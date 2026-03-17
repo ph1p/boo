@@ -32,7 +32,13 @@ final class Workspace {
 
     var customName: String?
     var color: WorkspaceColor = .none
+    var customColor: NSColor?  // overrides color when set
     var isPinned: Bool = false
+
+    /// Resolved color: custom color takes precedence, then preset, then nil.
+    var resolvedColor: NSColor? {
+        customColor ?? color.nsColor
+    }
 
     var displayName: String {
         customName ?? (folderPath as NSString).lastPathComponent

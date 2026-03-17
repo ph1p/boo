@@ -113,6 +113,43 @@ final class RemoteExplorer {
         return nil
     }
 
+    // MARK: - ControlMaster Setup
+
+    /// Append ControlMaster config to ~/.ssh/config if not already present.
+    /// Returns true on success.
+    static func enableControlMaster() -> Bool {
+        let configPath = NSHomeDirectory() + "/.ssh/config"
+        let fm = FileManager.default
+
+        // Check if already configured
+        if let existing = try? String(contentsOfFile: configPath, encoding: .utf8) {
+            if existing.lowercased().contains("controlmaster") {
+                return true  // already configured
+            }
+        }
+
+        // Ensure ~/.ssh directory exists
+        let sshDir = NSHomeDirectory() + "/.ssh"
+        if !fm.fileExists(atPath: sshDir) {
+            try? fm.createDirectory(atPath: sshDir, withIntermediateDirectories: true)
+        }
+
+        let block = "\n# Added by Exterm — enables SSH connection sharing for file explorer\nHost *\n  ControlMaster auto\n  ControlPath ~/.ssh/cm-%r@%h:%p\n  ControlPersist 10m\n"
+
+        if let handle = FileHandle(forWritingAtPath: configPath) {
+            handle.seekToEndOfFile()
+            if let data = block.data(using: .utf8) {
+                handle.write(data)
+            }
+            handle.closeFile()
+            return true
+        } else {
+            // Config file doesn't exist yet — create it
+            return fm.createFile(atPath: configPath, contents: block.data(using: .utf8),
+                                 attributes: [.posixPermissions: 0o600])
+        }
+    }
+
     // MARK: - Remote Commands
 
     /// Get the remote working directory.
@@ -149,52 +186,90 @@ final class RemoteExplorer {
     // MARK: - Command Execution
 
     /// Find an existing ControlMaster socket for the given host.
+    /// `host` may be "hostname" or "user@hostname".
     private static func findControlSocket(host: String) -> String? {
-        let sshDir = NSHomeDirectory() + "/.ssh"
+        // Build search terms: both the full host string and just the hostname part
+        var searchTerms: [String] = [host.lowercased()]
+        if let atIdx = host.firstIndex(of: "@") {
+            let hostname = String(host[host.index(after: atIdx)...]).lowercased()
+            let user = String(host[..<atIdx]).lowercased()
+            searchTerms.append(hostname)
+            searchTerms.append(user)
+        }
+
+        // Search common socket directories
+        let home = NSHomeDirectory()
+        let searchDirs = [
+            home + "/.ssh",
+            home + "/.ssh/sockets",
+            home + "/.ssh/cm",
+            "/tmp",
+        ]
+
         let fm = FileManager.default
+        for dir in searchDirs {
+            guard let files = try? fm.contentsOfDirectory(atPath: dir) else { continue }
+            for file in files {
+                let lower = file.lowercased()
+                // Socket must match at least the hostname
+                guard searchTerms.contains(where: { lower.contains($0) }) else { continue }
 
-        // Common ControlPath patterns: %h-%p-%r, %r@%h:%p, host-22, etc.
-        guard let files = try? fm.contentsOfDirectory(atPath: sshDir) else { return nil }
-
-        for file in files {
-            // Socket files used by ControlMaster typically contain the host
-            let lower = file.lowercased()
-            let hostLower = host.lowercased()
-            guard lower.contains(hostLower) else { continue }
-
-            let path = sshDir + "/" + file
-            var statBuf = stat()
-            guard stat(path, &statBuf) == 0 else { continue }
-            // Check if it's a socket (S_IFSOCK)
-            if (statBuf.st_mode & S_IFMT) == S_IFSOCK {
-                return path
+                let path = dir + "/" + file
+                var statBuf = stat()
+                guard stat(path, &statBuf) == 0 else { continue }
+                if (statBuf.st_mode & S_IFMT) == S_IFSOCK {
+                    return path
+                }
             }
         }
         return nil
     }
 
+    private static func runSSH(host: String, command: String, extraArgs: [String] = []) -> String? {
+        let process = Process()
+        let pipe = Pipe()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/ssh")
+        var args = [
+            "-n",  // no stdin — prevents password prompts from blocking
+            "-o", "ConnectTimeout=2",
+            "-o", "StrictHostKeyChecking=accept-new",
+            "-o", "BatchMode=yes",
+        ]
+        args += extraArgs
+        args += [host, command]
+        process.arguments = args
+        process.standardOutput = pipe
+        process.standardError = FileHandle.nullDevice
+        process.standardInput = FileHandle.nullDevice
+
+        do {
+            try process.run()
+            process.waitUntilExit()
+            guard process.terminationStatus == 0 else { return nil }
+            return String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)
+        } catch {
+            return nil
+        }
+    }
+
     private static func runRemoteCommand(session: RemoteSessionType, command: String, completion: @escaping (String?) -> Void) {
         DispatchQueue.global(qos: .userInitiated).async {
-            let process = Process()
-            let pipe = Pipe()
-
             switch session {
             case .ssh(let host):
-                process.executableURL = URL(fileURLWithPath: "/usr/bin/ssh")
-                var args = [
-                    "-o", "ConnectTimeout=2",
-                    "-o", "StrictHostKeyChecking=accept-new",
-                    "-o", "BatchMode=yes",
-                ]
-                // Try to reuse an existing ControlMaster socket so we don't need
-                // key-based auth — the user's interactive session already authenticated.
+                // Try with ControlMaster socket first (works with password-only auth)
                 if let socket = findControlSocket(host: host) {
-                    args += ["-o", "ControlPath=\(socket)"]
+                    if let result = runSSH(host: host, command: command, extraArgs: ["-o", "ControlPath=\(socket)"]) {
+                        DispatchQueue.main.async { completion(result) }
+                        return
+                    }
                 }
-                args += [host, command]
-                process.arguments = args
+                // Fall back to plain BatchMode (works with key-based auth / ssh-agent)
+                let result = runSSH(host: host, command: command)
+                DispatchQueue.main.async { completion(result) }
 
             case .docker(let container):
+                let process = Process()
+                let pipe = Pipe()
                 process.executableURL = URL(fileURLWithPath: "/usr/local/bin/docker")
                 for path in ["/usr/local/bin/docker", "/opt/homebrew/bin/docker", "/usr/bin/docker"] {
                     if FileManager.default.fileExists(atPath: path) {
@@ -203,22 +278,21 @@ final class RemoteExplorer {
                     }
                 }
                 process.arguments = ["exec", container, "sh", "-c", command]
-            }
+                process.standardOutput = pipe
+                process.standardError = FileHandle.nullDevice
 
-            process.standardOutput = pipe
-            process.standardError = FileHandle.nullDevice
-
-            do {
-                try process.run()
-                process.waitUntilExit()
-                guard process.terminationStatus == 0 else {
+                do {
+                    try process.run()
+                    process.waitUntilExit()
+                    guard process.terminationStatus == 0 else {
+                        DispatchQueue.main.async { completion(nil) }
+                        return
+                    }
+                    let data = pipe.fileHandleForReading.readDataToEndOfFile()
+                    DispatchQueue.main.async { completion(String(data: data, encoding: .utf8)) }
+                } catch {
                     DispatchQueue.main.async { completion(nil) }
-                    return
                 }
-                let data = pipe.fileHandleForReading.readDataToEndOfFile()
-                DispatchQueue.main.async { completion(String(data: data, encoding: .utf8)) }
-            } catch {
-                DispatchQueue.main.async { completion(nil) }
             }
         }
     }

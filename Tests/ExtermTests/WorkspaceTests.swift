@@ -95,4 +95,35 @@ final class WorkspaceTests: XCTestCase {
             XCTAssertFalse(color.label.isEmpty)
         }
     }
+
+    func testResolvedColorPreset() {
+        let ws = Workspace(folderPath: "/tmp")
+        XCTAssertNil(ws.resolvedColor) // No color set
+        ws.color = .blue
+        XCTAssertNotNil(ws.resolvedColor)
+        XCTAssertEqual(ws.resolvedColor, WorkspaceColor.blue.nsColor)
+    }
+
+    func testResolvedColorCustomOverridesPreset() {
+        let ws = Workspace(folderPath: "/tmp")
+        ws.color = .blue
+        let custom = NSColor(red: 1, green: 0, blue: 0, alpha: 1)
+        ws.customColor = custom
+        XCTAssertEqual(ws.resolvedColor, custom) // Custom takes precedence
+    }
+
+    func testResolvedColorCustomAlone() {
+        let ws = Workspace(folderPath: "/tmp")
+        let custom = NSColor(red: 0.5, green: 0.5, blue: 0.5, alpha: 1)
+        ws.customColor = custom
+        XCTAssertEqual(ws.resolvedColor, custom)
+    }
+
+    func testResolvedColorClearCustom() {
+        let ws = Workspace(folderPath: "/tmp")
+        ws.customColor = NSColor.red
+        ws.customColor = nil
+        ws.color = .green
+        XCTAssertEqual(ws.resolvedColor, WorkspaceColor.green.nsColor)
+    }
 }

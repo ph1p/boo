@@ -65,6 +65,11 @@ class TerminalView: NSView {
         isFocused && cursorBlinkOn
     }
 
+    /// Unfocused panes show a dim outline cursor (always visible, no blink).
+    private var showUnfocusedCursor: Bool {
+        !isFocused
+    }
+
     private func setupCursorBlink() {
         cursorBlinkTimer = Timer.scheduledTimer(withTimeInterval: 0.6, repeats: true) { [weak self] _ in
             guard let self = self, self.isFocused, self.window?.isVisible == true else { return }
@@ -149,8 +154,9 @@ class TerminalView: NSView {
 
         let theme = AppSettings.shared.theme
         let snap = terminal.snapshot()
+        // Use actual screen dimensions to prevent out-of-bounds
+        let rows = min(snap.rows, snap.screen.count)
         let cols = snap.cols
-        let rows = snap.rows
 
         // Background from theme
         ctx.setFillColor(theme.background.cgColor)
@@ -169,36 +175,39 @@ class TerminalView: NSView {
                 var bg = (style.bg == .defaultBG) ? theme.background : style.bg
                 if style.inverse { swap(&fg, &bg) }
 
-                let isCursor = col == snap.cursorX && row == snap.cursorY && showCursor
+                let isCursorPos = col == snap.cursorX && row == snap.cursorY
+                let activeCursor = isCursorPos && showCursor
+                let dimCursor = isCursorPos && showUnfocusedCursor
                 let isSelected = isCellSelected(col: col, row: row, cols: cols)
+                let cursorStyle = AppSettings.shared.cursorStyle
+                let cellRect = CGRect(x: x, y: y, width: cellWidth, height: cellHeight)
 
                 // Cell background
                 if isSelected {
                     ctx.setFillColor(theme.selection.cgColor)
-                    ctx.fill(CGRect(x: x, y: y, width: cellWidth, height: cellHeight))
+                    ctx.fill(cellRect)
                 } else if bg != theme.background {
                     ctx.setFillColor(bg.cgColor)
-                    ctx.fill(CGRect(x: x, y: y, width: cellWidth, height: cellHeight))
+                    ctx.fill(cellRect)
                 }
 
-                // Cursor
-                if isCursor && !isSelected {
-                    let cursorStyle = AppSettings.shared.cursorStyle
-                    ctx.setFillColor(fg.cgColor)
-                    switch cursorStyle {
-                    case .block:
-                        ctx.fill(CGRect(x: x, y: y, width: cellWidth, height: cellHeight))
-                    case .beam:
-                        ctx.fill(CGRect(x: x, y: y, width: 2, height: cellHeight))
-                    }
+                // Active cursor (focused pane, blinking)
+                if activeCursor && !isSelected {
+                    drawCursor(ctx: ctx, style: cursorStyle, rect: cellRect, color: fg.cgColor, filled: true)
+                }
+
+                // Unfocused cursor (dim outline, always visible)
+                if dimCursor && !isSelected && !activeCursor {
+                    let dimColor = theme.chromeMuted.withAlphaComponent(0.4).cgColor
+                    drawCursor(ctx: ctx, style: .blockOutline, rect: cellRect, color: dimColor, filled: false)
                 }
 
                 // Character
                 let char = cell.character
                 if char != " " {
                     let textColor: TerminalColor
-                    if isCursor && !isSelected && AppSettings.shared.cursorStyle == .block {
-                        textColor = bg
+                    if activeCursor && !isSelected && cursorStyle == .block {
+                        textColor = bg // Inverted on filled block cursor
                     } else {
                         textColor = fg
                     }
@@ -215,6 +224,31 @@ class TerminalView: NSView {
                     ctx.strokePath()
                 }
             }
+        }
+    }
+
+    private func drawCursor(ctx: CGContext, style: CursorStyle, rect: CGRect, color: CGColor, filled: Bool) {
+        switch style {
+        case .block:
+            if filled {
+                ctx.setFillColor(color)
+                ctx.fill(rect)
+            } else {
+                // Outline block
+                ctx.setStrokeColor(color)
+                ctx.setLineWidth(1)
+                ctx.stroke(rect.insetBy(dx: 0.5, dy: 0.5))
+            }
+        case .beam:
+            ctx.setFillColor(color)
+            ctx.fill(CGRect(x: rect.minX, y: rect.minY, width: 2, height: rect.height))
+        case .underline:
+            ctx.setFillColor(color)
+            ctx.fill(CGRect(x: rect.minX, y: rect.maxY - 2, width: rect.width, height: 2))
+        case .blockOutline:
+            ctx.setStrokeColor(color)
+            ctx.setLineWidth(1)
+            ctx.stroke(rect.insetBy(dx: 0.5, dy: 0.5))
         }
     }
 

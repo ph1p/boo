@@ -6,6 +6,7 @@ final class PTYProcess {
     private(set) var masterFD: Int32 = -1
     private(set) var pid: pid_t = -1
     private(set) var isRunning = false
+    var onExited: (() -> Void)?
 
     func spawn(
         cols: UInt16 = 80,
@@ -103,6 +104,7 @@ final class PTYProcess {
             waitpid(self.pid, &status, 0)
             DispatchQueue.main.async {
                 self.isRunning = false
+                self.onExited?()
             }
         }
     }

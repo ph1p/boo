@@ -4,8 +4,10 @@ protocol PaneViewDelegate: AnyObject {
     func paneView(_ paneView: PaneView, didFocus paneID: UUID)
     func paneView(_ paneView: PaneView, sessionForPane paneID: UUID, tabIndex: Int, workingDirectory: String) -> TerminalSession
     func paneView(_ paneView: PaneView, didChangeDirectory path: String, paneID: UUID)
+    func paneView(_ paneView: PaneView, foregroundProcessChanged name: String, paneID: UUID)
     func paneView(_ paneView: PaneView, remoteStateChanged session: RemoteSessionType?, remoteCwd: String?, paneID: UUID)
     func paneView(_ paneView: PaneView, remoteConnectionFailed session: RemoteSessionType, paneID: UUID)
+    func paneView(_ paneView: PaneView, sessionEnded paneID: UUID)
 }
 
 /// A pane: local tab bar on top + terminal view below. Each tab is a terminal session.
@@ -130,6 +132,11 @@ class PaneView: NSView {
                 self.paneDelegate?.paneView(self, didChangeDirectory: newPath, paneID: self.paneID)
             }
 
+            session.onForegroundProcessChanged = { [weak self] name in
+                guard let self = self else { return }
+                self.paneDelegate?.paneView(self, foregroundProcessChanged: name, paneID: self.paneID)
+            }
+
             session.onRemoteStateChanged = { [weak self] session, remoteCwd in
                 guard let self = self else { return }
                 self.paneDelegate?.paneView(self, remoteStateChanged: session, remoteCwd: remoteCwd, paneID: self.paneID)
@@ -138,6 +145,11 @@ class PaneView: NSView {
             session.onRemoteConnectionFailed = { [weak self] session in
                 guard let self = self else { return }
                 self.paneDelegate?.paneView(self, remoteConnectionFailed: session, paneID: self.paneID)
+            }
+
+            session.onSessionEnded = { [weak self] in
+                guard let self = self else { return }
+                self.paneDelegate?.paneView(self, sessionEnded: self.paneID)
             }
 
             pane.setSession(session, forTabAt: pane.activeTabIndex)

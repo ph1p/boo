@@ -1,6 +1,13 @@
 import Cocoa
 import SwiftUI
 
+/// NSSplitView with themed divider color.
+class ThemedSplitView: NSSplitView {
+    override var dividerColor: NSColor {
+        AppSettings.shared.theme.chromeMuted.withAlphaComponent(0.2)
+    }
+}
+
 class MainWindowController: NSWindowController, ToolbarViewDelegate, SplitContainerDelegate, PaneViewDelegate, NSSplitViewDelegate {
     private let appState = AppState()
 
@@ -21,13 +28,16 @@ class MainWindowController: NSWindowController, ToolbarViewDelegate, SplitContai
     private var paneViews: [UUID: PaneView] = [:]
     private var settingsObserver: Any?
 
-    /// Stack of recently closed tabs for Cmd+Z undo
-    struct ClosedTab {
-        let paneID: UUID
-        let workingDirectory: String
-        let index: Int
+    /// Undo stack for closed tabs and panes
+    enum ClosedItem {
+        case tab(paneID: UUID, workingDirectory: String, index: Int)
+        case pane(siblingPaneID: UUID, workingDirectory: String, direction: SplitTree.SplitDirection)
     }
-    private var closedTabsStack: [ClosedTab] = []
+    private var undoStack: [ClosedItem] = []
+
+    /// Keep closed sessions alive briefly so undo can restore them
+    private var sessionCache: [(session: TerminalSession, expiry: Date)] = []
+    private var sessionCacheTimer: Timer?
 
     init() {
         let window = NSWindow(
@@ -52,6 +62,11 @@ class MainWindowController: NSWindowController, ToolbarViewDelegate, SplitContai
 
         openWorkspace(path: FileManager.default.homeDirectoryForCurrentUser.path)
 
+        // Cleanup expired cached sessions every 10 seconds
+        sessionCacheTimer = Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { [weak self] _ in
+            self?.cleanSessionCache()
+        }
+
         settingsObserver = NotificationCenter.default.addObserver(
             forName: .settingsChanged, object: nil, queue: .main
         ) { [weak self] _ in
@@ -61,6 +76,7 @@ class MainWindowController: NSWindowController, ToolbarViewDelegate, SplitContai
             self.window?.backgroundColor = theme.chromeBg
             self.sidebarContainer.layer?.backgroundColor = theme.sidebarBg.cgColor
             self.splitContainer.layer?.backgroundColor = theme.background.nsColor.cgColor
+            self.mainSplitView.needsDisplay = true // Redraws themed divider
             self.toolbar.needsDisplay = true
             self.statusBar.needsDisplay = true
             for (_, pv) in self.paneViews {
@@ -90,7 +106,7 @@ class MainWindowController: NSWindowController, ToolbarViewDelegate, SplitContai
         toolbar.delegate = self
         contentView.addSubview(toolbar)
 
-        mainSplitView = NSSplitView()
+        mainSplitView = ThemedSplitView()
         mainSplitView.translatesAutoresizingMaskIntoConstraints = false
         mainSplitView.isVertical = true
         mainSplitView.dividerStyle = .thin
@@ -107,6 +123,9 @@ class MainWindowController: NSWindowController, ToolbarViewDelegate, SplitContai
         mainSplitView.addSubview(sidebarContainer)
 
         statusBar.translatesAutoresizingMaskIntoConstraints = false
+        statusBar.onBranchSwitch = { [weak self] branch in
+            self?.sendRawToActivePane("git switch \(branch)\n")
+        }
         contentView.addSubview(statusBar)
 
         NSLayoutConstraint.activate([
@@ -170,7 +189,10 @@ class MainWindowController: NSWindowController, ToolbarViewDelegate, SplitContai
 
         let fileMenuItem = NSMenuItem()
         let fileMenu = NSMenu(title: "File")
-        fileMenu.addItem(withTitle: "New Workspace...", action: #selector(openWorkspaceAction(_:)), keyEquivalent: "n")
+        fileMenu.addItem(withTitle: "New Workspace", action: #selector(newWorkspaceAction(_:)), keyEquivalent: "n")
+        let openFolder = NSMenuItem(title: "Open Folder...", action: #selector(openFolderAction(_:)), keyEquivalent: "O")
+        openFolder.keyEquivalentModifierMask = [.command, .shift]
+        fileMenu.addItem(openFolder)
         fileMenu.addItem(withTitle: "New Tab", action: #selector(newTabAction(_:)), keyEquivalent: "t")
         fileMenu.addItem(.separator())
         fileMenu.addItem(withTitle: "Close", action: #selector(smartCloseAction(_:)), keyEquivalent: "w")
@@ -237,7 +259,7 @@ class MainWindowController: NSWindowController, ToolbarViewDelegate, SplitContai
 
     private func refreshToolbar() {
         let wsItems = appState.workspaces.enumerated().map { (i, ws) in
-            ToolbarView.WorkspaceItem(name: ws.displayName, isActive: i == appState.activeWorkspaceIndex, color: ws.color, isPinned: ws.isPinned)
+            ToolbarView.WorkspaceItem(name: ws.displayName, isActive: i == appState.activeWorkspaceIndex, resolvedColor: ws.resolvedColor, isPinned: ws.isPinned)
         }
         toolbar.update(workspaces: wsItems, tabs: [], sidebarVisible: sidebarVisible)
         refreshStatusBar()
@@ -245,14 +267,15 @@ class MainWindowController: NSWindowController, ToolbarViewDelegate, SplitContai
 
     private func refreshStatusBar() {
         guard let ws = activeWorkspace else {
-            statusBar.update(directory: "", paneCount: 0, tabCount: 0, shellName: "")
+            statusBar.update(directory: "", paneCount: 0, tabCount: 0, runningProcess: "")
             return
         }
-        let cwd = ws.pane(for: ws.activePaneID)?.activeSession?.currentDirectory ?? ws.currentDirectory
+        let session = ws.pane(for: ws.activePaneID)?.activeSession
+        let cwd = session?.currentDirectory ?? ws.currentDirectory
         let paneCount = ws.panes.count
         let tabCount = ws.pane(for: ws.activePaneID)?.tabs.count ?? 0
-        let shell = (ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh") as NSString
-        statusBar.update(directory: cwd, paneCount: paneCount, tabCount: tabCount, shellName: shell.lastPathComponent)
+        let fg = session?.foregroundProcess ?? ""
+        statusBar.update(directory: cwd, paneCount: paneCount, tabCount: tabCount, runningProcess: fg)
     }
 
     // MARK: - Workspace
@@ -288,6 +311,11 @@ class MainWindowController: NSWindowController, ToolbarViewDelegate, SplitContai
 
     // MARK: - Sidebar
 
+    private func clearSidebar() {
+        sidebarContainer.layer?.backgroundColor = AppSettings.shared.theme.sidebarBg.cgColor
+        sidebarContainer.subviews.forEach { $0.removeFromSuperview() }
+    }
+
     private func updateSidebar(path: String) {
         isRemoteSidebar = false
         remoteRefreshTimer?.invalidate()
@@ -300,7 +328,8 @@ class MainWindowController: NSWindowController, ToolbarViewDelegate, SplitContai
         root.isExpanded = true
         self.fileTreeRoot = root
 
-        sidebarContainer.subviews.forEach { $0.removeFromSuperview() }
+        sidebarContainer.layer?.backgroundColor = AppSettings.shared.theme.sidebarBg.cgColor
+        clearSidebar()
 
         let actions = FileTreeActions(
             onFileClicked: { [weak self] path in
@@ -349,7 +378,7 @@ class MainWindowController: NSWindowController, ToolbarViewDelegate, SplitContai
         remoteRefreshTimer?.invalidate()
         remoteRefreshTimer = nil
 
-        sidebarContainer.subviews.forEach { $0.removeFromSuperview() }
+        clearSidebar()
 
         let connectingView = NSHostingView(rootView: RemoteConnectingView(session: session))
         connectingView.translatesAutoresizingMaskIntoConstraints = false
@@ -379,7 +408,7 @@ class MainWindowController: NSWindowController, ToolbarViewDelegate, SplitContai
         root.loadChildren()
         self.remoteTreeRoot = root
 
-        sidebarContainer.subviews.forEach { $0.removeFromSuperview() }
+        clearSidebar()
 
         let actions = FileTreeActions(
             onFileClicked: { [weak self] path in
@@ -422,7 +451,29 @@ class MainWindowController: NSWindowController, ToolbarViewDelegate, SplitContai
 
     func toolbar(_ toolbar: ToolbarView, didCloseWorkspaceAt index: Int) {
         guard index >= 0, index < appState.workspaces.count else { return }
-        guard !appState.workspaces[index].isPinned else { return }
+        let ws = appState.workspaces[index]
+        guard !ws.isPinned else { return }
+
+        // If workspace has multiple panes or tabs, ask for confirmation
+        let totalTabs = ws.panes.values.reduce(0) { $0 + $1.tabs.count }
+        if ws.panes.count > 1 || totalTabs > 1 {
+            let alert = NSAlert()
+            alert.messageText = "Close workspace \"\(ws.displayName)\"?"
+            alert.informativeText = "This will close \(ws.panes.count) pane\(ws.panes.count == 1 ? "" : "s") and \(totalTabs) tab\(totalTabs == 1 ? "" : "s")."
+            alert.alertStyle = .warning
+            alert.addButton(withTitle: "Close Workspace")
+            alert.addButton(withTitle: "Cancel")
+
+            alert.beginSheetModal(for: window!) { [weak self] response in
+                guard response == .alertFirstButtonReturn else { return }
+                self?.forceCloseWorkspace(at: index)
+            }
+        } else {
+            forceCloseWorkspace(at: index)
+        }
+    }
+
+    private func forceCloseWorkspace(at index: Int) {
         appState.removeWorkspace(at: index)
         if appState.workspaces.isEmpty {
             window?.close()
@@ -445,6 +496,12 @@ class MainWindowController: NSWindowController, ToolbarViewDelegate, SplitContai
     func toolbar(_ toolbar: ToolbarView, setColorForWorkspaceAt index: Int, color: WorkspaceColor) {
         guard index >= 0, index < appState.workspaces.count else { return }
         appState.workspaces[index].color = color
+        refreshToolbar()
+    }
+
+    func toolbar(_ toolbar: ToolbarView, setCustomColorForWorkspaceAt index: Int, color: NSColor) {
+        guard index >= 0, index < appState.workspaces.count else { return }
+        appState.workspaces[index].customColor = (color == .clear) ? nil : color
         refreshToolbar()
     }
 
@@ -505,6 +562,10 @@ class MainWindowController: NSWindowController, ToolbarViewDelegate, SplitContai
         refreshStatusBar()
     }
 
+    func paneView(_ paneView: PaneView, foregroundProcessChanged name: String, paneID: UUID) {
+        refreshStatusBar()
+    }
+
     func paneView(_ paneView: PaneView, remoteStateChanged session: RemoteSessionType?, remoteCwd: String?, paneID: UUID) {
         guard let workspace = activeWorkspace, workspace.activePaneID == paneID else { return }
 
@@ -524,7 +585,7 @@ class MainWindowController: NSWindowController, ToolbarViewDelegate, SplitContai
         guard let workspace = activeWorkspace, workspace.activePaneID == paneID else { return }
         guard isRemoteSidebar, activeRemoteSession == session else { return }
 
-        sidebarContainer.subviews.forEach { $0.removeFromSuperview() }
+        clearSidebar()
 
         let failView = NSHostingView(rootView: RemoteConnectionFailedView(session: session))
         failView.translatesAutoresizingMaskIntoConstraints = false
@@ -538,20 +599,43 @@ class MainWindowController: NSWindowController, ToolbarViewDelegate, SplitContai
         ])
     }
 
+    func paneView(_ paneView: PaneView, sessionEnded paneID: UUID) {
+        guard let workspace = activeWorkspace else { return }
+
+        // Focus this pane first so smartClose acts on the right one
+        if workspace.activePaneID != paneID {
+            workspace.activePaneID = paneID
+        }
+        smartCloseAction(nil)
+    }
+
     // MARK: - Actions
 
-    @objc private func openWorkspaceAction(_ sender: Any?) {
+    @objc private func newWorkspaceAction(_ sender: Any?) {
+        openWorkspace(path: FileManager.default.homeDirectoryForCurrentUser.path)
+    }
+
+    @objc private func openFolderAction(_ sender: Any?) {
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
         panel.allowsMultipleSelection = false
         panel.message = "Choose a folder to open as a workspace"
-
         panel.beginSheetModal(for: window!) { [weak self] response in
             guard response == .OK, let url = panel.url else { return }
             self?.openWorkspace(path: url.path)
         }
     }
+
+
+
+
+
+
+
+
+
+
 
     @objc private func newTabAction(_ sender: Any?) {
         guard let workspace = activeWorkspace,
@@ -568,17 +652,26 @@ class MainWindowController: NSWindowController, ToolbarViewDelegate, SplitContai
 
         if pane.tabs.count > 1 {
             // Multiple tabs: close the active tab (undoable)
-            let closedTab = ClosedTab(
+            let item = ClosedItem.tab(
                 paneID: workspace.activePaneID,
                 workingDirectory: pane.activeTab?.workingDirectory ?? workspace.folderPath,
                 index: pane.activeTabIndex
             )
-            closedTabsStack.append(closedTab)
-            if closedTabsStack.count > 20 { closedTabsStack.removeFirst() }
+            pushUndo(item)
             pv.closeTab(at: pane.activeTabIndex)
             refreshStatusBar()
         } else if workspace.panes.count > 1 {
-            // Multiple panes but single tab: close the pane
+            // Multiple panes but single tab: close the pane (undoable)
+            let cwd = pane.activeSession?.currentDirectory ?? pane.activeTab?.workingDirectory ?? workspace.folderPath
+            // Determine split direction from the tree
+            let direction = findSplitDirection(for: workspace.activePaneID, in: workspace.splitTree)
+            let siblingID = findSiblingID(for: workspace.activePaneID, in: workspace.splitTree)
+            let item = ClosedItem.pane(
+                siblingPaneID: siblingID ?? workspace.activePaneID,
+                workingDirectory: cwd,
+                direction: direction ?? .horizontal
+            )
+            pushUndo(item)
             closePaneAction(nil)
         } else if appState.workspaces.count > 1 {
             // Multiple workspaces: close this workspace
@@ -590,21 +683,90 @@ class MainWindowController: NSWindowController, ToolbarViewDelegate, SplitContai
     }
 
     @objc private func reopenTabAction(_ sender: Any?) {
-        guard let closed = closedTabsStack.popLast() else { return }
+        guard let item = undoStack.popLast(), let workspace = activeWorkspace else { return }
 
-        // Reopen in the same pane if it still exists, otherwise in the active pane
-        let targetPaneID: UUID
-        if activeWorkspace?.pane(for: closed.paneID) != nil {
-            targetPaneID = closed.paneID
-        } else if let ws = activeWorkspace {
-            targetPaneID = ws.activePaneID
-        } else {
-            return
+        switch item {
+        case .tab(let paneID, let cwd, _):
+            let targetPaneID = workspace.pane(for: paneID) != nil ? paneID : workspace.activePaneID
+            if let pv = paneViews[targetPaneID] {
+                pv.addNewTab(workingDirectory: cwd)
+            }
+
+        case .pane(let siblingID, let cwd, let direction):
+            // Re-split the sibling pane (or active pane if sibling is gone)
+            let targetID = workspace.pane(for: siblingID) != nil ? siblingID : workspace.activePaneID
+            window?.makeFirstResponder(nil)
+
+            let newID = workspace.splitPane(targetID, direction: direction)
+            // Override the new pane's tab to use the closed pane's cwd
+            if let pane = workspace.pane(for: newID) {
+                pane.stopAll()
+                _ = pane.addTab(workingDirectory: cwd)
+            }
+            workspace.activePaneID = newID
+            splitContainer.update(tree: workspace.splitTree)
+
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self else { return }
+                // Reattach all panes
+                for id in workspace.splitTree.leafIDs {
+                    if let pv = self.paneViews[id] {
+                        pv.startActiveSession()
+                    }
+                }
+                if let pv = self.paneViews[newID] {
+                    pv.startActiveSession()
+                    self.window?.makeFirstResponder(pv.currentTerminalView)
+                }
+            }
         }
-
-        guard let pv = paneViews[targetPaneID] else { return }
-        pv.addNewTab(workingDirectory: closed.workingDirectory)
         refreshStatusBar()
+    }
+
+    private func pushUndo(_ item: ClosedItem) {
+        undoStack.append(item)
+        if undoStack.count > 20 { undoStack.removeFirst() }
+    }
+
+    /// Cache a session so it stays alive for 30 seconds (for undo).
+    private func cacheSession(_ session: TerminalSession) {
+        sessionCache.append((session: session, expiry: Date().addingTimeInterval(30)))
+    }
+
+    private func cleanSessionCache() {
+        let now = Date()
+        let expired = sessionCache.filter { $0.expiry < now }
+        for entry in expired { entry.session.stop() }
+        sessionCache.removeAll { $0.expiry < now }
+    }
+
+    /// Find the split direction of the parent split containing the given leaf.
+    private func findSplitDirection(for leafID: UUID, in tree: SplitTree) -> SplitTree.SplitDirection? {
+        switch tree {
+        case .leaf:
+            return nil
+        case .split(let direction, let first, let second, _):
+            if first.leafIDs.contains(leafID) || second.leafIDs.contains(leafID) {
+                return direction
+            }
+            return findSplitDirection(for: leafID, in: first) ?? findSplitDirection(for: leafID, in: second)
+        }
+    }
+
+    /// Find the sibling leaf ID for a given leaf in the split tree.
+    private func findSiblingID(for leafID: UUID, in tree: SplitTree) -> UUID? {
+        switch tree {
+        case .leaf:
+            return nil
+        case .split(_, let first, let second, _):
+            if case .leaf(let id) = first, id == leafID {
+                return second.leafIDs.first
+            }
+            if case .leaf(let id) = second, id == leafID {
+                return first.leafIDs.first
+            }
+            return findSiblingID(for: leafID, in: first) ?? findSiblingID(for: leafID, in: second)
+        }
     }
 
     private func showCloseConfirmation() {

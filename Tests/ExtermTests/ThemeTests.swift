@@ -42,9 +42,65 @@ final class ThemeTests: XCTestCase {
 
     func testLightThemesHaveLightBackground() {
         let latte = TerminalTheme.catppuccinLatte
-        // Latte is a light theme — background should be light (high RGB values)
         XCTAssertGreaterThan(latte.background.r, 200)
         XCTAssertGreaterThan(latte.background.g, 200)
         XCTAssertGreaterThan(latte.background.b, 200)
+
+        let solLight = TerminalTheme.solarizedLight
+        XCTAssertGreaterThan(solLight.background.r, 200)
+    }
+
+    func testDarkThemesHaveDarkBackground() {
+        for theme in TerminalTheme.themes {
+            let name = theme.name
+            if name.contains("Latte") || name.contains("Light") { continue }
+            // Dark themes should have bg < 80 on all channels
+            XCTAssertLessThan(theme.background.r, 80, "Theme \(name) bg.r should be dark")
+            XCTAssertLessThan(theme.background.g, 80, "Theme \(name) bg.g should be dark")
+            XCTAssertLessThan(theme.background.b, 80, "Theme \(name) bg.b should be dark")
+        }
+    }
+
+    func testThemeFGBGAreDifferent() {
+        for theme in TerminalTheme.themes {
+            XCTAssertNotEqual(theme.foreground, theme.background, "Theme \(theme.name) fg should differ from bg")
+        }
+    }
+
+    func testSidebarBgIsNotNil() {
+        for theme in TerminalTheme.themes {
+            let components = theme.sidebarBg.cgColor.components ?? []
+            XCTAssertGreaterThan(components.count, 0, "Theme \(theme.name) sidebarBg should have color components")
+        }
+    }
+
+    func testSelectionColorHasAlpha() {
+        for theme in TerminalTheme.themes {
+            let alpha = theme.selection.alphaComponent
+            XCTAssertLessThan(alpha, 1.0, "Theme \(theme.name) selection should be semi-transparent")
+            XCTAssertGreaterThan(alpha, 0.0, "Theme \(theme.name) selection should not be fully transparent")
+        }
+    }
+
+    func testThemeLookupByName() {
+        let settings = AppSettings.shared
+        let original = settings.themeName
+
+        for theme in TerminalTheme.themes {
+            settings.themeName = theme.name
+            XCTAssertEqual(settings.theme.name, theme.name)
+        }
+
+        settings.themeName = original
+    }
+
+    func testInvalidThemeNameFallsBack() {
+        let settings = AppSettings.shared
+        let original = settings.themeName
+
+        settings.themeName = "NonExistentTheme"
+        XCTAssertEqual(settings.theme.name, "Default Dark")
+
+        settings.themeName = original
     }
 }

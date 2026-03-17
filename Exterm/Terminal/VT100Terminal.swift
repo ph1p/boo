@@ -148,10 +148,7 @@ final class VT100Terminal: TerminalBackend {
     func cell(at col: Int, row: Int) -> TerminalCell {
         lock.lock()
         defer { lock.unlock() }
-        guard row >= 0, row < rows, col >= 0, col < cols else {
-            return .blank
-        }
-        return screen[row][col]
+        return screenRead(row, col)
     }
 
     /// Snapshot all state needed for rendering under one lock acquisition.
@@ -303,9 +300,7 @@ final class VT100Terminal: TerminalBackend {
             pendingWrap = false
         }
 
-        if cursorX < cols && cursorY < rows {
-            screen[cursorY][cursorX] = TerminalCell(character: char, style: currentStyle)
-        }
+        screenWrite(cursorY, cursorX, TerminalCell(character: char, style: currentStyle))
 
         if cursorX >= cols - 1 {
             pendingWrap = true
@@ -590,6 +585,7 @@ final class VT100Terminal: TerminalBackend {
 
     private func scrollUp(_ count: Int) {
         for _ in 0..<count {
+            guard scrollTop < screenRowCount, scrollBottom < screenRowCount else { break }
             screen.remove(at: scrollTop)
             screen.insert(Array(repeating: .blank, count: cols), at: scrollBottom)
         }
@@ -597,6 +593,7 @@ final class VT100Terminal: TerminalBackend {
 
     private func scrollDown(_ count: Int) {
         for _ in 0..<count {
+            guard scrollTop < screenRowCount, scrollBottom < screenRowCount else { break }
             screen.remove(at: scrollBottom)
             screen.insert(Array(repeating: .blank, count: cols), at: scrollTop)
         }
@@ -623,17 +620,35 @@ final class VT100Terminal: TerminalBackend {
         }
     }
 
+    /// Safe check that a row/col is within the actual screen array bounds.
+    // MARK: - Safe Screen Access
+
+    private func screenRead(_ row: Int, _ col: Int) -> TerminalCell {
+        guard row >= 0, row < screen.count, col >= 0, col < screen[row].count else { return .blank }
+        return screen[row][col]
+    }
+
+    private func screenWrite(_ row: Int, _ col: Int, _ cell: TerminalCell) {
+        guard row >= 0, row < screen.count, col >= 0, col < screen[row].count else { return }
+        screen[row][col] = cell
+    }
+
+    private var screenRowCount: Int { screen.count }
+
+    private func screenColCount(_ row: Int) -> Int {
+        guard row >= 0, row < screen.count else { return 0 }
+        return screen[row].count
+    }
+
     private func eraseInLine(_ mode: Int) {
-        guard cursorY < rows else { return }
+        guard cursorY < screenRowCount else { return }
+        let rowLen = screenColCount(cursorY)
         switch mode {
         case 0: // Erase right
-            for col in cursorX..<cols {
-                screen[cursorY][col] = .blank
-            }
+            for col in cursorX..<rowLen { screenWrite(cursorY, col, .blank) }
         case 1: // Erase left
-            for col in 0...min(cursorX, cols - 1) {
-                screen[cursorY][col] = .blank
-            }
+            guard rowLen > 0 else { break }
+            for col in 0...min(cursorX, rowLen - 1) { screenWrite(cursorY, col, .blank) }
         case 2: // Erase entire line
             clearRow(cursorY)
         default:
@@ -642,45 +657,53 @@ final class VT100Terminal: TerminalBackend {
     }
 
     private func clearRow(_ row: Int) {
-        guard row >= 0, row < rows else { return }
-        screen[row] = Array(repeating: .blank, count: cols)
+        guard row >= 0, row < screenRowCount else { return }
+        screen[row] = Array(repeating: .blank, count: screenColCount(row))
     }
 
     private func insertLines(_ count: Int) {
-        guard cursorY >= scrollTop, cursorY <= scrollBottom else { return }
+        guard cursorY >= scrollTop, cursorY <= scrollBottom,
+              scrollBottom < screenRowCount, cursorY < screenRowCount else { return }
         for _ in 0..<min(count, scrollBottom - cursorY + 1) {
+            guard scrollBottom < screenRowCount else { break }
             screen.remove(at: scrollBottom)
             screen.insert(Array(repeating: .blank, count: cols), at: cursorY)
         }
     }
 
     private func deleteLines(_ count: Int) {
-        guard cursorY >= scrollTop, cursorY <= scrollBottom else { return }
+        guard cursorY >= scrollTop, cursorY <= scrollBottom,
+              scrollBottom < screenRowCount, cursorY < screenRowCount else { return }
         for _ in 0..<min(count, scrollBottom - cursorY + 1) {
+            guard cursorY < screenRowCount, scrollBottom < screenRowCount else { break }
             screen.remove(at: cursorY)
             screen.insert(Array(repeating: .blank, count: cols), at: scrollBottom)
         }
     }
 
     private func deleteChars(_ count: Int) {
-        guard cursorY < rows else { return }
-        let n = min(count, cols - cursorX)
+        guard cursorY < screenRowCount else { return }
+        let rowLen = screenColCount(cursorY)
+        let n = min(count, rowLen - cursorX)
+        guard n > 0, cursorX < rowLen else { return }
         screen[cursorY].removeSubrange(cursorX..<(cursorX + n))
         screen[cursorY].append(contentsOf: Array(repeating: TerminalCell.blank, count: n))
     }
 
     private func insertChars(_ count: Int) {
-        guard cursorY < rows else { return }
-        let n = min(count, cols - cursorX)
+        guard cursorY < screenRowCount else { return }
+        let rowLen = screenColCount(cursorY)
+        let n = min(count, rowLen - cursorX)
+        guard n > 0, cursorX < rowLen else { return }
         let blanks = Array(repeating: TerminalCell.blank, count: n)
         screen[cursorY].insert(contentsOf: blanks, at: cursorX)
-        screen[cursorY] = Array(screen[cursorY].prefix(cols))
+        screen[cursorY] = Array(screen[cursorY].prefix(rowLen))
     }
 
     private func eraseChars(_ count: Int) {
-        guard cursorY < rows else { return }
-        for col in cursorX..<min(cursorX + count, cols) {
-            screen[cursorY][col] = .blank
+        guard cursorY < screenRowCount else { return }
+        for col in cursorX..<min(cursorX + count, screenColCount(cursorY)) {
+            screenWrite(cursorY, col, .blank)
         }
     }
 

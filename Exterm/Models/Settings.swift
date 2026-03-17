@@ -3,11 +3,15 @@ import Cocoa
 enum CursorStyle: Int, CaseIterable {
     case block = 0
     case beam = 1
+    case underline = 2
+    case blockOutline = 3
 
     var label: String {
         switch self {
         case .block: return "Block"
-        case .beam: return "Line"
+        case .beam: return "Beam"
+        case .underline: return "Underline"
+        case .blockOutline: return "Outline"
         }
     }
 }

@@ -305,7 +305,7 @@ struct StatusBarSettingsView: View {
                             .onChange(of: showGit) { v in AppSettings.shared.statusBarShowGitBranch = v }
                         Toggle("Current path", isOn: $showPath)
                             .onChange(of: showPath) { v in AppSettings.shared.statusBarShowPath = v }
-                        Toggle("Shell name", isOn: $showShell)
+                        Toggle("Running process", isOn: $showShell)
                             .onChange(of: showShell) { v in AppSettings.shared.statusBarShowShell = v }
                     }
                     .font(.system(size: 12))

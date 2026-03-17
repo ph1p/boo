@@ -42,6 +42,7 @@ struct RemoteConnectingView: View {
 /// Shown when the file explorer could not connect to the remote session.
 struct RemoteConnectionFailedView: View {
     let session: RemoteSessionType
+    @State private var didEnable = false
 
     var body: some View {
         let theme = AppSettings.shared.theme
@@ -61,11 +62,27 @@ struct RemoteConnectionFailedView: View {
                 .font(.system(size: 13, weight: .medium, design: .monospaced))
                 .foregroundColor(Color(nsColor: theme.chromeText))
 
-            Text("File explorer needs a reusable SSH connection.\nAdd to ~/.ssh/config:\n\nHost *\n  ControlMaster auto\n  ControlPath ~/.ssh/cm-%r@%h:%p\n  ControlPersist 10m")
-                .font(.system(size: 10, design: .monospaced))
-                .foregroundColor(Color(nsColor: theme.chromeMuted).opacity(0.6))
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 16)
+            if didEnable {
+                Text("ControlMaster enabled.\nReconnect SSH to activate.")
+                    .font(.system(size: 11))
+                    .foregroundColor(Color(nsColor: theme.chromeMuted))
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 16)
+            } else {
+                Text("File explorer needs SSH connection sharing.\nThis adds ControlMaster to ~/.ssh/config\nso the explorer reuses your SSH session.")
+                    .font(.system(size: 10))
+                    .foregroundColor(Color(nsColor: theme.chromeMuted).opacity(0.6))
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 16)
+
+                Button("Enable & Reconnect") {
+                    if RemoteExplorer.enableControlMaster() {
+                        didEnable = true
+                    }
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            }
 
             Spacer()
         }

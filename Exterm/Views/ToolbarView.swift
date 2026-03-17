@@ -9,6 +9,7 @@ protocol ToolbarViewDelegate: AnyObject {
     func toolbarDidToggleSidebar(_ toolbar: ToolbarView)
     func toolbar(_ toolbar: ToolbarView, renameWorkspaceAt index: Int, to name: String)
     func toolbar(_ toolbar: ToolbarView, setColorForWorkspaceAt index: Int, color: WorkspaceColor)
+    func toolbar(_ toolbar: ToolbarView, setCustomColorForWorkspaceAt index: Int, color: NSColor)
     func toolbar(_ toolbar: ToolbarView, togglePinForWorkspaceAt index: Int)
 }
 
@@ -18,7 +19,7 @@ class ToolbarView: NSView {
     struct WorkspaceItem {
         let name: String
         let isActive: Bool
-        let color: WorkspaceColor
+        let resolvedColor: NSColor?  // nil = no color
         let isPinned: Bool
     }
 
@@ -31,6 +32,7 @@ class ToolbarView: NSView {
     private(set) var tabs: [TabItem] = []
     private var sidebarVisible = true
     private var tabScrollOffset: CGFloat = 0
+    private var workspaceScrollOffset: CGFloat = 0
 
     private let barHeight: CGFloat = 38
     private let tabFixedWidth: CGFloat = 140
@@ -54,8 +56,27 @@ class ToolbarView: NSView {
         self.workspaces = workspaces
         self.tabs = tabs
         self.sidebarVisible = sidebarVisible
+        scrollToActiveWorkspace()
         clampScrollOffset()
         needsDisplay = true
+    }
+
+    /// Ensure the active workspace pill is visible in the scroll area.
+    private func scrollToActiveWorkspace() {
+        guard let activeIndex = workspaces.firstIndex(where: { $0.isActive }) else { return }
+        var x: CGFloat = 0
+        for i in 0..<activeIndex {
+            x += measureWorkspace(workspaces[i]) + 6
+        }
+        let activeWidth = measureWorkspace(workspaces[activeIndex]) + 6
+        let visibleStart = workspaceScrollOffset
+        let visibleEnd = workspaceScrollOffset + workspaceZoneWidth
+
+        if x < visibleStart {
+            workspaceScrollOffset = x
+        } else if x + activeWidth > visibleEnd {
+            workspaceScrollOffset = x + activeWidth - workspaceZoneWidth
+        }
     }
 
     // MARK: - Layout constants
@@ -65,16 +86,35 @@ class ToolbarView: NSView {
     private let dividerWidth: CGFloat = 1
     private let zoneGap: CGFloat = 12
 
-    // Workspace zone: after traffic lights
-    private var workspaceZoneEnd: CGFloat {
-        var x = trafficLightWidth
+    /// Total content width of all workspace pills.
+    private var totalWorkspaceContentWidth: CGFloat {
+        var w: CGFloat = 0
         for ws in workspaces {
-            x += measureWorkspace(ws) + 6
+            w += measureWorkspace(ws) + 6
         }
-        return x
+        return w
     }
 
-    // Tab zone: after workspace zone + divider + gap
+    /// The workspace zone fills all space between traffic lights and the sidebar button.
+    private var workspaceZoneMaxWidth: CGFloat {
+        max(60, bounds.width - trafficLightWidth - sidebarButtonWidth - zoneGap)
+    }
+
+    /// Visible width of the workspace zone — shrinks to content if it fits, else fills available space.
+    private var workspaceZoneWidth: CGFloat {
+        min(totalWorkspaceContentWidth, workspaceZoneMaxWidth)
+    }
+
+    // Workspace zone: after traffic lights, up to sidebar button
+    private var workspaceZoneEnd: CGFloat {
+        trafficLightWidth + workspaceZoneWidth
+    }
+
+    private var maxWorkspaceScrollOffset: CGFloat {
+        max(0, totalWorkspaceContentWidth - workspaceZoneWidth)
+    }
+
+    // Tab zone (unused when tabs are in PaneView, kept for compatibility)
     private var tabZoneStart: CGFloat {
         workspaceZoneEnd + zoneGap + dividerWidth + zoneGap
     }
@@ -106,16 +146,28 @@ class ToolbarView: NSView {
 
     private func clampScrollOffset() {
         tabScrollOffset = min(max(0, tabScrollOffset), maxScrollOffset)
+        workspaceScrollOffset = min(max(0, workspaceScrollOffset), maxWorkspaceScrollOffset)
     }
 
     // MARK: - Scroll
 
     override func scrollWheel(with event: NSEvent) {
-        // Horizontal scroll in tab zone
         let point = convert(event.locationInWindow, from: nil)
+
+        // Workspace zone scroll
+        if point.x >= trafficLightWidth && point.x < workspaceZoneEnd + zoneGap {
+            workspaceScrollOffset -= event.scrollingDeltaX
+            if abs(event.scrollingDeltaY) > abs(event.scrollingDeltaX) {
+                workspaceScrollOffset += event.scrollingDeltaY
+            }
+            clampScrollOffset()
+            needsDisplay = true
+            return
+        }
+
+        // Tab zone scroll
         if point.x >= tabZoneStart && point.x <= tabZoneEnd {
             tabScrollOffset -= event.scrollingDeltaX
-            // Also support vertical scroll as horizontal
             if abs(event.scrollingDeltaY) > abs(event.scrollingDeltaX) {
                 tabScrollOffset += event.scrollingDeltaY
             }
@@ -143,19 +195,27 @@ class ToolbarView: NSView {
 
     private func drawWorkspaces(_ ctx: CGContext) {
         let theme = AppSettings.shared.theme
-        var x = trafficLightWidth
+        let zoneStart = trafficLightWidth
+        let zoneEnd = workspaceZoneEnd
+        let isScrollable = totalWorkspaceContentWidth > workspaceZoneWidth
+
+        if isScrollable {
+            ctx.saveGState()
+            ctx.clip(to: CGRect(x: zoneStart, y: 0, width: zoneEnd - zoneStart, height: barHeight))
+        }
+
+        var x = zoneStart - workspaceScrollOffset
 
         for ws in workspaces {
             let w = measureWorkspace(ws)
             let pillH: CGFloat = 24
             let pillY = (barHeight - pillH) / 2
 
-            let hasColor = ws.color != .none
-            let accentCG: CGColor? = ws.color.nsColor?.cgColor
+            let wsColor = ws.resolvedColor
 
             let rect = CGRect(x: x, y: pillY, width: w, height: pillH)
-            if hasColor {
-                ctx.setFillColor(accentCG!.copy(alpha: ws.isActive ? 0.25 : 0.12)!)
+            if let c = wsColor {
+                ctx.setFillColor(c.withAlphaComponent(ws.isActive ? 0.25 : 0.12).cgColor)
                 ctx.addPath(CGPath(roundedRect: rect, cornerWidth: 6, cornerHeight: 6, transform: nil))
                 ctx.fillPath()
             } else if ws.isActive {
@@ -178,13 +238,11 @@ class ToolbarView: NSView {
             }
 
             let textColor: NSColor
-            if hasColor && ws.isActive {
-                let c = ws.color.nsColor!
+            if let c = wsColor, ws.isActive {
                 textColor = NSColor(red: c.redComponent * 0.6 + 0.4, green: c.greenComponent * 0.6 + 0.4, blue: c.blueComponent * 0.6 + 0.4, alpha: 1)
             } else if ws.isActive {
                 textColor = theme.chromeText
-            } else if hasColor {
-                let c = ws.color.nsColor!
+            } else if let c = wsColor {
                 textColor = NSColor(red: c.redComponent * 0.5 + 0.2, green: c.greenComponent * 0.5 + 0.2, blue: c.blueComponent * 0.5 + 0.2, alpha: 1)
             } else {
                 textColor = theme.chromeMuted
@@ -201,6 +259,17 @@ class ToolbarView: NSView {
             )
 
             x += w + 6
+        }
+
+        if isScrollable {
+            ctx.restoreGState()
+
+            if workspaceScrollOffset > 0 {
+                drawFadeEdge(ctx, at: zoneStart, width: 20, leftToRight: true)
+            }
+            if workspaceScrollOffset < maxWorkspaceScrollOffset {
+                drawFadeEdge(ctx, at: zoneEnd - 20, width: 20, leftToRight: false)
+            }
         }
     }
 
@@ -292,15 +361,18 @@ class ToolbarView: NSView {
     }
 
     private func drawFadeEdge(_ ctx: CGContext, at x: CGFloat, width: CGFloat, leftToRight: Bool) {
-        let bg: CGFloat = 13.0/255.0
-        let bg2: CGFloat = 15.0/255.0
+        let bgColor = AppSettings.shared.theme.chromeBg.cgColor
+        let components = bgColor.components ?? [0, 0, 0, 1]
+        let r = components.count > 0 ? components[0] : 0
+        let g = components.count > 1 ? components[1] : 0
+        let b = components.count > 2 ? components[2] : 0
         let colors: [CGFloat] = leftToRight
-            ? [bg, bg, bg2, 1.0,  bg, bg, bg2, 0.0]
-            : [bg, bg, bg2, 0.0,  bg, bg, bg2, 1.0]
+            ? [r, g, b, 1.0,  r, g, b, 0.0]
+            : [r, g, b, 0.0,  r, g, b, 1.0]
         let colorSpace = CGColorSpaceCreateDeviceRGB()
         guard let gradient = CGGradient(colorSpace: colorSpace, colorComponents: colors, locations: nil, count: 2) else { return }
         ctx.saveGState()
-        ctx.clip(to: CGRect(x: x, y: 0, width: width, height: barHeight))
+        ctx.clip(to: CGRect(x: x, y: 0, width: width, height: barHeight - 1))
         ctx.drawLinearGradient(gradient,
                                start: CGPoint(x: x, y: 0),
                                end: CGPoint(x: x + width, y: 0),
@@ -355,8 +427,8 @@ class ToolbarView: NSView {
         }
 
         // Workspace zone
-        if point.x < workspaceZoneEnd + zoneGap {
-            var x = trafficLightWidth
+        if point.x >= trafficLightWidth && point.x < workspaceZoneEnd + zoneGap {
+            var x = trafficLightWidth - workspaceScrollOffset
             for (i, ws) in workspaces.enumerated() {
                 let w = measureWorkspace(ws)
                 if point.x >= x && point.x < x + w + 6 {
@@ -400,9 +472,9 @@ class ToolbarView: NSView {
         let point = convert(event.locationInWindow, from: nil)
 
         // Only show context menu in workspace zone
-        guard point.x < workspaceZoneEnd + zoneGap else { return }
+        guard point.x >= trafficLightWidth && point.x < workspaceZoneEnd + zoneGap else { return }
 
-        var x = trafficLightWidth
+        var x = trafficLightWidth - workspaceScrollOffset
         for (i, ws) in workspaces.enumerated() {
             let w = measureWorkspace(ws)
             if point.x >= x && point.x < x + w + 6 {
@@ -442,11 +514,13 @@ class ToolbarView: NSView {
             item.target = self
             item.tag = index
             item.representedObject = color
-            if color == ws.color {
-                item.state = .on
-            }
             colorMenu.addItem(item)
         }
+        colorMenu.addItem(.separator())
+        let customItem = NSMenuItem(title: "Custom Color...", action: #selector(contextCustomColor(_:)), keyEquivalent: "")
+        customItem.target = self
+        customItem.tag = index
+        colorMenu.addItem(customItem)
         colorItem.submenu = colorMenu
         menu.addItem(colorItem)
 
@@ -493,7 +567,23 @@ class ToolbarView: NSView {
 
     @objc private func contextSetColor(_ sender: NSMenuItem) {
         guard let color = sender.representedObject as? WorkspaceColor else { return }
+        // Clear custom color when selecting a preset
+        delegate?.toolbar(self, setCustomColorForWorkspaceAt: sender.tag, color: .clear)
         delegate?.toolbar(self, setColorForWorkspaceAt: sender.tag, color: color)
+    }
+
+    private var colorPickerIndex: Int = 0
+
+    @objc private func contextCustomColor(_ sender: NSMenuItem) {
+        colorPickerIndex = sender.tag
+        let picker = NSColorPanel.shared
+        picker.setTarget(self)
+        picker.setAction(#selector(colorPickerChanged(_:)))
+        picker.orderFront(nil)
+    }
+
+    @objc private func colorPickerChanged(_ sender: NSColorPanel) {
+        delegate?.toolbar(self, setCustomColorForWorkspaceAt: colorPickerIndex, color: sender.color)
     }
 
     @objc private func contextClose(_ sender: NSMenuItem) {

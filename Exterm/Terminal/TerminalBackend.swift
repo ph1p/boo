@@ -84,7 +84,7 @@ struct TerminalSnapshot {
     let cursorY: Int
 
     func cell(at col: Int, row: Int) -> TerminalCell {
-        guard row >= 0, row < rows, col >= 0, col < cols else { return .blank }
+        guard row >= 0, row < screen.count, col >= 0, col < screen[row].count else { return .blank }
         return screen[row][col]
     }
 }
