@@ -38,6 +38,19 @@ private func ghosttyAction(_ app: ghostty_app_t?, _ target: ghostty_target_s, _ 
         guard let titlePtr = action.action.set_title.title else { return false }
         let title = String(cString: titlePtr)
         guard let view = viewFromTarget() else { return false }
+        // Intercept EXTERM_LS: prefixed titles — these are directory listings,
+        // not real titles. Route to onDirectoryListing instead.
+        if title.hasPrefix("EXTERM_LS:") {
+            let payload = String(title.dropFirst("EXTERM_LS:".count))
+            if let colonIdx = payload.firstIndex(of: ":") {
+                let path = String(payload[..<colonIdx])
+                let output = String(payload[payload.index(after: colonIdx)...])
+                DispatchQueue.main.async {
+                    view.onDirectoryListing?(path, output)
+                }
+            }
+            return true
+        }
         DispatchQueue.main.async {
             view.onTitleChanged?(title)
         }
@@ -288,22 +301,28 @@ final class GhosttyRuntime {
         let zdotdir = (dir as NSString).appendingPathComponent("zsh")
         try? FileManager.default.createDirectory(atPath: zdotdir, withIntermediateDirectories: true)
 
-        // Remote init: a POSIX-compatible snippet that sets up OSC 7 reporting.
+        // Remote init: POSIX-compatible snippet that reports CWD via OSC 2 (title).
+        // Uses OSC 2 (not OSC 7) because Ghostty rejects OSC 7 from non-local hosts.
+        // The "user@host:path" title format is parsed by TerminalBridge.extractRemoteCwd.
+        // Injection into remote shells is handled by RemoteShellInjector in Swift.
         writeScript(
             dir: dir, name: "remote-init.sh", executable: false,
             content: [
-                #"__exterm_osc7() { printf '\033]7;file://%s%s\a' "$(hostname)" "$PWD"; }"#,
+                #"__exterm_report() {"#,
+                #"  printf '\033]2;%s@%s:%s\a' "$(whoami)" "$(hostname -s 2>/dev/null || hostname)" "$PWD""#,
+                #"  printf '\033]2;EXTERM_LS:%s:%s\a' "$PWD" "$(ls -1AF 2>/dev/null | head -500)""#,
+                #"}"#,
                 #"if [ -n "$ZSH_VERSION" ]; then"#,
-                #"  autoload -Uz add-zsh-hook 2>/dev/null && add-zsh-hook chpwd __exterm_osc7"#,
-                #"  precmd_functions+=(__exterm_osc7)"#,
+                #"  autoload -Uz add-zsh-hook 2>/dev/null && add-zsh-hook chpwd __exterm_report"#,
+                #"  precmd_functions+=(__exterm_report)"#,
                 #"elif [ -n "$BASH_VERSION" ]; then"#,
-                #"  PROMPT_COMMAND="__exterm_osc7${PROMPT_COMMAND:+;$PROMPT_COMMAND}""#,
+                #"  PROMPT_COMMAND="__exterm_report${PROMPT_COMMAND:+;$PROMPT_COMMAND}""#,
                 #"fi"#,
-                #"__exterm_osc7"#,
+                #"__exterm_report"#,
             ]
         )
 
-        // Compute base64 blob from remote-init.sh
+        // Compute base64 blob from remote-init.sh (used by docker wrapper)
         let remoteInitPath = (dir as NSString).appendingPathComponent("remote-init.sh")
         let b64: String
         if let data = FileManager.default.contents(atPath: remoteInitPath) {
@@ -312,38 +331,9 @@ final class GhosttyRuntime {
             b64 = ""
         }
 
-        // SSH wrapper function: tries ControlMaster injection (works with key auth),
-        // falls back to plain ssh (works with password auth, no remote CWD tracking).
-        let sshFunction = [
-            "ssh() {",
-            "  # Detect interactive (no remote command after host)",
-            "  local _int=1 _skip=0 _host= _a",
-            "  for _a in \"$@\"; do",
-            "    if [ \"$_skip\" = 1 ]; then _skip=0; continue; fi",
-            "    case \"$_a\" in",
-            "      -[bcDeFIiJLlmOopQRSWw]) _skip=1 ;;",
-            "      -*) ;;",
-            "      *) if [ -z \"$_host\" ]; then _host=\"$_a\"; else _int=0; break; fi ;;",
-            "    esac",
-            "  done",
-            "",
-            "  if [ \"$_int\" = 1 ] && [ -n \"$_host\" ]; then",
-            "    # Try ControlMaster injection (non-blocking, fails gracefully with password auth)",
-            "    local _sock=\"/tmp/exterm-cm-$$\"",
-            "    if echo '\(b64)' | command ssh -o BatchMode=yes -o ControlMaster=yes \\",
-            "         -o \"ControlPath=$_sock\" -o ControlPersist=60s \"$@\" \\",
-            "         'B=$(cat); eval \"$(echo $B | base64 -d)\" 2>/dev/null' 2>/dev/null; then",
-            "      # Injection succeeded — connect over the ControlMaster socket",
-            "      command ssh -o \"ControlPath=$_sock\" \"$@\"",
-            "      return",
-            "    fi",
-            "  fi",
-            "  # Fallback: plain ssh (password auth, non-interactive, or injection failed)",
-            "  command ssh \"$@\"",
-            "}",
-        ]
-
-        // Docker wrapper: injects init into interactive docker exec sessions
+        // Docker wrapper: injects init into interactive docker exec sessions.
+        // Docker injection must intercept the command to modify arguments,
+        // which can't be done from Swift after the process starts.
         let dockerFunction = [
             "docker() {",
             "  local _isexec=0",
@@ -366,7 +356,7 @@ final class GhosttyRuntime {
 
         writeScript(
             dir: dir, name: "exterm-init.sh", executable: false,
-            content: (sshFunction + [""] + dockerFunction)
+            content: dockerFunction
         )
 
         // ZDOTDIR shim for zsh

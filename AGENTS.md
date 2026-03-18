@@ -120,6 +120,30 @@ Ghostty's shell integration only injects OSC 7 hooks into the **local** shell. R
 - `RemoteSessionType` enum (.ssh, .docker) drives all remote behavior
 - `RemoteExplorer` handles ControlMaster setup, remote file listing, remote CWD queries
 
+### Plugin Architecture
+
+#### Sidebar Plugins (`SidebarPlugin` protocol)
+Sidebar panels below the file tree are registered as plugins. To add a new sidebar panel:
+1. Create a class conforming to `SidebarPlugin` in `Exterm/Services/`
+2. Implement `id`, `displayName`, `isAvailable`, `makeView(context:)`
+3. Optionally implement `makeStatusBarSegment()` to provide a toggle icon in the status bar
+4. Optionally implement `onAvailabilityChanged` for async availability (e.g. remote Docker check)
+5. Register it in `MainWindowController.init()` via `registerSidebarPlugin()`
+6. The panel auto-shows when `isAvailable` returns true; toggling adds/removes the view without rebuilding the file tree
+
+Existing plugins:
+- `DockerSidebarPlugin` — Docker container panel with live updates. Owns `DockerIconSegment` status bar toggle. Disabled on remote terminals (local only).
+- `BookmarksSidebarPlugin` — Bookmarked directories panel. Works on both local and remote terminals. Auto-shows when bookmarks exist.
+
+#### Status Bar Plugins (`StatusBarPlugin` protocol)
+Status bar segments are registered as plugins. Sidebar plugins can provide their own segments via `makeStatusBarSegment()`. To add a standalone segment:
+1. Create a class conforming to `StatusBarPlugin`
+2. Set `position` (.left or .right) and `priority` (lower = closer to edge)
+3. Implement `isVisible`, `draw`, `handleClick`
+4. Register in `StatusBarView.registerDefaultPlugins()`
+
+Existing segments: `GitBranchSegment`, `PathSegment`, `ProcessSegment`, `PaneInfoSegment`, `TimeSegment`, `BookmarkIconSegment`. Sidebar-owned: `DockerIconSegment`.
+
 ### Common Patterns
 - `TerminalColor.cgColor` / `.nsColor` extensions for color conversion
 - `AppSettings` uses `enum K` for UserDefaults keys, `bool(_:default:)` helper

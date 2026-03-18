@@ -9,6 +9,7 @@ class GhosttyView: NSView, NSTextInputClient {
     var onFocused: (() -> Void)?
     var onPwdChanged: ((String) -> Void)?
     var onTitleChanged: ((String) -> Void)?
+    var onDirectoryListing: ((String, String) -> Void)?
     var onProcessExited: (() -> Void)?
     let createdAt = Date()
     var shellPID: pid_t = 0
@@ -224,6 +225,39 @@ class GhosttyView: NSView, NSTextInputClient {
     // Prevent system beep for unhandled commands
     override func doCommand(by selector: Selector) {}
 
+    /// Send a synthetic key press to the terminal.
+    /// Used for programmatic key simulation (e.g. clear screen via Ctrl+L).
+    func sendKey(keyCode: UInt16, mods: ghostty_input_mods_e, text: String? = nil) {
+        guard let surface = surface else { return }
+        var key = ghostty_input_key_s()
+        key.action = GHOSTTY_ACTION_PRESS
+        key.mods = mods
+        key.keycode = UInt32(keyCode)
+        key.composing = false
+        key.consumed_mods = GHOSTTY_MODS_NONE
+        key.unshifted_codepoint = 0
+
+        // Set unshifted codepoint from text if available
+        if let t = text, let scalar = t.unicodeScalars.first {
+            key.unshifted_codepoint = scalar.value
+        }
+
+        if let text = text {
+            text.withCString { cstr in
+                key.text = cstr
+                _ = ghostty_surface_key(surface, key)
+            }
+        } else {
+            key.text = nil
+            _ = ghostty_surface_key(surface, key)
+        }
+
+        // Send release
+        key.action = GHOSTTY_ACTION_RELEASE
+        key.text = nil
+        _ = ghostty_surface_key(surface, key)
+    }
+
     // MARK: - NSTextInputClient
 
     func insertText(_ string: Any, replacementRange: NSRange) {
@@ -372,14 +406,13 @@ class GhosttyView: NSView, NSTextInputClient {
     }
 
     private static func menuContainsEquivalent(_ menu: NSMenu, event: NSEvent) -> Bool {
-        guard let chars = event.charactersIgnoringModifiers else { return false }
-        // Normalize modifier flags to only the ones menus care about
+        guard let chars = event.charactersIgnoringModifiers?.lowercased() else { return false }
         let eventMods = event.modifierFlags.intersection([.command, .shift, .option, .control])
 
         for item in menu.items {
-            if !item.keyEquivalent.isEmpty {
+            if !item.keyEquivalent.isEmpty && !item.isHidden {
                 let itemMods = item.keyEquivalentModifierMask.intersection([.command, .shift, .option, .control])
-                if item.keyEquivalent == chars, itemMods == eventMods {
+                if item.keyEquivalent.lowercased() == chars, itemMods == eventMods {
                     return true
                 }
             }

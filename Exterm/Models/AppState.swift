@@ -28,4 +28,19 @@ final class AppState {
         guard index >= 0, index < workspaces.count else { return }
         activeWorkspaceIndex = index
     }
+
+    func moveWorkspace(from source: Int, to destination: Int) {
+        guard source != destination, source >= 0, source < workspaces.count,
+              destination >= 0, destination <= workspaces.count else { return }
+        let ws = workspaces.remove(at: source)
+        let dest = destination > source ? destination - 1 : destination
+        workspaces.insert(ws, at: dest)
+        if activeWorkspaceIndex == source {
+            activeWorkspaceIndex = dest
+        } else if source < activeWorkspaceIndex && dest >= activeWorkspaceIndex {
+            activeWorkspaceIndex -= 1
+        } else if source > activeWorkspaceIndex && dest <= activeWorkspaceIndex {
+            activeWorkspaceIndex += 1
+        }
+    }
 }

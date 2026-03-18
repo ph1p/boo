@@ -8,33 +8,58 @@ class StatusBarView: NSView {
 
     /// Called when user picks a branch from the popup.
     var onBranchSwitch: ((String) -> Void)?
-    /// Called when Docker icon is clicked.
-    var onDockerToggle: (() -> Void)?
-    /// Called when a bookmark is selected (cd to that path).
-    var onBookmarkSelected: ((String) -> Void)?
-    /// Called to bookmark the current directory.
-    var onBookmarkCurrent: (() -> Void)?
-    /// Whether Docker panel is currently visible.
-    var dockerPanelVisible = false
+    /// Called when a sidebar plugin icon is clicked (plugin id).
+    var onSidebarPluginToggle: ((String) -> Void)?
+    /// Called when the sidebar toggle button is clicked.
+    var onSidebarToggle: (() -> Void)?
+    /// IDs of currently visible sidebar plugins.
+    var visibleSidebarPlugins: Set<String> = []
+    /// Whether the sidebar is currently visible.
+    var sidebarVisible: Bool = true
+    /// Whether the focused terminal session is remote.
+    var isRemote: Bool = false
+    /// The remote session type (SSH/Docker) if active.
+    var remoteSession: RemoteSessionType?
 
-    private let barHeight: CGFloat = 22
-    private var dockerIconRect: NSRect = .zero
-    private var bookmarkIconRect: NSRect = .zero
-    private var gitBranch: String?
-    private var gitRepoRoot: String?
-    private var gitBranchRect: NSRect = .zero // Hit area for branch click
-    private var timeFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.dateFormat = "HH:mm"
-        return f
-    }()
+    var barHeight: CGFloat { DensityMetrics.current.statusBarHeight }
     private var clockTimer: Timer?
     private var gitPollTimer: Timer?
     private var settingsObserver: Any?
 
+    // Git state (shared with GitBranchSegment)
+    var gitBranch: String?
+    var gitRepoRoot: String?
+    var gitChangedCount: Int = 0
+
+    // Plugin arrays sorted by priority
+    private(set) var leftPlugins: [StatusBarPlugin] = []
+    private(set) var rightPlugins: [StatusBarPlugin] = []
+
+    /// Hit rects for segments, keyed by plugin ID. Updated during draw.
+    var segmentRects: [String: NSRect] = [:]
+    /// Ordered list of visible panel-linked segment IDs (left to right) for Cmd+number shortcuts.
+    var panelSegmentOrder: [String] = []
+
+    /// Hit rect for the sidebar toggle button.
+    var sidebarToggleRect: NSRect = .zero
+
+    /// Cached accessibility child elements, rebuilt after each draw.
+    var accessibilityElements: [NSAccessibilityElement] = []
+
+    /// ID of the currently hovered segment (nil = none).
+    var hoveredSegmentID: String?
+    /// Whether the sidebar toggle is hovered.
+    var isSidebarToggleHovered: Bool = false
+    private var statusBarTrackingArea: NSTrackingArea?
+
+    static let homeDir = FileManager.default.homeDirectoryForCurrentUser.path
+
     override init(frame: NSRect) {
         super.init(frame: frame)
         wantsLayer = true
+        updateStatusBarTrackingArea()
+
+        registerDefaultPlugins()
 
         clockTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
             self?.needsDisplay = true
@@ -59,6 +84,31 @@ class StatusBarView: NSView {
         NSSize(width: NSView.noIntrinsicMetric, height: barHeight)
     }
 
+    // MARK: - Plugin Registration
+
+    private func registerDefaultPlugins() {
+        registerPlugin(EnvironmentSegment())
+        registerPlugin(GitBranchSegment())
+        registerPlugin(PathSegment())
+        registerPlugin(ProcessSegment())
+        registerPlugin(FileTreeIconSegment())
+        registerPlugin(PaneInfoSegment())
+        registerPlugin(TimeSegment())
+    }
+
+    func registerPlugin(_ plugin: StatusBarPlugin) {
+        switch plugin.position {
+        case .left:
+            leftPlugins.append(plugin)
+            leftPlugins.sort { $0.priority < $1.priority }
+        case .right:
+            rightPlugins.append(plugin)
+            rightPlugins.sort { $0.priority < $1.priority }
+        }
+    }
+
+    // MARK: - State
+
     func update(directory: String, paneCount: Int, tabCount: Int, runningProcess: String) {
         let dirChanged = directory != currentDirectory
         let changed = dirChanged || paneCount != self.paneCount || tabCount != self.tabCount || runningProcess != self.runningProcess
@@ -68,6 +118,22 @@ class StatusBarView: NSView {
         self.runningProcess = runningProcess
         if dirChanged { refreshGitBranch() }
         if changed { needsDisplay = true }
+    }
+
+    var currentState: StatusBarState {
+        StatusBarState(
+            currentDirectory: currentDirectory,
+            paneCount: paneCount,
+            tabCount: tabCount,
+            runningProcess: runningProcess,
+            visibleSidebarPlugins: visibleSidebarPlugins,
+            isRemote: isRemote,
+            remoteSession: remoteSession,
+            gitBranch: gitBranch,
+            gitRepoRoot: gitRepoRoot,
+            gitChangedCount: gitChangedCount,
+            sidebarVisible: sidebarVisible
+        )
     }
 
     // MARK: - Git
@@ -88,7 +154,7 @@ class StatusBarView: NSView {
     }
 
     /// Returns (branchName, repoRoot) or (nil, nil).
-    private static func detectGitInfo(in directory: String) -> (String?, String?) {
+    static func detectGitInfo(in directory: String) -> (String?, String?) {
         var dir = directory
         while !dir.isEmpty && dir != "/" {
             let gitDir = (dir as NSString).appendingPathComponent(".git")
@@ -114,15 +180,13 @@ class StatusBarView: NSView {
         var remote: [String] // e.g. "origin/feature-x"
     }
 
-    private static func listBranches(repoRoot: String) -> GitBranches {
+    static func listBranches(repoRoot: String) -> GitBranches {
         let gitDir = (repoRoot as NSString).appendingPathComponent(".git")
         var local = Set<String>()
         var remote = Set<String>()
 
-        // Read refs/heads/ (local branches)
         readRefs(at: (gitDir as NSString).appendingPathComponent("refs/heads"), into: &local)
 
-        // Read refs/remotes/ (remote branches)
         let remotesPath = (gitDir as NSString).appendingPathComponent("refs/remotes")
         if let remotes = try? FileManager.default.contentsOfDirectory(atPath: remotesPath) {
             for remoteName in remotes {
@@ -135,7 +199,6 @@ class StatusBarView: NSView {
             }
         }
 
-        // Also read packed-refs
         let packedPath = (gitDir as NSString).appendingPathComponent("packed-refs")
         if let packed = try? String(contentsOfFile: packedPath, encoding: .utf8) {
             for line in packed.split(separator: "\n") {
@@ -168,308 +231,64 @@ class StatusBarView: NSView {
         }
     }
 
-    // MARK: - Drawing
+    // MARK: - Hover Tracking
 
-    override func draw(_ dirtyRect: NSRect) {
-        guard let ctx = NSGraphicsContext.current?.cgContext else { return }
-        let theme = AppSettings.shared.theme
-        let settings = AppSettings.shared
-
-        ctx.setFillColor(theme.chromeBg.cgColor)
-        ctx.fill(bounds)
-
-        ctx.setFillColor(theme.chromeMuted.withAlphaComponent(0.3).cgColor)
-        ctx.fill(CGRect(x: 0, y: 0, width: bounds.width, height: 0.5))
-
-        let textY: CGFloat = (barHeight - 12) / 2
-
-        // Reset hit areas
-        gitBranchRect = .zero
-
-        // Collect left segments
-        var leftSegments: [(icon: String?, text: String, color: NSColor, isGitBranch: Bool)] = []
-
-        if settings.statusBarShowGitBranch, let branch = gitBranch {
-            leftSegments.append((icon: "\u{2387}", text: branch, color: theme.accentColor, isGitBranch: true))
-        }
-
-        if settings.statusBarShowPath {
-            leftSegments.append((icon: nil, text: abbreviatePath(currentDirectory), color: theme.chromeMuted.withAlphaComponent(0.7), isGitBranch: false))
-        }
-
-        if settings.statusBarShowShell, !runningProcess.isEmpty {
-            leftSegments.append((icon: nil, text: runningProcess, color: theme.chromeMuted.withAlphaComponent(0.5), isGitBranch: false))
-        }
-
-        // Collect right segments
-        var rightSegments: [(text: String, color: NSColor)] = []
-
-        if settings.statusBarShowPaneInfo {
-            var info = "\(paneCount) pane\(paneCount == 1 ? "" : "s")"
-            if tabCount > 1 { info += " \u{2022} \(tabCount) tabs" }
-            rightSegments.append((text: info, color: theme.chromeMuted.withAlphaComponent(0.5)))
-        }
-
-        if settings.statusBarShowTime {
-            rightSegments.append((text: timeFormatter.string(from: Date()), color: theme.chromeMuted.withAlphaComponent(0.6)))
-        }
-
-        // Draw left
-        var x: CGFloat = 10
-        for (i, seg) in leftSegments.enumerated() {
-            if i > 0 {
-                let sepAttrs: [NSAttributedString.Key: Any] = [
-                    .font: NSFont.systemFont(ofSize: 8),
-                    .foregroundColor: theme.chromeMuted.withAlphaComponent(0.3)
-                ]
-                ("\u{2022}" as NSString).draw(at: NSPoint(x: x + 4, y: textY + 1), withAttributes: sepAttrs)
-                x += 14
-            }
-
-            let segStartX = x
-
-            if let icon = seg.icon {
-                let iconAttrs: [NSAttributedString.Key: Any] = [
-                    .font: NSFont.systemFont(ofSize: 10),
-                    .foregroundColor: seg.color
-                ]
-                let iconStr = icon as NSString
-                iconStr.draw(at: NSPoint(x: x, y: textY), withAttributes: iconAttrs)
-                x += iconStr.size(withAttributes: iconAttrs).width + 3
-            }
-
-            let attrs: [NSAttributedString.Key: Any] = [
-                .font: NSFont.monospacedSystemFont(ofSize: 10, weight: .regular),
-                .foregroundColor: seg.color
-            ]
-            let str = seg.text as NSString
-            str.draw(at: NSPoint(x: x, y: textY), withAttributes: attrs)
-            x += str.size(withAttributes: attrs).width
-
-            // If this is the git branch segment, add a chevron and save the hit rect
-            if seg.isGitBranch && gitRepoRoot != nil {
-                let chevronAttrs: [NSAttributedString.Key: Any] = [
-                    .font: NSFont.systemFont(ofSize: 8),
-                    .foregroundColor: seg.color.withAlphaComponent(0.6)
-                ]
-                let chevron = " \u{25BE}" as NSString // small down triangle
-                chevron.draw(at: NSPoint(x: x, y: textY + 1), withAttributes: chevronAttrs)
-                x += chevron.size(withAttributes: chevronAttrs).width
-
-                gitBranchRect = NSRect(x: segStartX - 2, y: 0, width: x - segStartX + 4, height: barHeight)
-            }
-        }
-
-        // Right-edge icons: bookmark, docker
-        var rightIconX = bounds.width - 8
-        let iconH: CGFloat = 14
-        let iconY = (barHeight - iconH) / 2
-
-        // Docker icon
-        dockerIconRect = .zero
-        if DockerService.shared.isAvailable {
-            rightIconX -= iconH + 2
-            dockerIconRect = NSRect(x: rightIconX - 2, y: 0, width: iconH + 6, height: barHeight)
-            let dockerAttrs: [NSAttributedString.Key: Any] = [
-                .font: NSFont.systemFont(ofSize: 11),
-                .foregroundColor: dockerPanelVisible
-                    ? theme.accentColor : theme.chromeMuted.withAlphaComponent(0.5)
-            ]
-            ("\u{2338}" as NSString).draw(at: NSPoint(x: rightIconX, y: iconY), withAttributes: dockerAttrs)
-            rightIconX -= 4
-        }
-
-        // Bookmark icon
-        let isBookmarked = BookmarkService.shared.contains(path: currentDirectory)
-        rightIconX -= iconH + 2
-        bookmarkIconRect = NSRect(x: rightIconX - 2, y: 0, width: iconH + 6, height: barHeight)
-        let bmAttrs: [NSAttributedString.Key: Any] = [
-            .font: NSFont.systemFont(ofSize: 11),
-            .foregroundColor: isBookmarked
-                ? theme.accentColor : theme.chromeMuted.withAlphaComponent(0.5)
-        ]
-        let bmIcon = isBookmarked ? "\u{2605}" : "\u{2606}" // ★ filled or ☆ empty
-        (bmIcon as NSString).draw(at: NSPoint(x: rightIconX, y: iconY), withAttributes: bmAttrs)
-        rightIconX -= 4
-
-        // Draw right segments (before icons)
-        var rx = rightIconX - 4
-        for (i, seg) in rightSegments.reversed().enumerated() {
-            let attrs: [NSAttributedString.Key: Any] = [
-                .font: NSFont.systemFont(ofSize: 10, weight: .regular),
-                .foregroundColor: seg.color
-            ]
-            let str = seg.text as NSString
-            let size = str.size(withAttributes: attrs)
-            rx -= size.width
-            str.draw(at: NSPoint(x: rx, y: textY), withAttributes: attrs)
-
-            if i < rightSegments.count - 1 {
-                let sepAttrs: [NSAttributedString.Key: Any] = [
-                    .font: NSFont.systemFont(ofSize: 8),
-                    .foregroundColor: theme.chromeMuted.withAlphaComponent(0.3)
-                ]
-                rx -= 14
-                ("\u{2022}" as NSString).draw(at: NSPoint(x: rx + 4, y: textY + 1), withAttributes: sepAttrs)
-            }
-        }
+    func updateStatusBarTrackingArea() {
+        if let existing = statusBarTrackingArea { removeTrackingArea(existing) }
+        let area = NSTrackingArea(
+            rect: bounds,
+            options: [.mouseMoved, .mouseEnteredAndExited, .activeInKeyWindow],
+            owner: self, userInfo: nil)
+        addTrackingArea(area)
+        statusBarTrackingArea = area
     }
 
-    // MARK: - Click Handling
+    override func setFrameSize(_ newSize: NSSize) {
+        super.setFrameSize(newSize)
+        updateStatusBarTrackingArea()
+    }
 
-    override func mouseDown(with event: NSEvent) {
+    override func mouseMoved(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
+        var changed = false
 
-        // Bookmark icon
-        if bookmarkIconRect.contains(point) {
-            showBookmarkMenu(at: point)
-            return
+        // Check sidebar toggle
+        let toggleHover = sidebarToggleRect.contains(point)
+        if toggleHover != isSidebarToggleHovered {
+            isSidebarToggleHovered = toggleHover
+            changed = true
         }
 
-        // Docker icon
-        if dockerIconRect.contains(point) && DockerService.shared.isAvailable {
-            onDockerToggle?()
-            return
-        }
-
-        if gitBranchRect.contains(point), let repoRoot = gitRepoRoot {
-            showBranchMenu(at: point, repoRoot: repoRoot)
-            return
-        }
-    }
-
-    private func showBranchMenu(at point: NSPoint, repoRoot: String) {
-        let branches = Self.listBranches(repoRoot: repoRoot)
-        guard !branches.local.isEmpty || !branches.remote.isEmpty else { return }
-
-        let menu = NSMenu()
-
-        // Local branches
-        let localHeader = NSMenuItem(title: "Local Branches", action: nil, keyEquivalent: "")
-        localHeader.isEnabled = false
-        menu.addItem(localHeader)
-        menu.addItem(.separator())
-
-        for branch in branches.local {
-            let item = NSMenuItem(title: branch, action: #selector(branchSelected(_:)), keyEquivalent: "")
-            item.target = self
-            item.representedObject = branch
-            if branch == gitBranch { item.state = .on }
-            menu.addItem(item)
-        }
-
-        // Remote branches
-        if !branches.remote.isEmpty {
-            menu.addItem(.separator())
-            let remoteHeader = NSMenuItem(title: "Remote Branches", action: nil, keyEquivalent: "")
-            remoteHeader.isEnabled = false
-            menu.addItem(remoteHeader)
-            menu.addItem(.separator())
-
-            // Group by remote name
-            var grouped: [String: [String]] = [:]
-            for ref in branches.remote {
-                let parts = ref.split(separator: "/", maxSplits: 1)
-                let remoteName = String(parts[0])
-                let branchName = parts.count > 1 ? String(parts[1]) : ref
-                grouped[remoteName, default: []].append(branchName)
-            }
-
-            for remoteName in grouped.keys.sorted() {
-                for branch in grouped[remoteName]!.sorted() {
-                    // Skip if there's already a local branch with the same name
-                    if branches.local.contains(branch) { continue }
-
-                    let displayTitle = "\(remoteName)/\(branch)"
-                    let item = NSMenuItem(title: displayTitle, action: #selector(branchSelected(_:)), keyEquivalent: "")
-                    item.target = self
-                    // git switch will auto-create tracking branch from remote
-                    item.representedObject = branch
-                    item.indentationLevel = 1
-                    menu.addItem(item)
+        // Check clickable segments
+        var newHovered: String?
+        if !toggleHover {
+            let settings = AppSettings.shared
+            let state = currentState
+            let allPlugins: [StatusBarPlugin] = leftPlugins + rightPlugins
+            for plugin in allPlugins {
+                guard plugin.isVisible(settings: settings, state: state),
+                      let rect = segmentRects[plugin.id],
+                      rect.contains(point) else { continue }
+                // Only show hover for clickable segments
+                if plugin.associatedPanelID != nil || plugin is GitBranchSegment {
+                    newHovered = plugin.id
                 }
+                break
             }
         }
-
-        let menuPoint = NSPoint(x: gitBranchRect.minX, y: barHeight)
-        menu.popUp(positioning: nil, at: menuPoint, in: self)
-    }
-
-    @objc private func branchSelected(_ sender: NSMenuItem) {
-        guard let branch = sender.representedObject as? String else { return }
-        guard branch != gitBranch else { return }
-        onBranchSwitch?(branch)
-    }
-
-    // MARK: - Bookmark Menu
-
-    private func showBookmarkMenu(at point: NSPoint) {
-        let menu = NSMenu()
-        let service = BookmarkService.shared
-        let isBookmarked = service.contains(path: currentDirectory)
-
-        // Toggle bookmark for current directory
-        if isBookmarked {
-            let removeItem = NSMenuItem(title: "Remove Bookmark", action: #selector(removeCurrentBookmark(_:)), keyEquivalent: "")
-            removeItem.target = self
-            menu.addItem(removeItem)
-        } else {
-            let addItem = NSMenuItem(title: "Bookmark This Directory", action: #selector(addCurrentBookmark(_:)), keyEquivalent: "")
-            addItem.target = self
-            menu.addItem(addItem)
+        if newHovered != hoveredSegmentID {
+            hoveredSegmentID = newHovered
+            changed = true
         }
 
-        if !service.bookmarks.isEmpty {
-            menu.addItem(.separator())
-
-            let header = NSMenuItem(title: "Bookmarks", action: nil, keyEquivalent: "")
-            header.isEnabled = false
-            menu.addItem(header)
-
-            for (i, bm) in service.bookmarks.enumerated() {
-                let item = NSMenuItem(title: "\(bm.name)  \(abbreviatePath(bm.path))", action: #selector(bookmarkSelected(_:)), keyEquivalent: "")
-                if i < 9 {
-                    // Cmd+1 through Cmd+9 hint (shown in menu but handled by MainWindowController)
-                }
-                item.target = self
-                item.tag = i
-                if bm.path == currentDirectory { item.state = .on }
-                menu.addItem(item)
-            }
-        }
-
-        let menuPoint = NSPoint(x: bookmarkIconRect.midX, y: barHeight)
-        menu.popUp(positioning: nil, at: menuPoint, in: self)
+        if changed { needsDisplay = true }
     }
 
-    @objc private func addCurrentBookmark(_ sender: NSMenuItem) {
-        onBookmarkCurrent?()
-        needsDisplay = true
-    }
-
-    @objc private func removeCurrentBookmark(_ sender: NSMenuItem) {
-        let service = BookmarkService.shared
-        if let bm = service.bookmarks.first(where: { $0.path == currentDirectory }) {
-            service.remove(id: bm.id)
-        }
-        needsDisplay = true
-    }
-
-    @objc private func bookmarkSelected(_ sender: NSMenuItem) {
-        let service = BookmarkService.shared
-        let idx = sender.tag
-        guard idx >= 0, idx < service.bookmarks.count else { return }
-        onBookmarkSelected?(service.bookmarks[idx].path)
-    }
-
-    // MARK: - Helpers
-
-    private func abbreviatePath(_ path: String) -> String {
-        let home = FileManager.default.homeDirectoryForCurrentUser.path
-        if path.hasPrefix(home) {
-            return "~" + path.dropFirst(home.count)
-        }
-        return path
+    override func mouseExited(with event: NSEvent) {
+        let changed = hoveredSegmentID != nil || isSidebarToggleHovered
+        hoveredSegmentID = nil
+        isSidebarToggleHovered = false
+        if changed { needsDisplay = true }
     }
 
     deinit {
@@ -478,5 +297,15 @@ class StatusBarView: NSView {
         if let observer = settingsObserver {
             NotificationCenter.default.removeObserver(observer)
         }
+    }
+}
+
+// MARK: - StatusBarView Menu Actions (used by plugins)
+
+extension StatusBarView {
+    @objc func gitBranchSelected(_ sender: NSMenuItem) {
+        guard let branch = sender.representedObject as? String else { return }
+        guard branch != gitBranch else { return }
+        onBranchSwitch?(branch)
     }
 }

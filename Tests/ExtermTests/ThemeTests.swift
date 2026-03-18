@@ -4,7 +4,7 @@ import XCTest
 final class ThemeTests: XCTestCase {
 
     func testAllThemesExist() {
-        XCTAssertEqual(TerminalTheme.themes.count, 14)
+        XCTAssertEqual(TerminalTheme.themes.count, 22)
     }
 
     func testAllThemesHave16AnsiColors() {
@@ -32,11 +32,20 @@ final class ThemeTests: XCTestCase {
 
     func testThemeChromeColors() {
         for theme in TerminalTheme.themes {
-            XCTAssertNotNil(theme.chromeBg, "Theme \(theme.name) needs chromeBg")
-            XCTAssertNotNil(theme.chromeText, "Theme \(theme.name) needs chromeText")
-            XCTAssertNotNil(theme.chromeMuted, "Theme \(theme.name) needs chromeMuted")
-            XCTAssertNotNil(theme.sidebarBg, "Theme \(theme.name) needs sidebarBg")
-            XCTAssertNotNil(theme.accentColor, "Theme \(theme.name) needs accentColor")
+            let chromeBg = theme.chromeBg.cgColor.components ?? []
+            let chromeText = theme.chromeText.cgColor.components ?? []
+            let chromeMuted = theme.chromeMuted.cgColor.components ?? []
+            let sidebarBg = theme.sidebarBg.cgColor.components ?? []
+            let accent = theme.accentColor.cgColor.components ?? []
+
+            XCTAssertGreaterThan(chromeBg.count, 0, "Theme \(theme.name) needs a valid chromeBg color")
+            XCTAssertGreaterThan(chromeText.count, 0, "Theme \(theme.name) needs a valid chromeText color")
+            XCTAssertGreaterThan(chromeMuted.count, 0, "Theme \(theme.name) needs a valid chromeMuted color")
+            XCTAssertGreaterThan(sidebarBg.count, 0, "Theme \(theme.name) needs a valid sidebarBg color")
+            XCTAssertGreaterThan(accent.count, 0, "Theme \(theme.name) needs a valid accentColor")
+
+            XCTAssertNotEqual(theme.chromeBg, theme.chromeText, "Theme \(theme.name) chrome text should differ from chrome background")
+            XCTAssertNotEqual(theme.sidebarBg, theme.accentColor, "Theme \(theme.name) accent should differ from sidebar background")
         }
     }
 

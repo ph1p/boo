@@ -1,0 +1,77 @@
+# Remote Sessions
+
+Exterm automatically detects and supports remote terminal sessions over SSH and Docker, providing file tree browsing and CWD tracking for remote hosts.
+
+## Detection
+
+Remote sessions are detected via two mechanisms:
+
+### Title Heuristics
+
+`TerminalBridge.detectRemoteFromHeuristics` is triggered on every `GHOSTTY_ACTION_SET_TITLE`. It checks if the terminal title contains:
+
+- `user@host` patterns (SSH)
+- `docker exec/run` patterns (Docker)
+
+AND the reported CWD doesn't exist locally. This is the primary detection path since remote shells don't have Ghostty's shell integration.
+
+### Process Tree
+
+`RemoteExplorer.detectRemoteSession` uses `proc_listchildpids` + `proc_name` syscalls to find ssh/docker child processes and parse their command-line args via `sysctl(KERN_PROCARGS2)`.
+
+## Detection Flow
+
+```
+paneView(_:titleChanged:) in MainWindowController
+  → detectRemoteFromHeuristics
+    → if remote detected → handleRemoteSessionChange
+      → switches sidebar to RemoteFileTreeView
+        → RemoteExplorer.listRemoteDirectory
+```
+
+## Remote Commands
+
+Commands are executed differently depending on the session type:
+
+| Type | Command Pattern |
+|---|---|
+| **SSH** | `ssh -n -o BatchMode=yes <host> <cmd>` |
+| **Docker** | `docker exec <container> sh -c <cmd>` |
+
+SSH prefers ControlMaster sockets when available (searched in `~/.ssh/`, `/tmp/`).
+
+## Remote Shell Integration (CWD Tracking)
+
+Ghostty's shell integration only injects OSC 7 hooks into the **local** shell. Remote shells need their own mechanism.
+
+### How It Works
+
+`GhosttyRuntime.installShellIntegration()` sets up wrapper scripts:
+
+1. **`~/.exterm/shell-integration/remote-init.sh`** — A POSIX-compatible snippet that sets up `__exterm_osc7()` function and registers it as a `chpwd`/`PROMPT_COMMAND` hook (works in zsh and bash)
+
+2. **`~/.exterm/shell-integration/bin/ssh`** — A wrapper that detects interactive SSH sessions, base64-encodes the remote-init snippet, and injects it via:
+   ```bash
+   ssh -t host "eval $(echo <b64> | base64 -d); exec $SHELL -li"
+   ```
+
+3. **`~/.exterm/shell-integration/bin/docker`** — Same pattern for `docker exec` sessions
+
+4. The bin directory is prepended to `PATH` so wrappers shadow the real binaries
+
+### Non-Interactive Bypass
+
+The wrappers detect if a remote command is given (e.g. `ssh host ls`) and skip injection, passing through to the real binary directly.
+
+### Remote Init Snippet
+
+```bash
+printf '\033]7;kitty-shell-cwd://<hostname><pwd>\a'
+```
+
+This emits the same OSC 7 format that Ghostty's own integration uses (kitty-shell-cwd scheme). It is registered via:
+
+- **zsh** — `add-zsh-hook chpwd`
+- **bash** — `PROMPT_COMMAND`
+
+When the remote shell has bash or zsh, `cd` triggers OSC 7 which flows back through the PTY to Ghostty's action callback, updating the explorer. For shells without `PROMPT_COMMAND`/`chpwd` support (dash, sh), only the initial CWD is reported.

@@ -1,0 +1,99 @@
+# Ghostty Integration
+
+Exterm embeds [GhosttyKit](https://github.com/ghostty-org/ghostty) as a static library via the C API (`CGhostty/`). This provides complete terminal emulation with Metal GPU-accelerated rendering.
+
+## Terminal Engine
+
+GhosttyKit is the same engine that powers the [Ghostty terminal](https://ghostty.org):
+
+- Complete VT/xterm escape sequence parsing
+- Metal GPU-accelerated rendering
+- Proper font shaping and text rendering
+- Kitty keyboard protocol
+- Mouse tracking (all modes)
+- Scrollback with reflow
+- TUI application support (vim, lazygit, htop, etc.)
+
+A built-in VT100 parser exists as a fallback for environments where GhosttyKit isn't available.
+
+## Lifecycle
+
+### 1. Runtime Initialization
+
+`GhosttyRuntime.init()` is a singleton called once at app launch:
+
+1. Sets `GHOSTTY_RESOURCES_DIR` env var **before** `ghostty_init()` (required for shell integration)
+2. Sets `TERMINFO` env var pointing to bundled terminfo
+3. Calls `ghostty_init()` → `ghostty_app_new()` with runtime callbacks
+
+### 2. Surface Creation
+
+`GhosttyView.createSurface()` creates a `ghostty_surface_t` per terminal tab:
+
+- Each surface has `userdata` pointing to the owning `GhosttyView`
+- Surface is registered with the runtime for config updates
+
+## The Wakeup/Tick Loop
+
+Ghostty's internal message queue (surface mailbox) requires the host app to **drain it** by calling `ghostty_app_tick()`. The `wakeup_cb` callback fires from any thread when messages are queued.
+
+The wakeup callback **must** dispatch `ghostty_app_tick()` on the main thread:
+
+```swift
+private func ghosttyWakeup(_ userdata: UnsafeMutableRawPointer?) {
+    DispatchQueue.main.async {
+        guard let app = GhosttyRuntime.shared.app else { return }
+        ghostty_app_tick(app)
+    }
+}
+```
+
+:::warning
+Without this, **no surface messages are delivered** — PWD changes (OSC 7), title updates, process exit notifications, etc. will silently not arrive. This is the mechanism that turns Ghostty's internal async events into action callbacks.
+:::
+
+## Action Callback Chain
+
+```
+ghostty_action C callback
+  → dispatches to main thread
+    → GhosttyView.onPwdChanged / onTitleChanged / onProcessExited
+      → PaneView delegate
+        → MainWindowController
+          → TerminalBridge + sidebar update
+```
+
+Key actions:
+
+| Action | Trigger |
+|---|---|
+| `GHOSTTY_ACTION_PWD` | Shell `cd` detected via OSC 7 (requires shell integration) |
+| `GHOSTTY_ACTION_SET_TITLE` | Terminal title change (used for remote session detection) |
+| `GHOSTTY_ACTION_SHOW_CHILD_EXITED` | Shell process exited |
+
+## Shell Integration & Resources
+
+Ghostty injects shell hooks that make the shell emit OSC 7 on `cd`:
+
+- **zsh** — `ZDOTDIR` override
+- **bash** — `ENV` variable
+- **fish/elvish** — `XDG_DATA_DIRS`
+
+This requires the resources directory containing `shell-integration/` scripts.
+
+### Resource Bundling
+
+The `Makefile` copies `Vendor/ghostty/zig-out/share/ghostty/` and `share/terminfo/` next to the executable as `ghostty-resources/`.
+
+### Resolution Order
+
+`GhosttyRuntime.findResourcesDir()` searches:
+
+1. `{execDir}/ghostty-resources/ghostty/` — bundled (standalone)
+2. Walk up to `Vendor/ghostty/zig-out/share/ghostty` — development fallback
+
+## Configuration
+
+`applyExtermSettings(to:)` writes Exterm's theme/font/behavior settings to a temp Ghostty config file and loads it via `ghostty_config_load_file`.
+
+`ghostty_config_load_default_files` also loads the user's own Ghostty config at `~/Library/Application Support/com.mitchellh.ghostty/config`.

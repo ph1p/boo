@@ -1,0 +1,50 @@
+# Architecture
+
+## Language & Frameworks
+
+- **Swift** — macOS native, minimum macOS 13
+- **AppKit** — All terminal UI, toolbar, status bar, split panes
+- **SwiftUI** — File tree sidebar and settings window only
+- **GhosttyKit** — Terminal emulation and Metal GPU rendering (embedded from [ghostty-org/ghostty](https://github.com/ghostty-org/ghostty))
+- **CoreText** — Terminal text rendering (fallback, `NSView.draw`)
+- **POSIX PTY** — Via C helper (`CPTYHelper/`) using `forkpty()`
+
+## Project Structure
+
+```
+Exterm/
+  App/              AppDelegate, MainWindowController (window chrome, menus)
+  Ghostty/          GhosttyRuntime (app singleton), GhosttyView (Metal surface)
+  Terminal/         VT100Terminal (fallback parser), TerminalSession (PTY + I/O)
+  Renderer/         TerminalView (CoreText fallback renderer)
+  Models/           Workspace, Pane, SplitTree, AppSettings, Theme, TerminalTab
+  Views/            ToolbarView, PaneView, StatusBarView, FileTreeView, SettingsWindow
+  Services/         FileSystemWatcher, RemoteExplorer, KeyMapping, FileIcon
+  Plugin/           EnrichmentContext, TerminalContext
+  Plugins/          FileTreePlugin, BookmarksSidebarPlugin, DockerSidebarPlugin
+CGhostty/           C module wrapping ghostty.h
+CPTYHelper/         C helper for forkpty()
+Vendor/ghostty/     Ghostty source (git clone)
+```
+
+## Key Design Decisions
+
+- **TerminalBackend protocol** — Abstracts the terminal engine so it can be swapped between GhosttyKit and the built-in VT100 parser
+- **Per-pane tabs** — Each split pane owns its own tab bar and terminal sessions
+- **Workspace → SplitTree → Panes → Tabs** — Workspaces are folders, panes are splits, tabs are terminal sessions
+- **TerminalSession detach/reattach** — Sessions survive view hierarchy rebuilds via `attachToView()`/`detachFromView()`
+- **Thread safety** — VT100Terminal uses `NSLock`; `snapshot()` captures state under one lock for rendering
+- **All UI on main thread** — PTY read loop runs on a background GCD queue; OSC callbacks dispatch to main
+
+## Build System
+
+Swift Package Manager (`Package.swift`) with a `Makefile` for common tasks:
+
+```bash
+make setup         # First time: clone Ghostty + build GhosttyKit + build Exterm
+make run           # Build and launch
+make test          # Run tests
+make clean-ghostty # Clean GhosttyKit build artifacts
+make ghostty       # Rebuild GhosttyKit
+swift build        # Build only (requires GhosttyKit already built)
+```

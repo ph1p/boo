@@ -3,3 +3,8 @@ Vendor/ghostty/
 zig-out/
 .zig-cache/
 zig-cache/
+.claude
+_bmad
+_bmad-output
+documentation/docs/dist
+documentation/node_modules

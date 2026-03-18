@@ -1,0 +1,78 @@
+# Features
+
+## Workspaces
+
+Open folders as workspaces with their own file tree using **Cmd+N** (home directory) or **Cmd+Shift+O** (choose folder). Each workspace maintains its own state, color, and name.
+
+- **Workspace colors** — Assign preset or custom colors per workspace
+- **Pinning** — Pin frequently used workspaces
+- **Renaming** — Custom names for easy identification
+
+## Split Panes
+
+Split your terminal in any direction:
+
+- **Cmd+D** — Split right
+- **Cmd+Shift+D** — Split down
+- **Cmd+]** / **Cmd+[** — Navigate between panes
+
+Each split pane is independent with its own tab bar and terminal sessions.
+
+## Per-Pane Tabs
+
+Each pane has its own tab bar. Create new tabs with **Cmd+T**, close with **Cmd+W**. Closed tabs can be reopened with **Cmd+Z**.
+
+Smart close order: tab → pane → workspace.
+
+## File Explorer
+
+Toggle the sidebar with **Cmd+B**. The explorer shows a live-updating file tree for the current workspace.
+
+- **Local workspaces** — Uses FSEvents for real-time file system watching
+- **Remote SSH** — Auto-detects SSH sessions, lists files via `ssh <host> ls -1AF`
+- **Remote Docker** — Auto-detects `docker exec` sessions, lists files via `docker exec <container> sh -c 'ls -1AF'`
+
+## Themes
+
+14 built-in color themes with live preview swatches in settings:
+
+| Theme | Variants |
+|---|---|
+| Catppuccin | Mocha, Macchiato, Frappé, Latte |
+| Tokyo Night | — |
+| Dracula | — |
+| Nord | — |
+| Solarized | Dark, Light |
+| Gruvbox | — |
+| One Dark | — |
+| Rosé Pine | — |
+| Kanagawa | — |
+| Default Dark | — |
+
+## Git Integration
+
+The status bar shows the current git branch name. Click it to open a branch switcher showing both local and remote branches.
+
+## Status Bar
+
+Configurable segments displayed at the bottom of each pane:
+
+- **Git branch** — Current branch name with switcher
+- **Path** — Current working directory
+- **Running process** — Foreground process (zsh, node, vim, etc.)
+- **Pane count** — Number of active panes
+- **Clock** — Current time
+
+Toggle individual segments in **Settings → Status Bar**.
+
+## Settings
+
+Open with **Cmd+,**. Organized in tabs:
+
+| Tab | Options |
+|---|---|
+| **Theme** | 14 color themes with live preview |
+| **Terminal** | Font, font size, cursor style (block/beam/underline/outline) |
+| **Explorer** | Font, font size, show header/icons/hidden files |
+| **Status Bar** | Toggle individual segments |
+| **Shortcuts** | Keyboard shortcut reference |

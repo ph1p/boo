@@ -44,17 +44,13 @@ final class Workspace {
         customName ?? (folderPath as NSString).lastPathComponent
     }
 
-    private(set) var splitTree: SplitTree
+    var splitTree: SplitTree
     private(set) var panes: [UUID: Pane] = [:]
     var activePaneID: UUID
-
-    private(set) var currentDirectory: String
-    var onDirectoryChanged: ((String) -> Void)?
 
     init(folderPath: String) {
         self.id = UUID()
         self.folderPath = folderPath
-        self.currentDirectory = folderPath
         let rootID = UUID()
         self.splitTree = .leaf(id: rootID)
         self.activePaneID = rootID
@@ -69,7 +65,6 @@ final class Workspace {
     init(folderPath: String, id: UUID, splitTree: SplitTree, activePaneID: UUID) {
         self.id = id
         self.folderPath = folderPath
-        self.currentDirectory = folderPath
         self.splitTree = splitTree
         self.activePaneID = activePaneID
     }
@@ -96,17 +91,18 @@ final class Workspace {
     }
 
     func closePane(_ paneID: UUID) -> Bool {
+        // Find the closest sibling before removing
+        let sibling = splitTree.siblingLeafID(of: paneID)
+        guard let newTree = splitTree.removing(leafID: paneID) else {
+            return false
+        }
         panes[paneID]?.stopAll()
         panes.removeValue(forKey: paneID)
-
-        if let newTree = splitTree.removing(leafID: paneID) {
-            splitTree = newTree
-            if activePaneID == paneID {
-                activePaneID = splitTree.leafIDs.first ?? UUID()
-            }
-            return true
+        splitTree = newTree
+        if activePaneID == paneID {
+            activePaneID = sibling ?? splitTree.leafIDs.first ?? UUID()
         }
-        return false
+        return true
     }
 
     func equalizeSplits() {
@@ -125,12 +121,6 @@ final class Workspace {
                 ratio: 0.5
             )
         }
-    }
-
-    func handleDirectoryChange(_ newPath: String) {
-        guard newPath != currentDirectory else { return }
-        currentDirectory = newPath
-        onDirectoryChanged?(newPath)
     }
 
     func stopAll() {

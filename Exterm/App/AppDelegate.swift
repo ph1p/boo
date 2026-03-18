@@ -2,6 +2,7 @@ import Cocoa
 
 class AppDelegate: NSObject, NSApplicationDelegate {
     private var windowController: MainWindowController?
+    private var appearanceObserver: NSKeyValueObservation?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Initialize Ghostty runtime (lazy, won't crash if fails)
@@ -11,10 +12,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         windowController = MainWindowController()
         windowController?.showWindow(nil)
         windowController?.window?.makeKeyAndOrderFront(nil)
+
+        // Watch system appearance changes for auto-theme
+        appearanceObserver = NSApp.observe(\.effectiveAppearance) { _, _ in
+            AppSettings.shared.applySystemAppearance()
+        }
+        AppSettings.shared.applySystemAppearance()
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        windowController?.saveWorkspaces()
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {

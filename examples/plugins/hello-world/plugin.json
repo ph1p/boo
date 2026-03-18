@@ -1,0 +1,7 @@
+{
+  "id": "hello-world",
+  "name": "Hello World",
+  "version": "1.0.0",
+  "icon": "hand.wave",
+  "description": "Minimal example plugin - 5 lines of JSON"
+}

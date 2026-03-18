@@ -1,0 +1,48 @@
+# Theming
+
+## Theme Structure
+
+`TerminalTheme` defines a complete color scheme:
+
+- Foreground and background colors
+- 16 ANSI colors (8 normal + 8 bright)
+- Selection highlight color
+- Cursor color
+- UI chrome colors (sidebar, status bar, borders)
+
+## Built-in Themes
+
+Exterm ships with 14 themes:
+
+- **Default Dark**
+- **Tokyo Night**
+- **Catppuccin** — Mocha, Macchiato, Frappé, Latte
+- **Solarized** — Dark, Light
+- **Dracula**
+- **Nord**
+- **Gruvbox**
+- **One Dark**
+- **Rosé Pine**
+- **Kanagawa**
+
+## How Theming Works
+
+Theme colors are read at draw time from `AppSettings.shared.theme`. When a theme changes:
+
+1. Settings update is saved via `AppSettings.shared`
+2. `NotificationCenter` posts `.settingsChanged`
+3. `SettingsObserver` (ObservableObject) triggers SwiftUI re-renders
+4. AppKit views redraw with new theme colors
+
+## Color Utilities
+
+Use the `TerminalColor` extensions for color conversion:
+
+```swift
+// Correct
+let cg = myColor.cgColor
+let ns = myColor.nsColor
+
+// Avoid inline conversions like:
+// CGFloat(r) / 255.0
+```

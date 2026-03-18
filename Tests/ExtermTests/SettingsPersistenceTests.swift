@@ -79,6 +79,43 @@ final class SettingsPersistenceTests: XCTestCase {
         settings.themeName = original
     }
 
+    // MARK: - Sidebar Width Persistence
+
+    func testSidebarWidthDefaultValue() {
+        UserDefaults.standard.removeObject(forKey: "sidebarWidth")
+        let settings = AppSettings.shared
+        XCTAssertEqual(settings.sidebarWidth, 250, "Default sidebar width should be 250")
+    }
+
+    func testSidebarWidthRoundTrip() {
+        let settings = AppSettings.shared
+        let original = settings.sidebarWidth
+
+        settings.sidebarWidth = 300
+        XCTAssertEqual(settings.sidebarWidth, 300)
+
+        settings.sidebarWidth = 180
+        XCTAssertEqual(settings.sidebarWidth, 180)
+
+        settings.sidebarWidth = 250
+    }
+
+    func testSidebarWidthInSettingsJSON() {
+        let settings = AppSettings.shared
+        let original = settings.sidebarWidth
+        settings.sidebarWidth = 350
+        defer { settings.sidebarWidth = original }
+
+        let path = ExtermPaths.settingsFile
+        guard let data = try? Data(contentsOf: URL(fileURLWithPath: path)),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            XCTFail("Could not read settings.json")
+            return
+        }
+        XCTAssertEqual(json["sidebarWidth"] as? Double, 350.0,
+                       "sidebarWidth should be persisted in settings.json")
+    }
+
     func testBookmarksPersistToFile() {
         let service = BookmarkService.shared
         let countBefore = service.bookmarks.count

@@ -7,7 +7,6 @@ final class WorkspaceTests: XCTestCase {
         let ws = Workspace(folderPath: "/Users/test")
         XCTAssertEqual(ws.folderPath, "/Users/test")
         XCTAssertEqual(ws.displayName, "test")
-        XCTAssertEqual(ws.currentDirectory, "/Users/test")
         XCTAssertEqual(ws.panes.count, 1)
         XCTAssertNotNil(ws.pane(for: ws.activePaneID))
     }
@@ -59,25 +58,6 @@ final class WorkspaceTests: XCTestCase {
     func testCloseLastPane() {
         let ws = Workspace(folderPath: "/tmp")
         XCTAssertFalse(ws.closePane(ws.activePaneID))
-    }
-
-    func testHandleDirectoryChange() {
-        let ws = Workspace(folderPath: "/tmp")
-        var received: String?
-        ws.onDirectoryChanged = { received = $0 }
-
-        ws.handleDirectoryChange("/Users/test")
-        XCTAssertEqual(ws.currentDirectory, "/Users/test")
-        XCTAssertEqual(received, "/Users/test")
-    }
-
-    func testHandleDirectoryChangeNoOp() {
-        let ws = Workspace(folderPath: "/tmp")
-        var callCount = 0
-        ws.onDirectoryChanged = { _ in callCount += 1 }
-
-        ws.handleDirectoryChange("/tmp") // Same as current
-        XCTAssertEqual(callCount, 0)
     }
 
     func testStopAll() {

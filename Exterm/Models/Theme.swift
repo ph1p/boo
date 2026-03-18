@@ -14,6 +14,14 @@ struct TerminalTheme {
     let chromeMuted: NSColor
     let sidebarBg: NSColor
     let accentColor: NSColor
+
+    /// Whether this is a dark theme (background luminance < 0.5).
+    var isDark: Bool {
+        let r = CGFloat(background.r) / 255
+        let g = CGFloat(background.g) / 255
+        let b = CGFloat(background.b) / 255
+        return (0.299 * r + 0.587 * g + 0.114 * b) < 0.5
+    }
 }
 
 extension TerminalTheme {
@@ -29,9 +37,17 @@ extension TerminalTheme {
         .dracula,
         .nord,
         .gruvboxDark,
+        .gruvboxLight,
         .oneDark,
+        .oneLight,
         .rosePine,
         .kanagawa,
+        .everforestDark,
+        .everforestLight,
+        .githubDark,
+        .githubLight,
+        .ayuDark,
+        .ayuLight,
     ]
 
     static let defaultDark = TerminalTheme(
@@ -466,5 +482,253 @@ extension TerminalTheme {
         chromeMuted: NSColor(red: 84/255, green: 84/255, blue: 109/255, alpha: 1),
         sidebarBg: NSColor(red: 31/255, green: 31/255, blue: 40/255, alpha: 1),
         accentColor: NSColor(red: 126/255, green: 156/255, blue: 216/255, alpha: 1)
+    )
+
+    static let gruvboxLight = TerminalTheme(
+        name: "Gruvbox Light",
+        foreground: TerminalColor(r: 60, g: 56, b: 54),
+        background: TerminalColor(r: 251, g: 241, b: 199),
+        cursor: TerminalColor(r: 60, g: 56, b: 54),
+        selection: NSColor(red: 213/255, green: 196/255, blue: 161/255, alpha: 0.5),
+        ansiColors: [
+            TerminalColor(r: 251, g: 241, b: 199),    // 0 black
+            TerminalColor(r: 204, g: 36, b: 29),      // 1 red
+            TerminalColor(r: 152, g: 151, b: 26),     // 2 green
+            TerminalColor(r: 215, g: 153, b: 33),     // 3 yellow
+            TerminalColor(r: 69, g: 133, b: 136),     // 4 blue
+            TerminalColor(r: 177, g: 98, b: 134),     // 5 magenta
+            TerminalColor(r: 104, g: 157, b: 106),    // 6 cyan
+            TerminalColor(r: 60, g: 56, b: 54),       // 7 white
+            TerminalColor(r: 146, g: 131, b: 116),    // 8 bright black
+            TerminalColor(r: 157, g: 0, b: 6),        // 9 bright red
+            TerminalColor(r: 121, g: 116, b: 14),     // 10 bright green
+            TerminalColor(r: 181, g: 118, b: 20),     // 11 bright yellow
+            TerminalColor(r: 7, g: 102, b: 120),      // 12 bright blue
+            TerminalColor(r: 143, g: 63, b: 113),     // 13 bright magenta
+            TerminalColor(r: 66, g: 123, b: 88),      // 14 bright cyan
+            TerminalColor(r: 40, g: 40, b: 40),       // 15 bright white
+        ],
+        chromeBg: NSColor(red: 242/255, green: 229/255, blue: 188/255, alpha: 1),
+        chromeText: NSColor(red: 60/255, green: 56/255, blue: 54/255, alpha: 1),
+        chromeMuted: NSColor(red: 146/255, green: 131/255, blue: 116/255, alpha: 1),
+        sidebarBg: NSColor(red: 245/255, green: 235/255, blue: 193/255, alpha: 1),
+        accentColor: NSColor(red: 215/255, green: 153/255, blue: 33/255, alpha: 1)
+    )
+
+    static let oneLight = TerminalTheme(
+        name: "One Light",
+        foreground: TerminalColor(r: 56, g: 58, b: 66),
+        background: TerminalColor(r: 250, g: 250, b: 250),
+        cursor: TerminalColor(r: 82, g: 139, b: 255),
+        selection: NSColor(red: 56/255, green: 58/255, blue: 66/255, alpha: 0.1),
+        ansiColors: [
+            TerminalColor(r: 56, g: 58, b: 66),       // 0 black
+            TerminalColor(r: 228, g: 86, b: 73),      // 1 red
+            TerminalColor(r: 80, g: 161, b: 79),      // 2 green
+            TerminalColor(r: 193, g: 132, b: 1),      // 3 yellow
+            TerminalColor(r: 64, g: 120, b: 242),     // 4 blue
+            TerminalColor(r: 166, g: 38, b: 164),     // 5 magenta
+            TerminalColor(r: 1, g: 132, b: 188),      // 6 cyan
+            TerminalColor(r: 56, g: 58, b: 66),       // 7 white
+            TerminalColor(r: 160, g: 161, b: 167),    // 8 bright black
+            TerminalColor(r: 228, g: 86, b: 73),      // 9 bright red
+            TerminalColor(r: 80, g: 161, b: 79),      // 10 bright green
+            TerminalColor(r: 193, g: 132, b: 1),      // 11 bright yellow
+            TerminalColor(r: 64, g: 120, b: 242),     // 12 bright blue
+            TerminalColor(r: 166, g: 38, b: 164),     // 13 bright magenta
+            TerminalColor(r: 1, g: 132, b: 188),      // 14 bright cyan
+            TerminalColor(r: 56, g: 58, b: 66),       // 15 bright white
+        ],
+        chromeBg: NSColor(red: 240/255, green: 240/255, blue: 240/255, alpha: 1),
+        chromeText: NSColor(red: 56/255, green: 58/255, blue: 66/255, alpha: 1),
+        chromeMuted: NSColor(red: 160/255, green: 161/255, blue: 167/255, alpha: 1),
+        sidebarBg: NSColor(red: 245/255, green: 245/255, blue: 245/255, alpha: 1),
+        accentColor: NSColor(red: 64/255, green: 120/255, blue: 242/255, alpha: 1)
+    )
+
+    static let everforestDark = TerminalTheme(
+        name: "Everforest Dark",
+        foreground: TerminalColor(r: 211, g: 198, b: 170),
+        background: TerminalColor(r: 39, g: 46, b: 34),
+        cursor: TerminalColor(r: 211, g: 198, b: 170),
+        selection: NSColor(red: 80/255, green: 96/255, blue: 64/255, alpha: 0.5),
+        ansiColors: [
+            TerminalColor(r: 72, g: 84, b: 60),       // 0 black
+            TerminalColor(r: 230, g: 126, b: 128),    // 1 red
+            TerminalColor(r: 167, g: 192, b: 128),    // 2 green
+            TerminalColor(r: 219, g: 188, b: 127),    // 3 yellow
+            TerminalColor(r: 127, g: 187, b: 179),    // 4 blue
+            TerminalColor(r: 214, g: 153, b: 182),    // 5 magenta
+            TerminalColor(r: 131, g: 192, b: 146),    // 6 cyan
+            TerminalColor(r: 211, g: 198, b: 170),    // 7 white
+            TerminalColor(r: 113, g: 128, b: 97),     // 8 bright black
+            TerminalColor(r: 230, g: 126, b: 128),    // 9 bright red
+            TerminalColor(r: 167, g: 192, b: 128),    // 10 bright green
+            TerminalColor(r: 219, g: 188, b: 127),    // 11 bright yellow
+            TerminalColor(r: 127, g: 187, b: 179),    // 12 bright blue
+            TerminalColor(r: 214, g: 153, b: 182),    // 13 bright magenta
+            TerminalColor(r: 131, g: 192, b: 146),    // 14 bright cyan
+            TerminalColor(r: 211, g: 198, b: 170),    // 15 bright white
+        ],
+        chromeBg: NSColor(red: 31/255, green: 37/255, blue: 28/255, alpha: 1),
+        chromeText: NSColor(red: 211/255, green: 198/255, blue: 170/255, alpha: 1),
+        chromeMuted: NSColor(red: 113/255, green: 128/255, blue: 97/255, alpha: 1),
+        sidebarBg: NSColor(red: 39/255, green: 46/255, blue: 34/255, alpha: 1),
+        accentColor: NSColor(red: 167/255, green: 192/255, blue: 128/255, alpha: 1)
+    )
+
+    static let everforestLight = TerminalTheme(
+        name: "Everforest Light",
+        foreground: TerminalColor(r: 92, g: 103, b: 76),
+        background: TerminalColor(r: 253, g: 246, b: 227),
+        cursor: TerminalColor(r: 92, g: 103, b: 76),
+        selection: NSColor(red: 167/255, green: 192/255, blue: 128/255, alpha: 0.2),
+        ansiColors: [
+            TerminalColor(r: 92, g: 103, b: 76),      // 0 black
+            TerminalColor(r: 247, g: 83, b: 65),      // 1 red
+            TerminalColor(r: 143, g: 185, b: 69),     // 2 green
+            TerminalColor(r: 223, g: 163, b: 55),     // 3 yellow
+            TerminalColor(r: 57, g: 150, b: 159),     // 4 blue
+            TerminalColor(r: 223, g: 105, b: 149),    // 5 magenta
+            TerminalColor(r: 53, g: 168, b: 120),     // 6 cyan
+            TerminalColor(r: 92, g: 103, b: 76),      // 7 white
+            TerminalColor(r: 147, g: 160, b: 129),    // 8 bright black
+            TerminalColor(r: 247, g: 83, b: 65),      // 9 bright red
+            TerminalColor(r: 143, g: 185, b: 69),     // 10 bright green
+            TerminalColor(r: 223, g: 163, b: 55),     // 11 bright yellow
+            TerminalColor(r: 57, g: 150, b: 159),     // 12 bright blue
+            TerminalColor(r: 223, g: 105, b: 149),    // 13 bright magenta
+            TerminalColor(r: 53, g: 168, b: 120),     // 14 bright cyan
+            TerminalColor(r: 92, g: 103, b: 76),      // 15 bright white
+        ],
+        chromeBg: NSColor(red: 239/255, green: 231/255, blue: 213/255, alpha: 1),
+        chromeText: NSColor(red: 92/255, green: 103/255, blue: 76/255, alpha: 1),
+        chromeMuted: NSColor(red: 147/255, green: 160/255, blue: 129/255, alpha: 1),
+        sidebarBg: NSColor(red: 246/255, green: 238/255, blue: 220/255, alpha: 1),
+        accentColor: NSColor(red: 143/255, green: 185/255, blue: 69/255, alpha: 1)
+    )
+
+    static let githubDark = TerminalTheme(
+        name: "GitHub Dark",
+        foreground: TerminalColor(r: 201, g: 209, b: 217),
+        background: TerminalColor(r: 13, g: 17, b: 23),
+        cursor: TerminalColor(r: 201, g: 209, b: 217),
+        selection: NSColor(red: 56/255, green: 139/255, blue: 253/255, alpha: 0.3),
+        ansiColors: [
+            TerminalColor(r: 72, g: 79, b: 88),       // 0 black
+            TerminalColor(r: 255, g: 123, b: 114),    // 1 red
+            TerminalColor(r: 63, g: 185, b: 80),      // 2 green
+            TerminalColor(r: 210, g: 153, b: 34),     // 3 yellow
+            TerminalColor(r: 88, g: 166, b: 255),     // 4 blue
+            TerminalColor(r: 188, g: 140, b: 255),    // 5 magenta
+            TerminalColor(r: 57, g: 211, b: 220),     // 6 cyan
+            TerminalColor(r: 201, g: 209, b: 217),    // 7 white
+            TerminalColor(r: 110, g: 118, b: 129),    // 8 bright black
+            TerminalColor(r: 255, g: 123, b: 114),    // 9 bright red
+            TerminalColor(r: 63, g: 185, b: 80),      // 10 bright green
+            TerminalColor(r: 210, g: 153, b: 34),     // 11 bright yellow
+            TerminalColor(r: 88, g: 166, b: 255),     // 12 bright blue
+            TerminalColor(r: 188, g: 140, b: 255),    // 13 bright magenta
+            TerminalColor(r: 57, g: 211, b: 220),     // 14 bright cyan
+            TerminalColor(r: 201, g: 209, b: 217),    // 15 bright white
+        ],
+        chromeBg: NSColor(red: 1/255, green: 4/255, blue: 9/255, alpha: 1),
+        chromeText: NSColor(red: 201/255, green: 209/255, blue: 217/255, alpha: 1),
+        chromeMuted: NSColor(red: 110/255, green: 118/255, blue: 129/255, alpha: 1),
+        sidebarBg: NSColor(red: 13/255, green: 17/255, blue: 23/255, alpha: 1),
+        accentColor: NSColor(red: 88/255, green: 166/255, blue: 255/255, alpha: 1)
+    )
+
+    static let githubLight = TerminalTheme(
+        name: "GitHub Light",
+        foreground: TerminalColor(r: 31, g: 35, b: 40),
+        background: TerminalColor(r: 255, g: 255, b: 255),
+        cursor: TerminalColor(r: 31, g: 35, b: 40),
+        selection: NSColor(red: 56/255, green: 139/255, blue: 253/255, alpha: 0.2),
+        ansiColors: [
+            TerminalColor(r: 31, g: 35, b: 40),       // 0 black
+            TerminalColor(r: 207, g: 34, b: 46),      // 1 red
+            TerminalColor(r: 26, g: 127, b: 55),      // 2 green
+            TerminalColor(r: 155, g: 103, b: 0),      // 3 yellow
+            TerminalColor(r: 2, g: 82, b: 204),       // 4 blue
+            TerminalColor(r: 130, g: 80, b: 223),     // 5 magenta
+            TerminalColor(r: 5, g: 107, b: 121),      // 6 cyan
+            TerminalColor(r: 31, g: 35, b: 40),       // 7 white
+            TerminalColor(r: 110, g: 119, b: 129),    // 8 bright black
+            TerminalColor(r: 164, g: 38, b: 44),      // 9 bright red
+            TerminalColor(r: 26, g: 127, b: 55),      // 10 bright green
+            TerminalColor(r: 155, g: 103, b: 0),      // 11 bright yellow
+            TerminalColor(r: 2, g: 82, b: 204),       // 12 bright blue
+            TerminalColor(r: 130, g: 80, b: 223),     // 13 bright magenta
+            TerminalColor(r: 5, g: 107, b: 121),      // 14 bright cyan
+            TerminalColor(r: 31, g: 35, b: 40),       // 15 bright white
+        ],
+        chromeBg: NSColor(red: 246/255, green: 248/255, blue: 250/255, alpha: 1),
+        chromeText: NSColor(red: 31/255, green: 35/255, blue: 40/255, alpha: 1),
+        chromeMuted: NSColor(red: 110/255, green: 119/255, blue: 129/255, alpha: 1),
+        sidebarBg: NSColor(red: 255/255, green: 255/255, blue: 255/255, alpha: 1),
+        accentColor: NSColor(red: 2/255, green: 82/255, blue: 204/255, alpha: 1)
+    )
+
+    static let ayuDark = TerminalTheme(
+        name: "Ayu Dark",
+        foreground: TerminalColor(r: 179, g: 177, b: 168),
+        background: TerminalColor(r: 10, g: 14, b: 20),
+        cursor: TerminalColor(r: 232, g: 177, b: 82),
+        selection: NSColor(red: 39/255, green: 82/255, blue: 120/255, alpha: 0.5),
+        ansiColors: [
+            TerminalColor(r: 1, g: 10, b: 16),        // 0 black
+            TerminalColor(r: 242, g: 104, b: 82),     // 1 red
+            TerminalColor(r: 170, g: 212, b: 108),    // 2 green
+            TerminalColor(r: 232, g: 177, b: 82),     // 3 yellow
+            TerminalColor(r: 57, g: 186, b: 230),     // 4 blue
+            TerminalColor(r: 217, g: 151, b: 225),    // 5 magenta
+            TerminalColor(r: 149, g: 230, b: 203),    // 6 cyan
+            TerminalColor(r: 179, g: 177, b: 168),    // 7 white
+            TerminalColor(r: 71, g: 75, b: 82),       // 8 bright black
+            TerminalColor(r: 242, g: 104, b: 82),     // 9 bright red
+            TerminalColor(r: 170, g: 212, b: 108),    // 10 bright green
+            TerminalColor(r: 232, g: 177, b: 82),     // 11 bright yellow
+            TerminalColor(r: 57, g: 186, b: 230),     // 12 bright blue
+            TerminalColor(r: 217, g: 151, b: 225),    // 13 bright magenta
+            TerminalColor(r: 149, g: 230, b: 203),    // 14 bright cyan
+            TerminalColor(r: 179, g: 177, b: 168),    // 15 bright white
+        ],
+        chromeBg: NSColor(red: 1/255, green: 10/255, blue: 16/255, alpha: 1),
+        chromeText: NSColor(red: 179/255, green: 177/255, blue: 168/255, alpha: 1),
+        chromeMuted: NSColor(red: 71/255, green: 75/255, blue: 82/255, alpha: 1),
+        sidebarBg: NSColor(red: 10/255, green: 14/255, blue: 20/255, alpha: 1),
+        accentColor: NSColor(red: 232/255, green: 177/255, blue: 82/255, alpha: 1)
+    )
+
+    static let ayuLight = TerminalTheme(
+        name: "Ayu Light",
+        foreground: TerminalColor(r: 95, g: 102, b: 117),
+        background: TerminalColor(r: 252, g: 252, b: 252),
+        cursor: TerminalColor(r: 255, g: 106, b: 0),
+        selection: NSColor(red: 3/255, green: 130/255, blue: 240/255, alpha: 0.15),
+        ansiColors: [
+            TerminalColor(r: 95, g: 102, b: 117),     // 0 black
+            TerminalColor(r: 240, g: 113, b: 120),    // 1 red
+            TerminalColor(r: 134, g: 179, b: 69),     // 2 green
+            TerminalColor(r: 255, g: 106, b: 0),      // 3 yellow
+            TerminalColor(r: 54, g: 163, b: 217),     // 4 blue
+            TerminalColor(r: 163, g: 122, b: 204),    // 5 magenta
+            TerminalColor(r: 78, g: 191, b: 153),     // 6 cyan
+            TerminalColor(r: 95, g: 102, b: 117),     // 7 white
+            TerminalColor(r: 171, g: 178, b: 191),    // 8 bright black
+            TerminalColor(r: 240, g: 113, b: 120),    // 9 bright red
+            TerminalColor(r: 134, g: 179, b: 69),     // 10 bright green
+            TerminalColor(r: 255, g: 106, b: 0),      // 11 bright yellow
+            TerminalColor(r: 54, g: 163, b: 217),     // 12 bright blue
+            TerminalColor(r: 163, g: 122, b: 204),    // 13 bright magenta
+            TerminalColor(r: 78, g: 191, b: 153),     // 14 bright cyan
+            TerminalColor(r: 95, g: 102, b: 117),     // 15 bright white
+        ],
+        chromeBg: NSColor(red: 242/255, green: 242/255, blue: 242/255, alpha: 1),
+        chromeText: NSColor(red: 95/255, green: 102/255, blue: 117/255, alpha: 1),
+        chromeMuted: NSColor(red: 171/255, green: 178/255, blue: 191/255, alpha: 1),
+        sidebarBg: NSColor(red: 248/255, green: 248/255, blue: 248/255, alpha: 1),
+        accentColor: NSColor(red: 255/255, green: 106/255, blue: 0/255, alpha: 1)
     )
 }

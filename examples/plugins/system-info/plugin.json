@@ -1,0 +1,9 @@
+{
+  "id": "system-info",
+  "name": "System Info",
+  "version": "1.0.0",
+  "icon": "cpu",
+  "description": "Shows hostname, uptime, and disk usage",
+  "capabilities": { "sidebarPanel": true },
+  "runtime": "script"
+}

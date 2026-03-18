@@ -1,23 +1,26 @@
 import Combine
 import Foundation
 
-/// Snapshot of the active terminal's state.
-struct TerminalState: Equatable {
+/// Snapshot of the active terminal's state (transient bridge copy, not source of truth).
+/// TabState in Pane.Tab is the authoritative per-tab state.
+struct BridgeState: Equatable {
     var paneID: UUID
     var workspaceID: UUID
     var workingDirectory: String
     var terminalTitle: String
     var foregroundProcess: String
     var remoteSession: RemoteSessionType?
+    var remoteCwd: String?
     var isDockerAvailable: Bool
 
-    static let empty = TerminalState(
+    static let empty = BridgeState(
         paneID: UUID(),
         workspaceID: UUID(),
         workingDirectory: "",
         terminalTitle: "",
         foregroundProcess: "",
         remoteSession: nil,
+        remoteCwd: nil,
         isDockerAvailable: false
     )
 }
@@ -30,27 +33,83 @@ enum TerminalEvent: Equatable {
     case remoteSessionChanged(session: RemoteSessionType?)
     case focusChanged(paneID: UUID)
     case workspaceSwitched(workspaceID: UUID)
+    case remoteDirectoryListed(path: String, entries: [RemoteExplorer.RemoteEntry])
+}
+
+extension RemoteExplorer.RemoteEntry: Equatable {
+    static func == (lhs: RemoteExplorer.RemoteEntry, rhs: RemoteExplorer.RemoteEntry) -> Bool {
+        lhs.name == rhs.name && lhs.isDirectory == rhs.isDirectory
+    }
 }
 
 /// Centralized event bus and state holder for terminal events.
 /// One instance per MainWindowController.
 final class TerminalBridge {
-    @Published private(set) var state: TerminalState
+    @Published private(set) var state: BridgeState
     let events = PassthroughSubject<TerminalEvent, Never>()
+    let injector = RemoteShellInjector()
+    let monitor = RemoteSessionMonitor()
+
+    /// Most recent in-session directory listing from OSC 2 EXTERM_LS protocol.
+    private(set) var cachedRemoteListing: (path: String, entries: [RemoteExplorer.RemoteEntry])?
+
+    /// Process-tree hint per pane, updated by the monitor. Used for reconciliation.
+    private var processTreeHint: [UUID: RemoteSessionType?] = [:]
+
+    /// Grace period: when a session is first detected via title, protect it from stale
+    /// title events for a short window (until the process tree can confirm/deny).
+    private var sessionGraceUntil: [UUID: Date] = [:]
 
     init(paneID: UUID, workspaceID: UUID, workingDirectory: String) {
-        self.state = TerminalState(
+        self.state = BridgeState(
             paneID: paneID,
             workspaceID: workspaceID,
             workingDirectory: workingDirectory,
             terminalTitle: "",
             foregroundProcess: "",
             remoteSession: nil,
+            remoteCwd: nil,
             isDockerAvailable: false
         )
+        monitor.onSessionChanged = { [weak self] paneID, session in
+            self?.handleProcessTreeDetection(session: session, paneID: paneID)
+        }
     }
 
     // MARK: - Input Methods
+
+    /// Restore the full bridge state from the tab model when switching tabs/panes.
+    /// Each tab owns its own title, remote session, and CWD. The bridge is just a
+    /// window into the currently active tab. This avoids heuristic re-evaluation
+    /// which would misinterpret stale local CWDs as "remote session ended".
+    func restoreTabState(
+        paneID: UUID,
+        workingDirectory: String,
+        terminalTitle: String,
+        remoteSession: RemoteSessionType?,
+        remoteCwd: String?,
+        shellPID: pid_t = 0
+    ) {
+        NSLog("[Bridge] restoreTabState: paneID=\(paneID), cwd=\(workingDirectory), title=\(terminalTitle), remote=\(String(describing: remoteSession)), remoteCwd=\(String(describing: remoteCwd))")
+        let previousRemote = state.remoteSession
+        state.paneID = paneID
+        if !workingDirectory.isEmpty {
+            state.workingDirectory = workingDirectory
+        }
+        state.terminalTitle = terminalTitle
+        state.remoteSession = remoteSession
+        state.remoteCwd = remoteCwd
+
+        // Update the monitor with the active tab's shell PID
+        if shellPID > 0 {
+            monitor.updateShellPID(paneID: paneID, shellPID: shellPID)
+        }
+
+        events.send(.focusChanged(paneID: paneID))
+        if state.remoteSession != previousRemote {
+            events.send(.remoteSessionChanged(session: state.remoteSession))
+        }
+    }
 
     func handleFocus(paneID: UUID, workingDirectory: String) {
         state.paneID = paneID
@@ -61,14 +120,71 @@ final class TerminalBridge {
     }
 
     func handleDirectoryChange(path: String, paneID: UUID) {
-        guard paneID == state.paneID else { return }
-        guard path != state.workingDirectory else { return }
-        state.workingDirectory = path
+        guard paneID == state.paneID else {
+            return
+        }
 
         let previousRemote = state.remoteSession
-        state.remoteSession = TerminalBridge.detectRemoteFromHeuristics(
-            title: state.terminalTitle, cwd: path
+        NSLog("[Bridge] handleDirectoryChange: path=\(path), title=\(state.terminalTitle), previousRemote=\(String(describing: previousRemote)), currentCwd=\(state.workingDirectory)")
+
+        // If we were remote and the CWD is under the local user's home directory,
+        // the SSH/Docker session has ended and the local shell took over.
+        // OSC 7 (CWD reporting) only fires from the local shell, so a home-directory
+        // path proves the remote session is gone — clear it immediately rather
+        // than waiting for the title to update (which may lag).
+        // We only check home-directory paths (not /tmp etc.) because common system
+        // paths exist on both local and remote hosts.
+        // This must happen even when the path hasn't changed (e.g. user was in
+        // /Users/phlp, SSH'd somewhere, and returned to /Users/phlp).
+        let localHome = FileManager.default.homeDirectoryForCurrentUser.path
+        if previousRemote != nil && path.hasPrefix(localHome) {
+            NSLog("[Bridge] handleDirectoryChange: local home prefix detected, clearing remote session")
+            state.remoteSession = nil
+            state.remoteCwd = nil
+            state.workingDirectory = path
+            if previousRemote != nil { injector.sessionEnded(paneID: paneID) }
+            events.send(.remoteSessionChanged(session: nil))
+            events.send(.directoryChanged(path: path))
+            return
+        }
+
+        // If the process-tree monitor confirms no remote child, any CWD change
+        // proves the local shell is active (OSC 7 only fires from local shell).
+        if previousRemote != nil, let hint = processTreeHint[paneID], hint == nil {
+            NSLog("[Bridge] handleDirectoryChange: process tree confirms no remote child, clearing")
+            state.remoteSession = nil
+            state.remoteCwd = nil
+            state.workingDirectory = path
+            injector.sessionEnded(paneID: paneID)
+            events.send(.remoteSessionChanged(session: nil))
+            events.send(.directoryChanged(path: path))
+            return
+        }
+
+        guard path != state.workingDirectory else {
+            NSLog("[Bridge] handleDirectoryChange: path unchanged, skipping")
+            return
+        }
+        state.workingDirectory = path
+
+        state.remoteSession = TerminalBridge.resolveRemoteSession(
+            title: state.terminalTitle,
+            cwd: path,
+            previous: previousRemote,
+            preferPreviousForCwdEvent: true
         )
+        NSLog("[Bridge] handleDirectoryChange: resolved remote=\(String(describing: state.remoteSession))")
+
+        // When remote, extract remoteCwd from title (OSC-7 path is local-relative)
+        if state.remoteSession != nil {
+            if let remotePath = TerminalBridge.extractRemoteCwd(from: state.terminalTitle) {
+                state.remoteCwd = remotePath
+            }
+            // Keep existing remoteCwd if title doesn't have one
+        } else {
+            state.remoteCwd = nil
+        }
+
         if state.remoteSession != previousRemote {
             events.send(.remoteSessionChanged(session: state.remoteSession))
         }
@@ -78,6 +194,7 @@ final class TerminalBridge {
 
     func handleTitleChange(title: String, paneID: UUID) {
         guard paneID == state.paneID else { return }
+        NSLog("[Bridge] handleTitleChange: title=\(title), paneID=\(paneID)")
         state.terminalTitle = title
 
         let process = TerminalBridge.extractProcessName(from: title)
@@ -85,9 +202,53 @@ final class TerminalBridge {
         state.foregroundProcess = process
 
         let previousRemote = state.remoteSession
-        state.remoteSession = TerminalBridge.detectRemoteFromHeuristics(
-            title: title, cwd: state.workingDirectory
+        var resolved = TerminalBridge.resolveRemoteSession(
+            title: title,
+            cwd: state.workingDirectory,
+            previous: previousRemote
         )
+
+        // Guard against stale title events clearing an active session.
+        // On macOS, proc_name/sysctl fail for PTY child processes, so the process
+        // tree monitor cannot reliably confirm sessions. Instead we use:
+        // 1. processTreeHint (when available from monitor)
+        // 2. Grace period — protects new sessions for a few seconds
+        // 3. The CWD-based check in handleDirectoryChange (OSC 7 from local shell
+        //    is the strongest signal that a remote session ended)
+        if resolved == nil, let previousRemote {
+            if let hint = processTreeHint[paneID], hint != nil {
+                resolved = previousRemote
+            } else if let grace = sessionGraceUntil[paneID], Date() < grace {
+                // Within grace window after session detection — keep session.
+                // Stale local prompt titles often arrive right after docker exec/ssh
+                // starts because the shell's precmd fires before the child takes over.
+                // Exception: definitive local signals should not be suppressed:
+                // - bare shell name ("zsh", "bash") = user exited remote session
+                // - local user@host prompt = local shell is active
+                let trimmedTitle = title.trimmingCharacters(in: .whitespaces)
+                let firstWord = trimmedTitle.split(separator: " ").first.map(String.init) ?? ""
+                let isDefinitelyLocal = Self.shellNames.contains(firstWord.lowercased())
+                    || Self.titleIsLocalUserAtHost(trimmedTitle)
+                if !isDefinitelyLocal {
+                    resolved = previousRemote
+                }
+            }
+        }
+
+        state.remoteSession = resolved
+
+        // Extract remoteCwd from title and handle session switches
+        if state.remoteSession != nil {
+            // Session host changed → reset remoteCwd before re-extracting
+            if state.remoteSession != previousRemote {
+                state.remoteCwd = nil
+            }
+            if let remotePath = TerminalBridge.extractRemoteCwd(from: title) {
+                state.remoteCwd = remotePath
+            }
+        } else {
+            state.remoteCwd = nil
+        }
 
         events.send(.titleChanged(title: title))
         if processChanged {
@@ -95,13 +256,54 @@ final class TerminalBridge {
         }
         if state.remoteSession != previousRemote {
             events.send(.remoteSessionChanged(session: state.remoteSession))
+
+            // When a new session is detected via title, set a grace period to protect
+            // it from stale title events (e.g., local prompt title arriving after
+            // docker exec starts). The grace window is 3s — enough for the process
+            // tree monitor to poll and confirm/deny the session.
+            if state.remoteSession != nil && previousRemote == nil {
+                sessionGraceUntil[paneID] = Date().addingTimeInterval(3.0)
+            }
+            // Clean up injection state when remote session ends
+            if previousRemote != nil && state.remoteSession == nil {
+                injector.sessionEnded(paneID: state.paneID)
+            }
         }
+    }
+
+    func handleDirectoryListing(path: String, output: String, paneID: UUID) {
+        guard paneID == state.paneID else { return }
+        let entries = TerminalBridge.parseLsOutput(output)
+        cachedRemoteListing = (path: path, entries: entries)
+        events.send(.remoteDirectoryListed(path: path, entries: entries))
+    }
+
+    /// Parse `ls -1AF` output into RemoteEntry array.
+    static func parseLsOutput(_ output: String) -> [RemoteExplorer.RemoteEntry] {
+        var entries: [RemoteExplorer.RemoteEntry] = []
+        for line in output.split(separator: "\n") {
+            var name = String(line)
+            let isDir = name.hasSuffix("/")
+            if isDir { name = String(name.dropLast()) }
+            if let last = name.last, "@*|=".contains(last) { name = String(name.dropLast()) }
+            guard !name.isEmpty else { continue }
+            entries.append(RemoteExplorer.RemoteEntry(name: name, isDirectory: isDir))
+        }
+        entries.sort { lhs, rhs in
+            if lhs.isDirectory != rhs.isDirectory { return lhs.isDirectory }
+            return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
+        }
+        return entries
     }
 
     func handleProcessExit(paneID: UUID) {
         guard paneID == state.paneID else { return }
         let hadRemote = state.remoteSession != nil
+        if state.remoteSession != nil {
+            injector.sessionEnded(paneID: state.paneID)
+        }
         state.remoteSession = nil
+        state.remoteCwd = nil
         state.foregroundProcess = ""
         state.terminalTitle = ""
         if hadRemote {
@@ -109,186 +311,72 @@ final class TerminalBridge {
         }
     }
 
+    // MARK: - Process Tree Detection
+
+    /// Called by the monitor when process-tree inspection detects a state change.
+    /// Process tree is authoritative: it overrides title heuristics.
+    func handleProcessTreeDetection(session: RemoteSessionType?, paneID: UUID) {
+        processTreeHint[paneID] = session
+        sessionGraceUntil.removeValue(forKey: paneID) // Process tree is authoritative now
+        guard paneID == state.paneID else { return }
+
+        let previous = state.remoteSession
+        let resolved = reconcileWithProcessTree(titleSession: previous, processSession: session)
+
+        guard resolved != previous else { return }
+
+        NSLog("[Bridge] processTree: \(String(describing: session)) → resolved=\(String(describing: resolved)) (was \(String(describing: previous)))")
+
+        state.remoteSession = resolved
+        if resolved == nil {
+            state.remoteCwd = nil
+            if previous != nil {
+                injector.sessionEnded(paneID: paneID)
+            }
+        } else if previous == nil {
+            // New session detected — inject CWD reporter
+            injector.injectIfNeeded(paneID: paneID)
+        }
+        events.send(.remoteSessionChanged(session: resolved))
+    }
+
+    /// Reconcile title-based heuristic with process-tree detection.
+    /// Process tree is authoritative for END (no child = no remote).
+    /// Process tree is strong for START (child found = adopt it).
+    /// When process tree says Docker but title says SSH, prefer process tree.
+    private func reconcileWithProcessTree(titleSession: RemoteSessionType?, processSession: RemoteSessionType?) -> RemoteSessionType? {
+        // Process tree says no remote child — authoritative END
+        guard let process = processSession else { return nil }
+
+        // Process tree detected something
+        if let title = titleSession {
+            // Both agree on type — merge: title has better host info, process has alias
+            if case .ssh(let titleHost, let titleAlias) = title,
+               case .ssh(let processHost, _) = process {
+                let alias = titleAlias ?? processHost
+                return .ssh(host: titleHost, alias: alias)
+            }
+            if case .docker = title, case .docker = process { return title }
+            // Process says Docker, title says SSH (container hostname looks like user@host)
+            // — prefer process tree
+            if case .ssh = title, case .docker = process { return process }
+        }
+
+        return process
+    }
+
     func switchContext(paneID: UUID, workspaceID: UUID, workingDirectory: String) {
-        state = TerminalState(
+        state = BridgeState(
             paneID: paneID,
             workspaceID: workspaceID,
             workingDirectory: workingDirectory,
             terminalTitle: "",
             foregroundProcess: "",
             remoteSession: nil,
+            remoteCwd: nil,
             isDockerAvailable: state.isDockerAvailable
         )
         events.send(.workspaceSwitched(workspaceID: workspaceID))
     }
 
-    // MARK: - Heuristics
-
-    /// Detect remote sessions from terminal title and working directory.
-    /// If the title contains a user@host pattern and the CWD doesn't exist locally,
-    /// it's likely an SSH session. Docker is detected from title keywords.
-    static func detectRemoteFromHeuristics(title: String, cwd: String) -> RemoteSessionType? {
-        let trimmed = title.trimmingCharacters(in: .whitespaces)
-        guard !trimmed.isEmpty else { return nil }
-
-        // Check if CWD exists locally — if it does, we're not remote
-        if !cwd.isEmpty && FileManager.default.fileExists(atPath: cwd) {
-            return nil
-        }
-
-        // Docker detection: title contains "docker" keyword
-        let lower = trimmed.lowercased()
-        if lower.contains("docker exec") || lower.contains("docker run") ||
-           lower.hasPrefix("docker") {
-            // Try to extract container name from title
-            let parts = trimmed.split(separator: " ")
-            if let execIdx = parts.firstIndex(where: { $0 == "exec" || $0 == "run" }),
-               execIdx + 1 < parts.endIndex {
-                // Skip flags (starting with -)
-                var i = parts.index(after: execIdx)
-                while i < parts.endIndex && parts[i].hasPrefix("-") {
-                    i = parts.index(after: i)
-                }
-                if i < parts.endIndex {
-                    return .docker(container: String(parts[i]))
-                }
-            }
-            return .docker(container: "unknown")
-        }
-
-        // SSH detection: user@host pattern in title
-        let atPattern = trimmed.split(separator: " ").first(where: { $0.contains("@") })
-        if let match = atPattern {
-            let components = match.split(separator: "@", maxSplits: 1)
-            if components.count == 2 {
-                let host = String(components[1]).trimmingCharacters(in: CharacterSet(charactersIn: ":"))
-                if !host.isEmpty && host != "localhost" && host != "127.0.0.1" {
-                    return .ssh(host: String(match))
-                }
-            }
-        }
-
-        return nil
-    }
-
-    /// Detect remote session from the process/command shown in the terminal title.
-    /// This catches cases where the title is "ssh user@host" or "docker exec container"
-    /// even when the CWD still looks local.
-    static func detectRemoteFromProcessName(title: String) -> RemoteSessionType? {
-        let trimmed = title.trimmingCharacters(in: .whitespaces)
-        guard !trimmed.isEmpty else { return nil }
-        let parts = trimmed.split(separator: " ").map(String.init)
-        guard let cmd = parts.first else { return nil }
-        let cmdBase = (cmd as NSString).lastPathComponent
-
-        // SSH: title starts with "ssh" followed by a host
-        if cmdBase == "ssh" {
-            // Find first non-option argument as host
-            var skipNext = false
-            for arg in parts.dropFirst() {
-                if skipNext { skipNext = false; continue }
-                if arg.hasPrefix("-") {
-                    let valueOpts: Set<String> = ["-p", "-i", "-l", "-o", "-F", "-J", "-L", "-R", "-D", "-b", "-c", "-e", "-m", "-w", "-E"]
-                    if valueOpts.contains(arg) { skipNext = true }
-                    continue
-                }
-                let host = arg
-                if host != "localhost" && host != "127.0.0.1" {
-                    return .ssh(host: host)
-                }
-                break
-            }
-        }
-
-        // Docker: title starts with "docker" followed by "exec"
-        if cmdBase == "docker" && parts.count >= 3 {
-            if let execIdx = parts.firstIndex(of: "exec"), execIdx + 1 < parts.count {
-                var i = execIdx + 1
-                while i < parts.count && parts[i].hasPrefix("-") { i += 1 }
-                if i < parts.count {
-                    return .docker(container: parts[i])
-                }
-            }
-        }
-
-        return nil
-    }
-
-    /// Extract a remote CWD from a terminal title like "user@host:~/dir" or "user@host:/path".
-    /// Returns the path portion, expanding ~ to /root or /home/user as appropriate.
-    static func extractRemoteCwd(from title: String) -> String? {
-        let trimmed = title.trimmingCharacters(in: .whitespaces)
-        // Match "user@host:path" pattern
-        guard let atIdx = trimmed.firstIndex(of: "@") else { return nil }
-        let afterAt = trimmed[trimmed.index(after: atIdx)...]
-        guard let colonIdx = afterAt.firstIndex(of: ":") else { return nil }
-        let path = String(afterAt[afterAt.index(after: colonIdx)...]).trimmingCharacters(in: .whitespaces)
-        guard !path.isEmpty else { return nil }
-
-        // Extract user for ~ expansion
-        let user = String(trimmed[..<atIdx])
-
-        if path.hasPrefix("~") {
-            // Expand ~ to home directory
-            let rest = String(path.dropFirst()) // remove ~
-            if user == "root" {
-                return "/root" + rest
-            }
-            return "/home/\(user)" + rest
-        }
-        return path
-    }
-
-    /// Local hostname, cached for comparing against remote titles.
-    private static let localHostname: String = {
-        ProcessInfo.processInfo.hostName
-            .split(separator: ".").first.map(String.init) ?? ""
-    }()
-
-    /// Check if a terminal title has any remote indicators (user@host, ssh, docker).
-    /// Titles matching the local hostname (e.g. "user@localmachine:~") are NOT remote.
-    static func titleLooksRemote(_ title: String) -> Bool {
-        let trimmed = title.trimmingCharacters(in: .whitespaces)
-        if trimmed.isEmpty { return false }
-        let lower = trimmed.lowercased()
-        // Starts with ssh or docker command
-        let firstWord = lower.split(separator: " ").first.map(String.init) ?? ""
-        if firstWord == "ssh" || firstWord == "docker" { return true }
-        // Contains user@host pattern — check if host is local
-        if let atRange = trimmed.range(of: "@") {
-            let afterAt = String(trimmed[atRange.upperBound...])
-            // Extract hostname (before : or space or end)
-            let host = afterAt.split(separator: ":").first
-                .flatMap { $0.split(separator: " ").first }
-                .map(String.init) ?? afterAt
-            let hostLower = host.lowercased()
-            // Not remote if it matches local hostname
-            if hostLower == localHostname.lowercased()
-                || hostLower == "localhost"
-                || hostLower == "127.0.0.1" {
-                return false
-            }
-            return true
-        }
-        return false
-    }
-
-    /// Extract a short process name from a terminal title.
-    /// Shells typically set title to "user@host: cwd" or "command".
-    static func extractProcessName(from title: String) -> String {
-        let trimmed = title.trimmingCharacters(in: .whitespaces)
-        if trimmed.isEmpty { return "" }
-
-        // Common patterns: "user@host: ~/dir", "vim file.txt", "zsh"
-        if let colonIdx = trimmed.firstIndex(of: ":") {
-            let before = String(trimmed[..<colonIdx])
-            // "user@host" pattern → return just the command part or host
-            if before.contains("@") { return before }
-            return before
-        }
-
-        // Just the command/process name
-        let firstWord = trimmed.split(separator: " ").first.map(String.init) ?? trimmed
-        return firstWord
-    }
 }

@@ -1,12 +1,41 @@
 import Cocoa
 import SwiftUI
 
+// MARK: - Design Tokens
+
+/// Single source of truth for settings UI styling.
+/// Every sub-view pulls from here instead of re-deriving colors inline.
+private struct Tokens {
+    let theme: TerminalTheme
+    var text: Color { Color(nsColor: theme.chromeText) }
+    var muted: Color { Color(nsColor: theme.chromeMuted) }
+    var accent: Color { Color(nsColor: theme.accentColor) }
+    var bg: Color { Color(nsColor: theme.sidebarBg) }
+    var chromeBg: Color { Color(nsColor: theme.chromeBg) }
+    var fg: Color {
+        Color(red: Double(theme.foreground.r) / 255,
+              green: Double(theme.foreground.g) / 255,
+              blue: Double(theme.foreground.b) / 255)
+    }
+    var termBg: Color {
+        Color(red: Double(theme.background.r) / 255,
+              green: Double(theme.background.g) / 255,
+              blue: Double(theme.background.b) / 255)
+    }
+
+    static var current: Tokens { Tokens(theme: AppSettings.shared.theme) }
+}
+
+// MARK: - Root
+
 struct SettingsView: View {
     enum Tab: String, CaseIterable {
         case theme = "Theme"
         case terminal = "Terminal"
         case explorer = "Explorer"
         case statusBar = "Status Bar"
+        case layout = "Layout"
+        case plugins = "Plugins"
         case shortcuts = "Shortcuts"
 
         var icon: String {
@@ -15,429 +44,563 @@ struct SettingsView: View {
             case .terminal: return "terminal"
             case .explorer: return "sidebar.left"
             case .statusBar: return "rectangle.bottomthird.inset.filled"
+            case .layout: return "rectangle.3.group"
+            case .plugins: return "puzzlepiece"
             case .shortcuts: return "keyboard"
             }
         }
     }
 
     @State private var selectedTab: Tab = .theme
-    @ObservedObject var settings = SettingsObserver()
+    @ObservedObject private var observer = SettingsObserver()
 
     var body: some View {
-        let _ = settings.revision
-        let theme = AppSettings.shared.theme
+        let _ = observer.revision
+        let t = Tokens.current
 
         HStack(spacing: 0) {
-            // Sidebar
-            VStack(spacing: 2) {
-                ForEach(Tab.allCases, id: \.self) { tab in
-                    Button(action: { selectedTab = tab }) {
-                        HStack(spacing: 8) {
-                            Image(systemName: tab.icon)
-                                .font(.system(size: 12))
-                                .frame(width: 18)
-                            Text(tab.rawValue)
-                                .font(.system(size: 12))
-                            Spacer()
-                        }
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
-                        .foregroundColor(selectedTab == tab
-                            ? Color(nsColor: theme.chromeText)
-                            : Color(nsColor: theme.chromeMuted))
-                        .background(
-                            RoundedRectangle(cornerRadius: 6)
-                                .fill(selectedTab == tab
-                                    ? Color(nsColor: theme.accentColor).opacity(0.15)
-                                    : Color.clear)
-                        )
-                    }
-                    .buttonStyle(.plain)
-                }
-                Spacer()
-            }
-            .padding(10)
-            .frame(width: 140)
-            .background(Color(nsColor: theme.chromeBg))
+            sidebar(t)
 
-            // Divider
             Rectangle()
-                .fill(Color(nsColor: theme.chromeMuted).opacity(0.2))
+                .fill(t.muted.opacity(0.2))
                 .frame(width: 0.5)
 
-            // Content
-            VStack {
-                switch selectedTab {
-                case .theme:
-                    ThemeSettingsView()
-                case .terminal:
-                    TerminalSettingsView()
-                case .explorer:
-                    ExplorerSettingsView()
-                case .statusBar:
-                    StatusBarSettingsView()
-                case .shortcuts:
-                    ShortcutsView()
-                }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            content
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
-        .frame(width: 520, height: 440)
-        .background(Color(nsColor: theme.sidebarBg))
+        .frame(width: 560, height: 480)
+        .background(t.bg)
     }
-}
 
-// MARK: - Theme
+    // MARK: Sidebar
 
-struct ThemeSettingsView: View {
-    @State private var selectedTheme: String = AppSettings.shared.themeName
-
-    var body: some View {
-        let theme = AppSettings.shared.theme
-
-        ScrollView(.vertical, showsIndicators: true) {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Color Theme")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(Color(nsColor: theme.chromeText))
-                    .padding(.bottom, 4)
-
-                ForEach(TerminalTheme.themes, id: \.name) { t in
-                    HStack(spacing: 10) {
-                        HStack(spacing: 2) {
-                            RoundedRectangle(cornerRadius: 2)
-                                .fill(Color(red: Double(t.background.r)/255, green: Double(t.background.g)/255, blue: Double(t.background.b)/255))
-                                .frame(width: 14, height: 14)
-                            ForEach(0..<6, id: \.self) { i in
-                                let c = t.ansiColors[i + 1]
-                                RoundedRectangle(cornerRadius: 2)
-                                    .fill(Color(red: Double(c.r)/255, green: Double(c.g)/255, blue: Double(c.b)/255))
-                                    .frame(width: 14, height: 14)
-                            }
-                        }
-
-                        Text(t.name)
-                            .font(.system(size: 12))
-                            .foregroundColor(selectedTheme == t.name
-                                ? Color(nsColor: theme.chromeText)
-                                : Color(nsColor: theme.chromeMuted))
-
-                        Spacer()
-
-                        if selectedTheme == t.name {
-                            Image(systemName: "checkmark")
-                                .font(.system(size: 11, weight: .bold))
-                                .foregroundColor(Color(nsColor: theme.accentColor))
-                        }
-                    }
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 5)
-                    .contentShape(Rectangle())
-                    .background(
-                        RoundedRectangle(cornerRadius: 6)
-                            .fill(selectedTheme == t.name
-                                ? Color(nsColor: theme.accentColor).opacity(0.1)
-                                : Color.clear)
-                    )
-                    .onTapGesture {
-                        selectedTheme = t.name
-                        AppSettings.shared.themeName = t.name
-                    }
-                }
-            }
-            .padding(16)
-        }
-    }
-}
-
-// MARK: - Terminal
-
-struct TerminalSettingsView: View {
-    @State private var cursorStyle: CursorStyle = AppSettings.shared.cursorStyle
-    @State private var fontSize: Double = Double(AppSettings.shared.fontSize)
-    @State private var selectedFont: String = AppSettings.shared.fontName
-
-    private let fonts = AppSettings.availableMonospaceFonts
-
-    var body: some View {
-        let theme = AppSettings.shared.theme
-        let label = Color(nsColor: theme.chromeMuted)
-        let text = Color(nsColor: theme.chromeText)
-
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                Text("Terminal")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(text)
-
-                SettingsSection(title: "Font", label: label) {
-                    Picker("", selection: $selectedFont) {
-                        ForEach(fonts, id: \.self) { Text($0).tag($0) }
-                    }
-                    .labelsHidden()
-                    .onChange(of: selectedFont) { v in AppSettings.shared.fontName = v }
-                }
-
-                SettingsSection(title: "Font Size", label: label) {
-                    HStack {
-                        Slider(value: $fontSize, in: 10...28, step: 1)
-                            .onChange(of: fontSize) { v in AppSettings.shared.fontSize = CGFloat(v) }
-                        Text("\(Int(fontSize))pt")
-                            .font(.system(size: 11, design: .monospaced))
-                            .foregroundColor(text)
-                            .frame(width: 32)
-                    }
-                }
-
-                SettingsSection(title: "Cursor", label: label) {
-                    Picker("", selection: $cursorStyle) {
-                        ForEach(CursorStyle.allCases, id: \.self) { Text($0.label).tag($0) }
-                    }
-                    .labelsHidden()
-                    .pickerStyle(.segmented)
-                    .onChange(of: cursorStyle) { v in AppSettings.shared.cursorStyle = v }
-                }
-
-                // Preview
-                SettingsSection(title: "Preview", label: label) {
-                    Text("$ echo \"Hello, Exterm\"")
-                        .font(.custom(selectedFont, size: CGFloat(fontSize)))
-                        .foregroundColor(Color(red: Double(theme.foreground.r)/255, green: Double(theme.foreground.g)/255, blue: Double(theme.foreground.b)/255))
-                        .padding(8)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(
-                            RoundedRectangle(cornerRadius: 6)
-                                .fill(Color(red: Double(theme.background.r)/255, green: Double(theme.background.g)/255, blue: Double(theme.background.b)/255))
-                        )
-                }
-
-                Spacer()
-            }
-            .padding(16)
-        }
-    }
-}
-
-// MARK: - Explorer
-
-struct ExplorerSettingsView: View {
-    @State private var showHeader = AppSettings.shared.showExplorerHeader
-    @State private var showHidden = AppSettings.shared.showHiddenFiles
-    @State private var showIcons = AppSettings.shared.explorerIconsEnabled
-    @State private var explorerFontSize: Double = Double(AppSettings.shared.explorerFontSize)
-    @State private var explorerFont: String = AppSettings.shared.explorerFontName.isEmpty ? "System Default" : AppSettings.shared.explorerFontName
-
-    private let fonts = AppSettings.availableSystemFonts
-
-    var body: some View {
-        let theme = AppSettings.shared.theme
-        let label = Color(nsColor: theme.chromeMuted)
-        let text = Color(nsColor: theme.chromeText)
-
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                Text("File Explorer")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(text)
-
-                SettingsSection(title: "Font", label: label) {
-                    Picker("", selection: $explorerFont) {
-                        ForEach(fonts, id: \.self) { Text($0).tag($0) }
-                    }
-                    .labelsHidden()
-                    .onChange(of: explorerFont) { v in AppSettings.shared.explorerFontName = v == "System Default" ? "" : v }
-                }
-
-                SettingsSection(title: "Font Size", label: label) {
-                    HStack {
-                        Slider(value: $explorerFontSize, in: 9...20, step: 1)
-                            .onChange(of: explorerFontSize) { v in AppSettings.shared.explorerFontSize = CGFloat(v) }
-                        Text("\(Int(explorerFontSize))pt")
-                            .font(.system(size: 11, design: .monospaced))
-                            .foregroundColor(text)
-                            .frame(width: 32)
-                    }
-                }
-
-                SettingsSection(title: "Display", label: label) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Toggle("Show header", isOn: $showHeader)
-                            .onChange(of: showHeader) { v in AppSettings.shared.showExplorerHeader = v }
-                        Toggle("Show file icons", isOn: $showIcons)
-                            .onChange(of: showIcons) { v in AppSettings.shared.explorerIconsEnabled = v }
-                        Toggle("Show hidden files", isOn: $showHidden)
-                            .onChange(of: showHidden) { v in AppSettings.shared.showHiddenFiles = v }
-                    }
-                    .font(.system(size: 12))
-                    .foregroundColor(text)
-                }
-
-                Spacer()
-            }
-            .padding(16)
-        }
-    }
-}
-
-// MARK: - Status Bar
-
-struct StatusBarSettingsView: View {
-    @State private var showPath = AppSettings.shared.statusBarShowPath
-    @State private var showGit = AppSettings.shared.statusBarShowGitBranch
-    @State private var showTime = AppSettings.shared.statusBarShowTime
-    @State private var showPaneInfo = AppSettings.shared.statusBarShowPaneInfo
-    @State private var showShell = AppSettings.shared.statusBarShowShell
-
-    var body: some View {
-        let theme = AppSettings.shared.theme
-        let label = Color(nsColor: theme.chromeMuted)
-        let text = Color(nsColor: theme.chromeText)
-
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                Text("Status Bar")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(text)
-
-                SettingsSection(title: "Left Side", label: label) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Toggle("Git branch", isOn: $showGit)
-                            .onChange(of: showGit) { v in AppSettings.shared.statusBarShowGitBranch = v }
-                        Toggle("Current path", isOn: $showPath)
-                            .onChange(of: showPath) { v in AppSettings.shared.statusBarShowPath = v }
-                        Toggle("Running process", isOn: $showShell)
-                            .onChange(of: showShell) { v in AppSettings.shared.statusBarShowShell = v }
-                    }
-                    .font(.system(size: 12))
-                    .foregroundColor(text)
-                }
-
-                SettingsSection(title: "Right Side", label: label) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Toggle("Pane & tab count", isOn: $showPaneInfo)
-                            .onChange(of: showPaneInfo) { v in AppSettings.shared.statusBarShowPaneInfo = v }
-                        Toggle("Clock", isOn: $showTime)
-                            .onChange(of: showTime) { v in AppSettings.shared.statusBarShowTime = v }
-                    }
-                    .font(.system(size: 12))
-                    .foregroundColor(text)
-                }
-
-                Spacer()
-            }
-            .padding(16)
-        }
-    }
-}
-
-// MARK: - Shortcuts Reference
-
-struct ShortcutsView: View {
-    var body: some View {
-        let theme = AppSettings.shared.theme
-        let text = Color(nsColor: theme.chromeText)
-        let muted = Color(nsColor: theme.chromeMuted)
-        let accent = Color(nsColor: theme.accentColor)
-
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                Text("Keyboard Shortcuts")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(text)
-
-                ShortcutGroup(title: "General", items: [
-                    ("Settings", "\u{2318},"),
-                    ("New Workspace", "\u{2318}N"),
-                    ("Open Folder", "\u{21E7}\u{2318}O"),
-                    ("New Tab", "\u{2318}T"),
-                    ("Close", "\u{2318}W"),
-                    ("Reopen Tab", "\u{2318}Z"),
-                    ("Close Pane", "\u{21E7}\u{2318}W"),
-                    ("Switch Workspace 1-9", "\u{2318}1-9"),
-                ], text: text, muted: muted, accent: accent)
-
-                ShortcutGroup(title: "Terminal", items: [
-                    ("Clear Screen", "\u{2318}K"),
-                    ("Clear Scrollback", "\u{21E7}\u{2318}K"),
-                    ("Split Right", "\u{2318}D"),
-                    ("Split Down", "\u{21E7}\u{2318}D"),
-                    ("Focus Next Pane", "\u{2318}]"),
-                    ("Focus Previous Pane", "\u{2318}["),
-                ], text: text, muted: muted, accent: accent)
-
-                ShortcutGroup(title: "View", items: [
-                    ("Toggle Sidebar", "\u{2318}B"),
-                    ("Increase Font", "\u{2318}+"),
-                    ("Decrease Font", "\u{2318}-"),
-                    ("Reset Font", "\u{2318}0"),
-                ], text: text, muted: muted, accent: accent)
-
-                ShortcutGroup(title: "Edit", items: [
-                    ("Copy", "\u{2318}C"),
-                    ("Paste", "\u{2318}V"),
-                    ("Select All", "\u{2318}A"),
-                ], text: text, muted: muted, accent: accent)
-
-                ShortcutGroup(title: "Bookmarks", items: [
-                    ("Bookmark Directory", "\u{21E7}\u{2318}B"),
-                    ("Jump to Bookmark 1-9", "\u{2303}1-9"),
-                    ("Switch Workspace 1-9", "\u{2318}1-9"),
-                ], text: text, muted: muted, accent: accent)
-
-                Spacer()
-            }
-            .padding(16)
-        }
-    }
-}
-
-struct ShortcutGroup: View {
-    let title: String
-    let items: [(String, String)]
-    let text: Color
-    let muted: Color
-    let accent: Color
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(title)
-                .font(.system(size: 11, weight: .medium))
-                .foregroundColor(muted)
-
-            ForEach(items, id: \.0) { item in
-                HStack {
-                    Text(item.0)
+    private func sidebar(_ t: Tokens) -> some View {
+        VStack(spacing: 1) {
+            ForEach(Tab.allCases, id: \.self) { tab in
+                HStack(spacing: 8) {
+                    Image(systemName: tab.icon)
                         .font(.system(size: 12))
-                        .foregroundColor(text)
+                        .frame(width: 18)
+                    Text(tab.rawValue)
+                        .font(.system(size: 12))
                     Spacer()
-                    Text(item.1)
-                        .font(.system(size: 11, design: .monospaced))
-                        .foregroundColor(accent)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(
-                            RoundedRectangle(cornerRadius: 4)
-                                .fill(accent.opacity(0.1))
-                        )
                 }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .foregroundColor(selectedTab == tab ? t.text : t.muted)
+                .background(
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(selectedTab == tab ? t.accent.opacity(0.15) : Color.clear)
+                )
+                .contentShape(Rectangle())
+                .onTapGesture { selectedTab = tab }
             }
+            Spacer()
+        }
+        .padding(10)
+        .fixedSize(horizontal: true, vertical: false)
+        .background(t.chromeBg)
+    }
+
+    // MARK: Content Router
+
+    @ViewBuilder
+    private var content: some View {
+        switch selectedTab {
+        case .theme: ThemeSettingsView()
+        case .terminal: TerminalSettingsView()
+        case .explorer: ExplorerSettingsView()
+        case .statusBar: StatusBarSettingsView()
+        case .layout: LayoutSettingsView()
+        case .plugins: PluginSettingsView()
+        case .shortcuts: ShortcutsSettingsView()
         }
     }
 }
 
-// MARK: - Helper
+// MARK: - Settings Page Shell
 
-struct SettingsSection<Content: View>: View {
+/// Every tab uses this wrapper so layout is identical: title, scroll, consistent padding.
+private struct SettingsPage<Content: View>: View {
     let title: String
-    let label: Color
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        let t = Tokens.current
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                Text(title)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(t.text)
+                content()
+                Spacer()
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(16)
+        }
+    }
+}
+
+/// Labeled group within a page.
+private struct Section<Content: View>: View {
+    let title: String
     @ViewBuilder let content: () -> Content
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(title)
                 .font(.system(size: 11, weight: .medium))
-                .foregroundColor(label)
+                .foregroundColor(Tokens.current.muted)
             content()
+        }
+    }
+}
+
+// MARK: - Reusable Controls
+
+private struct FontSlider: View {
+    @Binding var value: Double
+    let range: ClosedRange<Double>
+
+    var body: some View {
+        let t = Tokens.current
+        HStack {
+            Slider(value: $value, in: range, step: 1)
+            Text("\(Int(value))pt")
+                .font(.system(size: 11, design: .monospaced))
+                .foregroundColor(t.text)
+                .frame(width: 32)
+        }
+    }
+}
+
+private struct ToggleRow: View {
+    let label: String
+    @Binding var isOn: Bool
+
+    var body: some View {
+        Toggle(label, isOn: $isOn)
+            .font(.system(size: 12))
+            .foregroundColor(Tokens.current.text)
+    }
+}
+
+// MARK: - Theme
+
+private struct ThemeSettingsView: View {
+    @State private var selectedTheme = AppSettings.shared.themeName
+    @State private var autoTheme = AppSettings.shared.autoTheme
+    @State private var darkTheme = AppSettings.shared.darkThemeName
+    @State private var lightTheme = AppSettings.shared.lightThemeName
+
+    private var darkThemes: [TerminalTheme] { TerminalTheme.themes.filter { $0.isDark } }
+    private var lightThemes: [TerminalTheme] { TerminalTheme.themes.filter { !$0.isDark } }
+
+    var body: some View {
+        let t = Tokens.current
+
+        SettingsPage(title: "Color Theme") {
+            Section(title: "System Appearance") {
+                VStack(alignment: .leading, spacing: 10) {
+                    ToggleRow(label: "Match system dark/light mode", isOn: $autoTheme)
+                        .onChange(of: autoTheme) { v in AppSettings.shared.autoTheme = v }
+
+                    if autoTheme {
+                        HStack(spacing: 12) {
+                            variantPicker("Dark", selection: $darkTheme, options: darkThemes)
+                                .onChange(of: darkTheme) { v in AppSettings.shared.darkThemeName = v }
+                            variantPicker("Light", selection: $lightTheme, options: lightThemes)
+                                .onChange(of: lightTheme) { v in AppSettings.shared.lightThemeName = v }
+                        }
+                    }
+                }
+            }
+
+            if !autoTheme {
+                Section(title: "Theme") {
+                    ForEach(TerminalTheme.themes, id: \.name) { theme in
+                        themeRow(theme, tokens: t)
+                    }
+                }
+            }
+        }
+    }
+
+    private func variantPicker(_ label: String, selection: Binding<String>, options: [TerminalTheme]) -> some View {
+        let t = Tokens.current
+        return VStack(alignment: .leading, spacing: 4) {
+            Text(label)
+                .font(.system(size: 10, weight: .medium))
+                .foregroundColor(t.muted)
+            Picker("", selection: selection) {
+                ForEach(options, id: \.name) { Text($0.name).tag($0.name) }
+            }
+            .labelsHidden()
+        }
+    }
+
+    private func themeRow(_ theme: TerminalTheme, tokens t: Tokens) -> some View {
+        let active = selectedTheme == theme.name
+        return HStack(spacing: 10) {
+            HStack(spacing: 2) {
+                colorSwatch(r: theme.background.r, g: theme.background.g, b: theme.background.b)
+                ForEach(0..<6, id: \.self) { i in
+                    let c = theme.ansiColors[i + 1]
+                    colorSwatch(r: c.r, g: c.g, b: c.b)
+                }
+            }
+            Text(theme.name)
+                .font(.system(size: 12))
+                .foregroundColor(active ? t.text : t.muted)
+            Image(systemName: theme.isDark ? "moon.fill" : "sun.max.fill")
+                .font(.system(size: 8))
+                .foregroundColor(t.muted.opacity(0.4))
+            Spacer()
+            if active {
+                Image(systemName: "checkmark")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundColor(t.accent)
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 5)
+        .contentShape(Rectangle())
+        .background(
+            RoundedRectangle(cornerRadius: 6)
+                .fill(active ? t.accent.opacity(0.1) : Color.clear)
+        )
+        .onTapGesture {
+            selectedTheme = theme.name
+            AppSettings.shared.themeName = theme.name
+        }
+    }
+
+    private func colorSwatch(r: UInt8, g: UInt8, b: UInt8) -> some View {
+        RoundedRectangle(cornerRadius: 2)
+            .fill(Color(red: Double(r) / 255, green: Double(g) / 255, blue: Double(b) / 255))
+            .frame(width: 14, height: 14)
+    }
+}
+
+// MARK: - Terminal
+
+private struct TerminalSettingsView: View {
+    @State private var cursorStyle = AppSettings.shared.cursorStyle
+    @State private var fontSize = Double(AppSettings.shared.fontSize)
+    @State private var selectedFont = AppSettings.shared.fontName
+
+    private let fonts = AppSettings.availableMonospaceFonts
+
+    var body: some View {
+        let t = Tokens.current
+
+        SettingsPage(title: "Terminal") {
+            Section(title: "Font") {
+                Picker("", selection: $selectedFont) {
+                    ForEach(fonts, id: \.self) { Text($0).tag($0) }
+                }
+                .labelsHidden()
+                .onChange(of: selectedFont) { v in AppSettings.shared.fontName = v }
+            }
+
+            Section(title: "Font Size") {
+                FontSlider(value: $fontSize, range: 10...28)
+                    .onChange(of: fontSize) { v in AppSettings.shared.fontSize = CGFloat(v) }
+            }
+
+            Section(title: "Cursor") {
+                Picker("", selection: $cursorStyle) {
+                    ForEach(CursorStyle.allCases, id: \.self) { Text($0.label).tag($0) }
+                }
+                .labelsHidden()
+                .pickerStyle(.segmented)
+                .onChange(of: cursorStyle) { v in AppSettings.shared.cursorStyle = v }
+            }
+
+            Section(title: "Preview") {
+                Text("$ echo \"Hello, Exterm\"")
+                    .font(.custom(selectedFont, size: CGFloat(fontSize)))
+                    .foregroundColor(t.fg)
+                    .padding(8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(RoundedRectangle(cornerRadius: 6).fill(t.termBg))
+            }
+        }
+    }
+}
+
+// MARK: - Explorer
+
+private struct ExplorerSettingsView: View {
+    @State private var showHidden = AppSettings.shared.showHiddenFiles
+    @State private var showIcons = AppSettings.shared.explorerIconsEnabled
+    @State private var fontSize = Double(AppSettings.shared.explorerFontSize)
+    @State private var selectedFont = AppSettings.shared.explorerFontName.isEmpty ? "System Default" : AppSettings.shared.explorerFontName
+
+    private let fonts = AppSettings.availableSystemFonts
+
+    var body: some View {
+        SettingsPage(title: "File Explorer") {
+            Section(title: "Font") {
+                Picker("", selection: $selectedFont) {
+                    ForEach(fonts, id: \.self) { Text($0).tag($0) }
+                }
+                .labelsHidden()
+                .onChange(of: selectedFont) { v in
+                    AppSettings.shared.explorerFontName = v == "System Default" ? "" : v
+                }
+            }
+
+            Section(title: "Font Size") {
+                FontSlider(value: $fontSize, range: 9...20)
+                    .onChange(of: fontSize) { v in AppSettings.shared.explorerFontSize = CGFloat(v) }
+            }
+
+            Section(title: "Display") {
+                VStack(alignment: .leading, spacing: 8) {
+                    ToggleRow(label: "Show file icons", isOn: $showIcons)
+                        .onChange(of: showIcons) { v in AppSettings.shared.explorerIconsEnabled = v }
+                    ToggleRow(label: "Show hidden files", isOn: $showHidden)
+                        .onChange(of: showHidden) { v in AppSettings.shared.showHiddenFiles = v }
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Status Bar
+
+private struct StatusBarSettingsView: View {
+    @State private var showPath = AppSettings.shared.statusBarShowPath
+    @State private var showGit = AppSettings.shared.statusBarShowGitBranch
+    @State private var showTime = AppSettings.shared.statusBarShowTime
+    @State private var showPaneInfo = AppSettings.shared.statusBarShowPaneInfo
+    @State private var showShell = AppSettings.shared.statusBarShowShell
+    @State private var showConnection = AppSettings.shared.statusBarShowConnection
+
+    var body: some View {
+        SettingsPage(title: "Status Bar") {
+            Section(title: "Left Segments") {
+                VStack(alignment: .leading, spacing: 8) {
+                    ToggleRow(label: "Connection", isOn: $showConnection)
+                        .onChange(of: showConnection) { v in AppSettings.shared.statusBarShowConnection = v }
+                    ToggleRow(label: "Git branch", isOn: $showGit)
+                        .onChange(of: showGit) { v in AppSettings.shared.statusBarShowGitBranch = v }
+                    ToggleRow(label: "Current path", isOn: $showPath)
+                        .onChange(of: showPath) { v in AppSettings.shared.statusBarShowPath = v }
+                    ToggleRow(label: "Running process", isOn: $showShell)
+                        .onChange(of: showShell) { v in AppSettings.shared.statusBarShowShell = v }
+                }
+            }
+
+            Section(title: "Right Segments") {
+                VStack(alignment: .leading, spacing: 8) {
+                    ToggleRow(label: "Pane & tab count", isOn: $showPaneInfo)
+                        .onChange(of: showPaneInfo) { v in AppSettings.shared.statusBarShowPaneInfo = v }
+                    ToggleRow(label: "Clock", isOn: $showTime)
+                        .onChange(of: showTime) { v in AppSettings.shared.statusBarShowTime = v }
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Layout
+
+struct LayoutSettingsView: View {
+    @State private var sidebarPosition = AppSettings.shared.sidebarPosition
+    @State private var workspaceBarPosition = AppSettings.shared.workspaceBarPosition
+    @State private var tabOverflowMode = AppSettings.shared.tabOverflowMode
+
+    var body: some View {
+        let t = Tokens.current
+
+        SettingsPage(title: "Layout") {
+            Section(title: "Sidebar Position") {
+                Picker("", selection: $sidebarPosition) {
+                    ForEach(SidebarPosition.allCases, id: \.self) { Text($0.label).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .onChange(of: sidebarPosition) { v in AppSettings.shared.sidebarPosition = v }
+            }
+
+            Section(title: "Workspace Bar Position") {
+                Picker("", selection: $workspaceBarPosition) {
+                    ForEach(WorkspaceBarPosition.allCases, id: \.self) { Text($0.label).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .onChange(of: workspaceBarPosition) { v in AppSettings.shared.workspaceBarPosition = v }
+            }
+
+            Section(title: "Tab Overflow") {
+                Picker("", selection: $tabOverflowMode) {
+                    ForEach(TabOverflowMode.allCases, id: \.self) { Text($0.label).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .onChange(of: tabOverflowMode) { v in AppSettings.shared.tabOverflowMode = v }
+            }
+        }
+        .foregroundColor(t.text)
+    }
+}
+
+// MARK: - Plugins
+
+private struct PluginSettingsView: View {
+    @ObservedObject private var observer = SettingsObserver()
+
+    var body: some View {
+        let _ = observer.revision
+        let t = Tokens.current
+
+        SettingsPage(title: "Plugins") {
+            Text("Built-in plugins provide core functionality. External plugins are loaded from ~/.exterm/plugins/")
+                .font(.system(size: 11))
+                .foregroundColor(t.muted)
+
+            VStack(alignment: .leading, spacing: 2) {
+                PluginRow(id: "file-tree-local", name: "Files (Local)", icon: "folder", description: "Local file explorer")
+                PluginRow(id: "file-tree-remote", name: "Files (Remote)", icon: "folder.badge.gearshape", description: "Remote file explorer")
+                PluginRow(id: "git-panel", name: "Git", icon: "arrow.triangle.branch", description: "Branch and changed files")
+                PluginRow(id: "docker", name: "Docker", icon: "shippingbox", description: "Running containers")
+                PluginRow(id: "bookmarks", name: "Bookmarks", icon: "star", description: "Saved directories")
+            }
+        }
+    }
+}
+
+private struct PluginRow: View {
+    let id: String
+    let name: String
+    let icon: String
+    let description: String
+
+    @State private var isEnabled: Bool
+
+    init(id: String, name: String, icon: String, description: String) {
+        self.id = id
+        self.name = name
+        self.icon = icon
+        self.description = description
+        self._isEnabled = State(initialValue: !AppSettings.shared.disabledPluginIDs.contains(id))
+    }
+
+    var body: some View {
+        let t = Tokens.current
+
+        HStack(spacing: 10) {
+            Image(systemName: icon)
+                .font(.system(size: 14))
+                .foregroundColor(isEnabled ? t.text : t.muted)
+                .frame(width: 20)
+            VStack(alignment: .leading, spacing: 1) {
+                HStack(spacing: 4) {
+                    Text(name)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(isEnabled ? t.text : t.muted)
+                    Text("Built-in")
+                        .font(.system(size: 9, weight: .medium))
+                        .foregroundColor(t.muted)
+                        .padding(.horizontal, 4)
+                        .padding(.vertical, 1)
+                        .background(t.muted.opacity(0.15))
+                        .cornerRadius(3)
+                }
+                Text(description)
+                    .font(.system(size: 10))
+                    .foregroundColor(t.muted)
+            }
+            Spacer()
+            Toggle("", isOn: $isEnabled)
+                .toggleStyle(.switch)
+                .controlSize(.small)
+                .onChange(of: isEnabled) { enabled in
+                    var disabled = AppSettings.shared.disabledPluginIDs
+                    if enabled {
+                        disabled.removeAll { $0 == id }
+                    } else {
+                        disabled.append(id)
+                    }
+                    AppSettings.shared.disabledPluginIDs = disabled
+                }
+        }
+        .padding(.vertical, 6)
+        .padding(.horizontal, 8)
+        .accessibilityLabel("\(name), \(isEnabled ? "enabled" : "disabled"), \(description)")
+    }
+}
+
+// MARK: - Shortcuts
+
+private struct ShortcutsSettingsView: View {
+    private static let groups: [(String, [(String, String)])] = [
+        ("General", [
+            ("Settings", "\u{2318},"),
+            ("New Workspace", "\u{2318}N"),
+            ("Open Folder", "\u{21E7}\u{2318}O"),
+            ("New Tab", "\u{2318}T"),
+            ("Close", "\u{2318}W"),
+            ("Reopen Tab", "\u{2318}Z"),
+            ("Close Pane", "\u{21E7}\u{2318}W"),
+            ("Switch Workspace 1-9", "\u{2318}1-9"),
+        ]),
+        ("Terminal", [
+            ("Clear Screen", "\u{2318}K"),
+            ("Clear Scrollback", "\u{21E7}\u{2318}K"),
+            ("Split Right", "\u{2318}D"),
+            ("Split Down", "\u{21E7}\u{2318}D"),
+            ("Focus Next Pane", "\u{2318}]"),
+            ("Focus Previous Pane", "\u{2318}["),
+        ]),
+        ("View", [
+            ("Toggle Sidebar", "\u{2318}B"),
+            ("Increase Font", "\u{2318}+"),
+            ("Decrease Font", "\u{2318}-"),
+            ("Reset Font", "\u{2318}0"),
+        ]),
+        ("Edit", [
+            ("Copy", "\u{2318}C"),
+            ("Paste", "\u{2318}V"),
+            ("Select All", "\u{2318}A"),
+        ]),
+        ("Bookmarks", [
+            ("Bookmark Directory", "\u{21E7}\u{2318}B"),
+            ("Jump to Bookmark 1-9", "\u{2303}1-9"),
+        ]),
+    ]
+
+    var body: some View {
+        let t = Tokens.current
+
+        SettingsPage(title: "Keyboard Shortcuts") {
+            ForEach(Self.groups, id: \.0) { group in
+                shortcutGroup(title: group.0, items: group.1, tokens: t)
+            }
+        }
+    }
+
+    private func shortcutGroup(title: String, items: [(String, String)], tokens t: Tokens) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundColor(t.muted)
+            ForEach(items, id: \.0) { item in
+                HStack {
+                    Text(item.0)
+                        .font(.system(size: 12))
+                        .foregroundColor(t.text)
+                    Spacer()
+                    Text(item.1)
+                        .font(.system(size: 11, design: .monospaced))
+                        .foregroundColor(t.accent)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(
+                            RoundedRectangle(cornerRadius: 4)
+                                .fill(t.accent.opacity(0.1))
+                        )
+                }
+            }
         }
     }
 }
@@ -447,19 +610,34 @@ struct SettingsSection<Content: View>: View {
 class SettingsWindowController: NSWindowController {
     static let shared = SettingsWindowController()
 
+    private var settingsObserver: NSObjectProtocol?
+
     private init() {
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 520, height: 440),
+            contentRect: NSRect(x: 0, y: 0, width: 560, height: 480),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false
         )
         window.title = "Settings"
         window.center()
-        window.backgroundColor = AppSettings.shared.theme.sidebarBg
+        // Prevent the window from participating in key view loop
+        // so sidebar items don't get focus rings
+        window.autorecalculatesKeyViewLoop = false
+        let theme = AppSettings.shared.theme
+        window.backgroundColor = theme.sidebarBg
+        window.appearance = NSAppearance(named: theme.isDark ? .darkAqua : .aqua)
         window.contentView = NSHostingView(rootView: SettingsView())
 
         super.init(window: window)
+
+        settingsObserver = NotificationCenter.default.addObserver(
+            forName: .settingsChanged, object: nil, queue: .main
+        ) { [weak self] _ in
+            let t = AppSettings.shared.theme
+            self?.window?.backgroundColor = t.sidebarBg
+            self?.window?.appearance = NSAppearance(named: t.isDark ? .darkAqua : .aqua)
+        }
     }
 
     required init?(coder: NSCoder) {

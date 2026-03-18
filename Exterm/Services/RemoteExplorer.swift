@@ -172,11 +172,13 @@ final class RemoteExplorer {
     }
 
     /// List directory contents on the remote target.
-    static func listRemoteDirectory(session: RemoteSessionType, path: String, completion: @escaping ([RemoteEntry]) -> Void) {
-        let cmd = "ls -1AF \(shellEsc(path)) 2>/dev/null"
+    /// Completion receives `nil` on connection/command failure, empty array for empty directory.
+    static func listRemoteDirectory(session: RemoteSessionType, path: String, completion: @escaping ([RemoteEntry]?) -> Void) {
+        let cmd = directoryListCommand(for: path)
 
         runRemoteCommand(session: session, command: cmd) { output in
-            guard let output = output, !output.isEmpty else { completion([]); return }
+            guard let output = output else { completion(nil); return }
+            guard !output.isEmpty else { completion([]); return }
 
             var entries: [RemoteEntry] = []
             for line in output.split(separator: "\n") {
@@ -195,18 +197,26 @@ final class RemoteExplorer {
         }
     }
 
+    static func directoryListCommand(for path: String) -> String {
+        "ls -1AF \(shellEscPath(path)) 2>/dev/null"
+    }
+
     // MARK: - Command Execution
 
     /// Find an existing ControlMaster socket for the given host.
     /// `host` may be "hostname" or "user@hostname".
-    private static func findControlSocket(host: String) -> String? {
-        // Build search terms: both the full host string and just the hostname part
-        var searchTerms: [String] = [host.lowercased()]
-        if let atIdx = host.firstIndex(of: "@") {
-            let hostname = String(host[host.index(after: atIdx)...]).lowercased()
-            let user = String(host[..<atIdx]).lowercased()
-            searchTerms.append(hostname)
-            searchTerms.append(user)
+    static func findControlSocket(host: String) -> String? {
+        // Build required search terms: the socket filename must contain the hostname.
+        // When user@host is given, require BOTH user and hostname to match,
+        // preventing a socket for user@serverA from matching a lookup for user@serverB.
+        let lowered = host.lowercased()
+        let requiredTerms: [String]
+        if let atIdx = lowered.firstIndex(of: "@") {
+            let user = String(lowered[..<atIdx])
+            let hostname = String(lowered[lowered.index(after: atIdx)...])
+            requiredTerms = [user, hostname]
+        } else {
+            requiredTerms = [lowered]
         }
 
         // Search common socket directories
@@ -223,8 +233,8 @@ final class RemoteExplorer {
             guard let files = try? fm.contentsOfDirectory(atPath: dir) else { continue }
             for file in files {
                 let lower = file.lowercased()
-                // Socket must match at least the hostname
-                guard searchTerms.contains(where: { lower.contains($0) }) else { continue }
+                // Socket must contain ALL required terms (both user and hostname)
+                guard requiredTerms.allSatisfy({ lower.contains($0) }) else { continue }
 
                 let path = dir + "/" + file
                 var statBuf = stat()
@@ -362,5 +372,16 @@ final class RemoteExplorer {
 
     private static func shellEsc(_ s: String) -> String {
         "'" + s.replacingOccurrences(of: "'", with: "'\\''") + "'"
+    }
+
+    private static func shellEscPath(_ path: String) -> String {
+        if path == "~" { return "~" }
+        if path.hasPrefix("~/") {
+            let relative = String(path.dropFirst(2))
+            if relative.isEmpty { return "~/" }
+            let components = relative.split(separator: "/", omittingEmptySubsequences: false).map(String.init)
+            return "~/" + components.map(shellEsc).joined(separator: "/")
+        }
+        return shellEsc(path)
     }
 }

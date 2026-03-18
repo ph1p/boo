@@ -16,6 +16,56 @@ enum CursorStyle: Int, CaseIterable {
     }
 }
 
+enum SidebarPosition: Int, CaseIterable {
+    case left = 0
+    case right = 1
+
+    var label: String {
+        switch self {
+        case .left: return "Left"
+        case .right: return "Right"
+        }
+    }
+}
+
+enum WorkspaceBarPosition: Int, CaseIterable {
+    case left = 0
+    case top = 1
+    case right = 2
+
+    var label: String {
+        switch self {
+        case .left: return "Left"
+        case .top: return "Top"
+        case .right: return "Right"
+        }
+    }
+}
+
+enum SidebarDensity: Int, CaseIterable {
+    case comfortable = 0
+    case compact = 1
+
+    var label: String {
+        switch self {
+        case .comfortable: return "Comfortable"
+        case .compact: return "Compact"
+        }
+    }
+}
+
+enum TabOverflowMode: Int, CaseIterable {
+    case scroll = 0
+    case wrap = 1
+
+    var label: String {
+        switch self {
+        case .scroll: return "Scroll"
+        case .wrap: return "Wrap"
+        }
+    }
+}
+
 extension Notification.Name {
     static let settingsChanged = Notification.Name("ExtermSettingsChanged")
 }
@@ -27,10 +77,13 @@ final class AppSettings {
 
     private enum K {
         static let themeName = "themeName"
+        static let autoTheme = "autoTheme"
+        static let darkThemeName = "darkThemeName"
+        static let lightThemeName = "lightThemeName"
         static let cursorStyle = "cursorStyle"
         static let fontSize = "fontSize"
         static let fontName = "fontName"
-        static let showExplorerHeader = "showExplorerHeader"
+
         static let showHiddenFiles = "showHiddenFiles"
         static let explorerIconsEnabled = "explorerIconsEnabled"
         static let explorerFontSize = "explorerFontSize"
@@ -40,6 +93,13 @@ final class AppSettings {
         static let statusBarShowTime = "statusBarShowTime"
         static let statusBarShowPaneInfo = "statusBarShowPaneInfo"
         static let statusBarShowShell = "statusBarShowShell"
+        static let statusBarShowConnection = "statusBarShowConnection"
+        static let sidebarPosition = "sidebarPosition"
+        static let workspaceBarPosition = "workspaceBarPosition"
+        static let sidebarDensity = "sidebarDensity"
+        static let tabOverflowMode = "tabOverflowMode"
+        static let disabledPluginIDs = "disabledPluginIDs"
+        static let sidebarWidth = "sidebarWidth"
     }
 
     /// Bool from UserDefaults with a custom default (since .bool returns false for unset keys).
@@ -60,8 +120,39 @@ final class AppSettings {
         set { set(newValue, forKey: K.themeName) }
     }
 
+    var autoTheme: Bool {
+        get { bool(K.autoTheme, default: false) }
+        set { set(newValue, forKey: K.autoTheme); if newValue { applySystemAppearance() } }
+    }
+
+    var darkThemeName: String {
+        get { UserDefaults.standard.string(forKey: K.darkThemeName) ?? "Default Dark" }
+        set { set(newValue, forKey: K.darkThemeName); if autoTheme { applySystemAppearance() } }
+    }
+
+    var lightThemeName: String {
+        get { UserDefaults.standard.string(forKey: K.lightThemeName) ?? "Solarized Light" }
+        set { set(newValue, forKey: K.lightThemeName); if autoTheme { applySystemAppearance() } }
+    }
+
+    private static let themesByName: [String: TerminalTheme] = {
+        var map = [String: TerminalTheme]()
+        for t in TerminalTheme.themes { map[t.name] = t }
+        return map
+    }()
+
     var theme: TerminalTheme {
-        TerminalTheme.themes.first { $0.name == themeName } ?? .defaultDark
+        Self.themesByName[themeName] ?? .defaultDark
+    }
+
+    /// Apply the correct theme based on system dark/light mode.
+    func applySystemAppearance() {
+        guard autoTheme else { return }
+        let isDark = NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        let target = isDark ? darkThemeName : lightThemeName
+        if target != themeName {
+            themeName = target
+        }
     }
 
     // MARK: - Terminal
@@ -86,10 +177,6 @@ final class AppSettings {
 
     // MARK: - Explorer
 
-    var showExplorerHeader: Bool {
-        get { bool(K.showExplorerHeader, default: true) }
-        set { set(newValue, forKey: K.showExplorerHeader) }
-    }
 
     var showHiddenFiles: Bool {
         get { UserDefaults.standard.bool(forKey: K.showHiddenFiles) }
@@ -141,6 +228,54 @@ final class AppSettings {
         set { set(newValue, forKey: K.statusBarShowShell) }
     }
 
+    var statusBarShowConnection: Bool {
+        get { bool(K.statusBarShowConnection, default: true) }
+        set { set(newValue, forKey: K.statusBarShowConnection) }
+    }
+
+    // MARK: - Layout
+
+    var sidebarPosition: SidebarPosition {
+        get {
+            guard UserDefaults.standard.object(forKey: K.sidebarPosition) != nil else { return .right }
+            return SidebarPosition(rawValue: UserDefaults.standard.integer(forKey: K.sidebarPosition)) ?? .right
+        }
+        set { set(newValue.rawValue, forKey: K.sidebarPosition) }
+    }
+
+    var workspaceBarPosition: WorkspaceBarPosition {
+        get {
+            guard UserDefaults.standard.object(forKey: K.workspaceBarPosition) != nil else { return .left }
+            return WorkspaceBarPosition(rawValue: UserDefaults.standard.integer(forKey: K.workspaceBarPosition)) ?? .left
+        }
+        set { set(newValue.rawValue, forKey: K.workspaceBarPosition) }
+    }
+
+    var sidebarDensity: SidebarDensity { .comfortable }
+
+    var sidebarWidth: CGFloat {
+        get {
+            let v = UserDefaults.standard.double(forKey: K.sidebarWidth)
+            return v > 0 ? CGFloat(v) : 250
+        }
+        set { set(Double(newValue), forKey: K.sidebarWidth) }
+    }
+
+    var tabOverflowMode: TabOverflowMode {
+        get {
+            guard UserDefaults.standard.object(forKey: K.tabOverflowMode) != nil else { return .scroll }
+            return TabOverflowMode(rawValue: UserDefaults.standard.integer(forKey: K.tabOverflowMode)) ?? .scroll
+        }
+        set { set(newValue.rawValue, forKey: K.tabOverflowMode) }
+    }
+
+    // MARK: - Plugins
+
+    var disabledPluginIDs: [String] {
+        get { UserDefaults.standard.stringArray(forKey: K.disabledPluginIDs) ?? [] }
+        set { set(newValue, forKey: K.disabledPluginIDs) }
+    }
+
     // MARK: - Font Resolution
 
     func resolvedFont() -> NSFont {
@@ -183,10 +318,13 @@ final class AppSettings {
     private func saveToFile() {
         let dict: [String: Any] = [
             K.themeName: themeName,
+            K.autoTheme: autoTheme,
+            K.darkThemeName: darkThemeName,
+            K.lightThemeName: lightThemeName,
             K.cursorStyle: cursorStyle.rawValue,
             K.fontSize: Double(fontSize),
             K.fontName: fontName,
-            K.showExplorerHeader: showExplorerHeader,
+
             K.showHiddenFiles: showHiddenFiles,
             K.explorerIconsEnabled: explorerIconsEnabled,
             K.explorerFontSize: Double(explorerFontSize),
@@ -196,6 +334,12 @@ final class AppSettings {
             K.statusBarShowTime: statusBarShowTime,
             K.statusBarShowPaneInfo: statusBarShowPaneInfo,
             K.statusBarShowShell: statusBarShowShell,
+            K.statusBarShowConnection: statusBarShowConnection,
+            K.sidebarPosition: sidebarPosition.rawValue,
+            K.workspaceBarPosition: workspaceBarPosition.rawValue,
+            K.sidebarWidth: Double(sidebarWidth),
+            K.tabOverflowMode: tabOverflowMode.rawValue,
+            K.disabledPluginIDs: disabledPluginIDs,
         ]
         if let data = try? JSONSerialization.data(withJSONObject: dict, options: [.prettyPrinted, .sortedKeys]) {
             try? data.write(to: URL(fileURLWithPath: ExtermPaths.settingsFile))

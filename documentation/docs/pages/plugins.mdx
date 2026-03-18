@@ -1,0 +1,54 @@
+# Plugin System
+
+Exterm uses a plugin architecture for extending the sidebar and status bar.
+
+## Sidebar Plugins
+
+Sidebar panels below the file tree are registered as plugins via the `SidebarPlugin` protocol.
+
+### Creating a Sidebar Plugin
+
+1. Create a class conforming to `SidebarPlugin` in `Exterm/Plugins/`
+2. Implement required properties and methods:
+   - `id` — Unique identifier
+   - `displayName` — Human-readable name
+   - `isAvailable` — Whether the plugin should be shown
+   - `makeView(context:)` — Returns the plugin's view
+3. Optionally implement:
+   - `makeStatusBarSegment()` — Provide a toggle icon in the status bar
+   - `onAvailabilityChanged` — For async availability (e.g. remote Docker check)
+4. Register it in `MainWindowController.init()` via `registerSidebarPlugin()`
+
+The panel auto-shows when `isAvailable` returns true. Toggling adds/removes the view without rebuilding the file tree.
+
+### Built-in Sidebar Plugins
+
+| Plugin | Description |
+|---|---|
+| **DockerSidebarPlugin** | Docker container panel with live updates. Owns `DockerIconSegment` status bar toggle. Disabled on remote terminals (local only). |
+| **BookmarksSidebarPlugin** | Bookmarked directories panel. Works on both local and remote terminals. Auto-shows when bookmarks exist. |
+
+## Status Bar Plugins
+
+Status bar segments are registered as plugins via the `StatusBarPlugin` protocol.
+
+### Creating a Status Bar Plugin
+
+1. Create a class conforming to `StatusBarPlugin`
+2. Set `position` (`.left` or `.right`) and `priority` (lower = closer to edge)
+3. Implement `isVisible`, `draw`, `handleClick`
+4. Register in `StatusBarView.registerDefaultPlugins()`
+
+Sidebar plugins can also provide their own status bar segments via `makeStatusBarSegment()`.
+
+### Built-in Status Bar Segments
+
+| Segment | Position | Description |
+|---|---|---|
+| **GitBranchSegment** | Left | Current git branch with switcher |
+| **PathSegment** | Left | Current working directory |
+| **ProcessSegment** | Left | Foreground process name |
+| **PaneInfoSegment** | Right | Active pane count |
+| **TimeSegment** | Right | Current time |
+| **BookmarkIconSegment** | Right | Bookmark toggle |
+| **DockerIconSegment** | Right | Docker panel toggle (from sidebar plugin) |

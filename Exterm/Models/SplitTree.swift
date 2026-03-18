@@ -84,6 +84,32 @@ indirect enum SplitTree {
         }
     }
 
+    /// Find the closest sibling leaf ID for a given leaf.
+    /// Returns the nearest leaf in the sibling subtree of the direct parent split.
+    func siblingLeafID(of leafID: UUID) -> UUID? {
+        switch self {
+        case .leaf:
+            return nil
+        case .split(_, let first, let second, _):
+            // If target is a direct child, return the closest leaf from the other side
+            if case .leaf(let id) = first, id == leafID {
+                return second.leafIDs.first
+            }
+            if case .leaf(let id) = second, id == leafID {
+                return first.leafIDs.last
+            }
+            // Recurse: check if the leaf is deeper in first or second
+            if first.containsLeaf(leafID) {
+                // Prefer sibling within the same subtree; fall back to nearest in other subtree
+                return first.siblingLeafID(of: leafID) ?? second.leafIDs.first
+            }
+            if second.containsLeaf(leafID) {
+                return second.siblingLeafID(of: leafID) ?? first.leafIDs.last
+            }
+            return nil
+        }
+    }
+
     private var direction: SplitDirection? {
         if case .split(let d, _, _, _) = self { return d }
         return nil
@@ -92,6 +118,31 @@ indirect enum SplitTree {
     private var ratio: CGFloat? {
         if case .split(_, _, _, let r) = self { return r }
         return nil
+    }
+
+    /// After splitting a leaf, the new pane appears as the second child.
+    /// For left/top edge drops we need the new pane first. This swaps
+    /// the children of the parent split containing the given leaf.
+    func swappingChildrenAtParent(of leafID: UUID) -> SplitTree {
+        switch self {
+        case .leaf:
+            return self
+        case .split(let dir, let first, let second, let ratio):
+            // If the target leaf is a direct child, swap children
+            if case .leaf(let id) = first, id == leafID {
+                return .split(direction: dir, first: second, second: first, ratio: 1.0 - ratio)
+            }
+            if case .leaf(let id) = second, id == leafID {
+                return .split(direction: dir, first: second, second: first, ratio: 1.0 - ratio)
+            }
+            // Recurse
+            let newFirst = first.swappingChildrenAtParent(of: leafID)
+            if newFirst != first {
+                return .split(direction: dir, first: newFirst, second: second, ratio: ratio)
+            }
+            let newSecond = second.swappingChildrenAtParent(of: leafID)
+            return .split(direction: dir, first: first, second: newSecond, ratio: ratio)
+        }
     }
 }
 

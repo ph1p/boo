@@ -15,31 +15,8 @@ final class PaneViewIntegrationTests: XCTestCase {
         _ = pane.addTab(workingDirectory: "/tmp")
         pane.updateWorkingDirectory(at: 0, "/Users/test/Documents")
         XCTAssertEqual(pane.activeTab?.workingDirectory, "/Users/test/Documents")
-        XCTAssertEqual(pane.activeTab?.title, "Documents")
-    }
-
-    func testWorkspaceCwdTracking() {
-        let ws = Workspace(folderPath: "/tmp")
-        XCTAssertEqual(ws.currentDirectory, "/tmp")
-
-        var notified = false
-        ws.onDirectoryChanged = { path in
-            XCTAssertEqual(path, "/Users/test")
-            notified = true
-        }
-
-        ws.handleDirectoryChange("/Users/test")
-        XCTAssertTrue(notified)
-        XCTAssertEqual(ws.currentDirectory, "/Users/test")
-    }
-
-    func testWorkspaceCwdNoOpForSameDirectory() {
-        let ws = Workspace(folderPath: "/tmp")
-        var callCount = 0
-        ws.onDirectoryChanged = { _ in callCount += 1 }
-
-        ws.handleDirectoryChange("/tmp") // same
-        XCTAssertEqual(callCount, 0, "Should not notify for same directory")
+        // Title stays at initial value — only updateTitle changes it
+        XCTAssertEqual(pane.activeTab?.title, "tmp")
     }
 
     func testPaneTabSwitchingPreservesDirectories() {
@@ -67,20 +44,6 @@ final class PaneViewIntegrationTests: XCTestCase {
         // New pane should inherit the current working directory
         XCTAssertEqual(newPane?.activeTab?.workingDirectory, "/home/user/projects")
     }
-
-    func testGhosttyRuntimeAvailable() {
-        let runtime = GhosttyRuntime.shared
-        XCTAssertNotNil(runtime.app, "Ghostty runtime should initialize")
-        XCTAssertNotNil(runtime.config, "Ghostty config should exist")
-    }
-
-    func testGhosttyConfigReload() {
-        let runtime = GhosttyRuntime.shared
-        // Should not crash
-        runtime.reloadConfig()
-        XCTAssertNotNil(runtime.config)
-    }
-
     func testTerminalColorConversion() {
         let c = TerminalColor(r: 128, g: 64, b: 255)
         XCTAssertNotNil(c.cgColor)

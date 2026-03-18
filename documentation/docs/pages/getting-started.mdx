@@ -1,0 +1,74 @@
+# Getting Started
+
+## Prerequisites
+
+- **macOS 13+** (Ventura or later)
+- **Xcode Command Line Tools** — `xcode-select --install`
+- **Zig 0.15+** — `brew install zig`
+- **Metal Toolchain** — `xcodebuild -downloadComponent MetalToolchain` (if not already installed)
+
+## Build
+
+### 1. Clone the repository
+
+```bash
+git clone https://github.com/your-username/exterm.git
+cd exterm
+```
+
+### 2. Get Ghostty
+
+```bash
+mkdir -p Vendor
+git clone --depth 1 https://github.com/ghostty-org/ghostty.git Vendor/ghostty
+```
+
+### 3. Build GhosttyKit
+
+```bash
+cd Vendor/ghostty
+zig build -Demit-xcframework=true -Dxcframework-target=native -Doptimize=ReleaseFast
+cd ../..
+```
+
+This builds `Vendor/ghostty/macos/GhosttyKit.xcframework/` containing `libghostty-fat.a` (~135MB) and headers.
+
+:::note
+First build downloads dependencies and compiles Metal shaders. Takes 2–5 minutes. Subsequent builds are cached.
+:::
+
+### 4. Build Exterm
+
+```bash
+swift build
+```
+
+### 5. Run
+
+```bash
+make run
+# or directly:
+.build/debug/Exterm
+```
+
+### Quick Start (one-liner)
+
+```bash
+make setup  # Clones Ghostty, builds GhosttyKit, builds Exterm
+make run    # Build and launch
+```
+
+### Release Build
+
+```bash
+swift build -c release
+.build/release/Exterm
+```
+
+## Running Tests
+
+```bash
+make test
+# or:
+swift test
+```
