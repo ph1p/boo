@@ -6,10 +6,20 @@ class StatusBarView: NSView {
     var tabCount: Int = 0
     var runningProcess: String = ""
 
-    /// Called when user picks a branch from the popup. Sends `git switch <branch>\n`.
+    /// Called when user picks a branch from the popup.
     var onBranchSwitch: ((String) -> Void)?
+    /// Called when Docker icon is clicked.
+    var onDockerToggle: (() -> Void)?
+    /// Called when a bookmark is selected (cd to that path).
+    var onBookmarkSelected: ((String) -> Void)?
+    /// Called to bookmark the current directory.
+    var onBookmarkCurrent: (() -> Void)?
+    /// Whether Docker panel is currently visible.
+    var dockerPanelVisible = false
 
     private let barHeight: CGFloat = 22
+    private var dockerIconRect: NSRect = .zero
+    private var bookmarkIconRect: NSRect = .zero
     private var gitBranch: String?
     private var gitRepoRoot: String?
     private var gitBranchRect: NSRect = .zero // Hit area for branch click
@@ -250,8 +260,40 @@ class StatusBarView: NSView {
             }
         }
 
-        // Draw right
-        var rx = bounds.width - 10
+        // Right-edge icons: bookmark, docker
+        var rightIconX = bounds.width - 8
+        let iconH: CGFloat = 14
+        let iconY = (barHeight - iconH) / 2
+
+        // Docker icon
+        dockerIconRect = .zero
+        if DockerService.shared.isAvailable {
+            rightIconX -= iconH + 2
+            dockerIconRect = NSRect(x: rightIconX - 2, y: 0, width: iconH + 6, height: barHeight)
+            let dockerAttrs: [NSAttributedString.Key: Any] = [
+                .font: NSFont.systemFont(ofSize: 11),
+                .foregroundColor: dockerPanelVisible
+                    ? theme.accentColor : theme.chromeMuted.withAlphaComponent(0.5)
+            ]
+            ("\u{2338}" as NSString).draw(at: NSPoint(x: rightIconX, y: iconY), withAttributes: dockerAttrs)
+            rightIconX -= 4
+        }
+
+        // Bookmark icon
+        let isBookmarked = BookmarkService.shared.contains(path: currentDirectory)
+        rightIconX -= iconH + 2
+        bookmarkIconRect = NSRect(x: rightIconX - 2, y: 0, width: iconH + 6, height: barHeight)
+        let bmAttrs: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: 11),
+            .foregroundColor: isBookmarked
+                ? theme.accentColor : theme.chromeMuted.withAlphaComponent(0.5)
+        ]
+        let bmIcon = isBookmarked ? "\u{2605}" : "\u{2606}" // ★ filled or ☆ empty
+        (bmIcon as NSString).draw(at: NSPoint(x: rightIconX, y: iconY), withAttributes: bmAttrs)
+        rightIconX -= 4
+
+        // Draw right segments (before icons)
+        var rx = rightIconX - 4
         for (i, seg) in rightSegments.reversed().enumerated() {
             let attrs: [NSAttributedString.Key: Any] = [
                 .font: NSFont.systemFont(ofSize: 10, weight: .regular),
@@ -277,6 +319,18 @@ class StatusBarView: NSView {
 
     override func mouseDown(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
+
+        // Bookmark icon
+        if bookmarkIconRect.contains(point) {
+            showBookmarkMenu(at: point)
+            return
+        }
+
+        // Docker icon
+        if dockerIconRect.contains(point) && DockerService.shared.isAvailable {
+            onDockerToggle?()
+            return
+        }
 
         if gitBranchRect.contains(point), let repoRoot = gitRepoRoot {
             showBranchMenu(at: point, repoRoot: repoRoot)
@@ -345,6 +399,67 @@ class StatusBarView: NSView {
         guard let branch = sender.representedObject as? String else { return }
         guard branch != gitBranch else { return }
         onBranchSwitch?(branch)
+    }
+
+    // MARK: - Bookmark Menu
+
+    private func showBookmarkMenu(at point: NSPoint) {
+        let menu = NSMenu()
+        let service = BookmarkService.shared
+        let isBookmarked = service.contains(path: currentDirectory)
+
+        // Toggle bookmark for current directory
+        if isBookmarked {
+            let removeItem = NSMenuItem(title: "Remove Bookmark", action: #selector(removeCurrentBookmark(_:)), keyEquivalent: "")
+            removeItem.target = self
+            menu.addItem(removeItem)
+        } else {
+            let addItem = NSMenuItem(title: "Bookmark This Directory", action: #selector(addCurrentBookmark(_:)), keyEquivalent: "")
+            addItem.target = self
+            menu.addItem(addItem)
+        }
+
+        if !service.bookmarks.isEmpty {
+            menu.addItem(.separator())
+
+            let header = NSMenuItem(title: "Bookmarks", action: nil, keyEquivalent: "")
+            header.isEnabled = false
+            menu.addItem(header)
+
+            for (i, bm) in service.bookmarks.enumerated() {
+                let item = NSMenuItem(title: "\(bm.name)  \(abbreviatePath(bm.path))", action: #selector(bookmarkSelected(_:)), keyEquivalent: "")
+                if i < 9 {
+                    // Cmd+1 through Cmd+9 hint (shown in menu but handled by MainWindowController)
+                }
+                item.target = self
+                item.tag = i
+                if bm.path == currentDirectory { item.state = .on }
+                menu.addItem(item)
+            }
+        }
+
+        let menuPoint = NSPoint(x: bookmarkIconRect.midX, y: barHeight)
+        menu.popUp(positioning: nil, at: menuPoint, in: self)
+    }
+
+    @objc private func addCurrentBookmark(_ sender: NSMenuItem) {
+        onBookmarkCurrent?()
+        needsDisplay = true
+    }
+
+    @objc private func removeCurrentBookmark(_ sender: NSMenuItem) {
+        let service = BookmarkService.shared
+        if let bm = service.bookmarks.first(where: { $0.path == currentDirectory }) {
+            service.remove(id: bm.id)
+        }
+        needsDisplay = true
+    }
+
+    @objc private func bookmarkSelected(_ sender: NSMenuItem) {
+        let service = BookmarkService.shared
+        let idx = sender.tag
+        guard idx >= 0, idx < service.bookmarks.count else { return }
+        onBookmarkSelected?(service.bookmarks[idx].path)
     }
 
     // MARK: - Helpers

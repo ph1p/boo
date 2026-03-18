@@ -1,1 +1,5 @@
 .build
+Vendor/ghostty/
+zig-out/
+.zig-cache/
+zig-cache/

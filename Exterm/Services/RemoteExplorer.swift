@@ -59,16 +59,28 @@ final class RemoteExplorer {
     }
 
     /// Find a child process by name using pgrep.
+    /// Find child process by name using proc_listchildpids + proc_name.
     private static func findChildProcess(parentPID: pid_t, name: String) -> pid_t? {
-        let output = runLocalCommand("/usr/bin/pgrep", args: ["-P", "\(parentPID)", name])
-        guard let line = output?.trimmingCharacters(in: .whitespacesAndNewlines).split(separator: "\n").first,
-              let pid = Int32(line) else { return nil }
-        return pid
+        let count = proc_listchildpids(parentPID, nil, 0)
+        guard count > 0 else { return nil }
+        var pids = [pid_t](repeating: 0, count: Int(count))
+        let actual = proc_listchildpids(parentPID, &pids, Int32(count) * Int32(MemoryLayout<pid_t>.size))
+        guard actual > 0 else { return nil }
+        let pidCount = Int(actual) / MemoryLayout<pid_t>.size
+
+        for i in 0..<min(pidCount, pids.count) {
+            let child = pids[i]
+            var nameBuffer = [CChar](repeating: 0, count: Int(MAXCOMLEN) + 1)
+            proc_name(child, &nameBuffer, UInt32(nameBuffer.count))
+            let procName = String(cString: nameBuffer)
+            if procName.contains(name) { return child }
+        }
+        return nil
     }
 
     /// Extract SSH host from the process command line.
     private static func parseSSHHost(pid: pid_t) -> String? {
-        guard let cmdline = runLocalCommand("/bin/ps", args: ["-o", "args=", "-p", "\(pid)"]) else { return nil }
+        guard let cmdline = getProcessArgs(pid: pid) else { return nil }
 
         let args = cmdline.trimmingCharacters(in: .whitespacesAndNewlines).split(separator: " ").map(String.init)
         var host: String?
@@ -90,7 +102,7 @@ final class RemoteExplorer {
 
     /// Extract Docker container name/ID from `docker exec` command line.
     private static func parseDockerContainer(pid: pid_t) -> String? {
-        guard let cmdline = runLocalCommand("/bin/ps", args: ["-o", "args=", "-p", "\(pid)"]) else { return nil }
+        guard let cmdline = getProcessArgs(pid: pid) else { return nil }
 
         let args = cmdline.trimmingCharacters(in: .whitespacesAndNewlines).split(separator: " ").map(String.init)
 
@@ -295,6 +307,42 @@ final class RemoteExplorer {
                 }
             }
         }
+    }
+
+    /// Get process command line arguments using sysctl (no subprocess).
+    private static func getProcessArgs(pid: pid_t) -> String? {
+        var mib: [Int32] = [CTL_KERN, KERN_PROCARGS2, pid]
+        var size: Int = 0
+        guard sysctl(&mib, UInt32(mib.count), nil, &size, nil, 0) == 0, size > 0 else { return nil }
+
+        var buffer = [UInt8](repeating: 0, count: size)
+        guard sysctl(&mib, UInt32(mib.count), &buffer, &size, nil, 0) == 0 else { return nil }
+
+        // Skip argc (first 4 bytes)
+        guard size > 4 else { return nil }
+        let args = buffer.withUnsafeBufferPointer { buf -> String? in
+            // Skip argc int
+            var offset = MemoryLayout<Int32>.size
+            // Skip exec path (null-terminated)
+            while offset < size && buf[offset] != 0 { offset += 1 }
+            // Skip padding nulls
+            while offset < size && buf[offset] == 0 { offset += 1 }
+            // Remaining is null-separated args
+            var result: [String] = []
+            var current = ""
+            while offset < size {
+                if buf[offset] == 0 {
+                    if !current.isEmpty { result.append(current) }
+                    current = ""
+                    if result.count > 20 { break } // Safety limit
+                } else {
+                    current += String(UnicodeScalar(buf[offset]))
+                }
+                offset += 1
+            }
+            return result.joined(separator: " ")
+        }
+        return args
     }
 
     private static func runLocalCommand(_ path: String, args: [String]) -> String? {

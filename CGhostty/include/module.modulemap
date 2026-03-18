@@ -1,0 +1,5 @@
+module CGhostty {
+    header "ghostty_bridge.h"
+    link "ghostty-fat"
+    export *
+}

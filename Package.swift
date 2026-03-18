@@ -18,11 +18,39 @@ let package = Package(
                 .linkedLibrary("util")
             ]
         ),
+        .target(
+            name: "CGhostty",
+            path: "CGhostty",
+            publicHeadersPath: "include",
+            cSettings: [
+                .headerSearchPath("include")
+            ],
+            linkerSettings: [
+                .unsafeFlags(["-L", "Vendor/ghostty/macos/GhosttyKit.xcframework/macos-arm64"]),
+                .linkedLibrary("ghostty-fat"),
+                .linkedLibrary("c++"),
+                .linkedLibrary("z"),
+                .linkedFramework("Metal"),
+                .linkedFramework("MetalKit"),
+                .linkedFramework("CoreGraphics"),
+                .linkedFramework("CoreText"),
+                .linkedFramework("QuartzCore"),
+                .linkedFramework("IOSurface"),
+                .linkedFramework("CoreFoundation"),
+                .linkedFramework("Foundation"),
+                .linkedFramework("AppKit"),
+                .linkedFramework("UniformTypeIdentifiers"),
+                .linkedFramework("Carbon"),
+            ]
+        ),
         .executableTarget(
             name: "Exterm",
-            dependencies: ["CPTYHelper"],
+            dependencies: ["CPTYHelper", "CGhostty"],
             path: "Exterm",
-            exclude: ["App/Info.plist", "Renderer/Shaders.metal"]
+            exclude: ["App/Info.plist"],
+            linkerSettings: [
+                .unsafeFlags(["-L", "Vendor/ghostty/macos/GhosttyKit.xcframework/macos-arm64"]),
+            ]
         ),
         .testTarget(
             name: "ExtermTests",

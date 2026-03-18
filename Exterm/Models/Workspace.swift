@@ -65,6 +65,20 @@ final class Workspace {
         panes[rootID] = pane
     }
 
+    /// Restore a workspace from persisted state.
+    init(folderPath: String, id: UUID, splitTree: SplitTree, activePaneID: UUID) {
+        self.id = id
+        self.folderPath = folderPath
+        self.currentDirectory = folderPath
+        self.splitTree = splitTree
+        self.activePaneID = activePaneID
+    }
+
+    /// Add a pre-built pane (used during restore).
+    func restorePane(_ pane: Pane) {
+        panes[pane.id] = pane
+    }
+
     func pane(for id: UUID) -> Pane? { panes[id] }
 
     @discardableResult
@@ -73,7 +87,7 @@ final class Workspace {
         splitTree = newTree
 
         // New pane inherits cwd from the source pane
-        let cwd = panes[paneID]?.activeSession?.currentDirectory ?? folderPath
+        let cwd = panes[paneID]?.activeTab?.workingDirectory ?? folderPath
         let newPane = Pane(id: newID)
         _ = newPane.addTab(workingDirectory: cwd)
         panes[newID] = newPane
@@ -93,6 +107,24 @@ final class Workspace {
             return true
         }
         return false
+    }
+
+    func equalizeSplits() {
+        splitTree = equalizeSplitRatios(splitTree)
+    }
+
+    private func equalizeSplitRatios(_ tree: SplitTree) -> SplitTree {
+        switch tree {
+        case .leaf:
+            return tree
+        case .split(let direction, let first, let second, _):
+            return .split(
+                direction: direction,
+                first: equalizeSplitRatios(first),
+                second: equalizeSplitRatios(second),
+                ratio: 0.5
+            )
+        }
     }
 
     func handleDirectoryChange(_ newPath: String) {

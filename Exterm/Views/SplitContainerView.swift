@@ -36,7 +36,7 @@ class SplitContainerView: NSView {
             return delegate.splitContainer(self, paneViewFor: id)
 
         case .split(let direction, let first, let second, let ratio):
-            let splitView = NSSplitView()
+            let splitView = ThemedSplitView()
             splitView.isVertical = (direction == .horizontal)
             splitView.dividerStyle = .thin
 

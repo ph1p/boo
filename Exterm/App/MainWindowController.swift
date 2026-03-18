@@ -1,5 +1,7 @@
 import Cocoa
+import Combine
 import SwiftUI
+import CGhostty
 
 /// NSSplitView with themed divider color.
 class ThemedSplitView: NSSplitView {
@@ -22,11 +24,24 @@ class MainWindowController: NSWindowController, ToolbarViewDelegate, SplitContai
     private var remoteTreeRoot: RemoteFileTreeNode?
     private var fileWatcher: FileSystemWatcher?
     private var sidebarVisible = true
+    private var dockerPanelVisible = false
+    private var sidebarSplitView: NSSplitView?
+    private var dockerHostingView: NSView?
     private var isRemoteSidebar = false
     private var remoteRefreshTimer: Timer?
 
-    private var paneViews: [UUID: PaneView] = [:]
+    /// PaneViews keyed by workspace ID → pane ID → PaneView
+    private var workspacePaneViews: [UUID: [UUID: PaneView]] = [:]
+
+    /// Convenience accessor for current workspace's pane views
+    private var paneViews: [UUID: PaneView] {
+        get { workspacePaneViews[activeWorkspace?.id ?? UUID()] ?? [:] }
+        set { if let id = activeWorkspace?.id { workspacePaneViews[id] = newValue } }
+    }
     private var settingsObserver: Any?
+    private var ghosttyActionObserver: Any?
+    private var bridge: TerminalBridge!
+    private var bridgeCancellables = Set<AnyCancellable>()
 
     /// Undo stack for closed tabs and panes
     enum ClosedItem {
@@ -36,7 +51,6 @@ class MainWindowController: NSWindowController, ToolbarViewDelegate, SplitContai
     private var undoStack: [ClosedItem] = []
 
     /// Keep closed sessions alive briefly so undo can restore them
-    private var sessionCache: [(session: TerminalSession, expiry: Date)] = []
     private var sessionCacheTimer: Timer?
 
     init() {
@@ -51,6 +65,7 @@ class MainWindowController: NSWindowController, ToolbarViewDelegate, SplitContai
         window.minSize = NSSize(width: 600, height: 400)
         window.setFrameAutosaveName("ExtermMainWindow")
         window.backgroundColor = AppSettings.shared.theme.chromeBg
+        window.appearance = NSAppearance(named: AppSettings.shared.theme.isDark ? .darkAqua : .aqua)
         window.titlebarAppearsTransparent = true
         window.titleVisibility = .hidden
         window.isMovableByWindowBackground = true
@@ -59,13 +74,9 @@ class MainWindowController: NSWindowController, ToolbarViewDelegate, SplitContai
 
         setupUI()
         setupMenuItems()
-
-        openWorkspace(path: FileManager.default.homeDirectoryForCurrentUser.path)
-
-        // Cleanup expired cached sessions every 10 seconds
-        sessionCacheTimer = Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { [weak self] _ in
-            self?.cleanSessionCache()
-        }
+        bridge = TerminalBridge(paneID: UUID(), workspaceID: UUID(), workingDirectory: "")
+        restoreWorkspaces()
+        subscribeToBridge()
 
         settingsObserver = NotificationCenter.default.addObserver(
             forName: .settingsChanged, object: nil, queue: .main
@@ -74,6 +85,7 @@ class MainWindowController: NSWindowController, ToolbarViewDelegate, SplitContai
             // Refresh chrome colors
             let theme = AppSettings.shared.theme
             self.window?.backgroundColor = theme.chromeBg
+            self.window?.appearance = NSAppearance(named: theme.isDark ? .darkAqua : .aqua)
             self.sidebarContainer.layer?.backgroundColor = theme.sidebarBg.cgColor
             self.splitContainer.layer?.backgroundColor = theme.background.nsColor.cgColor
             self.mainSplitView.needsDisplay = true // Redraws themed divider
@@ -87,6 +99,61 @@ class MainWindowController: NSWindowController, ToolbarViewDelegate, SplitContai
             if self.sidebarVisible {
                 self.fileTreeRoot?.refreshAll()
             }
+        }
+
+        ghosttyActionObserver = NotificationCenter.default.addObserver(
+            forName: .ghosttyAction, object: nil, queue: .main
+        ) { [weak self] notification in
+            guard let self = self else { return }
+            guard let info = notification.userInfo,
+                  let action = info["action"] as? String else { return }
+            self.handleGhosttyAction(action, userInfo: info)
+        }
+    }
+
+    private func handleGhosttyAction(_ action: String, userInfo: [AnyHashable: Any]) {
+        switch action {
+        case "new_split":
+            let dirStr = userInfo["direction"] as? String ?? "vertical"
+            if dirStr == "horizontal" {
+                splitHorizontalAction(nil)
+            } else {
+                splitVerticalAction(nil)
+            }
+
+        case "goto_split":
+            let dir = userInfo["direction"] as? String ?? "next"
+            if dir == "next" {
+                focusNextPaneAction(nil)
+            } else {
+                focusPrevPaneAction(nil)
+            }
+
+        case "equalize_splits":
+            guard let workspace = activeWorkspace else { return }
+            workspace.equalizeSplits()
+            splitContainer.update(tree: workspace.splitTree)
+
+        case "close_surface":
+            smartCloseAction(nil)
+
+        case "new_tab":
+            newTabAction(nil)
+
+        case "new_workspace":
+            newWorkspaceAction(nil)
+
+        case "toggle_fullscreen":
+            window?.toggleFullScreen(nil)
+
+        case "close_window":
+            window?.close()
+
+        case "open_settings":
+            showSettingsAction(nil)
+
+        default:
+            break
         }
     }
 
@@ -125,6 +192,19 @@ class MainWindowController: NSWindowController, ToolbarViewDelegate, SplitContai
         statusBar.translatesAutoresizingMaskIntoConstraints = false
         statusBar.onBranchSwitch = { [weak self] branch in
             self?.sendRawToActivePane("git switch \(branch)\n")
+        }
+        statusBar.onDockerToggle = { [weak self] in
+            self?.toggleDockerPanel()
+        }
+        statusBar.onBookmarkCurrent = { [weak self] in
+            guard let self = self else { return }
+            let cwd = self.activeWorkspace?.pane(for: self.activeWorkspace!.activePaneID)?.activeTab?.workingDirectory
+                ?? self.activeWorkspace?.folderPath ?? ""
+            BookmarkService.shared.addCurrentDirectory(cwd)
+            self.statusBar.needsDisplay = true
+        }
+        statusBar.onBookmarkSelected = { [weak self] path in
+            self?.sendRawToActivePane("cd \(path)\n")
         }
         contentView.addSubview(statusBar)
 
@@ -207,13 +287,20 @@ class MainWindowController: NSWindowController, ToolbarViewDelegate, SplitContai
         let viewMenuItem = NSMenuItem()
         let viewMenu = NSMenu(title: "View")
         viewMenu.addItem(withTitle: "Toggle Sidebar", action: #selector(toggleSidebarAction(_:)), keyEquivalent: "b")
+        let fullscreen = NSMenuItem(title: "Toggle Full Screen", action: #selector(toggleFullScreenAction(_:)), keyEquivalent: "\r")
+        fullscreen.keyEquivalentModifierMask = [.command]
+        viewMenu.addItem(fullscreen)
+        let fullscreenAlt = NSMenuItem(title: "Toggle Full Screen", action: #selector(toggleFullScreenAction(_:)), keyEquivalent: "f")
+        fullscreenAlt.keyEquivalentModifierMask = [.command, .control]
+        fullscreenAlt.isAlternate = true
+        viewMenu.addItem(fullscreenAlt)
         viewMenuItem.submenu = viewMenu
         mainMenu.addItem(viewMenuItem)
 
         let editMenuItem = NSMenuItem()
         let editMenu = NSMenu(title: "Edit")
         editMenu.addItem(withTitle: "Copy", action: #selector(copyAction(_:)), keyEquivalent: "c")
-        editMenu.addItem(withTitle: "Paste", action: #selector(TerminalView.paste(_:)), keyEquivalent: "v")
+        editMenu.addItem(withTitle: "Paste", action: #selector(GhosttyView.paste(_:)), keyEquivalent: "v")
         editMenu.addItem(.separator())
         editMenu.addItem(withTitle: "Select All", action: #selector(selectAllAction(_:)), keyEquivalent: "a")
         editMenuItem.submenu = editMenu
@@ -237,6 +324,10 @@ class MainWindowController: NSWindowController, ToolbarViewDelegate, SplitContai
         let focusPrev = NSMenuItem(title: "Focus Previous Pane", action: #selector(focusPrevPaneAction(_:)), keyEquivalent: "[")
         focusPrev.keyEquivalentModifierMask = [.command]
         termMenu.addItem(focusPrev)
+
+        let equalize = NSMenuItem(title: "Equalize Splits", action: #selector(equalizeSplitsAction(_:)), keyEquivalent: "=")
+        equalize.keyEquivalentModifierMask = [.command, .control]
+        termMenu.addItem(equalize)
         termMenu.addItem(.separator())
 
         let fontUp = NSMenuItem(title: "Increase Font Size", action: #selector(increaseFontSizeAction(_:)), keyEquivalent: "+")
@@ -252,7 +343,47 @@ class MainWindowController: NSWindowController, ToolbarViewDelegate, SplitContai
         termMenuItem.submenu = termMenu
         mainMenu.addItem(termMenuItem)
 
+        // Bookmarks menu
+        let bmMenuItem = NSMenuItem()
+        let bmMenu = NSMenu(title: "Bookmarks")
+        let addBm = NSMenuItem(title: "Bookmark Current Directory", action: #selector(bookmarkCurrentAction(_:)), keyEquivalent: "B")
+        addBm.keyEquivalentModifierMask = [.command, .shift]
+        bmMenu.addItem(addBm)
+        bmMenuItem.submenu = bmMenu
+        mainMenu.addItem(bmMenuItem)
+
+        // Cmd+1 through Cmd+9 for workspace switching (added to View menu)
+        for i in 1...9 {
+            let item = NSMenuItem(title: "Workspace \(i)", action: #selector(switchToWorkspaceAction(_:)), keyEquivalent: "\(i)")
+            item.keyEquivalentModifierMask = [.command]
+            item.tag = i - 1
+            item.isHidden = true
+            viewMenu.addItem(item)
+        }
+
         NSApplication.shared.mainMenu = mainMenu
+    }
+
+    @objc private func switchToWorkspaceAction(_ sender: NSMenuItem) {
+        let idx = sender.tag
+        guard idx >= 0, idx < appState.workspaces.count else { return }
+        guard idx != appState.activeWorkspaceIndex else { return }
+        activateWorkspace(idx)
+    }
+
+    @objc private func bookmarkCurrentAction(_ sender: Any?) {
+        let cwd = activeWorkspace?.pane(for: activeWorkspace!.activePaneID)?.activeTab?.workingDirectory
+            ?? activeWorkspace?.folderPath ?? ""
+        guard !cwd.isEmpty else { return }
+        BookmarkService.shared.addCurrentDirectory(cwd)
+        statusBar.needsDisplay = true
+    }
+
+    @objc private func jumpToBookmarkAction(_ sender: NSMenuItem) {
+        let idx = sender.tag
+        let bookmarks = BookmarkService.shared.bookmarks
+        guard idx >= 0, idx < bookmarks.count else { return }
+        sendRawToActivePane("cd \(bookmarks[idx].path)\n")
     }
 
     // MARK: - Toolbar
@@ -270,22 +401,126 @@ class MainWindowController: NSWindowController, ToolbarViewDelegate, SplitContai
             statusBar.update(directory: "", paneCount: 0, tabCount: 0, runningProcess: "")
             return
         }
-        let session = ws.pane(for: ws.activePaneID)?.activeSession
-        let cwd = session?.currentDirectory ?? ws.currentDirectory
+        let cwd = ws.pane(for: ws.activePaneID)?.activeTab?.workingDirectory ?? ws.folderPath
         let paneCount = ws.panes.count
         let tabCount = ws.pane(for: ws.activePaneID)?.tabs.count ?? 0
-        let fg = session?.foregroundProcess ?? ""
-        statusBar.update(directory: cwd, paneCount: paneCount, tabCount: tabCount, runningProcess: fg)
+        var process = bridge.state.foregroundProcess
+        // Don't show process when it duplicates the path or looks like a directory
+        if !process.isEmpty {
+            let cwdLast = (cwd as NSString).lastPathComponent
+            let abbrevCwd = abbreviateHomePath(cwd)
+            if process == cwdLast || process == cwd || process == abbrevCwd
+                || process.hasPrefix("~") || process.hasPrefix("/") {
+                process = ""
+            }
+        }
+        statusBar.update(directory: cwd, paneCount: paneCount, tabCount: tabCount, runningProcess: process)
+        refreshWindowTitle()
+    }
+
+    private func abbreviateHomePath(_ path: String) -> String {
+        let home = NSHomeDirectory()
+        if path.hasPrefix(home) { return "~" + path.dropFirst(home.count) }
+        return path
+    }
+
+    private func refreshWindowTitle() {
+        guard let ws = activeWorkspace,
+              let pane = ws.pane(for: ws.activePaneID),
+              let tab = pane.activeTab else {
+            window?.title = "Exterm"
+            return
+        }
+        // Use the terminal title if available (shows running process or shell prompt info),
+        // otherwise fall back to the last path component of the working directory.
+        let title = tab.title.trimmingCharacters(in: .whitespaces)
+        if !title.isEmpty {
+            window?.title = title
+        } else {
+            let dir = tab.workingDirectory
+            let name = (dir as NSString).lastPathComponent
+            window?.title = name.isEmpty ? "Exterm" : name
+        }
+    }
+
+    // MARK: - Terminal Bridge
+
+    private func subscribeToBridge() {
+        bridgeCancellables.removeAll()
+
+        bridge.$state
+            .receive(on: DispatchQueue.main)
+            .removeDuplicates()
+            .sink { [weak self] state in
+                guard let self = self else { return }
+                self.refreshStatusBar()
+            }
+            .store(in: &bridgeCancellables)
+
+        bridge.events
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] event in
+                guard let self = self else { return }
+                switch event {
+                case .directoryChanged:
+                    break
+
+                case .titleChanged:
+                    break
+
+                case .processChanged:
+                    break
+
+                case .remoteSessionChanged:
+                    break
+
+                case .focusChanged:
+                    self.refreshToolbar()
+
+                case .workspaceSwitched:
+                    self.refreshToolbar()
+                }
+            }
+            .store(in: &bridgeCancellables)
+    }
+
+    private func handleRemoteSessionChange(_ session: RemoteSessionType?) {
+        guard let ws = activeWorkspace else { return }
+        if let session = session {
+            showRemoteConnecting(session: session)
+            RemoteExplorer.getRemoteCwd(session: session) { [weak self] remoteCwd in
+                DispatchQueue.main.async {
+                    guard let self = self else { return }
+                    if let cwd = remoteCwd {
+                        self.showRemoteSidebar(session: session, remotePath: cwd)
+                    }
+                }
+            }
+        } else if isRemoteSidebar {
+            let cwd = ws.pane(for: ws.activePaneID)?.activeTab?.workingDirectory ?? ws.folderPath
+            updateSidebar(path: cwd)
+        }
+    }
+
+    /// Update the remote file tree to a new path (from OSC 7 on the remote shell).
+    private func updateRemoteCwd(path: String) {
+        NSLog("[RemoteCwd] updateRemoteCwd: path=\(path) activeSession=\(String(describing: activeRemoteSession)) isRemoteSidebar=\(isRemoteSidebar)")
+        guard let session = activeRemoteSession, isRemoteSidebar else {
+            NSLog("[RemoteCwd] SKIPPED — no active session or not remote sidebar")
+            return
+        }
+        NSLog("[RemoteCwd] → showRemoteSidebar(session=\(session), path=\(path))")
+        showRemoteSidebar(session: session, remotePath: path)
     }
 
     // MARK: - Workspace
 
+    private func restoreWorkspaces() {
+        openWorkspace(path: FileManager.default.homeDirectoryForCurrentUser.path)
+    }
+
     func openWorkspace(path: String) {
         let workspace = Workspace(folderPath: path)
-        workspace.onDirectoryChanged = { [weak self] newPath in
-            guard let self = self, self.activeWorkspace?.id == workspace.id else { return }
-            self.updateSidebar(path: newPath)
-        }
         appState.addWorkspace(workspace)
         activateWorkspace(appState.workspaces.count - 1)
     }
@@ -294,18 +529,30 @@ class MainWindowController: NSWindowController, ToolbarViewDelegate, SplitContai
         appState.setActiveWorkspace(index)
         guard let workspace = activeWorkspace else { return }
 
-        paneViews.removeAll()
+        let cwd = workspace.pane(for: workspace.activePaneID)?.activeTab?.workingDirectory ?? workspace.folderPath
+        bridge.switchContext(paneID: workspace.activePaneID, workspaceID: workspace.id, workingDirectory: cwd)
+
         refreshToolbar()
-        updateSidebar(path: workspace.currentDirectory)
+        updateSidebar(path: cwd)
+
+        // Rebuild split container with the workspace's tree
         splitContainer.update(tree: workspace.splitTree)
 
-        // Focus the active pane
         DispatchQueue.main.async { [weak self] in
             guard let self = self, let ws = self.activeWorkspace else { return }
+
+            for (_, pv) in self.paneViews {
+                // Ensure every pane has a session
+                if pv.currentTerminalView == nil {
+                    pv.startActiveSession()
+                }
+            }
+
             if let pv = self.paneViews[ws.activePaneID] {
-                pv.startActiveSession()
                 self.window?.makeFirstResponder(pv.currentTerminalView)
             }
+
+            self.refreshAllSurfaces()
         }
     }
 
@@ -314,24 +561,84 @@ class MainWindowController: NSWindowController, ToolbarViewDelegate, SplitContai
     private func clearSidebar() {
         sidebarContainer.layer?.backgroundColor = AppSettings.shared.theme.sidebarBg.cgColor
         sidebarContainer.subviews.forEach { $0.removeFromSuperview() }
+        sidebarHostingView = nil
+        sidebarSplitView = nil
+        dockerHostingView = nil
     }
 
-    private func updateSidebar(path: String) {
-        isRemoteSidebar = false
-        remoteRefreshTimer?.invalidate()
-        remoteRefreshTimer = nil
-        fileWatcher?.stop()
+    // MARK: - Docker Panel
 
-        let folderName = (path as NSString).lastPathComponent
-        let root = FileTreeNode(name: folderName, path: path, isDirectory: true)
-        root.loadChildren()
-        root.isExpanded = true
-        self.fileTreeRoot = root
+    private func toggleDockerPanel() {
+        dockerPanelVisible.toggle()
+        statusBar.dockerPanelVisible = dockerPanelVisible
+        statusBar.needsDisplay = true
 
-        sidebarContainer.layer?.backgroundColor = AppSettings.shared.theme.sidebarBg.cgColor
-        clearSidebar()
+        if dockerPanelVisible {
+            DockerService.shared.startWatching()
+        } else {
+            DockerService.shared.stopWatching()
+        }
 
-        let actions = FileTreeActions(
+        // Rebuild sidebar to include/exclude Docker panel
+        if let ws = activeWorkspace {
+            let cwd = ws.pane(for: ws.activePaneID)?.activeTab?.workingDirectory ?? ws.folderPath
+            updateSidebar(path: cwd)
+        }
+    }
+
+    /// Build the sidebar with file tree and optionally Docker panel below.
+    private func buildSidebarContent(fileTreeView: NSView) {
+        let hasDocker = DockerService.shared.isAvailable && dockerPanelVisible
+
+        if hasDocker {
+            let splitView = ThemedSplitView()
+            splitView.isVertical = false
+            splitView.dividerStyle = .thin
+            splitView.translatesAutoresizingMaskIntoConstraints = false
+
+            // File tree on top
+            splitView.addSubview(fileTreeView)
+
+            // Docker panel on bottom
+            let dockerView = DockerPanelView(
+                onExecIntoContainer: { [weak self] container in
+                    self?.sendRawToActivePane(DockerService.shared.execCommand(for: container))
+                }
+            )
+            let dockerHosting = NSHostingView(rootView: dockerView)
+            splitView.addSubview(dockerHosting)
+
+            sidebarContainer.addSubview(splitView)
+            splitView.translatesAutoresizingMaskIntoConstraints = false
+            NSLayoutConstraint.activate([
+                splitView.topAnchor.constraint(equalTo: sidebarContainer.topAnchor),
+                splitView.leadingAnchor.constraint(equalTo: sidebarContainer.leadingAnchor),
+                splitView.trailingAnchor.constraint(equalTo: sidebarContainer.trailingAnchor),
+                splitView.bottomAnchor.constraint(equalTo: sidebarContainer.bottomAnchor),
+            ])
+
+            DispatchQueue.main.async {
+                splitView.setPosition(splitView.bounds.height * 0.6, ofDividerAt: 0)
+            }
+
+            sidebarSplitView = splitView
+            dockerHostingView = dockerHosting
+        } else {
+            fileTreeView.translatesAutoresizingMaskIntoConstraints = false
+            sidebarContainer.addSubview(fileTreeView)
+            NSLayoutConstraint.activate([
+                fileTreeView.topAnchor.constraint(equalTo: sidebarContainer.topAnchor),
+                fileTreeView.leadingAnchor.constraint(equalTo: sidebarContainer.leadingAnchor),
+                fileTreeView.trailingAnchor.constraint(equalTo: sidebarContainer.trailingAnchor),
+                fileTreeView.bottomAnchor.constraint(equalTo: sidebarContainer.bottomAnchor),
+            ])
+            sidebarSplitView = nil
+            dockerHostingView = nil
+        }
+    }
+
+    private func makeFileTreeActions() -> FileTreeActions {
+        FileTreeActions(
             onFileClicked: { [weak self] path in
                 self?.pastePathToActivePane(path)
             },
@@ -349,18 +656,48 @@ class MainWindowController: NSWindowController, ToolbarViewDelegate, SplitContai
                 NSWorkspace.shared.selectFile(path, inFileViewerRootedAtPath: (path as NSString).deletingLastPathComponent)
             }
         )
-        let sidebarView = FileTreeView(root: root, actions: actions)
-        let hostingView = NSHostingView(rootView: sidebarView)
-        hostingView.translatesAutoresizingMaskIntoConstraints = false
-        sidebarContainer.addSubview(hostingView)
+    }
 
-        NSLayoutConstraint.activate([
-            hostingView.topAnchor.constraint(equalTo: sidebarContainer.topAnchor),
-            hostingView.leadingAnchor.constraint(equalTo: sidebarContainer.leadingAnchor),
-            hostingView.trailingAnchor.constraint(equalTo: sidebarContainer.trailingAnchor),
-            hostingView.bottomAnchor.constraint(equalTo: sidebarContainer.bottomAnchor),
-        ])
+    private func updateSidebar(path: String) {
+        isRemoteSidebar = false
+        activeRemoteSession = nil
+        remoteRefreshTimer?.invalidate()
+        remoteRefreshTimer = nil
+        fileWatcher?.stop()
+
+        let folderName = (path as NSString).lastPathComponent
+        let root = FileTreeNode(name: folderName, path: path, isDirectory: true)
+        root.loadChildren()
+        root.isExpanded = true
+        self.fileTreeRoot = root
+
+        // Fast path: reuse existing hosting view if local sidebar is already showing
+        if let hostingView = sidebarHostingView, !isRemoteSidebar {
+            hostingView.rootView = FileTreeView(root: root, actions: makeFileTreeActions())
+            fileWatcher = FileSystemWatcher(path: path) { [weak self] in
+                self?.fileTreeRoot?.refreshAll()
+            }
+            fileWatcher?.start()
+            return
+        }
+
+        // Full rebuild
+        sidebarContainer.layer?.backgroundColor = AppSettings.shared.theme.sidebarBg.cgColor
+        clearSidebar()
+
+        let sidebarView = FileTreeView(root: root, actions: makeFileTreeActions())
+        let hostingView = NSHostingView(rootView: sidebarView)
         sidebarHostingView = hostingView
+
+        // Auto-detect Docker and show panel if available
+        if DockerService.shared.isAvailable && !dockerPanelVisible {
+            dockerPanelVisible = true
+            statusBar.dockerPanelVisible = true
+            statusBar.needsDisplay = true
+            DockerService.shared.startWatching()
+        }
+
+        buildSidebarContent(fileTreeView: hostingView)
 
         fileWatcher = FileSystemWatcher(path: path) { [weak self] in
             self?.fileTreeRoot?.refreshAll()
@@ -474,6 +811,11 @@ class MainWindowController: NSWindowController, ToolbarViewDelegate, SplitContai
     }
 
     private func forceCloseWorkspace(at index: Int) {
+        let ws = appState.workspaces[index]
+        // Destroy all pane views for this workspace
+        if let views = workspacePaneViews.removeValue(forKey: ws.id) {
+            for (_, pv) in views { pv.stopAll() }
+        }
         appState.removeWorkspace(at: index)
         if appState.workspaces.isEmpty {
             window?.close()
@@ -534,73 +876,118 @@ class MainWindowController: NSWindowController, ToolbarViewDelegate, SplitContai
     func paneView(_ paneView: PaneView, didFocus paneID: UUID) {
         guard let workspace = activeWorkspace else { return }
         workspace.activePaneID = paneID
-        if let pane = workspace.pane(for: paneID),
-           let session = pane.activeSession {
-            workspace.handleDirectoryChange(session.currentDirectory)
+        let tab = workspace.pane(for: paneID)?.activeTab
+        let cwd = tab?.workingDirectory ?? workspace.folderPath
 
-            // Check SSH state for this pane
-            if let remote = session.remoteSession, let cwd = session.remoteCwd {
-                showRemoteSidebar(session: remote, remotePath: cwd)
-            } else if isRemoteSidebar {
-                updateSidebar(path: session.currentDirectory)
-            }
+        if let session = tab?.remoteSession {
+            handleRemoteSessionChange(session)
+        } else {
+            updateSidebar(path: cwd)
         }
-        refreshStatusBar()
-    }
 
-    func paneView(_ paneView: PaneView, sessionForPane paneID: UUID, tabIndex: Int, workingDirectory: String) -> TerminalSession {
-        guard let tv = paneView.currentTerminalView else {
-            fatalError("PaneView has no terminal view")
-        }
-        let session = TerminalSession(terminalView: tv, workingDirectory: workingDirectory)
-        return session
+        bridge.handleFocus(paneID: paneID, workingDirectory: cwd)
     }
 
     func paneView(_ paneView: PaneView, didChangeDirectory path: String, paneID: UUID) {
         guard let workspace = activeWorkspace, workspace.activePaneID == paneID else { return }
-        workspace.handleDirectoryChange(path)
-        refreshStatusBar()
+
+        let title = bridge.state.terminalTitle
+        let pane = workspace.pane(for: paneID)
+        let prevRemote = pane?.activeTab?.remoteSession
+
+        var remoteSession = TerminalBridge.detectRemoteFromHeuristics(title: title, cwd: path)
+        if remoteSession == nil {
+            remoteSession = TerminalBridge.detectRemoteFromProcessName(title: title)
+        }
+
+        NSLog("[CWD] path=\(path) title=\(title) prevRemote=\(String(describing: prevRemote)) detected=\(String(describing: remoteSession)) isRemoteSidebar=\(isRemoteSidebar) activeRemoteSession=\(String(describing: activeRemoteSession))")
+
+        if let session = remoteSession {
+            NSLog("[CWD] → new remote session detected: \(session)")
+            pane?.updateRemoteSession(at: pane!.activeTabIndex, session)
+            handleRemoteSessionChange(session)
+        } else if prevRemote != nil {
+            let pathExistsLocally = FileManager.default.fileExists(atPath: path)
+            let titleRemote = TerminalBridge.titleLooksRemote(title)
+            NSLog("[CWD] → prevRemote exists, pathLocal=\(pathExistsLocally) titleRemote=\(titleRemote)")
+            if pathExistsLocally && !titleRemote {
+                NSLog("[CWD] → clearing remote, back to local")
+                pane?.updateRemoteSession(at: pane!.activeTabIndex, nil)
+                updateSidebar(path: path)
+            } else {
+                NSLog("[CWD] → updateRemoteCwd(\(path))")
+                updateRemoteCwd(path: path)
+            }
+        } else {
+            NSLog("[CWD] → local sidebar update")
+            pane?.updateRemoteSession(at: pane!.activeTabIndex, nil)
+            updateSidebar(path: path)
+        }
+
+        bridge.handleDirectoryChange(path: path, paneID: paneID)
     }
 
-    func paneView(_ paneView: PaneView, foregroundProcessChanged name: String, paneID: UUID) {
-        refreshStatusBar()
-    }
+    func paneView(_ paneView: PaneView, titleChanged title: String, paneID: UUID) {
+        NSLog("[Title] title=\(title) paneID=\(paneID)")
+        guard let workspace = activeWorkspace else { return }
+        bridge.handleTitleChange(title: title, paneID: paneID)
 
-    func paneView(_ paneView: PaneView, remoteStateChanged session: RemoteSessionType?, remoteCwd: String?, paneID: UUID) {
-        guard let workspace = activeWorkspace, workspace.activePaneID == paneID else { return }
+        guard workspace.activePaneID == paneID else { return }
+        let cwd = workspace.pane(for: paneID)?.activeTab?.workingDirectory ?? ""
 
-        if let session = session, let cwd = remoteCwd {
-            // Connected — show file tree
-            showRemoteSidebar(session: session, remotePath: cwd)
-        } else if let session = session {
-            // Detected but not yet connected — show connecting state
-            showRemoteConnecting(session: session)
-        } else if isRemoteSidebar {
-            // Session ended — switch back to local
-            updateSidebar(path: workspace.currentDirectory)
+        // Detect remote session from title heuristics AND process name
+        var remoteSession = TerminalBridge.detectRemoteFromHeuristics(title: title, cwd: cwd)
+        if remoteSession == nil {
+            remoteSession = TerminalBridge.detectRemoteFromProcessName(title: title)
+        }
+
+        if let pane = workspace.pane(for: paneID) {
+            let prevRemote = pane.activeTab?.remoteSession
+
+            if remoteSession == nil && prevRemote != nil {
+                if TerminalBridge.titleLooksRemote(title) {
+                    // Still remote — try to extract CWD from title to update explorer
+                    if let remotePath = TerminalBridge.extractRemoteCwd(from: title) {
+                        updateRemoteCwd(path: remotePath)
+                    }
+                    return
+                }
+                // Title no longer looks remote — SSH/Docker exited, back to local
+                pane.updateRemoteSession(at: pane.activeTabIndex, nil)
+                let localCwd = pane.activeTab?.workingDirectory ?? ""
+                updateSidebar(path: localCwd)
+                return
+            }
+
+            pane.updateRemoteSession(at: pane.activeTabIndex, remoteSession)
+            if remoteSession != prevRemote {
+                if let session = remoteSession {
+                    handleRemoteSessionChange(session)
+                }
+            }
         }
     }
 
+    func paneView(_ paneView: PaneView, foregroundProcessChanged name: String, paneID: UUID) {
+        // Handled by bridge via titleChanged
+    }
+
+    func paneView(_ paneView: PaneView, remoteStateChanged session: RemoteSessionType?, remoteCwd: String?, paneID: UUID) {
+        // Handled by bridge via heuristic detection
+    }
+
     func paneView(_ paneView: PaneView, remoteConnectionFailed session: RemoteSessionType, paneID: UUID) {
-        guard let workspace = activeWorkspace, workspace.activePaneID == paneID else { return }
-        guard isRemoteSidebar, activeRemoteSession == session else { return }
-
-        clearSidebar()
-
-        let failView = NSHostingView(rootView: RemoteConnectionFailedView(session: session))
-        failView.translatesAutoresizingMaskIntoConstraints = false
-        sidebarContainer.addSubview(failView)
-
-        NSLayoutConstraint.activate([
-            failView.topAnchor.constraint(equalTo: sidebarContainer.topAnchor),
-            failView.leadingAnchor.constraint(equalTo: sidebarContainer.leadingAnchor),
-            failView.trailingAnchor.constraint(equalTo: sidebarContainer.trailingAnchor),
-            failView.bottomAnchor.constraint(equalTo: sidebarContainer.bottomAnchor),
-        ])
+        // Handled by bridge via heuristic detection
     }
 
     func paneView(_ paneView: PaneView, sessionEnded paneID: UUID) {
         guard let workspace = activeWorkspace else { return }
+
+        if let pane = workspace.pane(for: paneID) {
+            pane.updateRemoteSession(at: pane.activeTabIndex, nil)
+        }
+
+        bridge.handleProcessExit(paneID: paneID)
 
         // Focus this pane first so smartClose acts on the right one
         if workspace.activePaneID != paneID {
@@ -639,10 +1026,11 @@ class MainWindowController: NSWindowController, ToolbarViewDelegate, SplitContai
 
     @objc private func newTabAction(_ sender: Any?) {
         guard let workspace = activeWorkspace,
-              let pane = workspace.pane(for: workspace.activePaneID),
+              workspace.pane(for: workspace.activePaneID) != nil,
               let pv = paneViews[workspace.activePaneID] else { return }
-        let cwd = pane.activeSession?.currentDirectory ?? workspace.folderPath
+        let cwd = workspace.folderPath
         pv.addNewTab(workingDirectory: cwd)
+        window?.makeFirstResponder(pv.currentTerminalView)
     }
 
     @objc private func smartCloseAction(_ sender: Any?) {
@@ -662,7 +1050,7 @@ class MainWindowController: NSWindowController, ToolbarViewDelegate, SplitContai
             refreshStatusBar()
         } else if workspace.panes.count > 1 {
             // Multiple panes but single tab: close the pane (undoable)
-            let cwd = pane.activeSession?.currentDirectory ?? pane.activeTab?.workingDirectory ?? workspace.folderPath
+            let cwd = pane.activeTab?.workingDirectory ?? workspace.folderPath
             // Determine split direction from the tree
             let direction = findSplitDirection(for: workspace.activePaneID, in: workspace.splitTree)
             let siblingID = findSiblingID(for: workspace.activePaneID, in: workspace.splitTree)
@@ -728,17 +1116,7 @@ class MainWindowController: NSWindowController, ToolbarViewDelegate, SplitContai
         if undoStack.count > 20 { undoStack.removeFirst() }
     }
 
-    /// Cache a session so it stays alive for 30 seconds (for undo).
-    private func cacheSession(_ session: TerminalSession) {
-        sessionCache.append((session: session, expiry: Date().addingTimeInterval(30)))
-    }
-
-    private func cleanSessionCache() {
-        let now = Date()
-        let expired = sessionCache.filter { $0.expiry < now }
-        for entry in expired { entry.session.stop() }
-        sessionCache.removeAll { $0.expiry < now }
-    }
+    // Session caching removed — Ghostty surfaces are managed by PaneView
 
     /// Find the split direction of the parent split containing the given leaf.
     private func findSplitDirection(for leafID: UUID, in tree: SplitTree) -> SplitTree.SplitDirection? {
@@ -792,7 +1170,7 @@ class MainWindowController: NSWindowController, ToolbarViewDelegate, SplitContai
 
         // Remove the closed pane's view from cache
         let closedPV = paneViews.removeValue(forKey: paneID)
-        closedPV?.currentTerminalView?.terminal = nil
+        closedPV?.stopAll()
 
         if workspace.closePane(paneID) {
             let validIDs = Set(workspace.splitTree.leafIDs)
@@ -808,12 +1186,16 @@ class MainWindowController: NSWindowController, ToolbarViewDelegate, SplitContai
                 for id in validIDs {
                     if let pv = self.paneViews[id] {
                         pv.startActiveSession()
-                        pv.layoutTerminalView()
-                        pv.currentTerminalView?.needsDisplay = true
                     }
                 }
                 if let pv = self.paneViews[ws.activePaneID] {
                     self.window?.makeFirstResponder(pv.currentTerminalView)
+                }
+                self.refreshAllSurfaces()
+                // Update sidebar with the now-active pane's directory
+                if let pane = ws.pane(for: ws.activePaneID) {
+                    let cwd = pane.activeTab?.workingDirectory ?? ws.folderPath
+                    self.updateSidebar(path: cwd)
                 }
             }
         } else {
@@ -851,6 +1233,7 @@ class MainWindowController: NSWindowController, ToolbarViewDelegate, SplitContai
         window?.makeFirstResponder(nil)
 
         let newID = workspace.splitPane(oldPaneID, direction: direction)
+        // Focus the newly created pane
         workspace.activePaneID = newID
         splitContainer.update(tree: workspace.splitTree)
 
@@ -860,10 +1243,31 @@ class MainWindowController: NSWindowController, ToolbarViewDelegate, SplitContai
             if let oldPV = self.paneViews[oldPaneID] {
                 oldPV.startActiveSession()
             }
-            // Start the new pane's session
+            // Start the new pane's session and focus it
             if let newPV = self.paneViews[newID] {
                 newPV.startActiveSession()
                 self.window?.makeFirstResponder(newPV.currentTerminalView)
+            }
+            // Refresh all Ghostty surfaces after layout settles
+            self.refreshAllSurfaces()
+        }
+    }
+
+    /// Refresh all Ghostty surfaces — call after view hierarchy changes (splits, close, resize).
+    private func refreshAllSurfaces() {
+        guard let ws = activeWorkspace else { return }
+        for (paneID, pv) in paneViews {
+            pv.layoutTerminalView()
+            if let gv = pv.currentTerminalView as? GhosttyView,
+               let surface = gv.surface {
+                ghostty_surface_set_focus(surface, paneID == ws.activePaneID)
+                let scaledSize = gv.convertToBacking(gv.bounds.size)
+                let w = UInt32(scaledSize.width)
+                let h = UInt32(scaledSize.height)
+                if w > 0 && h > 0 {
+                    ghostty_surface_set_size(surface, w, h)
+                }
+                ghostty_surface_refresh(surface)
             }
         }
     }
@@ -875,41 +1279,19 @@ class MainWindowController: NSWindowController, ToolbarViewDelegate, SplitContai
     // MARK: - Terminal Shortcuts
 
     @objc private func clearScreenAction(_ sender: Any?) {
-        // Cmd+K: send clear (like Terminal.app)
-        guard let workspace = activeWorkspace,
-              let pane = workspace.pane(for: workspace.activePaneID),
-              let session = pane.activeSession else { return }
-        // Send form-feed to clear, then redraw prompt
-        if let data = "\u{0C}".data(using: .utf8) {
-            session.writeToPTY(data)
-        }
+        sendRawToActivePane("\u{0C}")
     }
 
     @objc private func clearScrollbackAction(_ sender: Any?) {
-        guard let workspace = activeWorkspace,
-              let pane = workspace.pane(for: workspace.activePaneID),
-              let session = pane.activeSession else { return }
-        // Send CSI 3J to clear scrollback + CSI 2J + CSI H to clear screen
-        if let data = "\u{1B}[3J\u{1B}[2J\u{1B}[H".data(using: .utf8) {
-            session.writeToPTY(data)
-        }
+        sendRawToActivePane("\u{1B}[3J\u{1B}[2J\u{1B}[H")
     }
 
     @objc private func copyAction(_ sender: Any?) {
-        guard let workspace = activeWorkspace,
-              let pv = paneViews[workspace.activePaneID],
-              let tv = pv.currentTerminalView,
-              let text = tv.selectedText(), !text.isEmpty else { return }
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(text, forType: .string)
-        tv.clearSelection()
+        // Ghostty handles copy/selection via its own keybindings
     }
 
     @objc private func selectAllAction(_ sender: Any?) {
-        guard let workspace = activeWorkspace,
-              let pv = paneViews[workspace.activePaneID],
-              let tv = pv.currentTerminalView else { return }
-        tv.selectAll()
+        // Ghostty handles select-all via its own keybindings
     }
 
     @objc private func focusNextPaneAction(_ sender: Any?) {
@@ -952,23 +1334,27 @@ class MainWindowController: NSWindowController, ToolbarViewDelegate, SplitContai
         AppSettings.shared.fontSize = 14
     }
 
-    func pastePathToActivePane(_ path: String) {
-        guard let workspace = activeWorkspace,
-              let pane = workspace.pane(for: workspace.activePaneID),
-              let session = pane.activeSession else { return }
-        let escaped = shellEscape(path)
-        if let data = escaped.data(using: .utf8) {
-            session.writeToPTY(data)
-        }
+    @objc private func toggleFullScreenAction(_ sender: Any?) {
+        window?.toggleFullScreen(nil)
     }
 
-    /// Send raw text to the active terminal (no escaping).
+    @objc private func equalizeSplitsAction(_ sender: Any?) {
+        guard let workspace = activeWorkspace else { return }
+        workspace.equalizeSplits()
+        splitContainer.update(tree: workspace.splitTree)
+    }
+
+    func pastePathToActivePane(_ path: String) {
+        sendRawToActivePane(shellEscape(path))
+    }
+
     func sendRawToActivePane(_ text: String) {
         guard let workspace = activeWorkspace,
-              let pane = workspace.pane(for: workspace.activePaneID),
-              let session = pane.activeSession else { return }
-        if let data = text.data(using: .utf8) {
-            session.writeToPTY(data)
+              let pv = paneViews[workspace.activePaneID],
+              let gv = pv.currentTerminalView as? GhosttyView,
+              let surface = gv.surface else { return }
+        text.withCString { cstr in
+            ghostty_surface_text(surface, cstr, UInt(strlen(cstr)))
         }
     }
 

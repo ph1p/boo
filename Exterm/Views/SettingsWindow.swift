@@ -348,10 +348,12 @@ struct ShortcutsView: View {
                 ShortcutGroup(title: "General", items: [
                     ("Settings", "\u{2318},"),
                     ("New Workspace", "\u{2318}N"),
+                    ("Open Folder", "\u{21E7}\u{2318}O"),
                     ("New Tab", "\u{2318}T"),
                     ("Close", "\u{2318}W"),
                     ("Reopen Tab", "\u{2318}Z"),
                     ("Close Pane", "\u{21E7}\u{2318}W"),
+                    ("Switch Workspace 1-9", "\u{2318}1-9"),
                 ], text: text, muted: muted, accent: accent)
 
                 ShortcutGroup(title: "Terminal", items: [
@@ -374,6 +376,12 @@ struct ShortcutsView: View {
                     ("Copy", "\u{2318}C"),
                     ("Paste", "\u{2318}V"),
                     ("Select All", "\u{2318}A"),
+                ], text: text, muted: muted, accent: accent)
+
+                ShortcutGroup(title: "Bookmarks", items: [
+                    ("Bookmark Directory", "\u{21E7}\u{2318}B"),
+                    ("Jump to Bookmark 1-9", "\u{2303}1-9"),
+                    ("Switch Workspace 1-9", "\u{2318}1-9"),
                 ], text: text, muted: muted, accent: accent)
 
                 Spacer()

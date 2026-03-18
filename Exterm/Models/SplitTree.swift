@@ -95,6 +95,45 @@ indirect enum SplitTree {
     }
 }
 
+// MARK: - Codable
+
+extension SplitTree: Codable {
+    private enum CodingKeys: String, CodingKey {
+        case type, id, direction, first, second, ratio
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let type = try c.decode(String.self, forKey: .type)
+        if type == "leaf" {
+            let id = try c.decode(UUID.self, forKey: .id)
+            self = .leaf(id: id)
+        } else {
+            let dirStr = try c.decode(String.self, forKey: .direction)
+            let dir: SplitDirection = dirStr == "vertical" ? .vertical : .horizontal
+            let first = try c.decode(SplitTree.self, forKey: .first)
+            let second = try c.decode(SplitTree.self, forKey: .second)
+            let ratio = try c.decode(CGFloat.self, forKey: .ratio)
+            self = .split(direction: dir, first: first, second: second, ratio: ratio)
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        switch self {
+        case .leaf(let id):
+            try c.encode("leaf", forKey: .type)
+            try c.encode(id, forKey: .id)
+        case .split(let direction, let first, let second, let ratio):
+            try c.encode("split", forKey: .type)
+            try c.encode(direction == .vertical ? "vertical" : "horizontal", forKey: .direction)
+            try c.encode(first, forKey: .first)
+            try c.encode(second, forKey: .second)
+            try c.encode(ratio, forKey: .ratio)
+        }
+    }
+}
+
 extension SplitTree: Equatable {
     static func == (lhs: SplitTree, rhs: SplitTree) -> Bool {
         switch (lhs, rhs) {

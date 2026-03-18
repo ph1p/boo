@@ -49,6 +49,7 @@ final class AppSettings {
 
     private func set(_ value: Any?, forKey key: String) {
         UserDefaults.standard.set(value, forKey: key)
+        saveToFile()
         notify()
     }
 
@@ -177,7 +178,50 @@ final class AppSettings {
         NotificationCenter.default.post(name: .settingsChanged, object: nil)
     }
 
-    private init() {}
+    // MARK: - File Persistence (~/.exterm/settings.json)
+
+    private func saveToFile() {
+        let dict: [String: Any] = [
+            K.themeName: themeName,
+            K.cursorStyle: cursorStyle.rawValue,
+            K.fontSize: Double(fontSize),
+            K.fontName: fontName,
+            K.showExplorerHeader: showExplorerHeader,
+            K.showHiddenFiles: showHiddenFiles,
+            K.explorerIconsEnabled: explorerIconsEnabled,
+            K.explorerFontSize: Double(explorerFontSize),
+            K.explorerFontName: explorerFontName,
+            K.statusBarShowPath: statusBarShowPath,
+            K.statusBarShowGitBranch: statusBarShowGitBranch,
+            K.statusBarShowTime: statusBarShowTime,
+            K.statusBarShowPaneInfo: statusBarShowPaneInfo,
+            K.statusBarShowShell: statusBarShowShell,
+        ]
+        if let data = try? JSONSerialization.data(withJSONObject: dict, options: [.prettyPrinted, .sortedKeys]) {
+            try? data.write(to: URL(fileURLWithPath: ExtermPaths.settingsFile))
+        }
+    }
+
+    private func loadFromFile() {
+        let path = ExtermPaths.settingsFile
+        guard FileManager.default.fileExists(atPath: path),
+              let data = try? Data(contentsOf: URL(fileURLWithPath: path)),
+              let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return }
+
+        // Only load values that aren't already in UserDefaults (first launch migration)
+        for (key, value) in dict {
+            if UserDefaults.standard.object(forKey: key) == nil {
+                UserDefaults.standard.set(value, forKey: key)
+            }
+        }
+    }
+
+    private init() {
+        // On first launch, load settings from ~/.exterm/settings.json if it exists
+        loadFromFile()
+        // Ensure the config directory exists
+        _ = ExtermPaths.configDir
+    }
 }
 
 /// Observable wrapper so SwiftUI views re-render when settings change.

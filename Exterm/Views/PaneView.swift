@@ -1,63 +1,98 @@
 import Cocoa
+import CGhostty
 
 protocol PaneViewDelegate: AnyObject {
     func paneView(_ paneView: PaneView, didFocus paneID: UUID)
-    func paneView(_ paneView: PaneView, sessionForPane paneID: UUID, tabIndex: Int, workingDirectory: String) -> TerminalSession
     func paneView(_ paneView: PaneView, didChangeDirectory path: String, paneID: UUID)
+    func paneView(_ paneView: PaneView, titleChanged title: String, paneID: UUID)
     func paneView(_ paneView: PaneView, foregroundProcessChanged name: String, paneID: UUID)
     func paneView(_ paneView: PaneView, remoteStateChanged session: RemoteSessionType?, remoteCwd: String?, paneID: UUID)
     func paneView(_ paneView: PaneView, remoteConnectionFailed session: RemoteSessionType, paneID: UUID)
     func paneView(_ paneView: PaneView, sessionEnded paneID: UUID)
 }
 
-/// A pane: local tab bar on top + terminal view below. Each tab is a terminal session.
+/// A pane: optional tab bar on top + GhosttyView below.
+/// Each tab has its own Ghostty surface. CWD and process tracking
+/// comes exclusively from Ghostty's action callbacks (OSC 7, title).
 class PaneView: NSView {
     let paneID: UUID
     weak var paneDelegate: PaneViewDelegate?
 
     private let pane: Pane
     private let tabBarHeight: CGFloat = 26
-    private var terminalView: TerminalView?
-    private var tabBarLayer = CALayer()
-    private var needsTabBarRedraw = true
+
+    private var ghosttyView: GhosttyView?
+    private var tabViews: [UUID: GhosttyView] = [:]
 
     init(paneID: UUID, pane: Pane) {
         self.paneID = paneID
         self.pane = pane
         super.init(frame: .zero)
         wantsLayer = true
-        let bg = AppSettings.shared.theme.background
-        layer?.backgroundColor = bg.nsColor.cgColor
-
-        setupTerminalView()
+        layer?.backgroundColor = AppSettings.shared.theme.background.nsColor.cgColor
     }
 
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
     }
 
-    var currentTerminalView: TerminalView? { terminalView }
+    var currentTerminalView: NSView? { ghosttyView }
 
-    private func setupTerminalView() {
-        terminalView?.removeFromSuperview()
+    // MARK: - Terminal Lifecycle
 
-        let tv = TerminalView(frame: .zero)
-        tv.onFocused = { [weak self] in
+    func startActiveSession() {
+        guard let tab = pane.activeTab else { return }
+
+        if let stored = tabViews.removeValue(forKey: tab.id) {
+            ghosttyView?.removeFromSuperview()
+            addSubview(stored)
+            ghosttyView = stored
+        } else if ghosttyView == nil {
+            let gv = GhosttyView(workingDirectory: tab.workingDirectory)
+            wireCallbacks(gv)
+            addSubview(gv)
+            ghosttyView = gv
+        }
+        layoutTerminalView()
+    }
+
+    private func wireCallbacks(_ gv: GhosttyView) {
+        gv.onFocused = { [weak self] in
             guard let self = self else { return }
             self.paneDelegate?.paneView(self, didFocus: self.paneID)
         }
-        addSubview(tv)
-        terminalView = tv
+
+        gv.onPwdChanged = { [weak self] path in
+            guard let self = self else { return }
+            let idx = self.pane.activeTabIndex
+            if idx >= 0 { self.pane.updateWorkingDirectory(at: idx, path) }
+            self.needsDisplay = true
+            self.paneDelegate?.paneView(self, didChangeDirectory: path, paneID: self.paneID)
+        }
+
+        gv.onTitleChanged = { [weak self] title in
+            guard let self = self else { return }
+            self.paneDelegate?.paneView(self, titleChanged: title, paneID: self.paneID)
+
+            let idx = self.pane.activeTabIndex
+            if idx >= 0 { self.pane.updateTitle(at: idx, title) }
+            self.needsDisplay = true
+        }
+
+        gv.onProcessExited = { [weak self] in
+            guard let self = self else { return }
+            self.paneDelegate?.paneView(self, sessionEnded: self.paneID)
+        }
     }
 
+    // MARK: - Layout
+
     func layoutTerminalView() {
-        guard let tv = terminalView else { return }
+        guard let gv = ghosttyView else { return }
         let showTabs = pane.tabs.count > 1
         let tabH = showTabs ? tabBarHeight : 0
         let newFrame = NSRect(x: 0, y: tabH, width: bounds.width, height: max(0, bounds.height - tabH))
-        if tv.frame != newFrame {
-            tv.frame = newFrame
-        }
+        if gv.frame != newFrame { gv.frame = newFrame }
     }
 
     override func layout() {
@@ -68,97 +103,66 @@ class PaneView: NSView {
 
     override func viewDidMoveToSuperview() {
         super.viewDidMoveToSuperview()
-        DispatchQueue.main.async { [weak self] in
-            self?.needsLayout = true
-        }
+        DispatchQueue.main.async { [weak self] in self?.needsLayout = true }
     }
 
     // MARK: - Tab Management
 
     func activateTab(_ index: Int) {
         guard index != pane.activeTabIndex else { return }
-
-        // Disconnect old session from view (keep it running in background)
-        pane.activeSession?.detachFromView()
-
+        storeCurrentView()
         pane.setActiveTab(index)
         startActiveSession()
         layoutTerminalView()
         needsDisplay = true
+        window?.makeFirstResponder(ghosttyView)
+        if let tab = pane.activeTab {
+            paneDelegate?.paneView(self, didChangeDirectory: tab.workingDirectory, paneID: paneID)
+        }
     }
 
     func addNewTab(workingDirectory: String) {
-        // Disconnect old session from view (session stays alive in background)
-        if let oldSession = pane.activeSession {
-            oldSession.detachFromView()
-        }
-        let _ = pane.addTab(workingDirectory: workingDirectory)
+        storeCurrentView()
+        _ = pane.addTab(workingDirectory: workingDirectory)
         startActiveSession()
         layoutTerminalView()
         needsDisplay = true
+        window?.makeFirstResponder(ghosttyView)
     }
 
     func closeTab(at index: Int) {
+        let tabID = pane.tabs[index].id
+        if let gv = tabViews.removeValue(forKey: tabID) { gv.destroy() }
+        if pane.activeTabIndex == index {
+            ghosttyView?.destroy()
+            ghosttyView?.removeFromSuperview()
+            ghosttyView = nil
+        }
+
         let wasActive = index == pane.activeTabIndex
         pane.removeTab(at: index)
-
-        if pane.tabs.isEmpty {
-            return // Caller should handle closing the pane
-        }
-
+        if pane.tabs.isEmpty { return }
         if wasActive {
             startActiveSession()
+            layoutTerminalView()
+            window?.makeFirstResponder(ghosttyView)
+            if let tab = pane.activeTab {
+                paneDelegate?.paneView(self, didChangeDirectory: tab.workingDirectory, paneID: paneID)
+            }
+        } else {
+            layoutTerminalView()
         }
-        layoutTerminalView()
         needsDisplay = true
     }
 
-    func startActiveSession() {
-        guard let tv = terminalView,
-              let tab = pane.activeTab,
-              let delegate = paneDelegate else { return }
-
-        if let existingSession = tab.session {
-            existingSession.attachToView(tv)
-            existingSession.terminal.ansiPalette = AppSettings.shared.theme.ansiColors
-        } else {
-            let session = delegate.paneView(self, sessionForPane: paneID, tabIndex: pane.activeTabIndex, workingDirectory: tab.workingDirectory)
-            session.terminal.ansiPalette = AppSettings.shared.theme.ansiColors
-
-            session.onDirectoryChanged = { [weak self] newPath in
-                guard let self = self else { return }
-                self.pane.updateTitle(at: self.pane.activeTabIndex, (newPath as NSString).lastPathComponent)
-                self.needsDisplay = true
-                self.paneDelegate?.paneView(self, didChangeDirectory: newPath, paneID: self.paneID)
-            }
-
-            session.onForegroundProcessChanged = { [weak self] name in
-                guard let self = self else { return }
-                self.paneDelegate?.paneView(self, foregroundProcessChanged: name, paneID: self.paneID)
-            }
-
-            session.onRemoteStateChanged = { [weak self] session, remoteCwd in
-                guard let self = self else { return }
-                self.paneDelegate?.paneView(self, remoteStateChanged: session, remoteCwd: remoteCwd, paneID: self.paneID)
-            }
-
-            session.onRemoteConnectionFailed = { [weak self] session in
-                guard let self = self else { return }
-                self.paneDelegate?.paneView(self, remoteConnectionFailed: session, paneID: self.paneID)
-            }
-
-            session.onSessionEnded = { [weak self] in
-                guard let self = self else { return }
-                self.paneDelegate?.paneView(self, sessionEnded: self.paneID)
-            }
-
-            pane.setSession(session, forTabAt: pane.activeTabIndex)
-            session.start()
-        }
+    private func storeCurrentView() {
+        guard let gv = ghosttyView, let tab = pane.activeTab else { return }
+        gv.removeFromSuperview()
+        tabViews[tab.id] = gv
+        ghosttyView = nil
     }
 
     var tabCount: Int { pane.tabs.count }
-    var hasMultipleTabs: Bool { pane.tabs.count > 1 }
 
     // MARK: - Drawing (tab bar)
 
@@ -167,13 +171,10 @@ class PaneView: NSView {
     override func draw(_ dirtyRect: NSRect) {
         guard let ctx = NSGraphicsContext.current?.cgContext else { return }
         let theme = AppSettings.shared.theme
-
-        let showTabs = pane.tabs.count > 1
-        guard showTabs else { return }
+        guard pane.tabs.count > 1 else { return }
 
         ctx.setFillColor(theme.chromeBg.cgColor)
         ctx.fill(CGRect(x: 0, y: 0, width: bounds.width, height: tabBarHeight))
-
         ctx.setFillColor(theme.chromeMuted.withAlphaComponent(0.3).cgColor)
         ctx.fill(CGRect(x: 0, y: tabBarHeight - 0.5, width: bounds.width, height: 0.5))
 
@@ -185,8 +186,7 @@ class PaneView: NSView {
             let tabRect = CGRect(x: x + 1, y: 3, width: tabW - 2, height: tabBarHeight - 5)
 
             if isActive {
-                let bg = theme.background
-                ctx.setFillColor(bg.cgColor)
+                ctx.setFillColor(theme.background.cgColor)
                 ctx.addPath(CGPath(roundedRect: tabRect, cornerWidth: 5, cornerHeight: 5, transform: nil))
                 ctx.fillPath()
             }
@@ -197,69 +197,61 @@ class PaneView: NSView {
             ]
             let title = tab.title as NSString
             let titleSize = title.size(withAttributes: attrs)
-            let maxTitleW = tabW - 22
-            title.draw(in: CGRect(
-                x: x + 8,
-                y: tabRect.midY - titleSize.height / 2,
-                width: min(titleSize.width, maxTitleW),
-                height: titleSize.height
-            ), withAttributes: attrs)
+            title.draw(in: CGRect(x: x + 8, y: tabRect.midY - titleSize.height / 2,
+                                  width: min(titleSize.width, tabW - 22), height: titleSize.height),
+                       withAttributes: attrs)
 
             if pane.tabs.count > 1 {
-                let closeAttrs: [NSAttributedString.Key: Any] = [
+                let ca: [NSAttributedString.Key: Any] = [
                     .font: NSFont.systemFont(ofSize: 8, weight: .bold),
                     .foregroundColor: theme.chromeMuted.withAlphaComponent(0.6)
                 ]
-                let closeStr = "\u{2715}" as NSString
-                let closeSize = closeStr.size(withAttributes: closeAttrs)
-                closeStr.draw(
-                    at: NSPoint(x: x + tabW - closeSize.width - 8, y: tabRect.midY - closeSize.height / 2),
-                    withAttributes: closeAttrs
-                )
+                let cs = "\u{2715}" as NSString
+                let csz = cs.size(withAttributes: ca)
+                cs.draw(at: NSPoint(x: x + tabW - csz.width - 8, y: tabRect.midY - csz.height / 2), withAttributes: ca)
             }
-
             x += tabW
         }
 
-        let plusAttrs: [NSAttributedString.Key: Any] = [
+        let pa: [NSAttributedString.Key: Any] = [
             .font: NSFont.systemFont(ofSize: 13, weight: .light),
             .foregroundColor: theme.chromeMuted.withAlphaComponent(0.6)
         ]
-        let plusSize = ("+" as NSString).size(withAttributes: plusAttrs)
-        ("+" as NSString).draw(at: NSPoint(x: x + 4, y: (tabBarHeight - plusSize.height) / 2), withAttributes: plusAttrs)
+        ("+" as NSString).draw(at: NSPoint(x: x + 4, y: (tabBarHeight - ("+" as NSString).size(withAttributes: pa).height) / 2), withAttributes: pa)
     }
 
-    // MARK: - Mouse (tab bar clicks)
+    // MARK: - Mouse (tab bar)
 
     override func mouseDown(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
-
-        // Only handle clicks in the tab bar area when multiple tabs
-        guard pane.tabs.count > 1, point.y < tabBarHeight else {
-            // Pass through — terminal view handles its own clicks
-            return
-        }
+        guard pane.tabs.count > 1, point.y < tabBarHeight else { return }
 
         let tabW: CGFloat = min(120, max(60, (bounds.width - 24) / CGFloat(pane.tabs.count)))
         var x: CGFloat = 4
 
         for (i, _) in pane.tabs.enumerated() {
             if point.x >= x && point.x < x + tabW {
-                // Close button
-                if point.x > x + tabW - 18 && pane.tabs.count > 1 {
-                    closeTab(at: i)
-                } else {
-                    activateTab(i)
-                }
+                if point.x > x + tabW - 18 && pane.tabs.count > 1 { closeTab(at: i) }
+                else { activateTab(i) }
                 return
             }
             x += tabW
         }
 
-        // Plus button
         if point.x >= x && point.x < x + 24 {
-            let cwd = pane.activeSession?.currentDirectory ?? pane.activeTab?.workingDirectory ?? "~"
-            addNewTab(workingDirectory: cwd)
+            addNewTab(workingDirectory: pane.activeTab?.workingDirectory ?? "~")
         }
     }
+
+    // MARK: - Cleanup
+
+    func stopAll() {
+        for (_, gv) in tabViews { gv.destroy() }
+        tabViews.removeAll()
+        ghosttyView?.destroy()
+        ghosttyView?.removeFromSuperview()
+        ghosttyView = nil
+    }
+
+    deinit { stopAll() }
 }
