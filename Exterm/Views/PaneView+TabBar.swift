@@ -31,22 +31,23 @@ extension PaneView {
         }
 
         // Clip scrollable tabs so they don't draw over the pinned plus button
-        let clipW = isOverflowing ? bounds.width - plusButtonWidth : bounds.width
+        let clipW = bounds.width - plusButtonWidth
         ctx.saveGState()
         ctx.clip(to: CGRect(x: 0, y: 0, width: clipW, height: barH + 1))
 
         var x: CGFloat = -tabScrollOffset
         for (i, tab) in pane.tabs.enumerated() {
             let isActive = i == pane.activeTabIndex
-            drawSingleTab(ctx: ctx, theme: theme, tab: tab, index: i, x: x, y: 0,
-                          width: widths[i], rowH: barH, isActive: isActive, termBgColor: termBgColor)
+            drawSingleTab(
+                ctx: ctx, theme: theme, tab: tab, index: i, x: x, y: 0,
+                width: widths[i], rowH: barH, isActive: isActive, termBgColor: termBgColor)
             x += widths[i]
         }
 
         ctx.restoreGState()
 
-        // Plus button: pinned at right when overflowing, after last tab otherwise
-        let pinX = isOverflowing ? bounds.width - plusButtonWidth : x
+        // Plus button: always pinned at right edge in scroll mode
+        let pinX = bounds.width - plusButtonWidth
         drawPlusButton(ctx: ctx, theme: theme, x: pinX, y: 0, width: plusButtonWidth, rowH: barH)
     }
 
@@ -58,8 +59,9 @@ extension PaneView {
             guard i < layouts.count else { break }
             let lay = layouts[i]
             let isActive = i == pane.activeTabIndex
-            drawSingleTab(ctx: ctx, theme: theme, tab: tab, index: i, x: lay.x, y: lay.y,
-                          width: lay.width, rowH: singleRowTabHeight, isActive: isActive, termBgColor: termBgColor)
+            drawSingleTab(
+                ctx: ctx, theme: theme, tab: tab, index: i, x: lay.x, y: lay.y,
+                width: lay.width, rowH: singleRowTabHeight, isActive: isActive, termBgColor: termBgColor)
         }
 
         // Plus button after last tab layout
@@ -68,14 +70,18 @@ extension PaneView {
         let plusY = lastLay?.y ?? 0
         let availW = bounds.width
         if plusX + plusButtonWidth > availW && plusX > 0 {
-            drawPlusButton(ctx: ctx, theme: theme, x: 0, y: plusY + singleRowTabHeight, width: plusButtonWidth, rowH: singleRowTabHeight)
+            drawPlusButton(
+                ctx: ctx, theme: theme, x: 0, y: plusY + singleRowTabHeight, width: plusButtonWidth,
+                rowH: singleRowTabHeight)
         } else {
             drawPlusButton(ctx: ctx, theme: theme, x: plusX, y: plusY, width: plusButtonWidth, rowH: singleRowTabHeight)
         }
     }
 
-    func drawSingleTab(ctx: CGContext, theme: TerminalTheme, tab: Pane.Tab, index: Int, x: CGFloat, y: CGFloat,
-                                width: CGFloat, rowH: CGFloat, isActive: Bool, termBgColor: CGColor) {
+    func drawSingleTab(
+        ctx: CGContext, theme: TerminalTheme, tab: Pane.Tab, index: Int, x: CGFloat, y: CGFloat,
+        width: CGFloat, rowH: CGFloat, isActive: Bool, termBgColor: CGColor
+    ) {
         let tabRect = CGRect(x: x, y: y, width: width, height: rowH)
         let isHovered = hoveredTabIndex == index
 
@@ -90,12 +96,12 @@ extension PaneView {
         // Full-height vertical separators (same color as bottom border)
         let midY = y + rowH / 2
         if x > 0 {
-            ctx.setFillColor(theme.chromeMuted.withAlphaComponent(0.2).cgColor)
+            ctx.setFillColor(theme.chromeBorder.cgColor)
             ctx.fill(CGRect(x: x, y: y, width: 0.5, height: rowH))
         }
         // Right edge separator on the last tab
         if index == pane.tabs.count - 1 {
-            ctx.setFillColor(theme.chromeMuted.withAlphaComponent(0.2).cgColor)
+            ctx.setFillColor(theme.chromeBorder.cgColor)
             ctx.fill(CGRect(x: x + width - 0.5, y: y, width: 0.5, height: rowH))
         }
 
@@ -116,27 +122,32 @@ extension PaneView {
         para.lineBreakMode = .byTruncatingTail
         let attrs: [NSAttributedString.Key: Any] = [
             .font: NSFont.systemFont(ofSize: 10.5, weight: isActive ? .medium : .regular),
-            .foregroundColor: isActive ? theme.chromeText : (isHovered ? theme.chromeText.withAlphaComponent(0.8) : theme.chromeMuted),
+            .foregroundColor: isActive
+                ? theme.chromeText : (isHovered ? theme.chromeText.withAlphaComponent(0.8) : theme.chromeMuted),
             .paragraphStyle: para
         ]
         let title = Self.tabDisplayTitle(tab: tab) as NSString
         let titleSize = title.size(withAttributes: attrs)
         let maxTitleW = max(0, x + width - textX - closeZone)
-        title.draw(in: CGRect(x: textX, y: midY - titleSize.height / 2,
-                               width: min(titleSize.width, maxTitleW), height: titleSize.height),
-                   withAttributes: attrs)
+        title.draw(
+            in: CGRect(
+                x: textX, y: midY - titleSize.height / 2,
+                width: min(titleSize.width, maxTitleW), height: titleSize.height),
+            withAttributes: attrs)
 
         // Close button — only show on active or hovered tab
         if showClose {
-            let closeHitX = x + width - 18
-            let closeHovered = isHovered && hoveredTabIndex == index
+            let closeHovered = isHovered && isCloseButtonHovered
             let closeAlpha: CGFloat = closeHovered ? 0.9 : (isActive ? 0.7 : 0.5)
 
-            // Subtle circular background on hover
+            let circleSize: CGFloat = 16
+            let circleCenterX = x + width - circleSize / 2 - 4
+            let circleCenterY = midY
+
+            // Subtle circular background on close-button hover
             if closeHovered {
-                let circleSize: CGFloat = 16
-                let circleX = x + width - circleSize - 4
-                let circleY = midY - circleSize / 2
+                let circleX = circleCenterX - circleSize / 2
+                let circleY = circleCenterY - circleSize / 2
                 ctx.setFillColor(theme.chromeMuted.withAlphaComponent(0.15).cgColor)
                 ctx.fillEllipse(in: CGRect(x: circleX, y: circleY, width: circleSize, height: circleSize))
             }
@@ -147,7 +158,8 @@ extension PaneView {
             ]
             let cs = "\u{2715}" as NSString
             let csz = cs.size(withAttributes: ca)
-            cs.draw(at: NSPoint(x: x + width - csz.width - 8, y: midY - csz.height / 2), withAttributes: ca)
+            cs.draw(
+                at: NSPoint(x: circleCenterX - csz.width / 2, y: circleCenterY - csz.height / 2), withAttributes: ca)
         }
     }
 
@@ -162,25 +174,25 @@ extension PaneView {
             ctx.fill(CGRect(x: x, y: y, width: width, height: rowH))
         }
 
-        // Full-height left separator (same color as bottom border)
-        if x > 0 {
-            ctx.setFillColor(theme.chromeMuted.withAlphaComponent(0.2).cgColor)
-            ctx.fill(CGRect(x: x, y: y, width: 0.5, height: rowH))
-        }
+        // Full-height left separator
+        ctx.setFillColor(theme.chromeBorder.cgColor)
+        ctx.fill(CGRect(x: x, y: y, width: 1, height: rowH))
 
-        // "+" character centered
-        let plusPara = NSMutableParagraphStyle()
-        plusPara.alignment = .center
-        let pa: [NSAttributedString.Key: Any] = [
-            .font: NSFont.systemFont(ofSize: 13, weight: .light),
-            .foregroundColor: theme.chromeMuted.withAlphaComponent(isPlusButtonHovered ? 0.9 : 0.6),
-            .paragraphStyle: plusPara
-        ]
+        // "+" centered — adjust for descender so the visible glyph is vertically centered
+        let font = NSFont.systemFont(ofSize: 15, weight: .light)
+        let color = theme.chromeMuted.withAlphaComponent(isPlusButtonHovered ? 0.9 : 0.6)
+        let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: color]
         let plusStr = "+" as NSString
-        let plusSize = plusStr.size(withAttributes: pa)
+        let plusSize = plusStr.size(withAttributes: attrs)
+        let contentX = x + 1
+        let contentW = width - 1
         let midY = y + rowH / 2
-        plusStr.draw(in: CGRect(x: x, y: midY - plusSize.height / 2, width: width, height: plusSize.height),
-                     withAttributes: pa)
+        // In flipped view, draw(at:) y is top of text box. Text box = ascender + descender.
+        // Visual center of "+" is at ascender/2 from top. We want that at midY.
+        let drawY = midY - font.ascender / 2 - 4
+        plusStr.draw(
+            at: NSPoint(x: contentX + (contentW - plusSize.width) / 2, y: drawY),
+            withAttributes: attrs)
     }
 
     // MARK: - Tab Display Helpers

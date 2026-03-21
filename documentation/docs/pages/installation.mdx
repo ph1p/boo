@@ -1,0 +1,129 @@
+# Installation
+
+## Download
+
+Download the latest release from the [GitHub Releases](https://github.com/ph1p/exterm/releases) page.
+
+### macOS (DMG)
+
+1. Download `Exterm-x.x.x.dmg`
+2. Open the DMG and drag **Exterm** to your **Applications** folder
+3. Launch Exterm from Applications
+
+:::note
+On first launch, macOS may show a security prompt. Click "Open" to allow the app to run. Releases are signed and notarized with Apple Developer ID.
+:::
+
+### Linux (tar.gz)
+
+1. Download `exterm-x.x.x-linux-x86_64.tar.gz`
+2. Extract: `tar xzf exterm-*.tar.gz`
+3. Run: `./exterm`
+
+The archive includes the `ghostty` GTK binary alongside `exterm`. Requires GTK4 and libadwaita at runtime.
+
+## Build from Source
+
+### macOS
+
+**Prerequisites:** macOS 13+, Xcode CLT, Zig 0.15+, Metal Toolchain
+
+```bash
+git clone --recursive https://github.com/ph1p/exterm.git
+cd exterm
+make setup    # Builds GhosttyKit + Exterm
+make run      # Build and launch
+```
+
+### Linux
+
+**Prerequisites:** Swift 5.9+, Zig 0.15+, GTK4 dev libraries
+
+```bash
+# Ubuntu/Debian
+sudo apt install swift zig libgtk-4-dev libadwaita-1-dev
+
+git clone --recursive https://github.com/ph1p/exterm.git
+cd exterm
+make setup-linux    # Builds Ghostty GTK + Exterm
+make run            # Launch
+```
+
+On Linux, Exterm launches Ghostty's native GTK terminal configured with Exterm's settings and shell integration. The sidebar/plugin UI is macOS-only for now.
+
+### Step by Step
+
+#### 1. Clone the repository
+
+```bash
+git clone --recursive https://github.com/ph1p/exterm.git
+cd exterm
+```
+
+If you already cloned without `--recursive`, initialize the submodule:
+
+```bash
+git submodule update --init --depth 1
+```
+
+#### 2. Build
+
+```bash
+# macOS
+make setup
+
+# Linux
+make setup-linux
+```
+
+#### 3. Run
+
+```bash
+make run
+```
+
+### Release Build
+
+```bash
+make release      # Optimized build
+make app          # macOS: create .app bundle
+make tarball      # Linux: create distributable tar.gz
+```
+
+### Running Tests
+
+```bash
+make test     # Runs all 492+ tests (macOS)
+```
+
+## System Requirements
+
+### macOS
+
+| Requirement | Minimum |
+|-------------|---------|
+| macOS | 13.0 (Ventura) |
+| Architecture | Apple Silicon (arm64) |
+| Disk space | ~200MB (including GhosttyKit) |
+| Zig (build only) | 0.15+ |
+
+### Linux
+
+| Requirement | Minimum |
+|-------------|---------|
+| Distribution | Ubuntu 22.04+ / Fedora 38+ (or equivalent) |
+| Swift | 5.9+ |
+| GTK | 4.0+ |
+| libadwaita | 1.0+ |
+| Zig (build only) | 0.15+ |
+
+## Uninstall
+
+### macOS
+1. Quit Exterm
+2. Delete `Exterm.app` from Applications
+3. Optionally remove configuration: `rm -rf ~/.exterm`
+
+### Linux
+1. Delete the extracted directory
+2. Optionally remove configuration: `rm -rf ~/.exterm ~/.config/exterm`

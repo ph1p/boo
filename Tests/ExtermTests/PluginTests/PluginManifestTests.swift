@@ -1,25 +1,26 @@
 import XCTest
+
 @testable import Exterm
 
 final class PluginManifestTests: XCTestCase {
 
     func testValidManifestParsing() throws {
         let json = """
-        {
-            "id": "git-panel",
-            "name": "Git Panel",
-            "version": "1.0.0",
-            "icon": "arrow.triangle.branch",
-            "description": "Shows git status in sidebar",
-            "when": "git.active",
-            "capabilities": { "sidebarPanel": true, "statusBarSegment": true },
-            "statusBar": { "position": "left", "priority": 10, "template": "{git.branch}" },
-            "settings": [
-                { "key": "showDiffs", "type": "bool", "label": "Show diffs", "default": true },
-                { "key": "maxFiles", "type": "int", "label": "Max files", "default": 50 }
-            ]
-        }
-        """
+            {
+                "id": "git-panel",
+                "name": "Git Panel",
+                "version": "1.0.0",
+                "icon": "arrow.triangle.branch",
+                "description": "Shows git status in sidebar",
+                "when": "git.active",
+                "capabilities": { "sidebarPanel": true, "statusBarSegment": true },
+                "statusBar": { "position": "left", "priority": 10, "template": "{git.branch}" },
+                "settings": [
+                    { "key": "showDiffs", "type": "bool", "label": "Show diffs", "default": true },
+                    { "key": "maxFiles", "type": "int", "label": "Max files", "default": 50 }
+                ]
+            }
+            """
         let manifest = try PluginManifest.parse(from: json)
 
         XCTAssertEqual(manifest.id, "git-panel")
@@ -40,8 +41,8 @@ final class PluginManifestTests: XCTestCase {
 
     func testMinimalManifest() throws {
         let json = """
-        { "id": "minimal", "name": "Minimal", "version": "1.0.0", "icon": "star" }
-        """
+            { "id": "minimal", "name": "Minimal", "version": "1.0.0", "icon": "star" }
+            """
         let manifest = try PluginManifest.parse(from: json)
         XCTAssertEqual(manifest.id, "minimal")
         XCTAssertNil(manifest.when)
@@ -51,8 +52,8 @@ final class PluginManifestTests: XCTestCase {
 
     func testMissingRequiredFieldID() {
         let json = """
-        { "id": "", "name": "Bad", "version": "1.0.0", "icon": "star" }
-        """
+            { "id": "", "name": "Bad", "version": "1.0.0", "icon": "star" }
+            """
         XCTAssertThrowsError(try PluginManifest.parse(from: json)) { error in
             XCTAssertTrue("\(error)".contains("id"), "Error should mention 'id': \(error)")
         }
@@ -60,8 +61,8 @@ final class PluginManifestTests: XCTestCase {
 
     func testMissingRequiredFieldName() {
         let json = """
-        { "id": "test", "name": "", "version": "1.0.0", "icon": "star" }
-        """
+            { "id": "test", "name": "", "version": "1.0.0", "icon": "star" }
+            """
         XCTAssertThrowsError(try PluginManifest.parse(from: json)) { error in
             XCTAssertTrue("\(error)".contains("name"), "Error should mention 'name': \(error)")
         }
@@ -74,8 +75,8 @@ final class PluginManifestTests: XCTestCase {
 
     func testUnknownFieldsIgnored() throws {
         let json = """
-        { "id": "test", "name": "Test", "version": "1.0.0", "icon": "star", "futureField": "ignored" }
-        """
+            { "id": "test", "name": "Test", "version": "1.0.0", "icon": "star", "futureField": "ignored" }
+            """
         // Should parse successfully, ignoring unknown fields
         let manifest = try PluginManifest.parse(from: json)
         XCTAssertEqual(manifest.id, "test")
@@ -83,16 +84,16 @@ final class PluginManifestTests: XCTestCase {
 
     func testSettingTypes() throws {
         let json = """
-        {
-            "id": "test", "name": "Test", "version": "1.0.0", "icon": "star",
-            "settings": [
-                { "key": "a", "type": "bool", "label": "A", "default": true },
-                { "key": "b", "type": "string", "label": "B", "default": "hello" },
-                { "key": "c", "type": "int", "label": "C", "default": 42 },
-                { "key": "d", "type": "double", "label": "D", "default": 3.14 }
-            ]
-        }
-        """
+            {
+                "id": "test", "name": "Test", "version": "1.0.0", "icon": "star",
+                "settings": [
+                    { "key": "a", "type": "bool", "label": "A", "default": true },
+                    { "key": "b", "type": "string", "label": "B", "default": "hello" },
+                    { "key": "c", "type": "int", "label": "C", "default": 42 },
+                    { "key": "d", "type": "double", "label": "D", "default": 3.14 }
+                ]
+            }
+            """
         let manifest = try PluginManifest.parse(from: json)
         XCTAssertEqual(manifest.settings?.count, 4)
         XCTAssertEqual(manifest.settings?[0].type, .bool)

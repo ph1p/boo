@@ -5,9 +5,10 @@ import os.log
 /// Bridges external JSON plugins into the same lifecycle as built-in Swift plugins.
 @MainActor
 final class ScriptPluginAdapter: ExtermPluginProtocol {
-    let pluginID: String
     let manifest: PluginManifest
     let pluginFolderPath: String
+    var hostActions: PluginHostActions?
+    var onRequestCycleRerun: (() -> Void)?
 
     private let scriptExecutor = ScriptExecutor()
     private let jscRuntime = JSCRuntime()
@@ -17,13 +18,7 @@ final class ScriptPluginAdapter: ExtermPluginProtocol {
     private var cachedDSLElements: [DSLElement]?
     private var cachedError: String?
 
-    var whenClause: WhenClauseNode? {
-        guard let when = manifest.when else { return nil }
-        return try? WhenClauseParser.parse(when)
-    }
-
     init(manifest: PluginManifest, folderPath: String) {
-        self.pluginID = manifest.id
         self.manifest = manifest
         self.pluginFolderPath = folderPath
     }
@@ -75,12 +70,13 @@ final class ScriptPluginAdapter: ExtermPluginProtocol {
         }
         let theme = AppSettings.shared.theme
         let density = AppSettings.shared.sidebarDensity
-        return AnyView(DSLRenderer(
-            elements: elements,
-            theme: theme,
-            density: density,
-            onAction: { actionHandler.handle($0) }
-        ))
+        return AnyView(
+            DSLRenderer(
+                elements: elements,
+                theme: theme,
+                density: density,
+                onAction: { actionHandler.handle($0) }
+            ))
     }
 
     // MARK: - Lifecycle
@@ -175,7 +171,7 @@ final class ScriptPluginAdapter: ExtermPluginProtocol {
         }
         if let session = context.remoteSession {
             switch session {
-            case .ssh(let host):
+            case .ssh(let host, _):
                 result = result.replacingOccurrences(of: "{remote.host}", with: host)
             case .docker(let container):
                 result = result.replacingOccurrences(of: "{remote.host}", with: container)

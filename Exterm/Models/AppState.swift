@@ -29,9 +29,43 @@ final class AppState {
         activeWorkspaceIndex = index
     }
 
+    func togglePin(at index: Int) {
+        guard index >= 0, index < workspaces.count else { return }
+        workspaces[index].isPinned.toggle()
+
+        if workspaces[index].isPinned {
+            // Move to end of pinned group
+            let pinnedEnd = workspaces.prefix(index).filter { $0.isPinned }.count
+            if index != pinnedEnd {
+                let ws = workspaces.remove(at: index)
+                workspaces.insert(ws, at: pinnedEnd)
+                // Fix active index
+                if activeWorkspaceIndex == index {
+                    activeWorkspaceIndex = pinnedEnd
+                } else if activeWorkspaceIndex >= pinnedEnd && activeWorkspaceIndex < index {
+                    activeWorkspaceIndex += 1
+                }
+            }
+        } else {
+            // Move to start of unpinned group (right after last pinned)
+            let pinnedEnd = workspaces.filter { $0.isPinned }.count
+            if index != pinnedEnd {
+                let ws = workspaces.remove(at: index)
+                workspaces.insert(ws, at: pinnedEnd)
+                if activeWorkspaceIndex == index {
+                    activeWorkspaceIndex = pinnedEnd
+                } else if activeWorkspaceIndex > index && activeWorkspaceIndex <= pinnedEnd {
+                    activeWorkspaceIndex -= 1
+                }
+            }
+        }
+    }
+
     func moveWorkspace(from source: Int, to destination: Int) {
         guard source != destination, source >= 0, source < workspaces.count,
-              destination >= 0, destination <= workspaces.count else { return }
+            destination >= 0, destination <= workspaces.count
+        else { return }
+        guard !workspaces[source].isPinned else { return }
         let ws = workspaces.remove(at: source)
         let dest = destination > source ? destination - 1 : destination
         workspaces.insert(ws, at: dest)

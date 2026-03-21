@@ -63,18 +63,23 @@ class SplitContainerView: NSView, NSSplitViewDelegate {
 
     // MARK: - NSSplitViewDelegate
 
-    func splitView(_ splitView: NSSplitView, constrainMinCoordinate proposedMinimumPosition: CGFloat, ofSubviewAt dividerIndex: Int) -> CGFloat {
+    func splitView(
+        _ splitView: NSSplitView, constrainMinCoordinate proposedMinimumPosition: CGFloat, ofSubviewAt dividerIndex: Int
+    ) -> CGFloat {
         proposedMinimumPosition + minPaneDimension
     }
 
-    func splitView(_ splitView: NSSplitView, constrainMaxCoordinate proposedMaximumPosition: CGFloat, ofSubviewAt dividerIndex: Int) -> CGFloat {
+    func splitView(
+        _ splitView: NSSplitView, constrainMaxCoordinate proposedMaximumPosition: CGFloat, ofSubviewAt dividerIndex: Int
+    ) -> CGFloat {
         proposedMaximumPosition - minPaneDimension
     }
 
     /// Apply split positions after layout so bounds are valid.
     private func applySplitPositions(view: NSView, tree: SplitTree) {
         guard case .split(let direction, let first, let second, let ratio) = tree,
-              let splitView = view as? NSSplitView else { return }
+            let splitView = view as? NSSplitView
+        else { return }
 
         let dimension = direction == .horizontal ? splitView.bounds.width : splitView.bounds.height
         if dimension > 0 {

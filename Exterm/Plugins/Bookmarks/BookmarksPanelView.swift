@@ -152,4 +152,5 @@ struct BookmarkRow: View {
             Button("Remove") { onRemove() }
         }
     }
+
 }

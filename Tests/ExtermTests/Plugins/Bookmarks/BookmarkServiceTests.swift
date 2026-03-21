@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import Exterm
 
 final class BookmarkServiceTests: XCTestCase {
@@ -29,7 +30,7 @@ final class BookmarkServiceTests: XCTestCase {
     func testNoDuplicates() {
         let service = BookmarkService.shared
         service.add(name: "A", path: "/tmp")
-        service.add(name: "B", path: "/tmp") // Same path
+        service.add(name: "B", path: "/tmp")  // Same path
         XCTAssertEqual(service.bookmarks.count, 1)
     }
 
@@ -122,8 +123,8 @@ final class BookmarkServiceTests: XCTestCase {
     func testBackwardCompatibleDecoding() {
         // Simulate a bookmark encoded without namespace field
         let json = """
-        {"id": "12345678-1234-1234-1234-123456789012", "name": "Old", "path": "/old", "icon": "folder"}
-        """
+            {"id": "12345678-1234-1234-1234-123456789012", "name": "Old", "path": "/old", "icon": "folder"}
+            """
         let data = json.data(using: .utf8)!
         let bookmark = try? JSONDecoder().decode(BookmarkService.Bookmark.self, from: data)
         XCTAssertNotNil(bookmark)

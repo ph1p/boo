@@ -111,7 +111,9 @@ class StatusBarView: NSView {
 
     func update(directory: String, paneCount: Int, tabCount: Int, runningProcess: String) {
         let dirChanged = directory != currentDirectory
-        let changed = dirChanged || paneCount != self.paneCount || tabCount != self.tabCount || runningProcess != self.runningProcess
+        let changed =
+            dirChanged || paneCount != self.paneCount || tabCount != self.tabCount
+            || runningProcess != self.runningProcess
         self.currentDirectory = directory
         self.paneCount = paneCount
         self.tabCount = tabCount
@@ -177,7 +179,7 @@ class StatusBarView: NSView {
 
     struct GitBranches {
         var local: [String]
-        var remote: [String] // e.g. "origin/feature-x"
+        var remote: [String]  // e.g. "origin/feature-x"
     }
 
     static func listBranches(repoRoot: String) -> GitBranches {
@@ -267,8 +269,9 @@ class StatusBarView: NSView {
             let allPlugins: [StatusBarPlugin] = leftPlugins + rightPlugins
             for plugin in allPlugins {
                 guard plugin.isVisible(settings: settings, state: state),
-                      let rect = segmentRects[plugin.id],
-                      rect.contains(point) else { continue }
+                    let rect = segmentRects[plugin.id],
+                    rect.contains(point)
+                else { continue }
                 // Only show hover for clickable segments
                 if plugin.associatedPanelID != nil || plugin is GitBranchSegment {
                     newHovered = plugin.id

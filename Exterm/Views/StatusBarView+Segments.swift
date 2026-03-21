@@ -21,7 +21,9 @@ final class EnvironmentSegment: StatusBarPlugin {
         cachedIsRemote = state.isRemote
     }
 
-    func draw(at x: CGFloat, y: CGFloat, theme: TerminalTheme, settings: AppSettings, state: StatusBarState, ctx: CGContext) -> CGFloat {
+    func draw(
+        at x: CGFloat, y: CGFloat, theme: TerminalTheme, settings: AppSettings, state: StatusBarState, ctx: CGContext
+    ) -> CGFloat {
         let (dotColor, label) = environmentInfo(state: state)
         var cx = x
 
@@ -54,21 +56,29 @@ final class EnvironmentSegment: StatusBarPlugin {
             switch session {
             case .ssh(let host, _):
                 // Amber for SSH
-                return (NSColor(calibratedRed: 0.9, green: 0.66, blue: 0.2, alpha: 1.0),
-                        "ssh: \(host)")
+                return (
+                    NSColor(calibratedRed: 0.9, green: 0.66, blue: 0.2, alpha: 1.0),
+                    "ssh: \(host)"
+                )
             case .docker(let container):
                 // Blue for Docker
-                return (NSColor(calibratedRed: 0.13, green: 0.59, blue: 0.95, alpha: 1.0),
-                        "docker: \(container)")
+                return (
+                    NSColor(calibratedRed: 0.13, green: 0.59, blue: 0.95, alpha: 1.0),
+                    "docker: \(container)"
+                )
             }
         } else if state.isRemote {
             // Remote detected but no specific session type
-            return (NSColor(calibratedRed: 0.9, green: 0.66, blue: 0.2, alpha: 1.0),
-                    "remote")
+            return (
+                NSColor(calibratedRed: 0.9, green: 0.66, blue: 0.2, alpha: 1.0),
+                "remote"
+            )
         }
         // Green for local
-        return (NSColor(calibratedRed: 0.25, green: 0.72, blue: 0.31, alpha: 1.0),
-                "local")
+        return (
+            NSColor(calibratedRed: 0.25, green: 0.72, blue: 0.31, alpha: 1.0),
+            "local"
+        )
     }
 
     func accessibilitySegmentLabel(state: StatusBarState) -> String? {
@@ -98,7 +108,9 @@ final class GitBranchSegment: StatusBarPlugin {
         settings.statusBarShowGitBranch && state.gitBranch != nil
     }
 
-    func draw(at x: CGFloat, y: CGFloat, theme: TerminalTheme, settings: AppSettings, state: StatusBarState, ctx: CGContext) -> CGFloat {
+    func draw(
+        at x: CGFloat, y: CGFloat, theme: TerminalTheme, settings: AppSettings, state: StatusBarState, ctx: CGContext
+    ) -> CGFloat {
         guard let branch = state.gitBranch else { return 0 }
         var cx = x
 
@@ -140,7 +152,8 @@ final class GitBranchSegment: StatusBarPlugin {
         }
 
         let width = cx - x
-        hitRect = state.gitRepoRoot != nil
+        hitRect =
+            state.gitRepoRoot != nil
             ? NSRect(x: x - 2, y: 0, width: width + 4, height: DensityMetrics.current.statusBarHeight)
             : .zero
         return width
@@ -197,7 +210,8 @@ final class GitBranchSegment: StatusBarPlugin {
                 for branch in grouped[remoteName]!.sorted() {
                     if branches.local.contains(branch) { continue }
                     let displayTitle = "\(remoteName)/\(branch)"
-                    let item = NSMenuItem(title: displayTitle, action: #selector(barView.gitBranchSelected(_:)), keyEquivalent: "")
+                    let item = NSMenuItem(
+                        title: displayTitle, action: #selector(barView.gitBranchSelected(_:)), keyEquivalent: "")
                     item.target = barView
                     item.representedObject = branch
                     item.indentationLevel = 1
@@ -222,7 +236,9 @@ final class PathSegment: StatusBarPlugin {
         settings.statusBarShowPath
     }
 
-    func draw(at x: CGFloat, y: CGFloat, theme: TerminalTheme, settings: AppSettings, state: StatusBarState, ctx: CGContext) -> CGFloat {
+    func draw(
+        at x: CGFloat, y: CGFloat, theme: TerminalTheme, settings: AppSettings, state: StatusBarState, ctx: CGContext
+    ) -> CGFloat {
         let attrs: [NSAttributedString.Key: Any] = [
             .font: NSFont.monospacedSystemFont(ofSize: 10, weight: .regular),
             .foregroundColor: theme.chromeMuted.withAlphaComponent(0.7)
@@ -251,7 +267,9 @@ final class ProcessSegment: StatusBarPlugin {
         settings.statusBarShowShell && !state.runningProcess.isEmpty
     }
 
-    func draw(at x: CGFloat, y: CGFloat, theme: TerminalTheme, settings: AppSettings, state: StatusBarState, ctx: CGContext) -> CGFloat {
+    func draw(
+        at x: CGFloat, y: CGFloat, theme: TerminalTheme, settings: AppSettings, state: StatusBarState, ctx: CGContext
+    ) -> CGFloat {
         let attrs: [NSAttributedString.Key: Any] = [
             .font: NSFont.monospacedSystemFont(ofSize: 10, weight: .regular),
             .foregroundColor: theme.chromeMuted.withAlphaComponent(0.5)
@@ -281,7 +299,9 @@ final class PaneInfoSegment: StatusBarPlugin {
         settings.statusBarShowPaneInfo
     }
 
-    func draw(at rx: CGFloat, y: CGFloat, theme: TerminalTheme, settings: AppSettings, state: StatusBarState, ctx: CGContext) -> CGFloat {
+    func draw(
+        at rx: CGFloat, y: CGFloat, theme: TerminalTheme, settings: AppSettings, state: StatusBarState, ctx: CGContext
+    ) -> CGFloat {
         var info = "\(state.paneCount) pane\(state.paneCount == 1 ? "" : "s")"
         if state.tabCount > 1 { info += " \u{2022} \(state.tabCount) tabs" }
         let attrs: [NSAttributedString.Key: Any] = [
@@ -317,9 +337,13 @@ final class FileTreeIconSegment: StatusBarPlugin {
 
     func update(state: StatusBarState) {}
 
-    func draw(at rx: CGFloat, y: CGFloat, theme: TerminalTheme, settings: AppSettings, state: StatusBarState, ctx: CGContext) -> CGFloat {
+    func draw(
+        at rx: CGFloat, y: CGFloat, theme: TerminalTheme, settings: AppSettings, state: StatusBarState, ctx: CGContext
+    ) -> CGFloat {
         let barH = DensityMetrics.current.statusBarHeight
-        let isActive = state.visibleSidebarPlugins.contains("file-tree-local") || state.visibleSidebarPlugins.contains("file-tree-remote")
+        let isActive =
+            state.visibleSidebarPlugins.contains("file-tree-local")
+            || state.visibleSidebarPlugins.contains("file-tree-remote")
         let color = isActive ? theme.accentColor : theme.chromeMuted.withAlphaComponent(0.5)
 
         let image = NSImage(systemSymbolName: "folder", accessibilityDescription: "Files")
@@ -344,7 +368,8 @@ final class FileTreeIconSegment: StatusBarPlugin {
             ctx.saveGState()
             ctx.translateBy(x: imgRect.origin.x, y: imgRect.origin.y + imgRect.height)
             ctx.scaleBy(x: 1, y: -1)
-            tinted.draw(in: NSRect(origin: .zero, size: imgRect.size), from: .zero, operation: .sourceOver, fraction: 1.0)
+            tinted.draw(
+                in: NSRect(origin: .zero, size: imgRect.size), from: .zero, operation: .sourceOver, fraction: 1.0)
             ctx.restoreGState()
         } else {
             hitRect = NSRect(x: rx - cellWidth, y: 0, width: cellWidth, height: barH)
@@ -361,7 +386,9 @@ final class FileTreeIconSegment: StatusBarPlugin {
     }
 
     func accessibilitySegmentLabel(state: StatusBarState) -> String? {
-        let isActive = state.visibleSidebarPlugins.contains("file-tree-local") || state.visibleSidebarPlugins.contains("file-tree-remote")
+        let isActive =
+            state.visibleSidebarPlugins.contains("file-tree-local")
+            || state.visibleSidebarPlugins.contains("file-tree-remote")
         return isActive ? "Files, selected" : "Files"
     }
 }
@@ -393,7 +420,9 @@ final class PluginIconSegment: StatusBarPlugin {
     func isVisible(settings: AppSettings, state: StatusBarState) -> Bool { isAvailable }
     func update(state: StatusBarState) {}
 
-    func draw(at rx: CGFloat, y: CGFloat, theme: TerminalTheme, settings: AppSettings, state: StatusBarState, ctx: CGContext) -> CGFloat {
+    func draw(
+        at rx: CGFloat, y: CGFloat, theme: TerminalTheme, settings: AppSettings, state: StatusBarState, ctx: CGContext
+    ) -> CGFloat {
         let barH = DensityMetrics.current.statusBarHeight
         let isActive = state.visibleSidebarPlugins.contains(associatedPanelID ?? "")
         let color = isActive ? theme.accentColor : theme.chromeMuted.withAlphaComponent(0.5)
@@ -420,7 +449,8 @@ final class PluginIconSegment: StatusBarPlugin {
             ctx.saveGState()
             ctx.translateBy(x: imgRect.origin.x, y: imgRect.origin.y + imgRect.height)
             ctx.scaleBy(x: 1, y: -1)
-            tinted.draw(in: NSRect(origin: .zero, size: imgRect.size), from: .zero, operation: .sourceOver, fraction: 1.0)
+            tinted.draw(
+                in: NSRect(origin: .zero, size: imgRect.size), from: .zero, operation: .sourceOver, fraction: 1.0)
             ctx.restoreGState()
         } else {
             hitRect = NSRect(x: rx - cellWidth, y: 0, width: cellWidth, height: barH)
@@ -460,7 +490,9 @@ final class TimeSegment: StatusBarPlugin {
         settings.statusBarShowTime
     }
 
-    func draw(at rx: CGFloat, y: CGFloat, theme: TerminalTheme, settings: AppSettings, state: StatusBarState, ctx: CGContext) -> CGFloat {
+    func draw(
+        at rx: CGFloat, y: CGFloat, theme: TerminalTheme, settings: AppSettings, state: StatusBarState, ctx: CGContext
+    ) -> CGFloat {
         let attrs: [NSAttributedString.Key: Any] = [
             .font: NSFont.systemFont(ofSize: 10, weight: .regular),
             .foregroundColor: theme.chromeMuted.withAlphaComponent(0.6)

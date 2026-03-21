@@ -88,11 +88,13 @@ extension ToolbarView {
             var contentX = x + 10
 
             if ws.isPinned {
-                let pinColor = ws.isActive ? theme.chromeText.withAlphaComponent(0.5) : theme.chromeMuted.withAlphaComponent(0.5)
+                let pinColor =
+                    ws.isActive ? theme.chromeText.withAlphaComponent(0.5) : theme.chromeMuted.withAlphaComponent(0.5)
                 let iconSize: CGFloat = 8
                 let iconY = (barHeight - iconSize) / 2
                 if let pinImage = NSImage(systemSymbolName: "pin.fill", accessibilityDescription: nil) {
-                    let sized = pinImage.withSymbolConfiguration(.init(pointSize: iconSize, weight: .regular)) ?? pinImage
+                    let sized =
+                        pinImage.withSymbolConfiguration(.init(pointSize: iconSize, weight: .regular)) ?? pinImage
                     sized.isTemplate = true
                     let iconRect = NSRect(x: contentX, y: iconY, width: iconSize, height: iconSize)
                     let tinted = NSImage(size: iconRect.size, flipped: false) { drawRect in
@@ -108,11 +110,15 @@ extension ToolbarView {
 
             let textColor: NSColor
             if let c = wsColor, ws.isActive {
-                textColor = NSColor(red: c.redComponent * 0.6 + 0.4, green: c.greenComponent * 0.6 + 0.4, blue: c.blueComponent * 0.6 + 0.4, alpha: 1)
+                textColor = NSColor(
+                    red: c.redComponent * 0.6 + 0.4, green: c.greenComponent * 0.6 + 0.4,
+                    blue: c.blueComponent * 0.6 + 0.4, alpha: 1)
             } else if ws.isActive {
                 textColor = theme.chromeText
             } else if let c = wsColor {
-                textColor = NSColor(red: c.redComponent * 0.5 + 0.2, green: c.greenComponent * 0.5 + 0.2, blue: c.blueComponent * 0.5 + 0.2, alpha: 1)
+                textColor = NSColor(
+                    red: c.redComponent * 0.5 + 0.2, green: c.greenComponent * 0.5 + 0.2,
+                    blue: c.blueComponent * 0.5 + 0.2, alpha: 1)
             } else {
                 textColor = theme.chromeMuted
             }
@@ -130,7 +136,8 @@ extension ToolbarView {
             // Close button — on hover, not pinned
             if !ws.isPinned && isWSHovered {
                 let closeColor: NSColor = wsColor?.withAlphaComponent(0.8) ?? theme.chromeMuted.withAlphaComponent(0.8)
-                let closeBgColor: NSColor = wsColor?.withAlphaComponent(0.15) ?? theme.chromeMuted.withAlphaComponent(0.15)
+                let closeBgColor: NSColor =
+                    wsColor?.withAlphaComponent(0.15) ?? theme.chromeMuted.withAlphaComponent(0.15)
                 let closeAttrs: [NSAttributedString.Key: Any] = [
                     .font: NSFont.systemFont(ofSize: 8, weight: .bold),
                     .foregroundColor: closeColor
@@ -176,7 +183,7 @@ extension ToolbarView {
 
     internal func drawDivider(_ ctx: CGContext) {
         let divX = workspaceZoneEnd + zoneGap
-        ctx.setFillColor(CGColor(red: 45/255, green: 45/255, blue: 50/255, alpha: 0.6))
+        ctx.setFillColor(CGColor(red: 45 / 255, green: 45 / 255, blue: 50 / 255, alpha: 0.6))
         ctx.fill(CGRect(x: divX, y: 10, width: dividerWidth, height: barHeight - 20))
     }
 
@@ -197,17 +204,18 @@ extension ToolbarView {
             let isTabHovered = hoveredTabIndex == tabIndex
 
             if tab.isActive {
-                ctx.setFillColor(CGColor(red: 28/255, green: 28/255, blue: 31/255, alpha: 1))
+                ctx.setFillColor(CGColor(red: 28 / 255, green: 28 / 255, blue: 31 / 255, alpha: 1))
                 ctx.addPath(CGPath(roundedRect: tabRect, cornerWidth: 7, cornerHeight: 7, transform: nil))
                 ctx.fillPath()
 
                 // Subtle bottom accent
-                let accentRect = CGRect(x: tabRect.minX + 12, y: tabRect.maxY - 2, width: tabRect.width - 24, height: 1.5)
-                ctx.setFillColor(CGColor(red: 77/255, green: 143/255, blue: 232/255, alpha: 0.5))
+                let accentRect = CGRect(
+                    x: tabRect.minX + 12, y: tabRect.maxY - 2, width: tabRect.width - 24, height: 1.5)
+                ctx.setFillColor(CGColor(red: 77 / 255, green: 143 / 255, blue: 232 / 255, alpha: 0.5))
                 ctx.addPath(CGPath(roundedRect: accentRect, cornerWidth: 0.75, cornerHeight: 0.75, transform: nil))
                 ctx.fillPath()
             } else if isTabHovered {
-                ctx.setFillColor(CGColor(red: 35/255, green: 35/255, blue: 40/255, alpha: 1))
+                ctx.setFillColor(CGColor(red: 35 / 255, green: 35 / 255, blue: 40 / 255, alpha: 1))
                 ctx.addPath(CGPath(roundedRect: tabRect, cornerWidth: 7, cornerHeight: 7, transform: nil))
                 ctx.fillPath()
             }
@@ -215,11 +223,11 @@ extension ToolbarView {
             // Title
             let textColor: NSColor
             if tab.isActive {
-                textColor = NSColor(red: 228/255, green: 228/255, blue: 232/255, alpha: 1)
+                textColor = NSColor(red: 228 / 255, green: 228 / 255, blue: 232 / 255, alpha: 1)
             } else if isTabHovered {
-                textColor = NSColor(red: 170/255, green: 170/255, blue: 178/255, alpha: 1)
+                textColor = NSColor(red: 170 / 255, green: 170 / 255, blue: 178 / 255, alpha: 1)
             } else {
-                textColor = NSColor(red: 110/255, green: 110/255, blue: 118/255, alpha: 1)
+                textColor = NSColor(red: 110 / 255, green: 110 / 255, blue: 118 / 255, alpha: 1)
             }
             let showClose = tabs.count > 1 && (tab.isActive || isTabHovered)
             let attrs: [NSAttributedString.Key: Any] = [
@@ -229,12 +237,13 @@ extension ToolbarView {
             let title = tab.title as NSString
             let titleSize = title.size(withAttributes: attrs)
             let maxTitleW = tabFixedWidth - (showClose ? 34 : 20)
-            title.draw(in: CGRect(
-                x: x + 12,
-                y: tabRect.midY - titleSize.height / 2,
-                width: min(titleSize.width, maxTitleW),
-                height: titleSize.height
-            ), withAttributes: attrs)
+            title.draw(
+                in: CGRect(
+                    x: x + 12,
+                    y: tabRect.midY - titleSize.height / 2,
+                    width: min(titleSize.width, maxTitleW),
+                    height: titleSize.height
+                ), withAttributes: attrs)
 
             // Close button — only on active or hovered tab
             if showClose {
@@ -244,18 +253,19 @@ extension ToolbarView {
                     let circleSize: CGFloat = 18
                     let circleX = x + tabFixedWidth - circleSize - 6
                     let circleY = tabRect.midY - circleSize / 2
-                    ctx.setFillColor(CGColor(red: 60/255, green: 60/255, blue: 68/255, alpha: 0.5))
+                    ctx.setFillColor(CGColor(red: 60 / 255, green: 60 / 255, blue: 68 / 255, alpha: 0.5))
                     ctx.fillEllipse(in: CGRect(x: circleX, y: circleY, width: circleSize, height: circleSize))
                 }
                 let closeAttrs: [NSAttributedString.Key: Any] = [
                     .font: NSFont.systemFont(ofSize: 9, weight: .bold),
-                    .foregroundColor: NSColor(red: 90/255, green: 90/255, blue: 98/255, alpha: closeAlpha)
+                    .foregroundColor: NSColor(red: 90 / 255, green: 90 / 255, blue: 98 / 255, alpha: closeAlpha)
                 ]
                 let closeStr = "\u{2715}" as NSString
                 let closeSize = closeStr.size(withAttributes: closeAttrs)
                 closeStr.draw(
-                    at: NSPoint(x: x + tabFixedWidth - closeSize.width - 12,
-                                y: tabRect.midY - closeSize.height / 2),
+                    at: NSPoint(
+                        x: x + tabFixedWidth - closeSize.width - 12,
+                        y: tabRect.midY - closeSize.height / 2),
                     withAttributes: closeAttrs
                 )
             }
@@ -267,13 +277,13 @@ extension ToolbarView {
         let plusAlpha: CGFloat = isPlusButtonHovered ? 1.0 : 0.6
         if isPlusButtonHovered {
             let hoverRect = CGRect(x: x + 2, y: 10, width: 24, height: barHeight - 20)
-            ctx.setFillColor(CGColor(red: 35/255, green: 35/255, blue: 40/255, alpha: 1))
+            ctx.setFillColor(CGColor(red: 35 / 255, green: 35 / 255, blue: 40 / 255, alpha: 1))
             ctx.addPath(CGPath(roundedRect: hoverRect, cornerWidth: 5, cornerHeight: 5, transform: nil))
             ctx.fillPath()
         }
         let plusAttrs: [NSAttributedString.Key: Any] = [
             .font: NSFont.systemFont(ofSize: 15, weight: .light),
-            .foregroundColor: NSColor(red: 90/255, green: 90/255, blue: 98/255, alpha: plusAlpha)
+            .foregroundColor: NSColor(red: 90 / 255, green: 90 / 255, blue: 98 / 255, alpha: plusAlpha)
         ]
         let plusSize = ("+" as NSString).size(withAttributes: plusAttrs)
         ("+" as NSString).draw(at: NSPoint(x: x + 6, y: (barHeight - plusSize.height) / 2), withAttributes: plusAttrs)
@@ -295,17 +305,20 @@ extension ToolbarView {
         let r = components.count > 0 ? components[0] : 0
         let g = components.count > 1 ? components[1] : 0
         let b = components.count > 2 ? components[2] : 0
-        let colors: [CGFloat] = leftToRight
-            ? [r, g, b, 1.0,  r, g, b, 0.0]
-            : [r, g, b, 0.0,  r, g, b, 1.0]
+        let colors: [CGFloat] =
+            leftToRight
+            ? [r, g, b, 1.0, r, g, b, 0.0]
+            : [r, g, b, 0.0, r, g, b, 1.0]
         let colorSpace = CGColorSpaceCreateDeviceRGB()
-        guard let gradient = CGGradient(colorSpace: colorSpace, colorComponents: colors, locations: nil, count: 2) else { return }
+        guard let gradient = CGGradient(colorSpace: colorSpace, colorComponents: colors, locations: nil, count: 2)
+        else { return }
         ctx.saveGState()
         ctx.clip(to: CGRect(x: x, y: 0, width: width, height: barHeight - 1))
-        ctx.drawLinearGradient(gradient,
-                               start: CGPoint(x: x, y: 0),
-                               end: CGPoint(x: x + width, y: 0),
-                               options: [])
+        ctx.drawLinearGradient(
+            gradient,
+            start: CGPoint(x: x, y: 0),
+            end: CGPoint(x: x + width, y: 0),
+            options: [])
         ctx.restoreGState()
     }
 
@@ -324,7 +337,8 @@ extension ToolbarView {
             ctx.fillPath()
         }
 
-        let color = sidebarVisible
+        let color =
+            sidebarVisible
             ? theme.accentColor.withAlphaComponent(isSidebarButtonHovered ? 1.0 : 0.8).cgColor
             : (isSidebarButtonHovered ? theme.chromeMuted.withAlphaComponent(0.8).cgColor : theme.chromeMuted.cgColor)
 
@@ -417,7 +431,8 @@ extension ToolbarView {
                     let circleSize: CGFloat = 16
                     let pillY = (barHeight - pillH) / 2
                     let circleY = pillY + (pillH - circleSize) / 2
-                    let closeRect = CGRect(x: pillX + w - circleSize - 2, y: circleY, width: circleSize, height: circleSize)
+                    let closeRect = CGRect(
+                        x: pillX + w - circleSize - 2, y: circleY, width: circleSize, height: circleSize)
                     if !ws.isPinned && hoveredWorkspaceIndex == idx && closeRect.contains(startPoint) {
                         delegate?.toolbar(self, didCloseWorkspaceAt: idx)
                     } else {
@@ -479,9 +494,10 @@ extension ToolbarView {
         }
 
         let win = NSWindow(
-            contentRect: NSRect(x: screenPoint.x - ghostWidth / 2,
-                                y: screenPoint.y - ghostHeight / 2,
-                                width: ghostWidth, height: ghostHeight),
+            contentRect: NSRect(
+                x: screenPoint.x - ghostWidth / 2,
+                y: screenPoint.y - ghostHeight / 2,
+                width: ghostWidth, height: ghostHeight),
             styleMask: .borderless,
             backing: .buffered,
             defer: false
@@ -507,8 +523,10 @@ extension ToolbarView {
                 screenPoint = NSEvent.mouseLocation
             }
             let frame = win.frame
-            win.setFrameOrigin(NSPoint(x: screenPoint.x - frame.width / 2,
-                                       y: screenPoint.y - frame.height / 2))
+            win.setFrameOrigin(
+                NSPoint(
+                    x: screenPoint.x - frame.width / 2,
+                    y: screenPoint.y - frame.height / 2))
         }
 
         // Update drop target
@@ -626,7 +644,8 @@ extension ToolbarView {
             colorMenu.addItem(item)
         }
         colorMenu.addItem(.separator())
-        let customItem = NSMenuItem(title: "Custom Color...", action: #selector(contextCustomColor(_:)), keyEquivalent: "")
+        let customItem = NSMenuItem(
+            title: "Custom Color...", action: #selector(contextCustomColor(_:)), keyEquivalent: "")
         customItem.target = self
         customItem.tag = index
         if ws.hasCustomColor {

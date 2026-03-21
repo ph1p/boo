@@ -26,14 +26,14 @@ final class ContextAnnouncementEngine {
 
     /// Schedule a debounced announcement. Rapid focus changes (e.g. holding
     /// Cmd+Opt+Arrow) only announce the final state.
-    private func scheduleAnnouncement(for state: TerminalState) {
+    private func scheduleAnnouncement(for state: BridgeState) {
         debounceTimer?.invalidate()
         debounceTimer = Timer.scheduledTimer(withTimeInterval: debounceInterval, repeats: false) { [weak self] _ in
             self?.announce(state: state)
         }
     }
 
-    private func announce(state: TerminalState) {
+    private func announce(state: BridgeState) {
         guard state.paneID != lastAnnouncedPaneID else { return }
         lastAnnouncedPaneID = state.paneID
 
@@ -55,13 +55,13 @@ final class ContextAnnouncementEngine {
 
     /// Compose the announcement string from terminal state.
     /// Format: "{environment}, {path}, {git branch if present}"
-    static func composeAnnouncement(from state: TerminalState) -> String {
+    static func composeAnnouncement(from state: BridgeState) -> String {
         var parts: [String] = []
 
         // Environment type
         if let session = state.remoteSession {
             switch session {
-            case .ssh(let host):
+            case .ssh(let host, _):
                 parts.append("SSH to \(host)")
             case .docker(let container):
                 parts.append("Docker container \(container)")

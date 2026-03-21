@@ -1,54 +1,243 @@
 # Plugin System
 
-Exterm uses a plugin architecture for extending the sidebar and status bar.
+Exterm has an extensible plugin architecture for sidebar panels, status bar segments, and terminal lifecycle hooks.
 
-## Sidebar Plugins
+## Two Plugin Types
 
-Sidebar panels below the file tree are registered as plugins via the `SidebarPlugin` protocol.
+1. **Built-in plugins** — Swift classes in `Exterm/Plugins/` conforming to `ExtermPluginProtocol`
+2. **External script plugins** — Folders in `~/.exterm/plugins/` with a `plugin.json` manifest and shell/JS scripts, hot-loaded at runtime
 
-### Creating a Sidebar Plugin
+Both use the same protocol, lifecycle, and UI integration.
 
-1. Create a class conforming to `SidebarPlugin` in `Exterm/Plugins/`
-2. Implement required properties and methods:
-   - `id` — Unique identifier
-   - `displayName` — Human-readable name
-   - `isAvailable` — Whether the plugin should be shown
-   - `makeView(context:)` — Returns the plugin's view
-3. Optionally implement:
-   - `makeStatusBarSegment()` — Provide a toggle icon in the status bar
-   - `onAvailabilityChanged` — For async availability (e.g. remote Docker check)
-4. Register it in `MainWindowController.init()` via `registerSidebarPlugin()`
+## Built-in Plugins
 
-The panel auto-shows when `isAvailable` returns true. Toggling adds/removes the view without rebuilding the file tree.
+| Plugin | Directory | Description |
+|---|---|---|
+| **Files** (`file-tree`) | `Plugins/FileTree/` | File explorer with local FSEvents watching and remote SSH/Docker browsing |
+| **Git** (`git-panel`) | `Plugins/Git/` | Branch, status, staged/unstaged/untracked files, stash, ahead/behind counts |
+| **Docker** (`docker`) | `Plugins/Docker/` | Running container list with exec, logs, start/stop/restart actions |
+| **Bookmarks** (`bookmarks`) | `Plugins/Bookmarks/` | Saved directory bookmarks with per-host namespacing for remote sessions |
+| **System** (`system-info`) | `Plugins/SystemInfo/` | CPU load, memory, disk usage — reference example demonstrating all plugin patterns |
 
-### Built-in Sidebar Plugins
+## Core Protocol
 
-| Plugin | Description |
+All plugins conform to `ExtermPluginProtocol` (which extends `ExtermPlugin: AnyObject`):
+
+```swift
+@MainActor
+protocol ExtermPluginProtocol: ExtermPlugin {
+    var manifest: PluginManifest { get }
+    var whenClause: WhenClauseNode? { get }
+
+    // UI
+    func makeDetailView(context: TerminalContext, actionHandler: DSLActionHandler) -> AnyView?
+    func makeStatusBarContent(context: TerminalContext) -> StatusBarContent?
+    func sectionTitle(context: TerminalContext) -> String?
+    var prefersOuterScrollView: Bool { get }
+
+    // Host integration (injected by PluginRegistry)
+    var hostActions: PluginHostActions? { get set }
+    var onRequestCycleRerun: (() -> Void)? { get set }
+
+    // Lifecycle callbacks
+    func cwdChanged(newPath: String, context: TerminalContext)
+    func remoteSessionChanged(session: RemoteSessionType?, context: TerminalContext)
+    func processChanged(name: String, context: TerminalContext)
+    func terminalCreated(terminalID: UUID)
+    func terminalClosed(terminalID: UUID)
+    func terminalFocusChanged(terminalID: UUID, context: TerminalContext)
+
+    // Two-phase cycle (from ExtermPlugin)
+    func enrich(context: EnrichmentContext)
+    func react(context: TerminalContext)
+}
+```
+
+All methods have default no-op implementations. Only override what your plugin needs.
+
+## PluginHostActions
+
+Plugins use `PluginHostActions` to request actions from the host app. This struct is injected by `PluginRegistry` — plugins never set it themselves:
+
+```swift
+struct PluginHostActions {
+    var pastePathToActivePane: ((String) -> Void)?
+    var openDirectoryInNewTab: ((String) -> Void)?
+    var openDirectoryInNewPane: ((String) -> Void)?
+    var sendRawToActivePane: ((String) -> Void)?
+    weak var bridge: TerminalBridge?
+}
+```
+
+Usage: `hostActions?.pastePathToActivePane?(path)`
+
+## Plugin Lifecycle
+
+### Registration
+
+1. `PluginRegistry.registerBuiltins()` creates and registers the four built-in plugins
+2. For each plugin, the registry automatically wires:
+   - `hostActions` — Distributed from `PluginRegistry.hostActions`
+   - `onRequestCycleRerun` — Fires `PluginRegistry.onRequestCycleRerun` (bound to MainWindowController's `runPluginCycle`)
+3. `PluginRegistry.registerStatusBarIcons(in:)` auto-registers status bar toggle icons for sidebar-capable plugins
+
+### Two-Phase Cycle
+
+Every terminal state change triggers a plugin cycle:
+
+1. **Enrich** — `EnrichmentContext` (mutable) is passed to each plugin's `enrich()`. Plugins can write shared data (e.g., GitPlugin promotes `gitIsDirty`, `gitChangedFileCount`).
+2. **Freeze** — `EnrichmentContext.freeze()` produces an immutable `TerminalContext`.
+3. **React** — Each plugin's `react()` receives the frozen context.
+4. **Evaluate** — When-clauses determine which plugins are visible; status bar content is collected.
+5. **Rebuild** — MainWindowController rebuilds the sidebar and status bar from the cycle result.
+
+Performance budget: &lt; 2ms per plugin per phase. Cycles exceeding 16ms total are logged as warnings.
+
+### Requesting a Cycle Rerun
+
+When a plugin's data changes externally (e.g., Docker containers change, git commit happens), call `onRequestCycleRerun?()` to trigger a sidebar/status bar refresh. This is preferred over exposing custom callbacks.
+
+## TerminalContext
+
+Immutable value type snapshot of terminal state, passed to all plugin methods:
+
+| Field | Type | Description |
+|---|---|---|
+| `terminalID` | `UUID` | Active terminal identifier |
+| `cwd` | `String` | Current working directory |
+| `remoteSession` | `RemoteSessionType?` | SSH or Docker session, if active |
+| `remoteCwd` | `String?` | Remote working directory |
+| `gitContext` | `GitContext?` | Branch, repo root, dirty state, counts |
+| `processName` | `String` | Foreground process name |
+| `paneCount` | `Int` | Number of panes in workspace |
+| `tabCount` | `Int` | Number of tabs in active pane |
+| `isRemote` | `Bool` | Computed: `remoteSession != nil` |
+
+### GitContext
+
+| Field | Type |
 |---|---|
-| **DockerSidebarPlugin** | Docker container panel with live updates. Owns `DockerIconSegment` status bar toggle. Disabled on remote terminals (local only). |
-| **BookmarksSidebarPlugin** | Bookmarked directories panel. Works on both local and remote terminals. Auto-shows when bookmarks exist. |
+| `branch` | `String` |
+| `repoRoot` | `String` |
+| `isDirty` | `Bool` |
+| `changedFileCount` | `Int` |
+| `stagedCount` | `Int` |
+| `stashCount` | `Int` |
+| `aheadCount` | `Int` |
+| `behindCount` | `Int` |
+| `lastCommitShort` | `String?` |
 
-## Status Bar Plugins
+## When-Clauses
 
-Status bar segments are registered as plugins via the `StatusBarPlugin` protocol.
+Plugins declare visibility conditions via the `when` field in their manifest:
 
-### Creating a Status Bar Plugin
+| Expression | Meaning |
+|---|---|
+| `null` | Always visible |
+| `"git.active"` | Only in git repos |
+| `"!remote"` | Only in local sessions |
+| `"remote"` | Only in remote sessions |
+| `"remote.type == 'ssh'"` | Only in SSH sessions |
+| `"git.active && !remote"` | Git repos, local only |
 
-1. Create a class conforming to `StatusBarPlugin`
-2. Set `position` (`.left` or `.right`) and `priority` (lower = closer to edge)
-3. Implement `isVisible`, `draw`, `handleClick`
-4. Register in `StatusBarView.registerDefaultPlugins()`
+Parsed by `WhenClauseParser` into a `WhenClauseNode` AST. Supports `&&`, `||`, `!`, `==`, `!=`, and grouping with `()`.
 
-Sidebar plugins can also provide their own status bar segments via `makeStatusBarSegment()`.
+## DSL Action System
 
-### Built-in Status Bar Segments
+Interactive elements in plugin views dispatch `DSLAction` values to `DSLActionHandler`:
+
+| Action Type | Parameters | Effect |
+|---|---|---|
+| `"cd"` | `path` | Sends `cd <path>` to terminal |
+| `"open"` | `path` | Opens file in `$EDITOR` (or `open`) |
+| `"exec"` | `command` | Sends raw command to terminal |
+| `"copy"` | `text` or `path` | Copies to clipboard |
+| `"reveal"` | `path` | Opens in Finder |
+
+Built-in plugins can also use `hostActions` closures directly for host-level operations (open tab, open pane, etc.).
+
+## PluginManifest
+
+Both built-in and external plugins have a `PluginManifest`:
+
+```swift
+struct PluginManifest {
+    let id: String               // Unique plugin ID
+    let name: String             // Display name
+    let version: String
+    let icon: String             // SF Symbol name
+    let description: String?
+    let when: String?            // When-clause expression
+    let runtime: PluginRuntime?  // .script or .js (nil for built-in)
+    let capabilities: Capabilities?
+    let statusBar: StatusBarManifest?
+    let settings: [SettingManifest]?
+}
+```
+
+### Plugin Settings
+
+Plugins declare their own settings via the `settings` array in their manifest. Each setting has a key, type, label, default value, and optional UI hint:
+
+```swift
+struct SettingManifest {
+    let key: String
+    let type: SettingType        // .bool, .string, .int, .double
+    let label: String
+    let defaultValue: AnyCodableValue?
+    let options: String?         // UI hint (e.g. "fontPicker:system", "fontPicker:mono")
+}
+```
+
+Settings are stored in `AppSettings` under a per-plugin namespace (`pluginSettings[pluginID][key]`) and accessed via:
+
+```swift
+AppSettings.shared.pluginBool("my-plugin", "myKey", default: true)
+AppSettings.shared.pluginString("my-plugin", "myKey", default: "")
+AppSettings.shared.pluginDouble("my-plugin", "myKey", default: 12.0)
+AppSettings.shared.setPluginSetting("my-plugin", "myKey", value)
+```
+
+The Settings window (Plugins tab) dynamically renders controls for each plugin's declared settings: toggles for bools, sliders for doubles, text fields or font pickers for strings (controlled by the `options` field).
+
+### Built-in Plugin Settings
+
+| Plugin | Setting | Type | Default | Description |
+|---|---|---|---|---|
+| **Git** (`git-panel`) | `showBranch` | Bool | `true` | Show git branch in status bar |
+| **Files** (`file-tree-local`) | `showHiddenFiles` | Bool | `false` | Show hidden files |
+| **Files** (`file-tree-local`) | `showIcons` | Bool | `true` | Show file icons |
+| **Files** (`file-tree-local`) | `fontSize` | Double | `12.0` | Font size |
+| **Files** (`file-tree-local`) | `fontName` | String | `""` | Font (empty = system default) |
+
+Both `LocalFileTreePlugin` and `RemoteFileTreePlugin` share the `file-tree-local` settings namespace for display configuration.
+
+## Plugin Enable/Disable
+
+Plugins can be enabled or disabled in **Settings → Plugins**. When a plugin is disabled:
+
+- It is hidden from the sidebar and status bar (`isVisible(for:)` returns `false`)
+- Its lifecycle callbacks are not invoked (registry skips disabled plugins)
+- Its status bar icon is not registered
+
+The `disabledPluginIDs` list is persisted in `AppSettings`.
+
+## Status Bar Segments
+
+The status bar uses a separate, simpler `StatusBarPlugin` protocol for individual segments:
 
 | Segment | Position | Description |
 |---|---|---|
-| **GitBranchSegment** | Left | Current git branch with switcher |
+| **EnvironmentSegment** | Left | Local/SSH/Docker indicator with colored dot |
+| **GitBranchSegment** | Left | Current git branch with switcher popup |
 | **PathSegment** | Left | Current working directory |
 | **ProcessSegment** | Left | Foreground process name |
-| **PaneInfoSegment** | Right | Active pane count |
+| **FileTreeIconSegment** | Right | Files panel toggle |
+| **PaneInfoSegment** | Right | Pane and tab count |
 | **TimeSegment** | Right | Current time |
-| **BookmarkIconSegment** | Right | Bookmark toggle |
-| **DockerIconSegment** | Right | Docker panel toggle (from sidebar plugin) |
+
+Sidebar plugins automatically get `PluginIconSegment` toggle icons in the status bar via `PluginRegistry.registerStatusBarIcons(in:)`. No manual registration needed.
+
+## External Script Plugins
+
+See the [Plugin Development](/plugin-development) guide for creating external plugins with shell scripts or JavaScript.

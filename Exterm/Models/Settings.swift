@@ -89,7 +89,7 @@ final class AppSettings {
         static let explorerFontSize = "explorerFontSize"
         static let explorerFontName = "explorerFontName"
         static let statusBarShowPath = "statusBarShowPath"
-        static let statusBarShowGitBranch = "statusBarShowGitBranch"
+        static let statusBarShowGitBranch = "statusBarShowGitBranch"  // legacy, migrated to plugin settings
         static let statusBarShowTime = "statusBarShowTime"
         static let statusBarShowPaneInfo = "statusBarShowPaneInfo"
         static let statusBarShowShell = "statusBarShowShell"
@@ -100,6 +100,8 @@ final class AppSettings {
         static let tabOverflowMode = "tabOverflowMode"
         static let disabledPluginIDs = "disabledPluginIDs"
         static let sidebarWidth = "sidebarWidth"
+        static let pluginSettings = "pluginSettings"
+        static let migratedPluginSettings_v1 = "migratedPluginSettings_v1"
     }
 
     /// Bool from UserDefaults with a custom default (since .bool returns false for unset keys).
@@ -122,17 +124,26 @@ final class AppSettings {
 
     var autoTheme: Bool {
         get { bool(K.autoTheme, default: false) }
-        set { set(newValue, forKey: K.autoTheme); if newValue { applySystemAppearance() } }
+        set {
+            set(newValue, forKey: K.autoTheme)
+            if newValue { applySystemAppearance() }
+        }
     }
 
     var darkThemeName: String {
         get { UserDefaults.standard.string(forKey: K.darkThemeName) ?? "Default Dark" }
-        set { set(newValue, forKey: K.darkThemeName); if autoTheme { applySystemAppearance() } }
+        set {
+            set(newValue, forKey: K.darkThemeName)
+            if autoTheme { applySystemAppearance() }
+        }
     }
 
     var lightThemeName: String {
         get { UserDefaults.standard.string(forKey: K.lightThemeName) ?? "Solarized Light" }
-        set { set(newValue, forKey: K.lightThemeName); if autoTheme { applySystemAppearance() } }
+        set {
+            set(newValue, forKey: K.lightThemeName)
+            if autoTheme { applySystemAppearance() }
+        }
     }
 
     private static let themesByName: [String: TerminalTheme] = {
@@ -175,30 +186,26 @@ final class AppSettings {
         set { set(newValue, forKey: K.fontName) }
     }
 
-    // MARK: - Explorer
-
+    // MARK: - Explorer (proxies to plugin settings)
 
     var showHiddenFiles: Bool {
-        get { UserDefaults.standard.bool(forKey: K.showHiddenFiles) }
-        set { set(newValue, forKey: K.showHiddenFiles) }
+        get { pluginBool("file-tree-local", "showHiddenFiles", default: false) }
+        set { setPluginSetting("file-tree-local", "showHiddenFiles", newValue) }
     }
 
     var explorerIconsEnabled: Bool {
-        get { bool(K.explorerIconsEnabled, default: true) }
-        set { set(newValue, forKey: K.explorerIconsEnabled) }
+        get { pluginBool("file-tree-local", "showIcons", default: true) }
+        set { setPluginSetting("file-tree-local", "showIcons", newValue) }
     }
 
     var explorerFontSize: CGFloat {
-        get {
-            let v = UserDefaults.standard.double(forKey: K.explorerFontSize)
-            return v > 0 ? CGFloat(v) : 12.0
-        }
-        set { set(Double(newValue), forKey: K.explorerFontSize) }
+        get { CGFloat(pluginDouble("file-tree-local", "fontSize", default: 12.0)) }
+        set { setPluginSetting("file-tree-local", "fontSize", Double(newValue)) }
     }
 
     var explorerFontName: String {
-        get { UserDefaults.standard.string(forKey: K.explorerFontName) ?? "" }
-        set { set(newValue, forKey: K.explorerFontName) }
+        get { pluginString("file-tree-local", "fontName", default: "") }
+        set { setPluginSetting("file-tree-local", "fontName", newValue) }
     }
 
     // MARK: - Status Bar
@@ -209,8 +216,8 @@ final class AppSettings {
     }
 
     var statusBarShowGitBranch: Bool {
-        get { bool(K.statusBarShowGitBranch, default: true) }
-        set { set(newValue, forKey: K.statusBarShowGitBranch) }
+        get { pluginBool("git-panel", "showBranch", default: true) }
+        set { setPluginSetting("git-panel", "showBranch", newValue) }
     }
 
     var statusBarShowTime: Bool {
@@ -246,7 +253,8 @@ final class AppSettings {
     var workspaceBarPosition: WorkspaceBarPosition {
         get {
             guard UserDefaults.standard.object(forKey: K.workspaceBarPosition) != nil else { return .left }
-            return WorkspaceBarPosition(rawValue: UserDefaults.standard.integer(forKey: K.workspaceBarPosition)) ?? .left
+            return WorkspaceBarPosition(rawValue: UserDefaults.standard.integer(forKey: K.workspaceBarPosition))
+                ?? .left
         }
         set { set(newValue.rawValue, forKey: K.workspaceBarPosition) }
     }
@@ -276,6 +284,38 @@ final class AppSettings {
         set { set(newValue, forKey: K.disabledPluginIDs) }
     }
 
+    // MARK: - Plugin Settings
+
+    private var pluginSettingsDict: [String: [String: Any]] {
+        get { UserDefaults.standard.dictionary(forKey: K.pluginSettings) as? [String: [String: Any]] ?? [:] }
+        set { UserDefaults.standard.set(newValue, forKey: K.pluginSettings) }
+    }
+
+    func pluginBool(_ pluginID: String, _ key: String, default defaultValue: Bool) -> Bool {
+        guard let dict = pluginSettingsDict[pluginID], let val = dict[key] as? Bool else { return defaultValue }
+        return val
+    }
+
+    func pluginString(_ pluginID: String, _ key: String, default defaultValue: String) -> String {
+        guard let dict = pluginSettingsDict[pluginID], let val = dict[key] as? String else { return defaultValue }
+        return val
+    }
+
+    func pluginDouble(_ pluginID: String, _ key: String, default defaultValue: Double) -> Double {
+        guard let dict = pluginSettingsDict[pluginID], let val = dict[key] as? Double else { return defaultValue }
+        return val
+    }
+
+    func setPluginSetting(_ pluginID: String, _ key: String, _ value: Any) {
+        var all = pluginSettingsDict
+        var plugin = all[pluginID] ?? [:]
+        plugin[key] = value
+        all[pluginID] = plugin
+        pluginSettingsDict = all
+        saveToFile()
+        notify()
+    }
+
     // MARK: - Font Resolution
 
     func resolvedFont() -> NSFont {
@@ -288,13 +328,17 @@ final class AppSettings {
         var fonts: [String] = ["SF Mono"]
         for family in fm.availableFontFamilies {
             if let members = fm.availableMembers(ofFontFamily: family),
-               let first = members.first,
-               let traits = first[3] as? UInt,
-               (traits & UInt(NSFontTraitMask.fixedPitchFontMask.rawValue)) != 0 {
+                let first = members.first,
+                let traits = first[3] as? UInt,
+                (traits & UInt(NSFontTraitMask.fixedPitchFontMask.rawValue)) != 0
+            {
                 fonts.append(family)
             }
         }
-        let knownMono = ["Menlo", "Monaco", "Courier", "Courier New", "Fira Code", "JetBrains Mono", "Hack", "Source Code Pro", "Inconsolata"]
+        let knownMono = [
+            "Menlo", "Monaco", "Courier", "Courier New", "Fira Code", "JetBrains Mono", "Hack", "Source Code Pro",
+            "Inconsolata"
+        ]
         for name in knownMono {
             if !fonts.contains(name), NSFont(name: name, size: 14) != nil {
                 fonts.append(name)
@@ -325,12 +369,7 @@ final class AppSettings {
             K.fontSize: Double(fontSize),
             K.fontName: fontName,
 
-            K.showHiddenFiles: showHiddenFiles,
-            K.explorerIconsEnabled: explorerIconsEnabled,
-            K.explorerFontSize: Double(explorerFontSize),
-            K.explorerFontName: explorerFontName,
             K.statusBarShowPath: statusBarShowPath,
-            K.statusBarShowGitBranch: statusBarShowGitBranch,
             K.statusBarShowTime: statusBarShowTime,
             K.statusBarShowPaneInfo: statusBarShowPaneInfo,
             K.statusBarShowShell: statusBarShowShell,
@@ -340,6 +379,7 @@ final class AppSettings {
             K.sidebarWidth: Double(sidebarWidth),
             K.tabOverflowMode: tabOverflowMode.rawValue,
             K.disabledPluginIDs: disabledPluginIDs,
+            K.pluginSettings: pluginSettingsDict
         ]
         if let data = try? JSONSerialization.data(withJSONObject: dict, options: [.prettyPrinted, .sortedKeys]) {
             try? data.write(to: URL(fileURLWithPath: ExtermPaths.settingsFile))
@@ -349,8 +389,9 @@ final class AppSettings {
     private func loadFromFile() {
         let path = ExtermPaths.settingsFile
         guard FileManager.default.fileExists(atPath: path),
-              let data = try? Data(contentsOf: URL(fileURLWithPath: path)),
-              let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return }
+            let data = try? Data(contentsOf: URL(fileURLWithPath: path)),
+            let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else { return }
 
         // Only load values that aren't already in UserDefaults (first launch migration)
         for (key, value) in dict {
@@ -365,6 +406,40 @@ final class AppSettings {
         loadFromFile()
         // Ensure the config directory exists
         _ = ExtermPaths.configDir
+        migratePluginSettings()
+    }
+
+    private func migratePluginSettings() {
+        guard !UserDefaults.standard.bool(forKey: K.migratedPluginSettings_v1) else { return }
+        var all = pluginSettingsDict
+
+        // Migrate git branch setting
+        if UserDefaults.standard.object(forKey: K.statusBarShowGitBranch) != nil {
+            var git = all["git-panel"] ?? [:]
+            git["showBranch"] = UserDefaults.standard.bool(forKey: K.statusBarShowGitBranch)
+            all["git-panel"] = git
+        }
+
+        // Migrate explorer settings
+        var ft = all["file-tree-local"] ?? [:]
+        if UserDefaults.standard.object(forKey: K.showHiddenFiles) != nil {
+            ft["showHiddenFiles"] = UserDefaults.standard.bool(forKey: K.showHiddenFiles)
+        }
+        if UserDefaults.standard.object(forKey: K.explorerIconsEnabled) != nil {
+            ft["showIcons"] = UserDefaults.standard.bool(forKey: K.explorerIconsEnabled)
+        }
+        if UserDefaults.standard.object(forKey: K.explorerFontSize) != nil {
+            let v = UserDefaults.standard.double(forKey: K.explorerFontSize)
+            if v > 0 { ft["fontSize"] = v }
+        }
+        if UserDefaults.standard.object(forKey: K.explorerFontName) != nil {
+            ft["fontName"] = UserDefaults.standard.string(forKey: K.explorerFontName) ?? ""
+        }
+        if !ft.isEmpty { all["file-tree-local"] = ft }
+
+        pluginSettingsDict = all
+        UserDefaults.standard.set(true, forKey: K.migratedPluginSettings_v1)
+        saveToFile()
     }
 }
 

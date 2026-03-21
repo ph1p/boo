@@ -20,7 +20,7 @@ enum DSLButtonStyle: String, Codable, Equatable {
 
 /// An action attached to an interactive DSL element.
 struct DSLAction: Codable, Equatable {
-    let type: String   // "cd", "open", "exec", "copy", "reveal"
+    let type: String  // "cd", "open", "exec", "copy", "reveal"
     let path: String?
     let command: String?
     let text: String?
@@ -29,7 +29,7 @@ struct DSLAction: Codable, Equatable {
 /// A list item within a `list` element.
 struct DSLListItem: Codable, Equatable {
     let label: String
-    let icon: String?         // SF Symbol name
+    let icon: String?  // SF Symbol name
     let tint: DSLTint?
     let detail: String?
     let action: DSLAction?

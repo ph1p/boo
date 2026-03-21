@@ -18,9 +18,15 @@ final class EnrichmentContext {
     var gitRepoRoot: String?
     var gitIsDirty: Bool = false
     var gitChangedFileCount: Int = 0
+    var gitStagedCount: Int = 0
+    var gitStashCount: Int = 0
+    var gitAheadCount: Int = 0
+    var gitBehindCount: Int = 0
+    var gitLastCommitShort: String?
 
     /// Additional key-value data plugins can contribute.
-    private var enrichedData: [String: Any] = [:]
+    /// Propagated into the frozen TerminalContext so Phase 2 plugins can read it.
+    private var enrichedData: [String: AnyHashable] = [:]
 
     private var isFrozen = false
 
@@ -36,16 +42,22 @@ final class EnrichmentContext {
         self.gitRepoRoot = base.gitContext?.repoRoot
         self.gitIsDirty = base.gitContext?.isDirty ?? false
         self.gitChangedFileCount = base.gitContext?.changedFileCount ?? 0
+        self.gitStagedCount = base.gitContext?.stagedCount ?? 0
+        self.gitStashCount = base.gitContext?.stashCount ?? 0
+        self.gitAheadCount = base.gitContext?.aheadCount ?? 0
+        self.gitBehindCount = base.gitContext?.behindCount ?? 0
+        self.gitLastCommitShort = base.gitContext?.lastCommitShort
     }
 
     /// Set enriched data by key. Only allowed during enrich phase.
-    func setData(_ value: Any, forKey key: String) {
+    /// Use plugin-namespaced keys (e.g. "my-plugin.myKey") to avoid collisions.
+    func setData(_ value: AnyHashable, forKey key: String) {
         guard !isFrozen else { return }
         enrichedData[key] = value
     }
 
     /// Get enriched data by key.
-    func getData(forKey key: String) -> Any? {
+    func getData(forKey key: String) -> AnyHashable? {
         enrichedData[key]
     }
 
@@ -59,7 +71,12 @@ final class EnrichmentContext {
                 branch: branch,
                 repoRoot: repoRoot,
                 isDirty: gitIsDirty,
-                changedFileCount: gitChangedFileCount
+                changedFileCount: gitChangedFileCount,
+                stagedCount: gitStagedCount,
+                stashCount: gitStashCount,
+                aheadCount: gitAheadCount,
+                behindCount: gitBehindCount,
+                lastCommitShort: gitLastCommitShort
             )
         } else {
             gitContext = nil
@@ -73,7 +90,8 @@ final class EnrichmentContext {
             gitContext: gitContext,
             processName: processName,
             paneCount: paneCount,
-            tabCount: tabCount
+            tabCount: tabCount,
+            enrichedData: enrichedData
         )
     }
 }

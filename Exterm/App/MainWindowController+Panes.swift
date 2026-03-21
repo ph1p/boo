@@ -9,57 +9,37 @@ extension MainWindowController: PaneViewDelegate {
         let tab = workspace.pane(for: paneID)?.activeTab
         let cwd = tab?.workingDirectory ?? workspace.folderPath
 
-        NSLog("[MWC] didFocus: paneID=\(paneID), tabTitle=\(tab?.title ?? "nil"), cwd=\(cwd), tabRemote=\(String(describing: tab?.remoteSession)), tabRemoteCwd=\(String(describing: tab?.remoteWorkingDirectory))")
-
-        if let session = tab?.remoteSession {
-            isRemoteSidebar = true
-            activeRemoteSession = session
-        } else {
-            isRemoteSidebar = false
-            activeRemoteSession = nil
-        }
-
-        // Restore the full bridge state from the tab model. Each tab owns its
-        // own title, remote session, and CWD — the bridge is just a window into
-        // whichever tab is currently active. Without this, switching tabs causes
-        // the bridge to see stale state from the previous tab and misinterpret it.
-        bridge.restoreTabState(
-            paneID: paneID,
-            workingDirectory: cwd,
-            terminalTitle: tab?.title ?? "",
-            remoteSession: tab?.remoteSession,
-            remoteCwd: tab?.remoteWorkingDirectory
+        NSLog(
+            "[MWC] didFocus: paneID=\(paneID), tabTitle=\(tab?.title ?? "nil"), cwd=\(cwd), tabRemote=\(String(describing: tab?.remoteSession)), tabRemoteCwd=\(String(describing: tab?.remoteWorkingDirectory))"
         )
+
+        // Restore the full bridge + plugin state from the tab model via coordinator.
+        if let tab = tab {
+            coordinator.activateTab(tab, paneID: paneID) { [weak self] tabID in
+                self?.findPaneContainingTab(tabID)
+            }
+        } else {
+            bridge.handleFocus(paneID: paneID, workingDirectory: cwd)
+        }
         runPluginCycle(reason: .focusChanged)
     }
 
     func paneView(_ paneView: PaneView, didChangeDirectory path: String, paneID: UUID) {
         guard let workspace = activeWorkspace, workspace.activePaneID == paneID else { return }
-        if let pane = workspace.pane(for: paneID) {
-            let tab = pane.tabs[pane.activeTabIndex]
-            NSLog("[MWC] didChangeDirectory: path=\(path), tabTitle=\(tab.title), tabRemote=\(String(describing: tab.remoteSession)), tabRemoteCwd=\(String(describing: tab.remoteWorkingDirectory))")
-        }
         bridge.handleDirectoryChange(path: path, paneID: paneID)
-        // Sync bridge state → pane model
+        // Coordinator syncs bridge state → TabState
         if let pane = workspace.pane(for: paneID) {
-            let idx = pane.activeTabIndex
-            NSLog("[MWC] didChangeDirectory SYNC: bridgeRemote=\(String(describing: bridge.state.remoteSession)), bridgeRemoteCwd=\(String(describing: bridge.state.remoteCwd))")
-            pane.updateRemoteSession(at: idx, bridge.state.remoteSession)
-            pane.updateRemoteWorkingDirectory(at: idx, bridge.state.remoteCwd)
+            coordinator.syncBridgeToTab(pane: pane, tabIndex: pane.activeTabIndex)
         }
         syncRemoteSidebarState()
     }
 
     func paneView(_ paneView: PaneView, titleChanged title: String, paneID: UUID) {
         guard let workspace = activeWorkspace else { return }
-        NSLog("[MWC] titleChanged: title=\(title), paneID=\(paneID)")
         bridge.handleTitleChange(title: title, paneID: paneID)
         guard workspace.activePaneID == paneID else { return }
         if let pane = workspace.pane(for: paneID) {
-            let idx = pane.activeTabIndex
-            NSLog("[MWC] titleChanged SYNC: bridgeRemote=\(String(describing: bridge.state.remoteSession)), bridgeRemoteCwd=\(String(describing: bridge.state.remoteCwd))")
-            pane.updateRemoteSession(at: idx, bridge.state.remoteSession)
-            pane.updateRemoteWorkingDirectory(at: idx, bridge.state.remoteCwd)
+            coordinator.syncBridgeToTab(pane: pane, tabIndex: pane.activeTabIndex)
         }
         syncRemoteSidebarState()
     }
@@ -68,7 +48,9 @@ extension MainWindowController: PaneViewDelegate {
         // Handled by bridge via titleChanged
     }
 
-    func paneView(_ paneView: PaneView, remoteStateChanged session: RemoteSessionType?, remoteCwd: String?, paneID: UUID) {
+    func paneView(
+        _ paneView: PaneView, remoteStateChanged session: RemoteSessionType?, remoteCwd: String?, paneID: UUID
+    ) {
         // Handled by bridge via heuristic detection
     }
 
@@ -80,10 +62,15 @@ extension MainWindowController: PaneViewDelegate {
         bridge.handleDirectoryListing(path: path, output: output, paneID: paneID)
     }
 
+    func paneView(_ paneView: PaneView, shellPIDDiscovered pid: pid_t, paneID: UUID) {
+        bridge.monitor.track(paneID: paneID, shellPID: pid)
+    }
+
     func paneView(_ paneView: PaneView, didRequestCloseTab index: Int, paneID: UUID) {
         guard let workspace = activeWorkspace,
-              let pane = workspace.pane(for: paneID),
-              let pv = paneViews[paneID] else { return }
+            let pane = workspace.pane(for: paneID),
+            let pv = paneViews[paneID]
+        else { return }
 
         if pane.tabs.count > 1 {
             // Confirm before closing
@@ -118,6 +105,7 @@ extension MainWindowController: PaneViewDelegate {
             pane.updateRemoteSession(at: pane.activeTabIndex, nil)
         }
 
+        bridge.monitor.untrack(paneID: paneID)
         bridge.handleProcessExit(paneID: paneID)
 
         // Focus this pane first so smartClose acts on the right one
@@ -131,12 +119,37 @@ extension MainWindowController: PaneViewDelegate {
 // MARK: - Pane Management
 
 extension MainWindowController {
+    /// Update all pane views' close-button visibility based on total pane count.
+    func updatePaneCloseButtons() {
+        let multiPane = activeWorkspace.map { $0.panes.count > 1 } ?? false
+        for (_, pv) in paneViews {
+            pv.showCloseOnSingleTab = multiPane
+            pv.needsDisplay = true
+        }
+    }
+
     func splitActivePane(direction: SplitTree.SplitDirection) {
         guard let workspace = activeWorkspace else { return }
         let oldPaneID = workspace.activePaneID
         window?.makeFirstResponder(nil)
 
         let newID = workspace.splitPane(oldPaneID, direction: direction)
+        // Inherit parent tab's plugin state so sidebar stays consistent
+        if let newPane = workspace.pane(for: newID),
+            newPane.activeTab != nil
+        {
+            if let oldTab = workspace.pane(for: oldPaneID)?.activeTab {
+                newPane.updatePluginState(
+                    at: newPane.activeTabIndex,
+                    open: oldTab.state.openPluginIDs,
+                    expanded: oldTab.state.expandedPluginIDs)
+            } else {
+                newPane.updatePluginState(
+                    at: newPane.activeTabIndex,
+                    open: openPluginIDs,
+                    expanded: expandedPluginIDs)
+            }
+        }
         // Focus the newly created pane
         workspace.activePaneID = newID
         splitContainer.update(tree: workspace.splitTree)
@@ -155,18 +168,19 @@ extension MainWindowController {
             // Refresh all Ghostty surfaces after layout settles
             self.refreshAllSurfaces()
             self.syncCoordinatorPaneViews()
+            self.updatePaneCloseButtons()
         }
+        refreshStatusBar()
     }
 
     @objc func closePaneAction(_ sender: Any?) {
         guard let workspace = activeWorkspace else { return }
         let paneID = workspace.activePaneID
 
-        // Remove the closed pane's view and plugin state from cache
+        // Remove the closed pane's view from cache
+        bridge.monitor.untrack(paneID: paneID)
         let closedPV = paneViews.removeValue(forKey: paneID)
         closedPV?.stopAll()
-        paneOpenPlugins.removeValue(forKey: paneID)
-        paneExpandedPlugins.removeValue(forKey: paneID)
 
         if workspace.closePane(paneID) {
             let validIDs = Set(workspace.splitTree.leafIDs)
@@ -189,6 +203,7 @@ extension MainWindowController {
                 }
                 self.refreshAllSurfaces()
                 self.syncCoordinatorPaneViews()
+                self.updatePaneCloseButtons()
                 self.runPluginCycle(reason: .focusChanged)
             }
         } else {
@@ -232,6 +247,7 @@ extension MainWindowController {
                     pv.startActiveSession()
                     self.window?.makeFirstResponder(pv.currentTerminalView)
                 }
+                self.updatePaneCloseButtons()
             }
         }
         refreshStatusBar()
@@ -279,7 +295,7 @@ extension MainWindowController {
     // MARK: - Cross-Pane Tab Drag & Drop
 
     func handleTabDrop(source: PaneView, tabIndex: Int, dest: PaneView, zone: TabDropZone) {
-        guard let workspace = activeWorkspace else { return }
+        guard activeWorkspace != nil else { return }
 
         switch zone {
         case .tabBarInsert(let insertIdx):
@@ -289,17 +305,21 @@ extension MainWindowController {
                 closeEmptyPane(source.paneID)
             }
         case .left:
-            splitPaneWithTab(source: source, tabIndex: tabIndex, target: dest,
-                             direction: .horizontal, insertBefore: true)
+            splitPaneWithTab(
+                source: source, tabIndex: tabIndex, target: dest,
+                direction: .horizontal, insertBefore: true)
         case .right:
-            splitPaneWithTab(source: source, tabIndex: tabIndex, target: dest,
-                             direction: .horizontal, insertBefore: false)
+            splitPaneWithTab(
+                source: source, tabIndex: tabIndex, target: dest,
+                direction: .horizontal, insertBefore: false)
         case .top:
-            splitPaneWithTab(source: source, tabIndex: tabIndex, target: dest,
-                             direction: .vertical, insertBefore: true)
+            splitPaneWithTab(
+                source: source, tabIndex: tabIndex, target: dest,
+                direction: .vertical, insertBefore: true)
         case .bottom:
-            splitPaneWithTab(source: source, tabIndex: tabIndex, target: dest,
-                             direction: .vertical, insertBefore: false)
+            splitPaneWithTab(
+                source: source, tabIndex: tabIndex, target: dest,
+                direction: .vertical, insertBefore: false)
         }
 
         syncCoordinatorPaneViews()
@@ -333,8 +353,10 @@ extension MainWindowController {
         window?.makeFirstResponder(dest.currentTerminalView)
     }
 
-    private func splitPaneWithTab(source: PaneView, tabIndex: Int, target: PaneView,
-                                   direction: SplitTree.SplitDirection, insertBefore: Bool) {
+    private func splitPaneWithTab(
+        source: PaneView, tabIndex: Int, target: PaneView,
+        direction: SplitTree.SplitDirection, insertBefore: Bool
+    ) {
         guard let workspace = activeWorkspace else { return }
         let sourcePane = source.pane
         let sourcePaneID = source.paneID
@@ -364,8 +386,6 @@ extension MainWindowController {
         if sourceIsEmpty {
             let closedPV = paneViews.removeValue(forKey: sourcePaneID)
             closedPV?.stopAll()
-            paneOpenPlugins.removeValue(forKey: sourcePaneID)
-            paneExpandedPlugins.removeValue(forKey: sourcePaneID)
             _ = workspace.closePane(sourcePaneID)
             // Clean up stale pane views
             let validIDs = Set(workspace.splitTree.leafIDs)
@@ -402,6 +422,7 @@ extension MainWindowController {
             }
             self.refreshAllSurfaces()
             self.syncCoordinatorPaneViews()
+            self.updatePaneCloseButtons()
         }
     }
 
@@ -411,8 +432,6 @@ extension MainWindowController {
 
         let closedPV = paneViews.removeValue(forKey: paneID)
         closedPV?.stopAll()
-        paneOpenPlugins.removeValue(forKey: paneID)
-        paneExpandedPlugins.removeValue(forKey: paneID)
 
         guard workspace.closePane(paneID) else { return }
 
@@ -436,13 +455,15 @@ extension MainWindowController {
             }
             self.refreshAllSurfaces()
             self.syncCoordinatorPaneViews()
+            self.updatePaneCloseButtons()
         }
     }
 
     @objc func smartCloseAction(_ sender: Any?) {
         guard let workspace = activeWorkspace,
-              let pane = workspace.pane(for: workspace.activePaneID),
-              let pv = paneViews[workspace.activePaneID] else { return }
+            let pane = workspace.pane(for: workspace.activePaneID),
+            let pv = paneViews[workspace.activePaneID]
+        else { return }
 
         if pane.tabs.count > 1 {
             // Multiple tabs: close the active tab (undoable)

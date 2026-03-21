@@ -38,23 +38,24 @@ final class BookmarksPluginNew: ExtermPluginProtocol {
     func makeDetailView(context: TerminalContext, actionHandler: DSLActionHandler) -> AnyView? {
         let ns = Self.namespace(for: context)
         let cwd = context.isRemote ? (context.remoteCwd ?? context.cwd) : context.cwd
-        return AnyView(BookmarksPanelView(
-            namespace: ns,
-            onBookmarkSelected: { path in
-                actionHandler.handle(DSLAction(type: "cd", path: path, command: nil, text: nil))
-            },
-            onBookmarkCurrent: {
-                let service = BookmarkService.shared
-                if service.contains(path: cwd, namespace: ns) {
-                    if let bm = service.bookmarks(for: ns).first(where: { $0.path == cwd }) {
-                        service.remove(id: bm.id)
+        return AnyView(
+            BookmarksPanelView(
+                namespace: ns,
+                onBookmarkSelected: { path in
+                    actionHandler.handle(DSLAction(type: "cd", path: path, command: nil, text: nil))
+                },
+                onBookmarkCurrent: {
+                    let service = BookmarkService.shared
+                    if service.contains(path: cwd, namespace: ns) {
+                        if let bm = service.bookmarks(for: ns).first(where: { $0.path == cwd }) {
+                            service.remove(id: bm.id)
+                        }
+                    } else {
+                        service.addCurrentDirectory(cwd, namespace: ns)
                     }
-                } else {
-                    service.addCurrentDirectory(cwd, namespace: ns)
-                }
-            },
-            currentDirectory: cwd
-        ))
+                },
+                currentDirectory: cwd
+            ))
     }
 
     /// Returns the bookmark namespace for the current context.

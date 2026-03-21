@@ -137,14 +137,21 @@ class ToolbarView: NSView {
                 newPlusHover = true
             }
         }
-        if newTabHover != hoveredTabIndex { hoveredTabIndex = newTabHover; changed = true }
-        if newPlusHover != isPlusButtonHovered { isPlusButtonHovered = newPlusHover; changed = true }
+        if newTabHover != hoveredTabIndex {
+            hoveredTabIndex = newTabHover
+            changed = true
+        }
+        if newPlusHover != isPlusButtonHovered {
+            isPlusButtonHovered = newPlusHover
+            changed = true
+        }
 
         if changed { needsDisplay = true }
     }
 
     override func mouseExited(with event: NSEvent) {
-        let changed = hoveredWorkspaceIndex != -1 || hoveredTabIndex != -1 || isSidebarButtonHovered || isPlusButtonHovered
+        let changed =
+            hoveredWorkspaceIndex != -1 || hoveredTabIndex != -1 || isSidebarButtonHovered || isPlusButtonHovered
         hoveredWorkspaceIndex = -1
         hoveredTabIndex = -1
         isSidebarButtonHovered = false
@@ -259,7 +266,7 @@ class ToolbarView: NSView {
     }
 
     var totalTabContentWidth: CGFloat {
-        CGFloat(tabs.count) * tabFixedWidth + 28 // +28 for plus button
+        CGFloat(tabs.count) * tabFixedWidth + 28  // +28 for plus button
     }
 
     var maxScrollOffset: CGFloat {
@@ -272,7 +279,7 @@ class ToolbarView: NSView {
         ]
         var w = (ws.name as NSString).size(withAttributes: attrs).width + 18
         if ws.isPinned { w += 12 }
-        if !ws.isPinned { w += 16 } // Space for close button on hover
+        if !ws.isPinned { w += 16 }  // Space for close button on hover
         return w
     }
 
@@ -285,8 +292,10 @@ class ToolbarView: NSView {
 // MARK: - NSDraggingSource
 
 extension ToolbarView: NSDraggingSource {
-    func draggingSession(_ session: NSDraggingSession, sourceOperationMaskFor context: NSDraggingContext) -> NSDragOperation {
-        return context == .withinApplication ? .move : []
+    func draggingSession(
+        _ session: NSDraggingSession, sourceOperationMaskFor context: NSDraggingContext
+    ) -> NSDragOperation {
+        context == .withinApplication ? .move : []
     }
 }
 
@@ -333,8 +342,9 @@ extension ToolbarView {
             needsDisplay = true
         }
         guard let dropIdx = dropTargetIndex,
-              let pb = sender.draggingPasteboard.string(forType: WorkspaceBarView.workspaceIndexPBType),
-              let sourceIdx = Int(pb) else { return false }
+            let pb = sender.draggingPasteboard.string(forType: WorkspaceBarView.workspaceIndexPBType),
+            let sourceIdx = Int(pb)
+        else { return false }
         guard sourceIdx != dropIdx && sourceIdx + 1 != dropIdx else { return true }
         delegate?.toolbar(self, moveWorkspaceFrom: sourceIdx, to: dropIdx)
         return true

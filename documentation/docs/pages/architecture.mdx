@@ -13,28 +13,120 @@
 
 ```
 Exterm/
-  App/              AppDelegate, MainWindowController (window chrome, menus)
+  App/              AppDelegate, MainWindowController, WindowStateCoordinator
   Ghostty/          GhosttyRuntime (app singleton), GhosttyView (Metal surface)
   Terminal/         VT100Terminal (fallback parser), TerminalSession (PTY + I/O)
   Renderer/         TerminalView (CoreText fallback renderer)
-  Models/           Workspace, Pane, SplitTree, AppSettings, Theme, TerminalTab
-  Views/            ToolbarView, PaneView, StatusBarView, FileTreeView, SettingsWindow
-  Services/         FileSystemWatcher, RemoteExplorer, KeyMapping, FileIcon
-  Plugin/           EnrichmentContext, TerminalContext
-  Plugins/          FileTreePlugin, BookmarksSidebarPlugin, DockerSidebarPlugin
+  Models/           Workspace, Pane (+ TabState), SplitTree, AppSettings, Theme
+  Plugin/           Core plugin framework (protocol, registry, runtime, DSL, watcher)
+  Plugins/          One directory per plugin, all plugin-specific code colocated
+    FileTree/       FileTreePlugin, FileTreeView, FileTreeNode, RemoteFileTreeView, RemoteFileTreeNode
+    Git/            GitPlugin (+ GitDetailView)
+    Docker/         DockerPluginNew, DockerService
+    Bookmarks/      BookmarksPluginNew, BookmarksPanelView, BookmarkService
+    SystemInfo/     SystemInfoPlugin (reference example)
+  Views/            App-level views (ToolbarView, PaneView, StatusBarView, SettingsWindow)
+  Services/         Shared infrastructure (FileSystemWatcher, RemoteExplorer, TerminalBridge)
 CGhostty/           C module wrapping ghostty.h
 CPTYHelper/         C helper for forkpty()
 Vendor/ghostty/     Ghostty source (git clone)
 ```
+
+### Plugin Layout
+
+Plugin code is colocated — all files for a plugin live in a single directory under `Exterm/Plugins/`. The core plugin **framework** (`Plugin/`) is separate from plugin **implementations** (`Plugins/`). Tests mirror the same layout under `Tests/ExtermTests/Plugins/`.
+
+See the [Plugin System](/plugins) page for the full architecture and the [Plugin Development](/plugin-development) guide for creating new plugins.
+
+## State Architecture
+
+Exterm's state is organized in two clear layers:
+
+### 1. Global State — `AppSettings` (singleton)
+
+Theme, font, layout preferences, status bar toggles, and per-plugin settings. Accessed via `AppSettings.shared`, changes broadcast via `NotificationCenter` (`.settingsChanged`). Plugin-specific settings (e.g. git branch visibility, explorer font) are stored in a namespaced `pluginSettings` dictionary and accessed via `pluginBool()`/`pluginString()`/`pluginDouble()` helpers.
+
+### 2. Per-Terminal State — `TabState` (per tab)
+
+Each `Pane.Tab` owns a `TabState` struct — the single source of truth for everything that tab owns:
+
+```swift
+struct TabState {
+    // Terminal
+    var workingDirectory: String
+    var remoteSession: RemoteSessionType?
+    var remoteWorkingDirectory: String?
+    var shellPID: pid_t = 0
+    var title: String
+
+    // Plugin UI
+    var openPluginIDs: Set<String>
+    var expandedPluginIDs: Set<String>
+}
+```
+
+`Pane.Tab` exposes convenience accessors (`tab.title`, `tab.workingDirectory`, etc.) that forward to `tab.state` for backward compatibility.
+
+### Data Flow
+
+```
+AppSettings (singleton, global)          Pane.Tab.state: TabState (per-tab)
+         │                                        │
+         v                                        v
+   WindowStateCoordinator  ◄───writes───  TerminalBridge (event parser)
+         │                                   (heuristics, process-tree)
+         │
+         v
+   TerminalContext.build(tabState:...)
+         │
+         v
+   PluginRuntime (enrich → freeze → react)
+         │
+         v
+   TerminalContext (frozen, immutable) → Plugins
+```
+
+**`WindowStateCoordinator`** (`App/WindowStateCoordinator.swift`) is the centralized state manager between `TerminalBridge`, `TabState`, and `PluginRegistry`:
+
+- Saves/restores per-tab plugin UI state on tab switch
+- Syncs bridge detection results (remote sessions, CWD) back into `TabState`
+- Builds `TerminalContext` from the active tab's `TabState`
+- Derives `isRemote` / `activeRemoteSession` from bridge state (no separate tracking)
+
+**`TerminalBridge`** remains the event parser and heuristic engine. Its `BridgeState` is a transient snapshot of the active terminal — not the source of truth. `TabState` is authoritative.
+
+**`MainWindowController`** delegates state management to the coordinator. Its `bridge`, `pluginRegistry`, `openPluginIDs`, `expandedPluginIDs`, and `previousFocusedTabID` properties are computed proxies to the coordinator.
+
+### Tab Switch Flow
+
+1. `PaneView.activateTab()` → `paneDelegate.didFocus()`
+2. `MainWindowController.didFocus()` → `coordinator.activateTab(tab, paneID:)`
+3. Coordinator saves current plugin state to previous tab's `TabState`
+4. Coordinator restores new tab's `TabState` → sets `openPluginIDs`, `expandedPluginIDs`
+5. Coordinator calls `bridge.restoreTabState()` to update bridge snapshot
+6. `runPluginCycle()` rebuilds sidebar from the new tab's context
+
+### Bridge → Tab Sync Flow
+
+1. Ghostty fires OSC 7 (CWD change) or title update
+2. `PaneView` delegate → `MainWindowController.didChangeDirectory` / `titleChanged`
+3. Bridge processes the event (heuristics, remote detection)
+4. `coordinator.syncBridgeToTab()` writes bridge results back to `TabState`
+5. Plugin cycle runs with the updated context
 
 ## Key Design Decisions
 
 - **TerminalBackend protocol** — Abstracts the terminal engine so it can be swapped between GhosttyKit and the built-in VT100 parser
 - **Per-pane tabs** — Each split pane owns its own tab bar and terminal sessions
 - **Workspace → SplitTree → Panes → Tabs** — Workspaces are folders, panes are splits, tabs are terminal sessions
+- **TabState as single source of truth** — All per-tab state (terminal + plugin UI) lives in one struct on `Pane.Tab`, eliminating scattered dictionaries and manual sync
+- **WindowStateCoordinator** — Centralizes state transitions between bridge, tab model, and plugin registry, keeping `MainWindowController` thin
+- **BridgeState is transient** — `TerminalBridge.BridgeState` is a working snapshot, not authoritative. The coordinator syncs detection results back to `TabState`
 - **TerminalSession detach/reattach** — Sessions survive view hierarchy rebuilds via `attachToView()`/`detachFromView()`
 - **Thread safety** — VT100Terminal uses `NSLock`; `snapshot()` captures state under one lock for rendering
 - **All UI on main thread** — PTY read loop runs on a background GCD queue; OSC callbacks dispatch to main
+- **Plugin colocation** — All code for a plugin (views, services, models) lives in one directory rather than scattered across `Views/`, `Services/`, `Plugins/`
+- **PluginHostActions** — Plugins request host actions through a shared struct of closures injected by the registry, rather than holding individual callbacks wired by `MainWindowController`
 
 ## Build System
 

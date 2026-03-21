@@ -8,7 +8,7 @@ final class BookmarkService {
         let id: UUID
         var name: String
         var path: String
-        var icon: String // SF Symbol name
+        var icon: String  // SF Symbol name
         var namespace: String
 
         init(name: String, path: String, icon: String = "folder", namespace: String = "local") {
@@ -95,13 +95,15 @@ final class BookmarkService {
         // Try file first, then fall back to UserDefaults for migration
         let filePath = ExtermPaths.bookmarksFile
         if let data = try? Data(contentsOf: URL(fileURLWithPath: filePath)),
-           let saved = try? JSONDecoder().decode([Bookmark].self, from: data) {
+            let saved = try? JSONDecoder().decode([Bookmark].self, from: data)
+        {
             bookmarks = saved
             return
         }
         // Migrate from UserDefaults
         guard let data = UserDefaults.standard.data(forKey: storageKey),
-              let saved = try? JSONDecoder().decode([Bookmark].self, from: data) else { return }
+            let saved = try? JSONDecoder().decode([Bookmark].self, from: data)
+        else { return }
         bookmarks = saved
     }
 }

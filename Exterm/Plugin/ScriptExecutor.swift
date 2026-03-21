@@ -51,7 +51,8 @@ final class ScriptExecutor {
         do {
             try process.run()
         } catch {
-            return ScriptResult(output: "", exitCode: -1, error: "Failed to launch: \(error.localizedDescription)", timedOut: false)
+            return ScriptResult(
+                output: "", exitCode: -1, error: "Failed to launch: \(error.localizedDescription)", timedOut: false)
         }
 
         // Timeout handling
@@ -84,7 +85,9 @@ final class ScriptExecutor {
         if timedOut {
             error = "Script timed out after \(Int(timeout))s"
         } else if exitCode != 0 {
-            error = stderr.isEmpty ? "Script exited with code \(exitCode)" : stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+            error =
+                stderr.isEmpty
+                ? "Script exited with code \(exitCode)" : stderr.trimmingCharacters(in: .whitespacesAndNewlines)
         } else {
             error = nil
         }
@@ -119,13 +122,13 @@ final class ScriptExecutor {
         var env: [String: String] = [
             "EXTERM_CWD": context.cwd,
             "EXTERM_PANE_COUNT": "\(context.paneCount)",
-            "EXTERM_TAB_COUNT": "\(context.tabCount)",
+            "EXTERM_TAB_COUNT": "\(context.tabCount)"
         ]
 
         // Environment type
         if let session = context.remoteSession {
             switch session {
-            case .ssh(let host):
+            case .ssh(let host, _):
                 env["EXTERM_ENV_TYPE"] = "ssh"
                 env["EXTERM_REMOTE_HOST"] = host
             case .docker(let container):

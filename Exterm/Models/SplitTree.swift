@@ -7,8 +7,8 @@ indirect enum SplitTree {
     case split(direction: SplitDirection, first: SplitTree, second: SplitTree, ratio: CGFloat)
 
     enum SplitDirection {
-        case horizontal // side by side
-        case vertical   // top and bottom
+        case horizontal  // side by side
+        case vertical  // top and bottom
     }
 
     /// Split the leaf with the given ID, returning a new tree.
@@ -33,7 +33,7 @@ indirect enum SplitTree {
             return (.split(direction: dir, first: first, second: newSecond, ratio: ratio), newID2)
 
         default:
-            return (self, UUID()) // no match
+            return (self, UUID())  // no match
         }
     }
 

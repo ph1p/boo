@@ -1,0 +1,70 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install swift-format
+        run: brew install swift-format
+
+      - name: Run swift-format lint
+        run: swift-format lint --strict --recursive Exterm/ Tests/
+
+  build-macos:
+    name: Build & Test (macOS)
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Install Zig
+        run: brew install zig
+
+      - name: Cache GhosttyKit build
+        uses: actions/cache@v4
+        with:
+          path: |
+            Vendor/ghostty/macos
+            Vendor/ghostty/zig-out
+          key: ghosttykit-macos-${{ hashFiles('.gitmodules') }}-${{ hashFiles('Makefile') }}
+          restore-keys: |
+            ghosttykit-macos-${{ hashFiles('.gitmodules') }}-
+
+      - name: Build (make setup)
+        run: make setup
+
+      - name: Run tests
+        run: make test
+
+  build-linux:
+    name: Build (Linux)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Swift
+        uses: swift-actions/setup-swift@v2
+        with:
+          swift-version: "5.10"
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-4-dev libvte-2.91-gtk4-dev libjson-glib-dev
+
+      - name: Build Exterm (Linux)
+        run: make build-linux

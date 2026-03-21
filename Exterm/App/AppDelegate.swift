@@ -9,6 +9,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let ghosttyOK = GhosttyRuntime.shared.app != nil
         NSLog("[Exterm] Ghostty runtime: \(ghosttyOK ? "OK" : "FAILED")")
 
+        // Enable SSH ControlMaster for connection sharing — allows the file explorer
+        // to multiplex on the user's interactive SSH sessions (including password auth).
+        _ = RemoteExplorer.enableControlMaster()
+
         windowController = MainWindowController()
         windowController?.showWindow(nil)
         windowController?.window?.makeKeyAndOrderFront(nil)
@@ -21,6 +25,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        SSHControlManager.shared.teardownAll()
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {

@@ -32,10 +32,14 @@ enum ExtermPaths {
         return path
     }()
 
-    /// Shell integration directory: ~/.exterm/shell-integration/
-    static let shellIntegrationDir: String = {
-        let path = (configDir as NSString).appendingPathComponent("shell-integration")
-        try? FileManager.default.createDirectory(atPath: path, withIntermediateDirectories: true)
+    /// SSH sockets directory: ~/.exterm/ssh-sockets/
+    static let sshSocketsDir: String = {
+        let path = (configDir as NSString).appendingPathComponent("ssh-sockets")
+        try? FileManager.default.createDirectory(
+            atPath: path, withIntermediateDirectories: true,
+            attributes: [.posixPermissions: 0o700]
+        )
         return path
     }()
+
 }

@@ -70,38 +70,44 @@ final class PluginRegistry {
 
     // MARK: - Lifecycle Events
 
+    /// Plugins that are not disabled by the user.
+    private var activePlugins: [ExtermPluginProtocol] {
+        let disabled = AppSettings.shared.disabledPluginIDs
+        return plugins.filter { !disabled.contains($0.pluginID) }
+    }
+
     func notifyCwdChanged(newPath: String, context: TerminalContext) {
-        for plugin in plugins {
+        for plugin in activePlugins {
             plugin.cwdChanged(newPath: newPath, context: context)
         }
     }
 
     func notifyRemoteSessionChanged(session: RemoteSessionType?, context: TerminalContext) {
-        for plugin in plugins {
+        for plugin in activePlugins {
             plugin.remoteSessionChanged(session: session, context: context)
         }
     }
 
     func notifyProcessChanged(name: String, context: TerminalContext) {
-        for plugin in plugins {
+        for plugin in activePlugins {
             plugin.processChanged(name: name, context: context)
         }
     }
 
     func notifyTerminalCreated(terminalID: UUID) {
-        for plugin in plugins {
+        for plugin in activePlugins {
             plugin.terminalCreated(terminalID: terminalID)
         }
     }
 
     func notifyTerminalClosed(terminalID: UUID) {
-        for plugin in plugins {
+        for plugin in activePlugins {
             plugin.terminalClosed(terminalID: terminalID)
         }
     }
 
     func notifyFocusChanged(terminalID: UUID, context: TerminalContext) {
-        for plugin in plugins {
+        for plugin in activePlugins {
             plugin.terminalFocusChanged(terminalID: terminalID, context: context)
         }
     }
@@ -125,7 +131,9 @@ final class PluginRegistry {
     /// Auto-register status bar toggle icons from plugin manifests.
     /// Skips file-tree plugins (they have a dedicated FileTreeIconSegment).
     func registerStatusBarIcons(in statusBar: StatusBarView) {
-        for plugin in plugins where plugin.manifest.capabilities?.sidebarPanel == true {
+        let disabled = AppSettings.shared.disabledPluginIDs
+        for plugin in plugins
+        where plugin.manifest.capabilities?.sidebarPanel == true && !disabled.contains(plugin.pluginID) {
             let m = plugin.manifest
             if m.id == "file-tree-local" || m.id == "file-tree-remote" { continue }
             let priority = m.statusBar?.priority ?? 50

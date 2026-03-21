@@ -37,12 +37,14 @@ struct RemoteConnectingView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(nsColor: theme.sidebarBg))
     }
+
 }
 
 /// Shown when the file explorer could not connect to the remote session.
 struct RemoteConnectionFailedView: View {
     let session: RemoteSessionType
-    @State private var didEnable = false
+    var onRetry: (() -> Void)?
+    @State private var isRetrying = false
 
     var body: some View {
         let theme = AppSettings.shared.theme
@@ -62,22 +64,26 @@ struct RemoteConnectionFailedView: View {
                 .font(.system(size: 13, weight: .medium, design: .monospaced))
                 .foregroundColor(Color(nsColor: theme.chromeText))
 
-            if didEnable {
-                Text("ControlMaster enabled.\nReconnect SSH to activate.")
-                    .font(.system(size: 11))
-                    .foregroundColor(Color(nsColor: theme.chromeMuted))
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 16)
-            } else {
-                Text("File explorer needs SSH connection sharing.\nThis adds ControlMaster to ~/.ssh/config\nso the explorer reuses your SSH session.")
-                    .font(.system(size: 10))
-                    .foregroundColor(Color(nsColor: theme.chromeMuted).opacity(0.6))
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 16)
+            Text("File explorer requires key-based\nSSH auth or SSH agent.")
+                .font(.system(size: 10))
+                .foregroundColor(Color(nsColor: theme.chromeMuted).opacity(0.6))
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 16)
 
-                Button("Enable & Reconnect") {
-                    if RemoteExplorer.enableControlMaster() {
-                        didEnable = true
+            if isRetrying {
+                ProgressView()
+                    .scaleEffect(0.7)
+            } else {
+                Button("Retry") {
+                    isRetrying = true
+                    if case .ssh = session {
+                        SSHControlManager.shared.ensureConnection(alias: session.sshConnectionTarget) { [self] _ in
+                            self.isRetrying = false
+                            self.onRetry?()
+                        }
+                    } else {
+                        isRetrying = false
+                        onRetry?()
                     }
                 }
                 .buttonStyle(.bordered)
@@ -89,6 +95,7 @@ struct RemoteConnectionFailedView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(nsColor: theme.sidebarBg))
     }
+
 }
 
 struct RemoteFileTreeView: View {
@@ -122,27 +129,18 @@ struct RemoteFileTreeView: View {
                 // Initial load — show connecting state instead of empty/flickering tree
                 RemoteConnectingView(session: root.session)
             } else if root.loadFailed {
-                RemoteConnectionFailedView(session: root.session)
+                RemoteConnectionFailedView(session: root.session) {
+                    root.resetForRetry()
+                    root.loadChildren()
+                }
             } else {
                 VStack(alignment: .leading, spacing: 0) {
-                    // Remote path breadcrumb
-                    HStack(spacing: 2) {
-                        Image(systemName: "folder")
-                            .font(.system(size: 9))
-                            .foregroundColor(mutedColor.opacity(0.6))
-                        Text(root.remotePath)
-                            .font(.system(size: 10, design: .monospaced))
-                            .foregroundColor(mutedColor.opacity(0.6))
-                            .lineLimit(1)
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.bottom, 4)
-
                     if root.remotePath != "/" {
                         ParentDirectoryButton(
                             mutedColor: mutedColor, hoverColor: hoverColor, explorerFont: explorerFont
                         ) {
-                            actions.onRunCommand?("cd ..\r")
+                            let parent = (root.remotePath as NSString).deletingLastPathComponent
+                            actions.onNavigate?(parent.isEmpty ? "/" : parent)
                         }
                     }
 
@@ -247,9 +245,15 @@ struct RemoteFileTreeRowView: View {
             }
             .contextMenu {
                 if node.isDirectory {
-                    Button("cd into directory") {
-                        actions.onRunCommand?("cd \(node.remotePath)\r")
+                    Button("Open in Explorer") {
+                        actions.onNavigate?(node.remotePath)
                     }
+                    Divider()
+                } else {
+                    Button("cat") {
+                        actions.onRunCommand?("cat \(RemoteExplorer.shellEscPath(node.remotePath))\r")
+                    }
+                    Divider()
                 }
                 Button("Copy Remote Path") {
                     actions.onCopyPath?(node.remotePath)
@@ -274,5 +278,5 @@ struct RemoteFileTreeRowView: View {
         }
     }
 
-    // fileIcon(for:) and shellEscape(_:) are in Services/FileIcon.swift
+    // fileIcon(for:) is in Services/FileIcon.swift
 }

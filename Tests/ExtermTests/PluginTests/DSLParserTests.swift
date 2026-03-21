@@ -1,12 +1,13 @@
 import XCTest
+
 @testable import Exterm
 
 final class DSLParserTests: XCTestCase {
 
     func testParseLabel() throws {
         let json = """
-        { "type": "label", "text": "Hello World", "style": "bold", "tint": "accent" }
-        """
+            { "type": "label", "text": "Hello World", "style": "bold", "tint": "accent" }
+            """
         let elements = try DSLParser.parse(json)
         XCTAssertEqual(elements.count, 1)
         if case .label(let text, let style, let tint) = elements[0] {
@@ -20,8 +21,8 @@ final class DSLParserTests: XCTestCase {
 
     func testParseLabelMinimal() throws {
         let json = """
-        { "type": "label", "text": "Plain text" }
-        """
+            { "type": "label", "text": "Plain text" }
+            """
         let elements = try DSLParser.parse(json)
         if case .label(let text, let style, let tint) = elements[0] {
             XCTAssertEqual(text, "Plain text")
@@ -34,14 +35,14 @@ final class DSLParserTests: XCTestCase {
 
     func testParseList() throws {
         let json = """
-        {
-            "type": "list",
-            "items": [
-                { "label": "file.swift", "icon": "doc", "tint": "success", "action": { "type": "open", "path": "/file.swift" } },
-                { "label": "README.md", "detail": "2.3 KB" }
-            ]
-        }
-        """
+            {
+                "type": "list",
+                "items": [
+                    { "label": "file.swift", "icon": "doc", "tint": "success", "action": { "type": "open", "path": "/file.swift" } },
+                    { "label": "README.md", "detail": "2.3 KB" }
+                ]
+            }
+            """
         let elements = try DSLParser.parse(json)
         if case .list(let items) = elements[0] {
             XCTAssertEqual(items.count, 2)
@@ -60,8 +61,8 @@ final class DSLParserTests: XCTestCase {
 
     func testParseButton() throws {
         let json = """
-        { "type": "button", "label": "Refresh", "action": { "type": "exec", "command": "git status" }, "style": "primary" }
-        """
+            { "type": "button", "label": "Refresh", "action": { "type": "exec", "command": "git status" }, "style": "primary" }
+            """
         let elements = try DSLParser.parse(json)
         if case .button(let label, let action, let style) = elements[0] {
             XCTAssertEqual(label, "Refresh")
@@ -75,8 +76,8 @@ final class DSLParserTests: XCTestCase {
 
     func testParseBadge() throws {
         let json = """
-        { "type": "badge", "text": "3", "tint": "warning", "accessibilityLabel": "3 changed files" }
-        """
+            { "type": "badge", "text": "3", "tint": "warning", "accessibilityLabel": "3 changed files" }
+            """
         let elements = try DSLParser.parse(json)
         if case .badge(let text, let tint, let a11y) = elements[0] {
             XCTAssertEqual(text, "3")
@@ -89,8 +90,8 @@ final class DSLParserTests: XCTestCase {
 
     func testParseBadgeWithCount() throws {
         let json = """
-        { "type": "badge", "count": 42 }
-        """
+            { "type": "badge", "count": 42 }
+            """
         let elements = try DSLParser.parse(json)
         if case .badge(let text, _, _) = elements[0] {
             XCTAssertEqual(text, "42")
@@ -101,37 +102,39 @@ final class DSLParserTests: XCTestCase {
 
     func testParseDivider() throws {
         let json = """
-        { "type": "divider" }
-        """
+            { "type": "divider" }
+            """
         let elements = try DSLParser.parse(json)
         XCTAssertEqual(elements[0], .divider)
     }
 
     func testParseSpacer() throws {
         let json = """
-        { "type": "spacer" }
-        """
+            { "type": "spacer" }
+            """
         let elements = try DSLParser.parse(json)
         XCTAssertEqual(elements[0], .spacer)
     }
 
     func testParseNestedVStack() throws {
         let json = """
-        {
-            "type": "vstack",
-            "children": [
-                { "type": "label", "text": "Header", "style": "bold" },
-                { "type": "divider" },
-                { "type": "label", "text": "Body" }
-            ]
-        }
-        """
+            {
+                "type": "vstack",
+                "children": [
+                    { "type": "label", "text": "Header", "style": "bold" },
+                    { "type": "divider" },
+                    { "type": "label", "text": "Body" }
+                ]
+            }
+            """
         let elements = try DSLParser.parse(json)
         if case .vstack(let children) = elements[0] {
             XCTAssertEqual(children.count, 3)
             if case .label(let text, _, _) = children[0] {
                 XCTAssertEqual(text, "Header")
-            } else { XCTFail("Expected label") }
+            } else {
+                XCTFail("Expected label")
+            }
             XCTAssertEqual(children[1], .divider)
         } else {
             XCTFail("Expected vstack element")
@@ -140,19 +143,19 @@ final class DSLParserTests: XCTestCase {
 
     func testParseArray() throws {
         let json = """
-        [
-            { "type": "label", "text": "First" },
-            { "type": "label", "text": "Second" }
-        ]
-        """
+            [
+                { "type": "label", "text": "First" },
+                { "type": "label", "text": "Second" }
+            ]
+            """
         let elements = try DSLParser.parse(json)
         XCTAssertEqual(elements.count, 2)
     }
 
     func testParseMissingType() {
         let json = """
-        { "text": "no type" }
-        """
+            { "text": "no type" }
+            """
         XCTAssertThrowsError(try DSLParser.parse(json)) { error in
             XCTAssertTrue("\(error)".contains("type"))
         }
@@ -160,8 +163,8 @@ final class DSLParserTests: XCTestCase {
 
     func testParseUnknownType() {
         let json = """
-        { "type": "unknown_widget" }
-        """
+            { "type": "unknown_widget" }
+            """
         XCTAssertThrowsError(try DSLParser.parse(json)) { error in
             XCTAssertTrue("\(error)".contains("unknown_widget"))
         }
@@ -169,8 +172,8 @@ final class DSLParserTests: XCTestCase {
 
     func testParseMissingLabelText() {
         let json = """
-        { "type": "label" }
-        """
+            { "type": "label" }
+            """
         XCTAssertThrowsError(try DSLParser.parse(json)) { error in
             XCTAssertTrue("\(error)".contains("text"))
         }
@@ -178,8 +181,8 @@ final class DSLParserTests: XCTestCase {
 
     func testParseMissingListItems() {
         let json = """
-        { "type": "list" }
-        """
+            { "type": "list" }
+            """
         XCTAssertThrowsError(try DSLParser.parse(json)) { error in
             XCTAssertTrue("\(error)".contains("items"))
         }

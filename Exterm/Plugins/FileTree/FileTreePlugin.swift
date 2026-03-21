@@ -212,7 +212,8 @@ final class FileTreePlugin: ExtermPluginProtocol {
         }
 
         let name = (resolved as NSString).lastPathComponent
-        let root = RemoteFileTreeNode(name: name.isEmpty ? "/" : name, remotePath: resolved, isDirectory: true, session: session)
+        let root = RemoteFileTreeNode(
+            name: name.isEmpty ? "/" : name, remotePath: resolved, isDirectory: true, session: session)
         root.bridge = bridge
         root.isExpanded = true
         cachedRemoteRoots[key] = root

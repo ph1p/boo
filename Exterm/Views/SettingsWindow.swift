@@ -13,14 +13,16 @@ private struct Tokens {
     var bg: Color { Color(nsColor: theme.sidebarBg) }
     var chromeBg: Color { Color(nsColor: theme.chromeBg) }
     var fg: Color {
-        Color(red: Double(theme.foreground.r) / 255,
-              green: Double(theme.foreground.g) / 255,
-              blue: Double(theme.foreground.b) / 255)
+        Color(
+            red: Double(theme.foreground.r) / 255,
+            green: Double(theme.foreground.g) / 255,
+            blue: Double(theme.foreground.b) / 255)
     }
     var termBg: Color {
-        Color(red: Double(theme.background.r) / 255,
-              green: Double(theme.background.g) / 255,
-              blue: Double(theme.background.b) / 255)
+        Color(
+            red: Double(theme.background.r) / 255,
+            green: Double(theme.background.g) / 255,
+            blue: Double(theme.background.b) / 255)
     }
 
     static var current: Tokens { Tokens(theme: AppSettings.shared.theme) }
@@ -32,7 +34,6 @@ struct SettingsView: View {
     enum Tab: String, CaseIterable {
         case theme = "Theme"
         case terminal = "Terminal"
-        case explorer = "Explorer"
         case statusBar = "Status Bar"
         case layout = "Layout"
         case plugins = "Plugins"
@@ -42,7 +43,6 @@ struct SettingsView: View {
             switch self {
             case .theme: return "paintpalette"
             case .terminal: return "terminal"
-            case .explorer: return "sidebar.left"
             case .statusBar: return "rectangle.bottomthird.inset.filled"
             case .layout: return "rectangle.3.group"
             case .plugins: return "puzzlepiece"
@@ -109,7 +109,6 @@ struct SettingsView: View {
         switch selectedTab {
         case .theme: ThemeSettingsView()
         case .terminal: TerminalSettingsView()
-        case .explorer: ExplorerSettingsView()
         case .statusBar: StatusBarSettingsView()
         case .layout: LayoutSettingsView()
         case .plugins: PluginSettingsView()
@@ -139,6 +138,7 @@ private struct SettingsPage<Content: View>: View {
             .padding(16)
         }
     }
+
 }
 
 /// Labeled group within a page.
@@ -154,6 +154,7 @@ private struct Section<Content: View>: View {
             content()
         }
     }
+
 }
 
 // MARK: - Reusable Controls
@@ -172,6 +173,7 @@ private struct FontSlider: View {
                 .frame(width: 32)
         }
     }
+
 }
 
 private struct ToggleRow: View {
@@ -183,6 +185,7 @@ private struct ToggleRow: View {
             .font(.system(size: 12))
             .foregroundColor(Tokens.current.text)
     }
+
 }
 
 // MARK: - Theme
@@ -192,11 +195,13 @@ private struct ThemeSettingsView: View {
     @State private var autoTheme = AppSettings.shared.autoTheme
     @State private var darkTheme = AppSettings.shared.darkThemeName
     @State private var lightTheme = AppSettings.shared.lightThemeName
+    @ObservedObject private var observer = SettingsObserver()
 
     private var darkThemes: [TerminalTheme] { TerminalTheme.themes.filter { $0.isDark } }
     private var lightThemes: [TerminalTheme] { TerminalTheme.themes.filter { !$0.isDark } }
 
     var body: some View {
+        let _ = observer.revision
         let t = Tokens.current
 
         SettingsPage(title: "Color Theme") {
@@ -288,10 +293,12 @@ private struct TerminalSettingsView: View {
     @State private var cursorStyle = AppSettings.shared.cursorStyle
     @State private var fontSize = Double(AppSettings.shared.fontSize)
     @State private var selectedFont = AppSettings.shared.fontName
+    @ObservedObject private var observer = SettingsObserver()
 
     private let fonts = AppSettings.availableMonospaceFonts
 
     var body: some View {
+        let _ = observer.revision
         let t = Tokens.current
 
         SettingsPage(title: "Terminal") {
@@ -327,65 +334,26 @@ private struct TerminalSettingsView: View {
             }
         }
     }
-}
 
-// MARK: - Explorer
-
-private struct ExplorerSettingsView: View {
-    @State private var showHidden = AppSettings.shared.showHiddenFiles
-    @State private var showIcons = AppSettings.shared.explorerIconsEnabled
-    @State private var fontSize = Double(AppSettings.shared.explorerFontSize)
-    @State private var selectedFont = AppSettings.shared.explorerFontName.isEmpty ? "System Default" : AppSettings.shared.explorerFontName
-
-    private let fonts = AppSettings.availableSystemFonts
-
-    var body: some View {
-        SettingsPage(title: "File Explorer") {
-            Section(title: "Font") {
-                Picker("", selection: $selectedFont) {
-                    ForEach(fonts, id: \.self) { Text($0).tag($0) }
-                }
-                .labelsHidden()
-                .onChange(of: selectedFont) { v in
-                    AppSettings.shared.explorerFontName = v == "System Default" ? "" : v
-                }
-            }
-
-            Section(title: "Font Size") {
-                FontSlider(value: $fontSize, range: 9...20)
-                    .onChange(of: fontSize) { v in AppSettings.shared.explorerFontSize = CGFloat(v) }
-            }
-
-            Section(title: "Display") {
-                VStack(alignment: .leading, spacing: 8) {
-                    ToggleRow(label: "Show file icons", isOn: $showIcons)
-                        .onChange(of: showIcons) { v in AppSettings.shared.explorerIconsEnabled = v }
-                    ToggleRow(label: "Show hidden files", isOn: $showHidden)
-                        .onChange(of: showHidden) { v in AppSettings.shared.showHiddenFiles = v }
-                }
-            }
-        }
-    }
 }
 
 // MARK: - Status Bar
 
 private struct StatusBarSettingsView: View {
     @State private var showPath = AppSettings.shared.statusBarShowPath
-    @State private var showGit = AppSettings.shared.statusBarShowGitBranch
     @State private var showTime = AppSettings.shared.statusBarShowTime
     @State private var showPaneInfo = AppSettings.shared.statusBarShowPaneInfo
     @State private var showShell = AppSettings.shared.statusBarShowShell
     @State private var showConnection = AppSettings.shared.statusBarShowConnection
+    @ObservedObject private var observer = SettingsObserver()
 
     var body: some View {
+        let _ = observer.revision
         SettingsPage(title: "Status Bar") {
             Section(title: "Left Segments") {
                 VStack(alignment: .leading, spacing: 8) {
                     ToggleRow(label: "Connection", isOn: $showConnection)
                         .onChange(of: showConnection) { v in AppSettings.shared.statusBarShowConnection = v }
-                    ToggleRow(label: "Git branch", isOn: $showGit)
-                        .onChange(of: showGit) { v in AppSettings.shared.statusBarShowGitBranch = v }
                     ToggleRow(label: "Current path", isOn: $showPath)
                         .onChange(of: showPath) { v in AppSettings.shared.statusBarShowPath = v }
                     ToggleRow(label: "Running process", isOn: $showShell)
@@ -403,6 +371,7 @@ private struct StatusBarSettingsView: View {
             }
         }
     }
+
 }
 
 // MARK: - Layout
@@ -411,8 +380,10 @@ struct LayoutSettingsView: View {
     @State private var sidebarPosition = AppSettings.shared.sidebarPosition
     @State private var workspaceBarPosition = AppSettings.shared.workspaceBarPosition
     @State private var tabOverflowMode = AppSettings.shared.tabOverflowMode
+    @ObservedObject private var observer = SettingsObserver()
 
     var body: some View {
+        let _ = observer.revision
         let t = Tokens.current
 
         SettingsPage(title: "Layout") {
@@ -442,16 +413,21 @@ struct LayoutSettingsView: View {
         }
         .foregroundColor(t.text)
     }
+
 }
 
 // MARK: - Plugins
 
-private struct PluginSettingsView: View {
+struct PluginSettingsView: View {
+    /// Set by MainWindowController before showing settings.
+    static var registeredManifests: [PluginManifest] = []
+
     @ObservedObject private var observer = SettingsObserver()
 
     var body: some View {
         let _ = observer.revision
         let t = Tokens.current
+        let manifests = Self.registeredManifests
 
         SettingsPage(title: "Plugins") {
             Text("Built-in plugins provide core functionality. External plugins are loaded from ~/.exterm/plugins/")
@@ -459,117 +435,245 @@ private struct PluginSettingsView: View {
                 .foregroundColor(t.muted)
 
             VStack(alignment: .leading, spacing: 2) {
-                PluginRow(id: "file-tree-local", name: "Files (Local)", icon: "folder", description: "Local file explorer")
-                PluginRow(id: "file-tree-remote", name: "Files (Remote)", icon: "folder.badge.gearshape", description: "Remote file explorer")
-                PluginRow(id: "git-panel", name: "Git", icon: "arrow.triangle.branch", description: "Branch and changed files")
-                PluginRow(id: "docker", name: "Docker", icon: "shippingbox", description: "Running containers")
-                PluginRow(id: "bookmarks", name: "Bookmarks", icon: "star", description: "Saved directories")
+                ForEach(manifests, id: \.id) { manifest in
+                    PluginRow(manifest: manifest)
+                }
             }
         }
     }
+
 }
 
 private struct PluginRow: View {
-    let id: String
-    let name: String
-    let icon: String
-    let description: String
+    let manifest: PluginManifest
 
     @State private var isEnabled: Bool
+    @State private var isExpanded: Bool = false
+    @ObservedObject private var observer = SettingsObserver()
 
-    init(id: String, name: String, icon: String, description: String) {
-        self.id = id
-        self.name = name
-        self.icon = icon
-        self.description = description
-        self._isEnabled = State(initialValue: !AppSettings.shared.disabledPluginIDs.contains(id))
+    init(manifest: PluginManifest) {
+        self.manifest = manifest
+        self._isEnabled = State(initialValue: !AppSettings.shared.disabledPluginIDs.contains(manifest.id))
     }
 
     var body: some View {
+        let _ = observer.revision
         let t = Tokens.current
 
-        HStack(spacing: 10) {
-            Image(systemName: icon)
-                .font(.system(size: 14))
-                .foregroundColor(isEnabled ? t.text : t.muted)
-                .frame(width: 20)
-            VStack(alignment: .leading, spacing: 1) {
-                HStack(spacing: 4) {
-                    Text(name)
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundColor(isEnabled ? t.text : t.muted)
-                    Text("Built-in")
-                        .font(.system(size: 9, weight: .medium))
-                        .foregroundColor(t.muted)
-                        .padding(.horizontal, 4)
-                        .padding(.vertical, 1)
-                        .background(t.muted.opacity(0.15))
-                        .cornerRadius(3)
-                }
-                Text(description)
-                    .font(.system(size: 10))
-                    .foregroundColor(t.muted)
-            }
-            Spacer()
-            Toggle("", isOn: $isEnabled)
-                .toggleStyle(.switch)
-                .controlSize(.small)
-                .onChange(of: isEnabled) { enabled in
-                    var disabled = AppSettings.shared.disabledPluginIDs
-                    if enabled {
-                        disabled.removeAll { $0 == id }
-                    } else {
-                        disabled.append(id)
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 10) {
+                Image(systemName: manifest.icon)
+                    .font(.system(size: 14))
+                    .foregroundColor(isEnabled ? t.text : t.muted)
+                    .frame(width: 20)
+                VStack(alignment: .leading, spacing: 1) {
+                    HStack(spacing: 4) {
+                        Text(manifest.name)
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(isEnabled ? t.text : t.muted)
+                        Text("Built-in")
+                            .font(.system(size: 9, weight: .medium))
+                            .foregroundColor(t.muted)
+                            .padding(.horizontal, 4)
+                            .padding(.vertical, 1)
+                            .background(t.muted.opacity(0.15))
+                            .cornerRadius(3)
                     }
-                    AppSettings.shared.disabledPluginIDs = disabled
+                    Text(manifest.description ?? "")
+                        .font(.system(size: 10))
+                        .foregroundColor(t.muted)
                 }
+                Spacer()
+
+                if manifest.settings != nil && !manifest.settings!.isEmpty {
+                    Button(action: { withAnimation(.easeInOut(duration: 0.15)) { isExpanded.toggle() } }) {
+                        Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundColor(t.muted)
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                Toggle("", isOn: $isEnabled)
+                    .toggleStyle(.switch)
+                    .controlSize(.small)
+                    .onChange(of: isEnabled) { enabled in
+                        var disabled = AppSettings.shared.disabledPluginIDs
+                        if enabled {
+                            disabled.removeAll { $0 == manifest.id }
+                        } else {
+                            disabled.append(manifest.id)
+                        }
+                        AppSettings.shared.disabledPluginIDs = disabled
+                    }
+            }
+            .padding(.vertical, 6)
+            .padding(.horizontal, 8)
+
+            if isExpanded, let settings = manifest.settings, !settings.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    ForEach(settings, id: \.key) { setting in
+                        PluginSettingControl(pluginID: manifest.id, setting: setting)
+                    }
+                }
+                .padding(.leading, 48)
+                .padding(.trailing, 8)
+                .padding(.bottom, 8)
+            }
         }
-        .padding(.vertical, 6)
-        .padding(.horizontal, 8)
-        .accessibilityLabel("\(name), \(isEnabled ? "enabled" : "disabled"), \(description)")
+        .accessibilityLabel("\(manifest.name), \(isEnabled ? "enabled" : "disabled"), \(manifest.description ?? "")")
+    }
+
+}
+
+private struct PluginSettingControl: View {
+    let pluginID: String
+    let setting: PluginManifest.SettingManifest
+    @ObservedObject private var observer = SettingsObserver()
+
+    var body: some View {
+        let _ = observer.revision
+        switch setting.type {
+        case .bool:
+            boolControl
+        case .double:
+            doubleControl
+        case .string:
+            stringControl
+        case .int:
+            EmptyView()
+        }
+    }
+
+    private var boolControl: some View {
+        let value = AppSettings.shared.pluginBool(
+            pluginID, setting.key, default: setting.defaultValue?.value as? Bool ?? false)
+        return ToggleRow(
+            label: setting.label,
+            isOn: Binding(
+                get: { value },
+                set: { AppSettings.shared.setPluginSetting(pluginID, setting.key, $0) }
+            ))
+    }
+
+    private var doubleControl: some View {
+        let value = AppSettings.shared.pluginDouble(
+            pluginID, setting.key, default: setting.defaultValue?.value as? Double ?? 0)
+        return HStack {
+            Text(setting.label)
+                .font(.system(size: 12))
+                .foregroundColor(Tokens.current.text)
+            Spacer()
+            FontSlider(
+                value: Binding(
+                    get: { value },
+                    set: { AppSettings.shared.setPluginSetting(pluginID, setting.key, $0) }
+                ), range: 9...20
+            )
+            .frame(width: 150)
+        }
+    }
+
+    private var stringControl: some View {
+        let value = AppSettings.shared.pluginString(
+            pluginID, setting.key, default: setting.defaultValue?.value as? String ?? "")
+        return HStack {
+            Text(setting.label)
+                .font(.system(size: 12))
+                .foregroundColor(Tokens.current.text)
+            Spacer()
+            if setting.options == "fontPicker:system" {
+                fontPicker(value: value, fonts: AppSettings.availableSystemFonts)
+            } else if setting.options == "fontPicker:mono" {
+                fontPicker(value: value, fonts: AppSettings.availableMonospaceFonts)
+            } else {
+                TextField(
+                    "",
+                    text: Binding(
+                        get: { value },
+                        set: { AppSettings.shared.setPluginSetting(pluginID, setting.key, $0) }
+                    )
+                )
+                .textFieldStyle(.roundedBorder)
+                .frame(width: 150)
+            }
+        }
+    }
+
+    private func fontPicker(value: String, fonts: [String]) -> some View {
+        let displayValue = value.isEmpty ? "System Default" : value
+        return Picker(
+            "",
+            selection: Binding(
+                get: { displayValue },
+                set: { AppSettings.shared.setPluginSetting(pluginID, setting.key, $0 == "System Default" ? "" : $0) }
+            )
+        ) {
+            ForEach(fonts, id: \.self) { Text($0).tag($0) }
+        }
+        .labelsHidden()
+        .frame(width: 150)
     }
 }
 
 // MARK: - Shortcuts
 
 private struct ShortcutsSettingsView: View {
+    @ObservedObject private var observer = SettingsObserver()
+
     private static let groups: [(String, [(String, String)])] = [
-        ("General", [
-            ("Settings", "\u{2318},"),
-            ("New Workspace", "\u{2318}N"),
-            ("Open Folder", "\u{21E7}\u{2318}O"),
-            ("New Tab", "\u{2318}T"),
-            ("Close", "\u{2318}W"),
-            ("Reopen Tab", "\u{2318}Z"),
-            ("Close Pane", "\u{21E7}\u{2318}W"),
-            ("Switch Workspace 1-9", "\u{2318}1-9"),
-        ]),
-        ("Terminal", [
-            ("Clear Screen", "\u{2318}K"),
-            ("Clear Scrollback", "\u{21E7}\u{2318}K"),
-            ("Split Right", "\u{2318}D"),
-            ("Split Down", "\u{21E7}\u{2318}D"),
-            ("Focus Next Pane", "\u{2318}]"),
-            ("Focus Previous Pane", "\u{2318}["),
-        ]),
-        ("View", [
-            ("Toggle Sidebar", "\u{2318}B"),
-            ("Increase Font", "\u{2318}+"),
-            ("Decrease Font", "\u{2318}-"),
-            ("Reset Font", "\u{2318}0"),
-        ]),
-        ("Edit", [
-            ("Copy", "\u{2318}C"),
-            ("Paste", "\u{2318}V"),
-            ("Select All", "\u{2318}A"),
-        ]),
-        ("Bookmarks", [
-            ("Bookmark Directory", "\u{21E7}\u{2318}B"),
-            ("Jump to Bookmark 1-9", "\u{2303}1-9"),
-        ]),
+        (
+            "General",
+            [
+                ("Settings", "\u{2318},"),
+                ("New Workspace", "\u{2318}N"),
+                ("Open Folder", "\u{21E7}\u{2318}O"),
+                ("New Tab", "\u{2318}T"),
+                ("Close", "\u{2318}W"),
+                ("Reopen Tab", "\u{2318}Z"),
+                ("Close Pane", "\u{21E7}\u{2318}W"),
+                ("Switch Workspace 1-9", "\u{2318}1-9")
+            ]
+        ),
+        (
+            "Terminal",
+            [
+                ("Clear Screen", "\u{2318}K"),
+                ("Clear Scrollback", "\u{21E7}\u{2318}K"),
+                ("Split Right", "\u{2318}D"),
+                ("Split Down", "\u{21E7}\u{2318}D"),
+                ("Focus Next Pane", "\u{2318}]"),
+                ("Focus Previous Pane", "\u{2318}[")
+            ]
+        ),
+        (
+            "View",
+            [
+                ("Toggle Sidebar", "\u{2318}B"),
+                ("Increase Font", "\u{2318}+"),
+                ("Decrease Font", "\u{2318}-"),
+                ("Reset Font", "\u{2318}0")
+            ]
+        ),
+        (
+            "Edit",
+            [
+                ("Copy", "\u{2318}C"),
+                ("Paste", "\u{2318}V"),
+                ("Select All", "\u{2318}A")
+            ]
+        ),
+        (
+            "Bookmarks",
+            [
+                ("Bookmark Directory", "\u{21E7}\u{2318}B"),
+                ("Jump to Bookmark 1-9", "\u{2303}1-9")
+            ]
+        )
     ]
 
     var body: some View {
+        let _ = observer.revision
         let t = Tokens.current
 
         SettingsPage(title: "Keyboard Shortcuts") {

@@ -1,5 +1,6 @@
-import XCTest
 import SwiftUI
+import XCTest
+
 @testable import Exterm
 
 // MARK: - Helper
@@ -89,7 +90,8 @@ final class SidebarLayoutTests: XCTestCase {
 
     func testAddMultipleSections() {
         let v = makePanelView()
-        v.updateSections([makeSection(id: "a"), makeSection(id: "b"), makeSection(id: "c")], expandedIDs: ["a", "b", "c"])
+        v.updateSections(
+            [makeSection(id: "a"), makeSection(id: "b"), makeSection(id: "c")], expandedIDs: ["a", "b", "c"])
         XCTAssertEqual(v.sectionStates.count, 3)
     }
 
@@ -387,12 +389,15 @@ final class SidebarLayoutTests: XCTestCase {
         let h3 = v.sectionStates[3].contentHeight
 
         // Drag between section 2 and 3 — only s2 and s3 should change
-        v.handleDrag(aboveIndex: 2, belowIndex: 3, delta: 30,
-                     startHeights: (h2, h3))
+        v.handleDrag(
+            aboveIndex: 2, belowIndex: 3, delta: 30,
+            startHeights: (h2, h3))
 
-        XCTAssertEqual(v.sectionStates[0].contentHeight, h0, accuracy: 0.5,
+        XCTAssertEqual(
+            v.sectionStates[0].contentHeight, h0, accuracy: 0.5,
             "Section 0 should not change during drag between 2 and 3")
-        XCTAssertEqual(v.sectionStates[1].contentHeight, h1, accuracy: 0.5,
+        XCTAssertEqual(
+            v.sectionStates[1].contentHeight, h1, accuracy: 0.5,
             "Section 1 should not change during drag between 2 and 3")
     }
 
@@ -407,11 +412,13 @@ final class SidebarLayoutTests: XCTestCase {
         let total = h0 + h1
 
         // Drag down: section 0 grows, section 1 shrinks
-        v.handleDrag(aboveIndex: 0, belowIndex: 1, delta: 50,
-                     startHeights: (h0, h1))
+        v.handleDrag(
+            aboveIndex: 0, belowIndex: 1, delta: 50,
+            startHeights: (h0, h1))
 
         let newTotal = v.sectionStates[0].contentHeight + v.sectionStates[1].contentHeight
-        XCTAssertEqual(newTotal, total, accuracy: 0.5,
+        XCTAssertEqual(
+            newTotal, total, accuracy: 0.5,
             "Sum of the two dragged sections must be preserved")
     }
 
@@ -425,13 +432,16 @@ final class SidebarLayoutTests: XCTestCase {
         let h1 = v.sectionStates[1].contentHeight
 
         // Drag down by a huge amount — should clamp at min height for below
-        v.handleDrag(aboveIndex: 0, belowIndex: 1, delta: 9999,
-                     startHeights: (h0, h1))
+        v.handleDrag(
+            aboveIndex: 0, belowIndex: 1, delta: 9999,
+            startHeights: (h0, h1))
 
-        XCTAssertGreaterThanOrEqual(v.sectionStates[1].contentHeight,
+        XCTAssertGreaterThanOrEqual(
+            v.sectionStates[1].contentHeight,
             SidebarLayout.minSectionHeight,
             "Below section should not go below min height")
-        XCTAssertGreaterThanOrEqual(v.sectionStates[0].contentHeight,
+        XCTAssertGreaterThanOrEqual(
+            v.sectionStates[0].contentHeight,
             SidebarLayout.minSectionHeight,
             "Above section should not go below min height")
     }
@@ -446,13 +456,16 @@ final class SidebarLayoutTests: XCTestCase {
         let h1 = v.sectionStates[1].contentHeight
 
         // Drag up by a huge amount — should clamp at min height for above
-        v.handleDrag(aboveIndex: 0, belowIndex: 1, delta: -9999,
-                     startHeights: (h0, h1))
+        v.handleDrag(
+            aboveIndex: 0, belowIndex: 1, delta: -9999,
+            startHeights: (h0, h1))
 
-        XCTAssertGreaterThanOrEqual(v.sectionStates[0].contentHeight,
+        XCTAssertGreaterThanOrEqual(
+            v.sectionStates[0].contentHeight,
             SidebarLayout.minSectionHeight,
             "Above section should not go below min height")
-        XCTAssertGreaterThanOrEqual(v.sectionStates[1].contentHeight,
+        XCTAssertGreaterThanOrEqual(
+            v.sectionStates[1].contentHeight,
             SidebarLayout.minSectionHeight,
             "Below section should not go below min height")
     }
@@ -468,12 +481,15 @@ final class SidebarLayoutTests: XCTestCase {
         let h2 = v.sectionStates[2].contentHeight
 
         // Drag the last handle (between s1 and s2) way past the window
-        v.handleDrag(aboveIndex: 1, belowIndex: 2, delta: 2000,
-                     startHeights: (h1, h2))
+        v.handleDrag(
+            aboveIndex: 1, belowIndex: 2, delta: 2000,
+            startHeights: (h1, h2))
 
-        XCTAssertEqual(v.sectionStates[0].contentHeight, h0, accuracy: 0.5,
+        XCTAssertEqual(
+            v.sectionStates[0].contentHeight, h0, accuracy: 0.5,
             "Section 0 must not change when dragging handle between 1 and 2 past edge")
-        XCTAssertGreaterThanOrEqual(v.sectionStates[2].contentHeight,
+        XCTAssertGreaterThanOrEqual(
+            v.sectionStates[2].contentHeight,
             SidebarLayout.minSectionHeight,
             "Last section should be clamped to min, not negative")
     }
@@ -489,16 +505,19 @@ final class SidebarLayoutTests: XCTestCase {
         let h2 = v.sectionStates[2].contentHeight
 
         // Drag between 0 and 1
-        v.handleDrag(aboveIndex: 0, belowIndex: 1, delta: 30,
-                     startHeights: (h0, h1))
+        v.handleDrag(
+            aboveIndex: 0, belowIndex: 1, delta: 30,
+            startHeights: (h0, h1))
 
         // Total content height should not exceed available
-        let available = v.bounds.height
+        let available =
+            v.bounds.height
             - CGFloat(3) * SidebarLayout.headerHeight
             - CGFloat(2) * SidebarLayout.separatorHeight
         let total = v.sectionStates.filter(\.isExpanded)
             .reduce(CGFloat(0)) { $0 + $1.contentHeight }
-        XCTAssertLessThanOrEqual(total, available + 1,
+        XCTAssertLessThanOrEqual(
+            total, available + 1,
             "Total content height must not exceed available space after drag")
     }
 
@@ -523,9 +542,11 @@ final class SidebarLayoutTests: XCTestCase {
         let expandedSum = v.sectionStates.filter(\.isExpanded)
             .reduce(CGFloat(0)) { $0 + $1.contentHeight }
 
-        XCTAssertEqual(expandedSum, availableContent, accuracy: 2,
+        XCTAssertEqual(
+            expandedSum, availableContent, accuracy: 2,
             "Remaining expanded sections should fill available space after collapse")
-        XCTAssertEqual(v.sectionStates[3].contentHeight, 0,
+        XCTAssertEqual(
+            v.sectionStates[3].contentHeight, 0,
             "Collapsed section should have zero content height")
     }
 
@@ -545,7 +566,8 @@ final class SidebarLayoutTests: XCTestCase {
         let expandedBottom = v.sectionStates[1].headerView.frame.maxY + v.sectionStates[1].contentHeight
         let expectedY = expandedBottom + SidebarLayout.separatorHeight
 
-        XCTAssertEqual(lastHeader.frame.origin.y, expectedY, accuracy: 1,
+        XCTAssertEqual(
+            lastHeader.frame.origin.y, expectedY, accuracy: 1,
             "Collapsed last section header should sit right below expanded content")
     }
 
@@ -558,23 +580,27 @@ final class SidebarLayoutTests: XCTestCase {
         // Drag handle 0-1 down
         let h0 = v.sectionStates[0].contentHeight
         let h1 = v.sectionStates[1].contentHeight
-        v.handleDrag(aboveIndex: 0, belowIndex: 1, delta: 40,
-                     startHeights: (h0, h1))
+        v.handleDrag(
+            aboveIndex: 0, belowIndex: 1, delta: 40,
+            startHeights: (h0, h1))
 
         // Now drag handle 1-2 down
         let h1b = v.sectionStates[1].contentHeight
         let h2 = v.sectionStates[2].contentHeight
-        v.handleDrag(aboveIndex: 1, belowIndex: 2, delta: 30,
-                     startHeights: (h1b, h2))
+        v.handleDrag(
+            aboveIndex: 1, belowIndex: 2, delta: 30,
+            startHeights: (h1b, h2))
 
         // Section 0 should be unchanged from its post-first-drag value
         let expected0 = min(h0 + h1 - SidebarLayout.minSectionHeight, max(SidebarLayout.minSectionHeight, h0 + 40))
-        XCTAssertEqual(v.sectionStates[0].contentHeight, expected0, accuracy: 0.5,
+        XCTAssertEqual(
+            v.sectionStates[0].contentHeight, expected0, accuracy: 0.5,
             "Section 0 must remain stable after second drag on a different handle")
 
         // All sections should still be at least min height
         for (i, state) in v.sectionStates.enumerated() where state.isExpanded {
-            XCTAssertGreaterThanOrEqual(state.contentHeight, SidebarLayout.minSectionHeight,
+            XCTAssertGreaterThanOrEqual(
+                state.contentHeight, SidebarLayout.minSectionHeight,
                 "Section \(i) should be at least min height after sequential drags")
         }
     }
@@ -602,7 +628,7 @@ final class SidebarLayoutTests: XCTestCase {
             panel.topAnchor.constraint(equalTo: window.contentView!.topAnchor),
             panel.leadingAnchor.constraint(equalTo: window.contentView!.leadingAnchor),
             panel.trailingAnchor.constraint(equalTo: window.contentView!.trailingAnchor),
-            panel.bottomAnchor.constraint(equalTo: window.contentView!.bottomAnchor),
+            panel.bottomAnchor.constraint(equalTo: window.contentView!.bottomAnchor)
         ])
 
         // Use the real plugins to generate content
@@ -624,17 +650,19 @@ final class SidebarLayoutTests: XCTestCase {
             var sections: [SidebarSection] = []
             for pluginID in ["file-tree-local", "docker", "bookmarks"] {
                 guard let plugin = registry.plugin(for: pluginID),
-                      plugin.isVisible(for: context),
-                      let content = plugin.makeDetailView(context: context, actionHandler: actionHandler) else {
+                    plugin.isVisible(for: context),
+                    let content = plugin.makeDetailView(context: context, actionHandler: actionHandler)
+                else {
                     continue
                 }
-                sections.append(SidebarSection(
-                    id: pluginID,
-                    name: plugin.sectionTitle(context: context) ?? plugin.manifest.name,
-                    icon: plugin.manifest.icon,
-                    content: content,
-                    prefersOuterScrollView: plugin.prefersOuterScrollView
-                ))
+                sections.append(
+                    SidebarSection(
+                        id: pluginID,
+                        name: plugin.sectionTitle(context: context) ?? plugin.manifest.name,
+                        icon: plugin.manifest.icon,
+                        content: content,
+                        prefersOuterScrollView: plugin.prefersOuterScrollView
+                    ))
             }
             return sections
         }
@@ -642,8 +670,7 @@ final class SidebarLayoutTests: XCTestCase {
         func rebuild() {
             let sections = makeSections()
             panel.onToggleExpand = { id in
-                if expandedIDs.contains(id) { expandedIDs.remove(id) }
-                else { expandedIDs.insert(id) }
+                if expandedIDs.contains(id) { expandedIDs.remove(id) } else { expandedIDs.insert(id) }
                 // Exact same pattern as MainWindowController.rebuildPluginSidebar
                 let newSections = makeSections()
                 panel.updateSections(newSections, expandedIDs: expandedIDs)
@@ -661,7 +688,10 @@ final class SidebarLayoutTests: XCTestCase {
         // Find bookmarks section
         let bmIndex = panel.sectionStates.firstIndex(where: { $0.id == "bookmarks" })
         XCTAssertNotNil(bmIndex, "Bookmarks section should exist")
-        guard let idx = bmIndex else { window.close(); return }
+        guard let idx = bmIndex else {
+            window.close()
+            return
+        }
 
         XCTAssertFalse(panel.sectionStates[idx].isExpanded, "Bookmarks should start collapsed")
 
@@ -671,14 +701,16 @@ final class SidebarLayoutTests: XCTestCase {
         window.layoutIfNeeded()
 
         // Verify it expanded without crashing
-        XCTAssertTrue(panel.sectionStates[idx].isExpanded,
+        XCTAssertTrue(
+            panel.sectionStates[idx].isExpanded,
             "Bookmarks should be expanded after clicking header")
 
         // Click again to collapse
         panel.sectionStates[idx].headerView.mouseDown(with: mouseDownEvent(for: window))
         window.layoutIfNeeded()
 
-        XCTAssertFalse(panel.sectionStates[idx].isExpanded,
+        XCTAssertFalse(
+            panel.sectionStates[idx].isExpanded,
             "Bookmarks should be collapsed after second click")
 
         // Click ALL headers to expand everything
@@ -688,7 +720,8 @@ final class SidebarLayoutTests: XCTestCase {
                 window.layoutIfNeeded()
             }
         }
-        XCTAssertTrue(panel.sectionStates.allSatisfy(\.isExpanded),
+        XCTAssertTrue(
+            panel.sectionStates.allSatisfy(\.isExpanded),
             "All sections should be expanded")
 
         window.close()

@@ -1,5 +1,5 @@
-import Cocoa
 import CGhostty
+import Cocoa
 
 extension Notification.Name {
     static let ghosttyPwdChanged = Notification.Name("ghosttyPwdChanged")
@@ -19,8 +19,9 @@ private func ghosttyAction(_ app: ghostty_app_t?, _ target: ghostty_target_s, _ 
     // Get the GhosttyView from the surface's userdata
     func viewFromTarget() -> GhosttyView? {
         guard target.tag == GHOSTTY_TARGET_SURFACE,
-              let surface = target.target.surface,
-              let userdata = ghostty_surface_userdata(surface) else { return nil }
+            let surface = target.target.surface,
+            let userdata = ghostty_surface_userdata(surface)
+        else { return nil }
         return Unmanaged<GhosttyView>.fromOpaque(userdata).takeUnretainedValue()
     }
 
@@ -29,8 +30,8 @@ private func ghosttyAction(_ app: ghostty_app_t?, _ target: ghostty_target_s, _ 
         guard let pwdPtr = action.action.pwd.pwd else { return false }
         let path = String(cString: pwdPtr)
         guard let view = viewFromTarget() else { return false }
-        DispatchQueue.main.async {
-            view.onPwdChanged?(path)
+        DispatchQueue.main.async { [weak view] in
+            view?.onPwdChanged?(path)
         }
         return true
 
@@ -45,21 +46,21 @@ private func ghosttyAction(_ app: ghostty_app_t?, _ target: ghostty_target_s, _ 
             if let colonIdx = payload.firstIndex(of: ":") {
                 let path = String(payload[..<colonIdx])
                 let output = String(payload[payload.index(after: colonIdx)...])
-                DispatchQueue.main.async {
-                    view.onDirectoryListing?(path, output)
+                DispatchQueue.main.async { [weak view] in
+                    view?.onDirectoryListing?(path, output)
                 }
             }
             return true
         }
-        DispatchQueue.main.async {
-            view.onTitleChanged?(title)
+        DispatchQueue.main.async { [weak view] in
+            view?.onTitleChanged?(title)
         }
         return true
 
     case GHOSTTY_ACTION_SHOW_CHILD_EXITED:
         guard let view = viewFromTarget() else { return false }
-        DispatchQueue.main.async {
-            view.onProcessExited?()
+        DispatchQueue.main.async { [weak view] in
+            view?.onProcessExited?()
         }
         return true
 
@@ -68,11 +69,14 @@ private func ghosttyAction(_ app: ghostty_app_t?, _ target: ghostty_target_s, _ 
         let direction = action.action.new_split
         let surface = target.tag == GHOSTTY_TARGET_SURFACE ? target.target.surface : nil
         DispatchQueue.main.async {
-            NotificationCenter.default.post(name: .ghosttyAction, object: nil, userInfo: [
-                "action": "new_split",
-                "direction": direction == GHOSTTY_SPLIT_DIRECTION_RIGHT || direction == GHOSTTY_SPLIT_DIRECTION_LEFT ? "vertical" : "horizontal",
-                "surface": surface as Any,
-            ])
+            NotificationCenter.default.post(
+                name: .ghosttyAction, object: nil,
+                userInfo: [
+                    "action": "new_split",
+                    "direction": direction == GHOSTTY_SPLIT_DIRECTION_RIGHT || direction == GHOSTTY_SPLIT_DIRECTION_LEFT
+                        ? "vertical" : "horizontal",
+                    "surface": surface as Any
+                ])
         }
         return true
 
@@ -85,9 +89,11 @@ private func ghosttyAction(_ app: ghostty_app_t?, _ target: ghostty_target_s, _ 
         default: return false
         }
         DispatchQueue.main.async {
-            NotificationCenter.default.post(name: .ghosttyAction, object: nil, userInfo: [
-                "action": "goto_split", "direction": dirStr,
-            ])
+            NotificationCenter.default.post(
+                name: .ghosttyAction, object: nil,
+                userInfo: [
+                    "action": "goto_split", "direction": dirStr
+                ])
         }
         return true
 
@@ -117,7 +123,8 @@ private func ghosttyAction(_ app: ghostty_app_t?, _ target: ghostty_target_s, _ 
 
     case GHOSTTY_ACTION_TOGGLE_FULLSCREEN:
         DispatchQueue.main.async {
-            NotificationCenter.default.post(name: .ghosttyAction, object: nil, userInfo: ["action": "toggle_fullscreen"])
+            NotificationCenter.default.post(
+                name: .ghosttyAction, object: nil, userInfo: ["action": "toggle_fullscreen"])
         }
         return true
 
@@ -145,19 +152,37 @@ private func ghosttyAction(_ app: ghostty_app_t?, _ target: ghostty_target_s, _ 
         }
         return true
 
+    case GHOSTTY_ACTION_SCROLLBAR:
+        let sb = action.action.scrollbar
+        guard let view = viewFromTarget() else { return false }
+        let scrollbar = GhosttyView.GhosttyScrollbar(
+            total: Int(sb.total), offset: Int(sb.offset), len: Int(sb.len))
+        DispatchQueue.main.async { [weak view] in
+            view?.onScrollbarChanged?(scrollbar)
+        }
+        return true
+
     default:
         return false
     }
 }
 
-private func ghosttyReadClipboard(_ userdata: UnsafeMutableRawPointer?, _ clipboard: ghostty_clipboard_e, _ state: UnsafeMutableRawPointer?) -> Bool {
-    return false
+private func ghosttyReadClipboard(
+    _ userdata: UnsafeMutableRawPointer?, _ clipboard: ghostty_clipboard_e, _ state: UnsafeMutableRawPointer?
+) -> Bool {
+    false
 }
 
-private func ghosttyConfirmReadClipboard(_ userdata: UnsafeMutableRawPointer?, _ prompt: UnsafePointer<CChar>?, _ state: UnsafeMutableRawPointer?, _ request: ghostty_clipboard_request_e) {
+private func ghosttyConfirmReadClipboard(
+    _ userdata: UnsafeMutableRawPointer?, _ prompt: UnsafePointer<CChar>?, _ state: UnsafeMutableRawPointer?,
+    _ request: ghostty_clipboard_request_e
+) {
 }
 
-private func ghosttyWriteClipboard(_ userdata: UnsafeMutableRawPointer?, _ clipboard: ghostty_clipboard_e, _ content: UnsafePointer<ghostty_clipboard_content_s>?, _ count: Int, _ confirmed: Bool) {
+private func ghosttyWriteClipboard(
+    _ userdata: UnsafeMutableRawPointer?, _ clipboard: ghostty_clipboard_e,
+    _ content: UnsafePointer<ghostty_clipboard_content_s>?, _ count: Int, _ confirmed: Bool
+) {
     guard let content = content, count > 0 else { return }
     let pb = NSPasteboard.general
     pb.clearContents()
@@ -197,25 +222,32 @@ final class GhosttyRuntime {
     }
 
     /// Find Ghostty's resources directory so shell integration (OSC 7) works.
-    /// Looks for bundled resources next to the executable first (standalone),
-    /// then falls back to the Vendor directory (development).
+    /// Looks for bundled resources in the app bundle first, then next to the
+    /// executable (standalone), then falls back to the Vendor directory (development).
     private static func findResourcesDir() -> String? {
         let execDir: String
         if let execPath = ProcessInfo.processInfo.arguments.first {
-            // Resolve symlinks to get the real executable location
             let resolved = (execPath as NSString).resolvingSymlinksInPath
             execDir = (resolved as NSString).deletingLastPathComponent
         } else {
             return nil
         }
 
-        // 1. Bundled: ghostty-resources/ghostty/ next to the executable
+        // 1. App bundle: Contents/Resources/ghostty/
+        if let bundlePath = Bundle.main.resourcePath {
+            let bundleRes = bundlePath + "/ghostty"
+            if FileManager.default.fileExists(atPath: bundleRes + "/shell-integration") {
+                return bundleRes
+            }
+        }
+
+        // 2. Bundled: ghostty-resources/ghostty/ next to the executable
         let bundled = execDir + "/ghostty-resources/ghostty"
         if FileManager.default.fileExists(atPath: bundled + "/shell-integration") {
             return bundled
         }
 
-        // 2. Development fallback: walk up to find Vendor/ghostty/zig-out
+        // 3. Development fallback: walk up to find Vendor/ghostty/zig-out
         var dir = execDir
         for _ in 0..<10 {
             let candidate = dir + "/Vendor/ghostty/zig-out/share/ghostty"
@@ -237,7 +269,7 @@ final class GhosttyRuntime {
             let terminfo = ((dir as NSString).deletingLastPathComponent as NSString)
                 .appendingPathComponent("terminfo")
             if FileManager.default.fileExists(atPath: terminfo) {
-                setenv("TERMINFO", terminfo, 0) // don't overwrite if already set
+                setenv("TERMINFO", terminfo, 0)  // don't overwrite if already set
             }
         } else {
             NSLog("[Ghostty] WARNING: Could not find resources dir — shell integration disabled")
@@ -250,9 +282,6 @@ final class GhosttyRuntime {
             NSLog("[Ghostty] ghostty_init failed with code \(rc)")
             return
         }
-
-        // Install shell integration BEFORE building config so ZDOTDIR path is available
-        GhosttyRuntime.installShellIntegration()
 
         config = buildConfig()
 
@@ -286,115 +315,6 @@ final class GhosttyRuntime {
         }
     }
 
-    /// Write Exterm's shell integration scripts to ~/.exterm/shell-integration/.
-    ///
-    /// SSH/Docker remote CWD injection approach:
-    /// - For key-based auth: ssh wrapper uses ControlMaster to first inject the
-    ///   OSC 7 reporter, then connects the interactive session over the same socket.
-    /// - For password auth: falls back to plain `ssh` — explorer uses title/process
-    ///   detection instead. The remote CWD won't auto-update on `cd`, but the
-    ///   explorer will show the remote home directory.
-    ///
-    /// Shell functions are loaded via ZDOTDIR (zsh) and BASH_ENV (bash).
-    private static func installShellIntegration() {
-        let dir = ExtermPaths.shellIntegrationDir
-        let zdotdir = (dir as NSString).appendingPathComponent("zsh")
-        try? FileManager.default.createDirectory(atPath: zdotdir, withIntermediateDirectories: true)
-
-        // Remote init: POSIX-compatible snippet that reports CWD via OSC 2 (title).
-        // Uses OSC 2 (not OSC 7) because Ghostty rejects OSC 7 from non-local hosts.
-        // The "user@host:path" title format is parsed by TerminalBridge.extractRemoteCwd.
-        // Injection into remote shells is handled by RemoteShellInjector in Swift.
-        writeScript(
-            dir: dir, name: "remote-init.sh", executable: false,
-            content: [
-                #"__exterm_report() {"#,
-                #"  printf '\033]2;%s@%s:%s\a' "$(whoami)" "$(hostname -s 2>/dev/null || hostname)" "$PWD""#,
-                #"  printf '\033]2;EXTERM_LS:%s:%s\a' "$PWD" "$(ls -1AF 2>/dev/null | head -500)""#,
-                #"}"#,
-                #"if [ -n "$ZSH_VERSION" ]; then"#,
-                #"  autoload -Uz add-zsh-hook 2>/dev/null && add-zsh-hook chpwd __exterm_report"#,
-                #"  precmd_functions+=(__exterm_report)"#,
-                #"elif [ -n "$BASH_VERSION" ]; then"#,
-                #"  PROMPT_COMMAND="__exterm_report${PROMPT_COMMAND:+;$PROMPT_COMMAND}""#,
-                #"fi"#,
-                #"__exterm_report"#,
-            ]
-        )
-
-        // Compute base64 blob from remote-init.sh (used by docker wrapper)
-        let remoteInitPath = (dir as NSString).appendingPathComponent("remote-init.sh")
-        let b64: String
-        if let data = FileManager.default.contents(atPath: remoteInitPath) {
-            b64 = data.base64EncodedString()
-        } else {
-            b64 = ""
-        }
-
-        // Docker wrapper: injects init into interactive docker exec sessions.
-        // Docker injection must intercept the command to modify arguments,
-        // which can't be done from Swift after the process starts.
-        let dockerFunction = [
-            "docker() {",
-            "  local _isexec=0",
-            "  case \"$*\" in *exec*) _isexec=1 ;; esac",
-            "  if [ \"$_isexec\" = 1 ]; then",
-            "    local _fe=0 _ctr= _ac=0 _a",
-            "    for _a in \"$@\"; do",
-            "      if [ \"$_fe\" = 0 ]; then [ \"$_a\" = exec ] && _fe=1; continue; fi",
-            "      if [ -z \"$_ctr\" ]; then case \"$_a\" in -*) continue ;; esac; _ctr=\"$_a\"; continue; fi",
-            "      _ac=1; break",
-            "    done",
-            "    if [ \"$_ac\" = 0 ] && [ -n \"$_ctr\" ]; then",
-            "      command docker exec -it \"$_ctr\" sh -c 'eval \"$(echo \(b64) | base64 -d)\" 2>/dev/null; exec ${SHELL:-sh} -li'",
-            "      return",
-            "    fi",
-            "  fi",
-            "  command docker \"$@\"",
-            "}",
-        ]
-
-        writeScript(
-            dir: dir, name: "exterm-init.sh", executable: false,
-            content: dockerFunction
-        )
-
-        // ZDOTDIR shim for zsh
-        let realHome = NSHomeDirectory()
-        writeScript(
-            dir: zdotdir, name: ".zshenv", executable: false,
-            content: [
-                "export ZDOTDIR=\"\(realHome)\"",
-                "[ -f \"$ZDOTDIR/.zshenv\" ] && source \"$ZDOTDIR/.zshenv\"",
-                "if [[ -o interactive ]]; then",
-                "  source \"\(dir)/exterm-init.sh\"",
-                "fi",
-            ]
-        )
-
-        // BASH_ENV for bash
-        writeScript(
-            dir: dir, name: "bash-init.sh", executable: false,
-            content: [
-                "[ -f ~/.bashrc ] && source ~/.bashrc",
-                "source \"\(dir)/exterm-init.sh\"",
-            ]
-        )
-
-        setenv("ZDOTDIR", zdotdir, 1)
-        setenv("BASH_ENV", (dir as NSString).appendingPathComponent("bash-init.sh"), 1)
-        setenv("EXTERM_SHELL_INTEGRATION", dir, 1)
-    }
-
-    private static func writeScript(dir: String, name: String, executable: Bool, content: [String]) {
-        let path = (dir as NSString).appendingPathComponent(name)
-        let text = content.joined(separator: "\n") + "\n"
-        try? text.write(toFile: path, atomically: true, encoding: .utf8)
-        if executable {
-            try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: path)
-        }
-    }
-
     /// Build a fresh Ghostty config from Exterm settings.
     private func buildConfig() -> ghostty_config_t? {
         let cfg = ghostty_config_new()
@@ -411,13 +331,15 @@ final class GhosttyRuntime {
     func reloadConfig() {
         guard let newConfig = buildConfig() else { return }
 
-        if let old = config { ghostty_config_free(old) }
+        let old = config
         config = newConfig
 
-        // Update the app config — this propagates to ALL surfaces automatically
+        // Update the app config — this propagates to ALL surfaces automatically.
+        // Free old config AFTER update in case Ghostty reads from it during the switch.
         if let app = app {
             ghostty_app_update_config(app, newConfig)
         }
+        if let old = old { ghostty_config_free(old) }
 
         NSLog("[Ghostty] Config reloaded via app, \(surfaces.count) surface(s)")
     }
@@ -461,20 +383,10 @@ final class GhosttyRuntime {
         // (xterm-ghostty requires ghostty terminfo to be installed)
         lines.append("term = xterm-256color")
 
-        // Inject shell integration env vars via Ghostty's env config.
-        // ZDOTDIR makes zsh load our shim .zshrc which defines ssh/docker functions.
-        // BASH_ENV makes bash source our init before interactive startup.
-        // Using Ghostty env config ensures these are set in the child process
-        // regardless of when surfaces are created.
-        let shellIntegDir = ExtermPaths.shellIntegrationDir
-        lines.append("environment = EXTERM_SHELL_INTEGRATION=\(shellIntegDir)")
-        lines.append("environment = ZDOTDIR=\(shellIntegDir)/zsh")
-        lines.append("environment = BASH_ENV=\(shellIntegDir)/bash-init.sh")
-
         // Window / terminal behavior
         lines.append("window-decoration = none")
-        lines.append("window-padding-x = 8")
-        lines.append("window-padding-y = 4")
+        lines.append("window-padding-x = 3")
+        lines.append("window-padding-y = 3")
         lines.append("confirm-close-surface = false")
         lines.append("quit-after-last-window-closed = false")
         lines.append("mouse-hide-while-typing = true")
@@ -504,9 +416,10 @@ final class GhosttyRuntime {
 
     private func hexNSColor(_ c: NSColor) -> String {
         let rgb = c.usingColorSpace(.sRGB) ?? c
-        return String(format: "#%02x%02x%02x",
-                      Int(rgb.redComponent * 255),
-                      Int(rgb.greenComponent * 255),
-                      Int(rgb.blueComponent * 255))
+        return String(
+            format: "#%02x%02x%02x",
+            Int(rgb.redComponent * 255),
+            Int(rgb.greenComponent * 255),
+            Int(rgb.blueComponent * 255))
     }
 }

@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import Exterm
 
 final class PaneTests: XCTestCase {
@@ -17,7 +18,7 @@ final class PaneTests: XCTestCase {
         _ = pane.addTab(workingDirectory: "/tmp")
         _ = pane.addTab(workingDirectory: "/home")
         XCTAssertEqual(pane.tabs.count, 2)
-        XCTAssertEqual(pane.activeTabIndex, 1) // Last added is active
+        XCTAssertEqual(pane.activeTabIndex, 1)  // Last added is active
         XCTAssertEqual(pane.activeTab?.workingDirectory, "/home")
     }
 
@@ -34,7 +35,7 @@ final class PaneTests: XCTestCase {
         let pane = Pane()
         _ = pane.addTab(workingDirectory: "/a")
         pane.setActiveTab(5)
-        XCTAssertEqual(pane.activeTabIndex, 0) // Unchanged
+        XCTAssertEqual(pane.activeTabIndex, 0)  // Unchanged
     }
 
     func testRemoveTab() {
@@ -51,7 +52,7 @@ final class PaneTests: XCTestCase {
         let pane = Pane()
         _ = pane.addTab(workingDirectory: "/a")
         _ = pane.addTab(workingDirectory: "/b")
-        pane.removeTab(at: 1) // Remove active
+        pane.removeTab(at: 1)  // Remove active
         XCTAssertEqual(pane.activeTabIndex, 0)
     }
 

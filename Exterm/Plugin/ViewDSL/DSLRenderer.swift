@@ -19,18 +19,20 @@ struct DSLRenderer: View {
     private func renderElement(_ element: DSLElement) -> AnyView {
         switch element {
         case .vstack(let children):
-            return AnyView(VStack(alignment: .leading, spacing: density == .comfortable ? 6 : 3) {
-                ForEach(Array(children.enumerated()), id: \.offset) { _, child in
-                    self.renderElement(child)
-                }
-            })
+            return AnyView(
+                VStack(alignment: .leading, spacing: density == .comfortable ? 6 : 3) {
+                    ForEach(Array(children.enumerated()), id: \.offset) { _, child in
+                        self.renderElement(child)
+                    }
+                })
 
         case .hstack(let children):
-            return AnyView(HStack(spacing: density == .comfortable ? 8 : 4) {
-                ForEach(Array(children.enumerated()), id: \.offset) { _, child in
-                    self.renderElement(child)
-                }
-            })
+            return AnyView(
+                HStack(spacing: density == .comfortable ? 8 : 4) {
+                    ForEach(Array(children.enumerated()), id: \.offset) { _, child in
+                        self.renderElement(child)
+                    }
+                })
 
         case .label(let text, let style, let tint):
             return AnyView(renderLabel(text: text, style: style, tint: tint))

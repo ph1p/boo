@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import Exterm
 
 final class PaneViewIntegrationTests: XCTestCase {
@@ -48,6 +49,6 @@ final class PaneViewIntegrationTests: XCTestCase {
         let c = TerminalColor(r: 128, g: 64, b: 255)
         XCTAssertNotNil(c.cgColor)
         XCTAssertNotNil(c.nsColor)
-        XCTAssertEqual(c.nsColor.redComponent, 128.0/255.0, accuracy: 0.01)
+        XCTAssertEqual(c.nsColor.redComponent, 128.0 / 255.0, accuracy: 0.01)
     }
 }

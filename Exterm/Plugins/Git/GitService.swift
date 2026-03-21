@@ -42,8 +42,8 @@ extension GitPlugin {
         return output.split(separator: "\n").compactMap { line in
             let str = String(line)
             guard str.count >= 3 else { return nil }
-            let col1 = str[str.startIndex]       // index status
-            let col2 = str[str.index(after: str.startIndex)] // work-tree status
+            let col1 = str[str.startIndex]  // index status
+            let col2 = str[str.index(after: str.startIndex)]  // work-tree status
             let filePath = String(str.dropFirst(3))
             let fullPath = (repoRoot as NSString).appendingPathComponent(filePath)
             return GitChangedFile(
@@ -103,7 +103,8 @@ extension GitPlugin {
         guard task.terminationStatus == 0 else { return nil }
         let data = pipe.fileHandleForReading.readDataToEndOfFile()
         guard let output = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !output.isEmpty else {
+            !output.isEmpty
+        else {
             return nil
         }
         return output
@@ -161,7 +162,8 @@ extension GitPlugin {
             group.wait()
             DispatchQueue.main.async {
                 guard let self = self else { return }
-                let changed = self.cachedFiles.map(\.path) != files.map(\.path)
+                let changed =
+                    self.cachedFiles.map(\.path) != files.map(\.path)
                     || self.cachedStashCount != stashCount
                     || self.cachedAheadCount != aheadCount
                     || self.cachedBehindCount != behindCount

@@ -88,8 +88,9 @@ final class Pane {
 
     func moveTab(from sourceIndex: Int, to destinationIndex: Int) {
         guard sourceIndex >= 0, sourceIndex < tabs.count,
-              destinationIndex >= 0, destinationIndex < tabs.count,
-              sourceIndex != destinationIndex else { return }
+            destinationIndex >= 0, destinationIndex < tabs.count,
+            sourceIndex != destinationIndex
+        else { return }
         let tab = tabs.remove(at: sourceIndex)
         tabs.insert(tab, at: destinationIndex)
         // Keep active tab pointing at the same tab
@@ -121,7 +122,8 @@ final class Pane {
         // prompt updates with the final state (e.g. "cd /path", "git switch branch")
         let trimmed = title.trimmingCharacters(in: .whitespaces)
         if trimmed.hasPrefix("cd ") || trimmed.hasPrefix("git switch ")
-            || trimmed.hasPrefix("git checkout ") {
+            || trimmed.hasPrefix("git checkout ")
+        {
             return
         }
         tabs[index].title = title

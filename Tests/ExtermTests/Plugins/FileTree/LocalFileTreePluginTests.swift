@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import Exterm
 
 @MainActor
@@ -20,8 +21,9 @@ final class LocalFileTreePluginTests: XCTestCase {
             paneCount: 1,
             tabCount: 1
         )
-        XCTAssertTrue(plugin.isVisible(for: context),
-                       "Local file tree plugin should be visible when not remote")
+        XCTAssertTrue(
+            plugin.isVisible(for: context),
+            "Local file tree plugin should be visible when not remote")
     }
 
     func testHiddenForRemoteContext() {
@@ -35,8 +37,9 @@ final class LocalFileTreePluginTests: XCTestCase {
             paneCount: 1,
             tabCount: 1
         )
-        XCTAssertFalse(plugin.isVisible(for: context),
-                        "Local file tree plugin should be hidden when remote")
+        XCTAssertFalse(
+            plugin.isVisible(for: context),
+            "Local file tree plugin should be hidden when remote")
     }
 
     func testPluginID() {

@@ -12,9 +12,9 @@ final class PluginWatcher {
     private let logger = Logger(subsystem: "com.exterm", category: "PluginWatcher")
 
     /// Callback when a plugin is loaded/reloaded.
-    var onPluginLoaded: ((String) -> Void)?    // plugin name
+    var onPluginLoaded: ((String) -> Void)?  // plugin name
     /// Callback when a plugin is removed.
-    var onPluginRemoved: ((String) -> Void)?   // plugin name
+    var onPluginRemoved: ((String) -> Void)?  // plugin name
     /// Callback when a plugin fails to load.
     var onPluginError: ((String, String) -> Void)?  // folder name, error message
 
@@ -58,7 +58,7 @@ final class PluginWatcher {
         )
 
         if let stream = stream {
-            FSEventStreamScheduleWithRunLoop(stream, CFRunLoopGetMain(), CFRunLoopMode.defaultMode.rawValue)
+            FSEventStreamSetDispatchQueue(stream, .main)
             FSEventStreamStart(stream)
             logger.info("Watching plugins at \(self.pluginsPath)")
         }
@@ -78,8 +78,11 @@ final class PluginWatcher {
     private func scheduleScan() {
         DispatchQueue.main.async { [weak self] in
             self?.debounceTimer?.invalidate()
-            self?.debounceTimer = Timer.scheduledTimer(withTimeInterval: self?.debounceInterval ?? 0.3, repeats: false) { [weak self] _ in
-                self?.scanPlugins()
+            self?.debounceTimer = Timer.scheduledTimer(withTimeInterval: self?.debounceInterval ?? 0.3, repeats: false)
+            { [weak self] _ in
+                Task { @MainActor in
+                    self?.scanPlugins()
+                }
             }
         }
     }
@@ -93,7 +96,9 @@ final class PluginWatcher {
         for entry in entries {
             let folderPath = (pluginsPath as NSString).appendingPathComponent(entry)
             var isDir: ObjCBool = false
-            guard FileManager.default.fileExists(atPath: folderPath, isDirectory: &isDir), isDir.boolValue else { continue }
+            guard FileManager.default.fileExists(atPath: folderPath, isDirectory: &isDir), isDir.boolValue else {
+                continue
+            }
 
             currentFolders.insert(entry)
 

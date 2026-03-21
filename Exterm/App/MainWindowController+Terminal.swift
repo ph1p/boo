@@ -1,11 +1,15 @@
-import Cocoa
 import CGhostty
+import Cocoa
 
 extension MainWindowController {
     var activeGhosttyView: GhosttyView? {
         guard let workspace = activeWorkspace,
-              let pv = paneViews[workspace.activePaneID] else { return nil }
-        return pv.currentTerminalView as? GhosttyView
+            let pv = paneViews[workspace.activePaneID]
+        else { return nil }
+        // currentTerminalView may be a TerminalScrollView wrapping the GhosttyView
+        if let gv = pv.currentTerminalView as? GhosttyView { return gv }
+        if let wrapper = pv.currentTerminalView as? TerminalScrollView { return wrapper.ghosttyView }
+        return nil
     }
 
     @objc func clearScreenAction(_ sender: Any?) {
@@ -110,7 +114,8 @@ extension MainWindowController {
 
     func openDirectoryInNewTab(_ path: String) {
         guard let workspace = activeWorkspace,
-              let pv = paneViews[workspace.activePaneID] else { return }
+            let pv = paneViews[workspace.activePaneID]
+        else { return }
         pv.addNewTab(workingDirectory: path)
         refreshStatusBar()
     }
@@ -145,7 +150,8 @@ extension MainWindowController {
         for (paneID, pv) in paneViews {
             pv.layoutTerminalView()
             if let gv = pv.currentTerminalView as? GhosttyView,
-               let surface = gv.surface {
+                let surface = gv.surface
+            {
                 ghostty_surface_set_focus(surface, paneID == ws.activePaneID)
                 let scaledSize = gv.convertToBacking(gv.bounds.size)
                 let w = UInt32(scaledSize.width)

@@ -14,7 +14,11 @@ final class GitPlugin: ExtermPluginProtocol {
         runtime: nil,
         capabilities: PluginManifest.Capabilities(sidebarPanel: true, statusBarSegment: true),
         statusBar: PluginManifest.StatusBarManifest(position: "left", priority: 15, template: nil),
-        settings: nil
+        settings: [
+            PluginManifest.SettingManifest(
+                key: "showBranch", type: .bool, label: "Show git branch in status bar",
+                defaultValue: AnyCodableValue(true), options: nil)
+        ]
     )
 
     var prefersOuterScrollView: Bool { false }
@@ -42,8 +46,8 @@ final class GitPlugin: ExtermPluginProtocol {
     struct GitChangedFile: Identifiable {
         let id = UUID()
         let path: String
-        let indexStatus: Character   // column 1: staged status
-        let workTreeStatus: Character // column 2: work tree status
+        let indexStatus: Character  // column 1: staged status
+        let workTreeStatus: Character  // column 2: work tree status
         let fullPath: String
 
         /// Legacy single-char status for display.
@@ -134,38 +138,39 @@ final class GitPlugin: ExtermPluginProtocol {
     func makeDetailView(context: TerminalContext, actionHandler: DSLActionHandler) -> AnyView? {
         guard let git = context.gitContext else { return nil }
         let repoRoot = git.repoRoot
-        return AnyView(GitDetailView(
-            branch: git.branch,
-            aheadCount: git.aheadCount,
-            behindCount: git.behindCount,
-            lastCommit: git.lastCommitShort,
-            stashCount: git.stashCount,
-            changedFiles: cachedFiles,
-            repoRoot: repoRoot,
-            onFileClicked: { path in
-                actionHandler.handle(DSLAction(type: "open", path: path, command: nil, text: nil))
-            },
-            onRefresh: { [weak self] in
-                self?.refreshGitStatus(cwd: repoRoot, repoRoot: repoRoot)
-            },
-            onGitAction: { [weak self] args in
-                DispatchQueue.global(qos: .userInitiated).async {
-                    Self.runGitCommand(repoRoot: repoRoot, args: args)
-                    DispatchQueue.main.async {
-                        self?.refreshGitStatus(cwd: repoRoot, repoRoot: repoRoot)
+        return AnyView(
+            GitDetailView(
+                branch: git.branch,
+                aheadCount: git.aheadCount,
+                behindCount: git.behindCount,
+                lastCommit: git.lastCommitShort,
+                stashCount: git.stashCount,
+                changedFiles: cachedFiles,
+                repoRoot: repoRoot,
+                onFileClicked: { path in
+                    actionHandler.handle(DSLAction(type: "open", path: path, command: nil, text: nil))
+                },
+                onRefresh: { [weak self] in
+                    self?.refreshGitStatus(cwd: repoRoot, repoRoot: repoRoot)
+                },
+                onGitAction: { [weak self] args in
+                    DispatchQueue.global(qos: .userInitiated).async {
+                        Self.runGitCommand(repoRoot: repoRoot, args: args)
+                        DispatchQueue.main.async {
+                            self?.refreshGitStatus(cwd: repoRoot, repoRoot: repoRoot)
+                        }
                     }
+                },
+                onTerminalAction: { command in
+                    actionHandler.handle(DSLAction(type: "exec", path: nil, command: command, text: nil))
+                },
+                onCopyPath: { path in
+                    actionHandler.handle(DSLAction(type: "copy", path: path, command: nil, text: nil))
+                },
+                onReveal: { path in
+                    actionHandler.handle(DSLAction(type: "reveal", path: path, command: nil, text: nil))
                 }
-            },
-            onTerminalAction: { command in
-                actionHandler.handle(DSLAction(type: "exec", path: nil, command: command, text: nil))
-            },
-            onCopyPath: { path in
-                actionHandler.handle(DSLAction(type: "copy", path: path, command: nil, text: nil))
-            },
-            onReveal: { path in
-                actionHandler.handle(DSLAction(type: "reveal", path: path, command: nil, text: nil))
-            }
-        ))
+            ))
     }
 
     // MARK: - Lifecycle

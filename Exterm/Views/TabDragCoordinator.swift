@@ -3,18 +3,23 @@ import Cocoa
 /// Where a tab can be dropped relative to a pane.
 enum TabDropZone: Equatable {
     case tabBarInsert(index: Int)  // insert at position in tab bar
-    case left         // left 20% — split horizontally, new pane on left
-    case right        // right 20% — split horizontally, new pane on right
-    case top          // top 20% — split vertically, new pane on top
-    case bottom       // bottom 20% — split vertically, new pane on bottom
+    case left  // left 20% — split horizontally, new pane on left
+    case right  // right 20% — split horizontally, new pane on right
+    case top  // top 20% — split vertically, new pane on top
+    case bottom  // bottom 20% — split vertically, new pane on bottom
 }
 
 /// Centralized drag state machine for cross-pane tab drag & drop.
 /// Owned by MainWindowController; PaneViews hold a weak reference.
 class TabDragCoordinator {
     /// Callback to execute a cross-pane drop.
-    var onDrop: ((_ sourcePaneView: PaneView, _ tabIndex: Int,
-                  _ destPaneView: PaneView, _ zone: TabDropZone) -> Void)?
+    var onDrop:
+        (
+            (
+                _ sourcePaneView: PaneView, _ tabIndex: Int,
+                _ destPaneView: PaneView, _ zone: TabDropZone
+            ) -> Void
+        )?
 
     /// All pane views in the current workspace, set by the window controller.
     var paneViews: [UUID: PaneView] = [:]
@@ -29,6 +34,8 @@ class TabDragCoordinator {
     private var currentDropTarget: (PaneView, TabDropZone)?
 
     private let edgeFraction: CGFloat = 0.2
+
+    deinit { cleanup() }
 
     // MARK: - Drag lifecycle
 
@@ -46,8 +53,9 @@ class TabDragCoordinator {
 
     private func executeDrop() {
         guard let source = sourcePaneView,
-              let tabIdx = sourceTabIndex,
-              let (dest, zone) = currentDropTarget else {
+            let tabIdx = sourceTabIndex,
+            let (dest, zone) = currentDropTarget
+        else {
             cleanup()
             return
         }
@@ -86,7 +94,8 @@ class TabDragCoordinator {
     // MARK: - Event monitor
 
     private func installEventMonitor() {
-        eventMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDragged, .leftMouseUp, .keyDown]) { [weak self] event in
+        eventMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDragged, .leftMouseUp, .keyDown]) {
+            [weak self] event in
             guard let self = self else { return event }
 
             switch event.type {
@@ -97,9 +106,9 @@ class TabDragCoordinator {
                 self.executeDrop()
                 return event
             case .keyDown:
-                if event.keyCode == 53 { // Escape
+                if event.keyCode == 53 {  // Escape
                     self.cancelDrag()
-                    return nil // consume the event
+                    return nil  // consume the event
                 }
                 return event
             default:
@@ -137,6 +146,13 @@ class TabDragCoordinator {
 
         if let (pv, zone) = foundTarget {
             currentDropTarget = (pv, zone)
+            // Auto-scroll tab bar when dragging near edges in scroll mode
+            if case .tabBarInsert = zone {
+                let pvWindow = pv.window!
+                let windowPoint = pvWindow.convertPoint(fromScreen: screenLoc)
+                let localPoint = pv.convert(windowPoint, from: nil)
+                pv.autoscrollTabBar(localX: localPoint.x)
+            }
             showIndicator(on: pv, zone: zone)
         } else {
             currentDropTarget = nil
@@ -153,7 +169,7 @@ class TabDragCoordinator {
         // PaneView is flipped (isFlipped = true), so y=0 is top.
         // Tab bar region: show insertion indicator between tabs.
         if point.y < paneView.tabBarHeight {
-            let idx = paneView.tabInsertionIndex(at: point.x)
+            let idx = paneView.tabInsertionIndex(at: point)
             return .tabBarInsert(index: idx)
         }
 
@@ -197,18 +213,21 @@ class TabDragCoordinator {
                 contentView.addSubview(insertInd)
             }
 
-            // Compute x position of the insertion gap in pane-local coords
-            let tabW = paneView.tabWidth()
-            let localX: CGFloat = 4 + CGFloat(index) * tabW
-            // Convert that point to contentView coords
-            let contentPt = paneView.convert(NSPoint(x: localX, y: 0), to: contentView)
-            // contentView is NOT flipped — tab bar is at the top of paneRect
+            // Compute position of the insertion gap in pane-local coords
+            let localPt = paneView.tabInsertionPosition(at: index)
+            // Convert x via the pane-local point; y we compute manually because
+            // PaneView is flipped but contentView is not.
+            let contentPt = paneView.convert(NSPoint(x: localPt.x, y: 0), to: contentView)
+            // paneRect.maxY is the top of the pane in contentView (unflipped) coords.
+            // Subtract the row's y offset (in flipped coords, larger y = lower row).
+            let rowY = localPt.y
             let barTop = paneRect.maxY
             let lineHeight: CGFloat = 20
             let lineWidth: CGFloat = 3
-            insertInd.frame = NSRect(x: contentPt.x - lineWidth / 2,
-                                     y: barTop - paneView.tabBarHeight + 3,
-                                     width: lineWidth, height: lineHeight)
+            insertInd.frame = NSRect(
+                x: contentPt.x - lineWidth / 2,
+                y: barTop - rowY - lineHeight - 3,
+                width: lineWidth, height: lineHeight)
 
         case .left, .right, .top, .bottom:
             // Hide tab insertion indicator
@@ -229,17 +248,21 @@ class TabDragCoordinator {
             let indicatorRect: NSRect
             switch zone {
             case .left:
-                indicatorRect = NSRect(x: paneRect.minX + 2, y: paneRect.minY + 2,
-                                       width: paneRect.width * 0.5 - 4, height: paneRect.height - 4)
+                indicatorRect = NSRect(
+                    x: paneRect.minX + 2, y: paneRect.minY + 2,
+                    width: paneRect.width * 0.5 - 4, height: paneRect.height - 4)
             case .right:
-                indicatorRect = NSRect(x: paneRect.midX + 2, y: paneRect.minY + 2,
-                                       width: paneRect.width * 0.5 - 4, height: paneRect.height - 4)
+                indicatorRect = NSRect(
+                    x: paneRect.midX + 2, y: paneRect.minY + 2,
+                    width: paneRect.width * 0.5 - 4, height: paneRect.height - 4)
             case .top:
-                indicatorRect = NSRect(x: paneRect.minX + 2, y: paneRect.midY + 2,
-                                       width: paneRect.width - 4, height: paneRect.height * 0.5 - 4)
+                indicatorRect = NSRect(
+                    x: paneRect.minX + 2, y: paneRect.midY + 2,
+                    width: paneRect.width - 4, height: paneRect.height * 0.5 - 4)
             case .bottom:
-                indicatorRect = NSRect(x: paneRect.minX + 2, y: paneRect.minY + 2,
-                                       width: paneRect.width - 4, height: paneRect.height * 0.5 - 4)
+                indicatorRect = NSRect(
+                    x: paneRect.minX + 2, y: paneRect.minY + 2,
+                    width: paneRect.width - 4, height: paneRect.height * 0.5 - 4)
             default:
                 return
             }
@@ -277,9 +300,10 @@ class TabDragCoordinator {
         }
 
         let win = NSWindow(
-            contentRect: NSRect(x: screenPoint.x - ghostWidth / 2,
-                                y: screenPoint.y - ghostHeight / 2,
-                                width: ghostWidth, height: ghostHeight),
+            contentRect: NSRect(
+                x: screenPoint.x - ghostWidth / 2,
+                y: screenPoint.y - ghostHeight / 2,
+                width: ghostWidth, height: ghostHeight),
             styleMask: .borderless,
             backing: .buffered,
             defer: false
@@ -304,7 +328,9 @@ class TabDragCoordinator {
             screenPoint = NSEvent.mouseLocation
         }
         let frame = win.frame
-        win.setFrameOrigin(NSPoint(x: screenPoint.x - frame.width / 2,
-                                   y: screenPoint.y - frame.height / 2))
+        win.setFrameOrigin(
+            NSPoint(
+                x: screenPoint.x - frame.width / 2,
+                y: screenPoint.y - frame.height / 2))
     }
 }

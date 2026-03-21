@@ -13,12 +13,21 @@ struct TerminalContext: Equatable {
     let paneCount: Int
     let tabCount: Int
 
+    /// Plugin-contributed data from the enrich phase, keyed by plugin-namespaced keys.
+    /// Plugins write via EnrichmentContext.setData() in Phase 1; all plugins read in Phase 2.
+    let enrichedData: [String: AnyHashable]
+
     /// Git repository context, if the terminal is in a git repo.
     struct GitContext: Equatable {
         let branch: String
         let repoRoot: String
         let isDirty: Bool
         let changedFileCount: Int
+        let stagedCount: Int
+        let stashCount: Int
+        let aheadCount: Int
+        let behindCount: Int
+        let lastCommitShort: String?
     }
 
     /// Whether this terminal is in a remote session.
@@ -28,7 +37,7 @@ struct TerminalContext: Equatable {
     var environmentLabel: String {
         guard let session = remoteSession else { return "local" }
         switch session {
-        case .ssh(let host): return "ssh: \(host)"
+        case .ssh(let host, _): return "ssh: \(host)"
         case .docker(let container): return "docker: \(container)"
         }
     }
@@ -41,7 +50,8 @@ struct TerminalContext: Equatable {
         gitContext: GitContext?,
         processName: String,
         paneCount: Int,
-        tabCount: Int
+        tabCount: Int,
+        enrichedData: [String: AnyHashable] = [:]
     ) {
         self.terminalID = terminalID
         self.cwd = cwd
@@ -51,16 +61,17 @@ struct TerminalContext: Equatable {
         self.processName = processName
         self.paneCount = paneCount
         self.tabCount = tabCount
+        self.enrichedData = enrichedData
     }
 }
 
 // MARK: - Builder
 
 extension TerminalContext {
-    /// Build a TerminalContext from existing TerminalState and StatusBarState.
+    /// Build a TerminalContext from existing BridgeState and StatusBarState.
     /// Bridges the current state system into the new structured format.
     static func build(
-        from terminalState: TerminalState,
+        from terminalState: BridgeState,
         gitBranch: String? = nil,
         gitRepoRoot: String? = nil,
         paneCount: Int = 1,
@@ -72,7 +83,12 @@ extension TerminalContext {
                 branch: branch,
                 repoRoot: repoRoot,
                 isDirty: false,
-                changedFileCount: 0
+                changedFileCount: 0,
+                stagedCount: 0,
+                stashCount: 0,
+                aheadCount: 0,
+                behindCount: 0,
+                lastCommitShort: nil
             )
         } else {
             gitContext = nil
@@ -85,6 +101,27 @@ extension TerminalContext {
             remoteCwd: terminalState.remoteCwd,
             gitContext: gitContext,
             processName: terminalState.foregroundProcess,
+            paneCount: paneCount,
+            tabCount: tabCount
+        )
+    }
+
+    /// Build a TerminalContext directly from per-tab state (source of truth).
+    static func build(
+        tabState: TabState,
+        terminalID: UUID,
+        gitContext: GitContext?,
+        processName: String,
+        paneCount: Int,
+        tabCount: Int
+    ) -> TerminalContext {
+        TerminalContext(
+            terminalID: terminalID,
+            cwd: tabState.workingDirectory,
+            remoteSession: tabState.remoteSession,
+            remoteCwd: tabState.remoteWorkingDirectory,
+            gitContext: gitContext,
+            processName: processName,
             paneCount: paneCount,
             tabCount: tabCount
         )

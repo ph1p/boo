@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import Exterm
 
 final class ThemeTests: XCTestCase {
@@ -44,8 +45,11 @@ final class ThemeTests: XCTestCase {
             XCTAssertGreaterThan(sidebarBg.count, 0, "Theme \(theme.name) needs a valid sidebarBg color")
             XCTAssertGreaterThan(accent.count, 0, "Theme \(theme.name) needs a valid accentColor")
 
-            XCTAssertNotEqual(theme.chromeBg, theme.chromeText, "Theme \(theme.name) chrome text should differ from chrome background")
-            XCTAssertNotEqual(theme.sidebarBg, theme.accentColor, "Theme \(theme.name) accent should differ from sidebar background")
+            XCTAssertNotEqual(
+                theme.chromeBg, theme.chromeText, "Theme \(theme.name) chrome text should differ from chrome background"
+            )
+            XCTAssertNotEqual(
+                theme.sidebarBg, theme.accentColor, "Theme \(theme.name) accent should differ from sidebar background")
         }
     }
 

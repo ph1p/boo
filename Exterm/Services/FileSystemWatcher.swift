@@ -1,5 +1,5 @@
-import Foundation
 import CoreServices
+import Foundation
 
 /// Watches a directory for file system changes using FSEvents.
 final class FileSystemWatcher {
@@ -32,7 +32,7 @@ final class FileSystemWatcher {
             &context,
             pathsToWatch,
             FSEventStreamEventId(kFSEventStreamEventIdSinceNow),
-            0.3, // latency in seconds
+            0.3,  // latency in seconds
             UInt32(kFSEventStreamCreateFlagUseCFTypes | kFSEventStreamCreateFlagFileEvents)
         )
 

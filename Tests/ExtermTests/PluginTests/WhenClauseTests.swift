@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import Exterm
 
 final class WhenClauseParserTests: XCTestCase {
@@ -40,18 +41,22 @@ final class WhenClauseParserTests: XCTestCase {
 
     func testComplexExpression() throws {
         let node = try WhenClauseParser.parse("env.ssh && process.name == 'kubectl'")
-        XCTAssertEqual(node, .and(
-            .variable("env.ssh"),
-            .equals(.variable("process.name"), .stringLiteral("kubectl"))
-        ))
+        XCTAssertEqual(
+            node,
+            .and(
+                .variable("env.ssh"),
+                .equals(.variable("process.name"), .stringLiteral("kubectl"))
+            ))
     }
 
     func testParentheses() throws {
         let node = try WhenClauseParser.parse("(env.ssh || env.docker) && git.active")
-        XCTAssertEqual(node, .and(
-            .or(.variable("env.ssh"), .variable("env.docker")),
-            .variable("git.active")
-        ))
+        XCTAssertEqual(
+            node,
+            .and(
+                .or(.variable("env.ssh"), .variable("env.docker")),
+                .variable("git.active")
+            ))
     }
 
     func testPrecedence() throws {
@@ -93,7 +98,9 @@ final class WhenClauseEvaluatorTests: XCTestCase {
     ) -> TerminalContext {
         let git: TerminalContext.GitContext?
         if let branch = gitBranch {
-            git = TerminalContext.GitContext(branch: branch, repoRoot: "/repo", isDirty: false, changedFileCount: 0)
+            git = TerminalContext.GitContext(
+                branch: branch, repoRoot: "/repo", isDirty: false, changedFileCount: 0, stagedCount: 0, stashCount: 0,
+                aheadCount: 0, behindCount: 0, lastCommitShort: nil)
         } else {
             git = nil
         }

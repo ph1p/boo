@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import Exterm
 
 final class DSLActionHandlerTests: XCTestCase {
@@ -10,7 +11,7 @@ final class DSLActionHandlerTests: XCTestCase {
 
         let result = handler.handle(DSLAction(type: "cd", path: "/var/log", command: nil, text: nil))
 
-        XCTAssertEqual(sentCommand, "cd /var/log\r")
+        XCTAssertEqual(sentCommand, "cd '/var/log'\r")
         XCTAssertEqual(result, "Changed directory to /var/log")
     }
 
@@ -32,7 +33,7 @@ final class DSLActionHandlerTests: XCTestCase {
         let result = handler.handle(DSLAction(type: "exec", path: nil, command: "git status", text: nil))
 
         XCTAssertEqual(sentCommand, "git status\r")
-        XCTAssertNil(result) // terminal output IS the feedback
+        XCTAssertNil(result)  // terminal output IS the feedback
     }
 
     func testCopyAction() {

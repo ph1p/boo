@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import Exterm
 
 /// Tests for per-tab sidebar plugin state persistence.
@@ -20,9 +21,11 @@ final class PanePluginStateTests: XCTestCase {
 
         pane.updatePluginState(at: pane.activeTabIndex, open: openPluginIDs, expanded: expandedPluginIDs)
 
-        XCTAssertFalse(pane.activeTab!.state.openPluginIDs.contains("bookmarks"),
+        XCTAssertFalse(
+            pane.activeTab!.state.openPluginIDs.contains("bookmarks"),
             "Toggled-off plugin should be removed from tab state")
-        XCTAssertTrue(pane.activeTab!.state.openPluginIDs.contains("file-tree-local"),
+        XCTAssertTrue(
+            pane.activeTab!.state.openPluginIDs.contains("file-tree-local"),
             "Other plugins should remain")
     }
 
@@ -54,8 +57,9 @@ final class PanePluginStateTests: XCTestCase {
         pane.updatePluginState(at: 0, open: ["file-tree-local"], expanded: ["file-tree-local"])
 
         // Tab 1 has all plugins open
-        pane.updatePluginState(at: 1, open: ["file-tree-local", "git-panel", "docker", "bookmarks"],
-                               expanded: ["file-tree-local", "bookmarks"])
+        pane.updatePluginState(
+            at: 1, open: ["file-tree-local", "git-panel", "docker", "bookmarks"],
+            expanded: ["file-tree-local", "bookmarks"])
 
         // Simulate focusing tab 0 — read its state
         pane.setActiveTab(0)
@@ -77,19 +81,23 @@ final class PanePluginStateTests: XCTestCase {
     func testNewPaneTabInheritsParentTabState() {
         let parentPane = Pane()
         _ = parentPane.addTab(workingDirectory: "/tmp")
-        parentPane.updatePluginState(at: 0, open: ["file-tree-local", "bookmarks"],
-                                     expanded: ["file-tree-local", "bookmarks"])
+        parentPane.updatePluginState(
+            at: 0, open: ["file-tree-local", "bookmarks"],
+            expanded: ["file-tree-local", "bookmarks"])
 
         // Simulate splitActivePane: new pane inherits parent tab's state
         let newPane = Pane()
         _ = newPane.addTab(workingDirectory: "/tmp")
         let parentState = parentPane.activeTab!.state
-        newPane.updatePluginState(at: 0, open: parentState.openPluginIDs,
-                                  expanded: parentState.expandedPluginIDs)
+        newPane.updatePluginState(
+            at: 0, open: parentState.openPluginIDs,
+            expanded: parentState.expandedPluginIDs)
 
-        XCTAssertEqual(newPane.activeTab!.state.openPluginIDs, ["file-tree-local", "bookmarks"],
+        XCTAssertEqual(
+            newPane.activeTab!.state.openPluginIDs, ["file-tree-local", "bookmarks"],
             "New tab should inherit parent tab's saved state")
-        XCTAssertEqual(newPane.activeTab!.state.expandedPluginIDs, ["file-tree-local", "bookmarks"],
+        XCTAssertEqual(
+            newPane.activeTab!.state.expandedPluginIDs, ["file-tree-local", "bookmarks"],
             "New tab should inherit parent tab's expanded state")
     }
 
@@ -103,10 +111,12 @@ final class PanePluginStateTests: XCTestCase {
         // New tab gets default TabState, same as parent
         let parentState = parentPane.activeTab!.state
 
-        newPane.updatePluginState(at: 0, open: parentState.openPluginIDs,
-                                  expanded: parentState.expandedPluginIDs)
+        newPane.updatePluginState(
+            at: 0, open: parentState.openPluginIDs,
+            expanded: parentState.expandedPluginIDs)
 
-        XCTAssertEqual(newPane.activeTab!.state.openPluginIDs,
+        XCTAssertEqual(
+            newPane.activeTab!.state.openPluginIDs,
             ["file-tree-local", "file-tree-remote", "git-panel", "docker", "bookmarks"],
             "New tab should use defaults when parent has defaults")
     }
@@ -144,7 +154,8 @@ final class PanePluginStateTests: XCTestCase {
             tabCount: 1
         )
         let result = registry.runCycle(baseContext: noGitContext, reason: .focusChanged)
-        XCTAssertFalse(result.visiblePluginIDs.contains("git-panel"),
+        XCTAssertFalse(
+            result.visiblePluginIDs.contains("git-panel"),
             "Git plugin should be hidden when there is no git context")
     }
 
@@ -166,7 +177,8 @@ final class PanePluginStateTests: XCTestCase {
             tabCount: 1
         )
         let result = registry.runCycle(baseContext: gitContext, reason: .focusChanged)
-        XCTAssertTrue(result.visiblePluginIDs.contains("git-panel"),
+        XCTAssertTrue(
+            result.visiblePluginIDs.contains("git-panel"),
             "Git plugin should be visible when git context is present")
     }
 
@@ -181,14 +193,16 @@ final class PanePluginStateTests: XCTestCase {
         expanded.insert("bookmarks")
         pane.updatePluginState(at: 0, open: pane.activeTab!.state.openPluginIDs, expanded: expanded)
 
-        XCTAssertTrue(pane.activeTab!.state.expandedPluginIDs.contains("bookmarks"),
+        XCTAssertTrue(
+            pane.activeTab!.state.expandedPluginIDs.contains("bookmarks"),
             "Expanded state should be persisted after toggle")
 
         // Collapse bookmarks
         expanded.remove("bookmarks")
         pane.updatePluginState(at: 0, open: pane.activeTab!.state.openPluginIDs, expanded: expanded)
 
-        XCTAssertFalse(pane.activeTab!.state.expandedPluginIDs.contains("bookmarks"),
+        XCTAssertFalse(
+            pane.activeTab!.state.expandedPluginIDs.contains("bookmarks"),
             "Collapsed state should be persisted after toggle")
     }
 }

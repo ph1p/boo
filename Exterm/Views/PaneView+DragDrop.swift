@@ -10,13 +10,16 @@ extension PaneView {
             let layouts = wrapLayout()
             for i in 0..<layouts.count {
                 let lay = layouts[i]
-                if point.y >= lay.y && point.y < lay.y + singleRowTabHeight &&
-                   point.x >= lay.x && point.x < lay.x + lay.width {
+                if point.y >= lay.y && point.y < lay.y + singleRowTabHeight && point.x >= lay.x
+                    && point.x < lay.x + lay.width
+                {
                     return i
                 }
             }
             return nil
         } else {
+            // Exclude the pinned plus button zone on the right
+            if point.x >= bounds.width - plusButtonWidth { return nil }
             let widths = allTabWidths()
             let adjusted = point.x + tabScrollOffset
             var cx: CGFloat = 0
@@ -27,6 +30,49 @@ extension PaneView {
             }
             return nil
         }
+    }
+
+    /// Check if a point is over the plus button.
+    func isPlusButtonHit(at point: NSPoint) -> Bool {
+        let mode = AppSettings.shared.tabOverflowMode
+        if mode == .wrap {
+            let layouts = wrapLayout()
+            let lastLay = layouts.last
+            var plusX = (lastLay?.x ?? 0) + (lastLay?.width ?? 0)
+            var plusY = lastLay?.y ?? 0
+            if plusX + plusButtonWidth > bounds.width && plusX > 0 {
+                plusX = 0
+                plusY = (lastLay?.y ?? 0) + singleRowTabHeight
+            }
+            return point.x >= plusX && point.x < plusX + plusButtonWidth && point.y >= plusY
+                && point.y < plusY + singleRowTabHeight
+        } else {
+            let pinX = bounds.width - plusButtonWidth
+            return point.x >= pinX
+        }
+    }
+
+    /// Check if a point is over the close button area of a given tab.
+    func isOverCloseButton(point: NSPoint, tabIndex idx: Int) -> Bool {
+        guard showTabClose else { return false }
+        let mode = AppSettings.shared.tabOverflowMode
+        let localX: CGFloat
+        let w: CGFloat
+        if mode == .wrap {
+            let layouts = wrapLayout()
+            guard idx < layouts.count else { return false }
+            let lay = layouts[idx]
+            localX = point.x - lay.x
+            w = lay.width
+        } else {
+            let widths = allTabWidths()
+            guard idx < widths.count else { return false }
+            var cx: CGFloat = 0
+            for i in 0..<idx { cx += widths[i] }
+            localX = (point.x + tabScrollOffset) - cx
+            w = widths[idx]
+        }
+        return localX > w - 22
     }
 
     // MARK: - Scroll Wheel
@@ -84,7 +130,8 @@ extension PaneView {
             return
         }
 
-        // Plus button
+        // Plus button — only trigger when clicking the actual button, not empty tab bar space
+        guard isPlusButtonHit(at: point) else { return }
         addNewTab(workingDirectory: pane.activeTab?.workingDirectory ?? "~")
     }
 

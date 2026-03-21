@@ -90,7 +90,9 @@ final class TerminalBridge {
         remoteCwd: String?,
         shellPID: pid_t = 0
     ) {
-        NSLog("[Bridge] restoreTabState: paneID=\(paneID), cwd=\(workingDirectory), title=\(terminalTitle), remote=\(String(describing: remoteSession)), remoteCwd=\(String(describing: remoteCwd))")
+        NSLog(
+            "[Bridge] restoreTabState: paneID=\(paneID), cwd=\(workingDirectory), title=\(terminalTitle), remote=\(String(describing: remoteSession)), remoteCwd=\(String(describing: remoteCwd))"
+        )
         let previousRemote = state.remoteSession
         state.paneID = paneID
         if !workingDirectory.isEmpty {
@@ -125,7 +127,9 @@ final class TerminalBridge {
         }
 
         let previousRemote = state.remoteSession
-        NSLog("[Bridge] handleDirectoryChange: path=\(path), title=\(state.terminalTitle), previousRemote=\(String(describing: previousRemote)), currentCwd=\(state.workingDirectory)")
+        NSLog(
+            "[Bridge] handleDirectoryChange: path=\(path), title=\(state.terminalTitle), previousRemote=\(String(describing: previousRemote)), currentCwd=\(state.workingDirectory)"
+        )
 
         // If we were remote and the CWD is under the local user's home directory,
         // the SSH/Docker session has ended and the local shell took over.
@@ -227,7 +231,8 @@ final class TerminalBridge {
                 // - local user@host prompt = local shell is active
                 let trimmedTitle = title.trimmingCharacters(in: .whitespaces)
                 let firstWord = trimmedTitle.split(separator: " ").first.map(String.init) ?? ""
-                let isDefinitelyLocal = Self.shellNames.contains(firstWord.lowercased())
+                let isDefinitelyLocal =
+                    Self.shellNames.contains(firstWord.lowercased())
                     || Self.titleIsLocalUserAtHost(trimmedTitle)
                 if !isDefinitelyLocal {
                     resolved = previousRemote
@@ -317,7 +322,7 @@ final class TerminalBridge {
     /// Process tree is authoritative: it overrides title heuristics.
     func handleProcessTreeDetection(session: RemoteSessionType?, paneID: UUID) {
         processTreeHint[paneID] = session
-        sessionGraceUntil.removeValue(forKey: paneID) // Process tree is authoritative now
+        sessionGraceUntil.removeValue(forKey: paneID)  // Process tree is authoritative now
         guard paneID == state.paneID else { return }
 
         let previous = state.remoteSession
@@ -325,7 +330,9 @@ final class TerminalBridge {
 
         guard resolved != previous else { return }
 
-        NSLog("[Bridge] processTree: \(String(describing: session)) → resolved=\(String(describing: resolved)) (was \(String(describing: previous)))")
+        NSLog(
+            "[Bridge] processTree: \(String(describing: session)) → resolved=\(String(describing: resolved)) (was \(String(describing: previous)))"
+        )
 
         state.remoteSession = resolved
         if resolved == nil {
@@ -344,7 +351,9 @@ final class TerminalBridge {
     /// Process tree is authoritative for END (no child = no remote).
     /// Process tree is strong for START (child found = adopt it).
     /// When process tree says Docker but title says SSH, prefer process tree.
-    private func reconcileWithProcessTree(titleSession: RemoteSessionType?, processSession: RemoteSessionType?) -> RemoteSessionType? {
+    private func reconcileWithProcessTree(
+        titleSession: RemoteSessionType?, processSession: RemoteSessionType?
+    ) -> RemoteSessionType? {
         // Process tree says no remote child — authoritative END
         guard let process = processSession else { return nil }
 
@@ -352,7 +361,8 @@ final class TerminalBridge {
         if let title = titleSession {
             // Both agree on type — merge: title has better host info, process has alias
             if case .ssh(let titleHost, let titleAlias) = title,
-               case .ssh(let processHost, _) = process {
+                case .ssh(let processHost, _) = process
+            {
                 let alias = titleAlias ?? processHost
                 return .ssh(host: titleHost, alias: alias)
             }

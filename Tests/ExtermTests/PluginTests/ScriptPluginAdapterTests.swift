@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import Exterm
 
 @MainActor
@@ -29,7 +30,9 @@ final class ScriptPluginAdapterTests: XCTestCase {
     ) -> TerminalContext {
         let git: TerminalContext.GitContext?
         if let branch = gitBranch {
-            git = TerminalContext.GitContext(branch: branch, repoRoot: "/repo", isDirty: false, changedFileCount: 0)
+            git = TerminalContext.GitContext(
+                branch: branch, repoRoot: "/repo", isDirty: false, changedFileCount: 0, stagedCount: 0, stashCount: 0,
+                aheadCount: 0, behindCount: 0, lastCommitShort: nil)
         } else {
             git = nil
         }

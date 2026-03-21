@@ -1,12 +1,13 @@
-import Cocoa
 import CGhostty
+import Cocoa
 
 protocol PaneViewDelegate: AnyObject {
     func paneView(_ paneView: PaneView, didFocus paneID: UUID)
     func paneView(_ paneView: PaneView, didChangeDirectory path: String, paneID: UUID)
     func paneView(_ paneView: PaneView, titleChanged title: String, paneID: UUID)
     func paneView(_ paneView: PaneView, foregroundProcessChanged name: String, paneID: UUID)
-    func paneView(_ paneView: PaneView, remoteStateChanged session: RemoteSessionType?, remoteCwd: String?, paneID: UUID)
+    func paneView(
+        _ paneView: PaneView, remoteStateChanged session: RemoteSessionType?, remoteCwd: String?, paneID: UUID)
     func paneView(_ paneView: PaneView, remoteConnectionFailed session: RemoteSessionType, paneID: UUID)
     func paneView(_ paneView: PaneView, sessionEnded paneID: UUID)
     func paneView(_ paneView: PaneView, directoryListing path: String, output: String, paneID: UUID)
@@ -37,6 +38,7 @@ class PaneView: NSView {
 
     // Hover state for tab bar
     var hoveredTabIndex: Int = -1
+    var isCloseButtonHovered: Bool = false
     var isPlusButtonHovered: Bool = false
     private var tabBarTrackingArea: NSTrackingArea?
 
@@ -46,7 +48,7 @@ class PaneView: NSView {
     // MARK: - Tab Size Constants
     private let tabMinWidth: CGFloat = 100
     private let tabMaxWidth: CGFloat = 180
-    private let tabHPadding: CGFloat = 28   // left content margin + close button zone
+    private let tabHPadding: CGFloat = 28  // left content margin + close button zone
     let plusButtonWidth: CGFloat = 32
 
     /// Tracks last active tab index that triggered auto-scroll, to avoid fighting manual scroll.
@@ -65,7 +67,7 @@ class PaneView: NSView {
         ]
         let title = Self.tabDisplayTitle(tab: tab) as NSString
         let textW = title.size(withAttributes: attrs).width
-        let dotAndGap: CGFloat = 20 // env dot + gap
+        let dotAndGap: CGFloat = 20  // env dot + gap
         let natural = dotAndGap + textW + tabHPadding
         return min(tabMaxWidth, max(tabMinWidth, natural))
     }
@@ -296,15 +298,18 @@ class PaneView: NSView {
             return
         }
         if let idx = tabIndex(at: point) {
-            if hoveredTabIndex != idx || isPlusButtonHovered {
+            let overClose = isOverCloseButton(point: point, tabIndex: idx)
+            if hoveredTabIndex != idx || isPlusButtonHovered || isCloseButtonHovered != overClose {
                 hoveredTabIndex = idx
+                isCloseButtonHovered = overClose
                 isPlusButtonHovered = false
                 needsDisplay = true
             }
-        } else if point.y < tabBarHeight {
-            // Over plus button area
+        } else if isPlusButtonHit(at: point) {
+            // Over plus button
             if !isPlusButtonHovered || hoveredTabIndex != -1 {
                 hoveredTabIndex = -1
+                isCloseButtonHovered = false
                 isPlusButtonHovered = true
                 needsDisplay = true
             }
@@ -318,8 +323,9 @@ class PaneView: NSView {
     }
 
     private func clearTabHover() {
-        if hoveredTabIndex != -1 || isPlusButtonHovered {
+        if hoveredTabIndex != -1 || isPlusButtonHovered || isCloseButtonHovered {
             hoveredTabIndex = -1
+            isCloseButtonHovered = false
             isPlusButtonHovered = false
             needsDisplay = true
         }
@@ -366,7 +372,9 @@ class PaneView: NSView {
         needsDisplay = true
         window?.makeFirstResponder(ghosttyView)
         if let tab = pane.activeTab {
-            NSLog("[PaneView] activateTab(\(index)): title=\(tab.title), cwd=\(tab.workingDirectory), remote=\(String(describing: tab.remoteSession)), remoteCwd=\(String(describing: tab.remoteWorkingDirectory))")
+            NSLog(
+                "[PaneView] activateTab(\(index)): title=\(tab.title), cwd=\(tab.workingDirectory), remote=\(String(describing: tab.remoteSession)), remoteCwd=\(String(describing: tab.remoteWorkingDirectory))"
+            )
             // Notify delegate of the tab switch so it can restore the bridge
             // state from the tab model. We do NOT fire didChangeDirectory here
             // because the bridge would misinterpret the stale local CWD (set
@@ -450,7 +458,7 @@ class PaneView: NSView {
         // Row separator borders in wrap mode (between rows)
         if overflowMode == .wrap {
             let rows = Int(barH / singleRowTabHeight)
-            ctx.setFillColor(theme.chromeMuted.withAlphaComponent(0.2).cgColor)
+            ctx.setFillColor(theme.chromeBorder.cgColor)
             for r in 1..<rows {
                 let borderY = CGFloat(r) * singleRowTabHeight - 1
                 ctx.fill(CGRect(x: 0, y: borderY, width: bounds.width, height: 1))
@@ -458,7 +466,7 @@ class PaneView: NSView {
         }
 
         // Full-width bottom border (1px, same style as sidebar separator)
-        ctx.setFillColor(theme.chromeMuted.withAlphaComponent(0.2).cgColor)
+        ctx.setFillColor(theme.chromeBorder.cgColor)
         ctx.fill(CGRect(x: 0, y: barH - 1, width: bounds.width, height: 1))
 
         // Active tab breaks the border to connect to the terminal below
@@ -482,8 +490,15 @@ class PaneView: NSView {
                 aw = widths[activeIdx]
             }
             if onBottomRow {
-                ctx.setFillColor(termBgColor)
-                ctx.fill(CGRect(x: ax, y: barH - 1, width: aw, height: 1))
+                // Clamp the break so it never erases the border under the plus button
+                let maxBreakRight = overflowMode == .scroll ? bounds.width - plusButtonWidth : bounds.width
+                let clampedRight = min(ax + aw, maxBreakRight)
+                let clampedLeft = min(ax, maxBreakRight)
+                let breakW = max(0, clampedRight - clampedLeft)
+                if breakW > 0 {
+                    ctx.setFillColor(termBgColor)
+                    ctx.fill(CGRect(x: clampedLeft, y: barH - 1, width: breakW, height: 1))
+                }
             }
         }
     }

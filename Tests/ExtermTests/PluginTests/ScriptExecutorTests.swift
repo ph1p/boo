@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import Exterm
 
 final class ScriptExecutorTests: XCTestCase {
@@ -8,7 +9,9 @@ final class ScriptExecutorTests: XCTestCase {
             terminalID: UUID(),
             cwd: "/Users/test/project",
             remoteSession: nil,
-            gitContext: TerminalContext.GitContext(branch: "main", repoRoot: "/Users/test/project", isDirty: true, changedFileCount: 3),
+            gitContext: TerminalContext.GitContext(
+                branch: "main", repoRoot: "/Users/test/project", isDirty: true, changedFileCount: 3, stagedCount: 0,
+                stashCount: 0, aheadCount: 0, behindCount: 0, lastCommitShort: nil),
             processName: "vim",
             paneCount: 2,
             tabCount: 1

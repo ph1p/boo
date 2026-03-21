@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import Exterm
 
 // MARK: - Test Plugins
@@ -171,7 +172,7 @@ final class EnrichmentContextTests: XCTestCase {
         XCTAssertEqual(frozen.gitContext?.repoRoot, "/home/user/repo")
         XCTAssertEqual(frozen.gitContext?.isDirty, true)
         XCTAssertEqual(frozen.gitContext?.changedFileCount, 5)
-        if case .ssh(let host) = frozen.remoteSession {
+        if case .ssh(let host, _) = frozen.remoteSession {
             XCTAssertEqual(host, "server")
         } else {
             XCTFail("Expected SSH session")
@@ -203,7 +204,9 @@ final class EnrichmentContextTests: XCTestCase {
             terminalID: id,
             cwd: "/projects",
             remoteSession: .docker(container: "app"),
-            gitContext: TerminalContext.GitContext(branch: "main", repoRoot: "/projects", isDirty: false, changedFileCount: 0),
+            gitContext: TerminalContext.GitContext(
+                branch: "main", repoRoot: "/projects", isDirty: false, changedFileCount: 0, stagedCount: 0,
+                stashCount: 0, aheadCount: 0, behindCount: 0, lastCommitShort: nil),
             processName: "node",
             paneCount: 3,
             tabCount: 2

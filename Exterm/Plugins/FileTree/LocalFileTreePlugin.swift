@@ -14,7 +14,19 @@ final class LocalFileTreePlugin: ExtermPluginProtocol {
         runtime: nil,
         capabilities: PluginManifest.Capabilities(sidebarPanel: true, statusBarSegment: true),
         statusBar: PluginManifest.StatusBarManifest(position: "left", priority: 5, template: nil),
-        settings: nil
+        settings: [
+            PluginManifest.SettingManifest(
+                key: "showHiddenFiles", type: .bool, label: "Show hidden files", defaultValue: AnyCodableValue(false),
+                options: nil),
+            PluginManifest.SettingManifest(
+                key: "showIcons", type: .bool, label: "Show file icons", defaultValue: AnyCodableValue(true),
+                options: nil),
+            PluginManifest.SettingManifest(
+                key: "fontSize", type: .double, label: "Font size", defaultValue: AnyCodableValue(12.0), options: nil),
+            PluginManifest.SettingManifest(
+                key: "fontName", type: .string, label: "Font", defaultValue: AnyCodableValue(""),
+                options: "fontPicker:system")
+        ]
     )
 
     /// Cached file tree roots keyed by path for instant switching.

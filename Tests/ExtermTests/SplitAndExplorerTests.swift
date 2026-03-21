@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import Exterm
 
 final class SplitAndExplorerTests: XCTestCase {
@@ -296,13 +297,13 @@ final class SplitAndExplorerTests: XCTestCase {
         pane.updateTitle(at: 0, "zsh")
 
         pane.updateWorkingDirectory(at: 0, "/home")
-        XCTAssertEqual(pane.tabs[0].title, "zsh") // CWD does NOT overwrite title
+        XCTAssertEqual(pane.tabs[0].title, "zsh")  // CWD does NOT overwrite title
 
         pane.updateTitle(at: 0, "vim file.txt")
         XCTAssertEqual(pane.tabs[0].title, "vim file.txt")
 
         pane.updateWorkingDirectory(at: 0, "/projects")
-        XCTAssertEqual(pane.tabs[0].title, "vim file.txt") // CWD does NOT overwrite title
+        XCTAssertEqual(pane.tabs[0].title, "vim file.txt")  // CWD does NOT overwrite title
 
         pane.updateTitle(at: 0, "zsh")
         XCTAssertEqual(pane.tabs[0].title, "zsh")

@@ -1,5 +1,6 @@
 import Combine
 import XCTest
+
 @testable import Exterm
 
 final class TerminalBridgeTests: XCTestCase {
@@ -45,7 +46,7 @@ final class TerminalBridgeTests: XCTestCase {
         var events: [TerminalEvent] = []
         bridge.events.sink { events.append($0) }.store(in: &cancellables)
 
-        bridge.handleDirectoryChange(path: "/tmp", paneID: paneID) // same as initial
+        bridge.handleDirectoryChange(path: "/tmp", paneID: paneID)  // same as initial
         XCTAssertTrue(events.isEmpty)
     }
 
@@ -129,7 +130,7 @@ final class TerminalBridgeTests: XCTestCase {
 
         XCTAssertEqual(bridge.state.foregroundProcess, "make")
         XCTAssertEqual(bridge.state.workingDirectory, "/Users/test/project")
-        XCTAssertTrue(events.count >= 3) // At least title + dir + title events
+        XCTAssertTrue(events.count >= 3)  // At least title + dir + title events
     }
 
     // MARK: - extractProcessName
@@ -329,7 +330,8 @@ final class TerminalBridgeTests: XCTestCase {
     func testIsLocalHostMatchesAllHostnameVariants() {
         // localHostnames should contain at least gethostname, ProcessInfo, SCDynamicStore names
         let names = TerminalBridge.localHostnames
-        XCTAssertTrue(names.count >= 3, "Should have at least localhost, 127.0.0.1, and one real hostname, got: \(names)")
+        XCTAssertTrue(
+            names.count >= 3, "Should have at least localhost, 127.0.0.1, and one real hostname, got: \(names)")
 
         // gethostname(2) result
         var buf = [CChar](repeating: 0, count: 256)
@@ -349,8 +351,9 @@ final class TerminalBridgeTests: XCTestCase {
         // The real local hostname from gethostname — simulates "phlp@phinnoq" style prompt
         var buf = [CChar](repeating: 0, count: 256)
         guard gethostname(&buf, buf.count) == 0,
-              let hn = String(validatingUTF8: buf), !hn.isEmpty else {
-            return // Can't test without a hostname
+            let hn = String(validatingUTF8: buf), !hn.isEmpty
+        else {
+            return  // Can't test without a hostname
         }
         let localUser = NSUserName()
 
@@ -370,7 +373,8 @@ final class TerminalBridgeTests: XCTestCase {
 
     func testProcessInfoHostnameNotDetectedAsRemote() {
         // ProcessInfo.hostName short form
-        let piHost = ProcessInfo.processInfo.hostName
+        let piHost =
+            ProcessInfo.processInfo.hostName
             .split(separator: ".").first.map(String.init) ?? ""
         guard !piHost.isEmpty else { return }
 
@@ -384,7 +388,8 @@ final class TerminalBridgeTests: XCTestCase {
     func testTitleLooksRemoteWithActualLocalHostname() {
         var buf = [CChar](repeating: 0, count: 256)
         guard gethostname(&buf, buf.count) == 0,
-              let hn = String(validatingUTF8: buf), !hn.isEmpty else { return }
+            let hn = String(validatingUTF8: buf), !hn.isEmpty
+        else { return }
         XCTAssertFalse(TerminalBridge.titleLooksRemote("user@\(hn): ~/dir"))
         XCTAssertTrue(TerminalBridge.titleLooksRemote("user@definitely-remote-box: ~/dir"))
     }
@@ -469,8 +474,9 @@ final class TerminalBridgeTests: XCTestCase {
         // Use the real local hostname so the detection recognizes it as local
         var buf = [CChar](repeating: 0, count: 256)
         guard gethostname(&buf, buf.count) == 0,
-              let localHost = String(validatingUTF8: buf), !localHost.isEmpty else {
-            return // Can't test without a hostname
+            let localHost = String(validatingUTF8: buf), !localHost.isEmpty
+        else {
+            return  // Can't test without a hostname
         }
         let localUser = NSUserName()
 
@@ -493,13 +499,15 @@ final class TerminalBridgeTests: XCTestCase {
         bridge.handleTitleChange(title: "\(localUser)@\(localHost):~/", paneID: paneID)
 
         // At this point the remote session MUST be cleared
-        XCTAssertNil(bridge.state.remoteSession,
-                     "Session must be nil after exiting SSH (local prompt title with \(localHost))")
+        XCTAssertNil(
+            bridge.state.remoteSession,
+            "Session must be nil after exiting SSH (local prompt title with \(localHost))")
 
         // 5. User types "ssh nas"
         bridge.handleTitleChange(title: "ssh nas", paneID: paneID)
-        XCTAssertEqual(bridge.state.remoteSession, .ssh(host: "nas"),
-                       "Session must be nas, not het")
+        XCTAssertEqual(
+            bridge.state.remoteSession, .ssh(host: "nas"),
+            "Session must be nas, not het")
     }
 
     /// Same scenario but the CWD change arrives while the remote title is still showing.
@@ -520,13 +528,15 @@ final class TerminalBridgeTests: XCTestCase {
 
         // 3. Title updates to local prompt (the exit command or shell name)
         bridge.handleTitleChange(title: "zsh", paneID: paneID)
-        XCTAssertNil(bridge.state.remoteSession,
-                     "Session must be nil after title shows local shell")
+        XCTAssertNil(
+            bridge.state.remoteSession,
+            "Session must be nil after title shows local shell")
 
         // 4. User types "ssh nas"
         bridge.handleTitleChange(title: "ssh nas", paneID: paneID)
-        XCTAssertEqual(bridge.state.remoteSession, .ssh(host: "nas"),
-                       "Session must be nas after new SSH command")
+        XCTAssertEqual(
+            bridge.state.remoteSession, .ssh(host: "nas"),
+            "Session must be nas after new SSH command")
     }
 
     /// The critical race: exit SSH, and the user types "ssh nas" so fast that the
@@ -535,7 +545,8 @@ final class TerminalBridgeTests: XCTestCase {
     func testSSHExitFastRetypeWithCwdRace() {
         var buf = [CChar](repeating: 0, count: 256)
         guard gethostname(&buf, buf.count) == 0,
-              let localHost = String(validatingUTF8: buf), !localHost.isEmpty else { return }
+            let localHost = String(validatingUTF8: buf), !localHost.isEmpty
+        else { return }
         let localUser = NSUserName()
 
         bridge = TerminalBridge(paneID: paneID, workspaceID: workspaceID, workingDirectory: "/Users/\(localUser)")
@@ -551,15 +562,17 @@ final class TerminalBridgeTests: XCTestCase {
 
         // CWD changed to a LOCAL path while supposedly remote — session should be cleared.
         // This is the key fix: a local CWD proves we're back on the local shell.
-        XCTAssertNil(bridge.state.remoteSession,
-                     "CWD change to local path must clear remote session even with stale title")
+        XCTAssertNil(
+            bridge.state.remoteSession,
+            "CWD change to local path must clear remote session even with stale title")
 
         // 3. User immediately types "ssh nas" — title changes directly
         bridge.handleTitleChange(title: "ssh nas", paneID: paneID)
 
         // The session MUST be nas, not het
-        XCTAssertEqual(bridge.state.remoteSession, .ssh(host: "nas"),
-                       "Fast retype: session must be nas, not stuck on het")
+        XCTAssertEqual(
+            bridge.state.remoteSession, .ssh(host: "nas"),
+            "Fast retype: session must be nas, not stuck on het")
     }
 
     /// Verify that when SSH config aliases are used (short hostnames like "het", "nas"),
@@ -660,14 +673,16 @@ final class TerminalBridgeTests: XCTestCase {
 
         // 2. Remote shell prompt appears
         bridge.handleTitleChange(title: "root@het:~", paneID: paneID)
-        XCTAssertEqual(bridge.state.remoteSession, .ssh(host: "het"),
-                       "Session host must stay 'het' — not flip to 'root@het'")
+        XCTAssertEqual(
+            bridge.state.remoteSession, .ssh(host: "het"),
+            "Session host must stay 'het' — not flip to 'root@het'")
         XCTAssertEqual(sessionEvents.count, 1, "No new session event — host unchanged")
 
         // 3. User does cd /tmp
         bridge.handleTitleChange(title: "root@het:/tmp", paneID: paneID)
-        XCTAssertEqual(bridge.state.remoteSession, .ssh(host: "het"),
-                       "cd must not cause session change")
+        XCTAssertEqual(
+            bridge.state.remoteSession, .ssh(host: "het"),
+            "cd must not cause session change")
         XCTAssertEqual(sessionEvents.count, 1, "Still only 1 session event total")
 
         // 4. User does cd /var/log
@@ -692,8 +707,9 @@ final class TerminalBridgeTests: XCTestCase {
 
         // 2. Title shows different hostname — alias must survive
         bridge.handleTitleChange(title: "root@ubuntu-server:~", paneID: paneID)
-        XCTAssertEqual(bridge.state.remoteSession, .ssh(host: "het"),
-                       "Session must stay 'het' even when remote hostname differs")
+        XCTAssertEqual(
+            bridge.state.remoteSession, .ssh(host: "het"),
+            "Session must stay 'het' even when remote hostname differs")
         XCTAssertEqual(sessionEvents.count, 1, "No false session transition")
 
         // 3. cd on the remote — still stable
@@ -712,10 +728,12 @@ final class TerminalBridgeTests: XCTestCase {
         bridge.handleProcessTreeDetection(session: .ssh(host: "het"), paneID: paneID)
 
         guard let session = bridge.state.remoteSession else {
-            XCTFail("Expected remote session"); return
+            XCTFail("Expected remote session")
+            return
         }
-        XCTAssertEqual(session.sshConnectionTarget, "het",
-                       "sshConnectionTarget must return alias for SSH command execution")
+        XCTAssertEqual(
+            session.sshConnectionTarget, "het",
+            "sshConnectionTarget must return alias for SSH command execution")
     }
 
     /// After alias is set via process tree, subsequent title changes must preserve it.
@@ -731,8 +749,9 @@ final class TerminalBridgeTests: XCTestCase {
 
         // 3. Title changes to remote prompt
         bridge.handleTitleChange(title: "root@ubuntu-server:~", paneID: paneID)
-        XCTAssertEqual(bridge.state.remoteSession?.sshConnectionTarget, "het",
-                       "Alias must survive title changes")
+        XCTAssertEqual(
+            bridge.state.remoteSession?.sshConnectionTarget, "het",
+            "Alias must survive title changes")
 
         // 4. Multiple cd's
         bridge.handleTitleChange(title: "root@ubuntu-server:/tmp", paneID: paneID)
@@ -759,8 +778,9 @@ final class TerminalBridgeTests: XCTestCase {
 
         // 2. Container shell prompt looks like SSH (user@containerID:path)
         bridge.handleTitleChange(title: "root@abc123def456:/app", paneID: paneID)
-        XCTAssertEqual(bridge.state.remoteSession, .docker(container: "mycontainer"),
-                       "Docker session must not flip to SSH from container prompt")
+        XCTAssertEqual(
+            bridge.state.remoteSession, .docker(container: "mycontainer"),
+            "Docker session must not flip to SSH from container prompt")
         XCTAssertEqual(sessionEvents.count, 1, "No false session transition")
 
         // 3. cd inside container
@@ -783,8 +803,9 @@ final class TerminalBridgeTests: XCTestCase {
 
         // Process tree says no remote child (user exited container)
         bridge.handleProcessTreeDetection(session: nil, paneID: paneID)
-        XCTAssertNil(bridge.state.remoteSession,
-                     "Docker session must be cleared when process tree says no remote child")
+        XCTAssertNil(
+            bridge.state.remoteSession,
+            "Docker session must be cleared when process tree says no remote child")
     }
 
     // MARK: - RemoteSessionType Equatable and sshConnectionTarget
@@ -834,10 +855,12 @@ final class TerminalBridgeTests: XCTestCase {
 
         // 2. User types "cd /tmp" — title briefly shows the command
         bridge.handleTitleChange(title: "cd /tmp", paneID: paneID)
-        XCTAssertEqual(bridge.state.remoteSession, .ssh(host: "het"),
-                       "Transient 'cd /tmp' title must not clear SSH session")
-        XCTAssertEqual(sessionEvents.count, eventsAfterConnect,
-                       "No session change event for transient command title")
+        XCTAssertEqual(
+            bridge.state.remoteSession, .ssh(host: "het"),
+            "Transient 'cd /tmp' title must not clear SSH session")
+        XCTAssertEqual(
+            sessionEvents.count, eventsAfterConnect,
+            "No session change event for transient command title")
 
         // 3. Title updates to new prompt
         bridge.handleTitleChange(title: "root@ubuntu-server:/tmp", paneID: paneID)
@@ -854,11 +877,14 @@ final class TerminalBridgeTests: XCTestCase {
         XCTAssertNotNil(bridge.state.remoteSession)
 
         // All of these are commands typed during the SSH session
-        for cmd in ["cd /tmp", "vim file.txt", "ls -la", "cat /etc/hosts",
-                     "make build", "git status", "top", "htop"] {
+        for cmd in [
+            "cd /tmp", "vim file.txt", "ls -la", "cat /etc/hosts",
+            "make build", "git status", "top", "htop"
+        ] {
             bridge.handleTitleChange(title: cmd, paneID: paneID)
-            XCTAssertNotNil(bridge.state.remoteSession,
-                            "Title '\(cmd)' must not clear remote session")
+            XCTAssertNotNil(
+                bridge.state.remoteSession,
+                "Title '\(cmd)' must not clear remote session")
         }
     }
 
@@ -871,8 +897,9 @@ final class TerminalBridgeTests: XCTestCase {
         XCTAssertNotNil(bridge.state.remoteSession)
 
         bridge.handleTitleChange(title: "zsh", paneID: paneID)
-        XCTAssertNil(bridge.state.remoteSession,
-                     "Local shell name 'zsh' must clear remote session")
+        XCTAssertNil(
+            bridge.state.remoteSession,
+            "Local shell name 'zsh' must clear remote session")
     }
 
     // MARK: - SSH session switch (connect to server B while on server A)
@@ -894,8 +921,9 @@ final class TerminalBridgeTests: XCTestCase {
 
         // Connect to server B
         bridge.handleTitleChange(title: "ssh nas", paneID: paneID)
-        XCTAssertEqual(bridge.state.remoteSession, .ssh(host: "nas"),
-                       "Session must be nas, not het")
+        XCTAssertEqual(
+            bridge.state.remoteSession, .ssh(host: "nas"),
+            "Session must be nas, not het")
         XCTAssertEqual(bridge.state.remoteSession?.sshConnectionTarget, "nas")
     }
 
@@ -905,7 +933,8 @@ final class TerminalBridgeTests: XCTestCase {
         let localUser = NSUserName()
         var buf = [CChar](repeating: 0, count: 256)
         guard gethostname(&buf, buf.count) == 0,
-              let localHost = String(validatingUTF8: buf), !localHost.isEmpty else { return }
+            let localHost = String(validatingUTF8: buf), !localHost.isEmpty
+        else { return }
 
         bridge = TerminalBridge(paneID: paneID, workspaceID: workspaceID, workingDirectory: "/Users/\(localUser)")
 
@@ -920,8 +949,9 @@ final class TerminalBridgeTests: XCTestCase {
 
         // But then the local prompt MUST clear it
         bridge.handleDirectoryChange(path: "/Users/\(localUser)", paneID: paneID)
-        XCTAssertNil(bridge.state.remoteSession,
-                     "Session must be cleared when local CWD is reported after exit")
+        XCTAssertNil(
+            bridge.state.remoteSession,
+            "Session must be cleared when local CWD is reported after exit")
 
         // Connect to server B
         bridge.handleTitleChange(title: "ssh nas", paneID: paneID)
@@ -929,8 +959,9 @@ final class TerminalBridgeTests: XCTestCase {
 
         // Server B prompt
         bridge.handleTitleChange(title: "phlp@nas-server:~", paneID: paneID)
-        XCTAssertEqual(bridge.state.remoteSession?.sshConnectionTarget, "nas",
-                       "Connection target must be nas, not het")
+        XCTAssertEqual(
+            bridge.state.remoteSession?.sshConnectionTarget, "nas",
+            "Connection target must be nas, not het")
     }
 
     /// User connects to server A, then directly types "ssh serverB" (nested or quick switch).
@@ -945,8 +976,9 @@ final class TerminalBridgeTests: XCTestCase {
 
         // User types "ssh nas" (either nested SSH or after quick exit)
         bridge.handleTitleChange(title: "ssh nas", paneID: paneID)
-        XCTAssertEqual(bridge.state.remoteSession, .ssh(host: "nas"),
-                       "Session must switch to nas when user types ssh nas")
+        XCTAssertEqual(
+            bridge.state.remoteSession, .ssh(host: "nas"),
+            "Session must switch to nas when user types ssh nas")
         XCTAssertEqual(bridge.state.remoteSession?.sshConnectionTarget, "nas")
     }
 
@@ -967,8 +999,9 @@ final class TerminalBridgeTests: XCTestCase {
 
         // Connect to different server
         bridge.handleTitleChange(title: "ssh het", paneID: paneID)
-        XCTAssertEqual(bridge.state.remoteSession, .ssh(host: "het"),
-                       "Session must be het after switching from IP-based session")
+        XCTAssertEqual(
+            bridge.state.remoteSession, .ssh(host: "het"),
+            "Session must be het after switching from IP-based session")
         XCTAssertEqual(bridge.state.remoteSession?.sshConnectionTarget, "het")
     }
 
@@ -978,14 +1011,16 @@ final class TerminalBridgeTests: XCTestCase {
     /// (e.g., docker exec -it 'my-container' sh). The quotes must be stripped.
     func testDockerQuotedContainerNameStripped() {
         let result = TerminalBridge.detectRemoteFromProcessName(title: "docker exec -it 'fancy-calendar-db' sh")
-        XCTAssertEqual(result, .docker(container: "fancy-calendar-db"),
-                       "Single quotes must be stripped from container name")
+        XCTAssertEqual(
+            result, .docker(container: "fancy-calendar-db"),
+            "Single quotes must be stripped from container name")
     }
 
     func testDockerDoubleQuotedContainerNameStripped() {
         let result = TerminalBridge.detectRemoteFromProcessName(title: "docker exec -it \"web-app\" bash")
-        XCTAssertEqual(result, .docker(container: "web-app"),
-                       "Double quotes must be stripped from container name")
+        XCTAssertEqual(
+            result, .docker(container: "web-app"),
+            "Double quotes must be stripped from container name")
     }
 
     func testDockerUnquotedContainerNameUnchanged() {
@@ -995,8 +1030,9 @@ final class TerminalBridgeTests: XCTestCase {
 
     func testDockerHeuristicQuotedContainerName() {
         let result = TerminalBridge.detectRemoteFromHeuristics(title: "docker exec -it 'my-db' sh", cwd: "/tmp")
-        XCTAssertEqual(result, .docker(container: "my-db"),
-                       "Heuristic detection must strip quotes from container name")
+        XCTAssertEqual(
+            result, .docker(container: "my-db"),
+            "Heuristic detection must strip quotes from container name")
     }
 
     // MARK: - Docker CWD Extraction
@@ -1004,20 +1040,23 @@ final class TerminalBridgeTests: XCTestCase {
     func testExtractRemoteCwdFromDockerContainerPrompt() {
         // Docker container prompt: "abc123def456:/path#"
         let result = TerminalBridge.extractRemoteCwd(from: "abc123def456:/tmp")
-        XCTAssertEqual(result, "/tmp",
-                       "Docker container prompt should extract /tmp as CWD")
+        XCTAssertEqual(
+            result, "/tmp",
+            "Docker container prompt should extract /tmp as CWD")
     }
 
     func testExtractRemoteCwdFromDockerContainerPromptWithHash() {
         let result = TerminalBridge.extractRemoteCwd(from: "abc123def456:/app#")
-        XCTAssertEqual(result, "/app",
-                       "Docker container prompt with trailing # should extract /app")
+        XCTAssertEqual(
+            result, "/app",
+            "Docker container prompt with trailing # should extract /app")
     }
 
     func testExtractRemoteCwdFromDockerContainerPromptWithDollar() {
         let result = TerminalBridge.extractRemoteCwd(from: "abc123def456:/home/user$ ")
-        XCTAssertEqual(result, "/home/user",
-                       "Docker container prompt with trailing $ should extract /home/user")
+        XCTAssertEqual(
+            result, "/home/user",
+            "Docker container prompt with trailing $ should extract /home/user")
     }
 
     func testExtractRemoteCwdDoesNotMatchShortNonHexStrings() {
@@ -1041,7 +1080,8 @@ final class TerminalBridgeTests: XCTestCase {
 
         // Container prompt
         bridge.handleTitleChange(title: "root@abc123def456:/app", paneID: paneID)
-        XCTAssertEqual(bridge.state.remoteSession, .docker(container: "fancy-calendar-db"),
-                       "Docker session must not flip to SSH from container prompt")
+        XCTAssertEqual(
+            bridge.state.remoteSession, .docker(container: "fancy-calendar-db"),
+            "Docker session must not flip to SSH from container prompt")
     }
 }

@@ -58,7 +58,7 @@ final class FileTreeNode: Identifiable, ObservableObject {
             loadChildren()
         }
         // Refresh expanded subdirectories
-        children?.forEach { child in
+        for child in children ?? [] {
             if child.isDirectory && child.isExpanded {
                 child.refreshAll()
             }

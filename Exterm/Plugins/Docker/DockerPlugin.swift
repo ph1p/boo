@@ -4,10 +4,16 @@ import SwiftUI
 /// Available locally (not in remote sessions).
 @MainActor
 final class DockerPluginNew: ExtermPluginProtocol {
-    let pluginID = "docker"
+    var hostActions: PluginHostActions?
+    var onRequestCycleRerun: (() -> Void)?
 
     init() {
         DockerService.shared.startWatching()
+        DockerService.shared.onContainersChanged = { [weak self] _ in
+            DispatchQueue.main.async {
+                self?.onRequestCycleRerun?()
+            }
+        }
     }
 
     let manifest = PluginManifest(
@@ -22,10 +28,6 @@ final class DockerPluginNew: ExtermPluginProtocol {
         statusBar: PluginManifest.StatusBarManifest(position: "right", priority: 10, template: nil),
         settings: nil
     )
-
-    var whenClause: WhenClauseNode? {
-        try? WhenClauseParser.parse("!remote")
-    }
 
     // MARK: - Section Title
 
@@ -42,7 +44,8 @@ final class DockerPluginNew: ExtermPluginProtocol {
         let containers = DockerService.shared.containers
         guard !containers.isEmpty else { return nil }
         let running = containers.filter { $0.state == .running }.count
-        let text = running == containers.count
+        let text =
+            running == containers.count
             ? "\(running) running"
             : "\(running)/\(containers.count) running"
         return StatusBarContent(
@@ -60,44 +63,48 @@ final class DockerPluginNew: ExtermPluginProtocol {
         let theme = AppSettings.shared.theme
         let density = AppSettings.shared.sidebarDensity
 
-        return AnyView(DockerPluginDetailView(
-            containers: containers,
-            density: density,
-            theme: theme,
-            onExec: { container in
-                actionHandler.handle(DSLAction(type: "exec", path: nil, command: DockerService.shared.execCommand(for: container), text: nil))
-            },
-            onLogs: { container in
-                let cmd = "docker logs --tail 100 -f \(container.name)\r"
-                actionHandler.handle(DSLAction(type: "exec", path: nil, command: cmd, text: nil))
-            },
-            onStart: { container in
-                DockerService.shared.startContainer(container.id) { DockerService.shared.refresh() }
-            },
-            onStop: { container in
-                DockerService.shared.stopContainer(container.id) { DockerService.shared.refresh() }
-            },
-            onRestart: { container in
-                DockerService.shared.restartContainer(container.id) { DockerService.shared.refresh() }
-            },
-            onPause: { container in
-                DockerService.shared.pauseContainer(container.id) { DockerService.shared.refresh() }
-            },
-            onUnpause: { container in
-                DockerService.shared.unpauseContainer(container.id) { DockerService.shared.refresh() }
-            },
-            onRemove: { container in
-                DockerService.shared.removeContainer(container.id) { DockerService.shared.refresh() }
-            },
-            onCopyID: { container in
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(container.id, forType: .string)
-            },
-            onInspect: { container in
-                let cmd = "docker inspect \(container.name) | less\r"
-                actionHandler.handle(DSLAction(type: "exec", path: nil, command: cmd, text: nil))
-            }
-        ))
+        return AnyView(
+            DockerPluginDetailView(
+                containers: containers,
+                density: density,
+                theme: theme,
+                onExec: { container in
+                    actionHandler.handle(
+                        DSLAction(
+                            type: "exec", path: nil, command: DockerService.shared.execCommand(for: container),
+                            text: nil))
+                },
+                onLogs: { container in
+                    let cmd = "docker logs --tail 100 -f \(container.name)\r"
+                    actionHandler.handle(DSLAction(type: "exec", path: nil, command: cmd, text: nil))
+                },
+                onStart: { container in
+                    DockerService.shared.startContainer(container.id) { DockerService.shared.refresh() }
+                },
+                onStop: { container in
+                    DockerService.shared.stopContainer(container.id) { DockerService.shared.refresh() }
+                },
+                onRestart: { container in
+                    DockerService.shared.restartContainer(container.id) { DockerService.shared.refresh() }
+                },
+                onPause: { container in
+                    DockerService.shared.pauseContainer(container.id) { DockerService.shared.refresh() }
+                },
+                onUnpause: { container in
+                    DockerService.shared.unpauseContainer(container.id) { DockerService.shared.refresh() }
+                },
+                onRemove: { container in
+                    DockerService.shared.removeContainer(container.id) { DockerService.shared.refresh() }
+                },
+                onCopyID: { container in
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(container.id, forType: .string)
+                },
+                onInspect: { container in
+                    let cmd = "docker inspect \(container.name) | less\r"
+                    actionHandler.handle(DSLAction(type: "exec", path: nil, command: cmd, text: nil))
+                }
+            ))
     }
 }
 
@@ -208,6 +215,7 @@ private struct DockerGroupHeader: View {
         .padding(.top, 8)
         .padding(.bottom, 4)
     }
+
 }
 
 // MARK: - Container Row
@@ -352,4 +360,5 @@ private struct DockerContainerRow: View {
         .accessibilityLabel("\(container.name), \(container.state.rawValue), \(container.image)")
         .accessibilityAddTraits(.isButton)
     }
+
 }

@@ -44,10 +44,18 @@ final class JSCRuntime {
             throw JSError(message: "JS parse error: \(err)")
         }
 
-        // Call the function
-        guard let fn = jsContext.objectForKeyedSubscript(functionName),
-              !fn.isUndefined else {
-            throw JSError(message: "Function '\(functionName)' not found in script")
+        // Call the function — try requested name first, then fall back to "render"/"transform"
+        let fn: JSValue
+        if let direct = jsContext.objectForKeyedSubscript(functionName), !direct.isUndefined {
+            fn = direct
+        } else {
+            // Try the alternate name so both "render" and "transform" work
+            let alternate = functionName == "transform" ? "render" : "transform"
+            if let fallback = jsContext.objectForKeyedSubscript(alternate), !fallback.isUndefined {
+                fn = fallback
+            } else {
+                throw JSError(message: "Function '\(functionName)' (or '\(alternate)') not found in script")
+            }
         }
 
         // Execute with timeout via GCD
@@ -102,12 +110,12 @@ final class JSCRuntime {
             "paneCount": context.paneCount,
             "tabCount": context.tabCount,
             "processName": context.processName,
-            "isRemote": context.isRemote,
+            "isRemote": context.isRemote
         ]
 
         if let session = context.remoteSession {
             switch session {
-            case .ssh(let host):
+            case .ssh(let host, _):
                 dict["envType"] = "ssh"
                 dict["remoteHost"] = host
             case .docker(let container):
@@ -119,12 +127,22 @@ final class JSCRuntime {
         }
 
         if let git = context.gitContext {
-            dict["git"] = [
-                "branch": git.branch,
-                "repoRoot": git.repoRoot,
-                "isDirty": git.isDirty,
-                "changedFileCount": git.changedFileCount,
-            ] as [String: Any]
+            dict["git"] =
+                [
+                    "branch": git.branch,
+                    "repoRoot": git.repoRoot,
+                    "isDirty": git.isDirty,
+                    "changedFileCount": git.changedFileCount
+                ] as [String: Any]
+        }
+
+        // Expose plugin-contributed enriched data
+        if !context.enrichedData.isEmpty {
+            var enriched: [String: Any] = [:]
+            for (key, value) in context.enrichedData {
+                enriched[key] = value
+            }
+            dict["enrichedData"] = enriched
         }
 
         return dict

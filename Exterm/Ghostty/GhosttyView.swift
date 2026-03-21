@@ -1,5 +1,5 @@
-import Cocoa
 import CGhostty
+import Cocoa
 
 /// NSView that hosts a Ghostty terminal surface with Metal rendering.
 /// Implements NSTextInputClient for proper keyboard input handling.
@@ -11,14 +11,26 @@ class GhosttyView: NSView, NSTextInputClient {
     var onTitleChanged: ((String) -> Void)?
     var onDirectoryListing: ((String, String) -> Void)?
     var onProcessExited: (() -> Void)?
+    var onShellPIDDiscovered: ((pid_t) -> Void)?
+    var onScrollbarChanged: ((GhosttyScrollbar) -> Void)?
     let createdAt = Date()
     var shellPID: pid_t = 0
+
+    /// Current scrollbar state from the terminal core.
+    struct GhosttyScrollbar {
+        let total: Int
+        let offset: Int
+        let len: Int
+    }
     private var isFocused = false
     private var markedText = NSMutableAttributedString()
     private var pendingText: String?
 
     override var acceptsFirstResponder: Bool { true }
     override var canBecomeKeyView: Bool { true }
+
+    override func accessibilityRole() -> NSAccessibility.Role? { .textArea }
+    override func accessibilityLabel() -> String? { "Terminal" }
 
     init(workingDirectory: String) {
         super.init(frame: .zero)
@@ -34,11 +46,15 @@ class GhosttyView: NSView, NSTextInputClient {
     private func createSurface(workingDirectory: String) {
         guard let app = GhosttyRuntime.shared.app else { return }
 
+        // Snapshot child PIDs before surface creation (which forks a shell)
+        let myPID = getpid()
+        let pidsBefore = Set(RemoteExplorer.childPIDs(of: myPID))
+
         var config = ghostty_surface_config_new()
         config.platform_tag = GHOSTTY_PLATFORM_MACOS
         config.platform.macos.nsview = Unmanaged.passUnretained(self).toOpaque()
         config.userdata = Unmanaged.passUnretained(self).toOpaque()
-        config.scale_factor = Double(NSScreen.main?.backingScaleFactor ?? 2.0)
+        config.scale_factor = Double(window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2.0)
         config.font_size = 0
         config.context = GHOSTTY_SURFACE_CONTEXT_SPLIT
 
@@ -51,6 +67,49 @@ class GhosttyView: NSView, NSTextInputClient {
             GhosttyRuntime.shared.registerSurface(s)
             // Start unfocused — only becomeFirstResponder sets focus
             ghostty_surface_set_focus(s, false)
+        }
+
+        // Schedule shell PID discovery on next run loop tick, after callbacks are wired
+        DispatchQueue.main.async { [weak self] in
+            self?.discoverShellPID(myPID: myPID, pidsBefore: pidsBefore)
+        }
+    }
+
+    /// Find the new shell PID by comparing child PIDs before/after surface creation.
+    /// Ghostty forks: Exterm → login → shell. We find the new direct child (login),
+    /// then walk down to the actual shell process.
+    /// Retries up to 5x at 100ms intervals if the child isn't visible yet.
+    private func discoverShellPID(myPID: pid_t, pidsBefore: Set<pid_t>, attempt: Int = 0) {
+        let pidsAfter = Set(RemoteExplorer.childPIDs(of: myPID))
+        let newPIDs = pidsAfter.subtracting(pidsBefore)
+
+        if let directChild = newPIDs.first {
+            // Walk down the single-child chain (login → shell).
+            // On early attempts the shell may not have spawned yet — retry if
+            // we're still at an intermediary like `login`.
+            let shell = RemoteExplorer.walkToLeafShell(from: directChild)
+            if shell != directChild || attempt >= 3 {
+                NSLog("[GhosttyView] shellPID discovered: directChild=\(directChild) shell=\(shell) attempt=\(attempt)")
+                shellPID = shell
+                onShellPIDDiscovered?(shell)
+                return
+            }
+            // Shell not yet visible — retry
+        }
+
+        guard attempt < 8 else {
+            // Last resort: use whatever we found
+            let pidsNow = Set(RemoteExplorer.childPIDs(of: myPID))
+            if let directChild = pidsNow.subtracting(pidsBefore).first {
+                let shell = RemoteExplorer.walkToLeafShell(from: directChild)
+                NSLog("[GhosttyView] shellPID fallback: directChild=\(directChild) shell=\(shell)")
+                shellPID = shell
+                onShellPIDDiscovered?(shell)
+            }
+            return
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
+            self?.discoverShellPID(myPID: myPID, pidsBefore: pidsBefore, attempt: attempt + 1)
         }
     }
 
@@ -137,7 +196,8 @@ class GhosttyView: NSView, NSTextInputClient {
         // when ctrl is pressed.
         key.unshifted_codepoint = 0
         if let chars = event.characters(byApplyingModifiers: []),
-           let codepoint = chars.unicodeScalars.first {
+            let codepoint = chars.unicodeScalars.first
+        {
             key.unshifted_codepoint = codepoint.value
         }
 
@@ -157,9 +217,10 @@ class GhosttyView: NSView, NSTextInputClient {
         // internally via its KeyEncoder.
         var textToSend = pendingText
         if let text = textToSend,
-           text.count == 1,
-           let scalar = text.unicodeScalars.first,
-           scalar.value < 0x20 {
+            text.count == 1,
+            let scalar = text.unicodeScalars.first,
+            scalar.value < 0x20
+        {
             textToSend = event.characters(byApplyingModifiers: event.modifierFlags.subtracting(.control))
         }
 
@@ -186,7 +247,8 @@ class GhosttyView: NSView, NSTextInputClient {
         key.consumed_mods = translateMods(consumedFlags)
         key.unshifted_codepoint = 0
         if let chars = event.characters(byApplyingModifiers: []),
-           let codepoint = chars.unicodeScalars.first {
+            let codepoint = chars.unicodeScalars.first
+        {
             key.unshifted_codepoint = codepoint.value
         }
         _ = ghostty_surface_key(surface, key)
@@ -208,7 +270,8 @@ class GhosttyView: NSView, NSTextInputClient {
         if hasMarkedText() { return }
 
         let mods = translateMods(event.modifierFlags)
-        let action: ghostty_input_action_e = (mods.rawValue & mod != 0)
+        let action: ghostty_input_action_e =
+            (mods.rawValue & mod != 0)
             ? GHOSTTY_ACTION_PRESS : GHOSTTY_ACTION_RELEASE
 
         var key = ghostty_input_key_s()
@@ -262,9 +325,13 @@ class GhosttyView: NSView, NSTextInputClient {
 
     func insertText(_ string: Any, replacementRange: NSRange) {
         let text: String
-        if let str = string as? String { text = str }
-        else if let astr = string as? NSAttributedString { text = astr.string }
-        else { return }
+        if let str = string as? String {
+            text = str
+        } else if let astr = string as? NSAttributedString {
+            text = astr.string
+        } else {
+            return
+        }
 
         // If called from interpretKeyEvents during keyDown, store for later
         pendingText = text
@@ -322,40 +389,75 @@ class GhosttyView: NSView, NSTextInputClient {
         window?.makeFirstResponder(self)
         guard let surface = surface else { return }
         updateMousePos(event)
-        _ = ghostty_surface_mouse_button(surface, GHOSTTY_MOUSE_PRESS, GHOSTTY_MOUSE_LEFT, translateMods(event.modifierFlags))
+        _ = ghostty_surface_mouse_button(
+            surface, GHOSTTY_MOUSE_PRESS, GHOSTTY_MOUSE_LEFT, translateMods(event.modifierFlags))
     }
 
     override func mouseUp(with event: NSEvent) {
         guard let surface = surface else { return }
         updateMousePos(event)
-        _ = ghostty_surface_mouse_button(surface, GHOSTTY_MOUSE_RELEASE, GHOSTTY_MOUSE_LEFT, translateMods(event.modifierFlags))
+        _ = ghostty_surface_mouse_button(
+            surface, GHOSTTY_MOUSE_RELEASE, GHOSTTY_MOUSE_LEFT, translateMods(event.modifierFlags))
     }
 
     override func mouseDragged(with event: NSEvent) { updateMousePos(event) }
     override func mouseMoved(with event: NSEvent) { updateMousePos(event) }
 
     override func rightMouseDown(with event: NSEvent) {
-        guard let surface = surface else { super.rightMouseDown(with: event); return }
+        guard let surface = surface else {
+            super.rightMouseDown(with: event)
+            return
+        }
         updateMousePos(event)
-        _ = ghostty_surface_mouse_button(surface, GHOSTTY_MOUSE_PRESS, GHOSTTY_MOUSE_RIGHT, translateMods(event.modifierFlags))
+        _ = ghostty_surface_mouse_button(
+            surface, GHOSTTY_MOUSE_PRESS, GHOSTTY_MOUSE_RIGHT, translateMods(event.modifierFlags))
     }
 
     override func rightMouseUp(with event: NSEvent) {
         guard let surface = surface else { return }
         updateMousePos(event)
-        _ = ghostty_surface_mouse_button(surface, GHOSTTY_MOUSE_RELEASE, GHOSTTY_MOUSE_RIGHT, translateMods(event.modifierFlags))
+        _ = ghostty_surface_mouse_button(
+            surface, GHOSTTY_MOUSE_RELEASE, GHOSTTY_MOUSE_RIGHT, translateMods(event.modifierFlags))
     }
 
     override func scrollWheel(with event: NSEvent) {
         guard let surface = surface else { return }
-        ghostty_surface_mouse_scroll(surface, event.scrollingDeltaX, event.scrollingDeltaY, 0)
+
+        var x = event.scrollingDeltaX
+        var y = event.scrollingDeltaY
+
+        if event.hasPreciseScrollingDeltas {
+            // Match Ghostty's 2x multiplier for trackpad — feels more natural
+            x *= 2
+            y *= 2
+        }
+
+        // Pack scroll mods: bit 0 = precision, bits 1-3 = momentum phase
+        var mods: ghostty_input_scroll_mods_t = 0
+        if event.hasPreciseScrollingDeltas {
+            mods = 1
+        }
+        var momentum = GHOSTTY_MOUSE_MOMENTUM_NONE
+        switch event.momentumPhase {
+        case .began: momentum = GHOSTTY_MOUSE_MOMENTUM_BEGAN
+        case .stationary: momentum = GHOSTTY_MOUSE_MOMENTUM_STATIONARY
+        case .changed: momentum = GHOSTTY_MOUSE_MOMENTUM_CHANGED
+        case .ended: momentum = GHOSTTY_MOUSE_MOMENTUM_ENDED
+        case .cancelled: momentum = GHOSTTY_MOUSE_MOMENTUM_CANCELLED
+        case .mayBegin: momentum = GHOSTTY_MOUSE_MOMENTUM_MAY_BEGIN
+        default: break
+        }
+        mods |= ghostty_input_scroll_mods_t(momentum.rawValue) << 1
+
+        ghostty_surface_mouse_scroll(surface, x, y, mods)
     }
 
     private func updateMousePos(_ event: NSEvent) {
         guard let surface = surface else { return }
         let point = convert(event.locationInWindow, from: nil)
         // Ghostty expects point coordinates (not pixel); it applies the content scale internally
-        ghostty_surface_mouse_pos(surface, Double(point.x), Double(bounds.height - point.y), translateMods(event.modifierFlags))
+        ghostty_surface_mouse_pos(
+            surface, Double(point.x), Double(bounds.height - point.y), translateMods(event.modifierFlags))
     }
 
     // MARK: - Paste
@@ -453,11 +555,10 @@ class GhosttyView: NSView, NSTextInputClient {
     }
 
     func destroy() {
-        if let surface = surface {
-            GhosttyRuntime.shared.unregisterSurface(surface)
-            ghostty_surface_free(surface)
-            self.surface = nil
-        }
+        guard let surface = surface else { return }
+        self.surface = nil  // nil first to prevent callbacks reaching a freed surface
+        GhosttyRuntime.shared.unregisterSurface(surface)
+        ghostty_surface_free(surface)
     }
 
     deinit { destroy() }

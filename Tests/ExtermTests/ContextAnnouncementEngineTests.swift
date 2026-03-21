@@ -1,10 +1,11 @@
 import XCTest
+
 @testable import Exterm
 
 final class ContextAnnouncementEngineTests: XCTestCase {
 
     func testLocalTerminalAnnouncement() {
-        let state = TerminalState(
+        let state = BridgeState(
             paneID: UUID(),
             workspaceID: UUID(),
             workingDirectory: "/Users/test/projects/myapp",
@@ -19,7 +20,7 @@ final class ContextAnnouncementEngineTests: XCTestCase {
     }
 
     func testSSHAnnouncement() {
-        let state = TerminalState(
+        let state = BridgeState(
             paneID: UUID(),
             workspaceID: UUID(),
             workingDirectory: "/var/log",
@@ -35,7 +36,7 @@ final class ContextAnnouncementEngineTests: XCTestCase {
     }
 
     func testDockerAnnouncement() {
-        let state = TerminalState(
+        let state = BridgeState(
             paneID: UUID(),
             workspaceID: UUID(),
             workingDirectory: "/var/lib/postgresql",
@@ -51,7 +52,7 @@ final class ContextAnnouncementEngineTests: XCTestCase {
     }
 
     func testEmptyDirectoryAnnouncement() {
-        let state = TerminalState(
+        let state = BridgeState(
             paneID: UUID(),
             workspaceID: UUID(),
             workingDirectory: "",
@@ -65,7 +66,7 @@ final class ContextAnnouncementEngineTests: XCTestCase {
     }
 
     func testAnnouncementPartsJoinedWithComma() {
-        let state = TerminalState(
+        let state = BridgeState(
             paneID: UUID(),
             workspaceID: UUID(),
             workingDirectory: "/tmp",

@@ -59,13 +59,7 @@ final class PluginRuntime {
         // Phase 1: Enrich
         let enrichment = EnrichmentContext(base: baseContext)
         for plugin in plugins {
-            do {
-                try ObjC.catchException {
-                    plugin.enrich(context: enrichment)
-                }
-            } catch {
-                logger.error("Plugin \(plugin.pluginID) enrich failed: \(error.localizedDescription)")
-            }
+            plugin.enrich(context: enrichment)
         }
 
         // Phase boundary: freeze
@@ -73,13 +67,7 @@ final class PluginRuntime {
 
         // Phase 2: React
         for plugin in plugins {
-            do {
-                try ObjC.catchException {
-                    plugin.react(context: frozenContext)
-                }
-            } catch {
-                logger.error("Plugin \(plugin.pluginID) react failed: \(error.localizedDescription)")
-            }
+            plugin.react(context: frozenContext)
         }
 
         let elapsed = (CFAbsoluteTimeGetCurrent() - start) * 1000
@@ -89,17 +77,5 @@ final class PluginRuntime {
 
         lastContext = frozenContext
         return frozenContext
-    }
-}
-
-// MARK: - ObjC Exception Bridging
-
-/// Bridges Objective-C exceptions into Swift errors for plugin isolation.
-enum ObjC {
-    static func catchException(_ block: () -> Void) throws {
-        // In production, plugins run Swift code that throws Swift errors.
-        // This wrapper exists for future Objective-C interop safety.
-        // For now, just execute the block directly.
-        block()
     }
 }

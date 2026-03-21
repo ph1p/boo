@@ -78,7 +78,17 @@ final class DockerService: ObservableObject {
 
         pipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
             let data = handle.availableData
-            guard !data.isEmpty else { return }
+            guard !data.isEmpty else {
+                // EOF — Docker daemon may have restarted. Fall back to polling.
+                handle.readabilityHandler = nil
+                DispatchQueue.main.async { [weak self] in
+                    self?.eventProcess = nil
+                    self?.pollTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { [weak self] _ in
+                        self?.refresh()
+                    }
+                }
+                return
+            }
             // Docker event received — refresh container list
             DispatchQueue.main.async { [weak self] in
                 self?.refresh()
@@ -104,7 +114,11 @@ final class DockerService: ObservableObject {
     func refresh() {
         guard let docker = dockerPath else { return }
         DispatchQueue.global(qos: .utility).async { [weak self] in
-            let output = Self.run(docker, args: ["ps", "-a", "--format", "{{.ID}}\\t{{.Names}}\\t{{.Image}}\\t{{.Status}}\\t{{.State}}\\t{{.Ports}}"])
+            let output = Self.run(
+                docker,
+                args: [
+                    "ps", "-a", "--format", "{{.ID}}\\t{{.Names}}\\t{{.Image}}\\t{{.Status}}\\t{{.State}}\\t{{.Ports}}"
+                ])
             let newContainers = Self.parseContainers(output)
             DispatchQueue.main.async {
                 guard let self = self else { return }
@@ -148,7 +162,7 @@ final class DockerService: ObservableObject {
 
     /// Exec into a container — returns the command string to paste into terminal.
     func execCommand(for container: Container) -> String {
-        "docker exec -it \(container.name) sh\r"
+        "docker exec -it \(shellEscape(container.name)) sh\r"
     }
 
     // MARK: - Remote Docker
@@ -156,12 +170,14 @@ final class DockerService: ObservableObject {
     /// List containers on a remote host via SSH.
     static func remoteContainers(host: String, completion: @escaping ([Container]) -> Void) {
         DispatchQueue.global(qos: .utility).async {
-            let output = run("/usr/bin/ssh", args: [
-                "-o", "ConnectTimeout=3",
-                "-o", "BatchMode=yes",
-                host,
-                "docker ps -a --format '{{.ID}}\\t{{.Names}}\\t{{.Image}}\\t{{.Status}}\\t{{.State}}\\t{{.Ports}}'"
-            ])
+            let output = run(
+                "/usr/bin/ssh",
+                args: [
+                    "-o", "ConnectTimeout=3",
+                    "-o", "BatchMode=yes",
+                    host,
+                    "docker ps -a --format '{{.ID}}\\t{{.Names}}\\t{{.Image}}\\t{{.Status}}\\t{{.State}}\\t{{.Ports}}'"
+                ])
             let containers = parseContainers(output)
             DispatchQueue.main.async { completion(containers) }
         }
@@ -171,11 +187,13 @@ final class DockerService: ObservableObject {
     static func remoteDockerCommand(host: String, args: [String], completion: (() -> Void)? = nil) {
         let cmd = "docker " + args.joined(separator: " ")
         DispatchQueue.global(qos: .utility).async {
-            _ = run("/usr/bin/ssh", args: [
-                "-o", "ConnectTimeout=3",
-                "-o", "BatchMode=yes",
-                host, cmd
-            ])
+            _ = run(
+                "/usr/bin/ssh",
+                args: [
+                    "-o", "ConnectTimeout=3",
+                    "-o", "BatchMode=yes",
+                    host, cmd
+                ])
             DispatchQueue.main.async { completion?() }
         }
     }

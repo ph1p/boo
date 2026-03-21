@@ -43,7 +43,9 @@ struct WhenClauseParser {
         let result = try parser.parseExpression()
         parser.skipWhitespace()
         if parser.position < parser.chars.count {
-            throw ParseError(message: "Unexpected token '\(parser.chars[parser.position])' at position \(parser.position)", position: parser.position)
+            throw ParseError(
+                message: "Unexpected token '\(parser.chars[parser.position])' at position \(parser.position)",
+                position: parser.position)
         }
         return result
     }
@@ -155,7 +157,7 @@ struct WhenClauseParser {
         guard position < chars.count else {
             throw ParseError(message: "Unterminated string at position \(position)", position: position)
         }
-        position += 1 // consume closing quote
+        position += 1  // consume closing quote
         return result
     }
 
@@ -205,7 +207,7 @@ struct WhenClauseEvaluator {
         case .variable(let name):
             return resolveBool(name, context: context)
         case .stringLiteral:
-            return true // bare string literal is truthy
+            return true  // bare string literal is truthy
         case .equals(let lhs, let rhs):
             return resolveString(lhs, context: context) == resolveString(rhs, context: context)
         case .notEquals(let lhs, let rhs):
@@ -259,7 +261,7 @@ struct WhenClauseEvaluator {
             if case .docker = context.remoteSession { return "docker" }
             return "local"
         case "remote.host":
-            if case .ssh(let host) = context.remoteSession { return host }
+            if case .ssh(let host, _) = context.remoteSession { return host }
             if case .docker(let container) = context.remoteSession { return container }
             return ""
         case "cwd": return context.cwd

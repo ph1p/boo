@@ -3,7 +3,7 @@ import SwiftUI
 /// Content for a status bar segment declared by a plugin.
 struct StatusBarContent {
     let text: String
-    let icon: String?       // SF Symbol name
+    let icon: String?  // SF Symbol name
     let tint: DSLTint?
     let accessibilityLabel: String?
 }
@@ -37,6 +37,13 @@ protocol ExtermPluginProtocol: ExtermPlugin {
     /// Plugins that already contain their own scroll view should return false.
     var prefersOuterScrollView: Bool { get }
 
+    /// Host-provided action closures (paste path, open in tab/pane, etc.).
+    var hostActions: PluginHostActions? { get set }
+
+    /// Called by the plugin when it wants the host to re-run a plugin cycle
+    /// (e.g. after Docker containers change or git status updates).
+    var onRequestCycleRerun: (() -> Void)? { get set }
+
     // MARK: - Granular Lifecycle Callbacks
 
     func cwdChanged(newPath: String, context: TerminalContext)
@@ -49,12 +56,25 @@ protocol ExtermPluginProtocol: ExtermPlugin {
 
 /// Default no-op implementations for all optional methods.
 extension ExtermPluginProtocol {
-    var whenClause: WhenClauseNode? { nil }
+    /// Default: derive pluginID from manifest.id to avoid redundant declarations.
+    var pluginID: String { manifest.id }
+
+    /// Default: parse whenClause from manifest.when string.
+    /// Returns nil if manifest.when is nil (always visible).
+    var whenClause: WhenClauseNode? {
+        guard let when = manifest.when else { return nil }
+        return try? WhenClauseParser.parse(when)
+    }
 
     func makeDetailView(context: TerminalContext, actionHandler: DSLActionHandler) -> AnyView? { nil }
     func makeStatusBarContent(context: TerminalContext) -> StatusBarContent? { nil }
     func sectionTitle(context: TerminalContext) -> String? { nil }
     var prefersOuterScrollView: Bool { true }
+
+    // Note: hostActions and onRequestCycleRerun have NO default implementation.
+    // Every plugin must declare stored properties for these so PluginRegistry
+    // injection works correctly. A default no-op getter/setter would silently
+    // discard injected values.
 
     func cwdChanged(newPath: String, context: TerminalContext) {}
     func remoteSessionChanged(session: RemoteSessionType?, context: TerminalContext) {}
@@ -67,6 +87,7 @@ extension ExtermPluginProtocol {
 /// Evaluates whether a plugin should be visible given a terminal context.
 extension ExtermPluginProtocol {
     func isVisible(for context: TerminalContext) -> Bool {
+        if AppSettings.shared.disabledPluginIDs.contains(pluginID) { return false }
         guard let clause = whenClause else { return true }
         return WhenClauseEvaluator.evaluate(clause, context: context)
     }

@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import Exterm
 
 final class AppStateTests: XCTestCase {
@@ -17,7 +18,7 @@ final class AppStateTests: XCTestCase {
         state.addWorkspace(Workspace(folderPath: "/a"))
         state.addWorkspace(Workspace(folderPath: "/b"))
         XCTAssertEqual(state.workspaces.count, 2)
-        XCTAssertEqual(state.activeWorkspaceIndex, 1) // Last added
+        XCTAssertEqual(state.activeWorkspaceIndex, 1)  // Last added
     }
 
     func testSetActiveWorkspace() {
@@ -32,7 +33,7 @@ final class AppStateTests: XCTestCase {
         let state = AppState()
         state.addWorkspace(Workspace(folderPath: "/a"))
         state.setActiveWorkspace(5)
-        XCTAssertEqual(state.activeWorkspaceIndex, 0) // Unchanged
+        XCTAssertEqual(state.activeWorkspaceIndex, 0)  // Unchanged
     }
 
     func testRemoveWorkspace() {
@@ -48,7 +49,7 @@ final class AppStateTests: XCTestCase {
         let state = AppState()
         state.addWorkspace(Workspace(folderPath: "/a"))
         state.addWorkspace(Workspace(folderPath: "/b"))
-        state.removeWorkspace(at: 1) // Remove active
+        state.removeWorkspace(at: 1)  // Remove active
         XCTAssertEqual(state.workspaces.count, 1)
         XCTAssertEqual(state.activeWorkspaceIndex, 0)
     }
@@ -73,7 +74,7 @@ final class AppStateTests: XCTestCase {
         XCTAssertEqual(state.workspaces[0].folderPath, "/b")
         XCTAssertEqual(state.workspaces[1].folderPath, "/c")
         XCTAssertEqual(state.workspaces[2].folderPath, "/a")
-        XCTAssertEqual(state.activeWorkspaceIndex, 2) // active followed the move
+        XCTAssertEqual(state.activeWorkspaceIndex, 2)  // active followed the move
     }
 
     func testMoveWorkspaceBackward() {
@@ -88,7 +89,7 @@ final class AppStateTests: XCTestCase {
         XCTAssertEqual(state.workspaces[0].folderPath, "/c")
         XCTAssertEqual(state.workspaces[1].folderPath, "/a")
         XCTAssertEqual(state.workspaces[2].folderPath, "/b")
-        XCTAssertEqual(state.activeWorkspaceIndex, 2) // /b shifted right
+        XCTAssertEqual(state.activeWorkspaceIndex, 2)  // /b shifted right
     }
 
     func testMoveWorkspaceNoOp() {
@@ -107,12 +108,12 @@ final class AppStateTests: XCTestCase {
         state.addWorkspace(Workspace(folderPath: "/a"))
         state.addWorkspace(Workspace(folderPath: "/b"))
         state.addWorkspace(Workspace(folderPath: "/c"))
-        state.setActiveWorkspace(2) // active is /c
+        state.setActiveWorkspace(2)  // active is /c
 
         // Move /a forward past active
         state.moveWorkspace(from: 0, to: 3)
         // /b is now 0, /c is now 1, /a is now 2
-        XCTAssertEqual(state.activeWorkspaceIndex, 1) // /c shifted left
+        XCTAssertEqual(state.activeWorkspaceIndex, 1)  // /c shifted left
     }
 
     func testWorkspaceBarBlocksWindowDrag() {

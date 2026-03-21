@@ -19,7 +19,7 @@ struct DensityMetrics {
         switch density {
         case .comfortable:
             listItemHeight = 28
-            statusBarHeight = 24
+            statusBarHeight = 28
             panelPaddingH = 12
             panelPaddingV = 8
             panelGap = 8
@@ -27,7 +27,7 @@ struct DensityMetrics {
             fontSize = 13
         case .compact:
             listItemHeight = 22
-            statusBarHeight = 20
+            statusBarHeight = 24
             panelPaddingH = 8
             panelPaddingV = 6
             panelGap = 4

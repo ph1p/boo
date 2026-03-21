@@ -13,13 +13,13 @@ enum WorkspaceColor: String, CaseIterable {
     var nsColor: NSColor? {
         switch self {
         case .none: return nil
-        case .blue: return NSColor(red: 77/255, green: 143/255, blue: 232/255, alpha: 1)
-        case .purple: return NSColor(red: 139/255, green: 92/255, blue: 246/255, alpha: 1)
-        case .green: return NSColor(red: 52/255, green: 199/255, blue: 89/255, alpha: 1)
-        case .orange: return NSColor(red: 255/255, green: 159/255, blue: 10/255, alpha: 1)
-        case .red: return NSColor(red: 255/255, green: 69/255, blue: 58/255, alpha: 1)
-        case .yellow: return NSColor(red: 255/255, green: 214/255, blue: 10/255, alpha: 1)
-        case .pink: return NSColor(red: 255/255, green: 55/255, blue: 95/255, alpha: 1)
+        case .blue: return NSColor(red: 77 / 255, green: 143 / 255, blue: 232 / 255, alpha: 1)
+        case .purple: return NSColor(red: 139 / 255, green: 92 / 255, blue: 246 / 255, alpha: 1)
+        case .green: return NSColor(red: 52 / 255, green: 199 / 255, blue: 89 / 255, alpha: 1)
+        case .orange: return NSColor(red: 255 / 255, green: 159 / 255, blue: 10 / 255, alpha: 1)
+        case .red: return NSColor(red: 255 / 255, green: 69 / 255, blue: 58 / 255, alpha: 1)
+        case .yellow: return NSColor(red: 255 / 255, green: 214 / 255, blue: 10 / 255, alpha: 1)
+        case .pink: return NSColor(red: 255 / 255, green: 55 / 255, blue: 95 / 255, alpha: 1)
         }
     }
 

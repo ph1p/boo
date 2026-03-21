@@ -35,9 +35,10 @@ struct PluginManifest: Codable, Equatable {
         let type: SettingType
         let label: String
         let defaultValue: AnyCodableValue?
+        let options: String?
 
         enum CodingKeys: String, CodingKey {
-            case key, type, label
+            case key, type, label, options
             case defaultValue = "default"
         }
 
@@ -58,19 +59,30 @@ struct AnyCodableValue: Codable, Equatable {
 
     init(from decoder: Decoder) throws {
         let container = try decoder.singleValueContainer()
-        if let b = try? container.decode(Bool.self) { value = b }
-        else if let i = try? container.decode(Int.self) { value = i }
-        else if let d = try? container.decode(Double.self) { value = d }
-        else if let s = try? container.decode(String.self) { value = s }
-        else { throw DecodingError.dataCorruptedError(in: container, debugDescription: "Unsupported setting value type") }
+        if let b = try? container.decode(Bool.self) {
+            value = b
+        } else if let i = try? container.decode(Int.self) {
+            value = i
+        } else if let d = try? container.decode(Double.self) {
+            value = d
+        } else if let s = try? container.decode(String.self) {
+            value = s
+        } else {
+            throw DecodingError.dataCorruptedError(in: container, debugDescription: "Unsupported setting value type")
+        }
     }
 
     func encode(to encoder: Encoder) throws {
         var container = encoder.singleValueContainer()
-        if let b = value as? Bool { try container.encode(b) }
-        else if let i = value as? Int { try container.encode(i) }
-        else if let d = value as? Double { try container.encode(d) }
-        else if let s = value as? String { try container.encode(s) }
+        if let b = value as? Bool {
+            try container.encode(b)
+        } else if let i = value as? Int {
+            try container.encode(i)
+        } else if let d = value as? Double {
+            try container.encode(d)
+        } else if let s = value as? String {
+            try container.encode(s)
+        }
     }
 
     static func == (lhs: AnyCodableValue, rhs: AnyCodableValue) -> Bool {

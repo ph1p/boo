@@ -1,5 +1,7 @@
 .build
-Vendor/ghostty/
+Vendor/ghostty/zig-out/
+Vendor/ghostty/.zig-cache/
+Vendor/ghostty/macos/
 zig-out/
 .zig-cache/
 zig-cache/
@@ -8,3 +10,5 @@ _bmad
 _bmad-output
 documentation/docs/dist
 documentation/node_modules
+*.dmg
+.DS_Store

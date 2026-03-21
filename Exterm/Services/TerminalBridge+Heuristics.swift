@@ -13,12 +13,12 @@ extension TerminalBridge {
 
         // Docker detection: title contains "docker" keyword
         let lower = trimmed.lowercased()
-        if lower.contains("docker exec") || lower.contains("docker run") ||
-           lower.hasPrefix("docker") {
+        if lower.contains("docker exec") || lower.contains("docker run") || lower.hasPrefix("docker") {
             // Try to extract container name from title
             let parts = trimmed.split(separator: " ")
             if let execIdx = parts.firstIndex(where: { $0 == "exec" || $0 == "run" }),
-               execIdx + 1 < parts.endIndex {
+                execIdx + 1 < parts.endIndex
+            {
                 // Skip flags (starting with -)
                 var i = parts.index(after: execIdx)
                 while i < parts.endIndex && parts[i].hasPrefix("-") {
@@ -36,7 +36,8 @@ extension TerminalBridge {
         if let match = atPattern {
             let components = match.split(separator: "@", maxSplits: 1)
             if components.count == 2 {
-                let host = components[1]
+                let host =
+                    components[1]
                     .split(separator: ":").first
                     .flatMap { $0.split(separator: " ").first }
                     .map(String.init)?
@@ -99,8 +100,9 @@ extension TerminalBridge {
         // transitions (no alias) like "user@host1:~" → "user@host2:~" are genuine
         // host switches and should NOT be stabilized.
         if case .ssh(let prevHost, let prevAlias) = previous, let alias = prevAlias,
-           case .ssh = detected,
-           heuristic != nil, processDetection == nil {
+            case .ssh = detected,
+            heuristic != nil, processDetection == nil
+        {
             detected = .ssh(host: prevHost, alias: alias)
         }
 
@@ -134,7 +136,8 @@ extension TerminalBridge {
         let isLocalUserAtHostPrompt: Bool = {
             guard trimmed.contains("@"), let atRange = trimmed.range(of: "@") else { return false }
             let afterAt = String(trimmed[atRange.upperBound...])
-            let host = afterAt.split(separator: ":").first
+            let host =
+                afterAt.split(separator: ":").first
                 .flatMap { $0.split(separator: " ").first }
                 .map(String.init) ?? afterAt
             return isLocalHost(host)
@@ -170,9 +173,14 @@ extension TerminalBridge {
             // Find first non-option argument as host
             var skipNext = false
             for arg in parts.dropFirst() {
-                if skipNext { skipNext = false; continue }
+                if skipNext {
+                    skipNext = false
+                    continue
+                }
                 if arg.hasPrefix("-") {
-                    let valueOpts: Set<String> = ["-p", "-i", "-l", "-o", "-F", "-J", "-L", "-R", "-D", "-b", "-c", "-e", "-m", "-w", "-E"]
+                    let valueOpts: Set<String> = [
+                        "-p", "-i", "-l", "-o", "-F", "-J", "-L", "-R", "-D", "-b", "-c", "-e", "-m", "-w", "-E"
+                    ]
                     if valueOpts.contains(arg) { skipNext = true }
                     continue
                 }
@@ -278,7 +286,8 @@ extension TerminalBridge {
         if let atRange = trimmed.range(of: "@") {
             let afterAt = String(trimmed[atRange.upperBound...])
             // Extract hostname (before : or space or end)
-            let host = afterAt.split(separator: ":").first
+            let host =
+                afterAt.split(separator: ":").first
                 .flatMap { $0.split(separator: " ").first }
                 .map(String.init) ?? afterAt
             // Not remote if it matches any local hostname
@@ -298,7 +307,8 @@ extension TerminalBridge {
         let trimmed = title.trimmingCharacters(in: .whitespaces)
         guard let atRange = trimmed.range(of: "@") else { return false }
         let afterAt = String(trimmed[atRange.upperBound...])
-        let host = afterAt.split(separator: ":").first
+        let host =
+            afterAt.split(separator: ":").first
             .flatMap { $0.split(separator: " ").first }
             .map(String.init) ?? afterAt
         return isLocalHost(host)

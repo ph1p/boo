@@ -1,7 +1,7 @@
+import CGhostty
 import Cocoa
 import Combine
 import SwiftUI
-import CGhostty
 
 // SidebarPanelView is added directly to sidebarContainer (no SwiftUI bridge).
 
@@ -25,7 +25,8 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
     var sidebarVisible = true
     var isRemoteSidebar: Bool {
         get { coordinator?.isRemote ?? false }
-        set { /* derived from bridge state, no-op setter for migration */ }
+        set {  // derived from bridge state, no-op setter for migration
+        }
     }
     var currentSidebarPosition: SidebarPosition = .right
     var currentWorkspaceBarPosition: WorkspaceBarPosition = .left
@@ -149,13 +150,18 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
             self.window?.appearance = NSAppearance(named: theme.isDark ? .darkAqua : .aqua)
             self.sidebarContainer.layer?.backgroundColor = theme.sidebarBg.cgColor
             self.splitContainer.layer?.backgroundColor = theme.background.nsColor.cgColor
-            self.mainSplitView.needsDisplay = true // Redraws themed divider
+            self.mainSplitView.needsDisplay = true  // Redraws themed divider
             self.toolbar.needsDisplay = true
             self.statusBarHeightConstraint?.constant = DensityMetrics.current.statusBarHeight
             self.statusBar.needsDisplay = true
             // Refresh plugin sidebar if open (theme/density may have changed)
-            if !self.openPluginIDs.isEmpty, let ctx = self.pluginRegistry.lastContext {
-                self.rebuildPluginSidebar(context: ctx)
+            if !self.openPluginIDs.isEmpty {
+                let registry = self.pluginRegistry
+                Task { @MainActor in
+                    if let ctx = registry.lastContext {
+                        self.rebuildPluginSidebar(context: ctx)
+                    }
+                }
             }
             for (_, pv) in self.paneViews {
                 pv.layer?.backgroundColor = theme.background.nsColor.cgColor
@@ -185,7 +191,8 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
         ) { [weak self] notification in
             guard let self = self else { return }
             guard let info = notification.userInfo,
-                  let action = info["action"] as? String else { return }
+                let action = info["action"] as? String
+            else { return }
             self.handleGhosttyAction(action, userInfo: info)
         }
     }
@@ -310,13 +317,14 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
 
             statusBar.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
             statusBar.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
-            statusBar.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
+            statusBar.bottomAnchor.constraint(equalTo: contentView.bottomAnchor)
         ])
 
         if currentWorkspaceBarPosition == .left || currentWorkspaceBarPosition == .right {
             setupSideWorkspaceBar(in: contentView, position: currentWorkspaceBarPosition)
         }
-        let heightConstraint = statusBar.heightAnchor.constraint(equalToConstant: DensityMetrics.current.statusBarHeight)
+        let heightConstraint = statusBar.heightAnchor.constraint(
+            equalToConstant: DensityMetrics.current.statusBarHeight)
         heightConstraint.isActive = true
         statusBarHeightConstraint = heightConstraint
 
@@ -354,7 +362,7 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
         var constraints = [
             bar.topAnchor.constraint(equalTo: toolbar.bottomAnchor),
             bar.bottomAnchor.constraint(equalTo: statusBar.topAnchor),
-            widthConstraint,
+            widthConstraint
         ]
 
         if position == .left {
@@ -448,7 +456,9 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
         return false
     }
 
-    func splitView(_ splitView: NSSplitView, effectiveRect r: NSRect, forDrawnRect d: NSRect, ofDividerAt i: Int) -> NSRect {
+    func splitView(
+        _ splitView: NSSplitView, effectiveRect r: NSRect, forDrawnRect d: NSRect, ofDividerAt i: Int
+    ) -> NSRect {
         if splitView == mainSplitView && !sidebarVisible { return .zero }
         return r
     }
@@ -493,18 +503,28 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
 
                 case .titleChanged:
                     if let ws = self.activeWorkspace,
-                       let pane = ws.pane(for: self.bridge.state.paneID) {
+                        let pane = ws.pane(for: self.bridge.state.paneID)
+                    {
                         self.coordinator.syncBridgeToTab(pane: pane, tabIndex: pane.activeTabIndex)
                     }
                     self.runPluginCycle(reason: .titleChanged)
 
                 case .processChanged:
+                    // Sync foreground process to TabState and redraw tab bar
+                    if let ws = self.activeWorkspace,
+                        let pane = ws.pane(for: self.bridge.state.paneID)
+                    {
+                        pane.updateForegroundProcess(
+                            at: pane.activeTabIndex, self.bridge.state.foregroundProcess)
+                        self.paneViews[pane.id]?.needsDisplay = true
+                    }
                     self.runPluginCycle(reason: .processChanged)
 
                 case .remoteSessionChanged:
                     // Coordinator syncs bridge state → TabState
                     if let ws = self.activeWorkspace,
-                       let pane = ws.pane(for: self.bridge.state.paneID) {
+                        let pane = ws.pane(for: self.bridge.state.paneID)
+                    {
                         self.coordinator.syncBridgeToTab(pane: pane, tabIndex: pane.activeTabIndex)
                     }
                     self.syncRemoteSidebarState()
@@ -540,7 +560,8 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
         }
 
         guard let workspace = activeWorkspace,
-              let pane = workspace.pane(for: paneID) else {
+            let pane = workspace.pane(for: paneID)
+        else {
             return PaneView(paneID: paneID, pane: Pane(id: paneID))
         }
 
@@ -571,8 +592,9 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
 
     @objc func newTabAction(_ sender: Any?) {
         guard let workspace = activeWorkspace,
-              workspace.pane(for: workspace.activePaneID) != nil,
-              let pv = paneViews[workspace.activePaneID] else { return }
+            workspace.pane(for: workspace.activePaneID) != nil,
+            let pv = paneViews[workspace.activePaneID]
+        else { return }
         let cwd = workspace.folderPath
         pv.addNewTab(workingDirectory: cwd)
         window?.makeFirstResponder(pv.currentTerminalView)

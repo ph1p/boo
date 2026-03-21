@@ -91,14 +91,14 @@ class WorkspaceBarView: NSView {
         let theme = AppSettings.shared.theme
 
         // Background — deepest layer
-        ctx.setFillColor(CGColor(red: 13/255, green: 13/255, blue: 15/255, alpha: 1))
+        ctx.setFillColor(CGColor(red: 13 / 255, green: 13 / 255, blue: 15 / 255, alpha: 1))
         ctx.fill(bounds)
 
         // Bottom separator
-        ctx.setFillColor(CGColor(red: 42/255, green: 42/255, blue: 47/255, alpha: 1))
+        ctx.setFillColor(CGColor(red: 42 / 255, green: 42 / 255, blue: 47 / 255, alpha: 1))
         ctx.fill(CGRect(x: 0, y: bounds.height - 1, width: bounds.width, height: 1))
 
-        var x: CGFloat = 72 // Clear traffic lights
+        var x: CGFloat = 72  // Clear traffic lights
 
         for (i, item) in items.enumerated() {
             let isSelected = i == selectedIndex
@@ -108,17 +108,23 @@ class WorkspaceBarView: NSView {
 
             let textColor: NSColor
             if let c = wsColor, isSelected {
-                textColor = NSColor(red: c.redComponent * 0.6 + 0.4, green: c.greenComponent * 0.6 + 0.4, blue: c.blueComponent * 0.6 + 0.4, alpha: 1)
+                textColor = NSColor(
+                    red: c.redComponent * 0.6 + 0.4, green: c.greenComponent * 0.6 + 0.4,
+                    blue: c.blueComponent * 0.6 + 0.4, alpha: 1)
             } else if isSelected {
-                textColor = NSColor(red: 228/255, green: 228/255, blue: 232/255, alpha: 1)
+                textColor = NSColor(red: 228 / 255, green: 228 / 255, blue: 232 / 255, alpha: 1)
             } else if let c = wsColor, isHovered {
-                textColor = NSColor(red: c.redComponent * 0.5 + 0.3, green: c.greenComponent * 0.5 + 0.3, blue: c.blueComponent * 0.5 + 0.3, alpha: 1)
+                textColor = NSColor(
+                    red: c.redComponent * 0.5 + 0.3, green: c.greenComponent * 0.5 + 0.3,
+                    blue: c.blueComponent * 0.5 + 0.3, alpha: 1)
             } else if isHovered {
-                textColor = NSColor(red: 160/255, green: 160/255, blue: 168/255, alpha: 1)
+                textColor = NSColor(red: 160 / 255, green: 160 / 255, blue: 168 / 255, alpha: 1)
             } else if let c = wsColor {
-                textColor = NSColor(red: c.redComponent * 0.5 + 0.2, green: c.greenComponent * 0.5 + 0.2, blue: c.blueComponent * 0.5 + 0.2, alpha: 1)
+                textColor = NSColor(
+                    red: c.redComponent * 0.5 + 0.2, green: c.greenComponent * 0.5 + 0.2,
+                    blue: c.blueComponent * 0.5 + 0.2, alpha: 1)
             } else {
-                textColor = NSColor(red: 86/255, green: 86/255, blue: 94/255, alpha: 1)
+                textColor = NSColor(red: 86 / 255, green: 86 / 255, blue: 94 / 255, alpha: 1)
             }
             let attrs: [NSAttributedString.Key: Any] = [
                 .font: NSFont.systemFont(ofSize: 11.5, weight: isSelected ? .medium : .regular),
@@ -138,11 +144,11 @@ class WorkspaceBarView: NSView {
                 ctx.addPath(CGPath(roundedRect: pillRect, cornerWidth: 6, cornerHeight: 6, transform: nil))
                 ctx.fillPath()
             } else if isSelected {
-                ctx.setFillColor(CGColor(red: 35/255, green: 35/255, blue: 39/255, alpha: 1))
+                ctx.setFillColor(CGColor(red: 35 / 255, green: 35 / 255, blue: 39 / 255, alpha: 1))
                 ctx.addPath(CGPath(roundedRect: pillRect, cornerWidth: 6, cornerHeight: 6, transform: nil))
                 ctx.fillPath()
             } else if isHovered {
-                ctx.setFillColor(CGColor(red: 28/255, green: 28/255, blue: 32/255, alpha: 1))
+                ctx.setFillColor(CGColor(red: 28 / 255, green: 28 / 255, blue: 32 / 255, alpha: 1))
                 ctx.addPath(CGPath(roundedRect: pillRect, cornerWidth: 6, cornerHeight: 6, transform: nil))
                 ctx.fillPath()
             }
@@ -158,8 +164,12 @@ class WorkspaceBarView: NSView {
 
             // Close button — on hover, not pinned
             if !item.isPinned && isHovered {
-                let closeColor: NSColor = wsColor?.withAlphaComponent(0.8) ?? NSColor(red: 86/255, green: 86/255, blue: 94/255, alpha: 0.8)
-                let closeBgColor: CGColor = (wsColor?.withAlphaComponent(0.15) ?? NSColor(red: 60/255, green: 60/255, blue: 68/255, alpha: 0.15)).cgColor
+                let closeColor: NSColor =
+                    wsColor?.withAlphaComponent(0.8)
+                    ?? NSColor(red: 86 / 255, green: 86 / 255, blue: 94 / 255, alpha: 0.8)
+                let closeBgColor: CGColor =
+                    (wsColor?.withAlphaComponent(0.15)
+                    ?? NSColor(red: 60 / 255, green: 60 / 255, blue: 68 / 255, alpha: 0.15)).cgColor
                 let closeAttrs: [NSAttributedString.Key: Any] = [
                     .font: NSFont.systemFont(ofSize: 8, weight: .bold),
                     .foregroundColor: closeColor
@@ -202,7 +212,7 @@ class WorkspaceBarView: NSView {
             let pillWidth = titleWidth + 32 + closeSpace
             x += pillWidth + 6
         }
-        return x - 3 // Center in the 6px gap
+        return x - 3  // Center in the 6px gap
     }
 
     // MARK: - Vertical Drawing (left bar)
@@ -252,11 +262,15 @@ class WorkspaceBarView: NSView {
             let label = String(item.name.prefix(2)).uppercased()
             let textColor: NSColor
             if let c = wsColor, isSelected {
-                textColor = NSColor(red: c.redComponent * 0.6 + 0.4, green: c.greenComponent * 0.6 + 0.4, blue: c.blueComponent * 0.6 + 0.4, alpha: 1)
+                textColor = NSColor(
+                    red: c.redComponent * 0.6 + 0.4, green: c.greenComponent * 0.6 + 0.4,
+                    blue: c.blueComponent * 0.6 + 0.4, alpha: 1)
             } else if isSelected {
                 textColor = theme.chromeText
             } else if let c = wsColor {
-                textColor = NSColor(red: c.redComponent * 0.5 + 0.2, green: c.greenComponent * 0.5 + 0.2, blue: c.blueComponent * 0.5 + 0.2, alpha: 1)
+                textColor = NSColor(
+                    red: c.redComponent * 0.5 + 0.2, green: c.greenComponent * 0.5 + 0.2,
+                    blue: c.blueComponent * 0.5 + 0.2, alpha: 1)
             } else {
                 textColor = theme.chromeMuted
             }
@@ -277,7 +291,8 @@ class WorkspaceBarView: NSView {
             // Close button — on hover, not pinned
             if !item.isPinned && isHovered {
                 let closeColor: NSColor = wsColor?.withAlphaComponent(0.8) ?? theme.chromeMuted.withAlphaComponent(0.8)
-                let closeBgColor: NSColor = wsColor?.withAlphaComponent(0.15) ?? theme.chromeMuted.withAlphaComponent(0.15)
+                let closeBgColor: NSColor =
+                    wsColor?.withAlphaComponent(0.15) ?? theme.chromeMuted.withAlphaComponent(0.15)
                 let closeAttrs: [NSAttributedString.Key: Any] = [
                     .font: NSFont.systemFont(ofSize: 8, weight: .bold),
                     .foregroundColor: closeColor
@@ -290,7 +305,9 @@ class WorkspaceBarView: NSView {
                 ctx.setFillColor(closeBgColor.cgColor)
                 ctx.fillEllipse(in: CGRect(x: circleX, y: circleY, width: circleSize, height: circleSize))
                 closeStr.draw(
-                    at: NSPoint(x: circleX + (circleSize - closeSize.width) / 2, y: circleY + (circleSize - closeSize.height) / 2),
+                    at: NSPoint(
+                        x: circleX + (circleSize - closeSize.width) / 2,
+                        y: circleY + (circleSize - closeSize.height) / 2),
                     withAttributes: closeAttrs
                 )
             }
@@ -385,7 +402,6 @@ class WorkspaceBarView: NSView {
         }
     }
 
-
     // MARK: - Ghost Drag System
 
     private func createGhostWindow(for index: Int, event: NSEvent) {
@@ -440,9 +456,10 @@ class WorkspaceBarView: NSView {
         }
 
         let win = NSWindow(
-            contentRect: NSRect(x: screenPoint.x - ghostWidth / 2,
-                                y: screenPoint.y - ghostHeight / 2,
-                                width: ghostWidth, height: ghostHeight),
+            contentRect: NSRect(
+                x: screenPoint.x - ghostWidth / 2,
+                y: screenPoint.y - ghostHeight / 2,
+                width: ghostWidth, height: ghostHeight),
             styleMask: .borderless,
             backing: .buffered,
             defer: false
@@ -468,8 +485,10 @@ class WorkspaceBarView: NSView {
                 screenPoint = NSEvent.mouseLocation
             }
             let frame = win.frame
-            win.setFrameOrigin(NSPoint(x: screenPoint.x - frame.width / 2,
-                                       y: screenPoint.y - frame.height / 2))
+            win.setFrameOrigin(
+                NSPoint(
+                    x: screenPoint.x - frame.width / 2,
+                    y: screenPoint.y - frame.height / 2))
         }
 
         // Update drop target
@@ -586,7 +605,8 @@ class WorkspaceBarView: NSView {
             colorMenu.addItem(ci)
         }
         colorMenu.addItem(.separator())
-        let customItem = NSMenuItem(title: "Custom Color...", action: #selector(contextCustomColor(_:)), keyEquivalent: "")
+        let customItem = NSMenuItem(
+            title: "Custom Color...", action: #selector(contextCustomColor(_:)), keyEquivalent: "")
         customItem.target = self
         customItem.tag = index
         if item.hasCustomColor {
@@ -751,7 +771,8 @@ class WorkspaceBarView: NSView {
                 // Close button hit area — only when hovered
                 let circleSize: CGFloat = 16
                 let circleY = (barHeight - circleSize) / 2
-                let closeRect = CGRect(x: x + pillWidth - circleSize - 4, y: circleY, width: circleSize, height: circleSize)
+                let closeRect = CGRect(
+                    x: x + pillWidth - circleSize - 4, y: circleY, width: circleSize, height: circleSize)
                 if !item.isPinned && i == hoveredIndex && closeRect.contains(point) {
                     delegate?.workspaceBar(self, didCloseAt: i)
                 } else {
@@ -773,7 +794,9 @@ class WorkspaceBarView: NSView {
             if pillRect.contains(point) {
                 // Close button hit area — only when hovered
                 let circleSize: CGFloat = 16
-                let closeRect = CGRect(x: pillRect.maxX - circleSize - 2, y: pillRect.midY - circleSize / 2, width: circleSize, height: circleSize)
+                let closeRect = CGRect(
+                    x: pillRect.maxX - circleSize - 2, y: pillRect.midY - circleSize / 2, width: circleSize,
+                    height: circleSize)
                 if !item.isPinned && i == hoveredIndex && closeRect.contains(point) {
                     delegate?.workspaceBar(self, didCloseAt: i)
                 } else {

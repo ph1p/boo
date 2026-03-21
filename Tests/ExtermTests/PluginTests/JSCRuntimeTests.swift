@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import Exterm
 
 final class JSCRuntimeTests: XCTestCase {
@@ -13,7 +14,9 @@ final class JSCRuntimeTests: XCTestCase {
     ) -> TerminalContext {
         let git: TerminalContext.GitContext?
         if let branch = gitBranch {
-            git = TerminalContext.GitContext(branch: branch, repoRoot: "/repo", isDirty: true, changedFileCount: 2)
+            git = TerminalContext.GitContext(
+                branch: branch, repoRoot: "/repo", isDirty: true, changedFileCount: 2, stagedCount: 0, stashCount: 0,
+                aheadCount: 0, behindCount: 0, lastCommitShort: nil)
         } else {
             git = nil
         }
@@ -30,33 +33,33 @@ final class JSCRuntimeTests: XCTestCase {
 
     func testBasicTransform() throws {
         let source = """
-        function transform(ctx) {
-            return JSON.stringify({ type: "label", text: "Hello from " + ctx.cwd });
-        }
-        """
+            function transform(ctx) {
+                return JSON.stringify({ type: "label", text: "Hello from " + ctx.cwd });
+            }
+            """
         let result = try runtime.execute(source: source, context: makeContext(cwd: "/home/user"))
         XCTAssertTrue(result.contains("Hello from /home/user"), "Got: \(result)")
     }
 
     func testContextAccess() throws {
         let source = """
-        function transform(ctx) {
-            return JSON.stringify({ type: "label", text: ctx.envType + ":" + ctx.cwd });
-        }
-        """
+            function transform(ctx) {
+                return JSON.stringify({ type: "label", text: ctx.envType + ":" + ctx.cwd });
+            }
+            """
         let result = try runtime.execute(source: source, context: makeContext())
         XCTAssertTrue(result.contains("local:/tmp"), "Got: \(result)")
     }
 
     func testGitContextAccess() throws {
         let source = """
-        function transform(ctx) {
-            if (ctx.git) {
-                return JSON.stringify({ type: "label", text: ctx.git.branch });
+            function transform(ctx) {
+                if (ctx.git) {
+                    return JSON.stringify({ type: "label", text: ctx.git.branch });
+                }
+                return JSON.stringify({ type: "label", text: "no git" });
             }
-            return JSON.stringify({ type: "label", text: "no git" });
-        }
-        """
+            """
         let withGit = try runtime.execute(source: source, context: makeContext(gitBranch: "feature"))
         XCTAssertTrue(withGit.contains("feature"), "Got: \(withGit)")
 
@@ -66,10 +69,10 @@ final class JSCRuntimeTests: XCTestCase {
 
     func testRemoteContextAccess() throws {
         let source = """
-        function transform(ctx) {
-            return JSON.stringify({ type: "label", text: ctx.envType + ":" + (ctx.remoteHost || "none") });
-        }
-        """
+            function transform(ctx) {
+                return JSON.stringify({ type: "label", text: ctx.envType + ":" + (ctx.remoteHost || "none") });
+            }
+            """
         let ssh = try runtime.execute(source: source, context: makeContext(remote: .ssh(host: "server")))
         XCTAssertTrue(ssh.contains("ssh:server"), "Got: \(ssh)")
     }
@@ -90,13 +93,13 @@ final class JSCRuntimeTests: XCTestCase {
 
     func testArrayReturn() throws {
         let source = """
-        function transform(ctx) {
-            return JSON.stringify([
-                { type: "label", text: "first" },
-                { type: "label", text: "second" }
-            ]);
-        }
-        """
+            function transform(ctx) {
+                return JSON.stringify([
+                    { type: "label", text: "first" },
+                    { type: "label", text: "second" }
+                ]);
+            }
+            """
         let result = try runtime.execute(source: source, context: makeContext())
         XCTAssertTrue(result.contains("first"), "Got: \(result)")
         XCTAssertTrue(result.contains("second"), "Got: \(result)")

@@ -12,63 +12,36 @@
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/your-username/exterm.git
+git clone --recursive https://github.com/your-username/exterm.git
 cd exterm
 ```
 
-### 2. Get Ghostty
+If you already cloned without `--recursive`:
 
 ```bash
-mkdir -p Vendor
-git clone --depth 1 https://github.com/ghostty-org/ghostty.git Vendor/ghostty
+git submodule update --init --depth 1
 ```
 
-### 3. Build GhosttyKit
+### 2. Build everything
 
 ```bash
-cd Vendor/ghostty
-zig build -Demit-xcframework=true -Dxcframework-target=native -Doptimize=ReleaseFast
-cd ../..
-```
-
-This builds `Vendor/ghostty/macos/GhosttyKit.xcframework/` containing `libghostty-fat.a` (~135MB) and headers.
-
-:::note
-First build downloads dependencies and compiles Metal shaders. Takes 2–5 minutes. Subsequent builds are cached.
-:::
-
-### 4. Build Exterm
-
-```bash
-swift build
-```
-
-### 5. Run
-
-```bash
-make run
-# or directly:
-.build/debug/Exterm
-```
-
-### Quick Start (one-liner)
-
-```bash
-make setup  # Clones Ghostty, builds GhosttyKit, builds Exterm
+make setup  # Builds GhosttyKit + Exterm
 make run    # Build and launch
 ```
+
+:::note
+First build downloads dependencies and compiles Metal shaders. Takes 2-5 minutes. Subsequent builds are cached.
+:::
 
 ### Release Build
 
 ```bash
-swift build -c release
-.build/release/Exterm
+make release  # Optimized release build
+make app      # Create .app bundle
 ```
 
 ## Running Tests
 
 ```bash
 make test
-# or:
-swift test
 ```

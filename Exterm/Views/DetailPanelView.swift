@@ -1,5 +1,5 @@
-import SwiftUI
 import Cocoa
+import SwiftUI
 
 // MARK: - Layout Constants
 
@@ -32,6 +32,10 @@ class SidebarPanelView: NSView {
         var isExpanded: Bool
         /// Content height for expanded sections (the portion below the header).
         var contentHeight: CGFloat
+        /// Intrinsic content height measured from SwiftUI fittingSize.
+        var intrinsicHeight: CGFloat = 0
+        /// Whether this section can grow to fill remaining space (e.g. file tree, git).
+        var canGrow: Bool = false
         var headerView: SidebarSectionHeaderView
         /// Container view that clips the SwiftUI content hosting view.
         var contentContainer: NSView?
@@ -63,6 +67,7 @@ class SidebarPanelView: NSView {
         let oldIDs = sectionStates.map(\.id)
 
         if newIDs == oldIDs {
+            var hadCollapseOrExpand = false
             for (i, section) in sections.enumerated() {
                 let wasExpanded = sectionStates[i].isExpanded
                 let isNowExpanded = expandedIDs.contains(section.id)
@@ -73,18 +78,28 @@ class SidebarPanelView: NSView {
                     name: section.name, icon: section.icon, isExpanded: isNowExpanded)
 
                 if isNowExpanded {
-                    if !wasExpanded {
-                        sectionStates[i].contentHeight = defaultExpandHeight()
-                    }
                     removeContentView(at: i)
                     addContentView(
                         at: i,
                         content: section.content,
                         prefersOuterScrollView: section.prefersOuterScrollView)
+                    if !wasExpanded {
+                        // Use measured intrinsic height from addContentView
+                        sectionStates[i].contentHeight = max(
+                            SidebarLayout.minSectionHeight,
+                            sectionStates[i].intrinsicHeight)
+                        hadCollapseOrExpand = true
+                    }
                 } else {
-                    if wasExpanded { sectionStates[i].contentHeight = 0 }
+                    if wasExpanded {
+                        sectionStates[i].contentHeight = 0
+                        hadCollapseOrExpand = true
+                    }
                     removeContentView(at: i)
                 }
+            }
+            if hadCollapseOrExpand {
+                redistributeAfterCollapseOrExpand()
             }
             layoutAllSections()
             return
@@ -107,17 +122,23 @@ class SidebarPanelView: NSView {
             header.onToggle = { [weak self] id in self?.onToggleExpand?(id) }
             addSubview(header)
 
-            sectionStates.append(SectionState(
-                id: section.id, name: section.name, icon: section.icon,
-                isExpanded: isExpanded,
-                contentHeight: isExpanded ? defaultExpandHeight() : 0,
-                headerView: header, contentContainer: nil))
+            let idx = sectionStates.count
+            sectionStates.append(
+                SectionState(
+                    id: section.id, name: section.name, icon: section.icon,
+                    isExpanded: isExpanded,
+                    contentHeight: 0,
+                    headerView: header, contentContainer: nil))
 
             if isExpanded {
                 addContentView(
-                    at: sectionStates.count - 1,
+                    at: idx,
                     content: section.content,
                     prefersOuterScrollView: section.prefersOuterScrollView)
+                // Use measured intrinsic height
+                sectionStates[idx].contentHeight = max(
+                    SidebarLayout.minSectionHeight,
+                    sectionStates[idx].intrinsicHeight)
             }
         }
         distributeEqualExpanded()
@@ -126,7 +147,17 @@ class SidebarPanelView: NSView {
 
     /// Add a content view for a section, optionally wrapped in an outer NSScrollView.
     private func addContentView(at index: Int, content: AnyView, prefersOuterScrollView: Bool) {
-        let hosting = NSHostingView(rootView: content)
+        // Wrap content in a top-leading aligned container to prevent centering
+        let aligned =
+            content
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        let hosting = NSHostingView(rootView: aligned)
+
+        // Measure intrinsic content height
+        hosting.frame.size.width = max(1, bounds.width)
+        let intrinsic = hosting.fittingSize.height
+        sectionStates[index].intrinsicHeight = intrinsic
+        sectionStates[index].canGrow = !prefersOuterScrollView
 
         if !prefersOuterScrollView {
             addSubview(hosting)
@@ -134,17 +165,14 @@ class SidebarPanelView: NSView {
             return
         }
 
-        let scrollView = NSScrollView()
+        let scrollView = TopAlignedScrollView()
         scrollView.hasVerticalScroller = true
         scrollView.hasHorizontalScroller = false
         scrollView.autohidesScrollers = true
         scrollView.drawsBackground = false
         scrollView.borderType = .noBorder
 
-        // Give the hosting view an initial width so it can compute intrinsic height
-        hosting.frame.size.width = bounds.width
-        let fittingHeight = hosting.fittingSize.height
-        hosting.frame.size.height = max(fittingHeight, bounds.height)
+        hosting.frame.size.height = intrinsic
         scrollView.documentView = hosting
 
         addSubview(scrollView)
@@ -157,20 +185,63 @@ class SidebarPanelView: NSView {
         sectionStates[index].contentContainer = nil
     }
 
-    /// Default height for a newly expanded section.
+    /// Default height for a newly expanded section — uses intrinsic height if known.
     private func defaultExpandHeight() -> CGFloat {
-        return max(SidebarLayout.minSectionHeight, 150)
+        SidebarLayout.minSectionHeight
     }
 
-    /// Give all expanded sections equal content height, fitting the available space.
+    /// Distribute available space among expanded sections.
+    /// Sections with measured intrinsic height get that height.
+    /// Growable sections (prefersOuterScrollView=false, e.g. file tree) share remaining space.
     private func distributeEqualExpanded() {
-        let expandedCount = sectionStates.filter(\.isExpanded).count
-        guard expandedCount > 0 else { return }
+        let expandedIndices = sectionStates.indices.filter { sectionStates[$0].isExpanded }
+        guard !expandedIndices.isEmpty else { return }
         let available = availableContentHeight()
-        let each = max(SidebarLayout.minSectionHeight, available / CGFloat(expandedCount))
-        for i in 0..<sectionStates.count where sectionStates[i].isExpanded {
-            sectionStates[i].contentHeight = each
+
+        // First pass: give each section its intrinsic height (or min)
+        for i in expandedIndices {
+            let intrinsic = sectionStates[i].intrinsicHeight
+            sectionStates[i].contentHeight = max(SidebarLayout.minSectionHeight, intrinsic)
         }
+
+        // Sum assigned heights
+        let assignedSum = expandedIndices.reduce(CGFloat(0)) { $0 + sectionStates[$1].contentHeight }
+        let remaining = available - assignedSum
+
+        // Second pass: distribute remaining space to growable sections
+        if remaining > 0 {
+            let growable = expandedIndices.filter { sectionStates[$0].canGrow }
+            if !growable.isEmpty {
+                let extra = remaining / CGFloat(growable.count)
+                for i in growable {
+                    sectionStates[i].contentHeight += extra
+                }
+            }
+            // If no growable sections but there's leftover space, leave it —
+            // sections stay at their intrinsic size, empty space at the bottom.
+        }
+    }
+
+    /// After a collapse or expand, redistribute space so expanded sections
+    /// fill the available area. Growable sections absorb extra space first.
+    private func redistributeAfterCollapseOrExpand() {
+        let expandedIndices = sectionStates.indices.filter { sectionStates[$0].isExpanded }
+        guard !expandedIndices.isEmpty else { return }
+        let available = availableContentHeight()
+        let currentSum = expandedIndices.reduce(CGFloat(0)) { $0 + sectionStates[$1].contentHeight }
+        let diff = available - currentSum
+        guard abs(diff) > 1 else { return }
+
+        if diff > 0 {
+            // Space freed (collapse) — distribute to growable, or all expanded
+            let targets = expandedIndices.filter { sectionStates[$0].canGrow }
+            let recipients = targets.isEmpty ? expandedIndices : targets
+            let extra = diff / CGFloat(recipients.count)
+            for i in recipients {
+                sectionStates[i].contentHeight += extra
+            }
+        }
+        // If diff < 0 (new section expanded, overflow), clampHeightsToFit handles it
     }
 
     /// Total height available for content (total - all headers - separators).
@@ -196,7 +267,11 @@ class SidebarPanelView: NSView {
         defer { isLayingOut = false }
         let w = bounds.width
 
-        clampHeightsToFit()
+        // During drag, the two sections are already constrained by handleDrag.
+        // Only clamp on non-drag layouts (window resize, section toggle, etc.)
+        if !isDragging {
+            clampHeightsToFit()
+        }
 
         for handle in dragHandles {
             handle.isHidden = true
@@ -213,16 +288,21 @@ class SidebarPanelView: NSView {
             y += SidebarLayout.headerHeight
 
             // Content
-            if state.isExpanded, let scrollView = state.contentContainer {
+            if state.isExpanded, let container = state.contentContainer {
                 let ch = max(0, state.contentHeight)
-                scrollView.frame = NSRect(x: 0, y: y, width: w, height: ch)
-                // Size documentView to scroll view width; set height so content is visible
-                if let docView = (scrollView as? NSScrollView)?.documentView {
+                container.frame = NSRect(x: 0, y: y, width: w, height: ch)
+                // Size documentView to scroll view width; height = intrinsic content
+                if let scrollView = container as? NSScrollView,
+                    let docView = scrollView.documentView
+                {
                     docView.frame.size.width = w
                     let fitting = docView.fittingSize.height
-                    docView.frame.size.height = max(ch, fitting)
+                    docView.frame.size.height = fitting
+                } else {
+                    // Direct hosting view (no scroll wrapper)
+                    container.frame = NSRect(x: 0, y: y, width: w, height: ch)
                 }
-                scrollView.isHidden = false
+                container.isHidden = false
                 y += ch
             } else {
                 state.contentContainer?.isHidden = true
@@ -264,35 +344,67 @@ class SidebarPanelView: NSView {
         needsDisplay = true
     }
 
-    /// Called by a drag handle during drag.
-    func handleDrag(aboveIndex: Int, belowIndex: Int, delta: CGFloat, startHeights: (CGFloat, CGFloat)) {
-        let newAbove = max(SidebarLayout.minSectionHeight, startHeights.0 + delta)
-        let newBelow = max(SidebarLayout.minSectionHeight, startHeights.1 - (newAbove - startHeights.0))
+    /// Whether a drag is in progress — suppresses clampHeightsToFit during layout.
+    private var isDragging = false
 
-        if newAbove >= SidebarLayout.minSectionHeight && newBelow >= SidebarLayout.minSectionHeight {
-            sectionStates[aboveIndex].contentHeight = newAbove
-            sectionStates[belowIndex].contentHeight = newBelow
-            layoutAllSections()
-        }
+    /// Called by a drag handle during drag.
+    /// Only the two adjacent sections change — all others stay fixed.
+    func handleDrag(aboveIndex: Int, belowIndex: Int, delta: CGFloat, startHeights: (CGFloat, CGFloat)) {
+        let total = startHeights.0 + startHeights.1
+        let minH = SidebarLayout.minSectionHeight
+
+        // Clamp: above can grow at most until below hits min, and vice versa
+        let maxAbove = total - minH
+        let newAbove = min(maxAbove, max(minH, startHeights.0 + delta))
+        let newBelow = total - newAbove
+
+        sectionStates[aboveIndex].contentHeight = newAbove
+        sectionStates[belowIndex].contentHeight = newBelow
+
+        isDragging = true
+        layoutAllSections()
+        isDragging = false
     }
 
-    /// Ensure expanded content heights sum to available space.
+    /// Ensure expanded content heights don't exceed available space.
+    /// Only shrinks when content overflows — does NOT stretch to fill.
     private func clampHeightsToFit() {
         let available = availableContentHeight()
         let expandedIndices = sectionStates.indices.filter { sectionStates[$0].isExpanded }
         guard !expandedIndices.isEmpty else { return }
 
         let currentSum = expandedIndices.reduce(CGFloat(0)) { $0 + sectionStates[$1].contentHeight }
-        if currentSum <= 0 || abs(currentSum - available) < 1 { return }
+        // Only clamp if overflowing
+        guard currentSum > available + 1 else { return }
 
-        let scale = available / currentSum
-        for i in expandedIndices {
-            sectionStates[i].contentHeight = max(SidebarLayout.minSectionHeight, sectionStates[i].contentHeight * scale)
+        let overflow = currentSum - available
+
+        // First try to shrink growable sections (file tree etc.)
+        let growable = expandedIndices.filter { sectionStates[$0].canGrow }
+        let growableSum = growable.reduce(CGFloat(0)) { $0 + sectionStates[$1].contentHeight }
+        let growableShrinkable = growableSum - CGFloat(growable.count) * SidebarLayout.minSectionHeight
+
+        if growableShrinkable >= overflow && !growable.isEmpty {
+            let scale = (growableSum - overflow) / growableSum
+            for i in growable {
+                sectionStates[i].contentHeight = max(
+                    SidebarLayout.minSectionHeight, sectionStates[i].contentHeight * scale)
+            }
+        } else {
+            // Proportional shrink across all expanded sections
+            let scale = available / currentSum
+            for i in expandedIndices {
+                sectionStates[i].contentHeight = max(
+                    SidebarLayout.minSectionHeight, sectionStates[i].contentHeight * scale)
+            }
         }
+
+        // Fix rounding
         let newSum = expandedIndices.reduce(CGFloat(0)) { $0 + sectionStates[$1].contentHeight }
         let correction = available - newSum
-        if let last = expandedIndices.last, abs(correction) > 0.5 {
-            sectionStates[last].contentHeight = max(SidebarLayout.minSectionHeight, sectionStates[last].contentHeight + correction)
+        if let last = expandedIndices.last, correction < -0.5 {
+            sectionStates[last].contentHeight = max(
+                SidebarLayout.minSectionHeight, sectionStates[last].contentHeight + correction)
         }
     }
 
@@ -317,6 +429,27 @@ class SidebarPanelView: NSView {
                 y += state.contentHeight
             }
         }
+    }
+}
+
+// MARK: - Top-Aligned Scroll View
+
+/// NSScrollView subclass that pins content to the top instead of centering
+/// when the document is shorter than the visible area.
+private class TopAlignedScrollView: NSScrollView {
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        let clip = FlippedClipView()
+        clip.drawsBackground = false
+        contentView = clip
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    private class FlippedClipView: NSClipView {
+        override var isFlipped: Bool { true }
     }
 }
 
@@ -421,7 +554,7 @@ class SidebarSectionHeaderView: NSView {
         let titleStr = name.uppercased() as NSString
         let titleAttrs: [NSAttributedString.Key: Any] = [
             .font: NSFont.systemFont(ofSize: 10.5, weight: .semibold),
-            .foregroundColor: theme.chromeMuted,
+            .foregroundColor: theme.chromeMuted
         ]
         let titleSize = titleStr.size(withAttributes: titleAttrs)
         let titleY = (bounds.height - titleSize.height) / 2

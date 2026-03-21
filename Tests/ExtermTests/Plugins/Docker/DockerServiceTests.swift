@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import Exterm
 
 final class DockerServiceTests: XCTestCase {
@@ -34,7 +35,7 @@ final class DockerServiceTests: XCTestCase {
             ports: "80/tcp"
         )
         let cmd = DockerService.shared.execCommand(for: container)
-        XCTAssertEqual(cmd, "docker exec -it myapp sh\r")
+        XCTAssertEqual(cmd, "docker exec -it 'myapp' sh\r")
     }
 
     func testContainerEquatable() {

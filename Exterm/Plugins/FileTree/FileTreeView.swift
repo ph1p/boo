@@ -6,7 +6,8 @@ struct FileTreeActions {
     var onOpenInPane: ((String) -> Void)?
     var onCopyPath: ((String) -> Void)?
     var onRevealInFinder: ((String) -> Void)?
-    var onRunCommand: ((String) -> Void)?  // send raw text to PTY (e.g. "cd /path\r")
+    var onRunCommand: ((String) -> Void)?  // send raw text to PTY (e.g. "cat /path\r")
+    var onNavigate: ((String) -> Void)?  // navigate file tree to a directory (no terminal command)
 }
 
 struct FileTreeView: View {
@@ -39,7 +40,8 @@ struct FileTreeView: View {
                 ParentDirectoryButton(
                     mutedColor: mutedColor, hoverColor: hoverColor, explorerFont: explorerFont
                 ) {
-                    actions.onRunCommand?("cd ..\r")
+                    let parent = (root.path as NSString).deletingLastPathComponent
+                    actions.onNavigate?(parent)
                 }
             }
 
@@ -139,8 +141,8 @@ struct FileTreeRowView: View {
             }
             .contextMenu {
                 if node.isDirectory {
-                    Button("cd into directory") {
-                        actions.onRunCommand?("cd \(node.path)\r")
+                    Button("Open in Explorer") {
+                        actions.onNavigate?(node.path)
                     }
                     Divider()
                     Button("Open in New Tab") {
@@ -148,6 +150,14 @@ struct FileTreeRowView: View {
                     }
                     Button("Open in New Pane") {
                         actions.onOpenInPane?(node.path)
+                    }
+                    Divider()
+                } else {
+                    Button("cat") {
+                        actions.onRunCommand?("cat \(shellEscape(node.path))\r")
+                    }
+                    Button("Open with Default App") {
+                        NSWorkspace.shared.open(URL(fileURLWithPath: node.path))
                     }
                     Divider()
                 }
@@ -194,8 +204,8 @@ struct ParentDirectoryButton: View {
 
     var body: some View {
         HStack(spacing: 5) {
-            Image(systemName: "chevron.up")
-                .font(.system(size: 9, weight: .semibold))
+            Image(systemName: "arrowshape.turn.up.left.fill")
+                .font(.system(size: 9))
                 .foregroundColor(mutedColor)
                 .frame(width: 10)
 
@@ -218,4 +228,5 @@ struct ParentDirectoryButton: View {
         .onHover { hovering in isHovered = hovering }
         .onTapGesture { action() }
     }
+
 }

@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import Exterm
 
 final class SettingsPersistenceTests: XCTestCase {
@@ -13,8 +14,9 @@ final class SettingsPersistenceTests: XCTestCase {
 
         // Check the file exists
         let path = ExtermPaths.settingsFile
-        XCTAssertTrue(FileManager.default.fileExists(atPath: path),
-                      "settings.json should exist after a settings change")
+        XCTAssertTrue(
+            FileManager.default.fileExists(atPath: path),
+            "settings.json should exist after a settings change")
     }
 
     func testSettingsFileIsValidJSON() {
@@ -39,8 +41,9 @@ final class SettingsPersistenceTests: XCTestCase {
         _ = GhosttyRuntime.shared
 
         let path = ExtermPaths.ghosttyConfigFile
-        XCTAssertTrue(FileManager.default.fileExists(atPath: path),
-                      "ghostty.conf should exist after runtime init")
+        XCTAssertTrue(
+            FileManager.default.fileExists(atPath: path),
+            "ghostty.conf should exist after runtime init")
     }
 
     func testGhosttyConfigContainsFont() {
@@ -73,8 +76,9 @@ final class SettingsPersistenceTests: XCTestCase {
         let content = try? String(contentsOfFile: path, encoding: .utf8)
 
         // Dracula background is #282a36
-        XCTAssertTrue(content?.contains("#282a36") ?? false,
-                      "Config should contain Dracula background color")
+        XCTAssertTrue(
+            content?.contains("#282a36") ?? false,
+            "Config should contain Dracula background color")
 
         settings.themeName = original
     }
@@ -108,12 +112,14 @@ final class SettingsPersistenceTests: XCTestCase {
 
         let path = ExtermPaths.settingsFile
         guard let data = try? Data(contentsOf: URL(fileURLWithPath: path)),
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else {
             XCTFail("Could not read settings.json")
             return
         }
-        XCTAssertEqual(json["sidebarWidth"] as? Double, 350.0,
-                       "sidebarWidth should be persisted in settings.json")
+        XCTAssertEqual(
+            json["sidebarWidth"] as? Double, 350.0,
+            "sidebarWidth should be persisted in settings.json")
     }
 
     func testBookmarksPersistToFile() {
@@ -128,11 +134,13 @@ final class SettingsPersistenceTests: XCTestCase {
         }
 
         let path = ExtermPaths.bookmarksFile
-        XCTAssertTrue(FileManager.default.fileExists(atPath: path),
-                      "bookmarks.json should exist after adding a bookmark")
+        XCTAssertTrue(
+            FileManager.default.fileExists(atPath: path),
+            "bookmarks.json should exist after adding a bookmark")
 
         guard let data = try? Data(contentsOf: URL(fileURLWithPath: path)),
-              let bookmarks = try? JSONDecoder().decode([BookmarkService.Bookmark].self, from: data) else {
+            let bookmarks = try? JSONDecoder().decode([BookmarkService.Bookmark].self, from: data)
+        else {
             XCTFail("Could not decode bookmarks.json")
             return
         }

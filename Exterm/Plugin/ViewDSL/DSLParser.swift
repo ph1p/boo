@@ -45,17 +45,23 @@ struct DSLParser {
             let children = try parseChildren(dict, path: path)
             return .vstack(children: children)
 
-        case "hstack":
+        case "hstack", "row":
             let children = try parseChildren(dict, path: path)
             return .hstack(children: children)
 
-        case "label":
-            guard let text = dict["text"] as? String else {
-                throw ParseError(message: "Missing 'text' for label at \(path)")
+        case "label", "text":
+            let text = dict["text"] as? String ?? dict["content"] as? String
+            guard let text else {
+                throw ParseError(message: "Missing 'text' or 'content' for \(type) at \(path)")
             }
             let style = (dict["style"] as? String).flatMap(DSLTextStyle.init(rawValue:))
             let tint = (dict["tint"] as? String).flatMap(DSLTint.init(rawValue:))
             return .label(text: text, style: style, tint: tint)
+
+        case "icon":
+            let name = dict["name"] as? String ?? dict["text"] as? String ?? "questionmark"
+            let tint = (dict["tint"] as? String).flatMap(DSLTint.init(rawValue:))
+            return .label(text: name, style: nil, tint: tint)
 
         case "list":
             guard let itemsJSON = dict["items"] as? [[String: Any]] else {
@@ -117,7 +123,8 @@ struct DSLParser {
             action = nil
         }
         let a11yLabel = dict["accessibilityLabel"] as? String
-        return DSLListItem(label: label, icon: icon, tint: tint, detail: detail, action: action, accessibilityLabel: a11yLabel)
+        return DSLListItem(
+            label: label, icon: icon, tint: tint, detail: detail, action: action, accessibilityLabel: a11yLabel)
     }
 
     private static func parseAction(_ dict: [String: Any], path: String) throws -> DSLAction {

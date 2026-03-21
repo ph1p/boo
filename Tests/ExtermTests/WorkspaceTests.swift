@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import Exterm
 
 final class WorkspaceTests: XCTestCase {
@@ -78,7 +79,7 @@ final class WorkspaceTests: XCTestCase {
 
     func testResolvedColorPreset() {
         let ws = Workspace(folderPath: "/tmp")
-        XCTAssertNil(ws.resolvedColor) // No color set
+        XCTAssertNil(ws.resolvedColor)  // No color set
         ws.color = .blue
         XCTAssertNotNil(ws.resolvedColor)
         XCTAssertEqual(ws.resolvedColor, WorkspaceColor.blue.nsColor)
@@ -89,7 +90,7 @@ final class WorkspaceTests: XCTestCase {
         ws.color = .blue
         let custom = NSColor(red: 1, green: 0, blue: 0, alpha: 1)
         ws.customColor = custom
-        XCTAssertEqual(ws.resolvedColor, custom) // Custom takes precedence
+        XCTAssertEqual(ws.resolvedColor, custom)  // Custom takes precedence
     }
 
     func testResolvedColorCustomAlone() {

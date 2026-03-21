@@ -49,21 +49,34 @@ Toggle the sidebar with **Cmd+B**. The explorer shows a live-updating file tree 
 | Kanagawa | — |
 | Default Dark | — |
 
+## Sidebar Plugins
+
+The sidebar shows stacked, collapsible panels powered by the [plugin system](/plugins):
+
+- **Files** — Live file tree for the current directory. Supports local (FSEvents) and remote (SSH/Docker) browsing. Click to open, right-click for context menu.
+- **Git** — Branch name, staged/unstaged/untracked files, stash count, ahead/behind. Inline stage/unstage buttons. Refresh on file system changes.
+- **Docker** — Running containers with exec, logs, start/stop/restart. Live updates via `docker events` stream. Local sessions only.
+- **Bookmarks** — Saved directory shortcuts with per-host namespacing for remote sessions.
+
+Toggle panels via status bar icons or extend with [custom plugins](/plugin-development).
+
 ## Git Integration
 
-The status bar shows the current git branch name. Click it to open a branch switcher showing both local and remote branches.
+The status bar shows the current git branch name. Click it to open a branch switcher showing both local and remote branches. The Git sidebar panel shows changed files with inline stage/unstage actions.
 
 ## Status Bar
 
-Configurable segments displayed at the bottom of each pane:
+Configurable segments displayed at the bottom of the window:
 
-- **Git branch** — Current branch name with switcher
+- **Environment** — Colored dot + label showing local/SSH/Docker
+- **Git branch** — Current branch name with switcher popup
 - **Path** — Current working directory
 - **Running process** — Foreground process (zsh, node, vim, etc.)
-- **Pane count** — Number of active panes
+- **Plugin icons** — Toggle icons for Files, Git, Docker, Bookmarks panels
+- **Pane count** — Number of active panes and tabs
 - **Clock** — Current time
 
-Toggle individual segments in **Settings → Status Bar**.
+Toggle individual segments in **Settings → Status Bar**. The git branch toggle has moved to the Git plugin's own settings in **Settings → Plugins**.
 
 ## Settings
 
@@ -73,6 +86,9 @@ Open with **Cmd+,**. Organized in tabs:
 |---|---|
 | **Theme** | 14 color themes with live preview |
 | **Terminal** | Font, font size, cursor style (block/beam/underline/outline) |
-| **Explorer** | Font, font size, show header/icons/hidden files |
-| **Status Bar** | Toggle individual segments |
+| **Status Bar** | Toggle individual segments (connection, path, process, pane count, clock) |
+| **Layout** | Sidebar position, workspace bar position, tab overflow mode |
+| **Plugins** | Enable/disable plugins, per-plugin settings (file explorer font/icons/hidden files, git branch visibility) |
 | **Shortcuts** | Keyboard shortcut reference |
+
+Explorer settings (font, font size, icons, hidden files) are now managed per-plugin in the **Plugins** tab rather than a separate Explorer tab.

@@ -1,0 +1,523 @@
+# Plugin Development
+
+This guide covers how to create plugins for Exterm — both external script plugins and built-in Swift plugins.
+
+## External Script Plugins
+
+External plugins live in `~/.exterm/plugins/` and are hot-loaded at runtime. No restart required — `PluginWatcher` uses FSEvents to detect additions, modifications, and removals in real-time.
+
+### Directory Structure
+
+```
+~/.exterm/plugins/my-plugin/
+  plugin.json       # Required manifest
+  main.sh           # Shell script (or main.js for JavaScript)
+```
+
+### Manifest (`plugin.json`)
+
+```json
+{
+  "id": "my-plugin",
+  "name": "My Plugin",
+  "version": "1.0.0",
+  "icon": "star",
+  "description": "A custom sidebar plugin",
+  "when": null,
+  "runtime": "script",
+  "capabilities": {
+    "sidebarPanel": true,
+    "statusBarSegment": true
+  },
+  "statusBar": {
+    "position": "right",
+    "priority": 30,
+    "template": "{cwd}"
+  }
+}
+```
+
+#### Manifest Fields
+
+| Field | Required | Description |
+|---|---|---|
+| `id` | Yes | Unique plugin identifier |
+| `name` | Yes | Display name in sidebar and status bar |
+| `version` | Yes | Semver version string |
+| `icon` | Yes | [SF Symbol](https://developer.apple.com/sf-symbols/) name |
+| `description` | No | Human-readable description |
+| `when` | No | When-clause expression for visibility (null = always visible) |
+| `runtime` | No | `"script"` for shell scripts, `"js"` for JavaScript |
+| `capabilities.sidebarPanel` | No | Show in sidebar |
+| `capabilities.statusBarSegment` | No | Show in status bar |
+| `statusBar.position` | No | `"left"` or `"right"` |
+| `statusBar.priority` | No | Lower = closer to edge |
+| `statusBar.template` | No | Template string for status bar text |
+| `settings` | No | Array of setting declarations (see [Plugin Settings](#plugin-settings)) |
+
+#### Plugin Settings
+
+Plugins can declare their own settings, which appear in the Settings → Plugins UI under an expandable section. Each setting in the `settings` array has:
+
+| Field | Required | Description |
+|---|---|---|
+| `key` | Yes | Setting key (unique within this plugin) |
+| `type` | Yes | `"bool"`, `"string"`, `"int"`, or `"double"` |
+| `label` | Yes | Human-readable label shown in UI |
+| `default` | No | Default value |
+| `options` | No | UI hint: `"fontPicker:system"` for system font picker, `"fontPicker:mono"` for monospace font picker |
+
+Example manifest with settings:
+
+```json
+{
+  "id": "my-plugin",
+  "name": "My Plugin",
+  "version": "1.0.0",
+  "icon": "star",
+  "runtime": "script",
+  "capabilities": { "sidebarPanel": true },
+  "settings": [
+    { "key": "enabled", "type": "bool", "label": "Enable feature", "default": true },
+    { "key": "fontSize", "type": "double", "label": "Font size", "default": 12.0 },
+    { "key": "fontName", "type": "string", "label": "Font", "default": "", "options": "fontPicker:system" }
+  ]
+}
+```
+
+Settings are stored per-plugin in `AppSettings` and accessed via:
+
+```swift
+AppSettings.shared.pluginBool("my-plugin", "enabled", default: true)
+AppSettings.shared.pluginDouble("my-plugin", "fontSize", default: 12.0)
+AppSettings.shared.pluginString("my-plugin", "fontName", default: "")
+AppSettings.shared.setPluginSetting("my-plugin", "fontSize", 14.0)
+```
+
+#### Status Bar Templates
+
+Templates substitute values from the terminal context:
+
+| Token | Value |
+|---|---|
+| `{cwd}` | Current working directory |
+| `{process.name}` | Foreground process name |
+| `{git.branch}` | Current git branch |
+| `{git.changedCount}` | Number of changed files |
+| `{remote.host}` | Remote host or container name |
+
+### Shell Scripts
+
+Shell scripts receive terminal context via environment variables and output JSON DSL to stdout.
+
+#### Environment Variables
+
+| Variable | Example |
+|---|---|
+| `EXTERM_CWD` | `/Users/phlp/project` |
+| `EXTERM_PROCESS` | `node` |
+| `EXTERM_GIT_BRANCH` | `main` |
+| `EXTERM_GIT_REPO_ROOT` | `/Users/phlp/project` |
+| `EXTERM_GIT_DIRTY` | `true` |
+| `EXTERM_GIT_CHANGED_COUNT` | `5` |
+| `EXTERM_REMOTE_TYPE` | `ssh` |
+| `EXTERM_REMOTE_HOST` | `server.example.com` |
+| `EXTERM_PANE_COUNT` | `2` |
+| `EXTERM_TAB_COUNT` | `3` |
+
+#### Example: `main.sh`
+
+```bash
+#!/bin/bash
+cat <<EOF
+[
+  {"type": "label", "text": "Directory: $EXTERM_CWD", "style": "bold"},
+  {"type": "divider"},
+  {"type": "label", "text": "Process: $EXTERM_PROCESS", "style": "muted"},
+  {"type": "button", "label": "Run tests", "action": {"type": "exec", "command": "make test"}}
+]
+EOF
+```
+
+The parser also accepts `"type": "text"` with a `"content"` field as an alias for `label`.
+
+Make the script executable: `chmod +x main.sh`
+
+Scripts have a 5-second timeout. Keep them fast — the sidebar blocks on script output.
+
+### JavaScript Plugins
+
+Set `"runtime": "js"` in the manifest and provide `main.js`. Runs in JavaScriptCore with no shell overhead.
+
+```javascript
+function render(context) {
+  var elements = [];
+
+  if (context.git && context.git.branch) {
+    elements.push({
+      type: "label",
+      text: "Branch: " + context.git.branch,
+      style: "bold"
+    });
+
+    if (context.git.changedFileCount > 0) {
+      elements.push({
+        type: "label",
+        text: context.git.changedFileCount + " files changed",
+        style: "muted"
+      });
+    }
+  }
+
+  elements.push({
+    type: "button",
+    label: "Open in Finder",
+    action: { type: "reveal", path: context.cwd }
+  });
+
+  return JSON.stringify(elements);
+}
+```
+
+Both `render` and `transform` are accepted as the entry function name.
+
+### DSL Elements
+
+Scripts output a JSON array of elements. Each element has a `type` and type-specific properties:
+
+| Type | Properties | Description |
+|---|---|---|
+| `label` | `text`, `style?`, `tint?` | Text label. Styles: `"bold"`, `"muted"`, `"mono"`. Alias: `text` (with `content` field) |
+| `button` | `label`, `action`, `style?` | Clickable button. Styles: `"primary"`, `"secondary"`, `"destructive"` |
+| `divider` | — | Horizontal line |
+| `spacer` | — | Vertical spacing |
+| `icon` | `name`, `tint?` | SF Symbol icon. Tints: `"success"`, `"error"`, `"warning"`, `"accent"`, `"muted"` |
+| `list` | `items` | List of items with `label`, `detail?`, `icon?`, `action?` |
+| `vstack` | `children` | Vertical layout of child elements |
+| `hstack` | `children` | Horizontal layout of child elements. Alias: `row` |
+| `badge` | `text`, `tint?` | Colored pill badge |
+
+### DSL Actions
+
+Actions are attached to interactive elements (buttons, list items):
+
+| Action Type | Parameters | Effect |
+|---|---|---|
+| `"cd"` | `path` | Changes terminal directory |
+| `"open"` | `path` | Opens file in `$EDITOR` |
+| `"exec"` | `command` | Sends command to terminal |
+| `"copy"` | `text` or `path` | Copies to clipboard |
+| `"reveal"` | `path` | Opens in Finder |
+
+### When-Clauses
+
+Control when your plugin is visible based on terminal state:
+
+| Expression | Meaning |
+|---|---|
+| `null` | Always visible |
+| `"git.active"` | Only in git repos |
+| `"!remote"` | Only in local sessions |
+| `"remote"` | Only in remote sessions |
+| `"remote.type == 'ssh'"` | Only in SSH sessions |
+| `"remote.type == 'docker'"` | Only in Docker sessions |
+| `"git.active && !remote"` | Git repos, local only |
+
+Operators: `&&` (and), `||` (or), `!` (not), `==`, `!=`, `()` (grouping).
+
+### Example: Complete Plugin
+
+A plugin that shows `package.json` scripts:
+
+**`~/.exterm/plugins/npm-scripts/plugin.json`**
+
+```json
+{
+  "id": "npm-scripts",
+  "name": "npm scripts",
+  "version": "1.0.0",
+  "icon": "terminal",
+  "description": "Quick-run npm scripts from package.json",
+  "when": null,
+  "runtime": "script",
+  "capabilities": { "sidebarPanel": true }
+}
+```
+
+**`~/.exterm/plugins/npm-scripts/main.sh`**
+
+```bash
+#!/bin/bash
+PKG="$EXTERM_CWD/package.json"
+if [ ! -f "$PKG" ]; then
+  echo '[{"type": "label", "text": "No package.json", "style": "muted"}]'
+  exit 0
+fi
+
+# Extract script names with jq
+SCRIPTS=$(jq -r '.scripts // {} | keys[]' "$PKG" 2>/dev/null)
+if [ -z "$SCRIPTS" ]; then
+  echo '[{"type": "label", "text": "No scripts defined", "style": "muted"}]'
+  exit 0
+fi
+
+echo -n '['
+FIRST=true
+while IFS= read -r script; do
+  if [ "$FIRST" = true ]; then FIRST=false; else echo -n ','; fi
+  echo -n "{\"type\":\"button\",\"label\":\"$script\",\"action\":{\"type\":\"exec\",\"command\":\"npm run $script\"}}"
+done <<< "$SCRIPTS"
+echo ']'
+```
+
+---
+
+## Built-in Swift Plugins
+
+Built-in plugins are Swift classes compiled into the app. They have full access to AppKit, SwiftUI, and all Exterm APIs.
+
+### File Organization
+
+All code for a plugin lives in one directory:
+
+```
+Exterm/Plugins/YourPlugin/
+  YourPlugin.swift          # Plugin class (ExtermPluginProtocol)
+  YourPluginDetailView.swift  # SwiftUI detail view (optional)
+  YourService.swift          # Supporting service (optional)
+```
+
+Tests go in the matching directory:
+
+```
+Tests/ExtermTests/Plugins/YourPlugin/
+  YourPluginTests.swift
+```
+
+No `Package.swift` changes needed — SPM resolves recursively within the target directories.
+
+### Reference Example: SystemInfoPlugin
+
+The `SystemInfoPlugin` (`Exterm/Plugins/SystemInfo/SystemInfoPlugin.swift`) is a working example that demonstrates all plugin patterns:
+
+- **Manifest** with `when: "!remote"` (hidden in SSH/Docker sessions)
+- **Status bar** via `makeStatusBarContent` showing memory usage with color-coded tint
+- **Sidebar panel** via `makeDetailView` with SwiftUI progress bars and action buttons
+- **Dynamic section title** via `sectionTitle` showing live memory percentage
+- **Background refresh** via a 10-second timer calling `onRequestCycleRerun`
+- **Lifecycle callback** (`cwdChanged`) to refresh disk usage on directory change
+- **Host actions** via `DSLActionHandler` to run `df -h` and `top` in the terminal
+- **Tests** in `Tests/ExtermTests/Plugins/SystemInfo/SystemInfoPluginTests.swift`
+
+### Minimal Plugin
+
+```swift
+import SwiftUI
+
+@MainActor
+final class MyPlugin: ExtermPluginProtocol {
+    var hostActions: PluginHostActions?
+    var onRequestCycleRerun: (() -> Void)?
+
+    let manifest = PluginManifest(
+        id: "my-plugin",       // Also used as pluginID (derived automatically)
+        name: "My Plugin",
+        version: "1.0.0",
+        icon: "star",
+        description: "Example built-in plugin",
+        when: nil,             // nil = always visible; or use "git.active", "!remote", etc.
+        runtime: nil,
+        capabilities: PluginManifest.Capabilities(sidebarPanel: true, statusBarSegment: true),
+        statusBar: PluginManifest.StatusBarManifest(position: "right", priority: 25, template: nil),
+        settings: [
+            PluginManifest.SettingManifest(key: "greeting", type: .string, label: "Greeting text", defaultValue: AnyCodableValue("Hello"), options: nil)
+        ]
+    )
+
+    // MARK: - Status Bar
+
+    func makeStatusBarContent(context: TerminalContext) -> StatusBarContent? {
+        StatusBarContent(
+            text: "Hello",
+            icon: "star",
+            tint: nil,
+            accessibilityLabel: "My Plugin"
+        )
+    }
+
+    // MARK: - Detail View
+
+    func makeDetailView(context: TerminalContext, actionHandler: DSLActionHandler) -> AnyView? {
+        AnyView(Text("Hello from My Plugin")
+            .foregroundColor(Color(nsColor: AppSettings.shared.theme.chromeText)))
+    }
+}
+```
+
+### Registration
+
+Add your plugin to `PluginRegistry.registerBuiltins()`:
+
+```swift
+func registerBuiltins() {
+    register(FileTreePlugin())
+    register(GitPlugin())
+    register(DockerPluginNew())
+    register(BookmarksPluginNew())
+    register(SystemInfoPlugin())
+    register(MyPlugin())  // Add here
+}
+```
+
+### Using Host Actions
+
+Access terminal and window actions through the injected `hostActions`:
+
+```swift
+// Paste a path into the active terminal
+hostActions?.pastePathToActivePane?("/some/path")
+
+// Open a directory in a new tab
+hostActions?.openDirectoryInNewTab?("/some/dir")
+
+// Open a directory in a new split pane
+hostActions?.openDirectoryInNewPane?("/some/dir")
+
+// Send raw text to the active terminal
+hostActions?.sendRawToActivePane?("ls -la\r")
+
+// Access the terminal bridge for advanced integration
+if let bridge = hostActions?.bridge {
+    // Subscribe to bridge events, read terminal state, etc.
+}
+```
+
+### Triggering Refreshes
+
+When your plugin's data changes asynchronously (e.g., from a background process, file watcher, or network callback), call `onRequestCycleRerun?()`:
+
+```swift
+// In your async callback
+SomeService.shared.onDataChanged = { [weak self] in
+    DispatchQueue.main.async {
+        self?.onRequestCycleRerun?()
+    }
+}
+```
+
+This triggers a full plugin cycle, which rebuilds the sidebar and status bar.
+
+### Lifecycle Callbacks
+
+Override lifecycle methods to respond to terminal state changes:
+
+```swift
+// Terminal changed working directory
+func cwdChanged(newPath: String, context: TerminalContext) {
+    refreshData(for: newPath)
+}
+
+// SSH/Docker session started or ended
+func remoteSessionChanged(session: RemoteSessionType?, context: TerminalContext) {
+    if session != nil {
+        // Entering remote session
+    } else {
+        // Back to local
+    }
+}
+
+// Focus moved to a different pane
+func terminalFocusChanged(terminalID: UUID, context: TerminalContext) {
+    // Update cached state for the new pane
+}
+```
+
+### Enrichment
+
+If your plugin contributes data that other plugins need, implement `enrich()`:
+
+```swift
+func enrich(context: EnrichmentContext) {
+    // Write data visible to all plugins in Phase 2
+    context.setData(myValue, forKey: "my-plugin.myKey")
+}
+```
+
+Other plugins read this in their `react()` phase via the frozen `TerminalContext`:
+
+```swift
+func react(context: TerminalContext) {
+    if let value = context.enrichedData["my-plugin.myKey"] {
+        // Use the value contributed by the other plugin
+    }
+}
+```
+
+JavaScript plugins can access enriched data via `context.enrichedData["key"]`.
+
+### Conditional Visibility
+
+Set the `when` field in your manifest to control when your plugin appears. The `whenClause` property is automatically derived from `manifest.when` — no override needed:
+
+```swift
+let manifest = PluginManifest(
+    id: "my-plugin",
+    ...
+    when: "git.active && !remote",  // Only visible in local git repos
+    ...
+)
+// whenClause is automatically parsed from manifest.when
+```
+
+### Scroll Behavior
+
+By default, the sidebar wraps your detail view in an `NSScrollView`. If your view handles its own scrolling (like `FileTreeView` does), return `false`:
+
+```swift
+var prefersOuterScrollView: Bool { false }
+```
+
+### Dynamic Section Titles
+
+Override `sectionTitle(context:)` to show context-dependent headers:
+
+```swift
+func sectionTitle(context: TerminalContext) -> String? {
+    let dirName = (context.cwd as NSString).lastPathComponent
+    return dirName.isEmpty ? nil : dirName
+}
+```
+
+Return `nil` to use the static `manifest.name`.
+
+## Status Bar Segments
+
+For adding standalone segments to the status bar (not tied to a sidebar plugin), use the `StatusBarPlugin` protocol:
+
+```swift
+final class MySegment: StatusBarPlugin {
+    let id = "my-segment"
+    let position: StatusBarPosition = .left
+    let priority = 25
+
+    func isVisible(settings: AppSettings, state: StatusBarState) -> Bool { true }
+
+    func draw(at x: CGFloat, y: CGFloat, theme: TerminalTheme,
+              settings: AppSettings, state: StatusBarState, ctx: CGContext) -> CGFloat {
+        let attrs: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: 10),
+            .foregroundColor: theme.chromeMuted
+        ]
+        let str = "Hello" as NSString
+        str.draw(at: NSPoint(x: x, y: y), withAttributes: attrs)
+        return str.size(withAttributes: attrs).width
+    }
+
+    func handleClick(at point: NSPoint, in barView: StatusBarView) -> Bool { false }
+    func update(state: StatusBarState) {}
+}
+```
+
+Register in `StatusBarView.registerDefaultPlugins()`.
+
+Sidebar plugins **do not** need to create their own status bar segments — the registry auto-registers `PluginIconSegment` toggle icons for any plugin with `capabilities.sidebarPanel = true`.

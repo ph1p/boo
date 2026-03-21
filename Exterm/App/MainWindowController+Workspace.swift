@@ -12,8 +12,8 @@ extension MainWindowController: ToolbarViewDelegate {
         toolbarDidCloseWorkspace(at: index)
     }
 
-    func toolbar(_ toolbar: ToolbarView, didSelectTabAt index: Int) { }
-    func toolbar(_ toolbar: ToolbarView, didCloseTabAt index: Int) { }
+    func toolbar(_ toolbar: ToolbarView, didSelectTabAt index: Int) {}
+    func toolbar(_ toolbar: ToolbarView, didCloseTabAt index: Int) {}
     func toolbarDidRequestNewTab(_ toolbar: ToolbarView) { newTabAction(nil) }
     func toolbarDidToggleSidebar(_ toolbar: ToolbarView) { toggleSidebarAction(nil) }
 
@@ -101,7 +101,8 @@ extension MainWindowController {
         let alert = NSAlert()
         alert.messageText = "Close workspace \"\(ws.displayName)\"?"
         if ws.panes.count > 1 || totalTabs > 1 {
-            alert.informativeText = "This will close \(ws.panes.count) pane\(ws.panes.count == 1 ? "" : "s") and \(totalTabs) tab\(totalTabs == 1 ? "" : "s")."
+            alert.informativeText =
+                "This will close \(ws.panes.count) pane\(ws.panes.count == 1 ? "" : "s") and \(totalTabs) tab\(totalTabs == 1 ? "" : "s")."
         } else {
             alert.informativeText = "This workspace and its terminal session will be closed."
         }
@@ -113,7 +114,8 @@ extension MainWindowController {
         alert.beginSheetModal(for: window) { [weak self] response in
             guard response == .alertFirstButtonReturn else { return }
             guard let self = self,
-                  let resolvedIndex = self.appState.workspaces.firstIndex(where: { $0.id == wsID }) else { return }
+                let resolvedIndex = self.appState.workspaces.firstIndex(where: { $0.id == wsID })
+            else { return }
             self.forceCloseWorkspace(at: resolvedIndex)
         }
     }

@@ -1,11 +1,12 @@
 import XCTest
+
 @testable import Exterm
 
 final class TerminalContextTests: XCTestCase {
 
-    func testBuildFromTerminalState() {
+    func testBuildFromBridgeState() {
         let paneID = UUID()
-        let state = TerminalState(
+        let state = BridgeState(
             paneID: paneID,
             workspaceID: UUID(),
             workingDirectory: "/Users/test/project",
@@ -35,7 +36,7 @@ final class TerminalContextTests: XCTestCase {
     }
 
     func testBuildWithSSH() {
-        let state = TerminalState(
+        let state = BridgeState(
             paneID: UUID(),
             workspaceID: UUID(),
             workingDirectory: "/var/log",
@@ -48,7 +49,7 @@ final class TerminalContextTests: XCTestCase {
 
         XCTAssertTrue(ctx.isRemote)
         XCTAssertEqual(ctx.environmentLabel, "ssh: prod-01")
-        if case .ssh(let host) = ctx.remoteSession {
+        if case .ssh(let host, _) = ctx.remoteSession {
             XCTAssertEqual(host, "prod-01")
         } else {
             XCTFail("Expected SSH session")
@@ -56,7 +57,7 @@ final class TerminalContextTests: XCTestCase {
     }
 
     func testBuildWithDocker() {
-        let state = TerminalState(
+        let state = BridgeState(
             paneID: UUID(),
             workspaceID: UUID(),
             workingDirectory: "/var/lib/postgresql",
@@ -72,7 +73,7 @@ final class TerminalContextTests: XCTestCase {
     }
 
     func testBuildWithoutGit() {
-        let state = TerminalState(
+        let state = BridgeState(
             paneID: UUID(),
             workspaceID: UUID(),
             workingDirectory: "/tmp",
@@ -88,7 +89,7 @@ final class TerminalContextTests: XCTestCase {
 
     func testEquality() {
         let id = UUID()
-        let state = TerminalState(
+        let state = BridgeState(
             paneID: id,
             workspaceID: UUID(),
             workingDirectory: "/tmp",

@@ -13,7 +13,7 @@ final class DSLActionHandler {
         switch action.type {
         case "cd":
             guard let path = action.path, !path.isEmpty else { return nil }
-            sendToTerminal?("cd \(shellEscape(path))\r")
+            sendToTerminal?("cd \(RemoteExplorer.shellEscPath(path))\r")
             return "Changed directory to \(path)"
 
         case "open":
@@ -30,7 +30,7 @@ final class DSLActionHandler {
         case "exec":
             guard let command = action.command, !command.isEmpty else { return nil }
             sendToTerminal?(command + "\r")
-            return nil // terminal output IS the feedback
+            return nil  // terminal output IS the feedback
 
         case "copy":
             guard let text = action.text ?? action.path, !text.isEmpty else { return nil }
@@ -46,14 +46,5 @@ final class DSLActionHandler {
         default:
             return nil
         }
-    }
-
-    /// Minimal shell escaping for paths with spaces.
-    private func shellEscape(_ str: String) -> String {
-        if str.contains(" ") || str.contains("'") || str.contains("\"") ||
-           str.contains("(") || str.contains(")") || str.contains("&") {
-            return "'" + str.replacingOccurrences(of: "'", with: "'\\''") + "'"
-        }
-        return str
     }
 }

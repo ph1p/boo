@@ -38,7 +38,8 @@ final class WindowStateCoordinator {
     func activateTab(_ tab: Pane.Tab, paneID: UUID, previousTabPaneResolver: (UUID) -> Pane?) {
         // Save current plugin state to previous tab
         if let prevTabID = previousFocusedTabID,
-           let prevPane = previousTabPaneResolver(prevTabID) {
+            let prevPane = previousTabPaneResolver(prevTabID)
+        {
             if let tabIdx = prevPane.tabs.firstIndex(where: { $0.id == prevTabID }) {
                 savePluginState(to: prevPane, tabIndex: tabIdx)
             }

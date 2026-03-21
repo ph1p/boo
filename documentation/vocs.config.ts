@@ -4,6 +4,10 @@ export default defineConfig({
   title: 'Exterm',
   sidebar: [
     {
+      text: 'Installation',
+      link: '/installation',
+    },
+    {
       text: 'Getting Started',
       link: '/getting-started',
     },
@@ -35,10 +39,18 @@ export default defineConfig({
           link: '/plugins',
         },
         {
+          text: 'Plugin Development',
+          link: '/plugin-development',
+        },
+        {
           text: 'Theming',
           link: '/theming',
         },
       ],
+    },
+    {
+      text: 'Contributing',
+      link: '/contributing',
     },
   ],
 })

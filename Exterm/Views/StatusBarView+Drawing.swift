@@ -136,7 +136,8 @@ extension StatusBarView {
         }
 
         // Sidebar icon — centered in the zone after the separator
-        let color = sidebarVisible
+        let color =
+            sidebarVisible
             ? theme.accentColor
             : theme.chromeMuted.withAlphaComponent(isSidebarToggleHovered ? 0.7 : 0.5)
 
@@ -202,8 +203,9 @@ extension StatusBarView {
         let allPlugins: [StatusBarPlugin] = rightPlugins + leftPlugins
         for plugin in allPlugins {
             guard let panelID = plugin.associatedPanelID,
-                  let rect = segmentRects[plugin.id],
-                  rect.contains(point) else { continue }
+                let rect = segmentRects[plugin.id],
+                rect.contains(point)
+            else { continue }
             onSidebarPluginToggle?(panelID)
             return
         }
@@ -213,16 +215,18 @@ extension StatusBarView {
 
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         guard event.modifierFlags.contains(.command),
-              !event.modifierFlags.contains(.shift),
-              !event.modifierFlags.contains(.option),
-              !event.modifierFlags.contains(.control) else {
+            !event.modifierFlags.contains(.shift),
+            !event.modifierFlags.contains(.option),
+            !event.modifierFlags.contains(.control)
+        else {
             return super.performKeyEquivalent(with: event)
         }
 
         // Cmd+1 through Cmd+9 toggle panel segments by position
         guard let char = event.charactersIgnoringModifiers,
-              let digit = Int(char),
-              digit >= 1 && digit <= 9 else {
+            let digit = Int(char),
+            digit >= 1 && digit <= 9
+        else {
             return super.performKeyEquivalent(with: event)
         }
 
@@ -234,7 +238,8 @@ extension StatusBarView {
         let pluginID = panelSegmentOrder[index]
         let allPlugins: [StatusBarPlugin] = leftPlugins + rightPlugins
         if let plugin = allPlugins.first(where: { $0.id == pluginID }),
-           let panelID = plugin.associatedPanelID {
+            let panelID = plugin.associatedPanelID
+        {
             onSidebarPluginToggle?(panelID)
             return true
         }
@@ -260,7 +265,8 @@ extension StatusBarView {
 
         for plugin in allPlugins {
             guard plugin.isVisible(settings: settings, state: state),
-                  let rect = segmentRects[plugin.id] else { continue }
+                let rect = segmentRects[plugin.id]
+            else { continue }
 
             let element = NSAccessibilityElement()
             element.setAccessibilityParent(self)

@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import Exterm
 
 final class RemoteFileTreePluginTests: XCTestCase {
@@ -126,7 +127,7 @@ final class RemoteFileTreePluginTests: XCTestCase {
         let root = plugin.getOrCreateRemoteRoot(for: "/root", session: session)
         root.applyEntries([
             .init(name: "container", isDirectory: true),
-            .init(name: "file.txt", isDirectory: false),
+            .init(name: "file.txt", isDirectory: false)
         ])
 
         // Children should have absolute paths, not tilde-relative
@@ -167,8 +168,9 @@ final class RemoteFileTreePluginTests: XCTestCase {
         // After reconciliation: host="root@ubuntu-server", alias="het"
         let session2 = RemoteSessionType.ssh(host: "root@ubuntu-server", alias: "het")
         let root2 = plugin.getOrCreateRemoteRoot(for: "~", session: session2)
-        XCTAssertTrue(root1 === root2,
-                      "Same alias must hit same cache entry regardless of display host")
+        XCTAssertTrue(
+            root1 === root2,
+            "Same alias must hit same cache entry regardless of display host")
     }
 
     /// Docker cache key should use container name.

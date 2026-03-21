@@ -267,7 +267,7 @@ struct GitDetailView: View {
             }
             .frame(height: itemHeight)
             .padding(.horizontal, density == .comfortable ? 12 : 8)
-            .padding(.leading, 10) // indent under section header
+            .padding(.leading, 10)  // indent under section header
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -277,7 +277,9 @@ struct GitDetailView: View {
         .contextMenu {
             fileContextMenu(file: file, section: section, escapedPath: escapedPath)
         }
-        .accessibilityLabel("\(file.status == "M" ? "Modified" : file.status == "A" ? "Added" : file.status == "D" ? "Deleted" : "Changed"): \(file.path)")
+        .accessibilityLabel(
+            "\(file.status == "M" ? "Modified" : file.status == "A" ? "Added" : file.status == "D" ? "Deleted" : "Changed"): \(file.path)"
+        )
         .accessibilityAddTraits(.isButton)
     }
 
