@@ -114,14 +114,8 @@ final class JSCRuntime {
         ]
 
         if let session = context.remoteSession {
-            switch session {
-            case .ssh(let host, _):
-                dict["envType"] = "ssh"
-                dict["remoteHost"] = host
-            case .docker(let container):
-                dict["envType"] = "docker"
-                dict["remoteHost"] = container
-            }
+            dict["envType"] = session.envType
+            dict["remoteHost"] = session.displayName
         } else {
             dict["envType"] = "local"
         }

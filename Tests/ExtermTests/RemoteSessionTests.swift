@@ -12,17 +12,17 @@ final class RemoteSessionTests: XCTestCase {
     }
 
     func testDockerSessionType() {
-        let session = RemoteSessionType.docker(container: "my-container")
+        let session = RemoteSessionType.container(target: "my-container", tool: .docker)
         XCTAssertEqual(session.displayName, "my-container")
         XCTAssertEqual(session.icon, "shippingbox")
-        XCTAssertTrue(session.connectingHint.contains("container"))
+        XCTAssertTrue(session.connectingHint.contains("docker"))
     }
 
     func testEquality() {
         let a = RemoteSessionType.ssh(host: "host1")
         let b = RemoteSessionType.ssh(host: "host1")
         let c = RemoteSessionType.ssh(host: "host2")
-        let d = RemoteSessionType.docker(container: "host1")
+        let d = RemoteSessionType.container(target: "host1", tool: .docker)
 
         XCTAssertEqual(a, b)
         XCTAssertNotEqual(a, c)

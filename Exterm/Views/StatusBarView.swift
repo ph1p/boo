@@ -22,14 +22,15 @@ class StatusBarView: NSView {
     var remoteSession: RemoteSessionType?
 
     var barHeight: CGFloat { DensityMetrics.current.statusBarHeight }
-    private var clockTimer: Timer?
-    private var gitPollTimer: Timer?
     private var settingsObserver: Any?
 
     // Git state (shared with GitBranchSegment)
     var gitBranch: String?
     var gitRepoRoot: String?
     var gitChangedCount: Int = 0
+
+    /// Status bar contents from plugin cycle results.
+    var pluginStatusBarContents: [(pluginID: String, content: StatusBarContent)] = []
 
     // Plugin arrays sorted by priority
     private(set) var leftPlugins: [StatusBarPlugin] = []
@@ -61,12 +62,6 @@ class StatusBarView: NSView {
 
         registerDefaultPlugins()
 
-        clockTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
-            self?.needsDisplay = true
-        }
-        gitPollTimer = Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { [weak self] _ in
-            self?.refreshGitBranch()
-        }
         settingsObserver = NotificationCenter.default.addObserver(
             forName: .settingsChanged, object: nil, queue: .main
         ) { [weak self] _ in
@@ -86,12 +81,15 @@ class StatusBarView: NSView {
 
     // MARK: - Plugin Registration
 
+    let systemInfoSegment = SystemInfoSegment()
+
     private func registerDefaultPlugins() {
         registerPlugin(EnvironmentSegment())
         registerPlugin(GitBranchSegment())
         registerPlugin(PathSegment())
         registerPlugin(ProcessSegment())
         registerPlugin(FileTreeIconSegment())
+        registerPlugin(systemInfoSegment)
         registerPlugin(PaneInfoSegment())
         registerPlugin(TimeSegment())
     }
@@ -295,8 +293,6 @@ class StatusBarView: NSView {
     }
 
     deinit {
-        clockTimer?.invalidate()
-        gitPollTimer?.invalidate()
         if let observer = settingsObserver {
             NotificationCenter.default.removeObserver(observer)
         }

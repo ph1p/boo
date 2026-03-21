@@ -25,10 +25,12 @@ final class SSHControlManager {
         cleanStaleSockets()
     }
 
-    /// Socket path for a given alias, or nil if no connection exists.
+    /// Socket path for a given alias, or nil if no managed connection exists.
+    /// Returns nil for unmanaged connections (user's own ControlMaster) — SSH will
+    /// find the user's socket automatically via their ~/.ssh/config.
     func socketPath(for alias: String) -> String? {
-        let state = queue.sync { connections[alias]?.state }
-        guard state == .ready else { return nil }
+        let conn = queue.sync { connections[alias] }
+        guard let conn, conn.state == .ready, conn.isManaged else { return nil }
         return Self.socketFilePath(for: alias)
     }
 
@@ -187,8 +189,8 @@ final class SSHControlManager {
 
     #if DEBUG
         /// Set connection state directly for testing.
-        func setTestState(alias: String, state: ConnectionState) {
-            queue.sync { connections[alias] = ManagedConnection(state: state, isManaged: false) }
+        func setTestState(alias: String, state: ConnectionState, isManaged: Bool = true) {
+            queue.sync { connections[alias] = ManagedConnection(state: state, isManaged: isManaged) }
         }
 
         /// Clear all connection state for testing.

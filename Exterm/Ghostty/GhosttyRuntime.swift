@@ -365,6 +365,7 @@ final class GhosttyRuntime {
         lines.append("cursor-style-blink = true")
         lines.append("cursor-opacity = 1")
         lines.append("cursor-text-color = \(hexColor(theme.background))")
+        lines.append("shell-integration-features = no-cursor")
         lines.append("unfocused-split-opacity = 0.85")
 
         // Colors from theme

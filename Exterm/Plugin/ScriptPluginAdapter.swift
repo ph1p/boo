@@ -7,6 +7,8 @@ import os.log
 final class ScriptPluginAdapter: ExtermPluginProtocol {
     let manifest: PluginManifest
     let pluginFolderPath: String
+    var actions: PluginActions?
+    var services: PluginServices?
     var hostActions: PluginHostActions?
     var onRequestCycleRerun: (() -> Void)?
 
@@ -39,7 +41,7 @@ final class ScriptPluginAdapter: ExtermPluginProtocol {
 
     // MARK: - Status Bar
 
-    func makeStatusBarContent(context: TerminalContext) -> StatusBarContent? {
+    func makeStatusBarContent(context: PluginContext) -> StatusBarContent? {
         guard let template = manifest.statusBar?.template else {
             // No template — use plugin name
             return StatusBarContent(
@@ -50,7 +52,7 @@ final class ScriptPluginAdapter: ExtermPluginProtocol {
             )
         }
 
-        let text = substituteTemplate(template, context: context)
+        let text = substituteTemplate(template, context: context.terminal)
         return StatusBarContent(
             text: text,
             icon: manifest.icon,
@@ -61,21 +63,20 @@ final class ScriptPluginAdapter: ExtermPluginProtocol {
 
     // MARK: - Detail View
 
-    func makeDetailView(context: TerminalContext, actionHandler: DSLActionHandler) -> AnyView? {
+    func makeDetailView(context: PluginContext) -> AnyView? {
         if let error = cachedError {
             return AnyView(ScriptPluginErrorView(pluginName: manifest.name, error: error))
         }
         guard let elements = cachedDSLElements else {
             return AnyView(ScriptPluginLoadingView(pluginName: manifest.name))
         }
-        let theme = AppSettings.shared.theme
-        let density = AppSettings.shared.sidebarDensity
+        let act = actions
         return AnyView(
             DSLRenderer(
                 elements: elements,
-                theme: theme,
-                density: density,
-                onAction: { actionHandler.handle($0) }
+                theme: AppSettings.shared.theme,
+                density: context.density,
+                onAction: { act?.handle($0) }
             ))
     }
 
@@ -170,12 +171,7 @@ final class ScriptPluginAdapter: ExtermPluginProtocol {
             result = result.replacingOccurrences(of: "{git.changedCount}", with: "\(git.changedFileCount)")
         }
         if let session = context.remoteSession {
-            switch session {
-            case .ssh(let host, _):
-                result = result.replacingOccurrences(of: "{remote.host}", with: host)
-            case .docker(let container):
-                result = result.replacingOccurrences(of: "{remote.host}", with: container)
-            }
+            result = result.replacingOccurrences(of: "{remote.host}", with: session.displayName)
         }
         return result
     }

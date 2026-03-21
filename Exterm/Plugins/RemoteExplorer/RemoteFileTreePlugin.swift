@@ -10,7 +10,7 @@ final class RemoteFileTreePlugin: ExtermPluginProtocol {
         version: "1.0.0",
         icon: "folder.badge.gearshape",
         description: "File explorer for remote sessions",
-        when: "remote",
+        when: "env.ssh",
         runtime: nil,
         capabilities: PluginManifest.Capabilities(sidebarPanel: true, statusBarSegment: false),
         statusBar: nil,
@@ -19,29 +19,32 @@ final class RemoteFileTreePlugin: ExtermPluginProtocol {
 
     /// Cached remote tree roots keyed by "session:path".
     private var cachedRemoteRoots: [String: RemoteFileTreeNode] = [:]
-    private var bridgeSubscription: AnyCancellable?
 
-    var hostActions: PluginHostActions? {
-        didSet { subscribeToBridge() }
-    }
+    /// Expanded directory paths per terminal (tab) ID.
+    private var expandedState: [UUID: Set<String>] = [:]
+    /// Cache key per terminal so we can find the right root on save.
+    private var terminalCacheKey: [UUID: String] = [:]
+    /// The last terminal ID we rendered for.
+    private var lastTerminalID: UUID?
+
+    var actions: PluginActions?
+    var services: PluginServices?
+    var hostActions: PluginHostActions?
     var onRequestCycleRerun: (() -> Void)?
 
-    /// Bridge shortcut for internal use.
-    private var bridge: TerminalBridge? { hostActions?.bridge }
-
-    var prefersOuterScrollView: Bool { false }
+    var prefersOuterScrollView: Bool { true }
 
     // MARK: - Section Title
 
-    func sectionTitle(context: TerminalContext) -> String? {
-        let dirName = (Self.remoteRootPath(for: context) as NSString).lastPathComponent
+    func sectionTitle(context: PluginContext) -> String? {
+        let dirName = (Self.remoteRootPath(for: context.terminal) as NSString).lastPathComponent
         return dirName.isEmpty ? nil : dirName
     }
 
     // MARK: - Status Bar
 
-    func makeStatusBarContent(context: TerminalContext) -> StatusBarContent? {
-        let dirName = (Self.remoteRootPath(for: context) as NSString).lastPathComponent
+    func makeStatusBarContent(context: PluginContext) -> StatusBarContent? {
+        let dirName = (Self.remoteRootPath(for: context.terminal) as NSString).lastPathComponent
         return StatusBarContent(
             text: dirName,
             icon: "folder.badge.gearshape",
@@ -52,49 +55,57 @@ final class RemoteFileTreePlugin: ExtermPluginProtocol {
 
     // MARK: - Detail View
 
-    func makeDetailView(context: TerminalContext, actionHandler: DSLActionHandler) -> AnyView? {
-        guard let session = context.remoteSession else { return nil }
+    func makeDetailView(context: PluginContext) -> AnyView? {
+        guard let session = context.terminal.remoteSession else { return nil }
 
-        let ha = hostActions
-        let actions = FileTreeActions(
+        let act = self.actions
+        let treeActions = FileTreeActions(
             onFileClicked: { path in
-                ha?.pastePathToActivePane?(path)
-                actionHandler.handle(DSLAction(type: "open", path: path, command: nil, text: nil))
+                act?.pastePath(path)
+                act?.handle(DSLAction(type: "open", path: path, command: nil, text: nil))
             },
             onOpenInTab: { path in
-                ha?.openDirectoryInNewTab?(path)
+                act?.openDirectoryInNewTab?(path)
             },
             onOpenInPane: { path in
-                ha?.openDirectoryInNewPane?(path)
+                act?.openDirectoryInNewPane?(path)
             },
             onCopyPath: { path in
-                actionHandler.handle(DSLAction(type: "copy", path: path, command: nil, text: nil))
+                act?.handle(DSLAction(type: "copy", path: path, command: nil, text: nil))
             },
             onRevealInFinder: { path in
-                actionHandler.handle(DSLAction(type: "reveal", path: path, command: nil, text: nil))
+                act?.handle(DSLAction(type: "reveal", path: path, command: nil, text: nil))
             },
             onRunCommand: { cmd in
-                actionHandler.sendToTerminal?(cmd)
+                act?.sendToTerminal?(cmd)
             },
             onNavigate: { path in
-                ha?.sendRawToActivePane?("cd \(path)\r")
+                act?.sendToTerminal?("cd \(RemoteExplorer.shellEscPath(path))\r")
             }
         )
 
-        let root = getOrCreateRemoteRoot(for: Self.remoteRootPath(for: context), session: session)
+        let tid = context.terminal.terminalID
+        saveExpandedState()
+        let rootPath = Self.remoteRootPath(for: context.terminal)
+        let root = getOrCreateRemoteRoot(for: rootPath, session: session)
         let host = session.displayName
-        return AnyView(RemoteFileTreeView(root: root, actions: actions, host: host))
+
+        // Restore expanded folders for this terminal
+        if let saved = expandedState[tid] {
+            root.restoreExpanded(saved)
+        }
+        let cacheHost = Self.cacheHost(for: session)
+        let resolved = RemoteExplorer.resolveTilde(rootPath, session: session) ?? rootPath
+        terminalCacheKey[tid] = "\(cacheHost):\(resolved)"
+        lastTerminalID = tid
+
+        return AnyView(RemoteFileTreeView(root: root, actions: treeActions, host: host))
     }
 
-    // MARK: - Bridge Subscription
+    // MARK: - Remote Directory Listing (replaces bridge subscription)
 
-    private func subscribeToBridge() {
-        bridgeSubscription = hostActions?.bridge?.events
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] event in
-                guard case .remoteDirectoryListed(let path, let entries) = event else { return }
-                self?.dispatchListing(path: path, entries: entries)
-            }
+    func remoteDirectoryListed(path: String, entries: [RemoteExplorer.RemoteEntry]) {
+        dispatchListing(path: path, entries: entries)
     }
 
     private func dispatchListing(path: String, entries: [RemoteExplorer.RemoteEntry]) {
@@ -112,6 +123,17 @@ final class RemoteFileTreePlugin: ExtermPluginProtocol {
         for child in children where child.isDirectory {
             deliverListing(to: child, path: path, entries: entries)
         }
+    }
+
+    // MARK: - Expanded State
+
+    /// Save the expanded folder state for the last active terminal.
+    private func saveExpandedState() {
+        guard let prevID = lastTerminalID,
+              let key = terminalCacheKey[prevID],
+              let root = cachedRemoteRoots[key]
+        else { return }
+        expandedState[prevID] = root.expandedPaths()
     }
 
     // MARK: - Internal
@@ -135,7 +157,11 @@ final class RemoteFileTreePlugin: ExtermPluginProtocol {
         let resolved = RemoteExplorer.resolveTilde(path, session: session) ?? path
         let host = Self.cacheHost(for: session)
         let key = "\(host):\(resolved)"
-        if let cached = cachedRemoteRoots[key] { return cached }
+        remoteLog("[RemoteFileTree] getOrCreateRemoteRoot: path=\(path) resolved=\(resolved) key=\(key) session=\(session)")
+        if let cached = cachedRemoteRoots[key] {
+            remoteLog("[RemoteFileTree] cache hit for key=\(key)")
+            return cached
+        }
 
         let hostPrefix = "\(host):"
         if let (existingKey, existingRoot) = cachedRemoteRoots.first(where: { $0.key.hasPrefix(hostPrefix) }) {
@@ -149,7 +175,9 @@ final class RemoteFileTreePlugin: ExtermPluginProtocol {
         let name = (resolved as NSString).lastPathComponent
         let root = RemoteFileTreeNode(
             name: name.isEmpty ? "/" : name, remotePath: resolved, isDirectory: true, session: session)
-        root.bridge = bridge
+        root.onRequestListing = { [weak self] path in
+            self?.onRequestCycleRerun?()
+        }
         root.isExpanded = true
         cachedRemoteRoots[key] = root
 

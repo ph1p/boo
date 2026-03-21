@@ -1,4 +1,5 @@
 import Cocoa
+import SwiftUI
 
 extension MainWindowController {
     func setupPluginWatcher() {
@@ -23,6 +24,7 @@ extension MainWindowController {
         let tabState = activeTab?.state ?? TabState(workingDirectory: ws.folderPath, title: "")
         let baseContext = coordinator.buildContext(
             paneID: ws.activePaneID,
+            tabID: activeTab?.id,
             tabState: tabState,
             gitContext: buildGitContext(cwd: cwd),
             processName: bridge.state.foregroundProcess,
@@ -30,25 +32,52 @@ extension MainWindowController {
             tabCount: ws.pane(for: ws.activePaneID)?.tabs.count ?? 1
         )
 
-        // Notify plugins of lifecycle events so they can refresh cached state
-        switch reason {
-        case .cwdChanged:
+        // Notify plugins of lifecycle events.
+        // Multiple events may have been coalesced into one cycle, so notify
+        // based on what actually changed rather than just the winning reason.
+        if reason == .cwdChanged {
             pluginRegistry.notifyCwdChanged(newPath: cwd, context: baseContext)
-        case .focusChanged, .workspaceSwitched:
+        }
+        if reason == .focusChanged || reason == .workspaceSwitched {
             pluginRegistry.notifyFocusChanged(terminalID: ws.activePaneID, context: baseContext)
-        case .processChanged:
-            pluginRegistry.notifyProcessChanged(name: bridge.state.foregroundProcess, context: baseContext)
-        case .remoteSessionChanged:
+        }
+        if reason == .remoteSessionChanged {
             pluginRegistry.notifyRemoteSessionChanged(session: activeRemoteSession, context: baseContext)
-        case .titleChanged:
-            break
+        }
+        // Always notify process changes when the process differs from last cycle
+        let currentProcess = bridge.state.foregroundProcess
+        if reason == .processChanged
+            || currentProcess != pluginRegistry.lastContext?.processName
+        {
+            pluginRegistry.notifyProcessChanged(name: currentProcess, context: baseContext)
         }
 
         let result = pluginRegistry.runCycle(baseContext: baseContext, reason: reason)
 
-        // On focus change (pane or tab switch), save and restore per-tab plugin state
-        // Note: per-tab plugin state save/restore is handled by coordinator.activateTab()
-        // which is called from paneView(_:didFocus:). No duplicate logic needed here.
+        // Update global store
+        AppStore.shared.updateContext(result.context)
+        AppStore.shared.updateVisiblePlugins(result.visiblePluginIDs)
+
+        // Feed plugin status bar contents to status bar
+        statusBar.pluginStatusBarContents = result.statusBarContents
+
+        // Feed system info segment from plugin cached values
+        if let sysPlugin = pluginRegistry.plugin(for: "system-info") as? SystemInfoPlugin {
+            let tint: NSColor? =
+                sysPlugin.memoryUsage > 0.85
+                ? .systemRed : (sysPlugin.memoryUsage > 0.7 ? .systemOrange : nil)
+            statusBar.systemInfoSegment.updateValues(
+                memoryPct: Int(sysPlugin.memoryUsage * 100),
+                diskFreeGB: sysPlugin.diskFreeGB,
+                cpuPct: Int(sysPlugin.cpuUsage * 100),
+                batteryPct: sysPlugin.battery.map { Int($0.level * 100) } ?? -1,
+                batteryCharging: sysPlugin.battery?.isCharging ?? false,
+                tint: tint
+            )
+        }
+
+        // Route git changed count through cycle result
+        statusBar.gitChangedCount = result.context.gitContext?.changedFileCount ?? 0
 
         // Update status bar icon availability based on plugin visibility
         let visibleIDs = result.visiblePluginIDs
@@ -58,6 +87,26 @@ extension MainWindowController {
             {
                 iconSegment.isAvailable = visibleIDs.contains(panelID)
             }
+            if let ftIcon = segment as? FileTreeIconSegment {
+                ftIcon.isAvailable =
+                    visibleIDs.contains("file-tree-local")
+                    || visibleIDs.contains("file-tree-remote")
+            }
+        }
+
+        // Auto-open process-dependent plugins that just became visible
+        // (e.g. AI agent panel when claude starts). Only process-gated plugins
+        // auto-open — other plugins are managed by the user via default sidebar settings.
+        if result.visibilityChanged {
+            for plugin in pluginRegistry.plugins
+            where plugin.manifest.capabilities?.sidebarPanel == true
+                && plugin.manifest.when?.contains("process") == true
+                && visibleIDs.contains(plugin.pluginID)
+                && !openPluginIDs.contains(plugin.pluginID)
+            {
+                openPluginIDs.insert(plugin.pluginID)
+                expandedPluginIDs.insert(plugin.pluginID)
+            }
         }
 
         // Rebuild stacked sidebar if any open plugins are actually visible
@@ -66,7 +115,10 @@ extension MainWindowController {
             return plugin.isVisible(for: result.context)
         }
         if !effectiveOpenIDs.isEmpty {
-            rebuildPluginSidebar(context: result.context)
+            // Only rebuild sidebar when context or visibility actually changed
+            if result.contextChanged || result.visibilityChanged || pluginSidebarPanelView == nil {
+                rebuildPluginSidebar(context: result.context)
+            }
         } else if sidebarVisible {
             // No visible plugins open — auto-hide sidebar
             pluginSidebarPanelView?.removeFromSuperview()
@@ -89,7 +141,7 @@ extension MainWindowController {
                 isDirty: false,
                 changedFileCount: 0,
                 stagedCount: 0,
-                stashCount: 0,
+
                 aheadCount: 0,
                 behindCount: 0,
                 lastCommitShort: nil
@@ -104,7 +156,6 @@ extension MainWindowController {
             isDirty: false,
             changedFileCount: 0,
             stagedCount: 0,
-            stashCount: 0,
             aheadCount: 0,
             behindCount: 0,
             lastCommitShort: nil
@@ -113,7 +164,8 @@ extension MainWindowController {
 
     /// Compute a dynamic section title for a plugin.
     func sectionTitle(for plugin: ExtermPluginProtocol, context: TerminalContext) -> String {
-        if let title = plugin.sectionTitle(context: context) {
+        let pluginCtx = pluginRegistry.buildPluginContext(for: plugin.pluginID, terminal: context)
+        if let title = plugin.sectionTitle(context: pluginCtx) {
             return title
         }
         return plugin.manifest.name
@@ -121,41 +173,60 @@ extension MainWindowController {
 
     /// Rebuild the stacked plugin sidebar with all open plugins.
     func rebuildPluginSidebar(context: TerminalContext) {
-        let actionHandler = DSLActionHandler()
-        actionHandler.sendToTerminal = { [weak self] cmd in
-            self?.sendRawToActivePane(cmd)
-        }
-
         // Build sections for all open + visible plugins
         var sections: [SidebarSection] = []
-        // Order plugins by statusBar priority (lower = first), falling back to name
+        // Order plugins by their position in defaultEnabledPluginIDs (user-configurable order)
+        let orderedIDs = AppSettings.shared.defaultEnabledPluginIDs
         let allPluginIDs = openPluginIDs.sorted { a, b in
-            let pa = pluginRegistry.plugin(for: a)?.manifest.statusBar?.priority ?? 50
-            let pb = pluginRegistry.plugin(for: b)?.manifest.statusBar?.priority ?? 50
-            if pa != pb { return pa < pb }
+            let ia = orderedIDs.firstIndex(of: a) ?? Int.max
+            let ib = orderedIDs.firstIndex(of: b) ?? Int.max
+            if ia != ib { return ia < ib }
             return a < b
         }
 
         for pluginID in allPluginIDs {
             guard openPluginIDs.contains(pluginID),
                 let plugin = pluginRegistry.plugin(for: pluginID),
-                plugin.isVisible(for: context),
-                let contentView = plugin.makeDetailView(context: context, actionHandler: actionHandler)
+                plugin.isVisible(for: context)
             else {
                 continue
             }
+
+            // Reuse cached view if the terminal context hasn't changed for this plugin
+            let contentView: AnyView
+            let generation: UInt64
+            if let cached = cachedDetailViews[pluginID], cached.context == context {
+                contentView = cached.view
+                generation = pluginViewGeneration[pluginID] ?? 0
+            } else {
+                let pluginCtx = pluginRegistry.buildPluginContext(for: pluginID, terminal: context)
+                guard let fresh = plugin.makeDetailView(context: pluginCtx) else { continue }
+                cachedDetailViews[pluginID] = (context: context, view: fresh)
+                viewGenerationCounter += 1
+                generation = viewGenerationCounter
+                pluginViewGeneration[pluginID] = generation
+                contentView = fresh
+            }
+
             sections.append(
                 SidebarSection(
                     id: pluginID,
                     name: sectionTitle(for: plugin, context: context),
                     icon: plugin.manifest.icon,
                     content: contentView,
-                    prefersOuterScrollView: plugin.prefersOuterScrollView
+                    prefersOuterScrollView: plugin.prefersOuterScrollView,
+                    generation: generation
                 ))
         }
 
         let newSectionIDs = sections.map(\.id)
-        let expanded = expandedPluginIDs
+
+        // Auto-expand when only one plugin is visible
+        var expanded = expandedPluginIDs
+        if sections.count == 1, let onlyID = sections.first?.id {
+            expanded.insert(onlyID)
+            expandedPluginIDs.insert(onlyID)
+        }
 
         let toggleHandler: (String) -> Void = { [weak self] id in
             guard let self = self else { return }
@@ -174,11 +245,13 @@ extension MainWindowController {
 
         if let existing = pluginSidebarPanelView {
             existing.onToggleExpand = toggleHandler
+            existing.setTerminalID(context.terminalID)
             existing.updateSections(sections, expandedIDs: expanded)
         } else {
             let panel = SidebarPanelView(frame: .zero)
             panel.translatesAutoresizingMaskIntoConstraints = false
             panel.onToggleExpand = toggleHandler
+            panel.setTerminalID(context.terminalID)
             sidebarContainer.addSubview(panel)
             NSLayoutConstraint.activate([
                 panel.topAnchor.constraint(equalTo: sidebarContainer.topAnchor),

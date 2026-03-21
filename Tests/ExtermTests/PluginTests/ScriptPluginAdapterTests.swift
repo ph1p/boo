@@ -47,6 +47,18 @@ final class ScriptPluginAdapterTests: XCTestCase {
         )
     }
 
+    private func makePluginContext(
+        terminal: TerminalContext,
+        pluginID: String = "test-plugin"
+    ) -> PluginContext {
+        PluginContext(
+            terminal: terminal,
+            theme: ThemeSnapshot(from: AppSettings.shared.theme),
+            density: .comfortable,
+            settings: PluginSettingsReader(pluginID: pluginID)
+        )
+    }
+
     func testAdapterConformsToPlugin() {
         let adapter = ScriptPluginAdapter(manifest: makeManifest(), folderPath: "/tmp/test-plugin")
         XCTAssertEqual(adapter.pluginID, "test-plugin")
@@ -84,7 +96,8 @@ final class ScriptPluginAdapterTests: XCTestCase {
             manifest: makeManifest(statusBarTemplate: "{git.branch} ({process.name})"),
             folderPath: "/tmp"
         )
-        let ctx = makeContext(gitBranch: "feature")
+        let tc = makeContext(gitBranch: "feature")
+        let ctx = makePluginContext(terminal: tc)
         let content = adapter.makeStatusBarContent(context: ctx)
 
         XCTAssertNotNil(content)
@@ -96,14 +109,15 @@ final class ScriptPluginAdapterTests: XCTestCase {
             manifest: makeManifest(statusBarTemplate: nil),
             folderPath: "/tmp"
         )
-        let content = adapter.makeStatusBarContent(context: makeContext())
+        let ctx = makePluginContext(terminal: makeContext())
+        let content = adapter.makeStatusBarContent(context: ctx)
         XCTAssertEqual(content?.text, "Test Plugin")
     }
 
     func testDetailViewShowsLoadingWhenNoCache() {
         let adapter = ScriptPluginAdapter(manifest: makeManifest(), folderPath: "/tmp/nonexistent")
-        let actionHandler = DSLActionHandler()
-        let view = adapter.makeDetailView(context: makeContext(), actionHandler: actionHandler)
+        let ctx = makePluginContext(terminal: makeContext())
+        let view = adapter.makeDetailView(context: ctx)
         // Should return a loading view since no script has been executed
         XCTAssertNotNil(view)
     }

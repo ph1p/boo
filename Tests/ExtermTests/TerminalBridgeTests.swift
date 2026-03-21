@@ -170,10 +170,58 @@ final class TerminalBridgeTests: XCTestCase {
             title: "docker exec -it mycontainer bash",
             cwd: "/tmp"
         )
-        if case .docker(let container) = result {
-            XCTAssertEqual(container, "mycontainer")
+        if case .container(let target, let tool) = result {
+            XCTAssertEqual(target, "mycontainer")
+            XCTAssertEqual(tool, .docker)
         } else {
             XCTFail("Expected Docker detection, got \(String(describing: result))")
+        }
+    }
+
+    func testDockerDetectionHeuristicSkipsOptionValuePairs() {
+        let result = TerminalBridge.detectRemoteFromHeuristics(
+            title: "docker exec --user root --workdir /app -it mycontainer bash",
+            cwd: "/tmp"
+        )
+        if case .container(let target, let tool) = result {
+            XCTAssertEqual(target, "mycontainer")
+            XCTAssertEqual(tool, .docker)
+        } else {
+            XCTFail("Expected Docker detection, got \(String(describing: result))")
+        }
+    }
+
+    func testDockerHexPromptDetectionHeuristic() {
+        let result = TerminalBridge.detectRemoteFromHeuristics(
+            title: "root@195cad4b6562:/app",
+            cwd: "/tmp"
+        )
+        XCTAssertEqual(result, .container(target: "195cad4b6562", tool: .docker))
+    }
+
+    func testPodmanDetectionHeuristic() {
+        let result = TerminalBridge.detectRemoteFromHeuristics(
+            title: "podman exec -it mycontainer bash",
+            cwd: "/tmp"
+        )
+        if case .container(let target, let tool) = result {
+            XCTAssertEqual(target, "mycontainer")
+            XCTAssertEqual(tool, .podman)
+        } else {
+            XCTFail("Expected Podman detection, got \(String(describing: result))")
+        }
+    }
+
+    func testKubectlDetectionHeuristic() {
+        let result = TerminalBridge.detectRemoteFromHeuristics(
+            title: "kubectl exec -it my-pod -- bash",
+            cwd: "/tmp"
+        )
+        if case .container(let target, let tool) = result {
+            XCTAssertEqual(target, "my-pod")
+            XCTAssertEqual(tool, .kubectl)
+        } else {
+            XCTFail("Expected kubectl detection, got \(String(describing: result))")
         }
     }
 
@@ -300,10 +348,71 @@ final class TerminalBridgeTests: XCTestCase {
 
     func testDockerProcessDetection() {
         let result = TerminalBridge.detectRemoteFromProcessName(title: "docker exec -it postgres bash")
-        if case .docker(let container) = result {
-            XCTAssertEqual(container, "postgres")
+        if case .container(let target, let tool) = result {
+            XCTAssertEqual(target, "postgres")
+            XCTAssertEqual(tool, .docker)
         } else {
             XCTFail("Expected Docker detection, got \(String(describing: result))")
+        }
+    }
+
+    func testDockerProcessDetectionSkipsOptionValuePairs() {
+        let result = TerminalBridge.detectRemoteFromProcessName(
+            title: "docker exec --user root --workdir /app -it postgres bash")
+        if case .container(let target, let tool) = result {
+            XCTAssertEqual(target, "postgres")
+            XCTAssertEqual(tool, .docker)
+        } else {
+            XCTFail("Expected Docker detection, got \(String(describing: result))")
+        }
+    }
+
+    func testMoshProcessDetection() {
+        let result = TerminalBridge.detectRemoteFromProcessName(title: "mosh user@server")
+        if case .mosh(let host) = result {
+            XCTAssertEqual(host, "user@server")
+        } else {
+            XCTFail("Expected Mosh detection, got \(String(describing: result))")
+        }
+    }
+
+    func testKubectlProcessDetection() {
+        let result = TerminalBridge.detectRemoteFromProcessName(title: "kubectl exec -it my-pod -- bash")
+        if case .container(let target, let tool) = result {
+            XCTAssertEqual(target, "my-pod")
+            XCTAssertEqual(tool, .kubectl)
+        } else {
+            XCTFail("Expected kubectl detection, got \(String(describing: result))")
+        }
+    }
+
+    func testVagrantProcessDetection() {
+        let result = TerminalBridge.detectRemoteFromProcessName(title: "vagrant ssh default")
+        if case .container(let target, let tool) = result {
+            XCTAssertEqual(target, "default")
+            XCTAssertEqual(tool, .vagrant)
+        } else {
+            XCTFail("Expected Vagrant detection, got \(String(describing: result))")
+        }
+    }
+
+    func testDistroboxProcessDetection() {
+        let result = TerminalBridge.detectRemoteFromProcessName(title: "distrobox enter ubuntu")
+        if case .container(let target, let tool) = result {
+            XCTAssertEqual(target, "ubuntu")
+            XCTAssertEqual(tool, .distrobox)
+        } else {
+            XCTFail("Expected Distrobox detection, got \(String(describing: result))")
+        }
+    }
+
+    func testAdbProcessDetection() {
+        let result = TerminalBridge.detectRemoteFromProcessName(title: "adb shell ls")
+        if case .container(let target, let tool) = result {
+            XCTAssertEqual(target, "ls")
+            XCTAssertEqual(tool, .adb)
+        } else {
+            XCTFail("Expected ADB detection, got \(String(describing: result))")
         }
     }
 
@@ -311,6 +420,52 @@ final class TerminalBridgeTests: XCTestCase {
         XCTAssertNil(TerminalBridge.detectRemoteFromProcessName(title: "vim file.txt"))
         XCTAssertNil(TerminalBridge.detectRemoteFromProcessName(title: ""))
         XCTAssertNil(TerminalBridge.detectRemoteFromProcessName(title: "make build"))
+    }
+
+    // MARK: - Non-interactive commands must NOT be detected
+
+    func testDockerLogsNotDetected() {
+        XCTAssertNil(TerminalBridge.detectRemoteFromProcessName(title: "docker logs -f mycontainer"))
+        XCTAssertNil(TerminalBridge.detectRemoteFromHeuristics(title: "docker logs -f mycontainer", cwd: "/tmp"))
+    }
+
+    func testDockerBuildNotDetected() {
+        XCTAssertNil(TerminalBridge.detectRemoteFromProcessName(title: "docker build -t myimage ."))
+        XCTAssertNil(TerminalBridge.detectRemoteFromHeuristics(title: "docker build -t myimage .", cwd: "/tmp"))
+    }
+
+    func testDockerRunWithoutInteractiveFlagsNotDetected() {
+        XCTAssertNil(TerminalBridge.detectRemoteFromProcessName(title: "docker run --rm myimage echo hello"))
+        XCTAssertNil(TerminalBridge.detectRemoteFromHeuristics(title: "docker run --rm myimage echo hello", cwd: "/tmp"))
+    }
+
+    func testDockerExecWithoutInteractiveFlagsNotDetected() {
+        XCTAssertNil(TerminalBridge.detectRemoteFromProcessName(title: "docker exec mycontainer cat /etc/hostname"))
+        XCTAssertNil(TerminalBridge.detectRemoteFromHeuristics(title: "docker exec mycontainer cat /etc/hostname", cwd: "/tmp"))
+    }
+
+    func testDockerRunInteractiveDetected() {
+        let result = TerminalBridge.detectRemoteFromProcessName(title: "docker run -it ubuntu bash")
+        if case .container(let target, let tool) = result {
+            XCTAssertEqual(target, "ubuntu")
+            XCTAssertEqual(tool, .docker)
+        } else {
+            XCTFail("Expected Docker run detection, got \(String(describing: result))")
+        }
+    }
+
+    func testDockerPsNotDetected() {
+        XCTAssertNil(TerminalBridge.detectRemoteFromProcessName(title: "docker ps"))
+        XCTAssertNil(TerminalBridge.detectRemoteFromHeuristics(title: "docker ps", cwd: "/tmp"))
+    }
+
+    func testKubectlExecWithoutInteractiveFlagsNotDetected() {
+        XCTAssertNil(TerminalBridge.detectRemoteFromProcessName(title: "kubectl exec my-pod -- cat /etc/hostname"))
+    }
+
+    func testKubectlLogsNotDetected() {
+        XCTAssertNil(TerminalBridge.detectRemoteFromProcessName(title: "kubectl logs my-pod"))
+        XCTAssertNil(TerminalBridge.detectRemoteFromHeuristics(title: "kubectl logs my-pod", cwd: "/tmp"))
     }
 
     func testSSHLocalhostNotRemote() {
@@ -773,19 +928,19 @@ final class TerminalBridgeTests: XCTestCase {
 
         // 1. Docker exec detected
         bridge.handleTitleChange(title: "docker exec -it mycontainer bash", paneID: paneID)
-        XCTAssertEqual(bridge.state.remoteSession, .docker(container: "mycontainer"))
+        XCTAssertEqual(bridge.state.remoteSession, .container(target: "mycontainer", tool: .docker))
         XCTAssertEqual(sessionEvents.count, 1)
 
         // 2. Container shell prompt looks like SSH (user@containerID:path)
         bridge.handleTitleChange(title: "root@abc123def456:/app", paneID: paneID)
         XCTAssertEqual(
-            bridge.state.remoteSession, .docker(container: "mycontainer"),
+            bridge.state.remoteSession, .container(target: "mycontainer", tool: .docker),
             "Docker session must not flip to SSH from container prompt")
         XCTAssertEqual(sessionEvents.count, 1, "No false session transition")
 
         // 3. cd inside container
         bridge.handleTitleChange(title: "root@abc123def456:/tmp", paneID: paneID)
-        XCTAssertEqual(bridge.state.remoteSession, .docker(container: "mycontainer"))
+        XCTAssertEqual(bridge.state.remoteSession, .container(target: "mycontainer", tool: .docker))
         XCTAssertEqual(sessionEvents.count, 1, "Docker session stays stable across cd")
     }
 
@@ -795,11 +950,11 @@ final class TerminalBridgeTests: XCTestCase {
 
         // Start Docker session
         bridge.handleTitleChange(title: "docker exec -it web bash", paneID: paneID)
-        XCTAssertEqual(bridge.state.remoteSession, .docker(container: "web"))
+        XCTAssertEqual(bridge.state.remoteSession, .container(target: "web", tool: .docker))
 
         // Container prompt
         bridge.handleTitleChange(title: "root@abc123:/app", paneID: paneID)
-        XCTAssertEqual(bridge.state.remoteSession, .docker(container: "web"))
+        XCTAssertEqual(bridge.state.remoteSession, .container(target: "web", tool: .docker))
 
         // Process tree says no remote child (user exited container)
         bridge.handleProcessTreeDetection(session: nil, paneID: paneID)
@@ -830,7 +985,7 @@ final class TerminalBridgeTests: XCTestCase {
     }
 
     func testDockerConnectionTarget() {
-        let docker = RemoteSessionType.docker(container: "web-app")
+        let docker = RemoteSessionType.container(target: "web-app", tool: .docker)
         XCTAssertEqual(docker.sshConnectionTarget, "web-app")
     }
 
@@ -1012,26 +1167,26 @@ final class TerminalBridgeTests: XCTestCase {
     func testDockerQuotedContainerNameStripped() {
         let result = TerminalBridge.detectRemoteFromProcessName(title: "docker exec -it 'fancy-calendar-db' sh")
         XCTAssertEqual(
-            result, .docker(container: "fancy-calendar-db"),
+            result, .container(target: "fancy-calendar-db", tool: .docker),
             "Single quotes must be stripped from container name")
     }
 
     func testDockerDoubleQuotedContainerNameStripped() {
         let result = TerminalBridge.detectRemoteFromProcessName(title: "docker exec -it \"web-app\" bash")
         XCTAssertEqual(
-            result, .docker(container: "web-app"),
+            result, .container(target: "web-app", tool: .docker),
             "Double quotes must be stripped from container name")
     }
 
     func testDockerUnquotedContainerNameUnchanged() {
         let result = TerminalBridge.detectRemoteFromProcessName(title: "docker exec -it web-app bash")
-        XCTAssertEqual(result, .docker(container: "web-app"))
+        XCTAssertEqual(result, .container(target: "web-app", tool: .docker))
     }
 
     func testDockerHeuristicQuotedContainerName() {
         let result = TerminalBridge.detectRemoteFromHeuristics(title: "docker exec -it 'my-db' sh", cwd: "/tmp")
         XCTAssertEqual(
-            result, .docker(container: "my-db"),
+            result, .container(target: "my-db", tool: .docker),
             "Heuristic detection must strip quotes from container name")
     }
 
@@ -1071,17 +1226,70 @@ final class TerminalBridgeTests: XCTestCase {
         XCTAssertEqual(result, "/root/projects")
     }
 
+    // MARK: - Container prompt CWD extraction
+
+    func testExtractRemoteCwdHexContainerWithAbsolutePath() {
+        let result = TerminalBridge.extractRemoteCwd(from: "195cad4b6562:/app#")
+        XCTAssertEqual(result, "/app")
+    }
+
+    func testExtractRemoteCwdHexContainerWithTilde() {
+        let result = TerminalBridge.extractRemoteCwd(from: "195cad4b6562:~#")
+        XCTAssertEqual(result, "/root")
+    }
+
+    func testExtractRemoteCwdHexContainerWithTildeSubdir() {
+        let result = TerminalBridge.extractRemoteCwd(from: "195cad4b6562:~/projects$")
+        XCTAssertEqual(result, "/root/projects")
+    }
+
+    func testExtractRemoteCwdNamedContainerWithPath() {
+        let result = TerminalBridge.extractRemoteCwd(from: "my-service-1:/var/log#")
+        XCTAssertEqual(result, "/var/log")
+    }
+
+    func testExtractRemoteCwdNamedContainerWithTilde() {
+        let result = TerminalBridge.extractRemoteCwd(from: "web-app_2:~#")
+        XCTAssertEqual(result, "/root")
+    }
+
+    func testExtractRemoteCwdUserAtContainerPrompt() {
+        // root@195cad4b6562:/app# — matched by the user@host:path branch
+        let result = TerminalBridge.extractRemoteCwd(from: "root@195cad4b6562:/app#")
+        XCTAssertEqual(result, "/app")
+    }
+
+    func testExtractRemoteCwdUserAtContainerTilde() {
+        let result = TerminalBridge.extractRemoteCwd(from: "root@195cad4b6562:~#")
+        XCTAssertEqual(result, "/root")
+    }
+
+    func testExtractRemoteCwdPlainWordDoesNotMatch() {
+        // Short names without hyphens/digits should not match
+        XCTAssertNil(TerminalBridge.extractRemoteCwd(from: "vim:/tmp"))
+        XCTAssertNil(TerminalBridge.extractRemoteCwd(from: "bash:/home"))
+    }
+
     /// Docker session stays stable when title changes to container prompt.
     func testDockerSessionStableWithQuotedName() {
         bridge = TerminalBridge(paneID: paneID, workspaceID: workspaceID, workingDirectory: "/Users/phlp")
 
         bridge.handleTitleChange(title: "docker exec -it 'fancy-calendar-db' sh", paneID: paneID)
-        XCTAssertEqual(bridge.state.remoteSession, .docker(container: "fancy-calendar-db"))
+        XCTAssertEqual(bridge.state.remoteSession, .container(target: "fancy-calendar-db", tool: .docker))
 
         // Container prompt
         bridge.handleTitleChange(title: "root@abc123def456:/app", paneID: paneID)
         XCTAssertEqual(
-            bridge.state.remoteSession, .docker(container: "fancy-calendar-db"),
+            bridge.state.remoteSession, .container(target: "fancy-calendar-db", tool: .docker),
             "Docker session must not flip to SSH from container prompt")
+    }
+
+    func testDockerHexPromptCreatesContainerSessionWithoutCommandTitle() {
+        bridge = TerminalBridge(paneID: paneID, workspaceID: workspaceID, workingDirectory: "/Users/phlp")
+
+        bridge.handleTitleChange(title: "root@195cad4b6562:/app", paneID: paneID)
+
+        XCTAssertEqual(bridge.state.remoteSession, .container(target: "195cad4b6562", tool: .docker))
+        XCTAssertEqual(bridge.state.remoteCwd, "/app")
     }
 }

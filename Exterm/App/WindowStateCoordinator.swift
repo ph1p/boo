@@ -12,7 +12,7 @@ final class WindowStateCoordinator {
     var previousFocusedTabID: UUID?
 
     /// Active plugin UI state (working copy, saved/restored on tab switch).
-    var openPluginIDs: Set<String> = ["file-tree-local", "file-tree-remote", "git-panel", "docker", "bookmarks"]
+    var openPluginIDs: Set<String> = Set(AppSettings.shared.defaultEnabledPluginIDs)
     var expandedPluginIDs: Set<String> = ["file-tree-local", "file-tree-remote"]
 
     init(bridge: TerminalBridge, pluginRegistry: PluginRegistry) {
@@ -36,11 +36,13 @@ final class WindowStateCoordinator {
     /// Handle a tab switch: save previous tab's state, restore new tab's state,
     /// and update the bridge to reflect the new tab.
     func activateTab(_ tab: Pane.Tab, paneID: UUID, previousTabPaneResolver: (UUID) -> Pane?) {
-        // Save current plugin state to previous tab
+        // Save current plugin state and bridge state to previous tab
         if let prevTabID = previousFocusedTabID,
             let prevPane = previousTabPaneResolver(prevTabID)
         {
             if let tabIdx = prevPane.tabs.firstIndex(where: { $0.id == prevTabID }) {
+                // Sync live bridge state to the outgoing tab before saving
+                syncBridgeToTab(pane: prevPane, tabIndex: tabIdx)
                 savePluginState(to: prevPane, tabIndex: tabIdx)
             }
         }
@@ -52,6 +54,7 @@ final class WindowStateCoordinator {
         // Update bridge to reflect the new active tab
         bridge.restoreTabState(
             paneID: paneID,
+            tabID: tab.id,
             workingDirectory: tab.workingDirectory,
             terminalTitle: tab.title,
             remoteSession: tab.remoteSession,
@@ -65,22 +68,34 @@ final class WindowStateCoordinator {
     func syncBridgeToTab(pane: Pane, tabIndex: Int) {
         pane.updateRemoteSession(at: tabIndex, bridge.state.remoteSession)
         pane.updateRemoteWorkingDirectory(at: tabIndex, bridge.state.remoteCwd)
+        pane.updateForegroundProcess(at: tabIndex, bridge.state.foregroundProcess)
+        remoteLog(
+            "[Coordinator] syncBridgeToTab: idx=\(tabIndex) remoteCwd=\(bridge.state.remoteCwd ?? "nil") session=\(bridge.state.remoteSession?.envType ?? "nil") process=\(bridge.state.foregroundProcess) title=\(bridge.state.terminalTitle.prefix(40))"
+        )
     }
 
     /// Build a TerminalContext from the active tab's state.
+    /// Bridge state is the single source of truth for the focused pane's remote
+    /// session and CWD — never fall back to tab state which may be stale.
     func buildContext(
         paneID: UUID,
+        tabID: UUID? = nil,
         tabState: TabState,
         gitContext: TerminalContext.GitContext?,
         processName: String,
         paneCount: Int,
         tabCount: Int
     ) -> TerminalContext {
-        TerminalContext(
-            terminalID: paneID,
+        // For the active pane, bridge is authoritative. For inactive panes
+        // (paneID doesn't match bridge), fall back to tab state.
+        let isActivePaneBridge = paneID == bridge.state.paneID
+        let remoteSession = isActivePaneBridge ? bridge.state.remoteSession : tabState.remoteSession
+        let remoteCwd = isActivePaneBridge ? bridge.state.remoteCwd : tabState.remoteWorkingDirectory
+        return TerminalContext(
+            terminalID: tabID ?? paneID,
             cwd: tabState.workingDirectory,
-            remoteSession: tabState.remoteSession,
-            remoteCwd: tabState.remoteWorkingDirectory,
+            remoteSession: remoteSession,
+            remoteCwd: remoteCwd,
             gitContext: gitContext,
             processName: processName,
             paneCount: paneCount,

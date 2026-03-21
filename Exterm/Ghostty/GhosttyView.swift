@@ -36,6 +36,7 @@ class GhosttyView: NSView, NSTextInputClient {
         super.init(frame: .zero)
         wantsLayer = true
         layer?.backgroundColor = NSColor.black.cgColor
+        registerForDraggedTypes([.fileURL])
         createSurface(workingDirectory: workingDirectory)
     }
 
@@ -117,14 +118,7 @@ class GhosttyView: NSView, NSTextInputClient {
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
-        guard let surface = surface, let window = window else { return }
-        let scale = window.backingScaleFactor
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        layer?.contentsScale = scale
-        CATransaction.commit()
-        ghostty_surface_set_content_scale(surface, Double(scale), Double(scale))
-        updateSurfaceSize()
+        applyContentScale()
     }
 
     override func setFrameSize(_ newSize: NSSize) {
@@ -134,6 +128,10 @@ class GhosttyView: NSView, NSTextInputClient {
 
     override func viewDidChangeBackingProperties() {
         super.viewDidChangeBackingProperties()
+        applyContentScale()
+    }
+
+    private func applyContentScale() {
         guard let surface = surface, let window = window else { return }
         let scale = window.backingScaleFactor
         CATransaction.begin()
@@ -173,33 +171,12 @@ class GhosttyView: NSView, NSTextInputClient {
     override func keyDown(with event: NSEvent) {
         guard let surface = surface else { return }
 
-        // Build Ghostty key event
         let action: ghostty_input_action_e = event.isARepeat ? GHOSTTY_ACTION_REPEAT : GHOSTTY_ACTION_PRESS
-        let mods = translateMods(event.modifierFlags)
-        let translatedMods = ghostty_surface_key_translation_mods(surface, mods)
-
-        var key = ghostty_input_key_s()
-        key.action = action
-        key.mods = translatedMods
-        key.keycode = UInt32(event.keyCode)
-        key.composing = false
-        key.text = nil
-
-        // consumed_mods: control and command never contribute to text translation
-        let consumedFlags = event.modifierFlags.subtracting([.control, .command])
-        key.consumed_mods = translateMods(consumedFlags)
-
-        // unshifted_codepoint: the character with no modifiers applied.
-        // Ghostty uses this to compute control characters (e.g. Ctrl+C → 0x03).
-        // We must use characters(byApplyingModifiers:) instead of
-        // charactersIgnoringModifiers because the latter changes behavior
-        // when ctrl is pressed.
-        key.unshifted_codepoint = 0
-        if let chars = event.characters(byApplyingModifiers: []),
-            let codepoint = chars.unicodeScalars.first
-        {
-            key.unshifted_codepoint = codepoint.value
-        }
+        let translatedMods = ghostty_surface_key_translation_mods(surface, translateMods(event.modifierFlags))
+        let params = eventKeyParams(event)
+        var key = makeKeyEvent(
+            action: action, keyCode: UInt32(event.keyCode), mods: translatedMods,
+            consumedMods: params.consumedMods, unshiftedCodepoint: params.unshiftedCodepoint)
 
         // Check if Ghostty handles this as a binding
         if isBinding(surface, key) {
@@ -237,20 +214,11 @@ class GhosttyView: NSView, NSTextInputClient {
 
     override func keyUp(with event: NSEvent) {
         guard let surface = surface else { return }
-        var key = ghostty_input_key_s()
-        key.action = GHOSTTY_ACTION_RELEASE
-        key.mods = translateMods(event.modifierFlags)
-        key.keycode = UInt32(event.keyCode)
-        key.composing = false
-        key.text = nil
-        let consumedFlags = event.modifierFlags.subtracting([.control, .command])
-        key.consumed_mods = translateMods(consumedFlags)
-        key.unshifted_codepoint = 0
-        if let chars = event.characters(byApplyingModifiers: []),
-            let codepoint = chars.unicodeScalars.first
-        {
-            key.unshifted_codepoint = codepoint.value
-        }
+        let params = eventKeyParams(event)
+        let key = makeKeyEvent(
+            action: GHOSTTY_ACTION_RELEASE, keyCode: UInt32(event.keyCode),
+            mods: translateMods(event.modifierFlags),
+            consumedMods: params.consumedMods, unshiftedCodepoint: params.unshiftedCodepoint)
         _ = ghostty_surface_key(surface, key)
     }
 
@@ -274,14 +242,7 @@ class GhosttyView: NSView, NSTextInputClient {
             (mods.rawValue & mod != 0)
             ? GHOSTTY_ACTION_PRESS : GHOSTTY_ACTION_RELEASE
 
-        var key = ghostty_input_key_s()
-        key.action = action
-        key.mods = mods
-        key.keycode = UInt32(event.keyCode)
-        key.composing = false
-        key.text = nil
-        key.consumed_mods = GHOSTTY_MODS_NONE
-        key.unshifted_codepoint = 0
+        let key = makeKeyEvent(action: action, keyCode: UInt32(event.keyCode), mods: mods)
         _ = ghostty_surface_key(surface, key)
     }
 
@@ -292,18 +253,10 @@ class GhosttyView: NSView, NSTextInputClient {
     /// Used for programmatic key simulation (e.g. clear screen via Ctrl+L).
     func sendKey(keyCode: UInt16, mods: ghostty_input_mods_e, text: String? = nil) {
         guard let surface = surface else { return }
-        var key = ghostty_input_key_s()
-        key.action = GHOSTTY_ACTION_PRESS
-        key.mods = mods
-        key.keycode = UInt32(keyCode)
-        key.composing = false
-        key.consumed_mods = GHOSTTY_MODS_NONE
-        key.unshifted_codepoint = 0
-
-        // Set unshifted codepoint from text if available
-        if let t = text, let scalar = t.unicodeScalars.first {
-            key.unshifted_codepoint = scalar.value
-        }
+        let codepoint = text?.unicodeScalars.first.map(\.value) ?? 0
+        var key = makeKeyEvent(
+            action: GHOSTTY_ACTION_PRESS, keyCode: UInt32(keyCode), mods: mods,
+            unshiftedCodepoint: codepoint)
 
         if let text = text {
             text.withCString { cstr in
@@ -311,7 +264,6 @@ class GhosttyView: NSView, NSTextInputClient {
                 _ = ghostty_surface_key(surface, key)
             }
         } else {
-            key.text = nil
             _ = ghostty_surface_key(surface, key)
         }
 
@@ -404,20 +356,39 @@ class GhosttyView: NSView, NSTextInputClient {
     override func mouseMoved(with event: NSEvent) { updateMousePos(event) }
 
     override func rightMouseDown(with event: NSEvent) {
-        guard let surface = surface else {
+        guard surface != nil else {
             super.rightMouseDown(with: event)
             return
         }
-        updateMousePos(event)
-        _ = ghostty_surface_mouse_button(
-            surface, GHOSTTY_MOUSE_PRESS, GHOSTTY_MOUSE_RIGHT, translateMods(event.modifierFlags))
-    }
+        let menu = NSMenu()
 
-    override func rightMouseUp(with event: NSEvent) {
-        guard let surface = surface else { return }
-        updateMousePos(event)
-        _ = ghostty_surface_mouse_button(
-            surface, GHOSTTY_MOUSE_RELEASE, GHOSTTY_MOUSE_RIGHT, translateMods(event.modifierFlags))
+        let copyItem = NSMenuItem(title: "Copy", action: #selector(copySelection(_:)), keyEquivalent: "")
+        copyItem.target = self
+        menu.addItem(copyItem)
+
+        let pasteItem = NSMenuItem(title: "Paste", action: #selector(paste(_:)), keyEquivalent: "")
+        pasteItem.target = self
+        menu.addItem(pasteItem)
+
+        menu.addItem(.separator())
+
+        let splitRight = NSMenuItem(
+            title: "Split Horizontally", action: #selector(MainWindowController.splitVerticalAction(_:)),
+            keyEquivalent: "")
+        menu.addItem(splitRight)
+
+        let splitDown = NSMenuItem(
+            title: "Split Vertically", action: #selector(MainWindowController.splitHorizontalAction(_:)),
+            keyEquivalent: "")
+        menu.addItem(splitDown)
+
+        menu.addItem(.separator())
+
+        let flashItem = NSMenuItem(title: "Flash", action: #selector(flashTerminal(_:)), keyEquivalent: "")
+        flashItem.target = self
+        menu.addItem(flashItem)
+
+        NSMenu.popUpContextMenu(menu, with: event, for: self)
     }
 
     override func scrollWheel(with event: NSEvent) {
@@ -460,7 +431,26 @@ class GhosttyView: NSView, NSTextInputClient {
             surface, Double(point.x), Double(bounds.height - point.y), translateMods(event.modifierFlags))
     }
 
-    // MARK: - Paste
+    // MARK: - Copy / Paste / Flash
+
+    @objc func copySelection(_ sender: Any?) {
+        guard let surface = surface else { return }
+        let action = "copy:clipboard"
+        _ = ghostty_surface_binding_action(surface, action, UInt(action.utf8.count))
+    }
+
+    @objc func flashTerminal(_ sender: Any?) {
+        let overlay = NSView(frame: bounds)
+        overlay.wantsLayer = true
+        overlay.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.3).cgColor
+        addSubview(overlay)
+        NSAnimationContext.runAnimationGroup({ ctx in
+            ctx.duration = 0.15
+            overlay.animator().alphaValue = 0
+        }) {
+            overlay.removeFromSuperview()
+        }
+    }
 
     @objc func paste(_ sender: Any?) {
         guard let surface = surface else { return }
@@ -529,6 +519,36 @@ class GhosttyView: NSView, NSTextInputClient {
 
     // MARK: - Helpers
 
+    /// Build a base key event struct with common fields. Event-specific fields
+    /// (text, composing) must be set by the caller.
+    private func makeKeyEvent(
+        action: ghostty_input_action_e, keyCode: UInt32, mods: ghostty_input_mods_e,
+        consumedMods: ghostty_input_mods_e = GHOSTTY_MODS_NONE, unshiftedCodepoint: UInt32 = 0
+    ) -> ghostty_input_key_s {
+        var key = ghostty_input_key_s()
+        key.action = action
+        key.mods = mods
+        key.keycode = keyCode
+        key.composing = false
+        key.text = nil
+        key.consumed_mods = consumedMods
+        key.unshifted_codepoint = unshiftedCodepoint
+        return key
+    }
+
+    /// Derive consumed_mods and unshifted_codepoint from an NSEvent.
+    private func eventKeyParams(_ event: NSEvent) -> (consumedMods: ghostty_input_mods_e, unshiftedCodepoint: UInt32) {
+        let consumedFlags = event.modifierFlags.subtracting([.control, .command])
+        let consumed = translateMods(consumedFlags)
+        var codepoint: UInt32 = 0
+        if let chars = event.characters(byApplyingModifiers: []),
+            let scalar = chars.unicodeScalars.first
+        {
+            codepoint = scalar.value
+        }
+        return (consumed, codepoint)
+    }
+
     private func isBinding(_ surface: ghostty_surface_t, _ key: ghostty_input_key_s) -> Bool {
         var flags = ghostty_binding_flags_e(rawValue: 0)
         return ghostty_surface_key_is_binding(surface, key, &flags)
@@ -559,6 +579,25 @@ class GhosttyView: NSView, NSTextInputClient {
         self.surface = nil  // nil first to prevent callbacks reaching a freed surface
         GhosttyRuntime.shared.unregisterSurface(surface)
         ghostty_surface_free(surface)
+    }
+
+    // MARK: - Drag & Drop
+
+    override func draggingEntered(_ sender: any NSDraggingInfo) -> NSDragOperation {
+        guard let types = sender.draggingPasteboard.types, types.contains(.fileURL) else { return [] }
+        return .copy
+    }
+
+    override func performDragOperation(_ sender: any NSDraggingInfo) -> Bool {
+        guard let surface = surface else { return false }
+        guard let urls = sender.draggingPasteboard.readObjects(forClasses: [NSURL.self]) as? [URL],
+            !urls.isEmpty
+        else { return false }
+        let text = urls.map { shellEscape($0.path) }.joined(separator: " ")
+        text.withCString { cstr in
+            ghostty_surface_text(surface, cstr, UInt(strlen(cstr)))
+        }
+        return true
     }
 
     deinit { destroy() }

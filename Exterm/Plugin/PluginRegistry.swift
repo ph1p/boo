@@ -9,14 +9,28 @@ final class PluginRegistry {
     private(set) var plugins: [ExtermPluginProtocol] = []
     private let runtime = PluginRuntime()
     private let logger = Logger(subsystem: "com.exterm", category: "PluginRegistry")
+    private let pluginServices: PluginServices = HostPluginServices()
 
     /// The most recent context after a cycle.
     var lastContext: TerminalContext? { runtime.lastContext }
 
+    /// The most recent PluginContext built during a cycle (for sidebar rebuild).
+    private(set) var lastPluginContexts: [String: PluginContext] = [:]
+
     /// Callback for plugins to request a cycle rerun.
     var onRequestCycleRerun: (() -> Void)?
 
+    /// Unified actions distributed to all plugins on set.
+    var actions: PluginActions? {
+        didSet {
+            for i in plugins.indices {
+                plugins[i].actions = actions
+            }
+        }
+    }
+
     /// Host actions distributed to all plugins on set.
+    /// Deprecated: use `actions` instead.
     var hostActions: PluginHostActions? {
         didSet {
             for i in plugins.indices {
@@ -30,6 +44,8 @@ final class PluginRegistry {
     func register(_ plugin: ExtermPluginProtocol) {
         let p = plugin
         p.hostActions = hostActions
+        p.actions = actions
+        p.services = pluginServices
         p.onRequestCycleRerun = { [weak self] in
             self?.onRequestCycleRerun?()
         }
@@ -55,16 +71,40 @@ final class PluginRegistry {
         let visiblePlugins = plugins.filter { $0.isVisible(for: frozenContext) }
         let visibleIDs = Set(visiblePlugins.map(\.pluginID))
 
-        // Collect status bar content
+        // Build per-plugin contexts and collect status bar content
+        let theme = ThemeSnapshot(from: AppSettings.shared.theme)
+        let density = AppSettings.shared.sidebarDensity
+        var contexts: [String: PluginContext] = [:]
         let statusBarContents: [(String, StatusBarContent)] = visiblePlugins.compactMap { plugin in
-            guard let content = plugin.makeStatusBarContent(context: frozenContext) else { return nil }
+            let ctx = PluginContext(
+                terminal: frozenContext,
+                theme: theme,
+                density: density,
+                settings: PluginSettingsReader(pluginID: plugin.pluginID)
+            )
+            contexts[plugin.pluginID] = ctx
+            guard let content = plugin.makeStatusBarContent(context: ctx) else { return nil }
             return (plugin.pluginID, content)
         }
+        lastPluginContexts = contexts
 
         return PluginCycleResult(
             context: frozenContext,
             visiblePluginIDs: visibleIDs,
             statusBarContents: statusBarContents
+        )
+    }
+
+    /// Build a PluginContext for a specific plugin from a TerminalContext.
+    func buildPluginContext(for pluginID: String, terminal: TerminalContext) -> PluginContext {
+        if let cached = lastPluginContexts[pluginID], cached.terminal == terminal {
+            return cached
+        }
+        return PluginContext(
+            terminal: terminal,
+            theme: ThemeSnapshot(from: AppSettings.shared.theme),
+            density: AppSettings.shared.sidebarDensity,
+            settings: PluginSettingsReader(pluginID: pluginID)
         )
     }
 
@@ -109,6 +149,12 @@ final class PluginRegistry {
     func notifyFocusChanged(terminalID: UUID, context: TerminalContext) {
         for plugin in activePlugins {
             plugin.terminalFocusChanged(terminalID: terminalID, context: context)
+        }
+    }
+
+    func notifyRemoteDirectoryListed(path: String, entries: [RemoteExplorer.RemoteEntry]) {
+        for plugin in activePlugins {
+            plugin.remoteDirectoryListed(path: path, entries: entries)
         }
     }
 

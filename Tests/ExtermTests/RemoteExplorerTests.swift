@@ -72,8 +72,13 @@ final class RemoteExplorerTests: XCTestCase {
     }
 
     func testDockerSessionConnectingHint() {
-        let session = RemoteSessionType.docker(container: "my-container")
-        XCTAssertTrue(session.connectingHint.contains("container"))
+        let session = RemoteSessionType.container(target: "my-container", tool: .docker)
+        XCTAssertTrue(session.connectingHint.contains("docker"))
+    }
+
+    func testMoshSessionConnectingHint() {
+        let session = RemoteSessionType.mosh(host: "test-host")
+        XCTAssertTrue(session.connectingHint.contains("Mosh"))
     }
 
     // MARK: - Remote Session Display
@@ -89,14 +94,80 @@ final class RemoteExplorerTests: XCTestCase {
     }
 
     func testDockerContainerDisplay() {
-        let session = RemoteSessionType.docker(container: "web-app")
+        let session = RemoteSessionType.container(target: "web-app", tool: .docker)
         XCTAssertEqual(session.displayName, "web-app")
         XCTAssertEqual(session.icon, "shippingbox")
+    }
+
+    func testMoshDisplay() {
+        let session = RemoteSessionType.mosh(host: "server.example.com")
+        XCTAssertEqual(session.displayName, "server.example.com")
+        XCTAssertEqual(session.icon, "globe.badge.chevron.backward")
+        XCTAssertEqual(session.envType, "mosh")
     }
 
     func testSSHIcon() {
         let session = RemoteSessionType.ssh(host: "host")
         XCTAssertEqual(session.icon, "globe")
+    }
+
+    // MARK: - Container Tool Properties
+
+    func testContainerToolIcons() {
+        XCTAssertEqual(RemoteSessionType.container(target: "pod", tool: .kubectl).icon, "helm")
+        XCTAssertEqual(RemoteSessionType.container(target: "vm", tool: .limactl).icon, "desktopcomputer")
+        XCTAssertEqual(RemoteSessionType.container(target: "box", tool: .distrobox).icon, "wrench.and.screwdriver")
+        XCTAssertEqual(RemoteSessionType.container(target: "dev", tool: .adb).icon, "iphone")
+    }
+
+    func testContainerToolEnvTypes() {
+        XCTAssertEqual(RemoteSessionType.container(target: "c", tool: .docker).envType, "docker")
+        XCTAssertEqual(RemoteSessionType.container(target: "p", tool: .podman).envType, "podman")
+        XCTAssertEqual(RemoteSessionType.container(target: "k", tool: .kubectl).envType, "kubectl")
+        XCTAssertEqual(RemoteSessionType.container(target: "o", tool: .oc).envType, "openshift")
+    }
+
+    func testIsSSHBased() {
+        XCTAssertTrue(RemoteSessionType.ssh(host: "h").isSSHBased)
+        XCTAssertTrue(RemoteSessionType.mosh(host: "h").isSSHBased)
+        XCTAssertTrue(RemoteSessionType.container(target: "vm", tool: .vagrant).isSSHBased)
+        XCTAssertTrue(RemoteSessionType.container(target: "vm", tool: .colima).isSSHBased)
+        XCTAssertFalse(RemoteSessionType.container(target: "c", tool: .docker).isSSHBased)
+        XCTAssertFalse(RemoteSessionType.container(target: "p", tool: .kubectl).isSSHBased)
+    }
+
+    func testContainerEquality() {
+        let a = RemoteSessionType.container(target: "web", tool: .docker)
+        let b = RemoteSessionType.container(target: "web", tool: .docker)
+        let c = RemoteSessionType.container(target: "web", tool: .podman)
+        XCTAssertEqual(a, b)
+        XCTAssertNotEqual(a, c)
+    }
+
+    func testMoshEquality() {
+        XCTAssertEqual(RemoteSessionType.mosh(host: "h"), RemoteSessionType.mosh(host: "h"))
+        XCTAssertNotEqual(RemoteSessionType.mosh(host: "h"), RemoteSessionType.ssh(host: "h"))
+    }
+
+    func testContainerToolByProcessName() {
+        XCTAssertEqual(ContainerTool.byProcessName["docker"], .docker)
+        XCTAssertEqual(ContainerTool.byProcessName["podman"], .podman)
+        XCTAssertEqual(ContainerTool.byProcessName["kubectl"], .kubectl)
+        XCTAssertEqual(ContainerTool.byProcessName["oc"], .oc)
+        XCTAssertEqual(ContainerTool.byProcessName["lima"], .limactl)
+        XCTAssertEqual(ContainerTool.byProcessName["adb"], .adb)
+    }
+
+    func testDockerInteractiveTargetSkipsOptionValuePairs() {
+        let target = ContainerTool.docker.interactiveTarget(
+            from: ["docker", "exec", "--user", "root", "--workdir", "/app", "-it", "web", "bash"])
+        XCTAssertEqual(target, "web")
+    }
+
+    func testDockerInteractiveTargetSkipsInlineLongOptionValues() {
+        let target = ContainerTool.docker.interactiveTarget(
+            from: ["docker", "exec", "--user=root", "--workdir=/app", "-it", "web", "bash"])
+        XCTAssertEqual(target, "web")
     }
 
     func testDirectoryListCommandLeavesBareTildeUnquoted() {
@@ -109,14 +180,14 @@ final class RemoteExplorerTests: XCTestCase {
     func testDirectoryListCommandPreservesTildeExpansionForNestedHomePath() {
         XCTAssertEqual(
             RemoteExplorer.directoryListCommand(for: "~/Projects/My App"),
-            "ls -1AF ~/'Projects'/'My App' 2>/dev/null"
+            "ls -1AF ~/Projects/'My App' 2>/dev/null"
         )
     }
 
     func testDirectoryListCommandQuotesAbsolutePaths() {
         XCTAssertEqual(
             RemoteExplorer.directoryListCommand(for: "/var/log"),
-            "ls -1AF '/var/log' 2>/dev/null"
+            "ls -1AF /var/log 2>/dev/null"
         )
     }
 
@@ -133,9 +204,9 @@ final class RemoteExplorerTests: XCTestCase {
         XCTAssertEqual(RemoteExplorer.shellEscPath("~"), "~")
     }
 
-    func testShellEscPathAbsolutePathIsQuoted() {
+    func testShellEscPathAbsolutePathIsUnquotedWhenNoSpecialChars() {
         let result = RemoteExplorer.shellEscPath("/root/container")
-        XCTAssertEqual(result, "'/root/container'")
+        XCTAssertEqual(result, "/root/container")
     }
 
     func testShellEscPathAbsolutePathWithSpaces() {
@@ -156,7 +227,7 @@ final class RemoteExplorerTests: XCTestCase {
         // We can't easily test the Process setup, but we can verify the command
         // structure is correct by checking directoryListCommand output.
         let cmd = RemoteExplorer.directoryListCommand(for: "/app")
-        XCTAssertEqual(cmd, "ls -1AF '/app' 2>/dev/null")
+        XCTAssertEqual(cmd, "ls -1AF /app 2>/dev/null")
     }
 
     // MARK: - sshConnectionTarget for home cache

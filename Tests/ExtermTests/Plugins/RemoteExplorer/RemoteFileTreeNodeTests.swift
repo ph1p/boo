@@ -106,12 +106,6 @@ final class RemoteFileTreeNodeTests: XCTestCase {
         XCTAssertEqual(node.session, .ssh(host: "het"))
     }
 
-    func testDockerSessionProperties() {
-        let node = RemoteFileTreeNode(
-            name: "root", remotePath: "~", isDirectory: true, session: .docker(container: "web-app"))
-        XCTAssertEqual(node.session, .docker(container: "web-app"))
-    }
-
     // MARK: - Child Path Construction
 
     func testApplyEntriesChildPathsCorrect() {

@@ -19,7 +19,18 @@ protocol ExtermPluginProtocol: ExtermPlugin {
     /// When-clause expression (parsed from manifest). nil = always visible.
     var whenClause: WhenClauseNode? { get }
 
-    // MARK: - UI
+    // MARK: - UI (PluginContext)
+
+    /// Create the detail panel content view using the structured plugin context.
+    func makeDetailView(context: PluginContext) -> AnyView?
+
+    /// Create status bar content using the structured plugin context.
+    func makeStatusBarContent(context: PluginContext) -> StatusBarContent?
+
+    /// Dynamic section title using the structured plugin context.
+    func sectionTitle(context: PluginContext) -> String?
+
+    // MARK: - UI (Legacy — TerminalContext + actionHandler)
 
     /// Create the detail panel content view for the current context.
     /// Built-in plugins return SwiftUI views; script plugins return DSL-rendered views.
@@ -37,7 +48,14 @@ protocol ExtermPluginProtocol: ExtermPlugin {
     /// Plugins that already contain their own scroll view should return false.
     var prefersOuterScrollView: Bool { get }
 
+    /// Unified action dispatch for terminal and system operations.
+    var actions: PluginActions? { get set }
+
+    /// Injectable services for system/shell calls.
+    var services: PluginServices? { get set }
+
     /// Host-provided action closures (paste path, open in tab/pane, etc.).
+    /// Deprecated: use `actions` instead.
     var hostActions: PluginHostActions? { get set }
 
     /// Called by the plugin when it wants the host to re-run a plugin cycle
@@ -52,6 +70,9 @@ protocol ExtermPluginProtocol: ExtermPlugin {
     func terminalCreated(terminalID: UUID)
     func terminalClosed(terminalID: UUID)
     func terminalFocusChanged(terminalID: UUID, context: TerminalContext)
+
+    /// Called when a remote directory listing arrives from the bridge.
+    func remoteDirectoryListed(path: String, entries: [RemoteExplorer.RemoteEntry])
 }
 
 /// Default no-op implementations for all optional methods.
@@ -66,15 +87,19 @@ extension ExtermPluginProtocol {
         return try? WhenClauseParser.parse(when)
     }
 
+    // PluginContext-based defaults forward to legacy TerminalContext methods.
+    func makeDetailView(context: PluginContext) -> AnyView? { nil }
+    func makeStatusBarContent(context: PluginContext) -> StatusBarContent? { nil }
+    func sectionTitle(context: PluginContext) -> String? { nil }
+
     func makeDetailView(context: TerminalContext, actionHandler: DSLActionHandler) -> AnyView? { nil }
     func makeStatusBarContent(context: TerminalContext) -> StatusBarContent? { nil }
     func sectionTitle(context: TerminalContext) -> String? { nil }
     var prefersOuterScrollView: Bool { true }
 
-    // Note: hostActions and onRequestCycleRerun have NO default implementation.
-    // Every plugin must declare stored properties for these so PluginRegistry
-    // injection works correctly. A default no-op getter/setter would silently
-    // discard injected values.
+    // Note: actions, services, hostActions, and onRequestCycleRerun have NO default
+    // implementation. Every plugin must declare stored properties for these so
+    // PluginRegistry injection works correctly.
 
     func cwdChanged(newPath: String, context: TerminalContext) {}
     func remoteSessionChanged(session: RemoteSessionType?, context: TerminalContext) {}
@@ -82,6 +107,7 @@ extension ExtermPluginProtocol {
     func terminalCreated(terminalID: UUID) {}
     func terminalClosed(terminalID: UUID) {}
     func terminalFocusChanged(terminalID: UUID, context: TerminalContext) {}
+    func remoteDirectoryListed(path: String, entries: [RemoteExplorer.RemoteEntry]) {}
 }
 
 /// Evaluates whether a plugin should be visible given a terminal context.

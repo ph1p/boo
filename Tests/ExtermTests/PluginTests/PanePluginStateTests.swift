@@ -117,7 +117,7 @@ final class PanePluginStateTests: XCTestCase {
 
         XCTAssertEqual(
             newPane.activeTab!.state.openPluginIDs,
-            ["file-tree-local", "file-tree-remote", "git-panel", "docker", "bookmarks"],
+            Set(AppSettings.shared.defaultEnabledPluginIDs),
             "New tab should use defaults when parent has defaults")
     }
 

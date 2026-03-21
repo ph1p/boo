@@ -30,7 +30,7 @@ final class ContextAnnouncementEngineTests: XCTestCase {
             isDockerAvailable: false
         )
         let text = ContextAnnouncementEngine.composeAnnouncement(from: state)
-        XCTAssertTrue(text.contains("SSH to prod-01"))
+        XCTAssertTrue(text.contains("ssh prod-01"))
         XCTAssertTrue(text.contains("/var/log"))
         XCTAssertTrue(text.contains("bash"))
     }
@@ -42,11 +42,11 @@ final class ContextAnnouncementEngineTests: XCTestCase {
             workingDirectory: "/var/lib/postgresql",
             terminalTitle: "",
             foregroundProcess: "psql",
-            remoteSession: .docker(container: "postgres"),
+            remoteSession: .container(target: "postgres", tool: .docker),
             isDockerAvailable: true
         )
         let text = ContextAnnouncementEngine.composeAnnouncement(from: state)
-        XCTAssertTrue(text.contains("Docker container postgres"))
+        XCTAssertTrue(text.contains("docker postgres"))
         XCTAssertTrue(text.contains("/var/lib/postgresql"))
         XCTAssertTrue(text.contains("psql"))
     }

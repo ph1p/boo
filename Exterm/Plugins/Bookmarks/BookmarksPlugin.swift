@@ -4,6 +4,8 @@ import SwiftUI
 /// unified plugin protocol. Per-host namespacing for remote sessions.
 @MainActor
 final class BookmarksPluginNew: ExtermPluginProtocol {
+    var actions: PluginActions?
+    var services: PluginServices?
     var hostActions: PluginHostActions?
     var onRequestCycleRerun: (() -> Void)?
 
@@ -22,7 +24,7 @@ final class BookmarksPluginNew: ExtermPluginProtocol {
 
     // MARK: - Status Bar
 
-    func makeStatusBarContent(context: TerminalContext) -> StatusBarContent? {
+    func makeStatusBarContent(context: PluginContext) -> StatusBarContent? {
         let count = BookmarkService.shared.bookmarks.count
         let text = count > 0 ? "\(count)" : "Bookmarks"
         return StatusBarContent(
@@ -35,14 +37,16 @@ final class BookmarksPluginNew: ExtermPluginProtocol {
 
     // MARK: - Detail View
 
-    func makeDetailView(context: TerminalContext, actionHandler: DSLActionHandler) -> AnyView? {
-        let ns = Self.namespace(for: context)
-        let cwd = context.isRemote ? (context.remoteCwd ?? context.cwd) : context.cwd
+    func makeDetailView(context: PluginContext) -> AnyView? {
+        let tc = context.terminal
+        let ns = Self.namespace(for: tc)
+        let cwd = tc.isRemote ? (tc.remoteCwd ?? tc.cwd) : tc.cwd
+        let act = actions
         return AnyView(
             BookmarksPanelView(
                 namespace: ns,
                 onBookmarkSelected: { path in
-                    actionHandler.handle(DSLAction(type: "cd", path: path, command: nil, text: nil))
+                    act?.handle(DSLAction(type: "cd", path: path, command: nil, text: nil))
                 },
                 onBookmarkCurrent: {
                     let service = BookmarkService.shared
@@ -61,9 +65,6 @@ final class BookmarksPluginNew: ExtermPluginProtocol {
     /// Returns the bookmark namespace for the current context.
     static func namespace(for context: TerminalContext) -> String {
         guard let session = context.remoteSession else { return "local" }
-        switch session {
-        case .ssh(let host, _): return "ssh:\(host)"
-        case .docker(let container): return "docker:\(container)"
-        }
+        return "\(session.envType):\(session.displayName)"
     }
 }

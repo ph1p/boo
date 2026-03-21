@@ -2,49 +2,57 @@ import Foundation
 
 extension TerminalBridge {
     /// Common shell names to filter out from process display.
-    static let shellNames: Set<String> = ["zsh", "bash", "sh", "fish", "dash", "tcsh", "csh", "ksh", "nu", "elvish"]
+    static var shellNames: Set<String> { ProcessIcon.shells }
+
+    /// All remote tool command names recognized in terminal titles.
+    private static let remoteCommandNames: Set<String> = {
+        var names: Set<String> = ["ssh", "mosh"]
+        for tool in ContainerTool.all {
+            for name in tool.processNames {
+                names.insert(name)
+            }
+        }
+        return names
+    }()
 
     /// Detect remote sessions from terminal title and working directory.
-    /// Uses title heuristics (user@host, ssh, docker) rather than filesystem checks,
-    /// since paths like `/tmp` exist on both local and remote systems.
+    /// Uses title heuristics (user@host, ssh, docker, kubectl, etc.) rather than
+    /// filesystem checks, since paths like `/tmp` exist on both local and remote systems.
+    /// Only matches interactive shell sessions (e.g. `docker exec -it`, not `docker logs`).
     static func detectRemoteFromHeuristics(title: String, cwd: String) -> RemoteSessionType? {
         let trimmed = title.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty else { return nil }
 
-        // Docker detection: title contains "docker" keyword
         let lower = trimmed.lowercased()
-        if lower.contains("docker exec") || lower.contains("docker run") || lower.hasPrefix("docker") {
-            // Try to extract container name from title
-            let parts = trimmed.split(separator: " ")
-            if let execIdx = parts.firstIndex(where: { $0 == "exec" || $0 == "run" }),
-                execIdx + 1 < parts.endIndex
-            {
-                // Skip flags (starting with -)
-                var i = parts.index(after: execIdx)
-                while i < parts.endIndex && parts[i].hasPrefix("-") {
-                    i = parts.index(after: i)
+        let parts = trimmed.split(separator: " ").map(String.init)
+        let lowerParts = lower.split(separator: " ").map(String.init)
+
+        // Container/VM tool detection: title must contain tool name + interactive subcommand.
+        // This excludes non-interactive commands like `docker logs`, `docker build`, etc.
+        for tool in ContainerTool.all {
+            for processName in tool.processNames {
+                guard lowerParts.first == processName || lower.hasPrefix("/") && (lowerParts.first?.hasSuffix("/\(processName)") == true) else {
+                    continue
                 }
-                if i < parts.endIndex {
-                    return .docker(container: stripShellQuotes(String(parts[i])))
+                if let target = tool.interactiveTarget(from: parts) {
+                    return .container(target: target, tool: tool)
                 }
             }
-            return .docker(container: "unknown")
+        }
+
+        if let hexContainerID = detectDockerHexPromptTarget(from: trimmed) {
+            return .container(target: hexContainerID, tool: .docker)
         }
 
         // SSH detection: user@host pattern in title
         let atPattern = trimmed.split(separator: " ").first(where: { $0.contains("@") })
         if let match = atPattern {
             let components = match.split(separator: "@", maxSplits: 1)
-            if components.count == 2 {
-                let host =
-                    components[1]
-                    .split(separator: ":").first
-                    .flatMap { $0.split(separator: " ").first }
-                    .map(String.init)?
-                    .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-                if !host.isEmpty && !isLocalHost(host) {
-                    return .ssh(host: "\(components[0])@\(host)", alias: nil)
-                }
+            if components.count == 2,
+                let host = extractHost(after: String(components[1])),
+                !isLocalHost(host)
+            {
+                return .ssh(host: "\(components[0])@\(host)", alias: nil)
             }
         }
 
@@ -64,7 +72,7 @@ extension TerminalBridge {
         let processDetection = detectRemoteFromProcessName(title: title)
         var detected = heuristic ?? processDetection
 
-        // When a "ssh" command is detected in the title, set alias = host so
+        // When an "ssh" or "mosh" command is detected in the title, set alias = host so
         // subsequent prompt-based detections can stabilize on it. This fires
         // regardless of whether the heuristic also matched (titles like
         // "ssh -i key root@host" trigger both the heuristic and process detection).
@@ -75,15 +83,32 @@ extension TerminalBridge {
                 detected = .ssh(host: cmdHost, alias: cmdHost)
             }
         }
+        if let processDetection, case .mosh(let cmdHost) = processDetection {
+            if detected == nil {
+                detected = .mosh(host: cmdHost)
+            }
+        }
 
-        // Nested docker commands inside SSH should keep the outer SSH environment.
-        if case .ssh = previous, case .docker = detected {
+        // Nested container commands inside SSH should keep the outer SSH environment.
+        if case .ssh = previous, case .container = detected {
+            detected = previous
+        }
+        if case .mosh = previous, case .container = detected {
             detected = previous
         }
 
-        // Docker container shell prompts show "root@abc123def456:~" which the heuristic
-        // misidentifies as SSH. When we're already in a Docker session, keep it.
-        if case .docker = previous, case .ssh = detected {
+        // Container shell prompts show "root@abc123def456:~" which the heuristic
+        // misidentifies as SSH. When we're already in a container session, keep it.
+        if case .container = previous, case .ssh = detected {
+            detected = previous
+        }
+        if case .container(_, let previousTool) = previous,
+            case .container(let target, let detectedTool) = detected,
+            previousTool == detectedTool,
+            heuristic != nil, processDetection == nil,
+            detectedTool == .docker,
+            looksLikeHexContainerID(target)
+        {
             detected = previous
         }
 
@@ -136,10 +161,7 @@ extension TerminalBridge {
         let isLocalUserAtHostPrompt: Bool = {
             guard trimmed.contains("@"), let atRange = trimmed.range(of: "@") else { return false }
             let afterAt = String(trimmed[atRange.upperBound...])
-            let host =
-                afterAt.split(separator: ":").first
-                .flatMap { $0.split(separator: " ").first }
-                .map(String.init) ?? afterAt
+            let host = extractHost(after: afterAt) ?? afterAt
             return isLocalHost(host)
         }()
         if isLocalShellPrompt || isLocalUserAtHostPrompt {
@@ -149,56 +171,162 @@ extension TerminalBridge {
         return previous
     }
 
-    /// Strip shell quoting from a string: 'foo' → foo, "foo" → foo, foo → foo.
-    static func stripShellQuotes(_ s: String) -> String {
-        var r = s
-        if (r.hasPrefix("'") && r.hasSuffix("'")) || (r.hasPrefix("\"") && r.hasSuffix("\"")) {
-            r = String(r.dropFirst().dropLast())
+    /// Extract the hostname from text containing "user@host:path" or "user@host rest".
+    /// Strips the colon-delimited path and any trailing words, returning just the host.
+    static func extractHost(after atSign: String) -> String? {
+        let host =
+            atSign
+            .split(separator: ":").first
+            .flatMap { $0.split(separator: " ").first }
+            .map(String.init)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return (host?.isEmpty == false) ? host : nil
+    }
+
+    /// Detect Docker's default prompt format where the hostname is the container ID.
+    /// This covers cases where the first title seen after `docker exec` is already
+    /// inside the container shell, before the original command title is observed.
+    private static func detectDockerHexPromptTarget(from title: String) -> String? {
+        let trimmed = title.trimmingCharacters(in: .whitespaces)
+        guard let colonIndex = trimmed.firstIndex(of: ":") else { return nil }
+
+        let rawPath = String(trimmed[trimmed.index(after: colonIndex)...])
+            .trimmingCharacters(in: CharacterSet(charactersIn: "#$ "))
+            .trimmingCharacters(in: .whitespaces)
+        guard rawPath.hasPrefix("/") || rawPath.hasPrefix("~") else { return nil }
+
+        let prefix = String(trimmed[..<colonIndex])
+        if let atIndex = prefix.firstIndex(of: "@") {
+            let host = String(prefix[prefix.index(after: atIndex)...])
+            return looksLikeHexContainerID(host) ? host : nil
         }
-        return r
+
+        return looksLikeHexContainerID(prefix) ? prefix : nil
+    }
+
+    private static func looksLikeHexContainerID(_ value: String) -> Bool {
+        value.count >= 12 && value.allSatisfy { $0.isHexDigit }
     }
 
     /// Detect remote session from the process/command shown in the terminal title.
-    /// This catches cases where the title is "ssh user@host" or "docker exec container"
-    /// even when the CWD still looks local.
+    /// This catches cases where the title is "ssh user@host", "mosh host",
+    /// "docker exec container", "kubectl exec pod", etc.
     static func detectRemoteFromProcessName(title: String) -> RemoteSessionType? {
         let trimmed = title.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty else { return nil }
         let parts = trimmed.split(separator: " ").map(String.init)
         guard let cmd = parts.first else { return nil }
-        let cmdBase = (cmd as NSString).lastPathComponent
+        let cmdBase = (cmd as NSString).lastPathComponent.lowercased()
 
         // SSH: title starts with "ssh" followed by a host
         if cmdBase == "ssh" {
-            // Find first non-option argument as host
             var skipNext = false
+            let valueOpts: Set<String> = [
+                "-p", "-i", "-l", "-o", "-F", "-J", "-L", "-R", "-D", "-b", "-c", "-e", "-m", "-w", "-E",
+            ]
             for arg in parts.dropFirst() {
                 if skipNext {
                     skipNext = false
                     continue
                 }
                 if arg.hasPrefix("-") {
-                    let valueOpts: Set<String> = [
-                        "-p", "-i", "-l", "-o", "-F", "-J", "-L", "-R", "-D", "-b", "-c", "-e", "-m", "-w", "-E"
-                    ]
                     if valueOpts.contains(arg) { skipNext = true }
                     continue
                 }
-                let host = arg
-                if host != "localhost" && host != "127.0.0.1" {
-                    return .ssh(host: host)
+                if arg != "localhost" && arg != "127.0.0.1" {
+                    return .ssh(host: arg)
                 }
                 break
             }
         }
 
-        // Docker: title starts with "docker" followed by "exec"
-        if cmdBase == "docker" && parts.count >= 3 {
-            if let execIdx = parts.firstIndex(of: "exec"), execIdx + 1 < parts.count {
-                var i = execIdx + 1
-                while i < parts.count && parts[i].hasPrefix("-") { i += 1 }
-                if i < parts.count {
-                    return .docker(container: stripShellQuotes(parts[i]))
+        // Mosh: title starts with "mosh" followed by a host
+        if cmdBase == "mosh" || cmdBase == "mosh-client" {
+            var skipNext = false
+            let valueOpts: Set<String> = ["-p", "--port", "--ssh", "--predict", "--predict-overwrite"]
+            for arg in parts.dropFirst() {
+                if skipNext {
+                    skipNext = false
+                    continue
+                }
+                if arg.hasPrefix("-") {
+                    if valueOpts.contains(arg) { skipNext = true }
+                    continue
+                }
+                if arg != "localhost" && arg != "127.0.0.1" {
+                    return .mosh(host: arg)
+                }
+                break
+            }
+        }
+
+        // Container/VM tools: title starts with tool name followed by an interactive subcommand
+        if let tool = ContainerTool.byProcessName[cmdBase], parts.count >= 2 {
+            if let target = tool.interactiveTarget(from: parts) {
+                return .container(target: target, tool: tool)
+            }
+        }
+
+        return nil
+    }
+
+    /// Extract a remote CWD from a terminal title like "user@host:~/dir", "user@host:/path",
+    /// or container prompts like "195cad4b6562:/app#", "my-container:~#".
+    /// Returns the path portion, expanding ~ to /root or /home/user as appropriate.
+    /// When `session` is a container, only matches container-style prompts (not SSH user@host:path).
+    static func extractRemoteCwd(from title: String, session: RemoteSessionType? = nil) -> String? {
+        let trimmed = title.trimmingCharacters(in: .whitespaces)
+        let isContainerSession = session?.isContainer ?? false
+
+        // Match "user@host:path" pattern (SSH prompts and container prompts with user@)
+        if let atIdx = trimmed.firstIndex(of: "@") {
+            let afterAt = trimmed[trimmed.index(after: atIdx)...]
+            if let colonIdx = afterAt.firstIndex(of: ":") {
+                // Extract the hostname between @ and :
+                let hostPart = String(afterAt[..<colonIdx])
+                let rawPath = String(afterAt[afterAt.index(after: colonIdx)...])
+                    .trimmingCharacters(in: CharacterSet(charactersIn: "#$ "))
+                    .trimmingCharacters(in: .whitespaces)
+                if !rawPath.isEmpty {
+                    // For container sessions, only match if the host looks like a container ID
+                    // (hex, 12+ chars) — reject SSH-style hostnames like "157.90.31.161".
+                    if isContainerSession {
+                        let isContainerID = hostPart.count >= 12 && hostPart.allSatisfy { $0.isHexDigit }
+                        if !isContainerID { /* fall through to container prompt branch */ }
+                        else {
+                            let user = String(trimmed[..<atIdx])
+                            return expandTildePath(rawPath, user: user)
+                        }
+                    } else {
+                        let user = String(trimmed[..<atIdx])
+                        return expandTildePath(rawPath, user: user)
+                    }
+                }
+            }
+        }
+
+        // Container/hostname prompt: "hostname:path#" or "hostname:path$"
+        // Matches both hex container IDs (195cad4b6562:/app#) and named containers
+        // (my-service:/app#). Only match if the path part looks like a filesystem path.
+        if let colonIdx = trimmed.firstIndex(of: ":") {
+            let before = String(trimmed[..<colonIdx])
+            let rawPath = String(trimmed[trimmed.index(after: colonIdx)...])
+                .trimmingCharacters(in: CharacterSet(charactersIn: "#$ "))
+                .trimmingCharacters(in: .whitespaces)
+            // Path must start with / or ~ to be a filesystem path (not a port number etc.)
+            if !rawPath.isEmpty && !before.isEmpty
+                && (rawPath.hasPrefix("/") || rawPath.hasPrefix("~"))
+            {
+                // Match hex container IDs (12+ chars) or hostnames that look like
+                // container/pod names (contain a hyphen/digit, at least 4 chars).
+                // Avoids matching short words like "vim:/tmp" or "foo:/bar".
+                let isHexID = before.count >= 12 && before.allSatisfy { $0.isHexDigit }
+                let isContainerHostname = before.count >= 4
+                    && before.contains(where: { $0 == "-" || $0 == "_" || $0.isNumber })
+                    && before.allSatisfy { $0.isLetter || $0.isNumber || $0 == "-" || $0 == "_" || $0 == "." }
+                if isHexID || isContainerHostname {
+                    // For container prompts without user@, assume root for ~ expansion
+                    return expandTildePath(rawPath, user: "root")
                 }
             }
         }
@@ -206,44 +334,14 @@ extension TerminalBridge {
         return nil
     }
 
-    /// Extract a remote CWD from a terminal title like "user@host:~/dir" or "user@host:/path".
-    /// Returns the path portion, expanding ~ to /root or /home/user as appropriate.
-    static func extractRemoteCwd(from title: String) -> String? {
-        let trimmed = title.trimmingCharacters(in: .whitespaces)
-
-        // Match "user@host:path" pattern
-        if let atIdx = trimmed.firstIndex(of: "@") {
-            let afterAt = trimmed[trimmed.index(after: atIdx)...]
-            if let colonIdx = afterAt.firstIndex(of: ":") {
-                let path = String(afterAt[afterAt.index(after: colonIdx)...]).trimmingCharacters(in: .whitespaces)
-                if !path.isEmpty {
-                    let user = String(trimmed[..<atIdx])
-                    if path.hasPrefix("~") {
-                        let rest = String(path.dropFirst())
-                        if user == "root" {
-                            return "/root" + rest
-                        }
-                        return "/home/\(user)" + rest
-                    }
-                    return path
-                }
-            }
+    /// Expand a tilde-prefixed path using the given username.
+    private static func expandTildePath(_ path: String, user: String) -> String {
+        guard path.hasPrefix("~") else { return path }
+        let rest = String(path.dropFirst())
+        if user == "root" {
+            return "/root" + rest
         }
-
-        // Docker container prompt: "containerid:/path#" or "containerid:/path$"
-        // No user@ prefix, just hex-like ID followed by colon and path.
-        if let colonIdx = trimmed.firstIndex(of: ":") {
-            let before = String(trimmed[..<colonIdx])
-            let afterColon = String(trimmed[trimmed.index(after: colonIdx)...])
-                .trimmingCharacters(in: CharacterSet(charactersIn: "#$ "))
-            // Container IDs are typically 12+ hex chars
-            let isContainerID = before.count >= 12 && before.allSatisfy { $0.isHexDigit }
-            if isContainerID && !afterColon.isEmpty && afterColon.hasPrefix("/") {
-                return afterColon
-            }
-        }
-
-        return nil
+        return "/home/\(user)" + rest
     }
 
     /// Extract a short process name from a terminal title.
@@ -251,6 +349,11 @@ extension TerminalBridge {
     static func extractProcessName(from title: String) -> String {
         let trimmed = title.trimmingCharacters(in: .whitespaces)
         if trimmed.isEmpty { return "" }
+
+        // Check for known app title patterns (e.g. "✳ Claude Code" → "claude")
+        if let matched = ProcessIcon.matchTitle(trimmed) {
+            return matched
+        }
 
         // "user@host: ~/dir" — local shell prompt, not a process
         if let colonIdx = trimmed.firstIndex(of: ":") {
@@ -273,27 +376,20 @@ extension TerminalBridge {
         return firstWord
     }
 
-    /// Check if a terminal title has any remote indicators (user@host, ssh, docker).
+    /// Check if a terminal title has any remote indicators (user@host, ssh, docker, kubectl, etc.).
     /// Titles matching the local hostname (e.g. "user@localmachine:~") are NOT remote.
     static func titleLooksRemote(_ title: String) -> Bool {
         let trimmed = title.trimmingCharacters(in: .whitespaces)
         if trimmed.isEmpty { return false }
         let lower = trimmed.lowercased()
-        // Starts with ssh or docker command
+        // Starts with a known remote command
         let firstWord = lower.split(separator: " ").first.map(String.init) ?? ""
-        if firstWord == "ssh" || firstWord == "docker" { return true }
+        if remoteCommandNames.contains(firstWord) { return true }
         // Contains user@host pattern — check if host is local
         if let atRange = trimmed.range(of: "@") {
             let afterAt = String(trimmed[atRange.upperBound...])
-            // Extract hostname (before : or space or end)
-            let host =
-                afterAt.split(separator: ":").first
-                .flatMap { $0.split(separator: " ").first }
-                .map(String.init) ?? afterAt
-            // Not remote if it matches any local hostname
-            if isLocalHost(host) {
-                return false
-            }
+            let host = extractHost(after: afterAt) ?? afterAt
+            if isLocalHost(host) { return false }
             return true
         }
         return false
@@ -307,10 +403,7 @@ extension TerminalBridge {
         let trimmed = title.trimmingCharacters(in: .whitespaces)
         guard let atRange = trimmed.range(of: "@") else { return false }
         let afterAt = String(trimmed[atRange.upperBound...])
-        let host =
-            afterAt.split(separator: ":").first
-            .flatMap { $0.split(separator: " ").first }
-            .map(String.init) ?? afterAt
+        let host = extractHost(after: afterAt) ?? afterAt
         return isLocalHost(host)
     }
 }

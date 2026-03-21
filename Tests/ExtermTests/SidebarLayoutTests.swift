@@ -605,6 +605,144 @@ final class SidebarLayoutTests: XCTestCase {
         }
     }
 
+    // MARK: - Scroll Position Per Terminal
+
+    func testSetTerminalIDSavesScrollOffsets() {
+        let v = makePanelView()
+        let s = [makeSection(id: "a")]
+        let tid1 = UUID()
+        let tid2 = UUID()
+
+        v.setTerminalID(tid1)
+        v.updateSections(s, expandedIDs: ["a"])
+
+        // Simulate scrolling by directly setting the scroll view offset
+        if let scrollView = v.sectionStates[0].contentContainer as? NSScrollView {
+            scrollView.contentView.scroll(to: NSPoint(x: 0, y: 42))
+            scrollView.reflectScrolledClipView(scrollView.contentView)
+        }
+
+        // Switch to terminal 2 — should save terminal 1's offsets
+        v.setTerminalID(tid2)
+
+        let saved = v.scrollOffset(for: tid1, sectionID: "a")
+        XCTAssertNotNil(saved, "Scroll offset should be saved for terminal 1")
+        XCTAssertEqual(saved?.y ?? -1, 42, accuracy: 1, "Saved scroll offset should match")
+    }
+
+    func testScrollOffsetRestoredOnTerminalSwitch() {
+        let v = makePanelView()
+        let s = [makeSection(id: "a")]
+        let tid1 = UUID()
+        let tid2 = UUID()
+
+        // Terminal 1: scroll to y=42
+        v.setTerminalID(tid1)
+        v.updateSections(s, expandedIDs: ["a"])
+        if let scrollView = v.sectionStates[0].contentContainer as? NSScrollView {
+            scrollView.contentView.scroll(to: NSPoint(x: 0, y: 42))
+            scrollView.reflectScrolledClipView(scrollView.contentView)
+        }
+
+        // Switch to terminal 2: scroll to y=100
+        v.setTerminalID(tid2)
+        v.updateSections(s, expandedIDs: ["a"])
+        if let scrollView = v.sectionStates[0].contentContainer as? NSScrollView {
+            scrollView.contentView.scroll(to: NSPoint(x: 0, y: 100))
+            scrollView.reflectScrolledClipView(scrollView.contentView)
+        }
+
+        // Switch back to terminal 1 — should restore y=42
+        v.setTerminalID(tid1)
+        v.updateSections(s, expandedIDs: ["a"])
+
+        if let scrollView = v.sectionStates[0].contentContainer as? NSScrollView {
+            let offset = scrollView.contentView.bounds.origin
+            XCTAssertEqual(offset.y, 42, accuracy: 1, "Scroll position should be restored for terminal 1")
+        }
+    }
+
+    func testScrollOffsetIndependentPerTerminal() {
+        let v = makePanelView()
+        let s = [makeSection(id: "a")]
+        let tid1 = UUID()
+        let tid2 = UUID()
+
+        // Terminal 1 at y=20
+        v.setTerminalID(tid1)
+        v.updateSections(s, expandedIDs: ["a"])
+        if let scrollView = v.sectionStates[0].contentContainer as? NSScrollView {
+            scrollView.contentView.scroll(to: NSPoint(x: 0, y: 20))
+            scrollView.reflectScrolledClipView(scrollView.contentView)
+        }
+
+        // Terminal 2 at y=80
+        v.setTerminalID(tid2)
+        v.updateSections(s, expandedIDs: ["a"])
+        if let scrollView = v.sectionStates[0].contentContainer as? NSScrollView {
+            scrollView.contentView.scroll(to: NSPoint(x: 0, y: 80))
+            scrollView.reflectScrolledClipView(scrollView.contentView)
+        }
+
+        // Explicitly save terminal 2's offsets before checking
+        v.saveScrollOffsets(for: tid2)
+
+        // Verify both are stored independently
+        let saved1 = v.scrollOffset(for: tid1, sectionID: "a")
+        let saved2 = v.scrollOffset(for: tid2, sectionID: "a")
+        XCTAssertEqual(saved1?.y ?? -1, 20, accuracy: 1)
+        XCTAssertEqual(saved2?.y ?? -1, 80, accuracy: 1)
+    }
+
+    func testScrollOffsetSavedPerSection() {
+        let v = makePanelView(height: 600)
+        let s = [makeSection(id: "a"), makeSection(id: "b")]
+        let tid = UUID()
+
+        v.setTerminalID(tid)
+        v.updateSections(s, expandedIDs: ["a", "b"])
+
+        // Scroll section a to y=10, section b to y=50
+        for (i, expected) in [(0, 10.0), (1, 50.0)] {
+            if let scrollView = v.sectionStates[i].contentContainer as? NSScrollView {
+                scrollView.contentView.scroll(to: NSPoint(x: 0, y: expected))
+                scrollView.reflectScrolledClipView(scrollView.contentView)
+            }
+        }
+
+        // Save and check
+        v.saveScrollOffsets(for: tid)
+        XCTAssertEqual(v.scrollOffset(for: tid, sectionID: "a")?.y ?? -1, 10, accuracy: 1)
+        XCTAssertEqual(v.scrollOffset(for: tid, sectionID: "b")?.y ?? -1, 50, accuracy: 1)
+    }
+
+    func testNoSavedOffsetForUnknownTerminal() {
+        let v = makePanelView()
+        let offset = v.scrollOffset(for: UUID(), sectionID: "a")
+        XCTAssertNil(offset)
+    }
+
+    func testSameTerminalIDDoesNotSave() {
+        let v = makePanelView()
+        let s = [makeSection(id: "a")]
+        let tid = UUID()
+
+        v.setTerminalID(tid)
+        v.updateSections(s, expandedIDs: ["a"])
+
+        // Scroll to y=42
+        if let scrollView = v.sectionStates[0].contentContainer as? NSScrollView {
+            scrollView.contentView.scroll(to: NSPoint(x: 0, y: 42))
+            scrollView.reflectScrolledClipView(scrollView.contentView)
+        }
+
+        // Set same terminal ID again — should NOT trigger a save (no transition)
+        v.setTerminalID(tid)
+        // Offset should not be saved because oldID == newID
+        let saved = v.scrollOffset(for: tid, sectionID: "a")
+        XCTAssertNil(saved, "Same terminal should not trigger save")
+    }
+
     // MARK: - Real plugin E2E: use actual BookmarksPlugin content in a window
 
     /// Uses the real BookmarksPlugin to generate content, in a real NSWindow,
@@ -643,22 +781,24 @@ final class SidebarLayoutTests: XCTestCase {
             paneCount: 1,
             tabCount: 1
         )
-        let actionHandler = DSLActionHandler()
         var expandedIDs: Set<String> = ["file-tree-local"]
 
         func makeSections() -> [SidebarSection] {
             var sections: [SidebarSection] = []
             for pluginID in ["file-tree-local", "docker", "bookmarks"] {
                 guard let plugin = registry.plugin(for: pluginID),
-                    plugin.isVisible(for: context),
-                    let content = plugin.makeDetailView(context: context, actionHandler: actionHandler)
+                    plugin.isVisible(for: context)
                 else {
+                    continue
+                }
+                let pluginCtx = registry.buildPluginContext(for: pluginID, terminal: context)
+                guard let content = plugin.makeDetailView(context: pluginCtx) else {
                     continue
                 }
                 sections.append(
                     SidebarSection(
                         id: pluginID,
-                        name: plugin.sectionTitle(context: context) ?? plugin.manifest.name,
+                        name: plugin.sectionTitle(context: pluginCtx) ?? plugin.manifest.name,
                         icon: plugin.manifest.icon,
                         content: content,
                         prefersOuterScrollView: plugin.prefersOuterScrollView

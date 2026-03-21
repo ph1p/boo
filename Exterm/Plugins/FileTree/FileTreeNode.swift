@@ -2,7 +2,7 @@ import Foundation
 
 /// Data model for file tree entries.
 final class FileTreeNode: Identifiable, ObservableObject {
-    let id: UUID
+    let id: String
     let name: String
     let path: String
     let isDirectory: Bool
@@ -11,7 +11,7 @@ final class FileTreeNode: Identifiable, ObservableObject {
     @Published var isExpanded: Bool = false
 
     init(name: String, path: String, isDirectory: Bool) {
-        self.id = UUID()
+        self.id = path
         self.name = name
         self.path = path
         self.isDirectory = isDirectory
@@ -48,6 +48,33 @@ final class FileTreeNode: Identifiable, ObservableObject {
             children = newChildren
         } catch {
             children = []
+        }
+    }
+
+    /// Collect all expanded directory paths in this subtree.
+    func expandedPaths() -> Set<String> {
+        var result = Set<String>()
+        if isDirectory && isExpanded {
+            result.insert(path)
+            for child in children ?? [] {
+                result.formUnion(child.expandedPaths())
+            }
+        }
+        return result
+    }
+
+    /// Restore expanded state from a set of previously expanded paths.
+    func restoreExpanded(_ paths: Set<String>) {
+        guard isDirectory else { return }
+        let shouldExpand = paths.contains(path)
+        if shouldExpand && !isExpanded {
+            isExpanded = true
+            loadChildren()
+        } else if !shouldExpand && isExpanded {
+            isExpanded = false
+        }
+        for child in children ?? [] {
+            child.restoreExpanded(paths)
         }
     }
 

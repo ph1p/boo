@@ -63,7 +63,7 @@ final class TerminalContextTests: XCTestCase {
             workingDirectory: "/var/lib/postgresql",
             terminalTitle: "",
             foregroundProcess: "psql",
-            remoteSession: .docker(container: "postgres"),
+            remoteSession: .container(target: "postgres", tool: .docker),
             isDockerAvailable: true
         )
         let ctx = TerminalContext.build(from: state)

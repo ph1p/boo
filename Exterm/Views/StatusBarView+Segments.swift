@@ -1,5 +1,22 @@
 import Cocoa
 
+// MARK: - Shared Helpers
+
+/// Draw a tinted SF Symbol into a CGContext, flipping coordinates for correct orientation.
+private func drawTintedIcon(_ image: NSImage, color: NSColor, in rect: NSRect, ctx: CGContext) {
+    let tinted = NSImage(size: rect.size, flipped: false) { drawRect in
+        image.draw(in: drawRect)
+        color.set()
+        drawRect.fill(using: .sourceAtop)
+        return true
+    }
+    ctx.saveGState()
+    ctx.translateBy(x: rect.origin.x, y: rect.origin.y + rect.height)
+    ctx.scaleBy(x: 1, y: -1)
+    tinted.draw(in: NSRect(origin: .zero, size: rect.size), from: .zero, operation: .sourceOver, fraction: 1.0)
+    ctx.restoreGState()
+}
+
 // MARK: - Environment Segment
 
 /// Shows the terminal environment type (local/SSH/Docker) with a colored dot and text label.
@@ -53,20 +70,14 @@ final class EnvironmentSegment: StatusBarPlugin {
     /// Returns (dot color, text label) for the current environment.
     private func environmentInfo(state: StatusBarState) -> (NSColor, String) {
         if let session = state.remoteSession {
+            let color: NSColor
             switch session {
-            case .ssh(let host, _):
-                // Amber for SSH
-                return (
-                    NSColor(calibratedRed: 0.9, green: 0.66, blue: 0.2, alpha: 1.0),
-                    "ssh: \(host)"
-                )
-            case .docker(let container):
-                // Blue for Docker
-                return (
-                    NSColor(calibratedRed: 0.13, green: 0.59, blue: 0.95, alpha: 1.0),
-                    "docker: \(container)"
-                )
+            case .ssh, .mosh:
+                color = NSColor(calibratedRed: 0.9, green: 0.66, blue: 0.2, alpha: 1.0)
+            case .container:
+                color = NSColor(calibratedRed: 0.13, green: 0.59, blue: 0.95, alpha: 1.0)
             }
+            return (color, "\(session.envType): \(session.displayName)")
         } else if state.isRemote {
             // Remote detected but no specific session type
             return (
@@ -83,12 +94,7 @@ final class EnvironmentSegment: StatusBarPlugin {
 
     func accessibilitySegmentLabel(state: StatusBarState) -> String? {
         if let session = state.remoteSession {
-            switch session {
-            case .ssh(let host, _):
-                return "Environment: SSH to \(host)"
-            case .docker(let container):
-                return "Environment: Docker \(container)"
-            }
+            return "Environment: \(session.envType) \(session.displayName)"
         } else if state.isRemote {
             return "Environment: remote"
         }
@@ -233,7 +239,7 @@ final class PathSegment: StatusBarPlugin {
     let priority = 20
 
     func isVisible(settings: AppSettings, state: StatusBarState) -> Bool {
-        settings.statusBarShowPath
+        settings.pluginBool("file-tree-local", "showPath", default: true)
     }
 
     func draw(
@@ -264,19 +270,43 @@ final class ProcessSegment: StatusBarPlugin {
     let priority = 30
 
     func isVisible(settings: AppSettings, state: StatusBarState) -> Bool {
-        settings.statusBarShowShell && !state.runningProcess.isEmpty
+        settings.pluginBool("file-tree-local", "showProcess", default: true) && !state.runningProcess.isEmpty
     }
 
     func draw(
         at x: CGFloat, y: CGFloat, theme: TerminalTheme, settings: AppSettings, state: StatusBarState, ctx: CGContext
     ) -> CGFloat {
+        let process = state.runningProcess
+        let barH = DensityMetrics.current.statusBarHeight
+        let color = ProcessIcon.themeColor(for: process, theme: theme, isActive: true)
+        var cx = x
+
+        // Draw process icon if available
+        if let iconName = ProcessIcon.icon(for: process),
+            let image = NSImage(systemSymbolName: iconName, accessibilityDescription: process)
+        {
+            let config = NSImage.SymbolConfiguration(pointSize: 10, weight: .medium)
+            let configured = image.withSymbolConfiguration(config) ?? image
+            let imgSize = configured.size
+            let imgY = (barH - imgSize.height) / 2
+            let imgRect = NSRect(x: cx, y: imgY, width: imgSize.width, height: imgSize.height)
+
+            drawTintedIcon(configured, color: color, in: imgRect, ctx: ctx)
+
+            cx += imgSize.width + 3
+        }
+
+        // Draw process name
+        let label = ProcessIcon.displayName(for: process) ?? process
         let attrs: [NSAttributedString.Key: Any] = [
             .font: NSFont.monospacedSystemFont(ofSize: 10, weight: .regular),
-            .foregroundColor: theme.chromeMuted.withAlphaComponent(0.5)
+            .foregroundColor: color.withAlphaComponent(0.7)
         ]
-        let str = state.runningProcess as NSString
-        str.draw(at: NSPoint(x: x, y: y), withAttributes: attrs)
-        return str.size(withAttributes: attrs).width
+        let str = label as NSString
+        str.draw(at: NSPoint(x: cx, y: y), withAttributes: attrs)
+        cx += str.size(withAttributes: attrs).width
+
+        return cx - x
     }
 
     func handleClick(at point: NSPoint, in barView: StatusBarView) -> Bool { false }
@@ -284,7 +314,8 @@ final class ProcessSegment: StatusBarPlugin {
 
     func accessibilitySegmentLabel(state: StatusBarState) -> String? {
         guard !state.runningProcess.isEmpty else { return nil }
-        return "Process: \(state.runningProcess)"
+        let label = ProcessIcon.displayName(for: state.runningProcess) ?? state.runningProcess
+        return "Process: \(label)"
     }
 }
 
@@ -351,28 +382,13 @@ final class FileTreeIconSegment: StatusBarPlugin {
         let configured = image?.withSymbolConfiguration(config)
 
         let cellWidth: CGFloat = 24
+        hitRect = NSRect(x: rx - cellWidth, y: 0, width: cellWidth, height: barH)
         if let img = configured {
             let imgSize = img.size
             let drawX = rx - cellWidth + (cellWidth - imgSize.width) / 2
             let drawY = (barH - imgSize.height) / 2
             let imgRect = NSRect(x: drawX, y: drawY, width: imgSize.width, height: imgSize.height)
-            hitRect = NSRect(x: rx - cellWidth, y: 0, width: cellWidth, height: barH)
-
-            let tinted = NSImage(size: imgSize, flipped: false) { rect in
-                img.draw(in: rect)
-                color.set()
-                rect.fill(using: .sourceAtop)
-                return true
-            }
-
-            ctx.saveGState()
-            ctx.translateBy(x: imgRect.origin.x, y: imgRect.origin.y + imgRect.height)
-            ctx.scaleBy(x: 1, y: -1)
-            tinted.draw(
-                in: NSRect(origin: .zero, size: imgRect.size), from: .zero, operation: .sourceOver, fraction: 1.0)
-            ctx.restoreGState()
-        } else {
-            hitRect = NSRect(x: rx - cellWidth, y: 0, width: cellWidth, height: barH)
+            drawTintedIcon(img, color: color, in: imgRect, ctx: ctx)
         }
 
         return cellWidth
@@ -432,28 +448,13 @@ final class PluginIconSegment: StatusBarPlugin {
         let configured = image?.withSymbolConfiguration(config)
 
         let cellWidth: CGFloat = 24
+        hitRect = NSRect(x: rx - cellWidth, y: 0, width: cellWidth, height: barH)
         if let img = configured {
             let imgSize = img.size
             let drawX = rx - cellWidth + (cellWidth - imgSize.width) / 2
             let drawY = (barH - imgSize.height) / 2
             let imgRect = NSRect(x: drawX, y: drawY, width: imgSize.width, height: imgSize.height)
-            hitRect = NSRect(x: rx - cellWidth, y: 0, width: cellWidth, height: barH)
-
-            let tinted = NSImage(size: imgSize, flipped: false) { rect in
-                img.draw(in: rect)
-                color.set()
-                rect.fill(using: .sourceAtop)
-                return true
-            }
-
-            ctx.saveGState()
-            ctx.translateBy(x: imgRect.origin.x, y: imgRect.origin.y + imgRect.height)
-            ctx.scaleBy(x: 1, y: -1)
-            tinted.draw(
-                in: NSRect(origin: .zero, size: imgRect.size), from: .zero, operation: .sourceOver, fraction: 1.0)
-            ctx.restoreGState()
-        } else {
-            hitRect = NSRect(x: rx - cellWidth, y: 0, width: cellWidth, height: barH)
+            drawTintedIcon(img, color: color, in: imgRect, ctx: ctx)
         }
 
         return cellWidth

@@ -44,6 +44,11 @@ class SidebarPanelView: NSView {
     private(set) var sectionStates: [SectionState] = []
     var onToggleExpand: ((String) -> Void)?
 
+    /// Current terminal ID — used to save/restore scroll positions per terminal.
+    private(set) var currentTerminalID: UUID?
+    /// Saved scroll offsets keyed by "terminalID:sectionID".
+    private var savedScrollOffsets: [String: NSPoint] = [:]
+
     /// Drag handle views placed between two expanded sections.
     private var dragHandles: [SidebarDragHandleView] = []
     /// Reentrancy guard for layout.
@@ -58,6 +63,45 @@ class SidebarPanelView: NSView {
 
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
+    }
+
+    // MARK: - Terminal Switch
+
+    /// Call before updating sections when the terminal changes.
+    /// Saves scroll offsets for the old terminal, then sets the new terminal ID.
+    func setTerminalID(_ newID: UUID?) {
+        if let oldID = currentTerminalID, oldID != newID {
+            saveScrollOffsets(for: oldID)
+        }
+        currentTerminalID = newID
+    }
+
+    /// Save scroll offsets for all expanded sections that use an outer NSScrollView.
+    func saveScrollOffsets(for terminalID: UUID) {
+        for state in sectionStates where state.isExpanded {
+            if let scrollView = state.contentContainer as? NSScrollView {
+                let key = "\(terminalID.uuidString):\(state.id)"
+                savedScrollOffsets[key] = scrollView.contentView.bounds.origin
+            }
+        }
+    }
+
+    /// Restore scroll offsets for all expanded sections that use an outer NSScrollView.
+    func restoreScrollOffsets(for terminalID: UUID) {
+        for state in sectionStates where state.isExpanded {
+            if let scrollView = state.contentContainer as? NSScrollView {
+                let key = "\(terminalID.uuidString):\(state.id)"
+                if let offset = savedScrollOffsets[key] {
+                    scrollView.contentView.scroll(to: offset)
+                    scrollView.reflectScrolledClipView(scrollView.contentView)
+                }
+            }
+        }
+    }
+
+    /// Lookup a saved scroll offset (for testing).
+    func scrollOffset(for terminalID: UUID, sectionID: String) -> NSPoint? {
+        savedScrollOffsets["\(terminalID.uuidString):\(sectionID)"]
     }
 
     // MARK: - Update
@@ -78,13 +122,16 @@ class SidebarPanelView: NSView {
                     name: section.name, icon: section.icon, isExpanded: isNowExpanded)
 
                 if isNowExpanded {
-                    removeContentView(at: i)
-                    addContentView(
-                        at: i,
-                        content: section.content,
-                        prefersOuterScrollView: section.prefersOuterScrollView)
-                    if !wasExpanded {
-                        // Use measured intrinsic height from addContentView
+                    if wasExpanded {
+                        // Already expanded — update rootView in-place to preserve scroll position
+                        updateContentView(at: i, content: section.content)
+                    } else {
+                        // Newly expanded — create content view
+                        removeContentView(at: i)
+                        addContentView(
+                            at: i,
+                            content: section.content,
+                            prefersOuterScrollView: section.prefersOuterScrollView)
                         sectionStates[i].contentHeight = max(
                             SidebarLayout.minSectionHeight,
                             sectionStates[i].intrinsicHeight)
@@ -102,6 +149,9 @@ class SidebarPanelView: NSView {
                 redistributeAfterCollapseOrExpand()
             }
             layoutAllSections()
+            if let tid = currentTerminalID {
+                restoreScrollOffsets(for: tid)
+            }
             return
         }
 
@@ -143,14 +193,17 @@ class SidebarPanelView: NSView {
         }
         distributeEqualExpanded()
         layoutAllSections()
+        if let tid = currentTerminalID {
+            restoreScrollOffsets(for: tid)
+        }
     }
 
     /// Add a content view for a section, optionally wrapped in an outer NSScrollView.
     private func addContentView(at index: Int, content: AnyView, prefersOuterScrollView: Bool) {
         // Wrap content in a top-leading aligned container to prevent centering
-        let aligned =
+        let aligned = AnyView(
             content
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading))
         let hosting = NSHostingView(rootView: aligned)
 
         // Measure intrinsic content height
@@ -177,6 +230,23 @@ class SidebarPanelView: NSView {
 
         addSubview(scrollView)
         sectionStates[index].contentContainer = scrollView
+    }
+
+    /// Update the rootView of an existing hosting view in-place, preserving scroll position.
+    private func updateContentView(at index: Int, content: AnyView) {
+        let aligned = AnyView(
+            content
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading))
+        let container = sectionStates[index].contentContainer
+
+        // Find the NSHostingView — either directly or inside a scroll view
+        if let h = container as? NSHostingView<AnyView> {
+            h.rootView = aligned
+        } else if let scrollView = container as? NSScrollView,
+            let h = scrollView.documentView as? NSHostingView<AnyView>
+        {
+            h.rootView = aligned
+        }
     }
 
     /// Remove the content view for a section.

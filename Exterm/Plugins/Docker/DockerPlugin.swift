@@ -4,6 +4,8 @@ import SwiftUI
 /// Available locally (not in remote sessions).
 @MainActor
 final class DockerPluginNew: ExtermPluginProtocol {
+    var actions: PluginActions?
+    var services: PluginServices?
     var hostActions: PluginHostActions?
     var onRequestCycleRerun: (() -> Void)?
 
@@ -31,7 +33,7 @@ final class DockerPluginNew: ExtermPluginProtocol {
 
     // MARK: - Section Title
 
-    func sectionTitle(context: TerminalContext) -> String? {
+    func sectionTitle(context: PluginContext) -> String? {
         let containers = DockerService.shared.containers
         guard !containers.isEmpty else { return nil }
         let running = containers.filter { $0.state == .running }.count
@@ -40,7 +42,7 @@ final class DockerPluginNew: ExtermPluginProtocol {
 
     // MARK: - Status Bar
 
-    func makeStatusBarContent(context: TerminalContext) -> StatusBarContent? {
+    func makeStatusBarContent(context: PluginContext) -> StatusBarContent? {
         let containers = DockerService.shared.containers
         guard !containers.isEmpty else { return nil }
         let running = containers.filter { $0.state == .running }.count
@@ -58,25 +60,24 @@ final class DockerPluginNew: ExtermPluginProtocol {
 
     // MARK: - Detail View
 
-    func makeDetailView(context: TerminalContext, actionHandler: DSLActionHandler) -> AnyView? {
+    func makeDetailView(context: PluginContext) -> AnyView? {
         let containers = DockerService.shared.containers
-        let theme = AppSettings.shared.theme
-        let density = AppSettings.shared.sidebarDensity
+        let act = actions
 
         return AnyView(
             DockerPluginDetailView(
                 containers: containers,
-                density: density,
-                theme: theme,
+                density: context.density,
+                theme: AppSettings.shared.theme,
                 onExec: { container in
-                    actionHandler.handle(
+                    act?.handle(
                         DSLAction(
                             type: "exec", path: nil, command: DockerService.shared.execCommand(for: container),
                             text: nil))
                 },
                 onLogs: { container in
                     let cmd = "docker logs --tail 100 -f \(container.name)\r"
-                    actionHandler.handle(DSLAction(type: "exec", path: nil, command: cmd, text: nil))
+                    act?.handle(DSLAction(type: "exec", path: nil, command: cmd, text: nil))
                 },
                 onStart: { container in
                     DockerService.shared.startContainer(container.id) { DockerService.shared.refresh() }
@@ -102,7 +103,7 @@ final class DockerPluginNew: ExtermPluginProtocol {
                 },
                 onInspect: { container in
                     let cmd = "docker inspect \(container.name) | less\r"
-                    actionHandler.handle(DSLAction(type: "exec", path: nil, command: cmd, text: nil))
+                    act?.handle(DSLAction(type: "exec", path: nil, command: cmd, text: nil))
                 }
             ))
     }

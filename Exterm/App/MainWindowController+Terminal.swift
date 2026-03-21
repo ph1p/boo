@@ -40,6 +40,7 @@ extension MainWindowController {
             if let pv = paneViews[next] {
                 window?.makeFirstResponder(pv.currentTerminalView)
             }
+            runPluginCycle(reason: .focusChanged)
         }
     }
 
@@ -53,6 +54,7 @@ extension MainWindowController {
             if let pv = paneViews[prev] {
                 window?.makeFirstResponder(pv.currentTerminalView)
             }
+            runPluginCycle(reason: .focusChanged)
         }
     }
 

@@ -8,6 +8,7 @@ struct FileTreeActions {
     var onRevealInFinder: ((String) -> Void)?
     var onRunCommand: ((String) -> Void)?  // send raw text to PTY (e.g. "cat /path\r")
     var onNavigate: ((String) -> Void)?  // navigate file tree to a directory (no terminal command)
+    var onMoveToTrash: ((String) -> Void)?
 }
 
 struct FileTreeView: View {
@@ -45,22 +46,20 @@ struct FileTreeView: View {
                 }
             }
 
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 0) {
-                    let children = filteredChildren(of: root, showHidden: showHidden)
-                    ForEach(children) { node in
-                        FileTreeRowView(
-                            node: node, depth: 0, actions: actions,
-                            explorerFont: explorerFont, showIcons: showIcons,
-                            showHidden: showHidden, iconSize: fontSize,
-                            textColor: textColor, mutedColor: mutedColor,
-                            accentColor: accentColor, hoverColor: hoverColor
-                        )
-                    }
+            LazyVStack(alignment: .leading, spacing: 0) {
+                let children = filteredChildren(of: root, showHidden: showHidden)
+                ForEach(children) { node in
+                    FileTreeRowView(
+                        node: node, depth: 0, actions: actions,
+                        explorerFont: explorerFont, showIcons: showIcons,
+                        showHidden: showHidden, iconSize: fontSize,
+                        textColor: textColor, mutedColor: mutedColor,
+                        accentColor: accentColor, hoverColor: hoverColor
+                    )
                 }
-                .padding(.top, 6)
-                .padding(.bottom, 20)
             }
+            .padding(.top, 6)
+            .padding(.bottom, 20)
         }
         .background(sidebarBgColor)
         .onAppear {
@@ -88,6 +87,7 @@ struct FileTreeRowView: View {
     var accentColor: Color
     var hoverColor: Color
     @State private var isHovered = false
+    @State private var showTrashConfirmation = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -175,6 +175,22 @@ struct FileTreeRowView: View {
                 Button("Reveal in Finder") {
                     actions.onRevealInFinder?(node.path)
                 }
+
+                Divider()
+
+                Button("Move to Trash", role: .destructive) {
+                    showTrashConfirmation = true
+                }
+            }
+            .confirmationDialog(
+                "Move \"\(node.name)\" to Trash?",
+                isPresented: $showTrashConfirmation,
+                titleVisibility: .visible
+            ) {
+                Button("Move to Trash", role: .destructive) {
+                    actions.onMoveToTrash?(node.path)
+                }
+                Button("Cancel", role: .cancel) {}
             }
 
             if node.isExpanded, let children = node.children {

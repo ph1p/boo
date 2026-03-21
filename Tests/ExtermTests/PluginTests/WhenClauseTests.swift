@@ -130,13 +130,13 @@ final class WhenClauseEvaluatorTests: XCTestCase {
         let node = try WhenClauseParser.parse("env.ssh")
         XCTAssertFalse(WhenClauseEvaluator.evaluate(node, context: makeContext()))
         XCTAssertTrue(WhenClauseEvaluator.evaluate(node, context: makeContext(remote: .ssh(host: "server"))))
-        XCTAssertFalse(WhenClauseEvaluator.evaluate(node, context: makeContext(remote: .docker(container: "app"))))
+        XCTAssertFalse(WhenClauseEvaluator.evaluate(node, context: makeContext(remote: .container(target: "app", tool: .docker))))
     }
 
     func testEnvDocker() throws {
         let node = try WhenClauseParser.parse("env.docker")
         XCTAssertFalse(WhenClauseEvaluator.evaluate(node, context: makeContext()))
-        XCTAssertTrue(WhenClauseEvaluator.evaluate(node, context: makeContext(remote: .docker(container: "app"))))
+        XCTAssertTrue(WhenClauseEvaluator.evaluate(node, context: makeContext(remote: .container(target: "app", tool: .docker))))
     }
 
     func testRemote() throws {
@@ -183,7 +183,7 @@ final class WhenClauseEvaluatorTests: XCTestCase {
         let node = try WhenClauseParser.parse("env.ssh || env.docker")
         XCTAssertFalse(WhenClauseEvaluator.evaluate(node, context: makeContext()))
         XCTAssertTrue(WhenClauseEvaluator.evaluate(node, context: makeContext(remote: .ssh(host: "s"))))
-        XCTAssertTrue(WhenClauseEvaluator.evaluate(node, context: makeContext(remote: .docker(container: "c"))))
+        XCTAssertTrue(WhenClauseEvaluator.evaluate(node, context: makeContext(remote: .container(target: "c", tool: .docker))))
     }
 
     func testGroupedExpression() throws {

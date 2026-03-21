@@ -11,7 +11,7 @@ final class DSLActionHandlerTests: XCTestCase {
 
         let result = handler.handle(DSLAction(type: "cd", path: "/var/log", command: nil, text: nil))
 
-        XCTAssertEqual(sentCommand, "cd '/var/log'\r")
+        XCTAssertEqual(sentCommand, "cd /var/log\r")
         XCTAssertEqual(result, "Changed directory to /var/log")
     }
 
@@ -22,7 +22,7 @@ final class DSLActionHandlerTests: XCTestCase {
 
         handler.handle(DSLAction(type: "cd", path: "/Users/test/My Project", command: nil, text: nil))
 
-        XCTAssertEqual(sentCommand, "cd '/Users/test/My Project'\r")
+        XCTAssertEqual(sentCommand, "cd '/Users/test/My Project'\r")  // space requires quoting
     }
 
     func testExecAction() {

@@ -47,7 +47,7 @@ final class FileIconTests: XCTestCase {
     }
 
     func testShellEscape() {
-        XCTAssertEqual(shellEscape("/simple/path"), "'/simple/path'")
+        XCTAssertEqual(shellEscape("/simple/path"), "/simple/path")  // no special chars, no quoting
         XCTAssertEqual(shellEscape("/path with spaces"), "'/path with spaces'")
         XCTAssertEqual(shellEscape("/it's a test"), "'/it'\\''s a test'")
         XCTAssertEqual(shellEscape("hello$world"), "'hello$world'")

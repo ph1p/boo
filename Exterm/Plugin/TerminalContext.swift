@@ -36,10 +36,7 @@ struct TerminalContext: Equatable {
     /// Environment description for display and VoiceOver.
     var environmentLabel: String {
         guard let session = remoteSession else { return "local" }
-        switch session {
-        case .ssh(let host, _): return "ssh: \(host)"
-        case .docker(let container): return "docker: \(container)"
-        }
+        return "\(session.envType): \(session.displayName)"
     }
 
     init(

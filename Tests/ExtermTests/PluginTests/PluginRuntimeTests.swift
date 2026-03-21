@@ -203,10 +203,10 @@ final class EnrichmentContextTests: XCTestCase {
         let base = TerminalContext(
             terminalID: id,
             cwd: "/projects",
-            remoteSession: .docker(container: "app"),
+            remoteSession: .container(target: "app", tool: .docker),
             gitContext: TerminalContext.GitContext(
                 branch: "main", repoRoot: "/projects", isDirty: false, changedFileCount: 0, stagedCount: 0,
-                stashCount: 0, aheadCount: 0, behindCount: 0, lastCommitShort: nil),
+                aheadCount: 0, behindCount: 0, lastCommitShort: nil),
             processName: "node",
             paneCount: 3,
             tabCount: 2

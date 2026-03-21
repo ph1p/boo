@@ -25,7 +25,13 @@ final class LocalFileTreePlugin: ExtermPluginProtocol {
                 key: "fontSize", type: .double, label: "Font size", defaultValue: AnyCodableValue(12.0), options: nil),
             PluginManifest.SettingManifest(
                 key: "fontName", type: .string, label: "Font", defaultValue: AnyCodableValue(""),
-                options: "fontPicker:system")
+                options: "fontPicker:system"),
+            PluginManifest.SettingManifest(
+                key: "showPath", type: .bool, label: "Show current path", defaultValue: AnyCodableValue(true),
+                options: nil),
+            PluginManifest.SettingManifest(
+                key: "showProcess", type: .bool, label: "Show running process", defaultValue: AnyCodableValue(true),
+                options: nil)
         ]
     )
 
@@ -33,22 +39,31 @@ final class LocalFileTreePlugin: ExtermPluginProtocol {
     private var cachedRoots: [String: FileTreeNode] = [:]
     private var fileWatcher: FileSystemWatcher?
 
+    /// Expanded directory paths per terminal (tab) ID.
+    private var expandedState: [UUID: Set<String>] = [:]
+    /// CWD per terminal so we can find the right root on save.
+    private var terminalCwd: [UUID: String] = [:]
+    /// The last terminal ID we rendered for, so we can save state on switch.
+    private var lastTerminalID: UUID?
+
+    var actions: PluginActions?
+    var services: PluginServices?
     var hostActions: PluginHostActions?
     var onRequestCycleRerun: (() -> Void)?
 
-    var prefersOuterScrollView: Bool { false }
+    var prefersOuterScrollView: Bool { true }
 
     // MARK: - Section Title
 
-    func sectionTitle(context: TerminalContext) -> String? {
-        let dirName = (context.cwd as NSString).lastPathComponent
+    func sectionTitle(context: PluginContext) -> String? {
+        let dirName = (context.terminal.cwd as NSString).lastPathComponent
         return dirName.isEmpty ? nil : dirName
     }
 
     // MARK: - Status Bar
 
-    func makeStatusBarContent(context: TerminalContext) -> StatusBarContent? {
-        let dirName = (context.cwd as NSString).lastPathComponent
+    func makeStatusBarContent(context: PluginContext) -> StatusBarContent? {
+        let dirName = (context.terminal.cwd as NSString).lastPathComponent
         return StatusBarContent(
             text: dirName,
             icon: "folder",
@@ -59,35 +74,55 @@ final class LocalFileTreePlugin: ExtermPluginProtocol {
 
     // MARK: - Detail View
 
-    func makeDetailView(context: TerminalContext, actionHandler: DSLActionHandler) -> AnyView? {
-        let ha = hostActions
-        let actions = FileTreeActions(
+    func makeDetailView(context: PluginContext) -> AnyView? {
+        let act = self.actions
+        let treeActions = FileTreeActions(
             onFileClicked: { path in
-                ha?.pastePathToActivePane?(path)
-                actionHandler.handle(DSLAction(type: "open", path: path, command: nil, text: nil))
+                act?.pastePath(path)
+                act?.handle(DSLAction(type: "open", path: path, command: nil, text: nil))
             },
             onOpenInTab: { path in
-                ha?.openDirectoryInNewTab?(path)
+                act?.openDirectoryInNewTab?(path)
             },
             onOpenInPane: { path in
-                ha?.openDirectoryInNewPane?(path)
+                act?.openDirectoryInNewPane?(path)
             },
             onCopyPath: { path in
-                actionHandler.handle(DSLAction(type: "copy", path: path, command: nil, text: nil))
+                act?.handle(DSLAction(type: "copy", path: path, command: nil, text: nil))
             },
             onRevealInFinder: { path in
-                actionHandler.handle(DSLAction(type: "reveal", path: path, command: nil, text: nil))
+                act?.handle(DSLAction(type: "reveal", path: path, command: nil, text: nil))
             },
             onRunCommand: { cmd in
-                actionHandler.sendToTerminal?(cmd)
+                act?.sendToTerminal?(cmd)
             },
             onNavigate: { path in
-                ha?.sendRawToActivePane?("cd \(path)\r")
+                act?.sendToTerminal?("cd \(shellEscape(path))\r")
+            },
+            onMoveToTrash: { [weak self] path in
+                let url = URL(fileURLWithPath: path)
+                NSWorkspace.shared.recycle([url]) { _, _ in
+                    DispatchQueue.main.async {
+                        // Refresh the parent directory after trashing
+                        let parent = (path as NSString).deletingLastPathComponent
+                        self?.cachedRoots[parent]?.refreshAll()
+                    }
+                }
             }
         )
 
-        let root = getOrCreateRoot(for: context.cwd)
-        return AnyView(FileTreeView(root: root, actions: actions))
+        let tid = context.terminal.terminalID
+        saveExpandedState()
+        let root = getOrCreateRoot(for: context.terminal.cwd)
+
+        // Restore expanded folders for this terminal
+        if let saved = expandedState[tid] {
+            root.restoreExpanded(saved)
+        }
+        lastTerminalID = tid
+        terminalCwd[tid] = context.terminal.cwd
+
+        return AnyView(FileTreeView(root: root, actions: treeActions))
     }
 
     // MARK: - Lifecycle
@@ -110,6 +145,15 @@ final class LocalFileTreePlugin: ExtermPluginProtocol {
     }
 
     // MARK: - Internal
+
+    /// Save the expanded folder state for the last active terminal.
+    private func saveExpandedState() {
+        guard let prevID = lastTerminalID,
+              let cwd = terminalCwd[prevID],
+              let root = cachedRoots[cwd]
+        else { return }
+        expandedState[prevID] = root.expandedPaths()
+    }
 
     private func getOrCreateRoot(for path: String) -> FileTreeNode {
         if let cached = cachedRoots[path] { return cached }

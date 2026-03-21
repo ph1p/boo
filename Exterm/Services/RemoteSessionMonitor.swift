@@ -2,18 +2,28 @@ import Foundation
 
 /// Polls process trees to detect SSH/Docker child processes for tracked panes.
 /// Fires `onSessionChanged` only on state transitions.
+/// For container sessions, also polls the container's CWD via /proc.
 final class RemoteSessionMonitor {
     struct TrackedPane {
         var shellPID: pid_t
         var lastSession: RemoteSessionType?
+        /// True when the session was set by title heuristics, not process tree.
+        /// Prevents the process tree poll from clearing it.
+        var titleDetected: Bool = false
     }
 
     private var tracked: [UUID: TrackedPane] = [:]
     private var timer: DispatchSourceTimer?
     private let queue = DispatchQueue(label: "com.exterm.remote-monitor", qos: .utility)
 
+    /// Tracks which tabs have registered with a container CWD watcher.
+    private var containerWatcherTabs: Set<UUID> = []
+
     /// Called on the main thread when a pane's remote session state changes.
     var onSessionChanged: ((UUID, RemoteSessionType?) -> Void)?
+
+    /// Called on the main thread when a container session's CWD changes.
+    var onContainerCwdChanged: ((UUID, String) -> Void)?
 
     func track(paneID: UUID, shellPID: pid_t) {
         NSLog("[Monitor] track: paneID=\(paneID) shellPID=\(shellPID)")
@@ -46,6 +56,43 @@ final class RemoteSessionMonitor {
         queue.sync { tracked[paneID]?.lastSession }
     }
 
+    /// Manually start container CWD polling for a pane whose container session was
+    /// detected by title heuristics (the process tree may not find it due to docker
+    /// CLI reparenting on macOS).
+    func stopContainerCwdWatcher(paneID: UUID, tabID: UUID) {
+        queue.async { [weak self] in
+            guard let self else { return }
+            if let session = self.tracked[paneID]?.lastSession {
+                ContainerCwdWatcher.shared(for: session)?.unregisterTab(paneID: tabID)
+                ContainerCwdWatcher.releaseIfUnused(for: session)
+            }
+            self.containerWatcherTabs.remove(tabID)
+        }
+    }
+
+    func startContainerCwdPolling(paneID: UUID, tabID: UUID, session: RemoteSessionType) {
+        queue.async { [weak self] in
+            guard let self else { return }
+            if var entry = self.tracked[paneID] {
+                if entry.lastSession != session || !entry.titleDetected {
+                    entry.lastSession = session
+                    entry.titleDetected = true
+                    self.tracked[paneID] = entry
+                    remoteLog("[Monitor] startContainerCwdPolling: paneID=\(paneID) tabID=\(tabID) session=\(session)")
+                }
+
+                // Register this tab with the shared watcher — keyed by tabID
+                guard !self.containerWatcherTabs.contains(tabID) else { return }
+                self.containerWatcherTabs.insert(tabID)
+
+                let callback = self.onContainerCwdChanged
+                ContainerCwdWatcher.shared(for: session)?.registerTab(paneID: tabID) { cwd in
+                    DispatchQueue.main.async { callback?(tabID, cwd) }
+                }
+            }
+        }
+    }
+
     /// Live process tree query for a tracked pane. Checks the process tree NOW
     /// (not from the last poll). Runs synchronously on the caller's thread.
     func probeSession(for paneID: UUID) -> RemoteSessionType? {
@@ -71,7 +118,25 @@ final class RemoteSessionMonitor {
     private func poll() {
         for (paneID, var entry) in tracked {
             let session = RemoteExplorer.detectRemoteSessionFiltered(shellPID: entry.shellPID)
-            if session != entry.lastSession {
+
+            // When a session was detected by title heuristics (titleDetected),
+            // don't let a nil process-tree result clear it — docker CLI is often
+            // not a direct child of the shell PID on macOS.
+            // But if the process tree finds a DIFFERENT session, adopt it.
+            // If the process tree finds the SAME session, clear the flag.
+            if entry.titleDetected {
+                if session == nil {
+                    // Process tree can't find it — keep title-detected session, skip transition
+                } else if session == entry.lastSession {
+                    entry.titleDetected = false
+                    tracked[paneID] = entry
+                } else {
+                    entry.titleDetected = false
+                    // Fall through to normal transition handling
+                }
+            }
+
+            if session != entry.lastSession && !entry.titleDetected {
                 NSLog(
                     "[Monitor] transition: shellPID=\(entry.shellPID) \(String(describing: entry.lastSession)) → \(String(describing: session))"
                 )
@@ -79,11 +144,23 @@ final class RemoteSessionMonitor {
                 entry.lastSession = session
                 tracked[paneID] = entry
 
-                // Manage background SSH connections for the remote file tree
-                if case .ssh(let host, _) = session, previous == nil {
-                    SSHControlManager.shared.ensureConnection(alias: host) { _ in }
-                } else if case .ssh(let prevHost, _) = previous, session == nil {
-                    SSHControlManager.shared.teardown(alias: prevHost)
+                // Manage background SSH connections for SSH-based sessions
+                if let session, session.isSSHBased, previous == nil {
+                    SSHControlManager.shared.ensureConnection(alias: session.sshConnectionTarget) { _ in }
+                } else if let previous, previous.isSSHBased, session == nil {
+                    SSHControlManager.shared.teardown(alias: previous.sshConnectionTarget)
+                }
+
+                // Clean up container CWD state when session ends
+                // Note: we can't know the tabID here, but session ending clears the pane-level state.
+                if let previous, previous.isContainer, session == nil {
+                    // Unregister all tabs for this pane from the watcher
+                    let watcher = ContainerCwdWatcher.shared(for: previous)
+                    for tabID in self.containerWatcherTabs {
+                        watcher?.unregisterTab(paneID: tabID)
+                    }
+                    self.containerWatcherTabs.removeAll()
+                    ContainerCwdWatcher.releaseIfUnused(for: previous)
                 }
 
                 let callback = onSessionChanged
@@ -91,8 +168,17 @@ final class RemoteSessionMonitor {
                     callback?(paneID, session)
                 }
             }
+
+            // Container CWD is handled by persistent watchers, not the poll loop.
         }
     }
+
+    // MARK: - Container CWD Command (for testing)
+
+    /// Shell command to list PID and CWD of all PTY processes inside the container.
+    static let containerCwdCommand = "for p in /proc/[0-9]*; do pid=${p##*/}; [ \"$pid\" = 1 ] || [ \"$pid\" = $$ ] && continue; t=$(readlink $p/fd/0 2>/dev/null); case $t in /dev/pts/*) c=$(readlink $p/cwd 2>/dev/null); [ -n \"$c\" ] && echo \"$pid $c\";; esac; done"
+
+    static var containerCwdCommandForTesting: String { containerCwdCommand }
 
     deinit {
         stopTimer()

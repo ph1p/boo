@@ -227,13 +227,27 @@ struct WhenClauseEvaluator {
         case "env.local": return context.remoteSession == nil
         case "env.ssh":
             if case .ssh = context.remoteSession { return true }
+            if case .mosh = context.remoteSession { return true }
             return false
         case "env.docker":
-            if case .docker = context.remoteSession { return true }
+            if case .container(_, .docker) = context.remoteSession { return true }
+            return false
+        case "env.container":
+            if case .container = context.remoteSession { return true }
+            return false
+        case "env.mosh":
+            if case .mosh = context.remoteSession { return true }
             return false
         case "remote": return context.isRemote
         case "git", "git.active": return context.gitContext != nil
         case "git.dirty": return context.gitContext?.isDirty ?? false
+        case "process.running": return !context.processName.isEmpty && !ProcessIcon.isShell(context.processName)
+        case "process.editor":
+            return ProcessIcon.category(for: context.processName) == "editor"
+        case "process.vcs":
+            return ProcessIcon.category(for: context.processName) == "vcs"
+        case "process.ai":
+            return ProcessIcon.category(for: context.processName) == "ai"
         default:
             return false
         }
@@ -255,15 +269,12 @@ struct WhenClauseEvaluator {
     private static func resolveStringValue(_ name: String, context: TerminalContext) -> String {
         switch name {
         case "process.name": return context.processName
+        case "process.category": return ProcessIcon.category(for: context.processName) ?? ""
         case "git.branch": return context.gitContext?.branch ?? ""
         case "env.type":
-            if case .ssh = context.remoteSession { return "ssh" }
-            if case .docker = context.remoteSession { return "docker" }
-            return "local"
+            return context.remoteSession?.envType ?? "local"
         case "remote.host":
-            if case .ssh(let host, _) = context.remoteSession { return host }
-            if case .docker(let container) = context.remoteSession { return container }
-            return ""
+            return context.remoteSession?.displayName ?? ""
         case "cwd": return context.cwd
         default:
             return ""

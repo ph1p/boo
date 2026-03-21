@@ -33,10 +33,11 @@ extension MainWindowController {
         }
         let activeTab = ws.pane(for: ws.activePaneID)?.activeTab
         let localCwd = activeTab?.workingDirectory ?? ws.folderPath
-        let activeRemoteSession = activeTab?.remoteSession
-        // Show remote CWD in status bar when in a remote session, tilde-contracted
-        // so it matches the tab title (e.g. "/root" → "~").
-        var cwd = (activeRemoteSession != nil ? activeTab?.remoteWorkingDirectory : nil) ?? localCwd
+        // Bridge state is the single source of truth for the active pane's remote
+        // session and CWD. Never fall back to tab state which may be stale.
+        let activeRemoteSession = bridge.state.remoteSession
+        let remoteCwd = bridge.state.remoteCwd
+        var cwd = (activeRemoteSession != nil ? remoteCwd : nil) ?? localCwd
         if activeRemoteSession != nil {
             cwd = Self.tildeContractRemotePath(cwd, session: activeRemoteSession, title: activeTab?.title)
         }
@@ -47,8 +48,8 @@ extension MainWindowController {
         // is a local user@host prompt, or is a connection command redundant with
         // the remote session indicator
         if !process.isEmpty {
-            let cwdLast = (cwd as NSString).lastPathComponent
-            let abbrevCwd = StatusBarView.abbreviatePath(cwd)
+            let cwdLast = cwd.lastPathComponent
+            let abbrevCwd = abbreviatePath(cwd)
             let looksLikePath =
                 process.hasPrefix("~") || process.hasPrefix("/")
                 || process.hasPrefix("\u{2026}") || process.hasPrefix("...")
@@ -79,8 +80,8 @@ extension MainWindowController {
     /// Mirrors the logic in PaneView.tildeContractRemotePath so tab and status bar match.
     private static func tildeContractRemotePath(_ path: String, session: RemoteSessionType?, title: String?) -> String {
         var user: String?
-        if case .ssh(let host, _) = session, host.contains("@") {
-            user = host.split(separator: "@").first.map(String.init)
+        if let session, session.displayName.contains("@") {
+            user = session.displayName.split(separator: "@").first.map(String.init)
         }
         if user == nil, let title = title?.trimmingCharacters(in: .whitespaces),
             let atIdx = title.firstIndex(of: "@")
@@ -116,7 +117,7 @@ extension MainWindowController {
             window?.title = title
         } else {
             let dir = tab.workingDirectory
-            let name = (dir as NSString).lastPathComponent
+            let name = dir.lastPathComponent
             window?.title = name.isEmpty ? "Exterm" : name
         }
     }

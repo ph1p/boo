@@ -49,7 +49,7 @@ final class ScriptExecutorTests: XCTestCase {
         let ctx = TerminalContext(
             terminalID: UUID(),
             cwd: "/",
-            remoteSession: .docker(container: "postgres"),
+            remoteSession: .container(target: "postgres", tool: .docker),
             gitContext: nil,
             processName: "psql",
             paneCount: 1,

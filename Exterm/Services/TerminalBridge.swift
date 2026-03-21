@@ -1,10 +1,11 @@
 import Combine
 import Foundation
 
-/// Snapshot of the active terminal's state (transient bridge copy, not source of truth).
-/// TabState in Pane.Tab is the authoritative per-tab state.
+/// Snapshot of the active terminal's state — single source of truth for the focused tab.
+/// TabState in Pane.Tab is the persistence copy, synced from bridge on every state change.
 struct BridgeState: Equatable {
     var paneID: UUID
+    var tabID: UUID = UUID()
     var workspaceID: UUID
     var workingDirectory: String
     var terminalTitle: String
@@ -74,6 +75,28 @@ final class TerminalBridge {
         monitor.onSessionChanged = { [weak self] paneID, session in
             self?.handleProcessTreeDetection(session: session, paneID: paneID)
         }
+        monitor.onContainerCwdChanged = { [weak self] tabID, cwd in
+            self?.handleContainerCwdChange(cwd: cwd, tabID: tabID)
+        }
+    }
+
+    /// Called by the monitor when a container session's CWD changes (polled from /proc).
+    func handleContainerCwdChange(cwd: String, tabID: UUID) {
+        guard tabID == state.tabID else { return }
+        guard state.remoteSession?.isContainer == true else { return }
+        guard cwd != state.remoteCwd else { return }
+
+        remoteLog("[Bridge] container CWD update: \(state.remoteCwd ?? "nil") → \(cwd)")
+        state.remoteCwd = cwd
+        events.send(.directoryChanged(path: cwd))
+    }
+
+    /// Start container CWD polling for the active pane when a container session is
+    /// detected by title heuristics. The monitor may not detect the container via
+    /// process tree (docker CLI reparenting), so this ensures CWD tracking works.
+    func ensureContainerCwdPolling() {
+        guard let session = state.remoteSession, session.isContainer else { return }
+        monitor.startContainerCwdPolling(paneID: state.paneID, tabID: state.tabID, session: session)
     }
 
     // MARK: - Input Methods
@@ -84,6 +107,7 @@ final class TerminalBridge {
     /// which would misinterpret stale local CWDs as "remote session ended".
     func restoreTabState(
         paneID: UUID,
+        tabID: UUID,
         workingDirectory: String,
         terminalTitle: String,
         remoteSession: RemoteSessionType?,
@@ -95,6 +119,7 @@ final class TerminalBridge {
         )
         let previousRemote = state.remoteSession
         state.paneID = paneID
+        state.tabID = tabID
         if !workingDirectory.isEmpty {
             state.workingDirectory = workingDirectory
         }
@@ -106,6 +131,9 @@ final class TerminalBridge {
         if shellPID > 0 {
             monitor.updateShellPID(paneID: paneID, shellPID: shellPID)
         }
+
+        // Start container CWD polling for the restored tab
+        ensureContainerCwdPolling()
 
         events.send(.focusChanged(paneID: paneID))
         if state.remoteSession != previousRemote {
@@ -181,7 +209,7 @@ final class TerminalBridge {
 
         // When remote, extract remoteCwd from title (OSC-7 path is local-relative)
         if state.remoteSession != nil {
-            if let remotePath = TerminalBridge.extractRemoteCwd(from: state.terminalTitle) {
+            if let remotePath = TerminalBridge.extractRemoteCwd(from: state.terminalTitle, session: state.remoteSession) {
                 state.remoteCwd = remotePath
             }
             // Keep existing remoteCwd if title doesn't have one
@@ -199,6 +227,7 @@ final class TerminalBridge {
     func handleTitleChange(title: String, paneID: UUID) {
         guard paneID == state.paneID else { return }
         NSLog("[Bridge] handleTitleChange: title=\(title), paneID=\(paneID)")
+        remoteLog("[Bridge] handleTitleChange: title=\(title) remote=\(String(describing: state.remoteSession))")
         state.terminalTitle = title
 
         let process = TerminalBridge.extractProcessName(from: title)
@@ -248,7 +277,8 @@ final class TerminalBridge {
             if state.remoteSession != previousRemote {
                 state.remoteCwd = nil
             }
-            if let remotePath = TerminalBridge.extractRemoteCwd(from: title) {
+            if let remotePath = TerminalBridge.extractRemoteCwd(from: title, session: state.remoteSession) {
+                remoteLog("[Bridge] extractRemoteCwd: title=\(title) → remoteCwd=\(remotePath)")
                 state.remoteCwd = remotePath
             }
         } else {
@@ -268,6 +298,8 @@ final class TerminalBridge {
             // tree monitor to poll and confirm/deny the session.
             if state.remoteSession != nil && previousRemote == nil {
                 sessionGraceUntil[paneID] = Date().addingTimeInterval(3.0)
+                // Start container CWD polling (process tree may not detect docker)
+                ensureContainerCwdPolling()
             }
             // Clean up injection state when remote session ends
             if previousRemote != nil && state.remoteSession == nil {
@@ -359,17 +391,20 @@ final class TerminalBridge {
 
         // Process tree detected something
         if let title = titleSession {
-            // Both agree on type — merge: title has better host info, process has alias
+            // Both agree on SSH — merge: title has better host info, process has alias
             if case .ssh(let titleHost, let titleAlias) = title,
                 case .ssh(let processHost, _) = process
             {
                 let alias = titleAlias ?? processHost
                 return .ssh(host: titleHost, alias: alias)
             }
-            if case .docker = title, case .docker = process { return title }
-            // Process says Docker, title says SSH (container hostname looks like user@host)
+            // Both agree on mosh — title has better info
+            if case .mosh = title, case .mosh = process { return title }
+            // Both agree on container type — prefer title (may have better name)
+            if case .container = title, case .container = process { return title }
+            // Process says container, title says SSH (container hostname looks like user@host)
             // — prefer process tree
-            if case .ssh = title, case .docker = process { return process }
+            if case .ssh = title, case .container = process { return process }
         }
 
         return process

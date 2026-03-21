@@ -115,7 +115,7 @@ final class PluginRegistryTests: XCTestCase {
     func testBookmarkNamespacing() {
         let local = makeContext()
         let ssh = makeContext(remote: .ssh(host: "prod-01"))
-        let docker = makeContext(remote: .docker(container: "app"))
+        let docker = makeContext(remote: .container(target: "app", tool: .docker))
 
         XCTAssertEqual(BookmarksPluginNew.namespace(for: local), "local")
         XCTAssertEqual(BookmarksPluginNew.namespace(for: ssh), "ssh:prod-01")

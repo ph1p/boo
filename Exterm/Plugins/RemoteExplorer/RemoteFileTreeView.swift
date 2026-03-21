@@ -76,7 +76,7 @@ struct RemoteConnectionFailedView: View {
             } else {
                 Button("Retry") {
                     isRetrying = true
-                    if case .ssh = session {
+                    if session.isSSHBased {
                         SSHControlManager.shared.ensureConnection(alias: session.sshConnectionTarget) { [self] _ in
                             self.isRetrying = false
                             self.onRetry?()
@@ -126,7 +126,6 @@ struct RemoteFileTreeView: View {
 
         Group {
             if root.children == nil && root.isLoading {
-                // Initial load — show connecting state instead of empty/flickering tree
                 RemoteConnectingView(session: root.session)
             } else if root.loadFailed {
                 RemoteConnectionFailedView(session: root.session) {
@@ -144,21 +143,19 @@ struct RemoteFileTreeView: View {
                         }
                     }
 
-                    ScrollView {
-                        LazyVStack(alignment: .leading, spacing: 0) {
-                            let children = filteredChildren(of: root, showHidden: showHidden)
-                            ForEach(children) { node in
-                                RemoteFileTreeRowView(
-                                    node: node, depth: 0, actions: actions,
-                                    explorerFont: explorerFont, showIcons: showIcons,
-                                    showHidden: showHidden, iconSize: fontSize,
-                                    textColor: textColor, mutedColor: mutedColor,
-                                    accentColor: accentColor, hoverColor: hoverColor
-                                )
-                            }
+                    LazyVStack(alignment: .leading, spacing: 0) {
+                        let children = filteredChildren(of: root, showHidden: showHidden)
+                        ForEach(children) { node in
+                            RemoteFileTreeRowView(
+                                node: node, depth: 0, actions: actions,
+                                explorerFont: explorerFont, showIcons: showIcons,
+                                showHidden: showHidden, iconSize: fontSize,
+                                textColor: textColor, mutedColor: mutedColor,
+                                accentColor: accentColor, hoverColor: hoverColor
+                            )
                         }
-                        .padding(.bottom, 20)
                     }
+                    .padding(.bottom, 20)
                 }
                 .background(sidebarBgColor)
             }
@@ -259,7 +256,7 @@ struct RemoteFileTreeRowView: View {
                     actions.onCopyPath?(node.remotePath)
                 }
                 Button("Paste Path to Terminal") {
-                    actions.onRunCommand?(node.remotePath)
+                    actions.onRunCommand?(RemoteExplorer.shellEscPath(node.remotePath))
                 }
             }
 

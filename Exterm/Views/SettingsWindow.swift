@@ -340,10 +340,8 @@ private struct TerminalSettingsView: View {
 // MARK: - Status Bar
 
 private struct StatusBarSettingsView: View {
-    @State private var showPath = AppSettings.shared.statusBarShowPath
     @State private var showTime = AppSettings.shared.statusBarShowTime
     @State private var showPaneInfo = AppSettings.shared.statusBarShowPaneInfo
-    @State private var showShell = AppSettings.shared.statusBarShowShell
     @State private var showConnection = AppSettings.shared.statusBarShowConnection
     @ObservedObject private var observer = SettingsObserver()
 
@@ -354,10 +352,6 @@ private struct StatusBarSettingsView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     ToggleRow(label: "Connection", isOn: $showConnection)
                         .onChange(of: showConnection) { v in AppSettings.shared.statusBarShowConnection = v }
-                    ToggleRow(label: "Current path", isOn: $showPath)
-                        .onChange(of: showPath) { v in AppSettings.shared.statusBarShowPath = v }
-                    ToggleRow(label: "Running process", isOn: $showShell)
-                        .onChange(of: showShell) { v in AppSettings.shared.statusBarShowShell = v }
                 }
             }
 
@@ -439,6 +433,17 @@ struct PluginSettingsView: View {
                     PluginRow(manifest: manifest)
                 }
             }
+
+            Section(title: "Default Sidebar Plugins") {
+                Text("Plugins shown in the sidebar when opening a new pane or starting the app.")
+                    .font(.system(size: 10))
+                    .foregroundColor(t.muted)
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(manifests.filter { $0.capabilities?.sidebarPanel == true }, id: \.id) { manifest in
+                        DefaultEnabledRow(manifest: manifest)
+                    }
+                }
+            }
         }
     }
 
@@ -485,7 +490,7 @@ private struct PluginRow: View {
                 }
                 Spacer()
 
-                if manifest.settings != nil && !manifest.settings!.isEmpty {
+                if let settings = manifest.settings, !settings.isEmpty {
                     Button(action: { withAnimation(.easeInOut(duration: 0.15)) { isExpanded.toggle() } }) {
                         Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
                             .font(.system(size: 10, weight: .semibold))
@@ -524,6 +529,35 @@ private struct PluginRow: View {
         .accessibilityLabel("\(manifest.name), \(isEnabled ? "enabled" : "disabled"), \(manifest.description ?? "")")
     }
 
+}
+
+private struct DefaultEnabledRow: View {
+    let manifest: PluginManifest
+    @State private var isEnabled: Bool
+    @ObservedObject private var observer = SettingsObserver()
+
+    init(manifest: PluginManifest) {
+        self.manifest = manifest
+        self._isEnabled = State(
+            initialValue: AppSettings.shared.defaultEnabledPluginIDs.contains(manifest.id))
+    }
+
+    var body: some View {
+        let _ = observer.revision
+        let t = Tokens.current
+        Toggle(manifest.name, isOn: $isEnabled)
+            .font(.system(size: 12))
+            .foregroundColor(t.text)
+            .onChange(of: isEnabled) { enabled in
+                var list = AppSettings.shared.defaultEnabledPluginIDs
+                if enabled {
+                    if !list.contains(manifest.id) { list.append(manifest.id) }
+                } else {
+                    list.removeAll { $0 == manifest.id }
+                }
+                AppSettings.shared.defaultEnabledPluginIDs = list
+            }
+    }
 }
 
 private struct PluginSettingControl: View {

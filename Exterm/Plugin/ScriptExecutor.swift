@@ -127,14 +127,8 @@ final class ScriptExecutor {
 
         // Environment type
         if let session = context.remoteSession {
-            switch session {
-            case .ssh(let host, _):
-                env["EXTERM_ENV_TYPE"] = "ssh"
-                env["EXTERM_REMOTE_HOST"] = host
-            case .docker(let container):
-                env["EXTERM_ENV_TYPE"] = "docker"
-                env["EXTERM_REMOTE_HOST"] = container
-            }
+            env["EXTERM_ENV_TYPE"] = session.envType
+            env["EXTERM_REMOTE_HOST"] = session.displayName
         } else {
             env["EXTERM_ENV_TYPE"] = "local"
         }

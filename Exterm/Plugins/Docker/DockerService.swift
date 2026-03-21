@@ -26,7 +26,6 @@ final class DockerService: ObservableObject {
 
     private(set) var isAvailable = false
     private(set) var dockerPath: String?
-    private var pollTimer: Timer?
 
     var onContainersChanged: (([Container]) -> Void)?
     @Published private(set) var containers: [Container] = []
@@ -52,14 +51,11 @@ final class DockerService: ObservableObject {
     /// Start watching Docker events via socket + initial refresh.
     func startWatching() {
         guard isAvailable else { return }
-        pollTimer?.invalidate()
         refresh()
         startEventStream()
     }
 
     func stopWatching() {
-        pollTimer?.invalidate()
-        pollTimer = nil
         eventProcess?.terminate()
         eventProcess = nil
     }
@@ -79,13 +75,11 @@ final class DockerService: ObservableObject {
         pipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
             let data = handle.availableData
             guard !data.isEmpty else {
-                // EOF — Docker daemon may have restarted. Fall back to polling.
+                // EOF — Docker daemon may have restarted. Do a final refresh.
                 handle.readabilityHandler = nil
                 DispatchQueue.main.async { [weak self] in
                     self?.eventProcess = nil
-                    self?.pollTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { [weak self] _ in
-                        self?.refresh()
-                    }
+                    self?.refresh()
                 }
                 return
             }
@@ -99,10 +93,8 @@ final class DockerService: ObservableObject {
             try process.run()
             eventProcess = process
         } catch {
-            // Fallback to polling if events don't work
-            pollTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { [weak self] _ in
-                self?.refresh()
-            }
+            // Events failed — do a single refresh
+            refresh()
         }
     }
 

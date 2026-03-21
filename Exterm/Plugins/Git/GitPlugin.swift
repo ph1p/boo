@@ -10,7 +10,7 @@ final class GitPlugin: ExtermPluginProtocol {
         version: "1.0.0",
         icon: "arrow.triangle.branch",
         description: "Git branch, status, and changed files",
-        when: "git.active",
+        when: "git.active && !remote",
         runtime: nil,
         capabilities: PluginManifest.Capabilities(sidebarPanel: true, statusBarSegment: true),
         statusBar: PluginManifest.StatusBarManifest(position: "left", priority: 15, template: nil),
@@ -34,6 +34,8 @@ final class GitPlugin: ExtermPluginProtocol {
     var watchedRepoRoot: String?
     var debounceWork: DispatchWorkItem?
 
+    var actions: PluginActions?
+    var services: PluginServices?
     var hostActions: PluginHostActions?
     var onRequestCycleRerun: (() -> Void)?
 
@@ -109,8 +111,8 @@ final class GitPlugin: ExtermPluginProtocol {
 
     // MARK: - Status Bar
 
-    func makeStatusBarContent(context: TerminalContext) -> StatusBarContent? {
-        guard let git = context.gitContext else { return nil }
+    func makeStatusBarContent(context: PluginContext) -> StatusBarContent? {
+        guard let git = context.terminal.gitContext else { return nil }
         var text = git.branch
         if git.aheadCount > 0 || git.behindCount > 0 {
             var arrow = ""
@@ -135,9 +137,10 @@ final class GitPlugin: ExtermPluginProtocol {
 
     // MARK: - Detail View
 
-    func makeDetailView(context: TerminalContext, actionHandler: DSLActionHandler) -> AnyView? {
-        guard let git = context.gitContext else { return nil }
+    func makeDetailView(context: PluginContext) -> AnyView? {
+        guard let git = context.terminal.gitContext else { return nil }
         let repoRoot = git.repoRoot
+        let act = actions
         return AnyView(
             GitDetailView(
                 branch: git.branch,
@@ -148,7 +151,7 @@ final class GitPlugin: ExtermPluginProtocol {
                 changedFiles: cachedFiles,
                 repoRoot: repoRoot,
                 onFileClicked: { path in
-                    actionHandler.handle(DSLAction(type: "open", path: path, command: nil, text: nil))
+                    act?.handle(DSLAction(type: "open", path: path, command: nil, text: nil))
                 },
                 onRefresh: { [weak self] in
                     self?.refreshGitStatus(cwd: repoRoot, repoRoot: repoRoot)
@@ -162,13 +165,13 @@ final class GitPlugin: ExtermPluginProtocol {
                     }
                 },
                 onTerminalAction: { command in
-                    actionHandler.handle(DSLAction(type: "exec", path: nil, command: command, text: nil))
+                    act?.handle(DSLAction(type: "exec", path: nil, command: command, text: nil))
                 },
                 onCopyPath: { path in
-                    actionHandler.handle(DSLAction(type: "copy", path: path, command: nil, text: nil))
+                    act?.handle(DSLAction(type: "copy", path: path, command: nil, text: nil))
                 },
                 onReveal: { path in
-                    actionHandler.handle(DSLAction(type: "reveal", path: path, command: nil, text: nil))
+                    act?.handle(DSLAction(type: "reveal", path: path, command: nil, text: nil))
                 }
             ))
     }

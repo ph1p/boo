@@ -13,7 +13,8 @@ _Coming soon_
 - **Split panes** — Split right (Cmd+D) or down (Cmd+Shift+D)
 - **File explorer** — Live-updating sidebar with file tree (Cmd+B to toggle)
 - **14 color themes** — Catppuccin (all 4), Tokyo Night, Dracula, Nord, Solarized, Gruvbox, One Dark, Rosé Pine, Kanagawa
-- **Remote explorer** — Auto-detects SSH and Docker exec sessions, shows remote file tree
+- **AI agent monitor** — Auto-detects Claude, Codex, Aider, Cursor, Copilot sessions with config/diff overview
+- **Remote explorer** — Auto-detects SSH sessions, shows remote file tree
 - **Git integration** — Branch name in status bar, clickable branch switcher with local + remote branches
 - **Running process** — Status bar shows the foreground process (zsh, node, vim, etc.)
 - **Customizable** — Font, cursor style, status bar segments, explorer settings
@@ -92,9 +93,9 @@ Exterm/
   Terminal/         TerminalBackend (PTY lifecycle)
   Models/           Workspace, Pane (+ TabState), SplitTree, AppSettings, Theme
   Plugin/           Core plugin framework (protocol, registry, runtime, DSL)
-  Plugins/          One directory per plugin (FileTree/, Git/, Docker/, Bookmarks/)
+  Plugins/          One directory per plugin (FileTree/, RemoteExplorer/, Git/, AIAgent/, Docker/, Bookmarks/, SystemInfo/)
   Views/            App-level views (ToolbarView, PaneView, StatusBarView, SettingsWindow)
-  Services/         Shared infrastructure (FileSystemWatcher, RemoteExplorer, TerminalBridge)
+  Services/         Shared infrastructure (FileSystemWatcher, RemoteExplorer, TerminalBridge, ContextAnnouncementEngine)
 CGhostty/           C module wrapping ghostty.h
 CPTYHelper/         C helper for forkpty()
 Vendor/ghostty/     Ghostty source (git clone)
@@ -129,10 +130,9 @@ Exterm uses **GhosttyKit** — the same terminal engine that powers the [Ghostty
 
 ### File Explorer
 
-- **Local**: Uses FSEvents for live file system watching
-- **Remote SSH**: Auto-detects SSH sessions, lists files via `ssh <host> ls -1AF`. Exterm manages its own SSH ControlMaster sockets — no user SSH config changes required
-- **Remote Docker**: Auto-detects `docker exec` sessions, lists files via `docker exec <container> sh -c 'ls -1AF'`
-- **Remote cd**: Clicking a directory in the remote tree runs `cd` in the active terminal. Tilde paths (`~`) are resolved to absolute paths so navigation works on Linux, macOS, and Docker containers
+- **Local**: Uses FSEvents for live file system watching (separate `file-tree-local` plugin, visible in local sessions)
+- **Remote SSH**: Auto-detects SSH sessions, lists files via `ssh <host> ls -1AF`. Exterm manages its own SSH ControlMaster sockets — no user SSH config changes required (separate `file-tree-remote` plugin, visible in SSH/MOSH sessions)
+- **Remote cd**: Clicking a directory in the remote tree runs `cd` in the active terminal. Tilde paths (`~`) are resolved to absolute paths so navigation works on Linux and macOS
 
 ## Plugin System
 
@@ -140,13 +140,15 @@ Exterm has an extensible plugin system. Plugins provide sidebar panels, status b
 
 ### Built-in Plugins
 
-| Plugin        | Directory             | Description                                                              |
-| ------------- | --------------------- | ------------------------------------------------------------------------ |
-| **Files**     | `Plugins/FileTree/`   | File explorer with local FSEvents watching + remote SSH/Docker browsing  |
-| **Git**       | `Plugins/Git/`        | Branch, status, staged/unstaged/untracked files, stash, ahead/behind     |
-| **Docker**    | `Plugins/Docker/`     | Running container list with exec, logs, start/stop/restart actions       |
-| **Bookmarks** | `Plugins/Bookmarks/`  | Saved directory bookmarks with per-host namespacing                      |
-| **System**    | `Plugins/SystemInfo/` | CPU load, memory, disk usage (example plugin demonstrating all patterns) |
+| Plugin             | Directory                  | Description                                                          |
+| ------------------ | -------------------------- | -------------------------------------------------------------------- |
+| **Files (Local)**  | `Plugins/FileTree/`        | Local file explorer with FSEvents watching (visible in local sessions) |
+| **Files (Remote)** | `Plugins/RemoteExplorer/`  | Remote file explorer for SSH/MOSH sessions                           |
+| **Git**            | `Plugins/Git/`             | Branch, status, staged/unstaged/untracked files, stash, ahead/behind |
+| **AI Agent**       | `Plugins/AIAgent/`         | Monitors AI coding agents (Claude, Codex, Aider, Cursor, Copilot)   |
+| **Docker**         | `Plugins/Docker/`          | Running container list with exec, logs, start/stop/restart actions   |
+| **Bookmarks**      | `Plugins/Bookmarks/`       | Saved directory bookmarks with per-host namespacing                  |
+| **System**         | `Plugins/SystemInfo/`      | CPU load, memory, disk usage (example plugin demonstrating all patterns) |
 
 ### External Plugins
 
@@ -177,14 +179,19 @@ Drop a folder into `~/.exterm/plugins/` with a `plugin.json` manifest and a scri
 
 Control when your plugin is visible:
 
-| Expression                | Meaning                 |
-| ------------------------- | ----------------------- |
-| `null`                    | Always visible          |
-| `"git.active"`            | Only in git repos       |
-| `"!remote"`               | Only in local sessions  |
-| `"remote"`                | Only in remote sessions |
-| `"remote.type == 'ssh'"`  | Only in SSH sessions    |
-| `"git.active && !remote"` | Git repos, local only   |
+| Expression                         | Meaning                        |
+| ---------------------------------- | ------------------------------ |
+| `null`                             | Always visible                 |
+| `"git.active"`                     | Only in git repos              |
+| `"!remote"`                        | Only in local sessions         |
+| `"remote"`                         | Only in remote sessions        |
+| `"remote.type == 'ssh'"`           | Only in SSH sessions           |
+| `"git.active && !remote"`          | Git repos, local only          |
+| `"process.name == 'vim'"`          | Only when vim is running       |
+| `"process.editor"`                 | Only when any editor is active |
+| `"process.category == 'database'"` | Only for database clients      |
+| `"process.ai"`                     | Only when an AI agent is active |
+| `"env.ssh"`                        | Only in SSH/MOSH sessions      |
 
 #### Script Environment
 
@@ -250,7 +257,7 @@ Open with **Cmd+,**. Organized in tabs:
 swift test
 ```
 
-391 tests covering models, themes, plugins, terminal bridge, remote explorer, SSH control manager, and more.
+536 tests covering models, themes, plugins, terminal bridge, remote explorer, SSH control manager, accessibility, and more.
 
 ## License
 

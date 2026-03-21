@@ -5,6 +5,15 @@ import XCTest
 @MainActor
 final class SystemInfoPluginTests: XCTestCase {
 
+    private func makePluginContext(terminal: TerminalContext) -> PluginContext {
+        PluginContext(
+            terminal: terminal,
+            theme: ThemeSnapshot(from: AppSettings.shared.theme),
+            density: .comfortable,
+            settings: PluginSettingsReader(pluginID: "system-info")
+        )
+    }
+
     func testManifest() {
         let plugin = SystemInfoPlugin()
         XCTAssertEqual(plugin.pluginID, "system-info")
@@ -50,7 +59,7 @@ final class SystemInfoPluginTests: XCTestCase {
 
     func testStatusBarContent() {
         let plugin = SystemInfoPlugin()
-        let context = TerminalContext(
+        let terminal = TerminalContext(
             terminalID: UUID(),
             cwd: "/tmp",
             remoteSession: nil,
@@ -59,8 +68,9 @@ final class SystemInfoPluginTests: XCTestCase {
             paneCount: 1,
             tabCount: 1
         )
+        let ctx = makePluginContext(terminal: terminal)
 
-        let content = plugin.makeStatusBarContent(context: context)
+        let content = plugin.makeStatusBarContent(context: ctx)
         XCTAssertNotNil(content)
         XCTAssertTrue(content!.text.hasPrefix("Mem "))
         XCTAssertEqual(content!.icon, "memorychip")
@@ -68,7 +78,7 @@ final class SystemInfoPluginTests: XCTestCase {
 
     func testSectionTitle() {
         let plugin = SystemInfoPlugin()
-        let context = TerminalContext(
+        let terminal = TerminalContext(
             terminalID: UUID(),
             cwd: "/tmp",
             remoteSession: nil,
@@ -77,15 +87,16 @@ final class SystemInfoPluginTests: XCTestCase {
             paneCount: 1,
             tabCount: 1
         )
+        let ctx = makePluginContext(terminal: terminal)
 
-        let title = plugin.sectionTitle(context: context)
+        let title = plugin.sectionTitle(context: ctx)
         XCTAssertNotNil(title)
         XCTAssertTrue(title!.hasPrefix("System ("))
     }
 
     func testDetailView() {
         let plugin = SystemInfoPlugin()
-        let context = TerminalContext(
+        let terminal = TerminalContext(
             terminalID: UUID(),
             cwd: "/tmp",
             remoteSession: nil,
@@ -94,9 +105,46 @@ final class SystemInfoPluginTests: XCTestCase {
             paneCount: 1,
             tabCount: 1
         )
+        let ctx = makePluginContext(terminal: terminal)
 
-        let view = plugin.makeDetailView(context: context, actionHandler: DSLActionHandler())
+        let view = plugin.makeDetailView(context: ctx)
         XCTAssertNotNil(view, "Detail view should be returned for local context")
+    }
+
+    func testNewMetricsPopulated() {
+        let plugin = SystemInfoPlugin()
+        // CPU usage should be 0.0-1.0
+        XCTAssertGreaterThanOrEqual(plugin.cpuUsage, 0)
+        XCTAssertLessThanOrEqual(plugin.cpuUsage, 1)
+        // Memory totals should be positive
+        XCTAssertGreaterThan(plugin.memoryTotalGB, 0)
+        XCTAssertGreaterThanOrEqual(plugin.memoryUsedGB, 0)
+        // Uptime should be positive
+        XCTAssertGreaterThan(plugin.uptimeSeconds, 0)
+    }
+
+    func testSectionTitleIncludesCPU() {
+        let plugin = SystemInfoPlugin()
+        let terminal = TerminalContext(
+            terminalID: UUID(),
+            cwd: "/tmp",
+            remoteSession: nil,
+            gitContext: nil,
+            processName: "",
+            paneCount: 1,
+            tabCount: 1
+        )
+        let ctx = makePluginContext(terminal: terminal)
+        let title = plugin.sectionTitle(context: ctx)!
+        XCTAssertTrue(title.contains("CPU"), "Section title should include CPU info")
+        XCTAssertTrue(title.contains("Mem"), "Section title should include Mem info")
+    }
+
+    func testManifestHasNewSettings() {
+        let plugin = SystemInfoPlugin()
+        let settingKeys = (plugin.manifest.settings ?? []).map(\.key)
+        XCTAssertTrue(settingKeys.contains("statusBarCPU"))
+        XCTAssertTrue(settingKeys.contains("statusBarBattery"))
     }
 
     func testRegisteredInBuiltins() {

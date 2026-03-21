@@ -117,6 +117,34 @@ extension PaneView {
         let showClose = showTabClose && (isActive || isHovered)
         let closeZone: CGFloat = showClose ? 18 : 8
 
+        // Process icon (when a non-shell process is running)
+        let process = tab.state.foregroundProcess
+        if !process.isEmpty, !ProcessIcon.isShell(process),
+            let iconName = ProcessIcon.icon(for: process)
+        {
+            let iconColor = ProcessIcon.themeColor(for: process, theme: theme, isActive: isActive)
+            let iconImage = NSImage(
+                systemSymbolName: iconName, accessibilityDescription: process)
+            if let iconImage {
+                let config = NSImage.SymbolConfiguration(pointSize: 9, weight: .medium)
+                let configured = iconImage.withSymbolConfiguration(config) ?? iconImage
+                let iconSize: CGFloat = 12
+                let iconRect = CGRect(x: textX, y: midY - iconSize / 2, width: iconSize, height: iconSize)
+                // Tint the SF Symbol by drawing it as a template with the desired color
+                let tinted = NSImage(size: configured.size)
+                tinted.lockFocus()
+                iconColor.set()
+                let imageRect = NSRect(origin: .zero, size: configured.size)
+                configured.draw(in: imageRect, from: .zero, operation: .sourceOver, fraction: 1.0)
+                imageRect.fill(using: .sourceAtop)
+                tinted.unlockFocus()
+                tinted.draw(
+                    in: iconRect, from: .zero, operation: .sourceOver,
+                    fraction: isActive ? 1.0 : 0.7)
+                textX += iconSize + 3
+            }
+        }
+
         // Title — use truncating tail paragraph style for automatic ellipsis
         let para = NSMutableParagraphStyle()
         para.lineBreakMode = .byTruncatingTail
@@ -198,18 +226,30 @@ extension PaneView {
     // MARK: - Tab Display Helpers
 
     static func tabDisplayTitle(tab: Pane.Tab) -> String {
-        if tab.remoteSession != nil {
-            // Prefer stored remote CWD, fall back to extracting path from title
+        let process = tab.state.foregroundProcess
+        let isContainer = tab.remoteSession?.isContainer ?? false
+
+        // Show process name when a non-shell process is running,
+        // but NOT for remote sessions — show host:path instead.
+        if !process.isEmpty, !ProcessIcon.isShell(process), tab.remoteSession == nil {
+            let displayName = ProcessIcon.displayName(for: process) ?? process
+            return displayName
+        }
+
+        if let session = tab.remoteSession {
+            let path: String
             if let remoteCwd = tab.remoteWorkingDirectory, !remoteCwd.isEmpty {
-                return tildeContractRemotePath(remoteCwd, tab: tab)
-            }
-            // Extract path portion from "user@host:path" title
-            if let colonIdx = tab.title.firstIndex(of: ":") {
-                let path = String(tab.title[tab.title.index(after: colonIdx)...])
+                path = tildeContractRemotePath(remoteCwd, tab: tab)
+            } else if let colonIdx = tab.title.firstIndex(of: ":") {
+                let extracted = String(tab.title[tab.title.index(after: colonIdx)...])
                     .trimmingCharacters(in: .whitespaces)
-                if !path.isEmpty { return path }
+                path = extracted.isEmpty ? "~" : extracted
+            } else {
+                path = "~"
             }
-            return "~"
+            // Format: "host:path" for SSH/mosh, "tool:target:path" for containers
+            let host = session.displayName
+            return "\(host):\(path)"
         }
         // Local tab: show tilde-contracted CWD
         let dir = tab.workingDirectory
@@ -228,8 +268,11 @@ extension PaneView {
     static func tildeContractRemotePath(_ path: String, tab: Pane.Tab) -> String {
         // Extract user from session host (e.g. "root@host" -> "root", alias "het" -> nil)
         var user: String?
-        if case .ssh(let host, _) = tab.remoteSession, host.contains("@") {
-            user = host.split(separator: "@").first.map(String.init)
+        if let session = tab.remoteSession {
+            let host = session.displayName
+            if host.contains("@") {
+                user = host.split(separator: "@").first.map(String.init)
+            }
         }
         // Also try extracting user from the terminal title ("root@host:~")
         if user == nil {
@@ -254,9 +297,9 @@ extension PaneView {
             return (NSColor(calibratedRed: 0.25, green: 0.72, blue: 0.31, alpha: 1.0), "")
         }
         switch session {
-        case .ssh:
+        case .ssh, .mosh:
             return (NSColor(calibratedRed: 0.9, green: 0.66, blue: 0.2, alpha: 1.0), "")
-        case .docker:
+        case .container:
             return (NSColor(calibratedRed: 0.13, green: 0.59, blue: 0.95, alpha: 1.0), "")
         }
     }

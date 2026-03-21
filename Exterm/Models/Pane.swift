@@ -8,9 +8,10 @@ struct TabState {
     var remoteWorkingDirectory: String?
     var shellPID: pid_t = 0
     var title: String
+    var foregroundProcess: String = ""
 
     // Plugin UI State
-    var openPluginIDs: Set<String> = ["file-tree-local", "file-tree-remote", "git-panel", "docker", "bookmarks"]
+    var openPluginIDs: Set<String> = Set(AppSettings.shared.defaultEnabledPluginIDs)
     var expandedPluginIDs: Set<String> = ["file-tree-local", "file-tree-remote"]
 }
 
@@ -145,6 +146,11 @@ final class Pane {
     func updateRemoteWorkingDirectory(at index: Int, _ path: String?) {
         guard index >= 0, index < tabs.count else { return }
         tabs[index].remoteWorkingDirectory = path
+    }
+
+    func updateForegroundProcess(at index: Int, _ process: String) {
+        guard index >= 0, index < tabs.count else { return }
+        tabs[index].state.foregroundProcess = process
     }
 
     func updateShellPID(at index: Int, _ pid: pid_t) {

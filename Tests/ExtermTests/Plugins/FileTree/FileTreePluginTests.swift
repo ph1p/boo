@@ -173,19 +173,6 @@ final class RemoteFileTreePluginTests: XCTestCase {
             "Same alias must hit same cache entry regardless of display host")
     }
 
-    /// Docker cache key should use container name.
-    @MainActor
-    func testDockerCacheKeyUsesContainerName() {
-        let plugin = RemoteFileTreePlugin()
-
-        let session = RemoteSessionType.docker(container: "web-app")
-        let root1 = plugin.getOrCreateRemoteRoot(for: "~", session: session)
-        root1.applyEntries([.init(name: "app", isDirectory: true)])
-
-        let root2 = plugin.getOrCreateRemoteRoot(for: "~", session: session)
-        XCTAssertTrue(root1 === root2, "Docker cache should work with container name")
-    }
-
     /// On cd, the existing root must be reused even with aliased sessions.
     @MainActor
     func testRemoteRootReusedOnCdWithAlias() {

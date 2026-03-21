@@ -60,12 +60,7 @@ final class ContextAnnouncementEngine {
 
         // Environment type
         if let session = state.remoteSession {
-            switch session {
-            case .ssh(let host, _):
-                parts.append("SSH to \(host)")
-            case .docker(let container):
-                parts.append("Docker container \(container)")
-            }
+            parts.append("\(session.envType) \(session.displayName)")
         } else {
             parts.append("Local terminal")
         }

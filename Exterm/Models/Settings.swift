@@ -99,6 +99,7 @@ final class AppSettings {
         static let sidebarDensity = "sidebarDensity"
         static let tabOverflowMode = "tabOverflowMode"
         static let disabledPluginIDs = "disabledPluginIDs"
+        static let defaultEnabledPluginIDs = "defaultEnabledPluginIDs"
         static let sidebarWidth = "sidebarWidth"
         static let pluginSettings = "pluginSettings"
         static let migratedPluginSettings_v1 = "migratedPluginSettings_v1"
@@ -284,6 +285,15 @@ final class AppSettings {
         set { set(newValue, forKey: K.disabledPluginIDs) }
     }
 
+    /// Plugins open in the sidebar by default when opening a new pane or starting the app.
+    var defaultEnabledPluginIDs: [String] {
+        get {
+            UserDefaults.standard.stringArray(forKey: K.defaultEnabledPluginIDs)
+                ?? ["file-tree-local", "file-tree-remote", "git-panel", "docker", "bookmarks"]
+        }
+        set { set(newValue, forKey: K.defaultEnabledPluginIDs) }
+    }
+
     // MARK: - Plugin Settings
 
     private var pluginSettingsDict: [String: [String: Any]] {
@@ -360,7 +370,7 @@ final class AppSettings {
     // MARK: - File Persistence (~/.exterm/settings.json)
 
     private func saveToFile() {
-        let dict: [String: Any] = [
+        var dict: [String: Any] = [
             K.themeName: themeName,
             K.autoTheme: autoTheme,
             K.darkThemeName: darkThemeName,
@@ -379,6 +389,7 @@ final class AppSettings {
             K.sidebarWidth: Double(sidebarWidth),
             K.tabOverflowMode: tabOverflowMode.rawValue,
             K.disabledPluginIDs: disabledPluginIDs,
+            K.defaultEnabledPluginIDs: defaultEnabledPluginIDs,
             K.pluginSettings: pluginSettingsDict
         ]
         if let data = try? JSONSerialization.data(withJSONObject: dict, options: [.prettyPrinted, .sortedKeys]) {

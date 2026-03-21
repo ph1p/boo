@@ -26,18 +26,19 @@ A macOS terminal emulator with integrated file explorer, workspace management, a
 ```
 Exterm/
   App/              - AppDelegate, MainWindowController, WindowStateCoordinator
-  Terminal/         - VT100Terminal (parser), TerminalSession (PTY + I/O), TerminalBackend (protocol)
-  Renderer/         - TerminalView (CoreText rendering, selection, input)
+  Terminal/         - TerminalBackend (PTY lifecycle protocol)
   Models/           - Workspace, Pane (+ TabState), SplitTree, AppSettings, Theme
   Plugin/           - Core plugin framework (protocol, registry, runtime, DSL, watcher)
   Plugins/          - One directory per plugin, all plugin-specific code colocated
-    FileTree/       - FileTreePlugin, FileTreeView, FileTreeNode, RemoteFileTreeView, RemoteFileTreeNode
-    Git/            - GitPlugin (+ GitDetailView)
-    Docker/         - DockerPluginNew, DockerService
-    Bookmarks/      - BookmarksPluginNew, BookmarksPanelView, BookmarkService
+    FileTree/       - LocalFileTreePlugin, FileTreeView, FileTreeNode
+    RemoteExplorer/ - RemoteFileTreePlugin, RemoteFileTreeView, RemoteFileTreeNode
+    Git/            - GitPlugin, GitDetailView, GitService
+    AIAgent/        - AIAgentPlugin, AIAgentDetailView
+    Docker/         - DockerPlugin, DockerService
+    Bookmarks/      - BookmarksPlugin, BookmarksPanelView, BookmarkService
     SystemInfo/     - SystemInfoPlugin (reference example plugin)
   Views/            - App-level views only (ToolbarView, PaneView, StatusBarView, SettingsWindow, etc.)
-  Services/         - Shared infrastructure (FileSystemWatcher, RemoteExplorer, TerminalBridge, etc.)
+  Services/         - Shared infrastructure (FileSystemWatcher, RemoteExplorer, TerminalBridge, ContextAnnouncementEngine, etc.)
 CPTYHelper/         - C library for forkpty() (Swift can't call fork directly)
 ```
 
@@ -134,17 +135,19 @@ PaneView.activateTab() → didFocus delegate
 
 `MainWindowController` properties (`bridge`, `pluginRegistry`, `openPluginIDs`, `expandedPluginIDs`, `previousFocusedTabID`, `isRemoteSidebar`, `activeRemoteSession`) are computed proxies to the coordinator — no separate state tracking.
 
+3. **Global Observable State** — `AppStore` (singleton, `@MainActor`): read-only projection of app-wide state for SwiftUI views. Published properties: `context` (current `TerminalContext`), `theme` (snapshot), `sidebarVisible`, `openPluginIDs`, `visiblePluginIDs`. Updated by `MainWindowController` at end of each plugin cycle. Uses `Equatable` guards to suppress spurious updates.
+
+4. **Accessibility** — `ContextAnnouncementEngine`: composes VoiceOver announcements when terminal focus changes. Debounced to 0.2s, announces environment type, working directory, and git branch. Respects VoiceOver enabled state.
+
 ### Key Design Decisions
-- **TerminalBackend protocol**: Abstracts VT100Terminal so it can be swapped
-- **libghostty-vt status**: Evaluated but not usable yet — C API has no per-cell screen access. Ghostty's own renderer uses internal Zig structs directly. Our VT100Terminal handles rendering with full TUI support (mouse, cursor visibility, app modes, bracketed paste). Ghostty kept as vendor dep for future integration.
+- **TerminalBackend protocol**: Abstracts PTY lifecycle so backends can be swapped
 - **Per-pane tabs**: Each split pane owns its own tab bar and terminal sessions
 - **Workspace → SplitTree → Panes → Tabs**: Workspaces are folders, panes are splits, tabs are terminal sessions
 - **TabState as single source of truth**: All per-tab state (terminal + plugin UI) in one struct on `Pane.Tab` — eliminates scattered dictionaries and manual sync
 - **WindowStateCoordinator**: Centralizes state transitions between bridge, tab model, and plugin registry
 - **BridgeState is transient**: `TerminalBridge.BridgeState` is a working snapshot; coordinator syncs results back to `TabState`
 - **TerminalSession detach/reattach**: Sessions survive view hierarchy rebuilds via `attachToView()`/`detachFromView()`
-- **Thread safety**: VT100Terminal uses NSLock; `snapshot()` captures state under one lock for rendering
-- **All UI callbacks must be on main thread**: PTY read loop is on background GCD queue; OSC callbacks dispatch to main
+- **Thread safety**: All UI callbacks on main thread; PTY read loop is on background GCD queue; OSC callbacks dispatch to main
 
 ### Theming
 - `TerminalTheme` defines foreground, background, 16 ANSI colors, selection, cursor, and all UI chrome colors
@@ -202,11 +205,13 @@ All code for a single plugin lives in one directory under `Exterm/Plugins/`:
 
 ```
 Exterm/Plugins/
-  FileTree/           FileTreePlugin.swift, FileTreeView.swift, FileTreeNode.swift,
-                      RemoteFileTreeView.swift, RemoteFileTreeNode.swift
-  Git/                GitPlugin.swift (includes GitDetailView)
+  FileTree/           LocalFileTreePlugin.swift, FileTreeView.swift, FileTreeNode.swift
+  RemoteExplorer/     RemoteFileTreePlugin.swift, RemoteFileTreeView.swift, RemoteFileTreeNode.swift
+  Git/                GitPlugin.swift, GitDetailView.swift, GitService.swift
+  AIAgent/            AIAgentPlugin.swift, AIAgentDetailView.swift
   Docker/             DockerPlugin.swift, DockerService.swift
   Bookmarks/          BookmarksPlugin.swift, BookmarksPanelView.swift, BookmarkService.swift
+  SystemInfo/         SystemInfoPlugin.swift
 ```
 
 Tests mirror this layout under `Tests/ExtermTests/Plugins/`.
@@ -274,7 +279,7 @@ Use from a plugin: `hostActions?.pastePathToActivePane?(path)`.
 
 #### Plugin Lifecycle & Registration
 
-1. `PluginRegistry.registerBuiltins()` — creates and registers the four built-in plugins
+1. `PluginRegistry.registerBuiltins()` — creates and registers the seven built-in plugins (LocalFileTree, RemoteFileTree, Git, AIAgent, Docker, Bookmarks, SystemInfo)
 2. For each registered plugin, the registry wires:
    - `hostActions` — distributed from `PluginRegistry.hostActions` (set once by MWC)
    - `onRequestCycleRerun` — fires `PluginRegistry.onRequestCycleRerun` (bound to MWC's `runPluginCycle`)
@@ -301,6 +306,8 @@ Plugins declare visibility conditions via `when` in the manifest:
 - `"git.active"` — visible only when terminal is in a git repo
 - `"!remote"` — visible only in local sessions
 - `"remote.type == 'ssh'"` — visible only in SSH sessions
+- `"env.ssh"` — visible only in SSH/MOSH sessions
+- `"process.ai"` — visible only when an AI coding agent is running
 - `nil` — always visible
 
 Parsed by `WhenClauseParser` into `WhenClauseNode` AST. Evaluated by `WhenClauseEvaluator` against a `TerminalContext`. Supports `&&`, `||`, `!`, `==`, `!=`, grouping with `()`.
@@ -385,7 +392,7 @@ Status bar segments are a separate, simpler system for the bottom bar. To add a 
 
 Sidebar plugins get auto-registered toggle icons via `PluginRegistry.registerStatusBarIcons(in:)` — no manual status bar registration needed.
 
-Existing built-in segments: `EnvironmentSegment`, `GitBranchSegment`, `PathSegment`, `ProcessSegment`, `FileTreeIconSegment`, `PaneInfoSegment`, `TimeSegment`. Auto-registered: `PluginIconSegment` instances for Git, Docker, Bookmarks.
+Existing built-in segments: `EnvironmentSegment`, `GitBranchSegment`, `PathSegment`, `ProcessSegment`, `FileTreeIconSegment`, `PaneInfoSegment`, `TimeSegment`. Auto-registered: `PluginIconSegment` instances for Git, AI Agent, Docker, Bookmarks.
 
 #### Adding a New Built-in Plugin
 
@@ -405,7 +412,7 @@ Existing built-in segments: `EnvironmentSegment`, `GitBranchSegment`, `PathSegme
 - `RemoteExplorer.shellEscPath()` must be used (not `shellEscape()`) for any path sent to a remote terminal — it handles tilde expansion correctly by keeping `~` outside quotes
 - `NotificationCenter` with `.settingsChanged` for cross-component settings updates
 - SwiftUI settings views must include `@ObservedObject private var observer = SettingsObserver()` with `let _ = observer.revision` in their body to re-render on theme changes
-- Font cache in TerminalView for bold/italic variants (hot path optimization)
+- Font cache in GhosttyView for bold/italic variants (hot path optimization)
 
 ## Guidelines
 - Keep the zero-warnings build

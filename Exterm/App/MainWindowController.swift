@@ -120,12 +120,17 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
             self?.runPluginCycle(reason: .focusChanged)
         }
         pluginRegistry.registerBuiltins()
+        let pluginActions = PluginActions()
+        pluginActions.sendToTerminal = { [weak self] in self?.sendRawToActivePane($0) }
+        pluginActions.openDirectoryInNewTab = { [weak self] in self?.openDirectoryInNewTab($0) }
+        pluginActions.openDirectoryInNewPane = { [weak self] in self?.openDirectoryInNewPane($0) }
+        pluginActions.pastePathToActivePane = { [weak self] in self?.pastePathToActivePane($0) }
+        pluginRegistry.actions = pluginActions
         pluginRegistry.hostActions = PluginHostActions(
             pastePathToActivePane: { [weak self] in self?.pastePathToActivePane($0) },
             openDirectoryInNewTab: { [weak self] in self?.openDirectoryInNewTab($0) },
             openDirectoryInNewPane: { [weak self] in self?.openDirectoryInNewPane($0) },
-            sendRawToActivePane: { [weak self] in self?.sendRawToActivePane($0) },
-            bridge: bridge
+            sendRawToActivePane: { [weak self] in self?.sendRawToActivePane($0) }
         )
         pluginRegistry.registerStatusBarIcons(in: statusBar)
         tabDragCoordinator.onDrop = { [weak self] source, tabIndex, dest, zone in
@@ -489,6 +494,14 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
             .removeDuplicates()
             .sink { [weak self] state in
                 guard let self = self else { return }
+                // Sync bridge state to the active tab immediately so tab bar
+                // and all UI reads from tab state are always fresh.
+                if let ws = self.activeWorkspace,
+                    let pane = ws.pane(for: state.paneID)
+                {
+                    self.coordinator.syncBridgeToTab(pane: pane, tabIndex: pane.activeTabIndex)
+                    self.paneViews[pane.id]?.needsDisplay = true
+                }
                 self.refreshStatusBar()
             }
             .store(in: &bridgeCancellables)
@@ -499,34 +512,19 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
                 guard let self = self else { return }
                 switch event {
                 case .directoryChanged:
+                    // bridge.$state sink already synced to tab
                     self.runPluginCycle(reason: .cwdChanged)
 
                 case .titleChanged:
-                    if let ws = self.activeWorkspace,
-                        let pane = ws.pane(for: self.bridge.state.paneID)
-                    {
-                        self.coordinator.syncBridgeToTab(pane: pane, tabIndex: pane.activeTabIndex)
-                    }
+                    // bridge.$state sink already synced to tab
                     self.runPluginCycle(reason: .titleChanged)
 
                 case .processChanged:
-                    // Sync foreground process to TabState and redraw tab bar
-                    if let ws = self.activeWorkspace,
-                        let pane = ws.pane(for: self.bridge.state.paneID)
-                    {
-                        pane.updateForegroundProcess(
-                            at: pane.activeTabIndex, self.bridge.state.foregroundProcess)
-                        self.paneViews[pane.id]?.needsDisplay = true
-                    }
+                    // bridge.$state sink already synced to tab
                     self.runPluginCycle(reason: .processChanged)
 
                 case .remoteSessionChanged:
-                    // Coordinator syncs bridge state → TabState
-                    if let ws = self.activeWorkspace,
-                        let pane = ws.pane(for: self.bridge.state.paneID)
-                    {
-                        self.coordinator.syncBridgeToTab(pane: pane, tabIndex: pane.activeTabIndex)
-                    }
+                    // bridge.$state sink already synced to tab
                     self.syncRemoteSidebarState()
                     self.runPluginCycle(reason: .remoteSessionChanged)
 
@@ -538,7 +536,8 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
                     self.refreshToolbar()
                     self.runPluginCycle(reason: .workspaceSwitched)
 
-                case .remoteDirectoryListed:
+                case .remoteDirectoryListed(let path, let entries):
+                    self.pluginRegistry.notifyRemoteDirectoryListed(path: path, entries: entries)
                     self.runPluginCycle(reason: .cwdChanged)
                 }
             }
@@ -597,7 +596,6 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
         else { return }
         let cwd = workspace.folderPath
         pv.addNewTab(workingDirectory: cwd)
-        window?.makeFirstResponder(pv.currentTerminalView)
     }
 
     @objc func toggleSidebarAction(_ sender: Any?) {

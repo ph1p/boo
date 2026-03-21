@@ -391,7 +391,12 @@ class PaneView: NSView {
         layoutTerminalView()
         needsLayout = true
         needsDisplay = true
-        window?.makeFirstResponder(ghosttyView)
+        paneDelegate?.paneView(self, didFocus: paneID)
+        // Defer focus to next run-loop tick so the view hierarchy is fully installed
+        DispatchQueue.main.async { [weak self] in
+            guard let self, let gv = self.ghosttyView else { return }
+            self.window?.makeFirstResponder(gv)
+        }
     }
 
     func closeTab(at index: Int) {
