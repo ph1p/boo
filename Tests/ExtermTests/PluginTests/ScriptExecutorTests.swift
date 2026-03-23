@@ -11,7 +11,7 @@ final class ScriptExecutorTests: XCTestCase {
             remoteSession: nil,
             gitContext: TerminalContext.GitContext(
                 branch: "main", repoRoot: "/Users/test/project", isDirty: true, changedFileCount: 3, stagedCount: 0,
-                stashCount: 0, aheadCount: 0, behindCount: 0, lastCommitShort: nil),
+                aheadCount: 0, behindCount: 0, lastCommitShort: nil),
             processName: "vim",
             paneCount: 2,
             tabCount: 1

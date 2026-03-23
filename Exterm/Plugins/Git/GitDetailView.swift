@@ -7,14 +7,13 @@ struct GitDetailView: View {
     let aheadCount: Int
     let behindCount: Int
     let lastCommit: String?
-    let stashCount: Int
     let changedFiles: [GitPlugin.GitChangedFile]
     let repoRoot: String
     var onFileClicked: ((String) -> Void)?
     var onRefresh: (() -> Void)?
     /// Runs a git command silently via Process in the repo, then refreshes.
     var onGitAction: (([String]) -> Void)?
-    /// Sends a command to the terminal for visible output (diff, stash list).
+    /// Sends a command to the terminal for visible output (diff).
     var onTerminalAction: ((String) -> Void)?
     var onCopyPath: ((String) -> Void)?
     var onReveal: ((String) -> Void)?
@@ -23,6 +22,8 @@ struct GitDetailView: View {
     @State private var unstagedExpanded = true
     @State private var untrackedExpanded = true
     @State private var hoveredFileID: UUID?
+    @State private var hoveredSection: FileSection?
+    @State private var commitCopied = false
 
     private var stagedFiles: [GitPlugin.GitChangedFile] {
         changedFiles.filter(\.isStaged)
@@ -47,13 +48,28 @@ struct GitDetailView: View {
 
                 // Last commit
                 if let commit = lastCommit {
-                    Text(commit)
-                        .font(.system(size: 10, design: .monospaced))
-                        .foregroundColor(Color(nsColor: theme.chromeMuted))
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                        .padding(.horizontal, density == .comfortable ? 12 : 8)
-                        .padding(.bottom, 4)
+                    Button(action: {
+                        let hash = String(commit.prefix(while: { !$0.isWhitespace }))
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(hash, forType: .string)
+                        commitCopied = true
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                            commitCopied = false
+                        }
+                    }) {
+                        Text(commitCopied ? "Copied!" : commit)
+                            .font(.system(size: 10, design: .monospaced))
+                            .foregroundColor(
+                                Color(nsColor: commitCopied ? theme.accentColor : theme.chromeMuted)
+                            )
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Click to copy commit hash")
+                    .accessibilityLabel("Copy commit hash")
+                    .padding(.horizontal, density == .comfortable ? 12 : 8)
+                    .padding(.bottom, 4)
                 }
 
                 if !changedFiles.isEmpty {
@@ -65,6 +81,7 @@ struct GitDetailView: View {
                             title: "Staged Changes",
                             count: stagedFiles.count,
                             color: NSColor(calibratedRed: 0.25, green: 0.72, blue: 0.31, alpha: 1.0),
+                            section: .staged,
                             expanded: $stagedExpanded,
                             density: density,
                             theme: theme
@@ -82,6 +99,7 @@ struct GitDetailView: View {
                             title: "Changes",
                             count: unstagedFiles.count,
                             color: NSColor(calibratedRed: 0.9, green: 0.66, blue: 0.2, alpha: 1.0),
+                            section: .unstaged,
                             expanded: $unstagedExpanded,
                             density: density,
                             theme: theme
@@ -99,6 +117,7 @@ struct GitDetailView: View {
                             title: "Untracked",
                             count: untrackedFiles.count,
                             color: NSColor(calibratedRed: 0.5, green: 0.5, blue: 0.5, alpha: 1.0),
+                            section: .untracked,
                             expanded: $untrackedExpanded,
                             density: density,
                             theme: theme
@@ -117,11 +136,6 @@ struct GitDetailView: View {
                         .padding(.vertical, density == .comfortable ? 8 : 6)
                 }
 
-                // Stash bar
-                if stashCount > 0 {
-                    Divider()
-                    stashBar(theme: theme, density: density)
-                }
             }
         }
     }
@@ -151,17 +165,6 @@ struct GitDetailView: View {
                 .foregroundColor(Color(nsColor: theme.chromeMuted))
             }
             Spacer()
-            if !changedFiles.isEmpty {
-                Button(action: {
-                    onGitAction?(["stash"])
-                }) {
-                    Image(systemName: "tray.and.arrow.down")
-                        .font(.system(size: 10))
-                        .foregroundColor(Color(nsColor: theme.chromeMuted))
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Stash all changes")
-            }
             Button(action: { onRefresh?() }) {
                 Image(systemName: "arrow.clockwise")
                     .font(.system(size: 10))
@@ -173,44 +176,95 @@ struct GitDetailView: View {
         .padding(.horizontal, density == .comfortable ? 12 : 8)
         .padding(.vertical, density == .comfortable ? 8 : 6)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Branch: \(branch)\(changedFiles.isEmpty ? "" : ", \(changedFiles.count) changed files")")
+        .accessibilityLabel(
+            "Branch: \(branch)\(changedFiles.isEmpty ? "" : ", \(changedFiles.count) changed files")")
     }
 
     // MARK: - Section Header
+
+    private enum FileSection {
+        case staged, unstaged, untracked
+    }
 
     @ViewBuilder
     private func sectionHeader(
         title: String,
         count: Int,
         color: NSColor,
+        section: FileSection,
         expanded: Binding<Bool>,
         density: SidebarDensity,
         theme: TerminalTheme
     ) -> some View {
-        Button(action: { expanded.wrappedValue.toggle() }) {
-            HStack(spacing: 4) {
-                Image(systemName: expanded.wrappedValue ? "chevron.down" : "chevron.right")
-                    .font(.system(size: 8, weight: .bold))
-                    .foregroundColor(Color(nsColor: theme.chromeMuted))
-                    .frame(width: 10)
-                Text("\(title) (\(count))")
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundColor(Color(nsColor: color))
-                Spacer()
+        let isHovered = hoveredSection == section
+        HStack(spacing: 4) {
+            Button(action: { expanded.wrappedValue.toggle() }) {
+                HStack(spacing: 4) {
+                    Image(systemName: expanded.wrappedValue ? "chevron.down" : "chevron.right")
+                        .font(.system(size: 8, weight: .bold))
+                        .foregroundColor(Color(nsColor: theme.chromeMuted))
+                        .frame(width: 10)
+                    Text("\(title) (\(count))")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundColor(Color(nsColor: color))
+                }
+                .contentShape(Rectangle())
             }
-            .padding(.horizontal, density == .comfortable ? 12 : 8)
-            .padding(.vertical, 4)
-            .contentShape(Rectangle())
+            .buttonStyle(.plain)
+            Spacer()
+            // Bulk action buttons
+            switch section {
+            case .staged:
+                Button(action: {
+                    onGitAction?(["restore", "--staged", "."])
+                }) {
+                    Image(systemName: "minus")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundColor(Color(nsColor: theme.chromeMuted))
+                }
+                .buttonStyle(.plain)
+                .opacity(isHovered ? 1.0 : 0.0)
+                .help("Unstage all")
+                .accessibilityLabel("Unstage all files")
+            case .unstaged:
+                Button(action: {
+                    onGitAction?(["add", "-u"])
+                }) {
+                    Image(systemName: "plus")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundColor(Color(nsColor: theme.chromeMuted))
+                }
+                .buttonStyle(.plain)
+                .opacity(isHovered ? 1.0 : 0.0)
+                .help("Stage all changes")
+                .accessibilityLabel("Stage all changed files")
+            case .untracked:
+                Button(action: {
+                    for file in untrackedFiles {
+                        onGitAction?(["add", file.path])
+                    }
+                }) {
+                    Image(systemName: "plus")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundColor(Color(nsColor: theme.chromeMuted))
+                }
+                .buttonStyle(.plain)
+                .opacity(isHovered ? 1.0 : 0.0)
+                .help("Stage all untracked")
+                .accessibilityLabel("Stage all untracked files")
+            }
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel("\(title), \(count) files, \(expanded.wrappedValue ? "expanded" : "collapsed")")
+        .padding(.horizontal, density == .comfortable ? 12 : 8)
+        .padding(.vertical, 4)
+        .contentShape(Rectangle())
+        .onHover { hovering in
+            hoveredSection = hovering ? section : nil
+        }
+        .accessibilityLabel(
+            "\(title), \(count) files, \(expanded.wrappedValue ? "expanded" : "collapsed")")
     }
 
     // MARK: - File Row
-
-    private enum FileSection {
-        case staged, unstaged, untracked
-    }
 
     @ViewBuilder
     private func fileRow(
@@ -223,46 +277,60 @@ struct GitDetailView: View {
         let isHovered = hoveredFileID == file.id
         let escapedPath = RemoteExplorer.shellEscPath(file.path)
 
-        Button(action: { onFileClicked?(file.fullPath) }) {
+        Button(action: {
+            // Click = show diff in terminal
+            switch section {
+            case .staged:
+                onTerminalAction?("git diff --cached \(escapedPath)")
+            case .unstaged:
+                onTerminalAction?("git diff \(escapedPath)")
+            case .untracked:
+                onFileClicked?(file.fullPath)
+            }
+        }) {
             HStack(spacing: 6) {
-                Image(systemName: file.statusIcon)
-                    .font(.system(size: 11))
-                    .foregroundColor(Color(nsColor: file.statusColor))
-                    .frame(width: 14)
                 Text(file.status)
                     .font(.system(size: 10, weight: .bold, design: .monospaced))
                     .foregroundColor(Color(nsColor: file.statusColor))
-                    .frame(width: 14)
-                Text(file.path)
+                    .frame(width: 14, alignment: .center)
+                Text((file.path as NSString).lastPathComponent)
                     .font(.system(size: density == .comfortable ? 12 : 11))
                     .foregroundColor(Color(nsColor: theme.chromeText))
                     .lineLimit(1)
-                    .truncationMode(.middle)
+                if (file.path as NSString).deletingLastPathComponent.count > 0 {
+                    Text((file.path as NSString).deletingLastPathComponent)
+                        .font(.system(size: density == .comfortable ? 10 : 9))
+                        .foregroundColor(Color(nsColor: theme.chromeMuted))
+                        .lineLimit(1)
+                        .truncationMode(.head)
+                }
                 Spacer()
-                if isHovered {
-                    // Inline stage/unstage buttons
-                    switch section {
-                    case .staged:
-                        Button(action: {
-                            onGitAction?(["restore", "--staged", file.path])
-                        }) {
-                            Image(systemName: "minus")
-                                .font(.system(size: 9, weight: .bold))
-                                .foregroundColor(Color(nsColor: theme.chromeMuted))
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("Unstage \(file.path)")
-                    case .unstaged, .untracked:
-                        Button(action: {
-                            onGitAction?(["add", file.path])
-                        }) {
-                            Image(systemName: "plus")
-                                .font(.system(size: 9, weight: .bold))
-                                .foregroundColor(Color(nsColor: theme.chromeMuted))
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("Stage \(file.path)")
+                // Inline stage/unstage buttons — always present, opacity changes on hover
+                switch section {
+                case .staged:
+                    Button(action: {
+                        onGitAction?(["restore", "--staged", file.path])
+                    }) {
+                        Image(systemName: "minus")
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundColor(Color(nsColor: theme.chromeMuted))
                     }
+                    .buttonStyle(.plain)
+                    .opacity(isHovered ? 1.0 : 0.3)
+                    .help("Unstage")
+                    .accessibilityLabel("Unstage \(file.path)")
+                case .unstaged, .untracked:
+                    Button(action: {
+                        onGitAction?(["add", file.path])
+                    }) {
+                        Image(systemName: "plus")
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundColor(Color(nsColor: theme.chromeMuted))
+                    }
+                    .buttonStyle(.plain)
+                    .opacity(isHovered ? 1.0 : 0.3)
+                    .help("Stage")
+                    .accessibilityLabel("Stage \(file.path)")
                 }
             }
             .frame(height: itemHeight)
@@ -302,20 +370,6 @@ struct GitDetailView: View {
             }
         }
 
-        if section == .unstaged {
-            Button("Discard Changes") {
-                let alert = NSAlert()
-                alert.messageText = "Discard changes to \(file.path)?"
-                alert.informativeText = "This cannot be undone."
-                alert.alertStyle = .warning
-                alert.addButton(withTitle: "Discard")
-                alert.addButton(withTitle: "Cancel")
-                if alert.runModal() == .alertFirstButtonReturn {
-                    onGitAction?(["checkout", "--", file.path])
-                }
-            }
-        }
-
         Divider()
 
         if section == .staged {
@@ -328,42 +382,52 @@ struct GitDetailView: View {
             }
         }
 
-        Divider()
+        Button("Open File") {
+            onFileClicked?(file.fullPath)
+        }
 
         Button("Copy Path") {
             onCopyPath?(file.path)
         }
+
         Button("Reveal in Finder") {
             onReveal?(file.fullPath)
         }
-    }
 
-    // MARK: - Stash Bar
-
-    @ViewBuilder
-    private func stashBar(theme: TerminalTheme, density: SidebarDensity) -> some View {
-        HStack(spacing: 8) {
-            Image(systemName: "tray.2")
-                .font(.system(size: 11))
-                .foregroundColor(Color(nsColor: theme.chromeMuted))
-            Text("\(stashCount) stash\(stashCount == 1 ? "" : "es")")
-                .font(.system(size: 11))
-                .foregroundColor(Color(nsColor: theme.chromeText))
-            Spacer()
-            Button("Pop") {
-                onGitAction?(["stash", "pop"])
+        if section == .untracked {
+            Divider()
+            Button("Add to .gitignore") {
+                let gitignorePath = (repoRoot as NSString).appendingPathComponent(".gitignore")
+                let entry = file.path + "\n"
+                if FileManager.default.fileExists(atPath: gitignorePath) {
+                    if let handle = FileHandle(forWritingAtPath: gitignorePath) {
+                        handle.seekToEndOfFile()
+                        if let data = entry.data(using: .utf8) {
+                            handle.write(data)
+                        }
+                        handle.closeFile()
+                    }
+                } else {
+                    try? entry.write(toFile: gitignorePath, atomically: true, encoding: .utf8)
+                }
+                onRefresh?()
             }
-            .font(.system(size: 10))
-            .buttonStyle(.plain)
-            .foregroundColor(Color(nsColor: theme.accentColor))
-            Button("List") {
-                onTerminalAction?("git stash list")
-            }
-            .font(.system(size: 10))
-            .buttonStyle(.plain)
-            .foregroundColor(Color(nsColor: theme.accentColor))
         }
-        .padding(.horizontal, density == .comfortable ? 12 : 8)
-        .padding(.vertical, 6)
+
+        if section == .unstaged {
+            Divider()
+            Button("Discard Changes") {
+                let alert = NSAlert()
+                alert.messageText = "Discard changes to \(file.path)?"
+                alert.informativeText = "This cannot be undone."
+                alert.alertStyle = .warning
+                alert.addButton(withTitle: "Discard")
+                alert.addButton(withTitle: "Cancel")
+                if alert.runModal() == .alertFirstButtonReturn {
+                    onGitAction?(["checkout", "--", file.path])
+                }
+            }
+        }
     }
+
 }

@@ -153,10 +153,10 @@ struct HostSystemInfoService: SystemInfoService {
 
     func batteryInfo() -> BatteryInfo? {
         guard let snapshot = IOPSCopyPowerSourcesInfo()?.takeRetainedValue(),
-              let sources = IOPSCopyPowerSourcesList(snapshot)?.takeRetainedValue() as? [Any],
-              let first = sources.first,
-              let desc = IOPSGetPowerSourceDescription(snapshot, first as CFTypeRef)?
-                  .takeUnretainedValue() as? [String: Any]
+            let sources = IOPSCopyPowerSourcesList(snapshot)?.takeRetainedValue() as? [Any],
+            let first = sources.first,
+            let desc = IOPSGetPowerSourceDescription(snapshot, first as CFTypeRef)?
+                .takeUnretainedValue() as? [String: Any]
         else { return nil }
 
         let capacity = desc[kIOPSCurrentCapacityKey] as? Int ?? 0

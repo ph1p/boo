@@ -176,7 +176,8 @@ final class RemoteSessionMonitor {
     // MARK: - Container CWD Command (for testing)
 
     /// Shell command to list PID and CWD of all PTY processes inside the container.
-    static let containerCwdCommand = "for p in /proc/[0-9]*; do pid=${p##*/}; [ \"$pid\" = 1 ] || [ \"$pid\" = $$ ] && continue; t=$(readlink $p/fd/0 2>/dev/null); case $t in /dev/pts/*) c=$(readlink $p/cwd 2>/dev/null); [ -n \"$c\" ] && echo \"$pid $c\";; esac; done"
+    static let containerCwdCommand =
+        "for p in /proc/[0-9]*; do pid=${p##*/}; [ \"$pid\" = 1 ] || [ \"$pid\" = $$ ] && continue; t=$(readlink $p/fd/0 2>/dev/null); case $t in /dev/pts/*) c=$(readlink $p/cwd 2>/dev/null); [ -n \"$c\" ] && echo \"$pid $c\";; esac; done"
 
     static var containerCwdCommandForTesting: String { containerCwdCommand }
 

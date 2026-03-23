@@ -24,13 +24,16 @@ private struct MockPluginContent: View {
     }
 }
 
+private var sectionGenCounter: UInt64 = 0
 private func makeSection(id: String, name: String = "Test") -> SidebarSection {
-    SidebarSection(
+    sectionGenCounter += 1
+    return SidebarSection(
         id: id,
         name: name,
         icon: "star",
         content: AnyView(MockPluginContent(label: name)),
-        prefersOuterScrollView: true
+        prefersOuterScrollView: true,
+        generation: sectionGenCounter
     )
 }
 
@@ -801,7 +804,8 @@ final class SidebarLayoutTests: XCTestCase {
                         name: plugin.sectionTitle(context: pluginCtx) ?? plugin.manifest.name,
                         icon: plugin.manifest.icon,
                         content: content,
-                        prefersOuterScrollView: plugin.prefersOuterScrollView
+                        prefersOuterScrollView: plugin.prefersOuterScrollView,
+                        generation: 0
                     ))
             }
             return sections
@@ -865,5 +869,87 @@ final class SidebarLayoutTests: XCTestCase {
             "All sections should be expanded")
 
         window.close()
+    }
+
+    // MARK: - Auto Layout document height (overflow:auto style)
+
+    func testDocumentViewUsesAutoLayout() {
+        let v = makePanelView()
+        v.updateSections([makeSection(id: "a")], expandedIDs: ["a"])
+        v.layoutAllSections()
+
+        guard let scrollView = v.sectionStates[0].contentContainer as? NSScrollView,
+              let docView = scrollView.documentView
+        else {
+            XCTFail("Expected scroll view with document view")
+            return
+        }
+        // The hosting view should use Auto Layout (translatesAutoresizingMaskIntoConstraints = false)
+        XCTAssertFalse(docView.translatesAutoresizingMaskIntoConstraints,
+            "Document view should use Auto Layout constraints")
+    }
+
+    func testDocumentViewPinnedToScrollContentView() {
+        let v = makePanelView()
+        v.updateSections([makeSection(id: "a")], expandedIDs: ["a"])
+        v.layoutAllSections()
+
+        guard let scrollView = v.sectionStates[0].contentContainer as? NSScrollView,
+              let docView = scrollView.documentView
+        else {
+            XCTFail("Expected scroll view with document view")
+            return
+        }
+        // Should have constraints pinning to the content view
+        let constraints = scrollView.contentView.constraints
+        let hasTopPin = constraints.contains { c in
+            (c.firstItem === docView && c.firstAttribute == .top) ||
+            (c.secondItem === docView && c.secondAttribute == .top)
+        }
+        let hasLeadingPin = constraints.contains { c in
+            (c.firstItem === docView && c.firstAttribute == .leading) ||
+            (c.secondItem === docView && c.secondAttribute == .leading)
+        }
+        XCTAssertTrue(hasTopPin, "Document view should be pinned to top of content view")
+        XCTAssertTrue(hasLeadingPin, "Document view should be pinned to leading of content view")
+    }
+
+    func testScrollViewContainerIsScrollView() {
+        let v = makePanelView()
+        v.updateSections([makeSection(id: "a")], expandedIDs: ["a"])
+        XCTAssertTrue(v.sectionStates[0].contentContainer is NSScrollView,
+            "Content container should be an NSScrollView for prefersOuterScrollView sections")
+    }
+
+    func testDocumentViewHasPositiveIntrinsicHeight() {
+        let v = makePanelView()
+        v.updateSections([makeSection(id: "a")], expandedIDs: ["a"])
+        v.layoutAllSections()
+
+        guard let scrollView = v.sectionStates[0].contentContainer as? NSScrollView,
+              let docView = scrollView.documentView
+        else {
+            XCTFail("Expected scroll view with document view")
+            return
+        }
+        let intrinsic = docView.intrinsicContentSize.height
+        XCTAssertGreaterThan(intrinsic, 0,
+            "Document view intrinsic height should be positive (is \(intrinsic))")
+    }
+
+    func testNonScrollSectionUsesDirectHosting() {
+        sectionGenCounter += 1
+        let section = SidebarSection(
+            id: "direct",
+            name: "Direct",
+            icon: "star",
+            content: AnyView(Text("Hello")),
+            prefersOuterScrollView: false,
+            generation: sectionGenCounter
+        )
+        let v = makePanelView()
+        v.updateSections([section], expandedIDs: ["direct"])
+        XCTAssertFalse(v.sectionStates[0].contentContainer is NSScrollView,
+            "Non-scroll section should use direct hosting, not NSScrollView")
     }
 }

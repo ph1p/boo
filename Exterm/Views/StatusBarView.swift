@@ -53,8 +53,6 @@ class StatusBarView: NSView {
     var isSidebarToggleHovered: Bool = false
     private var statusBarTrackingArea: NSTrackingArea?
 
-    static let homeDir = FileManager.default.homeDirectoryForCurrentUser.path
-
     override init(frame: NSRect) {
         super.init(frame: frame)
         wantsLayer = true

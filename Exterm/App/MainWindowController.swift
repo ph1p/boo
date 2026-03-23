@@ -51,6 +51,10 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
     var bridge: TerminalBridge! { coordinator.bridge }
     var bridgeCancellables = Set<AnyCancellable>()
     private let contextAnnouncer = ContextAnnouncementEngine()
+
+    /// Coalesced plugin cycle scheduling — batches rapid-fire events within one run loop tick.
+    private var pendingCycleReason: PluginCycleReason?
+    private var cycleScheduled = false
     var pluginRegistry: PluginRegistry { coordinator.pluginRegistry }
     /// Set of plugin IDs currently visible in the sidebar stack.
     var openPluginIDs: Set<String> {
@@ -59,6 +63,12 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
     }
     /// Track last visible section IDs for skip-rebuild optimization.
     var lastSidebarSectionIDs: [String] = []
+    /// Cached detail views per plugin, reused when context hasn't changed.
+    var cachedDetailViews: [String: (context: TerminalContext, view: AnyView)] = [:]
+    /// Generation counter per plugin — incremented only when the view is recreated.
+    var pluginViewGeneration: [String: UInt64] = [:]
+    /// Monotonic counter for assigning generations.
+    var viewGenerationCounter: UInt64 = 0
     /// Set of plugin IDs currently expanded (not collapsed) in the sidebar.
     var expandedPluginIDs: Set<String> {
         get { coordinator.expandedPluginIDs }
@@ -73,6 +83,12 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
     var pluginSidebarPanelView: SidebarPanelView?
 
     let tabDragCoordinator = TabDragCoordinator()
+
+    deinit {
+        if let obs = settingsObserver { NotificationCenter.default.removeObserver(obs) }
+        if let obs = ghosttyActionObserver { NotificationCenter.default.removeObserver(obs) }
+        bridgeCancellables.removeAll()
+    }
 
     /// Undo stack for closed tabs and panes
     enum ClosedItem {
@@ -117,7 +133,11 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
         let theRegistry = PluginRegistry()
         coordinator = WindowStateCoordinator(bridge: theBridge, pluginRegistry: theRegistry)
         pluginRegistry.onRequestCycleRerun = { [weak self] in
-            self?.runPluginCycle(reason: .focusChanged)
+            guard let self = self else { return }
+            // A plugin's internal state changed — clear view cache and force sidebar rebuild.
+            self.cachedDetailViews.removeAll()
+            self.pluginRegistry.clearChangeDetection()
+            self.runPluginCycle(reason: .focusChanged)
         }
         pluginRegistry.registerBuiltins()
         let pluginActions = PluginActions()
@@ -147,47 +167,74 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
 
         settingsObserver = NotificationCenter.default.addObserver(
             forName: .settingsChanged, object: nil, queue: .main
-        ) { [weak self] _ in
+        ) { [weak self] notification in
             guard let self = self, self.window?.isVisible == true else { return }
-            // Refresh chrome colors
-            let theme = AppSettings.shared.theme
-            self.window?.backgroundColor = theme.chromeBg
-            self.window?.appearance = NSAppearance(named: theme.isDark ? .darkAqua : .aqua)
-            self.sidebarContainer.layer?.backgroundColor = theme.sidebarBg.cgColor
-            self.splitContainer.layer?.backgroundColor = theme.background.nsColor.cgColor
-            self.mainSplitView.needsDisplay = true  // Redraws themed divider
-            self.toolbar.needsDisplay = true
-            self.statusBarHeightConstraint?.constant = DensityMetrics.current.statusBarHeight
-            self.statusBar.needsDisplay = true
-            // Refresh plugin sidebar if open (theme/density may have changed)
-            if !self.openPluginIDs.isEmpty {
-                let registry = self.pluginRegistry
-                Task { @MainActor in
-                    if let ctx = registry.lastContext {
-                        self.rebuildPluginSidebar(context: ctx)
+            let topic = (notification.userInfo?["topic"] as? String).flatMap(SettingsTopic.init(rawValue:))
+
+            // Theme changes: refresh chrome colors, pane backgrounds, sidebar, status bar
+            if topic == nil || topic == .theme {
+                MainActor.assumeIsolated { AppStore.shared.refreshTheme() }
+                let theme = AppSettings.shared.theme
+                self.window?.backgroundColor = theme.chromeBg
+                self.window?.appearance = NSAppearance(named: theme.isDark ? .darkAqua : .aqua)
+                self.sidebarContainer.layer?.backgroundColor = theme.sidebarBg.cgColor
+                self.splitContainer.layer?.backgroundColor = theme.background.nsColor.cgColor
+                self.mainSplitView.needsDisplay = true
+                self.toolbar.needsDisplay = true
+                self.statusBar.needsDisplay = true
+                for (_, pv) in self.paneViews {
+                    pv.layer?.backgroundColor = theme.background.nsColor.cgColor
+                    pv.needsLayout = true
+                    pv.needsDisplay = true
+                }
+                // Rebuild plugin sidebar to pick up new theme
+                if !self.openPluginIDs.isEmpty {
+                    let registry = self.pluginRegistry
+                    Task { @MainActor in
+                        if let ctx = registry.lastContext {
+                            self.rebuildPluginSidebar(context: ctx)
+                        }
                     }
                 }
             }
-            for (_, pv) in self.paneViews {
-                pv.layer?.backgroundColor = theme.background.nsColor.cgColor
-                pv.needsLayout = true
-                pv.needsDisplay = true
+
+            // Status bar changes
+            if topic == nil || topic == .statusBar {
+                self.statusBar.needsDisplay = true
             }
-            // Handle sidebar position change
-            let newSidebarPos = AppSettings.shared.sidebarPosition
-            if newSidebarPos != self.currentSidebarPosition {
-                self.currentSidebarPosition = newSidebarPos
-                self.rebuildSidebarLayout()
+
+            // Layout changes: sidebar/workspace bar position, density
+            if topic == nil || topic == .layout {
+                self.statusBarHeightConstraint?.constant = DensityMetrics.current.statusBarHeight
+                self.statusBar.needsDisplay = true
+                let newSidebarPos = AppSettings.shared.sidebarPosition
+                if newSidebarPos != self.currentSidebarPosition {
+                    self.currentSidebarPosition = newSidebarPos
+                    self.rebuildSidebarLayout()
+                }
+                let newWsBarPos = AppSettings.shared.workspaceBarPosition
+                if newWsBarPos != self.currentWorkspaceBarPosition {
+                    self.currentWorkspaceBarPosition = newWsBarPos
+                    self.rebuildWorkspaceBarLayout()
+                }
             }
-            // Handle workspace bar position change
-            let newWsBarPos = AppSettings.shared.workspaceBarPosition
-            if newWsBarPos != self.currentWorkspaceBarPosition {
-                self.currentWorkspaceBarPosition = newWsBarPos
-                self.rebuildWorkspaceBarLayout()
+
+            // Plugin default changes: sync live sidebar to match new defaults.
+            // Rebuild openPluginIDs from scratch: start with new defaults, keep auto-opened ones.
+            if topic == .plugins {
+                let newDefaults = Set(AppSettings.shared.defaultEnabledPluginIDs)
+                // Keep plugins that were auto-opened (not in any defaults list)
+                let autoOpened = self.openPluginIDs.filter { !newDefaults.contains($0) }
+                self.openPluginIDs = newDefaults.union(autoOpened)
+                self.cachedDetailViews.removeAll()
+                MainActor.assumeIsolated { self.pluginRegistry.clearChangeDetection() }
             }
-            // Refresh file tree plugin via a cycle
-            if self.sidebarVisible {
-                self.runPluginCycle(reason: .focusChanged)
+
+            // Explorer/plugin changes: refresh sidebar via a cycle
+            if topic == nil || topic == .explorer || topic == .plugins {
+                if self.sidebarVisible {
+                    self.runPluginCycle(reason: .focusChanged)
+                }
             }
         }
 
@@ -287,7 +334,8 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
 
         statusBar.translatesAutoresizingMaskIntoConstraints = false
         statusBar.onBranchSwitch = { [weak self] branch in
-            self?.sendRawToActivePane("git switch \(branch)\r")
+            let escaped = RemoteExplorer.shellEscPath(branch)
+            self?.sendRawToActivePane("git switch \(escaped)\r")
         }
         statusBar.onSidebarPluginToggle = { [weak self] pluginID in
             self?.togglePluginInSidebar(pluginID)
@@ -485,6 +533,38 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
 
     // MARK: - Terminal Bridge
 
+    /// Schedule a plugin cycle, coalescing multiple events within the same run loop tick.
+    /// The highest-priority reason wins when multiple events arrive before the cycle runs.
+    func schedulePluginCycle(reason: PluginCycleReason) {
+        if let existing = pendingCycleReason {
+            pendingCycleReason = Self.higherPriority(existing, reason)
+        } else {
+            pendingCycleReason = reason
+        }
+        guard !cycleScheduled else { return }
+        cycleScheduled = true
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self, let reason = self.pendingCycleReason else { return }
+            self.pendingCycleReason = nil
+            self.cycleScheduled = false
+            self.runPluginCycle(reason: reason)
+        }
+    }
+
+    private static func higherPriority(_ a: PluginCycleReason, _ b: PluginCycleReason) -> PluginCycleReason {
+        func rank(_ r: PluginCycleReason) -> Int {
+            switch r {
+            case .titleChanged: return 0
+            case .processChanged: return 1
+            case .focusChanged: return 2
+            case .cwdChanged: return 3
+            case .remoteSessionChanged: return 4
+            case .workspaceSwitched: return 5
+            }
+        }
+        return rank(b) >= rank(a) ? b : a
+    }
+
     private func subscribeToBridge() {
         bridgeCancellables.removeAll()
         contextAnnouncer.subscribe(to: bridge)
@@ -512,33 +592,29 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
                 guard let self = self else { return }
                 switch event {
                 case .directoryChanged:
-                    // bridge.$state sink already synced to tab
-                    self.runPluginCycle(reason: .cwdChanged)
+                    self.schedulePluginCycle(reason: .cwdChanged)
 
                 case .titleChanged:
-                    // bridge.$state sink already synced to tab
-                    self.runPluginCycle(reason: .titleChanged)
+                    self.schedulePluginCycle(reason: .titleChanged)
 
                 case .processChanged:
-                    // bridge.$state sink already synced to tab
-                    self.runPluginCycle(reason: .processChanged)
+                    self.schedulePluginCycle(reason: .processChanged)
 
                 case .remoteSessionChanged:
-                    // bridge.$state sink already synced to tab
                     self.syncRemoteSidebarState()
-                    self.runPluginCycle(reason: .remoteSessionChanged)
+                    self.schedulePluginCycle(reason: .remoteSessionChanged)
 
                 case .focusChanged:
                     self.refreshToolbar()
-                    self.runPluginCycle(reason: .focusChanged)
+                    self.schedulePluginCycle(reason: .focusChanged)
 
                 case .workspaceSwitched:
                     self.refreshToolbar()
-                    self.runPluginCycle(reason: .workspaceSwitched)
+                    self.schedulePluginCycle(reason: .workspaceSwitched)
 
                 case .remoteDirectoryListed(let path, let entries):
                     self.pluginRegistry.notifyRemoteDirectoryListed(path: path, entries: entries)
-                    self.runPluginCycle(reason: .cwdChanged)
+                    self.schedulePluginCycle(reason: .cwdChanged)
                 }
             }
             .store(in: &bridgeCancellables)
@@ -548,7 +624,7 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
         // isRemoteSidebar and activeRemoteSession are now derived from bridge state.
         // Just trigger a plugin cycle if remote state is relevant.
         let session = bridge.state.remoteSession
-        runPluginCycle(reason: session != nil ? .remoteSessionChanged : .cwdChanged)
+        schedulePluginCycle(reason: session != nil ? .remoteSessionChanged : .cwdChanged)
     }
 
     // MARK: - SplitContainerDelegate
@@ -619,6 +695,7 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
             pv.currentTerminalView?.needsLayout = true
         }
         statusBar.sidebarVisible = sidebarVisible
+        AppStore.shared.sidebarVisible = sidebarVisible
         statusBar.needsDisplay = true
         refreshToolbar()
     }

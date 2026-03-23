@@ -10,7 +10,7 @@ final class GitPlugin: ExtermPluginProtocol {
         version: "1.0.0",
         icon: "arrow.triangle.branch",
         description: "Git branch, status, and changed files",
-        when: "git.active && !remote",
+        when: "git.active && !remote && !process.ai",
         runtime: nil,
         capabilities: PluginManifest.Capabilities(sidebarPanel: true, statusBarSegment: true),
         statusBar: PluginManifest.StatusBarManifest(position: "left", priority: 15, template: nil),
@@ -40,7 +40,6 @@ final class GitPlugin: ExtermPluginProtocol {
     var onRequestCycleRerun: (() -> Void)?
 
     /// Cached extended git info.
-    var cachedStashCount: Int = 0
     var cachedAheadCount: Int = 0
     var cachedBehindCount: Int = 0
     var cachedLastCommit: String?
@@ -83,16 +82,6 @@ final class GitPlugin: ExtermPluginProtocol {
             }
         }
 
-        var statusIcon: String {
-            switch status {
-            case "M": return "pencil.circle.fill"
-            case "A": return "plus.circle.fill"
-            case "D": return "minus.circle.fill"
-            case "R": return "arrow.right.circle.fill"
-            case "?": return "questionmark.circle.fill"
-            default: return "circle.fill"
-            }
-        }
     }
 
     // MARK: - Enrich
@@ -103,7 +92,6 @@ final class GitPlugin: ExtermPluginProtocol {
             context.gitChangedFileCount = cachedFiles.count
         }
         context.gitStagedCount = cachedFiles.filter(\.isStaged).count
-        context.gitStashCount = cachedStashCount
         context.gitAheadCount = cachedAheadCount
         context.gitBehindCount = cachedBehindCount
         context.gitLastCommitShort = cachedLastCommit
@@ -123,9 +111,6 @@ final class GitPlugin: ExtermPluginProtocol {
         let count = git.changedFileCount > 0 ? git.changedFileCount : cachedFiles.count
         if count > 0 {
             text += ", \(count) changed"
-        }
-        if git.stashCount > 0 {
-            text += ", \(git.stashCount) stash"
         }
         return StatusBarContent(
             text: text,
@@ -147,7 +132,6 @@ final class GitPlugin: ExtermPluginProtocol {
                 aheadCount: git.aheadCount,
                 behindCount: git.behindCount,
                 lastCommit: git.lastCommitShort,
-                stashCount: git.stashCount,
                 changedFiles: cachedFiles,
                 repoRoot: repoRoot,
                 onFileClicked: { path in
@@ -183,9 +167,6 @@ final class GitPlugin: ExtermPluginProtocol {
     }
 
     func terminalFocusChanged(terminalID: UUID, context: TerminalContext) {
-        let cwd = context.cwd
-        if cwd != lastRefreshedPath {
-            refreshGitStatus(cwd: cwd, repoRoot: context.gitContext?.repoRoot)
-        }
+        refreshGitStatus(cwd: context.cwd, repoRoot: context.gitContext?.repoRoot)
     }
 }

@@ -436,12 +436,14 @@ final class TerminalBridgeTests: XCTestCase {
 
     func testDockerRunWithoutInteractiveFlagsNotDetected() {
         XCTAssertNil(TerminalBridge.detectRemoteFromProcessName(title: "docker run --rm myimage echo hello"))
-        XCTAssertNil(TerminalBridge.detectRemoteFromHeuristics(title: "docker run --rm myimage echo hello", cwd: "/tmp"))
+        XCTAssertNil(
+            TerminalBridge.detectRemoteFromHeuristics(title: "docker run --rm myimage echo hello", cwd: "/tmp"))
     }
 
     func testDockerExecWithoutInteractiveFlagsNotDetected() {
         XCTAssertNil(TerminalBridge.detectRemoteFromProcessName(title: "docker exec mycontainer cat /etc/hostname"))
-        XCTAssertNil(TerminalBridge.detectRemoteFromHeuristics(title: "docker exec mycontainer cat /etc/hostname", cwd: "/tmp"))
+        XCTAssertNil(
+            TerminalBridge.detectRemoteFromHeuristics(title: "docker exec mycontainer cat /etc/hostname", cwd: "/tmp"))
     }
 
     func testDockerRunInteractiveDetected() {

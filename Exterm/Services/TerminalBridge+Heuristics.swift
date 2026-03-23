@@ -15,6 +15,27 @@ extension TerminalBridge {
         return names
     }()
 
+    /// Git forge hosts that use SSH transport but are not interactive sessions.
+    /// Connections to these hosts should not trigger remote session detection.
+    private static let gitForgeHosts: Set<String> = [
+        "github.com", "gitlab.com", "bitbucket.org", "codeberg.org",
+        "ssh.dev.azure.com", "vs-ssh.visualstudio.com",
+        "source.developers.google.com", "ssh.gitlab.gnome.org"
+    ]
+
+    /// Whether a host is a known git forge (non-interactive SSH).
+    private static func isGitForgeHost(_ host: String) -> Bool {
+        let lower = host.lowercased()
+        // Strip "user@" prefix if present (e.g. "git@github.com" → "github.com")
+        let hostname: String
+        if let atIdx = lower.firstIndex(of: "@") {
+            hostname = String(lower[lower.index(after: atIdx)...])
+        } else {
+            hostname = lower
+        }
+        return gitForgeHosts.contains(hostname)
+    }
+
     /// Detect remote sessions from terminal title and working directory.
     /// Uses title heuristics (user@host, ssh, docker, kubectl, etc.) rather than
     /// filesystem checks, since paths like `/tmp` exist on both local and remote systems.
@@ -31,7 +52,10 @@ extension TerminalBridge {
         // This excludes non-interactive commands like `docker logs`, `docker build`, etc.
         for tool in ContainerTool.all {
             for processName in tool.processNames {
-                guard lowerParts.first == processName || lower.hasPrefix("/") && (lowerParts.first?.hasSuffix("/\(processName)") == true) else {
+                guard
+                    lowerParts.first == processName
+                        || lower.hasPrefix("/") && (lowerParts.first?.hasSuffix("/\(processName)") == true)
+                else {
                     continue
                 }
                 if let target = tool.interactiveTarget(from: parts) {
@@ -50,7 +74,8 @@ extension TerminalBridge {
             let components = match.split(separator: "@", maxSplits: 1)
             if components.count == 2,
                 let host = extractHost(after: String(components[1])),
-                !isLocalHost(host)
+                !isLocalHost(host),
+                !isGitForgeHost(host)
             {
                 return .ssh(host: "\(components[0])@\(host)", alias: nil)
             }
@@ -216,13 +241,13 @@ extension TerminalBridge {
         guard !trimmed.isEmpty else { return nil }
         let parts = trimmed.split(separator: " ").map(String.init)
         guard let cmd = parts.first else { return nil }
-        let cmdBase = (cmd as NSString).lastPathComponent.lowercased()
+        let cmdBase = cmd.lastPathComponent.lowercased()
 
         // SSH: title starts with "ssh" followed by a host
         if cmdBase == "ssh" {
             var skipNext = false
             let valueOpts: Set<String> = [
-                "-p", "-i", "-l", "-o", "-F", "-J", "-L", "-R", "-D", "-b", "-c", "-e", "-m", "-w", "-E",
+                "-p", "-i", "-l", "-o", "-F", "-J", "-L", "-R", "-D", "-b", "-c", "-e", "-m", "-w", "-E"
             ]
             for arg in parts.dropFirst() {
                 if skipNext {
@@ -233,7 +258,7 @@ extension TerminalBridge {
                     if valueOpts.contains(arg) { skipNext = true }
                     continue
                 }
-                if arg != "localhost" && arg != "127.0.0.1" {
+                if arg != "localhost" && arg != "127.0.0.1" && !isGitForgeHost(arg) {
                     return .ssh(host: arg)
                 }
                 break
@@ -292,8 +317,8 @@ extension TerminalBridge {
                     // (hex, 12+ chars) — reject SSH-style hostnames like "157.90.31.161".
                     if isContainerSession {
                         let isContainerID = hostPart.count >= 12 && hostPart.allSatisfy { $0.isHexDigit }
-                        if !isContainerID { /* fall through to container prompt branch */ }
-                        else {
+                        if !isContainerID { /* fall through to container prompt branch */
+                        } else {
                             let user = String(trimmed[..<atIdx])
                             return expandTildePath(rawPath, user: user)
                         }
@@ -321,7 +346,8 @@ extension TerminalBridge {
                 // container/pod names (contain a hyphen/digit, at least 4 chars).
                 // Avoids matching short words like "vim:/tmp" or "foo:/bar".
                 let isHexID = before.count >= 12 && before.allSatisfy { $0.isHexDigit }
-                let isContainerHostname = before.count >= 4
+                let isContainerHostname =
+                    before.count >= 4
                     && before.contains(where: { $0 == "-" || $0 == "_" || $0.isNumber })
                     && before.allSatisfy { $0.isLetter || $0.isNumber || $0 == "-" || $0 == "_" || $0 == "." }
                 if isHexID || isContainerHostname {

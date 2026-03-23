@@ -59,6 +59,7 @@ final class RemoteFileTreePlugin: ExtermPluginProtocol {
         guard let session = context.terminal.remoteSession else { return nil }
 
         let act = self.actions
+        let isAI = ProcessIcon.category(for: context.terminal.processName) == "ai"
         let treeActions = FileTreeActions(
             onFileClicked: { path in
                 act?.pastePath(path)
@@ -81,7 +82,11 @@ final class RemoteFileTreePlugin: ExtermPluginProtocol {
             },
             onNavigate: { path in
                 act?.sendToTerminal?("cd \(RemoteExplorer.shellEscPath(path))\r")
-            }
+            },
+            onReferenceInAI: { path in
+                act?.sendToTerminal?("@\(path) ")
+            },
+            isAIAgentRunning: isAI
         )
 
         let tid = context.terminal.terminalID
@@ -100,6 +105,12 @@ final class RemoteFileTreePlugin: ExtermPluginProtocol {
         lastTerminalID = tid
 
         return AnyView(RemoteFileTreeView(root: root, actions: treeActions, host: host))
+    }
+
+    // MARK: - Lifecycle
+
+    func processChanged(name: String, context: TerminalContext) {
+        // No action needed — see LocalFileTreePlugin.processChanged.
     }
 
     // MARK: - Remote Directory Listing (replaces bridge subscription)
@@ -130,8 +141,8 @@ final class RemoteFileTreePlugin: ExtermPluginProtocol {
     /// Save the expanded folder state for the last active terminal.
     private func saveExpandedState() {
         guard let prevID = lastTerminalID,
-              let key = terminalCacheKey[prevID],
-              let root = cachedRemoteRoots[key]
+            let key = terminalCacheKey[prevID],
+            let root = cachedRemoteRoots[key]
         else { return }
         expandedState[prevID] = root.expandedPaths()
     }
@@ -157,7 +168,8 @@ final class RemoteFileTreePlugin: ExtermPluginProtocol {
         let resolved = RemoteExplorer.resolveTilde(path, session: session) ?? path
         let host = Self.cacheHost(for: session)
         let key = "\(host):\(resolved)"
-        remoteLog("[RemoteFileTree] getOrCreateRemoteRoot: path=\(path) resolved=\(resolved) key=\(key) session=\(session)")
+        remoteLog(
+            "[RemoteFileTree] getOrCreateRemoteRoot: path=\(path) resolved=\(resolved) key=\(key) session=\(session)")
         if let cached = cachedRemoteRoots[key] {
             remoteLog("[RemoteFileTree] cache hit for key=\(key)")
             return cached

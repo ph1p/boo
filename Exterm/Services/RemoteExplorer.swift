@@ -21,7 +21,7 @@ enum ContainerTool: String, Equatable {
     case podman
     case nerdctl
     case kubectl
-    case oc          // OpenShift CLI
+    case oc  // OpenShift CLI
     case lxc
     case limactl
     case colima
@@ -106,7 +106,7 @@ enum ContainerTool: String, Equatable {
     /// All container tools, used for process tree scanning.
     static let all: [ContainerTool] = [
         .docker, .podman, .nerdctl, .kubectl, .oc, .lxc,
-        .limactl, .colima, .distrobox, .toolbox, .vagrant, .adb,
+        .limactl, .colima, .distrobox, .toolbox, .vagrant, .adb
     ]
 
     /// Map from process name to tool, used for detection.
@@ -178,13 +178,13 @@ enum ContainerTool: String, Equatable {
                 "-u", "--user",
                 "-w", "--workdir",
                 "--detach-keys",
-                "--name",
+                "--name"
             ]
         case .kubectl, .oc:
             return [
                 "-n", "--namespace",
                 "-c", "--container",
-                "--context", "--kubeconfig",
+                "--context", "--kubeconfig"
             ]
         case .lxc:
             return ["-u", "--user"]
@@ -311,12 +311,32 @@ final class RemoteExplorer {
 
     private static func detectSSH(shellPID: pid_t) -> String? {
         guard let pid = findChildProcess(parentPID: shellPID, name: "ssh") else { return nil }
-        return parseSSHHost(pid: pid)
+        guard let host = parseSSHHost(pid: pid), !isGitForgeHost(host) else { return nil }
+        return host
+    }
+
+    /// Whether a host is a known git forge (non-interactive SSH like git push/pull).
+    private static func isGitForgeHost(_ host: String) -> Bool {
+        let lower = host.lowercased()
+        // Strip "user@" prefix if present (e.g. "git@github.com" → "github.com")
+        let hostname: String
+        if let atIdx = lower.firstIndex(of: "@") {
+            hostname = String(lower[lower.index(after: atIdx)...])
+        } else {
+            hostname = lower
+        }
+        let forgeHosts: Set<String> = [
+            "github.com", "gitlab.com", "bitbucket.org", "codeberg.org",
+            "ssh.dev.azure.com", "vs-ssh.visualstudio.com",
+            "source.developers.google.com", "ssh.gitlab.gnome.org", "sr.ht"
+        ]
+        return forgeHosts.contains(hostname)
     }
 
     private static func detectMosh(shellPID: pid_t) -> String? {
         // mosh-client is the local process name
-        let pid = findChildProcess(parentPID: shellPID, name: "mosh-client")
+        let pid =
+            findChildProcess(parentPID: shellPID, name: "mosh-client")
             ?? findChildProcess(parentPID: shellPID, name: "mosh")
         guard let pid else { return nil }
         return parseMoshHost(pid: pid)
@@ -351,7 +371,7 @@ final class RemoteExplorer {
             // Use sysctl KERN_PROCARGS2 to get the executable path instead.
             if procName.isEmpty, let args = getProcessArgs(pid: child) {
                 let exe = args.split(separator: " ").first.map(String.init) ?? ""
-                let base = (exe as NSString).lastPathComponent
+                let base = exe.lastPathComponent
                 if base.contains(name) { return child }
             }
         }
@@ -413,7 +433,7 @@ final class RemoteExplorer {
         var skipNext = false
 
         let valueOpts: Set<String> = [
-            "-p", "--port", "--ssh", "--predict", "--predict-overwrite",
+            "-p", "--port", "--ssh", "--predict", "--predict-overwrite"
         ]
 
         for (i, arg) in args.enumerated() {
@@ -558,7 +578,7 @@ final class RemoteExplorer {
         // Check SSH first
         if let sshPID = findChildProcess(parentPID: shellPID, name: "ssh") {
             if !isSSHTunnel(pid: sshPID) {
-                if let host = parseSSHHost(pid: sshPID) {
+                if let host = parseSSHHost(pid: sshPID), !isGitForgeHost(host) {
                     return .ssh(host: host)
                 }
             }
@@ -667,7 +687,9 @@ final class RemoteExplorer {
     // MARK: - Remote Commands
 
     /// Run a command on the remote target. Public API for plugins that need custom commands.
-    static func runPublicRemoteCommand(session: RemoteSessionType, command: String, completion: @escaping (String?) -> Void) {
+    static func runPublicRemoteCommand(
+        session: RemoteSessionType, command: String, completion: @escaping (String?) -> Void
+    ) {
         runRemoteCommand(session: session, command: command, completion: completion)
     }
 
@@ -684,7 +706,9 @@ final class RemoteExplorer {
         session: RemoteSessionType, path: String, completion: @escaping ([RemoteEntry]?) -> Void
     ) {
         let cmd = directoryListCommand(for: path)
-        remoteLog("[RemoteExplorer] listRemoteDirectory: session=\(session.envType):\(session.displayName) path=\(path) cmd=\(cmd)")
+        remoteLog(
+            "[RemoteExplorer] listRemoteDirectory: session=\(session.envType):\(session.displayName) path=\(path) cmd=\(cmd)"
+        )
 
         runRemoteCommand(session: session, command: cmd) { output in
             guard let output = output else {
@@ -814,7 +838,9 @@ final class RemoteExplorer {
         session: RemoteSessionType, command: String, completion: @escaping (String?) -> Void
     ) {
         DispatchQueue.global(qos: .userInitiated).async {
-            remoteLog("[RemoteExplorer] runRemoteCommand: type=\(session.envType) target=\(session.sshConnectionTarget) cmd=\(command.prefix(80))")
+            remoteLog(
+                "[RemoteExplorer] runRemoteCommand: type=\(session.envType) target=\(session.sshConnectionTarget) cmd=\(command.prefix(80))"
+            )
             let result: String?
             switch session {
             case .ssh(let host, let alias):
@@ -833,7 +859,9 @@ final class RemoteExplorer {
                     result = runContainerExec(target: target, tool: tool, command: command)
                 }
             }
-            remoteLog("[RemoteExplorer] runRemoteCommand result: type=\(session.envType) hasOutput=\(result != nil) length=\(result?.count ?? 0)")
+            remoteLog(
+                "[RemoteExplorer] runRemoteCommand result: type=\(session.envType) hasOutput=\(result != nil) length=\(result?.count ?? 0)"
+            )
             DispatchQueue.main.async { completion(result) }
         }
     }
@@ -884,7 +912,9 @@ final class RemoteExplorer {
             process.waitUntilExit()
             let stderr = String(data: errPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
             guard process.terminationStatus == 0 else {
-                remoteLog("[RemoteExplorer] \(tool.rawValue) exec FAILED: target=\(target) exit=\(process.terminationStatus) stderr=\(stderr.prefix(300))")
+                remoteLog(
+                    "[RemoteExplorer] \(tool.rawValue) exec FAILED: target=\(target) exit=\(process.terminationStatus) stderr=\(stderr.prefix(300))"
+                )
                 return nil
             }
             let output = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)
@@ -946,7 +976,7 @@ final class RemoteExplorer {
             "/usr/local/bin/\(name)",
             "/opt/homebrew/bin/\(name)",
             "/usr/bin/\(name)",
-            "/snap/bin/\(name)",
+            "/snap/bin/\(name)"
         ]
         for path in searchPaths {
             if FileManager.default.fileExists(atPath: path) {

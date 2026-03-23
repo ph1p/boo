@@ -99,7 +99,7 @@ final class WhenClauseEvaluatorTests: XCTestCase {
         let git: TerminalContext.GitContext?
         if let branch = gitBranch {
             git = TerminalContext.GitContext(
-                branch: branch, repoRoot: "/repo", isDirty: false, changedFileCount: 0, stagedCount: 0, stashCount: 0,
+                branch: branch, repoRoot: "/repo", isDirty: false, changedFileCount: 0, stagedCount: 0,
                 aheadCount: 0, behindCount: 0, lastCommitShort: nil)
         } else {
             git = nil
@@ -130,13 +130,15 @@ final class WhenClauseEvaluatorTests: XCTestCase {
         let node = try WhenClauseParser.parse("env.ssh")
         XCTAssertFalse(WhenClauseEvaluator.evaluate(node, context: makeContext()))
         XCTAssertTrue(WhenClauseEvaluator.evaluate(node, context: makeContext(remote: .ssh(host: "server"))))
-        XCTAssertFalse(WhenClauseEvaluator.evaluate(node, context: makeContext(remote: .container(target: "app", tool: .docker))))
+        XCTAssertFalse(
+            WhenClauseEvaluator.evaluate(node, context: makeContext(remote: .container(target: "app", tool: .docker))))
     }
 
     func testEnvDocker() throws {
         let node = try WhenClauseParser.parse("env.docker")
         XCTAssertFalse(WhenClauseEvaluator.evaluate(node, context: makeContext()))
-        XCTAssertTrue(WhenClauseEvaluator.evaluate(node, context: makeContext(remote: .container(target: "app", tool: .docker))))
+        XCTAssertTrue(
+            WhenClauseEvaluator.evaluate(node, context: makeContext(remote: .container(target: "app", tool: .docker))))
     }
 
     func testRemote() throws {
@@ -183,7 +185,8 @@ final class WhenClauseEvaluatorTests: XCTestCase {
         let node = try WhenClauseParser.parse("env.ssh || env.docker")
         XCTAssertFalse(WhenClauseEvaluator.evaluate(node, context: makeContext()))
         XCTAssertTrue(WhenClauseEvaluator.evaluate(node, context: makeContext(remote: .ssh(host: "s"))))
-        XCTAssertTrue(WhenClauseEvaluator.evaluate(node, context: makeContext(remote: .container(target: "c", tool: .docker))))
+        XCTAssertTrue(
+            WhenClauseEvaluator.evaluate(node, context: makeContext(remote: .container(target: "c", tool: .docker))))
     }
 
     func testGroupedExpression() throws {

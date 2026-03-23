@@ -17,8 +17,18 @@ final class PluginRegistry {
     /// The most recent PluginContext built during a cycle (for sidebar rebuild).
     private(set) var lastPluginContexts: [String: PluginContext] = [:]
 
+    /// The most recent cycle result — used for change detection.
+    private var lastCycleVisibleIDs: Set<String>?
+    private var lastCycleContext: TerminalContext?
+
     /// Callback for plugins to request a cycle rerun.
     var onRequestCycleRerun: (() -> Void)?
+
+    /// Force the next cycle to report contextChanged/visibilityChanged as true.
+    func clearChangeDetection() {
+        lastCycleContext = nil
+        lastCycleVisibleIDs = nil
+    }
 
     /// Unified actions distributed to all plugins on set.
     var actions: PluginActions? {
@@ -86,12 +96,19 @@ final class PluginRegistry {
             guard let content = plugin.makeStatusBarContent(context: ctx) else { return nil }
             return (plugin.pluginID, content)
         }
+        let contextChanged = lastCycleContext != frozenContext
+        let visibilityChanged = lastCycleVisibleIDs != visibleIDs
+
         lastPluginContexts = contexts
+        lastCycleContext = frozenContext
+        lastCycleVisibleIDs = visibleIDs
 
         return PluginCycleResult(
             context: frozenContext,
             visiblePluginIDs: visibleIDs,
-            statusBarContents: statusBarContents
+            statusBarContents: statusBarContents,
+            contextChanged: contextChanged,
+            visibilityChanged: visibilityChanged
         )
     }
 
@@ -169,6 +186,7 @@ final class PluginRegistry {
         register(LocalFileTreePlugin())
         register(RemoteFileTreePlugin())
         register(GitPlugin())
+        register(AIAgentPlugin())
         register(DockerPluginNew())
         register(BookmarksPluginNew())
         register(SystemInfoPlugin())
@@ -199,4 +217,8 @@ struct PluginCycleResult {
     let context: TerminalContext
     let visiblePluginIDs: Set<String>
     let statusBarContents: [(pluginID: String, content: StatusBarContent)]
+    /// Whether the terminal context changed since the last cycle.
+    let contextChanged: Bool
+    /// Whether the set of visible plugins changed since the last cycle.
+    let visibilityChanged: Bool
 }

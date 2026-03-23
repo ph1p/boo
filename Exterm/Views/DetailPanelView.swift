@@ -17,6 +17,8 @@ struct SidebarSection: Identifiable {
     let icon: String
     let content: AnyView
     let prefersOuterScrollView: Bool
+    /// Monotonic generation counter. `updateContentView` is skipped when generation matches.
+    let generation: UInt64
 }
 
 // MARK: - Sidebar Panel View
@@ -43,6 +45,9 @@ class SidebarPanelView: NSView {
 
     private(set) var sectionStates: [SectionState] = []
     var onToggleExpand: ((String) -> Void)?
+
+    /// Last known generation per section ID — skip updateContentView when unchanged.
+    private var sectionGenerations: [String: UInt64] = [:]
 
     /// Current terminal ID — used to save/restore scroll positions per terminal.
     private(set) var currentTerminalID: UUID?
@@ -123,8 +128,11 @@ class SidebarPanelView: NSView {
 
                 if isNowExpanded {
                     if wasExpanded {
-                        // Already expanded — update rootView in-place to preserve scroll position
-                        updateContentView(at: i, content: section.content)
+                        // Only update rootView if the content generation changed
+                        if sectionGenerations[section.id] != section.generation {
+                            updateContentView(at: i, content: section.content)
+                            sectionGenerations[section.id] = section.generation
+                        }
                     } else {
                         // Newly expanded — create content view
                         removeContentView(at: i)
@@ -155,7 +163,8 @@ class SidebarPanelView: NSView {
             return
         }
 
-        // Full rebuild
+        // Full rebuild — reset generation tracking
+        sectionGenerations.removeAll()
         for handle in dragHandles { handle.removeFromSuperview() }
         dragHandles.removeAll()
         for state in sectionStates {
@@ -180,6 +189,7 @@ class SidebarPanelView: NSView {
                     contentHeight: 0,
                     headerView: header, contentContainer: nil))
 
+            sectionGenerations[section.id] = section.generation
             if isExpanded {
                 addContentView(
                     at: idx,
@@ -204,19 +214,24 @@ class SidebarPanelView: NSView {
         let aligned = AnyView(
             content
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading))
-        let hosting = NSHostingView(rootView: aligned)
 
         // Measure intrinsic content height
-        hosting.frame.size.width = max(1, bounds.width)
-        let intrinsic = hosting.fittingSize.height
-        sectionStates[index].intrinsicHeight = intrinsic
-        sectionStates[index].canGrow = !prefersOuterScrollView
+        sectionStates[index].canGrow = prefersOuterScrollView
 
         if !prefersOuterScrollView {
+            let hosting = NSHostingView(rootView: aligned)
+            hosting.frame.size.width = max(1, bounds.width)
+            sectionStates[index].intrinsicHeight = hosting.fittingSize.height
             addSubview(hosting)
             sectionStates[index].contentContainer = hosting
             return
         }
+
+        let hosting = NSHostingView(rootView: aligned)
+        hosting.translatesAutoresizingMaskIntoConstraints = false
+        hosting.frame.size.width = max(1, bounds.width)
+        let intrinsic = hosting.fittingSize.height
+        sectionStates[index].intrinsicHeight = intrinsic
 
         let scrollView = TopAlignedScrollView()
         scrollView.hasVerticalScroller = true
@@ -225,8 +240,15 @@ class SidebarPanelView: NSView {
         scrollView.drawsBackground = false
         scrollView.borderType = .noBorder
 
-        hosting.frame.size.height = intrinsic
         scrollView.documentView = hosting
+
+        // Pin the hosting view to the scroll view's content guide so
+        // Auto Layout keeps the document size in sync — like CSS overflow:auto.
+        NSLayoutConstraint.activate([
+            hosting.topAnchor.constraint(equalTo: scrollView.contentView.topAnchor),
+            hosting.leadingAnchor.constraint(equalTo: scrollView.contentView.leadingAnchor),
+            hosting.trailingAnchor.constraint(equalTo: scrollView.contentView.trailingAnchor),
+        ])
 
         addSubview(scrollView)
         sectionStates[index].contentContainer = scrollView
@@ -361,17 +383,6 @@ class SidebarPanelView: NSView {
             if state.isExpanded, let container = state.contentContainer {
                 let ch = max(0, state.contentHeight)
                 container.frame = NSRect(x: 0, y: y, width: w, height: ch)
-                // Size documentView to scroll view width; height = intrinsic content
-                if let scrollView = container as? NSScrollView,
-                    let docView = scrollView.documentView
-                {
-                    docView.frame.size.width = w
-                    let fitting = docView.fittingSize.height
-                    docView.frame.size.height = fitting
-                } else {
-                    // Direct hosting view (no scroll wrapper)
-                    container.frame = NSRect(x: 0, y: y, width: w, height: ch)
-                }
                 container.isHidden = false
                 y += ch
             } else {
@@ -436,45 +447,55 @@ class SidebarPanelView: NSView {
         isDragging = false
     }
 
-    /// Ensure expanded content heights don't exceed available space.
-    /// Only shrinks when content overflows — does NOT stretch to fill.
+    /// Ensure expanded content heights fit available space.
+    /// Shrinks when content overflows, and stretches growable sections to fill unused space.
     private func clampHeightsToFit() {
         let available = availableContentHeight()
         let expandedIndices = sectionStates.indices.filter { sectionStates[$0].isExpanded }
         guard !expandedIndices.isEmpty else { return }
 
         let currentSum = expandedIndices.reduce(CGFloat(0)) { $0 + sectionStates[$1].contentHeight }
-        // Only clamp if overflowing
-        guard currentSum > available + 1 else { return }
 
-        let overflow = currentSum - available
+        if currentSum > available + 1 {
+            // Overflow — shrink to fit
+            let overflow = currentSum - available
 
-        // First try to shrink growable sections (file tree etc.)
-        let growable = expandedIndices.filter { sectionStates[$0].canGrow }
-        let growableSum = growable.reduce(CGFloat(0)) { $0 + sectionStates[$1].contentHeight }
-        let growableShrinkable = growableSum - CGFloat(growable.count) * SidebarLayout.minSectionHeight
+            // First try to shrink growable sections (file tree etc.)
+            let growable = expandedIndices.filter { sectionStates[$0].canGrow }
+            let growableSum = growable.reduce(CGFloat(0)) { $0 + sectionStates[$1].contentHeight }
+            let growableShrinkable = growableSum - CGFloat(growable.count) * SidebarLayout.minSectionHeight
 
-        if growableShrinkable >= overflow && !growable.isEmpty {
-            let scale = (growableSum - overflow) / growableSum
-            for i in growable {
-                sectionStates[i].contentHeight = max(
-                    SidebarLayout.minSectionHeight, sectionStates[i].contentHeight * scale)
+            if growableShrinkable >= overflow && !growable.isEmpty {
+                let scale = (growableSum - overflow) / growableSum
+                for i in growable {
+                    sectionStates[i].contentHeight = max(
+                        SidebarLayout.minSectionHeight, sectionStates[i].contentHeight * scale)
+                }
+            } else {
+                // Proportional shrink across all expanded sections
+                let scale = available / currentSum
+                for i in expandedIndices {
+                    sectionStates[i].contentHeight = max(
+                        SidebarLayout.minSectionHeight, sectionStates[i].contentHeight * scale)
+                }
             }
-        } else {
-            // Proportional shrink across all expanded sections
-            let scale = available / currentSum
-            for i in expandedIndices {
-                sectionStates[i].contentHeight = max(
-                    SidebarLayout.minSectionHeight, sectionStates[i].contentHeight * scale)
-            }
-        }
 
-        // Fix rounding
-        let newSum = expandedIndices.reduce(CGFloat(0)) { $0 + sectionStates[$1].contentHeight }
-        let correction = available - newSum
-        if let last = expandedIndices.last, correction < -0.5 {
-            sectionStates[last].contentHeight = max(
-                SidebarLayout.minSectionHeight, sectionStates[last].contentHeight + correction)
+            // Fix rounding
+            let newSum = expandedIndices.reduce(CGFloat(0)) { $0 + sectionStates[$1].contentHeight }
+            let correction = available - newSum
+            if let last = expandedIndices.last, correction < -0.5 {
+                sectionStates[last].contentHeight = max(
+                    SidebarLayout.minSectionHeight, sectionStates[last].contentHeight + correction)
+            }
+        } else if currentSum < available - 1 {
+            // Underflow — stretch growable sections to fill remaining space
+            let remaining = available - currentSum
+            let growable = expandedIndices.filter { sectionStates[$0].canGrow }
+            let recipients = growable.isEmpty ? expandedIndices : growable
+            let extra = remaining / CGFloat(recipients.count)
+            for i in recipients {
+                sectionStates[i].contentHeight += extra
+            }
         }
     }
 
@@ -522,6 +543,8 @@ private class TopAlignedScrollView: NSScrollView {
         override var isFlipped: Bool { true }
     }
 }
+
+// MARK: - Self-Sizing Hosting View
 
 // MARK: - Drag Handle View
 

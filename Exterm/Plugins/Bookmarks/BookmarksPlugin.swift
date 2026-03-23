@@ -15,7 +15,7 @@ final class BookmarksPluginNew: ExtermPluginProtocol {
         version: "1.0.0",
         icon: "bookmark",
         description: "Saved directory bookmarks",
-        when: nil,
+        when: "!process.ai",
         runtime: nil,
         capabilities: PluginManifest.Capabilities(sidebarPanel: true, statusBarSegment: true),
         statusBar: PluginManifest.StatusBarManifest(position: "right", priority: 20, template: nil),

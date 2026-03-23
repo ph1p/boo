@@ -307,12 +307,4 @@ extension StatusBarView {
         accessibilityElements.append(toggleElement)
     }
 
-    // MARK: - Helpers
-
-    static func abbreviatePath(_ path: String) -> String {
-        if path.hasPrefix(homeDir) {
-            return "~" + path.dropFirst(homeDir.count)
-        }
-        return path
-    }
 }

@@ -1,4 +1,55 @@
+import Cocoa
 import Foundation
+
+// MARK: - Semantic Colors
+
+/// Named semantic colors used across status bar, tab bar, and other chrome.
+/// Avoids repeating hardcoded NSColor(calibratedRed:...) values.
+extension NSColor {
+    /// SSH / remote session indicator (warm orange).
+    static let extermRemote = NSColor(calibratedRed: 0.9, green: 0.66, blue: 0.2, alpha: 1.0)
+    /// Docker / container indicator (blue).
+    static let extermDocker = NSColor(calibratedRed: 0.13, green: 0.59, blue: 0.95, alpha: 1.0)
+    /// Local / success / added indicator (green).
+    static let extermLocal = NSColor(calibratedRed: 0.25, green: 0.72, blue: 0.31, alpha: 1.0)
+    /// Deleted / destructive (red).
+    static let extermDeleted = NSColor(calibratedRed: 0.97, green: 0.32, blue: 0.29, alpha: 1.0)
+    /// Neutral / unknown state (gray).
+    static let extermNeutral = NSColor(calibratedRed: 0.5, green: 0.5, blue: 0.5, alpha: 1.0)
+}
+
+// MARK: - String Path Helpers
+
+extension String {
+    /// Last path component without NSString bridging at the call site.
+    var lastPathComponent: String {
+        (self as NSString).lastPathComponent
+    }
+
+    /// Parent directory without NSString bridging at the call site.
+    var deletingLastPathComponent: String {
+        (self as NSString).deletingLastPathComponent
+    }
+
+    /// Append a path component without NSString bridging at the call site.
+    func appendingPathComponent(_ component: String) -> String {
+        (self as NSString).appendingPathComponent(component)
+    }
+}
+
+// MARK: - Path Abbreviation
+
+private let _homeDir = FileManager.default.homeDirectoryForCurrentUser.path
+
+/// Abbreviate a path by replacing the home directory with `~`.
+func abbreviatePath(_ path: String) -> String {
+    if path.hasPrefix(_homeDir) {
+        return "~" + path.dropFirst(_homeDir.count)
+    }
+    return path
+}
+
+// MARK: - ExtermPaths
 
 /// Central path management. All Exterm data lives in ~/.exterm/
 enum ExtermPaths {

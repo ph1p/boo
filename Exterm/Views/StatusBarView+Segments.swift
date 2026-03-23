@@ -73,23 +73,15 @@ final class EnvironmentSegment: StatusBarPlugin {
             let color: NSColor
             switch session {
             case .ssh, .mosh:
-                color = NSColor(calibratedRed: 0.9, green: 0.66, blue: 0.2, alpha: 1.0)
+                color = .extermRemote
             case .container:
-                color = NSColor(calibratedRed: 0.13, green: 0.59, blue: 0.95, alpha: 1.0)
+                color = .extermDocker
             }
             return (color, "\(session.envType): \(session.displayName)")
         } else if state.isRemote {
-            // Remote detected but no specific session type
-            return (
-                NSColor(calibratedRed: 0.9, green: 0.66, blue: 0.2, alpha: 1.0),
-                "remote"
-            )
+            return (.extermRemote, "remote")
         }
-        // Green for local
-        return (
-            NSColor(calibratedRed: 0.25, green: 0.72, blue: 0.31, alpha: 1.0),
-            "local"
-        )
+        return (.extermLocal, "local")
     }
 
     func accessibilitySegmentLabel(state: StatusBarState) -> String? {
@@ -140,7 +132,7 @@ final class GitBranchSegment: StatusBarPlugin {
         if state.gitChangedCount > 0 {
             let countAttrs: [NSAttributedString.Key: Any] = [
                 .font: NSFont.monospacedSystemFont(ofSize: 9, weight: .medium),
-                .foregroundColor: NSColor(calibratedRed: 0.9, green: 0.66, blue: 0.2, alpha: 1.0)
+                .foregroundColor: NSColor.extermRemote
             ]
             let countStr = " \(state.gitChangedCount)\u{25CF}" as NSString
             countStr.draw(at: NSPoint(x: cx, y: y + 0.5), withAttributes: countAttrs)
@@ -226,8 +218,8 @@ final class GitBranchSegment: StatusBarPlugin {
             }
         }
 
-        let menuPoint = NSPoint(x: hitRect.minX, y: barView.barHeight)
-        menu.popUp(positioning: nil, at: menuPoint, in: barView)
+        let menuPoint = NSPoint(x: hitRect.minX, y: 0)
+        menu.popUp(positioning: menu.items.last, at: menuPoint, in: barView)
     }
 }
 
@@ -249,7 +241,7 @@ final class PathSegment: StatusBarPlugin {
             .font: NSFont.monospacedSystemFont(ofSize: 10, weight: .regular),
             .foregroundColor: theme.chromeMuted.withAlphaComponent(0.7)
         ]
-        let str = StatusBarView.abbreviatePath(state.currentDirectory) as NSString
+        let str = abbreviatePath(state.currentDirectory) as NSString
         str.draw(at: NSPoint(x: x, y: y), withAttributes: attrs)
         return str.size(withAttributes: attrs).width
     }
@@ -258,7 +250,7 @@ final class PathSegment: StatusBarPlugin {
     func update(state: StatusBarState) {}
 
     func accessibilitySegmentLabel(state: StatusBarState) -> String? {
-        "Path: \(StatusBarView.abbreviatePath(state.currentDirectory))"
+        "Path: \(abbreviatePath(state.currentDirectory))"
     }
 }
 
@@ -363,8 +355,10 @@ final class FileTreeIconSegment: StatusBarPlugin {
     let priority = 5
     let associatedPanelID: String? = "file-tree-local"
     var hitRect: NSRect = .zero
+    /// Whether any file-tree plugin is available in the current context.
+    var isAvailable: Bool = true
 
-    func isVisible(settings: AppSettings, state: StatusBarState) -> Bool { true }
+    func isVisible(settings: AppSettings, state: StatusBarState) -> Bool { isAvailable }
 
     func update(state: StatusBarState) {}
 
@@ -471,6 +465,114 @@ final class PluginIconSegment: StatusBarPlugin {
     func accessibilitySegmentLabel(state: StatusBarState) -> String? {
         let isActive = state.visibleSidebarPlugins.contains(associatedPanelID ?? "")
         return isActive ? "\(label), selected" : label
+    }
+}
+
+// MARK: - System Info Segment
+
+/// Shows system resource values (memory, disk, load) as text in the status bar.
+/// Each metric is individually controllable via the system-info plugin settings.
+/// Updated by SystemInfoPlugin via `updateValues()`.
+final class SystemInfoSegment: StatusBarPlugin {
+    let id = "system-info-text"
+    let position: StatusBarPosition = .left
+    let priority = 25
+
+    private var memoryPct: Int = 0
+    private var diskFreeGB: Double = 0
+    private var cpuPct: Int = 0
+    private var batteryPct: Int = -1  // -1 = no battery
+    private var batteryCharging: Bool = false
+    private var memTint: NSColor?
+
+    func isVisible(settings: AppSettings, state: StatusBarState) -> Bool {
+        guard !state.isRemote else { return false }
+        let s = settings
+        return s.pluginBool("system-info", "statusBarCPU", default: false)
+            || s.pluginBool("system-info", "statusBarMemory", default: false)
+            || s.pluginBool("system-info", "statusBarDisk", default: false)
+            || s.pluginBool("system-info", "statusBarBattery", default: false)
+    }
+
+    func updateValues(
+        memoryPct: Int, diskFreeGB: Double, cpuPct: Int,
+        batteryPct: Int, batteryCharging: Bool, tint: NSColor?
+    ) {
+        self.memoryPct = memoryPct
+        self.diskFreeGB = diskFreeGB
+        self.cpuPct = cpuPct
+        self.batteryPct = batteryPct
+        self.batteryCharging = batteryCharging
+        self.memTint = tint
+    }
+
+    func draw(
+        at x: CGFloat, y: CGFloat, theme: TerminalTheme, settings: AppSettings, state: StatusBarState, ctx: CGContext
+    ) -> CGFloat {
+        let mutedColor = theme.chromeMuted.withAlphaComponent(0.6)
+        let font = NSFont.monospacedSystemFont(ofSize: 10, weight: .regular)
+
+        var parts: [(String, NSColor)] = []
+        if settings.pluginBool("system-info", "statusBarCPU", default: false) {
+            let tint: NSColor = cpuPct > 80 ? .systemRed : (cpuPct > 60 ? .systemOrange : mutedColor)
+            parts.append(("CPU \(cpuPct)%", tint))
+        }
+        if settings.pluginBool("system-info", "statusBarMemory", default: false) {
+            parts.append(("Mem \(memoryPct)%", memTint ?? mutedColor))
+        }
+        if settings.pluginBool("system-info", "statusBarDisk", default: false) {
+            parts.append(("Disk \(String(format: "%.0f", diskFreeGB))G", mutedColor))
+        }
+        if settings.pluginBool("system-info", "statusBarBattery", default: false), batteryPct >= 0 {
+            let label = batteryCharging ? "\(batteryPct)%+" : "\(batteryPct)%"
+            let tint: NSColor = batteryPct < 15 ? .systemRed : (batteryPct < 30 ? .systemOrange : mutedColor)
+            parts.append(("Bat \(label)", tint))
+        }
+
+        let middot = " \u{00B7} " as NSString
+        let middotAttrs: [NSAttributedString.Key: Any] = [
+            .font: font,
+            .foregroundColor: mutedColor
+        ]
+        let middotWidth = middot.size(withAttributes: middotAttrs).width
+
+        var cx = x
+        for (i, part) in parts.enumerated() {
+            let attrs: [NSAttributedString.Key: Any] = [
+                .font: font,
+                .foregroundColor: part.1
+            ]
+            let str = part.0 as NSString
+            str.draw(at: NSPoint(x: cx, y: y), withAttributes: attrs)
+            cx += str.size(withAttributes: attrs).width
+            if i < parts.count - 1 {
+                middot.draw(at: NSPoint(x: cx, y: y), withAttributes: middotAttrs)
+                cx += middotWidth
+            }
+        }
+
+        return cx - x
+    }
+
+    func handleClick(at point: NSPoint, in barView: StatusBarView) -> Bool { false }
+    func update(state: StatusBarState) {}
+
+    func accessibilitySegmentLabel(state: StatusBarState) -> String? {
+        var parts: [String] = []
+        let s = AppSettings.shared
+        if s.pluginBool("system-info", "statusBarCPU", default: false) {
+            parts.append("CPU \(cpuPct)%")
+        }
+        if s.pluginBool("system-info", "statusBarMemory", default: false) {
+            parts.append("Memory \(memoryPct)%")
+        }
+        if s.pluginBool("system-info", "statusBarDisk", default: false) {
+            parts.append("Disk \(String(format: "%.0f", diskFreeGB))GB free")
+        }
+        if s.pluginBool("system-info", "statusBarBattery", default: false), batteryPct >= 0 {
+            parts.append("Battery \(batteryPct)%")
+        }
+        return parts.isEmpty ? nil : "System: " + parts.joined(separator: ", ")
     }
 }
 

@@ -76,6 +76,7 @@ final class LocalFileTreePlugin: ExtermPluginProtocol {
 
     func makeDetailView(context: PluginContext) -> AnyView? {
         let act = self.actions
+        let isAI = ProcessIcon.category(for: context.terminal.processName) == "ai"
         let treeActions = FileTreeActions(
             onFileClicked: { path in
                 act?.pastePath(path)
@@ -103,12 +104,18 @@ final class LocalFileTreePlugin: ExtermPluginProtocol {
                 let url = URL(fileURLWithPath: path)
                 NSWorkspace.shared.recycle([url]) { _, _ in
                     DispatchQueue.main.async {
-                        // Refresh the parent directory after trashing
-                        let parent = (path as NSString).deletingLastPathComponent
-                        self?.cachedRoots[parent]?.refreshAll()
+                        guard let self else { return }
+                        // Refresh any cached root that contains the trashed path.
+                        for (rootPath, root) in self.cachedRoots where path.hasPrefix(rootPath) {
+                            root.refreshAll()
+                        }
                     }
                 }
-            }
+            },
+            onReferenceInAI: { path in
+                act?.sendToTerminal?("@\(path) ")
+            },
+            isAIAgentRunning: isAI
         )
 
         let tid = context.terminal.terminalID
@@ -144,13 +151,21 @@ final class LocalFileTreePlugin: ExtermPluginProtocol {
         setupWatcher(for: context.cwd)
     }
 
+    func processChanged(name: String, context: TerminalContext) {
+        // No action needed — makeDetailView reads the current processName
+        // from the context on every plugin cycle, so isAIAgentRunning is
+        // always up to date.  Do NOT call onRequestCycleRerun here:
+        // processChanged is invoked *during* a plugin cycle, so triggering
+        // another cycle would cause infinite recursion.
+    }
+
     // MARK: - Internal
 
     /// Save the expanded folder state for the last active terminal.
     private func saveExpandedState() {
         guard let prevID = lastTerminalID,
-              let cwd = terminalCwd[prevID],
-              let root = cachedRoots[cwd]
+            let cwd = terminalCwd[prevID],
+            let root = cachedRoots[cwd]
         else { return }
         expandedState[prevID] = root.expandedPaths()
     }
@@ -173,7 +188,12 @@ final class LocalFileTreePlugin: ExtermPluginProtocol {
     private func setupWatcher(for path: String) {
         fileWatcher?.stop()
         fileWatcher = FileSystemWatcher(path: path) { [weak self] in
-            self?.cachedRoots[path]?.refreshAll()
+            // Refresh all cached roots that are under (or equal to) the
+            // watched path, so subdirectory changes are picked up too.
+            guard let self else { return }
+            for (rootPath, root) in self.cachedRoots where path.hasPrefix(rootPath) || rootPath.hasPrefix(path) {
+                root.refreshAll()
+            }
         }
         fileWatcher?.start()
     }

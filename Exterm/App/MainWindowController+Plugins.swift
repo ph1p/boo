@@ -76,8 +76,15 @@ extension MainWindowController {
             )
         }
 
-        // Route git changed count through cycle result
+        // Route git state through cycle result
         statusBar.gitChangedCount = result.context.gitContext?.changedFileCount ?? 0
+        if let gitCtx = result.context.gitContext {
+            if statusBar.gitBranch != gitCtx.branch || statusBar.gitRepoRoot != gitCtx.repoRoot {
+                statusBar.gitBranch = gitCtx.branch
+                statusBar.gitRepoRoot = gitCtx.repoRoot
+                statusBar.needsDisplay = true
+            }
+        }
 
         // Update status bar icon availability based on plugin visibility
         let visibleIDs = result.visiblePluginIDs
@@ -283,7 +290,6 @@ extension MainWindowController {
             expandedPluginIDs.remove(pluginID)
         } else {
             openPluginIDs.insert(pluginID)
-            expandedPluginIDs.insert(pluginID)
         }
         savePluginStateForActiveTab()
         if !hasVisibleOpenPlugins() {

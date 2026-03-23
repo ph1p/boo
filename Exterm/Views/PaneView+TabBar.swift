@@ -227,7 +227,6 @@ extension PaneView {
 
     static func tabDisplayTitle(tab: Pane.Tab) -> String {
         let process = tab.state.foregroundProcess
-        let isContainer = tab.remoteSession?.isContainer ?? false
 
         // Show process name when a non-shell process is running,
         // but NOT for remote sessions — show host:path instead.
@@ -294,13 +293,13 @@ extension PaneView {
 
     static func environmentIndicator(for session: RemoteSessionType?) -> (NSColor, String) {
         guard let session = session else {
-            return (NSColor(calibratedRed: 0.25, green: 0.72, blue: 0.31, alpha: 1.0), "")
+            return (.extermLocal, "")
         }
         switch session {
         case .ssh, .mosh:
-            return (NSColor(calibratedRed: 0.9, green: 0.66, blue: 0.2, alpha: 1.0), "")
+            return (.extermRemote, "")
         case .container:
-            return (NSColor(calibratedRed: 0.13, green: 0.59, blue: 0.95, alpha: 1.0), "")
+            return (.extermDocker, "")
         }
     }
 }

@@ -26,7 +26,7 @@ class PaneView: NSView {
     let pane: Pane
     let singleRowTabHeight: CGFloat = 26
 
-    private var ghosttyView: GhosttyView?
+    private(set) var ghosttyView: GhosttyView?
     private var scrollWrapper: TerminalScrollView?
     private var tabViews: [UUID: GhosttyView] = [:]
 
@@ -153,6 +153,14 @@ class PaneView: NSView {
     // Coalesce tab bar redraws to avoid flicker from rapid title updates
     private var redrawScheduled = false
 
+    // Debounce title/cwd updates during startup to avoid the tab title and
+    // file explorer jumping through intermediate states as the shell settles.
+    private var titleDebounce: DispatchWorkItem?
+    private var cwdDebounce: DispatchWorkItem?
+    private var pendingTitle: String?
+    private var pendingCwd: String?
+    private static let debounceInterval: TimeInterval = 0.12
+
     init(paneID: UUID, pane: Pane) {
         self.paneID = paneID
         self.pane = pane
@@ -229,19 +237,12 @@ class PaneView: NSView {
 
         gv.onPwdChanged = { [weak self] path in
             guard let self = self else { return }
-            let idx = self.pane.activeTabIndex
-            if idx >= 0 { self.pane.updateWorkingDirectory(at: idx, path) }
-            self.scheduleTabBarRedraw()
-            self.paneDelegate?.paneView(self, didChangeDirectory: path, paneID: self.paneID)
+            self.debounceCwdUpdate(path)
         }
 
         gv.onTitleChanged = { [weak self] title in
             guard let self = self else { return }
-            self.paneDelegate?.paneView(self, titleChanged: title, paneID: self.paneID)
-
-            let idx = self.pane.activeTabIndex
-            if idx >= 0 { self.pane.updateTitle(at: idx, title) }
-            self.scheduleTabBarRedraw()
+            self.debounceTitleUpdate(title)
         }
 
         gv.onDirectoryListing = { [weak self] path, output in
@@ -331,6 +332,42 @@ class PaneView: NSView {
         }
     }
 
+    /// Debounce a title update: each new title resets the timer so only the
+    /// final value after the burst is applied.
+    private func debounceTitleUpdate(_ title: String) {
+        pendingTitle = title
+        titleDebounce?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self = self, let title = self.pendingTitle else { return }
+            self.pendingTitle = nil
+            self.titleDebounce = nil
+            self.paneDelegate?.paneView(self, titleChanged: title, paneID: self.paneID)
+            let idx = self.pane.activeTabIndex
+            if idx >= 0 { self.pane.updateTitle(at: idx, title) }
+            self.scheduleTabBarRedraw()
+        }
+        titleDebounce = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.debounceInterval, execute: work)
+    }
+
+    /// Debounce a CWD update: each new path resets the timer so only the
+    /// final value after the burst is applied.
+    private func debounceCwdUpdate(_ path: String) {
+        pendingCwd = path
+        cwdDebounce?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self = self, let cwd = self.pendingCwd else { return }
+            self.pendingCwd = nil
+            self.cwdDebounce = nil
+            let idx = self.pane.activeTabIndex
+            if idx >= 0 { self.pane.updateWorkingDirectory(at: idx, cwd) }
+            self.scheduleTabBarRedraw()
+            self.paneDelegate?.paneView(self, didChangeDirectory: cwd, paneID: self.paneID)
+        }
+        cwdDebounce = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.debounceInterval, execute: work)
+    }
+
     /// Coalesce rapid title/cwd updates into a single redraw per run loop cycle.
     private func scheduleTabBarRedraw() {
         guard !redrawScheduled else { return }
@@ -391,8 +428,12 @@ class PaneView: NSView {
         layoutTerminalView()
         needsLayout = true
         needsDisplay = true
+        // Try focusing synchronously first, then retry on next tick as fallback
+        // in case the view hierarchy isn't fully installed yet.
+        if let gv = ghosttyView {
+            window?.makeFirstResponder(gv)
+        }
         paneDelegate?.paneView(self, didFocus: paneID)
-        // Defer focus to next run-loop tick so the view hierarchy is fully installed
         DispatchQueue.main.async { [weak self] in
             guard let self, let gv = self.ghosttyView else { return }
             self.window?.makeFirstResponder(gv)

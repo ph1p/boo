@@ -4,7 +4,7 @@ import Foundation
 
 extension GitPlugin {
 
-    /// Run a git command synchronously in the given repo. Used for stage/unstage/discard/stash.
+    /// Run a git command synchronously in the given repo. Used for stage/unstage/discard.
     @discardableResult
     nonisolated static func runGitCommand(repoRoot: String, args: [String]) -> Bool {
         let task = Process()
@@ -55,21 +55,6 @@ extension GitPlugin {
         }
     }
 
-    nonisolated static func detectStashCount(repoRoot: String) -> Int {
-        let task = Process()
-        task.launchPath = "/usr/bin/git"
-        task.arguments = ["-C", repoRoot, "stash", "list"]
-        task.standardError = FileHandle.nullDevice
-        let pipe = Pipe()
-        task.standardOutput = pipe
-        do { try task.run() } catch { return 0 }
-        task.waitUntilExit()
-        guard task.terminationStatus == 0 else { return 0 }
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        guard let output = String(data: data, encoding: .utf8) else { return 0 }
-        return output.components(separatedBy: "\n").filter { !$0.isEmpty }.count
-    }
-
     nonisolated static func detectAheadBehind(repoRoot: String) -> (ahead: Int, behind: Int) {
         let task = Process()
         task.launchPath = "/usr/bin/git"
@@ -115,7 +100,6 @@ extension GitPlugin {
     internal func refreshGitStatus(cwd: String, repoRoot: String?) {
         guard let root = repoRoot else {
             cachedFiles = []
-            cachedStashCount = 0
             cachedAheadCount = 0
             cachedBehindCount = 0
             cachedLastCommit = nil
@@ -131,7 +115,6 @@ extension GitPlugin {
         DispatchQueue.global(qos: .utility).async { [weak self] in
             let group = DispatchGroup()
             var files: [GitChangedFile] = []
-            var stashCount = 0
             var aheadCount = 0
             var behindCount = 0
             var lastCommit: String?
@@ -139,11 +122,6 @@ extension GitPlugin {
             group.enter()
             DispatchQueue.global(qos: .utility).async {
                 files = Self.detectChangedFiles(repoRoot: root)
-                group.leave()
-            }
-            group.enter()
-            DispatchQueue.global(qos: .utility).async {
-                stashCount = Self.detectStashCount(repoRoot: root)
                 group.leave()
             }
             group.enter()
@@ -164,12 +142,10 @@ extension GitPlugin {
                 guard let self = self else { return }
                 let changed =
                     self.cachedFiles.map(\.path) != files.map(\.path)
-                    || self.cachedStashCount != stashCount
                     || self.cachedAheadCount != aheadCount
                     || self.cachedBehindCount != behindCount
                     || self.cachedLastCommit != lastCommit
                 self.cachedFiles = files
-                self.cachedStashCount = stashCount
                 self.cachedAheadCount = aheadCount
                 self.cachedBehindCount = behindCount
                 self.cachedLastCommit = lastCommit

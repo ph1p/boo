@@ -70,6 +70,17 @@ extension Notification.Name {
     static let settingsChanged = Notification.Name("ExtermSettingsChanged")
 }
 
+/// Topics for fine-grained settings observation.
+/// Views subscribe only to the topics they care about, avoiding unnecessary re-renders.
+enum SettingsTopic: String, CaseIterable {
+    case theme  // theme name, auto-theme, dark/light theme
+    case terminal  // cursor style, font size, font name
+    case explorer  // show hidden, icons, explorer font size/name
+    case statusBar  // status bar toggles (path, git, time, pane info, shell, connection)
+    case layout  // sidebar position, workspace bar, density, sidebar width, tab overflow
+    case plugins  // disabled plugins, default enabled plugins, plugin settings
+}
+
 final class AppSettings {
     static let shared = AppSettings()
 
@@ -110,23 +121,23 @@ final class AppSettings {
         UserDefaults.standard.object(forKey: key) == nil ? defaultValue : UserDefaults.standard.bool(forKey: key)
     }
 
-    private func set(_ value: Any?, forKey key: String) {
+    private func set(_ value: Any?, forKey key: String, topic: SettingsTopic? = nil) {
         UserDefaults.standard.set(value, forKey: key)
         saveToFile()
-        notify()
+        notify(topic: topic)
     }
 
     // MARK: - Theme
 
     var themeName: String {
         get { UserDefaults.standard.string(forKey: K.themeName) ?? "Default Dark" }
-        set { set(newValue, forKey: K.themeName) }
+        set { set(newValue, forKey: K.themeName, topic: .theme) }
     }
 
     var autoTheme: Bool {
         get { bool(K.autoTheme, default: false) }
         set {
-            set(newValue, forKey: K.autoTheme)
+            set(newValue, forKey: K.autoTheme, topic: .theme)
             if newValue { applySystemAppearance() }
         }
     }
@@ -134,7 +145,7 @@ final class AppSettings {
     var darkThemeName: String {
         get { UserDefaults.standard.string(forKey: K.darkThemeName) ?? "Default Dark" }
         set {
-            set(newValue, forKey: K.darkThemeName)
+            set(newValue, forKey: K.darkThemeName, topic: .theme)
             if autoTheme { applySystemAppearance() }
         }
     }
@@ -142,7 +153,7 @@ final class AppSettings {
     var lightThemeName: String {
         get { UserDefaults.standard.string(forKey: K.lightThemeName) ?? "Solarized Light" }
         set {
-            set(newValue, forKey: K.lightThemeName)
+            set(newValue, forKey: K.lightThemeName, topic: .theme)
             if autoTheme { applySystemAppearance() }
         }
     }
@@ -171,7 +182,7 @@ final class AppSettings {
 
     var cursorStyle: CursorStyle {
         get { CursorStyle(rawValue: UserDefaults.standard.integer(forKey: K.cursorStyle)) ?? .block }
-        set { set(newValue.rawValue, forKey: K.cursorStyle) }
+        set { set(newValue.rawValue, forKey: K.cursorStyle, topic: .terminal) }
     }
 
     var fontSize: CGFloat {
@@ -179,66 +190,66 @@ final class AppSettings {
             let v = UserDefaults.standard.double(forKey: K.fontSize)
             return v > 0 ? CGFloat(v) : 14.0
         }
-        set { set(Double(newValue), forKey: K.fontSize) }
+        set { set(Double(newValue), forKey: K.fontSize, topic: .terminal) }
     }
 
     var fontName: String {
         get { UserDefaults.standard.string(forKey: K.fontName) ?? "SF Mono" }
-        set { set(newValue, forKey: K.fontName) }
+        set { set(newValue, forKey: K.fontName, topic: .terminal) }
     }
 
     // MARK: - Explorer (proxies to plugin settings)
 
     var showHiddenFiles: Bool {
         get { pluginBool("file-tree-local", "showHiddenFiles", default: false) }
-        set { setPluginSetting("file-tree-local", "showHiddenFiles", newValue) }
+        set { setPluginSetting("file-tree-local", "showHiddenFiles", newValue, topic: .explorer) }
     }
 
     var explorerIconsEnabled: Bool {
         get { pluginBool("file-tree-local", "showIcons", default: true) }
-        set { setPluginSetting("file-tree-local", "showIcons", newValue) }
+        set { setPluginSetting("file-tree-local", "showIcons", newValue, topic: .explorer) }
     }
 
     var explorerFontSize: CGFloat {
         get { CGFloat(pluginDouble("file-tree-local", "fontSize", default: 12.0)) }
-        set { setPluginSetting("file-tree-local", "fontSize", Double(newValue)) }
+        set { setPluginSetting("file-tree-local", "fontSize", Double(newValue), topic: .explorer) }
     }
 
     var explorerFontName: String {
         get { pluginString("file-tree-local", "fontName", default: "") }
-        set { setPluginSetting("file-tree-local", "fontName", newValue) }
+        set { setPluginSetting("file-tree-local", "fontName", newValue, topic: .explorer) }
     }
 
     // MARK: - Status Bar
 
     var statusBarShowPath: Bool {
         get { bool(K.statusBarShowPath, default: true) }
-        set { set(newValue, forKey: K.statusBarShowPath) }
+        set { set(newValue, forKey: K.statusBarShowPath, topic: .statusBar) }
     }
 
     var statusBarShowGitBranch: Bool {
         get { pluginBool("git-panel", "showBranch", default: true) }
-        set { setPluginSetting("git-panel", "showBranch", newValue) }
+        set { setPluginSetting("git-panel", "showBranch", newValue, topic: .statusBar) }
     }
 
     var statusBarShowTime: Bool {
         get { bool(K.statusBarShowTime, default: true) }
-        set { set(newValue, forKey: K.statusBarShowTime) }
+        set { set(newValue, forKey: K.statusBarShowTime, topic: .statusBar) }
     }
 
     var statusBarShowPaneInfo: Bool {
         get { bool(K.statusBarShowPaneInfo, default: true) }
-        set { set(newValue, forKey: K.statusBarShowPaneInfo) }
+        set { set(newValue, forKey: K.statusBarShowPaneInfo, topic: .statusBar) }
     }
 
     var statusBarShowShell: Bool {
         get { bool(K.statusBarShowShell, default: false) }
-        set { set(newValue, forKey: K.statusBarShowShell) }
+        set { set(newValue, forKey: K.statusBarShowShell, topic: .statusBar) }
     }
 
     var statusBarShowConnection: Bool {
         get { bool(K.statusBarShowConnection, default: true) }
-        set { set(newValue, forKey: K.statusBarShowConnection) }
+        set { set(newValue, forKey: K.statusBarShowConnection, topic: .statusBar) }
     }
 
     // MARK: - Layout
@@ -248,7 +259,7 @@ final class AppSettings {
             guard UserDefaults.standard.object(forKey: K.sidebarPosition) != nil else { return .right }
             return SidebarPosition(rawValue: UserDefaults.standard.integer(forKey: K.sidebarPosition)) ?? .right
         }
-        set { set(newValue.rawValue, forKey: K.sidebarPosition) }
+        set { set(newValue.rawValue, forKey: K.sidebarPosition, topic: .layout) }
     }
 
     var workspaceBarPosition: WorkspaceBarPosition {
@@ -257,7 +268,7 @@ final class AppSettings {
             return WorkspaceBarPosition(rawValue: UserDefaults.standard.integer(forKey: K.workspaceBarPosition))
                 ?? .left
         }
-        set { set(newValue.rawValue, forKey: K.workspaceBarPosition) }
+        set { set(newValue.rawValue, forKey: K.workspaceBarPosition, topic: .layout) }
     }
 
     var sidebarDensity: SidebarDensity { .comfortable }
@@ -267,7 +278,7 @@ final class AppSettings {
             let v = UserDefaults.standard.double(forKey: K.sidebarWidth)
             return v > 0 ? CGFloat(v) : 250
         }
-        set { set(Double(newValue), forKey: K.sidebarWidth) }
+        set { set(Double(newValue), forKey: K.sidebarWidth, topic: .layout) }
     }
 
     var tabOverflowMode: TabOverflowMode {
@@ -275,14 +286,14 @@ final class AppSettings {
             guard UserDefaults.standard.object(forKey: K.tabOverflowMode) != nil else { return .scroll }
             return TabOverflowMode(rawValue: UserDefaults.standard.integer(forKey: K.tabOverflowMode)) ?? .scroll
         }
-        set { set(newValue.rawValue, forKey: K.tabOverflowMode) }
+        set { set(newValue.rawValue, forKey: K.tabOverflowMode, topic: .layout) }
     }
 
     // MARK: - Plugins
 
     var disabledPluginIDs: [String] {
         get { UserDefaults.standard.stringArray(forKey: K.disabledPluginIDs) ?? [] }
-        set { set(newValue, forKey: K.disabledPluginIDs) }
+        set { set(newValue, forKey: K.disabledPluginIDs, topic: .plugins) }
     }
 
     /// Plugins open in the sidebar by default when opening a new pane or starting the app.
@@ -291,7 +302,7 @@ final class AppSettings {
             UserDefaults.standard.stringArray(forKey: K.defaultEnabledPluginIDs)
                 ?? ["file-tree-local", "file-tree-remote", "git-panel", "docker", "bookmarks"]
         }
-        set { set(newValue, forKey: K.defaultEnabledPluginIDs) }
+        set { set(newValue, forKey: K.defaultEnabledPluginIDs, topic: .plugins) }
     }
 
     // MARK: - Plugin Settings
@@ -316,14 +327,14 @@ final class AppSettings {
         return val
     }
 
-    func setPluginSetting(_ pluginID: String, _ key: String, _ value: Any) {
+    func setPluginSetting(_ pluginID: String, _ key: String, _ value: Any, topic: SettingsTopic? = .plugins) {
         var all = pluginSettingsDict
         var plugin = all[pluginID] ?? [:]
         plugin[key] = value
         all[pluginID] = plugin
         pluginSettingsDict = all
         saveToFile()
-        notify()
+        notify(topic: topic)
     }
 
     // MARK: - Font Resolution
@@ -363,14 +374,18 @@ final class AppSettings {
         return result
     }
 
-    private func notify() {
-        NotificationCenter.default.post(name: .settingsChanged, object: nil)
+    private func notify(topic: SettingsTopic? = nil) {
+        NotificationCenter.default.post(
+            name: .settingsChanged,
+            object: nil,
+            userInfo: topic.map { ["topic": $0.rawValue] }
+        )
     }
 
     // MARK: - File Persistence (~/.exterm/settings.json)
 
     private func saveToFile() {
-        var dict: [String: Any] = [
+        let dict: [String: Any] = [
             K.themeName: themeName,
             K.autoTheme: autoTheme,
             K.darkThemeName: darkThemeName,
@@ -455,15 +470,28 @@ final class AppSettings {
 }
 
 /// Observable wrapper so SwiftUI views re-render when settings change.
+/// Pass `topics` to limit re-renders to only the settings categories the view cares about.
+/// An empty `topics` set (the default) matches all changes (backward-compatible).
 final class SettingsObserver: ObservableObject {
     @Published var revision: Int = 0
     private var observer: Any?
+    private let topics: Set<SettingsTopic>
 
-    init() {
+    init(topics: Set<SettingsTopic> = []) {
+        self.topics = topics
         observer = NotificationCenter.default.addObserver(
             forName: .settingsChanged, object: nil, queue: .main
-        ) { [weak self] _ in
-            self?.revision += 1
+        ) { [weak self] notification in
+            guard let self = self else { return }
+            // If this observer filters by topic, check the notification's topic
+            if !self.topics.isEmpty,
+                let topicRaw = notification.userInfo?["topic"] as? String,
+                let topic = SettingsTopic(rawValue: topicRaw),
+                !self.topics.contains(topic)
+            {
+                return  // Not a topic we care about — skip re-render
+            }
+            self.revision += 1
         }
     }
 

@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct BookmarksPanelView: View {
-    @ObservedObject var settings = SettingsObserver()
+    @ObservedObject var settings = SettingsObserver(topics: [.theme])
     @State private var bookmarks: [BookmarkService.Bookmark] = []
     var namespace: String = "local"
     var onBookmarkSelected: ((String) -> Void)?
@@ -122,7 +122,7 @@ struct BookmarkRow: View {
                     .foregroundColor(isCurrent ? accentColor : textColor)
                     .lineLimit(1)
 
-                Text(StatusBarView.abbreviatePath(bookmark.path))
+                Text(abbreviatePath(bookmark.path))
                     .font(.system(size: 9))
                     .foregroundColor(mutedColor.opacity(0.6))
                     .lineLimit(1)

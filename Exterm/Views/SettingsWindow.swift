@@ -52,7 +52,7 @@ struct SettingsView: View {
     }
 
     @State private var selectedTab: Tab = .theme
-    @ObservedObject private var observer = SettingsObserver()
+    @ObservedObject private var observer = SettingsObserver(topics: [.theme])
 
     var body: some View {
         let _ = observer.revision
@@ -195,7 +195,7 @@ private struct ThemeSettingsView: View {
     @State private var autoTheme = AppSettings.shared.autoTheme
     @State private var darkTheme = AppSettings.shared.darkThemeName
     @State private var lightTheme = AppSettings.shared.lightThemeName
-    @ObservedObject private var observer = SettingsObserver()
+    @ObservedObject private var observer = SettingsObserver(topics: [.theme])
 
     private var darkThemes: [TerminalTheme] { TerminalTheme.themes.filter { $0.isDark } }
     private var lightThemes: [TerminalTheme] { TerminalTheme.themes.filter { !$0.isDark } }
@@ -293,7 +293,7 @@ private struct TerminalSettingsView: View {
     @State private var cursorStyle = AppSettings.shared.cursorStyle
     @State private var fontSize = Double(AppSettings.shared.fontSize)
     @State private var selectedFont = AppSettings.shared.fontName
-    @ObservedObject private var observer = SettingsObserver()
+    @ObservedObject private var observer = SettingsObserver(topics: [.theme, .terminal])
 
     private let fonts = AppSettings.availableMonospaceFonts
 
@@ -343,7 +343,7 @@ private struct StatusBarSettingsView: View {
     @State private var showTime = AppSettings.shared.statusBarShowTime
     @State private var showPaneInfo = AppSettings.shared.statusBarShowPaneInfo
     @State private var showConnection = AppSettings.shared.statusBarShowConnection
-    @ObservedObject private var observer = SettingsObserver()
+    @ObservedObject private var observer = SettingsObserver(topics: [.theme, .statusBar])
 
     var body: some View {
         let _ = observer.revision
@@ -374,7 +374,7 @@ struct LayoutSettingsView: View {
     @State private var sidebarPosition = AppSettings.shared.sidebarPosition
     @State private var workspaceBarPosition = AppSettings.shared.workspaceBarPosition
     @State private var tabOverflowMode = AppSettings.shared.tabOverflowMode
-    @ObservedObject private var observer = SettingsObserver()
+    @ObservedObject private var observer = SettingsObserver(topics: [.theme, .layout])
 
     var body: some View {
         let _ = observer.revision
@@ -416,7 +416,7 @@ struct PluginSettingsView: View {
     /// Set by MainWindowController before showing settings.
     static var registeredManifests: [PluginManifest] = []
 
-    @ObservedObject private var observer = SettingsObserver()
+    @ObservedObject private var observer = SettingsObserver(topics: [.theme, .plugins])
 
     var body: some View {
         let _ = observer.revision
@@ -435,14 +435,10 @@ struct PluginSettingsView: View {
             }
 
             Section(title: "Default Sidebar Plugins") {
-                Text("Plugins shown in the sidebar when opening a new pane or starting the app.")
+                Text("Plugins shown in the sidebar when opening a new pane. Drag or use arrows to reorder.")
                     .font(.system(size: 10))
                     .foregroundColor(t.muted)
-                VStack(alignment: .leading, spacing: 4) {
-                    ForEach(manifests.filter { $0.capabilities?.sidebarPanel == true }, id: \.id) { manifest in
-                        DefaultEnabledRow(manifest: manifest)
-                    }
-                }
+                DefaultPluginOrderView(manifests: manifests.filter { $0.capabilities?.sidebarPanel == true })
             }
         }
     }
@@ -454,7 +450,7 @@ private struct PluginRow: View {
 
     @State private var isEnabled: Bool
     @State private var isExpanded: Bool = false
-    @ObservedObject private var observer = SettingsObserver()
+    @ObservedObject private var observer = SettingsObserver(topics: [.theme, .plugins])
 
     init(manifest: PluginManifest) {
         self.manifest = manifest
@@ -531,39 +527,119 @@ private struct PluginRow: View {
 
 }
 
-private struct DefaultEnabledRow: View {
-    let manifest: PluginManifest
-    @State private var isEnabled: Bool
-    @ObservedObject private var observer = SettingsObserver()
-
-    init(manifest: PluginManifest) {
-        self.manifest = manifest
-        self._isEnabled = State(
-            initialValue: AppSettings.shared.defaultEnabledPluginIDs.contains(manifest.id))
-    }
+/// Reorderable list of default sidebar plugins with toggle, drag-and-drop, and arrow buttons.
+private struct DefaultPluginOrderView: View {
+    let manifests: [PluginManifest]
+    @ObservedObject private var observer = SettingsObserver(topics: [.theme, .plugins])
+    @State private var orderedIDs: [String] = []
 
     var body: some View {
         let _ = observer.revision
         let t = Tokens.current
-        Toggle(manifest.name, isOn: $isEnabled)
-            .font(.system(size: 12))
-            .foregroundColor(t.text)
-            .onChange(of: isEnabled) { enabled in
-                var list = AppSettings.shared.defaultEnabledPluginIDs
-                if enabled {
-                    if !list.contains(manifest.id) { list.append(manifest.id) }
-                } else {
-                    list.removeAll { $0 == manifest.id }
+        let enabledSet = Set(AppSettings.shared.defaultEnabledPluginIDs)
+
+        VStack(alignment: .leading, spacing: 2) {
+            ForEach(Array(orderedIDs.enumerated()), id: \.element) { index, pluginID in
+                if let manifest = manifests.first(where: { $0.id == pluginID }) {
+                    let isEnabled = enabledSet.contains(pluginID)
+                    HStack(spacing: 8) {
+                        Image(systemName: manifest.icon)
+                            .font(.system(size: 12))
+                            .foregroundColor(isEnabled ? t.text : t.muted)
+                            .frame(width: 16)
+
+                        Text(manifest.name)
+                            .font(.system(size: 12))
+                            .foregroundColor(isEnabled ? t.text : t.muted)
+
+                        Spacer()
+
+                        Button(action: { moveUp(index) }) {
+                            Image(systemName: "chevron.up")
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundColor(index > 0 ? t.text : t.muted.opacity(0.3))
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(index == 0)
+
+                        Button(action: { moveDown(index) }) {
+                            Image(systemName: "chevron.down")
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundColor(index < orderedIDs.count - 1 ? t.text : t.muted.opacity(0.3))
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(index >= orderedIDs.count - 1)
+
+                        Toggle(
+                            "",
+                            isOn: Binding(
+                                get: { enabledSet.contains(pluginID) },
+                                set: { enabled in
+                                    var list = AppSettings.shared.defaultEnabledPluginIDs
+                                    if enabled {
+                                        if !list.contains(pluginID) { list.append(pluginID) }
+                                    } else {
+                                        list.removeAll { $0 == pluginID }
+                                    }
+                                    AppSettings.shared.defaultEnabledPluginIDs = list
+                                }
+                            )
+                        )
+                        .toggleStyle(.switch)
+                        .controlSize(.small)
+                    }
+                    .padding(.vertical, 4)
+                    .padding(.horizontal, 8)
+                    .background(
+                        RoundedRectangle(cornerRadius: 4)
+                            .fill(t.muted.opacity(0.05))
+                    )
                 }
-                AppSettings.shared.defaultEnabledPluginIDs = list
             }
+        }
+        .onAppear { syncOrder() }
+    }
+
+    /// Build the ordered list: enabled plugins in their saved order first, then disabled ones.
+    private func syncOrder() {
+        let saved = AppSettings.shared.defaultEnabledPluginIDs
+        let allIDs = manifests.map(\.id)
+        var result: [String] = []
+        // Enabled in saved order
+        for id in saved where allIDs.contains(id) {
+            result.append(id)
+        }
+        // Remaining (disabled) plugins not in saved list
+        for id in allIDs where !result.contains(id) {
+            result.append(id)
+        }
+        orderedIDs = result
+    }
+
+    private func moveUp(_ index: Int) {
+        guard index > 0 else { return }
+        orderedIDs.swapAt(index, index - 1)
+        persistOrder()
+    }
+
+    private func moveDown(_ index: Int) {
+        guard index < orderedIDs.count - 1 else { return }
+        orderedIDs.swapAt(index, index + 1)
+        persistOrder()
+    }
+
+    /// Save the current order back to settings (only enabled plugins).
+    private func persistOrder() {
+        let enabledSet = Set(AppSettings.shared.defaultEnabledPluginIDs)
+        let newOrder = orderedIDs.filter { enabledSet.contains($0) }
+        AppSettings.shared.defaultEnabledPluginIDs = newOrder
     }
 }
 
 private struct PluginSettingControl: View {
     let pluginID: String
     let setting: PluginManifest.SettingManifest
-    @ObservedObject private var observer = SettingsObserver()
+    @ObservedObject private var observer = SettingsObserver(topics: [.theme, .plugins])
 
     var body: some View {
         let _ = observer.revision
@@ -653,7 +729,7 @@ private struct PluginSettingControl: View {
 // MARK: - Shortcuts
 
 private struct ShortcutsSettingsView: View {
-    @ObservedObject private var observer = SettingsObserver()
+    @ObservedObject private var observer = SettingsObserver(topics: [.theme])
 
     private static let groups: [(String, [(String, String)])] = [
         (

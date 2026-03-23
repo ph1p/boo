@@ -17,6 +17,13 @@ final class RemoteFileTreeNode: Identifiable, ObservableObject {
     @Published var isLoading: Bool = false
     @Published var loadFailed: Bool = false
 
+    /// Incremented on any structural change (expand/collapse/children loaded)
+    /// so the parent view re-flattens the tree.  Only meaningful on the root.
+    @Published var treeRevision: Int = 0
+
+    /// Weak back-pointer to the tree root so child nodes can bump `treeRevision`.
+    weak var root: RemoteFileTreeNode?
+
     /// Number of automatic retries remaining (SSH master may still be connecting).
     private var retriesLeft = 15
     private var retryTimer: Timer?
@@ -51,7 +58,9 @@ final class RemoteFileTreeNode: Identifiable, ObservableObject {
                 guard let self = self else { return }
 
                 guard let entries = entries else {
-                    remoteLog("[RemoteFileTree] listRemoteDirectory returned nil for path=\(self.remotePath) retriesLeft=\(self.retriesLeft)")
+                    remoteLog(
+                        "[RemoteFileTree] listRemoteDirectory returned nil for path=\(self.remotePath) retriesLeft=\(self.retriesLeft)"
+                    )
                     // Connection failed — use SSHControlManager state to decide retry strategy.
                     let shouldRetry: Bool
                     let retryInterval: TimeInterval
@@ -93,7 +102,9 @@ final class RemoteFileTreeNode: Identifiable, ObservableObject {
                     return
                 }
 
-                remoteLog("[RemoteFileTree] listRemoteDirectory returned \(entries.count) entries for path=\(self.remotePath)")
+                remoteLog(
+                    "[RemoteFileTree] listRemoteDirectory returned \(entries.count) entries for path=\(self.remotePath)"
+                )
                 self.applyEntries(entries)
             }
             if Thread.isMainThread {
@@ -111,6 +122,7 @@ final class RemoteFileTreeNode: Identifiable, ObservableObject {
         retryTimer = nil
         isLoading = false
         loadFailed = false
+        let treeRoot = root ?? self
         let newChildren = entries.map { entry in
             if let existing = children?.first(where: { $0.name == entry.name && $0.isDirectory == entry.isDirectory }) {
                 return existing
@@ -122,10 +134,12 @@ final class RemoteFileTreeNode: Identifiable, ObservableObject {
                 isDirectory: entry.isDirectory,
                 session: session
             )
+            child.root = treeRoot
             child.onRequestListing = onRequestListing
             return child
         }
         children = newChildren
+        treeRoot.treeRevision &+= 1
     }
 
     /// Update the display path when "~" resolves to an absolute path or on cd.
@@ -167,15 +181,19 @@ final class RemoteFileTreeNode: Identifiable, ObservableObject {
         }
     }
 
-    func refreshAll() {
+    func refreshAll(isRoot: Bool = true) {
         guard isDirectory else { return }
         if children != nil {
+            retriesLeft = 3
             loadChildren()
         }
         for child in children ?? [] {
             if child.isDirectory && child.isExpanded {
-                child.refreshAll()
+                child.refreshAll(isRoot: false)
             }
+        }
+        if isRoot {
+            objectWillChange.send()
         }
     }
 }

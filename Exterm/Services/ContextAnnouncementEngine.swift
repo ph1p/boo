@@ -79,15 +79,6 @@ final class ContextAnnouncementEngine {
         return parts.joined(separator: ", ")
     }
 
-    private static let homeDir = FileManager.default.homeDirectoryForCurrentUser.path
-
-    private static func abbreviatePath(_ path: String) -> String {
-        if path.hasPrefix(homeDir) {
-            return "~" + path.dropFirst(homeDir.count)
-        }
-        return path
-    }
-
     deinit {
         debounceTimer?.invalidate()
     }

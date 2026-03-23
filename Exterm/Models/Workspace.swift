@@ -41,12 +41,26 @@ final class Workspace {
     }
 
     var displayName: String {
-        customName ?? (folderPath as NSString).lastPathComponent
+        customName ?? folderPath.lastPathComponent
     }
 
     var splitTree: SplitTree
     private(set) var panes: [UUID: Pane] = [:]
-    var activePaneID: UUID
+    var activePaneID: UUID {
+        didSet {
+            if activePaneID != oldValue {
+                // Keep a most-recently-focused history (no duplicates).
+                focusHistory.removeAll { $0 == activePaneID }
+                focusHistory.append(activePaneID)
+                // Cap size to avoid unbounded growth.
+                if focusHistory.count > 32 {
+                    focusHistory.removeFirst()
+                }
+            }
+        }
+    }
+    /// Most-recently-focused pane IDs (oldest first, newest last).
+    private var focusHistory: [UUID] = []
 
     init(folderPath: String) {
         self.id = UUID()
@@ -99,8 +113,13 @@ final class Workspace {
         panes[paneID]?.stopAll()
         panes.removeValue(forKey: paneID)
         splitTree = newTree
+        focusHistory.removeAll { $0 == paneID }
         if activePaneID == paneID {
-            activePaneID = sibling ?? splitTree.leafIDs.first ?? UUID()
+            // Restore the most recently focused pane that still exists,
+            // fall back to the sibling, then the first leaf.
+            let remaining = Set(splitTree.leafIDs)
+            let fromHistory = focusHistory.last(where: { remaining.contains($0) })
+            activePaneID = fromHistory ?? sibling ?? splitTree.leafIDs.first ?? UUID()
         }
         return true
     }

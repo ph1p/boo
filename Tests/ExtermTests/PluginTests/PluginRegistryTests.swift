@@ -12,7 +12,7 @@ final class PluginRegistryTests: XCTestCase {
         let git: TerminalContext.GitContext?
         if let branch = gitBranch {
             git = TerminalContext.GitContext(
-                branch: branch, repoRoot: "/repo", isDirty: true, changedFileCount: 3, stagedCount: 0, stashCount: 0,
+                branch: branch, repoRoot: "/repo", isDirty: true, changedFileCount: 3, stagedCount: 0,
                 aheadCount: 0, behindCount: 0, lastCommitShort: nil)
         } else {
             git = nil
@@ -32,10 +32,11 @@ final class PluginRegistryTests: XCTestCase {
         let registry = PluginRegistry()
         registry.registerBuiltins()
 
-        XCTAssertEqual(registry.plugins.count, 6)
+        XCTAssertEqual(registry.plugins.count, 7)
         XCTAssertNotNil(registry.plugin(for: "file-tree-local"))
         XCTAssertNotNil(registry.plugin(for: "file-tree-remote"))
         XCTAssertNotNil(registry.plugin(for: "git-panel"))
+        XCTAssertNotNil(registry.plugin(for: "ai-agent"))
         XCTAssertNotNil(registry.plugin(for: "docker"))
         XCTAssertNotNil(registry.plugin(for: "bookmarks"))
         XCTAssertNotNil(registry.plugin(for: "system-info"))
@@ -45,7 +46,7 @@ final class PluginRegistryTests: XCTestCase {
         let registry = PluginRegistry()
         registry.registerBuiltins()
         registry.unregister(pluginID: "docker")
-        XCTAssertEqual(registry.plugins.count, 5)
+        XCTAssertEqual(registry.plugins.count, 6)
         XCTAssertNil(registry.plugin(for: "docker"))
     }
 

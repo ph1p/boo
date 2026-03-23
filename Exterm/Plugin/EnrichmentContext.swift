@@ -19,7 +19,6 @@ final class EnrichmentContext {
     var gitIsDirty: Bool = false
     var gitChangedFileCount: Int = 0
     var gitStagedCount: Int = 0
-    var gitStashCount: Int = 0
     var gitAheadCount: Int = 0
     var gitBehindCount: Int = 0
     var gitLastCommitShort: String?
@@ -43,7 +42,6 @@ final class EnrichmentContext {
         self.gitIsDirty = base.gitContext?.isDirty ?? false
         self.gitChangedFileCount = base.gitContext?.changedFileCount ?? 0
         self.gitStagedCount = base.gitContext?.stagedCount ?? 0
-        self.gitStashCount = base.gitContext?.stashCount ?? 0
         self.gitAheadCount = base.gitContext?.aheadCount ?? 0
         self.gitBehindCount = base.gitContext?.behindCount ?? 0
         self.gitLastCommitShort = base.gitContext?.lastCommitShort
@@ -73,7 +71,6 @@ final class EnrichmentContext {
                 isDirty: gitIsDirty,
                 changedFileCount: gitChangedFileCount,
                 stagedCount: gitStagedCount,
-                stashCount: gitStashCount,
                 aheadCount: gitAheadCount,
                 behindCount: gitBehindCount,
                 lastCommitShort: gitLastCommitShort

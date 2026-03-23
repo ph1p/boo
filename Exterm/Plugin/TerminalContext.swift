@@ -24,11 +24,21 @@ struct TerminalContext: Equatable {
         let isDirty: Bool
         let changedFileCount: Int
         let stagedCount: Int
-        let stashCount: Int
         let aheadCount: Int
         let behindCount: Int
         let lastCommitShort: String?
     }
+
+    /// Empty context used as a default before any terminal state is available.
+    static let empty = TerminalContext(
+        terminalID: UUID(),
+        cwd: "",
+        remoteSession: nil,
+        gitContext: nil,
+        processName: "",
+        paneCount: 0,
+        tabCount: 0
+    )
 
     /// Whether this terminal is in a remote session.
     var isRemote: Bool { remoteSession != nil }
@@ -82,7 +92,7 @@ extension TerminalContext {
                 isDirty: false,
                 changedFileCount: 0,
                 stagedCount: 0,
-                stashCount: 0,
+
                 aheadCount: 0,
                 behindCount: 0,
                 lastCommitShort: nil

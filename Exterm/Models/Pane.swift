@@ -64,7 +64,7 @@ final class Pane {
             id: UUID(),
             state: TabState(
                 workingDirectory: workingDirectory,
-                title: (workingDirectory as NSString).lastPathComponent
+                title: workingDirectory.lastPathComponent
             )
         )
         tabs.append(tab)

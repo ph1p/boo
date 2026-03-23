@@ -100,12 +100,13 @@ struct RemoteConnectionFailedView: View {
 
 struct RemoteFileTreeView: View {
     @ObservedObject var root: RemoteFileTreeNode
-    @ObservedObject var settings = SettingsObserver()
+    @ObservedObject var settings = SettingsObserver(topics: [.theme, .explorer])
     var actions: FileTreeActions
     let host: String  // display name
 
     var body: some View {
         let _ = settings.revision
+        let _ = root.treeRevision  // trigger re-flatten on expand/collapse/load
         let theme = AppSettings.shared.theme
         let showIcons = AppSettings.shared.explorerIconsEnabled
         let showHidden = AppSettings.shared.showHiddenFiles
@@ -143,11 +144,15 @@ struct RemoteFileTreeView: View {
                         }
                     }
 
+                    // Use a flat LazyVStack so all rows — including nested
+                    // children — participate in lazy loading.  The previous
+                    // recursive VStack rendered every expanded child eagerly,
+                    // which caused scroll/performance issues in large dirs.
                     LazyVStack(alignment: .leading, spacing: 0) {
-                        let children = filteredChildren(of: root, showHidden: showHidden)
-                        ForEach(children) { node in
+                        let rows = flattenedRows(root: root, showHidden: showHidden)
+                        ForEach(rows, id: \.node.id) { row in
                             RemoteFileTreeRowView(
-                                node: node, depth: 0, actions: actions,
+                                node: row.node, depth: row.depth, actions: actions,
                                 explorerFont: explorerFont, showIcons: showIcons,
                                 showHidden: showHidden, iconSize: fontSize,
                                 textColor: textColor, mutedColor: mutedColor,
@@ -165,10 +170,26 @@ struct RemoteFileTreeView: View {
         }
     }
 
-    private func filteredChildren(of node: RemoteFileTreeNode, showHidden: Bool) -> [RemoteFileTreeNode] {
-        guard let children = node.children else { return [] }
-        if showHidden { return children }
-        return children.filter { !$0.name.hasPrefix(".") }
+    private struct FlatRow {
+        let node: RemoteFileTreeNode
+        let depth: Int
+    }
+
+    /// Build a flat list of visible rows so `LazyVStack` can virtualise them.
+    private func flattenedRows(root: RemoteFileTreeNode, showHidden: Bool) -> [FlatRow] {
+        var result: [FlatRow] = []
+        func collect(_ node: RemoteFileTreeNode, depth: Int) {
+            guard let children = node.children else { return }
+            let filtered = showHidden ? children : children.filter { !$0.name.hasPrefix(".") }
+            for child in filtered {
+                result.append(FlatRow(node: child, depth: depth))
+                if child.isDirectory && child.isExpanded {
+                    collect(child, depth: depth + 1)
+                }
+            }
+        }
+        collect(root, depth: 0)
+        return result
     }
 }
 
@@ -186,91 +207,87 @@ struct RemoteFileTreeRowView: View {
     var hoverColor: Color
     @State private var isHovered = false
 
+    // Children are rendered by the flat LazyVStack in RemoteFileTreeView —
+    // this view only renders a single row.
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 5) {
-                if node.isDirectory {
-                    if node.isLoading {
-                        ProgressView()
-                            .scaleEffect(0.4)
-                            .frame(width: 10, height: 10)
-                    } else {
-                        Image(systemName: node.isExpanded ? "chevron.down" : "chevron.right")
-                            .font(.system(size: 9, weight: .semibold))
-                            .foregroundColor(mutedColor)
-                            .frame(width: 10)
-                    }
+        HStack(spacing: 5) {
+            if node.isDirectory {
+                if node.isLoading {
+                    ProgressView()
+                        .scaleEffect(0.4)
+                        .frame(width: 10, height: 10)
                 } else {
-                    Spacer().frame(width: 10)
+                    Image(systemName: node.isExpanded ? "chevron.down" : "chevron.right")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundColor(mutedColor)
+                        .frame(width: 10)
                 }
-
-                if showIcons {
-                    Image(systemName: node.isDirectory ? "folder.fill" : fileIcon(for: node.name))
-                        .font(.system(size: iconSize))
-                        .frame(width: 16, height: 16)
-                        .foregroundColor(node.isDirectory ? accentColor.opacity(0.8) : mutedColor)
-                }
-
-                Text(node.name)
-                    .font(explorerFont)
-                    .foregroundColor(textColor)
-                    .lineLimit(1)
-
-                Spacer()
-            }
-            .padding(.leading, CGFloat(depth) * 16 + 12)
-            .padding(.vertical, 3)
-            .background(
-                RoundedRectangle(cornerRadius: 4)
-                    .fill(isHovered ? hoverColor : Color.clear)
-                    .padding(.horizontal, 4)
-            )
-            .contentShape(Rectangle())
-            .onHover { hovering in isHovered = hovering }
-            .onTapGesture {
-                if node.isDirectory {
-                    withAnimation(.easeInOut(duration: 0.15)) {
-                        node.isExpanded.toggle()
-                        if node.isExpanded {
-                            node.loadChildren()
-                        }
-                    }
-                } else {
-                    // Paste remote path to terminal
-                    actions.onFileClicked?(node.remotePath)
-                }
-            }
-            .contextMenu {
-                if node.isDirectory {
-                    Button("Open in Explorer") {
-                        actions.onNavigate?(node.remotePath)
-                    }
-                    Divider()
-                } else {
-                    Button("cat") {
-                        actions.onRunCommand?("cat \(RemoteExplorer.shellEscPath(node.remotePath))\r")
-                    }
-                    Divider()
-                }
-                Button("Copy Remote Path") {
-                    actions.onCopyPath?(node.remotePath)
-                }
-                Button("Paste Path to Terminal") {
-                    actions.onRunCommand?(RemoteExplorer.shellEscPath(node.remotePath))
-                }
+            } else {
+                Spacer().frame(width: 10)
             }
 
-            if node.isExpanded, let children = node.children {
-                let filtered = showHidden ? children : children.filter { !$0.name.hasPrefix(".") }
-                ForEach(filtered) { child in
-                    RemoteFileTreeRowView(
-                        node: child, depth: depth + 1, actions: actions,
-                        explorerFont: explorerFont, showIcons: showIcons,
-                        showHidden: showHidden, iconSize: iconSize,
-                        textColor: textColor, mutedColor: mutedColor,
-                        accentColor: accentColor, hoverColor: hoverColor
-                    )
+            if showIcons {
+                Image(systemName: node.isDirectory ? "folder.fill" : fileIcon(for: node.name))
+                    .font(.system(size: iconSize))
+                    .frame(width: 16, height: 16)
+                    .foregroundColor(node.isDirectory ? accentColor.opacity(0.8) : mutedColor)
+            }
+
+            Text(node.name)
+                .font(explorerFont)
+                .foregroundColor(textColor)
+                .lineLimit(1)
+
+            Spacer()
+        }
+        .padding(.leading, CGFloat(depth) * 16 + 12)
+        .padding(.vertical, 3)
+        .background(
+            RoundedRectangle(cornerRadius: 4)
+                .fill(isHovered ? hoverColor : Color.clear)
+                .padding(.horizontal, 4)
+        )
+        .contentShape(Rectangle())
+        .onHover { hovering in isHovered = hovering }
+        .onTapGesture {
+            if node.isDirectory {
+                withAnimation(.easeInOut(duration: 0.15)) {
+                    node.isExpanded.toggle()
+                    if node.isExpanded {
+                        node.loadChildren()
+                    }
+                    // Notify root so the flat list is recalculated.
+                    let treeRoot = node.root ?? node
+                    treeRoot.treeRevision &+= 1
                 }
+            } else {
+                actions.onFileClicked?(node.remotePath)
+            }
+        }
+        .contextMenu {
+            if actions.isAIAgentRunning {
+                Button("Reference in AI (@)") {
+                    actions.onReferenceInAI?(node.remotePath)
+                }
+                Divider()
+            }
+
+            if node.isDirectory && !actions.isAIAgentRunning {
+                Button("cd into") {
+                    actions.onNavigate?(node.remotePath)
+                }
+                Divider()
+            } else if !node.isDirectory {
+                Button("cat") {
+                    actions.onRunCommand?("cat \(RemoteExplorer.shellEscPath(node.remotePath))\r")
+                }
+                Divider()
+            }
+            Button("Copy Remote Path") {
+                actions.onCopyPath?(node.remotePath)
+            }
+            Button("Paste Path to Terminal") {
+                actions.onRunCommand?(RemoteExplorer.shellEscPath(node.remotePath))
             }
         }
     }

@@ -15,7 +15,7 @@ final class JSCRuntimeTests: XCTestCase {
         let git: TerminalContext.GitContext?
         if let branch = gitBranch {
             git = TerminalContext.GitContext(
-                branch: branch, repoRoot: "/repo", isDirty: true, changedFileCount: 2, stagedCount: 0, stashCount: 0,
+                branch: branch, repoRoot: "/repo", isDirty: true, changedFileCount: 2, stagedCount: 0,
                 aheadCount: 0, behindCount: 0, lastCommitShort: nil)
         } else {
             git = nil

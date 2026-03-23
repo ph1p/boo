@@ -16,7 +16,8 @@ final class FileSystemWatcher {
         let pathsToWatch = [path] as CFArray
 
         var context = FSEventStreamContext()
-        context.info = Unmanaged.passUnretained(self).toOpaque()
+        // Use passRetained so the callback pointer stays valid until stop().
+        context.info = Unmanaged.passRetained(self).toOpaque()
 
         let callback: FSEventStreamCallback = { _, info, numEvents, eventPaths, _, _ in
             guard let info = info else { return }
@@ -46,6 +47,8 @@ final class FileSystemWatcher {
         if let stream = stream {
             FSEventStreamStop(stream)
             FSEventStreamInvalidate(stream)
+            // Balance the passRetained() from start().
+            Unmanaged.passUnretained(self).release()
             FSEventStreamRelease(stream)
             self.stream = nil
         }

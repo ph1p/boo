@@ -10,6 +10,13 @@ final class FileTreeNode: Identifiable, ObservableObject {
     @Published var children: [FileTreeNode]?
     @Published var isExpanded: Bool = false
 
+    /// Incremented on structural changes so the parent view re-flattens the tree.
+    /// Only meaningful on the root node.
+    @Published var treeRevision: Int = 0
+
+    /// Weak back-pointer to the tree root so child nodes can bump `treeRevision`.
+    weak var root: FileTreeNode?
+
     init(name: String, path: String, isDirectory: Bool) {
         self.id = path
         self.name = name
@@ -21,6 +28,7 @@ final class FileTreeNode: Identifiable, ObservableObject {
     func loadChildren() {
         guard isDirectory else { return }
         let url = URL(fileURLWithPath: path)
+        let treeRoot = root ?? self
         do {
             let urls = try FileManager.default.contentsOfDirectory(
                 at: url,
@@ -39,15 +47,19 @@ final class FileTreeNode: Identifiable, ObservableObject {
             }
 
             let newChildren = sorted.map { entry -> FileTreeNode in
-                if let existing = children?.first(where: { $0.name == entry.name && $0.isDirectory == entry.isDir }) {
+                if let existing = children?.first(where: { $0.path == entry.path && $0.isDirectory == entry.isDir }) {
                     return existing
                 }
-                return FileTreeNode(name: entry.name, path: entry.path, isDirectory: entry.isDir)
+                let child = FileTreeNode(name: entry.name, path: entry.path, isDirectory: entry.isDir)
+                child.root = treeRoot
+                return child
             }
 
             children = newChildren
+            treeRoot.treeRevision &+= 1
         } catch {
             children = []
+            treeRoot.treeRevision &+= 1
         }
     }
 
@@ -79,7 +91,9 @@ final class FileTreeNode: Identifiable, ObservableObject {
     }
 
     /// Recursively refresh this node and all expanded children.
-    func refreshAll() {
+    /// When called on the root, triggers `objectWillChange` so SwiftUI
+    /// picks up deep child-list mutations that would otherwise be invisible.
+    func refreshAll(isRoot: Bool = true) {
         guard isDirectory else { return }
         if children != nil {
             loadChildren()
@@ -87,8 +101,12 @@ final class FileTreeNode: Identifiable, ObservableObject {
         // Refresh expanded subdirectories
         for child in children ?? [] {
             if child.isDirectory && child.isExpanded {
-                child.refreshAll()
+                child.refreshAll(isRoot: false)
             }
+        }
+        // Force SwiftUI to re-render the tree from the root.
+        if isRoot {
+            objectWillChange.send()
         }
     }
 

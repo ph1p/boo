@@ -3,10 +3,6 @@ import SwiftUI
 /// Sidebar detail view for the AI Agent Monitor plugin.
 /// Shows agent info, config files, hooks, skills, MCP servers, and changed files.
 struct AIAgentDetailView: View {
-    let agentName: String
-    let agentIcon: String
-    let runtime: TimeInterval
-    let cwd: String
     let diffStats: [AIAgentPlugin.DiffStatEntry]
     let agentConfig: AIAgentPlugin.AgentConfig
     let fontSize: CGFloat
@@ -17,8 +13,6 @@ struct AIAgentDetailView: View {
     let onCopyPath: (String) -> Void
     let onReferenceInAI: (String) -> Void
     let onPasteSkill: (String) -> Void
-    let onRefresh: () -> Void
-
     @State private var hoveredItemID: UUID?
     @State private var skillsExpanded = false
     @State private var configExpanded = true
@@ -27,9 +21,6 @@ struct AIAgentDetailView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                agentHeader
-                cwdRow
-                Divider().opacity(0.3)
                 configSection
                 hooksSection
                 mcpSection
@@ -37,51 +28,6 @@ struct AIAgentDetailView: View {
                 changedFilesSection
             }
         }
-    }
-
-    // MARK: - Agent Header
-
-    private var agentHeader: some View {
-        HStack(spacing: 6) {
-            Image(systemName: agentIcon)
-                .font(.system(size: 12))
-                .foregroundColor(accentColor)
-            Text(agentName)
-                .font(.system(size: 12, weight: .medium))
-                .foregroundColor(accentColor)
-            Spacer()
-            Text(formatRuntime(runtime))
-                .font(.system(size: fontSize, design: .monospaced))
-                .foregroundColor(mutedColor)
-            Button(action: onRefresh) {
-                Image(systemName: "arrow.clockwise")
-                    .font(.system(size: 10))
-                    .foregroundColor(mutedColor)
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Refresh")
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("AI Agent: \(agentName), running for \(formatRuntime(runtime))")
-    }
-
-    // MARK: - CWD Row
-
-    private var cwdRow: some View {
-        HStack(spacing: 4) {
-            Image(systemName: "folder")
-                .font(.system(size: fontSize - 1))
-                .foregroundColor(mutedColor)
-            Text(abbreviatePath(cwd))
-                .font(.system(size: fontSize, design: .monospaced))
-                .foregroundColor(textColor)
-                .lineLimit(1)
-                .truncationMode(.middle)
-        }
-        .padding(.horizontal, 12)
-        .padding(.bottom, 4)
     }
 
     // MARK: - Config Files
@@ -385,21 +331,6 @@ struct AIAgentDetailView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
-    }
-}
-
-// MARK: - Helpers
-
-private func formatRuntime(_ seconds: TimeInterval) -> String {
-    let totalSeconds = Int(seconds)
-    let hours = totalSeconds / 3600
-    let mins = (totalSeconds % 3600) / 60
-    if hours > 0 {
-        return "\(hours)h \(mins)m"
-    } else if mins > 0 {
-        return "\(mins)m"
-    } else {
-        return "<1m"
     }
 }
 

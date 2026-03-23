@@ -38,7 +38,7 @@ extension MainWindowController {
             let next = ids[(idx + 1) % ids.count]
             workspace.activePaneID = next
             if let pv = paneViews[next] {
-                window?.makeFirstResponder(pv.currentTerminalView)
+                window?.makeFirstResponder(pv.ghosttyView)
             }
             runPluginCycle(reason: .focusChanged)
         }
@@ -52,7 +52,7 @@ extension MainWindowController {
             let prev = ids[(idx - 1 + ids.count) % ids.count]
             workspace.activePaneID = prev
             if let pv = paneViews[prev] {
-                window?.makeFirstResponder(pv.currentTerminalView)
+                window?.makeFirstResponder(pv.ghosttyView)
             }
             runPluginCycle(reason: .focusChanged)
         }
@@ -140,8 +140,11 @@ extension MainWindowController {
             guard let self = self else { return }
             if let pv = self.paneViews[newID] {
                 pv.startActiveSession()
-                self.window?.makeFirstResponder(pv.currentTerminalView)
+                self.window?.makeFirstResponder(pv.ghosttyView)
             }
+            self.refreshAllSurfaces()
+            self.syncCoordinatorPaneViews()
+            self.updatePaneCloseButtons()
             self.refreshStatusBar()
         }
     }

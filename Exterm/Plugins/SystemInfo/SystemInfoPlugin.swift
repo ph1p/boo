@@ -26,14 +26,11 @@ final class SystemInfoPlugin: ExtermPluginProtocol {
                 key: "statusBarDisk", type: .bool, label: "Show disk in status bar",
                 defaultValue: AnyCodableValue(false), options: nil),
             PluginManifest.SettingManifest(
-                key: "statusBarLoad", type: .bool, label: "Show load in status bar",
-                defaultValue: AnyCodableValue(false), options: nil),
-            PluginManifest.SettingManifest(
                 key: "statusBarCPU", type: .bool, label: "Show CPU in status bar",
                 defaultValue: AnyCodableValue(false), options: nil),
             PluginManifest.SettingManifest(
                 key: "statusBarBattery", type: .bool, label: "Show battery in status bar",
-                defaultValue: AnyCodableValue(false), options: nil),
+                defaultValue: AnyCodableValue(false), options: nil)
         ]
     )
 
@@ -83,7 +80,8 @@ final class SystemInfoPlugin: ExtermPluginProtocol {
             let elapsed = now.timeIntervalSince(prev)
             if elapsed > 0 {
                 netRateIn = UInt64(Double(net.bytesIn.subtractingReportingOverflow(prevNetIn).partialValue) / elapsed)
-                netRateOut = UInt64(Double(net.bytesOut.subtractingReportingOverflow(prevNetOut).partialValue) / elapsed)
+                netRateOut = UInt64(
+                    Double(net.bytesOut.subtractingReportingOverflow(prevNetOut).partialValue) / elapsed)
             }
         }
         prevNetIn = net.bytesIn

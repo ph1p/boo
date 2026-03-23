@@ -62,7 +62,9 @@ final class ContainerCwdWatcher {
             guard let self else { return }
             let existingPID = self.tabCallbacks[paneID]?.pid
             self.tabCallbacks[paneID] = (pid: existingPID, onChange: onChange)
-            remoteLog("[CwdWatcher] registerTab: pane=\(paneID) existingPID=\(existingPID ?? "none") totalTabs=\(self.tabCallbacks.count) knownPIDs=\(self.pidCwdMap.count)")
+            remoteLog(
+                "[CwdWatcher] registerTab: pane=\(paneID) existingPID=\(existingPID ?? "none") totalTabs=\(self.tabCallbacks.count) knownPIDs=\(self.pidCwdMap.count)"
+            )
 
             // If PIDs are already known, try to assign one immediately.
             // Otherwise, the next processPollBatch will handle it.
@@ -152,8 +154,9 @@ final class ContainerCwdWatcher {
                 while let newlineIdx = buffer.firstIndex(of: UInt8(ascii: "\n")) {
                     let lineData = buffer[buffer.startIndex..<newlineIdx]
                     buffer = buffer[buffer.index(after: newlineIdx)...]
-                    guard let line = String(data: lineData, encoding: .utf8)?
-                        .trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard
+                        let line = String(data: lineData, encoding: .utf8)?
+                            .trimmingCharacters(in: .whitespacesAndNewlines)
                     else { continue }
 
                     if line == "---" {

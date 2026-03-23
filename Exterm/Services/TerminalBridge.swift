@@ -209,7 +209,8 @@ final class TerminalBridge {
 
         // When remote, extract remoteCwd from title (OSC-7 path is local-relative)
         if state.remoteSession != nil {
-            if let remotePath = TerminalBridge.extractRemoteCwd(from: state.terminalTitle, session: state.remoteSession) {
+            if let remotePath = TerminalBridge.extractRemoteCwd(from: state.terminalTitle, session: state.remoteSession)
+            {
                 state.remoteCwd = remotePath
             }
             // Keep existing remoteCwd if title doesn't have one
@@ -226,11 +227,26 @@ final class TerminalBridge {
 
     func handleTitleChange(title: String, paneID: UUID) {
         guard paneID == state.paneID else { return }
+        guard title != state.terminalTitle else {
+            NSLog("[Bridge] handleTitleChange: title unchanged, skipping")
+            return
+        }
         NSLog("[Bridge] handleTitleChange: title=\(title), paneID=\(paneID)")
         remoteLog("[Bridge] handleTitleChange: title=\(title) remote=\(String(describing: state.remoteSession))")
         state.terminalTitle = title
 
-        let process = TerminalBridge.extractProcessName(from: title)
+        var process = TerminalBridge.extractProcessName(from: title)
+        // Sticky AI process: when the current process is an AI agent and the new
+        // title yields an unknown/generic name (not a shell, not a recognized process),
+        // keep the AI process. AI tools like Claude Code cycle through dynamic titles
+        // ("⠂ New coding session", "⠐ Building...") that don't contain the tool name.
+        if ProcessIcon.category(for: state.foregroundProcess) == "ai"
+            && !process.isEmpty
+            && ProcessIcon.category(for: process) == nil
+            && !ProcessIcon.isShell(process)
+        {
+            process = state.foregroundProcess
+        }
         let processChanged = process != state.foregroundProcess
         state.foregroundProcess = process
 

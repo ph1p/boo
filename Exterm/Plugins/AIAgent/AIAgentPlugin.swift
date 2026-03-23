@@ -127,16 +127,12 @@ final class AIAgentPlugin: ExtermPluginProtocol {
     // MARK: - Detail View
 
     func makeDetailView(context: PluginContext) -> AnyView? {
-        guard let displayName = agentDisplayName else { return nil }
+        guard agentDisplayName != nil else { return nil }
         let act = actions
         let fontSize: CGFloat = 11.0
 
         return AnyView(
             AIAgentDetailView(
-                agentName: displayName,
-                agentIcon: agentIcon ?? "sparkles",
-                runtime: agentStartTime.map { Date().timeIntervalSince($0) } ?? 0,
-                cwd: currentCwd ?? context.terminal.cwd,
                 diffStats: diffStats,
                 agentConfig: agentConfig,
                 fontSize: fontSize,
@@ -156,11 +152,6 @@ final class AIAgentPlugin: ExtermPluginProtocol {
                 },
                 onPasteSkill: { name in
                     act?.sendToTerminal?("/\(name)")
-                },
-                onRefresh: { [weak self] in
-                    guard let self = self else { return }
-                    self.refreshDiffStats(repoRoot: self.lastDiffRepoRoot)
-                    self.scanAgentConfig(cwd: self.currentCwd, agentName: self.agentName)
                 }
             )
         )

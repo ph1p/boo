@@ -148,6 +148,16 @@ extension MainWindowController {
     }
 
     func activateWorkspace(_ index: Int) {
+        // Save the currently focused pane before switching away.
+        if let oldWS = activeWorkspace, let focusedView = window?.firstResponder as? NSView {
+            for (paneID, pv) in paneViews {
+                if pv.currentTerminalView === focusedView || pv.isDescendant(of: focusedView) || focusedView.isDescendant(of: pv) {
+                    oldWS.activePaneID = paneID
+                    break
+                }
+            }
+        }
+
         appState.setActiveWorkspace(index)
         guard let workspace = activeWorkspace else { return }
 
@@ -172,8 +182,16 @@ extension MainWindowController {
                 }
             }
 
-            if let pv = self.paneViews[ws.activePaneID] {
-                self.window?.makeFirstResponder(pv.currentTerminalView)
+            // Restore focus to the last focused pane, or the first pane.
+            let targetPaneID: UUID
+            if self.paneViews[ws.activePaneID] != nil {
+                targetPaneID = ws.activePaneID
+            } else {
+                targetPaneID = ws.splitTree.leafIDs.first ?? ws.activePaneID
+            }
+            if let pv = self.paneViews[targetPaneID] {
+                ws.activePaneID = targetPaneID
+                self.window?.makeFirstResponder(pv.ghosttyView)
             }
 
             self.refreshAllSurfaces()

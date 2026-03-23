@@ -169,7 +169,7 @@ final class PanePluginStateTests: XCTestCase {
             remoteSession: nil,
             gitContext: TerminalContext.GitContext(
                 branch: "main", repoRoot: "/repo", isDirty: false,
-                changedFileCount: 0, stagedCount: 0, stashCount: 0,
+                changedFileCount: 0, stagedCount: 0,
                 aheadCount: 0, behindCount: 0, lastCommitShort: nil
             ),
             processName: "",

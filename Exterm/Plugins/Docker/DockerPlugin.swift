@@ -24,7 +24,7 @@ final class DockerPluginNew: ExtermPluginProtocol {
         version: "1.0.0",
         icon: "shippingbox",
         description: "Running Docker containers",
-        when: "!remote",
+        when: "!remote && !process.ai",
         runtime: nil,
         capabilities: PluginManifest.Capabilities(sidebarPanel: true, statusBarSegment: true),
         statusBar: PluginManifest.StatusBarManifest(position: "right", priority: 10, template: nil),

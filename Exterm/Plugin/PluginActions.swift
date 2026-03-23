@@ -31,13 +31,7 @@ final class PluginActions {
     }
 
     func openInEditor(_ path: String) {
-        let editor = ProcessInfo.processInfo.environment["EDITOR"] ?? "open"
-        let task = Process()
-        task.launchPath = "/usr/bin/env"
-        task.arguments = [editor, path]
-        task.standardOutput = FileHandle.nullDevice
-        task.standardError = FileHandle.nullDevice
-        try? task.run()
+        NSWorkspace.shared.open(URL(fileURLWithPath: path))
     }
 
     /// Handle a DSL action. Returns a result description for VoiceOver announcement.

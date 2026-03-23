@@ -93,7 +93,10 @@ extension MainWindowController: PaneViewDelegate {
                 self?.refreshStatusBar()
             }
         } else {
-            // Last tab — use smartClose to handle pane/workspace cascading
+            // Last tab — use smartClose to handle pane/workspace cascading.
+            // Ensure the correct pane is active so smartClose acts on it,
+            // not on whichever pane previously had focus.
+            workspace.activePaneID = paneID
             smartCloseAction(nil)
         }
     }
@@ -163,7 +166,7 @@ extension MainWindowController {
             // Start the new pane's session and focus it
             if let newPV = self.paneViews[newID] {
                 newPV.startActiveSession()
-                self.window?.makeFirstResponder(newPV.currentTerminalView)
+                self.window?.makeFirstResponder(newPV.ghosttyView)
             }
             // Refresh all Ghostty surfaces after layout settles
             self.refreshAllSurfaces()
@@ -177,6 +180,11 @@ extension MainWindowController {
     @objc func closePaneAction(_ sender: Any?) {
         guard let workspace = activeWorkspace else { return }
         let paneID = workspace.activePaneID
+
+        // Clear the previous-tab tracker so the stale bridge state
+        // (which still holds the closed pane's title/cwd) is not
+        // synced onto the surviving pane's tab when it gains focus.
+        previousFocusedTabID = nil
 
         // Remove the closed pane's view from cache
         bridge.monitor.untrack(paneID: paneID)
@@ -200,7 +208,7 @@ extension MainWindowController {
                     }
                 }
                 if let pv = self.paneViews[ws.activePaneID] {
-                    self.window?.makeFirstResponder(pv.currentTerminalView)
+                    self.window?.makeFirstResponder(pv.ghosttyView)
                 }
                 self.refreshAllSurfaces()
                 self.syncCoordinatorPaneViews()
@@ -246,7 +254,7 @@ extension MainWindowController {
                 }
                 if let pv = self.paneViews[newID] {
                     pv.startActiveSession()
-                    self.window?.makeFirstResponder(pv.currentTerminalView)
+                    self.window?.makeFirstResponder(pv.ghosttyView)
                 }
                 self.updatePaneCloseButtons()
             }
@@ -351,7 +359,7 @@ extension MainWindowController {
         dest.forceActivateTab(insertIndex)
 
         workspace.activePaneID = dest.paneID
-        window?.makeFirstResponder(dest.currentTerminalView)
+        window?.makeFirstResponder(dest.ghosttyView)
     }
 
     private func splitPaneWithTab(
@@ -419,7 +427,7 @@ extension MainWindowController {
             }
 
             if let newPV = self.paneViews[newPaneID] {
-                self.window?.makeFirstResponder(newPV.currentTerminalView)
+                self.window?.makeFirstResponder(newPV.ghosttyView)
             }
             self.refreshAllSurfaces()
             self.syncCoordinatorPaneViews()
@@ -430,6 +438,8 @@ extension MainWindowController {
     /// Close an empty pane after its last tab was dragged out.
     private func closeEmptyPane(_ paneID: UUID) {
         guard let workspace = activeWorkspace else { return }
+
+        previousFocusedTabID = nil
 
         let closedPV = paneViews.removeValue(forKey: paneID)
         closedPV?.stopAll()
@@ -452,7 +462,7 @@ extension MainWindowController {
                 }
             }
             if let pv = self.paneViews[ws.activePaneID] {
-                self.window?.makeFirstResponder(pv.currentTerminalView)
+                self.window?.makeFirstResponder(pv.ghosttyView)
             }
             self.refreshAllSurfaces()
             self.syncCoordinatorPaneViews()
