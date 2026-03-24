@@ -22,6 +22,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             AppSettings.shared.applySystemAppearance()
         }
         AppSettings.shared.applySystemAppearance()
+
+        // Background update check on launch
+        Task { @MainActor in
+            await AutoUpdater.shared.checkForUpdates()
+            UpdateWindowController.shared.showIfUpdateAvailable()
+        }
     }
 
     func applicationWillTerminate(_ notification: Notification) {

@@ -244,10 +244,14 @@ class SidebarPanelView: NSView {
 
         // Pin the hosting view to the scroll view's content guide so
         // Auto Layout keeps the document size in sync — like CSS overflow:auto.
+        // The bottom greaterThanOrEqual constraint ensures the hosting view
+        // always fills the visible area (like CSS min-height: 100%).
         NSLayoutConstraint.activate([
             hosting.topAnchor.constraint(equalTo: scrollView.contentView.topAnchor),
             hosting.leadingAnchor.constraint(equalTo: scrollView.contentView.leadingAnchor),
             hosting.trailingAnchor.constraint(equalTo: scrollView.contentView.trailingAnchor),
+            hosting.bottomAnchor.constraint(
+                greaterThanOrEqualTo: scrollView.contentView.bottomAnchor),
         ])
 
         addSubview(scrollView)

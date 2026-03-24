@@ -21,6 +21,8 @@ _Coming soon_
 - **Workspace colors** — Preset or custom colors per workspace, pinning, renaming
 - **Undo** — Cmd+Z reopens closed tabs and panes
 - **Mouse selection** — Click, double-click (word), triple-click (line)
+- **Auto-updater** — Checks GitHub Releases for new versions, downloads and installs updates
+- **Focus memory** — Remembers last focused pane per workspace, restores on switch
 
 ## Install
 
@@ -95,7 +97,7 @@ Exterm/
   Plugin/           Core plugin framework (protocol, registry, runtime, DSL)
   Plugins/          One directory per plugin (FileTree/, RemoteExplorer/, Git/, AIAgent/, Docker/, Bookmarks/, SystemInfo/)
   Views/            App-level views (ToolbarView, PaneView, StatusBarView, SettingsWindow)
-  Services/         Shared infrastructure (FileSystemWatcher, RemoteExplorer, TerminalBridge, ContextAnnouncementEngine)
+  Services/         Shared infrastructure (FileSystemWatcher, RemoteExplorer, TerminalBridge, AutoUpdater, ContextAnnouncementEngine)
 CGhostty/           C module wrapping ghostty.h
 CPTYHelper/         C helper for forkpty()
 Vendor/ghostty/     Ghostty source (git clone)
@@ -130,9 +132,10 @@ Exterm uses **GhosttyKit** — the same terminal engine that powers the [Ghostty
 
 ### File Explorer
 
-- **Local**: Uses FSEvents for live file system watching (separate `file-tree-local` plugin, visible in local sessions)
+- **Local**: Uses FSEvents for live file system watching. Flattened lazy rendering handles large directories efficiently (separate `file-tree-local` plugin, visible in local sessions)
 - **Remote SSH**: Auto-detects SSH sessions, lists files via `ssh <host> ls -1AF`. Exterm manages its own SSH ControlMaster sockets — no user SSH config changes required (separate `file-tree-remote` plugin, visible in SSH/MOSH sessions)
 - **Remote cd**: Clicking a directory in the remote tree runs `cd` in the active terminal. Tilde paths (`~`) are resolved to absolute paths so navigation works on Linux and macOS
+- **Context menu**: Rename, move, create folder, move to trash, open in new tab/pane, cd into directory, copy path, reveal in Finder
 
 ## Plugin System
 
@@ -241,6 +244,16 @@ No `Package.swift` changes needed — SPM resolves recursively within the target
 
 See [AGENTS.md](AGENTS.md) for detailed protocol reference and architecture.
 
+## Auto-Update
+
+Exterm checks GitHub Releases for new versions on launch (once every 24 hours). You can also check manually via the app menu: **Exterm → Check for Updates...**
+
+The update flow: download DMG → verify code signature → replace app → relaunch. Settings:
+- Auto-check can be disabled in preferences
+- Individual versions can be skipped
+
+Releases are automated via [semantic-release](https://github.com/semantic-release/semantic-release) — conventional commits on `main` trigger version bumps, builds, and GitHub Releases.
+
 ## Settings
 
 Open with **Cmd+,**. Organized in tabs:
@@ -257,7 +270,7 @@ Open with **Cmd+,**. Organized in tabs:
 swift test
 ```
 
-536 tests covering models, themes, plugins, terminal bridge, remote explorer, SSH control manager, accessibility, and more.
+541 tests covering models, themes, plugins, terminal bridge, remote explorer, SSH control manager, sidebar layout, accessibility, and more.
 
 ## License
 

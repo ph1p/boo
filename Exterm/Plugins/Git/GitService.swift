@@ -99,6 +99,7 @@ extension GitPlugin {
 
     internal func refreshGitStatus(cwd: String, repoRoot: String?) {
         guard let root = repoRoot else {
+            let hadData = !cachedFiles.isEmpty || cachedLastCommit != nil
             cachedFiles = []
             cachedAheadCount = 0
             cachedBehindCount = 0
@@ -108,8 +109,22 @@ extension GitPlugin {
             repoWatcher = nil
             gitDirWatcher?.stop()
             gitDirWatcher = nil
+            watchedRepoRoot = nil
+            // Watch CWD so we detect `git init`
+            setupCwdWatcher(cwd: cwd)
+            if hadData {
+                onRequestCycleRerun?()
+            }
             return
         }
+        // Verify .git still exists — repo may have been de-initialized
+        let gitDir = (root as NSString).appendingPathComponent(".git")
+        if !FileManager.default.fileExists(atPath: gitDir) {
+            refreshGitStatus(cwd: cwd, repoRoot: nil)
+            return
+        }
+        cwdWatcher?.stop()
+        cwdWatcher = nil
         lastRefreshedPath = cwd
         setupGitWatcher(repoRoot: root)
         DispatchQueue.global(qos: .utility).async { [weak self] in
@@ -154,6 +169,21 @@ extension GitPlugin {
                 }
             }
         }
+    }
+
+    /// Watch CWD for `.git` appearing (e.g. after `git init`).
+    private func setupCwdWatcher(cwd: String) {
+        cwdWatcher?.stop()
+        cwdWatcher = FileSystemWatcher(path: cwd) { [weak self] in
+            guard let self = self else { return }
+            let gitDir = (cwd as NSString).appendingPathComponent(".git")
+            guard FileManager.default.fileExists(atPath: gitDir) else { return }
+            // .git appeared — trigger a full cycle rerun so buildGitContext picks it up
+            self.cwdWatcher?.stop()
+            self.cwdWatcher = nil
+            self.onRequestCycleRerun?()
+        }
+        cwdWatcher?.start()
     }
 
     internal func setupGitWatcher(repoRoot: String) {

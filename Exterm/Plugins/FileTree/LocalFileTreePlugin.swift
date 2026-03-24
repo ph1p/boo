@@ -112,6 +112,51 @@ final class LocalFileTreePlugin: ExtermPluginProtocol {
                     }
                 }
             },
+            onRename: { oldPath, newName in
+                let parentDir = (oldPath as NSString).deletingLastPathComponent
+                let newPath = (parentDir as NSString).appendingPathComponent(newName)
+                guard oldPath != newPath else { return }
+                do {
+                    try FileManager.default.moveItem(atPath: oldPath, toPath: newPath)
+                } catch {
+                    NSSound.beep()
+                }
+                // FSEvents watcher will auto-refresh the tree
+            },
+            onMove: { sourcePath, destinationDir in
+                let fileName = (sourcePath as NSString).lastPathComponent
+                let destPath = (destinationDir as NSString).appendingPathComponent(fileName)
+                // Don't move onto itself or into its own subtree
+                guard sourcePath != destPath,
+                    !destinationDir.hasPrefix(sourcePath + "/")
+                else { return }
+                do {
+                    if FileManager.default.fileExists(atPath: destPath) {
+                        // Avoid overwriting — append number
+                        NSSound.beep()
+                        return
+                    }
+                    try FileManager.default.moveItem(atPath: sourcePath, toPath: destPath)
+                } catch {
+                    NSSound.beep()
+                }
+            },
+            onCreateFolder: { parentPath in
+                var folderName = "New Folder"
+                var destPath = (parentPath as NSString).appendingPathComponent(folderName)
+                var counter = 2
+                while FileManager.default.fileExists(atPath: destPath) {
+                    folderName = "New Folder \(counter)"
+                    destPath = (parentPath as NSString).appendingPathComponent(folderName)
+                    counter += 1
+                }
+                do {
+                    try FileManager.default.createDirectory(
+                        atPath: destPath, withIntermediateDirectories: false)
+                } catch {
+                    NSSound.beep()
+                }
+            },
             onReferenceInAI: { path in
                 act?.sendToTerminal?("@\(path) ")
             },

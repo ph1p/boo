@@ -138,21 +138,27 @@ extension MainWindowController {
     /// Build git context from the current CWD.
     /// Uses synchronous detection so it's always accurate, even right after cd into a repo.
     func buildGitContext(cwd: String) -> TerminalContext.GitContext? {
-        // Try status bar cache first (fast path)
+        // Try status bar cache first (fast path), but verify .git still exists
         if let branch = statusBar.gitBranch, let repoRoot = statusBar.gitRepoRoot,
             cwd == repoRoot || cwd.hasPrefix(repoRoot + "/")
         {
-            return TerminalContext.GitContext(
-                branch: branch,
-                repoRoot: repoRoot,
-                isDirty: false,
-                changedFileCount: 0,
-                stagedCount: 0,
-
-                aheadCount: 0,
-                behindCount: 0,
-                lastCommitShort: nil
-            )
+            let gitDir = (repoRoot as NSString).appendingPathComponent(".git")
+            if FileManager.default.fileExists(atPath: gitDir) {
+                return TerminalContext.GitContext(
+                    branch: branch,
+                    repoRoot: repoRoot,
+                    isDirty: false,
+                    changedFileCount: 0,
+                    stagedCount: 0,
+                    aheadCount: 0,
+                    behindCount: 0,
+                    lastCommitShort: nil
+                )
+            }
+            // .git was removed — clear stale cache
+            statusBar.gitBranch = nil
+            statusBar.gitRepoRoot = nil
+            statusBar.needsDisplay = true
         }
         // Synchronous fallback: detect git info directly from the filesystem
         let (branch, repoRoot) = StatusBarView.detectGitInfo(in: cwd)

@@ -712,4 +712,11 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
         PluginSettingsView.registeredManifests = pluginRegistry.plugins.map(\.manifest)
         SettingsWindowController.shared.showSettings()
     }
+
+    @objc func checkForUpdatesAction(_ sender: Any?) {
+        Task { @MainActor in
+            await AutoUpdater.shared.checkForUpdates(userInitiated: true)
+            UpdateWindowController.shared.showIfUpdateAvailable()
+        }
+    }
 }

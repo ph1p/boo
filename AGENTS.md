@@ -38,7 +38,7 @@ Exterm/
     Bookmarks/      - BookmarksPlugin, BookmarksPanelView, BookmarkService
     SystemInfo/     - SystemInfoPlugin (reference example plugin)
   Views/            - App-level views only (ToolbarView, PaneView, StatusBarView, SettingsWindow, etc.)
-  Services/         - Shared infrastructure (FileSystemWatcher, RemoteExplorer, TerminalBridge, ContextAnnouncementEngine, etc.)
+  Services/         - Shared infrastructure (AutoUpdater, FileSystemWatcher, RemoteExplorer, TerminalBridge, ContextAnnouncementEngine, etc.)
 CPTYHelper/         - C library for forkpty() (Swift can't call fork directly)
 ```
 
@@ -184,6 +184,14 @@ PaneView.activateTab() → didFocus delegate
 - Cache key: `"{sshConnectionTarget}:{resolvedPath}"` — ensures alias-based keys match socket keys
 - On `cd`: existing root is reused (host prefix match), `updatePath` resets retry/loading state, `loadChildren` fetches new listing
 - `RemoteFileTreeNode.updatePath` cancels in-flight retries, resets `isLoading` and `retriesLeft` so the next load isn't blocked
+
+#### File Tree Rendering
+
+Both local and remote file trees use a **flat LazyVStack** architecture for performance with large directories. Instead of recursive `VStack` nesting (where child views are rendered eagerly), `flattenedRows()` walks the tree and produces a flat array of `(node, depth)` pairs. `LazyVStack` then virtualizes rows outside the viewport.
+
+A `treeRevision` counter on the root node is incremented on any structural change (expand/collapse/children loaded). Child nodes hold a `weak var root` back-pointer to bump the counter. The root view reads `root.treeRevision` in its body to trigger re-flattening.
+
+The sidebar's `NSScrollView` uses Auto Layout constraints (top/leading/trailing pins) on its `NSHostingView` document view — like CSS `overflow: auto`. This keeps the scroll content height in sync with SwiftUI content changes without manual `fittingSize` measurement.
 
 - `RemoteSessionType` enum (`.ssh(host:alias:)`, `.docker(container:)`) drives all remote behavior
 - `RemoteExplorer` handles remote file listing, remote CWD queries, and home path resolution (cache keyed on `sshConnectionTarget`)
@@ -403,6 +411,32 @@ Existing built-in segments: `EnvironmentSegment`, `GitBranchSegment`, `PathSegme
 5. Register in `PluginRegistry.registerBuiltins()`
 6. Add tests in `Tests/ExtermTests/Plugins/YourPlugin/`
 7. No `Package.swift` changes needed — SPM resolves recursively
+
+### Auto-Updater
+
+`AutoUpdater` (`Services/AutoUpdater.swift`) checks GitHub Releases for new versions:
+
+- **Check**: `GET https://api.github.com/repos/ph1p/exterm/releases/latest`, compares `tagName` (semver) against `CFBundleShortVersionString`
+- **Download**: Downloads DMG to `~/Library/Caches/com.exterm.app/Updates/` with progress
+- **Install**: Mounts DMG via `hdiutil`, copies `.app` to staging, verifies code signature via `codesign --verify --deep --strict`, launches a replacement shell script that waits for the old process to exit, replaces the app bundle, and relaunches
+- **UI**: `UpdateWindow.swift` — floating NSPanel with release notes, download progress, "Skip/Remind/Install" buttons
+- **Settings**: `autoCheckUpdates` (default true), `lastUpdateCheck`, `skipVersion` in `AppSettings`
+- **Trigger**: Automatic check on launch (24h interval), manual via "Check for Updates..." menu item
+
+Releases are automated via semantic-release (`.releaserc.json`) — conventional commits on `main` trigger version bumps, DMG builds, and GitHub Releases.
+
+### Workspace Focus Memory
+
+`Workspace` tracks a `focusHistory` (MRU stack of pane IDs, max 32). Updated via `didSet` on `activePaneID`. When a pane is closed, `closePane` restores focus to the most recently focused surviving pane (from history), falling back to the sibling or first leaf. On workspace switch, `activateWorkspace` saves the current focused pane before switching and restores it when returning.
+
+### Process Icons & Matching
+- `ProcessIcon.icon(for:)` maps ~100 process names to SF Symbols (vim → `pencil.line`, node → `circle.hexagongrid`, lazygit → `arrow.triangle.branch`, etc.)
+- `ProcessIcon.displayName(for:)` maps to human-readable names (nvim → "Neovim", node → "Node.js")
+- `ProcessIcon.category(for:)` maps to categories: `editor`, `vcs`, `runtime`, `build`, `package`, `container`, `database`, `monitor`, `filemanager`, `multiplexer`
+- `ProcessIcon.isShell()` identifies shell processes that should be transparent in tabs
+- Tab bar shows process icon + display name when a non-shell process is running
+- When-clause variables: `process.name`, `process.category`, `process.running`, `process.editor`, `process.vcs`
+- `foregroundProcess` is persisted in `TabState` per tab (synced from `BridgeState` on process change)
 
 ### Common Patterns
 - `TerminalColor.cgColor` / `.nsColor` extensions for color conversion

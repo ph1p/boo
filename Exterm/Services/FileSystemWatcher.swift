@@ -33,8 +33,10 @@ final class FileSystemWatcher {
             &context,
             pathsToWatch,
             FSEventStreamEventId(kFSEventStreamEventIdSinceNow),
-            0.3,  // latency in seconds
-            UInt32(kFSEventStreamCreateFlagUseCFTypes | kFSEventStreamCreateFlagFileEvents)
+            0.1,  // latency in seconds
+            UInt32(
+                kFSEventStreamCreateFlagUseCFTypes | kFSEventStreamCreateFlagFileEvents
+                    | kFSEventStreamCreateFlagNoDefer)
         )
 
         if let stream = stream {

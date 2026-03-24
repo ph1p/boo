@@ -31,6 +31,8 @@ final class GitPlugin: ExtermPluginProtocol {
     var lastRefreshedPath: String?
     var repoWatcher: FileSystemWatcher?
     var gitDirWatcher: FileSystemWatcher?
+    /// Watches CWD when no repo is active, to detect `git init`.
+    var cwdWatcher: FileSystemWatcher?
     var watchedRepoRoot: String?
     var debounceWork: DispatchWorkItem?
 

@@ -114,6 +114,10 @@ final class AppSettings {
         static let sidebarWidth = "sidebarWidth"
         static let pluginSettings = "pluginSettings"
         static let migratedPluginSettings_v1 = "migratedPluginSettings_v1"
+
+        static let autoCheckUpdates = "autoCheckUpdates"
+        static let lastUpdateCheck = "lastUpdateCheck"
+        static let skipVersion = "skipVersion"
     }
 
     /// Bool from UserDefaults with a custom default (since .bool returns false for unset keys).
@@ -303,6 +307,23 @@ final class AppSettings {
                 ?? ["file-tree-local", "file-tree-remote", "git-panel", "docker", "bookmarks"]
         }
         set { set(newValue, forKey: K.defaultEnabledPluginIDs, topic: .plugins) }
+    }
+
+    // MARK: - Updates
+
+    var autoCheckUpdates: Bool {
+        get { bool(K.autoCheckUpdates, default: true) }
+        set { UserDefaults.standard.set(newValue, forKey: K.autoCheckUpdates) }
+    }
+
+    var lastUpdateCheck: Date? {
+        get { UserDefaults.standard.object(forKey: K.lastUpdateCheck) as? Date }
+        set { UserDefaults.standard.set(newValue, forKey: K.lastUpdateCheck) }
+    }
+
+    var skipVersion: String? {
+        get { UserDefaults.standard.string(forKey: K.skipVersion) }
+        set { UserDefaults.standard.set(newValue, forKey: K.skipVersion) }
     }
 
     // MARK: - Plugin Settings
