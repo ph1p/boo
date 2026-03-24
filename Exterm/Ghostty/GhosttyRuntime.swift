@@ -300,11 +300,15 @@ final class GhosttyRuntime {
             NSLog("[Ghostty] Failed to create app")
         } else {
             NSLog("[Ghostty] App initialized")
-            // Periodic tick drives cursor blink and other time-based rendering
-            tickTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 30.0, repeats: true) { [weak self] _ in
+            // Periodic tick drives cursor blink and other time-based rendering.
+            // Add to .common modes so the timer fires during event tracking
+            // (resize, scroll) and modal panels, not just the default mode.
+            let timer = Timer(timeInterval: 1.0 / 30.0, repeats: true) { [weak self] _ in
                 guard let app = self?.app else { return }
                 ghostty_app_tick(app)
             }
+            RunLoop.main.add(timer, forMode: .common)
+            tickTimer = timer
         }
 
         // Listen for settings changes and push new config to all surfaces
