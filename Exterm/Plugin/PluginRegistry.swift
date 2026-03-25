@@ -134,43 +134,43 @@ final class PluginRegistry {
     }
 
     func notifyCwdChanged(newPath: String, context: TerminalContext) {
-        for plugin in activePlugins {
+        for plugin in activePlugins where plugin.subscribedEvents.contains(.cwdChanged) {
             plugin.cwdChanged(newPath: newPath, context: context)
         }
     }
 
     func notifyRemoteSessionChanged(session: RemoteSessionType?, context: TerminalContext) {
-        for plugin in activePlugins {
+        for plugin in activePlugins where plugin.subscribedEvents.contains(.remoteSessionChanged) {
             plugin.remoteSessionChanged(session: session, context: context)
         }
     }
 
     func notifyProcessChanged(name: String, context: TerminalContext) {
-        for plugin in activePlugins {
+        for plugin in activePlugins where plugin.subscribedEvents.contains(.processChanged) {
             plugin.processChanged(name: name, context: context)
         }
     }
 
     func notifyTerminalCreated(terminalID: UUID) {
-        for plugin in activePlugins {
+        for plugin in activePlugins where plugin.subscribedEvents.contains(.terminalCreated) {
             plugin.terminalCreated(terminalID: terminalID)
         }
     }
 
     func notifyTerminalClosed(terminalID: UUID) {
-        for plugin in activePlugins {
+        for plugin in activePlugins where plugin.subscribedEvents.contains(.terminalClosed) {
             plugin.terminalClosed(terminalID: terminalID)
         }
     }
 
     func notifyFocusChanged(terminalID: UUID, context: TerminalContext) {
-        for plugin in activePlugins {
+        for plugin in activePlugins where plugin.subscribedEvents.contains(.focusChanged) {
             plugin.terminalFocusChanged(terminalID: terminalID, context: context)
         }
     }
 
     func notifyRemoteDirectoryListed(path: String, entries: [RemoteExplorer.RemoteEntry]) {
-        for plugin in activePlugins {
+        for plugin in activePlugins where plugin.subscribedEvents.contains(.remoteDirectoryListed) {
             plugin.remoteDirectoryListed(path: path, entries: entries)
         }
     }

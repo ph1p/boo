@@ -271,6 +271,33 @@ protocol ExtermPluginProtocol: ExtermPlugin {
 
 All methods have default no-op implementations. Only override what your plugin needs.
 
+#### Event Subscriptions
+
+Plugins declare which lifecycle events they care about via `subscribedEvents`. The registry only
+delivers callbacks for subscribed events — unsubscribed plugins are skipped entirely. This is
+inspired by tmux's control mode subscription system (`refresh-client -B`).
+
+```swift
+// Only receive CWD and focus events — skip process, remote, terminal lifecycle
+var subscribedEvents: Set<PluginEvent> { [.cwdChanged, .focusChanged] }
+```
+
+Available events: `.cwdChanged`, `.processChanged`, `.remoteSessionChanged`, `.focusChanged`,
+`.terminalCreated`, `.terminalClosed`, `.remoteDirectoryListed`.
+
+Default: all events (backward compatible). Override to narrow scope.
+
+| Plugin | Subscriptions | Skipped |
+|--------|-------------|---------|
+| AIAgent | process, cwd, focus | remote, terminal lifecycle, listing |
+| Git | cwd, focus | process, remote, terminal lifecycle, listing |
+| FileTree | cwd, remote, focus, process | terminal lifecycle, listing |
+| RemoteExplorer | process, listing | cwd, focus, remote, terminal lifecycle |
+| SystemInfo | cwd, focus | process, remote, terminal lifecycle, listing |
+| Bookmarks | *(none)* | all |
+| Docker | *(none)* | all |
+| Debug | all | *(none)* |
+
 #### PluginHostActions
 
 `PluginHostActions` is a struct of closures that plugins use to request host actions (terminal paste, open tab/pane, etc.). Injected by `PluginRegistry` — plugins never set these themselves:

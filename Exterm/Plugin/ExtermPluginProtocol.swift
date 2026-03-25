@@ -1,5 +1,18 @@
 import SwiftUI
 
+/// Events that plugins can subscribe to. Plugins declare which events they
+/// care about via `subscribedEvents`. The registry only delivers callbacks
+/// for subscribed events — like tmux's control mode subscriptions.
+enum PluginEvent: Hashable {
+    case cwdChanged
+    case processChanged
+    case remoteSessionChanged
+    case focusChanged
+    case terminalCreated
+    case terminalClosed
+    case remoteDirectoryListed
+}
+
 /// Content for a status bar segment declared by a plugin.
 struct StatusBarContent {
     let text: String
@@ -62,6 +75,14 @@ protocol ExtermPluginProtocol: ExtermPlugin {
     /// (e.g. after Docker containers change or git status updates).
     var onRequestCycleRerun: (() -> Void)? { get set }
 
+    // MARK: - Event Subscriptions
+
+    /// Events this plugin subscribes to. Only subscribed events trigger lifecycle
+    /// callbacks — unsubscribed events are skipped entirely. This prevents plugins
+    /// from doing unnecessary work when data they don't care about changes.
+    /// Default: all events (backward compatible). Override to narrow scope.
+    var subscribedEvents: Set<PluginEvent> { get }
+
     // MARK: - Granular Lifecycle Callbacks
 
     func cwdChanged(newPath: String, context: TerminalContext)
@@ -97,9 +118,9 @@ extension ExtermPluginProtocol {
     func sectionTitle(context: TerminalContext) -> String? { nil }
     var prefersOuterScrollView: Bool { true }
 
-    // Note: actions, services, hostActions, and onRequestCycleRerun have NO default
-    // implementation. Every plugin must declare stored properties for these so
-    // PluginRegistry injection works correctly.
+    // Note: actions, services, hostActions, onRequestCycleRerun, and subscribedEvents
+    // have NO default implementation. Every plugin must declare them explicitly.
+    // This ensures plugins are intentional about what events they consume.
 
     func cwdChanged(newPath: String, context: TerminalContext) {}
     func remoteSessionChanged(session: RemoteSessionType?, context: TerminalContext) {}

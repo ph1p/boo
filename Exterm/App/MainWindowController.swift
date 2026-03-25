@@ -55,6 +55,13 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
     /// Coalesced plugin cycle scheduling — batches rapid-fire events within one run loop tick.
     private var pendingCycleReason: PluginCycleReason?
     private var cycleScheduled = false
+
+    /// Focus debounce — prevents sidebar rebuild from causing a focus feedback loop.
+    var lastFocusedPaneID: UUID?
+    var lastFocusTimestamp: UInt64 = 0
+    /// Last pane ID for which plugins received a focusChanged notification.
+    /// Prevents redundant notifications when the same pane re-focuses.
+    var lastFocusedPluginPaneID: UUID?
     var pluginRegistry: PluginRegistry { coordinator.pluginRegistry }
     /// Set of plugin IDs currently visible in the sidebar stack.
     var openPluginIDs: Set<String> {
@@ -617,8 +624,10 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
                     self.schedulePluginCycle(reason: .remoteSessionChanged)
 
                 case .focusChanged:
+                    // Only refresh toolbar — didFocus already runs a synchronous plugin cycle.
+                    // Scheduling another async cycle causes sidebar rebuild → GhosttyView focus
+                    // callback → didFocus → infinite loop.
                     self.refreshToolbar()
-                    self.schedulePluginCycle(reason: .focusChanged)
 
                 case .workspaceSwitched:
                     self.refreshToolbar()

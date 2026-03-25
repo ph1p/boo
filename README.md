@@ -323,6 +323,17 @@ function render(context) {
 
 No `Package.swift` changes needed — SPM resolves recursively within the target directories.
 
+#### Event Subscriptions
+
+Plugins declare which events they need. The registry only delivers callbacks for subscribed events:
+
+```swift
+// Only receive CWD and focus — skip process, remote, terminal lifecycle
+var subscribedEvents: Set<PluginEvent> { [.cwdChanged, .focusChanged] }
+```
+
+Available: `.cwdChanged`, `.processChanged`, `.remoteSessionChanged`, `.focusChanged`, `.terminalCreated`, `.terminalClosed`, `.remoteDirectoryListed`. Default is all events.
+
 See [AGENTS.md](AGENTS.md) for detailed protocol reference and architecture.
 
 ## Auto-Update
@@ -351,7 +362,7 @@ Open with **Cmd+,**. Organized in tabs:
 swift test
 ```
 
-656 tests covering models, themes, plugins, terminal bridge, remote explorer, SSH control manager, sidebar layout, accessibility, E2E plugin lifecycle, split/workspace operations, IPC socket protocol, and process detection.
+671 tests covering models, themes, plugins, terminal bridge, remote explorer, SSH control manager, sidebar layout, accessibility, E2E plugin lifecycle, split/workspace operations, IPC socket protocol, process detection, and event subscriptions.
 
 ## License
 

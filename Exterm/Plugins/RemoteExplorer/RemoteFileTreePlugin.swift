@@ -34,6 +34,8 @@ final class RemoteFileTreePlugin: ExtermPluginProtocol {
 
     var prefersOuterScrollView: Bool { true }
 
+    var subscribedEvents: Set<PluginEvent> { [.processChanged, .remoteDirectoryListed] }
+
     // MARK: - Section Title
 
     func sectionTitle(context: PluginContext) -> String? {

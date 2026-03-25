@@ -12,6 +12,13 @@ final class ScriptPluginAdapter: ExtermPluginProtocol {
     var hostActions: PluginHostActions?
     var onRequestCycleRerun: (() -> Void)?
 
+    // External script plugins subscribe to all events since we can't
+    // know which callbacks the script uses.
+    var subscribedEvents: Set<PluginEvent> {
+        [.cwdChanged, .processChanged, .remoteSessionChanged, .focusChanged,
+         .terminalCreated, .terminalClosed, .remoteDirectoryListed]
+    }
+
     private let scriptExecutor = ScriptExecutor()
     private let jscRuntime = JSCRuntime()
     private let logger = Logger(subsystem: "com.exterm", category: "ScriptPlugin")

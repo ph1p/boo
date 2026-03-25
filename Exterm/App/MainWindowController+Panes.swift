@@ -5,6 +5,19 @@ import Cocoa
 extension MainWindowController: PaneViewDelegate {
     func paneView(_ paneView: PaneView, didFocus paneID: UUID) {
         guard let workspace = activeWorkspace else { return }
+
+        // Debounce: skip if the same pane re-focused within 250ms.
+        // Sidebar rebuilds can steal first responder from GhosttyView, causing
+        // Ghostty to re-fire the focus callback and creating a feedback loop.
+        let now = DispatchTime.now().uptimeNanoseconds
+        if paneID == lastFocusedPaneID,
+            now - lastFocusTimestamp < 250_000_000
+        {
+            return
+        }
+        lastFocusedPaneID = paneID
+        lastFocusTimestamp = now
+
         workspace.activePaneID = paneID
         let tab = workspace.pane(for: paneID)?.activeTab
         let cwd = tab?.workingDirectory ?? workspace.folderPath
@@ -73,8 +86,8 @@ extension MainWindowController: PaneViewDelegate {
         else { return }
 
         if pane.tabs.count > 1 {
-            // Confirm before closing
             guard let window = window else { return }
+            let tabID = pane.tabs[index].id
             let alert = NSAlert()
             alert.messageText = "Close this tab?"
             alert.informativeText = "This will end the terminal session in this tab."
@@ -83,13 +96,15 @@ extension MainWindowController: PaneViewDelegate {
             alert.addButton(withTitle: "Cancel")
             alert.beginSheetModal(for: window) { [weak self] response in
                 guard response == .alertFirstButtonReturn else { return }
+                // Re-resolve index — tabs may have changed while alert was shown
+                guard let currentIndex = pane.tabs.firstIndex(where: { $0.id == tabID }) else { return }
                 let item = ClosedItem.tab(
                     paneID: paneID,
-                    workingDirectory: pane.tabs[index].workingDirectory,
-                    index: index
+                    workingDirectory: pane.tabs[currentIndex].workingDirectory,
+                    index: currentIndex
                 )
                 self?.pushUndo(item)
-                pv.closeTab(at: index)
+                pv.closeTab(at: currentIndex)
                 self?.refreshStatusBar()
             }
         } else {

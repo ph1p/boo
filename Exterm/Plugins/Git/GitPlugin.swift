@@ -23,6 +23,8 @@ final class GitPlugin: ExtermPluginProtocol {
 
     var prefersOuterScrollView: Bool { false }
 
+    var subscribedEvents: Set<PluginEvent> { [.cwdChanged, .focusChanged] }
+
     /// Cached changed files per repo root.
     var cachedFiles: [GitChangedFile] = []
 

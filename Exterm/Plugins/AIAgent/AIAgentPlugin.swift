@@ -25,6 +25,8 @@ final class AIAgentPlugin: ExtermPluginProtocol {
 
     var prefersOuterScrollView: Bool { false }
 
+    var subscribedEvents: Set<PluginEvent> { [.processChanged, .cwdChanged, .focusChanged] }
+
     // MARK: - Cached State
 
     private(set) var agentName: String?

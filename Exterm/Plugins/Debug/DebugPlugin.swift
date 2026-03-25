@@ -28,6 +28,11 @@ final class DebugPlugin: ExtermPluginProtocol {
 
     var prefersOuterScrollView: Bool { false }
 
+    var subscribedEvents: Set<PluginEvent> {
+        [.cwdChanged, .processChanged, .remoteSessionChanged, .focusChanged,
+         .terminalCreated, .terminalClosed, .remoteDirectoryListed]
+    }
+
     // MARK: - Log Storage
 
     struct LogEntry: Identifiable {

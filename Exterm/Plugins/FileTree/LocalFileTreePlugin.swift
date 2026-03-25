@@ -53,6 +53,10 @@ final class LocalFileTreePlugin: ExtermPluginProtocol {
 
     var prefersOuterScrollView: Bool { true }
 
+    var subscribedEvents: Set<PluginEvent> {
+        [.cwdChanged, .remoteSessionChanged, .focusChanged, .processChanged]
+    }
+
     // MARK: - Section Title
 
     func sectionTitle(context: PluginContext) -> String? {

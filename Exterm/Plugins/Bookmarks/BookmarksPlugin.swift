@@ -22,6 +22,8 @@ final class BookmarksPluginNew: ExtermPluginProtocol {
         settings: nil
     )
 
+    var subscribedEvents: Set<PluginEvent> { [] }
+
     // MARK: - Status Bar
 
     func makeStatusBarContent(context: PluginContext) -> StatusBarContent? {

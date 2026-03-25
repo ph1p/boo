@@ -32,23 +32,25 @@ extension MainWindowController {
             tabCount: ws.pane(for: ws.activePaneID)?.tabs.count ?? 1
         )
 
-        // Notify plugins of lifecycle events.
-        // Multiple events may have been coalesced into one cycle, so notify
-        // based on what actually changed rather than just the winning reason.
-        if reason == .cwdChanged {
+        // Notify plugins of lifecycle events only when the relevant data changed.
+        // This prevents redundant work when the same event fires multiple times
+        // (e.g. focus callbacks from sidebar rebuilds).
+        let lastCtx = pluginRegistry.lastContext
+        if reason == .cwdChanged, cwd != lastCtx?.cwd {
             pluginRegistry.notifyCwdChanged(newPath: cwd, context: baseContext)
         }
         if reason == .focusChanged || reason == .workspaceSwitched {
-            pluginRegistry.notifyFocusChanged(terminalID: ws.activePaneID, context: baseContext)
+            // Only notify focus change when the pane actually changed
+            if ws.activePaneID != lastFocusedPluginPaneID {
+                lastFocusedPluginPaneID = ws.activePaneID
+                pluginRegistry.notifyFocusChanged(terminalID: ws.activePaneID, context: baseContext)
+            }
         }
-        if reason == .remoteSessionChanged {
+        if reason == .remoteSessionChanged, baseContext.remoteSession != lastCtx?.remoteSession {
             pluginRegistry.notifyRemoteSessionChanged(session: activeRemoteSession, context: baseContext)
         }
-        // Always notify process changes when the process differs from last cycle
         let currentProcess = bridge.state.foregroundProcess
-        if reason == .processChanged
-            || currentProcess != pluginRegistry.lastContext?.processName
-        {
+        if currentProcess != lastCtx?.processName {
             pluginRegistry.notifyProcessChanged(name: currentProcess, context: baseContext)
         }
 

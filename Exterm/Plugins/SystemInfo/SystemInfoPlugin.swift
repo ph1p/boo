@@ -34,6 +34,8 @@ final class SystemInfoPlugin: ExtermPluginProtocol {
         ]
     )
 
+    var subscribedEvents: Set<PluginEvent> { [.cwdChanged, .focusChanged] }
+
     // MARK: - Cached State
 
     private(set) var memoryUsage: Double = 0  // 0.0-1.0

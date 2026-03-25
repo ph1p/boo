@@ -31,6 +31,8 @@ final class DockerPluginNew: ExtermPluginProtocol {
         settings: nil
     )
 
+    var subscribedEvents: Set<PluginEvent> { [] }
+
     // MARK: - Section Title
 
     func sectionTitle(context: PluginContext) -> String? {
