@@ -240,12 +240,44 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
             // Plugin default changes: sync live sidebar to match new defaults.
             // Rebuild openPluginIDs from scratch: start with new defaults, keep auto-opened ones.
             if topic == .plugins {
+                let disabled = Set(AppSettings.shared.disabledPluginIDs)
+
+                // Tear down any open plugins that are now disabled
+                let disabledOpen = self.openPluginIDs.filter { disabled.contains($0) }
+                for pluginID in disabledOpen {
+                    self.cachedDetailViews.removeValue(forKey: pluginID)
+                    self.expandedPluginIDs.remove(pluginID)
+                    self.statusBar.unregisterPluginIcon(for: pluginID)
+                }
+                MainActor.assumeIsolated {
+                    for pluginID in disabledOpen {
+                        self.pluginRegistry.deactivatePlugin(pluginID)
+                    }
+                }
+
                 let newDefaults = Set(AppSettings.shared.defaultEnabledPluginIDs)
                 // Keep plugins that were auto-opened (not in any defaults list)
                 let autoOpened = self.openPluginIDs.filter { !newDefaults.contains($0) }
-                self.openPluginIDs = newDefaults.union(autoOpened)
+                self.openPluginIDs = newDefaults.union(autoOpened).subtracting(disabled)
                 self.cachedDetailViews.removeAll()
-                MainActor.assumeIsolated { self.pluginRegistry.clearChangeDetection() }
+                MainActor.assumeIsolated {
+                    self.pluginRegistry.clearChangeDetection()
+                    // Re-register status bar icons for any re-enabled plugins
+                    self.pluginRegistry.registerStatusBarIcons(in: self.statusBar)
+                }
+                self.syncStatusBarHighlight()
+
+                // Collapse sidebar if no plugins remain open
+                if !self.hasVisibleOpenPlugins() {
+                    if let panel = self.pluginSidebarPanelView {
+                        self.savedSidebarHeights = panel.savedSectionHeights
+                    }
+                    self.pluginSidebarPanelView?.removeFromSuperview()
+                    self.pluginSidebarPanelView = nil
+                    if self.sidebarVisible {
+                        self.toggleSidebar(userInitiated: false)
+                    }
+                }
             }
 
             // Explorer/plugin changes: refresh sidebar via a cycle

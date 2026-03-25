@@ -372,6 +372,7 @@ private struct StatusBarSettingsView: View {
 
 struct LayoutSettingsView: View {
     @State private var sidebarPosition = AppSettings.shared.sidebarPosition
+    @State private var sidebarDefaultHidden = AppSettings.shared.sidebarDefaultHidden
     @State private var workspaceBarPosition = AppSettings.shared.workspaceBarPosition
     @State private var tabOverflowMode = AppSettings.shared.tabOverflowMode
     @ObservedObject private var observer = SettingsObserver(topics: [.theme, .layout])
@@ -381,12 +382,15 @@ struct LayoutSettingsView: View {
         let t = Tokens.current
 
         SettingsPage(title: "Layout") {
-            Section(title: "Sidebar Position") {
-                Picker("", selection: $sidebarPosition) {
+            Section(title: "Sidebar") {
+                Picker("Position", selection: $sidebarPosition) {
                     ForEach(SidebarPosition.allCases, id: \.self) { Text($0.label).tag($0) }
                 }
                 .pickerStyle(.segmented)
                 .onChange(of: sidebarPosition) { v in AppSettings.shared.sidebarPosition = v }
+
+                ToggleRow(label: "Hide sidebar by default", isOn: $sidebarDefaultHidden)
+                    .onChange(of: sidebarDefaultHidden) { v in AppSettings.shared.sidebarDefaultHidden = v }
             }
 
             Section(title: "Workspace Bar Position") {
@@ -472,7 +476,7 @@ private struct PluginRow: View {
                         Text(manifest.name)
                             .font(.system(size: 12, weight: .medium))
                             .foregroundColor(isEnabled ? t.text : t.muted)
-                        Text("Built-in")
+                        Text(manifest.isExternal ? "External" : "Built-in")
                             .font(.system(size: 9, weight: .medium))
                             .foregroundColor(t.muted)
                             .padding(.horizontal, 4)
@@ -669,43 +673,112 @@ private struct PluginSettingControl: View {
     private var doubleControl: some View {
         let value = AppSettings.shared.pluginDouble(
             pluginID, setting.key, default: setting.defaultValue?.value as? Double ?? 0)
+        let lo = setting.min ?? 0
+        let hi = setting.max ?? 100
+        let step = setting.step ?? 1
         return HStack {
             Text(setting.label)
                 .font(.system(size: 12))
                 .foregroundColor(Tokens.current.text)
             Spacer()
-            FontSlider(
+            Slider(
                 value: Binding(
                     get: { value },
                     set: { AppSettings.shared.setPluginSetting(pluginID, setting.key, $0) }
-                ), range: 9...20
+                ), in: lo...hi, step: step
             )
-            .frame(width: 150)
+            Text(step < 1 ? String(format: "%.1f", value) : "\(Int(value))")
+                .font(.system(size: 11, design: .monospaced))
+                .foregroundColor(Tokens.current.text)
+                .frame(width: 32)
         }
+        .frame(width: 200)
     }
 
     private var stringControl: some View {
         let value = AppSettings.shared.pluginString(
             pluginID, setting.key, default: setting.defaultValue?.value as? String ?? "")
-        return HStack {
-            Text(setting.label)
-                .font(.system(size: 12))
-                .foregroundColor(Tokens.current.text)
-            Spacer()
+        return Group {
             if setting.options == "fontPicker:system" {
-                fontPicker(value: value, fonts: AppSettings.availableSystemFonts)
+                HStack {
+                    Text(setting.label)
+                        .font(.system(size: 12))
+                        .foregroundColor(Tokens.current.text)
+                    Spacer()
+                    fontPicker(value: value, fonts: AppSettings.availableSystemFonts)
+                }
             } else if setting.options == "fontPicker:mono" {
-                fontPicker(value: value, fonts: AppSettings.availableMonospaceFonts)
+                HStack {
+                    Text(setting.label)
+                        .font(.system(size: 12))
+                        .foregroundColor(Tokens.current.text)
+                    Spacer()
+                    fontPicker(value: value, fonts: AppSettings.availableMonospaceFonts)
+                }
+            } else if setting.options == "dockerSocket" {
+                dockerSocketControl(value: value)
             } else {
+                HStack {
+                    Text(setting.label)
+                        .font(.system(size: 12))
+                        .foregroundColor(Tokens.current.text)
+                    Spacer()
+                    TextField(
+                        "",
+                        text: Binding(
+                            get: { value },
+                            set: { AppSettings.shared.setPluginSetting(pluginID, setting.key, $0) }
+                        )
+                    )
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 150)
+                }
+            }
+        }
+    }
+
+    private func dockerSocketControl(value: String) -> some View {
+        let docker = DockerService.shared
+        let connected = docker.isAvailable
+        let resolvedPath = docker.socketPath ?? "none"
+        let errorMsg = docker.connectionError
+
+        return VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Circle()
+                    .fill(connected ? Color.green : Color.red)
+                    .frame(width: 7, height: 7)
+                if connected {
+                    Text("Connected")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(Tokens.current.text)
+                    Text(resolvedPath)
+                        .font(.system(size: 10, design: .monospaced))
+                        .foregroundColor(Tokens.current.muted)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                } else {
+                    Text(errorMsg ?? "Disconnected")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(.red)
+                }
+            }
+            HStack(spacing: 6) {
+                Text(setting.label)
+                    .font(.system(size: 11))
+                    .foregroundColor(Tokens.current.muted)
                 TextField(
-                    "",
+                    "auto-detect",
                     text: Binding(
                         get: { value },
-                        set: { AppSettings.shared.setPluginSetting(pluginID, setting.key, $0) }
+                        set: {
+                            AppSettings.shared.setPluginSetting(
+                                pluginID, setting.key, $0)
+                        }
                     )
                 )
                 .textFieldStyle(.roundedBorder)
-                .frame(width: 150)
+                .font(.system(size: 11, design: .monospaced))
             }
         }
     }

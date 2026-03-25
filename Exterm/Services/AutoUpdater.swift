@@ -59,7 +59,10 @@ final class AutoUpdater: ObservableObject {
 
     @Published private(set) var state: State = .idle
 
-    private var downloadTask: URLSessionDataTask?
+    private var downloadSession: URLSession?
+    private var downloadTask: URLSessionDownloadTask?
+
+    private static let checkInterval: TimeInterval = 86_400
 
     // MARK: - Version Info
 
@@ -76,7 +79,7 @@ final class AutoUpdater: ObservableObject {
         if !userInitiated {
             guard AppSettings.shared.autoCheckUpdates else { return }
             if let last = AppSettings.shared.lastUpdateCheck,
-                Date().timeIntervalSince(last) < 86400
+                Date().timeIntervalSince(last) < Self.checkInterval
             {
                 return
             }
@@ -157,6 +160,9 @@ final class AutoUpdater: ObservableObject {
         } completion: { [weak self] tempURL, error in
             DispatchQueue.main.async {
                 guard let self else { return }
+                self.downloadSession?.finishTasksAndInvalidate()
+                self.downloadSession = nil
+                self.downloadTask = nil
                 if let error {
                     self.state = .error(error.localizedDescription)
                     return
@@ -175,13 +181,17 @@ final class AutoUpdater: ObservableObject {
         }
 
         let session = URLSession(configuration: .default, delegate: delegate, delegateQueue: nil)
+        downloadSession = session
         let task = session.downloadTask(with: url)
+        downloadTask = task
         task.resume()
     }
 
     func cancelDownload() {
         downloadTask?.cancel()
         downloadTask = nil
+        downloadSession?.invalidateAndCancel()
+        downloadSession = nil
         state = .idle
     }
 
@@ -194,7 +204,6 @@ final class AutoUpdater: ObservableObject {
             do {
                 let appURL = try Self.extractAppFromDMG(dmgURL)
 
-                // Verify code signature
                 guard Self.verifyCodeSignature(at: appURL) else {
                     DispatchQueue.main.async {
                         self?.state = .error("Code signature verification failed")
@@ -233,7 +242,6 @@ final class AutoUpdater: ObservableObject {
     // MARK: - DMG Handling
 
     nonisolated private static func extractAppFromDMG(_ dmgURL: URL) throws -> URL {
-        // Mount DMG
         let mountProcess = Process()
         mountProcess.executableURL = URL(fileURLWithPath: "/usr/bin/hdiutil")
         mountProcess.arguments = ["attach", dmgURL.path, "-nobrowse", "-readonly", "-plist"]
@@ -254,7 +262,6 @@ final class AutoUpdater: ObservableObject {
             throw UpdateError.mountFailed
         }
 
-        // Find .app in mounted volume
         let mountURL = URL(fileURLWithPath: mountPoint)
         let contents = try FileManager.default.contentsOfDirectory(at: mountURL, includingPropertiesForKeys: nil)
         guard let appBundle = contents.first(where: { $0.pathExtension == "app" }) else {
@@ -267,13 +274,11 @@ final class AutoUpdater: ObservableObject {
             throw UpdateError.noAppInDMG
         }
 
-        // Copy to staging area
         let staging = FileManager.default.temporaryDirectory.appendingPathComponent("ExTermUpdate-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: staging, withIntermediateDirectories: true)
         let stagedApp = staging.appendingPathComponent(appBundle.lastPathComponent)
         try FileManager.default.copyItem(at: appBundle, to: stagedApp)
 
-        // Unmount
         let unmount = Process()
         unmount.executableURL = URL(fileURLWithPath: "/usr/bin/hdiutil")
         unmount.arguments = ["detach", mountPoint, "-quiet"]
@@ -295,22 +300,24 @@ final class AutoUpdater: ObservableObject {
     // MARK: - Replacement Script
 
     nonisolated private static func buildReplacementScript(pid: Int32, currentApp: String, newApp: String) -> String {
-        """
-        #!/bin/bash
-        # Wait for Exterm to exit
-        while kill -0 \(pid) 2>/dev/null; do sleep 0.2; done
-        # Remove quarantine from downloaded app
-        xattr -dr com.apple.quarantine "\(newApp)" 2>/dev/null
-        # Replace app bundle
-        rm -rf "\(currentApp)"
-        cp -R "\(newApp)" "\(currentApp)"
-        # Clean up staging
-        rm -rf "$(dirname "\(newApp)")"
-        # Relaunch
-        open "\(currentApp)"
-        # Self-destruct
-        rm -- "$0"
-        """
+        let cur = shellEscapeForBash(currentApp)
+        let new = shellEscapeForBash(newApp)
+        return """
+            #!/bin/bash
+            while kill -0 \(pid) 2>/dev/null; do sleep 0.2; done
+            xattr -dr com.apple.quarantine \(new) 2>/dev/null
+            rm -rf \(cur)
+            cp -R \(new) \(cur)
+            rm -rf "$(dirname \(new))"
+            open \(cur)
+            rm -- "$0"
+            """
+    }
+
+    /// Single-quote shell escaping: wraps value in single quotes, escaping
+    /// embedded single quotes with the `'\''` pattern.
+    nonisolated private static func shellEscapeForBash(_ value: String) -> String {
+        "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'"
     }
 
     private static func launchReplacementScript(_ script: String) {

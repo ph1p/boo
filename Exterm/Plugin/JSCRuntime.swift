@@ -24,32 +24,67 @@ final class JSCRuntime {
         source: String,
         functionName: String = "transform",
         context: TerminalContext,
+        settings: [String: Any] = [:],
         timeout: TimeInterval = 1.0
     ) throws -> String {
+        var ctxDict = buildContextDict(from: context)
+        if !settings.isEmpty {
+            ctxDict["settings"] = settings
+        }
+
+        // All JSC work runs on a dedicated thread (JSContext is thread-bound).
+        // The calling thread waits with a deadline so infinite loops don't hang.
+        var output: String?
+        var thrownError: (any Error)?
+
+        let group = DispatchGroup()
+        group.enter()
+
+        let jsThread = Thread {
+            defer { group.leave() }
+            do {
+                output = try self.runJS(
+                    source: source, functionName: functionName, ctxDict: ctxDict)
+            } catch {
+                thrownError = error
+            }
+        }
+        jsThread.qualityOfService = .userInitiated
+        jsThread.start()
+
+        let waitResult = group.wait(timeout: .now() + timeout)
+        if waitResult == .timedOut {
+            jsThread.cancel()
+            throw JSError(message: "JS transform timed out after \(Int(timeout))s")
+        }
+
+        if let err = thrownError { throw err }
+        guard let result = output else {
+            throw JSError(message: "Function '\(functionName)' returned null/undefined")
+        }
+        return result
+    }
+
+    /// Run all JSC work on the current thread (must be called from the JS thread).
+    private func runJS(source: String, functionName: String, ctxDict: [String: Any]) throws -> String {
         let jsContext = JSContext()!
 
-        // Capture exceptions
         var jsError: String?
         jsContext.exceptionHandler = { _, exception in
             jsError = exception?.toString() ?? "Unknown JS error"
         }
 
-        // Inject context as global object
-        let ctxDict = buildContextDict(from: context)
         jsContext.setObject(ctxDict, forKeyedSubscript: "ctx" as NSString)
-
-        // Evaluate the source
+        injectHostFunctions(into: jsContext, cwd: ctxDict["cwd"] as? String ?? "/")
         jsContext.evaluateScript(source)
         if let err = jsError {
             throw JSError(message: "JS parse error: \(err)")
         }
 
-        // Call the function — try requested name first, then fall back to "render"/"transform"
         let fn: JSValue
         if let direct = jsContext.objectForKeyedSubscript(functionName), !direct.isUndefined {
             fn = direct
         } else {
-            // Try the alternate name so both "render" and "transform" work
             let alternate = functionName == "transform" ? "render" : "transform"
             if let fallback = jsContext.objectForKeyedSubscript(alternate), !fallback.isUndefined {
                 fn = fallback
@@ -58,29 +93,7 @@ final class JSCRuntime {
             }
         }
 
-        // Execute with timeout via GCD
-        var result: JSValue?
-        var timedOut = false
-
-        let group = DispatchGroup()
-        group.enter()
-
-        let workItem = DispatchWorkItem {
-            result = fn.call(withArguments: [ctxDict as Any])
-            group.leave()
-        }
-
-        // JSC must run on the thread that created the context
-        workItem.perform()
-
-        let waitResult = group.wait(timeout: .now() + timeout)
-        if waitResult == .timedOut {
-            timedOut = true
-        }
-
-        if timedOut {
-            throw JSError(message: "JS transform timed out after \(Int(timeout))s")
-        }
+        let result = fn.call(withArguments: [ctxDict as Any])
 
         if let err = jsError {
             throw JSError(message: "JS error: \(err)")
@@ -90,17 +103,42 @@ final class JSCRuntime {
             throw JSError(message: "Function '\(functionName)' returned null/undefined")
         }
 
-        // Convert result to JSON string
         if value.isString {
             return value.toString()
         }
 
-        // Serialize object/array to JSON
         let jsonData = try JSONSerialization.data(
-            withJSONObject: value.toObject() as Any,
-            options: []
-        )
+            withJSONObject: value.toObject() as Any, options: [])
         return String(data: jsonData, encoding: .utf8) ?? "{}"
+    }
+
+    // MARK: - Host Functions
+
+    /// Inject host-provided functions into the JS context.
+    /// These give plugins controlled access to the filesystem.
+    private func injectHostFunctions(into jsContext: JSContext, cwd: String) {
+        let readFile: @convention(block) (String) -> String? = { path in
+            guard let resolved = Self.resolvePath(path, under: cwd) else { return nil }
+            return try? String(contentsOfFile: resolved, encoding: .utf8)
+        }
+        jsContext.setObject(readFile, forKeyedSubscript: "readFile" as NSString)
+
+        let fileExists: @convention(block) (String) -> Bool = { path in
+            guard let resolved = Self.resolvePath(path, under: cwd) else { return false }
+            return FileManager.default.fileExists(atPath: resolved)
+        }
+        jsContext.setObject(fileExists, forKeyedSubscript: "fileExists" as NSString)
+    }
+
+    /// Resolve a path relative to cwd. Absolute paths must be under cwd (security boundary).
+    private static func resolvePath(_ path: String, under cwd: String) -> String? {
+        if (path as NSString).isAbsolutePath {
+            let resolved = (path as NSString).standardizingPath
+            let cwdPrefix = (cwd as NSString).standardizingPath
+            guard resolved.hasPrefix(cwdPrefix + "/") || resolved == cwdPrefix else { return nil }
+            return resolved
+        }
+        return ((cwd as NSString).appendingPathComponent(path) as NSString).standardizingPath
     }
 
     /// Build a JavaScript-compatible dictionary from TerminalContext.

@@ -63,8 +63,10 @@ extension MainWindowController {
         // Feed plugin status bar contents to status bar
         statusBar.pluginStatusBarContents = result.statusBarContents
 
-        // Feed system info segment from plugin cached values
-        if let sysPlugin = pluginRegistry.plugin(for: "system-info") as? SystemInfoPlugin {
+        // Feed system info segment from plugin cached values (skip if plugin disabled)
+        if AppSettings.shared.isPluginEnabled("system-info"),
+            let sysPlugin = pluginRegistry.plugin(for: "system-info") as? SystemInfoPlugin
+        {
             let tint: NSColor? =
                 sysPlugin.memoryUsage > 0.85
                 ? .systemRed : (sysPlugin.memoryUsage > 0.7 ? .systemOrange : nil)

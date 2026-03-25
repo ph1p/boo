@@ -1,0 +1,21 @@
+{
+  "id": "terminal-inspector",
+  "name": "Terminal Inspector",
+  "version": "1.0.0",
+  "icon": "magnifyingglass",
+  "description": "Showcase plugin: displays all terminal context fields, settings, and available actions",
+  "runtime": "js",
+  "capabilities": {
+    "sidebarPanel": true,
+    "statusBarSegment": true
+  },
+  "statusBar": {
+    "position": "right",
+    "priority": 90,
+    "template": "{process.name}"
+  },
+  "settings": [
+    { "key": "showGit", "type": "bool", "label": "Show git section", "default": true },
+    { "key": "showFiles", "type": "bool", "label": "Show file detection", "default": true }
+  ]
+}

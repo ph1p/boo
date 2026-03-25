@@ -113,7 +113,8 @@ final class PluginWatcher {
 
             do {
                 let data = try Data(contentsOf: URL(fileURLWithPath: manifestPath))
-                let manifest = try PluginManifest.parse(from: data)
+                var manifest = try PluginManifest.parse(from: data)
+                manifest.isExternal = true
 
                 if loadedPlugins[entry] == nil {
                     // New plugin

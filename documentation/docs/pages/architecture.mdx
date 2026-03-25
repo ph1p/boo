@@ -6,27 +6,29 @@
 - **AppKit** — All terminal UI, toolbar, status bar, split panes
 - **SwiftUI** — File tree sidebar and settings window only
 - **GhosttyKit** — Terminal emulation and Metal GPU rendering (embedded from [ghostty-org/ghostty](https://github.com/ghostty-org/ghostty))
-- **CoreText** — Terminal text rendering (fallback, `NSView.draw`)
 - **POSIX PTY** — Via C helper (`CPTYHelper/`) using `forkpty()`
 
 ## Project Structure
 
 ```
 Exterm/
-  App/              AppDelegate, MainWindowController, WindowStateCoordinator
-  Ghostty/          GhosttyRuntime (app singleton), GhosttyView (Metal surface)
-  Terminal/         VT100Terminal (fallback parser), TerminalSession (PTY + I/O)
-  Renderer/         TerminalView (CoreText fallback renderer)
+  App/              AppDelegate, MainWindowController (+extensions), WindowStateCoordinator, AppStore
+  Ghostty/          GhosttyRuntime (app singleton), GhosttyView (Metal surface), TerminalScrollView
+  Terminal/         TerminalBackend (PTY lifecycle protocol)
   Models/           Workspace, Pane (+ TabState), SplitTree, AppSettings, Theme
   Plugin/           Core plugin framework (protocol, registry, runtime, DSL, watcher)
+    ViewDSL/        DSL parser, renderer, elements, action handler
   Plugins/          One directory per plugin, all plugin-specific code colocated
-    FileTree/       FileTreePlugin, FileTreeView, FileTreeNode, RemoteFileTreeView, RemoteFileTreeNode
-    Git/            GitPlugin (+ GitDetailView)
-    Docker/         DockerPluginNew, DockerService
-    Bookmarks/      BookmarksPluginNew, BookmarksPanelView, BookmarkService
+    FileTree/       LocalFileTreePlugin, FileTreeView, FileTreeNode
+    RemoteExplorer/ RemoteFileTreePlugin, RemoteFileTreeView, RemoteFileTreeNode
+    Git/            GitPlugin, GitDetailView, GitService
+    AIAgent/        AIAgentPlugin, AIAgentDetailView
+    Docker/         DockerPlugin, DockerService
+    Bookmarks/      BookmarksPlugin, BookmarksPanelView, BookmarkService
     SystemInfo/     SystemInfoPlugin (reference example)
-  Views/            App-level views (ToolbarView, PaneView, StatusBarView, SettingsWindow)
-  Services/         Shared infrastructure (FileSystemWatcher, RemoteExplorer, TerminalBridge)
+    Debug/          DebugPlugin (lifecycle event logger and state inspector)
+  Views/            App-level views (PaneView, StatusBarView, ToolbarView, SettingsWindow, etc.)
+  Services/         Shared infrastructure (TerminalBridge, RemoteExplorer, ExtermSocketServer, etc.)
 CGhostty/           C module wrapping ghostty.h
 CPTYHelper/         C helper for forkpty()
 Vendor/ghostty/     Ghostty source (git clone)
@@ -67,23 +69,69 @@ struct TabState {
 
 `Pane.Tab` exposes convenience accessors (`tab.title`, `tab.workingDirectory`, etc.) that forward to `tab.state` for backward compatibility.
 
+### System Overview
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│ Exterm App                                                          │
+│                                                                     │
+│  ┌─────────────┐   ┌──────────────────────────────────────────┐     │
+│  │ AppSettings │   │ Workspace                                │     │
+│  │ (singleton) │   │  └─ SplitTree                            │     │
+│  │ theme, font │   │      ├─ Pane → Tab[] → TabState (SOT)   │     │
+│  │ plugin cfg  │   │      └─ Pane → Tab[] → TabState          │     │
+│  └──────┬──────┘   └──────────────────┬───────────────────────┘     │
+│         │                             │                             │
+│         v                             v                             │
+│  ┌─────────────────────────────────────────────────────┐            │
+│  │ WindowStateCoordinator                              │            │
+│  │  • sync bridge → TabState                           │            │
+│  │  • save/restore plugin UI state on tab switch       │            │
+│  │  • build TerminalContext from TabState               │            │
+│  └────────────┬──────────────────────┬─────────────────┘            │
+│               │                      │                              │
+│               v                      v                              │
+│  ┌────────────────────┐   ┌──────────────────────┐                  │
+│  │ TerminalBridge     │   │ PluginRuntime        │                  │
+│  │ (event parser)     │   │ enrich → freeze →    │                  │
+│  │ • title heuristics │   │ react → evaluate     │                  │
+│  │ • remote detection │   │                      │                  │
+│  │ • process tracking │   │ TerminalContext       │                  │
+│  └────────┬───────────┘   │ (frozen, immutable)  │                  │
+│           │               └──────────┬───────────┘                  │
+│           │                          │                              │
+│  ┌────────▼───────────┐              v                              │
+│  │ GhosttyRuntime     │   ┌──────────────────────────────────┐      │
+│  │ GhosttyView        │   │ Plugins                          │      │
+│  │ (Metal surface)    │   │ FileTree  Git      AIAgent       │      │
+│  │                    │   │ Remote    Docker   Bookmarks     │      │
+│  │ OSC 7 (CWD)       │   │ System    Debug    [External]    │      │
+│  │ OSC 2 (title)      │   └──────────────────────────────────┘      │
+│  │ process exit       │                                             │
+│  └────────┬───────────┘                                             │
+│           │                                                         │
+│  ┌────────▼───────────┐   ┌──────────────────────────────────┐      │
+│  │ PTY (CPTYHelper)   │   │ ExtermSocketServer               │      │
+│  │ forkpty() + GCD    │   │ ~/.exterm/exterm.sock            │      │
+│  │ background I/O     │   │ process registration (IPC)       │      │
+│  └────────────────────┘   └──────────────────────────────────┘      │
+│                                       ▲                             │
+└───────────────────────────────────────┼─────────────────────────────┘
+                                        │ Unix socket
+                              ┌─────────┴──────────┐
+                              │ Child processes     │
+                              │ (AI agents, tools)  │
+                              └────────────────────┘
+```
+
 ### Data Flow
 
 ```
-AppSettings (singleton, global)          Pane.Tab.state: TabState (per-tab)
-         │                                        │
-         v                                        v
-   WindowStateCoordinator  ◄───writes───  TerminalBridge (event parser)
-         │                                   (heuristics, process-tree)
-         │
-         v
-   TerminalContext.build(tabState:...)
-         │
-         v
-   PluginRuntime (enrich → freeze → react)
-         │
-         v
-   TerminalContext (frozen, immutable) → Plugins
+Ghostty OSC event → PaneView delegate → MainWindowController
+  → TerminalBridge (heuristics, remote detection)
+  → coordinator.syncBridgeToTab() → writes to TabState
+  → runPluginCycle() → coordinator.buildContext() → TerminalContext
+  → PluginRuntime (enrich → freeze → react) → sidebar/status bar
 ```
 
 **`WindowStateCoordinator`** (`App/WindowStateCoordinator.swift`) is the centralized state manager between `TerminalBridge`, `TabState`, and `PluginRegistry`:
@@ -116,15 +164,14 @@ AppSettings (singleton, global)          Pane.Tab.state: TabState (per-tab)
 
 ## Key Design Decisions
 
-- **TerminalBackend protocol** — Abstracts the terminal engine so it can be swapped between GhosttyKit and the built-in VT100 parser
+- **TerminalBackend protocol** — Abstracts PTY lifecycle so backends can be swapped
 - **Per-pane tabs** — Each split pane owns its own tab bar and terminal sessions
 - **Workspace → SplitTree → Panes → Tabs** — Workspaces are folders, panes are splits, tabs are terminal sessions
 - **TabState as single source of truth** — All per-tab state (terminal + plugin UI) lives in one struct on `Pane.Tab`, eliminating scattered dictionaries and manual sync
 - **WindowStateCoordinator** — Centralizes state transitions between bridge, tab model, and plugin registry, keeping `MainWindowController` thin
 - **BridgeState is transient** — `TerminalBridge.BridgeState` is a working snapshot, not authoritative. The coordinator syncs detection results back to `TabState`
 - **TerminalSession detach/reattach** — Sessions survive view hierarchy rebuilds via `attachToView()`/`detachFromView()`
-- **Thread safety** — VT100Terminal uses `NSLock`; `snapshot()` captures state under one lock for rendering
-- **All UI on main thread** — PTY read loop runs on a background GCD queue; OSC callbacks dispatch to main
+- **Thread safety** — All UI on main thread; PTY read loop runs on background GCD queue; OSC callbacks dispatch to main
 - **Plugin colocation** — All code for a plugin (views, services, models) lives in one directory rather than scattered across `Views/`, `Services/`, `Plugins/`
 - **PluginHostActions** — Plugins request host actions through a shared struct of closures injected by the registry, rather than holding individual callbacks wired by `MainWindowController`
 

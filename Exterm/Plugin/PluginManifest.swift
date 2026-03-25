@@ -2,7 +2,7 @@ import Foundation
 
 /// Parsed plugin manifest from plugin.json.
 /// ADR-4: Strict JSON Schema manifest validation.
-struct PluginManifest: Codable, Equatable {
+struct PluginManifest: Codable {
     let id: String
     let name: String
     let version: String
@@ -14,13 +14,19 @@ struct PluginManifest: Codable, Equatable {
     let statusBar: StatusBarManifest?
     let settings: [SettingManifest]?
 
+    /// True for plugins loaded from ~/.exterm/plugins/ (not decoded from JSON).
+    var isExternal: Bool = false
+
+    enum CodingKeys: String, CodingKey {
+        case id, name, version, icon, description, when, runtime, capabilities, statusBar, settings
+    }
+
     struct Capabilities: Codable, Equatable {
         let sidebarPanel: Bool?
         let statusBarSegment: Bool?
     }
 
     enum PluginRuntime: String, Codable, Equatable {
-        case script
         case js
     }
 
@@ -36,9 +42,12 @@ struct PluginManifest: Codable, Equatable {
         let label: String
         let defaultValue: AnyCodableValue?
         let options: String?
+        var min: Double? = nil
+        var max: Double? = nil
+        var step: Double? = nil
 
         enum CodingKeys: String, CodingKey {
-            case key, type, label, options
+            case key, type, label, options, min, max, step
             case defaultValue = "default"
         }
 
@@ -48,6 +57,16 @@ struct PluginManifest: Codable, Equatable {
             case int
             case double
         }
+    }
+}
+
+extension PluginManifest: Equatable {
+    static func == (lhs: PluginManifest, rhs: PluginManifest) -> Bool {
+        lhs.id == rhs.id && lhs.name == rhs.name && lhs.version == rhs.version
+            && lhs.icon == rhs.icon && lhs.description == rhs.description
+            && lhs.when == rhs.when && lhs.runtime == rhs.runtime
+            && lhs.capabilities == rhs.capabilities && lhs.statusBar == rhs.statusBar
+            && lhs.settings == rhs.settings
     }
 }
 

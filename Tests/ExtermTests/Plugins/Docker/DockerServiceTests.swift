@@ -6,15 +6,37 @@ final class DockerServiceTests: XCTestCase {
 
     func testDockerDetection() {
         let docker = DockerService.shared
-        // isAvailable depends on whether Docker is installed on the test machine
-        // Just verify it doesn't crash
+        // isAvailable depends on whether Docker socket exists on the test machine
         docker.detectDocker()
-        // dockerPath should be set if available
         if docker.isAvailable {
-            XCTAssertNotNil(docker.dockerPath)
+            XCTAssertNotNil(docker.socketPath)
+            XCTAssertNil(docker.connectionError)
         } else {
-            XCTAssertNil(docker.dockerPath)
+            XCTAssertNil(docker.socketPath)
+            XCTAssertNotNil(docker.connectionError)
         }
+    }
+
+    func testExplicitSocketPathNotFound() {
+        let docker = DockerService.shared
+        docker.detectDocker(explicitPath: "/nonexistent/docker.sock")
+        XCTAssertFalse(docker.isAvailable)
+        XCTAssertNil(docker.socketPath)
+        XCTAssertNotNil(docker.connectionError)
+        XCTAssertTrue(docker.connectionError!.contains("/nonexistent"))
+        // Restore auto-detect
+        docker.detectDocker()
+    }
+
+    func testExplicitSocketPathEmpty() {
+        let docker = DockerService.shared
+        // Empty string should fall back to auto-detect
+        docker.detectDocker(explicitPath: "")
+        if docker.isAvailable {
+            XCTAssertNil(docker.connectionError)
+        }
+        // Restore
+        docker.detectDocker()
     }
 
     func testContainerStateEnum() {
@@ -46,11 +68,11 @@ final class DockerServiceTests: XCTestCase {
         XCTAssertNotEqual(a, c)
     }
 
-    func testStartStopPolling() {
+    func testStartStopWatching() {
         let docker = DockerService.shared
         // Should not crash even if Docker is not available
-        docker.startPolling(interval: 60)
-        docker.stopPolling()
+        docker.startWatching()
+        docker.stopWatching()
     }
 
     func testContainerStateValues() {
@@ -70,10 +92,10 @@ final class DockerServiceTests: XCTestCase {
             paneCount: 1,
             tabCount: 1
         )
-        // With no containers, section title should be nil
         let title = plugin.sectionTitle(context: ctx)
-        // Containers come from DockerService.shared which may or may not have real data
-        if DockerService.shared.containers.isEmpty {
+        if DockerService.shared.connectionError != nil {
+            XCTAssertEqual(title, "Docker (disconnected)")
+        } else if DockerService.shared.containers.isEmpty {
             XCTAssertNil(title)
         } else {
             XCTAssertNotNil(title)
@@ -93,12 +115,24 @@ final class DockerServiceTests: XCTestCase {
             paneCount: 1,
             tabCount: 1
         )
-        if DockerService.shared.containers.isEmpty {
-            XCTAssertNil(plugin.makeStatusBarContent(context: ctx))
+        let content = plugin.makeStatusBarContent(context: ctx)
+        if DockerService.shared.connectionError != nil {
+            XCTAssertNotNil(content)
+            XCTAssertEqual(content!.text, "disconnected")
+        } else if DockerService.shared.containers.isEmpty {
+            XCTAssertNil(content)
         } else {
-            let content = plugin.makeStatusBarContent(context: ctx)
             XCTAssertNotNil(content)
             XCTAssertTrue(content!.text.contains("running"))
         }
+    }
+
+    @MainActor
+    func testDockerPluginHasSocketPathSetting() {
+        let plugin = DockerPluginNew()
+        let settings = plugin.manifest.settings ?? []
+        let socketSetting = settings.first { $0.key == "socketPath" }
+        XCTAssertNotNil(socketSetting)
+        XCTAssertEqual(socketSetting?.type, .string)
     }
 }

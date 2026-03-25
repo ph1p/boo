@@ -224,8 +224,10 @@ final class ContainerCwdWatcher {
 
     func stop() {
         remoteLog("[CwdWatcher] stopping shared watcher")
-        process?.terminate()
+        // Synchronize with readerQueue which sets `process` in start()
+        let proc = process
         process = nil
+        proc?.terminate()
     }
 
     deinit {

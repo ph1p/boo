@@ -70,6 +70,20 @@ final class PluginRegistry {
         logger.info("Unregistered plugin: \(pluginID)")
     }
 
+    // MARK: - Activate / Deactivate
+
+    /// Notify a plugin it has been opened in the sidebar.
+    /// Plugins use this to start background work (watchers, sockets).
+    func activatePlugin(_ pluginID: String) {
+        plugin(for: pluginID)?.pluginDidActivate()
+    }
+
+    /// Notify a plugin it has been closed from the sidebar.
+    /// Plugins use this to stop background work and release resources.
+    func deactivatePlugin(_ pluginID: String) {
+        plugin(for: pluginID)?.pluginDidDeactivate()
+    }
+
     // MARK: - Cycle
 
     /// Run the full plugin cycle and return visible plugin IDs.
@@ -197,10 +211,15 @@ final class PluginRegistry {
     /// Skips file-tree plugins (they have a dedicated FileTreeIconSegment).
     func registerStatusBarIcons(in statusBar: StatusBarView) {
         let disabled = AppSettings.shared.disabledPluginIDs
+        let existingIDs = Set(
+            (statusBar.leftPlugins + statusBar.rightPlugins)
+                .compactMap { ($0 as? PluginIconSegment)?.associatedPanelID }
+        )
         for plugin in plugins
         where plugin.manifest.capabilities?.sidebarPanel == true && !disabled.contains(plugin.pluginID) {
             let m = plugin.manifest
             if m.id == "file-tree-local" || m.id == "file-tree-remote" { continue }
+            if existingIDs.contains(m.id) { continue }
             let priority = m.statusBar?.priority ?? 50
             let segment = PluginIconSegment(
                 pluginID: m.id,

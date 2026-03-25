@@ -8,12 +8,16 @@ struct DSLRenderer: View {
     let density: SidebarDensity
     var onAction: ((DSLAction) -> Void)?
 
+    private var pad: CGFloat { density == .comfortable ? 12 : 8 }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: density == .comfortable ? 8 : 4) {
+        VStack(alignment: .leading, spacing: density == .comfortable ? 6 : 3) {
             ForEach(Array(elements.enumerated()), id: \.offset) { _, element in
                 self.renderElement(element)
             }
         }
+        .padding(.horizontal, pad)
+        .padding(.vertical, density == .comfortable ? 10 : 6)
     }
 
     private func renderElement(_ element: DSLElement) -> AnyView {
@@ -28,7 +32,7 @@ struct DSLRenderer: View {
 
         case .hstack(let children):
             return AnyView(
-                HStack(spacing: density == .comfortable ? 8 : 4) {
+                HStack(spacing: density == .comfortable ? 6 : 4) {
                     ForEach(Array(children.enumerated()), id: \.offset) { _, child in
                         self.renderElement(child)
                     }
@@ -40,17 +44,25 @@ struct DSLRenderer: View {
         case .list(let items):
             return AnyView(renderList(items: items))
 
-        case .button(let label, let action, let style):
-            return AnyView(renderButton(label: label, action: action, style: style))
+        case .button(let label, let action, let style, let ctxMenu):
+            return AnyView(renderButton(label: label, action: action, style: style, contextMenu: ctxMenu))
 
         case .badge(let text, let tint, let a11yLabel):
             return AnyView(renderBadge(text: text, tint: tint, accessibilityLabel: a11yLabel))
 
         case .divider:
-            return AnyView(Divider().accessibilityHidden(true))
+            return AnyView(
+                Divider()
+                    .padding(.vertical, density == .comfortable ? 4 : 2)
+                    .accessibilityHidden(true)
+            )
 
         case .spacer:
-            return AnyView(Spacer().accessibilityHidden(true))
+            return AnyView(
+                Spacer()
+                    .frame(height: density == .comfortable ? 12 : 8)
+                    .accessibilityHidden(true)
+            )
         }
     }
 
@@ -61,7 +73,7 @@ struct DSLRenderer: View {
         let font: Font = {
             switch style {
             case .bold: return .system(size: fontSize, weight: .semibold)
-            case .mono: return .system(size: fontSize, design: .monospaced)
+            case .mono: return .system(size: fontSize - 1, design: .monospaced)
             case .muted, nil: return .system(size: fontSize)
             }
         }()
@@ -75,6 +87,7 @@ struct DSLRenderer: View {
         Text(text)
             .font(font)
             .foregroundColor(color)
+            .lineLimit(style == .mono ? 2 : nil)
             .accessibilityLabel(text)
     }
 
@@ -84,58 +97,23 @@ struct DSLRenderer: View {
     private func renderList(items: [DSLListItem]) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             ForEach(Array(items.enumerated()), id: \.offset) { _, item in
-                renderListItem(item)
+                DSLListItemView(
+                    item: item, theme: theme, density: density,
+                    tintColor: tintColor, fontSize: fontSize, onAction: onAction
+                )
             }
         }
+        .padding(.horizontal, -pad)  // list items manage their own horizontal padding for full-width hover
         .accessibilityElement(children: .contain)
         .accessibilityLabel("\(items.count) items")
-    }
-
-    @ViewBuilder
-    private func renderListItem(_ item: DSLListItem) -> some View {
-        let itemHeight: CGFloat = density == .comfortable ? 28 : 22
-        let content = HStack(spacing: 6) {
-            if let icon = item.icon {
-                Image(systemName: icon)
-                    .font(.system(size: density == .comfortable ? 13 : 11))
-                    .foregroundColor(item.tint.map { tintColor($0) } ?? Color(nsColor: theme.chromeMuted))
-                    .frame(width: 16)
-            }
-            VStack(alignment: .leading, spacing: 1) {
-                Text(item.label)
-                    .font(.system(size: fontSize))
-                    .foregroundColor(Color(nsColor: theme.chromeText))
-                    .lineLimit(1)
-                if let detail = item.detail {
-                    Text(detail)
-                        .font(.system(size: fontSize - 2))
-                        .foregroundColor(Color(nsColor: theme.chromeMuted))
-                        .lineLimit(1)
-                }
-            }
-            Spacer()
-        }
-        .frame(height: itemHeight)
-        .padding(.horizontal, density == .comfortable ? 12 : 8)
-        .contentShape(Rectangle())
-
-        if let action = item.action {
-            Button(action: { onAction?(action) }) {
-                content
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(item.accessibilityLabel ?? item.label)
-            .accessibilityAddTraits(.isButton)
-        } else {
-            content
-                .accessibilityLabel(item.accessibilityLabel ?? item.label)
-        }
     }
 
     // MARK: - Button
 
     @ViewBuilder
-    private func renderButton(label: String, action: DSLAction, style: DSLButtonStyle?) -> some View {
+    private func renderButton(
+        label: String, action: DSLAction, style: DSLButtonStyle?, contextMenu: [DSLContextMenuItem]?
+    ) -> some View {
         let color: Color = {
             switch style {
             case .primary, nil: return Color(nsColor: theme.accentColor)
@@ -154,6 +132,7 @@ struct DSLRenderer: View {
                 .cornerRadius(6)
         }
         .buttonStyle(.plain)
+        .modifier(DSLContextMenuModifier(items: contextMenu, onAction: onAction))
         .accessibilityLabel(label)
         .accessibilityAddTraits(.isButton)
     }
@@ -186,6 +165,94 @@ struct DSLRenderer: View {
         case .warning: return Color(nsColor: .extermRemote)
         case .accent: return Color(nsColor: theme.accentColor)
         case .muted: return Color(nsColor: theme.chromeMuted)
+        }
+    }
+}
+
+// MARK: - List Item View (with hover state)
+
+/// Separate view for list items so each can track its own hover state.
+private struct DSLListItemView: View {
+    let item: DSLListItem
+    let theme: TerminalTheme
+    let density: SidebarDensity
+    let tintColor: (DSLTint) -> Color
+    let fontSize: CGFloat
+    let onAction: ((DSLAction) -> Void)?
+
+    @State private var isHovered = false
+
+    var body: some View {
+        let itemHeight: CGFloat = density == .comfortable ? 28 : 22
+        let hPad: CGFloat = density == .comfortable ? 12 : 8
+        let content = HStack(spacing: 6) {
+            if let icon = item.icon {
+                Image(systemName: icon)
+                    .font(.system(size: density == .comfortable ? 13 : 11))
+                    .foregroundColor(item.tint.map { tintColor($0) } ?? Color(nsColor: theme.chromeMuted))
+                    .frame(width: 16)
+            }
+            VStack(alignment: .leading, spacing: 1) {
+                Text(item.label)
+                    .font(.system(size: fontSize))
+                    .foregroundColor(Color(nsColor: theme.chromeText))
+                    .lineLimit(1)
+                if let detail = item.detail {
+                    Text(detail)
+                        .font(.system(size: fontSize - 2, design: .monospaced))
+                        .foregroundColor(Color(nsColor: theme.chromeMuted))
+                        .lineLimit(1)
+                }
+            }
+            Spacer()
+        }
+        .frame(height: itemHeight)
+        .padding(.horizontal, hPad)
+        .background(isHovered ? Color(nsColor: theme.chromeMuted).opacity(0.1) : Color.clear)
+        .cornerRadius(4)
+        .contentShape(Rectangle())
+        .onHover { isHovered = $0 }
+
+        let menuItems = item.contextMenu
+        if let action = item.action {
+            Button(action: { onAction?(action) }) {
+                content
+            }
+            .buttonStyle(.plain)
+            .modifier(DSLContextMenuModifier(items: menuItems, onAction: onAction))
+            .accessibilityLabel(item.accessibilityLabel ?? item.label)
+            .accessibilityAddTraits(.isButton)
+        } else {
+            content
+                .modifier(DSLContextMenuModifier(items: menuItems, onAction: onAction))
+                .accessibilityLabel(item.accessibilityLabel ?? item.label)
+        }
+    }
+}
+
+// MARK: - Context Menu Modifier
+
+/// Applies a DSL context menu to any view. No-op when items is nil or empty.
+private struct DSLContextMenuModifier: ViewModifier {
+    let items: [DSLContextMenuItem]?
+    let onAction: ((DSLAction) -> Void)?
+
+    func body(content: Content) -> some View {
+        if let items = items, !items.isEmpty {
+            content.contextMenu {
+                ForEach(Array(items.enumerated()), id: \.offset) { _, item in
+                    Button(action: { onAction?(item.action) }) {
+                        if let icon = item.icon {
+                            Label(item.label, systemImage: icon)
+                        } else {
+                            Text(item.label)
+                        }
+                    }
+                    .foregroundColor(item.style == .destructive ? .red : nil)
+                }
+            }
+        } else {
+            content
         }
     }
 }

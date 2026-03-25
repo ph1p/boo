@@ -81,7 +81,8 @@ struct DSLParser {
             }
             let action = try parseAction(actionDict, path: "\(path).action")
             let style = (dict["style"] as? String).flatMap(DSLButtonStyle.init(rawValue:))
-            return .button(label: label, action: action, style: style)
+            let ctxMenu = try parseContextMenu(dict, path: path)
+            return .button(label: label, action: action, style: style, contextMenu: ctxMenu)
 
         case "badge":
             guard let text = dict["text"] as? String ?? (dict["count"] as? Int).map(String.init) else {
@@ -122,9 +123,27 @@ struct DSLParser {
         } else {
             action = nil
         }
+        let ctxMenu = try parseContextMenu(dict, path: path)
         let a11yLabel = dict["accessibilityLabel"] as? String
         return DSLListItem(
-            label: label, icon: icon, tint: tint, detail: detail, action: action, accessibilityLabel: a11yLabel)
+            label: label, icon: icon, tint: tint, detail: detail, action: action,
+            contextMenu: ctxMenu, accessibilityLabel: a11yLabel)
+    }
+
+    private static func parseContextMenu(_ dict: [String: Any], path: String) throws -> [DSLContextMenuItem]? {
+        guard let menuItems = dict["contextMenu"] as? [[String: Any]] else { return nil }
+        return try menuItems.enumerated().map { i, itemDict in
+            guard let label = itemDict["label"] as? String else {
+                throw ParseError(message: "Missing 'label' for contextMenu item at \(path).contextMenu[\(i)]")
+            }
+            guard let actionDict = itemDict["action"] as? [String: Any] else {
+                throw ParseError(message: "Missing 'action' for contextMenu item at \(path).contextMenu[\(i)]")
+            }
+            let action = try parseAction(actionDict, path: "\(path).contextMenu[\(i)].action")
+            let icon = itemDict["icon"] as? String
+            let style = (itemDict["style"] as? String).flatMap(DSLButtonStyle.init(rawValue:))
+            return DSLContextMenuItem(label: label, action: action, icon: icon, style: style)
+        }
     }
 
     private static func parseAction(_ dict: [String: Any], path: String) throws -> DSLAction {

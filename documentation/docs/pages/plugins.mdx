@@ -5,7 +5,7 @@ Exterm has an extensible plugin architecture for sidebar panels, status bar segm
 ## Two Plugin Types
 
 1. **Built-in plugins** — Swift classes in `Exterm/Plugins/` conforming to `ExtermPluginProtocol`
-2. **External script plugins** — Folders in `~/.exterm/plugins/` with a `plugin.json` manifest and shell/JS scripts, hot-loaded at runtime
+2. **External plugins** — Folders in `~/.exterm/plugins/` with a `plugin.json` manifest and a `main.js` file, hot-loaded at runtime
 
 Both use the same protocol, lifecycle, and UI integration.
 
@@ -168,7 +168,7 @@ struct PluginManifest {
     let icon: String             // SF Symbol name
     let description: String?
     let when: String?            // When-clause expression
-    let runtime: PluginRuntime?  // .script or .js (nil for built-in)
+    let runtime: PluginRuntime?  // .js for external plugins (nil for built-in)
     let capabilities: Capabilities?
     let statusBar: StatusBarManifest?
     let settings: [SettingManifest]?
@@ -238,6 +238,8 @@ The status bar uses a separate, simpler `StatusBarPlugin` protocol for individua
 
 Sidebar plugins automatically get `PluginIconSegment` toggle icons in the status bar via `PluginRegistry.registerStatusBarIcons(in:)`. No manual registration needed.
 
-## External Script Plugins
+## External Plugins
 
-See the [Plugin Development](/plugin-development) guide for creating external plugins with shell scripts or JavaScript.
+External plugins are JavaScript, running in-process via JavaScriptCore with access to `readFile()` and `fileExists()` for reading project files.
+
+See the [Plugin Development](/plugin-development) guide for creating external plugins.

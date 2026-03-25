@@ -12,7 +12,7 @@ _Coming soon_
 - **Per-pane tabs** — Each split pane has its own tab bar (Cmd+T)
 - **Split panes** — Split right (Cmd+D) or down (Cmd+Shift+D)
 - **File explorer** — Live-updating sidebar with file tree (Cmd+B to toggle)
-- **14 color themes** — Catppuccin (all 4), Tokyo Night, Dracula, Nord, Solarized, Gruvbox, One Dark, Rosé Pine, Kanagawa
+- **22 color themes** — Catppuccin (all 4), Tokyo Night, Dracula, Nord, Solarized (dark/light), Gruvbox (dark/light), One Dark/Light, Rosé Pine, Kanagawa, Everforest (dark/light), GitHub (dark/light), Ayu (dark/light)
 - **AI agent monitor** — Auto-detects Claude, Codex, Aider, Cursor, Copilot sessions with config/diff overview
 - **Remote explorer** — Auto-detects SSH sessions, shows remote file tree
 - **Git integration** — Branch name in status bar, clickable branch switcher with local + remote branches
@@ -92,14 +92,15 @@ make run      # Build and launch
 
 ```
 Exterm/
-  App/              AppDelegate, MainWindowController, WindowStateCoordinator
-  Ghostty/          GhosttyRuntime (app singleton), GhosttyView (Metal surface)
-  Terminal/         TerminalBackend (PTY lifecycle)
+  App/              AppDelegate, MainWindowController (+extensions), WindowStateCoordinator, AppStore
+  Ghostty/          GhosttyRuntime (app singleton), GhosttyView (Metal surface), TerminalScrollView
+  Terminal/         TerminalBackend (PTY lifecycle protocol)
   Models/           Workspace, Pane (+ TabState), SplitTree, AppSettings, Theme
-  Plugin/           Core plugin framework (protocol, registry, runtime, DSL)
+  Plugin/           Core plugin framework (protocol, registry, runtime, DSL, watcher)
+    ViewDSL/        DSL parser, renderer, elements, action handler
   Plugins/          One directory per plugin (FileTree/, RemoteExplorer/, Git/, AIAgent/, Docker/, Bookmarks/, SystemInfo/, Debug/)
-  Views/            App-level views (ToolbarView, PaneView, StatusBarView, SettingsWindow)
-  Services/         Shared infrastructure (ExtermSocketServer, FileSystemWatcher, RemoteExplorer, TerminalBridge, AutoUpdater)
+  Views/            App-level views (PaneView, StatusBarView, ToolbarView, SettingsWindow, UpdateWindow, etc.)
+  Services/         Shared infrastructure (TerminalBridge, RemoteExplorer, ExtermSocketServer, AutoUpdater, etc.)
 CGhostty/           C module wrapping ghostty.h
 CPTYHelper/         C helper for forkpty()
 Vendor/ghostty/     Ghostty source (git clone)
@@ -107,13 +108,68 @@ Vendor/ghostty/     Ghostty source (git clone)
 
 ### State Model
 
-Two layers of state:
+Three layers of state:
 
-1. **Global** — `AppSettings` singleton (theme, font, layout)
+1. **Global** — `AppSettings` singleton (theme, font, layout, plugin settings)
 2. **Per-tab** — `TabState` struct on each `Pane.Tab` (CWD, remote session, title, plugin UI state)
+3. **Global Observable** — `AppStore` singleton projecting current context, theme, and sidebar state for SwiftUI views
 
 `WindowStateCoordinator` manages state transitions between `TerminalBridge` (event parser), `TabState` (source of truth), and `PluginRegistry`. On tab switch, the coordinator saves/restores plugin sidebar state and updates the bridge snapshot. `MainWindowController` is a thin shell that delegates state management to the coordinator.
 
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│ Exterm App                                                          │
+│                                                                     │
+│  ┌─────────────┐   ┌──────────────────────────────────────────┐     │
+│  │ AppSettings │   │ Workspace                                │     │
+│  │ (singleton) │   │  └─ SplitTree                            │     │
+│  │ theme, font │   │      ├─ Pane → Tab[] → TabState (SOT)   │     │
+│  │ plugin cfg  │   │      └─ Pane → Tab[] → TabState          │     │
+│  └──────┬──────┘   └──────────────────┬───────────────────────┘     │
+│         │                             │                             │
+│         v                             v                             │
+│  ┌─────────────────────────────────────────────────────┐            │
+│  │ WindowStateCoordinator                              │            │
+│  │  • sync bridge → TabState                           │            │
+│  │  • save/restore plugin UI state on tab switch       │            │
+│  │  • build TerminalContext from TabState               │            │
+│  └────────────┬──────────────────────┬─────────────────┘            │
+│               │                      │                              │
+│               v                      v                              │
+│  ┌────────────────────┐   ┌──────────────────────┐                  │
+│  │ TerminalBridge     │   │ PluginRuntime        │                  │
+│  │ (event parser)     │   │ enrich → freeze →    │                  │
+│  │ • title heuristics │   │ react → evaluate     │                  │
+│  │ • remote detection │   │                      │                  │
+│  │ • process tracking │   │ TerminalContext       │                  │
+│  └────────┬───────────┘   │ (frozen, immutable)  │                  │
+│           │               └──────────┬───────────┘                  │
+│           │                          │                              │
+│  ┌────────▼───────────┐              v                              │
+│  │ GhosttyRuntime     │   ┌──────────────────────────────────┐      │
+│  │ GhosttyView        │   │ Plugins                          │      │
+│  │ (Metal surface)    │   │ FileTree  Git      AIAgent       │      │
+│  │                    │   │ Remote    Docker   Bookmarks     │      │
+│  │ OSC 7 (CWD)       │   │ System    Debug    [External]    │      │
+│  │ OSC 2 (title)      │   └──────────────────────────────────┘      │
+│  │ process exit       │                                             │
+│  └────────┬───────────┘                                             │
+│           │                                                         │
+│  ┌────────▼───────────┐   ┌──────────────────────────────────┐      │
+│  │ PTY (CPTYHelper)   │   │ ExtermSocketServer               │      │
+│  │ forkpty() + GCD    │   │ ~/.exterm/exterm.sock            │      │
+│  │ background I/O     │   │ process registration (IPC)       │      │
+│  └────────────────────┘   └──────────────────────────────────┘      │
+│                                       ▲                             │
+└───────────────────────────────────────┼─────────────────────────────┘
+                                        │ Unix socket
+                              ┌─────────┴──────────┐
+                              │ Child processes     │
+                              │ (AI agents, tools)  │
+                              └────────────────────┘
+```
+
+**Event flow:**
 ```
 Ghostty OSC → PaneView → MainWindowController → TerminalBridge (heuristics)
   → coordinator.syncBridgeToTab() → TabState
@@ -236,15 +292,17 @@ Exterm has an extensible plugin system. Plugins provide sidebar panels, status b
 
 ### External Plugins
 
-Drop a folder into `~/.exterm/plugins/` with a `plugin.json` manifest and a script. Plugins are hot-loaded — no restart required.
+Drop a folder into `~/.exterm/plugins/` with a `plugin.json` manifest and a `main.js`. Plugins are hot-loaded — no restart required.
 
 ```
 ~/.exterm/plugins/my-plugin/
   plugin.json       # Required manifest
-  main.sh           # Shell script (or main.js for JavaScript)
+  main.js           # Plugin logic
 ```
 
-#### Minimal `plugin.json`
+#### Writing a Plugin
+
+Your `render` function receives the terminal context and returns DSL elements. Runs in JavaScriptCore — no process spawn, no dependencies.
 
 ```json
 {
@@ -253,9 +311,43 @@ Drop a folder into `~/.exterm/plugins/` with a `plugin.json` manifest and a scri
   "version": "1.0.0",
   "icon": "star",
   "description": "Example plugin",
-  "when": null,
-  "capabilities": { "sidebarPanel": true, "statusBarSegment": true },
-  "statusBar": { "position": "right", "priority": 30 }
+  "runtime": "js",
+  "capabilities": { "sidebarPanel": true }
+}
+```
+
+```javascript
+function render(ctx) {
+  var raw = readFile("package.json");
+  if (!raw) return { type: "label", text: "No package.json", style: "muted" };
+
+  var pkg = JSON.parse(raw);
+  var names = Object.keys(pkg.scripts || {});
+
+  return {
+    type: "list",
+    items: names.map(function (name) {
+      return { label: name, icon: "play.circle", action: { type: "exec", command: "npm run " + name } };
+    })
+  };
+}
+```
+
+Plugins have access to `readFile(path)` and `fileExists(path)` for reading files relative to the current directory. The full terminal context is available via `ctx` (cwd, git, process, remote session, settings, etc.). Plugin settings declared in the manifest are available via `ctx.settings`.
+
+#### Context Menus
+
+List items and buttons support right-click context menus:
+
+```javascript
+{
+  label: "src/index.ts", icon: "doc",
+  action: { type: "open", path: "src/index.ts" },
+  contextMenu: [
+    { label: "Copy Path", icon: "doc.on.doc", action: { type: "copy", path: "src/index.ts" } },
+    { label: "Reveal in Finder", icon: "folder", action: { type: "reveal", path: "src/index.ts" } },
+    { label: "Delete", icon: "trash", style: "destructive", action: { type: "exec", command: "rm src/index.ts" } }
+  ]
 }
 ```
 
@@ -275,41 +367,11 @@ Control when your plugin is visible:
 | `"process.editor"`                 | Only when any editor is active |
 | `"process.category == 'database'"` | Only for database clients      |
 | `"process.ai"`                     | Only when an AI agent is active |
+| `"env.local"`                      | Only in local sessions         |
 | `"env.ssh"`                        | Only in SSH/MOSH sessions      |
+| `"env.docker"`                     | Only in Docker sessions        |
 
-#### Script Environment
-
-Scripts receive terminal context via environment variables:
-
-| Variable               | Example               |
-| ---------------------- | --------------------- |
-| `EXTERM_CWD`           | `/Users/phlp/project` |
-| `EXTERM_PROCESS`       | `node`                |
-| `EXTERM_GIT_BRANCH`    | `main`                |
-| `EXTERM_GIT_REPO_ROOT` | `/Users/phlp/project` |
-| `EXTERM_REMOTE_TYPE`   | `ssh`                 |
-| `EXTERM_REMOTE_HOST`   | `server.example.com`  |
-| `EXTERM_PANE_COUNT`    | `2`                   |
-| `EXTERM_TAB_COUNT`     | `3`                   |
-
-Scripts output JSON DSL to stdout. Example:
-
-```json
-[
-  { "type": "text", "content": "Hello from my plugin", "style": "bold" },
-  { "type": "button", "label": "Run tests", "action": { "type": "exec", "command": "make test" } }
-]
-```
-
-#### JavaScript Plugins
-
-Set `"runtime": "js"` in the manifest and provide `main.js`. Runs in JavaScriptCore — no shell overhead:
-
-```javascript
-function render(context) {
-  return JSON.stringify([{ type: "text", content: "Branch: " + context.git.branch }]);
-}
-```
+See `examples/plugins/` for five working examples. Start with **hello-world**, then study **node-project** or **terminal-inspector** for the full plugin API.
 
 ### Developing a Built-in Plugin
 
@@ -350,7 +412,7 @@ Releases are automated via [semantic-release](https://github.com/semantic-releas
 
 Open with **Cmd+,**. Organized in tabs:
 
-- **Theme** — 14 color themes with live preview swatches
+- **Theme** — 22 color themes with live preview swatches
 - **Terminal** — Font, font size, cursor style (block/beam/underline/outline)
 - **Explorer** — Font, font size, show header/icons/hidden files
 - **Status Bar** — Toggle git branch, path, running process, pane count, clock
@@ -362,7 +424,7 @@ Open with **Cmd+,**. Organized in tabs:
 swift test
 ```
 
-671 tests covering models, themes, plugins, terminal bridge, remote explorer, SSH control manager, sidebar layout, accessibility, E2E plugin lifecycle, split/workspace operations, IPC socket protocol, process detection, and event subscriptions.
+682 tests covering models, themes, plugins, terminal bridge, remote explorer, SSH control manager, sidebar layout, accessibility, E2E plugin lifecycle, split/workspace operations, IPC socket protocol, process detection, event subscriptions, JSC runtime, DSL parsing, and script plugin adapters.
 
 ## License
 

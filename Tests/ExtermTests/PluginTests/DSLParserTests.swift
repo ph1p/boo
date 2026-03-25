@@ -64,7 +64,7 @@ final class DSLParserTests: XCTestCase {
             { "type": "button", "label": "Refresh", "action": { "type": "exec", "command": "git status" }, "style": "primary" }
             """
         let elements = try DSLParser.parse(json)
-        if case .button(let label, let action, let style) = elements[0] {
+        if case .button(let label, let action, let style, _) = elements[0] {
             XCTAssertEqual(label, "Refresh")
             XCTAssertEqual(action.type, "exec")
             XCTAssertEqual(action.command, "git status")

@@ -3,5 +3,7 @@
   "name": "Hello World",
   "version": "1.0.0",
   "icon": "hand.wave",
-  "description": "Minimal example plugin - 5 lines of JSON"
+  "description": "Minimal example - a JS plugin in two files",
+  "runtime": "js",
+  "capabilities": { "sidebarPanel": true }
 }

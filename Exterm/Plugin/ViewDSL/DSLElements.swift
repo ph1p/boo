@@ -26,6 +26,14 @@ struct DSLAction: Codable, Equatable {
     let text: String?
 }
 
+/// A context menu item attached to list items or buttons.
+struct DSLContextMenuItem: Codable, Equatable {
+    let label: String
+    let action: DSLAction
+    let icon: String?
+    let style: DSLButtonStyle?  // nil = default, .destructive = red
+}
+
 /// A list item within a `list` element.
 struct DSLListItem: Codable, Equatable {
     let label: String
@@ -33,6 +41,7 @@ struct DSLListItem: Codable, Equatable {
     let tint: DSLTint?
     let detail: String?
     let action: DSLAction?
+    let contextMenu: [DSLContextMenuItem]?
     let accessibilityLabel: String?
 }
 
@@ -42,7 +51,7 @@ indirect enum DSLElement: Equatable {
     case hstack(children: [DSLElement])
     case label(text: String, style: DSLTextStyle?, tint: DSLTint?)
     case list(items: [DSLListItem])
-    case button(label: String, action: DSLAction, style: DSLButtonStyle?)
+    case button(label: String, action: DSLAction, style: DSLButtonStyle?, contextMenu: [DSLContextMenuItem]?)
     case badge(text: String, tint: DSLTint?, accessibilityLabel: String?)
     case divider
     case spacer

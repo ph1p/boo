@@ -25,10 +25,12 @@ A macOS terminal emulator with integrated file explorer, workspace management, a
 ### Project Structure
 ```
 Exterm/
-  App/              - AppDelegate, MainWindowController, WindowStateCoordinator
+  App/              - AppDelegate, MainWindowController (+extensions), WindowStateCoordinator, AppStore
+  Ghostty/          - GhosttyRuntime (app singleton), GhosttyView (Metal surface), TerminalScrollView
   Terminal/         - TerminalBackend (PTY lifecycle protocol)
   Models/           - Workspace, Pane (+ TabState), SplitTree, AppSettings, Theme
   Plugin/           - Core plugin framework (protocol, registry, runtime, DSL, watcher)
+    ViewDSL/        - DSL parser, renderer, elements, action handler
   Plugins/          - One directory per plugin, all plugin-specific code colocated
     FileTree/       - LocalFileTreePlugin, FileTreeView, FileTreeNode
     RemoteExplorer/ - RemoteFileTreePlugin, RemoteFileTreeView, RemoteFileTreeNode
@@ -38,8 +40,9 @@ Exterm/
     Bookmarks/      - BookmarksPlugin, BookmarksPanelView, BookmarkService
     SystemInfo/     - SystemInfoPlugin (reference example plugin)
     Debug/          - DebugPlugin (lifecycle event logger and state inspector)
-  Views/            - App-level views only (ToolbarView, PaneView, StatusBarView, SettingsWindow, etc.)
-  Services/         - Shared infrastructure (AutoUpdater, ExtermSocketServer, FileSystemWatcher, RemoteExplorer, TerminalBridge, ContextAnnouncementEngine, etc.)
+  Views/            - App-level views only (PaneView, StatusBarView, ToolbarView, SettingsWindow, UpdateWindow, etc.)
+  Services/         - Shared infrastructure (TerminalBridge, RemoteExplorer, ExtermSocketServer, AutoUpdater, FileSystemWatcher, ContextAnnouncementEngine, etc.)
+CGhostty/           - C module wrapping ghostty.h
 CPTYHelper/         - C library for forkpty() (Swift can't call fork directly)
 ```
 
@@ -152,7 +155,7 @@ PaneView.activateTab() → didFocus delegate
 
 ### Theming
 - `TerminalTheme` defines foreground, background, 16 ANSI colors, selection, cursor, and all UI chrome colors
-- 14 built-in themes (Default Dark, Tokyo Night, Catppuccin x4, Solarized x2, Dracula, Nord, Gruvbox, One Dark, Rosé Pine, Kanagawa)
+- 22 built-in themes (Default Dark, Tokyo Night, Catppuccin x4, Solarized x2, Dracula, Nord, Gruvbox x2, One Dark/Light, Rosé Pine, Kanagawa, Everforest x2, GitHub x2, Ayu x2)
 - Theme colors are read at draw time from `AppSettings.shared.theme`
 - `SettingsObserver` (ObservableObject) triggers SwiftUI re-renders on settings change
 
@@ -204,7 +207,7 @@ The sidebar's `NSScrollView` uses Auto Layout constraints (top/leading/trailing 
 Exterm has two plugin systems:
 
 1. **Built-in plugins** — Swift classes in `Exterm/Plugins/` conforming to `ExtermPluginProtocol`
-2. **External script plugins** — Folders in `~/.exterm/plugins/` with a `plugin.json` manifest and shell/JS scripts, hot-loaded by `PluginWatcher`
+2. **External plugins** — Folders in `~/.exterm/plugins/` with a `plugin.json` manifest and a `main.js` (recommended) or `main.sh`, hot-loaded by `PluginWatcher`
 
 Both use the same protocol, lifecycle, and UI integration.
 
@@ -231,7 +234,7 @@ The core plugin **framework** (`Plugin/`) is separate from plugin **implementati
 ```
 Exterm/Plugin/        ExtermPluginProtocol, PluginRegistry, PluginRuntime, PluginHostActions,
                       PluginManifest, PluginWatcher, EnrichmentContext, TerminalContext,
-                      WhenClause, ScriptPluginAdapter, ScriptExecutor, JSCRuntime,
+                      WhenClause, ScriptPluginAdapter, JSCRuntime,
                       PluginStateBag, DensityMetrics, ViewDSL/
 ```
 
@@ -343,7 +346,9 @@ Plugins declare visibility conditions via `when` in the manifest:
 - `"git.active"` — visible only when terminal is in a git repo
 - `"!remote"` — visible only in local sessions
 - `"remote.type == 'ssh'"` — visible only in SSH sessions
+- `"env.local"` — visible only in local sessions (no remote)
 - `"env.ssh"` — visible only in SSH/MOSH sessions
+- `"env.docker"` — visible only in Docker sessions
 - `"process.ai"` — visible only when an AI coding agent is running
 - `nil` — always visible
 
@@ -372,6 +377,23 @@ Interactive elements in plugin views dispatch `DSLAction` values to `DSLActionHa
 
 Built-in plugins can also use `hostActions` closures directly for host-level operations (open tab, open pane, etc.).
 
+#### Context Menus
+
+List items and buttons support a `contextMenu` array for right-click menus. Each item has `label`, `icon` (SF Symbol), `action` (same DSL action types above), and optional `style` (`"destructive"` for red text):
+
+```javascript
+{
+  label: "file.txt", icon: "doc",
+  action: { type: "open", path: "file.txt" },
+  contextMenu: [
+    { label: "Copy Path", icon: "doc.on.doc", action: { type: "copy", path: "file.txt" } },
+    { label: "Delete", icon: "trash", style: "destructive", action: { type: "exec", command: "rm file.txt" } }
+  ]
+}
+```
+
+Parsed by `DSLParser.parseContextMenu()`, rendered via `DSLContextMenuModifier` in `DSLRenderer`.
+
 #### PluginManifest
 
 Both built-in and external plugins have a `PluginManifest`:
@@ -384,7 +406,8 @@ struct PluginManifest {
     let icon: String             // SF Symbol name
     let description: String?
     let when: String?            // When-clause expression
-    let runtime: PluginRuntime?  // .script or .js (nil for built-in)
+    let runtime: PluginRuntime?  // .js for external plugins (nil for built-in)
+    var isExternal: Bool         // true for plugins loaded from ~/.exterm/plugins/
     let capabilities: Capabilities?  // sidebarPanel, statusBarSegment
     let statusBar: StatusBarManifest?  // position, priority, template
     let settings: [SettingManifest]?
@@ -402,21 +425,19 @@ Built-in plugins construct manifests inline. External plugins provide `plugin.js
 2. `PluginRegistry.activePlugins` — lifecycle callbacks skip disabled plugins
 3. `PluginRegistry.registerStatusBarIcons(in:)` — skips disabled plugins
 
-#### External Script Plugins
+#### External Plugins
 
 External plugins live in `~/.exterm/plugins/<name>/` and are hot-loaded by `PluginWatcher`:
 
 ```
 ~/.exterm/plugins/my-plugin/
   plugin.json       — Manifest (required)
-  main.sh           — Shell script (or main.js for JS runtime)
+  main.js           — Plugin logic
 ```
 
-Scripts receive terminal context via environment variables (`EXTERM_CWD`, `EXTERM_PROCESS`, `EXTERM_GIT_BRANCH`, etc.) and output JSON DSL elements to stdout. The DSL is parsed by `DSLParser` and rendered by `DSLRenderer`.
+Plugins run in JavaScriptCore via `JSCRuntime` — no process spawn. The `render(ctx)` function receives the terminal context as an object and returns DSL elements. Host functions `readFile(path)` and `fileExists(path)` provide filesystem access scoped to `ctx.cwd`. Plugin settings declared in the manifest are available via `ctx.settings`.
 
-JS plugins (`"runtime": "js"`) run in JavaScriptCore via `JSCRuntime` — no shell overhead.
-
-`PluginWatcher` uses FSEvents to detect additions, modifications, and removals in real-time.
+Output DSL is parsed by `DSLParser` and rendered by `DSLRenderer`. `PluginWatcher` uses FSEvents for hot-loading.
 
 #### Status Bar Plugins (`StatusBarPlugin` protocol)
 

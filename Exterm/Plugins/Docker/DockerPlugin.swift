@@ -9,13 +9,51 @@ final class DockerPluginNew: ExtermPluginProtocol {
     var hostActions: PluginHostActions?
     var onRequestCycleRerun: (() -> Void)?
 
+    private var settingsObserver: NSObjectProtocol?
+    private var isActivated = false
+
     init() {
-        DockerService.shared.startWatching()
         DockerService.shared.onContainersChanged = { [weak self] _ in
             DispatchQueue.main.async {
                 self?.onRequestCycleRerun?()
             }
         }
+        applySocketPathSetting()
+        settingsObserver = NotificationCenter.default.addObserver(
+            forName: .settingsChanged, object: nil, queue: .main
+        ) { [weak self] notification in
+            guard let topic = notification.userInfo?["topic"] as? String,
+                topic == "plugins"
+            else { return }
+            let oldSocket = DockerService.shared.socketPath
+            self?.applySocketPathSetting()
+            guard DockerService.shared.socketPath != oldSocket else { return }
+            if self?.isActivated == true {
+                DockerService.shared.stopWatching()
+                DockerService.shared.startWatching()
+            }
+            self?.onRequestCycleRerun?()
+        }
+    }
+
+    deinit {
+        if let observer = settingsObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
+        DockerService.shared.stopWatching()
+    }
+
+    // MARK: - Activation Lifecycle
+
+    func pluginDidActivate() {
+        isActivated = true
+        applySocketPathSetting()
+        DockerService.shared.startWatching()
+    }
+
+    func pluginDidDeactivate() {
+        isActivated = false
+        DockerService.shared.stopWatching()
     }
 
     let manifest = PluginManifest(
@@ -28,14 +66,30 @@ final class DockerPluginNew: ExtermPluginProtocol {
         runtime: nil,
         capabilities: PluginManifest.Capabilities(sidebarPanel: true, statusBarSegment: true),
         statusBar: PluginManifest.StatusBarManifest(position: "right", priority: 10, template: nil),
-        settings: nil
+        settings: [
+            PluginManifest.SettingManifest(
+                key: "socketPath", type: .string,
+                label: "Docker socket path",
+                defaultValue: AnyCodableValue(""), options: "dockerSocket")
+        ]
     )
 
     var subscribedEvents: Set<PluginEvent> { [] }
 
+    /// Read the socket path setting and re-detect Docker.
+    private func applySocketPathSetting() {
+        let path = AppSettings.shared.pluginString(
+            "docker", "socketPath", default: "")
+        DockerService.shared.detectDocker(
+            explicitPath: path.isEmpty ? nil : path)
+    }
+
     // MARK: - Section Title
 
     func sectionTitle(context: PluginContext) -> String? {
+        if DockerService.shared.connectionError != nil {
+            return "Docker (disconnected)"
+        }
         let containers = DockerService.shared.containers
         guard !containers.isEmpty else { return nil }
         let running = containers.filter { $0.state == .running }.count
@@ -45,6 +99,14 @@ final class DockerPluginNew: ExtermPluginProtocol {
     // MARK: - Status Bar
 
     func makeStatusBarContent(context: PluginContext) -> StatusBarContent? {
+        if let error = DockerService.shared.connectionError {
+            return StatusBarContent(
+                text: "disconnected",
+                icon: "shippingbox",
+                tint: .error,
+                accessibilityLabel: "Docker: \(error)"
+            )
+        }
         let containers = DockerService.shared.containers
         guard !containers.isEmpty else { return nil }
         let running = containers.filter { $0.state == .running }.count
@@ -63,6 +125,14 @@ final class DockerPluginNew: ExtermPluginProtocol {
     // MARK: - Detail View
 
     func makeDetailView(context: PluginContext) -> AnyView? {
+        if let error = DockerService.shared.connectionError {
+            return AnyView(
+                DockerConnectionErrorView(
+                    error: error,
+                    theme: AppSettings.shared.theme
+                )
+            )
+        }
         let containers = DockerService.shared.containers
         let act = actions
 
@@ -74,30 +144,44 @@ final class DockerPluginNew: ExtermPluginProtocol {
                 onExec: { container in
                     act?.handle(
                         DSLAction(
-                            type: "exec", path: nil, command: DockerService.shared.execCommand(for: container),
+                            type: "exec", path: nil,
+                            command: DockerService.shared.execCommand(for: container),
                             text: nil))
                 },
                 onLogs: { container in
                     let cmd = "docker logs --tail 100 -f \(container.name)\r"
-                    act?.handle(DSLAction(type: "exec", path: nil, command: cmd, text: nil))
+                    act?.handle(
+                        DSLAction(type: "exec", path: nil, command: cmd, text: nil))
                 },
                 onStart: { container in
-                    DockerService.shared.startContainer(container.id) { DockerService.shared.refresh() }
+                    DockerService.shared.startContainer(container.id) {
+                        DockerService.shared.refresh()
+                    }
                 },
                 onStop: { container in
-                    DockerService.shared.stopContainer(container.id) { DockerService.shared.refresh() }
+                    DockerService.shared.stopContainer(container.id) {
+                        DockerService.shared.refresh()
+                    }
                 },
                 onRestart: { container in
-                    DockerService.shared.restartContainer(container.id) { DockerService.shared.refresh() }
+                    DockerService.shared.restartContainer(container.id) {
+                        DockerService.shared.refresh()
+                    }
                 },
                 onPause: { container in
-                    DockerService.shared.pauseContainer(container.id) { DockerService.shared.refresh() }
+                    DockerService.shared.pauseContainer(container.id) {
+                        DockerService.shared.refresh()
+                    }
                 },
                 onUnpause: { container in
-                    DockerService.shared.unpauseContainer(container.id) { DockerService.shared.refresh() }
+                    DockerService.shared.unpauseContainer(container.id) {
+                        DockerService.shared.refresh()
+                    }
                 },
                 onRemove: { container in
-                    DockerService.shared.removeContainer(container.id) { DockerService.shared.refresh() }
+                    DockerService.shared.removeContainer(container.id) {
+                        DockerService.shared.refresh()
+                    }
                 },
                 onCopyID: { container in
                     NSPasteboard.general.clearContents()
@@ -105,9 +189,42 @@ final class DockerPluginNew: ExtermPluginProtocol {
                 },
                 onInspect: { container in
                     let cmd = "docker inspect \(container.name) | less\r"
-                    act?.handle(DSLAction(type: "exec", path: nil, command: cmd, text: nil))
+                    act?.handle(
+                        DSLAction(type: "exec", path: nil, command: cmd, text: nil))
                 }
             ))
+    }
+}
+
+// MARK: - Connection Error View
+
+private struct DockerConnectionErrorView: View {
+    let error: String
+    let theme: TerminalTheme
+
+    var body: some View {
+        VStack(spacing: 8) {
+            Spacer()
+            Image(systemName: "exclamationmark.triangle")
+                .font(.system(size: 24))
+                .foregroundColor(.orange)
+            Text("Docker Disconnected")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundColor(Color(nsColor: theme.chromeText))
+            Text(error)
+                .font(.system(size: 10))
+                .foregroundColor(Color(nsColor: theme.chromeMuted))
+                .multilineTextAlignment(.center)
+            Text("Set the socket path in Settings > Plugins > Docker")
+                .font(.system(size: 10))
+                .foregroundColor(
+                    Color(nsColor: theme.chromeMuted).opacity(0.7)
+                )
+                .multilineTextAlignment(.center)
+            Spacer()
+        }
+        .padding(.horizontal, 12)
+        .frame(maxWidth: .infinity)
     }
 }
 
@@ -129,11 +246,16 @@ struct DockerPluginDetailView: View {
     var onInspect: ((DockerService.Container) -> Void)?
 
     private var runningContainers: [DockerService.Container] {
-        containers.filter { $0.state == .running || $0.state == .paused || $0.state == .restarting }
+        containers.filter {
+            $0.state == .running || $0.state == .paused || $0.state == .restarting
+        }
     }
 
     private var stoppedContainers: [DockerService.Container] {
-        containers.filter { $0.state == .exited || $0.state == .dead || $0.state == .created || $0.state == .unknown }
+        containers.filter {
+            $0.state == .exited || $0.state == .dead
+                || $0.state == .created || $0.state == .unknown
+        }
     }
 
     var body: some View {
@@ -145,17 +267,21 @@ struct DockerPluginDetailView: View {
                     Spacer()
                     Image(systemName: "shippingbox")
                         .font(.system(size: 24))
-                        .foregroundColor(Color(nsColor: theme.chromeMuted).opacity(0.3))
+                        .foregroundColor(
+                            Color(nsColor: theme.chromeMuted).opacity(0.3))
                     Text("No containers found")
                         .font(.system(size: 11))
-                        .foregroundColor(Color(nsColor: theme.chromeMuted).opacity(0.5))
+                        .foregroundColor(
+                            Color(nsColor: theme.chromeMuted).opacity(0.5))
                     Spacer()
                 }
                 .frame(maxWidth: .infinity)
             } else {
                 // Running containers
                 if !runningContainers.isEmpty {
-                    DockerGroupHeader(title: "Running", count: runningContainers.count, theme: theme, density: density)
+                    DockerGroupHeader(
+                        title: "Running", count: runningContainers.count,
+                        theme: theme, density: density)
                     ForEach(runningContainers, id: \.id) { container in
                         containerRow(container, itemHeight: itemHeight)
                     }
@@ -163,7 +289,9 @@ struct DockerPluginDetailView: View {
 
                 // Stopped containers
                 if !stoppedContainers.isEmpty {
-                    DockerGroupHeader(title: "Stopped", count: stoppedContainers.count, theme: theme, density: density)
+                    DockerGroupHeader(
+                        title: "Stopped", count: stoppedContainers.count,
+                        theme: theme, density: density)
                     ForEach(stoppedContainers, id: \.id) { container in
                         containerRow(container, itemHeight: itemHeight)
                     }
@@ -176,7 +304,9 @@ struct DockerPluginDetailView: View {
     }
 
     @ViewBuilder
-    private func containerRow(_ container: DockerService.Container, itemHeight: CGFloat) -> some View {
+    private func containerRow(
+        _ container: DockerService.Container, itemHeight: CGFloat
+    ) -> some View {
         DockerContainerRow(
             container: container,
             density: density,
@@ -208,17 +338,18 @@ private struct DockerGroupHeader: View {
         HStack(spacing: 4) {
             Text(title.uppercased())
                 .font(.system(size: 9, weight: .semibold))
-                .foregroundColor(Color(nsColor: theme.chromeMuted).opacity(0.6))
+                .foregroundColor(
+                    Color(nsColor: theme.chromeMuted).opacity(0.6))
             Text("\(count)")
                 .font(.system(size: 9, weight: .medium, design: .monospaced))
-                .foregroundColor(Color(nsColor: theme.chromeMuted).opacity(0.4))
+                .foregroundColor(
+                    Color(nsColor: theme.chromeMuted).opacity(0.4))
             Spacer()
         }
         .padding(.horizontal, density == .comfortable ? 12 : 8)
         .padding(.top, 8)
         .padding(.bottom, 4)
     }
-
 }
 
 // MARK: - Container Row
@@ -270,20 +401,35 @@ private struct DockerContainerRow: View {
 
             VStack(alignment: .leading, spacing: 1) {
                 Text(container.name)
-                    .font(.system(size: density == .comfortable ? 12 : 11, weight: .medium))
+                    .font(
+                        .system(
+                            size: density == .comfortable ? 12 : 11,
+                            weight: .medium)
+                    )
                     .foregroundColor(Color(nsColor: theme.chromeText))
                     .lineLimit(1)
 
                 HStack(spacing: 4) {
                     Text(container.image)
-                        .font(.system(size: density == .comfortable ? 10 : 9))
-                        .foregroundColor(Color(nsColor: theme.chromeMuted).opacity(0.7))
+                        .font(
+                            .system(
+                                size: density == .comfortable ? 10 : 9)
+                        )
+                        .foregroundColor(
+                            Color(nsColor: theme.chromeMuted).opacity(0.7)
+                        )
                         .lineLimit(1)
 
                     if !container.ports.isEmpty {
                         Text(container.ports)
-                            .font(.system(size: density == .comfortable ? 10 : 9, design: .monospaced))
-                            .foregroundColor(Color(nsColor: theme.chromeMuted).opacity(0.5))
+                            .font(
+                                .system(
+                                    size: density == .comfortable ? 10 : 9,
+                                    design: .monospaced)
+                            )
+                            .foregroundColor(
+                                Color(nsColor: theme.chromeMuted).opacity(0.5)
+                            )
                             .lineLimit(1)
                     }
                 }
@@ -296,7 +442,8 @@ private struct DockerContainerRow: View {
                 Button(action: onLogs) {
                     Image(systemName: "doc.text")
                         .font(.system(size: 10))
-                        .foregroundColor(Color(nsColor: theme.chromeMuted).opacity(0.7))
+                        .foregroundColor(
+                            Color(nsColor: theme.chromeMuted).opacity(0.7))
                 }
                 .buttonStyle(.plain)
                 .help("View logs")
@@ -304,7 +451,8 @@ private struct DockerContainerRow: View {
                 Button(action: onExec) {
                     Image(systemName: "terminal")
                         .font(.system(size: 10))
-                        .foregroundColor(Color(nsColor: theme.chromeMuted).opacity(0.7))
+                        .foregroundColor(
+                            Color(nsColor: theme.chromeMuted).opacity(0.7))
                 }
                 .buttonStyle(.plain)
                 .help("Exec into container")
@@ -320,7 +468,11 @@ private struct DockerContainerRow: View {
         .padding(.vertical, 4)
         .background(
             RoundedRectangle(cornerRadius: 4)
-                .fill(isHovered ? Color(nsColor: theme.chromeMuted).opacity(0.1) : Color.clear)
+                .fill(
+                    isHovered
+                        ? Color(nsColor: theme.chromeMuted).opacity(0.1)
+                        : Color.clear
+                )
                 .padding(.horizontal, 4)
         )
         .contentShape(Rectangle())
@@ -356,12 +508,14 @@ private struct DockerContainerRow: View {
             if !container.ports.isEmpty {
                 Button("Copy Ports") {
                     NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(container.ports, forType: .string)
+                    NSPasteboard.general.setString(
+                        container.ports, forType: .string)
                 }
             }
         }
-        .accessibilityLabel("\(container.name), \(container.state.rawValue), \(container.image)")
+        .accessibilityLabel(
+            "\(container.name), \(container.state.rawValue), \(container.image)"
+        )
         .accessibilityAddTraits(.isButton)
     }
-
 }

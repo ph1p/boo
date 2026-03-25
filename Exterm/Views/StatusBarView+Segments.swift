@@ -231,7 +231,8 @@ final class PathSegment: StatusBarPlugin {
     let priority = 20
 
     func isVisible(settings: AppSettings, state: StatusBarState) -> Bool {
-        settings.pluginBool("file-tree-local", "showPath", default: true)
+        settings.isPluginEnabled("file-tree-local")
+            && settings.pluginBool("file-tree-local", "showPath", default: true)
     }
 
     func draw(
@@ -262,7 +263,9 @@ final class ProcessSegment: StatusBarPlugin {
     let priority = 30
 
     func isVisible(settings: AppSettings, state: StatusBarState) -> Bool {
-        settings.pluginBool("file-tree-local", "showProcess", default: true) && !state.runningProcess.isEmpty
+        settings.isPluginEnabled("file-tree-local")
+            && settings.pluginBool("file-tree-local", "showProcess", default: true)
+            && !state.runningProcess.isEmpty
     }
 
     func draw(
@@ -486,7 +489,7 @@ final class SystemInfoSegment: StatusBarPlugin {
     private var memTint: NSColor?
 
     func isVisible(settings: AppSettings, state: StatusBarState) -> Bool {
-        guard !state.isRemote else { return false }
+        guard !state.isRemote, settings.isPluginEnabled("system-info") else { return false }
         let s = settings
         return s.pluginBool("system-info", "statusBarCPU", default: false)
             || s.pluginBool("system-info", "statusBarMemory", default: false)

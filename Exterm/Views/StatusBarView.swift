@@ -103,6 +103,12 @@ class StatusBarView: NSView {
         }
     }
 
+    /// Remove a plugin icon segment by its associated panel ID.
+    func unregisterPluginIcon(for pluginID: String) {
+        leftPlugins.removeAll { ($0 as? PluginIconSegment)?.associatedPanelID == pluginID }
+        rightPlugins.removeAll { ($0 as? PluginIconSegment)?.associatedPanelID == pluginID }
+    }
+
     // MARK: - State
 
     func update(directory: String, paneCount: Int, tabCount: Int, runningProcess: String) {

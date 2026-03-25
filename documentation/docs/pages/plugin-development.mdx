@@ -1,17 +1,19 @@
 # Plugin Development
 
-This guide covers how to create plugins for Exterm — both external script plugins and built-in Swift plugins.
+This guide covers how to create plugins for Exterm — both external JavaScript plugins and built-in Swift plugins.
 
-## External Script Plugins
+## External Plugins
 
-External plugins live in `~/.exterm/plugins/` and are hot-loaded at runtime. No restart required — `PluginWatcher` uses FSEvents to detect additions, modifications, and removals in real-time.
+External plugins live in `~/.exterm/plugins/` and are hot-loaded at runtime. No restart required — save a file and it appears in the sidebar.
+
+Plugins are JavaScript, running in-process via JavaScriptCore — no dependencies, no shell, instant execution.
 
 ### Directory Structure
 
 ```
 ~/.exterm/plugins/my-plugin/
   plugin.json       # Required manifest
-  main.sh           # Shell script (or main.js for JavaScript)
+  main.js           # Plugin logic
 ```
 
 ### Manifest (`plugin.json`)
@@ -23,19 +25,12 @@ External plugins live in `~/.exterm/plugins/` and are hot-loaded at runtime. No 
   "version": "1.0.0",
   "icon": "star",
   "description": "A custom sidebar plugin",
-  "when": null,
-  "runtime": "script",
-  "capabilities": {
-    "sidebarPanel": true,
-    "statusBarSegment": true
-  },
-  "statusBar": {
-    "position": "right",
-    "priority": 30,
-    "template": "{cwd}"
-  }
+  "runtime": "js",
+  "capabilities": { "sidebarPanel": true }
 }
 ```
+
+That's all you need to get started. The full set of fields:
 
 #### Manifest Fields
 
@@ -47,7 +42,7 @@ External plugins live in `~/.exterm/plugins/` and are hot-loaded at runtime. No 
 | `icon` | Yes | [SF Symbol](https://developer.apple.com/sf-symbols/) name |
 | `description` | No | Human-readable description |
 | `when` | No | When-clause expression for visibility (null = always visible) |
-| `runtime` | No | `"script"` for shell scripts, `"js"` for JavaScript |
+| `runtime` | No | `"js"` (only supported value) |
 | `capabilities.sidebarPanel` | No | Show in sidebar |
 | `capabilities.statusBarSegment` | No | Show in status bar |
 | `statusBar.position` | No | `"left"` or `"right"` |
@@ -75,7 +70,7 @@ Example manifest with settings:
   "name": "My Plugin",
   "version": "1.0.0",
   "icon": "star",
-  "runtime": "script",
+  "runtime": "js",
   "capabilities": { "sidebarPanel": true },
   "settings": [
     { "key": "enabled", "type": "bool", "label": "Enable feature", "default": true },
@@ -106,93 +101,94 @@ Templates substitute values from the terminal context:
 | `{git.changedCount}` | Number of changed files |
 | `{remote.host}` | Remote host or container name |
 
-### Shell Scripts
+### Writing a Plugin
 
-Shell scripts receive terminal context via environment variables and output JSON DSL to stdout.
+Provide `main.js` with a `render` function. It receives the terminal context and returns DSL elements. Runs in JavaScriptCore — no process spawn, no dependencies.
 
-#### Environment Variables
-
-| Variable | Example |
-|---|---|
-| `EXTERM_CWD` | `/Users/phlp/project` |
-| `EXTERM_PROCESS` | `node` |
-| `EXTERM_GIT_BRANCH` | `main` |
-| `EXTERM_GIT_REPO_ROOT` | `/Users/phlp/project` |
-| `EXTERM_GIT_DIRTY` | `true` |
-| `EXTERM_GIT_CHANGED_COUNT` | `5` |
-| `EXTERM_REMOTE_TYPE` | `ssh` |
-| `EXTERM_REMOTE_HOST` | `server.example.com` |
-| `EXTERM_PANE_COUNT` | `2` |
-| `EXTERM_TAB_COUNT` | `3` |
-
-#### Example: `main.sh`
-
-```bash
-#!/bin/bash
-cat <<EOF
-[
-  {"type": "label", "text": "Directory: $EXTERM_CWD", "style": "bold"},
-  {"type": "divider"},
-  {"type": "label", "text": "Process: $EXTERM_PROCESS", "style": "muted"},
-  {"type": "button", "label": "Run tests", "action": {"type": "exec", "command": "make test"}}
-]
-EOF
-```
-
-The parser also accepts `"type": "text"` with a `"content"` field as an alias for `label`.
-
-Make the script executable: `chmod +x main.sh`
-
-Scripts have a 5-second timeout. Keep them fast — the sidebar blocks on script output.
-
-### JavaScript Plugins
-
-Set `"runtime": "js"` in the manifest and provide `main.js`. Runs in JavaScriptCore with no shell overhead.
+#### Minimal example
 
 ```javascript
-function render(context) {
-  var elements = [];
-
-  if (context.git && context.git.branch) {
-    elements.push({
-      type: "label",
-      text: "Branch: " + context.git.branch,
-      style: "bold"
-    });
-
-    if (context.git.changedFileCount > 0) {
-      elements.push({
-        type: "label",
-        text: context.git.changedFileCount + " files changed",
-        style: "muted"
-      });
-    }
-  }
-
-  elements.push({
-    type: "button",
-    label: "Open in Finder",
-    action: { type: "reveal", path: context.cwd }
-  });
-
-  return JSON.stringify(elements);
+function render(ctx) {
+  var dir = ctx.cwd.split("/").pop();
+  return {
+    type: "vstack",
+    children: [
+      { type: "label", text: "Hello from " + dir, style: "bold" },
+      { type: "button", label: "Open in Finder", action: { type: "reveal", path: ctx.cwd } }
+    ]
+  };
 }
 ```
 
-Both `render` and `transform` are accepted as the entry function name.
+Both `render` and `transform` are accepted as the entry function name. You can return an object or call `JSON.stringify()` — both work.
+
+#### Context object (`ctx`)
+
+| Field | Type | Example |
+|---|---|---|
+| `ctx.cwd` | string | `"/Users/phlp/project"` |
+| `ctx.processName` | string | `"node"` |
+| `ctx.isRemote` | bool | `false` |
+| `ctx.envType` | string | `"local"`, `"ssh"`, `"docker"` |
+| `ctx.remoteHost` | string | `"server.example.com"` |
+| `ctx.paneCount` | number | `2` |
+| `ctx.tabCount` | number | `3` |
+| `ctx.git.branch` | string | `"main"` |
+| `ctx.git.repoRoot` | string | `"/Users/phlp/project"` |
+| `ctx.git.isDirty` | bool | `true` |
+| `ctx.git.changedFileCount` | number | `5` |
+| `ctx.enrichedData` | object | Data from other plugins |
+| `ctx.settings` | object | Plugin settings declared in manifest (see [Plugin Settings](#plugin-settings)) |
+
+#### Host functions
+
+JS plugins have access to these functions provided by the host:
+
+| Function | Returns | Description |
+|---|---|---|
+| `readFile(path)` | string or null | Read a file relative to `ctx.cwd`. Returns null if not found. |
+| `fileExists(path)` | bool | Check if a file exists relative to `ctx.cwd`. |
+
+Absolute paths are allowed but must be under `ctx.cwd` (security boundary).
+
+#### Example: reading a project file
+
+```javascript
+function render(ctx) {
+  var raw = readFile("package.json");
+  if (!raw) return { type: "label", text: "No package.json", style: "muted" };
+
+  var pkg = JSON.parse(raw);
+  var scripts = pkg.scripts || {};
+  var names = Object.keys(scripts);
+  if (!names.length) return { type: "label", text: "No scripts defined", style: "muted" };
+
+  return {
+    type: "list",
+    items: names.map(function (name) {
+      return {
+        label: name,
+        icon: "play.circle",
+        detail: scripts[name],
+        action: { type: "exec", command: "npm run " + name }
+      };
+    })
+  };
+}
+```
 
 ### DSL Elements
 
-Scripts output a JSON array of elements. Each element has a `type` and type-specific properties:
+Your `render` function returns a JSON object or array of elements. Each element has a `type` and type-specific properties:
 
 | Type | Properties | Description |
 |---|---|---|
 | `label` | `text`, `style?`, `tint?` | Text label. Styles: `"bold"`, `"muted"`, `"mono"`. Alias: `text` (with `content` field) |
-| `button` | `label`, `action`, `style?` | Clickable button. Styles: `"primary"`, `"secondary"`, `"destructive"` |
+| `button` | `label`, `action`, `style?`, `contextMenu?` | Clickable button. Styles: `"primary"`, `"secondary"`, `"destructive"` |
 | `divider` | — | Horizontal line |
 | `spacer` | — | Vertical spacing |
 | `icon` | `name`, `tint?` | SF Symbol icon. Tints: `"success"`, `"error"`, `"warning"`, `"accent"`, `"muted"` |
-| `list` | `items` | List of items with `label`, `detail?`, `icon?`, `action?` |
+| `list` | `items` | List of items with `label`, `detail?`, `icon?`, `action?`, `contextMenu?` |
 | `vstack` | `children` | Vertical layout of child elements |
 | `hstack` | `children` | Horizontal layout of child elements. Alias: `row` |
 | `badge` | `text`, `tint?` | Colored pill badge |
@@ -209,6 +205,25 @@ Actions are attached to interactive elements (buttons, list items):
 | `"copy"` | `text` or `path` | Copies to clipboard |
 | `"reveal"` | `path` | Opens in Finder |
 
+### Context Menus
+
+List items and buttons can have a `contextMenu` array for right-click actions:
+
+```javascript
+{
+  label: "main.js",
+  icon: "doc",
+  action: { type: "open", path: "main.js" },
+  contextMenu: [
+    { label: "Open in editor", icon: "pencil", action: { type: "open", path: "main.js" } },
+    { label: "Copy path", icon: "doc.on.doc", action: { type: "copy", text: "main.js" } },
+    { label: "Delete", style: "destructive", action: { type: "exec", command: "rm main.js" } }
+  ]
+}
+```
+
+Each menu item has `label` (required), `action` (required), and optional `icon` (SF Symbol) and `style` (`"destructive"` for red text).
+
 ### When-Clauses
 
 Control when your plugin is visible based on terminal state:
@@ -222,53 +237,72 @@ Control when your plugin is visible based on terminal state:
 | `"remote.type == 'ssh'"` | Only in SSH sessions |
 | `"remote.type == 'docker'"` | Only in Docker sessions |
 | `"git.active && !remote"` | Git repos, local only |
+| `"process.name == 'node'"` | Only when Node.js is running |
+| `"process.editor"` | Only when an editor is active |
+| `"process.category == 'database'"` | Only for database clients |
+
+Process categories: `editor`, `vcs`, `runtime`, `build`, `package`, `container`, `database`, `monitor`, `filemanager`, `multiplexer`.
 
 Operators: `&&` (and), `||` (or), `!` (not), `==`, `!=`, `()` (grouping).
 
-### Example: Complete Plugin
+See [When-Clauses](/plugins#when-clauses) for the full list of variables.
 
-A plugin that shows `package.json` scripts:
+### Example: Makefile targets plugin
 
-**`~/.exterm/plugins/npm-scripts/plugin.json`**
+A JS plugin that reads a Makefile and lists its targets as clickable items:
+
+**`~/.exterm/plugins/make-targets/plugin.json`**
 
 ```json
 {
-  "id": "npm-scripts",
-  "name": "npm scripts",
+  "id": "make-targets",
+  "name": "Make Targets",
   "version": "1.0.0",
-  "icon": "terminal",
-  "description": "Quick-run npm scripts from package.json",
-  "when": null,
-  "runtime": "script",
+  "icon": "hammer",
+  "description": "Lists Makefile targets. Click to run.",
+  "when": "env.local",
+  "runtime": "js",
   "capabilities": { "sidebarPanel": true }
 }
 ```
 
-**`~/.exterm/plugins/npm-scripts/main.sh`**
+**`~/.exterm/plugins/make-targets/main.js`**
 
-```bash
-#!/bin/bash
-PKG="$EXTERM_CWD/package.json"
-if [ ! -f "$PKG" ]; then
-  echo '[{"type": "label", "text": "No package.json", "style": "muted"}]'
-  exit 0
-fi
+```javascript
+function render(ctx) {
+  var src = readFile("Makefile");
+  if (!src) return { type: "label", text: "No Makefile", style: "muted" };
 
-# Extract script names with jq
-SCRIPTS=$(jq -r '.scripts // {} | keys[]' "$PKG" 2>/dev/null)
-if [ -z "$SCRIPTS" ]; then
-  echo '[{"type": "label", "text": "No scripts defined", "style": "muted"}]'
-  exit 0
-fi
+  var targets = [];
+  var lines = src.split("\n");
+  for (var i = 0; i < lines.length; i++) {
+    var m = lines[i].match(/^([a-zA-Z][a-zA-Z0-9_-]*)\s*:/);
+    if (m) targets.push(m[1]);
+  }
+  if (!targets.length) return { type: "label", text: "No targets found", style: "muted" };
 
-echo -n '['
-FIRST=true
-while IFS= read -r script; do
-  if [ "$FIRST" = true ]; then FIRST=false; else echo -n ','; fi
-  echo -n "{\"type\":\"button\",\"label\":\"$script\",\"action\":{\"type\":\"exec\",\"command\":\"npm run $script\"}}"
-done <<< "$SCRIPTS"
-echo ']'
+  return {
+    type: "list",
+    items: targets.map(function (t) {
+      return { label: t, icon: "terminal", action: { type: "exec", command: "make " + t } };
+    })
+  };
+}
 ```
+
+### Example plugins
+
+All example plugins are in the `examples/plugins/` directory:
+
+| Plugin | What it demonstrates |
+|---|---|
+| **hello-world** | Minimal starting point — `plugin.json` + 12 lines of JS |
+| **make-targets** | `readFile()`, regex parsing, when-clause, list with actions |
+| **project-info** | `fileExists()` for project type detection, list with open actions |
+| **node-project** | **Showcase** — every feature: settings, readFile/fileExists, all DSL elements/styles/tints/actions, context menus, badges |
+| **terminal-inspector** | **Showcase** — every ctx field, settings, file detection, all DSL elements/actions, context menus |
+
+Start with **hello-world**, then study **node-project** or **terminal-inspector** for the full API.
 
 ---
 

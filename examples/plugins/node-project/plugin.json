@@ -1,0 +1,23 @@
+{
+  "id": "node-project",
+  "name": "Node Project",
+  "version": "1.0.0",
+  "icon": "shippingbox.fill",
+  "description": "Showcase plugin: displays Node.js project info, scripts, dependencies, and quick actions",
+  "when": "env.local",
+  "runtime": "js",
+  "capabilities": {
+    "sidebarPanel": true,
+    "statusBarSegment": true
+  },
+  "statusBar": {
+    "position": "left",
+    "priority": 40,
+    "template": "node {cwd}"
+  },
+  "settings": [
+    { "key": "showDeps", "type": "bool", "label": "Show dependencies", "default": true },
+    { "key": "showDevDeps", "type": "bool", "label": "Show dev dependencies", "default": false },
+    { "key": "maxDeps", "type": "int", "label": "Max dependencies shown", "default": 10 }
+  ]
+}

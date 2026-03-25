@@ -118,6 +118,8 @@ final class AppSettings {
         static let autoCheckUpdates = "autoCheckUpdates"
         static let lastUpdateCheck = "lastUpdateCheck"
         static let skipVersion = "skipVersion"
+        static let sidebarDefaultHidden = "sidebarDefaultHidden"
+        static let sshControlMasterApproved = "sshControlMasterApproved"
     }
 
     /// Bool from UserDefaults with a custom default (since .bool returns false for unset keys).
@@ -285,6 +287,12 @@ final class AppSettings {
         set { set(Double(newValue), forKey: K.sidebarWidth, topic: .layout) }
     }
 
+    /// When true, the sidebar starts hidden in new windows.
+    var sidebarDefaultHidden: Bool {
+        get { bool(K.sidebarDefaultHidden, default: false) }
+        set { set(newValue, forKey: K.sidebarDefaultHidden, topic: .layout) }
+    }
+
     var tabOverflowMode: TabOverflowMode {
         get {
             guard UserDefaults.standard.object(forKey: K.tabOverflowMode) != nil else { return .scroll }
@@ -298,6 +306,11 @@ final class AppSettings {
     var disabledPluginIDs: [String] {
         get { UserDefaults.standard.stringArray(forKey: K.disabledPluginIDs) ?? [] }
         set { set(newValue, forKey: K.disabledPluginIDs, topic: .plugins) }
+    }
+
+    /// Whether a plugin is currently enabled (not in the disabled list).
+    func isPluginEnabled(_ pluginID: String) -> Bool {
+        !disabledPluginIDs.contains(pluginID)
     }
 
     /// Plugins open in the sidebar by default when opening a new pane or starting the app.
@@ -324,6 +337,15 @@ final class AppSettings {
     var skipVersion: String? {
         get { UserDefaults.standard.string(forKey: K.skipVersion) }
         set { UserDefaults.standard.set(newValue, forKey: K.skipVersion) }
+    }
+
+    /// nil = never asked, true = user approved, false = user declined.
+    var sshControlMasterApproved: Bool? {
+        get {
+            UserDefaults.standard.object(forKey: K.sshControlMasterApproved) == nil
+                ? nil : UserDefaults.standard.bool(forKey: K.sshControlMasterApproved)
+        }
+        set { UserDefaults.standard.set(newValue, forKey: K.sshControlMasterApproved) }
     }
 
     // MARK: - Plugin Settings
@@ -423,6 +445,7 @@ final class AppSettings {
             K.sidebarPosition: sidebarPosition.rawValue,
             K.workspaceBarPosition: workspaceBarPosition.rawValue,
             K.sidebarWidth: Double(sidebarWidth),
+            K.sidebarDefaultHidden: sidebarDefaultHidden,
             K.tabOverflowMode: tabOverflowMode.rawValue,
             K.disabledPluginIDs: disabledPluginIDs,
             K.defaultEnabledPluginIDs: defaultEnabledPluginIDs,

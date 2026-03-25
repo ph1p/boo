@@ -28,8 +28,20 @@ final class WindowStateCoordinator {
     }
 
     /// Restore plugin UI state from a tab.
+    /// Deactivates plugins that were open before but aren't in the new tab,
+    /// and activates plugins that are newly open.
     func restorePluginState(from tab: Pane.Tab) {
-        openPluginIDs = tab.state.openPluginIDs
+        let oldOpen = openPluginIDs
+        let newOpen = tab.state.openPluginIDs
+        // Deactivate plugins that are no longer open
+        for id in oldOpen.subtracting(newOpen) {
+            pluginRegistry.deactivatePlugin(id)
+        }
+        // Activate plugins that are newly open
+        for id in newOpen.subtracting(oldOpen) {
+            pluginRegistry.activatePlugin(id)
+        }
+        openPluginIDs = newOpen
         expandedPluginIDs = tab.state.expandedPluginIDs
     }
 

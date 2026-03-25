@@ -94,6 +94,16 @@ protocol ExtermPluginProtocol: ExtermPlugin {
 
     /// Called when a remote directory listing arrives from the bridge.
     func remoteDirectoryListed(path: String, entries: [RemoteExplorer.RemoteEntry])
+
+    // MARK: - Activation Lifecycle
+
+    /// Called when the plugin is opened in the sidebar (status bar click or tab switch).
+    /// Use this to start background work (watchers, sockets, timers).
+    func pluginDidActivate()
+
+    /// Called when the plugin is closed from the sidebar.
+    /// Use this to stop all background work and release resources.
+    func pluginDidDeactivate()
 }
 
 /// Default no-op implementations for all optional methods.
@@ -129,6 +139,9 @@ extension ExtermPluginProtocol {
     func terminalClosed(terminalID: UUID) {}
     func terminalFocusChanged(terminalID: UUID, context: TerminalContext) {}
     func remoteDirectoryListed(path: String, entries: [RemoteExplorer.RemoteEntry]) {}
+
+    func pluginDidActivate() {}
+    func pluginDidDeactivate() {}
 }
 
 /// Evaluates whether a plugin should be visible given a terminal context.

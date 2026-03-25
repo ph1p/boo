@@ -1,0 +1,11 @@
+{
+  "id": "make-targets",
+  "name": "Make Targets",
+  "version": "1.0.0",
+  "icon": "hammer",
+  "description": "Lists Makefile targets. Click to run.",
+  "when": "env.local",
+  "runtime": "js",
+  "capabilities": { "sidebarPanel": true },
+  "statusBar": { "position": "left", "priority": 45, "template": "make" }
+}

@@ -1,8 +1,8 @@
 import SwiftUI
 import os.log
 
-/// Adapts a script-based plugin (manifest + script folder) into the ExtermPlugin protocol.
-/// Bridges external JSON plugins into the same lifecycle as built-in Swift plugins.
+/// Adapts an external JS plugin (manifest + main.js) into the ExtermPlugin protocol.
+/// Bridges external plugins into the same lifecycle as built-in Swift plugins.
 @MainActor
 final class ScriptPluginAdapter: ExtermPluginProtocol {
     let manifest: PluginManifest
@@ -12,18 +12,17 @@ final class ScriptPluginAdapter: ExtermPluginProtocol {
     var hostActions: PluginHostActions?
     var onRequestCycleRerun: (() -> Void)?
 
-    // External script plugins subscribe to all events since we can't
+    // External plugins subscribe to all events since we can't
     // know which callbacks the script uses.
     var subscribedEvents: Set<PluginEvent> {
         [.cwdChanged, .processChanged, .remoteSessionChanged, .focusChanged,
          .terminalCreated, .terminalClosed, .remoteDirectoryListed]
     }
 
-    private let scriptExecutor = ScriptExecutor()
     private let jscRuntime = JSCRuntime()
     private let logger = Logger(subsystem: "com.exterm", category: "ScriptPlugin")
 
-    /// Cached DSL output from last script execution.
+    /// Cached DSL output from last JS execution.
     private var cachedDSLElements: [DSLElement]?
     private var cachedError: String?
 
@@ -35,22 +34,19 @@ final class ScriptPluginAdapter: ExtermPluginProtocol {
     // MARK: - Enrich
 
     func enrich(context: EnrichmentContext) {
-        // Script plugins don't enrich by default in v1.
-        // Future: manifest can declare "enrich": true with a script that outputs context additions.
+        // External plugins don't enrich in v1.
     }
 
     // MARK: - React
 
     func react(context: TerminalContext) {
-        // Trigger async script execution on react, cache results
-        executePluginScript(context: context)
+        executePlugin(context: context)
     }
 
     // MARK: - Status Bar
 
     func makeStatusBarContent(context: PluginContext) -> StatusBarContent? {
         guard let template = manifest.statusBar?.template else {
-            // No template — use plugin name
             return StatusBarContent(
                 text: manifest.name,
                 icon: manifest.icon,
@@ -72,10 +68,10 @@ final class ScriptPluginAdapter: ExtermPluginProtocol {
 
     func makeDetailView(context: PluginContext) -> AnyView? {
         if let error = cachedError {
-            return AnyView(ScriptPluginErrorView(pluginName: manifest.name, error: error))
+            return AnyView(PluginErrorView(pluginName: manifest.name, error: error))
         }
         guard let elements = cachedDSLElements else {
-            return AnyView(ScriptPluginLoadingView(pluginName: manifest.name))
+            return AnyView(PluginLoadingView(pluginName: manifest.name))
         }
         let act = actions
         return AnyView(
@@ -90,81 +86,61 @@ final class ScriptPluginAdapter: ExtermPluginProtocol {
     // MARK: - Lifecycle
 
     func cwdChanged(newPath: String, context: TerminalContext) {
-        executePluginScript(context: context)
+        executePlugin(context: context)
     }
 
     func terminalFocusChanged(terminalID: UUID, context: TerminalContext) {
-        // Use cached output on focus switch — don't re-run script
+        // Use cached output on focus switch — don't re-run
     }
 
-    // MARK: - Script Execution
+    // MARK: - JS Execution
 
-    private func executePluginScript(context: TerminalContext) {
-        // Find script path from manifest
-        // Convention: look for scripts declared in manifest, or fall back to main.sh / main.js
-        let scriptPath: String
-        let isJS: Bool
+    private func executePlugin(context: TerminalContext) {
+        let scriptPath = (pluginFolderPath as NSString).appendingPathComponent("main.js")
 
-        if manifest.runtime == .js {
-            scriptPath = (pluginFolderPath as NSString).appendingPathComponent("main.js")
-            isJS = true
-        } else {
-            // Look for any executable script
-            let candidates = ["main.sh", "fetch-data.sh", "main.py", "main.rb"]
-            let found = candidates.first { name in
-                let path = (pluginFolderPath as NSString).appendingPathComponent(name)
-                return FileManager.default.isExecutableFile(atPath: path)
-            }
-            guard let scriptName = found else {
-                // No script — plugin is manifest-only (static panel)
-                return
-            }
-            scriptPath = (pluginFolderPath as NSString).appendingPathComponent(scriptName)
-            isJS = false
+        guard let source = try? String(contentsOfFile: scriptPath, encoding: .utf8) else {
+            // No main.js — plugin is manifest-only (static panel)
+            return
         }
+        do {
+            let settings = buildSettingsDict()
+            let jsonOutput = try jscRuntime.execute(
+                source: source, context: context, settings: settings)
+            let elements = try DSLParser.parse(jsonOutput)
+            cachedDSLElements = elements
+            cachedError = nil
+        } catch {
+            cachedError = "\(error)"
+            logger.error("JS error for \(self.pluginID): \(error.localizedDescription)")
+        }
+    }
 
-        let env = ScriptExecutor.buildEnvironment(from: context)
+    // MARK: - Settings
 
-        if isJS {
-            // Read JS source and execute via JSC
-            guard let source = try? String(contentsOfFile: scriptPath, encoding: .utf8) else {
-                cachedError = "Cannot read script: \(scriptPath)"
-                return
-            }
-            do {
-                let jsonOutput = try jscRuntime.execute(source: source, context: context)
-                let elements = try DSLParser.parse(jsonOutput)
-                cachedDSLElements = elements
-                cachedError = nil
-            } catch {
-                cachedError = "\(error)"
-                logger.error("JSC error for \(self.pluginID): \(error.localizedDescription)")
-            }
-        } else {
-            // Execute shell script async
-            scriptExecutor.executeAsync(
-                path: scriptPath,
-                workingDirectory: pluginFolderPath,
-                environment: env,
-                timeout: 5.0
-            ) { [weak self] result in
-                guard let self = self else { return }
-                if let error = result.error {
-                    self.cachedError = error
-                    self.cachedDSLElements = nil
-                    self.logger.error("Script error for \(self.pluginID): \(error)")
-                } else {
-                    do {
-                        let elements = try DSLParser.parse(result.output)
-                        self.cachedDSLElements = elements
-                        self.cachedError = nil
-                    } catch {
-                        self.cachedError = "Invalid output: \(error)"
-                        self.logger.error("Parse error for \(self.pluginID): \(error.localizedDescription)")
-                    }
-                }
+    private func buildSettingsDict() -> [String: Any] {
+        guard let declarations = manifest.settings, !declarations.isEmpty else { return [:] }
+        var dict: [String: Any] = [:]
+        for setting in declarations {
+            switch setting.type {
+            case .bool:
+                dict[setting.key] = AppSettings.shared.pluginBool(
+                    pluginID, setting.key,
+                    default: (setting.defaultValue?.value as? Bool) ?? false)
+            case .string:
+                dict[setting.key] = AppSettings.shared.pluginString(
+                    pluginID, setting.key,
+                    default: (setting.defaultValue?.value as? String) ?? "")
+            case .int:
+                dict[setting.key] = Int(AppSettings.shared.pluginDouble(
+                    pluginID, setting.key,
+                    default: Double((setting.defaultValue?.value as? Int) ?? 0)))
+            case .double:
+                dict[setting.key] = AppSettings.shared.pluginDouble(
+                    pluginID, setting.key,
+                    default: (setting.defaultValue?.value as? Double) ?? 0)
             }
         }
+        return dict
     }
 
     // MARK: - Template Substitution
@@ -186,7 +162,7 @@ final class ScriptPluginAdapter: ExtermPluginProtocol {
 
 // MARK: - Helper Views
 
-struct ScriptPluginErrorView: View {
+struct PluginErrorView: View {
     let pluginName: String
     let error: String
 
@@ -210,7 +186,7 @@ struct ScriptPluginErrorView: View {
     }
 }
 
-struct ScriptPluginLoadingView: View {
+struct PluginLoadingView: View {
     let pluginName: String
 
     var body: some View {
