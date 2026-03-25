@@ -57,6 +57,7 @@ final class TerminalBridge {
     /// Process-tree hint per pane, updated by the monitor. Used for reconciliation.
     private var processTreeHint: [UUID: RemoteSessionType?] = [:]
 
+
     /// Grace period: when a session is first detected via title, protect it from stale
     /// title events for a short window (until the process tree can confirm/deny).
     private var sessionGraceUntil: [UUID: Date] = [:]
@@ -97,6 +98,26 @@ final class TerminalBridge {
     func ensureContainerCwdPolling() {
         guard let session = state.remoteSession, session.isContainer else { return }
         monitor.startContainerCwdPolling(paneID: state.paneID, tabID: state.tabID, session: session)
+    }
+
+    /// Re-evaluate the foreground process based on socket-registered processes.
+    /// Called when the ExtermSocketServer's status set changes.
+    func reevaluateSocketProcess() {
+        if let shellPID = monitor.shellPID(for: state.paneID),
+            let status = ExtermSocketServer.shared.activeProcess(shellPID: shellPID)
+        {
+            if state.foregroundProcess != status.name {
+                state.foregroundProcess = status.name
+                events.send(.processChanged(name: status.name))
+            }
+        } else {
+            // Process unregistered — fall back to title-based extraction
+            let process = TerminalBridge.extractProcessName(from: state.terminalTitle)
+            if state.foregroundProcess != process {
+                state.foregroundProcess = process
+                events.send(.processChanged(name: process))
+            }
+        }
     }
 
     // MARK: - Input Methods
@@ -236,16 +257,14 @@ final class TerminalBridge {
         state.terminalTitle = title
 
         var process = TerminalBridge.extractProcessName(from: title)
-        // Sticky AI process: when the current process is an AI agent and the new
-        // title yields an unknown/generic name (not a shell, not a recognized process),
-        // keep the AI process. AI tools like Claude Code cycle through dynamic titles
-        // ("⠂ New coding session", "⠐ Building...") that don't contain the tool name.
-        if ProcessIcon.category(for: state.foregroundProcess) == "ai"
-            && !process.isEmpty
-            && ProcessIcon.category(for: process) == nil
-            && !ProcessIcon.isShell(process)
+        // Socket-based process detection: if a process has registered itself via
+        // the EXTERM_SOCK Unix socket, use that as the authoritative process name.
+        // The socket approach is reliable — no title heuristics needed.
+        // When no socket registration exists, use whatever extractProcessName returns.
+        if let shellPID = monitor.shellPID(for: paneID),
+            let status = ExtermSocketServer.shared.activeProcess(shellPID: shellPID)
         {
-            process = state.foregroundProcess
+            process = status.name
         }
         let processChanged = process != state.foregroundProcess
         state.foregroundProcess = process

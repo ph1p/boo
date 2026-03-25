@@ -33,10 +33,11 @@ extension GitPlugin {
         } catch {
             return []
         }
+        // Read before waitUntilExit to prevent deadlock when output > 64KB
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
         task.waitUntilExit()
         guard task.terminationStatus == 0 else { return [] }
 
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
         guard let output = String(data: data, encoding: .utf8) else { return [] }
 
         return output.split(separator: "\n").compactMap { line in
@@ -95,6 +96,68 @@ extension GitPlugin {
         return output
     }
 
+    struct GitRemote: Equatable {
+        let name: String
+        let url: String
+
+        /// Convert SSH/git URLs to HTTPS browser URLs.
+        var webURL: URL? {
+            var cleaned = url
+            // git@github.com:user/repo.git → https://github.com/user/repo
+            if cleaned.hasPrefix("git@") {
+                cleaned = cleaned.replacingOccurrences(of: "git@", with: "https://")
+                if let colonIdx = cleaned.firstIndex(of: ":"),
+                    cleaned[cleaned.startIndex..<colonIdx].contains(".")
+                {
+                    cleaned = cleaned[cleaned.startIndex..<colonIdx] + "/"
+                        + cleaned[cleaned.index(after: colonIdx)...]
+                }
+            }
+            // ssh://git@host/path → https://host/path
+            if cleaned.hasPrefix("ssh://") {
+                cleaned = cleaned.replacingOccurrences(of: "ssh://", with: "https://")
+                if let atIdx = cleaned.firstIndex(of: "@") {
+                    cleaned = "https://" + cleaned[cleaned.index(after: atIdx)...]
+                }
+            }
+            // Strip .git suffix
+            if cleaned.hasSuffix(".git") {
+                cleaned = String(cleaned.dropLast(4))
+            }
+            return URL(string: cleaned)
+        }
+    }
+
+    nonisolated static func detectRemotes(repoRoot: String) -> [GitRemote] {
+        let task = Process()
+        task.launchPath = "/usr/bin/git"
+        task.arguments = ["-C", repoRoot, "remote", "-v"]
+        task.standardError = FileHandle.nullDevice
+        let pipe = Pipe()
+        task.standardOutput = pipe
+        do { try task.run() } catch { return [] }
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        task.waitUntilExit()
+        guard task.terminationStatus == 0 else { return [] }
+        guard let output = String(data: data, encoding: .utf8) else { return [] }
+
+        // git remote -v outputs: origin\thttps://... (fetch)\norigin\thttps://... (push)
+        // Deduplicate by name, prefer fetch URL
+        var seen: [String: String] = [:]
+        for line in output.split(separator: "\n") {
+            let parts = line.split(separator: "\t", maxSplits: 1)
+            guard parts.count == 2 else { continue }
+            let name = String(parts[0])
+            let rest = String(parts[1])
+            // Extract URL (before the (fetch)/(push) suffix)
+            let url = rest.split(separator: " ").first.map(String.init) ?? rest
+            if seen[name] == nil || rest.contains("(fetch)") {
+                seen[name] = url
+            }
+        }
+        return seen.sorted(by: { $0.key < $1.key }).map { GitRemote(name: $0.key, url: $0.value) }
+    }
+
     // MARK: - Refresh & Watcher
 
     internal func refreshGitStatus(cwd: String, repoRoot: String?) {
@@ -104,6 +167,7 @@ extension GitPlugin {
             cachedAheadCount = 0
             cachedBehindCount = 0
             cachedLastCommit = nil
+            cachedRemotes = []
             lastRefreshedPath = cwd
             repoWatcher?.stop()
             repoWatcher = nil
@@ -133,6 +197,7 @@ extension GitPlugin {
             var aheadCount = 0
             var behindCount = 0
             var lastCommit: String?
+            var remotes: [GitRemote] = []
 
             group.enter()
             DispatchQueue.global(qos: .utility).async {
@@ -151,6 +216,11 @@ extension GitPlugin {
                 lastCommit = Self.detectLastCommit(repoRoot: root)
                 group.leave()
             }
+            group.enter()
+            DispatchQueue.global(qos: .utility).async {
+                remotes = Self.detectRemotes(repoRoot: root)
+                group.leave()
+            }
 
             group.wait()
             DispatchQueue.main.async {
@@ -160,10 +230,12 @@ extension GitPlugin {
                     || self.cachedAheadCount != aheadCount
                     || self.cachedBehindCount != behindCount
                     || self.cachedLastCommit != lastCommit
+                    || self.cachedRemotes != remotes
                 self.cachedFiles = files
                 self.cachedAheadCount = aheadCount
                 self.cachedBehindCount = behindCount
                 self.cachedLastCommit = lastCommit
+                self.cachedRemotes = remotes
                 if changed {
                     self.onRequestCycleRerun?()
                 }

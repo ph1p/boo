@@ -8,6 +8,7 @@ struct GitDetailView: View {
     let behindCount: Int
     let lastCommit: String?
     let changedFiles: [GitPlugin.GitChangedFile]
+    let remotes: [GitPlugin.GitRemote]
     let repoRoot: String
     var onFileClicked: ((String) -> Void)?
     var onRefresh: (() -> Void)?
@@ -70,6 +71,11 @@ struct GitDetailView: View {
                     .accessibilityLabel("Copy commit hash")
                     .padding(.horizontal, density == .comfortable ? 12 : 8)
                     .padding(.bottom, 4)
+                }
+
+                // Remotes
+                if !remotes.isEmpty {
+                    remotesSection(theme: theme, density: density)
                 }
 
                 if !changedFiles.isEmpty {
@@ -136,6 +142,51 @@ struct GitDetailView: View {
                         .padding(.vertical, density == .comfortable ? 8 : 6)
                 }
 
+            }
+        }
+    }
+
+    // MARK: - Remotes
+
+    @ViewBuilder
+    private func remotesSection(theme: TerminalTheme, density: SidebarDensity) -> some View {
+        let hPad: CGFloat = density == .comfortable ? 12 : 8
+        ForEach(remotes, id: \.name) { remote in
+            if let webURL = remote.webURL {
+                HStack(spacing: 4) {
+                    Image(systemName: "link")
+                        .font(.system(size: 9))
+                        .foregroundColor(Color(nsColor: theme.chromeMuted))
+                    Text(remote.name)
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundColor(Color(nsColor: theme.accentColor))
+                    Text(webURL.host ?? remote.url)
+                        .font(.system(size: 10))
+                        .foregroundColor(Color(nsColor: theme.chromeMuted))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+                .padding(.horizontal, hPad)
+                .padding(.vertical, 2)
+                .contentShape(Rectangle())
+                .onTapGesture { NSWorkspace.shared.open(webURL) }
+                .help(remote.url)
+            } else {
+                HStack(spacing: 4) {
+                    Image(systemName: "link")
+                        .font(.system(size: 9))
+                        .foregroundColor(Color(nsColor: theme.chromeMuted))
+                    Text(remote.name)
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundColor(Color(nsColor: theme.chromeText))
+                    Text(remote.url)
+                        .font(.system(size: 10))
+                        .foregroundColor(Color(nsColor: theme.chromeMuted))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+                .padding(.horizontal, hPad)
+                .padding(.vertical, 2)
             }
         }
     }

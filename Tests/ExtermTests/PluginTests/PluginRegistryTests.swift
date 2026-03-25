@@ -32,7 +32,7 @@ final class PluginRegistryTests: XCTestCase {
         let registry = PluginRegistry()
         registry.registerBuiltins()
 
-        XCTAssertEqual(registry.plugins.count, 7)
+        XCTAssertEqual(registry.plugins.count, 8)
         XCTAssertNotNil(registry.plugin(for: "file-tree-local"))
         XCTAssertNotNil(registry.plugin(for: "file-tree-remote"))
         XCTAssertNotNil(registry.plugin(for: "git-panel"))
@@ -40,13 +40,14 @@ final class PluginRegistryTests: XCTestCase {
         XCTAssertNotNil(registry.plugin(for: "docker"))
         XCTAssertNotNil(registry.plugin(for: "bookmarks"))
         XCTAssertNotNil(registry.plugin(for: "system-info"))
+        XCTAssertNotNil(registry.plugin(for: "debug"))
     }
 
     func testUnregister() {
         let registry = PluginRegistry()
         registry.registerBuiltins()
         registry.unregister(pluginID: "docker")
-        XCTAssertEqual(registry.plugins.count, 6)
+        XCTAssertEqual(registry.plugins.count, 7)
         XCTAssertNil(registry.plugin(for: "docker"))
     }
 

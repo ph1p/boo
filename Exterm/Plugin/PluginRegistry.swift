@@ -190,6 +190,7 @@ final class PluginRegistry {
         register(DockerPluginNew())
         register(BookmarksPluginNew())
         register(SystemInfoPlugin())
+        register(DebugPlugin())
     }
 
     /// Auto-register status bar toggle icons from plugin manifests.

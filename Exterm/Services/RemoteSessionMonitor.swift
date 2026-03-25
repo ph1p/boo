@@ -56,6 +56,12 @@ final class RemoteSessionMonitor {
         queue.sync { tracked[paneID]?.lastSession }
     }
 
+    /// Synchronous query for the shell PID of a tracked pane.
+    func shellPID(for paneID: UUID) -> pid_t? {
+        let pid: pid_t? = queue.sync { tracked[paneID]?.shellPID }
+        return (pid != nil && pid! > 0) ? pid : nil
+    }
+
     /// Manually start container CWD polling for a pane whose container session was
     /// detected by title heuristics (the process tree may not find it due to docker
     /// CLI reparenting on macOS).

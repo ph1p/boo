@@ -358,7 +358,6 @@ final class RemoteExplorer {
 
     /// Find a child process by name using pgrep.
     /// Find child process by name using proc_listchildpids + proc_name.
-    /// Find a descendant process by name, searching recursively up to `maxDepth` levels.
     private static func findChildProcess(parentPID: pid_t, name: String, maxDepth: Int = 4) -> pid_t? {
         let children = childPIDs(of: parentPID)
         for child in children {
@@ -598,20 +597,24 @@ final class RemoteExplorer {
 
     // MARK: - ControlMaster Setup
 
+    /// Returns true if ControlMaster is already configured in ~/.ssh/config.
+    static func hasControlMaster() -> Bool {
+        let configPath = NSHomeDirectory() + "/.ssh/config"
+        if let existing = try? String(contentsOfFile: configPath, encoding: .utf8) {
+            return existing.lowercased().contains("controlmaster")
+        }
+        return false
+    }
+
     /// Append ControlMaster config to ~/.ssh/config if not already present.
-    /// Returns true on success.
+    /// Caller is responsible for gating this behind user consent.
+    @discardableResult
     static func enableControlMaster() -> Bool {
         let configPath = NSHomeDirectory() + "/.ssh/config"
         let fm = FileManager.default
 
-        // Check if already configured
-        if let existing = try? String(contentsOfFile: configPath, encoding: .utf8) {
-            if existing.lowercased().contains("controlmaster") {
-                return true  // already configured
-            }
-        }
+        if hasControlMaster() { return true }
 
-        // Ensure ~/.ssh directory exists
         let sshDir = NSHomeDirectory() + "/.ssh"
         if !fm.fileExists(atPath: sshDir) {
             try? fm.createDirectory(atPath: sshDir, withIntermediateDirectories: true)
@@ -628,7 +631,6 @@ final class RemoteExplorer {
             handle.closeFile()
             return true
         } else {
-            // Config file doesn't exist yet — create it
             return fm.createFile(
                 atPath: configPath, contents: block.data(using: .utf8),
                 attributes: [.posixPermissions: 0o600])

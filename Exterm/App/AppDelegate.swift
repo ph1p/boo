@@ -11,7 +11,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Enable SSH ControlMaster for connection sharing — allows the file explorer
         // to multiplex on the user's interactive SSH sessions (including password auth).
-        _ = RemoteExplorer.enableControlMaster()
+        setupSSHControlMaster()
+
+        // Start the IPC socket server for child process communication
+        ExtermSocketServer.shared.start()
 
         windowController = MainWindowController()
         windowController?.showWindow(nil)
@@ -32,6 +35,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         SSHControlManager.shared.teardownAll()
+        ExtermSocketServer.shared.stop()
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
@@ -40,5 +44,30 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationSupportsSecureRestorableState(_ app: NSApplication) -> Bool {
         true
+    }
+
+    /// Ask user once before modifying ~/.ssh/config; remember the choice.
+    private func setupSSHControlMaster() {
+        if RemoteExplorer.hasControlMaster() { return }
+
+        if let approved = AppSettings.shared.sshControlMasterApproved {
+            if approved { RemoteExplorer.enableControlMaster() }
+            return
+        }
+
+        let alert = NSAlert()
+        alert.messageText = "Enable SSH Connection Sharing?"
+        alert.informativeText =
+            "Exterm can add ControlMaster to your ~/.ssh/config so the file explorer "
+            + "can reuse your SSH sessions (including password-authenticated ones). "
+            + "This affects all SSH connections system-wide.\n\n"
+            + "You can change this later in Settings."
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: "Enable")
+        alert.addButton(withTitle: "Not Now")
+        let response = alert.runModal()
+        let approved = response == .alertFirstButtonReturn
+        AppSettings.shared.sshControlMasterApproved = approved
+        if approved { RemoteExplorer.enableControlMaster() }
     }
 }

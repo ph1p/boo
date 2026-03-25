@@ -37,8 +37,9 @@ Exterm/
     Docker/         - DockerPlugin, DockerService
     Bookmarks/      - BookmarksPlugin, BookmarksPanelView, BookmarkService
     SystemInfo/     - SystemInfoPlugin (reference example plugin)
+    Debug/          - DebugPlugin (lifecycle event logger and state inspector)
   Views/            - App-level views only (ToolbarView, PaneView, StatusBarView, SettingsWindow, etc.)
-  Services/         - Shared infrastructure (AutoUpdater, FileSystemWatcher, RemoteExplorer, TerminalBridge, ContextAnnouncementEngine, etc.)
+  Services/         - Shared infrastructure (AutoUpdater, ExtermSocketServer, FileSystemWatcher, RemoteExplorer, TerminalBridge, ContextAnnouncementEngine, etc.)
 CPTYHelper/         - C library for forkpty() (Swift can't call fork directly)
 ```
 
@@ -220,6 +221,7 @@ Exterm/Plugins/
   Docker/             DockerPlugin.swift, DockerService.swift
   Bookmarks/          BookmarksPlugin.swift, BookmarksPanelView.swift, BookmarkService.swift
   SystemInfo/         SystemInfoPlugin.swift
+  Debug/              DebugPlugin.swift
 ```
 
 Tests mirror this layout under `Tests/ExtermTests/Plugins/`.
@@ -287,7 +289,7 @@ Use from a plugin: `hostActions?.pastePathToActivePane?(path)`.
 
 #### Plugin Lifecycle & Registration
 
-1. `PluginRegistry.registerBuiltins()` — creates and registers the seven built-in plugins (LocalFileTree, RemoteFileTree, Git, AIAgent, Docker, Bookmarks, SystemInfo)
+1. `PluginRegistry.registerBuiltins()` — creates and registers the eight built-in plugins (LocalFileTree, RemoteFileTree, Git, AIAgent, Docker, Bookmarks, SystemInfo, Debug)
 2. For each registered plugin, the registry wires:
    - `hostActions` — distributed from `PluginRegistry.hostActions` (set once by MWC)
    - `onRequestCycleRerun` — fires `PluginRegistry.onRequestCycleRerun` (bound to MWC's `runPluginCycle`)
@@ -437,6 +439,124 @@ Releases are automated via semantic-release (`.releaserc.json`) — conventional
 - Tab bar shows process icon + display name when a non-shell process is running
 - When-clause variables: `process.name`, `process.category`, `process.running`, `process.editor`, `process.vcs`
 - `foregroundProcess` is persisted in `TabState` per tab (synced from `BridgeState` on process change)
+- **Path titles** (starting with `/`, `~/`, `…/`, `./`, `../`) are rejected by `extractProcessName` — they return empty
+
+### IPC Socket Server (`ExtermSocketServer`)
+
+Exterm exposes a Unix domain socket for reliable bidirectional IPC with child processes. This is the authoritative mechanism for process detection — title-based heuristics are the fallback.
+
+#### Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│ Exterm App                                                      │
+│                                                                 │
+│  ┌──────────────────┐     ┌──────────────────┐                  │
+│  │ ExtermSocketServer│────▶│  TerminalBridge  │                  │
+│  │ ~/.exterm/        │     │                  │                  │
+│  │   exterm.sock     │     │ handleTitleChange│                  │
+│  │                   │     │  1. Check socket │                  │
+│  │ • set_status      │     │  2. If registered│──▶ use socket    │
+│  │ • clear_status    │     │  3. If not       │──▶ use title     │
+│  │ • list_status     │     └────────┬─────────┘                  │
+│  │ • <plugin>.action │              │                            │
+│  │                   │     ┌────────▼─────────┐                  │
+│  │ Sweep: kill(pid,0)│     │  PluginRegistry  │                  │
+│  │ every 5s          │     │  (enrich → react)│                  │
+│  └────────┬──────────┘     └──────────────────┘                  │
+│           │ onStatusChanged                                      │
+│           ▼                                                      │
+│  reevaluateSocketProcess()                                       │
+│  → updates foregroundProcess                                     │
+│  → emits processChanged event                                   │
+│  → triggers plugin cycle                                        │
+└─────────────────────────────────────────────────────────────────┘
+            ▲                          ▲
+            │ Unix socket              │ Terminal title (OSC 2)
+            │ (EXTERM_SOCK)            │ (Ghostty callback)
+┌───────────┴──────────┐   ┌──────────┴──────────┐
+│ AI Agent / Tool      │   │ Shell (zsh/bash)     │
+│ (Claude, Codex, etc.)│   │ Sets title on cd,    │
+│                      │   │ prompt, process start │
+│ Registers via:       │   └─────────────────────┘
+│ echo '{"cmd":        │
+│   "set_status",      │
+│   "pid":$$,          │
+│   "name":"claude",   │
+│   "category":"ai"}'  │
+│ | nc -U $EXTERM_SOCK │
+└──────────────────────┘
+```
+
+#### Two-Tier Process Detection
+
+| Priority | Source | Reliability | How it works |
+|----------|--------|-------------|-------------|
+| **1 (primary)** | Socket registration | Bulletproof | Process registers its PID + name. Dead PID sweep via `kill(pid, 0)` every 5s. Survives all title changes. |
+| **2 (fallback)** | Terminal title | Best-effort | `extractProcessName(from: title)` parses the first word. No sticky logic — process follows the title directly. |
+
+When a socket-registered process is found as a descendant of the shell PID, it **always wins** over the title. The title fallback only applies when no socket registration exists.
+
+#### Socket Protocol
+
+Socket path: `~/.exterm/exterm.sock` (env var `EXTERM_SOCK` inherited by all child shells).
+Protocol: newline-delimited JSON. Each command gets a JSON response.
+
+**Built-in commands:**
+
+| Command | Fields | Description |
+|---------|--------|-------------|
+| `set_status` | `pid` (int), `name` (string), `category` (string, optional), `metadata` (dict, optional) | Register a process. PID must be alive. Category defaults to `"unknown"`. |
+| `clear_status` | `pid` (int) | Unregister a process. |
+| `list_status` | — | List all registered processes. |
+
+**Categories** are open-ended strings used by plugins to filter:
+`"ai"`, `"build"`, `"test"`, `"server"`, `"editor"`, `"monitor"`, etc.
+
+**Plugin command routing:**
+Plugins call `ExtermSocketServer.shared.registerHandler(namespace:)` to handle custom commands. A command like `{"cmd":"git.refresh"}` routes to the `"git"` namespace handler. Handlers receive the full JSON dict and return a response dict.
+
+**Example usage from shell:**
+```bash
+# AI agent registers itself
+echo '{"cmd":"set_status","pid":'"$$"',"name":"claude","category":"ai"}' \
+  | nc -U "$EXTERM_SOCK"
+
+# Build tool with metadata
+echo '{"cmd":"set_status","pid":'"$$"',"name":"webpack","category":"build","metadata":{"mode":"production"}}' \
+  | nc -U "$EXTERM_SOCK"
+
+# Unregister on exit
+echo '{"cmd":"clear_status","pid":'"$$"'}' | nc -U "$EXTERM_SOCK"
+
+# List all active processes
+echo '{"cmd":"list_status"}' | nc -U "$EXTERM_SOCK"
+```
+
+**Dead process sweep:**
+Every 5 seconds, the server checks all registered PIDs with `kill(pid, 0)`. If `errno == ESRCH` (no such process), the registration is removed and `onStatusChanged` fires, which triggers `bridge.reevaluateSocketProcess()` → clears the stale process name.
+
+**Process tree verification:**
+`activeProcess(shellPID:)` walks up from each registered PID using `sysctl(KERN_PROC)` to verify it's a descendant of the given shell. This prevents cross-tab interference — an agent in tab 1 won't affect tab 2. Results are cached per sweep cycle to avoid repeated syscalls.
+
+**Thread safety:**
+All socket I/O, process mutations, and ancestor lookups happen on a dedicated serial `DispatchQueue`. Public read accessors (`processes`, `activeProcess`, `hasActiveProcesses`) use `queue.sync` for thread-safe snapshots. `onStatusChanged` is always dispatched to main thread.
+
+**Security:**
+- Socket file permissions: `0o600` (owner-only read/write)
+- Peer credential check: `getsockopt(LOCAL_PEERCRED)` verifies connecting process has the same UID
+- PID existence check: `kill(pid, 0)` on registration verifies the PID is alive
+- Client limit: max 64 concurrent connections
+- Buffer limit: 16KB per client, disconnects on overflow
+- Non-blocking server socket to prevent accept hangs
+
+#### Lifecycle
+
+1. `AppDelegate.applicationDidFinishLaunching` → `ExtermSocketServer.shared.start()`
+2. `GhosttyRuntime.init()` → `setenv("EXTERM_SOCK", socketPath, 1)` (before any shell fork)
+3. Child shells inherit `EXTERM_SOCK` → agents can connect
+4. `MainWindowController` wires `onStatusChanged` → `bridge.reevaluateSocketProcess()`
+5. `AppDelegate.applicationWillTerminate` → `ExtermSocketServer.shared.stop()` (removes socket file)
 
 ### Common Patterns
 - `TerminalColor.cgColor` / `.nsColor` extensions for color conversion
@@ -453,4 +573,35 @@ Releases are automated via semantic-release (`.releaserc.json`) — conventional
 - All AppKit UI operations must be on the main thread
 - Use `TerminalColor` extensions instead of inline `CGFloat(r)/255` conversions
 - Settings changes go through `AppSettings.shared` which auto-notifies
-- Don't commit co-authored-by lines
+- Don't add co-authored-by to commits
+
+## Commit Conventions
+
+Use [Conventional Commits](https://www.conventionalcommits.org/). semantic-release uses these to determine version bumps.
+
+| Prefix | Version bump | When to use |
+|--------|-------------|-------------|
+| `feat:` | Minor (0.1.0 → 0.2.0) | New feature or capability |
+| `fix:` | Patch (0.1.0 → 0.1.1) | Bug fix |
+| `chore:` | None | Cleanup, deps, config (no release) |
+| `docs:` | None | Documentation only |
+| `refactor:` | None | Code change that neither fixes a bug nor adds a feature |
+| `test:` | None | Adding or fixing tests |
+| `perf:` | Patch | Performance improvement |
+
+**Breaking changes**: Add `BREAKING CHANGE:` in the commit body or `!` after the type (e.g. `feat!:`) for a major bump.
+
+**Commit message style**:
+- Keep the first line under 72 characters
+- Use imperative mood ("add feature" not "added feature")
+- Be specific about what changed, not verbose
+- Group related changes in one commit, split unrelated changes
+
+**Examples**:
+```
+feat: auto-updater via GitHub Releases
+fix: file explorer not refreshing after delete
+chore: minor cleanup (unused var, plugin expand)
+docs: document auto-updater and focus memory
+feat!: replace plugin API with new lifecycle hooks
+```

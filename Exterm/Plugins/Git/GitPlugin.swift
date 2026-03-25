@@ -45,6 +45,7 @@ final class GitPlugin: ExtermPluginProtocol {
     var cachedAheadCount: Int = 0
     var cachedBehindCount: Int = 0
     var cachedLastCommit: String?
+    var cachedRemotes: [GitRemote] = []
 
     struct GitChangedFile: Identifiable {
         let id = UUID()
@@ -135,6 +136,7 @@ final class GitPlugin: ExtermPluginProtocol {
                 behindCount: git.behindCount,
                 lastCommit: git.lastCommitShort,
                 changedFiles: cachedFiles,
+                remotes: cachedRemotes,
                 repoRoot: repoRoot,
                 onFileClicked: { path in
                     act?.handle(DSLAction(type: "open", path: path, command: nil, text: nil))

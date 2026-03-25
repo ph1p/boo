@@ -113,6 +113,10 @@ final class LocalFileTreePlugin: ExtermPluginProtocol {
                 }
             },
             onRename: { oldPath, newName in
+                guard !newName.contains("/"), !newName.contains("..") else {
+                    NSSound.beep()
+                    return
+                }
                 let parentDir = (oldPath as NSString).deletingLastPathComponent
                 let newPath = (parentDir as NSString).appendingPathComponent(newName)
                 guard oldPath != newPath else { return }
@@ -121,23 +125,17 @@ final class LocalFileTreePlugin: ExtermPluginProtocol {
                 } catch {
                     NSSound.beep()
                 }
-                // FSEvents watcher will auto-refresh the tree
             },
             onMove: { sourcePath, destinationDir in
                 let fileName = (sourcePath as NSString).lastPathComponent
                 let destPath = (destinationDir as NSString).appendingPathComponent(fileName)
-                // Don't move onto itself or into its own subtree
                 guard sourcePath != destPath,
                     !destinationDir.hasPrefix(sourcePath + "/")
                 else { return }
                 do {
-                    if FileManager.default.fileExists(atPath: destPath) {
-                        // Avoid overwriting — append number
-                        NSSound.beep()
-                        return
-                    }
                     try FileManager.default.moveItem(atPath: sourcePath, toPath: destPath)
                 } catch {
+                    // moveItem throws if dest exists — no need for pre-check
                     NSSound.beep()
                 }
             },

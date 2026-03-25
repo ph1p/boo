@@ -275,6 +275,9 @@ final class GhosttyRuntime {
             NSLog("[Ghostty] WARNING: Could not find resources dir — shell integration disabled")
         }
 
+        // Expose the socket path so child processes can communicate with Exterm
+        setenv("EXTERM_SOCK", ExtermSocketServer.shared.socketPath, 1)
+
         let argc = CommandLine.argc
         let argv = CommandLine.unsafeArgv
         let rc = ghostty_init(UInt(argc), argv)

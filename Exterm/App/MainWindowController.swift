@@ -22,7 +22,7 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
     var sidebarContainer: NSView!
     var mainSplitView: NSSplitView!
 
-    var sidebarVisible = true
+    var sidebarVisible = !AppSettings.shared.sidebarDefaultHidden
     var isRemoteSidebar: Bool {
         get { coordinator?.isRemote ?? false }
         set {  // derived from bridge state, no-op setter for migration
@@ -128,6 +128,8 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
         super.init(window: window)
 
         setupUI()
+        statusBar.sidebarVisible = sidebarVisible
+        AppStore.shared.sidebarVisible = sidebarVisible
         setupMenuItems()
         let theBridge = TerminalBridge(paneID: UUID(), workspaceID: UUID(), workingDirectory: "")
         let theRegistry = PluginRegistry()
@@ -324,12 +326,16 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
         sidebarContainer.layer?.backgroundColor = AppSettings.shared.theme.sidebarBg.cgColor
 
         currentSidebarPosition = AppSettings.shared.sidebarPosition
-        if currentSidebarPosition == .left {
-            mainSplitView.addSubview(sidebarContainer)
-            mainSplitView.addSubview(splitContainer)
+        if sidebarVisible {
+            if currentSidebarPosition == .left {
+                mainSplitView.addSubview(sidebarContainer)
+                mainSplitView.addSubview(splitContainer)
+            } else {
+                mainSplitView.addSubview(splitContainer)
+                mainSplitView.addSubview(sidebarContainer)
+            }
         } else {
             mainSplitView.addSubview(splitContainer)
-            mainSplitView.addSubview(sidebarContainer)
         }
 
         statusBar.translatesAutoresizingMaskIntoConstraints = false
@@ -585,6 +591,12 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
                 self.refreshStatusBar()
             }
             .store(in: &bridgeCancellables)
+
+        // When a process registers/unregisters via the socket, re-evaluate.
+        ExtermSocketServer.shared.onStatusChanged = { [weak self] in
+            guard let self else { return }
+            self.bridge.reevaluateSocketProcess()
+        }
 
         bridge.events
             .receive(on: DispatchQueue.main)

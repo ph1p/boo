@@ -23,6 +23,8 @@ _Coming soon_
 - **Mouse selection** — Click, double-click (word), triple-click (line)
 - **Auto-updater** — Checks GitHub Releases for new versions, downloads and installs updates
 - **Focus memory** — Remembers last focused pane per workspace, restores on switch
+- **IPC socket** — Unix socket at `~/.exterm/exterm.sock` for reliable process detection and plugin commands
+- **Debug plugin** — Live event log and terminal state inspector for diagnostics
 
 ## Install
 
@@ -95,9 +97,9 @@ Exterm/
   Terminal/         TerminalBackend (PTY lifecycle)
   Models/           Workspace, Pane (+ TabState), SplitTree, AppSettings, Theme
   Plugin/           Core plugin framework (protocol, registry, runtime, DSL)
-  Plugins/          One directory per plugin (FileTree/, RemoteExplorer/, Git/, AIAgent/, Docker/, Bookmarks/, SystemInfo/)
+  Plugins/          One directory per plugin (FileTree/, RemoteExplorer/, Git/, AIAgent/, Docker/, Bookmarks/, SystemInfo/, Debug/)
   Views/            App-level views (ToolbarView, PaneView, StatusBarView, SettingsWindow)
-  Services/         Shared infrastructure (FileSystemWatcher, RemoteExplorer, TerminalBridge, AutoUpdater, ContextAnnouncementEngine)
+  Services/         Shared infrastructure (ExtermSocketServer, FileSystemWatcher, RemoteExplorer, TerminalBridge, AutoUpdater)
 CGhostty/           C module wrapping ghostty.h
 CPTYHelper/         C helper for forkpty()
 Vendor/ghostty/     Ghostty source (git clone)
@@ -135,7 +137,85 @@ Exterm uses **GhosttyKit** — the same terminal engine that powers the [Ghostty
 - **Local**: Uses FSEvents for live file system watching. Flattened lazy rendering handles large directories efficiently (separate `file-tree-local` plugin, visible in local sessions)
 - **Remote SSH**: Auto-detects SSH sessions, lists files via `ssh <host> ls -1AF`. Exterm manages its own SSH ControlMaster sockets — no user SSH config changes required (separate `file-tree-remote` plugin, visible in SSH/MOSH sessions)
 - **Remote cd**: Clicking a directory in the remote tree runs `cd` in the active terminal. Tilde paths (`~`) are resolved to absolute paths so navigation works on Linux and macOS
-- **Context menu**: Rename, move, create folder, move to trash, open in new tab/pane, cd into directory, copy path, reveal in Finder
+- **Context menu**: Grouped by section — Terminal (cd, cat, paste path), OS (open in tab/pane, default app, reveal in Finder, copy path), Edit (new folder, rename, move to trash)
+
+## IPC Socket
+
+Exterm exposes a Unix domain socket for reliable communication between terminal child processes and the app. AI agents, build tools, test runners, and custom scripts use it to register themselves so Exterm can track them accurately — independent of terminal title heuristics.
+
+### How It Works
+
+```
+Shell process (zsh)
+  └─ AI Agent (claude)
+       │
+       ├─ Reads $EXTERM_SOCK env var
+       ├─ Connects to ~/.exterm/exterm.sock
+       └─ Sends: {"cmd":"set_status","pid":12345,"name":"claude","category":"ai"}
+                                    │
+                              ExtermSocketServer
+                                    │
+                              TerminalBridge picks up "claude"
+                              as the foreground process
+                                    │
+                              Plugins react (AI Agent panel, status bar, etc.)
+                                    │
+                              When agent exits:
+                              kill(pid, 0) → ESRCH → auto-cleared
+```
+
+### Usage
+
+The socket path is available in all terminal sessions via `$EXTERM_SOCK`:
+
+```bash
+# Register as an AI agent
+echo '{"cmd":"set_status","pid":'"$$"',"name":"claude","category":"ai"}' \
+  | nc -U "$EXTERM_SOCK"
+
+# Register as a build tool with metadata
+echo '{"cmd":"set_status","pid":'"$$"',"name":"webpack","category":"build","metadata":{"mode":"dev"}}' \
+  | nc -U "$EXTERM_SOCK"
+
+# Unregister (or just exit — dead PIDs are auto-swept every 5s)
+echo '{"cmd":"clear_status","pid":'"$$"'}' | nc -U "$EXTERM_SOCK"
+
+# List all registered processes
+echo '{"cmd":"list_status"}' | nc -U "$EXTERM_SOCK"
+```
+
+### Process Detection Priority
+
+| Priority | Source | When used |
+|----------|--------|-----------|
+| 1st | Socket registration | A process sent `set_status` and is still alive |
+| 2nd | Terminal title | No socket registration — parse process name from title |
+
+Socket-registered processes **always override** title-based detection. They survive all title changes (paths, spinners, shell names). When the process dies, `kill(pid, 0)` detects it within 5 seconds and clears the registration automatically.
+
+### Reliability & Security
+
+- **Thread-safe**: all socket I/O on a dedicated serial queue; public accessors use synchronized snapshots
+- **Peer authentication**: `LOCAL_PEERCRED` verifies every connecting process belongs to the same user
+- **Ancestor verification**: registered PIDs are verified as descendants of the shell via `sysctl(KERN_PROC)` — prevents cross-tab interference
+- **Auto-cleanup**: dead PIDs swept every 5s; no manual unregistration needed
+- **Resource limits**: max 64 concurrent clients, 16KB buffer cap per connection, non-blocking accept
+
+### Plugin Commands
+
+Plugins can register custom socket command handlers:
+
+```swift
+ExtermSocketServer.shared.registerHandler(namespace: "git") { json in
+    // Handle {"cmd":"git.refresh"} etc.
+    return ["ok": true, "branch": "main"]
+}
+```
+
+External tools can then send plugin-specific commands:
+```bash
+echo '{"cmd":"git.refresh"}' | nc -U "$EXTERM_SOCK"
+```
 
 ## Plugin System
 
@@ -152,6 +232,7 @@ Exterm has an extensible plugin system. Plugins provide sidebar panels, status b
 | **Docker**         | `Plugins/Docker/`          | Running container list with exec, logs, start/stop/restart actions   |
 | **Bookmarks**      | `Plugins/Bookmarks/`       | Saved directory bookmarks with per-host namespacing                  |
 | **System**         | `Plugins/SystemInfo/`      | CPU load, memory, disk usage (example plugin demonstrating all patterns) |
+| **Debug**          | `Plugins/Debug/`           | Logs all lifecycle events with timestamps, live terminal state inspector |
 
 ### External Plugins
 
@@ -270,7 +351,7 @@ Open with **Cmd+,**. Organized in tabs:
 swift test
 ```
 
-541 tests covering models, themes, plugins, terminal bridge, remote explorer, SSH control manager, sidebar layout, accessibility, and more.
+656 tests covering models, themes, plugins, terminal bridge, remote explorer, SSH control manager, sidebar layout, accessibility, E2E plugin lifecycle, split/workspace operations, IPC socket protocol, and process detection.
 
 ## License
 

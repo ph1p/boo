@@ -371,7 +371,7 @@ extension TerminalBridge {
     }
 
     /// Extract a short process name from a terminal title.
-    /// Returns empty for shell prompts and local user@host patterns.
+    /// Returns empty for shell prompts, local user@host patterns, and path-only titles.
     static func extractProcessName(from title: String) -> String {
         let trimmed = title.trimmingCharacters(in: .whitespaces)
         if trimmed.isEmpty { return "" }
@@ -394,12 +394,22 @@ extension TerminalBridge {
             }
             // "command: args" — return command name
             if shellNames.contains(before.lowercased()) { return "" }
+            if looksLikePath(before) { return "" }
             return before
         }
 
         let firstWord = trimmed.split(separator: " ").first.map(String.init) ?? trimmed
         if shellNames.contains(firstWord.lowercased()) { return "" }
+        // Reject path-only titles (e.g. "~/dev/project", "/Users/phlp/project",
+        // "…/dev/project") — these are CWD titles set by shell prompts, not process names.
+        if looksLikePath(firstWord) { return "" }
         return firstWord
+    }
+
+    /// True when the string looks like a filesystem path rather than a process name.
+    private static func looksLikePath(_ s: String) -> Bool {
+        s.hasPrefix("/") || s.hasPrefix("~/") || s.hasPrefix("~") || s.hasPrefix("…/")
+            || s.hasPrefix("./") || s.hasPrefix("../")
     }
 
     /// Check if a terminal title has any remote indicators (user@host, ssh, docker, kubectl, etc.).
