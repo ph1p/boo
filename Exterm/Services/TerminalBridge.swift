@@ -261,7 +261,8 @@ final class TerminalBridge {
         // the EXTERM_SOCK Unix socket, use that as the authoritative process name.
         // The socket approach is reliable — no title heuristics needed.
         // When no socket registration exists, use whatever extractProcessName returns.
-        if let shellPID = monitor.shellPID(for: paneID),
+        if ExtermSocketServer.shared.hasActiveProcesses,
+            let shellPID = monitor.shellPID(for: paneID),
             let status = ExtermSocketServer.shared.activeProcess(shellPID: shellPID)
         {
             process = status.name

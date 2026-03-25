@@ -165,7 +165,7 @@ final class DebugPlugin: ExtermPluginProtocol {
                 onCopyLog: { [weak self] in
                     guard let self else { return }
                     let text = self.entries.map { entry in
-                        let ts = Self.timeFormatter.string(from: entry.timestamp)
+                        let ts = DebugPlugin.timeFormatter.string(from: entry.timestamp)
                         return "[\(ts)] \(entry.event)\(entry.detail.isEmpty ? "" : ": \(entry.detail)")"
                     }.joined(separator: "\n")
                     NSPasteboard.general.clearContents()
@@ -175,7 +175,7 @@ final class DebugPlugin: ExtermPluginProtocol {
         )
     }
 
-    private static let timeFormatter: DateFormatter = {
+    static let timeFormatter: DateFormatter = {
         let f = DateFormatter()
         f.dateFormat = "HH:mm:ss.SSS"
         return f
@@ -199,12 +199,6 @@ private struct DebugDetailView: View {
     private var textColor: Color { Color(nsColor: theme.chromeText) }
     private var mutedColor: Color { Color(nsColor: theme.chromeMuted) }
     private var accentColor: Color { Color(nsColor: theme.accentColor) }
-
-    private static let timeFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.dateFormat = "HH:mm:ss.SSS"
-        return f
-    }()
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -356,7 +350,7 @@ private struct DebugDetailView: View {
 
     private func logRow(_ entry: DebugPlugin.LogEntry) -> some View {
         HStack(alignment: .top, spacing: 4) {
-            Text(Self.timeFormatter.string(from: entry.timestamp))
+            Text(DebugPlugin.timeFormatter.string(from: entry.timestamp))
                 .font(.system(size: fontSize - 1, design: .monospaced))
                 .foregroundColor(mutedColor.opacity(0.7))
             Text(entry.event)

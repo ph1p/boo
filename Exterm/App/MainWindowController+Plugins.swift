@@ -129,10 +129,13 @@ extension MainWindowController {
                 rebuildPluginSidebar(context: result.context)
             }
         } else if sidebarVisible {
-            // No visible plugins open — auto-hide sidebar
+            // No visible plugins open — save heights before destroying panel
+            if let panel = pluginSidebarPanelView {
+                savedSidebarHeights = panel.savedSectionHeights
+            }
             pluginSidebarPanelView?.removeFromSuperview()
             pluginSidebarPanelView = nil
-            toggleSidebarAction(nil)
+            toggleSidebar(userInitiated: false)
         }
         syncStatusBarHighlight()
     }
@@ -262,11 +265,15 @@ extension MainWindowController {
             existing.onToggleExpand = toggleHandler
             existing.setTerminalID(context.terminalID)
             existing.updateSections(sections, expandedIDs: expanded)
+            // Sync heights back to controller
+            savedSidebarHeights = existing.savedSectionHeights
         } else {
             let panel = SidebarPanelView(frame: .zero)
             panel.translatesAutoresizingMaskIntoConstraints = false
             panel.onToggleExpand = toggleHandler
             panel.setTerminalID(context.terminalID)
+            // Restore saved heights from controller
+            panel.savedSectionHeights = savedSidebarHeights
             sidebarContainer.addSubview(panel)
             NSLayoutConstraint.activate([
                 panel.topAnchor.constraint(equalTo: sidebarContainer.topAnchor),
@@ -278,8 +285,8 @@ extension MainWindowController {
             pluginSidebarPanelView = panel
         }
 
-        if !sidebarVisible {
-            toggleSidebarAction(nil)
+        if !sidebarVisible && !sidebarUserHidden {
+            toggleSidebar(userInitiated: false)
         }
     }
 
@@ -292,25 +299,33 @@ extension MainWindowController {
     }
 
     /// Toggle a plugin in/out of the sidebar stack.
+    /// Calls lifecycle hooks so plugins can start/stop background work.
     func togglePluginInSidebar(_ pluginID: String) {
         if openPluginIDs.contains(pluginID) {
             openPluginIDs.remove(pluginID)
             expandedPluginIDs.remove(pluginID)
+            cachedDetailViews.removeValue(forKey: pluginID)
+            pluginRegistry.deactivatePlugin(pluginID)
         } else {
             openPluginIDs.insert(pluginID)
+            pluginRegistry.activatePlugin(pluginID)
         }
         savePluginStateForActiveTab()
         if !hasVisibleOpenPlugins() {
-            // No plugins open — remove hosting view and auto-hide sidebar
+            // No plugins open — save heights, then remove panel
+            if let panel = pluginSidebarPanelView {
+                savedSidebarHeights = panel.savedSectionHeights
+            }
             pluginSidebarPanelView?.removeFromSuperview()
             pluginSidebarPanelView = nil
             if sidebarVisible {
-                toggleSidebarAction(nil)
+                toggleSidebar(userInitiated: false)
             }
         } else {
-            // Show sidebar if hidden
+            // Show sidebar if hidden — user explicitly opened a plugin
             if !sidebarVisible {
-                toggleSidebarAction(nil)
+                sidebarUserHidden = false
+                toggleSidebar(userInitiated: false)
             }
             // Rebuild with existing context, or run a fresh cycle
             if let ctx = pluginRegistry.lastContext {

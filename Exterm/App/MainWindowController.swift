@@ -23,6 +23,9 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
     var mainSplitView: NSSplitView!
 
     var sidebarVisible = !AppSettings.shared.sidebarDefaultHidden
+    /// True when the user explicitly hid the sidebar (Cmd+B or default-hidden setting).
+    /// Prevents the plugin cycle from auto-showing the sidebar on tab/pane switch.
+    var sidebarUserHidden = AppSettings.shared.sidebarDefaultHidden
     var isRemoteSidebar: Bool {
         get { coordinator?.isRemote ?? false }
         set {  // derived from bridge state, no-op setter for migration
@@ -70,6 +73,8 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
     }
     /// Track last visible section IDs for skip-rebuild optimization.
     var lastSidebarSectionIDs: [String] = []
+    /// Persisted sidebar section heights — survives panel view recreation.
+    var savedSidebarHeights: [String: CGFloat] = [:]
     /// Cached detail views per plugin, reused when context hasn't changed.
     var cachedDetailViews: [String: (context: TerminalContext, view: AnyView)] = [:]
     /// Generation counter per plugin — incremented only when the view is recreated.
@@ -149,6 +154,10 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
             self.runPluginCycle(reason: .focusChanged)
         }
         pluginRegistry.registerBuiltins()
+        // Activate plugins that are open in the default sidebar state.
+        for pluginID in openPluginIDs {
+            pluginRegistry.activatePlugin(pluginID)
+        }
         let pluginActions = PluginActions()
         pluginActions.sendToTerminal = { [weak self] in self?.sendRawToActivePane($0) }
         pluginActions.openDirectoryInNewTab = { [weak self] in self?.openDirectoryInNewTab($0) }
@@ -354,7 +363,7 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
             self?.togglePluginInSidebar(pluginID)
         }
         statusBar.onSidebarToggle = { [weak self] in
-            self?.toggleSidebarAction(nil)
+            self?.toggleSidebar(userInitiated: true)
         }
         contentView.addSubview(statusBar)
 
@@ -696,7 +705,16 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
     }
 
     @objc func toggleSidebarAction(_ sender: Any?) {
+        toggleSidebar(userInitiated: sender != nil)
+    }
+
+    /// Toggle sidebar visibility. When `userInitiated` is true, the flag is
+    /// recorded so the plugin system won't auto-show the sidebar on tab switch.
+    func toggleSidebar(userInitiated: Bool) {
         sidebarVisible.toggle()
+        if userInitiated {
+            sidebarUserHidden = !sidebarVisible
+        }
         if sidebarVisible {
             if currentSidebarPosition == .left {
                 // Insert sidebar before split container

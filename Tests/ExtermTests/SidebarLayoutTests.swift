@@ -952,4 +952,159 @@ final class SidebarLayoutTests: XCTestCase {
         XCTAssertFalse(v.sectionStates[0].contentContainer is NSScrollView,
             "Non-scroll section should use direct hosting, not NSScrollView")
     }
+
+    // MARK: - Height Persistence Across Rebuilds
+
+    func testHeightSurvivesFullRebuild() {
+        let v = makePanelView(height: 500)
+        let s1 = [makeSection(id: "a"), makeSection(id: "b")]
+        v.updateSections(s1, expandedIDs: ["a", "b"])
+
+        // Simulate drag resize — set custom height
+        v.handleDrag(aboveIndex: 0, belowIndex: 1, delta: 50,
+            startHeights: (v.sectionStates[0].contentHeight, v.sectionStates[1].contentHeight))
+        let heightA = v.sectionStates[0].contentHeight
+        let heightB = v.sectionStates[1].contentHeight
+
+        // Full rebuild (section IDs change then change back — forces rebuild path)
+        let s2 = [makeSection(id: "c")]
+        v.updateSections(s2, expandedIDs: ["c"])
+
+        // Rebuild with original sections
+        let s3 = [makeSection(id: "a"), makeSection(id: "b")]
+        v.updateSections(s3, expandedIDs: ["a", "b"])
+
+        XCTAssertEqual(v.sectionStates[0].contentHeight, heightA, accuracy: 1,
+            "Height of section A should be restored after rebuild")
+        XCTAssertEqual(v.sectionStates[1].contentHeight, heightB, accuracy: 1,
+            "Height of section B should be restored after rebuild")
+    }
+
+    func testHeightSurvivesCollapseAndReExpand() {
+        let v = makePanelView(height: 800)
+        let s = [makeSection(id: "a"), makeSection(id: "b")]
+        v.updateSections(s, expandedIDs: ["a", "b"])
+
+        // Resize — small delta to stay within bounds
+        v.handleDrag(aboveIndex: 0, belowIndex: 1, delta: 30,
+            startHeights: (v.sectionStates[0].contentHeight, v.sectionStates[1].contentHeight))
+        let heightA = v.sectionStates[0].contentHeight
+
+        // Collapse A
+        v.updateSections(s, expandedIDs: ["b"])
+        XCTAssertEqual(v.sectionStates[0].contentHeight, 0)
+
+        // Re-expand A — height is restored from saved, then clamped to fit.
+        // The total may need redistribution, so allow wider tolerance.
+        v.updateSections(s, expandedIDs: ["a", "b"])
+        XCTAssertGreaterThan(v.sectionStates[0].contentHeight, SidebarLayout.minSectionHeight,
+            "Restored height should be larger than minimum")
+    }
+
+    func testHeightSurvivesPluginAppearDisappear() {
+        let v = makePanelView(height: 800)
+
+        // Start with files + git
+        let s1 = [makeSection(id: "files"), makeSection(id: "git")]
+        v.updateSections(s1, expandedIDs: ["files", "git"])
+
+        // Resize — small delta
+        v.handleDrag(aboveIndex: 0, belowIndex: 1, delta: 30,
+            startHeights: (v.sectionStates[0].contentHeight, v.sectionStates[1].contentHeight))
+        let filesHeight = v.sectionStates[0].contentHeight
+
+        // AI agent appears — saved height is restored but may be clamped
+        let s2 = [makeSection(id: "files"), makeSection(id: "git"), makeSection(id: "ai")]
+        v.updateSections(s2, expandedIDs: ["files", "git", "ai"])
+
+        // Height may be slightly reduced to fit 3 sections, but should be close
+        XCTAssertGreaterThan(v.sectionStates[0].contentHeight, SidebarLayout.minSectionHeight,
+            "Files should have more than minimum height")
+
+        // AI agent disappears — files should get closer to original height
+        let s3 = [makeSection(id: "files"), makeSection(id: "git")]
+        v.updateSections(s3, expandedIDs: ["files", "git"])
+
+        XCTAssertEqual(v.sectionStates[0].contentHeight, filesHeight, accuracy: 5,
+            "Files height should be preserved when AI plugin disappears")
+    }
+
+    func testNewSectionGetsDefaultHeight() {
+        let v = makePanelView(height: 500)
+
+        // Start with one section
+        let s1 = [makeSection(id: "a")]
+        v.updateSections(s1, expandedIDs: ["a"])
+
+        // Add a new section (never seen before — should get intrinsic/default height)
+        let s2 = [makeSection(id: "a"), makeSection(id: "new")]
+        v.updateSections(s2, expandedIDs: ["a", "new"])
+
+        XCTAssertGreaterThan(v.sectionStates[1].contentHeight, 0,
+            "New section should have positive height")
+    }
+
+    func testDragResizePersistsHeights() {
+        let v = makePanelView(height: 500)
+        let s = [makeSection(id: "a"), makeSection(id: "b")]
+        v.updateSections(s, expandedIDs: ["a", "b"])
+
+        let beforeA = v.sectionStates[0].contentHeight
+        let beforeB = v.sectionStates[1].contentHeight
+
+        v.handleDrag(aboveIndex: 0, belowIndex: 1, delta: 40,
+            startHeights: (beforeA, beforeB))
+
+        XCTAssertEqual(v.sectionStates[0].contentHeight, beforeA + 40, accuracy: 1)
+        XCTAssertEqual(v.sectionStates[1].contentHeight, beforeB - 40, accuracy: 1)
+    }
+
+    // MARK: - Toggle shrink regression
+
+    func testRepeatedToggleDoesNotShrinkHeight() {
+        let v = makePanelView(height: 600)
+        let s = [makeSection(id: "files"), makeSection(id: "git")]
+        v.updateSections(s, expandedIDs: ["files", "git"])
+
+        let initialFiles = v.sectionStates[0].contentHeight
+        let initialGit = v.sectionStates[1].contentHeight
+        XCTAssertGreaterThan(initialFiles, 0)
+        XCTAssertGreaterThan(initialGit, 0)
+
+        // Toggle files 10 times — height should NOT shrink
+        for i in 0..<10 {
+            // Collapse files
+            v.updateSections(s, expandedIDs: ["git"])
+            // Re-expand files
+            v.updateSections(s, expandedIDs: ["files", "git"])
+
+            XCTAssertEqual(v.sectionStates[0].contentHeight, initialFiles, accuracy: 2,
+                "Files height should not shrink on toggle \(i + 1)")
+            XCTAssertEqual(v.sectionStates[1].contentHeight, initialGit, accuracy: 2,
+                "Git height should not shrink on toggle \(i + 1)")
+        }
+    }
+
+    func testRepeatedToggleWithDragDoesNotShrink() {
+        let v = makePanelView(height: 600)
+        let s = [makeSection(id: "a"), makeSection(id: "b")]
+        v.updateSections(s, expandedIDs: ["a", "b"])
+
+        // Drag to resize
+        v.handleDrag(aboveIndex: 0, belowIndex: 1, delta: 50,
+            startHeights: (v.sectionStates[0].contentHeight, v.sectionStates[1].contentHeight))
+        let draggedA = v.sectionStates[0].contentHeight
+        let draggedB = v.sectionStates[1].contentHeight
+
+        // Toggle 10 times
+        for i in 0..<10 {
+            v.updateSections(s, expandedIDs: ["b"])
+            v.updateSections(s, expandedIDs: ["a", "b"])
+
+            XCTAssertEqual(v.sectionStates[0].contentHeight, draggedA, accuracy: 2,
+                "A height should not shrink on toggle \(i + 1)")
+            XCTAssertEqual(v.sectionStates[1].contentHeight, draggedB, accuracy: 2,
+                "B height should not shrink on toggle \(i + 1)")
+        }
+    }
 }

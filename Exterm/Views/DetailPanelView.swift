@@ -49,6 +49,10 @@ class SidebarPanelView: NSView {
     /// Last known generation per section ID — skip updateContentView when unchanged.
     private var sectionGenerations: [String: UInt64] = [:]
 
+    /// Section heights by plugin ID — shared with the window controller
+    /// so heights survive panel view recreation (sidebar hide/show).
+    var savedSectionHeights: [String: CGFloat] = [:]
+
     /// Current terminal ID — used to save/restore scroll positions per terminal.
     private(set) var currentTerminalID: UUID?
     /// Saved scroll offsets keyed by "terminalID:sectionID".
@@ -134,19 +138,22 @@ class SidebarPanelView: NSView {
                             sectionGenerations[section.id] = section.generation
                         }
                     } else {
-                        // Newly expanded — create content view
+                        // Newly expanded — create content view, restore saved height
                         removeContentView(at: i)
                         addContentView(
                             at: i,
                             content: section.content,
                             prefersOuterScrollView: section.prefersOuterScrollView)
-                        sectionStates[i].contentHeight = max(
-                            SidebarLayout.minSectionHeight,
-                            sectionStates[i].intrinsicHeight)
+                        sectionStates[i].contentHeight = resolvedHeight(
+                            for: section.id, intrinsic: sectionStates[i].intrinsicHeight)
                         hadCollapseOrExpand = true
                     }
                 } else {
                     if wasExpanded {
+                        // Save height before collapsing so it restores on re-expand
+                        if sectionStates[i].contentHeight > 0 {
+                            savedSectionHeights[sectionStates[i].id] = sectionStates[i].contentHeight
+                        }
                         sectionStates[i].contentHeight = 0
                         hadCollapseOrExpand = true
                     }
@@ -154,13 +161,24 @@ class SidebarPanelView: NSView {
                 }
             }
             if hadCollapseOrExpand {
-                redistributeAfterCollapseOrExpand()
+                // Restore all expanded sections to their saved heights.
+                // Don't redistribute freed space — that causes the "shrink on toggle"
+                // bug. clampHeightsToFit in layoutAllSections handles overflow/underflow.
+                for i in sectionStates.indices where sectionStates[i].isExpanded {
+                    sectionStates[i].contentHeight = resolvedHeight(
+                        for: sectionStates[i].id, intrinsic: sectionStates[i].intrinsicHeight)
+                }
             }
             layoutAllSections()
             if let tid = currentTerminalID {
                 restoreScrollOffsets(for: tid)
             }
             return
+        }
+
+        // Save current heights before rebuild so user resizing persists
+        for state in sectionStates where state.isExpanded && state.contentHeight > 0 {
+            savedSectionHeights[state.id] = state.contentHeight
         }
 
         // Full rebuild — reset generation tracking
@@ -195,13 +213,17 @@ class SidebarPanelView: NSView {
                     at: idx,
                     content: section.content,
                     prefersOuterScrollView: section.prefersOuterScrollView)
-                // Use measured intrinsic height
-                sectionStates[idx].contentHeight = max(
-                    SidebarLayout.minSectionHeight,
-                    sectionStates[idx].intrinsicHeight)
+                sectionStates[idx].contentHeight = resolvedHeight(
+                    for: section.id, intrinsic: sectionStates[idx].intrinsicHeight)
             }
         }
-        distributeEqualExpanded()
+        // Only distribute equally when no saved heights exist (first layout)
+        let hasAnySaved = sections.contains { savedSectionHeights[$0.id] != nil }
+        if !hasAnySaved {
+            distributeEqualExpanded()
+        } else {
+            clampHeightsToFit()
+        }
         layoutAllSections()
         if let tid = currentTerminalID {
             restoreScrollOffsets(for: tid)
@@ -281,9 +303,9 @@ class SidebarPanelView: NSView {
         sectionStates[index].contentContainer = nil
     }
 
-    /// Default height for a newly expanded section — uses intrinsic height if known.
-    private func defaultExpandHeight() -> CGFloat {
-        SidebarLayout.minSectionHeight
+    /// Resolved content height for a section — saved height if available, otherwise intrinsic.
+    private func resolvedHeight(for sectionID: String, intrinsic: CGFloat) -> CGFloat {
+        max(SidebarLayout.minSectionHeight, savedSectionHeights[sectionID] ?? intrinsic)
     }
 
     /// Distribute available space among expanded sections.
@@ -316,28 +338,11 @@ class SidebarPanelView: NSView {
             // If no growable sections but there's leftover space, leave it —
             // sections stay at their intrinsic size, empty space at the bottom.
         }
-    }
 
-    /// After a collapse or expand, redistribute space so expanded sections
-    /// fill the available area. Growable sections absorb extra space first.
-    private func redistributeAfterCollapseOrExpand() {
-        let expandedIndices = sectionStates.indices.filter { sectionStates[$0].isExpanded }
-        guard !expandedIndices.isEmpty else { return }
-        let available = availableContentHeight()
-        let currentSum = expandedIndices.reduce(CGFloat(0)) { $0 + sectionStates[$1].contentHeight }
-        let diff = available - currentSum
-        guard abs(diff) > 1 else { return }
-
-        if diff > 0 {
-            // Space freed (collapse) — distribute to growable, or all expanded
-            let targets = expandedIndices.filter { sectionStates[$0].canGrow }
-            let recipients = targets.isEmpty ? expandedIndices : targets
-            let extra = diff / CGFloat(recipients.count)
-            for i in recipients {
-                sectionStates[i].contentHeight += extra
-            }
+        // Save distributed heights so they survive collapse/expand toggles
+        for i in expandedIndices {
+            savedSectionHeights[sectionStates[i].id] = sectionStates[i].contentHeight
         }
-        // If diff < 0 (new section expanded, overflow), clampHeightsToFit handles it
     }
 
     /// Total height available for content (total - all headers - separators).
@@ -445,6 +450,10 @@ class SidebarPanelView: NSView {
 
         sectionStates[aboveIndex].contentHeight = newAbove
         sectionStates[belowIndex].contentHeight = newBelow
+
+        // Persist resized heights
+        savedSectionHeights[sectionStates[aboveIndex].id] = newAbove
+        savedSectionHeights[sectionStates[belowIndex].id] = newBelow
 
         isDragging = true
         layoutAllSections()

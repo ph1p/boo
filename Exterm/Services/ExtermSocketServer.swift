@@ -34,10 +34,10 @@ final class ExtermSocketServer {
     /// Thread-safe process storage. Only mutated on `queue`.
     private var _processes: [pid_t: ProcessStatus] = [:]
 
-    /// Thread-safe read accessor — snapshots the current state.
+    /// Thread-safe accessor. Setter is internal for testing via `@testable import`.
     var processes: [pid_t: ProcessStatus] {
         get { queue.sync { _processes } }
-        set { queue.sync { _processes = newValue } }
+        set { queue.sync { _processes = newValue; ancestorCache.removeAll() } }
     }
 
     /// Called on main thread when the process set changes.
