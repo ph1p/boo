@@ -13,9 +13,24 @@ import Foundation
 ///   ← {"ok":true,...}\n
 ///
 /// Built-in commands:
-///   set_status   — register a process with metadata (pid, name, category)
-///   clear_status — unregister a process
-///   list_status  — list all registered processes
+///   set_status    — register a process with metadata (pid, name, category)
+///   clear_status  — unregister a process
+///   list_status   — list all registered processes
+///   get_context   — current terminal context snapshot
+///   get_theme     — current theme info
+///   get_settings  — current app settings
+///   list_themes   — all available theme names
+///   get_workspaces — list of workspaces
+///   set_theme     — change the active theme
+///   toggle_sidebar — toggle sidebar visibility
+///   switch_workspace — activate a workspace by index
+///   new_tab       — open a new tab (optionally at a path)
+///   send_text     — write raw text to the active terminal
+///   subscribe     — subscribe to push events
+///   unsubscribe   — remove event subscriptions
+///   statusbar.set   — push an external status bar segment
+///   statusbar.clear — remove an external segment
+///   statusbar.list  — list external segments
 ///
 /// The socket path is exposed to child processes via `EXTERM_SOCK`.
 final class ExtermSocketServer {
@@ -50,9 +65,9 @@ final class ExtermSocketServer {
     private var serverFD: Int32 = -1
     private var acceptSource: DispatchSourceRead?
     private var sweepTimer: DispatchSourceTimer?
-    private var clientSources: [Int32: DispatchSourceRead] = [:]
+    var clientSources: [Int32: DispatchSourceRead] = [:]
     private var clientBuffers: [Int32: Data] = [:]
-    private let queue = DispatchQueue(label: "com.exterm.socket", qos: .utility)
+    let queue = DispatchQueue(label: "com.exterm.socket", qos: .utility)
 
     /// Cached ancestor lookups — cleared on each sweep cycle.
     /// Key: (childPID, ancestorPID), Value: isDescendant.
@@ -63,7 +78,36 @@ final class ExtermSocketServer {
         (ExtermPaths.configDir as NSString).appendingPathComponent("exterm.sock")
     }()
 
-    private static let maxClients = 64
+    private static let maxClients = 128
+
+    // MARK: - Event Subscriptions
+
+    /// Clients subscribed to push events. Key: client FD, Value: set of event names.
+    /// Mutated only on `queue`.
+    var subscriptions: [Int32: Set<String>] = [:]
+
+    // MARK: - External Status Bar Segments
+
+    /// External status bar segment info pushed by connected clients.
+    struct ExternalSegmentInfo {
+        let id: String
+        let text: String
+        let icon: String?
+        let tint: String?
+        let position: StatusBarPosition
+        let priority: Int
+        let ownerFD: Int32
+    }
+
+    /// External segments keyed by segment ID. Mutated only on `queue`.
+    var externalSegments: [String: ExternalSegmentInfo] = [:]
+
+    /// Called on main thread when external segments change.
+    var onExternalSegmentsChanged: (([ExternalSegmentInfo]) -> Void)?
+
+    /// Callback for control commands that need MainActor access.
+    /// Set by MainWindowController on init.
+    var onControlCommand: ((_ cmd: String, _ json: [String: Any], _ reply: @escaping ([String: Any]) -> Void) -> Void)?
 
     // MARK: - Plugin Command Registration
 
@@ -181,6 +225,8 @@ final class ExtermSocketServer {
             }
             clientSources.removeAll()
             clientBuffers.removeAll()
+            subscriptions.removeAll()
+            externalSegments.removeAll()
             commandHandlers.removeAll()
             if serverFD >= 0 {
                 close(serverFD)
@@ -213,6 +259,11 @@ final class ExtermSocketServer {
             return
         }
 
+        // Non-blocking so broadcast writes don't stall on slow clients
+        var flags = fcntl(clientFD, F_GETFL)
+        flags |= O_NONBLOCK
+        _ = fcntl(clientFD, F_SETFL, flags)
+
         clientBuffers[clientFD] = Data()
         let source = DispatchSource.makeReadSource(fileDescriptor: clientFD, queue: queue)
         source.setEventHandler { [weak self] in self?.readClient(fd: clientFD) }
@@ -220,6 +271,7 @@ final class ExtermSocketServer {
             close(clientFD)
             self?.clientBuffers.removeValue(forKey: clientFD)
             self?.clientSources.removeValue(forKey: clientFD)
+            self?.cleanupClient(fd: clientFD)
         }
         source.resume()
         clientSources[clientFD] = source
@@ -243,8 +295,8 @@ final class ExtermSocketServer {
         }
         clientBuffers[fd]?.append(contentsOf: buf[0..<n])
 
-        // Guard against oversized buffers (no legitimate command > 16KB)
-        if let buffer = clientBuffers[fd], buffer.count > 16384 {
+        // Guard against oversized buffers
+        if let buffer = clientBuffers[fd], buffer.count > 65536 {
             clientSources[fd]?.cancel()
             return
         }
@@ -255,6 +307,18 @@ final class ExtermSocketServer {
             let lineData = buffer[buffer.startIndex..<newlineIdx]
             clientBuffers[fd] = Data(buffer[buffer.index(after: newlineIdx)...])
             processCommand(data: lineData, clientFD: fd)
+        }
+    }
+
+    /// Clean up subscriptions and external segments owned by a disconnecting client.
+    private func cleanupClient(fd: Int32) {
+        subscriptions.removeValue(forKey: fd)
+        let owned = externalSegments.filter { $0.value.ownerFD == fd }
+        if !owned.isEmpty {
+            for key in owned.keys {
+                externalSegments.removeValue(forKey: key)
+            }
+            notifyExternalSegmentsChanged()
         }
     }
 
@@ -279,8 +343,46 @@ final class ExtermSocketServer {
         case "list_status":
             handleListStatus(clientFD: clientFD)
             return
+
+        // Query commands
+        case "get_context":
+            handleGetContext(clientFD: clientFD)
+            return
+        case "get_theme":
+            handleGetTheme(clientFD: clientFD)
+            return
+        case "get_settings":
+            handleGetSettings(clientFD: clientFD)
+            return
+        case "list_themes":
+            handleListThemes(clientFD: clientFD)
+            return
+        case "get_workspaces":
+            handleControlCommand(cmd: cmd, json: json, clientFD: clientFD)
+            return
+
+        // Control commands
+        case "set_theme", "toggle_sidebar", "switch_workspace", "new_tab", "new_workspace",
+            "send_text":
+            handleControlCommand(cmd: cmd, json: json, clientFD: clientFD)
+            return
+
+        // Subscriptions
+        case "subscribe":
+            handleSubscribe(json: json, clientFD: clientFD)
+            return
+        case "unsubscribe":
+            handleUnsubscribe(json: json, clientFD: clientFD)
+            return
+
         default:
             break
+        }
+
+        // Status bar namespace
+        if cmd.hasPrefix("statusbar.") {
+            handleStatusBarCommand(cmd: cmd, json: json, clientFD: clientFD)
+            return
         }
 
         // Plugin namespace routing: "namespace.action" or "namespace"
@@ -355,13 +457,13 @@ final class ExtermSocketServer {
 
     // MARK: - Response Helpers
 
-    private func sendResponse(fd: Int32, ok: Bool, error: String? = nil) {
+    func sendResponse(fd: Int32, ok: Bool, error: String? = nil) {
         var resp: [String: Any] = ["ok": ok]
         if let e = error { resp["error"] = e }
         sendJSON(fd: fd, dict: resp)
     }
 
-    private func sendJSON(fd: Int32, dict: [String: Any]) {
+    func sendJSON(fd: Int32, dict: [String: Any]) {
         guard let data = try? JSONSerialization.data(withJSONObject: dict),
             var str = String(data: data, encoding: .utf8)
         else { return }
@@ -390,6 +492,12 @@ final class ExtermSocketServer {
     private func notifyChanged() {
         let callback = onStatusChanged
         DispatchQueue.main.async { callback?() }
+    }
+
+    func notifyExternalSegmentsChanged() {
+        let segments = Array(externalSegments.values)
+        let callback = onExternalSegmentsChanged
+        DispatchQueue.main.async { callback?(segments) }
     }
 
     // MARK: - Process Tree (with cache)

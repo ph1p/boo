@@ -85,17 +85,21 @@ extension MainWindowController: PaneViewDelegate {
             let pv = paneViews[paneID]
         else { return }
 
-        if pane.tabs.count > 1 {
-            guard let window = window else { return }
-            let tabID = pane.tabs[index].id
-            let alert = NSAlert()
-            alert.messageText = "Close this tab?"
-            alert.informativeText = "This will end the terminal session in this tab."
-            alert.alertStyle = .warning
-            alert.addButton(withTitle: "Close")
-            alert.addButton(withTitle: "Cancel")
-            alert.beginSheetModal(for: window) { [weak self] response in
-                guard response == .alertFirstButtonReturn else { return }
+        guard let window = window else { return }
+        let tabID = pane.tabs[index].id
+        let isLastTab = pane.tabs.count == 1
+        let alert = NSAlert()
+        alert.messageText = isLastTab ? "Close this pane?" : "Close this tab?"
+        alert.informativeText = "This will end the terminal session."
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "Close")
+        alert.addButton(withTitle: "Cancel")
+        alert.beginSheetModal(for: window) { [weak self] response in
+            guard response == .alertFirstButtonReturn else { return }
+            if isLastTab {
+                workspace.activePaneID = paneID
+                self?.smartCloseAction(nil)
+            } else {
                 // Re-resolve index — tabs may have changed while alert was shown
                 guard let currentIndex = pane.tabs.firstIndex(where: { $0.id == tabID }) else { return }
                 let item = ClosedItem.tab(
@@ -107,12 +111,6 @@ extension MainWindowController: PaneViewDelegate {
                 pv.closeTab(at: currentIndex)
                 self?.refreshStatusBar()
             }
-        } else {
-            // Last tab — use smartClose to handle pane/workspace cascading.
-            // Ensure the correct pane is active so smartClose acts on it,
-            // not on whichever pane previously had focus.
-            workspace.activePaneID = paneID
-            smartCloseAction(nil)
         }
     }
 

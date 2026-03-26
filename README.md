@@ -197,48 +197,86 @@ Exterm uses **GhosttyKit** — the same terminal engine that powers the [Ghostty
 
 ## IPC Socket
 
-Exterm exposes a Unix domain socket for reliable communication between terminal child processes and the app. AI agents, build tools, test runners, and custom scripts use it to register themselves so Exterm can track them accurately — independent of terminal title heuristics.
+Exterm exposes a Unix domain socket (`~/.exterm/exterm.sock`) as the primary communication layer between terminal child processes and the app. The socket path is available in all terminal sessions via `$EXTERM_SOCK`. Protocol: newline-delimited JSON — send a command, get a JSON response.
 
-### How It Works
+### Command Reference
 
-```
-Shell process (zsh)
-  └─ AI Agent (claude)
-       │
-       ├─ Reads $EXTERM_SOCK env var
-       ├─ Connects to ~/.exterm/exterm.sock
-       └─ Sends: {"cmd":"set_status","pid":12345,"name":"claude","category":"ai"}
-                                    │
-                              ExtermSocketServer
-                                    │
-                              TerminalBridge picks up "claude"
-                              as the foreground process
-                                    │
-                              Plugins react (AI Agent panel, status bar, etc.)
-                                    │
-                              When agent exits:
-                              kill(pid, 0) → ESRCH → auto-cleared
-```
+| Category | Command | Description |
+|----------|---------|-------------|
+| **Process** | `set_status` | Register a process (pid, name, category, metadata) |
+| | `clear_status` | Unregister a process |
+| | `list_status` | List all registered processes |
+| **Query** | `get_context` | Current terminal context (CWD, git, process, remote) |
+| | `get_theme` | Current theme name and dark/light mode |
+| | `get_settings` | App settings snapshot |
+| | `list_themes` | All available theme names |
+| | `get_workspaces` | List workspaces with active state |
+| **Control** | `set_theme` | Change theme (`name` parameter) |
+| | `toggle_sidebar` | Toggle sidebar visibility |
+| | `switch_workspace` | Switch workspace by `index` or `id` |
+| | `new_tab` | Open new tab (optional `cwd`) |
+| | `new_workspace` | Open new workspace (optional `path`) |
+| | `send_text` | Write text to the active terminal |
+| **Events** | `subscribe` | Subscribe to push events (`events` array) |
+| | `unsubscribe` | Remove event subscriptions |
+| **Status Bar** | `statusbar.set` | Push an external status bar segment |
+| | `statusbar.clear` | Remove an external segment |
+| | `statusbar.list` | List external segments |
+| **Plugin** | `<namespace>.<action>` | Route to a plugin's registered handler |
 
-### Usage
-
-The socket path is available in all terminal sessions via `$EXTERM_SOCK`:
+### Usage Examples
 
 ```bash
 # Register as an AI agent
 echo '{"cmd":"set_status","pid":'"$$"',"name":"claude","category":"ai"}' \
   | nc -U "$EXTERM_SOCK"
 
-# Register as a build tool with metadata
-echo '{"cmd":"set_status","pid":'"$$"',"name":"webpack","category":"build","metadata":{"mode":"dev"}}' \
+# Query current terminal context
+echo '{"cmd":"get_context"}' | nc -U "$EXTERM_SOCK"
+
+# Change theme
+echo '{"cmd":"set_theme","name":"Tokyo Night"}' | nc -U "$EXTERM_SOCK"
+
+# Push a status bar segment
+echo '{"cmd":"statusbar.set","id":"ci","text":"CI: passing","icon":"checkmark.circle","tint":"green"}' \
   | nc -U "$EXTERM_SOCK"
 
-# Unregister (or just exit — dead PIDs are auto-swept every 5s)
-echo '{"cmd":"clear_status","pid":'"$$"'}' | nc -U "$EXTERM_SOCK"
-
-# List all registered processes
-echo '{"cmd":"list_status"}' | nc -U "$EXTERM_SOCK"
+# Subscribe to events (keep connection open for push notifications)
+echo '{"cmd":"subscribe","events":["cwd_changed","process_changed"]}' | nc -U "$EXTERM_SOCK"
+# → receives: {"event":"cwd_changed","data":{"path":"/new/dir","is_remote":false}}
 ```
+
+### Event Subscriptions
+
+Subscribe to real-time push events by keeping a socket connection open:
+
+| Event | Data |
+|-------|------|
+| `cwd_changed` | `path`, `is_remote` |
+| `title_changed` | `title` |
+| `process_changed` | `name`, `category` |
+| `remote_session_changed` | `type`, `host`, `active` |
+| `focus_changed` | `pane_id` |
+| `workspace_switched` | `workspace_id` |
+| `theme_changed` | `name`, `is_dark` |
+| `settings_changed` | `topic` |
+
+Use `"events": ["*"]` to subscribe to all events.
+
+### External Status Bar Segments
+
+External processes can push custom segments to the status bar. Segments are automatically cleaned up when the client disconnects.
+
+```bash
+# Show build status
+echo '{"cmd":"statusbar.set","id":"build","text":"Building...","icon":"hammer","tint":"yellow","position":"left","priority":30}' \
+  | nc -U "$EXTERM_SOCK"
+
+# Clear when done
+echo '{"cmd":"statusbar.clear","id":"build"}' | nc -U "$EXTERM_SOCK"
+```
+
+Tint colors: `red`, `green`, `yellow`, `blue`, `orange`, `purple`, `accent`, or `#hex`.
 
 ### Process Detection Priority
 
@@ -254,8 +292,8 @@ Socket-registered processes **always override** title-based detection. They surv
 - **Thread-safe**: all socket I/O on a dedicated serial queue; public accessors use synchronized snapshots
 - **Peer authentication**: `LOCAL_PEERCRED` verifies every connecting process belongs to the same user
 - **Ancestor verification**: registered PIDs are verified as descendants of the shell via `sysctl(KERN_PROC)` — prevents cross-tab interference
-- **Auto-cleanup**: dead PIDs swept every 5s; no manual unregistration needed
-- **Resource limits**: max 64 concurrent clients, 16KB buffer cap per connection, non-blocking accept
+- **Auto-cleanup**: dead PIDs swept every 5s; disconnected clients' segments and subscriptions auto-removed
+- **Resource limits**: max 128 concurrent clients, 64KB buffer cap per connection, non-blocking accept
 
 ### Plugin Commands
 

@@ -550,36 +550,43 @@ When a socket-registered process is found as a descendant of the shell PID, it *
 Socket path: `~/.exterm/exterm.sock` (env var `EXTERM_SOCK` inherited by all child shells).
 Protocol: newline-delimited JSON. Each command gets a JSON response.
 
-**Built-in commands:**
+**Full command reference:**
 
-| Command | Fields | Description |
-|---------|--------|-------------|
-| `set_status` | `pid` (int), `name` (string), `category` (string, optional), `metadata` (dict, optional) | Register a process. PID must be alive. Category defaults to `"unknown"`. |
-| `clear_status` | `pid` (int) | Unregister a process. |
-| `list_status` | — | List all registered processes. |
+| Category | Command | Fields | Description |
+|----------|---------|--------|-------------|
+| Process | `set_status` | `pid`, `name`, `category?`, `metadata?` | Register a process. PID must be alive. |
+| | `clear_status` | `pid` | Unregister a process. |
+| | `list_status` | — | List all registered processes. |
+| Query | `get_context` | — | Terminal context (CWD, git, process, remote session). |
+| | `get_theme` | — | Current theme name and dark/light mode. |
+| | `get_settings` | — | App settings snapshot. |
+| | `list_themes` | — | All available theme names. |
+| | `get_workspaces` | — | List workspaces with active state. |
+| Control | `set_theme` | `name` | Change the active theme. |
+| | `toggle_sidebar` | — | Toggle sidebar visibility. |
+| | `switch_workspace` | `index` or `id` | Activate a workspace. |
+| | `new_tab` | `cwd?` | Open a new tab (optional directory). |
+| | `new_workspace` | `path?` | Open a new workspace. |
+| | `send_text` | `text` | Write text to the active terminal. |
+| Events | `subscribe` | `events` (array) | Subscribe to push events. |
+| | `unsubscribe` | `events` (array) | Remove subscriptions. |
+| Status Bar | `statusbar.set` | `id`, `text`, `icon?`, `tint?`, `position?`, `priority?` | Push an external segment. |
+| | `statusbar.clear` | `id` | Remove an external segment. |
+| | `statusbar.list` | — | List all external segments. |
+| Plugin | `<ns>.<action>` | varies | Route to a plugin handler. |
 
-**Categories** are open-ended strings used by plugins to filter:
-`"ai"`, `"build"`, `"test"`, `"server"`, `"editor"`, `"monitor"`, etc.
+**Event subscriptions:** Clients subscribe by sending `{"cmd":"subscribe","events":["cwd_changed","process_changed"]}` and keeping the connection open. Events are pushed as `{"event":"<name>","data":{...}}\n`. Use `["*"]` for all events.
 
-**Plugin command routing:**
-Plugins call `ExtermSocketServer.shared.registerHandler(namespace:)` to handle custom commands. A command like `{"cmd":"git.refresh"}` routes to the `"git"` namespace handler. Handlers receive the full JSON dict and return a response dict.
+Available events: `cwd_changed`, `title_changed`, `process_changed`, `remote_session_changed`, `focus_changed`, `workspace_switched`, `theme_changed`, `settings_changed`.
 
-**Example usage from shell:**
-```bash
-# AI agent registers itself
-echo '{"cmd":"set_status","pid":'"$$"',"name":"claude","category":"ai"}' \
-  | nc -U "$EXTERM_SOCK"
+**External status bar segments:** Processes push segments via `statusbar.set` with `id`, `text`, optional `icon` (SF Symbol), `tint` (red/green/yellow/blue/orange/purple/accent/#hex), `position` (left/right), `priority` (lower = closer to edge). Segments are auto-removed when the client disconnects.
 
-# Build tool with metadata
-echo '{"cmd":"set_status","pid":'"$$"',"name":"webpack","category":"build","metadata":{"mode":"production"}}' \
-  | nc -U "$EXTERM_SOCK"
-
-# Unregister on exit
-echo '{"cmd":"clear_status","pid":'"$$"'}' | nc -U "$EXTERM_SOCK"
-
-# List all active processes
-echo '{"cmd":"list_status"}' | nc -U "$EXTERM_SOCK"
-```
+**Implementation files:**
+- `ExtermSocketServer.swift` — core server, subscriptions, external segments
+- `ExtermSocketServer+Commands.swift` — query, control, subscription, status bar command handlers
+- `ExtermSocketServer+Events.swift` — event broadcasting to subscribers
+- `MainWindowController+IPC.swift` — MainActor-side control command handlers, segment updates
+- `ExternalStatusBarSegment.swift` — `StatusBarPlugin` conformance for external segments
 
 **Dead process sweep:**
 Every 5 seconds, the server checks all registered PIDs with `kill(pid, 0)`. If `errno == ESRCH` (no such process), the registration is removed and `onStatusChanged` fires, which triggers `bridge.reevaluateSocketProcess()` → clears the stale process name.
@@ -588,14 +595,14 @@ Every 5 seconds, the server checks all registered PIDs with `kill(pid, 0)`. If `
 `activeProcess(shellPID:)` walks up from each registered PID using `sysctl(KERN_PROC)` to verify it's a descendant of the given shell. This prevents cross-tab interference — an agent in tab 1 won't affect tab 2. Results are cached per sweep cycle to avoid repeated syscalls.
 
 **Thread safety:**
-All socket I/O, process mutations, and ancestor lookups happen on a dedicated serial `DispatchQueue`. Public read accessors (`processes`, `activeProcess`, `hasActiveProcesses`) use `queue.sync` for thread-safe snapshots. `onStatusChanged` is always dispatched to main thread.
+All socket I/O, process mutations, and ancestor lookups happen on a dedicated serial `DispatchQueue`. Public read accessors (`processes`, `activeProcess`, `hasActiveProcesses`) use `queue.sync` for thread-safe snapshots. `onStatusChanged` and `onExternalSegmentsChanged` are always dispatched to main thread. Control commands dispatch to `DispatchQueue.main` for UI mutations and respond back on the socket queue.
 
 **Security:**
 - Socket file permissions: `0o600` (owner-only read/write)
 - Peer credential check: `getsockopt(LOCAL_PEERCRED)` verifies connecting process has the same UID
 - PID existence check: `kill(pid, 0)` on registration verifies the PID is alive
-- Client limit: max 64 concurrent connections
-- Buffer limit: 16KB per client, disconnects on overflow
+- Client limit: max 128 concurrent connections
+- Buffer limit: 64KB per client, disconnects on overflow
 - Non-blocking server socket to prevent accept hangs
 
 #### Lifecycle
@@ -603,8 +610,9 @@ All socket I/O, process mutations, and ancestor lookups happen on a dedicated se
 1. `AppDelegate.applicationDidFinishLaunching` → `ExtermSocketServer.shared.start()`
 2. `GhosttyRuntime.init()` → `setenv("EXTERM_SOCK", socketPath, 1)` (before any shell fork)
 3. Child shells inherit `EXTERM_SOCK` → agents can connect
-4. `MainWindowController` wires `onStatusChanged` → `bridge.reevaluateSocketProcess()`
-5. `AppDelegate.applicationWillTerminate` → `ExtermSocketServer.shared.stop()` (removes socket file)
+4. `MainWindowController.init()` wires `onStatusChanged`, `onControlCommand`, `onExternalSegmentsChanged`
+5. Bridge events → `emitEvent()` broadcasts to subscribed clients
+6. `AppDelegate.applicationWillTerminate` → `ExtermSocketServer.shared.stop()` (removes socket file, cleans up clients)
 
 ### Common Patterns
 - `TerminalColor.cgColor` / `.nsColor` extensions for color conversion

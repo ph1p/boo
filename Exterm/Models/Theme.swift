@@ -28,6 +28,17 @@ struct TerminalTheme {
         return NSColor(red: r, green: g, blue: b, alpha: 1)
     }
 
+    /// Sidebar border: chromeMuted at 20% blended over sidebarBg.
+    var sidebarBorder: NSColor {
+        let alpha: CGFloat = 0.2
+        let fg = chromeMuted
+        let bg = sidebarBg
+        let r = fg.redComponent * alpha + bg.redComponent * (1 - alpha)
+        let g = fg.greenComponent * alpha + bg.greenComponent * (1 - alpha)
+        let b = fg.blueComponent * alpha + bg.blueComponent * (1 - alpha)
+        return NSColor(red: r, green: g, blue: b, alpha: 1)
+    }
+
     /// Whether this is a dark theme (background luminance < 0.5).
     var isDark: Bool {
         let r = CGFloat(background.r) / 255

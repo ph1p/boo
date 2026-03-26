@@ -109,6 +109,12 @@ class StatusBarView: NSView {
         rightPlugins.removeAll { ($0 as? PluginIconSegment)?.associatedPanelID == pluginID }
     }
 
+    /// Remove all external status bar segments (pushed via IPC socket).
+    func unregisterExternalSegments() {
+        leftPlugins.removeAll { $0 is ExternalStatusBarSegment }
+        rightPlugins.removeAll { $0 is ExternalStatusBarSegment }
+    }
+
     // MARK: - State
 
     func update(directory: String, paneCount: Int, tabCount: Int, runningProcess: String) {

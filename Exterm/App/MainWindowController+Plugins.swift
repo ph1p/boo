@@ -108,10 +108,12 @@ extension MainWindowController {
         // Auto-open process-dependent plugins that just became visible
         // (e.g. AI agent panel when claude starts). Only process-gated plugins
         // auto-open — other plugins are managed by the user via default sidebar settings.
+        // Match "process.ai", "process.name == 'vim'" etc. but not "!process.ai" which
+        // is a negation (Docker uses "!process.ai" to hide during AI sessions).
         if result.visibilityChanged {
             for plugin in pluginRegistry.plugins
             where plugin.manifest.capabilities?.sidebarPanel == true
-                && plugin.manifest.when?.contains("process") == true
+                && Self.isProcessGated(when: plugin.manifest.when)
                 && visibleIDs.contains(plugin.pluginID)
                 && !openPluginIDs.contains(plugin.pluginID)
             {
@@ -308,9 +310,11 @@ extension MainWindowController {
             expandedPluginIDs.remove(pluginID)
             cachedDetailViews.removeValue(forKey: pluginID)
             pluginRegistry.deactivatePlugin(pluginID)
+            AppSettings.shared.updateDefaultEnabledPlugins(remove: pluginID)
         } else {
             openPluginIDs.insert(pluginID)
             pluginRegistry.activatePlugin(pluginID)
+            AppSettings.shared.updateDefaultEnabledPlugins(add: pluginID)
         }
         savePluginStateForActiveTab()
         if !hasVisibleOpenPlugins() {
@@ -337,6 +341,25 @@ extension MainWindowController {
             }
         }
         syncStatusBarHighlight()
+    }
+
+    /// True if the when-clause positively requires a process condition (e.g. "process.ai"),
+    /// false if it only negates one (e.g. "!process.ai") or has no process clause.
+    static func isProcessGated(when clause: String?) -> Bool {
+        guard let clause else { return false }
+        // Look for "process." not preceded by "!"
+        // Split by "process." and check each occurrence isn't negated
+        var search = clause[clause.startIndex...]
+        while let range = search.range(of: "process.") {
+            let before = range.lowerBound > clause.startIndex
+                ? clause[clause.index(before: range.lowerBound)]
+                : Character(" ")
+            if before != "!" {
+                return true
+            }
+            search = clause[range.upperBound...]
+        }
+        return false
     }
 
     func syncStatusBarHighlight() {

@@ -8,7 +8,7 @@ import SwiftUI
 /// NSSplitView with themed divider color.
 class ThemedSplitView: NSSplitView {
     override var dividerColor: NSColor {
-        AppSettings.shared.theme.chromeBorder
+        AppSettings.shared.theme.sidebarBorder
     }
 }
 
@@ -33,6 +33,7 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
     }
     var currentSidebarPosition: SidebarPosition = .right
     var currentWorkspaceBarPosition: WorkspaceBarPosition = .left
+    var currentTabOverflowMode: TabOverflowMode = .scroll
     var sideWorkspaceBar: WorkspaceBarView?
     var sideWorkspaceBarWidthConstraint: NSLayoutConstraint?
     var mainSplitLeadingConstraint: NSLayoutConstraint?
@@ -176,6 +177,7 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
         }
         restoreWorkspaces()
         subscribeToBridge()
+        setupIPCHandlers()
         setupPluginWatcher()
 
         // Run initial plugin cycle so lastContext is available for first click
@@ -189,10 +191,16 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
             guard let self = self, self.window?.isVisible == true else { return }
             let topic = (notification.userInfo?["topic"] as? String).flatMap(SettingsTopic.init(rawValue:))
 
+            // Broadcast settings/theme changes to socket subscribers
+            if let t = topic {
+                ExtermSocketServer.shared.emitSettingsChanged(topic: t.rawValue)
+            }
+
             // Theme changes: refresh chrome colors, pane backgrounds, sidebar, status bar
             if topic == nil || topic == .theme {
                 MainActor.assumeIsolated { AppStore.shared.refreshTheme() }
                 let theme = AppSettings.shared.theme
+                ExtermSocketServer.shared.emitThemeChanged(name: theme.name, isDark: theme.isDark)
                 self.window?.backgroundColor = theme.chromeBg
                 self.window?.appearance = NSAppearance(named: theme.isDark ? .darkAqua : .aqua)
                 self.sidebarContainer.layer?.backgroundColor = theme.sidebarBg.cgColor
@@ -234,6 +242,14 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
                 if newWsBarPos != self.currentWorkspaceBarPosition {
                     self.currentWorkspaceBarPosition = newWsBarPos
                     self.rebuildWorkspaceBarLayout()
+                }
+                let newTabOverflow = AppSettings.shared.tabOverflowMode
+                if newTabOverflow != self.currentTabOverflowMode {
+                    self.currentTabOverflowMode = newTabOverflow
+                    for (_, pv) in self.paneViews {
+                        pv.needsLayout = true
+                        pv.needsDisplay = true
+                    }
                 }
             }
 
@@ -400,6 +416,7 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
         contentView.addSubview(statusBar)
 
         currentWorkspaceBarPosition = AppSettings.shared.workspaceBarPosition
+        currentTabOverflowMode = AppSettings.shared.tabOverflowMode
 
         // Create leading/trailing constraints that can be adjusted for side workspace bar
         let toolbarLeading = toolbar.leadingAnchor.constraint(equalTo: contentView.leadingAnchor)
@@ -570,8 +587,10 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
         return r
     }
 
-    func splitView(_ splitView: NSSplitView, resizeSubviewsWithOldSize oldSize: NSSize) {
-        splitView.adjustSubviews()
+    func splitView(_ splitView: NSSplitView, shouldAdjustSizeOfSubview view: NSView) -> Bool {
+        guard splitView == mainSplitView, sidebarVisible else { return true }
+        let sidebarIdx = currentSidebarPosition == .left ? 0 : 1
+        return splitView.subviews[sidebarIdx] !== view
     }
 
     override func mouseUp(with event: NSEvent) {
@@ -650,27 +669,34 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
             .receive(on: DispatchQueue.main)
             .sink { [weak self] event in
                 guard let self = self else { return }
+                let socket = ExtermSocketServer.shared
                 switch event {
-                case .directoryChanged:
+                case .directoryChanged(let path):
+                    socket.emitCwdChanged(path: path, isRemote: self.bridge.state.remoteSession != nil)
                     self.schedulePluginCycle(reason: .cwdChanged)
 
-                case .titleChanged:
+                case .titleChanged(let title):
+                    socket.emitTitleChanged(title: title)
                     self.schedulePluginCycle(reason: .titleChanged)
 
-                case .processChanged:
+                case .processChanged(let name):
+                    socket.emitProcessChanged(name: name, category: ProcessIcon.category(for: name))
                     self.schedulePluginCycle(reason: .processChanged)
 
-                case .remoteSessionChanged:
+                case .remoteSessionChanged(let session):
+                    socket.emitRemoteSessionChanged(session: session)
                     self.syncRemoteSidebarState()
                     self.schedulePluginCycle(reason: .remoteSessionChanged)
 
-                case .focusChanged:
+                case .focusChanged(let paneID):
+                    socket.emitFocusChanged(paneID: paneID)
                     // Only refresh toolbar — didFocus already runs a synchronous plugin cycle.
                     // Scheduling another async cycle causes sidebar rebuild → GhosttyView focus
                     // callback → didFocus → infinite loop.
                     self.refreshToolbar()
 
-                case .workspaceSwitched:
+                case .workspaceSwitched(let workspaceID):
+                    socket.emitWorkspaceSwitched(workspaceID: workspaceID)
                     self.refreshToolbar()
                     self.schedulePluginCycle(reason: .workspaceSwitched)
 

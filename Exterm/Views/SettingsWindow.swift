@@ -205,38 +205,46 @@ private struct ThemeSettingsView: View {
         let t = Tokens.current
 
         SettingsPage(title: "Color Theme") {
-            Section(title: "System Appearance") {
-                VStack(alignment: .leading, spacing: 10) {
-                    ToggleRow(label: "Match system dark/light mode", isOn: $autoTheme)
-                        .onChange(of: autoTheme) { v in AppSettings.shared.autoTheme = v }
-
-                    if autoTheme {
-                        HStack(spacing: 12) {
-                            variantPicker("Dark", selection: $darkTheme, options: darkThemes)
-                                .onChange(of: darkTheme) { v in AppSettings.shared.darkThemeName = v }
-                            variantPicker("Light", selection: $lightTheme, options: lightThemes)
-                                .onChange(of: lightTheme) { v in AppSettings.shared.lightThemeName = v }
-                        }
-                    }
-                }
+            // System appearance toggle
+            HStack(spacing: 8) {
+                Image(systemName: "circle.lefthalf.filled")
+                    .font(.system(size: 11))
+                    .foregroundColor(t.muted)
+                ToggleRow(label: "Match system dark/light mode", isOn: $autoTheme)
+                    .onChange(of: autoTheme) { v in AppSettings.shared.autoTheme = v }
             }
 
-            if !autoTheme {
-                Section(title: "Theme") {
-                    ForEach(TerminalTheme.themes, id: \.name) { theme in
-                        themeRow(theme, tokens: t)
-                    }
+            if autoTheme {
+                HStack(spacing: 12) {
+                    variantPicker("Dark", icon: "moon.fill", selection: $darkTheme, options: darkThemes)
+                        .onChange(of: darkTheme) { v in AppSettings.shared.darkThemeName = v }
+                    variantPicker("Light", icon: "sun.max.fill", selection: $lightTheme, options: lightThemes)
+                        .onChange(of: lightTheme) { v in AppSettings.shared.lightThemeName = v }
+                }
+            } else {
+                Section(title: "Dark") {
+                    themeGrid(darkThemes, tokens: t)
+                }
+                Section(title: "Light") {
+                    themeGrid(lightThemes, tokens: t)
                 }
             }
         }
     }
 
-    private func variantPicker(_ label: String, selection: Binding<String>, options: [TerminalTheme]) -> some View {
+    private func variantPicker(
+        _ label: String, icon: String, selection: Binding<String>, options: [TerminalTheme]
+    ) -> some View {
         let t = Tokens.current
         return VStack(alignment: .leading, spacing: 4) {
-            Text(label)
-                .font(.system(size: 10, weight: .medium))
-                .foregroundColor(t.muted)
+            HStack(spacing: 4) {
+                Image(systemName: icon)
+                    .font(.system(size: 9))
+                    .foregroundColor(t.muted)
+                Text(label)
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundColor(t.muted)
+            }
             Picker("", selection: selection) {
                 ForEach(options, id: \.name) { Text($0.name).tag($0.name) }
             }
@@ -244,35 +252,53 @@ private struct ThemeSettingsView: View {
         }
     }
 
+    private func themeGrid(_ themes: [TerminalTheme], tokens t: Tokens) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            ForEach(themes, id: \.name) { theme in
+                themeRow(theme, tokens: t)
+            }
+        }
+    }
+
     private func themeRow(_ theme: TerminalTheme, tokens t: Tokens) -> some View {
         let active = selectedTheme == theme.name
-        return HStack(spacing: 10) {
-            HStack(spacing: 2) {
-                colorSwatch(r: theme.background.r, g: theme.background.g, b: theme.background.b)
+        return HStack(spacing: 0) {
+            // Color bar: terminal bg + 6 ansi colors as a continuous strip
+            HStack(spacing: 0) {
+                Rectangle()
+                    .fill(color(theme.background))
+                    .frame(width: 20)
                 ForEach(0..<6, id: \.self) { i in
                     let c = theme.ansiColors[i + 1]
-                    colorSwatch(r: c.r, g: c.g, b: c.b)
+                    Rectangle().fill(color(c))
                 }
             }
+            .frame(width: 80, height: 24)
+            .clipShape(RoundedRectangle(cornerRadius: 4))
+            .overlay(
+                RoundedRectangle(cornerRadius: 4)
+                    .strokeBorder(active ? t.accent.opacity(0.5) : t.muted.opacity(0.1), lineWidth: 1)
+            )
+
             Text(theme.name)
-                .font(.system(size: 12))
+                .font(.system(size: 12, weight: active ? .medium : .regular))
                 .foregroundColor(active ? t.text : t.muted)
-            Image(systemName: theme.isDark ? "moon.fill" : "sun.max.fill")
-                .font(.system(size: 8))
-                .foregroundColor(t.muted.opacity(0.4))
+                .padding(.leading, 10)
+
             Spacer()
+
             if active {
-                Image(systemName: "checkmark")
-                    .font(.system(size: 11, weight: .bold))
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 13))
                     .foregroundColor(t.accent)
             }
         }
-        .padding(.horizontal, 10)
+        .padding(.horizontal, 8)
         .padding(.vertical, 5)
         .contentShape(Rectangle())
         .background(
             RoundedRectangle(cornerRadius: 6)
-                .fill(active ? t.accent.opacity(0.1) : Color.clear)
+                .fill(active ? t.accent.opacity(0.08) : Color.clear)
         )
         .onTapGesture {
             selectedTheme = theme.name
@@ -280,10 +306,8 @@ private struct ThemeSettingsView: View {
         }
     }
 
-    private func colorSwatch(r: UInt8, g: UInt8, b: UInt8) -> some View {
-        RoundedRectangle(cornerRadius: 2)
-            .fill(Color(red: Double(r) / 255, green: Double(g) / 255, blue: Double(b) / 255))
-            .frame(width: 14, height: 14)
+    private func color(_ c: TerminalColor) -> Color {
+        Color(red: Double(c.r) / 255, green: Double(c.g) / 255, blue: Double(c.b) / 255)
     }
 }
 

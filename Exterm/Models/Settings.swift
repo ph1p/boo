@@ -317,9 +317,18 @@ final class AppSettings {
     var defaultEnabledPluginIDs: [String] {
         get {
             UserDefaults.standard.stringArray(forKey: K.defaultEnabledPluginIDs)
-                ?? ["file-tree-local", "file-tree-remote", "git-panel", "docker", "bookmarks"]
+                ?? ["file-tree-local", "file-tree-remote", "git-panel", "bookmarks"]
         }
         set { set(newValue, forKey: K.defaultEnabledPluginIDs, topic: .plugins) }
+    }
+
+    /// Silently add or remove a plugin from the default-enabled list.
+    /// Does NOT fire the `.plugins` notification to avoid re-entrancy from the settings observer.
+    func updateDefaultEnabledPlugins(add addID: String? = nil, remove removeID: String? = nil) {
+        var ids = defaultEnabledPluginIDs
+        if let id = removeID { ids.removeAll { $0 == id } }
+        if let id = addID, !ids.contains(id) { ids.append(id) }
+        UserDefaults.standard.set(ids, forKey: K.defaultEnabledPluginIDs)
     }
 
     // MARK: - Updates
