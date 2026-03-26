@@ -124,8 +124,12 @@ Ghostty OSC event → PaneView delegate → MainWindowController
   → TerminalBridge (heuristics, remote detection)
   → coordinator.syncBridgeToTab() → writes to TabState
   → runPluginCycle() → coordinator.buildContext() → TerminalContext
+  → AppStore.shared.updateContext() → canonical pane-aware context
   → PluginRuntime (enrich → freeze → react) → sidebar/status bar
+  → ExtermSocketServer emits events (with pane_id) to subscribers
 ```
+
+The status bar reads exclusively from `AppStore.shared.context` (the `TerminalContext` built by the plugin cycle with pane-ID guarding), never from `bridge.state` directly. This ensures correct data in split-view setups where bridge state may lag behind focus changes.
 
 **Tab switch flow:**
 ```
@@ -234,8 +238,9 @@ The core plugin **framework** (`Plugin/`) is separate from plugin **implementati
 ```
 Exterm/Plugin/        ExtermPluginProtocol, PluginRegistry, PluginRuntime, PluginHostActions,
                       PluginManifest, PluginWatcher, EnrichmentContext, TerminalContext,
-                      WhenClause, ScriptPluginAdapter, JSCRuntime,
-                      PluginStateBag, DensityMetrics, ViewDSL/
+                      WhenClause, ScriptPluginAdapter, JSCRuntime, PluginStateBag,
+                      DensityMetrics, PluginServices, HostPluginServices,
+                      PluginActions, PluginContext, ViewDSL/
 ```
 
 #### Core Protocol: `ExtermPluginProtocol`
@@ -557,7 +562,7 @@ Protocol: newline-delimited JSON. Each command gets a JSON response.
 | Process | `set_status` | `pid`, `name`, `category?`, `metadata?` | Register a process. PID must be alive. |
 | | `clear_status` | `pid` | Unregister a process. |
 | | `list_status` | — | List all registered processes. |
-| Query | `get_context` | — | Terminal context (CWD, git, process, remote session). |
+| Query | `get_context` | — | Terminal context (pane_id, CWD, git, process, remote session). |
 | | `get_theme` | — | Current theme name and dark/light mode. |
 | | `get_settings` | — | App settings snapshot. |
 | | `list_themes` | — | All available theme names. |
@@ -578,6 +583,8 @@ Protocol: newline-delimited JSON. Each command gets a JSON response.
 **Event subscriptions:** Clients subscribe by sending `{"cmd":"subscribe","events":["cwd_changed","process_changed"]}` and keeping the connection open. Events are pushed as `{"event":"<name>","data":{...}}\n`. Use `["*"]` for all events.
 
 Available events: `cwd_changed`, `title_changed`, `process_changed`, `remote_session_changed`, `focus_changed`, `workspace_switched`, `theme_changed`, `settings_changed`.
+
+All terminal-scoped events (`cwd_changed`, `title_changed`, `process_changed`, `remote_session_changed`, `focus_changed`) include a `pane_id` field identifying the originating pane. This enables subscribers to filter by pane and avoid cross-pane interference in split-view setups. The `get_context` response also includes `pane_id`.
 
 **External status bar segments:** Processes push segments via `statusbar.set` with `id`, `text`, optional `icon` (SF Symbol), `tint` (red/green/yellow/blue/orange/purple/accent/#hex), `position` (left/right), `priority` (lower = closer to edge). Segments are auto-removed when the client disconnects.
 

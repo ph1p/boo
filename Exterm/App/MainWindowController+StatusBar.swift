@@ -31,19 +31,19 @@ extension MainWindowController {
             statusBar.update(directory: "", paneCount: 0, tabCount: 0, runningProcess: "")
             return
         }
+        // bridge.state may hold stale data from a different pane during async
+        // focus transitions — use the pane-ID-guarded context instead.
+        let ctx = AppStore.shared.context
         let activeTab = ws.pane(for: ws.activePaneID)?.activeTab
-        let localCwd = activeTab?.workingDirectory ?? ws.folderPath
-        // Bridge state is the single source of truth for the active pane's remote
-        // session and CWD. Never fall back to tab state which may be stale.
-        let activeRemoteSession = bridge.state.remoteSession
-        let remoteCwd = bridge.state.remoteCwd
-        var cwd = (activeRemoteSession != nil ? remoteCwd : nil) ?? localCwd
+        let activeRemoteSession = ctx.remoteSession
+        var cwd = (activeRemoteSession != nil ? ctx.remoteCwd : nil) ?? ctx.cwd
+        if cwd.isEmpty { cwd = activeTab?.workingDirectory ?? ws.folderPath }
         if activeRemoteSession != nil {
             cwd = Self.tildeContractRemotePath(cwd, session: activeRemoteSession, title: activeTab?.title)
         }
         let paneCount = ws.panes.count
         let tabCount = ws.pane(for: ws.activePaneID)?.tabs.count ?? 0
-        var process = bridge.state.foregroundProcess
+        var process = ctx.processName
         // Don't show process when it duplicates the path, looks like a directory,
         // is a local user@host prompt, or is a connection command redundant with
         // the remote session indicator

@@ -337,13 +337,15 @@ class PaneView: NSView {
     private func debounceTitleUpdate(_ title: String) {
         pendingTitle = title
         titleDebounce?.cancel()
+        let capturedIndex = pane.activeTabIndex
         let work = DispatchWorkItem { [weak self] in
             guard let self = self, let title = self.pendingTitle else { return }
             self.pendingTitle = nil
             self.titleDebounce = nil
             self.paneDelegate?.paneView(self, titleChanged: title, paneID: self.paneID)
-            let idx = self.pane.activeTabIndex
-            if idx >= 0 { self.pane.updateTitle(at: idx, title) }
+            if capturedIndex >= 0, capturedIndex < self.pane.tabs.count {
+                self.pane.updateTitle(at: capturedIndex, title)
+            }
             self.scheduleTabBarRedraw()
         }
         titleDebounce = work
@@ -355,12 +357,14 @@ class PaneView: NSView {
     private func debounceCwdUpdate(_ path: String) {
         pendingCwd = path
         cwdDebounce?.cancel()
+        let capturedIndex = pane.activeTabIndex
         let work = DispatchWorkItem { [weak self] in
             guard let self = self, let cwd = self.pendingCwd else { return }
             self.pendingCwd = nil
             self.cwdDebounce = nil
-            let idx = self.pane.activeTabIndex
-            if idx >= 0 { self.pane.updateWorkingDirectory(at: idx, cwd) }
+            if capturedIndex >= 0, capturedIndex < self.pane.tabs.count {
+                self.pane.updateWorkingDirectory(at: capturedIndex, cwd)
+            }
             self.scheduleTabBarRedraw()
             self.paneDelegate?.paneView(self, didChangeDirectory: cwd, paneID: self.paneID)
         }
@@ -469,7 +473,19 @@ class PaneView: NSView {
         needsDisplay = true
     }
 
+    /// Cancel any pending debounced title/CWD updates so they don't fire
+    /// after a tab switch and update the wrong tab.
+    private func cancelPendingDebounces() {
+        titleDebounce?.cancel()
+        titleDebounce = nil
+        pendingTitle = nil
+        cwdDebounce?.cancel()
+        cwdDebounce = nil
+        pendingCwd = nil
+    }
+
     private func storeCurrentView() {
+        cancelPendingDebounces()
         guard let gv = ghosttyView, let tab = pane.activeTab else { return }
         gv.removeFromSuperview()
         scrollWrapper?.removeFromSuperview()

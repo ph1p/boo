@@ -22,6 +22,7 @@ extension ExtermSocketServer {
     static func serializeContext(_ ctx: TerminalContext) -> [String: Any] {
         var dict: [String: Any] = [
             "terminal_id": ctx.terminalID.uuidString,
+            "pane_id": ctx.terminalID.uuidString,
             "cwd": ctx.cwd,
             "process_name": ctx.processName,
             "pane_count": ctx.paneCount,

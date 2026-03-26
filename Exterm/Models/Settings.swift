@@ -111,6 +111,7 @@ final class AppSettings {
         static let tabOverflowMode = "tabOverflowMode"
         static let disabledPluginIDs = "disabledPluginIDs"
         static let defaultEnabledPluginIDs = "defaultEnabledPluginIDs"
+        static let sidebarPluginOrder = "sidebarPluginOrder"
         static let sidebarWidth = "sidebarWidth"
         static let pluginSettings = "pluginSettings"
         static let migratedPluginSettings_v1 = "migratedPluginSettings_v1"
@@ -322,12 +323,39 @@ final class AppSettings {
         set { set(newValue, forKey: K.defaultEnabledPluginIDs, topic: .plugins) }
     }
 
+    /// Canonical ordering of all sidebar plugins (enabled and disabled).
+    /// The sidebar and settings panel use this to keep a stable order
+    /// even when plugins are toggled on/off individually.
+    var sidebarPluginOrder: [String] {
+        get {
+            UserDefaults.standard.stringArray(forKey: K.sidebarPluginOrder) ?? []
+        }
+        set { set(newValue, forKey: K.sidebarPluginOrder) }
+    }
+
     /// Silently add or remove a plugin from the default-enabled list.
     /// Does NOT fire the `.plugins` notification to avoid re-entrancy from the settings observer.
+    /// When adding, inserts at the position defined by `sidebarPluginOrder` to preserve
+    /// the user-configured order regardless of which plugins are currently active.
     func updateDefaultEnabledPlugins(add addID: String? = nil, remove removeID: String? = nil) {
         var ids = defaultEnabledPluginIDs
         if let id = removeID { ids.removeAll { $0 == id } }
-        if let id = addID, !ids.contains(id) { ids.append(id) }
+        if let id = addID, !ids.contains(id) {
+            let order = sidebarPluginOrder
+            if let canonicalIdx = order.firstIndex(of: id) {
+                // Find the right insertion point to maintain canonical order
+                var insertAt = ids.count
+                for (i, existing) in ids.enumerated() {
+                    if let existingIdx = order.firstIndex(of: existing), existingIdx > canonicalIdx {
+                        insertAt = i
+                        break
+                    }
+                }
+                ids.insert(id, at: insertAt)
+            } else {
+                ids.append(id)
+            }
+        }
         UserDefaults.standard.set(ids, forKey: K.defaultEnabledPluginIDs)
     }
 
@@ -458,6 +486,7 @@ final class AppSettings {
             K.tabOverflowMode: tabOverflowMode.rawValue,
             K.disabledPluginIDs: disabledPluginIDs,
             K.defaultEnabledPluginIDs: defaultEnabledPluginIDs,
+            K.sidebarPluginOrder: sidebarPluginOrder,
             K.pluginSettings: pluginSettingsDict
         ]
         if let data = try? JSONSerialization.data(withJSONObject: dict, options: [.prettyPrinted, .sortedKeys]) {

@@ -150,7 +150,7 @@ final class ExtermSocketSubscriptionTests: XCTestCase {
             """)
 
         // Emit a CWD event
-        ExtermSocketServer.shared.emitCwdChanged(path: "/tmp/nope", isRemote: false)
+        ExtermSocketServer.shared.emitCwdChanged(path: "/tmp/nope", isRemote: false, paneID: UUID())
         Thread.sleep(forTimeInterval: 0.2)
 
         // Set non-blocking to avoid hanging on read

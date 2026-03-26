@@ -42,27 +42,32 @@ extension ExtermSocketServer {
 
     // MARK: - Convenience Emitters
 
-    func emitCwdChanged(path: String, isRemote: Bool) {
-        emitEvent(name: "cwd_changed", data: ["path": path, "is_remote": isRemote])
+    func emitCwdChanged(path: String, isRemote: Bool, paneID: UUID) {
+        emitEvent(name: "cwd_changed", data: [
+            "path": path, "is_remote": isRemote, "pane_id": paneID.uuidString,
+        ])
     }
 
-    func emitTitleChanged(title: String) {
-        emitEvent(name: "title_changed", data: ["title": title])
+    func emitTitleChanged(title: String, paneID: UUID) {
+        emitEvent(name: "title_changed", data: ["title": title, "pane_id": paneID.uuidString])
     }
 
-    func emitProcessChanged(name: String, category: String?) {
-        var data: [String: Any] = ["name": name]
+    func emitProcessChanged(name: String, category: String?, paneID: UUID) {
+        var data: [String: Any] = ["name": name, "pane_id": paneID.uuidString]
         if let cat = category { data["category"] = cat }
         emitEvent(name: "process_changed", data: data)
     }
 
-    func emitRemoteSessionChanged(session: RemoteSessionType?) {
+    func emitRemoteSessionChanged(session: RemoteSessionType?, paneID: UUID) {
         if let session {
             var data = Self.serializeRemoteSession(session)
             data["active"] = true
+            data["pane_id"] = paneID.uuidString
             emitEvent(name: "remote_session_changed", data: data)
         } else {
-            emitEvent(name: "remote_session_changed", data: ["active": false])
+            emitEvent(name: "remote_session_changed", data: [
+                "active": false, "pane_id": paneID.uuidString,
+            ])
         }
     }
 

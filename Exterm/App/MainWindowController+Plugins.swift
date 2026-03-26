@@ -197,8 +197,9 @@ extension MainWindowController {
     func rebuildPluginSidebar(context: TerminalContext) {
         // Build sections for all open + visible plugins
         var sections: [SidebarSection] = []
-        // Order plugins by their position in defaultEnabledPluginIDs (user-configurable order)
-        let orderedIDs = AppSettings.shared.defaultEnabledPluginIDs
+        // Order plugins by canonical sidebar order, falling back to enabled order
+        let canonical = AppSettings.shared.sidebarPluginOrder
+        let orderedIDs = canonical.isEmpty ? AppSettings.shared.defaultEnabledPluginIDs : canonical
         let allPluginIDs = openPluginIDs.sorted { a, b in
             let ia = orderedIDs.firstIndex(of: a) ?? Int.max
             let ib = orderedIDs.firstIndex(of: b) ?? Int.max
@@ -310,11 +311,9 @@ extension MainWindowController {
             expandedPluginIDs.remove(pluginID)
             cachedDetailViews.removeValue(forKey: pluginID)
             pluginRegistry.deactivatePlugin(pluginID)
-            AppSettings.shared.updateDefaultEnabledPlugins(remove: pluginID)
         } else {
             openPluginIDs.insert(pluginID)
             pluginRegistry.activatePlugin(pluginID)
-            AppSettings.shared.updateDefaultEnabledPlugins(add: pluginID)
         }
         savePluginStateForActiveTab()
         if !hasVisibleOpenPlugins() {

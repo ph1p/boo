@@ -655,6 +655,9 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
                     self.coordinator.syncBridgeToTab(pane: pane, tabIndex: pane.activeTabIndex)
                     self.paneViews[pane.id]?.needsDisplay = true
                 }
+                // Refresh the status bar from AppStore.shared.context.
+                // A full plugin cycle is NOT needed here — bridge.events already
+                // schedules one with the correct reason for each event type.
                 self.refreshStatusBar()
             }
             .store(in: &bridgeCancellables)
@@ -672,19 +675,19 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
                 let socket = ExtermSocketServer.shared
                 switch event {
                 case .directoryChanged(let path):
-                    socket.emitCwdChanged(path: path, isRemote: self.bridge.state.remoteSession != nil)
+                    socket.emitCwdChanged(path: path, isRemote: self.bridge.state.remoteSession != nil, paneID: self.bridge.state.paneID)
                     self.schedulePluginCycle(reason: .cwdChanged)
 
                 case .titleChanged(let title):
-                    socket.emitTitleChanged(title: title)
+                    socket.emitTitleChanged(title: title, paneID: self.bridge.state.paneID)
                     self.schedulePluginCycle(reason: .titleChanged)
 
                 case .processChanged(let name):
-                    socket.emitProcessChanged(name: name, category: ProcessIcon.category(for: name))
+                    socket.emitProcessChanged(name: name, category: ProcessIcon.category(for: name), paneID: self.bridge.state.paneID)
                     self.schedulePluginCycle(reason: .processChanged)
 
                 case .remoteSessionChanged(let session):
-                    socket.emitRemoteSessionChanged(session: session)
+                    socket.emitRemoteSessionChanged(session: session, paneID: self.bridge.state.paneID)
                     self.syncRemoteSidebarState()
                     self.schedulePluginCycle(reason: .remoteSessionChanged)
 

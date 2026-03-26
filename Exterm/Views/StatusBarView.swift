@@ -38,9 +38,6 @@ class StatusBarView: NSView {
 
     /// Hit rects for segments, keyed by plugin ID. Updated during draw.
     var segmentRects: [String: NSRect] = [:]
-    /// Ordered list of visible panel-linked segment IDs (left to right) for Cmd+number shortcuts.
-    var panelSegmentOrder: [String] = []
-
     /// Hit rect for the sidebar toggle button.
     var sidebarToggleRect: NSRect = .zero
 

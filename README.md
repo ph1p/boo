@@ -68,8 +68,10 @@ make run      # Build and launch
 | Shortcut        | Action                               |
 | --------------- | ------------------------------------ |
 | **Cmd+N**       | New workspace (home directory)       |
+| **Cmd+1-9**     | Switch to workspace N                |
 | **Cmd+Shift+O** | Open folder as workspace             |
 | **Cmd+T**       | New tab in active pane               |
+| **Cmd+Opt+1-9** | Switch to tab N in active pane       |
 | **Cmd+W**       | Smart close (tab → pane → workspace) |
 | **Cmd+Z**       | Reopen closed tab/pane               |
 | **Cmd+Shift+W** | Close pane                           |
@@ -206,7 +208,7 @@ Exterm exposes a Unix domain socket (`~/.exterm/exterm.sock`) as the primary com
 | **Process** | `set_status` | Register a process (pid, name, category, metadata) |
 | | `clear_status` | Unregister a process |
 | | `list_status` | List all registered processes |
-| **Query** | `get_context` | Current terminal context (CWD, git, process, remote) |
+| **Query** | `get_context` | Current terminal context (pane_id, CWD, git, process, remote) |
 | | `get_theme` | Current theme name and dark/light mode |
 | | `get_settings` | App settings snapshot |
 | | `list_themes` | All available theme names |
@@ -243,7 +245,7 @@ echo '{"cmd":"statusbar.set","id":"ci","text":"CI: passing","icon":"checkmark.ci
 
 # Subscribe to events (keep connection open for push notifications)
 echo '{"cmd":"subscribe","events":["cwd_changed","process_changed"]}' | nc -U "$EXTERM_SOCK"
-# → receives: {"event":"cwd_changed","data":{"path":"/new/dir","is_remote":false}}
+# → receives: {"event":"cwd_changed","data":{"path":"/new/dir","is_remote":false,"pane_id":"..."}}
 ```
 
 ### Event Subscriptions
@@ -252,14 +254,16 @@ Subscribe to real-time push events by keeping a socket connection open:
 
 | Event | Data |
 |-------|------|
-| `cwd_changed` | `path`, `is_remote` |
-| `title_changed` | `title` |
-| `process_changed` | `name`, `category` |
-| `remote_session_changed` | `type`, `host`, `active` |
+| `cwd_changed` | `path`, `is_remote`, `pane_id` |
+| `title_changed` | `title`, `pane_id` |
+| `process_changed` | `name`, `category`, `pane_id` |
+| `remote_session_changed` | `type`, `host`, `active`, `pane_id` |
 | `focus_changed` | `pane_id` |
 | `workspace_switched` | `workspace_id` |
 | `theme_changed` | `name`, `is_dark` |
 | `settings_changed` | `topic` |
+
+All terminal-scoped events include a `pane_id` field identifying which pane the event originated from. This allows subscribers to filter events by pane and avoid cross-pane interference in split-view setups.
 
 Use `"events": ["*"]` to subscribe to all events.
 
@@ -462,7 +466,7 @@ Open with **Cmd+,**. Organized in tabs:
 swift test
 ```
 
-682 tests covering models, themes, plugins, terminal bridge, remote explorer, SSH control manager, sidebar layout, accessibility, E2E plugin lifecycle, split/workspace operations, IPC socket protocol, process detection, event subscriptions, JSC runtime, DSL parsing, and script plugin adapters.
+702 tests covering models, themes, plugins, terminal bridge, remote explorer, SSH control manager, sidebar layout, accessibility, E2E plugin lifecycle, split/workspace operations, IPC socket protocol, process detection, event subscriptions, JSC runtime, DSL parsing, and script plugin adapters.
 
 ## License
 

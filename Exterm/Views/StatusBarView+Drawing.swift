@@ -24,7 +24,6 @@ extension StatusBarView {
 
         // Reset tracking
         segmentRects.removeAll()
-        panelSegmentOrder.removeAll()
 
         // Draw left plugins left-to-right
         var x: CGFloat = 10
@@ -58,9 +57,6 @@ extension StatusBarView {
                 }
             }
 
-            if plugin.associatedPanelID != nil {
-                panelSegmentOrder.append(plugin.id)
-            }
 
             isFirst = false
         }
@@ -76,7 +72,6 @@ extension StatusBarView {
         // Draw panel icons right-to-left, with gap from sidebar toggle separator
         let iconGap: CGFloat = 5
         var rx = bounds.width - sidebarToggleWidth + 2
-        var panelIconIDs: [String] = []
         for plugin in panelIcons {
             let width = plugin.draw(at: rx, y: textY, theme: theme, settings: settings, state: state, ctx: ctx)
             rx -= width
@@ -91,11 +86,7 @@ extension StatusBarView {
                 ctx.fillPath()
             }
 
-            panelIconIDs.append(plugin.id)
         }
-        // Append in visual left-to-right order (icons are drawn right-to-left)
-        panelSegmentOrder.append(contentsOf: panelIconIDs.reversed())
-
         // Draw separator between panel icons and text segments
         if !panelIcons.isEmpty {
             let sepInset = round(barHeight * 0.22)
@@ -209,41 +200,6 @@ extension StatusBarView {
             onSidebarPluginToggle?(panelID)
             return
         }
-    }
-
-    // MARK: - Keyboard Shortcuts
-
-    override func performKeyEquivalent(with event: NSEvent) -> Bool {
-        guard event.modifierFlags.contains(.command),
-            !event.modifierFlags.contains(.shift),
-            !event.modifierFlags.contains(.option),
-            !event.modifierFlags.contains(.control)
-        else {
-            return super.performKeyEquivalent(with: event)
-        }
-
-        // Cmd+1 through Cmd+9 toggle panel segments by position
-        guard let char = event.charactersIgnoringModifiers,
-            let digit = Int(char),
-            digit >= 1 && digit <= 9
-        else {
-            return super.performKeyEquivalent(with: event)
-        }
-
-        let index = digit - 1
-        guard index < panelSegmentOrder.count else {
-            return super.performKeyEquivalent(with: event)
-        }
-
-        let pluginID = panelSegmentOrder[index]
-        let allPlugins: [StatusBarPlugin] = leftPlugins + rightPlugins
-        if let plugin = allPlugins.first(where: { $0.id == pluginID }),
-            let panelID = plugin.associatedPanelID
-        {
-            onSidebarPluginToggle?(panelID)
-            return true
-        }
-        return super.performKeyEquivalent(with: event)
     }
 
     // MARK: - Accessibility

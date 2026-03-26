@@ -1,5 +1,6 @@
 import Cocoa
 import SwiftUI
+import UniformTypeIdentifiers
 
 // MARK: - Design Tokens
 
@@ -560,6 +561,7 @@ private struct DefaultPluginOrderView: View {
     let manifests: [PluginManifest]
     @ObservedObject private var observer = SettingsObserver(topics: [.theme, .plugins])
     @State private var orderedIDs: [String] = []
+    @State private var draggedID: String?
 
     var body: some View {
         let _ = observer.revision
@@ -571,6 +573,11 @@ private struct DefaultPluginOrderView: View {
                 if let manifest = manifests.first(where: { $0.id == pluginID }) {
                     let isEnabled = enabledSet.contains(pluginID)
                     HStack(spacing: 8) {
+                        Image(systemName: "line.3.horizontal")
+                            .font(.system(size: 10))
+                            .foregroundColor(t.muted.opacity(0.5))
+                            .frame(width: 12)
+
                         Image(systemName: manifest.icon)
                             .font(.system(size: 12))
                             .foregroundColor(isEnabled ? t.text : t.muted)
@@ -620,24 +627,34 @@ private struct DefaultPluginOrderView: View {
                     .padding(.horizontal, 8)
                     .background(
                         RoundedRectangle(cornerRadius: 4)
-                            .fill(t.muted.opacity(0.05))
+                            .fill(draggedID == pluginID ? t.accent.opacity(0.1) : t.muted.opacity(0.05))
                     )
+                    .opacity(draggedID == pluginID ? 0.6 : 1.0)
+                    .onDrag {
+                        draggedID = pluginID
+                        return NSItemProvider(object: pluginID as NSString)
+                    }
+                    .onDrop(of: [.text], delegate: PluginDropDelegate(
+                        targetID: pluginID,
+                        orderedIDs: $orderedIDs,
+                        draggedID: $draggedID,
+                        onReorder: { persistOrder() }
+                    ))
                 }
             }
         }
         .onAppear { syncOrder() }
     }
 
-    /// Build the ordered list: enabled plugins in their saved order first, then disabled ones.
+    /// Build the ordered list from the canonical order, falling back to enabled-first.
     private func syncOrder() {
-        let saved = AppSettings.shared.defaultEnabledPluginIDs
+        let canonical = AppSettings.shared.sidebarPluginOrder
+        let seed = canonical.isEmpty ? AppSettings.shared.defaultEnabledPluginIDs : canonical
         let allIDs = manifests.map(\.id)
         var result: [String] = []
-        // Enabled in saved order
-        for id in saved where allIDs.contains(id) {
+        for id in seed where allIDs.contains(id) {
             result.append(id)
         }
-        // Remaining (disabled) plugins not in saved list
         for id in allIDs where !result.contains(id) {
             result.append(id)
         }
@@ -656,11 +673,45 @@ private struct DefaultPluginOrderView: View {
         persistOrder()
     }
 
-    /// Save the current order back to settings (only enabled plugins).
+    /// Save the current order back to settings.
+    /// Persists both the enabled-only list and the full canonical order.
     private func persistOrder() {
+        AppSettings.shared.sidebarPluginOrder = orderedIDs
         let enabledSet = Set(AppSettings.shared.defaultEnabledPluginIDs)
         let newOrder = orderedIDs.filter { enabledSet.contains($0) }
         AppSettings.shared.defaultEnabledPluginIDs = newOrder
+    }
+}
+
+/// Drop delegate that reorders plugins by moving the dragged item to the drop target's position.
+private struct PluginDropDelegate: DropDelegate {
+    let targetID: String
+    @Binding var orderedIDs: [String]
+    @Binding var draggedID: String?
+    let onReorder: () -> Void
+
+    func performDrop(info: DropInfo) -> Bool {
+        draggedID = nil
+        onReorder()
+        return true
+    }
+
+    func dropEntered(info: DropInfo) {
+        guard let dragged = draggedID, dragged != targetID,
+              let fromIndex = orderedIDs.firstIndex(of: dragged),
+              let toIndex = orderedIDs.firstIndex(of: targetID)
+        else { return }
+        withAnimation(.easeInOut(duration: 0.15)) {
+            orderedIDs.move(fromOffsets: IndexSet(integer: fromIndex), toOffset: toIndex > fromIndex ? toIndex + 1 : toIndex)
+        }
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        DropProposal(operation: .move)
+    }
+
+    func validateDrop(info: DropInfo) -> Bool {
+        draggedID != nil
     }
 }
 

@@ -130,7 +130,26 @@ extension MainWindowController {
             viewMenu.addItem(item)
         }
 
+        viewMenu.addItem(.separator())
+        for i in 1...9 {
+            let item = NSMenuItem(
+                title: "Tab \(i)", action: #selector(switchToTabAction(_:)), keyEquivalent: "\(i)")
+            item.keyEquivalentModifierMask = [.command, .option]
+            item.tag = i - 1
+            viewMenu.addItem(item)
+        }
+
         NSApplication.shared.mainMenu = mainMenu
+    }
+
+    @objc func switchToTabAction(_ sender: NSMenuItem) {
+        let idx = sender.tag
+        guard let ws = activeWorkspace,
+            let pane = ws.pane(for: ws.activePaneID),
+            let pv = paneViews[ws.activePaneID],
+            idx < pane.tabs.count
+        else { return }
+        pv.activateTab(idx)
     }
 
     @objc func switchToWorkspaceAction(_ sender: NSMenuItem) {
