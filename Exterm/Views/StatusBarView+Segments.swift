@@ -30,7 +30,7 @@ final class EnvironmentSegment: StatusBarPlugin {
     private var cachedIsRemote: Bool = false
 
     func isVisible(settings: AppSettings, state: StatusBarState) -> Bool {
-        settings.statusBarShowConnection
+        settings.statusBarShowConnection && state.isRemote
     }
 
     func update(state: StatusBarState) {
@@ -263,9 +263,7 @@ final class ProcessSegment: StatusBarPlugin {
     let priority = 30
 
     func isVisible(settings: AppSettings, state: StatusBarState) -> Bool {
-        settings.isPluginEnabled("file-tree-local")
-            && settings.pluginBool("file-tree-local", "showProcess", default: true)
-            && !state.runningProcess.isEmpty
+        !state.runningProcess.isEmpty
     }
 
     func draw(
@@ -305,6 +303,7 @@ final class ProcessSegment: StatusBarPlugin {
     }
 
     func handleClick(at point: NSPoint, in barView: StatusBarView) -> Bool { false }
+
     func update(state: StatusBarState) {}
 
     func accessibilitySegmentLabel(state: StatusBarState) -> String? {

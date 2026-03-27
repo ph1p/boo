@@ -152,17 +152,10 @@ final class AIProcessDetectionTests: XCTestCase {
 
     // MARK: - Title-only detection (no socket): process follows title
 
-    func testTitleOnlyClaudeDetectedThenCleared() {
+    func testTitleSetsAndClears() {
         bridge.handleTitleChange(title: "✳ Claude Code", paneID: paneID)
         XCTAssertEqual(bridge.state.foregroundProcess, "claude")
 
-        // Without socket, path title clears the process
-        bridge.handleTitleChange(title: "~/dev/project", paneID: paneID)
-        XCTAssertEqual(bridge.state.foregroundProcess, "",
-            "Without socket, title changes clear the process")
-    }
-
-    func testTitleOnlyShellClearsProcess() {
         bridge.handleTitleChange(title: "vim", paneID: paneID)
         XCTAssertEqual(bridge.state.foregroundProcess, "vim")
 
@@ -170,71 +163,65 @@ final class AIProcessDetectionTests: XCTestCase {
         XCTAssertEqual(bridge.state.foregroundProcess, "")
     }
 
-    func testTitleOnlyAIReplacedByDifferentAI() {
-        bridge.handleTitleChange(title: "✳ Claude Code", paneID: paneID)
-        XCTAssertEqual(bridge.state.foregroundProcess, "claude")
-
-        bridge.handleTitleChange(title: "Codex CLI", paneID: paneID)
-        XCTAssertEqual(bridge.state.foregroundProcess, "codex")
-    }
-
-    func testTitleOnlyPathClearsNonAI() {
+    func testPathTitleClears() {
         bridge.handleTitleChange(title: "vim", paneID: paneID)
+        XCTAssertEqual(bridge.state.foregroundProcess, "vim")
+
         bridge.handleTitleChange(title: "~/dev/project", paneID: paneID)
         XCTAssertEqual(bridge.state.foregroundProcess, "")
     }
 
-    // MARK: - Socket-based: agent survives all titles
-
-    func testSocketAgentSurvivesPathTitle() {
-        let myPid = getpid()
-        bridge.monitor.track(paneID: paneID, shellPID: getppid())
-        ExtermSocketServer.shared.processes[myPid] = ExtermSocketServer.ProcessStatus(
-            pid: myPid, name: "claude", category: "ai", registeredAt: Date(), metadata: [:])
-
+    func testSpinnerTitleKeepsClaude() {
         bridge.handleTitleChange(title: "✳ Claude Code", paneID: paneID)
         XCTAssertEqual(bridge.state.foregroundProcess, "claude")
 
-        bridge.handleTitleChange(title: "~/dev/project", paneID: paneID)
+        // Spinner titles still match "claude" via matchTitle
+        bridge.handleTitleChange(title: "⠂ General coding assistance", paneID: paneID)
         XCTAssertEqual(bridge.state.foregroundProcess, "claude")
-
-        bridge.handleTitleChange(title: "/Users/phlp/dev/project", paneID: paneID)
-        XCTAssertEqual(bridge.state.foregroundProcess, "claude")
-
-        bridge.handleTitleChange(title: "…/dev/project", paneID: paneID)
-        XCTAssertEqual(bridge.state.foregroundProcess, "claude")
-
-        bridge.monitor.untrack(paneID: paneID)
     }
 
-    func testSocketAgentSurvivesShellTitle() {
+    func testShellTitleClears() {
+        bridge.handleTitleChange(title: "vim", paneID: paneID)
+        XCTAssertEqual(bridge.state.foregroundProcess, "vim")
+
+        bridge.handleTitleChange(title: "zsh", paneID: paneID)
+        XCTAssertEqual(bridge.state.foregroundProcess, "")
+    }
+
+    // MARK: - Socket-based: process set via reevaluateSocketProcess
+
+    func testSocketAgentSetViaReeval() {
         let myPid = getpid()
         bridge.monitor.track(paneID: paneID, shellPID: getppid())
         ExtermSocketServer.shared.processes[myPid] = ExtermSocketServer.ProcessStatus(
             pid: myPid, name: "claude", category: "ai", registeredAt: Date(), metadata: [:])
+
+        bridge.reevaluateSocketProcess()
+        XCTAssertEqual(bridge.state.foregroundProcess, "claude")
+
+        // Title changes do NOT affect foregroundProcess
+        bridge.handleTitleChange(title: "~/dev/project", paneID: paneID)
+        XCTAssertEqual(bridge.state.foregroundProcess, "claude")
 
         bridge.handleTitleChange(title: "zsh", paneID: paneID)
         XCTAssertEqual(bridge.state.foregroundProcess, "claude")
 
-        bridge.handleTitleChange(title: "bash", paneID: paneID)
+        bridge.handleTitleChange(title: "⠂ General coding assistance", paneID: paneID)
         XCTAssertEqual(bridge.state.foregroundProcess, "claude")
 
         bridge.monitor.untrack(paneID: paneID)
     }
 
-    func testSocketAgentSurvivesSpinnerTitles() {
+    func testSocketSurvivesTitleChanges() {
         let myPid = getpid()
         bridge.monitor.track(paneID: paneID, shellPID: getppid())
         ExtermSocketServer.shared.processes[myPid] = ExtermSocketServer.ProcessStatus(
             pid: myPid, name: "claude", category: "ai", registeredAt: Date(), metadata: [:])
-
-        bridge.handleTitleChange(title: "⠂ New coding session", paneID: paneID)
+        bridge.reevaluateSocketProcess()
         XCTAssertEqual(bridge.state.foregroundProcess, "claude")
 
-        bridge.handleTitleChange(title: "⠐ Building...", paneID: paneID)
-        XCTAssertEqual(bridge.state.foregroundProcess, "claude")
-
-        bridge.handleTitleChange(title: "⠈ Thinking", paneID: paneID)
+        // Title changes don't downgrade socket-registered process
+        bridge.handleTitleChange(title: "⠂ General coding assistance", paneID: paneID)
         XCTAssertEqual(bridge.state.foregroundProcess, "claude")
 
         bridge.monitor.untrack(paneID: paneID)
@@ -246,13 +233,12 @@ final class AIProcessDetectionTests: XCTestCase {
         ExtermSocketServer.shared.processes[myPid] = ExtermSocketServer.ProcessStatus(
             pid: myPid, name: "claude", category: "ai", registeredAt: Date(), metadata: [:])
 
-        bridge.handleTitleChange(title: "~/dev/project", paneID: paneID)
+        bridge.reevaluateSocketProcess()
         XCTAssertEqual(bridge.state.foregroundProcess, "claude")
 
-        // Agent exits — socket cleared, falls back to title extraction
+        // Agent exits — socket cleared
         ExtermSocketServer.shared.processes.removeAll()
         bridge.reevaluateSocketProcess()
-        // Title "~/dev/project" extracts as "" (path)
         XCTAssertEqual(bridge.state.foregroundProcess, "")
 
         bridge.monitor.untrack(paneID: paneID)
@@ -267,8 +253,7 @@ final class AIProcessDetectionTests: XCTestCase {
         // 1. cd to project
         bridge.handleDirectoryChange(path: "/Users/dev/project", paneID: paneID)
 
-        // 2. Path title (no agent yet)
-        bridge.handleTitleChange(title: "…/dev/project", paneID: paneID)
+        // 2. No agent yet — process stays empty
         XCTAssertEqual(bridge.state.foregroundProcess, "")
 
         // 3. Agent registers via socket
@@ -277,7 +262,7 @@ final class AIProcessDetectionTests: XCTestCase {
         bridge.reevaluateSocketProcess()
         XCTAssertEqual(bridge.state.foregroundProcess, "claude")
 
-        // 4. All title changes — agent stays
+        // 4. All title changes — agent stays (title doesn't affect process)
         for title in ["⠂ Thinking", "~/dev/project", "zsh", "⠐ Building...", "/Users/dev/project"] {
             bridge.handleTitleChange(title: title, paneID: paneID)
             XCTAssertEqual(bridge.state.foregroundProcess, "claude",
@@ -287,10 +272,6 @@ final class AIProcessDetectionTests: XCTestCase {
         // 5. Agent exits (sweep detects dead PID)
         ExtermSocketServer.shared.processes.removeAll()
         bridge.reevaluateSocketProcess()
-        XCTAssertEqual(bridge.state.foregroundProcess, "")
-
-        // 6. Path title after exit stays empty
-        bridge.handleTitleChange(title: "…/dev/project", paneID: paneID)
         XCTAssertEqual(bridge.state.foregroundProcess, "")
 
         // Verify plugin log

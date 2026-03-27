@@ -124,6 +124,16 @@ final class DebugPluginE2ETests: XCTestCase {
         XCTAssertTrue(procEvents[0].detail.contains("category=runtime"))
     }
 
+    func testTitleClearsProcess() {
+        bridge.handleTitleChange(title: "vim", paneID: paneID)
+        bridge.handleTitleChange(title: "~/project", paneID: paneID)
+
+        let procEvents = events(named: "processChanged")
+        XCTAssertEqual(procEvents.count, 2)
+        XCTAssertTrue(procEvents[0].detail.contains("name=vim"))
+        XCTAssertTrue(procEvents[1].detail.contains("name=(empty)"))
+    }
+
     func testShellProcessClears() {
         bridge.handleTitleChange(title: "vim", paneID: paneID)
         bridge.handleTitleChange(title: "zsh", paneID: paneID)
@@ -265,7 +275,7 @@ final class DebugPluginE2ETests: XCTestCase {
         // Should have cwd change
         XCTAssertTrue(allEvents.contains("cwdChanged"))
 
-        // Should have process changes: "" → vim → "" → ssh-related → ""
+        // Should have process changes from title detection
         let procEvents = events(named: "processChanged")
         XCTAssertGreaterThanOrEqual(procEvents.count, 2, "At least vim start + vim end")
 

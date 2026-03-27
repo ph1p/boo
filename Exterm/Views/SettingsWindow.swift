@@ -318,6 +318,7 @@ private struct TerminalSettingsView: View {
     @State private var cursorStyle = AppSettings.shared.cursorStyle
     @State private var fontSize = Double(AppSettings.shared.fontSize)
     @State private var selectedFont = AppSettings.shared.fontName
+    @State private var debugLogging = AppSettings.shared.debugLogging
     @ObservedObject private var observer = SettingsObserver(topics: [.theme, .terminal])
 
     private let fonts = AppSettings.availableMonospaceFonts
@@ -356,6 +357,13 @@ private struct TerminalSettingsView: View {
                     .padding(8)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(RoundedRectangle(cornerRadius: 6).fill(t.termBg))
+            }
+
+            Section(title: "Debug") {
+                VStack(alignment: .leading, spacing: 8) {
+                    ToggleRow(label: "Debug logging", isOn: $debugLogging)
+                        .onChange(of: debugLogging) { v in AppSettings.shared.debugLogging = v }
+                }
             }
         }
     }

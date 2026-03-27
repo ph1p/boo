@@ -35,6 +35,7 @@ enum TerminalEvent: Equatable {
     case focusChanged(paneID: UUID)
     case workspaceSwitched(workspaceID: UUID)
     case remoteDirectoryListed(path: String, entries: [RemoteExplorer.RemoteEntry])
+
 }
 
 extension RemoteExplorer.RemoteEntry: Equatable {
@@ -50,13 +51,11 @@ final class TerminalBridge {
     let events = PassthroughSubject<TerminalEvent, Never>()
     let injector = RemoteShellInjector()
     let monitor = RemoteSessionMonitor()
-
     /// Most recent in-session directory listing from OSC 2 EXTERM_LS protocol.
     private(set) var cachedRemoteListing: (path: String, entries: [RemoteExplorer.RemoteEntry])?
 
     /// Process-tree hint per pane, updated by the monitor. Used for reconciliation.
     private var processTreeHint: [UUID: RemoteSessionType?] = [:]
-
 
     /// Grace period: when a session is first detected via title, protect it from stale
     /// title events for a short window (until the process tree can confirm/deny).
@@ -100,23 +99,24 @@ final class TerminalBridge {
         monitor.startContainerCwdPolling(paneID: state.paneID, tabID: state.tabID, session: session)
     }
 
+    /// Resolve the foreground process name from title + socket registration.
+    private func resolveProcess(paneID: UUID, title: String) -> String {
+        if ExtermSocketServer.shared.hasActiveProcesses,
+            let shellPID = monitor.shellPID(for: paneID),
+            let status = ExtermSocketServer.shared.activeProcess(shellPID: shellPID)
+        {
+            return status.name
+        }
+        return TerminalBridge.extractProcessName(from: title)
+    }
+
     /// Re-evaluate the foreground process based on socket-registered processes.
     /// Called when the ExtermSocketServer's status set changes.
     func reevaluateSocketProcess() {
-        if let shellPID = monitor.shellPID(for: state.paneID),
-            let status = ExtermSocketServer.shared.activeProcess(shellPID: shellPID)
-        {
-            if state.foregroundProcess != status.name {
-                state.foregroundProcess = status.name
-                events.send(.processChanged(name: status.name))
-            }
-        } else {
-            // Process unregistered — fall back to title-based extraction
-            let process = TerminalBridge.extractProcessName(from: state.terminalTitle)
-            if state.foregroundProcess != process {
-                state.foregroundProcess = process
-                events.send(.processChanged(name: process))
-            }
+        let process = resolveProcess(paneID: state.paneID, title: state.terminalTitle)
+        if state.foregroundProcess != process {
+            state.foregroundProcess = process
+            events.send(.processChanged(name: process))
         }
     }
 
@@ -148,7 +148,12 @@ final class TerminalBridge {
         state.remoteSession = remoteSession
         state.remoteCwd = remoteCwd
 
-        // Update the monitor with the active tab's shell PID
+        debugLog("[Bridge] restoreTabState: pane=\(paneID.uuidString.prefix(8)) title=\(terminalTitle) prevProcess=\(state.foregroundProcess)")
+
+        let previousProcess = state.foregroundProcess
+        state.foregroundProcess = resolveProcess(paneID: paneID, title: terminalTitle)
+
+        // Update the monitors with the active tab's shell PID
         if shellPID > 0 {
             monitor.updateShellPID(paneID: paneID, shellPID: shellPID)
         }
@@ -157,6 +162,9 @@ final class TerminalBridge {
         ensureContainerCwdPolling()
 
         events.send(.focusChanged(paneID: paneID))
+        if state.foregroundProcess != previousProcess {
+            events.send(.processChanged(name: state.foregroundProcess))
+        }
         if state.remoteSession != previousRemote {
             events.send(.remoteSessionChanged(session: state.remoteSession))
         }
@@ -248,27 +256,16 @@ final class TerminalBridge {
 
     func handleTitleChange(title: String, paneID: UUID) {
         guard paneID == state.paneID else { return }
-        guard title != state.terminalTitle else {
-            NSLog("[Bridge] handleTitleChange: title unchanged, skipping")
-            return
-        }
-        NSLog("[Bridge] handleTitleChange: title=\(title), paneID=\(paneID)")
-        remoteLog("[Bridge] handleTitleChange: title=\(title) remote=\(String(describing: state.remoteSession))")
+        guard title != state.terminalTitle else { return }
+        debugLog("[Bridge] titleChanged: \(title) pane=\(paneID.uuidString.prefix(8))")
         state.terminalTitle = title
 
-        var process = TerminalBridge.extractProcessName(from: title)
-        // Socket-based process detection: if a process has registered itself via
-        // the EXTERM_SOCK Unix socket, use that as the authoritative process name.
-        // The socket approach is reliable — no title heuristics needed.
-        // When no socket registration exists, use whatever extractProcessName returns.
-        if ExtermSocketServer.shared.hasActiveProcesses,
-            let shellPID = monitor.shellPID(for: paneID),
-            let status = ExtermSocketServer.shared.activeProcess(shellPID: shellPID)
-        {
-            process = status.name
-        }
+        let process = resolveProcess(paneID: paneID, title: title)
         let processChanged = process != state.foregroundProcess
         state.foregroundProcess = process
+        if processChanged {
+            debugLog("[Bridge] processChanged: \(state.foregroundProcess.isEmpty ? "(empty)" : state.foregroundProcess) pane=\(paneID.uuidString.prefix(8))")
+        }
 
         let previousRemote = state.remoteSession
         var resolved = TerminalBridge.resolveRemoteSession(

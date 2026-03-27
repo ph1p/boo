@@ -73,6 +73,23 @@ final class TerminalBridgeTests: XCTestCase {
         XCTAssertTrue(events.contains(.processChanged(name: "vim")))
     }
 
+    func testTitleUpdatesProcess() {
+        bridge.handleTitleChange(title: "vim", paneID: paneID)
+        XCTAssertEqual(bridge.state.foregroundProcess, "vim")
+
+        bridge.handleTitleChange(title: "nvim", paneID: paneID)
+        XCTAssertEqual(bridge.state.foregroundProcess, "nvim")
+    }
+
+    func testTitleWithSpinnerMatchesClaude() {
+        // Spinner-prefixed titles match "claude" via matchTitle
+        bridge.handleTitleChange(title: "⠂ General coding assistance", paneID: paneID)
+        XCTAssertEqual(bridge.state.foregroundProcess, "claude")
+
+        bridge.handleTitleChange(title: "✳ Claude Code", paneID: paneID)
+        XCTAssertEqual(bridge.state.foregroundProcess, "claude")
+    }
+
     func testSwitchContextResetsState() {
         bridge.handleTitleChange(title: "vim", paneID: paneID)
         bridge.handleDirectoryChange(path: "/Users/test", paneID: paneID)
@@ -130,7 +147,7 @@ final class TerminalBridgeTests: XCTestCase {
 
         XCTAssertEqual(bridge.state.foregroundProcess, "make")
         XCTAssertEqual(bridge.state.workingDirectory, "/Users/test/project")
-        XCTAssertTrue(events.count >= 3)  // At least title + dir + title events
+        XCTAssertTrue(events.count >= 3)
     }
 
     // MARK: - extractProcessName

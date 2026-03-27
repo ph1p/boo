@@ -25,6 +25,16 @@ final class AIAgentPlugin: ExtermPluginProtocol {
 
     var prefersOuterScrollView: Bool { false }
 
+    /// Override default visibility: remain visible while agent state is still set
+    /// (during deferred teardown or while subprocesses run).
+    func isVisible(for context: TerminalContext) -> Bool {
+        if !AppSettings.shared.isPluginEnabled(pluginID) { return false }
+        // Still visible while we have agent state (deferred teardown pending)
+        if agentName != nil { return true }
+        guard let clause = whenClause else { return true }
+        return WhenClauseEvaluator.evaluate(clause, context: context)
+    }
+
     var subscribedEvents: Set<PluginEvent> { [.processChanged, .cwdChanged, .focusChanged] }
 
     // MARK: - Cached State
@@ -43,6 +53,12 @@ final class AIAgentPlugin: ExtermPluginProtocol {
     private var lastConfigScanRoot: String?
     private var refreshTimer: DispatchSourceTimer?
     private var debounceWork: DispatchWorkItem?
+
+    /// Monotonic counter to identify the active deferred teardown.
+    private var teardownGeneration: UInt64 = 0
+
+    /// Grace period before tearing down when the process switches away from AI.
+    private let teardownGracePeriod: TimeInterval = 2.0
 
     struct DiffStatEntry: Identifiable {
         let id = UUID()
@@ -164,38 +180,48 @@ final class AIAgentPlugin: ExtermPluginProtocol {
     func processChanged(name: String, context: TerminalContext) {
         let isAI = ProcessIcon.category(for: name) == "ai"
         if isAI {
+            cancelTeardown()
+
             if agentName != name {
                 agentName = name
                 agentDisplayName = ProcessIcon.displayName(for: name) ?? name
                 agentIcon = ProcessIcon.icon(for: name)
                 agentStartTime = Date()
-                // Lock the project directory — the CWD when the agent was launched
                 currentCwd = context.cwd
                 scanAgentConfig(cwd: context.cwd, agentName: name)
             }
             refreshDiffStats(repoRoot: context.gitContext?.repoRoot)
             startRefreshTimer(repoRoot: context.gitContext?.repoRoot)
         } else if agentName != nil {
-            agentName = nil
-            agentDisplayName = nil
-            agentIcon = nil
-            agentStartTime = nil
-            diffStats = []
-            agentConfig = AgentConfig()
-            lastDiffRepoRoot = nil
-            lastConfigScanRoot = nil
-            stopRefreshTimer()
+            // Process switched away from AI — always defer teardown.
+            // Never tear down immediately: the AI agent may have spawned a
+            // subprocess, or the title may be flickering during a transition.
+            scheduleDeferredTeardown()
+        }
+    }
+
+    private func cancelTeardown() {
+        teardownGeneration &+= 1
+    }
+
+    /// Schedule a deferred teardown. Invalidates any previous schedule.
+    private func scheduleDeferredTeardown() {
+        teardownGeneration &+= 1
+        let gen = teardownGeneration
+        DispatchQueue.main.asyncAfter(deadline: .now() + teardownGracePeriod) { [weak self] in
+            guard let self = self, self.teardownGeneration == gen else { return }
+            self.performTeardown()
         }
     }
 
     func cwdChanged(newPath: String, context: TerminalContext) {
         // CWD is locked to the directory where the agent was launched.
-        // Shell CWD changes during an agent session are not relevant.
     }
 
     func terminalFocusChanged(terminalID: UUID, context: TerminalContext) {
         let isAI = ProcessIcon.category(for: context.processName) == "ai"
         if isAI {
+            cancelTeardown()
             if agentName != context.processName {
                 agentName = context.processName
                 agentDisplayName = ProcessIcon.displayName(for: context.processName) ?? context.processName
@@ -207,6 +233,28 @@ final class AIAgentPlugin: ExtermPluginProtocol {
             refreshDiffStats(repoRoot: context.gitContext?.repoRoot)
             startRefreshTimer(repoRoot: context.gitContext?.repoRoot)
         }
+    }
+
+    func pluginDidDeactivate() {
+        clearAgentState()
+    }
+
+    private func performTeardown() {
+        clearAgentState()
+        onRequestCycleRerun?()
+    }
+
+    private func clearAgentState() {
+        cancelTeardown()
+        agentName = nil
+        agentDisplayName = nil
+        agentIcon = nil
+        agentStartTime = nil
+        diffStats = []
+        agentConfig = AgentConfig()
+        lastDiffRepoRoot = nil
+        lastConfigScanRoot = nil
+        stopRefreshTimer()
     }
 
     // MARK: - Agent Config Scan

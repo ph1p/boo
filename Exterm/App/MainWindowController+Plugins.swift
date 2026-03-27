@@ -53,7 +53,6 @@ extension MainWindowController {
         if currentProcess != lastCtx?.processName {
             pluginRegistry.notifyProcessChanged(name: currentProcess, context: baseContext)
         }
-
         let result = pluginRegistry.runCycle(baseContext: baseContext, reason: reason)
 
         // Update global store

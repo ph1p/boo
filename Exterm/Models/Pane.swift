@@ -59,12 +59,12 @@ final class Pane {
     }
 
     @discardableResult
-    func addTab(workingDirectory: String) -> Int {
+    func addTab(workingDirectory: String, title: String? = nil) -> Int {
         let tab = Tab(
             id: UUID(),
             state: TabState(
                 workingDirectory: workingDirectory,
-                title: workingDirectory.lastPathComponent
+                title: title ?? workingDirectory.lastPathComponent
             )
         )
         tabs.append(tab)

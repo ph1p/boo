@@ -469,6 +469,14 @@ final class RemoteExplorer {
         return Array(pids.prefix(Int(actual)))
     }
 
+    /// Get the process name for a PID, stripping the login-shell "-" prefix.
+    static func processName(pid: pid_t) -> String {
+        var nameBuffer = [CChar](repeating: 0, count: Int(MAXCOMLEN) + 1)
+        proc_name(pid, &nameBuffer, UInt32(nameBuffer.count))
+        let name = String(cString: nameBuffer)
+        return name.hasPrefix("-") ? String(name.dropFirst()) : name
+    }
+
     /// Walk from a process down single-child chains to find the actual shell.
     /// Ghostty forks: Exterm → login → shell. This walks login → shell.
     /// Stops when: the process has 0 children, >1 children, or is a known shell.
@@ -476,12 +484,7 @@ final class RemoteExplorer {
         let shellNames = ProcessIcon.shells
         var current = pid
         for _ in 0..<5 {  // safety limit
-            // Check if current process is a shell
-            var nameBuffer = [CChar](repeating: 0, count: Int(MAXCOMLEN) + 1)
-            proc_name(current, &nameBuffer, UInt32(nameBuffer.count))
-            let name = String(cString: nameBuffer)
-            // Strip leading "-" (login shells show as "-zsh")
-            let cleanName = name.hasPrefix("-") ? String(name.dropFirst()) : name
+            let cleanName = processName(pid: current)
             if shellNames.contains(cleanName) { return current }
 
             let children = childPIDs(of: current)

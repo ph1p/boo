@@ -318,22 +318,22 @@ final class ExtermSocketBridgeTests: XCTestCase {
         bridge.monitor.untrack(paneID: paneID)
     }
 
-    func testSocketOverridesTitleHeuristic() {
+    func testSocketSurvivesTitleChanges() {
         let myPid = getpid()
         let parentPid = getppid()
 
         bridge.monitor.track(paneID: paneID, shellPID: parentPid)
         ExtermSocketServer.shared.processes[myPid] = ExtermSocketServer.ProcessStatus(
             pid: myPid, name: "claude", category: "ai", registeredAt: Date(), metadata: [:])
+        bridge.reevaluateSocketProcess()
+        XCTAssertEqual(bridge.state.foregroundProcess, "claude")
 
-        // Path title — normally clears process
+        // Title changes never affect foreground process
         bridge.handleTitleChange(title: "~/dev/project", paneID: paneID)
         XCTAssertEqual(bridge.state.foregroundProcess, "claude")
 
-        // Shell name — normally clears AI
         bridge.handleTitleChange(title: "zsh", paneID: paneID)
-        XCTAssertEqual(bridge.state.foregroundProcess, "claude",
-            "Socket registration should override even shell title")
+        XCTAssertEqual(bridge.state.foregroundProcess, "claude")
 
         bridge.monitor.untrack(paneID: paneID)
     }
@@ -345,14 +345,13 @@ final class ExtermSocketBridgeTests: XCTestCase {
         bridge.monitor.track(paneID: paneID, shellPID: parentPid)
         ExtermSocketServer.shared.processes[myPid] = ExtermSocketServer.ProcessStatus(
             pid: myPid, name: "webpack", category: "build", registeredAt: Date(), metadata: [:])
-
-        bridge.handleTitleChange(title: "~/dev/project", paneID: paneID)
+        bridge.reevaluateSocketProcess()
         XCTAssertEqual(bridge.state.foregroundProcess, "webpack")
 
         bridge.monitor.untrack(paneID: paneID)
     }
 
-    func testNoSocketFallsToTitleHeuristic() {
+    func testTitleSetsAndClears() {
         bridge.handleTitleChange(title: "vim", paneID: paneID)
         XCTAssertEqual(bridge.state.foregroundProcess, "vim")
 
@@ -388,8 +387,9 @@ final class ExtermSocketBridgeTests: XCTestCase {
         bridge.monitor.track(paneID: paneID, shellPID: parentPid)
         ExtermSocketServer.shared.processes[myPid] = ExtermSocketServer.ProcessStatus(
             pid: myPid, name: "claude", category: "ai", registeredAt: Date(), metadata: [:])
+        bridge.reevaluateSocketProcess()
 
-        // Flood with various title types
+        // Title changes never affect foreground process
         let titles = [
             "~/dev/project", "/Users/phlp/project", "…/project",
             "⠂ Thinking", "⠐ Building...", "zsh", "bash",

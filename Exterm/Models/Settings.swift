@@ -105,6 +105,7 @@ final class AppSettings {
         static let statusBarShowPaneInfo = "statusBarShowPaneInfo"
         static let statusBarShowShell = "statusBarShowShell"
         static let statusBarShowConnection = "statusBarShowConnection"
+        static let debugLogging = "debugLogging"
         static let sidebarPosition = "sidebarPosition"
         static let workspaceBarPosition = "workspaceBarPosition"
         static let sidebarDensity = "sidebarDensity"
@@ -257,6 +258,13 @@ final class AppSettings {
     var statusBarShowConnection: Bool {
         get { bool(K.statusBarShowConnection, default: true) }
         set { set(newValue, forKey: K.statusBarShowConnection, topic: .statusBar) }
+    }
+
+    // MARK: - Debug
+
+    var debugLogging: Bool {
+        get { bool(K.debugLogging, default: false) }
+        set { set(newValue, forKey: K.debugLogging) }
     }
 
     // MARK: - Layout

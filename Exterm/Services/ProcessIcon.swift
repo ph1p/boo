@@ -81,11 +81,18 @@ enum ProcessIcon {
     /// Match a terminal title against known app title patterns.
     /// Returns a canonical process name (key into iconMap) or nil.
     static func matchTitle(_ title: String) -> String? {
-        // Strip leading emoji/symbols to get the text content
+        // Strip leading emoji/symbols/spinners to get the text content
         let stripped = String(
             title.drop { !$0.isLetter && !$0.isNumber }
         ).trimmingCharacters(in: .whitespaces).lowercased()
-        return titleMap[stripped]
+        if let exact = titleMap[stripped] { return exact }
+
+        // AI agents update their title dynamically (e.g. "⠂ General coding assistance").
+        // Match titles that start with known spinner/status characters used by AI CLIs.
+        if let first = title.unicodeScalars.first, Self.isAISpinnerScalar(first) {
+            return "claude"
+        }
+        return nil
     }
 
     /// Maps cleaned terminal titles to canonical process names.
@@ -94,6 +101,11 @@ enum ProcessIcon {
         "cursor": "cursor",
         "codex cli": "codex"
     ]
+
+    /// Braille pattern dots (U+2800..U+28FF) or ✳ (U+2733) — used by AI CLI spinners.
+    private static func isAISpinnerScalar(_ s: Unicode.Scalar) -> Bool {
+        (0x2800...0x28FF).contains(s.value) || s.value == 0x2733
+    }
 
     // MARK: - Mappings
 

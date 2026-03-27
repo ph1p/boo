@@ -109,12 +109,13 @@ final class SplitAndExplorerTests: XCTestCase {
         XCTAssertEqual(after.activeTab?.workingDirectory, "/projects")
     }
 
-    func testSplitNewPaneGetsDirectoryTitle() {
+    func testSplitNewPaneStartsWithEmptyTitle() {
         let ws = Workspace(folderPath: "/tmp")
         ws.pane(for: ws.activePaneID)?.updateWorkingDirectory(at: 0, "/Users/test/Documents")
         let newID = ws.splitPane(ws.activePaneID, direction: .horizontal)
         let newPane = ws.pane(for: newID)!
-        XCTAssertEqual(newPane.activeTab?.title, "Documents")
+        XCTAssertEqual(newPane.activeTab?.title, "")
+        XCTAssertEqual(newPane.activeTab?.workingDirectory, "/Users/test/Documents")
     }
 
     func testDoubleSplit() {

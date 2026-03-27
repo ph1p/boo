@@ -26,6 +26,8 @@ extension MainWindowController: PaneViewDelegate {
             "[MWC] didFocus: paneID=\(paneID), tabTitle=\(tab?.title ?? "nil"), cwd=\(cwd), tabRemote=\(String(describing: tab?.remoteSession)), tabRemoteCwd=\(String(describing: tab?.remoteWorkingDirectory))"
         )
 
+        debugLog("[Focus] didFocus pane=\(paneID.uuidString.prefix(8)) tab=\(tab?.id.uuidString.prefix(8) ?? "nil") title=\(tab?.title ?? "nil") process=\(tab?.state.foregroundProcess ?? "nil")")
+
         // Restore the full bridge + plugin state from the tab model via coordinator.
         if let tab = tab {
             coordinator.activateTab(tab, paneID: paneID) { [weak self] tabID in
@@ -147,9 +149,11 @@ extension MainWindowController {
     func splitActivePane(direction: SplitTree.SplitDirection) {
         guard let workspace = activeWorkspace else { return }
         let oldPaneID = workspace.activePaneID
+        debugLog("[Split] splitting pane=\(oldPaneID.uuidString.prefix(8)) direction=\(direction)")
         window?.makeFirstResponder(nil)
 
         let newID = workspace.splitPane(oldPaneID, direction: direction)
+        debugLog("[Split] created pane=\(newID.uuidString.prefix(8)) from=\(oldPaneID.uuidString.prefix(8))")
         // Inherit parent tab's plugin state so sidebar stays consistent
         if let newPane = workspace.pane(for: newID),
             newPane.activeTab != nil
@@ -193,6 +197,7 @@ extension MainWindowController {
     @objc func closePaneAction(_ sender: Any?) {
         guard let workspace = activeWorkspace else { return }
         let paneID = workspace.activePaneID
+        debugLog("[Close] closing pane=\(paneID.uuidString.prefix(8)) remainingPanes=\(workspace.panes.count - 1)")
 
         // Clear the previous-tab tracker so the stale bridge state
         // (which still holds the closed pane's title/cwd) is not

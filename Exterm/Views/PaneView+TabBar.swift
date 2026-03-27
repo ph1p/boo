@@ -105,13 +105,7 @@ extension PaneView {
             ctx.fill(CGRect(x: x + width - 0.5, y: y, width: 0.5, height: rowH))
         }
 
-        // Environment dot
-        let (dotColor, _) = Self.environmentIndicator(for: tab.remoteSession)
         var textX = x + 10
-        let dotSize: CGFloat = 6
-        ctx.setFillColor(dotColor.cgColor)
-        ctx.fillEllipse(in: CGRect(x: textX, y: midY - dotSize / 2, width: dotSize, height: dotSize))
-        textX += dotSize + 4
 
         // Close button visible on hover or active tab (when closeable)
         let showClose = showTabClose && (isActive || isHovered)

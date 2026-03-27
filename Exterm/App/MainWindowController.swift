@@ -629,6 +629,7 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
             switch r {
             case .titleChanged: return 0
             case .processChanged: return 1
+
             case .focusChanged: return 2
             case .cwdChanged: return 3
             case .remoteSessionChanged: return 4
@@ -706,6 +707,7 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
                 case .remoteDirectoryListed(let path, let entries):
                     self.pluginRegistry.notifyRemoteDirectoryListed(path: path, entries: entries)
                     self.schedulePluginCycle(reason: .cwdChanged)
+
                 }
             }
             .store(in: &bridgeCancellables)
