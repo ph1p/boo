@@ -447,24 +447,22 @@ final class AppSettings {
 
     static var availableMonospaceFonts: [String] {
         let fm = NSFontManager.shared
-        var fonts: [String] = ["SF Mono"]
+        var fonts = Set<String>(["SF Mono"])
         for family in fm.availableFontFamilies {
             if let members = fm.availableMembers(ofFontFamily: family),
                 let first = members.first,
                 let traits = first[3] as? UInt,
                 (traits & UInt(NSFontTraitMask.fixedPitchFontMask.rawValue)) != 0
             {
-                fonts.append(family)
+                fonts.insert(family)
             }
         }
         let knownMono = [
             "Menlo", "Monaco", "Courier", "Courier New", "Fira Code", "JetBrains Mono", "Hack", "Source Code Pro",
-            "Inconsolata"
+            "Inconsolata",
         ]
-        for name in knownMono {
-            if !fonts.contains(name), NSFont(name: name, size: 14) != nil {
-                fonts.append(name)
-            }
+        for name in knownMono where NSFont(name: name, size: 14) != nil {
+            fonts.insert(name)
         }
         return fonts.sorted()
     }

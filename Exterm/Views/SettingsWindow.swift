@@ -160,21 +160,82 @@ private struct Section<Content: View>: View {
 
 // MARK: - Reusable Controls
 
-private struct FontSlider: View {
+private struct FontSizePicker: NSViewRepresentable {
     @Binding var value: Double
     let range: ClosedRange<Double>
 
-    var body: some View {
-        let t = Tokens.current
-        HStack {
-            Slider(value: $value, in: range, step: 1)
-            Text("\(Int(value))pt")
-                .font(.system(size: 11, design: .monospaced))
-                .foregroundColor(t.text)
-                .frame(width: 32)
+    func makeNSView(context: Context) -> NSPopUpButton {
+        let popup = NSPopUpButton(frame: .zero, pullsDown: false)
+        popup.bezelStyle = .push
+        popup.controlSize = .regular
+        let sizes = Array(stride(from: range.lowerBound, through: range.upperBound, by: 1))
+        for size in sizes {
+            popup.addItem(withTitle: "\(Int(size)) pt")
+            popup.lastItem?.tag = Int(size)
+        }
+        popup.target = context.coordinator
+        popup.action = #selector(Coordinator.selectionChanged(_:))
+        return popup
+    }
+
+    func updateNSView(_ popup: NSPopUpButton, context: Context) {
+        let tag = Int(value)
+        if popup.selectedTag() != tag {
+            popup.selectItem(withTag: tag)
         }
     }
 
+    func makeCoordinator() -> Coordinator { Coordinator(value: $value) }
+
+    final class Coordinator: NSObject {
+        var value: Binding<Double>
+        init(value: Binding<Double>) { self.value = value }
+
+        @objc func selectionChanged(_ sender: NSPopUpButton) {
+            value.wrappedValue = Double(sender.selectedTag())
+        }
+    }
+}
+
+private struct FontChooser: NSViewRepresentable {
+    @Binding var selectedFont: String
+    let fonts: [String]
+
+    func makeNSView(context: Context) -> NSPopUpButton {
+        let popup = NSPopUpButton(frame: .zero, pullsDown: false)
+        popup.bezelStyle = .push
+        popup.controlSize = .regular
+        for name in fonts {
+            popup.addItem(withTitle: name)
+            let item = popup.lastItem!
+            item.attributedTitle = NSAttributedString(
+                string: name,
+                attributes: [.font: NSFont(name: name, size: 13) ?? NSFont.systemFont(ofSize: 13)]
+            )
+        }
+        popup.target = context.coordinator
+        popup.action = #selector(Coordinator.selectionChanged(_:))
+        return popup
+    }
+
+    func updateNSView(_ popup: NSPopUpButton, context: Context) {
+        if popup.titleOfSelectedItem != selectedFont {
+            popup.selectItem(withTitle: selectedFont)
+        }
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator(selectedFont: $selectedFont) }
+
+    final class Coordinator: NSObject {
+        var selectedFont: Binding<String>
+        init(selectedFont: Binding<String>) { self.selectedFont = selectedFont }
+
+        @objc func selectionChanged(_ sender: NSPopUpButton) {
+            if let title = sender.titleOfSelectedItem {
+                selectedFont.wrappedValue = title
+            }
+        }
+    }
 }
 
 private struct ToggleRow: View {
@@ -329,15 +390,12 @@ private struct TerminalSettingsView: View {
 
         SettingsPage(title: "Terminal") {
             Section(title: "Font") {
-                Picker("", selection: $selectedFont) {
-                    ForEach(fonts, id: \.self) { Text($0).tag($0) }
-                }
-                .labelsHidden()
-                .onChange(of: selectedFont) { v in AppSettings.shared.fontName = v }
+                FontChooser(selectedFont: $selectedFont, fonts: fonts)
+                    .onChange(of: selectedFont) { v in AppSettings.shared.fontName = v }
             }
 
             Section(title: "Font Size") {
-                FontSlider(value: $fontSize, range: 10...28)
+                FontSizePicker(value: $fontSize, range: 10...28)
                     .onChange(of: fontSize) { v in AppSettings.shared.fontSize = CGFloat(v) }
             }
 

@@ -327,7 +327,9 @@ final class GhosttyRuntime {
         let cfg = ghostty_config_new()
         guard let cfg = cfg else { return nil }
 
-        ghostty_config_load_default_files(cfg)
+        // Skip ghostty_config_load_default_files — Exterm manages its own
+        // settings.  Loading the user's Ghostty config would prepend values
+        // for repeatable keys like font-family, making our settings ignored.
         applyExtermSettings(to: cfg)
         ghostty_config_finalize(cfg)
 
@@ -341,14 +343,24 @@ final class GhosttyRuntime {
         let old = config
         config = newConfig
 
-        // Update the app config — this propagates to ALL surfaces automatically.
-        // Free old config AFTER update in case Ghostty reads from it during the switch.
+        // Update the app-level config for new surfaces.
         if let app = app {
             ghostty_app_update_config(app, newConfig)
         }
+
+        // Push config to each existing surface (font, colors, cursor, etc.).
+        // Reset font size first — Ghostty tracks manual adjustments (Cmd+/-)
+        // and skips config-based font changes if the flag is set.
+        for surface in surfaces {
+            "reset_font_size".withCString { action in
+                _ = ghostty_surface_binding_action(surface, action, 15)
+            }
+            ghostty_surface_update_config(surface, newConfig)
+        }
+
         if let old = old { ghostty_config_free(old) }
 
-        NSLog("[Ghostty] Config reloaded via app, \(surfaces.count) surface(s)")
+        NSLog("[Ghostty] Config reloaded, pushed to \(surfaces.count) surface(s)")
     }
 
     /// Write Exterm settings as a Ghostty config file and load it.
