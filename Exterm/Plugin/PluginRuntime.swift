@@ -57,8 +57,10 @@ final class PluginRuntime {
         let start = CFAbsoluteTimeGetCurrent()
 
         // Phase 1: Enrich
+        let disabled = AppSettings.shared.disabledPluginIDsSet
+        let active = plugins.filter { !disabled.contains($0.pluginID) }
         let enrichment = EnrichmentContext(base: baseContext)
-        for plugin in plugins {
+        for plugin in active {
             plugin.enrich(context: enrichment)
         }
 
@@ -66,7 +68,7 @@ final class PluginRuntime {
         let frozenContext = enrichment.freeze()
 
         // Phase 2: React
-        for plugin in plugins {
+        for plugin in active {
             plugin.react(context: frozenContext)
         }
 

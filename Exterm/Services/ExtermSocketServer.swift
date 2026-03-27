@@ -159,7 +159,7 @@ final class ExtermSocketServer {
             // Set non-blocking to avoid hangs on accept
             var flags = fcntl(serverFD, F_GETFL)
             flags |= O_NONBLOCK
-            fcntl(serverFD, F_SETFL, flags)
+            _ = fcntl(serverFD, F_SETFL, flags)
 
             var addr = sockaddr_un()
             addr.sun_family = sa_family_t(AF_UNIX)

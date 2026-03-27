@@ -22,17 +22,19 @@ final class DockerPluginNew: ExtermPluginProtocol {
         settingsObserver = NotificationCenter.default.addObserver(
             forName: .settingsChanged, object: nil, queue: .main
         ) { [weak self] notification in
-            guard let topic = notification.userInfo?["topic"] as? String,
-                topic == "plugins"
-            else { return }
-            let oldSocket = DockerService.shared.socketPath
-            self?.applySocketPathSetting()
-            guard DockerService.shared.socketPath != oldSocket else { return }
-            if self?.isActivated == true {
-                DockerService.shared.stopWatching()
-                DockerService.shared.startWatching()
+            MainActor.assumeIsolated {
+                guard let topic = notification.userInfo?["topic"] as? String,
+                    topic == "plugins"
+                else { return }
+                let oldSocket = DockerService.shared.socketPath
+                self?.applySocketPathSetting()
+                guard DockerService.shared.socketPath != oldSocket else { return }
+                if self?.isActivated == true {
+                    DockerService.shared.stopWatching()
+                    DockerService.shared.startWatching()
+                }
+                self?.onRequestCycleRerun?()
             }
-            self?.onRequestCycleRerun?()
         }
     }
 

@@ -566,12 +566,15 @@ private struct DefaultPluginOrderView: View {
     var body: some View {
         let _ = observer.revision
         let t = Tokens.current
+        let disabledSet = AppSettings.shared.disabledPluginIDsSet
+        let visibleIDs = orderedIDs.filter { !disabledSet.contains($0) }
         let enabledSet = Set(AppSettings.shared.defaultEnabledPluginIDs)
 
         VStack(alignment: .leading, spacing: 2) {
-            ForEach(Array(orderedIDs.enumerated()), id: \.element) { index, pluginID in
+            ForEach(Array(visibleIDs.enumerated()), id: \.element) { index, pluginID in
                 if let manifest = manifests.first(where: { $0.id == pluginID }) {
                     let isEnabled = enabledSet.contains(pluginID)
+                    let realIndex = orderedIDs.firstIndex(of: pluginID) ?? index
                     HStack(spacing: 8) {
                         Image(systemName: "line.3.horizontal")
                             .font(.system(size: 10))
@@ -589,7 +592,7 @@ private struct DefaultPluginOrderView: View {
 
                         Spacer()
 
-                        Button(action: { moveUp(index) }) {
+                        Button(action: { moveUp(realIndex) }) {
                             Image(systemName: "chevron.up")
                                 .font(.system(size: 10, weight: .semibold))
                                 .foregroundColor(index > 0 ? t.text : t.muted.opacity(0.3))
@@ -597,13 +600,13 @@ private struct DefaultPluginOrderView: View {
                         .buttonStyle(.plain)
                         .disabled(index == 0)
 
-                        Button(action: { moveDown(index) }) {
+                        Button(action: { moveDown(realIndex) }) {
                             Image(systemName: "chevron.down")
                                 .font(.system(size: 10, weight: .semibold))
-                                .foregroundColor(index < orderedIDs.count - 1 ? t.text : t.muted.opacity(0.3))
+                                .foregroundColor(index < visibleIDs.count - 1 ? t.text : t.muted.opacity(0.3))
                         }
                         .buttonStyle(.plain)
-                        .disabled(index >= orderedIDs.count - 1)
+                        .disabled(index >= visibleIDs.count - 1)
 
                         Toggle(
                             "",

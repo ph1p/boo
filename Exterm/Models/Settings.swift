@@ -306,12 +306,25 @@ final class AppSettings {
 
     var disabledPluginIDs: [String] {
         get { UserDefaults.standard.stringArray(forKey: K.disabledPluginIDs) ?? [] }
-        set { set(newValue, forKey: K.disabledPluginIDs, topic: .plugins) }
+        set {
+            _disabledPluginIDsSet = nil
+            set(newValue, forKey: K.disabledPluginIDs, topic: .plugins)
+        }
+    }
+
+    private var _disabledPluginIDsSet: Set<String>?
+
+    /// Cached Set for O(1) lookups — invalidated on write.
+    var disabledPluginIDsSet: Set<String> {
+        if let cached = _disabledPluginIDsSet { return cached }
+        let result = Set(disabledPluginIDs)
+        _disabledPluginIDsSet = result
+        return result
     }
 
     /// Whether a plugin is currently enabled (not in the disabled list).
     func isPluginEnabled(_ pluginID: String) -> Bool {
-        !disabledPluginIDs.contains(pluginID)
+        !disabledPluginIDsSet.contains(pluginID)
     }
 
     /// Plugins open in the sidebar by default when opening a new pane or starting the app.

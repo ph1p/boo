@@ -143,7 +143,7 @@ final class PluginRegistry {
 
     /// Plugins that are not disabled by the user.
     private var activePlugins: [ExtermPluginProtocol] {
-        let disabled = AppSettings.shared.disabledPluginIDs
+        let disabled = AppSettings.shared.disabledPluginIDsSet
         return plugins.filter { !disabled.contains($0.pluginID) }
     }
 
@@ -210,7 +210,7 @@ final class PluginRegistry {
     /// Auto-register status bar toggle icons from plugin manifests.
     /// Skips file-tree plugins (they have a dedicated FileTreeIconSegment).
     func registerStatusBarIcons(in statusBar: StatusBarView) {
-        let disabled = AppSettings.shared.disabledPluginIDs
+        let disabled = AppSettings.shared.disabledPluginIDsSet
         let existingIDs = Set(
             (statusBar.leftPlugins + statusBar.rightPlugins)
                 .compactMap { ($0 as? PluginIconSegment)?.associatedPanelID }

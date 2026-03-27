@@ -147,7 +147,7 @@ extension ExtermPluginProtocol {
 /// Evaluates whether a plugin should be visible given a terminal context.
 extension ExtermPluginProtocol {
     func isVisible(for context: TerminalContext) -> Bool {
-        if AppSettings.shared.disabledPluginIDs.contains(pluginID) { return false }
+        if !AppSettings.shared.isPluginEnabled(pluginID) { return false }
         guard let clause = whenClause else { return true }
         return WhenClauseEvaluator.evaluate(clause, context: context)
     }

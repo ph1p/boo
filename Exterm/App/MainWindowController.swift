@@ -256,7 +256,7 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
             // Plugin default changes: sync live sidebar to match new defaults.
             // Rebuild openPluginIDs from scratch: start with new defaults, keep auto-opened ones.
             if topic == .plugins {
-                let disabled = Set(AppSettings.shared.disabledPluginIDs)
+                let disabled = AppSettings.shared.disabledPluginIDsSet
 
                 // Tear down any open plugins that are now disabled
                 let disabledOpen = self.openPluginIDs.filter { disabled.contains($0) }
