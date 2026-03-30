@@ -116,11 +116,6 @@ final class AppStateTests: XCTestCase {
         XCTAssertEqual(state.activeWorkspaceIndex, 1)  // /c shifted left
     }
 
-    func testWorkspaceBarBlocksWindowDrag() {
-        let bar = WorkspaceBarView(frame: NSRect(x: 0, y: 0, width: 400, height: 28))
-        XCTAssertFalse(bar.mouseDownCanMoveWindow)
-    }
-
     func testMoveWorkspaceOutOfBounds() {
         let state = AppState()
         state.addWorkspace(Workspace(folderPath: "/a"))

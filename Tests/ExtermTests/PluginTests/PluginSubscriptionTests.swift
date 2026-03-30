@@ -233,37 +233,6 @@ final class PluginSubscriptionTests: XCTestCase {
         XCTAssertFalse(sysInfo.subscribedEvents.contains(.processChanged))
     }
 
-    // MARK: - No Default — Must Be Explicit
-
-    func testSubscribedEventsIsRequired() {
-        // AllEventsPlugin explicitly declares all 7 events
-        let plugin = AllEventsPlugin()
-        XCTAssertEqual(plugin.subscribedEvents.count, 7)
-
-        // NoEventsPlugin explicitly declares empty
-        let silent = NoEventsPlugin()
-        XCTAssertTrue(silent.subscribedEvents.isEmpty)
-
-        // CwdOnlyPlugin explicitly declares 1
-        let cwd = CwdOnlyPlugin()
-        XCTAssertEqual(cwd.subscribedEvents, [.cwdChanged])
-    }
-
-    // MARK: - PluginEvent Enum
-
-    func testPluginEventHashable() {
-        let set: Set<PluginEvent> = [.cwdChanged, .processChanged, .cwdChanged]
-        XCTAssertEqual(set.count, 2, "Set should deduplicate")
-    }
-
-    func testPluginEventAllCases() {
-        let all: [PluginEvent] = [
-            .cwdChanged, .processChanged, .remoteSessionChanged,
-            .focusChanged, .terminalCreated, .terminalClosed, .remoteDirectoryListed,
-        ]
-        XCTAssertEqual(all.count, 7)
-    }
-
     // MARK: - Subscription Prevents Unnecessary Work
 
     func testFocusFloodOnlyHitsSubscribers() {

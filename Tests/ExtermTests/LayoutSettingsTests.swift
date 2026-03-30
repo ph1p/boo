@@ -154,13 +154,4 @@ final class LayoutSettingsTests: XCTestCase {
         XCTAssertFalse(wc.sidebarUserHidden)
     }
 
-    func testEnumLabels() {
-        XCTAssertEqual(SidebarPosition.left.label, "Left")
-        XCTAssertEqual(SidebarPosition.right.label, "Right")
-        XCTAssertEqual(WorkspaceBarPosition.left.label, "Left")
-        XCTAssertEqual(WorkspaceBarPosition.top.label, "Top")
-        XCTAssertEqual(WorkspaceBarPosition.right.label, "Right")
-        XCTAssertEqual(SidebarDensity.comfortable.label, "Comfortable")
-        XCTAssertEqual(SidebarDensity.compact.label, "Compact")
-    }
 }

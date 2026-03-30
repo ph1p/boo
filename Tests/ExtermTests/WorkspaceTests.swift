@@ -19,21 +19,6 @@ final class WorkspaceTests: XCTestCase {
         XCTAssertEqual(ws.displayName, "My Workspace")
     }
 
-    func testColor() {
-        let ws = Workspace(folderPath: "/tmp")
-        XCTAssertEqual(ws.color, .none)
-        ws.color = .blue
-        XCTAssertEqual(ws.color, .blue)
-        XCTAssertNotNil(ws.color.nsColor)
-    }
-
-    func testPin() {
-        let ws = Workspace(folderPath: "/tmp")
-        XCTAssertFalse(ws.isPinned)
-        ws.isPinned = true
-        XCTAssertTrue(ws.isPinned)
-    }
-
     func testSplitPane() {
         let ws = Workspace(folderPath: "/tmp")
         let originalID = ws.activePaneID

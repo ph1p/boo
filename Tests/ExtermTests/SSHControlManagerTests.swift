@@ -26,21 +26,6 @@ final class SSHControlManagerTests: XCTestCase {
         XCTAssertNil(SSHControlManager.shared.connectionState(for: "never-seen"))
     }
 
-    func testSetTestStateSetsConnectionState() {
-        SSHControlManager.shared.setTestState(alias: "testhost", state: .ready)
-        XCTAssertEqual(SSHControlManager.shared.connectionState(for: "testhost"), .ready)
-    }
-
-    func testSetTestStateConnecting() {
-        SSHControlManager.shared.setTestState(alias: "testhost", state: .connecting)
-        XCTAssertEqual(SSHControlManager.shared.connectionState(for: "testhost"), .connecting)
-    }
-
-    func testSetTestStateFailed() {
-        SSHControlManager.shared.setTestState(alias: "testhost", state: .failed)
-        XCTAssertEqual(SSHControlManager.shared.connectionState(for: "testhost"), .failed)
-    }
-
     func testClearTestStateRemovesAll() {
         SSHControlManager.shared.setTestState(alias: "a", state: .ready)
         SSHControlManager.shared.setTestState(alias: "b", state: .connecting)

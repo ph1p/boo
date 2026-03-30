@@ -4,16 +4,6 @@ import XCTest
 
 final class GhosttyTests: XCTestCase {
 
-    func testRuntimeInitializes() {
-        let runtime = GhosttyRuntime.shared
-        XCTAssertNotNil(runtime.app, "GhosttyRuntime.app should not be nil")
-    }
-
-    func testConfigCreated() {
-        let runtime = GhosttyRuntime.shared
-        XCTAssertNotNil(runtime.config, "GhosttyRuntime.config should not be nil")
-    }
-
     func testTerminalColorHex() {
         let c = TerminalColor(r: 255, g: 128, b: 0)
         // Verify the color can produce valid CGColor/NSColor

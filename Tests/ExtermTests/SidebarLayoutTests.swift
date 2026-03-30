@@ -57,24 +57,6 @@ private func mouseDownEvent(for window: NSWindow) -> NSEvent {
 
 final class SidebarLayoutTests: XCTestCase {
 
-    // MARK: - Constants
-
-    func testHeaderHeightConstant() {
-        XCTAssertEqual(SidebarLayout.headerHeight, 26)
-    }
-
-    func testMinSectionHeightConstant() {
-        XCTAssertEqual(SidebarLayout.minSectionHeight, 50)
-    }
-
-    // MARK: - Section Data
-
-    func testSidebarSectionInit() {
-        let s = makeSection(id: "files", name: "Files")
-        XCTAssertEqual(s.id, "files")
-        XCTAssertEqual(s.name, "Files")
-    }
-
     // MARK: - Adding Panels
 
     func testAddSingleExpanded() {

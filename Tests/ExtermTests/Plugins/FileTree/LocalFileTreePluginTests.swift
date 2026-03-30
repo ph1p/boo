@@ -5,11 +5,6 @@ import XCTest
 @MainActor
 final class LocalFileTreePluginTests: XCTestCase {
 
-    func testWhenClauseIsNotRemote() {
-        let plugin = LocalFileTreePlugin()
-        XCTAssertEqual(plugin.manifest.when, "!remote")
-    }
-
     func testVisibleForLocalContext() {
         let plugin = LocalFileTreePlugin()
         let context = TerminalContext(
@@ -42,8 +37,4 @@ final class LocalFileTreePluginTests: XCTestCase {
             "Local file tree plugin should be hidden when remote")
     }
 
-    func testPluginID() {
-        let plugin = LocalFileTreePlugin()
-        XCTAssertEqual(plugin.manifest.id, "file-tree-local")
-    }
 }

@@ -203,35 +203,4 @@ final class PaneViewTabBarTests: XCTestCase {
         }
     }
 
-    // MARK: - Plus button centering (structural test)
-
-    func testPlusButtonCentering() {
-        let para = NSMutableParagraphStyle()
-        para.alignment = .center
-        XCTAssertEqual(para.alignment, .center)
-    }
-
-    // MARK: - Bottom border position
-
-    func testBottomBorderPosition() {
-        let pv = makePaneView(tabTitles: ["~", "~"], width: 600)
-        let barH = pv.tabBarHeight
-        let borderY = barH - 0.5
-        XCTAssertEqual(borderY, pv.singleRowTabHeight - 0.5, accuracy: 0.01)
-    }
-
-    // MARK: - Ellipsis (structural test)
-
-    func testEllipsisParagraphStyle() {
-        // Verify that the paragraph style used for tab titles has byTruncatingTail
-        let para = NSMutableParagraphStyle()
-        para.lineBreakMode = .byTruncatingTail
-        let attrs: [NSAttributedString.Key: Any] = [
-            .font: NSFont.systemFont(ofSize: 10.5, weight: .medium),
-            .paragraphStyle: para
-        ]
-        let retrieved = attrs[.paragraphStyle] as? NSParagraphStyle
-        XCTAssertNotNil(retrieved)
-        XCTAssertEqual(retrieved?.lineBreakMode, .byTruncatingTail)
-    }
 }

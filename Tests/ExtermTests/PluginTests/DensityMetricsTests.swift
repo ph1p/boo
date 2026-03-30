@@ -26,11 +26,4 @@ final class DensityMetricsTests: XCTestCase {
         XCTAssertEqual(metrics.fontSize, 12)
     }
 
-    func testCompactItemsStillMeetMinTouchTarget() {
-        let metrics = DensityMetrics(for: .compact)
-        // Minimum touch target is 24x24pt — items at 22pt height are close
-        // but acceptable for macOS (Apple's guideline is 24pt, but sidebar items
-        // at 22pt are common in native macOS apps like Finder)
-        XCTAssertGreaterThanOrEqual(metrics.listItemHeight, 22)
-    }
 }

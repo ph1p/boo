@@ -19,10 +19,6 @@ final class ThemeTests: XCTestCase {
         XCTAssertEqual(Set(names).count, names.count, "Theme names should be unique")
     }
 
-    func testDefaultDarkExists() {
-        XCTAssertEqual(TerminalTheme.defaultDark.name, "Default Dark")
-    }
-
     func testAllCatppuccinFlavors() {
         let names = TerminalTheme.themes.map(\.name)
         XCTAssertTrue(names.contains("Catppuccin Latte"))

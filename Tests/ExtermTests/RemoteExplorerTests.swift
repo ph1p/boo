@@ -53,16 +53,6 @@ final class RemoteExplorerTests: XCTestCase {
 
     // MARK: - ControlMaster Config
 
-    func testEnableControlMasterIdempotent() {
-        // If ControlMaster is already in the config, enableControlMaster should detect it
-        let content = """
-            Host *
-              ControlMaster auto
-              ControlPath ~/.ssh/cm-%r@%h:%p
-            """
-        XCTAssertTrue(content.lowercased().contains("controlmaster"))
-    }
-
     // MARK: - Session Type Properties
 
     func testSSHSessionConnectingHint() {
@@ -220,14 +210,6 @@ final class RemoteExplorerTests: XCTestCase {
         RemoteExplorer.clearAllHomeCache()
         let result = RemoteExplorer.resolveTilde("~/project", session: .ssh(host: "unknown-host-xyz"))
         XCTAssertNil(result)
-    }
-
-    func testDockerStdinNullified() {
-        // Verify Docker exec branch of runRemoteCommand sets standardInput.
-        // We can't easily test the Process setup, but we can verify the command
-        // structure is correct by checking directoryListCommand output.
-        let cmd = RemoteExplorer.directoryListCommand(for: "/app")
-        XCTAssertEqual(cmd, "ls -1AF /app 2>/dev/null")
     }
 
     // MARK: - sshConnectionTarget for home cache

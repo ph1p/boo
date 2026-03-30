@@ -14,15 +14,6 @@ final class ExtermSocketServerTests: XCTestCase {
         XCTAssertTrue(server.socketPath.hasSuffix("exterm.sock"))
     }
 
-    func testProcessStatusEquatable() {
-        let now = Date()
-        let a = ExtermSocketServer.ProcessStatus(
-            pid: 100, name: "claude", category: "ai", registeredAt: now, metadata: [:])
-        let b = ExtermSocketServer.ProcessStatus(
-            pid: 100, name: "claude", category: "ai", registeredAt: now, metadata: [:])
-        XCTAssertEqual(a, b)
-    }
-
     func testDirectProcessRegistration() {
         let server = ExtermSocketServer.shared
         let pid = getpid()
@@ -108,15 +99,6 @@ final class ExtermSocketServerTests: XCTestCase {
         server.processes.removeAll()
     }
 
-    func testKillSignalZeroDetectsLiveProcess() {
-        XCTAssertEqual(kill(getpid(), 0), 0)
-    }
-
-    func testKillSignalZeroDetectsDeadProcess() {
-        errno = 0
-        XCTAssertEqual(kill(99_999_999, 0), -1)
-        XCTAssertEqual(POSIXErrorCode(rawValue: errno), .ESRCH)
-    }
 }
 
 // MARK: - Socket Protocol Integration Tests

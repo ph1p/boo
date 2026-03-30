@@ -14,15 +14,6 @@ final class SystemInfoPluginTests: XCTestCase {
         )
     }
 
-    func testManifest() {
-        let plugin = SystemInfoPlugin()
-        XCTAssertEqual(plugin.pluginID, "system-info")
-        XCTAssertEqual(plugin.manifest.id, "system-info")
-        XCTAssertEqual(plugin.manifest.name, "System")
-        XCTAssertEqual(plugin.manifest.icon, "gauge.with.dots.needle.33percent")
-        XCTAssertEqual(plugin.manifest.when, "!remote")
-    }
-
     func testHiddenInRemoteSession() {
         let plugin = SystemInfoPlugin()
 

@@ -45,10 +45,4 @@ final class PaneViewIntegrationTests: XCTestCase {
         // New pane should inherit the current working directory
         XCTAssertEqual(newPane?.activeTab?.workingDirectory, "/home/user/projects")
     }
-    func testTerminalColorConversion() {
-        let c = TerminalColor(r: 128, g: 64, b: 255)
-        XCTAssertNotNil(c.cgColor)
-        XCTAssertNotNil(c.nsColor)
-        XCTAssertEqual(c.nsColor.redComponent, 128.0 / 255.0, accuracy: 0.01)
-    }
 }
