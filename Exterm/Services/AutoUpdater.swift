@@ -147,8 +147,13 @@ final class AutoUpdater: ObservableObject {
 
         state = .downloading(progress: 0)
 
-        let cacheDir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!
-            .appendingPathComponent("com.exterm.app/Updates", isDirectory: true)
+        guard
+            let cacheDir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first?
+                .appendingPathComponent("com.exterm.app/Updates", isDirectory: true)
+        else {
+            state = .error("Cache directory unavailable")
+            return
+        }
         try? FileManager.default.createDirectory(at: cacheDir, withIntermediateDirectories: true)
         let destURL = cacheDir.appendingPathComponent(asset.name)
 

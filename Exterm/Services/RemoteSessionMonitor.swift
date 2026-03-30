@@ -122,7 +122,8 @@ final class RemoteSessionMonitor {
     }
 
     private func poll() {
-        for (paneID, var entry) in tracked {
+        for paneID in Array(tracked.keys) {
+            guard var entry = tracked[paneID] else { continue }
             let session = RemoteExplorer.detectRemoteSessionFiltered(shellPID: entry.shellPID)
 
             // When a session was detected by title heuristics (titleDetected),

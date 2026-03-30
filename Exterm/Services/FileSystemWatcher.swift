@@ -46,14 +46,13 @@ final class FileSystemWatcher {
     }
 
     func stop() {
-        if let stream = stream {
-            FSEventStreamStop(stream)
-            FSEventStreamInvalidate(stream)
-            // Balance the passRetained() from start().
-            Unmanaged.passUnretained(self).release()
-            FSEventStreamRelease(stream)
-            self.stream = nil
-        }
+        guard let stream = stream else { return }
+        self.stream = nil
+        FSEventStreamStop(stream)
+        FSEventStreamInvalidate(stream)
+        FSEventStreamRelease(stream)
+        // Balance the passRetained() from start().
+        Unmanaged.passUnretained(self).release()
     }
 
     deinit {

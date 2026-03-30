@@ -444,6 +444,7 @@ class PaneView: NSView {
 
     func closeTab(at index: Int) {
         lastAutoScrolledTabIndex = -1
+        guard index >= 0, index < pane.tabs.count else { return }
         let tabID = pane.tabs[index].id
         if let gv = tabViews.removeValue(forKey: tabID) { gv.destroy() }
         if pane.activeTabIndex == index {

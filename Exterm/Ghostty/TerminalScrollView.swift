@@ -126,7 +126,9 @@ class TerminalScrollView: NSView {
     }
 
     private var cellHeight: CGFloat {
-        guard let size = ghosttyView.gridSize, size.rows > 0 else { return 0 }
+        guard let size = ghosttyView.gridSize, size.rows > 0,
+            ghosttyView.bounds.height > 0
+        else { return 0 }
         return ghosttyView.bounds.height / CGFloat(size.rows)
     }
 

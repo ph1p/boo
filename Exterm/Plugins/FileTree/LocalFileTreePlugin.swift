@@ -54,7 +54,12 @@ final class LocalFileTreePlugin: ExtermPluginProtocol {
     var prefersOuterScrollView: Bool { true }
 
     var subscribedEvents: Set<PluginEvent> {
-        [.cwdChanged, .remoteSessionChanged, .focusChanged, .processChanged]
+        [.cwdChanged, .remoteSessionChanged, .focusChanged, .processChanged, .terminalClosed]
+    }
+
+    func terminalClosed(terminalID: UUID) {
+        expandedState.removeValue(forKey: terminalID)
+        terminalCwd.removeValue(forKey: terminalID)
     }
 
     // MARK: - Section Title
@@ -226,8 +231,8 @@ final class LocalFileTreePlugin: ExtermPluginProtocol {
         cachedRoots[path] = root
         setupWatcher(for: path)
         if cachedRoots.count > 10 {
-            let oldest = cachedRoots.keys.first { $0 != path }
-            if let key = oldest { cachedRoots.removeValue(forKey: key) }
+            // Evict all entries except the current path to bound cache growth
+            cachedRoots = cachedRoots.filter { $0.key == path }
         }
         return root
     }

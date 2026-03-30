@@ -378,13 +378,17 @@ final class AppSettings {
             }
         }
         UserDefaults.standard.set(ids, forKey: K.defaultEnabledPluginIDs)
+        saveToFile()
     }
 
     // MARK: - Updates
 
     var autoCheckUpdates: Bool {
         get { bool(K.autoCheckUpdates, default: true) }
-        set { UserDefaults.standard.set(newValue, forKey: K.autoCheckUpdates) }
+        set {
+            UserDefaults.standard.set(newValue, forKey: K.autoCheckUpdates)
+            saveToFile()
+        }
     }
 
     var lastUpdateCheck: Date? {
@@ -394,7 +398,10 @@ final class AppSettings {
 
     var skipVersion: String? {
         get { UserDefaults.standard.string(forKey: K.skipVersion) }
-        set { UserDefaults.standard.set(newValue, forKey: K.skipVersion) }
+        set {
+            UserDefaults.standard.set(newValue, forKey: K.skipVersion)
+            saveToFile()
+        }
     }
 
     /// nil = never asked, true = user approved, false = user declined.
@@ -403,7 +410,10 @@ final class AppSettings {
             UserDefaults.standard.object(forKey: K.sshControlMasterApproved) == nil
                 ? nil : UserDefaults.standard.bool(forKey: K.sshControlMasterApproved)
         }
-        set { UserDefaults.standard.set(newValue, forKey: K.sshControlMasterApproved) }
+        set {
+            UserDefaults.standard.set(newValue, forKey: K.sshControlMasterApproved)
+            saveToFile()
+        }
     }
 
     // MARK: - Plugin Settings

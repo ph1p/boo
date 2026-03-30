@@ -273,6 +273,7 @@ class TabDragCoordinator {
     // MARK: - Ghost window
 
     private func createGhostWindow(for paneView: PaneView, tabIndex: Int, event: NSEvent) {
+        guard tabIndex >= 0, tabIndex < paneView.pane.tabs.count else { return }
         let tab = paneView.pane.tabs[tabIndex]
         let title = tab.title
         let ghostWidth: CGFloat = 140

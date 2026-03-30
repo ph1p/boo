@@ -43,7 +43,7 @@ indirect enum SplitTree {
         case .leaf(let id):
             return id == leafID ? nil : self
 
-        case .split(_, let first, let second, _):
+        case .split(let dir, let first, let second, let r):
             if case .leaf(let id) = first, id == leafID {
                 return second
             }
@@ -54,7 +54,7 @@ indirect enum SplitTree {
             // Try removing from first subtree
             if first.containsLeaf(leafID) {
                 if let newFirst = first.removing(leafID: leafID) {
-                    return .split(direction: direction!, first: newFirst, second: second, ratio: ratio!)
+                    return .split(direction: dir, first: newFirst, second: second, ratio: r)
                 }
                 // first collapsed to nil — return second
                 return second
@@ -62,7 +62,7 @@ indirect enum SplitTree {
             // Try removing from second subtree
             if second.containsLeaf(leafID) {
                 if let newSecond = second.removing(leafID: leafID) {
-                    return .split(direction: direction!, first: first, second: newSecond, ratio: ratio!)
+                    return .split(direction: dir, first: first, second: newSecond, ratio: r)
                 }
                 return first
             }

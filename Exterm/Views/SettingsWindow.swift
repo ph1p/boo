@@ -207,7 +207,7 @@ private struct FontChooser: NSViewRepresentable {
         popup.controlSize = .regular
         for name in fonts {
             popup.addItem(withTitle: name)
-            let item = popup.lastItem!
+            guard let item = popup.lastItem else { continue }
             item.attributedTitle = NSAttributedString(
                 string: name,
                 attributes: [.font: NSFont(name: name, size: 13) ?? NSFont.systemFont(ofSize: 13)]

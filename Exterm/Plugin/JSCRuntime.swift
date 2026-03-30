@@ -67,7 +67,9 @@ final class JSCRuntime {
 
     /// Run all JSC work on the current thread (must be called from the JS thread).
     private func runJS(source: String, functionName: String, ctxDict: [String: Any]) throws -> String {
-        let jsContext = JSContext()!
+        guard let jsContext = JSContext() else {
+            throw JSError(message: "Failed to create JavaScript context")
+        }
 
         var jsError: String?
         jsContext.exceptionHandler = { _, exception in
