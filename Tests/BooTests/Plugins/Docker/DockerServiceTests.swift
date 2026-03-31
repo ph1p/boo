@@ -83,14 +83,19 @@ final class DockerServiceTests: XCTestCase {
     @MainActor
     func testDockerPluginSectionTitle() {
         let plugin = DockerPluginNew()
-        let ctx = TerminalContext(
-            terminalID: UUID(),
-            cwd: "/tmp",
-            remoteSession: nil,
-            gitContext: nil,
-            processName: "zsh",
-            paneCount: 1,
-            tabCount: 1
+        let ctx = PluginContext(
+            terminal: TerminalContext(
+                terminalID: UUID(),
+                cwd: "/tmp",
+                remoteSession: nil,
+                gitContext: nil,
+                processName: "zsh",
+                paneCount: 1,
+                tabCount: 1
+            ),
+            theme: ThemeSnapshot(from: .defaultDark),
+            density: .comfortable,
+            settings: PluginSettingsReader(pluginID: plugin.manifest.id)
         )
         let title = plugin.sectionTitle(context: ctx)
         if DockerService.shared.connectionError != nil {
@@ -99,7 +104,6 @@ final class DockerServiceTests: XCTestCase {
             XCTAssertNotNil(title)
             XCTAssertTrue(title!.contains("Docker"))
         } else {
-            // No connection error and no containers (Docker not running or not yet polled)
             XCTAssertNil(title)
         }
     }
@@ -107,14 +111,19 @@ final class DockerServiceTests: XCTestCase {
     @MainActor
     func testDockerPluginStatusBarContent() {
         let plugin = DockerPluginNew()
-        let ctx = TerminalContext(
-            terminalID: UUID(),
-            cwd: "/tmp",
-            remoteSession: nil,
-            gitContext: nil,
-            processName: "zsh",
-            paneCount: 1,
-            tabCount: 1
+        let ctx = PluginContext(
+            terminal: TerminalContext(
+                terminalID: UUID(),
+                cwd: "/tmp",
+                remoteSession: nil,
+                gitContext: nil,
+                processName: "zsh",
+                paneCount: 1,
+                tabCount: 1
+            ),
+            theme: ThemeSnapshot(from: .defaultDark),
+            density: .comfortable,
+            settings: PluginSettingsReader(pluginID: plugin.manifest.id)
         )
         let content = plugin.makeStatusBarContent(context: ctx)
         if DockerService.shared.connectionError != nil {
@@ -124,7 +133,6 @@ final class DockerServiceTests: XCTestCase {
             XCTAssertNotNil(content)
             XCTAssertTrue(content!.text.contains("running"))
         } else {
-            // No connection error and no containers — status bar content is nil
             XCTAssertNil(content)
         }
     }
