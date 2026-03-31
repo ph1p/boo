@@ -27,7 +27,7 @@ final class LayoutSettingsTests: XCTestCase {
 
     func testWorkspaceBarPositionDefault() {
         UserDefaults.standard.removeObject(forKey: "workspaceBarPosition")
-        XCTAssertEqual(AppSettings.shared.workspaceBarPosition, .left)
+        XCTAssertEqual(AppSettings.shared.workspaceBarPosition, .top)
     }
 
     func testWorkspaceBarPositionRoundTrip() {
