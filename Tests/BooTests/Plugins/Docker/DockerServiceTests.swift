@@ -95,11 +95,12 @@ final class DockerServiceTests: XCTestCase {
         let title = plugin.sectionTitle(context: ctx)
         if DockerService.shared.connectionError != nil {
             XCTAssertEqual(title, "Docker (disconnected)")
-        } else if DockerService.shared.containers.isEmpty {
-            XCTAssertNil(title)
-        } else {
+        } else if !DockerService.shared.containers.isEmpty {
             XCTAssertNotNil(title)
             XCTAssertTrue(title!.contains("Docker"))
+        } else {
+            // No connection error and no containers (Docker not running or not yet polled)
+            XCTAssertNil(title)
         }
     }
 
@@ -119,11 +120,12 @@ final class DockerServiceTests: XCTestCase {
         if DockerService.shared.connectionError != nil {
             XCTAssertNotNil(content)
             XCTAssertEqual(content!.text, "disconnected")
-        } else if DockerService.shared.containers.isEmpty {
-            XCTAssertNil(content)
-        } else {
+        } else if !DockerService.shared.containers.isEmpty {
             XCTAssertNotNil(content)
             XCTAssertTrue(content!.text.contains("running"))
+        } else {
+            // No connection error and no containers — status bar content is nil
+            XCTAssertNil(content)
         }
     }
 
