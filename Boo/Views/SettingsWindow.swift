@@ -382,12 +382,16 @@ private struct ThemeRow: View {
         HStack(spacing: 0) {
             // Theme-colored body
             HStack(spacing: 8) {
-                // Palette dots: 6 ANSI accent colors
-                HStack(spacing: 3) {
+                // Palette stripes: bg + 6 ANSI accent colors
+                HStack(spacing: 0) {
+                    Rectangle().fill(bg).frame(width: 10)
                     ForEach([1, 2, 3, 4, 5, 6], id: \.self) { i in
-                        Circle().fill(ansi(i)).frame(width: 8, height: 8)
+                        Rectangle().fill(ansi(i))
                     }
                 }
+                .frame(width: 52, height: 20)
+                .clipShape(RoundedRectangle(cornerRadius: 3))
+                .overlay(RoundedRectangle(cornerRadius: 3).strokeBorder(fg.opacity(0.12), lineWidth: 0.5))
 
                 Text(theme.name)
                     .font(.system(size: 12, weight: active ? .semibold : .regular))
