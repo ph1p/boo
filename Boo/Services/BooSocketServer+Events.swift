@@ -43,9 +43,11 @@ extension BooSocketServer {
     // MARK: - Convenience Emitters
 
     func emitCwdChanged(path: String, isRemote: Bool, paneID: UUID) {
-        emitEvent(name: "cwd_changed", data: [
-            "path": path, "is_remote": isRemote, "pane_id": paneID.uuidString,
-        ])
+        emitEvent(
+            name: "cwd_changed",
+            data: [
+                "path": path, "is_remote": isRemote, "pane_id": paneID.uuidString
+            ])
     }
 
     func emitTitleChanged(title: String, paneID: UUID) {
@@ -65,9 +67,11 @@ extension BooSocketServer {
             data["pane_id"] = paneID.uuidString
             emitEvent(name: "remote_session_changed", data: data)
         } else {
-            emitEvent(name: "remote_session_changed", data: [
-                "active": false, "pane_id": paneID.uuidString,
-            ])
+            emitEvent(
+                name: "remote_session_changed",
+                data: [
+                    "active": false, "pane_id": paneID.uuidString
+                ])
         }
     }
 

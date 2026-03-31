@@ -679,12 +679,12 @@ private struct ColorWell: NSViewRepresentable {
 
 // MARK: - Helpers
 
-private extension TerminalColor {
-    var hexString: String {
+extension TerminalColor {
+    fileprivate var hexString: String {
         String(format: "#%02X%02X%02X", r, g, b)
     }
 
-    init?(hex: String) {
+    fileprivate init?(hex: String) {
         var s = hex.trimmingCharacters(in: .whitespaces)
         if s.hasPrefix("#") { s = String(s.dropFirst()) }
         guard s.count == 6, let v = UInt32(s, radix: 16) else { return nil }
@@ -692,8 +692,8 @@ private extension TerminalColor {
     }
 }
 
-private extension CustomThemeData {
-    func withName(_ newName: String) -> CustomThemeData {
+extension CustomThemeData {
+    fileprivate func withName(_ newName: String) -> CustomThemeData {
         var copy = self
         copy.name = newName
         return copy
@@ -1085,12 +1085,14 @@ private struct DefaultPluginOrderView: View {
                         draggedID = pluginID
                         return NSItemProvider(object: pluginID as NSString)
                     }
-                    .onDrop(of: [.text], delegate: PluginDropDelegate(
-                        targetID: pluginID,
-                        orderedIDs: $orderedIDs,
-                        draggedID: $draggedID,
-                        onReorder: { persistOrder() }
-                    ))
+                    .onDrop(
+                        of: [.text],
+                        delegate: PluginDropDelegate(
+                            targetID: pluginID,
+                            orderedIDs: $orderedIDs,
+                            draggedID: $draggedID,
+                            onReorder: { persistOrder() }
+                        ))
                 }
             }
         }
@@ -1116,7 +1118,7 @@ private struct DefaultPluginOrderView: View {
         let disabledSet = AppSettings.shared.disabledPluginIDsSet
         // Find the nearest visible predecessor in orderedIDs
         guard index > 0,
-              let prevIndex = (0..<index).reversed().first(where: { !disabledSet.contains(orderedIDs[$0]) })
+            let prevIndex = (0..<index).reversed().first(where: { !disabledSet.contains(orderedIDs[$0]) })
         else { return }
         orderedIDs.swapAt(index, prevIndex)
         persistOrder()
@@ -1126,7 +1128,7 @@ private struct DefaultPluginOrderView: View {
         let disabledSet = AppSettings.shared.disabledPluginIDsSet
         // Find the nearest visible successor in orderedIDs
         guard index < orderedIDs.count - 1,
-              let nextIndex = ((index + 1)..<orderedIDs.count).first(where: { !disabledSet.contains(orderedIDs[$0]) })
+            let nextIndex = ((index + 1)..<orderedIDs.count).first(where: { !disabledSet.contains(orderedIDs[$0]) })
         else { return }
         orderedIDs.swapAt(index, nextIndex)
         persistOrder()
@@ -1157,11 +1159,12 @@ private struct PluginDropDelegate: DropDelegate {
 
     func dropEntered(info: DropInfo) {
         guard let dragged = draggedID, dragged != targetID,
-              let fromIndex = orderedIDs.firstIndex(of: dragged),
-              let toIndex = orderedIDs.firstIndex(of: targetID)
+            let fromIndex = orderedIDs.firstIndex(of: dragged),
+            let toIndex = orderedIDs.firstIndex(of: targetID)
         else { return }
         withAnimation(.easeInOut(duration: 0.15)) {
-            orderedIDs.move(fromOffsets: IndexSet(integer: fromIndex), toOffset: toIndex > fromIndex ? toIndex + 1 : toIndex)
+            orderedIDs.move(
+                fromOffsets: IndexSet(integer: fromIndex), toOffset: toIndex > fromIndex ? toIndex + 1 : toIndex)
         }
     }
 

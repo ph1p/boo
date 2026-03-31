@@ -692,7 +692,8 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
                 let socket = BooSocketServer.shared
                 switch event {
                 case .directoryChanged(let path):
-                    socket.emitCwdChanged(path: path, isRemote: self.bridge.state.remoteSession != nil, paneID: self.bridge.state.paneID)
+                    socket.emitCwdChanged(
+                        path: path, isRemote: self.bridge.state.remoteSession != nil, paneID: self.bridge.state.paneID)
                     self.schedulePluginCycle(reason: .cwdChanged)
 
                 case .titleChanged(let title):
@@ -700,7 +701,8 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
                     self.schedulePluginCycle(reason: .titleChanged)
 
                 case .processChanged(let name):
-                    socket.emitProcessChanged(name: name, category: ProcessIcon.category(for: name), paneID: self.bridge.state.paneID)
+                    socket.emitProcessChanged(
+                        name: name, category: ProcessIcon.category(for: name), paneID: self.bridge.state.paneID)
                     self.schedulePluginCycle(reason: .processChanged)
 
                 case .remoteSessionChanged(let session):

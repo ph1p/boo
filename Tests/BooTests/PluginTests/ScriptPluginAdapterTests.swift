@@ -13,7 +13,6 @@ final class ScriptPluginAdapterTests: XCTestCase {
         return dir.path
     }
 
-
     private func makeManifest(
         id: String = "test-plugin",
         when: String? = nil,
@@ -130,11 +129,12 @@ final class ScriptPluginAdapterTests: XCTestCase {
     }
 
     func testDetailStateShowsErrorAfterInvalidScript() throws {
-        let folder = try makeTempPluginFolder(script: """
-            function transform(ctx) {
-                return {{ invalid;
-            }
-            """)
+        let folder = try makeTempPluginFolder(
+            script: """
+                function transform(ctx) {
+                    return {{ invalid;
+                }
+                """)
         defer { try? FileManager.default.removeItem(atPath: folder) }
 
         let adapter = ScriptPluginAdapter(manifest: makeManifest(), folderPath: folder)
@@ -147,11 +147,12 @@ final class ScriptPluginAdapterTests: XCTestCase {
     }
 
     func testDetailStateShowsRenderedAfterValidScript() throws {
-        let folder = try makeTempPluginFolder(script: """
-            function transform(ctx) {
-                return JSON.stringify({ type: "label", text: "Hello " + ctx.cwd });
-            }
-            """)
+        let folder = try makeTempPluginFolder(
+            script: """
+                function transform(ctx) {
+                    return JSON.stringify({ type: "label", text: "Hello " + ctx.cwd });
+                }
+                """)
         defer { try? FileManager.default.removeItem(atPath: folder) }
 
         let adapter = ScriptPluginAdapter(manifest: makeManifest(), folderPath: folder)

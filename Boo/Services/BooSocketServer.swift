@@ -52,7 +52,12 @@ final class BooSocketServer {
     /// Thread-safe accessor. Setter is internal for testing via `@testable import`.
     var processes: [pid_t: ProcessStatus] {
         get { queue.sync { _processes } }
-        set { queue.sync { _processes = newValue; ancestorCache.removeAll() } }
+        set {
+            queue.sync {
+                _processes = newValue
+                ancestorCache.removeAll()
+            }
+        }
     }
 
     /// Called on main thread when the process set changes.
@@ -449,7 +454,7 @@ final class BooSocketServer {
             [
                 "pid": Int($0.pid),
                 "name": $0.name,
-                "category": $0.category,
+                "category": $0.category
             ] as [String: Any]
         }
         sendJSON(fd: clientFD, dict: ["ok": true, "processes": list])

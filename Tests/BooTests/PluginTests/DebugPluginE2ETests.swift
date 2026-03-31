@@ -218,7 +218,7 @@ final class DebugPluginE2ETests: XCTestCase {
         let entries = [
             RemoteExplorer.RemoteEntry(name: "src", isDirectory: true),
             RemoteExplorer.RemoteEntry(name: "README.md", isDirectory: false),
-            RemoteExplorer.RemoteEntry(name: "lib", isDirectory: true),
+            RemoteExplorer.RemoteEntry(name: "lib", isDirectory: true)
         ]
         registry.notifyRemoteDirectoryListed(path: "/home/user/project", entries: entries)
 

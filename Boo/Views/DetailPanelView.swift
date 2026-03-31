@@ -289,7 +289,7 @@ class SidebarPanelView: NSView {
             hosting.leadingAnchor.constraint(equalTo: scrollView.contentView.leadingAnchor),
             hosting.trailingAnchor.constraint(equalTo: scrollView.contentView.trailingAnchor),
             hosting.bottomAnchor.constraint(
-                greaterThanOrEqualTo: scrollView.contentView.bottomAnchor),
+                greaterThanOrEqualTo: scrollView.contentView.bottomAnchor)
         ])
 
         addSubview(scrollView)
@@ -368,7 +368,9 @@ class SidebarPanelView: NSView {
 
     private func distributeRemainingSpace(_ remaining: CGFloat, across indices: [Int]) {
         guard remaining > 0, !indices.isEmpty else { return }
-        let currentTotal = indices.reduce(CGFloat(0)) { $0 + max(SidebarLayout.minSectionHeight, sectionStates[$1].contentHeight) }
+        let currentTotal = indices.reduce(CGFloat(0)) {
+            $0 + max(SidebarLayout.minSectionHeight, sectionStates[$1].contentHeight)
+        }
         if currentTotal <= 0 {
             let extra = remaining / CGFloat(indices.count)
             for i in indices {

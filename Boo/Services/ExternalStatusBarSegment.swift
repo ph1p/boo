@@ -62,7 +62,7 @@ final class ExternalStatusBarSegment: StatusBarPlugin {
         // Draw text
         let attrs: [NSAttributedString.Key: Any] = [
             .font: font,
-            .foregroundColor: textColor,
+            .foregroundColor: textColor
         ]
         let str = text as NSString
         str.draw(at: NSPoint(x: cx, y: y), withAttributes: attrs)

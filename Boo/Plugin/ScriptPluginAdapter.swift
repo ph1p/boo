@@ -21,8 +21,10 @@ final class ScriptPluginAdapter: BooPluginProtocol {
     // External plugins subscribe to all events since we can't
     // know which callbacks the script uses.
     var subscribedEvents: Set<PluginEvent> {
-        [.cwdChanged, .processChanged, .remoteSessionChanged, .focusChanged,
-         .terminalCreated, .terminalClosed, .remoteDirectoryListed]
+        [
+            .cwdChanged, .processChanged, .remoteSessionChanged, .focusChanged,
+            .terminalCreated, .terminalClosed, .remoteDirectoryListed
+        ]
     }
 
     private let jscRuntime = JSCRuntime()
@@ -151,9 +153,10 @@ final class ScriptPluginAdapter: BooPluginProtocol {
                     pluginID, setting.key,
                     default: (setting.defaultValue?.value as? String) ?? "")
             case .int:
-                dict[setting.key] = Int(AppSettings.shared.pluginDouble(
-                    pluginID, setting.key,
-                    default: Double((setting.defaultValue?.value as? Int) ?? 0)))
+                dict[setting.key] = Int(
+                    AppSettings.shared.pluginDouble(
+                        pluginID, setting.key,
+                        default: Double((setting.defaultValue?.value as? Int) ?? 0)))
             case .double:
                 dict[setting.key] = AppSettings.shared.pluginDouble(
                     pluginID, setting.key,

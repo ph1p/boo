@@ -265,7 +265,8 @@ final class AIProcessDetectionTests: XCTestCase {
         // 4. All title changes — agent stays (title doesn't affect process)
         for title in ["⠂ Thinking", "~/dev/project", "zsh", "⠐ Building...", "/Users/dev/project"] {
             bridge.handleTitleChange(title: title, paneID: paneID)
-            XCTAssertEqual(bridge.state.foregroundProcess, "claude",
+            XCTAssertEqual(
+                bridge.state.foregroundProcess, "claude",
                 "Socket agent must survive title '\(title)'")
         }
 

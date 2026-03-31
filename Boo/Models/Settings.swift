@@ -187,7 +187,7 @@ final class AppSettings {
     var customThemes: [CustomThemeData] {
         get {
             guard let data = UserDefaults.standard.data(forKey: K.customThemes),
-                  let decoded = try? JSONDecoder().decode([CustomThemeData].self, from: data)
+                let decoded = try? JSONDecoder().decode([CustomThemeData].self, from: data)
             else { return [] }
             return decoded
         }
@@ -312,7 +312,10 @@ final class AppSettings {
 
     /// Path to open as the working directory for new workspaces. Defaults to the user's home directory.
     var defaultFolder: String {
-        get { UserDefaults.standard.string(forKey: K.defaultFolder) ?? FileManager.default.homeDirectoryForCurrentUser.path }
+        get {
+            UserDefaults.standard.string(forKey: K.defaultFolder)
+                ?? FileManager.default.homeDirectoryForCurrentUser.path
+        }
         set { set(newValue, forKey: K.defaultFolder, topic: .layout) }
     }
 
@@ -369,7 +372,10 @@ final class AppSettings {
     var defaultEnabledPluginIDs: [String] {
         get {
             UserDefaults.standard.stringArray(forKey: K.defaultEnabledPluginIDs)
-                ?? ["file-tree-local", "file-tree-remote", "git-panel", "bookmarks", "docker", "system-info", "ai-agent"]
+                ?? [
+                    "file-tree-local", "file-tree-remote", "git-panel", "bookmarks", "docker", "system-info",
+                    "ai-agent"
+                ]
         }
         set { set(newValue, forKey: K.defaultEnabledPluginIDs, topic: .plugins) }
     }
@@ -499,7 +505,7 @@ final class AppSettings {
         }
         let knownMono = [
             "Menlo", "Monaco", "Courier", "Courier New", "Fira Code", "JetBrains Mono", "Hack", "Source Code Pro",
-            "Inconsolata",
+            "Inconsolata"
         ]
         for name in knownMono where NSFont(name: name, size: 14) != nil {
             fonts.insert(name)

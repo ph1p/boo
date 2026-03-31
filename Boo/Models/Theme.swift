@@ -60,8 +60,8 @@ struct CustomThemeData: Codable, Identifiable {
     var foreground: TerminalColor
     var background: TerminalColor
     var cursor: TerminalColor
-    var selectionHex: String        // "#RRGGBB"
-    var ansiColors: [TerminalColor] // 16 entries
+    var selectionHex: String  // "#RRGGBB"
+    var ansiColors: [TerminalColor]  // 16 entries
     var chromeBgHex: String
     var chromeTextHex: String
     var chromeMutedHex: String
@@ -158,7 +158,7 @@ extension TerminalTheme {
         .cobalt2,
         .nightOwl,
         .synthwave84,
-        .moonlight,
+        .moonlight
     ]
 
     static let defaultDark = TerminalTheme(
@@ -852,22 +852,22 @@ extension TerminalTheme {
         cursor: TerminalColor(r: 40, g: 40, b: 45),
         selection: NSColor(red: 60 / 255, green: 130 / 255, blue: 220 / 255, alpha: 0.2),
         ansiColors: [
-            TerminalColor(r: 58, g: 58, b: 66),   // 0 black
-            TerminalColor(r: 200, g: 40, b: 41),   // 1 red
-            TerminalColor(r: 50, g: 155, b: 50),   // 2 green
-            TerminalColor(r: 180, g: 110, b: 0),   // 3 yellow
-            TerminalColor(r: 0, g: 100, b: 200),   // 4 blue
+            TerminalColor(r: 58, g: 58, b: 66),  // 0 black
+            TerminalColor(r: 200, g: 40, b: 41),  // 1 red
+            TerminalColor(r: 50, g: 155, b: 50),  // 2 green
+            TerminalColor(r: 180, g: 110, b: 0),  // 3 yellow
+            TerminalColor(r: 0, g: 100, b: 200),  // 4 blue
             TerminalColor(r: 150, g: 50, b: 200),  // 5 magenta
-            TerminalColor(r: 0, g: 140, b: 155),   // 6 cyan
-            TerminalColor(r: 120, g: 120, b: 130), // 7 white
-            TerminalColor(r: 100, g: 100, b: 110), // 8 bright black
-            TerminalColor(r: 220, g: 60, b: 60),   // 9 bright red
-            TerminalColor(r: 60, g: 175, b: 60),   // 10 bright green
-            TerminalColor(r: 200, g: 130, b: 0),   // 11 bright yellow
+            TerminalColor(r: 0, g: 140, b: 155),  // 6 cyan
+            TerminalColor(r: 120, g: 120, b: 130),  // 7 white
+            TerminalColor(r: 100, g: 100, b: 110),  // 8 bright black
+            TerminalColor(r: 220, g: 60, b: 60),  // 9 bright red
+            TerminalColor(r: 60, g: 175, b: 60),  // 10 bright green
+            TerminalColor(r: 200, g: 130, b: 0),  // 11 bright yellow
             TerminalColor(r: 20, g: 120, b: 220),  // 12 bright blue
             TerminalColor(r: 170, g: 70, b: 220),  // 13 bright magenta
-            TerminalColor(r: 0, g: 160, b: 175),   // 14 bright cyan
-            TerminalColor(r: 40, g: 40, b: 45)     // 15 bright white
+            TerminalColor(r: 0, g: 160, b: 175),  // 14 bright cyan
+            TerminalColor(r: 40, g: 40, b: 45)  // 15 bright white
         ],
         chromeBg: NSColor(red: 245 / 255, green: 245 / 255, blue: 247 / 255, alpha: 1),
         chromeText: NSColor(red: 40 / 255, green: 40 / 255, blue: 45 / 255, alpha: 1),
@@ -885,21 +885,21 @@ extension TerminalTheme {
         cursor: TerminalColor(r: 248, g: 248, b: 240),
         selection: NSColor(red: 73 / 255, green: 72 / 255, blue: 62 / 255, alpha: 0.6),
         ansiColors: [
-            TerminalColor(r: 39, g: 40, b: 34),    // 0 black
+            TerminalColor(r: 39, g: 40, b: 34),  // 0 black
             TerminalColor(r: 249, g: 38, b: 114),  // 1 red
             TerminalColor(r: 166, g: 226, b: 46),  // 2 green
-            TerminalColor(r: 244, g: 191, b: 117), // 3 yellow
-            TerminalColor(r: 102, g: 217, b: 239), // 4 blue
-            TerminalColor(r: 174, g: 129, b: 255), // 5 magenta
-            TerminalColor(r: 161, g: 239, b: 228), // 6 cyan
-            TerminalColor(r: 248, g: 248, b: 242), // 7 white
+            TerminalColor(r: 244, g: 191, b: 117),  // 3 yellow
+            TerminalColor(r: 102, g: 217, b: 239),  // 4 blue
+            TerminalColor(r: 174, g: 129, b: 255),  // 5 magenta
+            TerminalColor(r: 161, g: 239, b: 228),  // 6 cyan
+            TerminalColor(r: 248, g: 248, b: 242),  // 7 white
             TerminalColor(r: 117, g: 113, b: 94),  // 8 bright black
             TerminalColor(r: 249, g: 38, b: 114),  // 9 bright red
             TerminalColor(r: 166, g: 226, b: 46),  // 10 bright green
-            TerminalColor(r: 244, g: 191, b: 117), // 11 bright yellow
-            TerminalColor(r: 102, g: 217, b: 239), // 12 bright blue
-            TerminalColor(r: 174, g: 129, b: 255), // 13 bright magenta
-            TerminalColor(r: 161, g: 239, b: 228), // 14 bright cyan
+            TerminalColor(r: 244, g: 191, b: 117),  // 11 bright yellow
+            TerminalColor(r: 102, g: 217, b: 239),  // 12 bright blue
+            TerminalColor(r: 174, g: 129, b: 255),  // 13 bright magenta
+            TerminalColor(r: 161, g: 239, b: 228),  // 14 bright cyan
             TerminalColor(r: 249, g: 248, b: 245)  // 15 bright white
         ],
         chromeBg: NSColor(red: 30 / 255, green: 31 / 255, blue: 26 / 255, alpha: 1),
@@ -918,21 +918,21 @@ extension TerminalTheme {
         cursor: TerminalColor(r: 238, g: 238, b: 238),
         selection: NSColor(red: 80 / 255, green: 130 / 255, blue: 160 / 255, alpha: 0.4),
         ansiColors: [
-            TerminalColor(r: 38, g: 50, b: 56),    // 0 black
-            TerminalColor(r: 239, g: 83, b: 80),   // 1 red
-            TerminalColor(r: 102, g: 187, b: 106), // 2 green
+            TerminalColor(r: 38, g: 50, b: 56),  // 0 black
+            TerminalColor(r: 239, g: 83, b: 80),  // 1 red
+            TerminalColor(r: 102, g: 187, b: 106),  // 2 green
             TerminalColor(r: 249, g: 168, b: 37),  // 3 yellow
             TerminalColor(r: 66, g: 165, b: 245),  // 4 blue
             TerminalColor(r: 171, g: 71, b: 188),  // 5 magenta
             TerminalColor(r: 38, g: 198, b: 218),  // 6 cyan
-            TerminalColor(r: 238, g: 238, b: 238), // 7 white
+            TerminalColor(r: 238, g: 238, b: 238),  // 7 white
             TerminalColor(r: 84, g: 110, b: 122),  // 8 bright black
-            TerminalColor(r: 255, g: 138, b: 128), // 9 bright red
-            TerminalColor(r: 165, g: 214, b: 167), // 10 bright green
-            TerminalColor(r: 255, g: 224, b: 130), // 11 bright yellow
-            TerminalColor(r: 144, g: 202, b: 249), // 12 bright blue
-            TerminalColor(r: 206, g: 147, b: 216), // 13 bright magenta
-            TerminalColor(r: 128, g: 222, b: 234), // 14 bright cyan
+            TerminalColor(r: 255, g: 138, b: 128),  // 9 bright red
+            TerminalColor(r: 165, g: 214, b: 167),  // 10 bright green
+            TerminalColor(r: 255, g: 224, b: 130),  // 11 bright yellow
+            TerminalColor(r: 144, g: 202, b: 249),  // 12 bright blue
+            TerminalColor(r: 206, g: 147, b: 216),  // 13 bright magenta
+            TerminalColor(r: 128, g: 222, b: 234),  // 14 bright cyan
             TerminalColor(r: 255, g: 255, b: 255)  // 15 bright white
         ],
         chromeBg: NSColor(red: 28 / 255, green: 39 / 255, blue: 45 / 255, alpha: 1),
@@ -952,21 +952,21 @@ extension TerminalTheme {
         selection: NSColor(red: 66 / 255, green: 165 / 255, blue: 245 / 255, alpha: 0.2),
         ansiColors: [
             TerminalColor(r: 84, g: 110, b: 122),  // 0 black
-            TerminalColor(r: 229, g: 57, b: 53),   // 1 red
-            TerminalColor(r: 67, g: 160, b: 71),   // 2 green
-            TerminalColor(r: 251, g: 140, b: 0),   // 3 yellow
+            TerminalColor(r: 229, g: 57, b: 53),  // 1 red
+            TerminalColor(r: 67, g: 160, b: 71),  // 2 green
+            TerminalColor(r: 251, g: 140, b: 0),  // 3 yellow
             TerminalColor(r: 30, g: 136, b: 229),  // 4 blue
             TerminalColor(r: 142, g: 36, b: 170),  // 5 magenta
-            TerminalColor(r: 0, g: 172, b: 193),   // 6 cyan
-            TerminalColor(r: 144, g: 164, b: 174), // 7 white
-            TerminalColor(r: 120, g: 144, b: 156), // 8 bright black
-            TerminalColor(r: 239, g: 83, b: 80),   // 9 bright red
-            TerminalColor(r: 102, g: 187, b: 106), // 10 bright green
+            TerminalColor(r: 0, g: 172, b: 193),  // 6 cyan
+            TerminalColor(r: 144, g: 164, b: 174),  // 7 white
+            TerminalColor(r: 120, g: 144, b: 156),  // 8 bright black
+            TerminalColor(r: 239, g: 83, b: 80),  // 9 bright red
+            TerminalColor(r: 102, g: 187, b: 106),  // 10 bright green
             TerminalColor(r: 255, g: 167, b: 38),  // 11 bright yellow
             TerminalColor(r: 66, g: 165, b: 245),  // 12 bright blue
             TerminalColor(r: 171, g: 71, b: 188),  // 13 bright magenta
             TerminalColor(r: 38, g: 198, b: 218),  // 14 bright cyan
-            TerminalColor(r: 84, g: 110, b: 122)   // 15 bright white
+            TerminalColor(r: 84, g: 110, b: 122)  // 15 bright white
         ],
         chromeBg: NSColor(red: 240 / 255, green: 240 / 255, blue: 240 / 255, alpha: 1),
         chromeText: NSColor(red: 84 / 255, green: 110 / 255, blue: 122 / 255, alpha: 1),
@@ -984,21 +984,21 @@ extension TerminalTheme {
         cursor: TerminalColor(r: 255, g: 203, b: 107),
         selection: NSColor(red: 84 / 255, green: 90 / 255, blue: 120 / 255, alpha: 0.4),
         ansiColors: [
-            TerminalColor(r: 41, g: 45, b: 62),    // 0 black
-            TerminalColor(r: 240, g: 113, b: 120), // 1 red
-            TerminalColor(r: 195, g: 232, b: 141), // 2 green
-            TerminalColor(r: 255, g: 203, b: 107), // 3 yellow
-            TerminalColor(r: 130, g: 170, b: 255), // 4 blue
-            TerminalColor(r: 199, g: 146, b: 234), // 5 magenta
-            TerminalColor(r: 137, g: 221, b: 255), // 6 cyan
-            TerminalColor(r: 166, g: 172, b: 205), // 7 white
-            TerminalColor(r: 84, g: 90, b: 120),   // 8 bright black
+            TerminalColor(r: 41, g: 45, b: 62),  // 0 black
+            TerminalColor(r: 240, g: 113, b: 120),  // 1 red
+            TerminalColor(r: 195, g: 232, b: 141),  // 2 green
+            TerminalColor(r: 255, g: 203, b: 107),  // 3 yellow
+            TerminalColor(r: 130, g: 170, b: 255),  // 4 blue
+            TerminalColor(r: 199, g: 146, b: 234),  // 5 magenta
+            TerminalColor(r: 137, g: 221, b: 255),  // 6 cyan
+            TerminalColor(r: 166, g: 172, b: 205),  // 7 white
+            TerminalColor(r: 84, g: 90, b: 120),  // 8 bright black
             TerminalColor(r: 255, g: 85, b: 114),  // 9 bright red
-            TerminalColor(r: 195, g: 232, b: 141), // 10 bright green
-            TerminalColor(r: 255, g: 203, b: 107), // 11 bright yellow
-            TerminalColor(r: 130, g: 170, b: 255), // 12 bright blue
-            TerminalColor(r: 199, g: 146, b: 234), // 13 bright magenta
-            TerminalColor(r: 137, g: 221, b: 255), // 14 bright cyan
+            TerminalColor(r: 195, g: 232, b: 141),  // 10 bright green
+            TerminalColor(r: 255, g: 203, b: 107),  // 11 bright yellow
+            TerminalColor(r: 130, g: 170, b: 255),  // 12 bright blue
+            TerminalColor(r: 199, g: 146, b: 234),  // 13 bright magenta
+            TerminalColor(r: 137, g: 221, b: 255),  // 14 bright cyan
             TerminalColor(r: 215, g: 218, b: 234)  // 15 bright white
         ],
         chromeBg: NSColor(red: 33 / 255, green: 37 / 255, blue: 52 / 255, alpha: 1),
@@ -1017,21 +1017,21 @@ extension TerminalTheme {
         cursor: TerminalColor(r: 232, g: 173, b: 85),
         selection: NSColor(red: 79 / 255, green: 51 / 255, blue: 64 / 255, alpha: 0.5),
         ansiColors: [
-            TerminalColor(r: 9, g: 8, b: 16),      // 0 black
-            TerminalColor(r: 232, g: 106, b: 120), // 1 red
+            TerminalColor(r: 9, g: 8, b: 16),  // 0 black
+            TerminalColor(r: 232, g: 106, b: 120),  // 1 red
             TerminalColor(r: 41, g: 205, b: 145),  // 2 green
             TerminalColor(r: 232, g: 173, b: 85),  // 3 yellow
             TerminalColor(r: 38, g: 162, b: 255),  // 4 blue
-            TerminalColor(r: 178, g: 117, b: 255), // 5 magenta
-            TerminalColor(r: 9, g: 189, b: 185),   // 6 cyan
-            TerminalColor(r: 228, g: 212, b: 213), // 7 white
-            TerminalColor(r: 79, g: 51, b: 64),    // 8 bright black
-            TerminalColor(r: 246, g: 121, b: 121), // 9 bright red
-            TerminalColor(r: 111, g: 232, b: 185), // 10 bright green
-            TerminalColor(r: 255, g: 202, b: 122), // 11 bright yellow
+            TerminalColor(r: 178, g: 117, b: 255),  // 5 magenta
+            TerminalColor(r: 9, g: 189, b: 185),  // 6 cyan
+            TerminalColor(r: 228, g: 212, b: 213),  // 7 white
+            TerminalColor(r: 79, g: 51, b: 64),  // 8 bright black
+            TerminalColor(r: 246, g: 121, b: 121),  // 9 bright red
+            TerminalColor(r: 111, g: 232, b: 185),  // 10 bright green
+            TerminalColor(r: 255, g: 202, b: 122),  // 11 bright yellow
             TerminalColor(r: 38, g: 162, b: 255),  // 12 bright blue
-            TerminalColor(r: 209, g: 154, b: 255), // 13 bright magenta
-            TerminalColor(r: 9, g: 215, b: 210),   // 14 bright cyan
+            TerminalColor(r: 209, g: 154, b: 255),  // 13 bright magenta
+            TerminalColor(r: 9, g: 215, b: 210),  // 14 bright cyan
             TerminalColor(r: 242, g: 233, b: 234)  // 15 bright white
         ],
         chromeBg: NSColor(red: 20 / 255, green: 16 / 255, blue: 22 / 255, alpha: 1),
@@ -1050,21 +1050,21 @@ extension TerminalTheme {
         cursor: TerminalColor(r: 255, g: 191, b: 0),
         selection: NSColor(red: 0 / 255, green: 100 / 255, blue: 163 / 255, alpha: 0.5),
         ansiColors: [
-            TerminalColor(r: 19, g: 44, b: 68),    // 0 black
-            TerminalColor(r: 255, g: 0, b: 109),   // 1 red
+            TerminalColor(r: 19, g: 44, b: 68),  // 0 black
+            TerminalColor(r: 255, g: 0, b: 109),  // 1 red
             TerminalColor(r: 135, g: 232, b: 90),  // 2 green
-            TerminalColor(r: 255, g: 191, b: 0),   // 3 yellow
-            TerminalColor(r: 0, g: 149, b: 255),   // 4 blue
-            TerminalColor(r: 207, g: 106, b: 255), // 5 magenta
-            TerminalColor(r: 0, g: 220, b: 220),   // 6 cyan
-            TerminalColor(r: 255, g: 255, b: 255), // 7 white
-            TerminalColor(r: 0, g: 84, b: 141),    // 8 bright black
+            TerminalColor(r: 255, g: 191, b: 0),  // 3 yellow
+            TerminalColor(r: 0, g: 149, b: 255),  // 4 blue
+            TerminalColor(r: 207, g: 106, b: 255),  // 5 magenta
+            TerminalColor(r: 0, g: 220, b: 220),  // 6 cyan
+            TerminalColor(r: 255, g: 255, b: 255),  // 7 white
+            TerminalColor(r: 0, g: 84, b: 141),  // 8 bright black
             TerminalColor(r: 255, g: 85, b: 139),  // 9 bright red
-            TerminalColor(r: 175, g: 255, b: 115), // 10 bright green
+            TerminalColor(r: 175, g: 255, b: 115),  // 10 bright green
             TerminalColor(r: 255, g: 210, b: 70),  // 11 bright yellow
             TerminalColor(r: 71, g: 175, b: 255),  // 12 bright blue
-            TerminalColor(r: 225, g: 140, b: 255), // 13 bright magenta
-            TerminalColor(r: 0, g: 240, b: 240),   // 14 bright cyan
+            TerminalColor(r: 225, g: 140, b: 255),  // 13 bright magenta
+            TerminalColor(r: 0, g: 240, b: 240),  // 14 bright cyan
             TerminalColor(r: 255, g: 255, b: 255)  // 15 bright white
         ],
         chromeBg: NSColor(red: 13 / 255, green: 33 / 255, blue: 52 / 255, alpha: 1),
@@ -1083,21 +1083,21 @@ extension TerminalTheme {
         cursor: TerminalColor(r: 128, g: 203, b: 196),
         selection: NSColor(red: 1 / 255, green: 82 / 255, blue: 131 / 255, alpha: 0.5),
         ansiColors: [
-            TerminalColor(r: 1, g: 22, b: 39),     // 0 black
+            TerminalColor(r: 1, g: 22, b: 39),  // 0 black
             TerminalColor(r: 255, g: 88, b: 116),  // 1 red
-            TerminalColor(r: 173, g: 219, b: 103), // 2 green
-            TerminalColor(r: 255, g: 203, b: 107), // 3 yellow
-            TerminalColor(r: 130, g: 170, b: 255), // 4 blue
-            TerminalColor(r: 199, g: 146, b: 234), // 5 magenta
-            TerminalColor(r: 128, g: 203, b: 196), // 6 cyan
-            TerminalColor(r: 214, g: 222, b: 235), // 7 white
-            TerminalColor(r: 1, g: 56, b: 97),     // 8 bright black
+            TerminalColor(r: 173, g: 219, b: 103),  // 2 green
+            TerminalColor(r: 255, g: 203, b: 107),  // 3 yellow
+            TerminalColor(r: 130, g: 170, b: 255),  // 4 blue
+            TerminalColor(r: 199, g: 146, b: 234),  // 5 magenta
+            TerminalColor(r: 128, g: 203, b: 196),  // 6 cyan
+            TerminalColor(r: 214, g: 222, b: 235),  // 7 white
+            TerminalColor(r: 1, g: 56, b: 97),  // 8 bright black
             TerminalColor(r: 255, g: 88, b: 116),  // 9 bright red
-            TerminalColor(r: 195, g: 232, b: 141), // 10 bright green
-            TerminalColor(r: 255, g: 239, b: 153), // 11 bright yellow
-            TerminalColor(r: 130, g: 170, b: 255), // 12 bright blue
-            TerminalColor(r: 215, g: 174, b: 255), // 13 bright magenta
-            TerminalColor(r: 149, g: 230, b: 203), // 14 bright cyan
+            TerminalColor(r: 195, g: 232, b: 141),  // 10 bright green
+            TerminalColor(r: 255, g: 239, b: 153),  // 11 bright yellow
+            TerminalColor(r: 130, g: 170, b: 255),  // 12 bright blue
+            TerminalColor(r: 215, g: 174, b: 255),  // 13 bright magenta
+            TerminalColor(r: 149, g: 230, b: 203),  // 14 bright cyan
             TerminalColor(r: 214, g: 222, b: 235)  // 15 bright white
         ],
         chromeBg: NSColor(red: 1 / 255, green: 15 / 255, blue: 28 / 255, alpha: 1),
@@ -1116,21 +1116,21 @@ extension TerminalTheme {
         cursor: TerminalColor(r: 255, g: 45, b: 195),
         selection: NSColor(red: 73 / 255, green: 42 / 255, blue: 119 / 255, alpha: 0.5),
         ansiColors: [
-            TerminalColor(r: 26, g: 20, b: 46),    // 0 black
+            TerminalColor(r: 26, g: 20, b: 46),  // 0 black
             TerminalColor(r: 254, g: 55, b: 104),  // 1 red
-            TerminalColor(r: 114, g: 241, b: 184), // 2 green
-            TerminalColor(r: 255, g: 246, b: 133), // 3 yellow
+            TerminalColor(r: 114, g: 241, b: 184),  // 2 green
+            TerminalColor(r: 255, g: 246, b: 133),  // 3 yellow
             TerminalColor(r: 54, g: 168, b: 255),  // 4 blue
             TerminalColor(r: 255, g: 45, b: 195),  // 5 magenta
             TerminalColor(r: 54, g: 249, b: 255),  // 6 cyan
-            TerminalColor(r: 255, g: 255, b: 255), // 7 white
-            TerminalColor(r: 73, g: 42, b: 119),   // 8 bright black
-            TerminalColor(r: 254, g: 100, b: 141), // 9 bright red
-            TerminalColor(r: 149, g: 255, b: 203), // 10 bright green
-            TerminalColor(r: 255, g: 249, b: 168), // 11 bright yellow
-            TerminalColor(r: 107, g: 193, b: 255), // 12 bright blue
-            TerminalColor(r: 255, g: 100, b: 220), // 13 bright magenta
-            TerminalColor(r: 107, g: 255, b: 255), // 14 bright cyan
+            TerminalColor(r: 255, g: 255, b: 255),  // 7 white
+            TerminalColor(r: 73, g: 42, b: 119),  // 8 bright black
+            TerminalColor(r: 254, g: 100, b: 141),  // 9 bright red
+            TerminalColor(r: 149, g: 255, b: 203),  // 10 bright green
+            TerminalColor(r: 255, g: 249, b: 168),  // 11 bright yellow
+            TerminalColor(r: 107, g: 193, b: 255),  // 12 bright blue
+            TerminalColor(r: 255, g: 100, b: 220),  // 13 bright magenta
+            TerminalColor(r: 107, g: 255, b: 255),  // 14 bright cyan
             TerminalColor(r: 255, g: 255, b: 255)  // 15 bright white
         ],
         chromeBg: NSColor(red: 18 / 255, green: 13 / 255, blue: 35 / 255, alpha: 1),
@@ -1149,21 +1149,21 @@ extension TerminalTheme {
         cursor: TerminalColor(r: 130, g: 170, b: 255),
         selection: NSColor(red: 56 / 255, green: 60 / 255, blue: 90 / 255, alpha: 0.5),
         ansiColors: [
-            TerminalColor(r: 23, g: 24, b: 38),    // 0 black
-            TerminalColor(r: 255, g: 117, b: 127), // 1 red
-            TerminalColor(r: 186, g: 230, b: 126), // 2 green
-            TerminalColor(r: 255, g: 217, b: 125), // 3 yellow
-            TerminalColor(r: 130, g: 170, b: 255), // 4 blue
-            TerminalColor(r: 197, g: 152, b: 245), // 5 magenta
-            TerminalColor(r: 134, g: 225, b: 220), // 6 cyan
-            TerminalColor(r: 195, g: 203, b: 237), // 7 white
-            TerminalColor(r: 56, g: 60, b: 90),    // 8 bright black
-            TerminalColor(r: 255, g: 137, b: 145), // 9 bright red
-            TerminalColor(r: 195, g: 235, b: 147), // 10 bright green
-            TerminalColor(r: 255, g: 228, b: 153), // 11 bright yellow
-            TerminalColor(r: 155, g: 188, b: 255), // 12 bright blue
-            TerminalColor(r: 210, g: 168, b: 255), // 13 bright magenta
-            TerminalColor(r: 155, g: 235, b: 230), // 14 bright cyan
+            TerminalColor(r: 23, g: 24, b: 38),  // 0 black
+            TerminalColor(r: 255, g: 117, b: 127),  // 1 red
+            TerminalColor(r: 186, g: 230, b: 126),  // 2 green
+            TerminalColor(r: 255, g: 217, b: 125),  // 3 yellow
+            TerminalColor(r: 130, g: 170, b: 255),  // 4 blue
+            TerminalColor(r: 197, g: 152, b: 245),  // 5 magenta
+            TerminalColor(r: 134, g: 225, b: 220),  // 6 cyan
+            TerminalColor(r: 195, g: 203, b: 237),  // 7 white
+            TerminalColor(r: 56, g: 60, b: 90),  // 8 bright black
+            TerminalColor(r: 255, g: 137, b: 145),  // 9 bright red
+            TerminalColor(r: 195, g: 235, b: 147),  // 10 bright green
+            TerminalColor(r: 255, g: 228, b: 153),  // 11 bright yellow
+            TerminalColor(r: 155, g: 188, b: 255),  // 12 bright blue
+            TerminalColor(r: 210, g: 168, b: 255),  // 13 bright magenta
+            TerminalColor(r: 155, g: 235, b: 230),  // 14 bright cyan
             TerminalColor(r: 215, g: 220, b: 245)  // 15 bright white
         ],
         chromeBg: NSColor(red: 16 / 255, green: 17 / 255, blue: 28 / 255, alpha: 1),

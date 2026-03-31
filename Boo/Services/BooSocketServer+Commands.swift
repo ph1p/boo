@@ -28,7 +28,7 @@ extension BooSocketServer {
             "pane_count": ctx.paneCount,
             "tab_count": ctx.tabCount,
             "is_remote": ctx.isRemote,
-            "environment": ctx.environmentLabel,
+            "environment": ctx.environmentLabel
         ]
         if let remote = ctx.remoteSession {
             dict["remote_session"] = serializeRemoteSession(remote)
@@ -37,16 +37,17 @@ extension BooSocketServer {
             dict["remote_cwd"] = remoteCwd
         }
         if let git = ctx.gitContext {
-            dict["git"] = [
-                "branch": git.branch,
-                "repo_root": git.repoRoot,
-                "is_dirty": git.isDirty,
-                "changed_count": git.changedFileCount,
-                "staged_count": git.stagedCount,
-                "ahead": git.aheadCount,
-                "behind": git.behindCount,
-                "last_commit": git.lastCommitShort as Any,
-            ] as [String: Any]
+            dict["git"] =
+                [
+                    "branch": git.branch,
+                    "repo_root": git.repoRoot,
+                    "is_dirty": git.isDirty,
+                    "changed_count": git.changedFileCount,
+                    "staged_count": git.stagedCount,
+                    "ahead": git.aheadCount,
+                    "behind": git.behindCount,
+                    "last_commit": git.lastCommitShort as Any
+                ] as [String: Any]
         }
         return dict
     }
@@ -68,38 +69,42 @@ extension BooSocketServer {
 
     func handleGetTheme(clientFD: Int32) {
         let theme = AppSettings.shared.theme
-        sendJSON(fd: clientFD, dict: [
-            "ok": true,
-            "theme": [
-                "name": theme.name,
-                "is_dark": theme.isDark,
-            ] as [String: Any],
-        ])
+        sendJSON(
+            fd: clientFD,
+            dict: [
+                "ok": true,
+                "theme": [
+                    "name": theme.name,
+                    "is_dark": theme.isDark
+                ] as [String: Any]
+            ])
     }
 
     // MARK: - Query: get_settings
 
     func handleGetSettings(clientFD: Int32) {
         let s = AppSettings.shared
-        sendJSON(fd: clientFD, dict: [
-            "ok": true,
-            "settings": [
-                "theme_name": s.themeName,
-                "auto_theme": s.autoTheme,
-                "font_name": s.fontName,
-                "font_size": s.fontSize,
-                "cursor_style": s.cursorStyle.label.lowercased(),
-                "sidebar_position": s.sidebarPosition == .left ? "left" : "right",
-                "sidebar_density": s.sidebarDensity == .compact ? "compact" : "comfortable",
-                "show_hidden_files": s.showHiddenFiles,
-                "auto_check_updates": s.autoCheckUpdates,
-                "status_bar_show_path": s.statusBarShowPath,
-                "status_bar_show_time": s.statusBarShowTime,
-                "status_bar_show_pane_info": s.statusBarShowPaneInfo,
-                "status_bar_show_shell": s.statusBarShowShell,
-                "status_bar_show_connection": s.statusBarShowConnection,
-            ] as [String: Any],
-        ])
+        sendJSON(
+            fd: clientFD,
+            dict: [
+                "ok": true,
+                "settings": [
+                    "theme_name": s.themeName,
+                    "auto_theme": s.autoTheme,
+                    "font_name": s.fontName,
+                    "font_size": s.fontSize,
+                    "cursor_style": s.cursorStyle.label.lowercased(),
+                    "sidebar_position": s.sidebarPosition == .left ? "left" : "right",
+                    "sidebar_density": s.sidebarDensity == .compact ? "compact" : "comfortable",
+                    "show_hidden_files": s.showHiddenFiles,
+                    "auto_check_updates": s.autoCheckUpdates,
+                    "status_bar_show_path": s.statusBarShowPath,
+                    "status_bar_show_time": s.statusBarShowTime,
+                    "status_bar_show_pane_info": s.statusBarShowPaneInfo,
+                    "status_bar_show_shell": s.statusBarShowShell,
+                    "status_bar_show_connection": s.statusBarShowConnection
+                ] as [String: Any]
+            ])
     }
 
     // MARK: - Query: list_themes
@@ -130,7 +135,7 @@ extension BooSocketServer {
     static let availableEvents: Set<String> = [
         "cwd_changed", "title_changed", "process_changed",
         "remote_session_changed", "focus_changed", "workspace_switched",
-        "theme_changed", "settings_changed",
+        "theme_changed", "settings_changed"
     ]
 
     func handleSubscribe(json: [String: Any], clientFD: Int32) {
@@ -231,7 +236,7 @@ extension BooSocketServer {
                 "text": $0.text,
                 "icon": $0.icon as Any,
                 "position": $0.position == .left ? "left" : "right",
-                "priority": $0.priority,
+                "priority": $0.priority
             ] as [String: Any]
         }
         sendJSON(fd: clientFD, dict: ["ok": true, "segments": list])

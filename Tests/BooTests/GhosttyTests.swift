@@ -30,7 +30,8 @@ final class GhosttyTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: root) }
 
         let execPath = root.appendingPathComponent("bin/boo")
-        try FileManager.default.createDirectory(at: execPath.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(
+            at: execPath.deletingLastPathComponent(), withIntermediateDirectories: true)
         FileManager.default.createFile(atPath: execPath.path, contents: Data())
 
         let bundleResources = root.appendingPathComponent("App.app/Contents/Resources/ghostty")
@@ -51,7 +52,8 @@ final class GhosttyTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: root) }
 
         let execPath = root.appendingPathComponent("bin/boo")
-        try FileManager.default.createDirectory(at: execPath.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(
+            at: execPath.deletingLastPathComponent(), withIntermediateDirectories: true)
         FileManager.default.createFile(atPath: execPath.path, contents: Data())
 
         let bundledResources = execPath.deletingLastPathComponent().appendingPathComponent("ghostty-resources/ghostty")
@@ -70,7 +72,8 @@ final class GhosttyTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: root) }
 
         let execPath = root.appendingPathComponent(".build/debug/boo")
-        try FileManager.default.createDirectory(at: execPath.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(
+            at: execPath.deletingLastPathComponent(), withIntermediateDirectories: true)
         FileManager.default.createFile(atPath: execPath.path, contents: Data())
 
         let vendorResources = root.appendingPathComponent("Vendor/ghostty/zig-out/share/ghostty")

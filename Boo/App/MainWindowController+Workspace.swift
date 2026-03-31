@@ -158,7 +158,9 @@ extension MainWindowController {
         // Save the currently focused pane before switching away.
         if let oldWS = activeWorkspace, let focusedView = window?.firstResponder as? NSView {
             for (paneID, pv) in paneViews {
-                if pv.currentTerminalView === focusedView || pv.isDescendant(of: focusedView) || focusedView.isDescendant(of: pv) {
+                if pv.currentTerminalView === focusedView || pv.isDescendant(of: focusedView)
+                    || focusedView.isDescendant(of: pv)
+                {
                     oldWS.activePaneID = paneID
                     break
                 }

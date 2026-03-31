@@ -148,7 +148,9 @@ final class TerminalBridge {
         state.remoteSession = remoteSession
         state.remoteCwd = remoteCwd
 
-        debugLog("[Bridge] restoreTabState: pane=\(paneID.uuidString.prefix(8)) title=\(terminalTitle) prevProcess=\(state.foregroundProcess)")
+        debugLog(
+            "[Bridge] restoreTabState: pane=\(paneID.uuidString.prefix(8)) title=\(terminalTitle) prevProcess=\(state.foregroundProcess)"
+        )
 
         let previousProcess = state.foregroundProcess
         state.foregroundProcess = resolveProcess(paneID: paneID, title: terminalTitle)
@@ -264,7 +266,9 @@ final class TerminalBridge {
         let processChanged = process != state.foregroundProcess
         state.foregroundProcess = process
         if processChanged {
-            debugLog("[Bridge] processChanged: \(state.foregroundProcess.isEmpty ? "(empty)" : state.foregroundProcess) pane=\(paneID.uuidString.prefix(8))")
+            debugLog(
+                "[Bridge] processChanged: \(state.foregroundProcess.isEmpty ? "(empty)" : state.foregroundProcess) pane=\(paneID.uuidString.prefix(8))"
+            )
         }
 
         let previousRemote = state.remoteSession

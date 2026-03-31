@@ -57,7 +57,6 @@ extension StatusBarView {
                 }
             }
 
-
             isFirst = false
         }
 

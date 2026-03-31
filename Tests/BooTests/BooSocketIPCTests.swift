@@ -68,7 +68,8 @@ final class BooSocketSubscriptionTests: XCTestCase {
     // MARK: - Subscribe/Unsubscribe
 
     func testSubscribeReturnsSubscribedEvents() {
-        let resp = sendCommand("""
+        let resp = sendCommand(
+            """
             {"cmd":"subscribe","events":["cwd_changed","process_changed"]}
             """)
         XCTAssertTrue(resp?.contains("\"ok\":true") ?? false)
@@ -77,7 +78,8 @@ final class BooSocketSubscriptionTests: XCTestCase {
     }
 
     func testSubscribeWildcard() {
-        let resp = sendCommand("""
+        let resp = sendCommand(
+            """
             {"cmd":"subscribe","events":["*"]}
             """)
         XCTAssertTrue(resp?.contains("\"ok\":true") ?? false)
@@ -86,14 +88,16 @@ final class BooSocketSubscriptionTests: XCTestCase {
     }
 
     func testSubscribeRejectsInvalidEvents() {
-        let resp = sendCommand("""
+        let resp = sendCommand(
+            """
             {"cmd":"subscribe","events":["nonexistent_event"]}
             """)
         XCTAssertTrue(resp?.contains("no valid events") ?? false)
     }
 
     func testSubscribeMissingEventsArray() {
-        let resp = sendCommand("""
+        let resp = sendCommand(
+            """
             {"cmd":"subscribe"}
             """)
         XCTAssertTrue(resp?.contains("missing events") ?? false)
@@ -104,12 +108,16 @@ final class BooSocketSubscriptionTests: XCTestCase {
         guard fd >= 0 else { return XCTFail("connect failed") }
         defer { close(fd) }
 
-        _ = sendAndRead(fd: fd, json: """
-            {"cmd":"subscribe","events":["cwd_changed"]}
-            """)
-        let resp = sendAndRead(fd: fd, json: """
-            {"cmd":"unsubscribe","events":["cwd_changed"]}
-            """)
+        _ = sendAndRead(
+            fd: fd,
+            json: """
+                {"cmd":"subscribe","events":["cwd_changed"]}
+                """)
+        let resp = sendAndRead(
+            fd: fd,
+            json: """
+                {"cmd":"unsubscribe","events":["cwd_changed"]}
+                """)
         XCTAssertTrue(resp?.contains("\"ok\":true") ?? false)
     }
 
@@ -117,10 +125,12 @@ final class BooSocketSubscriptionTests: XCTestCase {
 
     func testSubscriberReceivesEvent() {
         // Use the simple sendCommand helper to subscribe (verifies it works)
-        let subResp = sendCommand("""
+        let subResp = sendCommand(
+            """
             {"cmd":"subscribe","events":["cwd_changed"]}
             """)
-        XCTAssertTrue(subResp?.contains("cwd_changed") ?? false,
+        XCTAssertTrue(
+            subResp?.contains("cwd_changed") ?? false,
             "Subscribe should return subscribed events, got: \(subResp ?? "nil")")
         // Note: the sendCommand helper closes the connection after reading the response,
         // so the subscription is cleaned up. This test verifies subscribe/response works.
@@ -145,9 +155,11 @@ final class BooSocketSubscriptionTests: XCTestCase {
         defer { close(fd) }
 
         // Subscribe to a different event
-        _ = sendAndRead(fd: fd, json: """
-            {"cmd":"subscribe","events":["theme_changed"]}
-            """)
+        _ = sendAndRead(
+            fd: fd,
+            json: """
+                {"cmd":"subscribe","events":["theme_changed"]}
+                """)
 
         // Emit a CWD event
         BooSocketServer.shared.emitCwdChanged(path: "/tmp/nope", isRemote: false, paneID: UUID())
@@ -218,7 +230,8 @@ final class BooSocketQueryTests: XCTestCase {
     // in test runner. We test list_themes (no main dispatch) and verify serialization separately.
 
     func testListThemes() {
-        let resp = sendCommand("""
+        let resp = sendCommand(
+            """
             {"cmd":"list_themes"}
             """)
         XCTAssertTrue(resp?.contains("\"ok\":true") ?? false)
@@ -292,7 +305,8 @@ final class BooSocketStatusBarTests: XCTestCase {
     }
 
     func testStatusBarSet() {
-        let resp = sendCommand("""
+        let resp = sendCommand(
+            """
             {"cmd":"statusbar.set","id":"test-build","text":"Building...","icon":"hammer","tint":"yellow","position":"left","priority":30}
             """)
         XCTAssertTrue(resp?.contains("\"ok\":true") ?? false)
@@ -301,14 +315,16 @@ final class BooSocketStatusBarTests: XCTestCase {
     }
 
     func testStatusBarClear() {
-        let resp = sendCommand("""
+        let resp = sendCommand(
+            """
             {"cmd":"statusbar.clear","id":"nonexistent"}
             """)
         XCTAssertTrue(resp?.contains("\"ok\":true") ?? false)
     }
 
     func testStatusBarList() {
-        let resp = sendCommand("""
+        let resp = sendCommand(
+            """
             {"cmd":"statusbar.list"}
             """)
         XCTAssertTrue(resp?.contains("\"ok\":true") ?? false)
@@ -329,7 +345,8 @@ final class BooSocketStatusBarTests: XCTestCase {
     }
 
     func testStatusBarSetMissingID() {
-        let resp = sendCommand("""
+        let resp = sendCommand(
+            """
             {"cmd":"statusbar.set","text":"no id"}
             """)
         XCTAssertTrue(resp?.contains("missing id") ?? false)

@@ -8,7 +8,8 @@ extension MainWindowController {
         let appMenu = NSMenu()
         appMenu.addItem(withTitle: "About Boo", action: nil, keyEquivalent: "")
         appMenu.addItem(.separator())
-        appMenu.addItem(withTitle: "Check for Updates...", action: #selector(checkForUpdatesAction(_:)), keyEquivalent: "")
+        appMenu.addItem(
+            withTitle: "Check for Updates...", action: #selector(checkForUpdatesAction(_:)), keyEquivalent: "")
         appMenu.addItem(withTitle: "Settings...", action: #selector(showSettingsAction(_:)), keyEquivalent: ",")
         appMenu.addItem(.separator())
         appMenu.addItem(withTitle: "Quit Boo", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")

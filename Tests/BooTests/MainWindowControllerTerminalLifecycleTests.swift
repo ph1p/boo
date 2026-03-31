@@ -159,7 +159,8 @@ final class MainWindowControllerTerminalLifecycleTests: XCTestCase {
             firstHeights
         )
         XCTAssertEqual(
-            firstWorkspace.pane(for: firstWorkspace.activePaneID)?.activeTab?.state.sidebarScrollOffsets["\(firstTab.id.uuidString):bookmarks"]?.y ?? -1,
+            firstWorkspace.pane(for: firstWorkspace.activePaneID)?.activeTab?.state.sidebarScrollOffsets[
+                "\(firstTab.id.uuidString):bookmarks"]?.y ?? -1,
             44,
             accuracy: 0.1
         )

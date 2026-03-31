@@ -29,7 +29,9 @@ extension MainWindowController: PaneViewDelegate {
             "[MWC] didFocus: paneID=\(paneID), tabTitle=\(tab?.title ?? "nil"), cwd=\(cwd), tabRemote=\(String(describing: tab?.remoteSession)), tabRemoteCwd=\(String(describing: tab?.remoteWorkingDirectory))"
         )
 
-        debugLog("[Focus] didFocus pane=\(paneID.uuidString.prefix(8)) tab=\(tab?.id.uuidString.prefix(8) ?? "nil") title=\(tab?.title ?? "nil") process=\(tab?.state.foregroundProcess ?? "nil")")
+        debugLog(
+            "[Focus] didFocus pane=\(paneID.uuidString.prefix(8)) tab=\(tab?.id.uuidString.prefix(8) ?? "nil") title=\(tab?.title ?? "nil") process=\(tab?.state.foregroundProcess ?? "nil")"
+        )
 
         // Restore the full bridge + plugin state from the tab model via coordinator.
         if let tab = tab {

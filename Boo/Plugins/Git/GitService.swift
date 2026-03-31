@@ -109,7 +109,8 @@ extension GitPlugin {
                 if let colonIdx = cleaned.firstIndex(of: ":"),
                     cleaned[cleaned.startIndex..<colonIdx].contains(".")
                 {
-                    cleaned = cleaned[cleaned.startIndex..<colonIdx] + "/"
+                    cleaned =
+                        cleaned[cleaned.startIndex..<colonIdx] + "/"
                         + cleaned[cleaned.index(after: colonIdx)...]
                 }
             }

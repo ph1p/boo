@@ -390,7 +390,8 @@ extension MainWindowController {
         // Split by "process." and check each occurrence isn't negated
         var search = clause[clause.startIndex...]
         while let range = search.range(of: "process.") {
-            let before = range.lowerBound > clause.startIndex
+            let before =
+                range.lowerBound > clause.startIndex
                 ? clause[clause.index(before: range.lowerBound)]
                 : Character(" ")
             if before != "!" {

@@ -129,7 +129,7 @@ extension MainWindowController {
                 "path": ws.folderPath,
                 "name": ws.displayName,
                 "is_active": ws.id == activeID,
-                "pane_count": ws.panes.count,
+                "pane_count": ws.panes.count
             ] as [String: Any]
         }
         reply(["ok": true, "workspaces": list])

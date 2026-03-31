@@ -29,8 +29,10 @@ final class DebugPlugin: BooPluginProtocol {
     var prefersOuterScrollView: Bool { false }
 
     var subscribedEvents: Set<PluginEvent> {
-        [.cwdChanged, .processChanged, .remoteSessionChanged, .focusChanged,
-         .terminalCreated, .terminalClosed, .remoteDirectoryListed]
+        [
+            .cwdChanged, .processChanged, .remoteSessionChanged, .focusChanged,
+            .terminalCreated, .terminalClosed, .remoteDirectoryListed
+        ]
     }
 
     // MARK: - Log Storage
@@ -98,11 +100,15 @@ final class DebugPlugin: BooPluginProtocol {
     // MARK: - Lifecycle Events
 
     func cwdChanged(newPath: String, context: TerminalContext) {
-        log("cwdChanged", "path=\(newPath) | process=\(context.processName) | remote=\(context.remoteSession?.displayName ?? "nil")")
+        log(
+            "cwdChanged",
+            "path=\(newPath) | process=\(context.processName) | remote=\(context.remoteSession?.displayName ?? "nil")")
     }
 
     func remoteSessionChanged(session: RemoteSessionType?, context: TerminalContext) {
-        log("remoteSessionChanged", "session=\(session?.displayName ?? "nil") | type=\(session?.envType ?? "local") | cwd=\(context.cwd)")
+        log(
+            "remoteSessionChanged",
+            "session=\(session?.displayName ?? "nil") | type=\(session?.envType ?? "local") | cwd=\(context.cwd)")
     }
 
     func processChanged(name: String, context: TerminalContext) {
@@ -119,7 +125,9 @@ final class DebugPlugin: BooPluginProtocol {
     }
 
     func terminalFocusChanged(terminalID: UUID, context: TerminalContext) {
-        log("focusChanged", "id=\(terminalID.uuidString.prefix(8)) | cwd=\(context.cwd) | process=\(context.processName)")
+        log(
+            "focusChanged",
+            "id=\(terminalID.uuidString.prefix(8)) | cwd=\(context.cwd) | process=\(context.processName)")
     }
 
     func remoteDirectoryListed(path: String, entries: [RemoteExplorer.RemoteEntry]) {

@@ -317,7 +317,7 @@ extension TerminalBridge {
                     // (hex, 12+ chars) — reject SSH-style hostnames like "157.90.31.161".
                     if isContainerSession {
                         let isContainerID = hostPart.count >= 12 && hostPart.allSatisfy { $0.isHexDigit }
-                        if !isContainerID { /* fall through to container prompt branch */
+                        if !isContainerID {  // fall through to container prompt branch
                         } else {
                             let user = String(trimmed[..<atIdx])
                             return expandTildePath(rawPath, user: user)

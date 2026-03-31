@@ -59,8 +59,10 @@ private final class AllEventsPlugin: BooPluginProtocol {
     var onRequestCycleRerun: (() -> Void)?
 
     var subscribedEvents: Set<PluginEvent> {
-        [.cwdChanged, .processChanged, .remoteSessionChanged, .focusChanged,
-         .terminalCreated, .terminalClosed, .remoteDirectoryListed]
+        [
+            .cwdChanged, .processChanged, .remoteSessionChanged, .focusChanged,
+            .terminalCreated, .terminalClosed, .remoteDirectoryListed
+        ]
     }
 
     var events: [String] = []

@@ -413,7 +413,9 @@ class PaneView: NSView {
         needsDisplay = true
         window?.makeFirstResponder(ghosttyView)
         if let tab = pane.activeTab {
-            debugLog("[TabSwitch] activateTab(\(index)) pane=\(paneID.uuidString.prefix(8)) title=\(tab.title) process=\(tab.state.foregroundProcess)")
+            debugLog(
+                "[TabSwitch] activateTab(\(index)) pane=\(paneID.uuidString.prefix(8)) title=\(tab.title) process=\(tab.state.foregroundProcess)"
+            )
             // Notify delegate of the tab switch so it can restore the bridge
             // state from the tab model. We do NOT fire didChangeDirectory here
             // because the bridge would misinterpret the stale local CWD (set

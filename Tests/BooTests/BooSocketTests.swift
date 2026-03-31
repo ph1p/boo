@@ -156,7 +156,8 @@ final class BooSocketProtocolTests: XCTestCase {
     func testSetAndClearStatus() {
         let pid = getpid()
 
-        let setResp = sendCommand("""
+        let setResp = sendCommand(
+            """
             {"cmd":"set_status","pid":\(pid),"name":"claude","category":"ai"}
             """)
         XCTAssertTrue(setResp?.contains("\"ok\":true") ?? false)
@@ -165,7 +166,8 @@ final class BooSocketProtocolTests: XCTestCase {
         XCTAssertEqual(BooSocketServer.shared.processes[pid]?.name, "claude")
         XCTAssertEqual(BooSocketServer.shared.processes[pid]?.category, "ai")
 
-        let clearResp = sendCommand("""
+        let clearResp = sendCommand(
+            """
             {"cmd":"clear_status","pid":\(pid)}
             """)
         XCTAssertTrue(clearResp?.contains("\"ok\":true") ?? false)
@@ -177,7 +179,8 @@ final class BooSocketProtocolTests: XCTestCase {
     func testSetStatusWithMetadata() {
         let pid = getpid()
 
-        let resp = sendCommand("""
+        let resp = sendCommand(
+            """
             {"cmd":"set_status","pid":\(pid),"name":"jest","category":"test","metadata":{"suite":"e2e"}}
             """)
         XCTAssertTrue(resp?.contains("\"ok\":true") ?? false)
@@ -185,13 +188,15 @@ final class BooSocketProtocolTests: XCTestCase {
         Thread.sleep(forTimeInterval: 0.2)
         XCTAssertEqual(BooSocketServer.shared.processes[pid]?.metadata["suite"], "e2e")
 
-        _ = sendCommand("""
+        _ = sendCommand(
+            """
             {"cmd":"clear_status","pid":\(pid)}
             """)
     }
 
     func testSetStatusRejectsDeadPID() {
-        let resp = sendCommand("""
+        let resp = sendCommand(
+            """
             {"cmd":"set_status","pid":99999999,"name":"fake","category":"ai"}
             """)
         XCTAssertTrue(resp?.contains("not found") ?? false)
@@ -199,18 +204,21 @@ final class BooSocketProtocolTests: XCTestCase {
 
     func testListStatus() {
         let pid = getpid()
-        _ = sendCommand("""
+        _ = sendCommand(
+            """
             {"cmd":"set_status","pid":\(pid),"name":"opencode","category":"ai"}
             """)
         Thread.sleep(forTimeInterval: 0.2)
 
-        let resp = sendCommand("""
+        let resp = sendCommand(
+            """
             {"cmd":"list_status"}
             """)
         XCTAssertTrue(resp?.contains("opencode") ?? false)
         XCTAssertTrue(resp?.contains("ai") ?? false)
 
-        _ = sendCommand("""
+        _ = sendCommand(
+            """
             {"cmd":"clear_status","pid":\(pid)}
             """)
     }
@@ -221,7 +229,8 @@ final class BooSocketProtocolTests: XCTestCase {
     }
 
     func testUnknownCommand() {
-        let resp = sendCommand("""
+        let resp = sendCommand(
+            """
             {"cmd":"magic_spell"}
             """)
         XCTAssertTrue(resp?.contains("unknown") ?? false)
@@ -229,13 +238,15 @@ final class BooSocketProtocolTests: XCTestCase {
 
     func testDefaultCategoryIsUnknown() {
         let pid = getpid()
-        _ = sendCommand("""
+        _ = sendCommand(
+            """
             {"cmd":"set_status","pid":\(pid),"name":"myprocess"}
             """)
         Thread.sleep(forTimeInterval: 0.2)
         XCTAssertEqual(BooSocketServer.shared.processes[pid]?.category, "unknown")
 
-        _ = sendCommand("""
+        _ = sendCommand(
+            """
             {"cmd":"clear_status","pid":\(pid)}
             """)
     }
@@ -375,11 +386,12 @@ final class BooSocketBridgeTests: XCTestCase {
         let titles = [
             "~/dev/project", "/Users/phlp/project", "…/project",
             "⠂ Thinking", "⠐ Building...", "zsh", "bash",
-            "node server.js", "vim file.txt", "~/other",
+            "node server.js", "vim file.txt", "~/other"
         ]
         for title in titles {
             bridge.handleTitleChange(title: title, paneID: paneID)
-            XCTAssertEqual(bridge.state.foregroundProcess, "claude",
+            XCTAssertEqual(
+                bridge.state.foregroundProcess, "claude",
                 "Socket process should survive title '\(title)'")
         }
 
@@ -446,7 +458,8 @@ final class BooSocketPluginHandlerTests: XCTestCase {
             return ["ok": true, "echo": json["data"] ?? "none"]
         }
 
-        let resp = sendCommand("""
+        let resp = sendCommand(
+            """
             {"cmd":"myplugin.refresh","data":"hello"}
             """)
 
@@ -469,14 +482,16 @@ final class BooSocketPluginHandlerTests: XCTestCase {
             return ["ok": true]
         }
 
-        _ = sendCommand("""
+        _ = sendCommand(
+            """
             {"cmd":"git.status"}
             """)
         Thread.sleep(forTimeInterval: 0.2)
         XCTAssertTrue(gitHandled)
         XCTAssertFalse(dockerHandled)
 
-        _ = sendCommand("""
+        _ = sendCommand(
+            """
             {"cmd":"docker.list"}
             """)
         Thread.sleep(forTimeInterval: 0.2)
@@ -484,7 +499,8 @@ final class BooSocketPluginHandlerTests: XCTestCase {
     }
 
     func testUnregisteredNamespaceReturnsError() {
-        let resp = sendCommand("""
+        let resp = sendCommand(
+            """
             {"cmd":"nonexistent.action"}
             """)
         XCTAssertTrue(resp?.contains("unknown") ?? false)
@@ -493,20 +509,23 @@ final class BooSocketPluginHandlerTests: XCTestCase {
     func testMultipleCategories() {
         let pid = getpid()
 
-        _ = sendCommand("""
+        _ = sendCommand(
+            """
             {"cmd":"set_status","pid":\(pid),"name":"jest","category":"test"}
             """)
         Thread.sleep(forTimeInterval: 0.2)
         XCTAssertEqual(BooSocketServer.shared.processes[pid]?.category, "test")
 
         // Replace with different category
-        _ = sendCommand("""
+        _ = sendCommand(
+            """
             {"cmd":"set_status","pid":\(pid),"name":"jest","category":"build"}
             """)
         Thread.sleep(forTimeInterval: 0.2)
         XCTAssertEqual(BooSocketServer.shared.processes[pid]?.category, "build")
 
-        _ = sendCommand("""
+        _ = sendCommand(
+            """
             {"cmd":"clear_status","pid":\(pid)}
             """)
     }
@@ -615,7 +634,8 @@ final class BooSocketFullE2ETests: XCTestCase {
         XCTAssertEqual(bridge.state.foregroundProcess, "claude")
 
         bridge.handleTitleChange(title: "zsh", paneID: paneID)
-        XCTAssertEqual(bridge.state.foregroundProcess, "claude",
+        XCTAssertEqual(
+            bridge.state.foregroundProcess, "claude",
             "Socket agent survives shell title")
 
         bridge.handleTitleChange(title: "/Users/dev/project", paneID: paneID)
