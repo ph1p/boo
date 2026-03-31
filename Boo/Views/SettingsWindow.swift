@@ -360,80 +360,72 @@ private struct ThemeSettingsView: View {
     }
 }
 
-/// A single theme row that renders using the theme's own colors.
 private struct ThemeRow: View {
     let theme: TerminalTheme
     @Binding var selectedTheme: String
     @State private var hovered = false
-
-    // Editing state (only used for custom themes)
     @State private var editingTheme: CustomThemeData? = nil
 
     private var active: Bool { selectedTheme == theme.name }
-    private var bg: Color { Color(red: Double(theme.background.r) / 255, green: Double(theme.background.g) / 255, blue: Double(theme.background.b) / 255) }
-    private var fg: Color { Color(red: Double(theme.foreground.r) / 255, green: Double(theme.foreground.g) / 255, blue: Double(theme.foreground.b) / 255) }
-    private var accent: Color { Color(nsColor: theme.accentColor) }
-    private func ansi(_ i: Int) -> Color {
-        let c = theme.ansiColors[i]
-        return Color(red: Double(c.r) / 255, green: Double(c.g) / 255, blue: Double(c.b) / 255)
+
+    // Stripes use the row theme's own colors
+    private func themeBg() -> Color { tc(theme.background) }
+    private func ansi(_ i: Int) -> Color { tc(theme.ansiColors[i]) }
+    private func tc(_ c: TerminalColor) -> Color {
+        Color(red: Double(c.r) / 255, green: Double(c.g) / 255, blue: Double(c.b) / 255)
     }
 
     var body: some View {
-        HStack(spacing: 0) {
-            // Theme-colored body
-            HStack(spacing: 8) {
-                // Palette stripes: bg + 6 ANSI accent colors
-                HStack(spacing: 0) {
-                    Rectangle().fill(bg).frame(width: 10)
-                    ForEach([1, 2, 3, 4, 5, 6], id: \.self) { i in
-                        Rectangle().fill(ansi(i))
+        // UI chrome comes from the active app theme (Tokens), not the row's theme
+        let t = Tokens.current
+
+        HStack(spacing: 8) {
+            // Stripes: this theme's bg + 6 ANSI colors
+            HStack(spacing: 0) {
+                Rectangle().fill(themeBg()).frame(width: 10)
+                ForEach([1, 2, 3, 4, 5, 6], id: \.self) { i in Rectangle().fill(ansi(i)) }
+            }
+            .frame(width: 52, height: 20)
+            .clipShape(RoundedRectangle(cornerRadius: 3))
+            .overlay(RoundedRectangle(cornerRadius: 3).strokeBorder(t.muted.opacity(0.15), lineWidth: 0.5))
+
+            Text(theme.name)
+                .font(.system(size: 12, weight: active ? .semibold : .regular))
+                .foregroundColor(active ? t.text : t.muted)
+
+            Spacer()
+
+            if theme.isCustom && (hovered || active) {
+                HStack(spacing: 2) {
+                    iconBtn(systemName: "pencil", color: t.muted) {
+                        editingTheme = AppSettings.shared.customThemes.first { $0.name == theme.name }
                     }
-                }
-                .frame(width: 52, height: 20)
-                .clipShape(RoundedRectangle(cornerRadius: 3))
-                .overlay(RoundedRectangle(cornerRadius: 3).strokeBorder(fg.opacity(0.12), lineWidth: 0.5))
-
-                Text(theme.name)
-                    .font(.system(size: 12, weight: active ? .semibold : .regular))
-                    .foregroundColor(fg)
-
-                Spacer()
-
-                if theme.isCustom && (hovered || active) {
-                    HStack(spacing: 2) {
-                        iconBtn(systemName: "pencil", color: fg.opacity(0.5)) {
-                            editingTheme = AppSettings.shared.customThemes.first { $0.name == theme.name }
-                        }
-                        iconBtn(systemName: "trash", color: fg.opacity(0.5)) {
-                            var customs = AppSettings.shared.customThemes
-                            customs.removeAll { $0.name == theme.name }
-                            AppSettings.shared.customThemes = customs
-                            if selectedTheme == theme.name {
-                                selectedTheme = "Default Dark"
-                                AppSettings.shared.themeName = "Default Dark"
-                            }
+                    iconBtn(systemName: "trash", color: t.muted) {
+                        var customs = AppSettings.shared.customThemes
+                        customs.removeAll { $0.name == theme.name }
+                        AppSettings.shared.customThemes = customs
+                        if selectedTheme == theme.name {
+                            selectedTheme = "Default Dark"
+                            AppSettings.shared.themeName = "Default Dark"
                         }
                     }
-                }
-
-                if active {
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundColor(accent)
                 }
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 7)
+
+            if active {
+                Image(systemName: "checkmark")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundColor(t.accent)
+            }
         }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
         .background(
             RoundedRectangle(cornerRadius: 6)
-                .fill(bg)
+                .fill(active ? t.accent.opacity(0.08) : (hovered ? t.muted.opacity(0.06) : Color.clear))
                 .overlay(
                     RoundedRectangle(cornerRadius: 6)
-                        .strokeBorder(
-                            active ? accent.opacity(0.7) : fg.opacity(hovered ? 0.15 : 0.07),
-                            lineWidth: active ? 1.5 : 0.5
-                        )
+                        .strokeBorder(active ? t.accent.opacity(0.5) : Color.clear, lineWidth: 1)
                 )
         )
         .contentShape(Rectangle())
