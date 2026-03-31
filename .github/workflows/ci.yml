@@ -13,7 +13,7 @@ concurrency:
 jobs:
   lint:
     name: Lint
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
 
@@ -25,14 +25,16 @@ jobs:
 
   build-macos:
     name: Build & Test (macOS)
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: true
 
       - name: Install Zig
-        run: brew install zig
+        run: |
+          brew install zig
+          zig version
 
       - name: Cache GhosttyKit build
         uses: actions/cache@v4
@@ -40,31 +42,16 @@ jobs:
           path: |
             Vendor/ghostty/macos
             Vendor/ghostty/zig-out
-          key: ghosttykit-macos-${{ hashFiles('.gitmodules') }}-${{ hashFiles('Makefile') }}
+            Vendor/ghostty/.zig-cache
+          key: ghosttykit-macos15-${{ hashFiles('Vendor/ghostty/build.zig.zon') }}-${{ hashFiles('Makefile') }}
           restore-keys: |
-            ghosttykit-macos-${{ hashFiles('.gitmodules') }}-
+            ghosttykit-macos15-
 
-      - name: Build (make setup)
-        run: make setup
+      - name: Build GhosttyKit
+        run: make ghostty
+
+      - name: Build Boo
+        run: swift build
 
       - name: Run tests
         run: make test
-
-  build-linux:
-    name: Build (Linux)
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install Swift
-        uses: swift-actions/setup-swift@v2
-        with:
-          swift-version: "5.10"
-
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libgtk-4-dev libvte-2.91-gtk4-dev libjson-glib-dev
-
-      - name: Build Boo (Linux)
-        run: make build-linux

@@ -12,7 +12,7 @@ permissions:
 jobs:
   release:
     name: Semantic Release
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
         with:
@@ -22,13 +22,15 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
 
       - name: Install semantic-release plugins
         run: npm install -g semantic-release @semantic-release/exec @semantic-release/git
 
       - name: Install Zig
-        run: brew install zig
+        run: |
+          brew install zig
+          zig version
 
       - name: Cache GhosttyKit build
         uses: actions/cache@v4
@@ -36,9 +38,10 @@ jobs:
           path: |
             Vendor/ghostty/macos
             Vendor/ghostty/zig-out
-          key: ghosttykit-${{ hashFiles('.gitmodules') }}-${{ hashFiles('Makefile') }}
+            Vendor/ghostty/.zig-cache
+          key: ghosttykit-release-macos15-${{ hashFiles('Vendor/ghostty/build.zig.zon') }}-${{ hashFiles('Makefile') }}
           restore-keys: |
-            ghosttykit-${{ hashFiles('.gitmodules') }}-
+            ghosttykit-release-macos15-
 
       - name: Build GhosttyKit
         run: make ghostty
