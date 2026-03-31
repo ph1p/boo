@@ -6,6 +6,7 @@ on:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  DEVELOPER_DIR: /Applications/Xcode_16.3.app/Contents/Developer
 
 permissions:
   contents: write
