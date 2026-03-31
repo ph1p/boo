@@ -21,7 +21,7 @@ jobs:
         run: brew install swift-format
 
       - name: Run swift-format lint
-        run: swift-format lint --strict --recursive Exterm/ Tests/
+        run: swift-format lint --strict --recursive Boo/ Tests/
 
   build-macos:
     name: Build & Test (macOS)
@@ -66,5 +66,5 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libgtk-4-dev libvte-2.91-gtk4-dev libjson-glib-dev
 
-      - name: Build Exterm (Linux)
+      - name: Build Boo (Linux)
         run: make build-linux

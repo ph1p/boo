@@ -1,4 +1,4 @@
-# Exterm - Explorer Terminal
+# Boo
 
 A macOS terminal emulator with integrated file explorer, workspace management, split panes, and remote session support. Powered by [Ghostty](https://github.com/ghostty-org/ghostty) for terminal emulation and Metal GPU rendering.
 
@@ -23,12 +23,12 @@ _Coming soon_
 - **Mouse selection** — Click, double-click (word), triple-click (line)
 - **Auto-updater** — Checks GitHub Releases for new versions, downloads and installs updates
 - **Focus memory** — Remembers last focused pane per workspace, restores on switch
-- **IPC socket** — Unix socket at `~/.exterm/exterm.sock` for reliable process detection and plugin commands
+- **IPC socket** — Unix socket at `~/.boo/boo.sock` for reliable process detection and plugin commands
 - **Debug plugin** — Live event log and terminal state inspector for diagnostics
 
 ## Install
 
-Download the latest release from [GitHub Releases](https://github.com/ph1p/exterm/releases) — open the DMG and drag Exterm to Applications.
+Download the latest release from [GitHub Releases](https://github.com/ph1p/boo/releases) — open the DMG and drag Boo to Applications.
 
 ## Build from Source
 
@@ -42,9 +42,9 @@ Download the latest release from [GitHub Releases](https://github.com/ph1p/exter
 ### Quick Start
 
 ```bash
-git clone --recursive https://github.com/ph1p/exterm.git
-cd exterm
-make setup    # Builds GhosttyKit + Exterm
+git clone --recursive https://github.com/ph1p/boo.git
+cd boo
+make setup    # Builds GhosttyKit + Boo
 make run      # Build and launch
 ```
 
@@ -93,7 +93,7 @@ make run      # Build and launch
 ## Architecture
 
 ```
-Exterm/
+Boo/
   App/              AppDelegate, MainWindowController (+extensions), WindowStateCoordinator, AppStore
   Ghostty/          GhosttyRuntime (app singleton), GhosttyView (Metal surface), TerminalScrollView
   Terminal/         TerminalBackend (PTY lifecycle protocol)
@@ -102,7 +102,7 @@ Exterm/
     ViewDSL/        DSL parser, renderer, elements, action handler
   Plugins/          One directory per plugin (FileTree/, RemoteExplorer/, Git/, AIAgent/, Docker/, Bookmarks/, SystemInfo/, Debug/)
   Views/            App-level views (PaneView, StatusBarView, ToolbarView, SettingsWindow, UpdateWindow, etc.)
-  Services/         Shared infrastructure (TerminalBridge, RemoteExplorer, ExtermSocketServer, AutoUpdater, etc.)
+  Services/         Shared infrastructure (TerminalBridge, RemoteExplorer, BooSocketServer, AutoUpdater, etc.)
 CGhostty/           C module wrapping ghostty.h
 CPTYHelper/         C helper for forkpty()
 Vendor/ghostty/     Ghostty source (git clone)
@@ -120,7 +120,7 @@ Three layers of state:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│ Exterm App                                                          │
+│ Boo App                                                          │
 │                                                                     │
 │  ┌─────────────┐   ┌──────────────────────────────────────────┐     │
 │  │ AppSettings │   │ Workspace                                │     │
@@ -158,8 +158,8 @@ Three layers of state:
 │  └────────┬───────────┘                                             │
 │           │                                                         │
 │  ┌────────▼───────────┐   ┌──────────────────────────────────┐      │
-│  │ PTY (CPTYHelper)   │   │ ExtermSocketServer               │      │
-│  │ forkpty() + GCD    │   │ ~/.exterm/exterm.sock            │      │
+│  │ PTY (CPTYHelper)   │   │ BooSocketServer               │      │
+│  │ forkpty() + GCD    │   │ ~/.boo/boo.sock            │      │
 │  │ background I/O     │   │ process registration (IPC)       │      │
 │  └────────────────────┘   └──────────────────────────────────┘      │
 │                                       ▲                             │
@@ -180,7 +180,7 @@ Ghostty OSC → PaneView → MainWindowController → TerminalBridge (heuristics
 
 ### Terminal Engine
 
-Exterm uses **GhosttyKit** — the same terminal engine that powers the [Ghostty terminal](https://ghostty.org). This provides:
+Boo uses **GhosttyKit** — the same terminal engine that powers the [Ghostty terminal](https://ghostty.org). This provides:
 
 - Complete VT/xterm escape sequence parsing
 - Metal GPU-accelerated rendering
@@ -193,13 +193,13 @@ Exterm uses **GhosttyKit** — the same terminal engine that powers the [Ghostty
 ### File Explorer
 
 - **Local**: Uses FSEvents for live file system watching. Flattened lazy rendering handles large directories efficiently (separate `file-tree-local` plugin, visible in local sessions)
-- **Remote SSH**: Auto-detects SSH sessions, lists files via `ssh <host> ls -1AF`. Exterm manages its own SSH ControlMaster sockets — no user SSH config changes required (separate `file-tree-remote` plugin, visible in SSH/MOSH sessions)
+- **Remote SSH**: Auto-detects SSH sessions, lists files via `ssh <host> ls -1AF`. Boo manages its own SSH ControlMaster sockets — no user SSH config changes required (separate `file-tree-remote` plugin, visible in SSH/MOSH sessions)
 - **Remote cd**: Clicking a directory in the remote tree runs `cd` in the active terminal. Tilde paths (`~`) are resolved to absolute paths so navigation works on Linux and macOS
 - **Context menu**: Grouped by section — Terminal (cd, cat, paste path), OS (open in tab/pane, default app, reveal in Finder, copy path), Edit (new folder, rename, move to trash)
 
 ## IPC Socket
 
-Exterm exposes a Unix domain socket (`~/.exterm/exterm.sock`) as the primary communication layer between terminal child processes and the app. The socket path is available in all terminal sessions via `$EXTERM_SOCK`. Protocol: newline-delimited JSON — send a command, get a JSON response.
+Boo exposes a Unix domain socket (`~/.boo/boo.sock`) as the primary communication layer between terminal child processes and the app. The socket path is available in all terminal sessions via `$BOO_SOCK`. Protocol: newline-delimited JSON — send a command, get a JSON response.
 
 ### Command Reference
 
@@ -231,20 +231,20 @@ Exterm exposes a Unix domain socket (`~/.exterm/exterm.sock`) as the primary com
 ```bash
 # Register as an AI agent
 echo '{"cmd":"set_status","pid":'"$$"',"name":"claude","category":"ai"}' \
-  | nc -U "$EXTERM_SOCK"
+  | nc -U "$BOO_SOCK"
 
 # Query current terminal context
-echo '{"cmd":"get_context"}' | nc -U "$EXTERM_SOCK"
+echo '{"cmd":"get_context"}' | nc -U "$BOO_SOCK"
 
 # Change theme
-echo '{"cmd":"set_theme","name":"Tokyo Night"}' | nc -U "$EXTERM_SOCK"
+echo '{"cmd":"set_theme","name":"Tokyo Night"}' | nc -U "$BOO_SOCK"
 
 # Push a status bar segment
 echo '{"cmd":"statusbar.set","id":"ci","text":"CI: passing","icon":"checkmark.circle","tint":"green"}' \
-  | nc -U "$EXTERM_SOCK"
+  | nc -U "$BOO_SOCK"
 
 # Subscribe to events (keep connection open for push notifications)
-echo '{"cmd":"subscribe","events":["cwd_changed","process_changed"]}' | nc -U "$EXTERM_SOCK"
+echo '{"cmd":"subscribe","events":["cwd_changed","process_changed"]}' | nc -U "$BOO_SOCK"
 # → receives: {"event":"cwd_changed","data":{"path":"/new/dir","is_remote":false,"pane_id":"..."}}
 ```
 
@@ -274,10 +274,10 @@ External processes can push custom segments to the status bar. Segments are auto
 ```bash
 # Show build status
 echo '{"cmd":"statusbar.set","id":"build","text":"Building...","icon":"hammer","tint":"yellow","position":"left","priority":30}' \
-  | nc -U "$EXTERM_SOCK"
+  | nc -U "$BOO_SOCK"
 
 # Clear when done
-echo '{"cmd":"statusbar.clear","id":"build"}' | nc -U "$EXTERM_SOCK"
+echo '{"cmd":"statusbar.clear","id":"build"}' | nc -U "$BOO_SOCK"
 ```
 
 Tint colors: `red`, `green`, `yellow`, `blue`, `orange`, `purple`, `accent`, or `#hex`.
@@ -304,7 +304,7 @@ Socket-registered processes **always override** title-based detection. They surv
 Plugins can register custom socket command handlers:
 
 ```swift
-ExtermSocketServer.shared.registerHandler(namespace: "git") { json in
+BooSocketServer.shared.registerHandler(namespace: "git") { json in
     // Handle {"cmd":"git.refresh"} etc.
     return ["ok": true, "branch": "main"]
 }
@@ -312,12 +312,12 @@ ExtermSocketServer.shared.registerHandler(namespace: "git") { json in
 
 External tools can then send plugin-specific commands:
 ```bash
-echo '{"cmd":"git.refresh"}' | nc -U "$EXTERM_SOCK"
+echo '{"cmd":"git.refresh"}' | nc -U "$BOO_SOCK"
 ```
 
 ## Plugin System
 
-Exterm has an extensible plugin system. Plugins provide sidebar panels, status bar segments, and respond to terminal lifecycle events.
+Boo has an extensible plugin system. Plugins provide sidebar panels, status bar segments, and respond to terminal lifecycle events.
 
 ### Built-in Plugins
 
@@ -334,10 +334,10 @@ Exterm has an extensible plugin system. Plugins provide sidebar panels, status b
 
 ### External Plugins
 
-Drop a folder into `~/.exterm/plugins/` with a `plugin.json` manifest and a `main.js`. Plugins are hot-loaded — no restart required.
+Drop a folder into `~/.boo/plugins/` with a `plugin.json` manifest and a `main.js`. Plugins are hot-loaded — no restart required.
 
 ```
-~/.exterm/plugins/my-plugin/
+~/.boo/plugins/my-plugin/
   plugin.json       # Required manifest
   main.js           # Plugin logic
 ```
@@ -417,13 +417,13 @@ See `examples/plugins/` for five working examples. Start with **hello-world**, t
 
 ### Developing a Built-in Plugin
 
-1. Create `Exterm/Plugins/YourPlugin/YourPlugin.swift`
-2. Conform to `ExtermPluginProtocol` — implement `pluginID`, `manifest`, and whichever UI/lifecycle methods you need
+1. Create `Boo/Plugins/YourPlugin/YourPlugin.swift`
+2. Conform to `BooPluginProtocol` — implement `pluginID`, `manifest`, and whichever UI/lifecycle methods you need
 3. Put views and services in the same directory
 4. Use `hostActions` for terminal interaction (paste path, open tab/pane, send raw text)
 5. Call `onRequestCycleRerun?()` when your plugin's data changes and the sidebar/status bar should refresh
 6. Register in `PluginRegistry.registerBuiltins()`
-7. Add tests in `Tests/ExtermTests/Plugins/YourPlugin/`
+7. Add tests in `Tests/BooTests/Plugins/YourPlugin/`
 
 No `Package.swift` changes needed — SPM resolves recursively within the target directories.
 
@@ -442,7 +442,7 @@ See [AGENTS.md](AGENTS.md) for detailed protocol reference and architecture.
 
 ## Auto-Update
 
-Exterm checks GitHub Releases for new versions on launch (once every 24 hours). You can also check manually via the app menu: **Exterm → Check for Updates...**
+Boo checks GitHub Releases for new versions on launch (once every 24 hours). You can also check manually via the app menu: **Boo → Check for Updates...**
 
 The update flow: download DMG → verify code signature → replace app → relaunch. Settings:
 - Auto-check can be disabled in preferences

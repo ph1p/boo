@@ -6,13 +6,13 @@
     [
       "@semantic-release/exec",
       {
-        "prepareCmd": "/usr/libexec/PlistBuddy -c \"Set CFBundleShortVersionString ${nextRelease.version}\" Exterm/App/Info.plist && make release app && ([ -n \"$SIGNING_IDENTITY\" ] && make sign || codesign --force --deep --sign - .build/Exterm.app) && ([ -n \"$APPLE_ID\" ] && make notarize || true) && make dmg"
+        "prepareCmd": "/usr/libexec/PlistBuddy -c \"Set CFBundleShortVersionString ${nextRelease.version}\" Boo/App/Info.plist && make release app && ([ -n \"$SIGNING_IDENTITY\" ] && make sign || codesign --force --deep --sign - .build/Boo.app) && ([ -n \"$APPLE_ID\" ] && make notarize || true) && make dmg"
       }
     ],
     [
       "@semantic-release/git",
       {
-        "assets": ["Exterm/App/Info.plist"],
+        "assets": ["Boo/App/Info.plist"],
         "message": "chore(release): ${nextRelease.version} [skip ci]"
       }
     ],
@@ -21,8 +21,8 @@
       {
         "assets": [
           {
-            "path": ".build/Exterm-*.dmg",
-            "label": "Exterm-${nextRelease.version}.dmg"
+            "path": ".build/Boo-*.dmg",
+            "label": "Boo-${nextRelease.version}.dmg"
           }
         ]
       }

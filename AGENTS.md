@@ -1,4 +1,4 @@
-# Exterm - Explorer Terminal
+# Boo
 
 A macOS terminal emulator with integrated file explorer, workspace management, and remote session support.
 
@@ -24,7 +24,7 @@ A macOS terminal emulator with integrated file explorer, workspace management, a
 
 ### Project Structure
 ```
-Exterm/
+Boo/
   App/              - AppDelegate, MainWindowController (+extensions), WindowStateCoordinator, AppStore
   Ghostty/          - GhosttyRuntime (app singleton), GhosttyView (Metal surface), TerminalScrollView
   Terminal/         - TerminalBackend (PTY lifecycle protocol)
@@ -41,14 +41,14 @@ Exterm/
     SystemInfo/     - SystemInfoPlugin (reference example plugin)
     Debug/          - DebugPlugin (lifecycle event logger and state inspector)
   Views/            - App-level views only (PaneView, StatusBarView, ToolbarView, SettingsWindow, UpdateWindow, etc.)
-  Services/         - Shared infrastructure (TerminalBridge, RemoteExplorer, ExtermSocketServer, AutoUpdater, FileSystemWatcher, ContextAnnouncementEngine, etc.)
+  Services/         - Shared infrastructure (TerminalBridge, RemoteExplorer, BooSocketServer, AutoUpdater, FileSystemWatcher, ContextAnnouncementEngine, etc.)
 CGhostty/           - C module wrapping ghostty.h
 CPTYHelper/         - C library for forkpty() (Swift can't call fork directly)
 ```
 
 ### Ghostty Integration (GhosttyKit Embedded API)
 
-Exterm embeds GhosttyKit as a static library via the C API (`CGhostty/`). Key integration points:
+Boo embeds GhosttyKit as a static library via the C API (`CGhostty/`). Key integration points:
 
 #### Lifecycle
 1. `GhosttyRuntime.init()` — singleton, called once at app launch
@@ -89,12 +89,12 @@ Ghostty injects shell hooks (zsh: ZDOTDIR override, bash: ENV, fish/elvish: XDG_
 2. Walk up to `Vendor/ghostty/zig-out/share/ghostty` — development fallback
 
 #### Remote Shell Integration (SSH/Docker CWD tracking)
-Ghostty's shell integration only injects OSC 7 hooks into the **local** shell. Remote shells (SSH, Docker) need their own mechanism. Exterm solves this with wrapper scripts:
+Ghostty's shell integration only injects OSC 7 hooks into the **local** shell. Remote shells (SSH, Docker) need their own mechanism. Boo solves this with wrapper scripts:
 
 **How it works** (`GhosttyRuntime.installShellIntegration()`):
-1. Writes `~/.exterm/shell-integration/remote-init.sh` — a POSIX-compatible snippet that sets up `__exterm_osc7()` function and registers it as chpwd/PROMPT_COMMAND hook (works in zsh and bash)
-2. Writes `~/.exterm/shell-integration/bin/ssh` — a wrapper that detects interactive SSH sessions, base64-encodes the remote-init snippet, and injects it via `ssh -t host "eval $(echo <b64> | base64 -d); exec $SHELL -li"`
-3. Writes `~/.exterm/shell-integration/bin/docker` — same pattern for `docker exec` sessions
+1. Writes `~/.boo/shell-integration/remote-init.sh` — a POSIX-compatible snippet that sets up `__boo_osc7()` function and registers it as chpwd/PROMPT_COMMAND hook (works in zsh and bash)
+2. Writes `~/.boo/shell-integration/bin/ssh` — a wrapper that detects interactive SSH sessions, base64-encodes the remote-init snippet, and injects it via `ssh -t host "eval $(echo <b64> | base64 -d); exec $SHELL -li"`
+3. Writes `~/.boo/shell-integration/bin/docker` — same pattern for `docker exec` sessions
 4. Prepends the bin dir to `PATH` so wrappers shadow the real binaries
 
 **Non-interactive bypass**: The wrappers detect if a remote command is given (e.g. `ssh host ls`) and skip injection, passing through to the real binary directly.
@@ -102,7 +102,7 @@ Ghostty's shell integration only injects OSC 7 hooks into the **local** shell. R
 **Remote init snippet**: `printf '\033]7;kitty-shell-cwd://<hostname><pwd>\a'` — the same OSC 7 format Ghostty's own integration uses (kitty-shell-cwd scheme). Registered via `add-zsh-hook chpwd` for zsh, `PROMPT_COMMAND` for bash.
 
 #### Config
-`applyExtermSettings(to:)` writes Exterm's theme/font/behavior settings to a temp Ghostty config file and loads it via `ghostty_config_load_file`. Note: `ghostty_config_load_default_files` also loads the user's own Ghostty config (`~/Library/Application Support/com.mitchellh.ghostty/config`).
+`applyBooSettings(to:)` writes Boo's theme/font/behavior settings to a temp Ghostty config file and loads it via `ghostty_config_load_file`. Note: `ghostty_config_load_default_files` also loads the user's own Ghostty config (`~/Library/Application Support/com.mitchellh.ghostty/config`).
 
 ### State Architecture
 
@@ -126,7 +126,7 @@ Ghostty OSC event → PaneView delegate → MainWindowController
   → runPluginCycle() → coordinator.buildContext() → TerminalContext
   → AppStore.shared.updateContext() → canonical pane-aware context
   → PluginRuntime (enrich → freeze → react) → sidebar/status bar
-  → ExtermSocketServer emits events (with pane_id) to subscribers
+  → BooSocketServer emits events (with pane_id) to subscribers
 ```
 
 The status bar reads exclusively from `AppStore.shared.context` (the `TerminalContext` built by the plugin cycle with pane-ID guarding), never from `bridge.state` directly. This ensures correct data in split-view setups where bridge state may lag behind focus changes.
@@ -184,9 +184,9 @@ PaneView.activateTab() → didFocus delegate
 
 **Flow**: `paneView(_:titleChanged:)` → `TerminalBridge.handleTitleChange` → `resolveRemoteSession` (title-based) → tab model sync → `runPluginCycle` → `FileTreePlugin.makeDetailView` → `getOrCreateRemoteRoot` → `RemoteExplorer.listRemoteDirectory`.
 
-**Remote commands**: Executed via `ssh -n -o BatchMode=yes <target> <cmd>` or `docker exec <container> sh -c <cmd>`. The SSH target is `session.sshConnectionTarget` (alias when available). SSH uses Exterm's managed ControlMaster sockets (`SSHControlManager`) when available, falling back to the user's own SSH config.
+**Remote commands**: Executed via `ssh -n -o BatchMode=yes <target> <cmd>` or `docker exec <container> sh -c <cmd>`. The SSH target is `session.sshConnectionTarget` (alias when available). SSH uses Boo's managed ControlMaster sockets (`SSHControlManager`) when available, falling back to the user's own SSH config.
 
-**Remote CWD tracking**: The SSH/Docker wrappers in `~/.exterm/shell-integration/bin/` inject an OSC 7 reporter into remote shells (see "Remote Shell Integration" above). When the remote shell has bash or zsh, `cd` triggers OSC 7 which flows back through the PTY to Ghostty's action callback, updating the explorer. For shells without PROMPT_COMMAND/chpwd support (dash, sh), only the initial CWD is reported. `remoteCwd` is also extracted from title prompts via `extractRemoteCwd` (e.g., "root@host:/tmp" → "/tmp").
+**Remote CWD tracking**: The SSH/Docker wrappers in `~/.boo/shell-integration/bin/` inject an OSC 7 reporter into remote shells (see "Remote Shell Integration" above). When the remote shell has bash or zsh, `cd` triggers OSC 7 which flows back through the PTY to Ghostty's action callback, updating the explorer. For shells without PROMPT_COMMAND/chpwd support (dash, sh), only the initial CWD is reported. `remoteCwd` is also extracted from title prompts via `extractRemoteCwd` (e.g., "root@host:/tmp" → "/tmp").
 
 **File tree cache** (`FileTreePlugin.getOrCreateRemoteRoot`):
 - Cache key: `"{sshConnectionTarget}:{resolvedPath}"` — ensures alias-based keys match socket keys
@@ -203,24 +203,24 @@ The sidebar's `NSScrollView` uses Auto Layout constraints (top/leading/trailing 
 
 - `RemoteSessionType` enum (`.ssh(host:alias:)`, `.docker(container:)`) drives all remote behavior
 - `RemoteExplorer` handles remote file listing, remote CWD queries, and home path resolution (cache keyed on `sshConnectionTarget`)
-- `SSHControlManager` manages per-session background SSH master connections with Exterm-owned sockets (no user config required)
+- `SSHControlManager` manages per-session background SSH master connections with Boo-owned sockets (no user config required)
 - `RemoteSessionMonitor` polls process trees every 2s, fires `onSessionChanged` on transitions only
 
 ### Plugin Architecture
 
-Exterm has two plugin systems:
+Boo has two plugin systems:
 
-1. **Built-in plugins** — Swift classes in `Exterm/Plugins/` conforming to `ExtermPluginProtocol`
-2. **External plugins** — Folders in `~/.exterm/plugins/` with a `plugin.json` manifest and a `main.js` (recommended) or `main.sh`, hot-loaded by `PluginWatcher`
+1. **Built-in plugins** — Swift classes in `Boo/Plugins/` conforming to `BooPluginProtocol`
+2. **External plugins** — Folders in `~/.boo/plugins/` with a `plugin.json` manifest and a `main.js` (recommended) or `main.sh`, hot-loaded by `PluginWatcher`
 
 Both use the same protocol, lifecycle, and UI integration.
 
 #### Directory Layout
 
-All code for a single plugin lives in one directory under `Exterm/Plugins/`:
+All code for a single plugin lives in one directory under `Boo/Plugins/`:
 
 ```
-Exterm/Plugins/
+Boo/Plugins/
   FileTree/           LocalFileTreePlugin.swift, FileTreeView.swift, FileTreeNode.swift
   RemoteExplorer/     RemoteFileTreePlugin.swift, RemoteFileTreeView.swift, RemoteFileTreeNode.swift
   Git/                GitPlugin.swift, GitDetailView.swift, GitService.swift
@@ -231,25 +231,25 @@ Exterm/Plugins/
   Debug/              DebugPlugin.swift
 ```
 
-Tests mirror this layout under `Tests/ExtermTests/Plugins/`.
+Tests mirror this layout under `Tests/BooTests/Plugins/`.
 
 The core plugin **framework** (`Plugin/`) is separate from plugin **implementations** (`Plugins/`):
 
 ```
-Exterm/Plugin/        ExtermPluginProtocol, PluginRegistry, PluginRuntime, PluginHostActions,
+Boo/Plugin/        BooPluginProtocol, PluginRegistry, PluginRuntime, PluginHostActions,
                       PluginManifest, PluginWatcher, EnrichmentContext, TerminalContext,
                       WhenClause, ScriptPluginAdapter, JSCRuntime, PluginStateBag,
                       DensityMetrics, PluginServices, HostPluginServices,
                       PluginActions, PluginContext, ViewDSL/
 ```
 
-#### Core Protocol: `ExtermPluginProtocol`
+#### Core Protocol: `BooPluginProtocol`
 
-All plugins conform to `ExtermPluginProtocol` (which extends `ExtermPlugin: AnyObject`). Key members:
+All plugins conform to `BooPluginProtocol` (which extends `BooPlugin: AnyObject`). Key members:
 
 ```swift
 @MainActor
-protocol ExtermPluginProtocol: ExtermPlugin {
+protocol BooPluginProtocol: BooPlugin {
     var manifest: PluginManifest { get }
     var whenClause: WhenClauseNode? { get }                    // nil = always visible
 
@@ -271,7 +271,7 @@ protocol ExtermPluginProtocol: ExtermPlugin {
     func terminalClosed(terminalID: UUID)
     func terminalFocusChanged(terminalID: UUID, context: TerminalContext)
 
-    // Two-phase cycle (from ExtermPlugin)
+    // Two-phase cycle (from BooPlugin)
     func enrich(context: EnrichmentContext)     // Phase 1: write to shared mutable context
     func react(context: TerminalContext)         // Phase 2: read frozen context
 }
@@ -412,7 +412,7 @@ struct PluginManifest {
     let description: String?
     let when: String?            // When-clause expression
     let runtime: PluginRuntime?  // .js for external plugins (nil for built-in)
-    var isExternal: Bool         // true for plugins loaded from ~/.exterm/plugins/
+    var isExternal: Bool         // true for plugins loaded from ~/.boo/plugins/
     let capabilities: Capabilities?  // sidebarPanel, statusBarSegment
     let statusBar: StatusBarManifest?  // position, priority, template
     let settings: [SettingManifest]?
@@ -426,16 +426,16 @@ Built-in plugins construct manifests inline. External plugins provide `plugin.js
 #### Plugin Enable/Disable
 
 `disabledPluginIDs` in `AppSettings` is enforced at three levels:
-1. `ExtermPluginProtocol.isVisible(for:)` — returns `false` for disabled plugins (before when-clause evaluation)
+1. `BooPluginProtocol.isVisible(for:)` — returns `false` for disabled plugins (before when-clause evaluation)
 2. `PluginRegistry.activePlugins` — lifecycle callbacks skip disabled plugins
 3. `PluginRegistry.registerStatusBarIcons(in:)` — skips disabled plugins
 
 #### External Plugins
 
-External plugins live in `~/.exterm/plugins/<name>/` and are hot-loaded by `PluginWatcher`:
+External plugins live in `~/.boo/plugins/<name>/` and are hot-loaded by `PluginWatcher`:
 
 ```
-~/.exterm/plugins/my-plugin/
+~/.boo/plugins/my-plugin/
   plugin.json       — Manifest (required)
   main.js           — Plugin logic
 ```
@@ -459,20 +459,20 @@ Existing built-in segments: `EnvironmentSegment`, `GitBranchSegment`, `PathSegme
 
 #### Adding a New Built-in Plugin
 
-1. Create `Exterm/Plugins/YourPlugin/YourPlugin.swift`
+1. Create `Boo/Plugins/YourPlugin/YourPlugin.swift`
 2. Add any views and services in the same directory
-3. Conform to `ExtermPluginProtocol` — implement `pluginID`, `manifest`, and the UI/lifecycle methods you need
+3. Conform to `BooPluginProtocol` — implement `pluginID`, `manifest`, and the UI/lifecycle methods you need
 4. Use `hostActions` for terminal interaction, `onRequestCycleRerun` for triggering sidebar/status bar refresh
 5. Register in `PluginRegistry.registerBuiltins()`
-6. Add tests in `Tests/ExtermTests/Plugins/YourPlugin/`
+6. Add tests in `Tests/BooTests/Plugins/YourPlugin/`
 7. No `Package.swift` changes needed — SPM resolves recursively
 
 ### Auto-Updater
 
 `AutoUpdater` (`Services/AutoUpdater.swift`) checks GitHub Releases for new versions:
 
-- **Check**: `GET https://api.github.com/repos/ph1p/exterm/releases/latest`, compares `tagName` (semver) against `CFBundleShortVersionString`
-- **Download**: Downloads DMG to `~/Library/Caches/com.exterm.app/Updates/` with progress
+- **Check**: `GET https://api.github.com/repos/ph1p/boo/releases/latest`, compares `tagName` (semver) against `CFBundleShortVersionString`
+- **Download**: Downloads DMG to `~/Library/Caches/com.boo.app/Updates/` with progress
 - **Install**: Mounts DMG via `hdiutil`, copies `.app` to staging, verifies code signature via `codesign --verify --deep --strict`, launches a replacement shell script that waits for the old process to exit, replaces the app bundle, and relaunches
 - **UI**: `UpdateWindow.swift` — floating NSPanel with release notes, download progress, "Skip/Remind/Install" buttons
 - **Settings**: `autoCheckUpdates` (default true), `lastUpdateCheck`, `skipVersion` in `AppSettings`
@@ -494,20 +494,20 @@ Releases are automated via semantic-release (`.releaserc.json`) — conventional
 - `foregroundProcess` is persisted in `TabState` per tab (synced from `BridgeState` on process change)
 - **Path titles** (starting with `/`, `~/`, `…/`, `./`, `../`) are rejected by `extractProcessName` — they return empty
 
-### IPC Socket Server (`ExtermSocketServer`)
+### IPC Socket Server (`BooSocketServer`)
 
-Exterm exposes a Unix domain socket for reliable bidirectional IPC with child processes. This is the authoritative mechanism for process detection — title-based heuristics are the fallback.
+Boo exposes a Unix domain socket for reliable bidirectional IPC with child processes. This is the authoritative mechanism for process detection — title-based heuristics are the fallback.
 
 #### Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│ Exterm App                                                      │
+│ Boo App                                                      │
 │                                                                 │
 │  ┌──────────────────┐     ┌──────────────────┐                  │
-│  │ ExtermSocketServer│────▶│  TerminalBridge  │                  │
-│  │ ~/.exterm/        │     │                  │                  │
-│  │   exterm.sock     │     │ handleTitleChange│                  │
+│  │ BooSocketServer│────▶│  TerminalBridge  │                  │
+│  │ ~/.boo/        │     │                  │                  │
+│  │   boo.sock     │     │ handleTitleChange│                  │
 │  │                   │     │  1. Check socket │                  │
 │  │ • set_status      │     │  2. If registered│──▶ use socket    │
 │  │ • clear_status    │     │  3. If not       │──▶ use title     │
@@ -526,7 +526,7 @@ Exterm exposes a Unix domain socket for reliable bidirectional IPC with child pr
 └─────────────────────────────────────────────────────────────────┘
             ▲                          ▲
             │ Unix socket              │ Terminal title (OSC 2)
-            │ (EXTERM_SOCK)            │ (Ghostty callback)
+            │ (BOO_SOCK)            │ (Ghostty callback)
 ┌───────────┴──────────┐   ┌──────────┴──────────┐
 │ AI Agent / Tool      │   │ Shell (zsh/bash)     │
 │ (Claude, Codex, etc.)│   │ Sets title on cd,    │
@@ -537,7 +537,7 @@ Exterm exposes a Unix domain socket for reliable bidirectional IPC with child pr
 │   "pid":$$,          │
 │   "name":"claude",   │
 │   "category":"ai"}'  │
-│ | nc -U $EXTERM_SOCK │
+│ | nc -U $BOO_SOCK │
 └──────────────────────┘
 ```
 
@@ -552,7 +552,7 @@ When a socket-registered process is found as a descendant of the shell PID, it *
 
 #### Socket Protocol
 
-Socket path: `~/.exterm/exterm.sock` (env var `EXTERM_SOCK` inherited by all child shells).
+Socket path: `~/.boo/boo.sock` (env var `BOO_SOCK` inherited by all child shells).
 Protocol: newline-delimited JSON. Each command gets a JSON response.
 
 **Full command reference:**
@@ -589,9 +589,9 @@ All terminal-scoped events (`cwd_changed`, `title_changed`, `process_changed`, `
 **External status bar segments:** Processes push segments via `statusbar.set` with `id`, `text`, optional `icon` (SF Symbol), `tint` (red/green/yellow/blue/orange/purple/accent/#hex), `position` (left/right), `priority` (lower = closer to edge). Segments are auto-removed when the client disconnects.
 
 **Implementation files:**
-- `ExtermSocketServer.swift` — core server, subscriptions, external segments
-- `ExtermSocketServer+Commands.swift` — query, control, subscription, status bar command handlers
-- `ExtermSocketServer+Events.swift` — event broadcasting to subscribers
+- `BooSocketServer.swift` — core server, subscriptions, external segments
+- `BooSocketServer+Commands.swift` — query, control, subscription, status bar command handlers
+- `BooSocketServer+Events.swift` — event broadcasting to subscribers
 - `MainWindowController+IPC.swift` — MainActor-side control command handlers, segment updates
 - `ExternalStatusBarSegment.swift` — `StatusBarPlugin` conformance for external segments
 
@@ -614,12 +614,12 @@ All socket I/O, process mutations, and ancestor lookups happen on a dedicated se
 
 #### Lifecycle
 
-1. `AppDelegate.applicationDidFinishLaunching` → `ExtermSocketServer.shared.start()`
-2. `GhosttyRuntime.init()` → `setenv("EXTERM_SOCK", socketPath, 1)` (before any shell fork)
-3. Child shells inherit `EXTERM_SOCK` → agents can connect
+1. `AppDelegate.applicationDidFinishLaunching` → `BooSocketServer.shared.start()`
+2. `GhosttyRuntime.init()` → `setenv("BOO_SOCK", socketPath, 1)` (before any shell fork)
+3. Child shells inherit `BOO_SOCK` → agents can connect
 4. `MainWindowController.init()` wires `onStatusChanged`, `onControlCommand`, `onExternalSegmentsChanged`
 5. Bridge events → `emitEvent()` broadcasts to subscribed clients
-6. `AppDelegate.applicationWillTerminate` → `ExtermSocketServer.shared.stop()` (removes socket file, cleans up clients)
+6. `AppDelegate.applicationWillTerminate` → `BooSocketServer.shared.stop()` (removes socket file, cleans up clients)
 
 ### Common Patterns
 - `TerminalColor.cgColor` / `.nsColor` extensions for color conversion

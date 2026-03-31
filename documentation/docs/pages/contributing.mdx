@@ -9,7 +9,7 @@
 
 ## Code Style
 
-Exterm uses [swift-format](https://github.com/swiftlang/swift-format) for consistent code formatting. Configuration is in `.swift-format` at the project root.
+Boo uses [swift-format](https://github.com/swiftlang/swift-format) for consistent code formatting. Configuration is in `.swift-format` at the project root.
 
 ```bash
 make format   # Format all source files in-place
@@ -27,7 +27,7 @@ CI runs `make lint` on every pull request. Format your code before pushing.
 ## Project Structure
 
 ```
-Exterm/
+Boo/
   App/              AppDelegate, MainWindowController, WindowStateCoordinator
   Ghostty/          GhosttyRuntime, GhosttyView (Metal GPU rendering)
   Terminal/         VT100Terminal (fallback parser), TerminalBackend protocol
@@ -64,10 +64,10 @@ See [Architecture](/architecture) for detailed design documentation.
 
 ### Adding a Plugin
 
-1. Create `Exterm/Plugins/YourPlugin/YourPlugin.swift`
-2. Conform to `ExtermPluginProtocol`
+1. Create `Boo/Plugins/YourPlugin/YourPlugin.swift`
+2. Conform to `BooPluginProtocol`
 3. Register in `PluginRegistry.registerBuiltins()`
-4. Add tests in `Tests/ExtermTests/Plugins/YourPlugin/`
+4. Add tests in `Tests/BooTests/Plugins/YourPlugin/`
 5. No `Package.swift` changes needed
 
 See [Plugin Development](/plugin-development) for the full guide.

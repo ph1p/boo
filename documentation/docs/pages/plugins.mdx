@@ -1,11 +1,11 @@
 # Plugin System
 
-Exterm has an extensible plugin architecture for sidebar panels, status bar segments, and terminal lifecycle hooks.
+Boo has an extensible plugin architecture for sidebar panels, status bar segments, and terminal lifecycle hooks.
 
 ## Two Plugin Types
 
-1. **Built-in plugins** — Swift classes in `Exterm/Plugins/` conforming to `ExtermPluginProtocol`
-2. **External plugins** — Folders in `~/.exterm/plugins/` with a `plugin.json` manifest and a `main.js` file, hot-loaded at runtime
+1. **Built-in plugins** — Swift classes in `Boo/Plugins/` conforming to `BooPluginProtocol`
+2. **External plugins** — Folders in `~/.boo/plugins/` with a `plugin.json` manifest and a `main.js` file, hot-loaded at runtime
 
 Both use the same protocol, lifecycle, and UI integration.
 
@@ -21,11 +21,11 @@ Both use the same protocol, lifecycle, and UI integration.
 
 ## Core Protocol
 
-All plugins conform to `ExtermPluginProtocol` (which extends `ExtermPlugin: AnyObject`):
+All plugins conform to `BooPluginProtocol` (which extends `BooPlugin: AnyObject`):
 
 ```swift
 @MainActor
-protocol ExtermPluginProtocol: ExtermPlugin {
+protocol BooPluginProtocol: BooPlugin {
     var manifest: PluginManifest { get }
     var whenClause: WhenClauseNode? { get }
 
@@ -47,7 +47,7 @@ protocol ExtermPluginProtocol: ExtermPlugin {
     func terminalClosed(terminalID: UUID)
     func terminalFocusChanged(terminalID: UUID, context: TerminalContext)
 
-    // Two-phase cycle (from ExtermPlugin)
+    // Two-phase cycle (from BooPlugin)
     func enrich(context: EnrichmentContext)
     func react(context: TerminalContext)
 }

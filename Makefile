@@ -4,9 +4,9 @@ UNAME := $(shell uname -s)
 
 # ── Configuration ────────────────────────────────────────────────────────────
 
-APP_NAME     := Exterm
-BUNDLE_ID    := com.exterm.app
-VERSION      := $(shell /usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" Exterm/App/Info.plist 2>/dev/null || echo "0.1.0")
+APP_NAME     := Boo
+BUNDLE_ID    := com.boo.app
+VERSION      := $(shell /usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" Boo/App/Info.plist 2>/dev/null || echo "0.1.0")
 BUILD_DIR    := .build
 APP_BUNDLE   := $(BUILD_DIR)/$(APP_NAME).app
 DMG_NAME     := $(APP_NAME)-$(VERSION).dmg
@@ -56,10 +56,10 @@ else
 setup: setup-linux
 endif
 
-# Linux setup: build Exterm with GTK4 sidebar + VTE terminal
+# Linux setup: build Boo with GTK4 sidebar + VTE terminal
 setup-linux: build-linux
 
-# Build Exterm (macOS — requires GhosttyKit)
+# Build Boo (macOS — requires GhosttyKit)
 build:
 	swift build
 	@# Bundle Ghostty resources next to the executable so shell integration works
@@ -72,14 +72,14 @@ build:
 	done
 	@echo "==> Ghostty resources bundled"
 
-# Build Exterm for Linux (GTK4 + VTE terminal with sidebar)
+# Build Boo for Linux (GTK4 + VTE terminal with sidebar)
 build-linux:
 	swift build
 	@echo "==> Linux build complete"
 
 # Build and run (auto-detects platform)
 run: build
-	.build/debug/Exterm
+	.build/debug/Boo
 
 # Release build
 ifeq ($(UNAME),Darwin)
@@ -107,8 +107,8 @@ test:
 
 # Find the release binary (SPM may use different output dirs)
 RELEASE_BIN = $(shell \
-	if [ -f .build/release/Exterm ]; then echo .build/release/Exterm; \
-	elif [ -f .build/arm64-apple-macosx/release/Exterm ]; then echo .build/arm64-apple-macosx/release/Exterm; \
+	if [ -f .build/release/Boo ]; then echo .build/release/Boo; \
+	elif [ -f .build/arm64-apple-macosx/release/Boo ]; then echo .build/arm64-apple-macosx/release/Boo; \
 	fi)
 
 # Create macOS .app bundle from release build
@@ -118,7 +118,7 @@ app: release
 	@mkdir -p "$(APP_BUNDLE)/Contents/MacOS"
 	@mkdir -p "$(APP_BUNDLE)/Contents/Resources"
 	@cp "$(RELEASE_BIN)" "$(APP_BUNDLE)/Contents/MacOS/$(APP_NAME)"
-	@cp Exterm/App/Info.plist "$(APP_BUNDLE)/Contents/"
+	@cp Boo/App/Info.plist "$(APP_BUNDLE)/Contents/"
 	@rsync -a Vendor/ghostty/zig-out/share/ghostty/ "$(APP_BUNDLE)/Contents/Resources/ghostty/"
 	@rsync -a Vendor/ghostty/zig-out/share/terminfo/ "$(APP_BUNDLE)/Contents/Resources/terminfo/"
 	@if [ -f assets/AppIcon.icns ]; then \
@@ -131,14 +131,14 @@ app: release
 # Create a tar.gz archive for Linux distribution
 tarball: release
 	@echo "==> Creating Linux tarball..."
-	@mkdir -p "$(BUILD_DIR)/exterm-$(VERSION)-linux"
-	@cp .build/release/Exterm "$(BUILD_DIR)/exterm-$(VERSION)-linux/exterm"
-	@if [ -f CLinuxGTK/exterm.css ]; then \
-		cp CLinuxGTK/exterm.css "$(BUILD_DIR)/exterm-$(VERSION)-linux/"; \
+	@mkdir -p "$(BUILD_DIR)/boo-$(VERSION)-linux"
+	@cp .build/release/Boo "$(BUILD_DIR)/boo-$(VERSION)-linux/boo"
+	@if [ -f CLinuxGTK/boo.css ]; then \
+		cp CLinuxGTK/boo.css "$(BUILD_DIR)/boo-$(VERSION)-linux/"; \
 	fi
-	@cd "$(BUILD_DIR)" && tar czf "exterm-$(VERSION)-linux-$$(uname -m).tar.gz" "exterm-$(VERSION)-linux/"
-	@rm -rf "$(BUILD_DIR)/exterm-$(VERSION)-linux"
-	@echo "==> $(BUILD_DIR)/exterm-$(VERSION)-linux-$$(uname -m).tar.gz created"
+	@cd "$(BUILD_DIR)" && tar czf "boo-$(VERSION)-linux-$$(uname -m).tar.gz" "boo-$(VERSION)-linux/"
+	@rm -rf "$(BUILD_DIR)/boo-$(VERSION)-linux"
+	@echo "==> $(BUILD_DIR)/boo-$(VERSION)-linux-$$(uname -m).tar.gz created"
 
 # ── Code Signing (macOS) ────────────────────────────────────────────────────
 
@@ -149,7 +149,7 @@ sign:
 	fi
 	@echo "==> Signing $(APP_BUNDLE)..."
 	codesign --force --options runtime --sign "$(SIGNING_IDENTITY)" \
-		--entitlements Exterm/App/Exterm.entitlements \
+		--entitlements Boo/App/Boo.entitlements \
 		"$(APP_BUNDLE)"
 	@echo "==> Signed"
 
@@ -203,10 +203,10 @@ dist: app
 # ── Lint & Format ────────────────────────────────────────────────────────────
 
 lint:
-	swift-format lint --strict --recursive Exterm/ Tests/
+	swift-format lint --strict --recursive Boo/ Tests/
 
 format:
-	swift-format format --in-place --recursive Exterm/ Tests/
+	swift-format format --in-place --recursive Boo/ Tests/
 
 # ── Cleanup ──────────────────────────────────────────────────────────────────
 

@@ -2,13 +2,13 @@
 
 ## Download
 
-Download the latest release from the [GitHub Releases](https://github.com/ph1p/exterm/releases) page.
+Download the latest release from the [GitHub Releases](https://github.com/ph1p/boo/releases) page.
 
 ### macOS (DMG)
 
-1. Download `Exterm-x.x.x.dmg`
-2. Open the DMG and drag **Exterm** to your **Applications** folder
-3. Launch Exterm from Applications
+1. Download `Boo-x.x.x.dmg`
+2. Open the DMG and drag **Boo** to your **Applications** folder
+3. Launch Boo from Applications
 
 :::note
 On first launch, macOS may show a security prompt. Click "Open" to allow the app to run. Releases are signed and notarized with Apple Developer ID.
@@ -16,11 +16,11 @@ On first launch, macOS may show a security prompt. Click "Open" to allow the app
 
 ### Linux (tar.gz)
 
-1. Download `exterm-x.x.x-linux-x86_64.tar.gz`
-2. Extract: `tar xzf exterm-*.tar.gz`
-3. Run: `./exterm`
+1. Download `boo-x.x.x-linux-x86_64.tar.gz`
+2. Extract: `tar xzf boo-*.tar.gz`
+3. Run: `./boo`
 
-The archive includes the `ghostty` GTK binary alongside `exterm`. Requires GTK4 and libadwaita at runtime.
+The archive includes the `ghostty` GTK binary alongside `boo`. Requires GTK4 and libadwaita at runtime.
 
 ## Build from Source
 
@@ -29,9 +29,9 @@ The archive includes the `ghostty` GTK binary alongside `exterm`. Requires GTK4 
 **Prerequisites:** macOS 13+, Xcode CLT, Zig 0.15+, Metal Toolchain
 
 ```bash
-git clone --recursive https://github.com/ph1p/exterm.git
-cd exterm
-make setup    # Builds GhosttyKit + Exterm
+git clone --recursive https://github.com/ph1p/boo.git
+cd boo
+make setup    # Builds GhosttyKit + Boo
 make run      # Build and launch
 ```
 
@@ -43,21 +43,21 @@ make run      # Build and launch
 # Ubuntu/Debian
 sudo apt install swift zig libgtk-4-dev libadwaita-1-dev
 
-git clone --recursive https://github.com/ph1p/exterm.git
-cd exterm
-make setup-linux    # Builds Ghostty GTK + Exterm
+git clone --recursive https://github.com/ph1p/boo.git
+cd boo
+make setup-linux    # Builds Ghostty GTK + Boo
 make run            # Launch
 ```
 
-On Linux, Exterm launches Ghostty's native GTK terminal configured with Exterm's settings and shell integration. The sidebar/plugin UI is macOS-only for now.
+On Linux, Boo launches Ghostty's native GTK terminal configured with Boo's settings and shell integration. The sidebar/plugin UI is macOS-only for now.
 
 ### Step by Step
 
 #### 1. Clone the repository
 
 ```bash
-git clone --recursive https://github.com/ph1p/exterm.git
-cd exterm
+git clone --recursive https://github.com/ph1p/boo.git
+cd boo
 ```
 
 If you already cloned without `--recursive`, initialize the submodule:
@@ -120,10 +120,10 @@ make test     # Runs all 492+ tests (macOS)
 ## Uninstall
 
 ### macOS
-1. Quit Exterm
-2. Delete `Exterm.app` from Applications
-3. Optionally remove configuration: `rm -rf ~/.exterm`
+1. Quit Boo
+2. Delete `Boo.app` from Applications
+3. Optionally remove configuration: `rm -rf ~/.boo`
 
 ### Linux
 1. Delete the extracted directory
-2. Optionally remove configuration: `rm -rf ~/.exterm ~/.config/exterm`
+2. Optionally remove configuration: `rm -rf ~/.boo ~/.config/boo`

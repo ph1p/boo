@@ -7,7 +7,7 @@ See [README.md](../README.md) for build instructions and feature overview.
 
 ### Build
 ```bash
-make setup    # First time: clone Ghostty + build GhosttyKit + build Exterm
+make setup    # First time: clone Ghostty + build GhosttyKit + build Boo
 make run      # Build and launch
 make test     # Run 702 tests
 swift build   # Build only (requires GhosttyKit already built)

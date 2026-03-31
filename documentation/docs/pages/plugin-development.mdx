@@ -1,17 +1,17 @@
 # Plugin Development
 
-This guide covers how to create plugins for Exterm — both external JavaScript plugins and built-in Swift plugins.
+This guide covers how to create plugins for Boo — both external JavaScript plugins and built-in Swift plugins.
 
 ## External Plugins
 
-External plugins live in `~/.exterm/plugins/` and are hot-loaded at runtime. No restart required — save a file and it appears in the sidebar.
+External plugins live in `~/.boo/plugins/` and are hot-loaded at runtime. No restart required — save a file and it appears in the sidebar.
 
 Plugins are JavaScript, running in-process via JavaScriptCore — no dependencies, no shell, instant execution.
 
 ### Directory Structure
 
 ```
-~/.exterm/plugins/my-plugin/
+~/.boo/plugins/my-plugin/
   plugin.json       # Required manifest
   main.js           # Plugin logic
 ```
@@ -251,7 +251,7 @@ See [When-Clauses](/plugins#when-clauses) for the full list of variables.
 
 A JS plugin that reads a Makefile and lists its targets as clickable items:
 
-**`~/.exterm/plugins/make-targets/plugin.json`**
+**`~/.boo/plugins/make-targets/plugin.json`**
 
 ```json
 {
@@ -266,7 +266,7 @@ A JS plugin that reads a Makefile and lists its targets as clickable items:
 }
 ```
 
-**`~/.exterm/plugins/make-targets/main.js`**
+**`~/.boo/plugins/make-targets/main.js`**
 
 ```javascript
 function render(ctx) {
@@ -308,15 +308,15 @@ Start with **hello-world**, then study **node-project** or **terminal-inspector*
 
 ## Built-in Swift Plugins
 
-Built-in plugins are Swift classes compiled into the app. They have full access to AppKit, SwiftUI, and all Exterm APIs.
+Built-in plugins are Swift classes compiled into the app. They have full access to AppKit, SwiftUI, and all Boo APIs.
 
 ### File Organization
 
 All code for a plugin lives in one directory:
 
 ```
-Exterm/Plugins/YourPlugin/
-  YourPlugin.swift          # Plugin class (ExtermPluginProtocol)
+Boo/Plugins/YourPlugin/
+  YourPlugin.swift          # Plugin class (BooPluginProtocol)
   YourPluginDetailView.swift  # SwiftUI detail view (optional)
   YourService.swift          # Supporting service (optional)
 ```
@@ -324,7 +324,7 @@ Exterm/Plugins/YourPlugin/
 Tests go in the matching directory:
 
 ```
-Tests/ExtermTests/Plugins/YourPlugin/
+Tests/BooTests/Plugins/YourPlugin/
   YourPluginTests.swift
 ```
 
@@ -332,7 +332,7 @@ No `Package.swift` changes needed — SPM resolves recursively within the target
 
 ### Reference Example: SystemInfoPlugin
 
-The `SystemInfoPlugin` (`Exterm/Plugins/SystemInfo/SystemInfoPlugin.swift`) is a working example that demonstrates all plugin patterns:
+The `SystemInfoPlugin` (`Boo/Plugins/SystemInfo/SystemInfoPlugin.swift`) is a working example that demonstrates all plugin patterns:
 
 - **Manifest** with `when: "!remote"` (hidden in SSH/Docker sessions)
 - **Status bar** via `makeStatusBarContent` showing memory usage with color-coded tint
@@ -341,7 +341,7 @@ The `SystemInfoPlugin` (`Exterm/Plugins/SystemInfo/SystemInfoPlugin.swift`) is a
 - **Background refresh** via a 10-second timer calling `onRequestCycleRerun`
 - **Lifecycle callback** (`cwdChanged`) to refresh disk usage on directory change
 - **Host actions** via `DSLActionHandler` to run `df -h` and `top` in the terminal
-- **Tests** in `Tests/ExtermTests/Plugins/SystemInfo/SystemInfoPluginTests.swift`
+- **Tests** in `Tests/BooTests/Plugins/SystemInfo/SystemInfoPluginTests.swift`
 
 ### Minimal Plugin
 
@@ -349,7 +349,7 @@ The `SystemInfoPlugin` (`Exterm/Plugins/SystemInfo/SystemInfoPlugin.swift`) is a
 import SwiftUI
 
 @MainActor
-final class MyPlugin: ExtermPluginProtocol {
+final class MyPlugin: BooPluginProtocol {
     var hostActions: PluginHostActions?
     var onRequestCycleRerun: (() -> Void)?
 

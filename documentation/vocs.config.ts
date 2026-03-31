@@ -1,7 +1,7 @@
 import { defineConfig } from 'vocs'
 
 export default defineConfig({
-  title: 'Exterm',
+  title: 'Boo',
   sidebar: [
     {
       text: 'Installation',

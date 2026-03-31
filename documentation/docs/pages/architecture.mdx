@@ -11,7 +11,7 @@
 ## Project Structure
 
 ```
-Exterm/
+Boo/
   App/              AppDelegate, MainWindowController (+extensions), WindowStateCoordinator, AppStore
   Ghostty/          GhosttyRuntime (app singleton), GhosttyView (Metal surface), TerminalScrollView
   Terminal/         TerminalBackend (PTY lifecycle protocol)
@@ -28,7 +28,7 @@ Exterm/
     SystemInfo/     SystemInfoPlugin (reference example)
     Debug/          DebugPlugin (lifecycle event logger and state inspector)
   Views/            App-level views (PaneView, StatusBarView, ToolbarView, SettingsWindow, etc.)
-  Services/         Shared infrastructure (TerminalBridge, RemoteExplorer, ExtermSocketServer, etc.)
+  Services/         Shared infrastructure (TerminalBridge, RemoteExplorer, BooSocketServer, etc.)
 CGhostty/           C module wrapping ghostty.h
 CPTYHelper/         C helper for forkpty()
 Vendor/ghostty/     Ghostty source (git clone)
@@ -36,13 +36,13 @@ Vendor/ghostty/     Ghostty source (git clone)
 
 ### Plugin Layout
 
-Plugin code is colocated — all files for a plugin live in a single directory under `Exterm/Plugins/`. The core plugin **framework** (`Plugin/`) is separate from plugin **implementations** (`Plugins/`). Tests mirror the same layout under `Tests/ExtermTests/Plugins/`.
+Plugin code is colocated — all files for a plugin live in a single directory under `Boo/Plugins/`. The core plugin **framework** (`Plugin/`) is separate from plugin **implementations** (`Plugins/`). Tests mirror the same layout under `Tests/BooTests/Plugins/`.
 
 See the [Plugin System](/plugins) page for the full architecture and the [Plugin Development](/plugin-development) guide for creating new plugins.
 
 ## State Architecture
 
-Exterm's state is organized in two clear layers:
+Boo's state is organized in two clear layers:
 
 ### 1. Global State — `AppSettings` (singleton)
 
@@ -73,7 +73,7 @@ struct TabState {
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│ Exterm App                                                          │
+│ Boo App                                                          │
 │                                                                     │
 │  ┌─────────────┐   ┌──────────────────────────────────────────┐     │
 │  │ AppSettings │   │ Workspace                                │     │
@@ -111,8 +111,8 @@ struct TabState {
 │  └────────┬───────────┘                                             │
 │           │                                                         │
 │  ┌────────▼───────────┐   ┌──────────────────────────────────┐      │
-│  │ PTY (CPTYHelper)   │   │ ExtermSocketServer               │      │
-│  │ forkpty() + GCD    │   │ ~/.exterm/exterm.sock            │      │
+│  │ PTY (CPTYHelper)   │   │ BooSocketServer               │      │
+│  │ forkpty() + GCD    │   │ ~/.boo/boo.sock            │      │
 │  │ background I/O     │   │ process registration (IPC)       │      │
 │  └────────────────────┘   └──────────────────────────────────┘      │
 │                                       ▲                             │
@@ -180,7 +180,7 @@ Ghostty OSC event → PaneView delegate → MainWindowController
 Swift Package Manager (`Package.swift`) with a `Makefile` for common tasks:
 
 ```bash
-make setup         # First time: clone Ghostty + build GhosttyKit + build Exterm
+make setup         # First time: clone Ghostty + build GhosttyKit + build Boo
 make run           # Build and launch
 make test          # Run tests
 make clean-ghostty # Clean GhosttyKit build artifacts

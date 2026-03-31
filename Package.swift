@@ -1,12 +1,12 @@
 // swift-tools-version: 5.9
 import PackageDescription
 
-let extermDeps: [Target.Dependency] = ["CGhostty"]
-let extermExclude: [String] = [
+let booDeps: [Target.Dependency] = ["CGhostty"]
+let booExclude: [String] = [
     "App/Info.plist",
-    "App/Exterm.entitlements",
+    "App/Boo.entitlements",
 ]
-let extermLinkerSettings: [LinkerSetting] = [
+let booLinkerSettings: [LinkerSetting] = [
     .unsafeFlags(["-L", "Vendor/ghostty/macos/GhosttyKit.xcframework/macos-arm64"])
 ]
 let targets: [Target] = [
@@ -36,21 +36,21 @@ let targets: [Target] = [
         ]
     ),
     .executableTarget(
-        name: "Exterm",
-        dependencies: extermDeps,
-        path: "Exterm",
-        exclude: extermExclude,
-        linkerSettings: extermLinkerSettings
+        name: "Boo",
+        dependencies: booDeps,
+        path: "Boo",
+        exclude: booExclude,
+        linkerSettings: booLinkerSettings
     ),
     .testTarget(
-        name: "ExtermTests",
-        dependencies: ["Exterm"],
-        path: "Tests/ExtermTests"
+        name: "BooTests",
+        dependencies: ["Boo"],
+        path: "Tests/BooTests"
     ),
 ]
 
 let package = Package(
-    name: "Exterm",
+    name: "Boo",
     platforms: [
         .macOS(.v13)
     ],

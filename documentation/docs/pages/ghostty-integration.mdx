@@ -1,6 +1,6 @@
 # Ghostty Integration
 
-Exterm embeds [GhosttyKit](https://github.com/ghostty-org/ghostty) as a static library via the C API (`CGhostty/`). This provides complete terminal emulation with Metal GPU-accelerated rendering.
+Boo embeds [GhosttyKit](https://github.com/ghostty-org/ghostty) as a static library via the C API (`CGhostty/`). This provides complete terminal emulation with Metal GPU-accelerated rendering.
 
 ## Terminal Engine
 
@@ -94,6 +94,6 @@ The `Makefile` copies `Vendor/ghostty/zig-out/share/ghostty/` and `share/terminf
 
 ## Configuration
 
-`applyExtermSettings(to:)` writes Exterm's theme/font/behavior settings to a temp Ghostty config file and loads it via `ghostty_config_load_file`.
+`applyBooSettings(to:)` writes Boo's theme/font/behavior settings to a temp Ghostty config file and loads it via `ghostty_config_load_file`.
 
 `ghostty_config_load_default_files` also loads the user's own Ghostty config at `~/Library/Application Support/com.mitchellh.ghostty/config`.
