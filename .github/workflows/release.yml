@@ -28,7 +28,7 @@ jobs:
           node-version: 22
 
       - name: Install semantic-release plugins
-        run: npm install -g semantic-release@24.1.3 @semantic-release/exec @semantic-release/git
+        run: npm install -g semantic-release@25.0.3 @semantic-release/exec @semantic-release/git lodash-es@4.17.21
 
       - name: Install Zig
         run: |
