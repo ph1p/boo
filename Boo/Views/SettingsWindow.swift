@@ -294,9 +294,9 @@ private struct ThemeSettingsView: View {
             }
 
             Section(title: "Custom") {
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: 3) {
                     ForEach(customThemes, id: \.name) { theme in
-                        customThemeRow(theme, tokens: t)
+                        ThemeRow(theme: theme, selectedTheme: $selectedTheme)
                     }
                     Button(action: {
                         editingTheme = CustomThemeData.from(.defaultDark).withName("My Theme")
@@ -350,107 +350,121 @@ private struct ThemeSettingsView: View {
     }
 
     private func themeGrid(_ themes: [TerminalTheme], tokens t: Tokens) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            ForEach(themes, id: \.name) { themeRow($0, tokens: t) }
+        VStack(alignment: .leading, spacing: 3) {
+            ForEach(themes, id: \.name) { ThemeRow(theme: $0, selectedTheme: $selectedTheme) }
         }
-    }
-
-    // Standard (built-in) theme row
-    private func themeRow(_ theme: TerminalTheme, tokens t: Tokens) -> some View {
-        let active = selectedTheme == theme.name
-        return HStack(spacing: 10) {
-            colorBar(theme)
-            Text(theme.name)
-                .font(.system(size: 12, weight: active ? .medium : .regular))
-                .foregroundColor(active ? t.text : t.muted)
-            Spacer()
-            if active {
-                Image(systemName: "checkmark")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundColor(t.accent)
-            }
-        }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 5)
-        .contentShape(Rectangle())
-        .background(RoundedRectangle(cornerRadius: 6).fill(active ? t.accent.opacity(0.08) : Color.clear))
-        .onTapGesture {
-            selectedTheme = theme.name
-            AppSettings.shared.themeName = theme.name
-        }
-    }
-
-    // Custom theme row — shows edit/delete on hover
-    private func customThemeRow(_ theme: TerminalTheme, tokens t: Tokens) -> some View {
-        let active = selectedTheme == theme.name
-        return HStack(spacing: 10) {
-            colorBar(theme)
-            Text(theme.name)
-                .font(.system(size: 12, weight: active ? .medium : .regular))
-                .foregroundColor(active ? t.text : t.muted)
-            Spacer()
-            // Edit / delete always visible for custom themes
-            HStack(spacing: 2) {
-                Button(action: {
-                    editingTheme = AppSettings.shared.customThemes.first(where: { $0.name == theme.name })
-                }) {
-                    Image(systemName: "pencil")
-                        .font(.system(size: 11))
-                        .frame(width: 22, height: 22)
-                        .foregroundColor(t.muted)
-                        .background(RoundedRectangle(cornerRadius: 4).fill(t.muted.opacity(0.08)))
-                }
-                .buttonStyle(.plain)
-
-                Button(action: {
-                    var customs = AppSettings.shared.customThemes
-                    customs.removeAll { $0.name == theme.name }
-                    AppSettings.shared.customThemes = customs
-                    if selectedTheme == theme.name {
-                        selectedTheme = "Default Dark"
-                        AppSettings.shared.themeName = "Default Dark"
-                    }
-                }) {
-                    Image(systemName: "trash")
-                        .font(.system(size: 11))
-                        .frame(width: 22, height: 22)
-                        .foregroundColor(t.muted)
-                        .background(RoundedRectangle(cornerRadius: 4).fill(t.muted.opacity(0.08)))
-                }
-                .buttonStyle(.plain)
-            }
-            if active {
-                Image(systemName: "checkmark")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundColor(t.accent)
-                    .padding(.leading, 2)
-            }
-        }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 5)
-        .contentShape(Rectangle())
-        .background(RoundedRectangle(cornerRadius: 6).fill(active ? t.accent.opacity(0.08) : Color.clear))
-        .onTapGesture {
-            selectedTheme = theme.name
-            AppSettings.shared.themeName = theme.name
-        }
-    }
-
-    /// Color bar: background swatch + 8 ANSI normal colors.
-    private func colorBar(_ theme: TerminalTheme) -> some View {
-        HStack(spacing: 0) {
-            Rectangle().fill(tc(theme.background)).frame(width: 14)
-            ForEach(0..<8, id: \.self) { i in
-                Rectangle().fill(tc(theme.ansiColors[i]))
-            }
-        }
-        .frame(width: 86, height: 20)
-        .clipShape(RoundedRectangle(cornerRadius: 3))
-        .overlay(RoundedRectangle(cornerRadius: 3).strokeBorder(Tokens.current.muted.opacity(0.12), lineWidth: 0.5))
     }
 
     private func tc(_ c: TerminalColor) -> Color {
         Color(red: Double(c.r) / 255, green: Double(c.g) / 255, blue: Double(c.b) / 255)
+    }
+}
+
+/// A single theme row that renders using the theme's own colors.
+private struct ThemeRow: View {
+    let theme: TerminalTheme
+    @Binding var selectedTheme: String
+    @State private var hovered = false
+
+    // Editing state (only used for custom themes)
+    @State private var editingTheme: CustomThemeData? = nil
+
+    private var active: Bool { selectedTheme == theme.name }
+    private var bg: Color { Color(red: Double(theme.background.r) / 255, green: Double(theme.background.g) / 255, blue: Double(theme.background.b) / 255) }
+    private var fg: Color { Color(red: Double(theme.foreground.r) / 255, green: Double(theme.foreground.g) / 255, blue: Double(theme.foreground.b) / 255) }
+    private var accent: Color { Color(nsColor: theme.accentColor) }
+    private func ansi(_ i: Int) -> Color {
+        let c = theme.ansiColors[i]
+        return Color(red: Double(c.r) / 255, green: Double(c.g) / 255, blue: Double(c.b) / 255)
+    }
+
+    var body: some View {
+        HStack(spacing: 0) {
+            // Theme-colored body
+            HStack(spacing: 8) {
+                // Palette dots: 6 ANSI accent colors
+                HStack(spacing: 3) {
+                    ForEach([1, 2, 3, 4, 5, 6], id: \.self) { i in
+                        Circle().fill(ansi(i)).frame(width: 8, height: 8)
+                    }
+                }
+
+                Text(theme.name)
+                    .font(.system(size: 12, weight: active ? .semibold : .regular))
+                    .foregroundColor(fg)
+
+                Spacer()
+
+                if theme.isCustom && (hovered || active) {
+                    HStack(spacing: 2) {
+                        iconBtn(systemName: "pencil", color: fg.opacity(0.5)) {
+                            editingTheme = AppSettings.shared.customThemes.first { $0.name == theme.name }
+                        }
+                        iconBtn(systemName: "trash", color: fg.opacity(0.5)) {
+                            var customs = AppSettings.shared.customThemes
+                            customs.removeAll { $0.name == theme.name }
+                            AppSettings.shared.customThemes = customs
+                            if selectedTheme == theme.name {
+                                selectedTheme = "Default Dark"
+                                AppSettings.shared.themeName = "Default Dark"
+                            }
+                        }
+                    }
+                }
+
+                if active {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundColor(accent)
+                }
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 7)
+        }
+        .background(
+            RoundedRectangle(cornerRadius: 6)
+                .fill(bg)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6)
+                        .strokeBorder(
+                            active ? accent.opacity(0.7) : fg.opacity(hovered ? 0.15 : 0.07),
+                            lineWidth: active ? 1.5 : 0.5
+                        )
+                )
+        )
+        .contentShape(Rectangle())
+        .onHover { hovered = $0 }
+        .onTapGesture {
+            selectedTheme = theme.name
+            AppSettings.shared.themeName = theme.name
+        }
+        .sheet(item: $editingTheme) { theme in
+            CustomThemeEditorView(data: theme) { saved in
+                var customs = AppSettings.shared.customThemes
+                if let idx = customs.firstIndex(where: { $0.name == saved.name }) {
+                    customs[idx] = saved
+                } else {
+                    customs.append(saved)
+                }
+                AppSettings.shared.customThemes = customs
+                selectedTheme = saved.name
+                AppSettings.shared.themeName = saved.name
+                editingTheme = nil
+            } onCancel: {
+                editingTheme = nil
+            }
+        }
+    }
+
+    private func iconBtn(systemName: String, color: Color, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.system(size: 10))
+                .frame(width: 20, height: 20)
+                .foregroundColor(color)
+                .background(RoundedRectangle(cornerRadius: 4).fill(color.opacity(0.12)))
+        }
+        .buttonStyle(.plain)
     }
 }
 
@@ -607,25 +621,74 @@ private struct EditorSection<Content: View>: View {
     }
 }
 
-/// One row: colored well on the left, fixed-width label on the right.
+/// One row: color well + label + editable hex field.
 private struct SwatchRow: View {
     let label: String
     @Binding var hex: String
 
+    // Draft text while typing — lets user type freely before committing
+    @State private var draft: String = ""
+    @State private var isEditing = false
+    @State private var isInvalid = false
+
+    private var isValid: Bool { TerminalColor(hex: draft) != nil }
+
     var body: some View {
         let t = Tokens.current
         HStack(spacing: 8) {
+            // Color well
             ColorWell(hex: $hex)
-                .frame(width: 22, height: 18)
-                .clipShape(RoundedRectangle(cornerRadius: 3))
+                .frame(width: 26, height: 20)
+                .clipShape(RoundedRectangle(cornerRadius: 4))
+                .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(t.muted.opacity(0.15), lineWidth: 0.5))
+
+            // Label
             Text(label)
                 .font(.system(size: 11))
                 .foregroundColor(t.muted)
-                .frame(width: 90, alignment: .leading)
-            Text(hex.uppercased())
+                .frame(width: 88, alignment: .leading)
+
+            // Editable hex field
+            TextField("", text: $draft)
                 .font(.system(size: 10, design: .monospaced))
-                .foregroundColor(t.muted.opacity(0.6))
+                .foregroundColor(isInvalid ? Color.red.opacity(0.8) : t.muted.opacity(0.75))
+                .frame(width: 64)
+                .padding(.horizontal, 5)
+                .padding(.vertical, 2)
+                .background(
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(isEditing ? t.muted.opacity(0.08) : Color.clear)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 4)
+                                .strokeBorder(isInvalid ? Color.red.opacity(0.5) : (isEditing ? t.accent.opacity(0.4) : Color.clear), lineWidth: 1)
+                        )
+                )
+                .onAppear { draft = hex.uppercased() }
+                .onChange(of: hex) { newHex in
+                    if !isEditing { draft = newHex.uppercased() }
+                }
+                .onSubmit { commitDraft() }
+                .onChange(of: draft) { _ in
+                    isInvalid = !draft.isEmpty && TerminalColor(hex: draft) == nil
+                }
+                .onTapGesture { isEditing = true }
+                .onExitCommand { isEditing = false; draft = hex.uppercased(); isInvalid = false }
         }
+        .onChange(of: isEditing) { editing in
+            if !editing { commitDraft() }
+        }
+    }
+
+    private func commitDraft() {
+        if let c = TerminalColor(hex: draft) {
+            hex = c.hexString.uppercased()
+            isInvalid = false
+        } else {
+            // Revert to last valid value
+            draft = hex.uppercased()
+            isInvalid = false
+        }
+        isEditing = false
     }
 }
 
