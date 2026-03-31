@@ -33,6 +33,7 @@ private struct Tokens {
 
 struct SettingsView: View {
     enum Tab: String, CaseIterable {
+        case general = "General"
         case theme = "Theme"
         case terminal = "Terminal"
         case statusBar = "Status Bar"
@@ -42,6 +43,7 @@ struct SettingsView: View {
 
         var icon: String {
             switch self {
+            case .general: return "gear"
             case .theme: return "paintpalette"
             case .terminal: return "terminal"
             case .statusBar: return "rectangle.bottomthird.inset.filled"
@@ -52,7 +54,7 @@ struct SettingsView: View {
         }
     }
 
-    @State private var selectedTab: Tab = .theme
+    @State private var selectedTab: Tab = .general
     @ObservedObject private var observer = SettingsObserver(topics: [.theme])
 
     var body: some View {
@@ -108,6 +110,7 @@ struct SettingsView: View {
     @ViewBuilder
     private var content: some View {
         switch selectedTab {
+        case .general: GeneralSettingsView()
         case .theme: ThemeSettingsView()
         case .terminal: TerminalSettingsView()
         case .statusBar: StatusBarSettingsView()
@@ -373,13 +376,73 @@ private struct ThemeSettingsView: View {
     }
 }
 
+// MARK: - General
+
+private struct GeneralSettingsView: View {
+    @State private var defaultFolder = AppSettings.shared.defaultFolder
+    @State private var autoCheckUpdates = AppSettings.shared.autoCheckUpdates
+    @State private var debugLogging = AppSettings.shared.debugLogging
+    @ObservedObject private var observer = SettingsObserver(topics: [.theme])
+
+    var body: some View {
+        let _ = observer.revision
+        let t = Tokens.current
+
+        SettingsPage(title: "General") {
+            Section(title: "Default Folder") {
+                HStack(spacing: 8) {
+                    Text(defaultFolder)
+                        .font(.system(size: 12, design: .monospaced))
+                        .foregroundColor(t.muted)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+
+                    Button("Choose…") {
+                        let panel = NSOpenPanel()
+                        panel.canChooseDirectories = true
+                        panel.canChooseFiles = false
+                        panel.allowsMultipleSelection = false
+                        panel.directoryURL = URL(fileURLWithPath: defaultFolder)
+                        panel.message = "Choose the default folder for new workspaces"
+                        if panel.runModal() == .OK, let url = panel.url {
+                            defaultFolder = url.path
+                            AppSettings.shared.defaultFolder = url.path
+                        }
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+
+                    Button("Reset") {
+                        let home = FileManager.default.homeDirectoryForCurrentUser.path
+                        defaultFolder = home
+                        AppSettings.shared.defaultFolder = home
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                }
+            }
+
+            Section(title: "Updates") {
+                ToggleRow(label: "Check for updates automatically", isOn: $autoCheckUpdates)
+                    .onChange(of: autoCheckUpdates) { v in AppSettings.shared.autoCheckUpdates = v }
+            }
+
+            Section(title: "Debug") {
+                ToggleRow(label: "Debug logging", isOn: $debugLogging)
+                    .onChange(of: debugLogging) { v in AppSettings.shared.debugLogging = v }
+            }
+        }
+        .foregroundColor(t.text)
+    }
+}
+
 // MARK: - Terminal
 
 private struct TerminalSettingsView: View {
     @State private var cursorStyle = AppSettings.shared.cursorStyle
     @State private var fontSize = Double(AppSettings.shared.fontSize)
     @State private var selectedFont = AppSettings.shared.fontName
-    @State private var debugLogging = AppSettings.shared.debugLogging
     @ObservedObject private var observer = SettingsObserver(topics: [.theme, .terminal])
 
     private let fonts = AppSettings.availableMonospaceFonts
@@ -417,12 +480,6 @@ private struct TerminalSettingsView: View {
                     .background(RoundedRectangle(cornerRadius: 6).fill(t.termBg))
             }
 
-            Section(title: "Debug") {
-                VStack(alignment: .leading, spacing: 8) {
-                    ToggleRow(label: "Debug logging", isOn: $debugLogging)
-                        .onChange(of: debugLogging) { v in AppSettings.shared.debugLogging = v }
-                }
-            }
         }
     }
 
@@ -466,7 +523,6 @@ struct LayoutSettingsView: View {
     @State private var sidebarDefaultHidden = AppSettings.shared.sidebarDefaultHidden
     @State private var workspaceBarPosition = AppSettings.shared.workspaceBarPosition
     @State private var tabOverflowMode = AppSettings.shared.tabOverflowMode
-    @State private var defaultFolder = AppSettings.shared.defaultFolder
     @ObservedObject private var observer = SettingsObserver(topics: [.theme, .layout])
 
     var body: some View {
@@ -501,39 +557,6 @@ struct LayoutSettingsView: View {
                 .onChange(of: tabOverflowMode) { v in AppSettings.shared.tabOverflowMode = v }
             }
 
-            Section(title: "Default Folder") {
-                HStack(spacing: 8) {
-                    Text(defaultFolder)
-                        .font(.system(size: 12, design: .monospaced))
-                        .foregroundColor(t.muted)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-
-                    Button("Choose…") {
-                        let panel = NSOpenPanel()
-                        panel.canChooseDirectories = true
-                        panel.canChooseFiles = false
-                        panel.allowsMultipleSelection = false
-                        panel.directoryURL = URL(fileURLWithPath: defaultFolder)
-                        panel.message = "Choose the default folder for new workspaces"
-                        if panel.runModal() == .OK, let url = panel.url {
-                            defaultFolder = url.path
-                            AppSettings.shared.defaultFolder = url.path
-                        }
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-
-                    Button("Reset") {
-                        let home = FileManager.default.homeDirectoryForCurrentUser.path
-                        defaultFolder = home
-                        AppSettings.shared.defaultFolder = home
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                }
-            }
         }
         .foregroundColor(t.text)
     }
