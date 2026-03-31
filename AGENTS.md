@@ -159,7 +159,8 @@ PaneView.activateTab() → didFocus delegate
 
 ### Theming
 - `TerminalTheme` defines foreground, background, 16 ANSI colors, selection, cursor, and all UI chrome colors
-- 22 built-in themes (Default Dark, Tokyo Night, Catppuccin x4, Solarized x2, Dracula, Nord, Gruvbox x2, One Dark/Light, Rosé Pine, Kanagawa, Everforest x2, GitHub x2, Ayu x2)
+- 32 built-in themes (Default Dark/Light, Tokyo Night, Catppuccin x4, Solarized x2, Dracula, Nord, Gruvbox x2, One Dark/Light, Rosé Pine, Kanagawa, Everforest x2, GitHub x2, Ayu x2, Cobalt2, Horizon Dark, Material Dark/Light, Monokai, Moonlight, Night Owl, Palenight, Synthwave '84)
+- Custom themes via `CustomThemeData` (Codable) — user-created themes with full color picker editor, persisted and marked `isCustom: true`
 - Theme colors are read at draw time from `AppSettings.shared.theme`
 - `SettingsObserver` (ObservableObject) triggers SwiftUI re-renders on settings change
 

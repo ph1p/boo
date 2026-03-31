@@ -12,7 +12,8 @@ _Coming soon_
 - **Per-pane tabs** — Each split pane has its own tab bar (Cmd+T)
 - **Split panes** — Split right (Cmd+D) or down (Cmd+Shift+D)
 - **File explorer** — Live-updating sidebar with file tree (Cmd+B to toggle)
-- **22 color themes** — Catppuccin (all 4), Tokyo Night, Dracula, Nord, Solarized (dark/light), Gruvbox (dark/light), One Dark/Light, Rosé Pine, Kanagawa, Everforest (dark/light), GitHub (dark/light), Ayu (dark/light)
+- **32 color themes** — Catppuccin (all 4), Tokyo Night, Dracula, Nord, Solarized (dark/light), Gruvbox (dark/light), One Dark/Light, Rosé Pine, Kanagawa, Everforest (dark/light), GitHub (dark/light), Ayu (dark/light), Cobalt2, Horizon Dark, Material (dark/light), Monokai, Moonlight, Night Owl, Palenight, Synthwave '84, Default (dark/light)
+- **Custom themes** — Create your own themes with a full color picker editor
 - **AI agent monitor** — Auto-detects Claude, Codex, Aider, Cursor, Copilot sessions with config/diff overview
 - **Remote explorer** — Auto-detects SSH sessions, shows remote file tree
 - **Git integration** — Branch name in status bar, clickable branch switcher with local + remote branches
@@ -62,6 +63,9 @@ make run      # Build and launch
 | `make dist`    | Full release pipeline (build, bundle, sign, notarize, DMG) |
 | `make lint`    | Check code style with swift-format                         |
 | `make format`  | Format source code in-place                                |
+| `make clean`   | Clean build artifacts                                      |
+| `make clean-ghostty` | Clean GhosttyKit build (for rebuild)                 |
+| `make ghostty` | Build GhosttyKit only                                      |
 
 ## Keyboard Shortcuts
 
@@ -88,6 +92,10 @@ make run      # Build and launch
 | **Cmd+C**       | Copy selection                       |
 | **Cmd+V**       | Paste                                |
 | **Cmd+A**       | Select all                           |
+| **Cmd+Return**  | Toggle full screen                   |
+| **Cmd+Ctrl+=**  | Equalize split sizes                 |
+| **Cmd+Shift+B** | Bookmark current directory           |
+| **Ctrl+1-9**    | Jump to bookmark N                   |
 | **Cmd+,**       | Settings                             |
 
 ## Architecture
@@ -454,10 +462,13 @@ Releases are automated via [semantic-release](https://github.com/semantic-releas
 
 Open with **Cmd+,**. Organized in tabs:
 
-- **Theme** — 22 color themes with live preview swatches
+- **General** — Auto-update preferences
+- **Theme** — 32 built-in color themes with live preview swatches, custom theme editor
 - **Terminal** — Font, font size, cursor style (block/beam/underline/outline)
 - **Explorer** — Font, font size, show header/icons/hidden files
 - **Status Bar** — Toggle git branch, path, running process, pane count, clock
+- **Layout** — Sidebar width, pane divider style
+- **Plugins** — Enable/disable plugins, per-plugin settings
 - **Shortcuts** — Reference of all keyboard shortcuts
 
 ## Tests
@@ -466,7 +477,7 @@ Open with **Cmd+,**. Organized in tabs:
 swift test
 ```
 
-702 tests covering models, themes, plugins, terminal bridge, remote explorer, SSH control manager, sidebar layout, accessibility, E2E plugin lifecycle, split/workspace operations, IPC socket protocol, process detection, event subscriptions, JSC runtime, DSL parsing, and script plugin adapters.
+717 tests covering models, themes, plugins, terminal bridge, remote explorer, SSH control manager, sidebar layout, accessibility, E2E plugin lifecycle, split/workspace operations, IPC socket protocol, process detection, event subscriptions, JSC runtime, DSL parsing, and script plugin adapters.
 
 ## License
 

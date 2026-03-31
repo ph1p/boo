@@ -19,15 +19,48 @@ APPLE_PASSWORD   ?=
 
 # ── GhosttyKit (macOS) ──────────────────────────────────────────────────────
 
+# Xcode 26 beta ships macOS SDK .tbd stubs with only arm64e (no arm64), which
+# breaks zig 0.15's linker. The CLT macOS SDK still includes arm64. This
+# wrapper intercepts `xcrun --sdk macosx --show-sdk-path` to return the CLT
+# SDK while letting all other xcrun calls (iOS SDK, metal, etc.) pass through.
+XCRUN_WRAPPER_DIR := $(BUILD_DIR)/xcrun-wrapper
+
+$(XCRUN_WRAPPER_DIR)/xcrun:
+	@mkdir -p $(XCRUN_WRAPPER_DIR)
+	@CLT_SDK=$$(DEVELOPER_DIR=/Library/Developer/CommandLineTools xcrun --sdk macosx --show-sdk-path 2>/dev/null); \
+	XCODE_SDK=$$(xcrun --sdk macosx --show-sdk-path 2>/dev/null); \
+	XCODE_TBD="$$XCODE_SDK/usr/lib/libSystem.B.tbd"; \
+	NEED_WRAPPER=false; \
+	if [ -n "$$CLT_SDK" ] && [ "$$CLT_SDK" != "$$XCODE_SDK" ] && [ -f "$$XCODE_TBD" ]; then \
+		TOP_TARGETS=$$(head -4 "$$XCODE_TBD" | grep '^targets:'); \
+		if echo "$$TOP_TARGETS" | grep -q 'arm64e-macos' && \
+		   ! echo "$$TOP_TARGETS" | grep -qE '[ ,]arm64-macos[ ,\]]'; then \
+			NEED_WRAPPER=true; \
+		fi; \
+	fi; \
+	if $$NEED_WRAPPER; then \
+		echo "==> Xcode macOS SDK missing arm64 stubs; using CLT SDK for zig"; \
+		printf '#!/bin/bash\n\
+sdk_is_macosx=false; has_show_sdk_path=false\n\
+for arg in "$$@"; do\n\
+  case "$$arg" in macosx) sdk_is_macosx=true ;; --show-sdk-path) has_show_sdk_path=true ;; esac\n\
+done\n\
+if $$sdk_is_macosx && $$has_show_sdk_path; then echo "%s"; exit 0; fi\n\
+exec /usr/bin/xcrun "$$@"\n' "$$CLT_SDK" > $(XCRUN_WRAPPER_DIR)/xcrun; \
+	else \
+		printf '#!/bin/bash\nexec /usr/bin/xcrun "$$@"\n' > $(XCRUN_WRAPPER_DIR)/xcrun; \
+	fi
+	@chmod +x $(XCRUN_WRAPPER_DIR)/xcrun
+
 # Initialize Ghostty submodule and build GhosttyKit xcframework (macOS)
-ghostty:
+ghostty: $(XCRUN_WRAPPER_DIR)/xcrun
 	@if [ ! -f Vendor/ghostty/build.zig ]; then \
 		echo "==> Initializing Ghostty submodule..."; \
 		git submodule update --init --depth 1 Vendor/ghostty; \
 	fi
 	@if [ ! -f Vendor/ghostty/macos/GhosttyKit.xcframework/macos-arm64/libghostty-fat.a ]; then \
 		echo "==> Building GhosttyKit..."; \
-		cd Vendor/ghostty && zig build -Demit-xcframework=true -Dxcframework-target=native -Doptimize=ReleaseFast; \
+		cd Vendor/ghostty && PATH="$(CURDIR)/$(XCRUN_WRAPPER_DIR):$$PATH" zig build -Demit-xcframework=true -Dxcframework-target=native -Doptimize=ReleaseFast; \
 	else \
 		echo "==> GhosttyKit already built"; \
 	fi
