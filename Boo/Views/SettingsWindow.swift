@@ -260,10 +260,14 @@ private struct ThemeSettingsView: View {
     @State private var autoTheme = AppSettings.shared.autoTheme
     @State private var darkTheme = AppSettings.shared.darkThemeName
     @State private var lightTheme = AppSettings.shared.lightThemeName
+    @State private var editingTheme: CustomThemeData? = nil
+    @State private var showEditor = false
     @ObservedObject private var observer = SettingsObserver(topics: [.theme])
 
-    private var darkThemes: [TerminalTheme] { TerminalTheme.themes.filter { $0.isDark } }
-    private var lightThemes: [TerminalTheme] { TerminalTheme.themes.filter { !$0.isDark } }
+    private var allThemes: [TerminalTheme] { AppSettings.shared.allThemes }
+    private var darkThemes: [TerminalTheme] { allThemes.filter { $0.isDark && !$0.isCustom } }
+    private var lightThemes: [TerminalTheme] { allThemes.filter { !$0.isDark && !$0.isCustom } }
+    private var customThemes: [TerminalTheme] { allThemes.filter { $0.isCustom } }
 
     var body: some View {
         let _ = observer.revision
@@ -294,6 +298,47 @@ private struct ThemeSettingsView: View {
                     themeGrid(lightThemes, tokens: t)
                 }
             }
+
+            Section(title: "Custom") {
+                VStack(alignment: .leading, spacing: 3) {
+                    ForEach(customThemes, id: \.name) { theme in
+                        themeRow(theme, tokens: t, isCustom: true)
+                    }
+                    Button(action: {
+                        editingTheme = CustomThemeData.from(.defaultDark).withName("My Theme")
+                        showEditor = true
+                    }) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "plus.circle")
+                                .font(.system(size: 11))
+                            Text("New Theme…")
+                                .font(.system(size: 12))
+                        }
+                        .foregroundColor(t.accent)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 5)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+        .sheet(isPresented: $showEditor) {
+            if let theme = editingTheme {
+                CustomThemeEditorView(data: theme) { saved in
+                    var customs = AppSettings.shared.customThemes
+                    if let idx = customs.firstIndex(where: { $0.name == saved.name }) {
+                        customs[idx] = saved
+                    } else {
+                        customs.append(saved)
+                    }
+                    AppSettings.shared.customThemes = customs
+                    selectedTheme = saved.name
+                    AppSettings.shared.themeName = saved.name
+                    showEditor = false
+                } onCancel: {
+                    showEditor = false
+                }
+            }
         }
     }
 
@@ -320,12 +365,12 @@ private struct ThemeSettingsView: View {
     private func themeGrid(_ themes: [TerminalTheme], tokens t: Tokens) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             ForEach(themes, id: \.name) { theme in
-                themeRow(theme, tokens: t)
+                themeRow(theme, tokens: t, isCustom: false)
             }
         }
     }
 
-    private func themeRow(_ theme: TerminalTheme, tokens t: Tokens) -> some View {
+    private func themeRow(_ theme: TerminalTheme, tokens t: Tokens, isCustom: Bool) -> some View {
         let active = selectedTheme == theme.name
         return HStack(spacing: 0) {
             // Color bar: terminal bg + 6 ansi colors as a continuous strip
@@ -352,6 +397,35 @@ private struct ThemeSettingsView: View {
 
             Spacer()
 
+            if isCustom {
+                Button(action: {
+                    editingTheme = AppSettings.shared.customThemes.first(where: { $0.name == theme.name })
+                    showEditor = true
+                }) {
+                    Image(systemName: "pencil")
+                        .font(.system(size: 11))
+                        .foregroundColor(t.muted)
+                }
+                .buttonStyle(.plain)
+                .padding(.trailing, 6)
+
+                Button(action: {
+                    var customs = AppSettings.shared.customThemes
+                    customs.removeAll { $0.name == theme.name }
+                    AppSettings.shared.customThemes = customs
+                    if selectedTheme == theme.name {
+                        selectedTheme = "Default Dark"
+                        AppSettings.shared.themeName = "Default Dark"
+                    }
+                }) {
+                    Image(systemName: "trash")
+                        .font(.system(size: 11))
+                        .foregroundColor(t.muted)
+                }
+                .buttonStyle(.plain)
+                .padding(.trailing, 4)
+            }
+
             if active {
                 Image(systemName: "checkmark.circle.fill")
                     .font(.system(size: 13))
@@ -373,6 +447,256 @@ private struct ThemeSettingsView: View {
 
     private func color(_ c: TerminalColor) -> Color {
         Color(red: Double(c.r) / 255, green: Double(c.g) / 255, blue: Double(c.b) / 255)
+    }
+}
+
+// MARK: - Custom Theme Editor
+
+private struct CustomThemeEditorView: View {
+    @State var data: CustomThemeData
+    let onSave: (CustomThemeData) -> Void
+    let onCancel: () -> Void
+
+    // Derived live preview theme
+    private var preview: TerminalTheme { data.toTheme() }
+
+    var body: some View {
+        let t = Tokens.current
+        VStack(spacing: 0) {
+            // Header
+            HStack {
+                Text("Custom Theme")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(t.text)
+                Spacer()
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 20)
+            .padding(.bottom, 12)
+
+            Divider().opacity(0.3)
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    // Name
+                    ThemeEditorSection(title: "Name") {
+                        TextField("Theme name", text: $data.name)
+                            .textFieldStyle(.roundedBorder)
+                            .font(.system(size: 12))
+                    }
+
+                    // Live preview bar
+                    ThemeEditorSection(title: "Preview") {
+                        HStack(spacing: 0) {
+                            Rectangle()
+                                .fill(termColor(preview.background))
+                                .frame(width: 30)
+                            ForEach(1..<8, id: \.self) { i in
+                                Rectangle().fill(termColor(preview.ansiColors[i]))
+                            }
+                            ForEach(9..<16, id: \.self) { i in
+                                Rectangle().fill(termColor(preview.ansiColors[i]))
+                            }
+                        }
+                        .frame(height: 28)
+                        .clipShape(RoundedRectangle(cornerRadius: 5))
+                    }
+
+                    // Terminal colors
+                    ThemeEditorSection(title: "Terminal") {
+                        ThreeColumnColorGrid {
+                            ColorSwatch(label: "Foreground", hex: hexBinding(\.foreground))
+                            ColorSwatch(label: "Background", hex: hexBinding(\.background))
+                            ColorSwatch(label: "Cursor", hex: hexBinding(\.cursor))
+                            ColorSwatch(label: "Selection", hex: $data.selectionHex)
+                        }
+                    }
+
+                    // ANSI normal colors
+                    ThemeEditorSection(title: "ANSI Colors (Normal)") {
+                        let labels = ["Black", "Red", "Green", "Yellow", "Blue", "Magenta", "Cyan", "White"]
+                        ThreeColumnColorGrid {
+                            ForEach(0..<8, id: \.self) { i in
+                                ColorSwatch(label: labels[i], hex: ansiBinding(i))
+                            }
+                        }
+                    }
+
+                    // ANSI bright colors
+                    ThemeEditorSection(title: "ANSI Colors (Bright)") {
+                        let labels = ["Black", "Red", "Green", "Yellow", "Blue", "Magenta", "Cyan", "White"]
+                        ThreeColumnColorGrid {
+                            ForEach(0..<8, id: \.self) { i in
+                                ColorSwatch(label: "Bright \(labels[i])", hex: ansiBinding(i + 8))
+                            }
+                        }
+                    }
+
+                    // UI Chrome colors
+                    ThemeEditorSection(title: "UI Chrome") {
+                        ThreeColumnColorGrid {
+                            ColorSwatch(label: "Chrome BG", hex: $data.chromeBgHex)
+                            ColorSwatch(label: "Chrome Text", hex: $data.chromeTextHex)
+                            ColorSwatch(label: "Chrome Muted", hex: $data.chromeMutedHex)
+                            ColorSwatch(label: "Sidebar BG", hex: $data.sidebarBgHex)
+                            ColorSwatch(label: "Accent", hex: $data.accentHex)
+                        }
+                    }
+                }
+                .padding(20)
+            }
+
+            Divider().opacity(0.3)
+
+            // Footer buttons
+            HStack {
+                Button("Cancel") { onCancel() }
+                    .keyboardShortcut(.cancelAction)
+                Spacer()
+                Button("Save Theme") {
+                    // Ensure 16 ANSI colors
+                    while data.ansiColors.count < 16 {
+                        data.ansiColors.append(TerminalColor(r: 128, g: 128, b: 128))
+                    }
+                    onSave(data)
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(data.name.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 14)
+        }
+        .frame(width: 520, height: 560)
+        .background(Tokens.current.bg)
+    }
+
+    // MARK: Bindings
+
+    private func hexBinding(_ kp: WritableKeyPath<CustomThemeData, TerminalColor>) -> Binding<String> {
+        Binding(
+            get: { data[keyPath: kp].hexString },
+            set: { hex in
+                if let c = TerminalColor(hex: hex) { data[keyPath: kp] = c }
+            }
+        )
+    }
+
+    private func ansiBinding(_ index: Int) -> Binding<String> {
+        Binding(
+            get: {
+                guard index < data.ansiColors.count else { return "#808080" }
+                return data.ansiColors[index].hexString
+            },
+            set: { hex in
+                guard let c = TerminalColor(hex: hex) else { return }
+                while data.ansiColors.count <= index { data.ansiColors.append(TerminalColor(r: 128, g: 128, b: 128)) }
+                data.ansiColors[index] = c
+            }
+        )
+    }
+
+    private func termColor(_ c: TerminalColor) -> Color {
+        Color(red: Double(c.r) / 255, green: Double(c.g) / 255, blue: Double(c.b) / 255)
+    }
+}
+
+private struct ThemeEditorSection<Content: View>: View {
+    let title: String
+    @ViewBuilder let content: () -> Content
+    var body: some View {
+        let t = Tokens.current
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundColor(t.muted)
+                .textCase(.uppercase)
+            content()
+        }
+    }
+}
+
+private struct ThreeColumnColorGrid<Content: View>: View {
+    @ViewBuilder let content: () -> Content
+    var body: some View {
+        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
+            content()
+        }
+    }
+}
+
+/// A labeled color swatch that opens NSColorPanel on click.
+private struct ColorSwatch: View {
+    let label: String
+    @Binding var hex: String
+
+    var body: some View {
+        let t = Tokens.current
+        HStack(spacing: 6) {
+            ColorWell(hex: $hex)
+                .frame(width: 24, height: 24)
+            Text(label)
+                .font(.system(size: 11))
+                .foregroundColor(t.muted)
+                .lineLimit(1)
+            Spacer(minLength: 0)
+        }
+    }
+}
+
+/// NSColorWell bridge that binds to a hex string.
+private struct ColorWell: NSViewRepresentable {
+    @Binding var hex: String
+
+    func makeNSView(context: Context) -> NSColorWell {
+        let well = NSColorWell()
+        well.color = NSColor(hex: hex) ?? .gray
+        well.target = context.coordinator
+        well.action = #selector(Coordinator.colorChanged(_:))
+        return well
+    }
+
+    func updateNSView(_ well: NSColorWell, context: Context) {
+        if let c = NSColor(hex: hex), c != well.color.usingColorSpace(.sRGB) {
+            well.color = c
+        }
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator(hex: $hex) }
+
+    final class Coordinator: NSObject {
+        var hex: Binding<String>
+        init(hex: Binding<String>) { self.hex = hex }
+        @objc func colorChanged(_ sender: NSColorWell) {
+            if let c = sender.color.usingColorSpace(.sRGB) {
+                let r = Int(c.redComponent * 255)
+                let g = Int(c.greenComponent * 255)
+                let b = Int(c.blueComponent * 255)
+                hex.wrappedValue = String(format: "#%02X%02X%02X", r, g, b)
+            }
+        }
+    }
+}
+
+// MARK: - Helpers
+
+private extension TerminalColor {
+    var hexString: String {
+        String(format: "#%02X%02X%02X", r, g, b)
+    }
+
+    init?(hex: String) {
+        var s = hex.trimmingCharacters(in: .whitespaces)
+        if s.hasPrefix("#") { s = String(s.dropFirst()) }
+        guard s.count == 6, let v = UInt32(s, radix: 16) else { return nil }
+        self.init(r: UInt8((v >> 16) & 0xFF), g: UInt8((v >> 8) & 0xFF), b: UInt8(v & 0xFF))
+    }
+}
+
+private extension CustomThemeData {
+    func withName(_ newName: String) -> CustomThemeData {
+        var copy = self
+        copy.name = newName
+        return copy
     }
 }
 

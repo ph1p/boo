@@ -123,6 +123,7 @@ final class AppSettings {
         static let sidebarDefaultHidden = "sidebarDefaultHidden"
         static let defaultFolder = "defaultFolder"
         static let sshControlMasterApproved = "sshControlMasterApproved"
+        static let customThemes = "customThemes"
     }
 
     /// Bool from UserDefaults with a custom default (since .bool returns false for unset keys).
@@ -167,14 +168,36 @@ final class AppSettings {
         }
     }
 
-    private static let themesByName: [String: TerminalTheme] = {
+    private static let builtInThemesByName: [String: TerminalTheme] = {
         var map = [String: TerminalTheme]()
         for t in TerminalTheme.themes { map[t.name] = t }
         return map
     }()
 
     var theme: TerminalTheme {
-        Self.themesByName[themeName] ?? .defaultDark
+        if let t = Self.builtInThemesByName[themeName] { return t }
+        return customThemes.first(where: { $0.name == themeName })?.toTheme() ?? .defaultDark
+    }
+
+    /// All themes: built-ins followed by user-created custom themes.
+    var allThemes: [TerminalTheme] {
+        TerminalTheme.themes + customThemes.map { $0.toTheme() }
+    }
+
+    var customThemes: [CustomThemeData] {
+        get {
+            guard let data = UserDefaults.standard.data(forKey: K.customThemes),
+                  let decoded = try? JSONDecoder().decode([CustomThemeData].self, from: data)
+            else { return [] }
+            return decoded
+        }
+        set {
+            if let data = try? JSONEncoder().encode(newValue) {
+                UserDefaults.standard.set(data, forKey: K.customThemes)
+            }
+            saveToFile()
+            notify(topic: .theme)
+        }
     }
 
     /// Apply the correct theme based on system dark/light mode.
