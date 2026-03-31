@@ -60,7 +60,7 @@ ghostty: $(XCRUN_WRAPPER_DIR)/xcrun
 	fi
 	@if [ ! -f Vendor/ghostty/macos/GhosttyKit.xcframework/macos-arm64/libghostty-fat.a ]; then \
 		echo "==> Building GhosttyKit..."; \
-		cd Vendor/ghostty && PATH="$(CURDIR)/$(XCRUN_WRAPPER_DIR):$$PATH" zig build -Demit-xcframework=true -Dxcframework-target=native -Doptimize=ReleaseFast; \
+		cd Vendor/ghostty && PATH="$(CURDIR)/$(XCRUN_WRAPPER_DIR):$$PATH" zig build -Demit-xcframework=true -Dxcframework-target=native -Demit-macos-app=false -Doptimize=ReleaseFast; \
 	else \
 		echo "==> GhosttyKit already built"; \
 	fi

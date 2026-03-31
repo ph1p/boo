@@ -510,8 +510,8 @@ private struct CustomThemeEditorView: View {
                         EditorSection(title: "Terminal") {
                             SwatchRow(label: "Foreground", hex: hexBinding(\.foreground))
                             SwatchRow(label: "Background", hex: hexBinding(\.background))
-                            SwatchRow(label: "Cursor",     hex: hexBinding(\.cursor))
-                            SwatchRow(label: "Selection",  hex: $data.selectionHex)
+                            SwatchRow(label: "Cursor", hex: hexBinding(\.cursor))
+                            SwatchRow(label: "Selection", hex: $data.selectionHex)
                         }
 
                         EditorSection(title: "ANSI — Normal") {
@@ -538,11 +538,11 @@ private struct CustomThemeEditorView: View {
                     // Right column: UI Chrome
                     VStack(alignment: .leading, spacing: 20) {
                         EditorSection(title: "UI Chrome") {
-                            SwatchRow(label: "Toolbar BG",   hex: $data.chromeBgHex)
+                            SwatchRow(label: "Toolbar BG", hex: $data.chromeBgHex)
                             SwatchRow(label: "Toolbar Text", hex: $data.chromeTextHex)
-                            SwatchRow(label: "Muted Text",   hex: $data.chromeMutedHex)
-                            SwatchRow(label: "Sidebar BG",   hex: $data.sidebarBgHex)
-                            SwatchRow(label: "Accent",       hex: $data.accentHex)
+                            SwatchRow(label: "Muted Text", hex: $data.chromeMutedHex)
+                            SwatchRow(label: "Sidebar BG", hex: $data.sidebarBgHex)
+                            SwatchRow(label: "Accent", hex: $data.accentHex)
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -656,7 +656,12 @@ private struct SwatchRow: View {
                         .fill(isEditing ? t.muted.opacity(0.08) : Color.clear)
                         .overlay(
                             RoundedRectangle(cornerRadius: 4)
-                                .strokeBorder(isInvalid ? Color.red.opacity(0.5) : (isEditing ? t.accent.opacity(0.4) : Color.clear), lineWidth: 1)
+                                .strokeBorder(
+                                    isInvalid
+                                        ? Color.red.opacity(0.5)
+                                        : (isEditing ? t.accent.opacity(0.4) : Color.clear),
+                                    lineWidth: 1
+                                )
                         )
                 )
                 .onAppear { draft = hex.uppercased() }
@@ -668,7 +673,11 @@ private struct SwatchRow: View {
                     isInvalid = !draft.isEmpty && TerminalColor(hex: draft) == nil
                 }
                 .onTapGesture { isEditing = true }
-                .onExitCommand { isEditing = false; draft = hex.uppercased(); isInvalid = false }
+                .onExitCommand {
+                    isEditing = false
+                    draft = hex.uppercased()
+                    isInvalid = false
+                }
         }
         .onChange(of: isEditing) { editing in
             if !editing { commitDraft() }
@@ -736,7 +745,9 @@ extension TerminalColor {
 
 extension CustomThemeData {
     fileprivate func withName(_ newName: String) -> CustomThemeData {
-        var copy = self; copy.name = newName; return copy
+        var copy = self
+        copy.name = newName
+        return copy
     }
 }
 
