@@ -261,7 +261,6 @@ private struct ThemeSettingsView: View {
     @State private var darkTheme = AppSettings.shared.darkThemeName
     @State private var lightTheme = AppSettings.shared.lightThemeName
     @State private var editingTheme: CustomThemeData? = nil
-    @State private var showEditor = false
     @ObservedObject private var observer = SettingsObserver(topics: [.theme])
 
     private var allThemes: [TerminalTheme] { AppSettings.shared.allThemes }
@@ -274,7 +273,6 @@ private struct ThemeSettingsView: View {
         let t = Tokens.current
 
         SettingsPage(title: "Color Theme") {
-            // System appearance toggle
             HStack(spacing: 8) {
                 Image(systemName: "circle.lefthalf.filled")
                     .font(.system(size: 11))
@@ -291,53 +289,46 @@ private struct ThemeSettingsView: View {
                         .onChange(of: lightTheme) { v in AppSettings.shared.lightThemeName = v }
                 }
             } else {
-                Section(title: "Dark") {
-                    themeGrid(darkThemes, tokens: t)
-                }
-                Section(title: "Light") {
-                    themeGrid(lightThemes, tokens: t)
-                }
+                Section(title: "Dark") { themeGrid(darkThemes, tokens: t) }
+                Section(title: "Light") { themeGrid(lightThemes, tokens: t) }
             }
 
             Section(title: "Custom") {
-                VStack(alignment: .leading, spacing: 3) {
+                VStack(alignment: .leading, spacing: 2) {
                     ForEach(customThemes, id: \.name) { theme in
-                        themeRow(theme, tokens: t, isCustom: true)
+                        customThemeRow(theme, tokens: t)
                     }
                     Button(action: {
                         editingTheme = CustomThemeData.from(.defaultDark).withName("My Theme")
-                        showEditor = true
                     }) {
                         HStack(spacing: 6) {
-                            Image(systemName: "plus.circle")
-                                .font(.system(size: 11))
+                            Image(systemName: "plus")
+                                .font(.system(size: 10, weight: .medium))
                             Text("New Theme…")
                                 .font(.system(size: 12))
                         }
                         .foregroundColor(t.accent)
                         .padding(.horizontal, 8)
-                        .padding(.vertical, 5)
+                        .padding(.vertical, 6)
                     }
                     .buttonStyle(.plain)
                 }
             }
         }
-        .sheet(isPresented: $showEditor) {
-            if let theme = editingTheme {
-                CustomThemeEditorView(data: theme) { saved in
-                    var customs = AppSettings.shared.customThemes
-                    if let idx = customs.firstIndex(where: { $0.name == saved.name }) {
-                        customs[idx] = saved
-                    } else {
-                        customs.append(saved)
-                    }
-                    AppSettings.shared.customThemes = customs
-                    selectedTheme = saved.name
-                    AppSettings.shared.themeName = saved.name
-                    showEditor = false
-                } onCancel: {
-                    showEditor = false
+        .sheet(item: $editingTheme) { theme in
+            CustomThemeEditorView(data: theme) { saved in
+                var customs = AppSettings.shared.customThemes
+                if let idx = customs.firstIndex(where: { $0.name == saved.name }) {
+                    customs[idx] = saved
+                } else {
+                    customs.append(saved)
                 }
+                AppSettings.shared.customThemes = customs
+                selectedTheme = saved.name
+                AppSettings.shared.themeName = saved.name
+                editingTheme = nil
+            } onCancel: {
+                editingTheme = nil
             }
         }
     }
@@ -348,12 +339,8 @@ private struct ThemeSettingsView: View {
         let t = Tokens.current
         return VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 4) {
-                Image(systemName: icon)
-                    .font(.system(size: 9))
-                    .foregroundColor(t.muted)
-                Text(label)
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundColor(t.muted)
+                Image(systemName: icon).font(.system(size: 9)).foregroundColor(t.muted)
+                Text(label).font(.system(size: 10, weight: .medium)).foregroundColor(t.muted)
             }
             Picker("", selection: selection) {
                 ForEach(options, id: \.name) { Text($0.name).tag($0.name) }
@@ -363,51 +350,57 @@ private struct ThemeSettingsView: View {
     }
 
     private func themeGrid(_ themes: [TerminalTheme], tokens t: Tokens) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
-            ForEach(themes, id: \.name) { theme in
-                themeRow(theme, tokens: t, isCustom: false)
-            }
+        VStack(alignment: .leading, spacing: 2) {
+            ForEach(themes, id: \.name) { themeRow($0, tokens: t) }
         }
     }
 
-    private func themeRow(_ theme: TerminalTheme, tokens t: Tokens, isCustom: Bool) -> some View {
+    // Standard (built-in) theme row
+    private func themeRow(_ theme: TerminalTheme, tokens t: Tokens) -> some View {
         let active = selectedTheme == theme.name
-        return HStack(spacing: 0) {
-            // Color bar: terminal bg + 6 ansi colors as a continuous strip
-            HStack(spacing: 0) {
-                Rectangle()
-                    .fill(color(theme.background))
-                    .frame(width: 20)
-                ForEach(0..<6, id: \.self) { i in
-                    let c = theme.ansiColors[i + 1]
-                    Rectangle().fill(color(c))
-                }
-            }
-            .frame(width: 80, height: 24)
-            .clipShape(RoundedRectangle(cornerRadius: 4))
-            .overlay(
-                RoundedRectangle(cornerRadius: 4)
-                    .strokeBorder(active ? t.accent.opacity(0.5) : t.muted.opacity(0.1), lineWidth: 1)
-            )
-
+        return HStack(spacing: 10) {
+            colorBar(theme)
             Text(theme.name)
                 .font(.system(size: 12, weight: active ? .medium : .regular))
                 .foregroundColor(active ? t.text : t.muted)
-                .padding(.leading, 10)
-
             Spacer()
+            if active {
+                Image(systemName: "checkmark")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(t.accent)
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .contentShape(Rectangle())
+        .background(RoundedRectangle(cornerRadius: 6).fill(active ? t.accent.opacity(0.08) : Color.clear))
+        .onTapGesture {
+            selectedTheme = theme.name
+            AppSettings.shared.themeName = theme.name
+        }
+    }
 
-            if isCustom {
+    // Custom theme row — shows edit/delete on hover
+    private func customThemeRow(_ theme: TerminalTheme, tokens t: Tokens) -> some View {
+        let active = selectedTheme == theme.name
+        return HStack(spacing: 10) {
+            colorBar(theme)
+            Text(theme.name)
+                .font(.system(size: 12, weight: active ? .medium : .regular))
+                .foregroundColor(active ? t.text : t.muted)
+            Spacer()
+            // Edit / delete always visible for custom themes
+            HStack(spacing: 2) {
                 Button(action: {
                     editingTheme = AppSettings.shared.customThemes.first(where: { $0.name == theme.name })
-                    showEditor = true
                 }) {
                     Image(systemName: "pencil")
                         .font(.system(size: 11))
+                        .frame(width: 22, height: 22)
                         .foregroundColor(t.muted)
+                        .background(RoundedRectangle(cornerRadius: 4).fill(t.muted.opacity(0.08)))
                 }
                 .buttonStyle(.plain)
-                .padding(.trailing, 6)
 
                 Button(action: {
                     var customs = AppSettings.shared.customThemes
@@ -420,32 +413,43 @@ private struct ThemeSettingsView: View {
                 }) {
                     Image(systemName: "trash")
                         .font(.system(size: 11))
+                        .frame(width: 22, height: 22)
                         .foregroundColor(t.muted)
+                        .background(RoundedRectangle(cornerRadius: 4).fill(t.muted.opacity(0.08)))
                 }
                 .buttonStyle(.plain)
-                .padding(.trailing, 4)
             }
-
             if active {
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 13))
+                Image(systemName: "checkmark")
+                    .font(.system(size: 11, weight: .semibold))
                     .foregroundColor(t.accent)
+                    .padding(.leading, 2)
             }
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 5)
         .contentShape(Rectangle())
-        .background(
-            RoundedRectangle(cornerRadius: 6)
-                .fill(active ? t.accent.opacity(0.08) : Color.clear)
-        )
+        .background(RoundedRectangle(cornerRadius: 6).fill(active ? t.accent.opacity(0.08) : Color.clear))
         .onTapGesture {
             selectedTheme = theme.name
             AppSettings.shared.themeName = theme.name
         }
     }
 
-    private func color(_ c: TerminalColor) -> Color {
+    /// Color bar: background swatch + 8 ANSI normal colors.
+    private func colorBar(_ theme: TerminalTheme) -> some View {
+        HStack(spacing: 0) {
+            Rectangle().fill(tc(theme.background)).frame(width: 14)
+            ForEach(0..<8, id: \.self) { i in
+                Rectangle().fill(tc(theme.ansiColors[i]))
+            }
+        }
+        .frame(width: 86, height: 20)
+        .clipShape(RoundedRectangle(cornerRadius: 3))
+        .overlay(RoundedRectangle(cornerRadius: 3).strokeBorder(Tokens.current.muted.opacity(0.12), lineWidth: 0.5))
+    }
+
+    private func tc(_ c: TerminalColor) -> Color {
         Color(red: Double(c.r) / 255, green: Double(c.g) / 255, blue: Double(c.b) / 255)
     }
 }
@@ -457,104 +461,94 @@ private struct CustomThemeEditorView: View {
     let onSave: (CustomThemeData) -> Void
     let onCancel: () -> Void
 
-    // Derived live preview theme
     private var preview: TerminalTheme { data.toTheme() }
+    private let ansiLabels = ["Black", "Red", "Green", "Yellow", "Blue", "Magenta", "Cyan", "White"]
 
     var body: some View {
         let t = Tokens.current
         VStack(spacing: 0) {
-            // Header
-            HStack {
-                Text("Custom Theme")
-                    .font(.system(size: 13, weight: .semibold))
+
+            // ── Header ──────────────────────────────────────────────────────
+            HStack(spacing: 12) {
+                TextField("Theme name", text: $data.name)
+                    .font(.system(size: 14, weight: .semibold))
+                    .textFieldStyle(.plain)
                     .foregroundColor(t.text)
                 Spacer()
+                // Live color strip preview
+                HStack(spacing: 0) {
+                    Rectangle().fill(tc(preview.background)).frame(width: 18)
+                    ForEach(0..<8, id: \.self) { i in Rectangle().fill(tc(preview.ansiColors[i])) }
+                    ForEach(8..<16, id: \.self) { i in Rectangle().fill(tc(preview.ansiColors[i])) }
+                }
+                .frame(width: 136, height: 22)
+                .clipShape(RoundedRectangle(cornerRadius: 4))
+                .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(t.muted.opacity(0.15), lineWidth: 0.5))
             }
             .padding(.horizontal, 20)
-            .padding(.top, 20)
-            .padding(.bottom, 12)
+            .padding(.top, 18)
+            .padding(.bottom, 14)
 
-            Divider().opacity(0.3)
+            Divider().opacity(0.25)
 
+            // ── Body ─────────────────────────────────────────────────────────
             ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    // Name
-                    ThemeEditorSection(title: "Name") {
-                        TextField("Theme name", text: $data.name)
-                            .textFieldStyle(.roundedBorder)
-                            .font(.system(size: 12))
-                    }
+                HStack(alignment: .top, spacing: 0) {
 
-                    // Live preview bar
-                    ThemeEditorSection(title: "Preview") {
-                        HStack(spacing: 0) {
-                            Rectangle()
-                                .fill(termColor(preview.background))
-                                .frame(width: 30)
-                            ForEach(1..<8, id: \.self) { i in
-                                Rectangle().fill(termColor(preview.ansiColors[i]))
-                            }
-                            ForEach(9..<16, id: \.self) { i in
-                                Rectangle().fill(termColor(preview.ansiColors[i]))
-                            }
+                    // Left column: Terminal + ANSI
+                    VStack(alignment: .leading, spacing: 20) {
+                        EditorSection(title: "Terminal") {
+                            SwatchRow(label: "Foreground", hex: hexBinding(\.foreground))
+                            SwatchRow(label: "Background", hex: hexBinding(\.background))
+                            SwatchRow(label: "Cursor",     hex: hexBinding(\.cursor))
+                            SwatchRow(label: "Selection",  hex: $data.selectionHex)
                         }
-                        .frame(height: 28)
-                        .clipShape(RoundedRectangle(cornerRadius: 5))
-                    }
 
-                    // Terminal colors
-                    ThemeEditorSection(title: "Terminal") {
-                        ThreeColumnColorGrid {
-                            ColorSwatch(label: "Foreground", hex: hexBinding(\.foreground))
-                            ColorSwatch(label: "Background", hex: hexBinding(\.background))
-                            ColorSwatch(label: "Cursor", hex: hexBinding(\.cursor))
-                            ColorSwatch(label: "Selection", hex: $data.selectionHex)
-                        }
-                    }
-
-                    // ANSI normal colors
-                    ThemeEditorSection(title: "ANSI Colors (Normal)") {
-                        let labels = ["Black", "Red", "Green", "Yellow", "Blue", "Magenta", "Cyan", "White"]
-                        ThreeColumnColorGrid {
+                        EditorSection(title: "ANSI — Normal") {
                             ForEach(0..<8, id: \.self) { i in
-                                ColorSwatch(label: labels[i], hex: ansiBinding(i))
+                                SwatchRow(label: ansiLabels[i], hex: ansiBinding(i))
                             }
                         }
-                    }
 
-                    // ANSI bright colors
-                    ThemeEditorSection(title: "ANSI Colors (Bright)") {
-                        let labels = ["Black", "Red", "Green", "Yellow", "Blue", "Magenta", "Cyan", "White"]
-                        ThreeColumnColorGrid {
+                        EditorSection(title: "ANSI — Bright") {
                             ForEach(0..<8, id: \.self) { i in
-                                ColorSwatch(label: "Bright \(labels[i])", hex: ansiBinding(i + 8))
+                                SwatchRow(label: ansiLabels[i], hex: ansiBinding(i + 8))
                             }
                         }
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.trailing, 10)
 
-                    // UI Chrome colors
-                    ThemeEditorSection(title: "UI Chrome") {
-                        ThreeColumnColorGrid {
-                            ColorSwatch(label: "Chrome BG", hex: $data.chromeBgHex)
-                            ColorSwatch(label: "Chrome Text", hex: $data.chromeTextHex)
-                            ColorSwatch(label: "Chrome Muted", hex: $data.chromeMutedHex)
-                            ColorSwatch(label: "Sidebar BG", hex: $data.sidebarBgHex)
-                            ColorSwatch(label: "Accent", hex: $data.accentHex)
+                    // Divider between columns
+                    Rectangle()
+                        .fill(t.muted.opacity(0.15))
+                        .frame(width: 0.5)
+                        .padding(.vertical, 4)
+
+                    // Right column: UI Chrome
+                    VStack(alignment: .leading, spacing: 20) {
+                        EditorSection(title: "UI Chrome") {
+                            SwatchRow(label: "Toolbar BG",   hex: $data.chromeBgHex)
+                            SwatchRow(label: "Toolbar Text", hex: $data.chromeTextHex)
+                            SwatchRow(label: "Muted Text",   hex: $data.chromeMutedHex)
+                            SwatchRow(label: "Sidebar BG",   hex: $data.sidebarBgHex)
+                            SwatchRow(label: "Accent",       hex: $data.accentHex)
                         }
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.leading, 10)
                 }
                 .padding(20)
             }
 
-            Divider().opacity(0.3)
+            Divider().opacity(0.25)
 
-            // Footer buttons
+            // ── Footer ───────────────────────────────────────────────────────
             HStack {
                 Button("Cancel") { onCancel() }
                     .keyboardShortcut(.cancelAction)
                 Spacer()
-                Button("Save Theme") {
-                    // Ensure 16 ANSI colors
+                Button("Save") {
                     while data.ansiColors.count < 16 {
                         data.ansiColors.append(TerminalColor(r: 128, g: 128, b: 128))
                     }
@@ -564,10 +558,10 @@ private struct CustomThemeEditorView: View {
                 .disabled(data.name.trimmingCharacters(in: .whitespaces).isEmpty)
             }
             .padding(.horizontal, 20)
-            .padding(.vertical, 14)
+            .padding(.vertical, 12)
         }
-        .frame(width: 520, height: 560)
-        .background(Tokens.current.bg)
+        .frame(width: 560, height: 540)
+        .background(t.bg)
     }
 
     // MARK: Bindings
@@ -575,18 +569,13 @@ private struct CustomThemeEditorView: View {
     private func hexBinding(_ kp: WritableKeyPath<CustomThemeData, TerminalColor>) -> Binding<String> {
         Binding(
             get: { data[keyPath: kp].hexString },
-            set: { hex in
-                if let c = TerminalColor(hex: hex) { data[keyPath: kp] = c }
-            }
+            set: { if let c = TerminalColor(hex: $0) { data[keyPath: kp] = c } }
         )
     }
 
     private func ansiBinding(_ index: Int) -> Binding<String> {
         Binding(
-            get: {
-                guard index < data.ansiColors.count else { return "#808080" }
-                return data.ansiColors[index].hexString
-            },
+            get: { index < data.ansiColors.count ? data.ansiColors[index].hexString : "#808080" },
             set: { hex in
                 guard let c = TerminalColor(hex: hex) else { return }
                 while data.ansiColors.count <= index { data.ansiColors.append(TerminalColor(r: 128, g: 128, b: 128)) }
@@ -595,50 +584,47 @@ private struct CustomThemeEditorView: View {
         )
     }
 
-    private func termColor(_ c: TerminalColor) -> Color {
+    private func tc(_ c: TerminalColor) -> Color {
         Color(red: Double(c.r) / 255, green: Double(c.g) / 255, blue: Double(c.b) / 255)
     }
 }
 
-private struct ThemeEditorSection<Content: View>: View {
+// ── Editor building blocks ──────────────────────────────────────────────────
+
+private struct EditorSection<Content: View>: View {
     let title: String
     @ViewBuilder let content: () -> Content
     var body: some View {
         let t = Tokens.current
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 6) {
             Text(title)
-                .font(.system(size: 10, weight: .semibold))
+                .font(.system(size: 9, weight: .semibold))
                 .foregroundColor(t.muted)
+                .tracking(0.6)
                 .textCase(.uppercase)
-            content()
+            VStack(alignment: .leading, spacing: 4) { content() }
         }
     }
 }
 
-private struct ThreeColumnColorGrid<Content: View>: View {
-    @ViewBuilder let content: () -> Content
-    var body: some View {
-        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
-            content()
-        }
-    }
-}
-
-/// A labeled color swatch that opens NSColorPanel on click.
-private struct ColorSwatch: View {
+/// One row: colored well on the left, fixed-width label on the right.
+private struct SwatchRow: View {
     let label: String
     @Binding var hex: String
 
     var body: some View {
         let t = Tokens.current
-        HStack(spacing: 6) {
+        HStack(spacing: 8) {
             ColorWell(hex: $hex)
-                .frame(width: 24, height: 24)
+                .frame(width: 22, height: 18)
+                .clipShape(RoundedRectangle(cornerRadius: 3))
             Text(label)
                 .font(.system(size: 11))
                 .foregroundColor(t.muted)
-                .lineLimit(1)
-            Spacer(minLength: 0)
+                .frame(width: 90, alignment: .leading)
+            Text(hex.uppercased())
+                .font(.system(size: 10, design: .monospaced))
+                .foregroundColor(t.muted.opacity(0.6))
         }
     }
 }
@@ -656,7 +642,7 @@ private struct ColorWell: NSViewRepresentable {
     }
 
     func updateNSView(_ well: NSColorWell, context: Context) {
-        if let c = NSColor(hex: hex), c != well.color.usingColorSpace(.sRGB) {
+        if let c = NSColor(hex: hex), c.usingColorSpace(.sRGB) != well.color.usingColorSpace(.sRGB) {
             well.color = c
         }
     }
@@ -667,12 +653,11 @@ private struct ColorWell: NSViewRepresentable {
         var hex: Binding<String>
         init(hex: Binding<String>) { self.hex = hex }
         @objc func colorChanged(_ sender: NSColorWell) {
-            if let c = sender.color.usingColorSpace(.sRGB) {
-                let r = Int(c.redComponent * 255)
-                let g = Int(c.greenComponent * 255)
-                let b = Int(c.blueComponent * 255)
-                hex.wrappedValue = String(format: "#%02X%02X%02X", r, g, b)
-            }
+            guard let c = sender.color.usingColorSpace(.sRGB) else { return }
+            hex.wrappedValue = String(
+                format: "#%02X%02X%02X",
+                Int(c.redComponent * 255), Int(c.greenComponent * 255), Int(c.blueComponent * 255)
+            )
         }
     }
 }
@@ -680,9 +665,7 @@ private struct ColorWell: NSViewRepresentable {
 // MARK: - Helpers
 
 extension TerminalColor {
-    fileprivate var hexString: String {
-        String(format: "#%02X%02X%02X", r, g, b)
-    }
+    fileprivate var hexString: String { String(format: "#%02X%02X%02X", r, g, b) }
 
     fileprivate init?(hex: String) {
         var s = hex.trimmingCharacters(in: .whitespaces)
@@ -694,9 +677,7 @@ extension TerminalColor {
 
 extension CustomThemeData {
     fileprivate func withName(_ newName: String) -> CustomThemeData {
-        var copy = self
-        copy.name = newName
-        return copy
+        var copy = self; copy.name = newName; return copy
     }
 }
 
