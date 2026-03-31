@@ -26,8 +26,9 @@ jobs:
       - name: Run swift-format lint
         run: swift-format lint --strict --recursive Boo/ Tests/
 
-  build-macos:
-    name: Build & Test (macOS)
+  build-and-test:
+    name: Build & Test
+    needs: lint
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
@@ -53,8 +54,78 @@ jobs:
       - name: Build GhosttyKit
         run: make ghostty
 
-      - name: Build Boo
+      - name: Build
         run: swift build
 
-      - name: Run tests
+      - name: Test
         run: make test
+
+  release:
+    name: Release
+    needs: build-and-test
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: macos-15
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install semantic-release plugins
+        run: npm install -g semantic-release@25.0.3 @semantic-release/exec @semantic-release/git lodash-es@4.17.21
+
+      - name: Install Zig
+        run: |
+          brew install zig
+          zig version
+
+      - name: Cache GhosttyKit build
+        uses: actions/cache@v4
+        with:
+          path: |
+            Vendor/ghostty/macos
+            Vendor/ghostty/zig-out
+            Vendor/ghostty/.zig-cache
+          key: ghosttykit-macos15-${{ hashFiles('Vendor/ghostty/build.zig.zon') }}-${{ hashFiles('Makefile') }}
+          restore-keys: |
+            ghosttykit-macos15-
+
+      - name: Build GhosttyKit
+        run: make ghostty
+
+      - name: Import signing certificate
+        if: env.CERTIFICATE_P12_BASE64 != ''
+        env:
+          CERTIFICATE_P12_BASE64: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}
+          CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          CERTIFICATE_PATH="$RUNNER_TEMP/certificate.p12"
+          echo "$CERTIFICATE_P12_BASE64" | base64 --decode > "$CERTIFICATE_PATH"
+          KEYCHAIN_PATH="$RUNNER_TEMP/signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(openssl rand -hex 32)"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$CERTIFICATE_PATH" \
+            -P "$CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security list-keychain -d user -s "$KEYCHAIN_PATH"
+
+      - name: Run semantic-release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SIGNING_IDENTITY: ${{ secrets.SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+        run: npx semantic-release
