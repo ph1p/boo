@@ -288,6 +288,12 @@ extension RemoteSessionType: Equatable {
 
 /// Detects remote sessions (SSH, Mosh, Docker, kubectl, etc.) and provides file listing.
 final class RemoteExplorer {
+    /// When true, `runSSH` returns nil immediately instead of spawning `/usr/bin/ssh`.
+    /// Automatically enabled when running under XCTest to avoid real network calls.
+    static var disableRealSSH: Bool = {
+        NSClassFromString("XCTestCase") != nil
+    }()
+
     struct RemoteEntry {
         let name: String
         let isDirectory: Bool
@@ -793,6 +799,7 @@ final class RemoteExplorer {
     }
 
     private static func runSSH(host: String, command: String, extraArgs: [String] = []) -> String? {
+        if disableRealSSH { return nil }
         let process = Process()
         let pipe = Pipe()
         let errPipe = Pipe()
