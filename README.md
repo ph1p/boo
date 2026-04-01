@@ -8,6 +8,15 @@ A macOS terminal emulator with integrated file explorer, workspace management, s
 
 _Coming soon_
 
+## Install
+
+Download the latest release from [GitHub Releases](https://github.com/ph1p/boo/releases) — open the app and drag Boo to Applications.
+
+> **"Boo cannot be opened" (Gatekeeper)** — If macOS blocks the app after installing, run:
+> ```bash
+> xattr -dr com.apple.quarantine /Applications/Boo.app
+> ```
+
 ## Features
 
 - **Workspaces** — Open folders as workspaces with their own file tree (Cmd+N)
@@ -28,10 +37,6 @@ _Coming soon_
 - **Focus memory** — Remembers last focused pane per workspace, restores on switch
 - **IPC socket** — Unix socket at `~/.boo/boo.sock` for reliable process detection and plugin commands
 - **Debug plugin** — Live event log and terminal state inspector for diagnostics
-
-## Install
-
-Download the latest release from [GitHub Releases](https://github.com/ph1p/boo/releases) — open the DMG and drag Boo to Applications.
 
 ## Build from Source
 
