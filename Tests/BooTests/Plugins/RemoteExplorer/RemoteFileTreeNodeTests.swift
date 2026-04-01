@@ -13,7 +13,7 @@ final class RemoteFileTreeNodeTests: XCTestCase {
 
     func testInitialState() {
         let node = RemoteFileTreeNode(
-            name: "project", remotePath: "~/project", isDirectory: true, session: .ssh(host: "het"))
+            name: "project", remotePath: "~/project", isDirectory: true, session: .ssh(host: "devbox"))
         XCTAssertNil(node.children)
         XCTAssertFalse(node.isLoading)
         XCTAssertFalse(node.loadFailed)
@@ -22,14 +22,14 @@ final class RemoteFileTreeNodeTests: XCTestCase {
     }
 
     func testUpdatePathChangesNameAndPath() {
-        let node = RemoteFileTreeNode(name: "~", remotePath: "~", isDirectory: true, session: .ssh(host: "het"))
+        let node = RemoteFileTreeNode(name: "~", remotePath: "~", isDirectory: true, session: .ssh(host: "devbox"))
         node.updatePath("/home/user/project")
         XCTAssertEqual(node.remotePath, "/home/user/project")
         XCTAssertEqual(node.name, "project")
     }
 
     func testUpdatePathRootDirectory() {
-        let node = RemoteFileTreeNode(name: "~", remotePath: "~", isDirectory: true, session: .ssh(host: "het"))
+        let node = RemoteFileTreeNode(name: "~", remotePath: "~", isDirectory: true, session: .ssh(host: "devbox"))
         node.updatePath("/")
         XCTAssertEqual(node.remotePath, "/")
         XCTAssertEqual(node.name, "/")
@@ -38,7 +38,7 @@ final class RemoteFileTreeNodeTests: XCTestCase {
     // MARK: - applyEntries
 
     func testApplyEntriesSetsChildren() {
-        let node = RemoteFileTreeNode(name: "root", remotePath: "~", isDirectory: true, session: .ssh(host: "het"))
+        let node = RemoteFileTreeNode(name: "root", remotePath: "~", isDirectory: true, session: .ssh(host: "devbox"))
         node.isLoading = true
 
         let entries: [RemoteExplorer.RemoteEntry] = [
@@ -57,7 +57,7 @@ final class RemoteFileTreeNodeTests: XCTestCase {
     }
 
     func testApplyEntriesPreservesExistingMatchingNodes() {
-        let node = RemoteFileTreeNode(name: "root", remotePath: "~", isDirectory: true, session: .ssh(host: "het"))
+        let node = RemoteFileTreeNode(name: "root", remotePath: "~", isDirectory: true, session: .ssh(host: "devbox"))
 
         let entries1: [RemoteExplorer.RemoteEntry] = [
             .init(name: "src", isDirectory: true),
@@ -84,7 +84,7 @@ final class RemoteFileTreeNodeTests: XCTestCase {
     }
 
     func testApplyEntriesResetsLoadFailed() {
-        let node = RemoteFileTreeNode(name: "root", remotePath: "~", isDirectory: true, session: .ssh(host: "het"))
+        let node = RemoteFileTreeNode(name: "root", remotePath: "~", isDirectory: true, session: .ssh(host: "devbox"))
         node.loadFailed = true
         node.applyEntries([])
         XCTAssertFalse(node.loadFailed)
@@ -93,7 +93,7 @@ final class RemoteFileTreeNodeTests: XCTestCase {
     // MARK: - resetForRetry
 
     func testResetForRetry() {
-        let node = RemoteFileTreeNode(name: "root", remotePath: "~", isDirectory: true, session: .ssh(host: "het"))
+        let node = RemoteFileTreeNode(name: "root", remotePath: "~", isDirectory: true, session: .ssh(host: "devbox"))
         node.loadFailed = true
         node.resetForRetry()
         XCTAssertFalse(node.loadFailed)
@@ -102,15 +102,15 @@ final class RemoteFileTreeNodeTests: XCTestCase {
     // MARK: - Session Properties
 
     func testSSHSessionProperties() {
-        let node = RemoteFileTreeNode(name: "root", remotePath: "~", isDirectory: true, session: .ssh(host: "het"))
-        XCTAssertEqual(node.session, .ssh(host: "het"))
+        let node = RemoteFileTreeNode(name: "root", remotePath: "~", isDirectory: true, session: .ssh(host: "devbox"))
+        XCTAssertEqual(node.session, .ssh(host: "devbox"))
     }
 
     // MARK: - Child Path Construction
 
     func testApplyEntriesChildPathsCorrect() {
         let node = RemoteFileTreeNode(
-            name: "project", remotePath: "/home/user/project", isDirectory: true, session: .ssh(host: "het"))
+            name: "project", remotePath: "/home/user/project", isDirectory: true, session: .ssh(host: "devbox"))
         let entries: [RemoteExplorer.RemoteEntry] = [
             .init(name: "src", isDirectory: true),
             .init(name: "Makefile", isDirectory: false)
@@ -126,7 +126,7 @@ final class RemoteFileTreeNodeTests: XCTestCase {
     /// Without this, a node that exhausted retries on the initial load would never
     /// retry when the user navigates to a new directory.
     func testUpdatePathResetsRetryState() {
-        let node = RemoteFileTreeNode(name: "root", remotePath: "~", isDirectory: true, session: .ssh(host: "het"))
+        let node = RemoteFileTreeNode(name: "root", remotePath: "~", isDirectory: true, session: .ssh(host: "devbox"))
 
         // Simulate exhausted retries from a failed initial load
         node.loadFailed = true
@@ -144,7 +144,7 @@ final class RemoteFileTreeNodeTests: XCTestCase {
     /// updatePath must cancel any in-flight retry timer to prevent stale retries
     /// from interfering with the new path's load.
     func testUpdatePathCancelsIsLoading() {
-        let node = RemoteFileTreeNode(name: "root", remotePath: "~", isDirectory: true, session: .ssh(host: "het"))
+        let node = RemoteFileTreeNode(name: "root", remotePath: "~", isDirectory: true, session: .ssh(host: "devbox"))
 
         // Simulate a load in progress
         node.isLoading = true
@@ -160,18 +160,18 @@ final class RemoteFileTreeNodeTests: XCTestCase {
     // MARK: - Session with Alias
 
     func testNodeUsesConnectionTargetForSSH() {
-        let session = RemoteSessionType.ssh(host: "het", alias: "het")
+        let session = RemoteSessionType.ssh(host: "devbox", alias: "devbox")
         let node = RemoteFileTreeNode(name: "root", remotePath: "~", isDirectory: true, session: session)
         XCTAssertEqual(
-            node.session.sshConnectionTarget, "het",
+            node.session.sshConnectionTarget, "devbox",
             "Node should use alias for SSH connection")
     }
 
     func testNodeWithDifferentHostAndAlias() {
-        let session = RemoteSessionType.ssh(host: "root@ubuntu-server", alias: "het")
+        let session = RemoteSessionType.ssh(host: "root@ubuntu-server", alias: "devbox")
         let node = RemoteFileTreeNode(name: "root", remotePath: "~", isDirectory: true, session: session)
         XCTAssertEqual(
-            node.session.sshConnectionTarget, "het",
+            node.session.sshConnectionTarget, "devbox",
             "Connection target must be the alias, not the display host")
         XCTAssertEqual(
             node.session.displayName, "root@ubuntu-server",

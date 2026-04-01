@@ -219,7 +219,7 @@ enum RemoteSessionType {
     }
 
     /// The target to use for SSH connections (alias if available, otherwise host).
-    /// This matches what the user typed (e.g. "het") and what SSHControlManager keys on.
+    /// This matches what the user typed (e.g. "devbox") and what SSHControlManager keys on.
     var sshConnectionTarget: String {
         switch self {
         case .ssh(let host, let alias): return alias ?? host

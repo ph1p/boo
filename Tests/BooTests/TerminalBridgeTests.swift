@@ -314,7 +314,7 @@ final class TerminalBridgeTests: XCTestCase {
     func testResolveRemoteSessionKeepsPreviousRemoteDuringCwdEventWithLocalLookingTitle() {
         let previous = RemoteSessionType.ssh(host: "user@remote-host")
         let result = TerminalBridge.resolveRemoteSession(
-            title: "user@localhost:/Users/phlp/project",
+            title: "user@localhost:/Users/testuser/project",
             cwd: "/tmp",
             previous: previous,
             preferPreviousForCwdEvent: true
@@ -327,13 +327,13 @@ final class TerminalBridgeTests: XCTestCase {
         bridge = TerminalBridge(
             paneID: paneID,
             workspaceID: workspaceID,
-            workingDirectory: "/Users/phlp/project"
+            workingDirectory: "/Users/testuser/project"
         )
 
         bridge.handleTitleChange(title: "ssh user@remote-host", paneID: paneID)
         XCTAssertEqual(bridge.state.remoteSession, .ssh(host: "user@remote-host"))
 
-        bridge.handleTitleChange(title: "user@localhost:/Users/phlp/project", paneID: paneID)
+        bridge.handleTitleChange(title: "user@localhost:/Users/testuser/project", paneID: paneID)
         XCTAssertNil(bridge.state.remoteSession)
 
         // Simulate MainWindowController keeping the remote session on the pane while the
@@ -518,12 +518,12 @@ final class TerminalBridgeTests: XCTestCase {
     func testIsLocalHostRejectsRemote() {
         XCTAssertFalse(TerminalBridge.isLocalHost("remote-server"))
         XCTAssertFalse(TerminalBridge.isLocalHost("prod-db-01"))
-        XCTAssertFalse(TerminalBridge.isLocalHost("nas"))
-        XCTAssertFalse(TerminalBridge.isLocalHost("het"))
+        XCTAssertFalse(TerminalBridge.isLocalHost("fileserv"))
+        XCTAssertFalse(TerminalBridge.isLocalHost("devbox"))
     }
 
     func testLocalUserAtHostNotDetectedAsRemote() {
-        // The real local hostname from gethostname — simulates "phlp@phinnoq" style prompt
+        // The real local hostname from gethostname — simulates "user@hostname" style prompt
         var buf = [CChar](repeating: 0, count: 256)
         guard gethostname(&buf, buf.count) == 0,
             let hn = String(validatingUTF8: buf), !hn.isEmpty
@@ -643,8 +643,8 @@ final class TerminalBridgeTests: XCTestCase {
 
     // MARK: - SSH exit → new SSH regression
 
-    /// Simulates: ssh het → connected → exit → ssh nas.
-    /// The session must switch from het to nas; it must NOT stick on het.
+    /// Simulates: ssh devbox → connected → exit → ssh fileserv.
+    /// The session must switch from devbox to fileserv; it must NOT stick on devbox.
     func testSSHExitThenNewSSHClearsOldSession() {
         // Use the real local hostname so the detection recognizes it as local
         var buf = [CChar](repeating: 0, count: 256)
@@ -657,14 +657,14 @@ final class TerminalBridgeTests: XCTestCase {
 
         bridge = TerminalBridge(paneID: paneID, workspaceID: workspaceID, workingDirectory: "/Users/\(localUser)")
 
-        // 1. User types "ssh het"
-        bridge.handleTitleChange(title: "ssh het", paneID: paneID)
-        XCTAssertEqual(bridge.state.remoteSession, .ssh(host: "het"))
+        // 1. User types "ssh devbox"
+        bridge.handleTitleChange(title: "ssh devbox", paneID: paneID)
+        XCTAssertEqual(bridge.state.remoteSession, .ssh(host: "devbox"))
 
-        // 2. SSH connects, remote shell sets title to "phlp@het:~"
-        //    Session preserves the config alias "het" instead of switching to "phlp@het"
-        bridge.handleTitleChange(title: "\(localUser)@het:~", paneID: paneID)
-        XCTAssertEqual(bridge.state.remoteSession, .ssh(host: "het"))
+        // 2. SSH connects, remote shell sets title to "user@devbox:~"
+        //    Session preserves the config alias "devbox" instead of switching to "user@devbox"
+        bridge.handleTitleChange(title: "\(localUser)@devbox:~", paneID: paneID)
+        XCTAssertEqual(bridge.state.remoteSession, .ssh(host: "devbox"))
 
         // 3. User types "exit" — local shell resumes
         //    OSC 7 fires with local CWD BEFORE title updates
@@ -678,11 +678,11 @@ final class TerminalBridgeTests: XCTestCase {
             bridge.state.remoteSession,
             "Session must be nil after exiting SSH (local prompt title with \(localHost))")
 
-        // 5. User types "ssh nas"
-        bridge.handleTitleChange(title: "ssh nas", paneID: paneID)
+        // 5. User types "ssh fileserv"
+        bridge.handleTitleChange(title: "ssh fileserv", paneID: paneID)
         XCTAssertEqual(
-            bridge.state.remoteSession, .ssh(host: "nas"),
-            "Session must be nas, not het")
+            bridge.state.remoteSession, .ssh(host: "fileserv"),
+            "Session must be fileserv, not devbox")
     }
 
     /// Same scenario but the CWD change arrives while the remote title is still showing.
@@ -690,10 +690,10 @@ final class TerminalBridgeTests: XCTestCase {
     func testSSHExitWithStaleTitleThenNewSSH() {
         bridge = TerminalBridge(paneID: paneID, workspaceID: workspaceID, workingDirectory: localHome)
 
-        // 1. SSH to het, connected — alias preserved
-        bridge.handleTitleChange(title: "ssh het", paneID: paneID)
-        bridge.handleTitleChange(title: "phlp@het:~", paneID: paneID)
-        XCTAssertEqual(bridge.state.remoteSession, .ssh(host: "het"))
+        // 1. SSH to devbox, connected — alias preserved
+        bridge.handleTitleChange(title: "ssh devbox", paneID: paneID)
+        bridge.handleTitleChange(title: "user@devbox:~", paneID: paneID)
+        XCTAssertEqual(bridge.state.remoteSession, .ssh(host: "devbox"))
 
         // 2. User exits SSH. OSC 7 CWD arrives while title still shows remote prompt.
         bridge.handleDirectoryChange(path: localHome, paneID: paneID)
@@ -707,15 +707,15 @@ final class TerminalBridgeTests: XCTestCase {
             bridge.state.remoteSession,
             "Session must be nil after title shows local shell")
 
-        // 4. User types "ssh nas"
-        bridge.handleTitleChange(title: "ssh nas", paneID: paneID)
+        // 4. User types "ssh fileserv"
+        bridge.handleTitleChange(title: "ssh fileserv", paneID: paneID)
         XCTAssertEqual(
-            bridge.state.remoteSession, .ssh(host: "nas"),
-            "Session must be nas after new SSH command")
+            bridge.state.remoteSession, .ssh(host: "fileserv"),
+            "Session must be fileserv after new SSH command")
     }
 
-    /// The critical race: exit SSH, and the user types "ssh nas" so fast that the
-    /// title goes from "phlp@het:~" directly to "ssh nas" without an intermediate
+    /// The critical race: exit SSH, and the user types "ssh fileserv" so fast that the
+    /// title goes from "user@devbox:~" directly to "ssh fileserv" without an intermediate
     /// local title. The CWD change (OSC 7) arrives between these.
     func testSSHExitFastRetypeWithCwdRace() {
         var buf = [CChar](repeating: 0, count: 256)
@@ -726,10 +726,10 @@ final class TerminalBridgeTests: XCTestCase {
 
         bridge = TerminalBridge(paneID: paneID, workspaceID: workspaceID, workingDirectory: "/Users/\(localUser)")
 
-        // 1. SSH to het, connected — alias preserved
-        bridge.handleTitleChange(title: "ssh het", paneID: paneID)
-        bridge.handleTitleChange(title: "\(localUser)@het:~", paneID: paneID)
-        XCTAssertEqual(bridge.state.remoteSession, .ssh(host: "het"))
+        // 1. SSH to devbox, connected — alias preserved
+        bridge.handleTitleChange(title: "ssh devbox", paneID: paneID)
+        bridge.handleTitleChange(title: "\(localUser)@devbox:~", paneID: paneID)
+        XCTAssertEqual(bridge.state.remoteSession, .ssh(host: "devbox"))
 
         // 2. User types exit. CWD change arrives (local path).
         //    Title still shows remote prompt due to timing.
@@ -741,16 +741,16 @@ final class TerminalBridgeTests: XCTestCase {
             bridge.state.remoteSession,
             "CWD change to local path must clear remote session even with stale title")
 
-        // 3. User immediately types "ssh nas" — title changes directly
-        bridge.handleTitleChange(title: "ssh nas", paneID: paneID)
+        // 3. User immediately types "ssh fileserv" — title changes directly
+        bridge.handleTitleChange(title: "ssh fileserv", paneID: paneID)
 
-        // The session MUST be nas, not het
+        // The session MUST be fileserv, not devbox
         XCTAssertEqual(
-            bridge.state.remoteSession, .ssh(host: "nas"),
-            "Fast retype: session must be nas, not stuck on het")
+            bridge.state.remoteSession, .ssh(host: "fileserv"),
+            "Fast retype: session must be fileserv, not stuck on devbox")
     }
 
-    /// Verify that when SSH config aliases are used (short hostnames like "het", "nas"),
+    /// Verify that when SSH config aliases are used (short hostnames like "devbox", "fileserv"),
     /// switching between them produces distinct sessions with correct host values.
     func testSSHConfigAliasSessionSwitch() {
         bridge = TerminalBridge(paneID: paneID, workspaceID: workspaceID, workingDirectory: localHome)
@@ -759,27 +759,27 @@ final class TerminalBridgeTests: XCTestCase {
         bridge.events.sink { events.append($0) }.store(in: &cancellables)
 
         // SSH to first host
-        bridge.handleTitleChange(title: "ssh het", paneID: paneID)
-        XCTAssertEqual(bridge.state.remoteSession, .ssh(host: "het"))
+        bridge.handleTitleChange(title: "ssh devbox", paneID: paneID)
+        XCTAssertEqual(bridge.state.remoteSession, .ssh(host: "devbox"))
 
         // Exit: title goes to local shell
         bridge.handleTitleChange(title: "zsh", paneID: paneID)
         XCTAssertNil(bridge.state.remoteSession)
 
         // SSH to second host
-        bridge.handleTitleChange(title: "ssh nas", paneID: paneID)
-        XCTAssertEqual(bridge.state.remoteSession, .ssh(host: "nas"))
+        bridge.handleTitleChange(title: "ssh fileserv", paneID: paneID)
+        XCTAssertEqual(bridge.state.remoteSession, .ssh(host: "fileserv"))
 
         // Verify all three session change events fired
         let sessionEvents = events.compactMap { event -> TerminalEvent? in
             if case .remoteSessionChanged = event { return event }
             return nil
         }
-        // Expected: .ssh("het"), nil, .ssh("nas")
-        XCTAssertEqual(sessionEvents.count, 3, "Should have 3 session changes: het → nil → nas")
-        XCTAssertEqual(sessionEvents[0], .remoteSessionChanged(session: .ssh(host: "het")))
+        // Expected: .ssh("devbox"), nil, .ssh("fileserv")
+        XCTAssertEqual(sessionEvents.count, 3, "Should have 3 session changes: devbox → nil → fileserv")
+        XCTAssertEqual(sessionEvents[0], .remoteSessionChanged(session: .ssh(host: "devbox")))
         XCTAssertEqual(sessionEvents[1], .remoteSessionChanged(session: nil))
-        XCTAssertEqual(sessionEvents[2], .remoteSessionChanged(session: .ssh(host: "nas")))
+        XCTAssertEqual(sessionEvents[2], .remoteSessionChanged(session: .ssh(host: "fileserv")))
     }
 
     // MARK: - Directory Listing (OSC 2 EXTERM_LS protocol)
@@ -830,9 +830,9 @@ final class TerminalBridgeTests: XCTestCase {
 
     // MARK: - SSH Alias Stability (no false session transitions on cd)
 
-    /// Core bug: "ssh het" connects, initial tree loads, then on cd the title changes
-    /// from "root@het:~" to "root@het:/tmp". Each title change must NOT cause a session
-    /// change event — the session host must stay stable as "het".
+    /// Core bug: "ssh devbox" connects, initial tree loads, then on cd the title changes
+    /// from "root@devbox:~" to "root@devbox:/tmp". Each title change must NOT cause a session
+    /// change event — the session host must stay stable as "devbox".
     func testSSHAliasStableAcrossMultipleCdChanges() {
         bridge = TerminalBridge(paneID: paneID, workspaceID: workspaceID, workingDirectory: localHome)
 
@@ -841,32 +841,32 @@ final class TerminalBridgeTests: XCTestCase {
             .sink { if case .remoteSessionChanged = $0 { sessionEvents.append($0) } }
             .store(in: &cancellables)
 
-        // 1. User types "ssh het"
-        bridge.handleTitleChange(title: "ssh het", paneID: paneID)
-        XCTAssertEqual(bridge.state.remoteSession, .ssh(host: "het"))
+        // 1. User types "ssh devbox"
+        bridge.handleTitleChange(title: "ssh devbox", paneID: paneID)
+        XCTAssertEqual(bridge.state.remoteSession, .ssh(host: "devbox"))
         XCTAssertEqual(sessionEvents.count, 1, "Initial SSH detection should fire one event")
 
         // 2. Remote shell prompt appears
-        bridge.handleTitleChange(title: "root@het:~", paneID: paneID)
+        bridge.handleTitleChange(title: "root@devbox:~", paneID: paneID)
         XCTAssertEqual(
-            bridge.state.remoteSession, .ssh(host: "het"),
-            "Session host must stay 'het' — not flip to 'root@het'")
+            bridge.state.remoteSession, .ssh(host: "devbox"),
+            "Session host must stay 'devbox' — not flip to 'root@devbox'")
         XCTAssertEqual(sessionEvents.count, 1, "No new session event — host unchanged")
 
         // 3. User does cd /tmp
-        bridge.handleTitleChange(title: "root@het:/tmp", paneID: paneID)
+        bridge.handleTitleChange(title: "root@devbox:/tmp", paneID: paneID)
         XCTAssertEqual(
-            bridge.state.remoteSession, .ssh(host: "het"),
+            bridge.state.remoteSession, .ssh(host: "devbox"),
             "cd must not cause session change")
         XCTAssertEqual(sessionEvents.count, 1, "Still only 1 session event total")
 
         // 4. User does cd /var/log
-        bridge.handleTitleChange(title: "root@het:/var/log", paneID: paneID)
-        XCTAssertEqual(bridge.state.remoteSession, .ssh(host: "het"))
+        bridge.handleTitleChange(title: "root@devbox:/var/log", paneID: paneID)
+        XCTAssertEqual(bridge.state.remoteSession, .ssh(host: "devbox"))
         XCTAssertEqual(sessionEvents.count, 1, "Multiple cd's must not cause session churn")
     }
 
-    /// When the SSH config alias resolves to a different hostname (e.g., "het" → "ubuntu-server"),
+    /// When the SSH config alias resolves to a different hostname (e.g., "devbox" → "ubuntu-server"),
     /// the title shows "root@ubuntu-server:~" but the session must stay stable with the alias.
     func testSSHAliasStableWhenHostnameDiffersFromAlias() {
         bridge = TerminalBridge(paneID: paneID, workspaceID: workspaceID, workingDirectory: localHome)
@@ -876,20 +876,20 @@ final class TerminalBridgeTests: XCTestCase {
             .sink { if case .remoteSessionChanged = $0 { sessionEvents.append($0) } }
             .store(in: &cancellables)
 
-        // 1. User types "ssh het"
-        bridge.handleTitleChange(title: "ssh het", paneID: paneID)
-        XCTAssertEqual(bridge.state.remoteSession, .ssh(host: "het"))
+        // 1. User types "ssh devbox"
+        bridge.handleTitleChange(title: "ssh devbox", paneID: paneID)
+        XCTAssertEqual(bridge.state.remoteSession, .ssh(host: "devbox"))
 
         // 2. Title shows different hostname — alias must survive
         bridge.handleTitleChange(title: "root@ubuntu-server:~", paneID: paneID)
         XCTAssertEqual(
-            bridge.state.remoteSession, .ssh(host: "het"),
-            "Session must stay 'het' even when remote hostname differs")
+            bridge.state.remoteSession, .ssh(host: "devbox"),
+            "Session must stay 'devbox' even when remote hostname differs")
         XCTAssertEqual(sessionEvents.count, 1, "No false session transition")
 
         // 3. cd on the remote — still stable
         bridge.handleTitleChange(title: "root@ubuntu-server:/opt", paneID: paneID)
-        XCTAssertEqual(bridge.state.remoteSession, .ssh(host: "het"))
+        XCTAssertEqual(bridge.state.remoteSession, .ssh(host: "devbox"))
         XCTAssertEqual(sessionEvents.count, 1)
     }
 
@@ -898,16 +898,16 @@ final class TerminalBridgeTests: XCTestCase {
         bridge = TerminalBridge(paneID: paneID, workspaceID: workspaceID, workingDirectory: localHome)
 
         // Establish session with alias via process tree reconciliation
-        bridge.handleTitleChange(title: "ssh het", paneID: paneID)
+        bridge.handleTitleChange(title: "ssh devbox", paneID: paneID)
         // Simulate process tree detecting the same alias
-        bridge.handleProcessTreeDetection(session: .ssh(host: "het"), paneID: paneID)
+        bridge.handleProcessTreeDetection(session: .ssh(host: "devbox"), paneID: paneID)
 
         guard let session = bridge.state.remoteSession else {
             XCTFail("Expected remote session")
             return
         }
         XCTAssertEqual(
-            session.sshConnectionTarget, "het",
+            session.sshConnectionTarget, "devbox",
             "sshConnectionTarget must return alias for SSH command execution")
     }
 
@@ -915,23 +915,23 @@ final class TerminalBridgeTests: XCTestCase {
     func testProcessTreeAliasPreservedAcrossTitleChanges() {
         bridge = TerminalBridge(paneID: paneID, workspaceID: workspaceID, workingDirectory: localHome)
 
-        // 1. ssh het detected by title
-        bridge.handleTitleChange(title: "ssh het", paneID: paneID)
+        // 1. ssh devbox detected by title
+        bridge.handleTitleChange(title: "ssh devbox", paneID: paneID)
 
         // 2. Process tree confirms with alias
-        bridge.handleProcessTreeDetection(session: .ssh(host: "het"), paneID: paneID)
-        XCTAssertEqual(bridge.state.remoteSession?.sshConnectionTarget, "het")
+        bridge.handleProcessTreeDetection(session: .ssh(host: "devbox"), paneID: paneID)
+        XCTAssertEqual(bridge.state.remoteSession?.sshConnectionTarget, "devbox")
 
         // 3. Title changes to remote prompt
         bridge.handleTitleChange(title: "root@ubuntu-server:~", paneID: paneID)
         XCTAssertEqual(
-            bridge.state.remoteSession?.sshConnectionTarget, "het",
+            bridge.state.remoteSession?.sshConnectionTarget, "devbox",
             "Alias must survive title changes")
 
         // 4. Multiple cd's
         bridge.handleTitleChange(title: "root@ubuntu-server:/tmp", paneID: paneID)
         bridge.handleTitleChange(title: "root@ubuntu-server:/var", paneID: paneID)
-        XCTAssertEqual(bridge.state.remoteSession?.sshConnectionTarget, "het")
+        XCTAssertEqual(bridge.state.remoteSession?.sshConnectionTarget, "devbox")
     }
 
     // MARK: - Docker Session Stability
@@ -986,22 +986,22 @@ final class TerminalBridgeTests: XCTestCase {
     // MARK: - RemoteSessionType Equatable and sshConnectionTarget
 
     func testSSHEqualityIgnoresAlias() {
-        let a = RemoteSessionType.ssh(host: "het", alias: "het")
-        let b = RemoteSessionType.ssh(host: "het", alias: nil)
-        let c = RemoteSessionType.ssh(host: "het", alias: "other")
+        let a = RemoteSessionType.ssh(host: "devbox", alias: "devbox")
+        let b = RemoteSessionType.ssh(host: "devbox", alias: nil)
+        let c = RemoteSessionType.ssh(host: "devbox", alias: "other")
         XCTAssertEqual(a, b, "Alias should be ignored for equality")
         XCTAssertEqual(a, c, "Different aliases with same host should be equal")
     }
 
     func testSSHConnectionTargetPrefersAlias() {
-        let withAlias = RemoteSessionType.ssh(host: "root@ubuntu-server", alias: "het")
-        XCTAssertEqual(withAlias.sshConnectionTarget, "het")
+        let withAlias = RemoteSessionType.ssh(host: "root@ubuntu-server", alias: "devbox")
+        XCTAssertEqual(withAlias.sshConnectionTarget, "devbox")
 
         let noAlias = RemoteSessionType.ssh(host: "root@ubuntu-server")
         XCTAssertEqual(noAlias.sshConnectionTarget, "root@ubuntu-server")
 
-        let shortHost = RemoteSessionType.ssh(host: "het")
-        XCTAssertEqual(shortHost.sshConnectionTarget, "het")
+        let shortHost = RemoteSessionType.ssh(host: "devbox")
+        XCTAssertEqual(shortHost.sshConnectionTarget, "devbox")
     }
 
     func testDockerConnectionTarget() {
@@ -1023,15 +1023,15 @@ final class TerminalBridgeTests: XCTestCase {
             .store(in: &cancellables)
 
         // 1. SSH connected
-        bridge.handleTitleChange(title: "ssh het", paneID: paneID)
+        bridge.handleTitleChange(title: "ssh devbox", paneID: paneID)
         bridge.handleTitleChange(title: "root@ubuntu-server:~", paneID: paneID)
-        XCTAssertEqual(bridge.state.remoteSession, .ssh(host: "het"))
+        XCTAssertEqual(bridge.state.remoteSession, .ssh(host: "devbox"))
         let eventsAfterConnect = sessionEvents.count
 
         // 2. User types "cd /tmp" — title briefly shows the command
         bridge.handleTitleChange(title: "cd /tmp", paneID: paneID)
         XCTAssertEqual(
-            bridge.state.remoteSession, .ssh(host: "het"),
+            bridge.state.remoteSession, .ssh(host: "devbox"),
             "Transient 'cd /tmp' title must not clear SSH session")
         XCTAssertEqual(
             sessionEvents.count, eventsAfterConnect,
@@ -1039,7 +1039,7 @@ final class TerminalBridgeTests: XCTestCase {
 
         // 3. Title updates to new prompt
         bridge.handleTitleChange(title: "root@ubuntu-server:/tmp", paneID: paneID)
-        XCTAssertEqual(bridge.state.remoteSession, .ssh(host: "het"))
+        XCTAssertEqual(bridge.state.remoteSession, .ssh(host: "devbox"))
         XCTAssertEqual(bridge.state.remoteCwd, "/tmp")
     }
 
@@ -1047,7 +1047,7 @@ final class TerminalBridgeTests: XCTestCase {
     func testVariousTransientTitlesPreserveSession() {
         bridge = TerminalBridge(paneID: paneID, workspaceID: workspaceID, workingDirectory: localHome)
 
-        bridge.handleTitleChange(title: "ssh het", paneID: paneID)
+        bridge.handleTitleChange(title: "ssh devbox", paneID: paneID)
         bridge.handleTitleChange(title: "root@server:~", paneID: paneID)
         XCTAssertNotNil(bridge.state.remoteSession)
 
@@ -1068,7 +1068,7 @@ final class TerminalBridgeTests: XCTestCase {
     func testLocalShellTitleClearsSession() {
         bridge = TerminalBridge(paneID: paneID, workspaceID: workspaceID, workingDirectory: localHome)
 
-        bridge.handleTitleChange(title: "ssh het", paneID: paneID)
+        bridge.handleTitleChange(title: "ssh devbox", paneID: paneID)
         XCTAssertNotNil(bridge.state.remoteSession)
 
         bridge.handleTitleChange(title: "zsh", paneID: paneID)
@@ -1085,9 +1085,9 @@ final class TerminalBridgeTests: XCTestCase {
         bridge = TerminalBridge(paneID: paneID, workspaceID: workspaceID, workingDirectory: localHome)
 
         // Connect to server A
-        bridge.handleTitleChange(title: "ssh het", paneID: paneID)
+        bridge.handleTitleChange(title: "ssh devbox", paneID: paneID)
         bridge.handleTitleChange(title: "root@ubuntu-server:~", paneID: paneID)
-        XCTAssertEqual(bridge.state.remoteSession?.sshConnectionTarget, "het")
+        XCTAssertEqual(bridge.state.remoteSession?.sshConnectionTarget, "devbox")
 
         // Exit server A — title shows "exit" command, then OSC 7 with local CWD
         bridge.handleTitleChange(title: "exit", paneID: paneID)
@@ -1095,11 +1095,11 @@ final class TerminalBridgeTests: XCTestCase {
         XCTAssertNil(bridge.state.remoteSession, "Session A must be cleared after exit + local CWD")
 
         // Connect to server B
-        bridge.handleTitleChange(title: "ssh nas", paneID: paneID)
+        bridge.handleTitleChange(title: "ssh fileserv", paneID: paneID)
         XCTAssertEqual(
-            bridge.state.remoteSession, .ssh(host: "nas"),
-            "Session must be nas, not het")
-        XCTAssertEqual(bridge.state.remoteSession?.sshConnectionTarget, "nas")
+            bridge.state.remoteSession, .ssh(host: "fileserv"),
+            "Session must be fileserv, not devbox")
+        XCTAssertEqual(bridge.state.remoteSession?.sshConnectionTarget, "fileserv")
     }
 
     /// Realistic sequence: user types "exit", title shows "exit", then "logout",
@@ -1114,9 +1114,9 @@ final class TerminalBridgeTests: XCTestCase {
         bridge = TerminalBridge(paneID: paneID, workspaceID: workspaceID, workingDirectory: "/Users/\(localUser)")
 
         // Connect to server A
-        bridge.handleTitleChange(title: "ssh het", paneID: paneID)
+        bridge.handleTitleChange(title: "ssh devbox", paneID: paneID)
         bridge.handleTitleChange(title: "root@ubuntu-server:~", paneID: paneID)
-        XCTAssertEqual(bridge.state.remoteSession?.sshConnectionTarget, "het")
+        XCTAssertEqual(bridge.state.remoteSession?.sshConnectionTarget, "devbox")
 
         // User types "exit" — this is the title the terminal shows
         bridge.handleTitleChange(title: "exit", paneID: paneID)
@@ -1129,14 +1129,14 @@ final class TerminalBridgeTests: XCTestCase {
             "Session must be cleared when local CWD is reported after exit")
 
         // Connect to server B
-        bridge.handleTitleChange(title: "ssh nas", paneID: paneID)
-        XCTAssertEqual(bridge.state.remoteSession, .ssh(host: "nas"))
+        bridge.handleTitleChange(title: "ssh fileserv", paneID: paneID)
+        XCTAssertEqual(bridge.state.remoteSession, .ssh(host: "fileserv"))
 
         // Server B prompt
-        bridge.handleTitleChange(title: "phlp@nas-server:~", paneID: paneID)
+        bridge.handleTitleChange(title: "user@fileserv-host:~", paneID: paneID)
         XCTAssertEqual(
-            bridge.state.remoteSession?.sshConnectionTarget, "nas",
-            "Connection target must be nas, not het")
+            bridge.state.remoteSession?.sshConnectionTarget, "fileserv",
+            "Connection target must be fileserv, not devbox")
     }
 
     /// User connects to server A, then directly types "ssh serverB" (nested or quick switch).
@@ -1145,20 +1145,20 @@ final class TerminalBridgeTests: XCTestCase {
         bridge = TerminalBridge(paneID: paneID, workspaceID: workspaceID, workingDirectory: localHome)
 
         // Connect to server A
-        bridge.handleTitleChange(title: "ssh het", paneID: paneID)
+        bridge.handleTitleChange(title: "ssh devbox", paneID: paneID)
         bridge.handleTitleChange(title: "root@ubuntu-server:~", paneID: paneID)
-        XCTAssertEqual(bridge.state.remoteSession?.sshConnectionTarget, "het")
+        XCTAssertEqual(bridge.state.remoteSession?.sshConnectionTarget, "devbox")
 
-        // User types "ssh nas" (either nested SSH or after quick exit)
-        bridge.handleTitleChange(title: "ssh nas", paneID: paneID)
+        // User types "ssh fileserv" (either nested SSH or after quick exit)
+        bridge.handleTitleChange(title: "ssh fileserv", paneID: paneID)
         XCTAssertEqual(
-            bridge.state.remoteSession, .ssh(host: "nas"),
-            "Session must switch to nas when user types ssh nas")
-        XCTAssertEqual(bridge.state.remoteSession?.sshConnectionTarget, "nas")
+            bridge.state.remoteSession, .ssh(host: "fileserv"),
+            "Session must switch to fileserv when user types ssh fileserv")
+        XCTAssertEqual(bridge.state.remoteSession?.sshConnectionTarget, "fileserv")
     }
 
     /// User connects to "ssh -i key root@1.2.3.4", prompt shows "root@hostname:~",
-    /// then exits and connects to "ssh het". Must switch to het.
+    /// then exits and connects to "ssh devbox". Must switch to devbox.
     func testSSHSwitchFromIPToAlias() {
         bridge = TerminalBridge(paneID: paneID, workspaceID: workspaceID, workingDirectory: localHome)
 
@@ -1173,11 +1173,11 @@ final class TerminalBridgeTests: XCTestCase {
         XCTAssertNil(bridge.state.remoteSession)
 
         // Connect to different server
-        bridge.handleTitleChange(title: "ssh het", paneID: paneID)
+        bridge.handleTitleChange(title: "ssh devbox", paneID: paneID)
         XCTAssertEqual(
-            bridge.state.remoteSession, .ssh(host: "het"),
-            "Session must be het after switching from IP-based session")
-        XCTAssertEqual(bridge.state.remoteSession?.sshConnectionTarget, "het")
+            bridge.state.remoteSession, .ssh(host: "devbox"),
+            "Session must be devbox after switching from IP-based session")
+        XCTAssertEqual(bridge.state.remoteSession?.sshConnectionTarget, "devbox")
     }
 
     // MARK: - Docker shell-quoted container names

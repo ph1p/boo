@@ -74,13 +74,13 @@ final class RemoteExplorerTests: XCTestCase {
     // MARK: - Remote Session Display
 
     func testSSHHostWithUser() {
-        let session = RemoteSessionType.ssh(host: "phlp@nas.local")
-        XCTAssertEqual(session.displayName, "phlp@nas.local")
+        let session = RemoteSessionType.ssh(host: "user@fileserv.local")
+        XCTAssertEqual(session.displayName, "user@fileserv.local")
     }
 
     func testSSHHostWithoutUser() {
-        let session = RemoteSessionType.ssh(host: "nas.local")
-        XCTAssertEqual(session.displayName, "nas.local")
+        let session = RemoteSessionType.ssh(host: "fileserv.local")
+        XCTAssertEqual(session.displayName, "fileserv.local")
     }
 
     func testDockerContainerDisplay() {
@@ -218,26 +218,26 @@ final class RemoteExplorerTests: XCTestCase {
         RemoteExplorer.clearAllHomeCache()
 
         // Two sessions with same alias but different display hosts
-        let session1 = RemoteSessionType.ssh(host: "het", alias: "het")
-        let session2 = RemoteSessionType.ssh(host: "root@ubuntu-server", alias: "het")
+        let session1 = RemoteSessionType.ssh(host: "devbox", alias: "devbox")
+        let session2 = RemoteSessionType.ssh(host: "root@ubuntu-server", alias: "devbox")
 
         // resolveTilde with no cache returns nil for both
         XCTAssertNil(RemoteExplorer.resolveTilde("~/proj", session: session1))
         XCTAssertNil(RemoteExplorer.resolveTilde("~/proj", session: session2))
 
-        // Both sessions should use the same cache key ("het")
-        XCTAssertEqual(session1.sshConnectionTarget, "het")
-        XCTAssertEqual(session2.sshConnectionTarget, "het")
+        // Both sessions should use the same cache key ("devbox")
+        XCTAssertEqual(session1.sshConnectionTarget, "devbox")
+        XCTAssertEqual(session2.sshConnectionTarget, "devbox")
     }
 
     func testSSHConnectionTargetWithAlias() {
-        let session = RemoteSessionType.ssh(host: "root@ubuntu-server", alias: "het")
-        XCTAssertEqual(session.sshConnectionTarget, "het")
+        let session = RemoteSessionType.ssh(host: "root@ubuntu-server", alias: "devbox")
+        XCTAssertEqual(session.sshConnectionTarget, "devbox")
         XCTAssertEqual(session.displayName, "root@ubuntu-server")
     }
 
     func testSSHConnectionTargetWithoutAlias() {
-        let session = RemoteSessionType.ssh(host: "nas.local")
-        XCTAssertEqual(session.sshConnectionTarget, "nas.local")
+        let session = RemoteSessionType.ssh(host: "fileserv.local")
+        XCTAssertEqual(session.sshConnectionTarget, "fileserv.local")
     }
 }

@@ -384,7 +384,7 @@ final class BooSocketBridgeTests: XCTestCase {
 
         // Title changes never affect foreground process
         let titles = [
-            "~/dev/project", "/Users/phlp/project", "…/project",
+            "~/dev/project", "/Users/testuser/project", "…/project",
             "⠂ Thinking", "⠐ Building...", "zsh", "bash",
             "node server.js", "vim file.txt", "~/other"
         ]

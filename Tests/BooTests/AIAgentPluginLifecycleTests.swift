@@ -249,7 +249,7 @@ final class AIAgentPluginLifecycleTests: XCTestCase {
         XCTAssertNil(ProcessIcon.matchTitle("vim"))
         XCTAssertNil(ProcessIcon.matchTitle("zsh"))
         XCTAssertNil(ProcessIcon.matchTitle("~/Downloads/project"))
-        XCTAssertNil(ProcessIcon.matchTitle("phlp@host:~"))
+        XCTAssertNil(ProcessIcon.matchTitle("user@host:~"))
     }
 
     func testNodeResolvesToClaudeViaTitle() {
