@@ -1,5 +1,7 @@
 # Boo
 
+<img width="451" height="451" alt="Rectangle 1392" src="https://github.com/user-attachments/assets/f9c18574-d6fe-4ba4-bc2c-ca2c3f17e423" />
+
 A macOS terminal emulator with integrated file explorer, workspace management, split panes, and remote session support. Powered by [Ghostty](https://github.com/ghostty-org/ghostty) for terminal emulation and Metal GPU rendering.
 
 ## Screenshots
