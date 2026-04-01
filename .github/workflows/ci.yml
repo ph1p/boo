@@ -16,6 +16,12 @@ concurrency:
 jobs:
   lint:
     name: Lint
+    if: >-
+      github.event_name == 'pull_request' ||
+      !startsWith(github.event.head_commit.message, 'chore') &&
+      !startsWith(github.event.head_commit.message, 'docs') &&
+      !startsWith(github.event.head_commit.message, 'style') &&
+      !startsWith(github.event.head_commit.message, 'ci')
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v6
