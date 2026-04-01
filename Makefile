@@ -112,7 +112,7 @@ build-linux:
 
 # Build and run (auto-detects platform)
 run: build
-	.build/debug/Boo
+	.build/debug/BooApp
 
 # Release build
 ifeq ($(UNAME),Darwin)
@@ -134,14 +134,14 @@ endif
 
 # Run tests (macOS only — tests depend on AppKit types)
 test:
-	swift test
+	swift test --disable-swift-testing
 
 # ── App Bundle (macOS) ───────────────────────────────────────────────────────
 
 # Find the release binary (SPM may use different output dirs)
 RELEASE_BIN = $(shell \
-	if [ -f .build/release/Boo ]; then echo .build/release/Boo; \
-	elif [ -f .build/arm64-apple-macosx/release/Boo ]; then echo .build/arm64-apple-macosx/release/Boo; \
+	if [ -f .build/release/BooApp ]; then echo .build/release/BooApp; \
+	elif [ -f .build/arm64-apple-macosx/release/BooApp ]; then echo .build/arm64-apple-macosx/release/BooApp; \
 	fi)
 
 # Create macOS .app bundle from release build
@@ -165,7 +165,7 @@ app: release
 tarball: release
 	@echo "==> Creating Linux tarball..."
 	@mkdir -p "$(BUILD_DIR)/boo-$(VERSION)-linux"
-	@cp .build/release/Boo "$(BUILD_DIR)/boo-$(VERSION)-linux/boo"
+	@cp .build/release/BooApp "$(BUILD_DIR)/boo-$(VERSION)-linux/boo"
 	@if [ -f CLinuxGTK/boo.css ]; then \
 		cp CLinuxGTK/boo.css "$(BUILD_DIR)/boo-$(VERSION)-linux/"; \
 	fi
@@ -236,10 +236,10 @@ dist: app
 # ── Lint & Format ────────────────────────────────────────────────────────────
 
 lint:
-	swift-format lint --strict --recursive Boo/ Tests/
+	swift-format lint --strict --recursive Boo/ BooApp/ Tests/
 
 format:
-	swift-format format --in-place --recursive Boo/ Tests/
+	swift-format format --in-place --recursive Boo/ BooApp/ Tests/
 
 # ── Cleanup ──────────────────────────────────────────────────────────────────
 

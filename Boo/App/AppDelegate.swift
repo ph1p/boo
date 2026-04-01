@@ -1,5 +1,16 @@
 import Cocoa
 
+public enum BooMain {
+    public static func run() {
+        let app = NSApplication.shared
+        app.setActivationPolicy(.regular)
+        let delegate = AppDelegate()
+        app.delegate = delegate
+        app.activate(ignoringOtherApps: true)
+        app.run()
+    }
+}
+
 class AppDelegate: NSObject, NSApplicationDelegate {
     private var windowController: MainWindowController?
     private var appearanceObserver: NSKeyValueObservation?

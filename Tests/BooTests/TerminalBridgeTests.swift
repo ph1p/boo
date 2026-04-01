@@ -8,6 +8,7 @@ final class TerminalBridgeTests: XCTestCase {
     private var cancellables: Set<AnyCancellable>!
     private let paneID = UUID()
     private let workspaceID = UUID()
+    private let localHome = NSHomeDirectory()
 
     override func setUp() {
         super.setUp()
@@ -687,7 +688,7 @@ final class TerminalBridgeTests: XCTestCase {
     /// Same scenario but the CWD change arrives while the remote title is still showing.
     /// This is the critical race: OSC 7 arrives before the title updates to local.
     func testSSHExitWithStaleTitleThenNewSSH() {
-        bridge = TerminalBridge(paneID: paneID, workspaceID: workspaceID, workingDirectory: "/Users/phlp")
+        bridge = TerminalBridge(paneID: paneID, workspaceID: workspaceID, workingDirectory: localHome)
 
         // 1. SSH to het, connected — alias preserved
         bridge.handleTitleChange(title: "ssh het", paneID: paneID)
@@ -695,7 +696,7 @@ final class TerminalBridgeTests: XCTestCase {
         XCTAssertEqual(bridge.state.remoteSession, .ssh(host: "het"))
 
         // 2. User exits SSH. OSC 7 CWD arrives while title still shows remote prompt.
-        bridge.handleDirectoryChange(path: "/Users/phlp", paneID: paneID)
+        bridge.handleDirectoryChange(path: localHome, paneID: paneID)
 
         // The session may still be retained here due to preferPreviousForCwdEvent — that's OK
         // as long as it clears on the next title change.
@@ -752,7 +753,7 @@ final class TerminalBridgeTests: XCTestCase {
     /// Verify that when SSH config aliases are used (short hostnames like "het", "nas"),
     /// switching between them produces distinct sessions with correct host values.
     func testSSHConfigAliasSessionSwitch() {
-        bridge = TerminalBridge(paneID: paneID, workspaceID: workspaceID, workingDirectory: "/Users/phlp")
+        bridge = TerminalBridge(paneID: paneID, workspaceID: workspaceID, workingDirectory: localHome)
 
         var events: [TerminalEvent] = []
         bridge.events.sink { events.append($0) }.store(in: &cancellables)
@@ -833,7 +834,7 @@ final class TerminalBridgeTests: XCTestCase {
     /// from "root@het:~" to "root@het:/tmp". Each title change must NOT cause a session
     /// change event — the session host must stay stable as "het".
     func testSSHAliasStableAcrossMultipleCdChanges() {
-        bridge = TerminalBridge(paneID: paneID, workspaceID: workspaceID, workingDirectory: "/Users/phlp")
+        bridge = TerminalBridge(paneID: paneID, workspaceID: workspaceID, workingDirectory: localHome)
 
         var sessionEvents: [TerminalEvent] = []
         bridge.events
@@ -868,7 +869,7 @@ final class TerminalBridgeTests: XCTestCase {
     /// When the SSH config alias resolves to a different hostname (e.g., "het" → "ubuntu-server"),
     /// the title shows "root@ubuntu-server:~" but the session must stay stable with the alias.
     func testSSHAliasStableWhenHostnameDiffersFromAlias() {
-        bridge = TerminalBridge(paneID: paneID, workspaceID: workspaceID, workingDirectory: "/Users/phlp")
+        bridge = TerminalBridge(paneID: paneID, workspaceID: workspaceID, workingDirectory: localHome)
 
         var sessionEvents: [TerminalEvent] = []
         bridge.events
@@ -894,7 +895,7 @@ final class TerminalBridgeTests: XCTestCase {
 
     /// Verify sshConnectionTarget returns the alias for command execution.
     func testSSHConnectionTargetReturnsAlias() {
-        bridge = TerminalBridge(paneID: paneID, workspaceID: workspaceID, workingDirectory: "/Users/phlp")
+        bridge = TerminalBridge(paneID: paneID, workspaceID: workspaceID, workingDirectory: localHome)
 
         // Establish session with alias via process tree reconciliation
         bridge.handleTitleChange(title: "ssh het", paneID: paneID)
@@ -912,7 +913,7 @@ final class TerminalBridgeTests: XCTestCase {
 
     /// After alias is set via process tree, subsequent title changes must preserve it.
     func testProcessTreeAliasPreservedAcrossTitleChanges() {
-        bridge = TerminalBridge(paneID: paneID, workspaceID: workspaceID, workingDirectory: "/Users/phlp")
+        bridge = TerminalBridge(paneID: paneID, workspaceID: workspaceID, workingDirectory: localHome)
 
         // 1. ssh het detected by title
         bridge.handleTitleChange(title: "ssh het", paneID: paneID)
@@ -938,7 +939,7 @@ final class TerminalBridgeTests: XCTestCase {
     /// Docker container prompts show "root@abc123def456:~" which looks like SSH to the
     /// title heuristic. The Docker session must not flip to SSH.
     func testDockerSessionNotFlippedToSSHByContainerPrompt() {
-        bridge = TerminalBridge(paneID: paneID, workspaceID: workspaceID, workingDirectory: "/Users/phlp")
+        bridge = TerminalBridge(paneID: paneID, workspaceID: workspaceID, workingDirectory: localHome)
 
         var sessionEvents: [TerminalEvent] = []
         bridge.events
@@ -965,7 +966,7 @@ final class TerminalBridgeTests: XCTestCase {
 
     /// Docker session ends when process tree says no remote child.
     func testDockerSessionClearedByProcessTree() {
-        bridge = TerminalBridge(paneID: paneID, workspaceID: workspaceID, workingDirectory: "/Users/phlp")
+        bridge = TerminalBridge(paneID: paneID, workspaceID: workspaceID, workingDirectory: localHome)
 
         // Start Docker session
         bridge.handleTitleChange(title: "docker exec -it web bash", paneID: paneID)
@@ -1014,7 +1015,7 @@ final class TerminalBridgeTests: XCTestCase {
     /// briefly shows "cd /tmp" before updating to the new prompt. This transient
     /// title must NOT clear the remote session.
     func testTransientCommandTitleDoesNotClearSSHSession() {
-        bridge = TerminalBridge(paneID: paneID, workspaceID: workspaceID, workingDirectory: "/Users/phlp")
+        bridge = TerminalBridge(paneID: paneID, workspaceID: workspaceID, workingDirectory: localHome)
 
         var sessionEvents: [TerminalEvent] = []
         bridge.events
@@ -1044,7 +1045,7 @@ final class TerminalBridgeTests: XCTestCase {
 
     /// Various command titles that should not clear a remote session.
     func testVariousTransientTitlesPreserveSession() {
-        bridge = TerminalBridge(paneID: paneID, workspaceID: workspaceID, workingDirectory: "/Users/phlp")
+        bridge = TerminalBridge(paneID: paneID, workspaceID: workspaceID, workingDirectory: localHome)
 
         bridge.handleTitleChange(title: "ssh het", paneID: paneID)
         bridge.handleTitleChange(title: "root@server:~", paneID: paneID)
@@ -1065,7 +1066,7 @@ final class TerminalBridgeTests: XCTestCase {
     /// A local shell prompt ("zsh", "bash") SHOULD clear the session — it means
     /// the user has exited the remote shell.
     func testLocalShellTitleClearsSession() {
-        bridge = TerminalBridge(paneID: paneID, workspaceID: workspaceID, workingDirectory: "/Users/phlp")
+        bridge = TerminalBridge(paneID: paneID, workspaceID: workspaceID, workingDirectory: localHome)
 
         bridge.handleTitleChange(title: "ssh het", paneID: paneID)
         XCTAssertNotNil(bridge.state.remoteSession)
@@ -1081,7 +1082,7 @@ final class TerminalBridgeTests: XCTestCase {
     /// User is connected to server A, exits, and connects to server B.
     /// The session must switch to B, not stay on A.
     func testSSHSwitchServersViaExit() {
-        bridge = TerminalBridge(paneID: paneID, workspaceID: workspaceID, workingDirectory: "/Users/phlp")
+        bridge = TerminalBridge(paneID: paneID, workspaceID: workspaceID, workingDirectory: localHome)
 
         // Connect to server A
         bridge.handleTitleChange(title: "ssh het", paneID: paneID)
@@ -1090,7 +1091,7 @@ final class TerminalBridgeTests: XCTestCase {
 
         // Exit server A — title shows "exit" command, then OSC 7 with local CWD
         bridge.handleTitleChange(title: "exit", paneID: paneID)
-        bridge.handleDirectoryChange(path: "/Users/phlp", paneID: paneID)
+        bridge.handleDirectoryChange(path: localHome, paneID: paneID)
         XCTAssertNil(bridge.state.remoteSession, "Session A must be cleared after exit + local CWD")
 
         // Connect to server B
@@ -1141,7 +1142,7 @@ final class TerminalBridgeTests: XCTestCase {
     /// User connects to server A, then directly types "ssh serverB" (nested or quick switch).
     /// The title goes: "ssh serverA" → "root@serverA:~" → "ssh serverB".
     func testSSHSwitchServersDirectly() {
-        bridge = TerminalBridge(paneID: paneID, workspaceID: workspaceID, workingDirectory: "/Users/phlp")
+        bridge = TerminalBridge(paneID: paneID, workspaceID: workspaceID, workingDirectory: localHome)
 
         // Connect to server A
         bridge.handleTitleChange(title: "ssh het", paneID: paneID)
@@ -1159,7 +1160,7 @@ final class TerminalBridgeTests: XCTestCase {
     /// User connects to "ssh -i key root@1.2.3.4", prompt shows "root@hostname:~",
     /// then exits and connects to "ssh het". Must switch to het.
     func testSSHSwitchFromIPToAlias() {
-        bridge = TerminalBridge(paneID: paneID, workspaceID: workspaceID, workingDirectory: "/Users/phlp")
+        bridge = TerminalBridge(paneID: paneID, workspaceID: workspaceID, workingDirectory: localHome)
 
         // Connect via IP
         bridge.handleTitleChange(title: "ssh -i ~/.ssh/key root@1.2.3.4", paneID: paneID)
@@ -1167,7 +1168,7 @@ final class TerminalBridgeTests: XCTestCase {
         XCTAssertEqual(bridge.state.remoteSession?.sshConnectionTarget, "root@1.2.3.4")
 
         // Exit
-        bridge.handleDirectoryChange(path: "/Users/phlp", paneID: paneID)
+        bridge.handleDirectoryChange(path: localHome, paneID: paneID)
         bridge.handleTitleChange(title: "zsh", paneID: paneID)
         XCTAssertNil(bridge.state.remoteSession)
 
@@ -1291,7 +1292,7 @@ final class TerminalBridgeTests: XCTestCase {
 
     /// Docker session stays stable when title changes to container prompt.
     func testDockerSessionStableWithQuotedName() {
-        bridge = TerminalBridge(paneID: paneID, workspaceID: workspaceID, workingDirectory: "/Users/phlp")
+        bridge = TerminalBridge(paneID: paneID, workspaceID: workspaceID, workingDirectory: localHome)
 
         bridge.handleTitleChange(title: "docker exec -it 'fancy-calendar-db' sh", paneID: paneID)
         XCTAssertEqual(bridge.state.remoteSession, .container(target: "fancy-calendar-db", tool: .docker))
@@ -1304,7 +1305,7 @@ final class TerminalBridgeTests: XCTestCase {
     }
 
     func testDockerHexPromptCreatesContainerSessionWithoutCommandTitle() {
-        bridge = TerminalBridge(paneID: paneID, workspaceID: workspaceID, workingDirectory: "/Users/phlp")
+        bridge = TerminalBridge(paneID: paneID, workspaceID: workspaceID, workingDirectory: localHome)
 
         bridge.handleTitleChange(title: "root@195cad4b6562:/app", paneID: paneID)
 

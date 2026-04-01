@@ -32,7 +32,8 @@ final class MainWindowControllerTerminalLifecycleTests: XCTestCase {
         }
     }
 
-    func testForceCloseWorkspaceEmitsTerminalClosedForAllTabs() {
+    func testForceCloseWorkspaceEmitsTerminalClosedForAllTabs() throws {
+        try XCTSkipIf(ProcessInfo.processInfo.environment["CI"] != nil, "Requires a display (NSWindow)")
         let windowController = MainWindowController()
         let spy = TerminalCloseSpyPlugin()
         windowController.pluginRegistry.register(spy)
@@ -57,7 +58,8 @@ final class MainWindowControllerTerminalLifecycleTests: XCTestCase {
         )
     }
 
-    func testProcessChangeRefreshesStatusBarAfterPluginCycle() {
+    func testProcessChangeRefreshesStatusBarAfterPluginCycle() throws {
+        try XCTSkipIf(ProcessInfo.processInfo.environment["CI"] != nil, "Requires a display (NSWindow)")
         let windowController = MainWindowController()
         guard let workspace = windowController.activeWorkspace else {
             XCTFail("Expected an active workspace")
@@ -80,7 +82,8 @@ final class MainWindowControllerTerminalLifecycleTests: XCTestCase {
         )
     }
 
-    func testSplitPaneRemapsSidebarScrollOffsetsToNewTerminal() {
+    func testSplitPaneRemapsSidebarScrollOffsetsToNewTerminal() throws {
+        try XCTSkipIf(ProcessInfo.processInfo.environment["CI"] != nil, "Requires a display (NSWindow)")
         let windowController = MainWindowController()
         defer { windowController.window?.close() }
 
@@ -122,7 +125,8 @@ final class MainWindowControllerTerminalLifecycleTests: XCTestCase {
         XCTAssertNil(newTab.state.sidebarScrollOffsets["\(parentTab.id.uuidString):bookmarks"])
     }
 
-    func testWorkspaceSwitchSavesAndRestoresSidebarPanelState() {
+    func testWorkspaceSwitchSavesAndRestoresSidebarPanelState() throws {
+        try XCTSkipIf(ProcessInfo.processInfo.environment["CI"] != nil, "Requires a display (NSWindow)")
         let windowController = MainWindowController()
         defer { windowController.window?.close() }
 

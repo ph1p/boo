@@ -279,7 +279,8 @@ final class SidebarLayoutTests: XCTestCase {
 
     // MARK: - Toggle callback
 
-    @MainActor func testToggleCallbackFires() {
+    @MainActor func testToggleCallbackFires() throws {
+        try XCTSkipIf(ProcessInfo.processInfo.environment["CI"] != nil, "Requires a display (NSWindow)")
         let _ = NSApplication.shared
         NSApp.setActivationPolicy(.accessory)
 
@@ -309,7 +310,8 @@ final class SidebarLayoutTests: XCTestCase {
         XCTAssertTrue(h.isFlipped)
     }
 
-    @MainActor func testHeaderViewMouseDownInvokesToggleWithSectionID() {
+    @MainActor func testHeaderViewMouseDownInvokesToggleWithSectionID() throws {
+        try XCTSkipIf(ProcessInfo.processInfo.environment["CI"] != nil, "Requires a display (NSWindow)")
         let h = SidebarSectionHeaderView(sectionID: "x", name: "A", icon: "star", isExpanded: false)
         var toggled: String?
         h.onToggle = { toggled = $0 }
@@ -728,7 +730,8 @@ final class SidebarLayoutTests: XCTestCase {
 
     /// Uses the real BookmarksPlugin to generate content, in a real NSWindow,
     /// with the exact toggle-rebuild cycle from MainWindowController.
-    @MainActor func testClickBookmarkHeaderWithRealPlugin() {
+    @MainActor func testClickBookmarkHeaderWithRealPlugin() throws {
+        try XCTSkipIf(ProcessInfo.processInfo.environment["CI"] != nil, "Requires a display (NSWindow)")
         let _ = NSApplication.shared
         NSApp.setActivationPolicy(.accessory)
 

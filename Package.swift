@@ -5,6 +5,7 @@ let booDeps: [Target.Dependency] = ["CGhostty"]
 let booExclude: [String] = [
     "App/Info.plist",
     "App/Boo.entitlements",
+    "App/main.swift",
 ]
 let booLinkerSettings: [LinkerSetting] = [
     .unsafeFlags(["-L", "Vendor/ghostty/macos/GhosttyKit.xcframework/macos-arm64"])
@@ -35,11 +36,17 @@ let targets: [Target] = [
             .linkedFramework("Carbon"),
         ]
     ),
-    .executableTarget(
+    .target(
         name: "Boo",
         dependencies: booDeps,
         path: "Boo",
         exclude: booExclude,
+        linkerSettings: booLinkerSettings
+    ),
+    .executableTarget(
+        name: "BooApp",
+        dependencies: ["Boo"],
+        path: "BooApp",
         linkerSettings: booLinkerSettings
     ),
     .testTarget(

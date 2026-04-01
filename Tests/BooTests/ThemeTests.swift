@@ -5,7 +5,7 @@ import XCTest
 final class ThemeTests: XCTestCase {
 
     func testAllThemesExist() {
-        XCTAssertEqual(TerminalTheme.themes.count, 22)
+        XCTAssertEqual(TerminalTheme.themes.count, 32)
     }
 
     func testAllThemesHave16AnsiColors() {

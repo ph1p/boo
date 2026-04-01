@@ -24,7 +24,7 @@ jobs:
         run: brew install swift-format
 
       - name: Run swift-format lint
-        run: swift-format lint --strict --recursive Boo/ Tests/
+        run: swift-format lint --strict --recursive Boo/ BooApp/ Tests/
 
   build-and-test:
     name: Build & Test
