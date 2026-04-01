@@ -54,7 +54,7 @@ final class RemoteFileTreePluginTests: XCTestCase {
     @MainActor
     func testRemoteRootReusedOnCd() {
         let plugin = RemoteFileTreePlugin()
-        let session = RemoteSessionType.ssh(host: "het")
+        let session = RemoteSessionType.ssh(host: "devbox")
 
         // Create initial root for home directory
         let root1 = plugin.getOrCreateRemoteRoot(for: "~", session: session)
@@ -81,7 +81,7 @@ final class RemoteFileTreePluginTests: XCTestCase {
     @MainActor
     func testRemoteRootTildePromotionViaReuse() {
         let plugin = RemoteFileTreePlugin()
-        let session = RemoteSessionType.ssh(host: "het")
+        let session = RemoteSessionType.ssh(host: "devbox")
 
         // Start with tilde root
         let tildeRoot = plugin.getOrCreateRemoteRoot(for: "~", session: session)
@@ -98,7 +98,7 @@ final class RemoteFileTreePluginTests: XCTestCase {
     @MainActor
     func testRemoteRootCacheHitReturnsSameObject() {
         let plugin = RemoteFileTreePlugin()
-        let session = RemoteSessionType.ssh(host: "het")
+        let session = RemoteSessionType.ssh(host: "devbox")
 
         let root1 = plugin.getOrCreateRemoteRoot(for: "~", session: session)
         let root2 = plugin.getOrCreateRemoteRoot(for: "~", session: session)
@@ -108,7 +108,7 @@ final class RemoteFileTreePluginTests: XCTestCase {
     @MainActor
     func testRemoteRootResolvesAbsolutePathWhenHomeCached() {
         let plugin = RemoteFileTreePlugin()
-        let session = RemoteSessionType.ssh(host: "het")
+        let session = RemoteSessionType.ssh(host: "devbox")
 
         // Pre-populate home cache so resolveTilde works synchronously
         RemoteExplorer.resolveRemoteHome(session: session) { _ in }
@@ -122,7 +122,7 @@ final class RemoteFileTreePluginTests: XCTestCase {
     @MainActor
     func testRemoteRootAbsolutePathChildrenAreAbsolute() {
         let plugin = RemoteFileTreePlugin()
-        let session = RemoteSessionType.ssh(host: "het")
+        let session = RemoteSessionType.ssh(host: "devbox")
 
         let root = plugin.getOrCreateRemoteRoot(for: "/root", session: session)
         root.applyEntries([
@@ -145,7 +145,7 @@ final class RemoteFileTreePluginTests: XCTestCase {
         let plugin = RemoteFileTreePlugin()
 
         // Session where display host differs from alias
-        let session = RemoteSessionType.ssh(host: "root@ubuntu-server", alias: "het")
+        let session = RemoteSessionType.ssh(host: "root@ubuntu-server", alias: "devbox")
 
         let root1 = plugin.getOrCreateRemoteRoot(for: "~", session: session)
         root1.applyEntries([.init(name: "src", isDirectory: true)])
@@ -160,13 +160,13 @@ final class RemoteFileTreePluginTests: XCTestCase {
     func testCacheSharedBySameAlias() {
         let plugin = RemoteFileTreePlugin()
 
-        // Title-based session: host="het", alias="het"
-        let session1 = RemoteSessionType.ssh(host: "het", alias: "het")
+        // Title-based session: host="devbox", alias="devbox"
+        let session1 = RemoteSessionType.ssh(host: "devbox", alias: "devbox")
         let root1 = plugin.getOrCreateRemoteRoot(for: "~", session: session1)
         root1.applyEntries([.init(name: "docs", isDirectory: true)])
 
-        // After reconciliation: host="root@ubuntu-server", alias="het"
-        let session2 = RemoteSessionType.ssh(host: "root@ubuntu-server", alias: "het")
+        // After reconciliation: host="root@ubuntu-server", alias="devbox"
+        let session2 = RemoteSessionType.ssh(host: "root@ubuntu-server", alias: "devbox")
         let root2 = plugin.getOrCreateRemoteRoot(for: "~", session: session2)
         XCTAssertTrue(
             root1 === root2,
@@ -177,7 +177,7 @@ final class RemoteFileTreePluginTests: XCTestCase {
     @MainActor
     func testRemoteRootReusedOnCdWithAlias() {
         let plugin = RemoteFileTreePlugin()
-        let session = RemoteSessionType.ssh(host: "het", alias: "het")
+        let session = RemoteSessionType.ssh(host: "devbox", alias: "devbox")
 
         let root1 = plugin.getOrCreateRemoteRoot(for: "~", session: session)
         root1.applyEntries([.init(name: "src", isDirectory: true)])

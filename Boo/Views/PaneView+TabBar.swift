@@ -259,7 +259,7 @@ extension PaneView {
     }
 
     static func tildeContractRemotePath(_ path: String, tab: Pane.Tab) -> String {
-        // Extract user from session host (e.g. "root@host" -> "root", alias "het" -> nil)
+        // Extract user from session host (e.g. "root@host" -> "root", alias "devbox" -> nil)
         var user: String?
         if let session = tab.remoteSession {
             let host = session.displayName

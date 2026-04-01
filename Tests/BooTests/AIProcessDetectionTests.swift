@@ -77,7 +77,7 @@ final class AIProcessDetectionTests: XCTestCase {
     }
 
     func testPathAbsoluteReturnsEmpty() {
-        XCTAssertEqual(TerminalBridge.extractProcessName(from: "/Users/phlp/dev/project"), "")
+        XCTAssertEqual(TerminalBridge.extractProcessName(from: "/Users/testuser/dev/project"), "")
     }
 
     func testPathEllipsisReturnsEmpty() {
@@ -102,7 +102,7 @@ final class AIProcessDetectionTests: XCTestCase {
 
     func testPathAbsoluteWithColonReturnsEmpty() {
         XCTAssertEqual(
-            TerminalBridge.extractProcessName(from: "/Users/phlp/dev/telis/e2e-playwright-starter"), "")
+            TerminalBridge.extractProcessName(from: "/Users/testuser/dev/telis/e2e-playwright-starter"), "")
     }
 
     func testPathWithSpacesReturnsEmpty() {

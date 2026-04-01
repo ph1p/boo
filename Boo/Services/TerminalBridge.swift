@@ -198,7 +198,7 @@ final class TerminalBridge {
         // We only check home-directory paths (not /tmp etc.) because common system
         // paths exist on both local and remote hosts.
         // This must happen even when the path hasn't changed (e.g. user was in
-        // /Users/phlp, SSH'd somewhere, and returned to /Users/phlp).
+        // /Users/jane, SSH'd somewhere, and returned to /Users/jane).
         let localHome = FileManager.default.homeDirectoryForCurrentUser.path
         if previousRemote != nil && path.hasPrefix(localHome) {
             NSLog("[Bridge] handleDirectoryChange: local home prefix detected, clearing remote session")

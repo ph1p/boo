@@ -138,13 +138,13 @@ extension TerminalBridge {
         }
 
         // Preserve alias from previous session when the new detection doesn't have one.
-        // This keeps the SSH config alias (e.g. "het") available for connection reuse
+        // This keeps the SSH config alias (e.g. "devbox") available for connection reuse
         // even as the title changes to "root@ubuntu-server:~".
         // CRITICAL: We must keep the *previous host* as the display name to avoid
         // breaking Equatable (which compares hosts). A host change would cause a
         // false session transition on every cd, tearing down and rebuilding the tree.
         // Stabilize SSH session host when the prompt shows a different hostname than
-        // the original command target. E.g., "ssh het" → "root@ubuntu-server:~" or
+        // the original command target. E.g., "ssh devbox" → "root@ubuntu-server:~" or
         // "ssh root@1.2.3.4" → "root@hostname:~". The alias (set when detected from
         // a command title) marks sessions that should be stabilized. Prompt-to-prompt
         // transitions (no alias) like "user@host1:~" → "user@host2:~" are genuine
@@ -400,7 +400,7 @@ extension TerminalBridge {
 
         let firstWord = trimmed.split(separator: " ").first.map(String.init) ?? trimmed
         if shellNames.contains(firstWord.lowercased()) { return "" }
-        // Reject path-only titles (e.g. "~/dev/project", "/Users/phlp/project",
+        // Reject path-only titles (e.g. "~/dev/project", "/Users/jane/project",
         // "…/dev/project") — these are CWD titles set by shell prompts, not process names.
         if looksLikePath(firstWord) { return "" }
         return firstWord

@@ -57,7 +57,7 @@ extension MainWindowController {
             let isLocalPrompt = process.contains("@") && !TerminalBridge.titleLooksRemote(process)
             // Always hide connection commands (ssh, docker, etc.) — they're not user-facing processes
             let isConnectionCommand = Self.connectionProcessNames.contains(process.lowercased())
-            // Hide when process matches the remote session name (e.g. "user@het")
+            // Hide when process matches the remote session name (e.g. "user@devbox")
             let isRemotePrompt = process.contains("@") && TerminalBridge.titleLooksRemote(process)
             if process == cwdLast || process == cwd || process == abbrevCwd
                 || looksLikePath || process.hasSuffix(cwdLast) || isLocalPrompt
