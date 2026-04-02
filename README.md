@@ -1,4 +1,4 @@
-<p align="center"><img width="251" height="251" alt="Frame 59" src="https://github.com/user-attachments/assets/03864724-5fdb-4737-ab08-b4164e7443c2" /></p>
+<p align="center"><img width="251" height="251" alt="Boo Logo" src="./documentation/docs/public/logo.png" /></p>
 
 # Boo
 
@@ -6,13 +6,15 @@ A macOS terminal emulator with integrated file explorer, workspace management, s
 
 ## Screenshots
 
-_Coming soon_
+<img width="500" alt="Boo App" src="./documentation/docs/public/app.png" />
+<img width="300" alt="Boo Settings" src="./documentation/docs/public/settings.png" />
 
 ## Install
 
 Download the latest release from [GitHub Releases](https://github.com/ph1p/boo/releases) — open the app and drag Boo to Applications.
 
 > **"Boo cannot be opened" (Gatekeeper)** — If macOS blocks the app after installing, run:
+>
 > ```bash
 > xattr -dr com.apple.quarantine /Applications/Boo.app
 > ```
@@ -59,21 +61,21 @@ make run      # Build and launch
 
 ### Make Targets
 
-| Target         | Description                                                |
-| -------------- | ---------------------------------------------------------- |
-| `make setup`   | First-time setup (init submodule + build everything)       |
-| `make build`   | Debug build                                                |
-| `make run`     | Build and launch                                           |
-| `make release` | Optimized release build                                    |
-| `make test`    | Run all tests                                              |
-| `make app`     | Create `.app` bundle from release build                    |
-| `make dmg`     | Create distributable DMG                                   |
-| `make dist`    | Full release pipeline (build, bundle, sign, notarize, DMG) |
-| `make lint`    | Check code style with swift-format                         |
-| `make format`  | Format source code in-place                                |
-| `make clean`   | Clean build artifacts                                      |
-| `make clean-ghostty` | Clean GhosttyKit build (for rebuild)                 |
-| `make ghostty` | Build GhosttyKit only                                      |
+| Target               | Description                                                |
+| -------------------- | ---------------------------------------------------------- |
+| `make setup`         | First-time setup (init submodule + build everything)       |
+| `make build`         | Debug build                                                |
+| `make run`           | Build and launch                                           |
+| `make release`       | Optimized release build                                    |
+| `make test`          | Run all tests                                              |
+| `make app`           | Create `.app` bundle from release build                    |
+| `make dmg`           | Create distributable DMG                                   |
+| `make dist`          | Full release pipeline (build, bundle, sign, notarize, DMG) |
+| `make lint`          | Check code style with swift-format                         |
+| `make format`        | Format source code in-place                                |
+| `make clean`         | Clean build artifacts                                      |
+| `make clean-ghostty` | Clean GhosttyKit build (for rebuild)                       |
+| `make ghostty`       | Build GhosttyKit only                                      |
 
 ## Keyboard Shortcuts
 
@@ -190,6 +192,7 @@ Three layers of state:
 ```
 
 **Event flow:**
+
 ```
 Ghostty OSC → PaneView → MainWindowController → TerminalBridge (heuristics)
   → coordinator.syncBridgeToTab() → TabState
@@ -221,28 +224,28 @@ Boo exposes a Unix domain socket (`~/.boo/boo.sock`) as the primary communicatio
 
 ### Command Reference
 
-| Category | Command | Description |
-|----------|---------|-------------|
-| **Process** | `set_status` | Register a process (pid, name, category, metadata) |
-| | `clear_status` | Unregister a process |
-| | `list_status` | List all registered processes |
-| **Query** | `get_context` | Current terminal context (pane_id, CWD, git, process, remote) |
-| | `get_theme` | Current theme name and dark/light mode |
-| | `get_settings` | App settings snapshot |
-| | `list_themes` | All available theme names |
-| | `get_workspaces` | List workspaces with active state |
-| **Control** | `set_theme` | Change theme (`name` parameter) |
-| | `toggle_sidebar` | Toggle sidebar visibility |
-| | `switch_workspace` | Switch workspace by `index` or `id` |
-| | `new_tab` | Open new tab (optional `cwd`) |
-| | `new_workspace` | Open new workspace (optional `path`) |
-| | `send_text` | Write text to the active terminal |
-| **Events** | `subscribe` | Subscribe to push events (`events` array) |
-| | `unsubscribe` | Remove event subscriptions |
-| **Status Bar** | `statusbar.set` | Push an external status bar segment |
-| | `statusbar.clear` | Remove an external segment |
-| | `statusbar.list` | List external segments |
-| **Plugin** | `<namespace>.<action>` | Route to a plugin's registered handler |
+| Category       | Command                | Description                                                   |
+| -------------- | ---------------------- | ------------------------------------------------------------- |
+| **Process**    | `set_status`           | Register a process (pid, name, category, metadata)            |
+|                | `clear_status`         | Unregister a process                                          |
+|                | `list_status`          | List all registered processes                                 |
+| **Query**      | `get_context`          | Current terminal context (pane_id, CWD, git, process, remote) |
+|                | `get_theme`            | Current theme name and dark/light mode                        |
+|                | `get_settings`         | App settings snapshot                                         |
+|                | `list_themes`          | All available theme names                                     |
+|                | `get_workspaces`       | List workspaces with active state                             |
+| **Control**    | `set_theme`            | Change theme (`name` parameter)                               |
+|                | `toggle_sidebar`       | Toggle sidebar visibility                                     |
+|                | `switch_workspace`     | Switch workspace by `index` or `id`                           |
+|                | `new_tab`              | Open new tab (optional `cwd`)                                 |
+|                | `new_workspace`        | Open new workspace (optional `path`)                          |
+|                | `send_text`            | Write text to the active terminal                             |
+| **Events**     | `subscribe`            | Subscribe to push events (`events` array)                     |
+|                | `unsubscribe`          | Remove event subscriptions                                    |
+| **Status Bar** | `statusbar.set`        | Push an external status bar segment                           |
+|                | `statusbar.clear`      | Remove an external segment                                    |
+|                | `statusbar.list`       | List external segments                                        |
+| **Plugin**     | `<namespace>.<action>` | Route to a plugin's registered handler                        |
 
 ### Usage Examples
 
@@ -270,16 +273,16 @@ echo '{"cmd":"subscribe","events":["cwd_changed","process_changed"]}' | nc -U "$
 
 Subscribe to real-time push events by keeping a socket connection open:
 
-| Event | Data |
-|-------|------|
-| `cwd_changed` | `path`, `is_remote`, `pane_id` |
-| `title_changed` | `title`, `pane_id` |
-| `process_changed` | `name`, `category`, `pane_id` |
+| Event                    | Data                                |
+| ------------------------ | ----------------------------------- |
+| `cwd_changed`            | `path`, `is_remote`, `pane_id`      |
+| `title_changed`          | `title`, `pane_id`                  |
+| `process_changed`        | `name`, `category`, `pane_id`       |
 | `remote_session_changed` | `type`, `host`, `active`, `pane_id` |
-| `focus_changed` | `pane_id` |
-| `workspace_switched` | `workspace_id` |
-| `theme_changed` | `name`, `is_dark` |
-| `settings_changed` | `topic` |
+| `focus_changed`          | `pane_id`                           |
+| `workspace_switched`     | `workspace_id`                      |
+| `theme_changed`          | `name`, `is_dark`                   |
+| `settings_changed`       | `topic`                             |
 
 All terminal-scoped events include a `pane_id` field identifying which pane the event originated from. This allows subscribers to filter events by pane and avoid cross-pane interference in split-view setups.
 
@@ -302,10 +305,10 @@ Tint colors: `red`, `green`, `yellow`, `blue`, `orange`, `purple`, `accent`, or 
 
 ### Process Detection Priority
 
-| Priority | Source | When used |
-|----------|--------|-----------|
-| 1st | Socket registration | A process sent `set_status` and is still alive |
-| 2nd | Terminal title | No socket registration — parse process name from title |
+| Priority | Source              | When used                                              |
+| -------- | ------------------- | ------------------------------------------------------ |
+| 1st      | Socket registration | A process sent `set_status` and is still alive         |
+| 2nd      | Terminal title      | No socket registration — parse process name from title |
 
 Socket-registered processes **always override** title-based detection. They survive all title changes (paths, spinners, shell names). When the process dies, `kill(pid, 0)` detects it within 5 seconds and clears the registration automatically.
 
@@ -329,6 +332,7 @@ BooSocketServer.shared.registerHandler(namespace: "git") { json in
 ```
 
 External tools can then send plugin-specific commands:
+
 ```bash
 echo '{"cmd":"git.refresh"}' | nc -U "$BOO_SOCK"
 ```
@@ -339,16 +343,16 @@ Boo has an extensible plugin system. Plugins provide sidebar panels, status bar 
 
 ### Built-in Plugins
 
-| Plugin             | Directory                  | Description                                                          |
-| ------------------ | -------------------------- | -------------------------------------------------------------------- |
-| **Files (Local)**  | `Plugins/FileTree/`        | Local file explorer with FSEvents watching (visible in local sessions) |
-| **Files (Remote)** | `Plugins/RemoteExplorer/`  | Remote file explorer for SSH/MOSH sessions                           |
-| **Git**            | `Plugins/Git/`             | Branch, status, staged/unstaged/untracked files, stash, ahead/behind |
-| **AI Agent**       | `Plugins/AIAgent/`         | Monitors AI coding agents (Claude, Codex, Aider, Cursor, Copilot)   |
-| **Docker**         | `Plugins/Docker/`          | Running container list with exec, logs, start/stop/restart actions   |
-| **Bookmarks**      | `Plugins/Bookmarks/`       | Saved directory bookmarks with per-host namespacing                  |
-| **System**         | `Plugins/SystemInfo/`      | CPU load, memory, disk usage (example plugin demonstrating all patterns) |
-| **Debug**          | `Plugins/Debug/`           | Logs all lifecycle events with timestamps, live terminal state inspector |
+| Plugin             | Directory                 | Description                                                              |
+| ------------------ | ------------------------- | ------------------------------------------------------------------------ |
+| **Files (Local)**  | `Plugins/FileTree/`       | Local file explorer with FSEvents watching (visible in local sessions)   |
+| **Files (Remote)** | `Plugins/RemoteExplorer/` | Remote file explorer for SSH/MOSH sessions                               |
+| **Git**            | `Plugins/Git/`            | Branch, status, staged/unstaged/untracked files, stash, ahead/behind     |
+| **AI Agent**       | `Plugins/AIAgent/`        | Monitors AI coding agents (Claude, Codex, Aider, Cursor, Copilot)        |
+| **Docker**         | `Plugins/Docker/`         | Running container list with exec, logs, start/stop/restart actions       |
+| **Bookmarks**      | `Plugins/Bookmarks/`      | Saved directory bookmarks with per-host namespacing                      |
+| **System**         | `Plugins/SystemInfo/`     | CPU load, memory, disk usage (example plugin demonstrating all patterns) |
+| **Debug**          | `Plugins/Debug/`          | Logs all lifecycle events with timestamps, live terminal state inspector |
 
 ### External Plugins
 
@@ -387,8 +391,12 @@ function render(ctx) {
   return {
     type: "list",
     items: names.map(function (name) {
-      return { label: name, icon: "play.circle", action: { type: "exec", command: "npm run " + name } };
-    })
+      return {
+        label: name,
+        icon: "play.circle",
+        action: { type: "exec", command: "npm run " + name },
+      };
+    }),
   };
 }
 ```
@@ -415,21 +423,21 @@ List items and buttons support right-click context menus:
 
 Control when your plugin is visible:
 
-| Expression                         | Meaning                        |
-| ---------------------------------- | ------------------------------ |
-| `null`                             | Always visible                 |
-| `"git.active"`                     | Only in git repos              |
-| `"!remote"`                        | Only in local sessions         |
-| `"remote"`                         | Only in remote sessions        |
-| `"remote.type == 'ssh'"`           | Only in SSH sessions           |
-| `"git.active && !remote"`          | Git repos, local only          |
-| `"process.name == 'vim'"`          | Only when vim is running       |
-| `"process.editor"`                 | Only when any editor is active |
-| `"process.category == 'database'"` | Only for database clients      |
+| Expression                         | Meaning                         |
+| ---------------------------------- | ------------------------------- |
+| `null`                             | Always visible                  |
+| `"git.active"`                     | Only in git repos               |
+| `"!remote"`                        | Only in local sessions          |
+| `"remote"`                         | Only in remote sessions         |
+| `"remote.type == 'ssh'"`           | Only in SSH sessions            |
+| `"git.active && !remote"`          | Git repos, local only           |
+| `"process.name == 'vim'"`          | Only when vim is running        |
+| `"process.editor"`                 | Only when any editor is active  |
+| `"process.category == 'database'"` | Only for database clients       |
 | `"process.ai"`                     | Only when an AI agent is active |
-| `"env.local"`                      | Only in local sessions         |
-| `"env.ssh"`                        | Only in SSH/MOSH sessions      |
-| `"env.docker"`                     | Only in Docker sessions        |
+| `"env.local"`                      | Only in local sessions          |
+| `"env.ssh"`                        | Only in SSH/MOSH sessions       |
+| `"env.docker"`                     | Only in Docker sessions         |
 
 See `examples/plugins/` for five working examples. Start with **hello-world**, then study **node-project** or **terminal-inspector** for the full plugin API.
 
@@ -463,6 +471,7 @@ See [AGENTS.md](AGENTS.md) for detailed protocol reference and architecture.
 Boo checks GitHub Releases for new versions on launch (once every 24 hours). You can also check manually via the app menu: **Boo → Check for Updates...**
 
 The update flow: download DMG → verify code signature → replace app → relaunch. Settings:
+
 - Auto-check can be disabled in preferences
 - Individual versions can be skipped
 
