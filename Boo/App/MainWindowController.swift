@@ -783,6 +783,7 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
         else { return }
         let cwd = workspace.folderPath
         pv.addNewTab(workingDirectory: cwd)
+        saveSession()
     }
 
     @objc func toggleSidebarAction(_ sender: Any?) {

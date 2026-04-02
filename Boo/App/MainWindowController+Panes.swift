@@ -118,6 +118,7 @@ extension MainWindowController: PaneViewDelegate {
                 self?.notifyTerminalClosed(for: pane.tabs[currentIndex].id)
                 pv.closeTab(at: currentIndex)
                 self?.refreshStatusBar()
+                self?.saveSession()
             }
         }
     }
@@ -191,6 +192,7 @@ extension MainWindowController {
         // Focus the newly created pane
         workspace.activePaneID = newID
         splitContainer.update(tree: workspace.splitTree)
+        saveSession()
 
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
@@ -238,6 +240,7 @@ extension MainWindowController {
             }
 
             splitContainer.update(tree: workspace.splitTree)
+            saveSession()
 
             DispatchQueue.main.async { [weak self] in
                 guard let self = self, let ws = self.activeWorkspace else { return }
