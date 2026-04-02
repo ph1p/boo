@@ -358,6 +358,12 @@ class WorkspaceBarView: NSView {
             return
         }
 
+        // Double-click triggers rename
+        if event.clickCount == 2 {
+            showRenameAlert(at: idx)
+            return
+        }
+
         // Run a local tracking loop to prevent isMovableByWindowBackground
         // from hijacking the drag. We own the entire mouse sequence here.
         var didStartDrag = false
@@ -630,7 +636,10 @@ class WorkspaceBarView: NSView {
     }
 
     @objc private func contextRename(_ sender: NSMenuItem) {
-        let index = sender.tag
+        showRenameAlert(at: sender.tag)
+    }
+
+    private func showRenameAlert(at index: Int) {
         guard index >= 0, index < items.count else { return }
 
         let alert = NSAlert()
@@ -653,6 +662,7 @@ class WorkspaceBarView: NSView {
                 }
             }
         }
+        alert.window.makeFirstResponder(input)
     }
 
     @objc private func contextTogglePin(_ sender: NSMenuItem) {
@@ -691,6 +701,42 @@ class WorkspaceBarView: NSView {
             NSColorPanel.shared.setTarget(nil)
             NSColorPanel.shared.setAction(nil)
             colorPickerActive = false
+        }
+    }
+
+    // MARK: - Testing Hooks
+
+    /// Directly invoke the double-click rename path. For tests only.
+    func triggerDoubleClickForTesting(at index: Int) {
+        showRenameAlert(at: index)
+    }
+
+    /// Directly invoke the single-click select/close path. For tests only.
+    func triggerSingleClickForTesting(at index: Int) {
+        guard index >= 0, index < items.count else { return }
+        if isVertical {
+            let itemSize: CGFloat = 32
+            let padding: CGFloat = 4
+            let y: CGFloat = 8 + CGFloat(index) * (itemSize + 4) + itemSize / 2
+            let x: CGFloat = bounds.midX
+            handleVerticalClick(NSPoint(x: x, y: y))
+        } else {
+            var x: CGFloat = 72
+            for (i, item) in items.enumerated() {
+                let isSelected = i == selectedIndex
+                let attrs: [NSAttributedString.Key: Any] = [
+                    .font: NSFont.systemFont(ofSize: 11.5, weight: isSelected ? .medium : .regular)
+                ]
+                let titleWidth = (item.name as NSString).size(withAttributes: attrs).width
+                let closeSpace: CGFloat = item.isPinned ? 0 : 16
+                let pillWidth = titleWidth + 32 + closeSpace
+                if i == index {
+                    // Click in the safe centre of the pill (away from the close button)
+                    handleHorizontalClick(NSPoint(x: x + 14, y: bounds.midY))
+                    return
+                }
+                x += pillWidth + 6
+            }
         }
     }
 

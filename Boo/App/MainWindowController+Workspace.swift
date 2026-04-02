@@ -21,28 +21,33 @@ extension MainWindowController: ToolbarViewDelegate {
         guard index >= 0, index < appState.workspaces.count else { return }
         appState.workspaces[index].customName = name
         refreshToolbar()
+        saveSession()
     }
 
     func toolbar(_ toolbar: ToolbarView, setColorForWorkspaceAt index: Int, color: WorkspaceColor) {
         guard index >= 0, index < appState.workspaces.count else { return }
         appState.workspaces[index].color = color
         refreshToolbar()
+        saveSession()
     }
 
     func toolbar(_ toolbar: ToolbarView, setCustomColorForWorkspaceAt index: Int, color: NSColor) {
         guard index >= 0, index < appState.workspaces.count else { return }
         appState.workspaces[index].customColor = (color == .clear) ? nil : color
         refreshToolbar()
+        saveSession()
     }
 
     func toolbar(_ toolbar: ToolbarView, togglePinForWorkspaceAt index: Int) {
         appState.togglePin(at: index)
         refreshToolbar()
+        saveSession()
     }
 
     func toolbar(_ toolbar: ToolbarView, moveWorkspaceFrom source: Int, to destination: Int) {
         appState.moveWorkspace(from: source, to: destination)
         refreshToolbar()
+        saveSession()
     }
 }
 
@@ -62,28 +67,33 @@ extension MainWindowController: WorkspaceBarViewDelegate {
         guard index >= 0, index < appState.workspaces.count else { return }
         appState.workspaces[index].customName = name
         refreshToolbar()
+        saveSession()
     }
 
     func workspaceBar(_ bar: WorkspaceBarView, setColorForWorkspaceAt index: Int, color: WorkspaceColor) {
         guard index >= 0, index < appState.workspaces.count else { return }
         appState.workspaces[index].color = color
         refreshToolbar()
+        saveSession()
     }
 
     func workspaceBar(_ bar: WorkspaceBarView, setCustomColorForWorkspaceAt index: Int, color: NSColor) {
         guard index >= 0, index < appState.workspaces.count else { return }
         appState.workspaces[index].customColor = (color == .clear) ? nil : color
         refreshToolbar()
+        saveSession()
     }
 
     func workspaceBar(_ bar: WorkspaceBarView, togglePinForWorkspaceAt index: Int) {
         appState.togglePin(at: index)
         refreshToolbar()
+        saveSession()
     }
 
     func workspaceBar(_ bar: WorkspaceBarView, moveWorkspaceFrom source: Int, to destination: Int) {
         appState.moveWorkspace(from: source, to: destination)
         refreshToolbar()
+        saveSession()
     }
 }
 
@@ -134,14 +144,34 @@ extension MainWindowController {
         }
         appState.removeWorkspace(at: index)
         if appState.workspaces.isEmpty {
+            saveSession()
             window?.close()
         } else {
+            saveSession()
             activateWorkspace(appState.activeWorkspaceIndex)
         }
     }
 
     func restoreWorkspaces() {
+        if let snapshot = SessionStore.load() {
+            let restored = SessionStore.workspaces(from: snapshot)
+            if !restored.isEmpty {
+                for ws in restored {
+                    appState.addWorkspace(ws)
+                }
+                let safeIndex = min(
+                    max(snapshot.activeWorkspaceIndex, 0),
+                    appState.workspaces.count - 1
+                )
+                activateWorkspace(safeIndex)
+                return
+            }
+        }
         openWorkspace(path: AppSettings.shared.defaultFolder)
+    }
+
+    func saveSession() {
+        SessionStore.save(appState: appState)
     }
 
     func openWorkspace(path: String) {
@@ -152,6 +182,7 @@ extension MainWindowController {
             appState.setActiveWorkspace(previousIndex)
         }
         activateWorkspace(appState.workspaces.count - 1)
+        saveSession()
     }
 
     func activateWorkspace(_ index: Int) {

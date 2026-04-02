@@ -376,6 +376,10 @@ extension ToolbarView {
 
         // Workspace zone — use tracking loop for drag reordering
         if !hideWorkspaces, let hitIdx = hitTestWorkspaceIndex(at: startPoint) {
+            if event.clickCount == 2 {
+                showRenameAlert(at: hitIdx)
+                return
+            }
             handleWorkspaceMouseDown(event, startPoint: startPoint, hitIndex: hitIdx)
             return
         }
@@ -670,7 +674,10 @@ extension ToolbarView {
     }
 
     @objc internal func contextRename(_ sender: NSMenuItem) {
-        let index = sender.tag
+        showRenameAlert(at: sender.tag)
+    }
+
+    internal func showRenameAlert(at index: Int) {
         guard index >= 0, index < workspaces.count else { return }
 
         let alert = NSAlert()
@@ -693,6 +700,7 @@ extension ToolbarView {
                 }
             }
         }
+        alert.window.makeFirstResponder(input)
     }
 
     @objc internal func contextTogglePin(_ sender: NSMenuItem) {
@@ -721,5 +729,12 @@ extension ToolbarView {
 
     @objc internal func contextClose(_ sender: NSMenuItem) {
         delegate?.toolbar(self, didCloseWorkspaceAt: sender.tag)
+    }
+
+    // MARK: - Testing Hooks
+
+    /// Directly invoke the double-click rename path. For tests only.
+    func triggerDoubleClickForTesting(at index: Int) {
+        showRenameAlert(at: index)
     }
 }

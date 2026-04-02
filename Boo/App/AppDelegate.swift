@@ -45,6 +45,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        windowController?.saveSession()
         SSHControlManager.shared.teardownAll()
         BooSocketServer.shared.stop()
     }
