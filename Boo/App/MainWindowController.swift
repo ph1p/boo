@@ -837,6 +837,10 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
         SettingsWindowController.shared.showSettings()
     }
 
+    @objc func showAboutAction(_ sender: Any?) {
+        AboutWindowController.shared.showAbout()
+    }
+
     @objc func checkForUpdatesAction(_ sender: Any?) {
         Task { @MainActor in
             await AutoUpdater.shared.checkForUpdates(userInitiated: true)

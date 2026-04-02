@@ -1,0 +1,5 @@
+module CIronmark {
+    header "ironmark_bridge.h"
+    link "ironmark"
+    export *
+}

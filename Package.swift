@@ -1,7 +1,7 @@
 // swift-tools-version: 5.9
 import PackageDescription
 
-let booDeps: [Target.Dependency] = ["CGhostty"]
+let booDeps: [Target.Dependency] = ["CGhostty", "CIronmark"]
 let booExclude: [String] = [
     "App/Info.plist",
     "App/Boo.entitlements",
@@ -34,6 +34,18 @@ let targets: [Target] = [
             .linkedFramework("AppKit"),
             .linkedFramework("UniformTypeIdentifiers"),
             .linkedFramework("Carbon"),
+        ]
+    ),
+    .target(
+        name: "CIronmark",
+        path: "CIronmark",
+        publicHeadersPath: "include",
+        cSettings: [
+            .headerSearchPath("include")
+        ],
+        linkerSettings: [
+            .unsafeFlags(["-L", "Vendor/ironmark/macos-arm64"]),
+            .linkedLibrary("ironmark"),
         ]
     ),
     .target(
