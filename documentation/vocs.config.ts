@@ -3,7 +3,7 @@ import { defineConfig } from 'vocs'
 export default defineConfig({
   title: 'Boo',
   basePath: '/boo',
-  logoUrl: '/logo.png',
+  logoUrl: '/boo/logo.png',
   sidebar: [
     {
       text: 'Installation',

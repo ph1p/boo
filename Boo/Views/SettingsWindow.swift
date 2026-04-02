@@ -13,6 +13,7 @@ private struct Tokens {
     var accent: Color { Color(nsColor: theme.accentColor) }
     var bg: Color { Color(nsColor: theme.sidebarBg) }
     var chromeBg: Color { Color(nsColor: theme.chromeBg) }
+    var border: Color { Color(nsColor: theme.sidebarBorder) }
     var fg: Color {
         Color(
             red: Double(theme.foreground.r) / 255,
@@ -63,18 +64,44 @@ struct SettingsView: View {
         let _ = observer.revision
         let t = Tokens.current
 
-        HStack(spacing: 0) {
-            sidebar(t)
+        VStack(spacing: 0) {
+            // Custom title bar extending under the transparent native title bar
+            titleBar(t)
 
-            Rectangle()
-                .fill(t.muted.opacity(0.2))
-                .frame(width: 0.5)
+            HStack(spacing: 0) {
+                sidebar(t)
 
-            content
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                Rectangle()
+                    .fill(t.border)
+                    .frame(width: 0.5)
+
+                content
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .frame(width: 560, height: 480)
         .background(t.bg)
+    }
+
+    // MARK: Title Bar
+
+    private func titleBar(_ t: Tokens) -> some View {
+        ZStack {
+            t.chromeBg
+            Text("Settings")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundColor(t.muted)
+                .offset(y: -1)
+            VStack(spacing: 0) {
+                Spacer()
+                Rectangle()
+                    .fill(t.border)
+                    .frame(height: 0.5)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: 30)
     }
 
     // MARK: Sidebar
@@ -1545,6 +1572,12 @@ private struct ShortcutsSettingsView: View {
     }
 }
 
+// MARK: - Hosting View (no safe area)
+
+private class NoSafeAreaHostingView<Root: View>: NSHostingView<Root> {
+    override var safeAreaInsets: NSEdgeInsets { .init() }
+}
+
 // MARK: - Window Controller
 
 class SettingsWindowController: NSWindowController {
@@ -1555,19 +1588,22 @@ class SettingsWindowController: NSWindowController {
     private init() {
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 560, height: 480),
-            styleMask: [.titled, .closable],
+            styleMask: [.titled, .closable, .fullSizeContentView],
             backing: .buffered,
             defer: false
         )
         window.title = "Settings"
+        window.titlebarAppearsTransparent = true
+        window.titleVisibility = .hidden
         window.center()
         // Prevent the window from participating in key view loop
         // so sidebar items don't get focus rings
         window.autorecalculatesKeyViewLoop = false
         let theme = AppSettings.shared.theme
-        window.backgroundColor = theme.sidebarBg
+        window.backgroundColor = theme.chromeBg
         window.appearance = NSAppearance(named: theme.isDark ? .darkAqua : .aqua)
-        window.contentView = NSHostingView(rootView: SettingsView())
+        let hostingView = NoSafeAreaHostingView(rootView: SettingsView())
+        window.contentView = hostingView
 
         super.init(window: window)
 
@@ -1575,7 +1611,7 @@ class SettingsWindowController: NSWindowController {
             forName: .settingsChanged, object: nil, queue: .main
         ) { [weak self] _ in
             let t = AppSettings.shared.theme
-            self?.window?.backgroundColor = t.sidebarBg
+            self?.window?.backgroundColor = t.chromeBg
             self?.window?.appearance = NSAppearance(named: t.isDark ? .darkAqua : .aqua)
         }
     }
