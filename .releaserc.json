@@ -21,6 +21,10 @@
       {
         "assets": [
           {
+            "path": ".build/Boo-*.dmg",
+            "label": "Boo-${nextRelease.version}.dmg"
+          },
+          {
             "path": ".build/Boo-*.app.zip",
             "label": "Boo-${nextRelease.version}.app.zip"
           }
