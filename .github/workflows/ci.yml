@@ -60,6 +60,22 @@ jobs:
       - name: Build GhosttyKit
         run: make ghostty
 
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin
+
+      - name: Cache ironmark build
+        uses: actions/cache@v5
+        with:
+          path: Vendor/ironmark/target
+          key: ironmark-macos15-${{ hashFiles('Vendor/ironmark/Cargo.lock', 'Vendor/ironmark/Cargo.toml') }}
+          restore-keys: |
+            ironmark-macos15-
+
+      - name: Build ironmark
+        run: make ironmark
+
       - name: Build
         run: swift build
 
@@ -107,6 +123,22 @@ jobs:
 
       - name: Build GhosttyKit
         run: make ghostty
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin
+
+      - name: Cache ironmark build
+        uses: actions/cache@v5
+        with:
+          path: Vendor/ironmark/target
+          key: ironmark-release-macos15-${{ hashFiles('Vendor/ironmark/Cargo.lock', 'Vendor/ironmark/Cargo.toml') }}
+          restore-keys: |
+            ironmark-release-macos15-
+
+      - name: Build ironmark
+        run: make ironmark
 
       - name: Import signing certificate
         if: env.CERTIFICATE_P12_BASE64 != ''
