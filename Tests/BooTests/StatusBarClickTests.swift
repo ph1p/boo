@@ -39,7 +39,7 @@ final class StatusBarClickTests: XCTestCase {
             return iconSize + 6
         }
 
-        func handleClick(at point: NSPoint, in barView: StatusBarView) -> Bool {
+        @MainActor func handleClick(at point: NSPoint, in barView: StatusBarView) -> Bool {
             guard hitRect.contains(point) else { return false }
             clickCount += 1
             barView.onSidebarPluginToggle?(associatedPanelID ?? "")

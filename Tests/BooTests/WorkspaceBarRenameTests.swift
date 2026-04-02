@@ -20,6 +20,7 @@ private class SpyDelegate: WorkspaceBarViewDelegate {
     func workspaceBar(_ bar: WorkspaceBarView, setCustomColorForWorkspaceAt index: Int, color: NSColor) {}
     func workspaceBar(_ bar: WorkspaceBarView, togglePinForWorkspaceAt index: Int) {}
     func workspaceBar(_ bar: WorkspaceBarView, moveWorkspaceFrom source: Int, to destination: Int) {}
+    func workspaceBarDidRequestNewWorkspace(_ bar: WorkspaceBarView) {}
 }
 
 // MARK: - Tests
@@ -165,6 +166,7 @@ private class ToolbarSpyDelegate: ToolbarViewDelegate {
     func toolbar(_ toolbar: ToolbarView, setCustomColorForWorkspaceAt index: Int, color: NSColor) {}
     func toolbar(_ toolbar: ToolbarView, togglePinForWorkspaceAt index: Int) {}
     func toolbar(_ toolbar: ToolbarView, moveWorkspaceFrom source: Int, to destination: Int) {}
+    func toolbarDidRequestNewWorkspace(_ toolbar: ToolbarView) {}
 }
 
 // MARK: - ToolbarView rename tests (top/horizontal workspace bar)
