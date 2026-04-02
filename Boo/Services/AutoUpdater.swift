@@ -17,7 +17,7 @@ final class AutoUpdater: ObservableObject {
     enum State: Equatable {
         case idle
         case checking
-        case available(release: Release)
+        case available(release: Release, changelog: [Release])
         case downloading(progress: Double)
         case readyToInstall(dmgURL: URL)
         case installing
@@ -28,7 +28,7 @@ final class AutoUpdater: ObservableObject {
             case (.idle, .idle), (.checking, .checking), (.installing, .installing): return true
             case (.downloading(let a), .downloading(let b)): return a == b
             case (.error(let a), .error(let b)): return a == b
-            case (.available(let a), .available(let b)): return a.tagName == b.tagName
+            case (.available(let a, _), .available(let b, _)): return a.tagName == b.tagName
             case (.readyToInstall(let a), .readyToInstall(let b)): return a == b
             default: return false
             }
@@ -87,7 +87,7 @@ final class AutoUpdater: ObservableObject {
 
         state = .checking
         let urlString =
-            "https://api.github.com/repos/\(Self.repoOwner)/\(Self.repoName)/releases/latest"
+            "https://api.github.com/repos/\(Self.repoOwner)/\(Self.repoName)/releases?per_page=50"
         guard let url = URL(string: urlString) else {
             state = .error("Invalid repository URL")
             return
@@ -108,28 +108,30 @@ final class AutoUpdater: ObservableObject {
 
             let decoder = JSONDecoder()
             decoder.keyDecodingStrategy = .convertFromSnakeCase
-            guard let release = try? decoder.decode(Release.self, from: data) else {
-                state = userInitiated ? .error("Failed to parse release") : .idle
+            guard let allReleases = try? decoder.decode([Release].self, from: data),
+                !allReleases.isEmpty
+            else {
+                state = userInitiated ? .error("Failed to parse releases") : .idle
                 return
             }
 
-            guard release.dmgAsset != nil else {
-                state = userInitiated ? .error("No DMG in release") : .idle
-                return
+            // Filter to releases newer than current version (sorted newest first by API)
+            let newerReleases = allReleases.filter {
+                Self.isNewer($0.version, than: Self.currentVersion)
             }
 
-            if Self.isNewer(release.version, than: Self.currentVersion) {
-                if !userInitiated, AppSettings.shared.skipVersion == release.version {
-                    state = .idle
-                    return
-                }
-                state = .available(release: release)
-            } else {
+            guard let latest = newerReleases.first, latest.dmgAsset != nil else {
                 state = .idle
-                if userInitiated {
-                    showUpToDateAlert()
-                }
+                if userInitiated { showUpToDateAlert() }
+                return
             }
+
+            if !userInitiated, AppSettings.shared.skipVersion == latest.version {
+                state = .idle
+                return
+            }
+
+            state = .available(release: latest, changelog: newerReleases)
         } catch {
             state = userInitiated ? .error(error.localizedDescription) : .idle
         }

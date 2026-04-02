@@ -1,4 +1,4 @@
-.PHONY: build run clean ghostty ghostty-linux setup setup-linux release test app sign notarize dmg dist lint format
+.PHONY: build run clean ghostty ghostty-linux ironmark setup setup-linux release test app sign notarize dmg dist lint format
 
 UNAME := $(shell uname -s)
 
@@ -80,11 +80,28 @@ ghostty-linux:
 		echo "==> Ghostty GTK already built"; \
 	fi
 
+# ── Ironmark (macOS) ────────────────────────────────────────────────────────
+
+# Build ironmark static library for markdown rendering
+ironmark:
+	@if [ ! -f Vendor/ironmark/Cargo.toml ]; then \
+		echo "==> Initializing ironmark submodule..."; \
+		git submodule update --init --depth 1 Vendor/ironmark; \
+	fi
+	@if [ ! -f Vendor/ironmark/macos-arm64/libironmark.a ]; then \
+		echo "==> Building ironmark..."; \
+		cd Vendor/ironmark && MACOSX_DEPLOYMENT_TARGET=13.0 RUSTFLAGS="-C link-arg=-mmacosx-version-min=13.0" cargo build --release --target aarch64-apple-darwin; \
+		mkdir -p macos-arm64; \
+		cp target/aarch64-apple-darwin/release/libironmark.a macos-arm64/; \
+	else \
+		echo "==> ironmark already built"; \
+	fi
+
 # ── Build ────────────────────────────────────────────────────────────────────
 
 # Full setup (auto-detects platform)
 ifeq ($(UNAME),Darwin)
-setup: ghostty build
+setup: ghostty ironmark build
 else
 setup: setup-linux
 endif

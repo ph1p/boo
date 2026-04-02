@@ -2,6 +2,8 @@
 Vendor/ghostty/zig-out/
 Vendor/ghostty/.zig-cache/
 Vendor/ghostty/macos/
+Vendor/ironmark/target/
+Vendor/ironmark/macos-arm64/
 zig-out/
 .zig-cache/
 zig-cache/

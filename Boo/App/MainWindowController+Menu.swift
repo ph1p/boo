@@ -6,7 +6,7 @@ extension MainWindowController {
 
         let appMenuItem = NSMenuItem()
         let appMenu = NSMenu()
-        appMenu.addItem(withTitle: "About Boo", action: nil, keyEquivalent: "")
+        appMenu.addItem(withTitle: "About Boo", action: #selector(showAboutAction(_:)), keyEquivalent: "")
         appMenu.addItem(.separator())
         appMenu.addItem(
             withTitle: "Check for Updates...", action: #selector(checkForUpdatesAction(_:)), keyEquivalent: "")

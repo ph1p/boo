@@ -2,3 +2,6 @@
 	path = Vendor/ghostty
 	url = https://github.com/ghostty-org/ghostty.git
 	shallow = true
+[submodule "Vendor/ironmark"]
+	path = Vendor/ironmark
+	url = https://github.com/ph1p/ironmark
