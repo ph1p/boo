@@ -166,6 +166,7 @@ final class DebugPlugin: BooPluginProtocol {
                 context: context.terminal,
                 theme: context.theme,
                 density: context.density,
+                fontScale: context.fontScale,
                 onClear: { [weak self] in
                     self?.entries.removeAll()
                     self?.onRequestCycleRerun?()
@@ -197,13 +198,12 @@ private struct DebugDetailView: View {
     let context: TerminalContext
     let theme: ThemeSnapshot
     let density: SidebarDensity
+    let fontScale: SidebarFontScale
     let onClear: () -> Void
     let onCopyLog: () -> Void
 
     @State private var showState = true
     @State private var filter = ""
-
-    private var fontSize: CGFloat { density == .compact ? 9.0 : 10.0 }
     private var textColor: Color { Color(nsColor: theme.chromeText) }
     private var mutedColor: Color { Color(nsColor: theme.chromeMuted) }
     private var accentColor: Color { Color(nsColor: theme.accentColor) }
@@ -216,7 +216,7 @@ private struct DebugDetailView: View {
                     showState.toggle()
                 }
                 .buttonStyle(.plain)
-                .font(.system(size: fontSize))
+                .font(fontScale.font(.base))
                 .foregroundColor(accentColor)
                 .padding(.horizontal, 6)
                 .padding(.vertical, 2)
@@ -227,7 +227,7 @@ private struct DebugDetailView: View {
 
                 Button("Copy") { onCopyLog() }
                     .buttonStyle(.plain)
-                    .font(.system(size: fontSize))
+                    .font(fontScale.font(.base))
                     .foregroundColor(mutedColor)
                     .padding(.horizontal, 6)
                     .padding(.vertical, 2)
@@ -236,7 +236,7 @@ private struct DebugDetailView: View {
 
                 Button("Clear") { onClear() }
                     .buttonStyle(.plain)
-                    .font(.system(size: fontSize))
+                    .font(fontScale.font(.base))
                     .foregroundColor(mutedColor)
                     .padding(.horizontal, 6)
                     .padding(.vertical, 2)
@@ -299,11 +299,11 @@ private struct DebugDetailView: View {
     private func stateRow(_ label: String, _ value: String) -> some View {
         HStack(alignment: .top, spacing: 6) {
             Text(label)
-                .font(.system(size: fontSize, weight: .medium))
+                .font(fontScale.font(.base).weight(.medium))
                 .foregroundColor(mutedColor)
                 .frame(width: 80, alignment: .trailing)
             Text(value)
-                .font(.system(size: fontSize, design: .monospaced))
+                .font(fontScale.font(.base, design: .monospaced))
                 .foregroundColor(textColor)
                 .lineLimit(2)
                 .textSelection(.enabled)
@@ -318,11 +318,11 @@ private struct DebugDetailView: View {
             // Filter
             HStack {
                 Image(systemName: "line.3.horizontal.decrease")
-                    .font(.system(size: fontSize))
+                    .font(fontScale.font(.base))
                     .foregroundColor(mutedColor)
                 TextField("Filter events...", text: $filter)
                     .textFieldStyle(.plain)
-                    .font(.system(size: fontSize))
+                    .font(fontScale.font(.base))
                     .foregroundColor(textColor)
             }
             .padding(.horizontal, 10)
@@ -359,14 +359,14 @@ private struct DebugDetailView: View {
     private func logRow(_ entry: DebugPlugin.LogEntry) -> some View {
         HStack(alignment: .top, spacing: 4) {
             Text(DebugPlugin.timeFormatter.string(from: entry.timestamp))
-                .font(.system(size: fontSize - 1, design: .monospaced))
+                .font(fontScale.font(.sm, design: .monospaced))
                 .foregroundColor(mutedColor.opacity(0.7))
             Text(entry.event)
-                .font(.system(size: fontSize, weight: .medium, design: .monospaced))
+                .font(fontScale.font(.base, design: .monospaced).weight(.medium))
                 .foregroundColor(eventColor(entry.event))
             if !entry.detail.isEmpty {
                 Text(entry.detail)
-                    .font(.system(size: fontSize - 1, design: .monospaced))
+                    .font(fontScale.font(.sm, design: .monospaced))
                     .foregroundColor(textColor.opacity(0.8))
                     .lineLimit(3)
             }

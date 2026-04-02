@@ -247,6 +247,7 @@ extension MainWindowController {
 
             self.refreshAllSurfaces()
             self.syncCoordinatorPaneViews()
+            self.updatePaneCloseButtons()
         }
     }
 }

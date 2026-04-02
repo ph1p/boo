@@ -18,7 +18,7 @@ struct GitDetailView: View {
     var onTerminalAction: ((String) -> Void)?
     var onCopyPath: ((String) -> Void)?
     var onReveal: ((String) -> Void)?
-
+    var fontScale: SidebarFontScale = SidebarFontScale(base: AppSettings.shared.sidebarFontSize)
     @State private var stagedExpanded = true
     @State private var unstagedExpanded = true
     @State private var untrackedExpanded = true
@@ -136,7 +136,7 @@ struct GitDetailView: View {
                     }
                 } else {
                     Text("Working tree clean")
-                        .font(.system(size: 11))
+                        .font(fontScale.font(.base))
                         .foregroundColor(Color(nsColor: theme.chromeMuted))
                         .padding(.horizontal, density == .comfortable ? 12 : 8)
                         .padding(.vertical, density == .comfortable ? 8 : 6)
@@ -158,10 +158,10 @@ struct GitDetailView: View {
                         .font(.system(size: 9))
                         .foregroundColor(Color(nsColor: theme.chromeMuted))
                     Text(remote.name)
-                        .font(.system(size: 10, weight: .medium))
+                        .font(fontScale.font(.base).weight(Font.Weight.medium))
                         .foregroundColor(Color(nsColor: theme.accentColor))
                     Text(webURL.host ?? remote.url)
-                        .font(.system(size: 10))
+                        .font(fontScale.font(.sm))
                         .foregroundColor(Color(nsColor: theme.chromeMuted))
                         .lineLimit(1)
                         .truncationMode(.middle)
@@ -177,10 +177,10 @@ struct GitDetailView: View {
                         .font(.system(size: 9))
                         .foregroundColor(Color(nsColor: theme.chromeMuted))
                     Text(remote.name)
-                        .font(.system(size: 10, weight: .medium))
+                        .font(fontScale.font(.base).weight(Font.Weight.medium))
                         .foregroundColor(Color(nsColor: theme.chromeText))
                     Text(remote.url)
-                        .font(.system(size: 10))
+                        .font(fontScale.font(.sm))
                         .foregroundColor(Color(nsColor: theme.chromeMuted))
                         .lineLimit(1)
                         .truncationMode(.middle)
@@ -345,12 +345,12 @@ struct GitDetailView: View {
                     .foregroundColor(Color(nsColor: file.statusColor))
                     .frame(width: 14, alignment: .center)
                 Text((file.path as NSString).lastPathComponent)
-                    .font(.system(size: density == .comfortable ? 12 : 11))
+                    .font(fontScale.font(.base))
                     .foregroundColor(Color(nsColor: theme.chromeText))
                     .lineLimit(1)
                 if (file.path as NSString).deletingLastPathComponent.count > 0 {
                     Text((file.path as NSString).deletingLastPathComponent)
-                        .font(.system(size: density == .comfortable ? 10 : 9))
+                        .font(fontScale.font(.xs))
                         .foregroundColor(Color(nsColor: theme.chromeMuted))
                         .lineLimit(1)
                         .truncationMode(.head)

@@ -36,6 +36,7 @@ struct SettingsView: View {
         case general = "General"
         case theme = "Theme"
         case terminal = "Terminal"
+        case sidebar = "Sidebar"
         case statusBar = "Status Bar"
         case layout = "Layout"
         case plugins = "Plugins"
@@ -46,6 +47,7 @@ struct SettingsView: View {
             case .general: return "gear"
             case .theme: return "paintpalette"
             case .terminal: return "terminal"
+            case .sidebar: return "sidebar.left"
             case .statusBar: return "rectangle.bottomthird.inset.filled"
             case .layout: return "rectangle.3.group"
             case .plugins: return "puzzlepiece"
@@ -113,6 +115,7 @@ struct SettingsView: View {
         case .general: GeneralSettingsView()
         case .theme: ThemeSettingsView()
         case .terminal: TerminalSettingsView()
+        case .sidebar: SidebarSettingsView()
         case .statusBar: StatusBarSettingsView()
         case .layout: LayoutSettingsView()
         case .plugins: PluginSettingsView()
@@ -858,6 +861,68 @@ private struct TerminalSettingsView: View {
         }
     }
 
+}
+
+// MARK: - Sidebar
+
+private struct SidebarSettingsView: View {
+    @State private var fontSize = Double(AppSettings.shared.sidebarFontSize)
+    @State private var selectedFont =
+        AppSettings.shared.sidebarFontName.isEmpty ? "System Default" : AppSettings.shared.sidebarFontName
+    @ObservedObject private var observer = SettingsObserver(topics: [.theme, .explorer, .sidebarFont])
+
+    private let fonts = AppSettings.availableSystemFonts
+
+    var body: some View {
+        let _ = observer.revision
+        let t = Tokens.current
+
+        SettingsPage(title: "Sidebar") {
+            Section(title: "Base Font Size") {
+                Text("All sidebar text is relative to this size.")
+                    .font(.system(size: 11))
+                    .foregroundColor(t.muted)
+                FontSizePicker(value: $fontSize, range: 10...20)
+                    .onChange(of: fontSize) { v in AppSettings.shared.sidebarFontSize = CGFloat(v) }
+            }
+
+            Section(title: "Content Font") {
+                Text("Applied to file trees and content only — not to section headers.")
+                    .font(.system(size: 11))
+                    .foregroundColor(t.muted)
+                FontChooser(selectedFont: $selectedFont, fonts: fonts)
+                    .onChange(of: selectedFont) { v in
+                        AppSettings.shared.sidebarFontName = v == "System Default" ? "" : v
+                    }
+            }
+
+            Section(title: "Preview") {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Section Header")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(t.muted)
+                    let previewFont: Font = {
+                        let name = selectedFont == "System Default" ? "" : selectedFont
+                        if name.isEmpty { return .system(size: CGFloat(fontSize)) }
+                        return .custom(name, size: CGFloat(fontSize))
+                    }()
+                    Text("  Documents")
+                        .font(previewFont)
+                        .foregroundColor(t.text)
+                    Text("  Projects")
+                        .font(previewFont)
+                        .foregroundColor(t.text)
+                    Text("  README.md")
+                        .font(previewFont)
+                        .foregroundColor(t.muted)
+                }
+                .padding(8)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(RoundedRectangle(cornerRadius: 6).fill(t.chromeBg))
+            }
+        }
+        .foregroundColor(t.text)
+    }
 }
 
 // MARK: - Status Bar

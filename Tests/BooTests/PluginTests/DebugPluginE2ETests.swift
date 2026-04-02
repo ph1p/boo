@@ -300,7 +300,8 @@ final class DebugPluginE2ETests: XCTestCase {
             terminal: currentContext(),
             theme: ThemeSnapshot(from: AppSettings.shared.theme),
             density: .comfortable,
-            settings: PluginSettingsReader(pluginID: "debug")
+            settings: PluginSettingsReader(pluginID: "debug"),
+            fontScale: SidebarFontScale(base: 12)
         )
 
         let content = debug.makeStatusBarContent(context: ctx)

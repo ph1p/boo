@@ -64,7 +64,8 @@ final class ScriptPluginAdapterTests: XCTestCase {
             terminal: terminal,
             theme: ThemeSnapshot(from: AppSettings.shared.theme),
             density: .comfortable,
-            settings: PluginSettingsReader(pluginID: pluginID)
+            settings: PluginSettingsReader(pluginID: pluginID),
+            fontScale: SidebarFontScale(base: 12)
         )
     }
 

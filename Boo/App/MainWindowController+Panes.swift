@@ -285,6 +285,7 @@ extension MainWindowController {
             }
             workspace.activePaneID = newID
             splitContainer.update(tree: workspace.splitTree)
+            saveSession()
 
             DispatchQueue.main.async { [weak self] in
                 guard let self = self else { return }
@@ -449,6 +450,7 @@ extension MainWindowController {
 
         // 4. Single tree rebuild with all changes applied
         splitContainer.update(tree: workspace.splitTree)
+        saveSession()
 
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }

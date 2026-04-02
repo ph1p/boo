@@ -162,7 +162,8 @@ final class GitPlugin: BooPluginProtocol {
                 },
                 onReveal: { path in
                     act?.handle(DSLAction(type: "reveal", path: path, command: nil, text: nil))
-                }
+                },
+                fontScale: context.fontScale
             ))
     }
 

@@ -22,11 +22,6 @@ final class LocalFileTreePlugin: BooPluginProtocol {
                 key: "showIcons", type: .bool, label: "Show file icons", defaultValue: AnyCodableValue(true),
                 options: nil),
             PluginManifest.SettingManifest(
-                key: "fontSize", type: .double, label: "Font size", defaultValue: AnyCodableValue(12.0), options: nil),
-            PluginManifest.SettingManifest(
-                key: "fontName", type: .string, label: "Font", defaultValue: AnyCodableValue(""),
-                options: "fontPicker:system"),
-            PluginManifest.SettingManifest(
                 key: "showPath", type: .bool, label: "Show current path", defaultValue: AnyCodableValue(true),
                 options: nil),
             PluginManifest.SettingManifest(

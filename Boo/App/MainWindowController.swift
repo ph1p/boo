@@ -313,9 +313,18 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
             }
 
             // Explorer/plugin changes: refresh sidebar via a cycle
-            if topic == nil || topic == .explorer || topic == .plugins {
+            if topic == nil || topic == .explorer || topic == .sidebarFont || topic == .plugins {
                 if self.sidebarVisible {
-                    self.runPluginCycle(reason: .focusChanged)
+                    if topic == .sidebarFont, let ctx = self.pluginRegistry.lastContext {
+                        // Only font settings changed — wipe view cache so makeDetailView
+                        // is called again with the new fontScale, then rebuild directly.
+                        // rebuildPluginSidebar is guarded by contextChanged/visibilityChanged,
+                        // so we bypass runPluginCycle here to guarantee a rebuild.
+                        self.cachedDetailViews.removeAll()
+                        self.rebuildPluginSidebar(context: ctx)
+                    } else {
+                        self.runPluginCycle(reason: .focusChanged)
+                    }
                 }
             }
         }

@@ -131,7 +131,8 @@ final class DockerPluginNew: BooPluginProtocol {
             return AnyView(
                 DockerConnectionErrorView(
                     error: error,
-                    theme: AppSettings.shared.theme
+                    theme: AppSettings.shared.theme,
+                    fontScale: context.fontScale
                 )
             )
         }
@@ -143,6 +144,7 @@ final class DockerPluginNew: BooPluginProtocol {
                 containers: containers,
                 density: context.density,
                 theme: AppSettings.shared.theme,
+                fontScale: context.fontScale,
                 onExec: { container in
                     act?.handle(
                         DSLAction(
@@ -203,6 +205,7 @@ final class DockerPluginNew: BooPluginProtocol {
 private struct DockerConnectionErrorView: View {
     let error: String
     let theme: TerminalTheme
+    let fontScale: SidebarFontScale
 
     var body: some View {
         VStack(spacing: 8) {
@@ -211,14 +214,14 @@ private struct DockerConnectionErrorView: View {
                 .font(.system(size: 24))
                 .foregroundColor(.orange)
             Text("Docker Disconnected")
-                .font(.system(size: 12, weight: .medium))
+                .font(fontScale.font(.base).weight(Font.Weight.medium))
                 .foregroundColor(Color(nsColor: theme.chromeText))
             Text(error)
-                .font(.system(size: 10))
+                .font(fontScale.font(.sm))
                 .foregroundColor(Color(nsColor: theme.chromeMuted))
                 .multilineTextAlignment(.center)
             Text("Set the socket path in Settings > Plugins > Docker")
-                .font(.system(size: 10))
+                .font(fontScale.font(.sm))
                 .foregroundColor(
                     Color(nsColor: theme.chromeMuted).opacity(0.7)
                 )
@@ -236,6 +239,7 @@ struct DockerPluginDetailView: View {
     let containers: [DockerService.Container]
     let density: SidebarDensity
     let theme: TerminalTheme
+    let fontScale: SidebarFontScale
     var onExec: ((DockerService.Container) -> Void)?
     var onLogs: ((DockerService.Container) -> Void)?
     var onStart: ((DockerService.Container) -> Void)?
@@ -272,7 +276,7 @@ struct DockerPluginDetailView: View {
                         .foregroundColor(
                             Color(nsColor: theme.chromeMuted).opacity(0.3))
                     Text("No containers found")
-                        .font(.system(size: 11))
+                        .font(fontScale.font(.base))
                         .foregroundColor(
                             Color(nsColor: theme.chromeMuted).opacity(0.5))
                     Spacer()
@@ -313,6 +317,7 @@ struct DockerPluginDetailView: View {
             container: container,
             density: density,
             theme: theme,
+            fontScale: fontScale,
             itemHeight: itemHeight,
             onExec: { onExec?(container) },
             onLogs: { onLogs?(container) },
@@ -360,6 +365,7 @@ private struct DockerContainerRow: View {
     let container: DockerService.Container
     let density: SidebarDensity
     let theme: TerminalTheme
+    let fontScale: SidebarFontScale
     let itemHeight: CGFloat
     let onExec: () -> Void
     let onLogs: () -> Void
@@ -403,20 +409,13 @@ private struct DockerContainerRow: View {
 
             VStack(alignment: .leading, spacing: 1) {
                 Text(container.name)
-                    .font(
-                        .system(
-                            size: density == .comfortable ? 12 : 11,
-                            weight: .medium)
-                    )
+                    .font(fontScale.font(.base).weight(Font.Weight.medium))
                     .foregroundColor(Color(nsColor: theme.chromeText))
                     .lineLimit(1)
 
                 HStack(spacing: 4) {
                     Text(container.image)
-                        .font(
-                            .system(
-                                size: density == .comfortable ? 10 : 9)
-                        )
+                        .font(fontScale.font(.xs))
                         .foregroundColor(
                             Color(nsColor: theme.chromeMuted).opacity(0.7)
                         )
@@ -424,11 +423,7 @@ private struct DockerContainerRow: View {
 
                     if !container.ports.isEmpty {
                         Text(container.ports)
-                            .font(
-                                .system(
-                                    size: density == .comfortable ? 10 : 9,
-                                    design: .monospaced)
-                            )
+                            .font(fontScale.font(.xs, design: .monospaced))
                             .foregroundColor(
                                 Color(nsColor: theme.chromeMuted).opacity(0.5)
                             )

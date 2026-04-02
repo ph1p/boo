@@ -278,6 +278,42 @@ final class TerminalBridgeTests: XCTestCase {
         XCTAssertNil(result)
     }
 
+    func testNpmScopedPackageNotDetectedAsSSH() {
+        // "bunx @scope/package" — scoped package, empty user before "@"
+        XCTAssertNil(
+            TerminalBridge.detectRemoteFromHeuristics(title: "bunx @scope/package", cwd: "/tmp"))
+        XCTAssertNil(
+            TerminalBridge.detectRemoteFromHeuristics(title: "npx @scope/package", cwd: "/tmp"))
+        // "@scope/package" as first word — empty user part, still not SSH
+        XCTAssertNil(
+            TerminalBridge.detectRemoteFromHeuristics(title: "@scope/package", cwd: "/tmp"))
+    }
+
+    func testNpmVersionTagNotDetectedAsSSH() {
+        // "npx any-buddy@latest" — package@version as an argument to npx/bunx.
+        // "any-buddy" is the user and "latest" the host only by accident; this is npm syntax.
+        XCTAssertNil(
+            TerminalBridge.detectRemoteFromHeuristics(title: "npx any-buddy@latest", cwd: "/tmp"))
+        XCTAssertNil(
+            TerminalBridge.detectRemoteFromHeuristics(title: "bunx any-buddy@latest", cwd: "/tmp"))
+        XCTAssertNil(
+            TerminalBridge.detectRemoteFromHeuristics(title: "npx pkg@2.0.0", cwd: "/tmp"))
+        XCTAssertNil(
+            TerminalBridge.detectRemoteFromHeuristics(title: "bunx @scope/tool --flag value", cwd: "/tmp"))
+    }
+
+    func testRealSSHStillDetectedAfterScopedPackageFix() {
+        // Genuine SSH sessions must continue to be detected.
+        // The prompt "user@remote-server:~" is the first (and only) word — still SSH.
+        let result = TerminalBridge.detectRemoteFromHeuristics(
+            title: "user@remote-server:~", cwd: "/tmp")
+        if case .ssh(let host, _) = result {
+            XCTAssertTrue(host.contains("remote-server"))
+        } else {
+            XCTFail("Expected SSH session to be detected")
+        }
+    }
+
     func testResolveRemoteSessionRetainsPreviousRemoteForBlankTitle() {
         let previous = RemoteSessionType.ssh(host: "user@remote-host")
         let result = TerminalBridge.resolveRemoteSession(

@@ -120,7 +120,6 @@ final class SystemInfoPlugin: BooPluginProtocol {
     // MARK: - Detail View
 
     func makeDetailView(context: PluginContext) -> AnyView? {
-        let fontSize = context.density == .compact ? 10.0 : 11.0
         let act = actions
 
         return AnyView(
@@ -137,7 +136,7 @@ final class SystemInfoPlugin: BooPluginProtocol {
                 netRateIn: netRateIn,
                 netRateOut: netRateOut,
                 cwd: context.terminal.cwd,
-                fontSize: fontSize,
+                fontScale: context.fontScale,
                 textColor: Color(nsColor: context.theme.chromeText),
                 mutedColor: Color(nsColor: context.theme.chromeMuted),
                 onDiskUsage: {
@@ -212,7 +211,7 @@ private struct SystemInfoDetailView: View {
     let netRateIn: UInt64
     let netRateOut: UInt64
     let cwd: String
-    let fontSize: CGFloat
+    let fontScale: SidebarFontScale
     let textColor: Color
     let mutedColor: Color
     let onDiskUsage: () -> Void
@@ -228,7 +227,7 @@ private struct SystemInfoDetailView: View {
                 value: "\(Int(cpuUsage * 100))%",
                 ratio: cpuUsage,
                 barColor: barColor(for: cpuUsage),
-                fontSize: fontSize,
+                fontScale: fontScale,
                 textColor: textColor,
                 mutedColor: mutedColor
             )
@@ -239,7 +238,7 @@ private struct SystemInfoDetailView: View {
                 value: String(format: "%.1f / %.0f GB", memoryUsedGB, memoryTotalGB),
                 ratio: memoryUsage,
                 barColor: barColor(for: memoryUsage),
-                fontSize: fontSize,
+                fontScale: fontScale,
                 textColor: textColor,
                 mutedColor: mutedColor
             )
@@ -250,7 +249,7 @@ private struct SystemInfoDetailView: View {
                 value: String(format: "%.1f GB free", diskFreeGB),
                 ratio: diskUsage,
                 barColor: barColor(for: diskUsage),
-                fontSize: fontSize,
+                fontScale: fontScale,
                 textColor: textColor,
                 mutedColor: mutedColor
             )
@@ -262,7 +261,7 @@ private struct SystemInfoDetailView: View {
                     value: "\(Int(bat.level * 100))%",
                     ratio: bat.level,
                     barColor: batteryColor(for: bat),
-                    fontSize: fontSize,
+                    fontScale: fontScale,
                     textColor: textColor,
                     mutedColor: mutedColor
                 )
@@ -273,44 +272,44 @@ private struct SystemInfoDetailView: View {
             // Load + Uptime + Network in compact rows
             HStack {
                 Text("Load avg")
-                    .font(.system(size: fontSize))
+                    .font(fontScale.font(.base))
                     .foregroundColor(mutedColor)
                 Spacer()
                 Text(String(format: "%.2f", loadAverage))
-                    .font(.system(size: fontSize, design: .monospaced))
+                    .font(fontScale.font(.base, design: .monospaced))
                     .foregroundColor(textColor)
             }
 
             HStack {
                 Text("Uptime")
-                    .font(.system(size: fontSize))
+                    .font(fontScale.font(.base))
                     .foregroundColor(mutedColor)
                 Spacer()
                 Text(formatUptime(uptimeSeconds))
-                    .font(.system(size: fontSize, design: .monospaced))
+                    .font(fontScale.font(.base, design: .monospaced))
                     .foregroundColor(textColor)
             }
 
             HStack {
                 Text("Network")
-                    .font(.system(size: fontSize))
+                    .font(fontScale.font(.base))
                     .foregroundColor(mutedColor)
                 Spacer()
                 HStack(spacing: 8) {
                     HStack(spacing: 2) {
                         Image(systemName: "arrow.down")
-                            .font(.system(size: fontSize - 2))
+                            .font(fontScale.font(.xs))
                             .foregroundColor(mutedColor)
                         Text(formatBytes(netRateIn))
-                            .font(.system(size: fontSize, design: .monospaced))
+                            .font(fontScale.font(.base, design: .monospaced))
                             .foregroundColor(textColor)
                     }
                     HStack(spacing: 2) {
                         Image(systemName: "arrow.up")
-                            .font(.system(size: fontSize - 2))
+                            .font(fontScale.font(.xs))
                             .foregroundColor(mutedColor)
                         Text(formatBytes(netRateOut))
-                            .font(.system(size: fontSize, design: .monospaced))
+                            .font(fontScale.font(.base, design: .monospaced))
                             .foregroundColor(textColor)
                     }
                 }
@@ -320,10 +319,10 @@ private struct SystemInfoDetailView: View {
 
             // Quick actions
             HStack(spacing: 6) {
-                QuickActionButton(label: "df -h", fontSize: fontSize, color: mutedColor, action: onDiskUsage)
-                QuickActionButton(label: "top", fontSize: fontSize, color: mutedColor, action: onTopProcesses)
-                QuickActionButton(label: "netstat", fontSize: fontSize, color: mutedColor, action: onNetworkInfo)
-                QuickActionButton(label: "uptime", fontSize: fontSize, color: mutedColor, action: onUptimeInfo)
+                QuickActionButton(label: "df -h", fontScale: fontScale, color: mutedColor, action: onDiskUsage)
+                QuickActionButton(label: "top", fontScale: fontScale, color: mutedColor, action: onTopProcesses)
+                QuickActionButton(label: "netstat", fontScale: fontScale, color: mutedColor, action: onNetworkInfo)
+                QuickActionButton(label: "uptime", fontScale: fontScale, color: mutedColor, action: onUptimeInfo)
             }
         }
         .padding(.horizontal, 10)
@@ -346,14 +345,14 @@ private struct SystemInfoDetailView: View {
 
 private struct QuickActionButton: View {
     let label: String
-    let fontSize: CGFloat
+    let fontScale: SidebarFontScale
     let color: Color
     let action: () -> Void
 
     var body: some View {
         Button(label) { action() }
             .buttonStyle(.plain)
-            .font(.system(size: fontSize - 1))
+            .font(fontScale.font(.sm))
             .foregroundColor(color)
             .padding(.horizontal, 6)
             .padding(.vertical, 2)
@@ -367,7 +366,7 @@ private struct ResourceRow: View {
     let value: String
     let ratio: Double
     let barColor: Color
-    let fontSize: CGFloat
+    let fontScale: SidebarFontScale
     let textColor: Color
     let mutedColor: Color
 
@@ -375,11 +374,11 @@ private struct ResourceRow: View {
         VStack(alignment: .leading, spacing: 3) {
             HStack {
                 Text(label)
-                    .font(.system(size: fontSize))
+                    .font(fontScale.font(.base))
                     .foregroundColor(mutedColor)
                 Spacer()
                 Text(value)
-                    .font(.system(size: fontSize, design: .monospaced))
+                    .font(fontScale.font(.base, design: .monospaced))
                     .foregroundColor(textColor)
             }
             GeometryReader { geo in

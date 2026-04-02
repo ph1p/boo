@@ -46,6 +46,7 @@ final class BookmarksPluginNew: BooPluginProtocol {
         let act = actions
         return AnyView(
             BookmarksPanelView(
+                fontScale: context.fontScale,
                 namespace: ns,
                 onBookmarkSelected: { path in
                     act?.handle(DSLAction(type: "cd", path: path, command: nil, text: nil))
