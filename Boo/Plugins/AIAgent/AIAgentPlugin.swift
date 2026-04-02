@@ -147,13 +147,13 @@ final class AIAgentPlugin: BooPluginProtocol {
     func makeDetailView(context: PluginContext) -> AnyView? {
         guard agentDisplayName != nil else { return nil }
         let act = actions
-        let fontSize: CGFloat = 11.0
+        let fontScale = context.fontScale
 
         return AnyView(
             AIAgentDetailView(
                 diffStats: diffStats,
                 agentConfig: agentConfig,
-                fontSize: fontSize,
+                fontScale: fontScale,
                 textColor: Color(nsColor: context.theme.chromeText),
                 mutedColor: Color(nsColor: context.theme.chromeMuted),
                 accentColor: context.theme.ansiColors.count > 13

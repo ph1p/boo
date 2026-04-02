@@ -124,6 +124,8 @@ Both `render` and `transform` are accepted as the entry function name. You can r
 
 #### Context object (`ctx`)
 
+Font rendering for JS plugins is handled automatically by the DSL renderer — it applies the user's sidebar font scale to all `label`, `list`, and `button` elements. No font configuration is needed in your JS code.
+
 | Field | Type | Example |
 |---|---|---|
 | `ctx.cwd` | string | `"/Users/jane/project"` |
@@ -381,12 +383,71 @@ final class MyPlugin: BooPluginProtocol {
 
     // MARK: - Detail View
 
-    func makeDetailView(context: TerminalContext, actionHandler: DSLActionHandler) -> AnyView? {
-        AnyView(Text("Hello from My Plugin")
-            .foregroundColor(Color(nsColor: AppSettings.shared.theme.chromeText)))
+    func makeDetailView(context: PluginContext) -> AnyView? {
+        AnyView(
+            Text("Hello from My Plugin")
+                .font(context.fontScale.font(.base))
+                .foregroundColor(Color(nsColor: context.theme.chromeText))
+        )
     }
 }
 ```
+
+### PluginContext
+
+Every `makeDetailView` call receives a `PluginContext` — the single source of truth for the current state. Prefer it over reaching into `AppSettings.shared` directly.
+
+| Property | Type | Description |
+|---|---|---|
+| `context.terminal` | `TerminalContext` | CWD, process, git, remote session info |
+| `context.theme` | `ThemeSnapshot` | Resolved theme colors (chromeText, chromeMuted, accentColor, etc.) |
+| `context.density` | `SidebarDensity` | `.comfortable` or `.compact` |
+| `context.settings` | `PluginSettingsReader` | Scoped reader for this plugin's settings |
+| `context.fontScale` | `SidebarFontScale` | Tailwind-inspired font scale (see below) |
+
+### Font Scale
+
+`context.fontScale` gives every plugin a Tailwind-inspired type scale that automatically reflects the user's base font size from **Settings → Sidebar**.
+
+```swift
+func makeDetailView(context: PluginContext) -> AnyView? {
+    let scale = context.fontScale
+
+    return AnyView(
+        VStack(alignment: .leading, spacing: 4) {
+            // Named scale steps
+            Text("File name")  .font(scale.font(.base))   // × 1.0  (default 12 pt)
+            Text("Directory")  .font(scale.font(.sm))     // × 0.875 (default ~10 pt)
+            Text("Status")     .font(scale.font(.xs))     // × 0.75  (default  9 pt)
+            Text("Section")    .font(scale.font(.lg))     // × 1.125 (default ~13 pt)
+            Text("Header")     .font(scale.font(.xl))     // × 1.25  (default 15 pt)
+
+            // Pass a design to override the font family (e.g. for code/paths)
+            Text("abc123").font(scale.font(.sm, design: .monospaced))
+
+            // Apply weight on top of the scale font
+            Text("Bold label").font(scale.font(.base).weight(.semibold))
+
+            // Read the raw point size if you need it (e.g. for image frames)
+            Image(systemName: "star")
+                .font(.system(size: scale.size(.sm)))
+                .frame(width: scale.size(.base))
+        }
+    )
+}
+```
+
+#### Scale reference (base = 12 pt)
+
+| Step | Multiplier | Default pt | Typical use |
+|------|-----------|-----------|-------------|
+| `xs` | × 0.75 | 9 pt | Timestamps, badges, secondary icons |
+| `sm` | × 0.875 | 10 pt | Sub-labels, directory paths, detail text |
+| `base` | × 1.0 | 12 pt | Primary content — file names, list items |
+| `lg` | × 1.125 | 13 pt | Section sub-headers |
+| `xl` | × 1.25 | 15 pt | Emphasis, large labels |
+
+Section/panel headers rendered by the sidebar host (the bold title bars with chevrons) are **not** affected by `fontScale` — they always use the system font at a fixed size. Only your plugin's returned view is scaled.
 
 ### Registration
 

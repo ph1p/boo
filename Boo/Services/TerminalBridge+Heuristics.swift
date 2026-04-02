@@ -68,17 +68,41 @@ extension TerminalBridge {
             return .container(target: hexContainerID, tool: .docker)
         }
 
-        // SSH detection: user@host pattern in title
-        let atPattern = trimmed.split(separator: " ").first(where: { $0.contains("@") })
-        if let match = atPattern {
-            let components = match.split(separator: "@", maxSplits: 1)
-            if components.count == 2,
-                let host = extractHost(after: String(components[1])),
-                !isLocalHost(host),
-                !isGitForgeHost(host)
-            {
-                return .ssh(host: "\(components[0])@\(host)", alias: nil)
+        // SSH detection: require the shell-prompt pattern "user@host:path".
+        // Real SSH (and container) shell prompts always include a colon after the hostname
+        // followed by a path, e.g. "user@host:~$", "user@host: ~/dir", "user@host:/app#".
+        // This PS1 pattern is the definitive marker — it is absent from:
+        //   - npm version specifiers  ("npx pkg@latest", "bunx @scope/tool")
+        //   - bare command arguments  ("cmd user@host")
+        //   - git remote URLs         ("git@github.com:org/repo") ← also caught by gitForgeHosts
+        // Without the colon we cannot reliably distinguish `word@word` from SSH.
+        //
+        // Matching strategy: find the first occurrence of "@" in the title and check
+        // that a ":" appears immediately after the host token (before any space).
+        // "user@host: ~/dir" (space after colon) is handled by requiring ":" anywhere
+        // between the "@" and the next space boundary of the host portion.
+        if let atRange = trimmed.range(of: "@") {
+            let user = String(trimmed[..<atRange.lowerBound])
+            let afterAt = String(trimmed[atRange.upperBound...])
+
+            // Split host from path at the first ":"
+            guard let colonIdx = afterAt.firstIndex(of: ":") else {
+                // No colon → not a shell prompt pattern; skip SSH detection
+                return nil
             }
+            let rawHost = String(afterAt[..<colonIdx])
+            // Host must not contain spaces (it's a single token before the colon)
+            guard !rawHost.contains(" "),
+                !rawHost.isEmpty,
+                !user.contains(" "),  // user is also a single token
+                !user.isEmpty,
+                !rawHost.contains("/"),  // path separators are not valid in hostnames
+                !isLocalHost(rawHost),
+                !isGitForgeHost(rawHost)
+            else {
+                return nil
+            }
+            return .ssh(host: "\(user)@\(rawHost)", alias: nil)
         }
 
         return nil

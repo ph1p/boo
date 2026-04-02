@@ -2,6 +2,7 @@ import SwiftUI
 
 struct BookmarksPanelView: View {
     @ObservedObject var settings = SettingsObserver(topics: [.theme])
+    var fontScale: SidebarFontScale = SidebarFontScale(base: AppSettings.shared.sidebarFontSize)
     @State private var bookmarks: [BookmarkService.Bookmark] = []
     var namespace: String = "local"
     var onBookmarkSelected: ((String) -> Void)?
@@ -59,7 +60,7 @@ struct BookmarksPanelView: View {
                         .font(.system(size: 24))
                         .foregroundColor(mutedColor.opacity(0.3))
                     Text("No bookmarks yet")
-                        .font(.system(size: 11))
+                        .font(fontScale.font(.base))
                         .foregroundColor(mutedColor.opacity(0.5))
                     Spacer()
                 }
@@ -71,6 +72,7 @@ struct BookmarksPanelView: View {
                             BookmarkRow(
                                 bookmark: bookmark,
                                 isCurrent: bookmark.path == currentDirectory,
+                                fontScale: fontScale,
                                 textColor: textColor,
                                 mutedColor: mutedColor,
                                 accentColor: accentColor,
@@ -102,6 +104,7 @@ struct BookmarksPanelView: View {
 struct BookmarkRow: View {
     let bookmark: BookmarkService.Bookmark
     let isCurrent: Bool
+    let fontScale: SidebarFontScale
     let textColor: Color
     let mutedColor: Color
     let accentColor: Color
@@ -117,13 +120,14 @@ struct BookmarkRow: View {
                 .frame(width: 14)
 
             VStack(alignment: .leading, spacing: 1) {
+                let nameWeight: Font.Weight = isCurrent ? .semibold : .medium
                 Text(bookmark.name)
-                    .font(.system(size: 11, weight: isCurrent ? .semibold : .medium))
+                    .font(fontScale.font(.base).weight(nameWeight))
                     .foregroundColor(isCurrent ? accentColor : textColor)
                     .lineLimit(1)
 
                 Text(abbreviatePath(bookmark.path))
-                    .font(.system(size: 9))
+                    .font(fontScale.font(.xs))
                     .foregroundColor(mutedColor.opacity(0.6))
                     .lineLimit(1)
             }

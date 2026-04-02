@@ -105,7 +105,7 @@ final class FileTreeDragState: ObservableObject {
 
 struct FileTreeView: View {
     @ObservedObject var root: FileTreeNode
-    @ObservedObject var settings = SettingsObserver(topics: [.theme, .explorer])
+    @ObservedObject var settings = SettingsObserver(topics: [.theme, .explorer, .sidebarFont])
     @StateObject private var renameState = FileTreeRenameState()
     @StateObject private var dragState = FileTreeDragState()
     var actions: FileTreeActions
@@ -116,7 +116,7 @@ struct FileTreeView: View {
         let theme = AppSettings.shared.theme
         let cfg = RowStyle(
             showIcons: AppSettings.shared.explorerIconsEnabled,
-            fontSize: AppSettings.shared.explorerFontSize,
+            fontSize: AppSettings.shared.sidebarFontSize,
             font: explorerFont,
             textColor: Color(nsColor: theme.chromeText),
             mutedColor: Color(nsColor: theme.chromeMuted),
@@ -162,8 +162,8 @@ struct FileTreeView: View {
     }
 
     private var explorerFont: Font {
-        let name = AppSettings.shared.explorerFontName
-        let size = AppSettings.shared.explorerFontSize
+        let name = AppSettings.shared.sidebarFontName
+        let size = AppSettings.shared.sidebarFontSize
         if name.isEmpty || name == "System Default" { return .system(size: size) }
         return .custom(name, size: size)
     }

@@ -95,7 +95,8 @@ final class DockerServiceTests: XCTestCase {
             ),
             theme: ThemeSnapshot(from: .defaultDark),
             density: .comfortable,
-            settings: PluginSettingsReader(pluginID: plugin.manifest.id)
+            settings: PluginSettingsReader(pluginID: plugin.manifest.id),
+            fontScale: SidebarFontScale(base: 12)
         )
         let title = plugin.sectionTitle(context: ctx)
         if DockerService.shared.connectionError != nil {
@@ -123,7 +124,8 @@ final class DockerServiceTests: XCTestCase {
             ),
             theme: ThemeSnapshot(from: .defaultDark),
             density: .comfortable,
-            settings: PluginSettingsReader(pluginID: plugin.manifest.id)
+            settings: PluginSettingsReader(pluginID: plugin.manifest.id),
+            fontScale: SidebarFontScale(base: 12)
         )
         let content = plugin.makeStatusBarContent(context: ctx)
         if DockerService.shared.connectionError != nil {

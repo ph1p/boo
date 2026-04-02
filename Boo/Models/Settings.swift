@@ -1,4 +1,5 @@
 import Cocoa
+import SwiftUI
 
 enum CursorStyle: Int, CaseIterable {
     case block = 0
@@ -75,7 +76,8 @@ extension Notification.Name {
 enum SettingsTopic: String, CaseIterable {
     case theme  // theme name, auto-theme, dark/light theme
     case terminal  // cursor style, font size, font name
-    case explorer  // show hidden, icons, explorer font size/name
+    case explorer  // show hidden, icons
+    case sidebarFont  // sidebar font size/name
     case statusBar  // status bar toggles (path, git, time, pane info, shell, connection)
     case layout  // sidebar position, workspace bar, density, sidebar width, tab overflow
     case plugins  // disabled plugins, default enabled plugins, plugin settings
@@ -97,8 +99,8 @@ final class AppSettings {
 
         static let showHiddenFiles = "showHiddenFiles"
         static let explorerIconsEnabled = "explorerIconsEnabled"
-        static let explorerFontSize = "explorerFontSize"
-        static let explorerFontName = "explorerFontName"
+        static let sidebarFontSize = "sidebarFontSize"
+        static let sidebarFontName = "sidebarFontName"
         static let statusBarShowPath = "statusBarShowPath"
         static let statusBarShowGitBranch = "statusBarShowGitBranch"  // legacy, migrated to plugin settings
         static let statusBarShowTime = "statusBarShowTime"
@@ -242,14 +244,19 @@ final class AppSettings {
         set { setPluginSetting("file-tree-local", "showIcons", newValue, topic: .explorer) }
     }
 
-    var explorerFontSize: CGFloat {
-        get { CGFloat(pluginDouble("file-tree-local", "fontSize", default: 12.0)) }
-        set { setPluginSetting("file-tree-local", "fontSize", Double(newValue), topic: .explorer) }
+    /// Global base font size for the sidebar. All sidebar content scales from this.
+    var sidebarFontSize: CGFloat {
+        get {
+            let v = UserDefaults.standard.double(forKey: K.sidebarFontSize)
+            return v > 0 ? CGFloat(v) : 12.0
+        }
+        set { set(Double(newValue), forKey: K.sidebarFontSize, topic: .sidebarFont) }
     }
 
-    var explorerFontName: String {
-        get { pluginString("file-tree-local", "fontName", default: "") }
-        set { setPluginSetting("file-tree-local", "fontName", newValue, topic: .explorer) }
+    /// Global font family for sidebar content (not applied to headers). Empty string = system default.
+    var sidebarFontName: String {
+        get { UserDefaults.standard.string(forKey: K.sidebarFontName) ?? "" }
+        set { set(newValue, forKey: K.sidebarFontName, topic: .sidebarFont) }
     }
 
     // MARK: - Status Bar
@@ -553,7 +560,9 @@ final class AppSettings {
             K.disabledPluginIDs: disabledPluginIDs,
             K.defaultEnabledPluginIDs: defaultEnabledPluginIDs,
             K.sidebarPluginOrder: sidebarPluginOrder,
-            K.pluginSettings: pluginSettingsDict
+            K.pluginSettings: pluginSettingsDict,
+            K.sidebarFontSize: Double(sidebarFontSize),
+            K.sidebarFontName: sidebarFontName
         ]
         dict[K.autoCheckUpdates] = autoCheckUpdates
         if let skipVersion {
@@ -608,13 +617,6 @@ final class AppSettings {
         }
         if UserDefaults.standard.object(forKey: K.explorerIconsEnabled) != nil {
             ft["showIcons"] = UserDefaults.standard.bool(forKey: K.explorerIconsEnabled)
-        }
-        if UserDefaults.standard.object(forKey: K.explorerFontSize) != nil {
-            let v = UserDefaults.standard.double(forKey: K.explorerFontSize)
-            if v > 0 { ft["fontSize"] = v }
-        }
-        if UserDefaults.standard.object(forKey: K.explorerFontName) != nil {
-            ft["fontName"] = UserDefaults.standard.string(forKey: K.explorerFontName) ?? ""
         }
         if !ft.isEmpty { all["file-tree-local"] = ft }
 

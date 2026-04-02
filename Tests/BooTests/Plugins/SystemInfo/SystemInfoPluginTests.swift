@@ -45,7 +45,8 @@ final class SystemInfoPluginTests: XCTestCase {
             terminal: terminal,
             theme: ThemeSnapshot(from: AppSettings.shared.theme),
             density: .comfortable,
-            settings: PluginSettingsReader(pluginID: "system-info")
+            settings: PluginSettingsReader(pluginID: "system-info"),
+            fontScale: SidebarFontScale(base: 12)
         )
     }
 

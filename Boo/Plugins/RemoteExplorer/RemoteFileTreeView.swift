@@ -100,7 +100,7 @@ struct RemoteConnectionFailedView: View {
 
 struct RemoteFileTreeView: View {
     @ObservedObject var root: RemoteFileTreeNode
-    @ObservedObject var settings = SettingsObserver(topics: [.theme, .explorer])
+    @ObservedObject var settings = SettingsObserver(topics: [.theme, .explorer, .sidebarFont])
     var actions: FileTreeActions
     let host: String  // display name
 
@@ -110,8 +110,8 @@ struct RemoteFileTreeView: View {
         let theme = AppSettings.shared.theme
         let showIcons = AppSettings.shared.explorerIconsEnabled
         let showHidden = AppSettings.shared.showHiddenFiles
-        let fontSize = AppSettings.shared.explorerFontSize
-        let fontName = AppSettings.shared.explorerFontName
+        let fontSize = AppSettings.shared.sidebarFontSize
+        let fontName = AppSettings.shared.sidebarFontName
         let mutedColor = Color(nsColor: theme.chromeMuted)
         let textColor = Color(nsColor: theme.chromeText)
         let accentColor = Color(nsColor: theme.accentColor)

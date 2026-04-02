@@ -5,7 +5,7 @@ import SwiftUI
 struct AIAgentDetailView: View {
     let diffStats: [AIAgentPlugin.DiffStatEntry]
     let agentConfig: AIAgentPlugin.AgentConfig
-    let fontSize: CGFloat
+    let fontScale: SidebarFontScale
     let textColor: Color
     let mutedColor: Color
     let accentColor: Color
@@ -54,12 +54,12 @@ struct AIAgentDetailView: View {
         return Button(action: { onFileClicked(file.path) }) {
             HStack(spacing: 6) {
                 Image(systemName: file.icon)
-                    .font(.system(size: fontSize - 1))
+                    .font(fontScale.font(.sm))
                     .foregroundColor(file.scope == "global" ? mutedColor : accentColor)
                     .frame(width: 14)
 
                 Text(file.name)
-                    .font(.system(size: 11))
+                    .font(fontScale.font(.base))
                     .foregroundColor(textColor)
                     .lineLimit(1)
 
@@ -143,7 +143,7 @@ struct AIAgentDetailView: View {
                         .frame(width: 4, height: 4)
 
                     Text(server)
-                        .font(.system(size: 11, design: .monospaced))
+                        .font(fontScale.font(.base, design: .monospaced))
                         .foregroundColor(textColor)
                         .lineLimit(1)
 
@@ -181,13 +181,13 @@ struct AIAgentDetailView: View {
         return Button(action: { onPasteSkill(skill.name) }) {
             HStack(spacing: 6) {
                 Text("/\(skill.name)")
-                    .font(.system(size: 11, weight: .medium))
+                    .font(fontScale.font(.base).weight(.medium))
                     .foregroundColor(accentColor)
                     .lineLimit(1)
 
                 if !skill.description.isEmpty {
                     Text(skill.description)
-                        .font(.system(size: 10))
+                        .font(fontScale.font(.sm))
                         .foregroundColor(mutedColor)
                         .lineLimit(1)
                         .truncationMode(.tail)
@@ -252,7 +252,7 @@ struct AIAgentDetailView: View {
                 .frame(width: 56, alignment: .leading)
 
                 Text(entry.path)
-                    .font(.system(size: 11))
+                    .font(fontScale.font(.base))
                     .foregroundColor(textColor)
                     .lineLimit(1)
                     .truncationMode(.middle)
@@ -299,14 +299,14 @@ struct AIAgentDetailView: View {
                     .foregroundColor(mutedColor)
 
                 Text("\(title) (\(count))")
-                    .font(.system(size: 10, weight: .semibold))
+                    .font(fontScale.font(.sm).weight(.semibold))
                     .foregroundColor(textColor)
 
                 Spacer()
 
                 if let trailing = trailing {
                     Text(trailing)
-                        .font(.system(size: 9, design: .monospaced))
+                        .font(fontScale.font(.xs, design: .monospaced))
                         .foregroundColor(mutedColor)
                 }
             }
@@ -324,7 +324,7 @@ struct AIAgentDetailView: View {
                 .foregroundColor(mutedColor)
 
             Text("\(title) (\(count))")
-                .font(.system(size: 10, weight: .semibold))
+                .font(fontScale.font(.sm).weight(.semibold))
                 .foregroundColor(textColor)
 
             Spacer()

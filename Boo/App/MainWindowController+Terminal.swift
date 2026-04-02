@@ -135,6 +135,7 @@ extension MainWindowController {
         }
         workspace.activePaneID = newID
         splitContainer.update(tree: workspace.splitTree)
+        saveSession()
 
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
