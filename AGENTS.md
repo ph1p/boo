@@ -8,10 +8,10 @@ Full documentation: https://ph1p.github.io/boo/
 
 - **Swift** (macOS 13+), **AppKit**, **GhosttyKit** (Metal GPU rendering)
 - Swift Package Manager (`Package.swift`)
-- Prerequisites: macOS 13+, Xcode CLT, Zig 0.15+ (`brew install zig`)
+- Prerequisites: macOS 13+, Xcode CLT, Zig 0.15+ (`brew install zig`), Rust (`rustup`)
 
 ```bash
-make setup          # First time: clone Ghostty + build GhosttyKit + build Boo
+make setup          # First time: clone Ghostty + build GhosttyKit + build ironmark + build Boo
 make run            # Build and launch
 make test           # Run tests
 swift build         # Build only (requires GhosttyKit already built)
@@ -37,6 +37,7 @@ Boo/                  Library target (all app code)
   Services/           TerminalBridge, RemoteExplorer, BooSocketServer, AutoUpdater
 BooApp/               Executable entry point (just calls BooMain.run())
 CGhostty/             C module wrapping ghostty.h
+CIronmark/            C module wrapping ironmark (Rust markdown parser)
 Tests/BooTests/       717 tests
 documentation/        Vocs documentation site
 ```

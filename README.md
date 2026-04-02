@@ -45,6 +45,7 @@ Download the latest release from [GitHub Releases](https://github.com/ph1p/boo/r
 - **macOS 13+** (Ventura or later)
 - **Xcode Command Line Tools** — `xcode-select --install`
 - **Zig 0.15+** — `brew install zig`
+- **Rust** — `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`
 - **Metal Toolchain** — `xcodebuild -downloadComponent MetalToolchain` (if not already installed)
 
 ### Quick Start
@@ -52,7 +53,7 @@ Download the latest release from [GitHub Releases](https://github.com/ph1p/boo/r
 ```bash
 git clone --recursive https://github.com/ph1p/boo.git
 cd boo
-make setup    # Builds GhosttyKit + Boo
+make setup    # Builds GhosttyKit + ironmark + Boo
 make run      # Build and launch
 ```
 
@@ -119,8 +120,10 @@ Boo/
   Views/            App-level views (PaneView, StatusBarView, ToolbarView, SettingsWindow, UpdateWindow, etc.)
   Services/         Shared infrastructure (TerminalBridge, RemoteExplorer, BooSocketServer, AutoUpdater, etc.)
 CGhostty/           C module wrapping ghostty.h
+CIronmark/          C module wrapping ironmark (Rust markdown parser)
 CPTYHelper/         C helper for forkpty()
-Vendor/ghostty/     Ghostty source (git clone)
+Vendor/ghostty/     Ghostty source (git submodule)
+Vendor/ironmark/    ironmark source (git submodule)
 ```
 
 ### State Model

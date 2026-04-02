@@ -162,9 +162,9 @@ final class AutoUpdater: ObservableObject {
         // Clean up previous downloads
         try? FileManager.default.removeItem(at: destURL)
 
-        let delegate = DownloadDelegate { [weak self] progress in
+        let delegate = DownloadDelegate(destinationURL: destURL) { [weak self] progress in
             DispatchQueue.main.async { self?.state = .downloading(progress: progress) }
-        } completion: { [weak self] tempURL, error in
+        } completion: { [weak self] savedURL, error in
             DispatchQueue.main.async {
                 guard let self else { return }
                 self.downloadSession?.finishTasksAndInvalidate()
@@ -174,16 +174,11 @@ final class AutoUpdater: ObservableObject {
                     self.state = .error(error.localizedDescription)
                     return
                 }
-                guard let tempURL else {
+                guard let savedURL else {
                     self.state = .error("Download failed")
                     return
                 }
-                do {
-                    try FileManager.default.moveItem(at: tempURL, to: destURL)
-                    self.state = .readyToInstall(dmgURL: destURL)
-                } catch {
-                    self.state = .error("Failed to save: \(error.localizedDescription)")
-                }
+                self.state = .readyToInstall(dmgURL: savedURL)
             }
         }
 
@@ -389,14 +384,23 @@ final class AutoUpdater: ObservableObject {
 private class DownloadDelegate: NSObject, URLSessionDownloadDelegate {
     let onProgress: (Double) -> Void
     let onCompletion: (URL?, Error?) -> Void
+    let destinationURL: URL
 
-    init(onProgress: @escaping (Double) -> Void, completion: @escaping (URL?, Error?) -> Void) {
+    init(destinationURL: URL, onProgress: @escaping (Double) -> Void, completion: @escaping (URL?, Error?) -> Void) {
+        self.destinationURL = destinationURL
         self.onProgress = onProgress
         self.onCompletion = completion
     }
 
     func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
-        onCompletion(location, nil)
+        // Move immediately — the temp file is deleted when this method returns
+        do {
+            try? FileManager.default.removeItem(at: destinationURL)
+            try FileManager.default.moveItem(at: location, to: destinationURL)
+            onCompletion(destinationURL, nil)
+        } catch {
+            onCompletion(nil, error)
+        }
     }
 
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {

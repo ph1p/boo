@@ -30,16 +30,16 @@ CI runs `make lint` on every pull request. Format your code before pushing.
 Boo/
   App/              AppDelegate, MainWindowController, WindowStateCoordinator
   Ghostty/          GhosttyRuntime, GhosttyView (Metal GPU rendering)
-  Terminal/         VT100Terminal (fallback parser), TerminalBackend protocol
-  Renderer/         TerminalView (CoreText fallback renderer)
+  Terminal/         TerminalBackend protocol
   Models/           Workspace, Pane, SplitTree, AppSettings, Theme
   Plugin/           Core plugin framework (protocol, registry, runtime, DSL)
   Plugins/          Built-in plugins (FileTree/, Git/, Docker/, Bookmarks/)
   Views/            App-level views (ToolbarView, PaneView, StatusBarView)
-  Services/         Shared infrastructure (RemoteExplorer, TerminalBridge)
+  Services/         Shared infrastructure (RemoteExplorer, TerminalBridge, MarkdownRenderer)
 CGhostty/           C module wrapping ghostty.h
+CIronmark/          C module wrapping ironmark (Rust markdown parser)
 CPTYHelper/         C helper for forkpty()
-Tests/              391+ tests mirroring source structure
+Tests/              717+ tests mirroring source structure
 ```
 
 See [Architecture](/architecture) for detailed design documentation.
