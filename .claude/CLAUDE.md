@@ -6,7 +6,7 @@ Full docs: https://ph1p.github.io/boo/
 ## Build
 
 ```bash
-make setup    # First time: clone Ghostty + build GhosttyKit + build Boo
+make setup    # First time: clone Ghostty + build GhosttyKit + build ironmark + build Boo
 make run      # Build and launch
 make test     # Run tests
 make lint     # Check code style

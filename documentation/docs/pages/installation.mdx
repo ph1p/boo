@@ -26,7 +26,7 @@ The archive includes the `ghostty` GTK binary alongside `boo`. Requires GTK4 and
 
 ### macOS
 
-**Prerequisites:** macOS 13+, Xcode CLT, Zig 0.15+, Metal Toolchain
+**Prerequisites:** macOS 13+, Xcode CLT, Zig 0.15+, Rust, Metal Toolchain
 
 ```bash
 git clone --recursive https://github.com/ph1p/boo.git
@@ -93,7 +93,7 @@ make tarball      # Linux: create distributable tar.gz
 ### Running Tests
 
 ```bash
-make test     # Runs all 492+ tests (macOS)
+make test     # Runs all 717+ tests (macOS)
 ```
 
 ## System Requirements
@@ -106,6 +106,7 @@ make test     # Runs all 492+ tests (macOS)
 | Architecture | Apple Silicon (arm64) |
 | Disk space | ~200MB (including GhosttyKit) |
 | Zig (build only) | 0.15+ |
+| Rust (build only) | stable |
 
 ### Linux
 
