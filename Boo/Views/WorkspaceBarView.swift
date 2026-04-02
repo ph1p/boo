@@ -374,7 +374,8 @@ class WorkspaceBarView: NSView {
         let theme = AppSettings.shared.theme
 
         if isPlusButtonHovered {
-            let bg = isVertical
+            let bg =
+                isVertical
                 ? theme.chromeMuted.withAlphaComponent(0.12).cgColor
                 : CGColor(red: 28 / 255, green: 28 / 255, blue: 32 / 255, alpha: 1)
             ctx.setFillColor(bg)
@@ -382,9 +383,12 @@ class WorkspaceBarView: NSView {
             ctx.fillPath()
         }
 
-        let plusColor: NSColor = isPlusButtonHovered
-            ? NSColor(red: 160 / 255, green: 160 / 255, blue: 168 / 255, alpha: 1)
-            : (isVertical ? theme.chromeMuted.withAlphaComponent(0.4) : NSColor(red: 86 / 255, green: 86 / 255, blue: 94 / 255, alpha: 0.7))
+        let hoveredColor = NSColor(red: 160 / 255, green: 160 / 255, blue: 168 / 255, alpha: 1)
+        let defaultColor =
+            isVertical
+            ? theme.chromeMuted.withAlphaComponent(0.4)
+            : NSColor(red: 86 / 255, green: 86 / 255, blue: 94 / 255, alpha: 0.7)
+        let plusColor: NSColor = isPlusButtonHovered ? hoveredColor : defaultColor
         let attrs: [NSAttributedString.Key: Any] = [
             .font: NSFont.systemFont(ofSize: isVertical ? 14 : 11, weight: .light),
             .foregroundColor: plusColor
@@ -824,8 +828,14 @@ class WorkspaceBarView: NSView {
 
     override func mouseExited(with event: NSEvent) {
         var changed = false
-        if hoveredIndex != -1 { hoveredIndex = -1; changed = true }
-        if isPlusButtonHovered { isPlusButtonHovered = false; changed = true }
+        if hoveredIndex != -1 {
+            hoveredIndex = -1
+            changed = true
+        }
+        if isPlusButtonHovered {
+            isPlusButtonHovered = false
+            changed = true
+        }
         if changed { needsDisplay = true }
     }
 
