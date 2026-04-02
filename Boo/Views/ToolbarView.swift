@@ -12,6 +12,7 @@ protocol ToolbarViewDelegate: AnyObject {
     func toolbar(_ toolbar: ToolbarView, setCustomColorForWorkspaceAt index: Int, color: NSColor)
     func toolbar(_ toolbar: ToolbarView, togglePinForWorkspaceAt index: Int)
     func toolbar(_ toolbar: ToolbarView, moveWorkspaceFrom source: Int, to destination: Int)
+    func toolbarDidRequestNewWorkspace(_ toolbar: ToolbarView)
 }
 
 class ToolbarView: NSView {
@@ -55,6 +56,7 @@ class ToolbarView: NSView {
     var hoveredTabIndex: Int = -1
     var isSidebarButtonHovered: Bool = false
     var isPlusButtonHovered: Bool = false
+    var isWorkspacePlusButtonHovered: Bool = false
     private var toolbarTrackingArea: NSTrackingArea?
 
     let barHeight: CGFloat = 38
@@ -123,6 +125,13 @@ class ToolbarView: NSView {
             changed = true
         }
 
+        // Workspace plus button
+        let newWSPlusHover = !hideWorkspaces && workspacePlusButtonRect.contains(point) && !sidebarHover
+        if newWSPlusHover != isWorkspacePlusButtonHovered {
+            isWorkspacePlusButtonHovered = newWSPlusHover
+            changed = true
+        }
+
         // Tab zone
         var newTabHover = -1
         var newPlusHover = false
@@ -154,10 +163,12 @@ class ToolbarView: NSView {
     override func mouseExited(with event: NSEvent) {
         let changed =
             hoveredWorkspaceIndex != -1 || hoveredTabIndex != -1 || isSidebarButtonHovered || isPlusButtonHovered
+            || isWorkspacePlusButtonHovered
         hoveredWorkspaceIndex = -1
         hoveredTabIndex = -1
         isSidebarButtonHovered = false
         isPlusButtonHovered = false
+        isWorkspacePlusButtonHovered = false
         if changed { needsDisplay = true }
     }
 
@@ -252,6 +263,14 @@ class ToolbarView: NSView {
 
     var maxWorkspaceScrollOffset: CGFloat {
         max(0, totalWorkspaceContentWidth - workspaceZoneWidth)
+    }
+
+    /// The `+` button rect for adding a new workspace (top bar only).
+    var workspacePlusButtonRect: CGRect {
+        let btnSize: CGFloat = 20
+        let x = workspaceZoneEnd + zoneGap / 2 - btnSize / 2
+        let y = (barHeight - btnSize) / 2
+        return CGRect(x: x, y: y, width: btnSize, height: btnSize)
     }
 
     // Tab zone (unused when tabs are in PaneView, kept for compatibility)

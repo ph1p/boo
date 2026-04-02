@@ -49,6 +49,10 @@ extension MainWindowController: ToolbarViewDelegate {
         refreshToolbar()
         saveSession()
     }
+
+    func toolbarDidRequestNewWorkspace(_ toolbar: ToolbarView) {
+        newWorkspaceAction(nil)
+    }
 }
 
 // MARK: - WorkspaceBarViewDelegate
@@ -94,6 +98,10 @@ extension MainWindowController: WorkspaceBarViewDelegate {
         appState.moveWorkspace(from: source, to: destination)
         refreshToolbar()
         saveSession()
+    }
+
+    func workspaceBarDidRequestNewWorkspace(_ bar: WorkspaceBarView) {
+        newWorkspaceAction(nil)
     }
 }
 

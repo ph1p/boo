@@ -179,6 +179,24 @@ extension ToolbarView {
                 drawFadeEdge(ctx, at: zoneEnd - 20, width: 20, leftToRight: false)
             }
         }
+
+        // Workspace plus button (drawn outside scroll clip)
+        let plusRect = workspacePlusButtonRect
+        if isWorkspacePlusButtonHovered {
+            ctx.setFillColor(theme.chromeMuted.withAlphaComponent(0.12).cgColor)
+            ctx.addPath(CGPath(roundedRect: plusRect, cornerWidth: 5, cornerHeight: 5, transform: nil))
+            ctx.fillPath()
+        }
+        let wsPlusAlpha: CGFloat = isWorkspacePlusButtonHovered ? 0.9 : 0.45
+        let wsPlusAttrs: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: 13, weight: .light),
+            .foregroundColor: theme.chromeMuted.withAlphaComponent(wsPlusAlpha)
+        ]
+        let wsPlusStr = "+" as NSString
+        let wsPlusSize = wsPlusStr.size(withAttributes: wsPlusAttrs)
+        wsPlusStr.draw(
+            at: NSPoint(x: plusRect.midX - wsPlusSize.width / 2, y: plusRect.midY - wsPlusSize.height / 2),
+            withAttributes: wsPlusAttrs)
     }
 
     internal func drawDivider(_ ctx: CGContext) {
@@ -381,6 +399,12 @@ extension ToolbarView {
                 return
             }
             handleWorkspaceMouseDown(event, startPoint: startPoint, hitIndex: hitIdx)
+            return
+        }
+
+        // Workspace plus button
+        if !hideWorkspaces && workspacePlusButtonRect.contains(startPoint) {
+            delegate?.toolbarDidRequestNewWorkspace(self)
             return
         }
 

@@ -8,6 +8,7 @@ protocol WorkspaceBarViewDelegate: AnyObject {
     func workspaceBar(_ bar: WorkspaceBarView, setCustomColorForWorkspaceAt index: Int, color: NSColor)
     func workspaceBar(_ bar: WorkspaceBarView, togglePinForWorkspaceAt index: Int)
     func workspaceBar(_ bar: WorkspaceBarView, moveWorkspaceFrom source: Int, to destination: Int)
+    func workspaceBarDidRequestNewWorkspace(_ bar: WorkspaceBarView)
 }
 
 class WorkspaceBarView: NSView {
@@ -42,6 +43,7 @@ class WorkspaceBarView: NSView {
 
     // Hover state
     var hoveredIndex: Int = -1
+    private var isPlusButtonHovered: Bool = false
     private var wsBarTrackingArea: NSTrackingArea?
 
     override var mouseDownCanMoveWindow: Bool { false }
@@ -190,6 +192,10 @@ class WorkspaceBarView: NSView {
             x += pillWidth + 6
         }
 
+        // Plus button
+        let plusRect = horizontalPlusButtonRect(afterX: x)
+        drawPlusButton(ctx, in: plusRect, isVertical: false)
+
         // Draw horizontal drop insertion indicator (vertical line between pills)
         if let dropIdx = dropTargetIndex {
             let indicatorX = horizontalDropIndicatorX(for: dropIdx)
@@ -315,6 +321,10 @@ class WorkspaceBarView: NSView {
             y += itemSize + 4
         }
 
+        // Plus button
+        let plusRect = verticalPlusButtonRect(afterY: y)
+        drawPlusButton(ctx, in: plusRect, isVertical: true)
+
         // Draw drop insertion indicator
         if let dropIdx = dropTargetIndex {
             let indicatorY: CGFloat = 8 + CGFloat(dropIdx) * (itemSize + 4) - 2
@@ -346,15 +356,59 @@ class WorkspaceBarView: NSView {
         }
     }
 
+    // MARK: - Plus Button
+
+    private func horizontalPlusButtonRect(afterX x: CGFloat) -> CGRect {
+        let size: CGFloat = 20
+        let y = (barHeight - size) / 2
+        return CGRect(x: x + 2, y: y, width: size, height: size)
+    }
+
+    private func verticalPlusButtonRect(afterY y: CGFloat) -> CGRect {
+        let padding: CGFloat = 4
+        let size: CGFloat = 32
+        return CGRect(x: padding, y: y, width: bounds.width - padding * 2, height: size)
+    }
+
+    private func drawPlusButton(_ ctx: CGContext, in rect: CGRect, isVertical: Bool) {
+        let theme = AppSettings.shared.theme
+
+        if isPlusButtonHovered {
+            let bg = isVertical
+                ? theme.chromeMuted.withAlphaComponent(0.12).cgColor
+                : CGColor(red: 28 / 255, green: 28 / 255, blue: 32 / 255, alpha: 1)
+            ctx.setFillColor(bg)
+            ctx.addPath(CGPath(roundedRect: rect, cornerWidth: 6, cornerHeight: 6, transform: nil))
+            ctx.fillPath()
+        }
+
+        let plusColor: NSColor = isPlusButtonHovered
+            ? NSColor(red: 160 / 255, green: 160 / 255, blue: 168 / 255, alpha: 1)
+            : (isVertical ? theme.chromeMuted.withAlphaComponent(0.4) : NSColor(red: 86 / 255, green: 86 / 255, blue: 94 / 255, alpha: 0.7))
+        let attrs: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: isVertical ? 14 : 11, weight: .light),
+            .foregroundColor: plusColor
+        ]
+        let str = "+" as NSString
+        let strSize = str.size(withAttributes: attrs)
+        str.draw(
+            at: NSPoint(x: rect.midX - strSize.width / 2, y: rect.midY - strSize.height / 2),
+            withAttributes: attrs)
+    }
+
     // MARK: - Click Handling
 
     override func mouseDown(with event: NSEvent) {
         let startPoint = convert(event.locationInWindow, from: nil)
         let hitIdx = hitTestItemIndex(at: startPoint)
 
-        // If click is not on any item, start a window drag manually
+        // If click is not on any item, check for plus button or start a window drag
         guard let idx = hitIdx, idx >= 0, idx < items.count else {
-            window?.performDrag(with: event)
+            if isPlusButtonHit(at: startPoint) {
+                delegate?.workspaceBarDidRequestNewWorkspace(self)
+            } else {
+                window?.performDrag(with: event)
+            }
             return
         }
 
@@ -760,17 +814,19 @@ class WorkspaceBarView: NSView {
     override func mouseMoved(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
         let newHover = hitTestItemIndex(at: point) ?? -1
-        if newHover != hoveredIndex {
+        let newPlusHover = isPlusButtonHit(at: point)
+        if newHover != hoveredIndex || newPlusHover != isPlusButtonHovered {
             hoveredIndex = newHover
+            isPlusButtonHovered = newPlusHover
             needsDisplay = true
         }
     }
 
     override func mouseExited(with event: NSEvent) {
-        if hoveredIndex != -1 {
-            hoveredIndex = -1
-            needsDisplay = true
-        }
+        var changed = false
+        if hoveredIndex != -1 { hoveredIndex = -1; changed = true }
+        if isPlusButtonHovered { isPlusButtonHovered = false; changed = true }
+        if changed { needsDisplay = true }
     }
 
     // MARK: - Hit Testing
@@ -799,6 +855,29 @@ class WorkspaceBarView: NSView {
             }
         }
         return nil
+    }
+
+    private func isPlusButtonHit(at point: NSPoint) -> Bool {
+        if isVertical {
+            var y: CGFloat = 8
+            for _ in items {
+                y += 32 + 4
+            }
+            return verticalPlusButtonRect(afterY: y).contains(point)
+        } else {
+            var x: CGFloat = 72
+            for (i, item) in items.enumerated() {
+                let isSelected = i == selectedIndex
+                let attrs: [NSAttributedString.Key: Any] = [
+                    .font: NSFont.systemFont(ofSize: 11.5, weight: isSelected ? .medium : .regular)
+                ]
+                let titleWidth = (item.name as NSString).size(withAttributes: attrs).width
+                let closeSpace: CGFloat = item.isPinned ? 0 : 16
+                let pillWidth = titleWidth + 32 + closeSpace
+                x += pillWidth + 6
+            }
+            return horizontalPlusButtonRect(afterX: x).contains(point)
+        }
     }
 
     private func handleHorizontalClick(_ point: NSPoint) {
