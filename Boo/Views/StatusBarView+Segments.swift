@@ -205,7 +205,7 @@ final class GitBranchSegment: StatusBarPlugin {
             }
 
             for remoteName in grouped.keys.sorted() {
-                for branch in grouped[remoteName]!.sorted() {
+                for branch in (grouped[remoteName] ?? []).sorted() {
                     if branches.local.contains(branch) { continue }
                     let displayTitle = "\(remoteName)/\(branch)"
                     let item = NSMenuItem(

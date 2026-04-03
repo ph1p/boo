@@ -60,7 +60,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Ask user once before modifying ~/.ssh/config; remember the choice.
     private func setupSSHControlMaster() {
-        if RemoteExplorer.hasControlMaster() { return }
+        DispatchQueue.global(qos: .utility).async {
+            let alreadyConfigured = RemoteExplorer.hasControlMaster()
+            DispatchQueue.main.async {
+                self.finishSSHControlMasterSetup(alreadyConfigured: alreadyConfigured)
+            }
+        }
+    }
+
+    private func finishSSHControlMasterSetup(alreadyConfigured: Bool) {
+        if alreadyConfigured { return }
 
         if let approved = AppSettings.shared.sshControlMasterApproved {
             if approved { RemoteExplorer.enableControlMaster() }
