@@ -77,7 +77,7 @@ final class SplitAndExplorerTests: XCTestCase {
 
     func testRestoredTabStartsWithSavedTitle() {
         let pane = Pane()
-        _ = pane.addTab(id: UUID(), title: "saved-title", workingDirectory: "/saved")
+        _ = pane.addTab(workingDirectory: "/saved", title: "saved-title")
         XCTAssertEqual(pane.tabs[0].title, "saved-title")
 
         // Directory update does NOT overwrite saved title
@@ -322,13 +322,13 @@ final class SplitAndExplorerTests: XCTestCase {
 
         // Simulate snapshot
         let tabSnapshots = pane.tabs.map {
-            (id: $0.id, title: $0.title, workingDirectory: $0.workingDirectory)
+            (title: $0.title, workingDirectory: $0.workingDirectory)
         }
 
         // Restore
         let restored = Pane(id: pane.id)
         for snap in tabSnapshots {
-            restored.addTab(id: snap.id, title: snap.title, workingDirectory: snap.workingDirectory)
+            restored.addTab(workingDirectory: snap.workingDirectory, title: snap.title)
         }
         restored.setActiveTab(0)
 

@@ -7,7 +7,7 @@ final class PaneViewTabBarTests: XCTestCase {
     private func makePaneView(tabTitles: [String], width: CGFloat = 600) -> PaneView {
         let pane = Pane()
         for title in tabTitles {
-            pane.addTab(id: UUID(), title: title, workingDirectory: "/tmp")
+            pane.addTab(workingDirectory: "/tmp", title: title)
         }
         let pv = PaneView(paneID: pane.id, pane: pane)
         pv.frame = NSRect(x: 0, y: 0, width: width, height: 300)
@@ -18,7 +18,7 @@ final class PaneViewTabBarTests: XCTestCase {
 
     func testMeasuredTabWidth_shortTitle() {
         let pane = Pane()
-        pane.addTab(id: UUID(), title: "~", workingDirectory: "/tmp")
+        pane.addTab(workingDirectory: "/tmp", title: "~")
         let pv = PaneView(paneID: pane.id, pane: pane)
         pv.frame = NSRect(x: 0, y: 0, width: 600, height: 300)
         let w = pv.measuredTabWidth(for: pane.tabs[0])
@@ -30,8 +30,8 @@ final class PaneViewTabBarTests: XCTestCase {
         // Use a remote session tab so tabDisplayTitle returns the remote CWD directly
         let pane = Pane()
         pane.addTab(
-            id: UUID(), title: "user@host:/very/long/path/to/some/deeply/nested/directory/structure",
-            workingDirectory: "/tmp")
+            workingDirectory: "/tmp",
+            title: "user@host:/very/long/path/to/some/deeply/nested/directory/structure")
         // Set a remote session so tabDisplayTitle extracts the path after ":"
         pane.updateRemoteSession(at: 0, .ssh(host: "user@host"))
         pane.updateRemoteWorkingDirectory(at: 0, "/very/long/path/to/some/deeply/nested/directory/structure")
@@ -44,7 +44,7 @@ final class PaneViewTabBarTests: XCTestCase {
 
     func testMeasuredTabWidth_mediumTitle() {
         let pane = Pane()
-        pane.addTab(id: UUID(), title: "Documents", workingDirectory: "/tmp")
+        pane.addTab(workingDirectory: "/tmp", title: "Documents")
         let pv = PaneView(paneID: pane.id, pane: pane)
         pv.frame = NSRect(x: 0, y: 0, width: 600, height: 300)
         let w = pv.measuredTabWidth(for: pane.tabs[0])
