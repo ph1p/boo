@@ -8,7 +8,7 @@ import XCTest
 final class StatusBarClickTests: XCTestCase {
 
     /// A spy StatusBarPlugin that records clicks and can be hidden.
-    final class SpyIconSegment: StatusBarPlugin {
+    final class SpyIconSegment: @preconcurrency StatusBarPlugin {
         let id: String
         let position: StatusBarPosition = .right
         let priority: Int

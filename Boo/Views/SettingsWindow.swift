@@ -78,7 +78,7 @@ struct SettingsView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .frame(width: 560, height: 480)
+        .frame(width: 620, height: 500)
         .background(t.bg)
     }
 
@@ -159,30 +159,51 @@ private struct SettingsPage<Content: View>: View {
         let t = Tokens.current
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                Text(title)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(t.text)
+                VStack(alignment: .leading, spacing: 10) {
+                    Text(title)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(t.text)
+                    Rectangle()
+                        .fill(t.border.opacity(0.8))
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 0.5)
+                }
                 content()
                 Spacer()
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(16)
+            .padding(18)
         }
     }
 
 }
 
-/// Labeled group within a page.
+/// Labeled group within a page — renders a header label above a card-style container.
 private struct Section<Content: View>: View {
     let title: String
     @ViewBuilder let content: () -> Content
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(title)
-                .font(.system(size: 11, weight: .medium))
-                .foregroundColor(Tokens.current.muted)
-            content()
+        let t = Tokens.current
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title.uppercased())
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundColor(t.muted)
+                .tracking(0.4)
+            VStack(alignment: .leading, spacing: 8) {
+                content()
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(t.chromeBg)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .strokeBorder(t.border.opacity(0.6), lineWidth: 0.5)
+                    )
+            )
         }
     }
 
@@ -273,9 +294,17 @@ private struct ToggleRow: View {
     @Binding var isOn: Bool
 
     var body: some View {
-        Toggle(label, isOn: $isOn)
-            .font(.system(size: 12))
-            .foregroundColor(Tokens.current.text)
+        let t = Tokens.current
+        HStack {
+            Text(label)
+                .font(.system(size: 12))
+                .foregroundColor(t.text)
+            Spacer()
+            Toggle("", isOn: $isOn)
+                .labelsHidden()
+                .toggleStyle(.switch)
+                .controlSize(.small)
+        }
     }
 
 }
@@ -830,9 +859,12 @@ private struct GeneralSettingsView: View {
                     .onChange(of: autoCheckUpdates) { v in AppSettings.shared.autoCheckUpdates = v }
             }
 
-            Section(title: "Debug") {
+            Section(title: "Advanced") {
                 ToggleRow(label: "Debug logging", isOn: $debugLogging)
                     .onChange(of: debugLogging) { v in AppSettings.shared.debugLogging = v }
+                Text("Writes verbose output to the system log. Disable when not troubleshooting.")
+                    .font(.system(size: 11))
+                    .foregroundColor(t.muted)
             }
         }
         .foregroundColor(t.text)
@@ -930,7 +962,12 @@ private struct StatusBarSettingsView: View {
 
     var body: some View {
         let _ = observer.revision
+        let t = Tokens.current
         SettingsPage(title: "Status Bar") {
+            Section(title: "Preview") {
+                statusBarPreview(t)
+            }
+
             Section(title: "Left Segments") {
                 VStack(alignment: .leading, spacing: 8) {
                     ToggleRow(label: "Connection", isOn: $showConnection)
@@ -950,6 +987,52 @@ private struct StatusBarSettingsView: View {
                         .onChange(of: showTime) { v in AppSettings.shared.statusBarShowTime = v }
                 }
             }
+        }
+    }
+
+    private func statusBarPreview(_ t: Tokens) -> some View {
+        HStack(spacing: 0) {
+            HStack(spacing: 10) {
+                if showConnection {
+                    statusChip(icon: "circle.fill", label: "local", color: Color.green, t: t)
+                }
+                if showPath {
+                    statusChip(icon: "folder", label: "~/projects/boo", color: t.muted, t: t)
+                }
+                if showGitBranch {
+                    statusChip(icon: "arrow.triangle.branch", label: "main", color: t.muted, t: t)
+                }
+            }
+            Spacer()
+            HStack(spacing: 10) {
+                if showPaneInfo {
+                    statusChip(icon: nil, label: "2 panes \u{00B7} 3 tabs", color: t.muted, t: t)
+                }
+                if showTime {
+                    statusChip(icon: nil, label: "12:00", color: t.muted, t: t)
+                }
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .background(t.chromeBg)
+        .clipShape(RoundedRectangle(cornerRadius: 5))
+        .overlay(
+            RoundedRectangle(cornerRadius: 5)
+                .strokeBorder(t.border.opacity(0.5), lineWidth: 0.5)
+        )
+    }
+
+    private func statusChip(icon: String?, label: String, color: Color, t: Tokens) -> some View {
+        HStack(spacing: 4) {
+            if let icon {
+                Image(systemName: icon)
+                    .font(.system(size: 9))
+                    .foregroundColor(color)
+            }
+            Text(label)
+                .font(.system(size: 10))
+                .foregroundColor(color)
         }
     }
 
@@ -1058,6 +1141,27 @@ private struct PluginRow: View {
         self._isEnabled = State(initialValue: !AppSettings.shared.disabledPluginIDs.contains(manifest.id))
     }
 
+    /// Returns true when at least one of the plugin's settings deviates from its declared default.
+    private var hasCustomSettings: Bool {
+        guard let settings = manifest.settings else { return false }
+        for s in settings {
+            switch s.type {
+            case .bool:
+                let def = s.defaultValue?.value as? Bool ?? false
+                if AppSettings.shared.pluginBool(manifest.id, s.key, default: def) != def { return true }
+            case .double:
+                let def = s.defaultValue?.value as? Double ?? 0
+                if AppSettings.shared.pluginDouble(manifest.id, s.key, default: def) != def { return true }
+            case .string:
+                let def = s.defaultValue?.value as? String ?? ""
+                if AppSettings.shared.pluginString(manifest.id, s.key, default: def) != def { return true }
+            case .int:
+                break
+            }
+        }
+        return false
+    }
+
     var body: some View {
         let _ = observer.revision
         let t = Tokens.current
@@ -1089,9 +1193,17 @@ private struct PluginRow: View {
 
                 if let settings = manifest.settings, !settings.isEmpty {
                     Button(action: { withAnimation(.easeInOut(duration: 0.15)) { isExpanded.toggle() } }) {
-                        Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-                            .font(.system(size: 10, weight: .semibold))
-                            .foregroundColor(t.muted)
+                        ZStack(alignment: .topTrailing) {
+                            Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundColor(t.muted)
+                            if hasCustomSettings && !isExpanded {
+                                Circle()
+                                    .fill(t.accent)
+                                    .frame(width: 5, height: 5)
+                                    .offset(x: 4, y: -3)
+                            }
+                        }
                     }
                     .buttonStyle(.plain)
                 }
@@ -1464,6 +1576,7 @@ private struct PluginSettingControl: View {
 
 private struct ShortcutsSettingsView: View {
     @ObservedObject private var observer = SettingsObserver(topics: [.theme])
+    @State private var searchText: String = ""
 
     private static let groups: [(String, [(String, String)])] = [
         (
@@ -1516,13 +1629,58 @@ private struct ShortcutsSettingsView: View {
         )
     ]
 
+    private var filteredGroups: [(String, [(String, String)])] {
+        let q = searchText.trimmingCharacters(in: .whitespaces).lowercased()
+        guard !q.isEmpty else { return Self.groups }
+        return Self.groups.compactMap { group in
+            let matchingItems = group.1.filter {
+                $0.0.lowercased().contains(q) || $0.1.lowercased().contains(q)
+            }
+            return matchingItems.isEmpty ? nil : (group.0, matchingItems)
+        }
+    }
+
     var body: some View {
         let _ = observer.revision
         let t = Tokens.current
 
         SettingsPage(title: "Keyboard Shortcuts") {
-            ForEach(Self.groups, id: \.0) { group in
-                shortcutGroup(title: group.0, items: group.1, tokens: t)
+            // Search field
+            HStack(spacing: 6) {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 11))
+                    .foregroundColor(t.muted)
+                TextField("Filter shortcuts", text: $searchText)
+                    .font(.system(size: 12))
+                    .textFieldStyle(.plain)
+                    .foregroundColor(t.text)
+                if !searchText.isEmpty {
+                    Button(action: { searchText = "" }) {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 11))
+                            .foregroundColor(t.muted)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
+            .background(
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(t.chromeBg)
+                    .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(t.border.opacity(0.6), lineWidth: 0.5))
+            )
+
+            if filteredGroups.isEmpty {
+                Text("No shortcuts matching \"\(searchText)\"")
+                    .font(.system(size: 12))
+                    .foregroundColor(t.muted)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.top, 24)
+            } else {
+                ForEach(filteredGroups, id: \.0) { group in
+                    shortcutGroup(title: group.0, items: group.1, tokens: t)
+                }
             }
         }
     }
