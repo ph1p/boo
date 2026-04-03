@@ -169,6 +169,72 @@ extension PaneView {
         needsDisplay = true
     }
 
+    // MARK: - Right-Click Context Menu
+
+    override func rightMouseDown(with event: NSEvent) {
+        let point = convert(event.locationInWindow, from: nil)
+        guard point.y < tabBarHeight, let idx = tabIndex(at: point) else {
+            super.rightMouseDown(with: event)
+            return
+        }
+        showTabContextMenu(at: idx, event: event)
+    }
+
+    private func showTabContextMenu(at index: Int, event: NSEvent) {
+        let menu = NSMenu()
+
+        // Close tab
+        let isLastTabInWorkspace = isOnlyTabInWorkspace()
+        let closeTitle = isLastTabInWorkspace ? "Close Workspace" : "Close Tab"
+        let closeItem = NSMenuItem(title: closeTitle, action: #selector(contextCloseTab(_:)), keyEquivalent: "")
+        closeItem.target = self
+        closeItem.tag = index
+        menu.addItem(closeItem)
+
+        // Move to workspace submenu
+        if let workspaces = paneDelegate?.paneViewWorkspaceNames(self), workspaces.count > 0 {
+            menu.addItem(.separator())
+            let moveMenu = NSMenu()
+            for ws in workspaces {
+                let item = NSMenuItem(
+                    title: ws.name,
+                    action: #selector(contextMoveToWorkspace(_:)),
+                    keyEquivalent: ""
+                )
+                item.target = self
+                item.representedObject = MoveTabAction(tabIndex: index, workspaceIndex: ws.index)
+                moveMenu.addItem(item)
+            }
+            let moveItem = NSMenuItem(title: "Move Tab to Workspace", action: nil, keyEquivalent: "")
+            moveItem.submenu = moveMenu
+            menu.addItem(moveItem)
+        }
+
+        NSMenu.popUpContextMenu(menu, with: event, for: self)
+    }
+
+    /// Returns true when closing any tab would leave the workspace empty.
+    func isOnlyTabInWorkspace() -> Bool {
+        guard pane.tabs.count == 1 else { return false }
+        return paneDelegate?.paneViewIsOnlyPaneInWorkspace(self) ?? true
+    }
+
+    private struct MoveTabAction {
+        let tabIndex: Int
+        let workspaceIndex: Int
+    }
+
+    @objc private func contextCloseTab(_ sender: NSMenuItem) {
+        paneDelegate?.paneView(self, didRequestCloseTab: sender.tag, paneID: paneID)
+    }
+
+    @objc private func contextMoveToWorkspace(_ sender: NSMenuItem) {
+        guard let action = sender.representedObject as? MoveTabAction else { return }
+        paneDelegate?.paneView(
+            self, didRequestMoveTab: action.tabIndex,
+            toWorkspaceAt: action.workspaceIndex, paneID: paneID)
+    }
+
     // MARK: - Drag Auto-scroll
 
     /// Auto-scroll the tab bar during a drag. Called by the drag coordinator.
