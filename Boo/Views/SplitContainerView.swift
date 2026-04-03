@@ -7,7 +7,11 @@ protocol SplitContainerDelegate: AnyObject {
 class SplitContainerView: NSView, NSSplitViewDelegate {
     weak var splitDelegate: SplitContainerDelegate?
 
+    /// Called whenever the user drags a divider, with the updated tree.
+    var onRatioChanged: ((SplitTree) -> Void)?
+
     private var currentView: NSView?
+    private var currentTree: SplitTree?
     /// Minimum dimension (width or height) for terminal panes in splits.
     private let minPaneDimension: CGFloat = 80
 
@@ -22,6 +26,8 @@ class SplitContainerView: NSView, NSSplitViewDelegate {
     }
 
     func update(tree: SplitTree) {
+        currentTree = tree
+
         // Remove old view hierarchy
         currentView?.removeFromSuperview()
         currentView = nil
@@ -73,6 +79,51 @@ class SplitContainerView: NSView, NSSplitViewDelegate {
         _ splitView: NSSplitView, constrainMaxCoordinate proposedMaximumPosition: CGFloat, ofSubviewAt dividerIndex: Int
     ) -> CGFloat {
         proposedMaximumPosition - minPaneDimension
+    }
+
+    func splitViewDidResizeSubviews(_ notification: Notification) {
+        guard let splitView = notification.object as? NSSplitView,
+            splitView.subviews.count >= 2,
+            let rootView = currentView,
+            let tree = currentTree
+        else { return }
+
+        // Compute ratio from the actual divider position
+        let firstSize = splitView.isVertical
+            ? splitView.subviews[0].frame.width
+            : splitView.subviews[0].frame.height
+        let totalSize = splitView.isVertical
+            ? splitView.bounds.width
+            : splitView.bounds.height
+        guard totalSize > 0 else { return }
+        let newRatio = min(max(firstSize / totalSize, 0.01), 0.99)
+
+        let updatedTree = updatingRatio(in: tree, newRatio: newRatio, matchingSplitView: splitView, rootView: rootView)
+        guard updatedTree != tree else { return }
+        currentTree = updatedTree
+        onRatioChanged?(updatedTree)
+    }
+
+    /// Walk the tree and view hierarchy in parallel; update the ratio of the split node
+    /// whose view identity matches `splitView`.
+    private func updatingRatio(
+        in tree: SplitTree,
+        newRatio: CGFloat,
+        matchingSplitView splitView: NSSplitView,
+        rootView: NSView
+    ) -> SplitTree {
+        switch tree {
+        case .leaf:
+            return tree
+        case .split(let dir, let first, let second, let ratio):
+            guard let sv = rootView as? NSSplitView, sv.subviews.count >= 2 else { return tree }
+            if sv === splitView {
+                return .split(direction: dir, first: first, second: second, ratio: newRatio)
+            }
+            let newFirst = updatingRatio(in: first, newRatio: newRatio, matchingSplitView: splitView, rootView: sv.subviews[0])
+            let newSecond = updatingRatio(in: second, newRatio: newRatio, matchingSplitView: splitView, rootView: sv.subviews[1])
+            return .split(direction: dir, first: newFirst, second: newSecond, ratio: ratio)
+        }
     }
 
     /// Apply split positions after layout so bounds are valid.
