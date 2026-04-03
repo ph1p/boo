@@ -4,7 +4,6 @@ import Foundation
 // MARK: - Codable session snapshot types
 
 struct SessionTab: Codable {
-    let id: UUID
     let title: String
     let workingDirectory: String
     // Remote sessions are intentionally omitted — only local state is persisted.
@@ -54,7 +53,6 @@ enum SessionStore {
             let panes = ws.panes.values.map { pane -> SessionPane in
                 let tabs = pane.tabs.map { tab in
                     SessionTab(
-                        id: tab.id,
                         title: tab.title,
                         workingDirectory: tab.workingDirectory
                     )
@@ -147,7 +145,7 @@ enum SessionStore {
                 let pane = Pane(id: leafID)
                 if let sp = paneByID[leafID], !sp.tabs.isEmpty {
                     for tab in sp.tabs {
-                        pane.addTab(id: tab.id, title: tab.title, workingDirectory: tab.workingDirectory)
+                        pane.addTab(workingDirectory: tab.workingDirectory, title: tab.title)
                     }
                     let safeIndex = min(max(sp.activeTabIndex, 0), sp.tabs.count - 1)
                     pane.setActiveTab(safeIndex)

@@ -74,21 +74,6 @@ final class Pane {
         return activeTabIndex
     }
 
-    /// Restore a tab with a specific ID and title (used during workspace restore).
-    @discardableResult
-    func addTab(id: UUID, title: String, workingDirectory: String) -> Int {
-        let tab = Tab(
-            id: id,
-            state: TabState(
-                workingDirectory: workingDirectory,
-                title: title
-            )
-        )
-        tabs.append(tab)
-        activeTabIndex = tabs.count - 1
-        return activeTabIndex
-    }
-
     func moveTab(from sourceIndex: Int, to destinationIndex: Int) {
         guard sourceIndex >= 0, sourceIndex < tabs.count,
             destinationIndex >= 0, destinationIndex < tabs.count,
