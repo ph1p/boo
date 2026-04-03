@@ -372,7 +372,7 @@ final class MyPlugin: BooPluginProtocol {
 
     // MARK: - Status Bar
 
-    func makeStatusBarContent(context: TerminalContext) -> StatusBarContent? {
+    func makeStatusBarContent(context: PluginContext) -> StatusBarContent? {
         StatusBarContent(
             text: "Hello",
             icon: "star",
@@ -455,8 +455,10 @@ Add your plugin to `PluginRegistry.registerBuiltins()`:
 
 ```swift
 func registerBuiltins() {
-    register(FileTreePlugin())
+    register(LocalFileTreePlugin())
+    register(RemoteFileTreePlugin())
     register(GitPlugin())
+    register(AIAgentPlugin())
     register(DockerPluginNew())
     register(BookmarksPluginNew())
     register(SystemInfoPlugin())

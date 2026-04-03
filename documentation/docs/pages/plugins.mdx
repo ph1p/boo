@@ -13,8 +13,9 @@ Both use the same protocol, lifecycle, and UI integration.
 
 | Plugin | Directory | Description |
 |---|---|---|
-| **Files** (`file-tree`) | `Plugins/FileTree/` | File explorer with local FSEvents watching and remote SSH/Docker browsing |
+| **Files** (`file-tree-local`, `file-tree-remote`) | `Plugins/FileTree/` | File explorer with local FSEvents watching and remote SSH/Docker browsing |
 | **Git** (`git-panel`) | `Plugins/Git/` | Branch, status, staged/unstaged/untracked files, stash, ahead/behind counts |
+| **AI Agent** (`ai-agent`) | `Plugins/AIAgent/` | Monitors running AI coding agents (Claude, Codex, etc.); shows config, hooks, skills, and changed files. Appears when an AI agent is the foreground process. |
 | **Docker** (`docker`) | `Plugins/Docker/` | Running container list with exec, logs, start/stop/restart actions |
 | **Bookmarks** (`bookmarks`) | `Plugins/Bookmarks/` | Saved directory bookmarks with per-host namespacing for remote sessions |
 | **System** (`system-info`) | `Plugins/SystemInfo/` | CPU load, memory, disk usage — reference example demonstrating all plugin patterns |
@@ -29,11 +30,15 @@ protocol BooPluginProtocol: BooPlugin {
     var manifest: PluginManifest { get }
     var whenClause: WhenClauseNode? { get }
 
-    // UI
+    // UI — primary API (PluginContext)
+    func makeDetailView(context: PluginContext) -> AnyView?
+    func makeStatusBarContent(context: PluginContext) -> StatusBarContent?
+    func sectionTitle(context: PluginContext) -> String?
+    var prefersOuterScrollView: Bool { get }
+
+    // UI — legacy API (TerminalContext + actionHandler); still supported for external plugins
     func makeDetailView(context: TerminalContext, actionHandler: DSLActionHandler) -> AnyView?
     func makeStatusBarContent(context: TerminalContext) -> StatusBarContent?
-    func sectionTitle(context: TerminalContext) -> String?
-    var prefersOuterScrollView: Bool { get }
 
     // Host integration (injected by PluginRegistry)
     var hostActions: PluginHostActions? { get set }
@@ -75,7 +80,7 @@ Usage: `hostActions?.pastePathToActivePane?(path)`
 
 ### Registration
 
-1. `PluginRegistry.registerBuiltins()` creates and registers the four built-in plugins
+1. `PluginRegistry.registerBuiltins()` creates and registers the built-in plugins
 2. For each plugin, the registry automatically wires:
    - `hostActions` — Distributed from `PluginRegistry.hostActions`
    - `onRequestCycleRerun` — Fires `PluginRegistry.onRequestCycleRerun` (bound to MainWindowController's `runPluginCycle`)
