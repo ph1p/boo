@@ -1,5 +1,23 @@
 import Foundation
 
+// MARK: - Process Timeout Helper
+
+extension Process {
+    /// Wait for the process to exit, terminating it if it exceeds the timeout.
+    /// Returns true if the process exited within the timeout with status 0.
+    @discardableResult
+    func waitWithTimeout(seconds: TimeInterval) -> Bool {
+        let sem = DispatchSemaphore(value: 0)
+        terminationHandler = { _ in sem.signal() }
+        let result = sem.wait(timeout: .now() + seconds)
+        if result == .timedOut {
+            terminate()
+            return false
+        }
+        return terminationStatus == 0
+    }
+}
+
 // MARK: - Git Command Execution & Detection
 
 extension GitPlugin {
@@ -13,8 +31,7 @@ extension GitPlugin {
         task.standardOutput = FileHandle.nullDevice
         task.standardError = FileHandle.nullDevice
         do { try task.run() } catch { return false }
-        task.waitUntilExit()
-        return task.terminationStatus == 0
+        return task.waitWithTimeout(seconds: 10)
     }
 
     // MARK: - Detection Helpers
@@ -33,10 +50,9 @@ extension GitPlugin {
         } catch {
             return []
         }
-        // Read before waitUntilExit to prevent deadlock when output > 64KB
+        // Read before waiting to prevent deadlock when output > 64KB
         let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        task.waitUntilExit()
-        guard task.terminationStatus == 0 else { return [] }
+        guard task.waitWithTimeout(seconds: 15) else { return [] }
 
         guard let output = String(data: data, encoding: .utf8) else { return [] }
 
@@ -64,8 +80,7 @@ extension GitPlugin {
         let pipe = Pipe()
         task.standardOutput = pipe
         do { try task.run() } catch { return (0, 0) }
-        task.waitUntilExit()
-        guard task.terminationStatus == 0 else { return (0, 0) }
+        guard task.waitWithTimeout(seconds: 15) else { return (0, 0) }
         let data = pipe.fileHandleForReading.readDataToEndOfFile()
         guard let output = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) else {
             return (0, 0)
@@ -85,8 +100,7 @@ extension GitPlugin {
         let pipe = Pipe()
         task.standardOutput = pipe
         do { try task.run() } catch { return nil }
-        task.waitUntilExit()
-        guard task.terminationStatus == 0 else { return nil }
+        guard task.waitWithTimeout(seconds: 15) else { return nil }
         let data = pipe.fileHandleForReading.readDataToEndOfFile()
         guard let output = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
             !output.isEmpty
@@ -138,8 +152,7 @@ extension GitPlugin {
         task.standardOutput = pipe
         do { try task.run() } catch { return [] }
         let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        task.waitUntilExit()
-        guard task.terminationStatus == 0 else { return [] }
+        guard task.waitWithTimeout(seconds: 15) else { return [] }
         guard let output = String(data: data, encoding: .utf8) else { return [] }
 
         // git remote -v outputs: origin\thttps://... (fetch)\norigin\thttps://... (push)

@@ -156,7 +156,12 @@ final class AutoUpdater: ObservableObject {
             state = .error("Cache directory unavailable")
             return
         }
-        try? FileManager.default.createDirectory(at: cacheDir, withIntermediateDirectories: true)
+        do {
+            try FileManager.default.createDirectory(at: cacheDir, withIntermediateDirectories: true)
+        } catch {
+            state = .error("Failed to create cache directory: \(error.localizedDescription)")
+            return
+        }
         let destURL = cacheDir.appendingPathComponent(asset.name)
 
         // Clean up previous downloads
@@ -271,7 +276,7 @@ final class AutoUpdater: ObservableObject {
             let unmount = Process()
             unmount.executableURL = URL(fileURLWithPath: "/usr/bin/hdiutil")
             unmount.arguments = ["detach", mountPoint, "-quiet"]
-            try? unmount.run()
+            do { try unmount.run() } catch { debugLog("[AutoUpdater] unmount failed: \(error)") }
             unmount.waitUntilExit()
             throw UpdateError.noAppInDMG
         }
@@ -284,7 +289,7 @@ final class AutoUpdater: ObservableObject {
         let unmount = Process()
         unmount.executableURL = URL(fileURLWithPath: "/usr/bin/hdiutil")
         unmount.arguments = ["detach", mountPoint, "-quiet"]
-        try? unmount.run()
+        do { try unmount.run() } catch { debugLog("[AutoUpdater] unmount failed: \(error)") }
         unmount.waitUntilExit()
 
         return stagedApp
@@ -325,9 +330,14 @@ final class AutoUpdater: ObservableObject {
     private static func launchReplacementScript(_ script: String) {
         let scriptURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("boo-update-\(UUID().uuidString).sh")
-        try? script.write(to: scriptURL, atomically: true, encoding: .utf8)
-        try? FileManager.default.setAttributes(
-            [.posixPermissions: 0o755], ofItemAtPath: scriptURL.path)
+        do {
+            try script.write(to: scriptURL, atomically: true, encoding: .utf8)
+            try FileManager.default.setAttributes(
+                [.posixPermissions: 0o755], ofItemAtPath: scriptURL.path)
+        } catch {
+            debugLog("[AutoUpdater] failed to write replacement script: \(error)")
+            return
+        }
 
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/bash")
@@ -335,7 +345,7 @@ final class AutoUpdater: ObservableObject {
         process.standardOutput = nil
         process.standardError = nil
         // Detach so it outlives the parent
-        try? process.run()
+        do { try process.run() } catch { debugLog("[AutoUpdater] failed to launch replacement script: \(error)") }
     }
 
     // MARK: - Version Comparison
