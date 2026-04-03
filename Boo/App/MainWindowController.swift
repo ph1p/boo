@@ -62,6 +62,8 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
 
     /// Focus debounce — prevents sidebar rebuild from causing a focus feedback loop.
     var lastFocusedPaneID: UUID?
+    /// Debounce timer for saving the session after split-pane divider drags.
+    private var splitRatioSaveTimer: Timer?
     var lastFocusTimestamp: UInt64 = 0
     /// Last pane ID for which plugins received a focusChanged notification.
     /// Prevents redundant notifications when the same pane re-focuses.
@@ -192,6 +194,13 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
         pluginRegistry.registerStatusBarIcons(in: statusBar)
         tabDragCoordinator.onDrop = { [weak self] source, tabIndex, dest, zone in
             self?.handleTabDrop(source: source, tabIndex: tabIndex, dest: dest, zone: zone)
+        }
+        tabDragCoordinator.onWorkspaceHover = { [weak self] index in
+            guard let self = self, index != self.appState.activeWorkspaceIndex else { return }
+            self.activateWorkspace(index)
+        }
+        tabDragCoordinator.workspacePillFrames = { [weak self] in
+            self?.workspacePillScreenFrames() ?? []
         }
         restoreWorkspaces()
         subscribeToBridge()
@@ -409,6 +418,14 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
 
         splitContainer = SplitContainerView(frame: .zero)
         splitContainer.splitDelegate = self
+        splitContainer.onRatioChanged = { [weak self] updatedTree in
+            guard let self, let ws = self.activeWorkspace else { return }
+            ws.splitTree = updatedTree
+            self.splitRatioSaveTimer?.invalidate()
+            self.splitRatioSaveTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: false) { [weak self] _ in
+                self?.saveSession()
+            }
+        }
 
         sidebarContainer = NSView()
         sidebarContainer.wantsLayer = true
