@@ -90,6 +90,8 @@ final class Workspace {
 
     func pane(for id: UUID) -> Pane? { panes[id] }
 
+    var totalTabCount: Int { panes.values.reduce(0) { $0 + $1.tabs.count } }
+
     @discardableResult
     func splitPane(_ paneID: UUID, direction: SplitTree.SplitDirection) -> UUID {
         let (newTree, newID) = splitTree.splitting(leafID: paneID, direction: direction)
