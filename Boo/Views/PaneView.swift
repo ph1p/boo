@@ -13,6 +13,10 @@ protocol PaneViewDelegate: AnyObject {
     func paneView(_ paneView: PaneView, directoryListing path: String, output: String, paneID: UUID)
     func paneView(_ paneView: PaneView, didRequestCloseTab index: Int, paneID: UUID)
     func paneView(_ paneView: PaneView, shellPIDDiscovered pid: pid_t, paneID: UUID)
+    func paneView(_ paneView: PaneView, didRequestMoveTab index: Int, toWorkspaceAt workspaceIndex: Int, paneID: UUID)
+    func paneViewWorkspaceNames(_ paneView: PaneView) -> [(index: Int, name: String)]
+    /// Returns true if this pane is the only pane in its workspace (used for close-label wording).
+    func paneViewIsOnlyPaneInWorkspace(_ paneView: PaneView) -> Bool
 }
 
 /// A pane: optional tab bar on top + GhosttyView below.
