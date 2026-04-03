@@ -7,7 +7,8 @@ Open folders as workspaces with their own file tree using **Cmd+N** (home direct
 - **Workspace colors** — Assign preset or custom colors per workspace
 - **Pinning** — Pin frequently used workspaces
 - **Renaming** — Double-click a workspace pill to rename it, or use the right-click context menu
-- **Session persistence** — Workspace names, colors, split layouts, and tab paths are saved to `~/.boo/session.json` and restored on next launch. Remote connections are not restored; tabs reopen at their local working directory.
+- **Session persistence** — Workspace names, colors, split layouts, tab paths, and split pane ratios are saved to `~/.boo/session.json` and restored on next launch. Remote connections are not restored; tabs reopen at their local working directory.
+- **Drag to switch workspace** — While dragging a tab, hover over a workspace pill for ~500 ms to spring-load into that workspace, then drop the tab onto any pane there.
 
 ## Split Panes
 
@@ -17,13 +18,16 @@ Split your terminal in any direction:
 - **Cmd+Shift+D** — Split down
 - **Cmd+]** / **Cmd+[** — Navigate between panes
 
-Each split pane is independent with its own tab bar and terminal sessions.
+Each split pane is independent with its own tab bar and terminal sessions. Drag the divider between panes to resize; the ratio is saved and restored across launches.
 
 ## Per-Pane Tabs
 
 Each pane has its own tab bar. Create new tabs with **Cmd+T**, close with **Cmd+W**. Closed tabs can be reopened with **Cmd+Z**.
 
 Smart close order: tab → pane → workspace.
+
+- **Right-click a tab** — Context menu with "Close Tab" (or "Close Workspace" when it's the only tab) and a "Move Tab to Workspace →" submenu listing all other open workspaces.
+- **Drag tabs across workspaces** — Drag a tab to a different pane or split zone in the current workspace, or use the workspace pill hover to move it to another workspace entirely. Moving the last tab out of a workspace prompts to close that workspace.
 
 ## File Explorer
 
@@ -96,7 +100,7 @@ Open with **Cmd+,**. Organized in tabs:
 
 | Tab | Options |
 |---|---|
-| **Theme** | 14 color themes with live preview |
+| **Theme** | 32 color themes with live preview |
 | **Appearance** | Terminal font, font size, cursor style (block/beam/underline/outline); sidebar font and font size |
 | **Status Bar** | Toggle individual segments (connection, path, git branch, process, pane count, clock) |
 | **Layout** | Sidebar position (toggle with Cmd+B), workspace bar position, tab overflow mode |
