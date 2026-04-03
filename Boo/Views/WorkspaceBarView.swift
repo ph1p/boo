@@ -626,6 +626,43 @@ class WorkspaceBarView: NSView {
         needsDisplay = true
     }
 
+    /// Returns screen-space rects for each workspace pill, used for tab-drag hover detection.
+    func workspacePillScreenFrames() -> [(index: Int, screenFrame: NSRect)] {
+        guard let window = window else { return [] }
+        var result: [(Int, NSRect)] = []
+        if isVertical {
+            let itemSize: CGFloat = 32
+            let padding: CGFloat = 4
+            var y: CGFloat = 8
+            for (i, _) in items.enumerated() {
+                let localRect = NSRect(x: padding, y: y, width: bounds.width - padding * 2, height: itemSize)
+                let windowRect = convert(localRect, to: nil)
+                let screenRect = window.convertToScreen(windowRect)
+                result.append((i, screenRect))
+                y += itemSize + 4
+            }
+        } else {
+            var x: CGFloat = 72
+            for (i, item) in items.enumerated() {
+                let isSelected = i == selectedIndex
+                let attrs: [NSAttributedString.Key: Any] = [
+                    .font: NSFont.systemFont(ofSize: 11.5, weight: isSelected ? .medium : .regular)
+                ]
+                let titleWidth = (item.name as NSString).size(withAttributes: attrs).width
+                let closeSpace: CGFloat = item.isPinned ? 0 : 16
+                let pillWidth = titleWidth + 32 + closeSpace
+                let pillHeight: CGFloat = 20
+                let pillY = (barHeight - pillHeight) / 2
+                let localRect = NSRect(x: x, y: pillY, width: pillWidth, height: pillHeight)
+                let windowRect = convert(localRect, to: nil)
+                let screenRect = window.convertToScreen(windowRect)
+                result.append((i, screenRect))
+                x += pillWidth + 6
+            }
+        }
+        return result
+    }
+
     // MARK: - Right Click Context Menu
 
     override func rightMouseDown(with event: NSEvent) {

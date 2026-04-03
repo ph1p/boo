@@ -21,6 +21,12 @@ class TabDragCoordinator {
             ) -> Void
         )?
 
+    /// Called with a workspace index when the cursor hovers over a pill long enough.
+    var onWorkspaceHover: ((Int) -> Void)?
+
+    /// Returns (index, screenFrame) pairs for all workspace pills.
+    var workspacePillFrames: (() -> [(index: Int, screenFrame: NSRect)])?
+
     /// All pane views in the current workspace, set by the window controller.
     var paneViews: [UUID: PaneView] = [:]
 
@@ -33,6 +39,12 @@ class TabDragCoordinator {
     private var eventMonitor: Any?
     private var currentDropTarget: (PaneView, TabDropZone)?
 
+    // Workspace hover state
+    private var hoveredWorkspaceIndex: Int?
+    private var workspaceHoverTimer: Timer?
+    private let workspaceHoverDelay: TimeInterval = 0.5
+    private var cachedPillFrames: [(index: Int, screenFrame: NSRect)]?
+
     private let edgeFraction: CGFloat = 0.2
 
     deinit { cleanup() }
@@ -42,6 +54,7 @@ class TabDragCoordinator {
     func beginDrag(from paneView: PaneView, tabIndex: Int, event: NSEvent) {
         sourcePaneView = paneView
         sourceTabIndex = tabIndex
+        cachedPillFrames = workspacePillFrames?()
 
         createGhostWindow(for: paneView, tabIndex: tabIndex, event: event)
         installEventMonitor()
@@ -89,6 +102,10 @@ class TabDragCoordinator {
         sourcePaneView = nil
         sourceTabIndex = nil
         currentDropTarget = nil
+        workspaceHoverTimer?.invalidate()
+        workspaceHoverTimer = nil
+        hoveredWorkspaceIndex = nil
+        cachedPillFrames = nil
     }
 
     // MARK: - Event monitor
@@ -122,6 +139,39 @@ class TabDragCoordinator {
     private func handleDrag(_ event: NSEvent) {
         moveGhostWindow(to: event)
         hitTestPaneViews(event: event)
+        checkWorkspaceHover(event: event)
+    }
+
+    private func checkWorkspaceHover(event: NSEvent) {
+        let screenLoc: NSPoint =
+            event.window?.convertPoint(toScreen: event.locationInWindow) ?? NSEvent.mouseLocation
+        updateWorkspaceHover(screenPoint: screenLoc)
+    }
+
+    /// Called by the event path and exposed for testing.
+    /// Tests that bypass `beginDrag` can pre-populate the cache via this entry point.
+    func simulateHoverAt(screenPoint: NSPoint) {
+        if cachedPillFrames == nil { cachedPillFrames = workspacePillFrames?() }
+        updateWorkspaceHover(screenPoint: screenPoint)
+    }
+
+    private func updateWorkspaceHover(screenPoint: NSPoint) {
+        guard let frames = cachedPillFrames else { return }
+
+        let hitIndex = frames.first(where: { $0.screenFrame.contains(screenPoint) })?.index
+
+        guard hitIndex != hoveredWorkspaceIndex else { return }
+        hoveredWorkspaceIndex = hitIndex
+        workspaceHoverTimer?.invalidate()
+        workspaceHoverTimer = nil
+
+        guard let idx = hitIndex else { return }
+        workspaceHoverTimer = Timer.scheduledTimer(
+            withTimeInterval: workspaceHoverDelay, repeats: false
+        ) { [weak self] _ in
+            self?.onWorkspaceHover?(idx)
+            self?.workspaceHoverTimer = nil
+        }
     }
 
     private func hitTestPaneViews(event: NSEvent) {

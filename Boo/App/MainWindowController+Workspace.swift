@@ -115,7 +115,7 @@ extension MainWindowController {
         guard !ws.isPinned else { return }
 
         let wsID = ws.id
-        let totalTabs = ws.panes.values.reduce(0) { $0 + $1.tabs.count }
+        let totalTabs = ws.totalTabCount
         let alert = NSAlert()
         alert.messageText = "Close workspace \"\(ws.displayName)\"?"
         if ws.panes.count > 1 || totalTabs > 1 {
@@ -191,6 +191,16 @@ extension MainWindowController {
         }
         activateWorkspace(appState.workspaces.count - 1)
         saveSession()
+    }
+
+    /// Collects screen-space rects for all workspace pills across toolbar and side bar.
+    func workspacePillScreenFrames() -> [(index: Int, screenFrame: NSRect)] {
+        var results: [(Int, NSRect)] = []
+        results += toolbar.workspacePillScreenFrames()
+        if let bar = sideWorkspaceBar {
+            results += bar.workspacePillScreenFrames()
+        }
+        return results
     }
 
     func activateWorkspace(_ index: Int) {

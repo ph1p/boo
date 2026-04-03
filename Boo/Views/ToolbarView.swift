@@ -308,6 +308,24 @@ class ToolbarView: NSView {
         tabScrollOffset = min(max(0, tabScrollOffset), maxScrollOffset)
         workspaceScrollOffset = min(max(0, workspaceScrollOffset), maxWorkspaceScrollOffset)
     }
+
+    /// Returns the screen-space rect for each workspace pill, used for tab-drag hover detection.
+    func workspacePillScreenFrames() -> [(index: Int, screenFrame: NSRect)] {
+        guard let window = window, !hideWorkspaces else { return [] }
+        var result: [(Int, NSRect)] = []
+        var x = trafficLightWidth - workspaceScrollOffset
+        for (i, ws) in workspaces.enumerated() {
+            let w = measureWorkspace(ws)
+            let pillH: CGFloat = 24
+            let pillY = (barHeight - pillH) / 2
+            let localRect = NSRect(x: x, y: pillY, width: w, height: pillH)
+            let windowRect = convert(localRect, to: nil)
+            let screenRect = window.convertToScreen(windowRect)
+            result.append((i, screenRect))
+            x += w + 6
+        }
+        return result
+    }
 }
 
 // MARK: - NSDraggingSource
