@@ -86,6 +86,93 @@ extension MainWindowController: PaneViewDelegate {
         bridge.monitor.track(paneID: paneID, shellPID: pid)
     }
 
+    func paneViewIsOnlyPaneInWorkspace(_ paneView: PaneView) -> Bool {
+        guard let ws = appState.workspaces.first(where: { $0.panes[paneView.paneID] != nil }) else { return true }
+        return ws.panes.count == 1
+    }
+
+    func paneViewWorkspaceNames(_ paneView: PaneView) -> [(index: Int, name: String)] {
+        // Return all workspaces except the one this pane belongs to
+        guard let currentWS = appState.workspaces.first(where: { $0.panes[paneView.paneID] != nil }) else {
+            return []
+        }
+        return appState.workspaces.enumerated().compactMap { (i, ws) in
+            ws.id == currentWS.id ? nil : (index: i, name: ws.displayName)
+        }
+    }
+
+    func paneView(_ paneView: PaneView, didRequestMoveTab index: Int, toWorkspaceAt workspaceIndex: Int, paneID: UUID) {
+        guard workspaceIndex >= 0, workspaceIndex < appState.workspaces.count else { return }
+        guard let sourceWorkspace = appState.workspaces.first(where: { $0.panes[paneID] != nil }),
+            let sourcePane = sourceWorkspace.pane(for: paneID),
+            let pv = workspacePaneViews[sourceWorkspace.id]?[paneID]
+        else { return }
+
+        let isLastTabInWorkspace = sourceWorkspace.totalTabCount == 1
+
+        if isLastTabInWorkspace && appState.workspaces.count <= 1 {
+            // Only workspace — can't move, nothing to move to
+            return
+        }
+
+        let destWorkspace = appState.workspaces[workspaceIndex]
+        let destPaneID = destWorkspace.activePaneID
+        guard let destPane = destWorkspace.pane(for: destPaneID) else { return }
+
+        // Extract the tab and its GhosttyView from the source pane
+        guard let tab = sourcePane.extractTab(at: index) else { return }
+        let gv = pv.extractGhosttyView(for: tab.id)
+
+        // Restore source view if it still has tabs
+        if !sourcePane.tabs.isEmpty {
+            pv.startActiveSession()
+            pv.layoutTerminalView()
+            pv.needsDisplay = true
+        }
+
+        // Insert tab into destination workspace's active pane
+        let insertIndex = destPane.tabs.count
+        destPane.insertTab(tab, at: insertIndex)
+
+        // Cache the GhosttyView in the destination pane view (if it exists)
+        if let gv = gv, let destPV = workspacePaneViews[destWorkspace.id]?[destPaneID] {
+            destPV.insertGhosttyView(gv, for: tab.id)
+        }
+
+        // If source pane is now empty, close it (which may close the workspace)
+        if sourcePane.tabs.isEmpty {
+            let sourceWasActive = sourceWorkspace.id == activeWorkspace?.id
+            if isLastTabInWorkspace {
+                // Close the entire workspace
+                if let resolvedIndex = appState.workspaces.firstIndex(where: { $0.id == sourceWorkspace.id }) {
+                    forceCloseWorkspace(at: resolvedIndex)
+                }
+            } else {
+                // Just close the empty pane
+                if sourceWasActive {
+                    closeEmptyPane(paneID)
+                } else {
+                    // Remove from non-active workspace's pane views
+                    workspacePaneViews[sourceWorkspace.id]?.removeValue(forKey: paneID)
+                    pv.stopAll()
+                    _ = sourceWorkspace.closePane(paneID)
+                }
+            }
+        }
+
+        // Switch to destination workspace so user sees where tab landed
+        if let destIndex = appState.workspaces.firstIndex(where: { $0.id == destWorkspace.id }) {
+            activateWorkspace(destIndex)
+            // Activate the moved tab in the destination pane
+            if let destPV = paneViews[destPaneID] {
+                destPV.forceActivateTab(insertIndex)
+                window?.makeFirstResponder(destPV.ghosttyView)
+            }
+        }
+
+        saveSession()
+    }
+
     func paneView(_ paneView: PaneView, didRequestCloseTab index: Int, paneID: UUID) {
         guard let workspace = activeWorkspace,
             let pane = workspace.pane(for: paneID),
@@ -349,6 +436,24 @@ extension MainWindowController {
     func handleTabDrop(source: PaneView, tabIndex: Int, dest: PaneView, zone: TabDropZone) {
         guard activeWorkspace != nil else { return }
 
+        // Detect cross-workspace drop: source pane is not in the current workspace's pane views.
+        // This happens when the user hovered over a workspace pill mid-drag to switch workspaces.
+        let isCrossWorkspace = paneViews[source.paneID] == nil
+        if isCrossWorkspace {
+            handleCrossWorkspaceTabDrop(source: source, tabIndex: tabIndex, dest: dest, zone: zone)
+            syncCoordinatorPaneViews()
+            return
+        }
+
+        // Same-workspace drop — check if this is the last tab in the workspace.
+        // If so, abort: dropping the only tab would leave an empty workspace.
+        let sourceWorkspaceTotalTabs = activeWorkspace?.totalTabCount ?? 0
+        if sourceWorkspaceTotalTabs == 1 && source.paneID != dest.paneID {
+            // Last tab being dragged to a different pane (split zone) within the same workspace —
+            // this would leave the source workspace empty. Abort silently.
+            return
+        }
+
         switch zone {
         case .tabBarInsert(let insertIdx):
             moveTabBetweenPanes(source: source, tabIndex: tabIndex, dest: dest, insertAt: insertIdx)
@@ -375,6 +480,121 @@ extension MainWindowController {
         }
 
         syncCoordinatorPaneViews()
+    }
+
+    /// Handle a drop where the source pane belongs to a different (now-inactive) workspace.
+    private func handleCrossWorkspaceTabDrop(
+        source: PaneView, tabIndex: Int, dest: PaneView, zone: TabDropZone
+    ) {
+        guard let destWorkspace = activeWorkspace,
+            let sourceWorkspace = appState.workspaces.first(where: { $0.panes[source.paneID] != nil })
+        else { return }
+
+        let isLastTabInSourceWorkspace = sourceWorkspace.totalTabCount == 1
+
+        if isLastTabInSourceWorkspace {
+            // Dropping the only tab out of a workspace — ask user what to do
+            guard let window = window else { return }
+            let alert = NSAlert()
+            alert.messageText = "Move last tab out of \"\(sourceWorkspace.displayName)\"?"
+            alert.informativeText =
+                "This is the only tab in that workspace. Moving it will close the workspace."
+            alert.alertStyle = .warning
+            alert.addButton(withTitle: "Move & Close Workspace")
+            alert.addButton(withTitle: "Cancel")
+            alert.beginSheetModal(for: window) { [weak self] response in
+                guard response == .alertFirstButtonReturn else { return }
+                self?.executeCrossWorkspaceDrop(
+                    source: source, tabIndex: tabIndex, dest: dest, zone: zone,
+                    sourceWorkspace: sourceWorkspace, destWorkspace: destWorkspace,
+                    closeSourceWorkspace: true)
+            }
+        } else {
+            executeCrossWorkspaceDrop(
+                source: source, tabIndex: tabIndex, dest: dest, zone: zone,
+                sourceWorkspace: sourceWorkspace, destWorkspace: destWorkspace,
+                closeSourceWorkspace: false)
+        }
+    }
+
+    private func executeCrossWorkspaceDrop(
+        source: PaneView, tabIndex: Int, dest: PaneView, zone: TabDropZone,
+        sourceWorkspace: Workspace, destWorkspace: Workspace,
+        closeSourceWorkspace: Bool
+    ) {
+        let sourcePane = source.pane
+        guard let tab = sourcePane.extractTab(at: tabIndex) else { return }
+        let gv = source.extractGhosttyView(for: tab.id)
+
+        // Restore source view if still has tabs
+        if !sourcePane.tabs.isEmpty {
+            source.startActiveSession()
+            source.layoutTerminalView()
+            source.needsDisplay = true
+        }
+
+        // Perform the drop into the destination workspace
+        switch zone {
+        case .tabBarInsert(let insertIdx):
+            let insertIndex = min(insertIdx, dest.pane.tabs.count)
+            dest.pane.insertTab(tab, at: insertIndex)
+            if let gv = gv { dest.insertGhosttyView(gv, for: tab.id) }
+            dest.forceActivateTab(insertIndex)
+            destWorkspace.activePaneID = dest.paneID
+            window?.makeFirstResponder(dest.ghosttyView)
+        case .left, .right, .top, .bottom:
+            let direction: SplitTree.SplitDirection = (zone == .left || zone == .right) ? .horizontal : .vertical
+            let insertBefore = (zone == .left || zone == .top)
+            let newPaneID = destWorkspace.splitPane(dest.paneID, direction: direction)
+            if insertBefore {
+                destWorkspace.splitTree = destWorkspace.splitTree.swappingChildrenAtParent(of: newPaneID)
+            }
+            if let newPane = destWorkspace.pane(for: newPaneID) {
+                newPane.stopAll()
+                newPane.insertTab(tab, at: 0)
+            }
+            destWorkspace.activePaneID = newPaneID
+            splitContainer.update(tree: destWorkspace.splitTree)
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self else { return }
+                if let newPV = self.paneViews[newPaneID] {
+                    if let gv = gv { newPV.insertGhosttyView(gv, for: tab.id) }
+                    newPV.tabDragCoordinator = self.tabDragCoordinator
+                    newPV.startActiveSession()
+                    self.window?.makeFirstResponder(newPV.ghosttyView)
+                }
+                for id in destWorkspace.splitTree.leafIDs where id != newPaneID {
+                    self.paneViews[id]?.startActiveSession()
+                }
+                self.refreshAllSurfaces()
+                self.syncCoordinatorPaneViews()
+                self.updatePaneCloseButtons()
+            }
+        }
+
+        // Close source pane / workspace
+        if closeSourceWorkspace {
+            if let idx = appState.workspaces.firstIndex(where: { $0.id == sourceWorkspace.id }) {
+                // Notify terminals then destroy views — but don't switch workspace (we're already on dest)
+                for pane in sourceWorkspace.panes.values {
+                    notifyTerminalClosed(for: pane.tabs)
+                }
+                if let views = workspacePaneViews.removeValue(forKey: sourceWorkspace.id) {
+                    for (_, pv) in views { pv.stopAll() }
+                }
+                appState.removeWorkspace(at: idx)
+                refreshToolbar()
+                saveSession()
+            }
+        } else if sourcePane.tabs.isEmpty {
+            // Source pane is now empty — close just the pane in the source workspace
+            workspacePaneViews[sourceWorkspace.id]?.removeValue(forKey: source.paneID)
+            source.stopAll()
+            _ = sourceWorkspace.closePane(source.paneID)
+            saveSession()
+        }
+
+        saveSession()
     }
 
     private func moveTabBetweenPanes(source: PaneView, tabIndex: Int, dest: PaneView, insertAt: Int) {
