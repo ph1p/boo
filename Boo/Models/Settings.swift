@@ -222,7 +222,7 @@ final class AppSettings {
     var fontSize: CGFloat {
         get {
             let v = UserDefaults.standard.double(forKey: K.fontSize)
-            return v > 0 ? CGFloat(v) : 14.0
+            return v > 0 ? CGFloat(v) : 13.0
         }
         set { set(Double(newValue), forKey: K.fontSize, topic: .terminal) }
     }

@@ -36,8 +36,7 @@ struct SettingsView: View {
     enum Tab: String, CaseIterable {
         case general = "General"
         case theme = "Theme"
-        case terminal = "Terminal"
-        case sidebar = "Sidebar"
+        case appearance = "Appearance"
         case statusBar = "Status Bar"
         case layout = "Layout"
         case plugins = "Plugins"
@@ -47,8 +46,7 @@ struct SettingsView: View {
             switch self {
             case .general: return "gear"
             case .theme: return "paintpalette"
-            case .terminal: return "terminal"
-            case .sidebar: return "sidebar.left"
+            case .appearance: return "textformat"
             case .statusBar: return "rectangle.bottomthird.inset.filled"
             case .layout: return "rectangle.3.group"
             case .plugins: return "puzzlepiece"
@@ -141,8 +139,7 @@ struct SettingsView: View {
         switch selectedTab {
         case .general: GeneralSettingsView()
         case .theme: ThemeSettingsView()
-        case .terminal: TerminalSettingsView()
-        case .sidebar: SidebarSettingsView()
+        case .appearance: AppearanceSettingsView()
         case .statusBar: StatusBarSettingsView()
         case .layout: LayoutSettingsView()
         case .plugins: PluginSettingsView()
@@ -842,31 +839,25 @@ private struct GeneralSettingsView: View {
     }
 }
 
-// MARK: - Terminal
+// MARK: - Appearance
 
-private struct TerminalSettingsView: View {
+private struct AppearanceSettingsView: View {
     @State private var cursorStyle = AppSettings.shared.cursorStyle
-    @State private var fontSize = Double(AppSettings.shared.fontSize)
-    @State private var selectedFont = AppSettings.shared.fontName
-    @ObservedObject private var observer = SettingsObserver(topics: [.theme, .terminal])
+    @State private var termFontSize = Double(AppSettings.shared.fontSize)
+    @State private var termSelectedFont = AppSettings.shared.fontName
+    @State private var sidebarFontSize = Double(AppSettings.shared.sidebarFontSize)
+    @State private var sidebarSelectedFont =
+        AppSettings.shared.sidebarFontName.isEmpty ? "System Default" : AppSettings.shared.sidebarFontName
+    @ObservedObject private var observer = SettingsObserver(topics: [.theme, .terminal, .sidebarFont])
 
-    private let fonts = AppSettings.availableMonospaceFonts
+    private let monoFonts = AppSettings.availableMonospaceFonts
+    private let systemFonts = AppSettings.availableSystemFonts
 
     var body: some View {
         let _ = observer.revision
         let t = Tokens.current
 
-        SettingsPage(title: "Terminal") {
-            Section(title: "Font") {
-                FontChooser(selectedFont: $selectedFont, fonts: fonts)
-                    .onChange(of: selectedFont) { v in AppSettings.shared.fontName = v }
-            }
-
-            Section(title: "Font Size") {
-                FontSizePicker(value: $fontSize, range: 10...28)
-                    .onChange(of: fontSize) { v in AppSettings.shared.fontSize = CGFloat(v) }
-            }
-
+        SettingsPage(title: "Appearance") {
             Section(title: "Cursor") {
                 Picker("", selection: $cursorStyle) {
                     ForEach(CursorStyle.allCases, id: \.self) { Text($0.label).tag($0) }
@@ -876,62 +867,37 @@ private struct TerminalSettingsView: View {
                 .onChange(of: cursorStyle) { v in AppSettings.shared.cursorStyle = v }
             }
 
-            Section(title: "Preview") {
+            Section(title: "Terminal Font") {
+                FontChooser(selectedFont: $termSelectedFont, fonts: monoFonts)
+                    .onChange(of: termSelectedFont) { v in AppSettings.shared.fontName = v }
+                FontSizePicker(value: $termFontSize, range: 10...28)
+                    .onChange(of: termFontSize) { v in AppSettings.shared.fontSize = CGFloat(v) }
                 Text("$ echo \"Hello, Boo\"")
-                    .font(.custom(selectedFont, size: CGFloat(fontSize)))
+                    .font(.custom(termSelectedFont, size: CGFloat(termFontSize)))
                     .foregroundColor(t.fg)
                     .padding(8)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(RoundedRectangle(cornerRadius: 6).fill(t.termBg))
             }
 
-        }
-    }
-
-}
-
-// MARK: - Sidebar
-
-private struct SidebarSettingsView: View {
-    @State private var fontSize = Double(AppSettings.shared.sidebarFontSize)
-    @State private var selectedFont =
-        AppSettings.shared.sidebarFontName.isEmpty ? "System Default" : AppSettings.shared.sidebarFontName
-    @ObservedObject private var observer = SettingsObserver(topics: [.theme, .explorer, .sidebarFont])
-
-    private let fonts = AppSettings.availableSystemFonts
-
-    var body: some View {
-        let _ = observer.revision
-        let t = Tokens.current
-
-        SettingsPage(title: "Sidebar") {
-            Section(title: "Base Font Size") {
-                Text("All sidebar text is relative to this size.")
-                    .font(.system(size: 11))
-                    .foregroundColor(t.muted)
-                FontSizePicker(value: $fontSize, range: 10...20)
-                    .onChange(of: fontSize) { v in AppSettings.shared.sidebarFontSize = CGFloat(v) }
-            }
-
-            Section(title: "Content Font") {
+            Section(title: "Sidebar Font") {
+                FontChooser(selectedFont: $sidebarSelectedFont, fonts: systemFonts)
+                    .onChange(of: sidebarSelectedFont) { v in
+                        AppSettings.shared.sidebarFontName = v == "System Default" ? "" : v
+                    }
+                FontSizePicker(value: $sidebarFontSize, range: 10...20)
+                    .onChange(of: sidebarFontSize) { v in AppSettings.shared.sidebarFontSize = CGFloat(v) }
                 Text("Applied to file trees and content only — not to section headers.")
                     .font(.system(size: 11))
                     .foregroundColor(t.muted)
-                FontChooser(selectedFont: $selectedFont, fonts: fonts)
-                    .onChange(of: selectedFont) { v in
-                        AppSettings.shared.sidebarFontName = v == "System Default" ? "" : v
-                    }
-            }
-
-            Section(title: "Preview") {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Section Header")
                         .font(.system(size: 11, weight: .medium))
                         .foregroundColor(t.muted)
                     let previewFont: Font = {
-                        let name = selectedFont == "System Default" ? "" : selectedFont
-                        if name.isEmpty { return .system(size: CGFloat(fontSize)) }
-                        return .custom(name, size: CGFloat(fontSize))
+                        let name = sidebarSelectedFont == "System Default" ? "" : sidebarSelectedFont
+                        if name.isEmpty { return .system(size: CGFloat(sidebarFontSize)) }
+                        return .custom(name, size: CGFloat(sidebarFontSize))
                     }()
                     Text("  Documents")
                         .font(previewFont)
@@ -958,6 +924,8 @@ private struct StatusBarSettingsView: View {
     @State private var showTime = AppSettings.shared.statusBarShowTime
     @State private var showPaneInfo = AppSettings.shared.statusBarShowPaneInfo
     @State private var showConnection = AppSettings.shared.statusBarShowConnection
+    @State private var showPath = AppSettings.shared.statusBarShowPath
+    @State private var showGitBranch = AppSettings.shared.statusBarShowGitBranch
     @ObservedObject private var observer = SettingsObserver(topics: [.theme, .statusBar])
 
     var body: some View {
@@ -967,6 +935,10 @@ private struct StatusBarSettingsView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     ToggleRow(label: "Connection", isOn: $showConnection)
                         .onChange(of: showConnection) { v in AppSettings.shared.statusBarShowConnection = v }
+                    ToggleRow(label: "Current path", isOn: $showPath)
+                        .onChange(of: showPath) { v in AppSettings.shared.statusBarShowPath = v }
+                    ToggleRow(label: "Git branch", isOn: $showGitBranch)
+                        .onChange(of: showGitBranch) { v in AppSettings.shared.statusBarShowGitBranch = v }
                 }
             }
 
@@ -1006,14 +978,20 @@ struct LayoutSettingsView: View {
 
                 ToggleRow(label: "Hide sidebar by default", isOn: $sidebarDefaultHidden)
                     .onChange(of: sidebarDefaultHidden) { v in AppSettings.shared.sidebarDefaultHidden = v }
+                Text("Toggle the sidebar with \u{2318}B.")
+                    .font(.system(size: 11))
+                    .foregroundColor(t.muted)
             }
 
-            Section(title: "Workspace Bar Position") {
+            Section(title: "Workspace Bar") {
                 Picker("", selection: $workspaceBarPosition) {
                     ForEach(WorkspaceBarPosition.allCases, id: \.self) { Text($0.label).tag($0) }
                 }
                 .pickerStyle(.segmented)
                 .onChange(of: workspaceBarPosition) { v in AppSettings.shared.workspaceBarPosition = v }
+                Text("Position of the workspace switcher bar.")
+                    .font(.system(size: 11))
+                    .foregroundColor(t.muted)
             }
 
             Section(title: "Tab Overflow") {
@@ -1022,6 +1000,9 @@ struct LayoutSettingsView: View {
                 }
                 .pickerStyle(.segmented)
                 .onChange(of: tabOverflowMode) { v in AppSettings.shared.tabOverflowMode = v }
+                Text("How tabs behave when they exceed the available bar width.")
+                    .font(.system(size: 11))
+                    .foregroundColor(t.muted)
             }
 
         }
