@@ -89,10 +89,12 @@ class SplitContainerView: NSView, NSSplitViewDelegate {
         else { return }
 
         // Compute ratio from the actual divider position
-        let firstSize = splitView.isVertical
+        let firstSize =
+            splitView.isVertical
             ? splitView.subviews[0].frame.width
             : splitView.subviews[0].frame.height
-        let totalSize = splitView.isVertical
+        let totalSize =
+            splitView.isVertical
             ? splitView.bounds.width
             : splitView.bounds.height
         guard totalSize > 0 else { return }
@@ -120,8 +122,10 @@ class SplitContainerView: NSView, NSSplitViewDelegate {
             if sv === splitView {
                 return .split(direction: dir, first: first, second: second, ratio: newRatio)
             }
-            let newFirst = updatingRatio(in: first, newRatio: newRatio, matchingSplitView: splitView, rootView: sv.subviews[0])
-            let newSecond = updatingRatio(in: second, newRatio: newRatio, matchingSplitView: splitView, rootView: sv.subviews[1])
+            let newFirst = updatingRatio(
+                in: first, newRatio: newRatio, matchingSplitView: splitView, rootView: sv.subviews[0])
+            let newSecond = updatingRatio(
+                in: second, newRatio: newRatio, matchingSplitView: splitView, rootView: sv.subviews[1])
             return .split(direction: dir, first: newFirst, second: newSecond, ratio: ratio)
         }
     }

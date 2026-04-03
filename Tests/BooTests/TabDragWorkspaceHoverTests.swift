@@ -29,7 +29,7 @@ final class TabDragWorkspaceHoverTests: XCTestCase {
     func testWorkspacePillFramesCanBeSet() {
         let frames: [(index: Int, screenFrame: NSRect)] = [
             (0, NSRect(x: 100, y: 100, width: 80, height: 24)),
-            (1, NSRect(x: 190, y: 100, width: 80, height: 24)),
+            (1, NSRect(x: 190, y: 100, width: 80, height: 24))
         ]
         coordinator.workspacePillFrames = { frames }
         XCTAssertNotNil(coordinator.workspacePillFrames)
