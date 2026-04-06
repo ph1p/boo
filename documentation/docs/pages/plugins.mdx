@@ -212,10 +212,14 @@ The Settings window (Plugins tab) dynamically renders controls for each plugin's
 | **Git** (`git-panel`) | `showBranch` | Bool | `true` | Show git branch in status bar |
 | **Files** (`file-tree-local`) | `showHiddenFiles` | Bool | `false` | Show hidden files |
 | **Files** (`file-tree-local`) | `showIcons` | Bool | `true` | Show file icons |
-| **Files** (`file-tree-local`) | `fontSize` | Double | `12.0` | Font size |
-| **Files** (`file-tree-local`) | `fontName` | String | `""` | Font (empty = system default) |
+| **Files** (`file-tree-local`) | `showPath` | Bool | `true` | Show current path above tree |
+| **Files** (`file-tree-local`) | `showProcess` | Bool | `true` | Show running process name |
+| **Files** (`file-tree-local`) | `useTimg` | Bool | `true` | Preview images with timg (if installed) |
+| **Files** (`file-tree-local`) | `editorExtensions` | String | *(see below)* | Comma-separated list of extensions that open in the terminal editor |
 
-Both `LocalFileTreePlugin` and `RemoteFileTreePlugin` share the `file-tree-local` settings namespace for display configuration.
+The `editorExtensions` setting controls which file types open in the terminal editor (via the configured editor command or `$EDITOR`). All other types open with the default macOS app. The default list covers common source and text formats.
+
+If `timg` is installed (`brew install timg`), image files open inline in a new terminal tab. The `useTimg` toggle disables this if preferred.
 
 ## Plugin Enable/Disable
 
