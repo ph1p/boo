@@ -5,6 +5,7 @@ import UniformTypeIdentifiers
 
 struct FileTreeActions {
     var onFileClicked: ((String) -> Void)?
+    var onPastePath: ((String) -> Void)?
     var onOpenInTab: ((String) -> Void)?
     var onOpenInPane: ((String) -> Void)?
     var onCopyPath: ((String) -> Void)?
@@ -351,9 +352,10 @@ struct FileTreeRowView: View {
                 Button("cd into") { actions.onNavigate?(node.path) }
             }
         } else {
+            Button("Open in Editor") { actions.onFileClicked?(node.path) }
             Button("cat") { actions.onRunCommand?("cat \(shellEscape(node.path))\r") }
         }
-        Button("Paste Path to Terminal") { actions.onFileClicked?(node.path) }
+        Button("Paste Path to Terminal") { actions.onPastePath?(node.path) }
         Divider()
 
         // OS
