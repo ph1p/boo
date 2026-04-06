@@ -37,6 +37,13 @@ Toggle the sidebar with **Cmd+B**. The explorer shows a live-updating file tree 
 - **Remote SSH** — Auto-detects SSH sessions, lists files via `ssh <host> ls -1AF`
 - **Remote Docker** — Auto-detects `docker exec` sessions, lists files via `docker exec <container> sh -c 'ls -1AF'`
 
+**File click behavior:**
+- **Source/text files** — Opens a new tab in the file's parent directory and runs the configured editor (set in General Settings → File Editor, falls back to `$EDITOR`, then `vi`)
+- **Images** — Opens inline via `timg` in a new tab if installed; otherwise opens with the default macOS app
+- **Other files** — Opens with the default macOS app
+
+Configure which extensions open in the editor (and toggle timg) in **Settings → Plugins → Files**.
+
 ## Themes
 
 32 built-in color themes with live preview swatches in settings:
