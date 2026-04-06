@@ -165,15 +165,21 @@ final class LocalFileTreePlugin: BooPluginProtocol {
         )
 
         let tid = context.terminal.terminalID
-        saveExpandedState()
-        let root = getOrCreateRoot(for: context.terminal.cwd)
+        let cwd = context.terminal.cwd
+        let isSameTerminalAndCwd = (tid == lastTerminalID && terminalCwd[tid] == cwd)
 
-        // Restore expanded folders for this terminal
-        if let saved = expandedState[tid] {
+        if !isSameTerminalAndCwd {
+            saveExpandedState()
+        }
+        let root = getOrCreateRoot(for: cwd)
+
+        // Only restore on terminal/CWD switch — skipping on same-context re-renders
+        // prevents save→restore from collapsing folders the user just opened.
+        if !isSameTerminalAndCwd, let saved = expandedState[tid] {
             root.restoreExpanded(saved)
         }
         lastTerminalID = tid
-        terminalCwd[tid] = context.terminal.cwd
+        terminalCwd[tid] = cwd
 
         return AnyView(FileTreeView(root: root, actions: treeActions))
     }
