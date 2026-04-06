@@ -118,6 +118,7 @@ final class AppSettings {
         static let sidebarWidth = "sidebarWidth"
         static let pluginSettings = "pluginSettings"
         static let migratedPluginSettings_v1 = "migratedPluginSettings_v1"
+        static let fileEditorCommand = "fileEditorCommand"
 
         static let autoCheckUpdates = "autoCheckUpdates"
         static let lastUpdateCheck = "lastUpdateCheck"
@@ -242,6 +243,13 @@ final class AppSettings {
     var explorerIconsEnabled: Bool {
         get { pluginBool("file-tree-local", "showIcons", default: true) }
         set { setPluginSetting("file-tree-local", "showIcons", newValue, topic: .explorer) }
+    }
+
+    /// Command used to open files from the file tree (e.g. "vim", "nvim", "nano").
+    /// Empty string means use $EDITOR env var, falling back to "vi".
+    var fileEditorCommand: String {
+        get { UserDefaults.standard.string(forKey: K.fileEditorCommand) ?? "" }
+        set { set(newValue, forKey: K.fileEditorCommand, topic: .explorer) }
     }
 
     /// Global base font size for the sidebar. All sidebar content scales from this.
@@ -562,7 +570,8 @@ final class AppSettings {
             K.sidebarPluginOrder: sidebarPluginOrder,
             K.pluginSettings: pluginSettingsDict,
             K.sidebarFontSize: Double(sidebarFontSize),
-            K.sidebarFontName: sidebarFontName
+            K.sidebarFontName: sidebarFontName,
+            K.fileEditorCommand: fileEditorCommand
         ]
         dict[K.autoCheckUpdates] = autoCheckUpdates
         if let skipVersion {

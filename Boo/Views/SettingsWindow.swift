@@ -813,6 +813,7 @@ private struct GeneralSettingsView: View {
     @State private var defaultFolder = AppSettings.shared.defaultFolder
     @State private var autoCheckUpdates = AppSettings.shared.autoCheckUpdates
     @State private var debugLogging = AppSettings.shared.debugLogging
+    @State private var fileEditorCommand = AppSettings.shared.fileEditorCommand
     @ObservedObject private var observer = SettingsObserver(topics: [.theme])
 
     var body: some View {
@@ -852,6 +853,32 @@ private struct GeneralSettingsView: View {
                     .buttonStyle(.bordered)
                     .controlSize(.small)
                 }
+            }
+
+            Section(title: "File Editor") {
+                HStack(spacing: 8) {
+                    TextField("vim, nvim, nano… (empty = $EDITOR)", text: $fileEditorCommand)
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 12, design: .monospaced))
+                        .foregroundColor(t.text)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 5)
+                        .background(
+                            RoundedRectangle(cornerRadius: 6)
+                                .stroke(t.border, lineWidth: 1)
+                        )
+                        .onSubmit {
+                            AppSettings.shared.fileEditorCommand =
+                                fileEditorCommand.trimmingCharacters(in: .whitespaces)
+                        }
+                        .onChange(of: fileEditorCommand) { v in
+                            AppSettings.shared.fileEditorCommand =
+                                v.trimmingCharacters(in: .whitespaces)
+                        }
+                }
+                Text("Command run when clicking a file in the explorer. Leave empty to use $EDITOR.")
+                    .font(.system(size: 11))
+                    .foregroundColor(t.muted)
             }
 
             Section(title: "Updates") {
@@ -1488,8 +1515,10 @@ private struct PluginSettingControl: View {
                     Spacer()
                     fontPicker(value: value, fonts: AppSettings.availableMonospaceFonts)
                 }
-            } else if setting.options == "dockerSocket" {
-                dockerSocketControl(value: value)
+            } else if setting.options == "timgStatus" {
+                timgStatusControl
+            } else if setting.options == "editorExtensions" {
+                editorExtensionsControl(value: value)
             } else {
                 HStack {
                     Text(setting.label)
@@ -1507,6 +1536,47 @@ private struct PluginSettingControl: View {
                     .frame(width: 150)
                 }
             }
+        }
+    }
+
+    private var timgStatusControl: some View {
+        let installed = LocalFileTreePlugin.timgPath
+        return HStack(spacing: 6) {
+            Circle()
+                .fill(installed != nil ? Color.green : Color(nsColor: .tertiaryLabelColor))
+                .frame(width: 7, height: 7)
+            if let path = installed {
+                Text(path)
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundColor(Tokens.current.muted)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            } else {
+                Text("timg not found — install via Homebrew: brew install timg")
+                    .font(.system(size: 11))
+                    .foregroundColor(Tokens.current.muted)
+            }
+        }
+    }
+
+    private func editorExtensionsControl(value: String) -> some View {
+        let t = Tokens.current
+        return VStack(alignment: .leading, spacing: 4) {
+            Text(setting.label)
+                .font(.system(size: 12))
+                .foregroundColor(t.text)
+            TextField(
+                LocalFileTreePlugin.defaultEditorExtensions,
+                text: Binding(
+                    get: { value },
+                    set: { AppSettings.shared.setPluginSetting(pluginID, setting.key, $0) }
+                )
+            )
+            .textFieldStyle(.roundedBorder)
+            .font(.system(size: 11, design: .monospaced))
+            Text("Comma-separated. Other file types open with the default app.")
+                .font(.system(size: 11))
+                .foregroundColor(t.muted)
         }
     }
 

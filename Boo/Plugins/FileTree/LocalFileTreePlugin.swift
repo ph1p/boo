@@ -16,19 +16,62 @@ final class LocalFileTreePlugin: BooPluginProtocol {
         statusBar: PluginManifest.StatusBarManifest(position: "left", priority: 5, template: nil),
         settings: [
             PluginManifest.SettingManifest(
-                key: "showHiddenFiles", type: .bool, label: "Show hidden files", defaultValue: AnyCodableValue(false),
-                options: nil),
+                key: "showHiddenFiles", type: .bool, label: "Show hidden files",
+                defaultValue: AnyCodableValue(false), options: nil),
             PluginManifest.SettingManifest(
-                key: "showIcons", type: .bool, label: "Show file icons", defaultValue: AnyCodableValue(true),
-                options: nil),
+                key: "showIcons", type: .bool, label: "Show file icons",
+                defaultValue: AnyCodableValue(true), options: nil),
             PluginManifest.SettingManifest(
-                key: "showPath", type: .bool, label: "Show current path", defaultValue: AnyCodableValue(true),
-                options: nil),
+                key: "showPath", type: .bool, label: "Show current path",
+                defaultValue: AnyCodableValue(true), options: nil),
             PluginManifest.SettingManifest(
-                key: "showProcess", type: .bool, label: "Show running process", defaultValue: AnyCodableValue(true),
-                options: nil)
+                key: "showProcess", type: .bool, label: "Show running process",
+                defaultValue: AnyCodableValue(true), options: nil),
+            PluginManifest.SettingManifest(
+                key: "useTimg", type: .bool, label: "Preview images with timg",
+                defaultValue: AnyCodableValue(true), options: nil),
+            PluginManifest.SettingManifest(
+                key: "_timgStatus", type: .string, label: "timg",
+                defaultValue: nil, options: "timgStatus"),
+            PluginManifest.SettingManifest(
+                key: "editorExtensions", type: .string,
+                label: "Open in editor (extensions)",
+                defaultValue: AnyCodableValue(LocalFileTreePlugin.defaultEditorExtensions),
+                options: "editorExtensions")
         ]
     )
+
+    private static let imageExtensions: Set<String> = [
+        "png", "jpg", "jpeg", "gif", "webp", "bmp", "tiff", "tif", "ico", "svg", "heic", "heif",
+        "avif"
+    ]
+
+    /// Default comma-separated list of extensions that open in the terminal editor.
+    static let defaultEditorExtensions =
+        "swift,m,h,c,cpp,js,ts,jsx,tsx,py,rb,go,rs,java,kt,sh,bash,zsh,fish,"
+        + "html,css,scss,sass,less,vue,svelte,json,yaml,yml,toml,xml,plist,"
+        + "md,txt,log,conf,cfg,ini,env,gitignore,dockerfile,makefile"
+
+    /// Returns the current set of editor extensions from plugin settings.
+    private static func editorExtensionSet() -> Set<String> {
+        let raw = AppSettings.shared.pluginString(
+            "file-tree-local", "editorExtensions",
+            default: defaultEditorExtensions
+        )
+        return Set(
+            raw.split(separator: ",")
+                .map { $0.trimmingCharacters(in: .whitespaces).lowercased() }
+                .filter { !$0.isEmpty }
+        )
+    }
+
+    /// Path to timg if installed, nil otherwise. Resolved once and cached.
+    static let timgPath: String? = {
+        let candidates = [
+            "/opt/homebrew/bin/timg", "/usr/local/bin/timg", "/usr/bin/timg"
+        ]
+        return candidates.first { FileManager.default.isExecutableFile(atPath: $0) }
+    }()
 
     /// Cached file tree roots keyed by path for instant switching.
     private var cachedRoots: [String: FileTreeNode] = [:]
@@ -83,6 +126,34 @@ final class LocalFileTreePlugin: BooPluginProtocol {
         let isAI = ProcessIcon.category(for: context.terminal.processName) == "ai"
         let treeActions = FileTreeActions(
             onFileClicked: { path in
+                let ext = (path as NSString).pathExtension.lowercased()
+                let isImage = Self.imageExtensions.contains(ext)
+                let useTimg = AppSettings.shared.pluginBool(
+                    "file-tree-local", "useTimg", default: true)
+                if isImage && Self.timgPath != nil && useTimg {
+                    let parentDir = (path as NSString).deletingLastPathComponent
+                    act?.openDirectoryInNewTab?(parentDir)
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                        act?.sendToTerminal?("timg \(shellEscape(path))\r")
+                    }
+                } else if Self.editorExtensionSet().contains(ext) {
+                    let parentDir = (path as NSString).deletingLastPathComponent
+                    act?.openDirectoryInNewTab?(parentDir)
+                    let configured = AppSettings.shared.fileEditorCommand.trimmingCharacters(
+                        in: .whitespaces
+                    )
+                    var editorCmd = configured
+                    if editorCmd.isEmpty {
+                        editorCmd = ProcessInfo.processInfo.environment["EDITOR"] ?? "vi"
+                    }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                        act?.sendToTerminal?("\(editorCmd) \(shellEscape(path))\r")
+                    }
+                } else {
+                    NSWorkspace.shared.open(URL(fileURLWithPath: path))
+                }
+            },
+            onPastePath: { path in
                 act?.pastePath(path)
             },
             onOpenInTab: { path in
@@ -172,6 +243,14 @@ final class LocalFileTreePlugin: BooPluginProtocol {
             saveExpandedState()
         }
         let root = getOrCreateRoot(for: cwd)
+
+        // On context switch, always reload the root's children — the root may be a
+        // cached node whose children are nil (e.g. after eviction) or stale, and
+        // SwiftUI's onAppear doesn't fire when rootView is replaced in-place via
+        // NSHostingView.rootView, so we must trigger the load here.
+        if !isSameTerminalAndCwd {
+            root.loadChildren()
+        }
 
         // Only restore on terminal/CWD switch — skipping on same-context re-renders
         // prevents save→restore from collapsing folders the user just opened.
