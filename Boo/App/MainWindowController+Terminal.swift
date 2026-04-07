@@ -3,9 +3,12 @@ import Cocoa
 
 extension MainWindowController {
     var activeGhosttyView: GhosttyView? {
-        guard let workspace = activeWorkspace,
-            let pv = paneViews[workspace.activePaneID]
-        else { return nil }
+        guard let workspace = activeWorkspace else { return nil }
+        return ghosttyView(for: workspace.activePaneID)
+    }
+
+    func ghosttyView(for paneID: UUID) -> GhosttyView? {
+        guard let pv = paneViews[paneID] else { return nil }
         // currentTerminalView may be a TerminalScrollView wrapping the GhosttyView
         if let gv = pv.currentTerminalView as? GhosttyView { return gv }
         if let wrapper = pv.currentTerminalView as? TerminalScrollView { return wrapper.ghosttyView }
@@ -93,25 +96,8 @@ extension MainWindowController {
     }
 
     /// Send text to the active terminal as keyboard input (not paste).
-    /// Splits at control characters (\r, \n) and sends them as key events.
     func sendRawToActivePane(_ text: String) {
-        guard let gv = activeGhosttyView else { return }
-        var buf = ""
-        for char in text {
-            if char == "\r" || char == "\n" {
-                if !buf.isEmpty {
-                    gv.sendKey(keyCode: 0, mods: GHOSTTY_MODS_NONE, text: buf)
-                    buf = ""
-                }
-                // Enter key (keyCode 0x24 = Return)
-                gv.sendKey(keyCode: 0x24, mods: GHOSTTY_MODS_NONE, text: "\r")
-            } else {
-                buf.append(char)
-            }
-        }
-        if !buf.isEmpty {
-            gv.sendKey(keyCode: 0, mods: GHOSTTY_MODS_NONE, text: buf)
-        }
+        activeGhosttyView?.sendRaw(text)
     }
 
     func openDirectoryInNewTab(_ path: String) {
@@ -147,6 +133,41 @@ extension MainWindowController {
             self.syncCoordinatorPaneViews()
             self.updatePaneCloseButtons()
             self.refreshStatusBar()
+        }
+    }
+
+    /// Flush a pending image send for `paneID` if a shell PID is available.
+    /// Called from both `onShellPIDUpdated` (new PID registered) and `didFocus`
+    /// (pane becomes active — shell must be running if user can interact with it).
+    /// Flush a pending image send keyed by `tabID`.
+    /// `shellPID` is the PID to send to; if nil, look up the current pane PID (for didFocus path).
+    func flushPendingImageSend(for tabID: UUID, shellPID: pid_t? = nil, paneID: UUID? = nil) {
+        guard let pending = pendingImageSends[tabID] else { return }
+        let pid: pid_t?
+        if let shellPID {
+            pid = shellPID
+        } else if let paneID {
+            pid = bridge.monitor.shellPID(for: paneID)
+        } else {
+            return
+        }
+        guard let pid, pid != pending.failedPID else { return }
+        pendingImageSends.removeValue(forKey: tabID)
+        let path = pending.path
+        let size = pending.size
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let ok = KittyImageProtocol.sendImage(imagePath: path, to: pid, terminalSize: size)
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                if ok {
+                } else {
+                    self.pendingImageSends[tabID] = (path, size, pid)
+                    // Trigger a shell PID refresh — zsh may have re-exec'd to a new PID.
+                    if let paneID {
+                        self.ghosttyView(for: paneID)?.refreshShellPIDIfNeeded(currentPID: pid)
+                    }
+                }
+            }
         }
     }
 

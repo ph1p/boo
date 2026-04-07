@@ -60,6 +60,10 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
     private var pendingCycleReason: PluginCycleReason?
     private var cycleScheduled = false
 
+    /// Pending image sends keyed by tab ID, waiting for a live shell PID.
+    /// `failedPID` is the PID that last failed — only retry with a different PID.
+    var pendingImageSends: [UUID: (path: String, size: ghostty_surface_size_s?, failedPID: pid_t)] = [:]
+
     /// Focus debounce — prevents sidebar rebuild from causing a focus feedback loop.
     var lastFocusedPaneID: UUID?
     /// Debounce timer for saving the session after split-pane divider drags.
@@ -131,6 +135,7 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
 
     func notifyTerminalClosed(for terminalID: UUID) {
         pluginRegistry.notifyTerminalClosed(terminalID: terminalID)
+        pendingImageSends.removeValue(forKey: terminalID)
     }
 
     func notifyTerminalClosed(for tabs: [Pane.Tab]) {
@@ -184,7 +189,55 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
         pluginActions.openDirectoryInNewTab = { [weak self] in self?.openDirectoryInNewTab($0) }
         pluginActions.openDirectoryInNewPane = { [weak self] in self?.openDirectoryInNewPane($0) }
         pluginActions.pastePathToActivePane = { [weak self] in self?.pastePathToActivePane($0) }
+        pluginActions.displayImageInTerminal = { [weak self] path, newTab in
+            guard let self, let workspace = self.activeWorkspace else { return }
+            let paneID = workspace.activePaneID
+            let activeTabID = workspace.pane(for: paneID)?.activeTab?.id
+            let size: ghostty_surface_size_s? = self.ghosttyView(for: paneID)?.surface.map {
+                ghostty_surface_size($0)
+            }
+            func send(tabID: UUID, to shellPID: pid_t) {
+                DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                    let ok = KittyImageProtocol.sendImage(imagePath: path, to: shellPID, terminalSize: size)
+                    if !ok {
+                        DispatchQueue.main.async { [weak self] in
+                            guard let self else { return }
+                            self.pendingImageSends[tabID] = (path, size, shellPID)
+                            // zsh may have re-exec'd — refresh from the login process.
+                            self.ghosttyView(for: paneID)?.refreshShellPIDIfNeeded(currentPID: shellPID)
+                        }
+                    }
+                }
+            }
+            if newTab {
+                guard let pv = self.paneViews[paneID],
+                    let newTabID = pv.addNewTab(workingDirectory: path.deletingLastPathComponent)
+                else { return }
+                self.refreshStatusBar()
+                // Queue keyed by the new tab's ID — isolated from other tabs' retries.
+                self.pendingImageSends[newTabID] = (path, size, 0)
+            } else {
+                guard let tabID = activeTabID else { return }
+                guard let shellPID = self.bridge.monitor.shellPID(for: paneID) else {
+                    self.pendingImageSends[tabID] = (path, size, 0)
+                    return
+                }
+                send(tabID: tabID, to: shellPID)
+            }
+        }
         pluginRegistry.actions = pluginActions
+        bridge.monitor.onShellPIDUpdated = { [weak self] paneID, shellPID, tabID in
+            guard let self, let tabID else { return }
+            let isNewTab = self.pendingImageSends[tabID]?.failedPID == 0
+            if isNewTab {
+                // Delay sending until zsh has finished init and printed its first prompt.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self] in
+                    self?.flushPendingImageSend(for: tabID, shellPID: shellPID)
+                }
+            } else {
+                self.flushPendingImageSend(for: tabID, shellPID: shellPID)
+            }
+        }
         pluginRegistry.hostActions = PluginHostActions(
             pastePathToActivePane: { [weak self] in self?.pastePathToActivePane($0) },
             openDirectoryInNewTab: { [weak self] in self?.openDirectoryInNewTab($0) },
@@ -324,7 +377,7 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
             // Explorer/plugin changes: refresh sidebar via a cycle
             if topic == nil || topic == .explorer || topic == .sidebarFont || topic == .plugins {
                 if self.sidebarVisible {
-                    if topic == .sidebarFont, let ctx = self.pluginRegistry.lastContext {
+                    if topic == .sidebarFont, let ctx = MainActor.assumeIsolated({ self.pluginRegistry.lastContext }) {
                         // Only font settings changed — wipe view cache so makeDetailView
                         // is called again with the new fontScale, then rebuild directly.
                         // rebuildPluginSidebar is guarded by contextChanged/visibilityChanged,

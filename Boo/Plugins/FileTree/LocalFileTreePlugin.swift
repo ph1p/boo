@@ -28,11 +28,11 @@ final class LocalFileTreePlugin: BooPluginProtocol {
                 key: "showProcess", type: .bool, label: "Show running process",
                 defaultValue: AnyCodableValue(true), options: nil),
             PluginManifest.SettingManifest(
-                key: "useTimg", type: .bool, label: "Preview images with timg",
+                key: "useKitty", type: .bool, label: "Preview images inline",
                 defaultValue: AnyCodableValue(true), options: nil),
             PluginManifest.SettingManifest(
-                key: "_timgStatus", type: .string, label: "timg",
-                defaultValue: nil, options: "timgStatus"),
+                key: "kittyNewTab", type: .bool, label: "Open image in new tab",
+                defaultValue: AnyCodableValue(true), options: nil),
             PluginManifest.SettingManifest(
                 key: "editorExtensions", type: .string,
                 label: "Open in editor (extensions)",
@@ -64,14 +64,6 @@ final class LocalFileTreePlugin: BooPluginProtocol {
                 .filter { !$0.isEmpty }
         )
     }
-
-    /// Path to timg if installed, nil otherwise. Resolved once and cached.
-    static let timgPath: String? = {
-        let candidates = [
-            "/opt/homebrew/bin/timg", "/usr/local/bin/timg", "/usr/bin/timg"
-        ]
-        return candidates.first { FileManager.default.isExecutableFile(atPath: $0) }
-    }()
 
     /// Cached file tree roots keyed by path for instant switching.
     private var cachedRoots: [String: FileTreeNode] = [:]
@@ -128,14 +120,12 @@ final class LocalFileTreePlugin: BooPluginProtocol {
             onFileClicked: { path in
                 let ext = (path as NSString).pathExtension.lowercased()
                 let isImage = Self.imageExtensions.contains(ext)
-                let useTimg = AppSettings.shared.pluginBool(
-                    "file-tree-local", "useTimg", default: true)
-                if isImage && Self.timgPath != nil && useTimg {
-                    let parentDir = (path as NSString).deletingLastPathComponent
-                    act?.openDirectoryInNewTab?(parentDir)
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                        act?.sendToTerminal?("timg \(shellEscape(path))\r")
-                    }
+                let useKitty = AppSettings.shared.pluginBool(
+                    "file-tree-local", "useKitty", default: true)
+                if isImage && useKitty {
+                    let newTab = AppSettings.shared.pluginBool(
+                        "file-tree-local", "kittyNewTab", default: true)
+                    act?.displayImageInTerminal?(path, newTab)
                 } else if Self.editorExtensionSet().contains(ext) {
                     let parentDir = (path as NSString).deletingLastPathComponent
                     act?.openDirectoryInNewTab?(parentDir)
@@ -228,6 +218,11 @@ final class LocalFileTreePlugin: BooPluginProtocol {
                 } catch {
                     NSSound.beep()
                 }
+            },
+            onCopyImage: { path in
+                guard let image = NSImage(contentsOfFile: path) else { return }
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.writeObjects([image])
             },
             onReferenceInAI: { path in
                 act?.sendToTerminal?("@\(path) ")

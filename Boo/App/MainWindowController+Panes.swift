@@ -42,6 +42,9 @@ extension MainWindowController: PaneViewDelegate {
             bridge.handleFocus(paneID: paneID, workingDirectory: cwd)
         }
         runPluginCycle(reason: .focusChanged)
+        if let tabID = workspace.pane(for: paneID)?.activeTab?.id {
+            flushPendingImageSend(for: tabID, paneID: paneID)
+        }
     }
 
     func paneView(_ paneView: PaneView, didChangeDirectory path: String, paneID: UUID) {
@@ -82,8 +85,8 @@ extension MainWindowController: PaneViewDelegate {
         bridge.handleDirectoryListing(path: path, output: output, paneID: paneID)
     }
 
-    func paneView(_ paneView: PaneView, shellPIDDiscovered pid: pid_t, paneID: UUID) {
-        bridge.monitor.track(paneID: paneID, shellPID: pid)
+    func paneView(_ paneView: PaneView, shellPIDDiscovered pid: pid_t, paneID: UUID, tabID: UUID?) {
+        bridge.monitor.track(paneID: paneID, shellPID: pid, tabID: tabID)
     }
 
     func paneViewIsOnlyPaneInWorkspace(_ paneView: PaneView) -> Bool {

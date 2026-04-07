@@ -16,6 +16,7 @@ struct FileTreeActions {
     var onRename: ((_ oldPath: String, _ newName: String) -> Void)?
     var onMove: ((_ sourcePath: String, _ destinationDir: String) -> Void)?
     var onCreateFolder: ((_ parentPath: String) -> Void)?
+    var onCopyImage: ((String) -> Void)?
     var onReferenceInAI: ((String) -> Void)?
     var isAIAgentRunning: Bool = false
 }
@@ -353,7 +354,13 @@ struct FileTreeRowView: View {
             }
         } else {
             Button("Open in Editor") { actions.onFileClicked?(node.path) }
-            Button("cat") { actions.onRunCommand?("cat \(shellEscape(node.path))\r") }
+            let ext = (node.name as NSString).pathExtension
+            let isImage = UTType(filenameExtension: ext)?.conforms(to: .image) ?? false
+            if isImage {
+                Button("Copy Image") { actions.onCopyImage?(node.path) }
+            } else {
+                Button("cat") { actions.onRunCommand?("cat \(shellEscape(node.path))\r") }
+            }
         }
         Button("Paste Path to Terminal") { actions.onPastePath?(node.path) }
         Divider()

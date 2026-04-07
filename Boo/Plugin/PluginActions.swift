@@ -8,6 +8,9 @@ final class PluginActions {
     var openDirectoryInNewTab: ((String) -> Void)?
     var openDirectoryInNewPane: ((String) -> Void)?
     var pastePathToActivePane: ((String) -> Void)?
+    /// Display an image using the Kitty Graphics Protocol.
+    /// `newTab`: open a new tab first; false = inject into the focused terminal's PTY directly.
+    var displayImageInTerminal: ((String, Bool) -> Void)?
 
     func pastePath(_ path: String) {
         pastePathToActivePane?(path)
