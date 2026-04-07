@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 
 /// Generic Unix socket server for IPC between terminal child processes and Boo.
@@ -265,9 +266,7 @@ final class BooSocketServer {
         }
 
         // Non-blocking so broadcast writes don't stall on slow clients
-        var flags = fcntl(clientFD, F_GETFL)
-        flags |= O_NONBLOCK
-        _ = fcntl(clientFD, F_SETFL, flags)
+        configureClientSocket(clientFD)
 
         clientBuffers[clientFD] = Data()
         let source = DispatchSource.makeReadSource(fileDescriptor: clientFD, queue: queue)
@@ -468,12 +467,17 @@ final class BooSocketServer {
         sendJSON(fd: fd, dict: resp)
     }
 
-    func sendJSON(fd: Int32, dict: [String: Any]) {
-        guard let data = try? JSONSerialization.data(withJSONObject: dict),
-            var str = String(data: data, encoding: .utf8)
-        else { return }
-        str += "\n"
-        _ = str.withCString { write(fd, $0, strlen($0)) }
+    @discardableResult
+    func sendJSON(fd: Int32, dict: [String: Any]) -> Bool {
+        guard var data = try? JSONSerialization.data(withJSONObject: dict) else { return false }
+        data.append(UInt8(ascii: "\n"))
+        let ok = writeAll(fd: fd, data: data)
+        if !ok {
+            queue.async { [weak self] in
+                self?.clientSources[fd]?.cancel()
+            }
+        }
+        return ok
     }
 
     // MARK: - Sweep
@@ -534,5 +538,73 @@ final class BooSocketServer {
         var mib: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_PID, pid]
         guard sysctl(&mib, 4, &info, &size, nil, 0) == 0 else { return -1 }
         return info.kp_eproc.e_ppid
+    }
+
+    private func configureClientSocket(_ fd: Int32) {
+        var flags = fcntl(fd, F_GETFL)
+        if flags >= 0 {
+            flags |= O_NONBLOCK
+            _ = fcntl(fd, F_SETFL, flags)
+        }
+
+        var noSigPipe: Int32 = 1
+        _ = withUnsafePointer(to: &noSigPipe) {
+            setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, $0, socklen_t(MemoryLayout<Int32>.size))
+        }
+    }
+
+    private func writeAll(fd: Int32, data: Data) -> Bool {
+        data.withUnsafeBytes { rawBuffer in
+            guard let baseAddress = rawBuffer.baseAddress else { return true }
+            var offset = 0
+
+            while offset < data.count {
+                let remaining = data.count - offset
+                let pointer = baseAddress.advanced(by: offset)
+                let written = send(fd, pointer, remaining, Int32(MSG_NOSIGNAL))
+
+                if written > 0 {
+                    offset += written
+                    continue
+                }
+                if written == 0 {
+                    return false
+                }
+
+                switch errno {
+                case EINTR:
+                    continue
+                case EAGAIN, EWOULDBLOCK:
+                    guard waitUntilWritable(fd: fd) else { return false }
+                case EPIPE:
+                    return false
+                default:
+                    return false
+                }
+            }
+
+            return true
+        }
+    }
+
+    private func waitUntilWritable(fd: Int32, timeoutMS: Int32 = 250) -> Bool {
+        var descriptor = pollfd(fd: fd, events: Int16(POLLOUT), revents: 0)
+
+        while true {
+            let result = poll(&descriptor, 1, timeoutMS)
+            if result > 0 {
+                let invalidMask = Int16(POLLERR | POLLHUP | POLLNVAL)
+                if descriptor.revents & invalidMask != 0 {
+                    return false
+                }
+                return descriptor.revents & Int16(POLLOUT) != 0
+            }
+            if result == 0 {
+                return false
+            }
+            if errno != EINTR {
+                return false
+            }
+        }
     }
 }

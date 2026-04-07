@@ -1,0 +1,68 @@
+# IPC Socket
+
+Boo exposes a Unix domain socket at `~/.boo/boo.sock` for communication between terminal child processes, plugins, and the app.
+
+The socket path is also available inside terminal sessions as `$BOO_SOCK`.
+
+## Protocol
+
+- Newline-delimited JSON
+- One request per line
+- One JSON response per request
+- Long-lived connections can subscribe to push events
+
+## Command Categories
+
+| Category       | Examples                                                                                   |
+| -------------- | ------------------------------------------------------------------------------------------ |
+| **Process**    | `set_status`, `clear_status`, `list_status`                                                |
+| **Query**      | `get_context`, `get_theme`, `get_settings`, `get_workspaces`                               |
+| **Control**    | `set_theme`, `toggle_sidebar`, `switch_workspace`, `new_tab`, `new_workspace`, `send_text` |
+| **Events**     | `subscribe`, `unsubscribe`                                                                 |
+| **Status Bar** | `statusbar.set`, `statusbar.clear`, `statusbar.list`                                       |
+| **Plugin**     | `<namespace>.<action>`                                                                     |
+
+## Examples
+
+```bash
+# Register as an AI agent
+echo '{"cmd":"set_status","pid":'"$$"',"name":"claude","category":"ai"}' \
+  | nc -U "$BOO_SOCK"
+
+# Query current terminal context
+echo '{"cmd":"get_context"}' | nc -U "$BOO_SOCK"
+
+# Push a status bar segment
+echo '{"cmd":"statusbar.set","id":"ci","text":"CI: passing","icon":"checkmark.circle","tint":"green"}' \
+  | nc -U "$BOO_SOCK"
+```
+
+## Event Subscriptions
+
+Keep the connection open after `subscribe` to receive push events:
+
+| Event                    | Data                                |
+| ------------------------ | ----------------------------------- |
+| `cwd_changed`            | `path`, `is_remote`, `pane_id`      |
+| `title_changed`          | `title`, `pane_id`                  |
+| `process_changed`        | `name`, `category`, `pane_id`       |
+| `remote_session_changed` | `type`, `host`, `active`, `pane_id` |
+| `focus_changed`          | `pane_id`                           |
+| `workspace_switched`     | `workspace_id`                      |
+| `theme_changed`          | `name`, `is_dark`                   |
+| `settings_changed`       | `topic`                             |
+
+Use `"events": ["*"]` to subscribe to all events.
+
+## Status Bar Segments
+
+External processes can publish their own status bar segments. Segments are automatically cleaned up when the client disconnects.
+
+Tint colors accept named values such as `red`, `green`, `yellow`, `blue`, `orange`, `purple`, `accent`, or a `#hex` color.
+
+## Reliability and Safety
+
+- Socket I/O runs on a dedicated serial queue.
+- Connecting processes are verified with `LOCAL_PEERCRED`.
+- Registered PIDs are checked as descendants of the shell to avoid cross-pane interference.
+- Dead processes and disconnected clients are cleaned up automatically.

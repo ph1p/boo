@@ -34,10 +34,11 @@ Smart close order: tab → pane → workspace.
 Toggle the sidebar with **Cmd+B**. The explorer shows a live-updating file tree for the current workspace.
 
 - **Local workspaces** — Uses FSEvents for real-time file system watching
-- **Remote SSH** — Auto-detects SSH sessions, lists files via `ssh <host> ls -1AF`
-- **Remote Docker** — Auto-detects `docker exec` sessions, lists files via `docker exec <container> sh -c 'ls -1AF'`
+- **Remote SSH / Mosh** — Auto-detects SSH-style sessions and reuses shared connections for file listing when possible
+- **Remote containers / VMs / devices** — Auto-detects interactive `docker`, `podman`, `nerdctl`, `kubectl`, `oc`, `lxc`, `limactl`, `colima`, `distrobox`, `toolbox`, `vagrant`, and `adb shell` sessions and runs the appropriate listing command for each tool
 
 **File click behavior:**
+
 - **Source/text files** — Opens a new tab in the file's parent directory and runs the configured editor (set in General Settings → File Editor, falls back to `$EDITOR`, then `vi`)
 - **Images** — Rendered inline using the Kitty Graphics Protocol (supported natively by Ghostty); otherwise opens with the default macOS app
 - **Other files** — Opens with the default macOS app
@@ -48,35 +49,35 @@ Configure which extensions open in the editor (and toggle inline image preview) 
 
 32 built-in color themes with live preview swatches in settings:
 
-| Theme | Variants |
-|---|---|
-| Default | Dark, Light |
-| Catppuccin | Mocha, Macchiato, Frappé, Latte |
-| Tokyo Night | — |
-| Dracula | — |
-| Nord | — |
-| Solarized | Dark, Light |
-| Gruvbox | Dark, Light |
-| One | Dark, Light |
-| Rosé Pine | — |
-| Kanagawa | — |
-| Everforest | Dark, Light |
-| GitHub | Dark, Light |
-| Ayu | Dark, Light |
-| Monokai | — |
-| Material | Dark, Light |
-| Palenight | — |
-| Horizon Dark | — |
-| Cobalt2 | — |
-| Night Owl | — |
-| Synthwave '84 | — |
-| Moonlight | — |
+| Theme         | Variants                        |
+| ------------- | ------------------------------- |
+| Default       | Dark, Light                     |
+| Catppuccin    | Mocha, Macchiato, Frappé, Latte |
+| Tokyo Night   | —                               |
+| Dracula       | —                               |
+| Nord          | —                               |
+| Solarized     | Dark, Light                     |
+| Gruvbox       | Dark, Light                     |
+| One           | Dark, Light                     |
+| Rosé Pine     | —                               |
+| Kanagawa      | —                               |
+| Everforest    | Dark, Light                     |
+| GitHub        | Dark, Light                     |
+| Ayu           | Dark, Light                     |
+| Monokai       | —                               |
+| Material      | Dark, Light                     |
+| Palenight     | —                               |
+| Horizon Dark  | —                               |
+| Cobalt2       | —                               |
+| Night Owl     | —                               |
+| Synthwave '84 | —                               |
+| Moonlight     | —                               |
 
 ## Sidebar Plugins
 
 The sidebar shows stacked, collapsible panels powered by the [plugin system](/plugins):
 
-- **Files** — Live file tree for the current directory. Supports local (FSEvents) and remote (SSH/Docker) browsing. Click to open, right-click for context menu.
+- **Files** — Live file tree for the current directory. Supports local (FSEvents) and remote (SSH, Mosh, containers, VMs, and device shells) browsing. Click to open, right-click for context menu.
 - **Git** — Branch name, staged/unstaged/untracked files, stash count, ahead/behind. Inline stage/unstage buttons. Refresh on file system changes.
 - **Docker** — Running containers with exec, logs, start/stop/restart. Live updates via `docker events` stream. Local sessions only.
 - **Bookmarks** — Saved directory shortcuts with per-host namespacing for remote sessions.
@@ -91,7 +92,7 @@ The status bar shows the current git branch name. Click it to open a branch swit
 
 Configurable segments displayed at the bottom of the window:
 
-- **Environment** — Colored dot + label showing local/SSH/Docker
+- **Environment** — Colored dot + label showing the active environment (`local`, `ssh`, `mosh`, `docker`, `kubectl`, and other supported remote types)
 - **Git branch** — Current branch name with switcher popup
 - **Path** — Current working directory
 - **Running process** — Foreground process (zsh, node, vim, etc.)
@@ -105,11 +106,11 @@ Toggle individual segments in **Settings → Status Bar**, including path visibi
 
 Open with **Cmd+,**. Organized in tabs:
 
-| Tab | Options |
-|---|---|
-| **Theme** | 32 color themes with live preview |
+| Tab            | Options                                                                                           |
+| -------------- | ------------------------------------------------------------------------------------------------- |
+| **Theme**      | 32 color themes with live preview                                                                 |
 | **Appearance** | Terminal font, font size, cursor style (block/beam/underline/outline); sidebar font and font size |
-| **Status Bar** | Toggle individual segments (connection, path, git branch, process, pane count, clock) |
-| **Layout** | Sidebar position (toggle with Cmd+B), workspace bar position, tab overflow mode |
-| **Plugins** | Enable/disable plugins, per-plugin settings (file explorer icons/hidden files, git settings) |
-| **Shortcuts** | Keyboard shortcut reference |
+| **Status Bar** | Toggle individual segments (connection, path, git branch, process, pane count, clock)             |
+| **Layout**     | Sidebar position (toggle with Cmd+B), workspace bar position, tab overflow mode                   |
+| **Plugins**    | Enable/disable plugins, per-plugin settings (file explorer icons/hidden files, git settings)      |
+| **Shortcuts**  | Keyboard shortcut reference                                                                       |

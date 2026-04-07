@@ -11,14 +11,14 @@ Both use the same protocol, lifecycle, and UI integration.
 
 ## Built-in Plugins
 
-| Plugin | Directory | Description |
-|---|---|---|
-| **Files** (`file-tree-local`, `file-tree-remote`) | `Plugins/FileTree/` | File explorer with local FSEvents watching and remote SSH/Docker browsing |
-| **Git** (`git-panel`) | `Plugins/Git/` | Branch, status, staged/unstaged/untracked files, stash, ahead/behind counts |
-| **AI Agent** (`ai-agent`) | `Plugins/AIAgent/` | Monitors running AI coding agents (Claude, Codex, etc.); shows config, hooks, skills, and changed files. Appears when an AI agent is the foreground process. |
-| **Docker** (`docker`) | `Plugins/Docker/` | Running container list with exec, logs, start/stop/restart actions |
-| **Bookmarks** (`bookmarks`) | `Plugins/Bookmarks/` | Saved directory bookmarks with per-host namespacing for remote sessions |
-| **System** (`system-info`) | `Plugins/SystemInfo/` | CPU load, memory, disk usage — reference example demonstrating all plugin patterns |
+| Plugin                                            | Directory             | Description                                                                                                                                                  |
+| ------------------------------------------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Files** (`file-tree-local`, `file-tree-remote`) | `Plugins/FileTree/`   | File explorer with local FSEvents watching and remote SSH / Mosh / container / VM browsing                                                                   |
+| **Git** (`git-panel`)                             | `Plugins/Git/`        | Branch, status, staged/unstaged/untracked files, stash, ahead/behind counts                                                                                  |
+| **AI Agent** (`ai-agent`)                         | `Plugins/AIAgent/`    | Monitors running AI coding agents (Claude, Codex, etc.); shows config, hooks, skills, and changed files. Appears when an AI agent is the foreground process. |
+| **Docker** (`docker`)                             | `Plugins/Docker/`     | Running container list with exec, logs, start/stop/restart actions                                                                                           |
+| **Bookmarks** (`bookmarks`)                       | `Plugins/Bookmarks/`  | Saved directory bookmarks with per-host namespacing for remote sessions                                                                                      |
+| **System** (`system-info`)                        | `Plugins/SystemInfo/` | CPU load, memory, disk usage — reference example demonstrating all plugin patterns                                                                           |
 
 ## Core Protocol
 
@@ -106,58 +106,63 @@ When a plugin's data changes externally (e.g., Docker containers change, git com
 
 Immutable value type snapshot of terminal state, passed to all plugin methods:
 
-| Field | Type | Description |
-|---|---|---|
-| `terminalID` | `UUID` | Active terminal identifier |
-| `cwd` | `String` | Current working directory |
-| `remoteSession` | `RemoteSessionType?` | SSH or Docker session, if active |
-| `remoteCwd` | `String?` | Remote working directory |
-| `gitContext` | `GitContext?` | Branch, repo root, dirty state, counts |
-| `processName` | `String` | Foreground process name |
-| `paneCount` | `Int` | Number of panes in workspace |
-| `tabCount` | `Int` | Number of tabs in active pane |
-| `isRemote` | `Bool` | Computed: `remoteSession != nil` |
+| Field           | Type                 | Description                                                    |
+| --------------- | -------------------- | -------------------------------------------------------------- |
+| `terminalID`    | `UUID`               | Active terminal identifier                                     |
+| `cwd`           | `String`             | Current working directory                                      |
+| `remoteSession` | `RemoteSessionType?` | SSH, Mosh, or container / VM / device shell session, if active |
+| `remoteCwd`     | `String?`            | Remote working directory                                       |
+| `gitContext`    | `GitContext?`        | Branch, repo root, dirty state, counts                         |
+| `processName`   | `String`             | Foreground process name                                        |
+| `paneCount`     | `Int`                | Number of panes in workspace                                   |
+| `tabCount`      | `Int`                | Number of tabs in active pane                                  |
+| `isRemote`      | `Bool`               | Computed: `remoteSession != nil`                               |
 
 ### GitContext
 
-| Field | Type |
-|---|---|
-| `branch` | `String` |
-| `repoRoot` | `String` |
-| `isDirty` | `Bool` |
-| `changedFileCount` | `Int` |
-| `stagedCount` | `Int` |
-| `stashCount` | `Int` |
-| `aheadCount` | `Int` |
-| `behindCount` | `Int` |
-| `lastCommitShort` | `String?` |
+| Field              | Type      |
+| ------------------ | --------- |
+| `branch`           | `String`  |
+| `repoRoot`         | `String`  |
+| `isDirty`          | `Bool`    |
+| `changedFileCount` | `Int`     |
+| `stagedCount`      | `Int`     |
+| `stashCount`       | `Int`     |
+| `aheadCount`       | `Int`     |
+| `behindCount`      | `Int`     |
+| `lastCommitShort`  | `String?` |
 
 ## When-Clauses
 
 Plugins declare visibility conditions via the `when` field in their manifest:
 
-| Expression | Meaning |
-|---|---|
-| `null` | Always visible |
-| `"git.active"` | Only in git repos |
-| `"!remote"` | Only in local sessions |
-| `"remote"` | Only in remote sessions |
-| `"remote.type == 'ssh'"` | Only in SSH sessions |
-| `"git.active && !remote"` | Git repos, local only |
+| Expression                | Meaning                                   |
+| ------------------------- | ----------------------------------------- |
+| `null`                    | Always visible                            |
+| `"git.active"`            | Only in git repos                         |
+| `"!remote"`               | Only in local sessions                    |
+| `"remote"`                | Only in remote sessions                   |
+| `"env.ssh"`               | Only in SSH or Mosh sessions              |
+| `"env.docker"`            | Only in Docker sessions                   |
+| `"env.container"`         | Only in any container / VM / device shell |
+| `"env.type == 'kubectl'"` | Only in kubectl sessions                  |
+| `"git.active && !remote"` | Git repos, local only                     |
 
 Parsed by `WhenClauseParser` into a `WhenClauseNode` AST. Supports `&&`, `||`, `!`, `==`, `!=`, and grouping with `()`.
+
+String comparisons use `env.type` and `remote.host`. Example values for `env.type` include `local`, `ssh`, `mosh`, `docker`, `podman`, `kubectl`, `openshift`, `limactl`, `colima`, `distrobox`, `toolbox`, `vagrant`, and `adb`.
 
 ## DSL Action System
 
 Interactive elements in plugin views dispatch `DSLAction` values to `DSLActionHandler`:
 
-| Action Type | Parameters | Effect |
-|---|---|---|
-| `"cd"` | `path` | Sends `cd <path>` to terminal |
-| `"open"` | `path` | Opens file in `$EDITOR` (or `open`) |
-| `"exec"` | `command` | Sends raw command to terminal |
-| `"copy"` | `text` or `path` | Copies to clipboard |
-| `"reveal"` | `path` | Opens in Finder |
+| Action Type | Parameters       | Effect                              |
+| ----------- | ---------------- | ----------------------------------- |
+| `"cd"`      | `path`           | Sends `cd <path>` to terminal       |
+| `"open"`    | `path`           | Opens file in `$EDITOR` (or `open`) |
+| `"exec"`    | `command`        | Sends raw command to terminal       |
+| `"copy"`    | `text` or `path` | Copies to clipboard                 |
+| `"reveal"`  | `path`           | Opens in Finder                     |
 
 Built-in plugins can also use `hostActions` closures directly for host-level operations (open tab, open pane, etc.).
 
@@ -207,15 +212,15 @@ The Settings window (Plugins tab) dynamically renders controls for each plugin's
 
 ### Built-in Plugin Settings
 
-| Plugin | Setting | Type | Default | Description |
-|---|---|---|---|---|
-| **Git** (`git-panel`) | `showBranch` | Bool | `true` | Show git branch in status bar |
-| **Files** (`file-tree-local`) | `showHiddenFiles` | Bool | `false` | Show hidden files |
-| **Files** (`file-tree-local`) | `showIcons` | Bool | `true` | Show file icons |
-| **Files** (`file-tree-local`) | `showPath` | Bool | `true` | Show current path above tree |
-| **Files** (`file-tree-local`) | `showProcess` | Bool | `true` | Show running process name |
-| **Files** (`file-tree-local`) | `useKitty` | Bool | `true` | Preview images inline using the Kitty Graphics Protocol |
-| **Files** (`file-tree-local`) | `editorExtensions` | String | *(see below)* | Comma-separated list of extensions that open in the terminal editor |
+| Plugin                        | Setting            | Type   | Default       | Description                                                         |
+| ----------------------------- | ------------------ | ------ | ------------- | ------------------------------------------------------------------- |
+| **Git** (`git-panel`)         | `showBranch`       | Bool   | `true`        | Show git branch in status bar                                       |
+| **Files** (`file-tree-local`) | `showHiddenFiles`  | Bool   | `false`       | Show hidden files                                                   |
+| **Files** (`file-tree-local`) | `showIcons`        | Bool   | `true`        | Show file icons                                                     |
+| **Files** (`file-tree-local`) | `showPath`         | Bool   | `true`        | Show current path above tree                                        |
+| **Files** (`file-tree-local`) | `showProcess`      | Bool   | `true`        | Show running process name                                           |
+| **Files** (`file-tree-local`) | `useKitty`         | Bool   | `true`        | Preview images inline using the Kitty Graphics Protocol             |
+| **Files** (`file-tree-local`) | `editorExtensions` | String | _(see below)_ | Comma-separated list of extensions that open in the terminal editor |
 
 The `editorExtensions` setting controls which file types open in the terminal editor (via the configured editor command or `$EDITOR`). All other types open with the default macOS app. The default list covers common source and text formats.
 
@@ -235,15 +240,15 @@ The `disabledPluginIDs` list is persisted in `AppSettings`.
 
 The status bar uses a separate, simpler `StatusBarPlugin` protocol for individual segments:
 
-| Segment | Position | Description |
-|---|---|---|
-| **EnvironmentSegment** | Left | Local/SSH/Docker indicator with colored dot |
-| **GitBranchSegment** | Left | Current git branch with switcher popup |
-| **PathSegment** | Left | Current working directory |
-| **ProcessSegment** | Left | Foreground process name |
-| **FileTreeIconSegment** | Right | Files panel toggle |
-| **PaneInfoSegment** | Right | Pane and tab count |
-| **TimeSegment** | Right | Current time |
+| Segment                 | Position | Description                                            |
+| ----------------------- | -------- | ------------------------------------------------------ |
+| **EnvironmentSegment**  | Left     | Local or remote environment indicator with colored dot |
+| **GitBranchSegment**    | Left     | Current git branch with switcher popup                 |
+| **PathSegment**         | Left     | Current working directory                              |
+| **ProcessSegment**      | Left     | Foreground process name                                |
+| **FileTreeIconSegment** | Right    | Files panel toggle                                     |
+| **PaneInfoSegment**     | Right    | Pane and tab count                                     |
+| **TimeSegment**         | Right    | Current time                                           |
 
 Sidebar plugins automatically get `PluginIconSegment` toggle icons in the status bar via `PluginRegistry.registerStatusBarIcons(in:)`. No manual registration needed.
 

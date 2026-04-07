@@ -196,6 +196,19 @@ final class TerminalBridgeTests: XCTestCase {
         }
     }
 
+    func testDockerDetectionHeuristicWithAbsoluteBinaryPath() {
+        let result = TerminalBridge.detectRemoteFromHeuristics(
+            title: "/usr/local/bin/docker exec -it mycontainer bash",
+            cwd: "/tmp"
+        )
+        if case .container(let target, let tool) = result {
+            XCTAssertEqual(target, "mycontainer")
+            XCTAssertEqual(tool, .docker)
+        } else {
+            XCTFail("Expected Docker detection for absolute binary path, got \(String(describing: result))")
+        }
+    }
+
     func testDockerDetectionHeuristicSkipsOptionValuePairs() {
         let result = TerminalBridge.detectRemoteFromHeuristics(
             title: "docker exec --user root --workdir /app -it mycontainer bash",
@@ -300,6 +313,12 @@ final class TerminalBridgeTests: XCTestCase {
             TerminalBridge.detectRemoteFromHeuristics(title: "npx pkg@2.0.0", cwd: "/tmp"))
         XCTAssertNil(
             TerminalBridge.detectRemoteFromHeuristics(title: "bunx @scope/tool --flag value", cwd: "/tmp"))
+    }
+
+    func testGitForgeSSHUrlNotDetectedAsInteractiveRemote() {
+        XCTAssertNil(
+            TerminalBridge.detectRemoteFromHeuristics(title: "git@github.com:org/repo.git", cwd: "/tmp")
+        )
     }
 
     func testRealSSHStillDetectedAfterScopedPackageFix() {

@@ -811,7 +811,6 @@ class WorkspaceBarView: NSView {
         guard index >= 0, index < items.count else { return }
         if isVertical {
             let itemSize: CGFloat = 32
-            let padding: CGFloat = 4
             let y: CGFloat = 8 + CGFloat(index) * (itemSize + 4) + itemSize / 2
             let x: CGFloat = bounds.midX
             handleVerticalClick(NSPoint(x: x, y: y))

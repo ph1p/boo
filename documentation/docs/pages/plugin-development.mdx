@@ -34,33 +34,33 @@ That's all you need to get started. The full set of fields:
 
 #### Manifest Fields
 
-| Field | Required | Description |
-|---|---|---|
-| `id` | Yes | Unique plugin identifier |
-| `name` | Yes | Display name in sidebar and status bar |
-| `version` | Yes | Semver version string |
-| `icon` | Yes | [SF Symbol](https://developer.apple.com/sf-symbols/) name |
-| `description` | No | Human-readable description |
-| `when` | No | When-clause expression for visibility (null = always visible) |
-| `runtime` | No | `"js"` (only supported value) |
-| `capabilities.sidebarPanel` | No | Show in sidebar |
-| `capabilities.statusBarSegment` | No | Show in status bar |
-| `statusBar.position` | No | `"left"` or `"right"` |
-| `statusBar.priority` | No | Lower = closer to edge |
-| `statusBar.template` | No | Template string for status bar text |
-| `settings` | No | Array of setting declarations (see [Plugin Settings](#plugin-settings)) |
+| Field                           | Required | Description                                                             |
+| ------------------------------- | -------- | ----------------------------------------------------------------------- |
+| `id`                            | Yes      | Unique plugin identifier                                                |
+| `name`                          | Yes      | Display name in sidebar and status bar                                  |
+| `version`                       | Yes      | Semver version string                                                   |
+| `icon`                          | Yes      | [SF Symbol](https://developer.apple.com/sf-symbols/) name               |
+| `description`                   | No       | Human-readable description                                              |
+| `when`                          | No       | When-clause expression for visibility (null = always visible)           |
+| `runtime`                       | No       | `"js"` (only supported value)                                           |
+| `capabilities.sidebarPanel`     | No       | Show in sidebar                                                         |
+| `capabilities.statusBarSegment` | No       | Show in status bar                                                      |
+| `statusBar.position`            | No       | `"left"` or `"right"`                                                   |
+| `statusBar.priority`            | No       | Lower = closer to edge                                                  |
+| `statusBar.template`            | No       | Template string for status bar text                                     |
+| `settings`                      | No       | Array of setting declarations (see [Plugin Settings](#plugin-settings)) |
 
 #### Plugin Settings
 
 Plugins can declare their own settings, which appear in the Settings → Plugins UI under an expandable section. Each setting in the `settings` array has:
 
-| Field | Required | Description |
-|---|---|---|
-| `key` | Yes | Setting key (unique within this plugin) |
-| `type` | Yes | `"bool"`, `"string"`, `"int"`, or `"double"` |
-| `label` | Yes | Human-readable label shown in UI |
-| `default` | No | Default value |
-| `options` | No | UI hint: `"fontPicker:system"` for system font picker, `"fontPicker:mono"` for monospace font picker |
+| Field     | Required | Description                                                                                          |
+| --------- | -------- | ---------------------------------------------------------------------------------------------------- |
+| `key`     | Yes      | Setting key (unique within this plugin)                                                              |
+| `type`    | Yes      | `"bool"`, `"string"`, `"int"`, or `"double"`                                                         |
+| `label`   | Yes      | Human-readable label shown in UI                                                                     |
+| `default` | No       | Default value                                                                                        |
+| `options` | No       | UI hint: `"fontPicker:system"` for system font picker, `"fontPicker:mono"` for monospace font picker |
 
 Example manifest with settings:
 
@@ -75,7 +75,13 @@ Example manifest with settings:
   "settings": [
     { "key": "enabled", "type": "bool", "label": "Enable feature", "default": true },
     { "key": "fontSize", "type": "double", "label": "Font size", "default": 12.0 },
-    { "key": "fontName", "type": "string", "label": "Font", "default": "", "options": "fontPicker:system" }
+    {
+      "key": "fontName",
+      "type": "string",
+      "label": "Font",
+      "default": "",
+      "options": "fontPicker:system"
+    }
   ]
 }
 ```
@@ -93,13 +99,13 @@ AppSettings.shared.setPluginSetting("my-plugin", "fontSize", 14.0)
 
 Templates substitute values from the terminal context:
 
-| Token | Value |
-|---|---|
-| `{cwd}` | Current working directory |
-| `{process.name}` | Foreground process name |
-| `{git.branch}` | Current git branch |
-| `{git.changedCount}` | Number of changed files |
-| `{remote.host}` | Remote host or container name |
+| Token                | Value                                           |
+| -------------------- | ----------------------------------------------- |
+| `{cwd}`              | Current working directory                       |
+| `{process.name}`     | Foreground process name                         |
+| `{git.branch}`       | Current git branch                              |
+| `{git.changedCount}` | Number of changed files                         |
+| `{remote.host}`      | Remote host, container, pod, VM, or device name |
 
 ### Writing a Plugin
 
@@ -114,8 +120,8 @@ function render(ctx) {
     type: "vstack",
     children: [
       { type: "label", text: "Hello from " + dir, style: "bold" },
-      { type: "button", label: "Open in Finder", action: { type: "reveal", path: ctx.cwd } }
-    ]
+      { type: "button", label: "Open in Finder", action: { type: "reveal", path: ctx.cwd } },
+    ],
   };
 }
 ```
@@ -126,30 +132,32 @@ Both `render` and `transform` are accepted as the entry function name. You can r
 
 Font rendering for JS plugins is handled automatically by the DSL renderer — it applies the user's sidebar font scale to all `label`, `list`, and `button` elements. No font configuration is needed in your JS code.
 
-| Field | Type | Example |
-|---|---|---|
-| `ctx.cwd` | string | `"/Users/jane/project"` |
-| `ctx.processName` | string | `"node"` |
-| `ctx.isRemote` | bool | `false` |
-| `ctx.envType` | string | `"local"`, `"ssh"`, `"docker"` |
-| `ctx.remoteHost` | string | `"server.example.com"` |
-| `ctx.paneCount` | number | `2` |
-| `ctx.tabCount` | number | `3` |
-| `ctx.git.branch` | string | `"main"` |
-| `ctx.git.repoRoot` | string | `"/Users/jane/project"` |
-| `ctx.git.isDirty` | bool | `true` |
-| `ctx.git.changedFileCount` | number | `5` |
-| `ctx.enrichedData` | object | Data from other plugins |
-| `ctx.settings` | object | Plugin settings declared in manifest (see [Plugin Settings](#plugin-settings)) |
+| Field                      | Type   | Example                                                                        |
+| -------------------------- | ------ | ------------------------------------------------------------------------------ |
+| `ctx.cwd`                  | string | `"/Users/jane/project"`                                                        |
+| `ctx.processName`          | string | `"node"`                                                                       |
+| `ctx.isRemote`             | bool   | `false`                                                                        |
+| `ctx.envType`              | string | `"local"`, `"ssh"`, `"mosh"`, `"docker"`, `"kubectl"`                          |
+| `ctx.remoteHost`           | string | `"server.example.com"`                                                         |
+| `ctx.paneCount`            | number | `2`                                                                            |
+| `ctx.tabCount`             | number | `3`                                                                            |
+| `ctx.git.branch`           | string | `"main"`                                                                       |
+| `ctx.git.repoRoot`         | string | `"/Users/jane/project"`                                                        |
+| `ctx.git.isDirty`          | bool   | `true`                                                                         |
+| `ctx.git.changedFileCount` | number | `5`                                                                            |
+| `ctx.enrichedData`         | object | Data from other plugins                                                        |
+| `ctx.settings`             | object | Plugin settings declared in manifest (see [Plugin Settings](#plugin-settings)) |
+
+`ctx.envType` mirrors the remote session's tool label. Common values include `local`, `ssh`, `mosh`, `docker`, `podman`, `kubectl`, `openshift`, `limactl`, `colima`, `distrobox`, `toolbox`, `vagrant`, and `adb`.
 
 #### Host functions
 
 JS plugins have access to these functions provided by the host:
 
-| Function | Returns | Description |
-|---|---|---|
-| `readFile(path)` | string or null | Read a file relative to `ctx.cwd`. Returns null if not found. |
-| `fileExists(path)` | bool | Check if a file exists relative to `ctx.cwd`. |
+| Function           | Returns        | Description                                                   |
+| ------------------ | -------------- | ------------------------------------------------------------- |
+| `readFile(path)`   | string or null | Read a file relative to `ctx.cwd`. Returns null if not found. |
+| `fileExists(path)` | bool           | Check if a file exists relative to `ctx.cwd`.                 |
 
 Absolute paths are allowed but must be under `ctx.cwd` (security boundary).
 
@@ -172,9 +180,9 @@ function render(ctx) {
         label: name,
         icon: "play.circle",
         detail: scripts[name],
-        action: { type: "exec", command: "npm run " + name }
+        action: { type: "exec", command: "npm run " + name },
       };
-    })
+    }),
   };
 }
 ```
@@ -183,29 +191,29 @@ function render(ctx) {
 
 Your `render` function returns a JSON object or array of elements. Each element has a `type` and type-specific properties:
 
-| Type | Properties | Description |
-|---|---|---|
-| `label` | `text`, `style?`, `tint?` | Text label. Styles: `"bold"`, `"muted"`, `"mono"`. Alias: `text` (with `content` field) |
-| `button` | `label`, `action`, `style?`, `contextMenu?` | Clickable button. Styles: `"primary"`, `"secondary"`, `"destructive"` |
-| `divider` | — | Horizontal line |
-| `spacer` | — | Vertical spacing |
-| `icon` | `name`, `tint?` | SF Symbol icon. Tints: `"success"`, `"error"`, `"warning"`, `"accent"`, `"muted"` |
-| `list` | `items` | List of items with `label`, `detail?`, `icon?`, `action?`, `contextMenu?` |
-| `vstack` | `children` | Vertical layout of child elements |
-| `hstack` | `children` | Horizontal layout of child elements. Alias: `row` |
-| `badge` | `text`, `tint?` | Colored pill badge |
+| Type      | Properties                                  | Description                                                                             |
+| --------- | ------------------------------------------- | --------------------------------------------------------------------------------------- |
+| `label`   | `text`, `style?`, `tint?`                   | Text label. Styles: `"bold"`, `"muted"`, `"mono"`. Alias: `text` (with `content` field) |
+| `button`  | `label`, `action`, `style?`, `contextMenu?` | Clickable button. Styles: `"primary"`, `"secondary"`, `"destructive"`                   |
+| `divider` | —                                           | Horizontal line                                                                         |
+| `spacer`  | —                                           | Vertical spacing                                                                        |
+| `icon`    | `name`, `tint?`                             | SF Symbol icon. Tints: `"success"`, `"error"`, `"warning"`, `"accent"`, `"muted"`       |
+| `list`    | `items`                                     | List of items with `label`, `detail?`, `icon?`, `action?`, `contextMenu?`               |
+| `vstack`  | `children`                                  | Vertical layout of child elements                                                       |
+| `hstack`  | `children`                                  | Horizontal layout of child elements. Alias: `row`                                       |
+| `badge`   | `text`, `tint?`                             | Colored pill badge                                                                      |
 
 ### DSL Actions
 
 Actions are attached to interactive elements (buttons, list items):
 
-| Action Type | Parameters | Effect |
-|---|---|---|
-| `"cd"` | `path` | Changes terminal directory |
-| `"open"` | `path` | Opens file in `$EDITOR` |
-| `"exec"` | `command` | Sends command to terminal |
-| `"copy"` | `text` or `path` | Copies to clipboard |
-| `"reveal"` | `path` | Opens in Finder |
+| Action Type | Parameters       | Effect                     |
+| ----------- | ---------------- | -------------------------- |
+| `"cd"`      | `path`           | Changes terminal directory |
+| `"open"`    | `path`           | Opens file in `$EDITOR`    |
+| `"exec"`    | `command`        | Sends command to terminal  |
+| `"copy"`    | `text` or `path` | Copies to clipboard        |
+| `"reveal"`  | `path`           | Opens in Finder            |
 
 ### Context Menus
 
@@ -230,22 +238,26 @@ Each menu item has `label` (required), `action` (required), and optional `icon` 
 
 Control when your plugin is visible based on terminal state:
 
-| Expression | Meaning |
-|---|---|
-| `null` | Always visible |
-| `"git.active"` | Only in git repos |
-| `"!remote"` | Only in local sessions |
-| `"remote"` | Only in remote sessions |
-| `"remote.type == 'ssh'"` | Only in SSH sessions |
-| `"remote.type == 'docker'"` | Only in Docker sessions |
-| `"git.active && !remote"` | Git repos, local only |
-| `"process.name == 'node'"` | Only when Node.js is running |
-| `"process.editor"` | Only when an editor is active |
-| `"process.category == 'database'"` | Only for database clients |
+| Expression                         | Meaning                                   |
+| ---------------------------------- | ----------------------------------------- |
+| `null`                             | Always visible                            |
+| `"git.active"`                     | Only in git repos                         |
+| `"!remote"`                        | Only in local sessions                    |
+| `"remote"`                         | Only in remote sessions                   |
+| `"env.ssh"`                        | Only in SSH or Mosh sessions              |
+| `"env.docker"`                     | Only in Docker sessions                   |
+| `"env.container"`                  | Only in any container / VM / device shell |
+| `"env.type == 'kubectl'"`          | Only in kubectl sessions                  |
+| `"git.active && !remote"`          | Git repos, local only                     |
+| `"process.name == 'node'"`         | Only when Node.js is running              |
+| `"process.editor"`                 | Only when an editor is active             |
+| `"process.category == 'database'"` | Only for database clients                 |
 
 Process categories: `editor`, `vcs`, `runtime`, `build`, `package`, `container`, `database`, `monitor`, `filemanager`, `multiplexer`.
 
 Operators: `&&` (and), `||` (or), `!` (not), `==`, `!=`, `()` (grouping).
+
+Use `env.type` for string comparisons and `remote.host` to match the current host or target name.
 
 See [When-Clauses](/plugins#when-clauses) for the full list of variables.
 
@@ -287,7 +299,7 @@ function render(ctx) {
     type: "list",
     items: targets.map(function (t) {
       return { label: t, icon: "terminal", action: { type: "exec", command: "make " + t } };
-    })
+    }),
   };
 }
 ```
@@ -296,13 +308,13 @@ function render(ctx) {
 
 All example plugins are in the `examples/plugins/` directory:
 
-| Plugin | What it demonstrates |
-|---|---|
-| **hello-world** | Minimal starting point — `plugin.json` + 12 lines of JS |
-| **make-targets** | `readFile()`, regex parsing, when-clause, list with actions |
-| **project-info** | `fileExists()` for project type detection, list with open actions |
-| **node-project** | **Showcase** — every feature: settings, readFile/fileExists, all DSL elements/styles/tints/actions, context menus, badges |
-| **terminal-inspector** | **Showcase** — every ctx field, settings, file detection, all DSL elements/actions, context menus |
+| Plugin                 | What it demonstrates                                                                                                      |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| **hello-world**        | Minimal starting point — `plugin.json` + 12 lines of JS                                                                   |
+| **make-targets**       | `readFile()`, regex parsing, when-clause, list with actions                                                               |
+| **project-info**       | `fileExists()` for project type detection, list with open actions                                                         |
+| **node-project**       | **Showcase** — every feature: settings, readFile/fileExists, all DSL elements/styles/tints/actions, context menus, badges |
+| **terminal-inspector** | **Showcase** — every ctx field, settings, file detection, all DSL elements/actions, context menus                         |
 
 Start with **hello-world**, then study **node-project** or **terminal-inspector** for the full API.
 
@@ -336,7 +348,7 @@ No `Package.swift` changes needed — SPM resolves recursively within the target
 
 The `SystemInfoPlugin` (`Boo/Plugins/SystemInfo/SystemInfoPlugin.swift`) is a working example that demonstrates all plugin patterns:
 
-- **Manifest** with `when: "!remote"` (hidden in SSH/Docker sessions)
+- **Manifest** with `when: "!remote"` (hidden in remote sessions)
 - **Status bar** via `makeStatusBarContent` showing memory usage with color-coded tint
 - **Sidebar panel** via `makeDetailView` with SwiftUI progress bars and action buttons
 - **Dynamic section title** via `sectionTitle` showing live memory percentage
@@ -397,13 +409,13 @@ final class MyPlugin: BooPluginProtocol {
 
 Every `makeDetailView` call receives a `PluginContext` — the single source of truth for the current state. Prefer it over reaching into `AppSettings.shared` directly.
 
-| Property | Type | Description |
-|---|---|---|
-| `context.terminal` | `TerminalContext` | CWD, process, git, remote session info |
-| `context.theme` | `ThemeSnapshot` | Resolved theme colors (chromeText, chromeMuted, accentColor, etc.) |
-| `context.density` | `SidebarDensity` | `.comfortable` or `.compact` |
-| `context.settings` | `PluginSettingsReader` | Scoped reader for this plugin's settings |
-| `context.fontScale` | `SidebarFontScale` | Tailwind-inspired font scale (see below) |
+| Property            | Type                   | Description                                                        |
+| ------------------- | ---------------------- | ------------------------------------------------------------------ |
+| `context.terminal`  | `TerminalContext`      | CWD, process, git, remote session info                             |
+| `context.theme`     | `ThemeSnapshot`        | Resolved theme colors (chromeText, chromeMuted, accentColor, etc.) |
+| `context.density`   | `SidebarDensity`       | `.comfortable` or `.compact`                                       |
+| `context.settings`  | `PluginSettingsReader` | Scoped reader for this plugin's settings                           |
+| `context.fontScale` | `SidebarFontScale`     | Tailwind-inspired font scale (see below)                           |
 
 ### Font Scale
 
@@ -439,13 +451,13 @@ func makeDetailView(context: PluginContext) -> AnyView? {
 
 #### Scale reference (base = 12 pt)
 
-| Step | Multiplier | Default pt | Typical use |
-|------|-----------|-----------|-------------|
-| `xs` | × 0.75 | 9 pt | Timestamps, badges, secondary icons |
-| `sm` | × 0.875 | 10 pt | Sub-labels, directory paths, detail text |
-| `base` | × 1.0 | 12 pt | Primary content — file names, list items |
-| `lg` | × 1.125 | 13 pt | Section sub-headers |
-| `xl` | × 1.25 | 15 pt | Emphasis, large labels |
+| Step   | Multiplier | Default pt | Typical use                              |
+| ------ | ---------- | ---------- | ---------------------------------------- |
+| `xs`   | × 0.75     | 9 pt       | Timestamps, badges, secondary icons      |
+| `sm`   | × 0.875    | 10 pt      | Sub-labels, directory paths, detail text |
+| `base` | × 1.0      | 12 pt      | Primary content — file names, list items |
+| `lg`   | × 1.125    | 13 pt      | Section sub-headers                      |
+| `xl`   | × 1.25     | 15 pt      | Emphasis, large labels                   |
 
 Section/panel headers rendered by the sidebar host (the bold title bars with chevrons) are **not** affected by `fontScale` — they always use the system font at a fixed size. Only your plugin's returned view is scaled.
 
@@ -514,7 +526,7 @@ func cwdChanged(newPath: String, context: TerminalContext) {
     refreshData(for: newPath)
 }
 
-// SSH/Docker session started or ended
+// Remote session started or ended
 func remoteSessionChanged(session: RemoteSessionType?, context: TerminalContext) {
     if session != nil {
         // Entering remote session

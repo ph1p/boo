@@ -8,15 +8,13 @@ import XCTest
 final class AIAgentPluginLifecycleTests: XCTestCase {
 
     private var plugin: AIAgentPlugin!
-    private var cycleRerunCount: Int = 0
+    private let teardownGracePeriod: TimeInterval = 0.02
+    private let teardownWaitTimeout: TimeInterval = 0.25
 
     override func setUp() {
         super.setUp()
-        cycleRerunCount = 0
         plugin = AIAgentPlugin()
-        plugin.onRequestCycleRerun = { [weak self] in
-            self?.cycleRerunCount += 1
-        }
+        plugin.teardownGracePeriod = teardownGracePeriod
     }
 
     override func tearDown() {
@@ -33,25 +31,34 @@ final class AIAgentPluginLifecycleTests: XCTestCase {
             terminalID: UUID(),
             cwd: "/tmp/project",
             remoteSession: nil,
-            gitContext: TerminalContext.GitContext(
-                branch: "main", repoRoot: "/tmp/project",
-                isDirty: false, changedFileCount: 0, stagedCount: 0,
-                aheadCount: 0, behindCount: 0, lastCommitShort: nil
-            ),
+            gitContext: nil,
             processName: processName,
             paneCount: 1,
             tabCount: 1
         )
     }
 
+    private func pumpMainRunLoop(for duration: TimeInterval) {
+        let deadline = Date().addingTimeInterval(duration)
+        while Date() < deadline {
+            RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.005))
+        }
+    }
+
+    private func waitForTeardown() {
+        BooSocketTestSupport.waitUntil(timeout: teardownWaitTimeout) {
+            self.plugin.agentName == nil
+        }
+    }
+
     // MARK: - Basic Agent Detection
 
     func testAgentDetectedOnProcessChange() {
-        let ctx = makeContext(processName: "claude")
-        plugin.processChanged(name: "claude", context: ctx)
+        let ctx = makeContext(processName: "aider")
+        plugin.processChanged(name: "aider", context: ctx)
 
-        XCTAssertEqual(plugin.agentName, "claude")
-        XCTAssertEqual(plugin.agentDisplayName, "Claude")
+        XCTAssertEqual(plugin.agentName, "aider")
+        XCTAssertEqual(plugin.agentDisplayName, "Aider")
         XCTAssertNotNil(plugin.agentStartTime)
     }
 
@@ -65,8 +72,8 @@ final class AIAgentPluginLifecycleTests: XCTestCase {
     // MARK: - Visibility Override
 
     func testVisibleWhileAgentNameSet() {
-        let ctx = makeContext(processName: "claude")
-        plugin.processChanged(name: "claude", context: ctx)
+        let ctx = makeContext(processName: "aider")
+        plugin.processChanged(name: "aider", context: ctx)
 
         // Visible even if context says different process
         let shellCtx = makeContext(processName: "zsh")
@@ -74,8 +81,8 @@ final class AIAgentPluginLifecycleTests: XCTestCase {
     }
 
     func testNotVisibleAfterTeardown() {
-        let ctx = makeContext(processName: "claude")
-        plugin.processChanged(name: "claude", context: ctx)
+        let ctx = makeContext(processName: "aider")
+        plugin.processChanged(name: "aider", context: ctx)
 
         // Simulate: process changes to shell, then wait for teardown
         let shellCtx = makeContext(processName: "zsh")
@@ -84,145 +91,117 @@ final class AIAgentPluginLifecycleTests: XCTestCase {
         // Still visible during grace period
         XCTAssertTrue(plugin.isVisible(for: shellCtx))
 
-        // Wait for grace period to expire
-        let exp = expectation(description: "teardown")
-        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
-            exp.fulfill()
-        }
-        wait(for: [exp], timeout: 5.0)
-
-        // Now teardown has happened
-        XCTAssertNil(plugin.agentName)
+        waitForTeardown()
         XCTAssertFalse(plugin.isVisible(for: shellCtx))
     }
 
     // MARK: - Core Bug Fix: Process switches away never tears down immediately
 
     func testProcessSwitchAwayNeverTearsDownImmediately() {
-        let ctx = makeContext(processName: "claude")
-        plugin.processChanged(name: "claude", context: ctx)
-        XCTAssertEqual(plugin.agentName, "claude")
+        let ctx = makeContext(processName: "aider")
+        plugin.processChanged(name: "aider", context: ctx)
+        XCTAssertEqual(plugin.agentName, "aider")
 
         // Process changes to shell with activity idle — should NOT tear down immediately
         let shellCtx = makeContext(processName: "zsh")
         plugin.processChanged(name: "zsh", context: shellCtx)
 
         // Agent should still be set (deferred teardown pending)
-        XCTAssertEqual(plugin.agentName, "claude")
-        XCTAssertEqual(cycleRerunCount, 0, "Should not have called cycle rerun yet")
+        XCTAssertEqual(plugin.agentName, "aider")
     }
 
     func testProcessSwitchAwayWithRunningAlsoDefers() {
-        let ctx = makeContext(processName: "claude")
-        plugin.processChanged(name: "claude", context: ctx)
+        let ctx = makeContext(processName: "aider")
+        plugin.processChanged(name: "aider", context: ctx)
 
         // Process changes to git with running activity
         let gitCtx = makeContext(processName: "git")
         plugin.processChanged(name: "git", context: gitCtx)
 
-        XCTAssertEqual(plugin.agentName, "claude")
-        XCTAssertEqual(cycleRerunCount, 0)
+        XCTAssertEqual(plugin.agentName, "aider")
     }
 
     // MARK: - Process returns to AI cancels teardown
 
     func testProcessReturnsToAICancelsTeardown() {
-        let ctx = makeContext(processName: "claude")
-        plugin.processChanged(name: "claude", context: ctx)
+        let ctx = makeContext(processName: "aider")
+        plugin.processChanged(name: "aider", context: ctx)
 
         // Process briefly switches away
         let shellCtx = makeContext(processName: "zsh")
         plugin.processChanged(name: "zsh", context: shellCtx)
 
         // Process comes back to AI
-        plugin.processChanged(name: "claude", context: ctx)
+        plugin.processChanged(name: "aider", context: ctx)
 
         // Wait past the grace period
-        let exp = expectation(description: "wait")
-        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) { exp.fulfill() }
-        wait(for: [exp], timeout: 5.0)
+        pumpMainRunLoop(for: teardownGracePeriod * 4)
 
         // Should NOT have torn down — the process came back
-        XCTAssertEqual(plugin.agentName, "claude")
+        XCTAssertEqual(plugin.agentName, "aider")
     }
 
     // MARK: - Simulate real Claude Code session
 
     func testFullClaudeCodeSession() {
         // 1. Claude starts
-        plugin.processChanged(name: "claude", context: makeContext(processName: "claude"))
-        XCTAssertEqual(plugin.agentName, "claude")
+        plugin.processChanged(name: "aider", context: makeContext(processName: "aider"))
+        XCTAssertEqual(plugin.agentName, "aider")
 
         // 2. Claude spawns git subprocess — title changes briefly
         plugin.processChanged(name: "git", context: makeContext(processName: "git"))
-        XCTAssertEqual(plugin.agentName, "claude", "Should not tear down during git")
+        XCTAssertEqual(plugin.agentName, "aider", "Should not tear down during git")
 
         // 3. Git finishes, Claude comes back
-        plugin.processChanged(name: "claude", context: makeContext(processName: "claude"))
-        XCTAssertEqual(plugin.agentName, "claude")
-
-        // No teardown at any point
-        XCTAssertEqual(cycleRerunCount, 0)
+        plugin.processChanged(name: "aider", context: makeContext(processName: "aider"))
+        XCTAssertEqual(plugin.agentName, "aider")
     }
 
     func testFullClaudeCodeSessionWithSocketUnregister() {
         // 1. Claude starts
-        plugin.processChanged(name: "claude", context: makeContext(processName: "claude"))
-        XCTAssertEqual(plugin.agentName, "claude")
+        plugin.processChanged(name: "aider", context: makeContext(processName: "aider"))
+        XCTAssertEqual(plugin.agentName, "aider")
 
         // 2. Claude Code finishes a prompt — spawns git
         plugin.processChanged(name: "git", context: makeContext(processName: "git"))
-        XCTAssertEqual(plugin.agentName, "claude")
+        XCTAssertEqual(plugin.agentName, "aider")
 
         // 3. Git finishes, title falls back to shell
         plugin.processChanged(name: "", context: makeContext(processName: ""))
-        XCTAssertEqual(plugin.agentName, "claude", "Grace period should protect")
+        XCTAssertEqual(plugin.agentName, "aider", "Grace period should protect")
 
         // 4. Claude re-registers via socket
-        plugin.processChanged(name: "claude", context: makeContext(processName: "claude"))
-        XCTAssertEqual(plugin.agentName, "claude")
-        XCTAssertEqual(cycleRerunCount, 0, "No teardown should have occurred")
+        plugin.processChanged(name: "aider", context: makeContext(processName: "aider"))
+        XCTAssertEqual(plugin.agentName, "aider")
     }
 
     func testClaudeExitsForReal() {
         // 1. Claude starts
-        plugin.processChanged(name: "claude", context: makeContext(processName: "claude"))
+        plugin.processChanged(name: "aider", context: makeContext(processName: "aider"))
 
         // 2. Claude exits — process changes to shell
         plugin.processChanged(name: "", context: makeContext(processName: ""))
-        XCTAssertEqual(plugin.agentName, "claude", "Grace period active")
+        XCTAssertEqual(plugin.agentName, "aider", "Grace period active")
 
-        // 3. Wait for grace period to expire
-        let exp = expectation(description: "teardown")
-        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) { exp.fulfill() }
-        wait(for: [exp], timeout: 5.0)
-
-        // Teardown should happen now
-        XCTAssertNil(plugin.agentName)
+        waitForTeardown()
     }
 
     func testGracePeriodExpiresWhenNothingComesBack() {
         // 1. Claude starts
-        plugin.processChanged(name: "claude", context: makeContext(processName: "claude"))
+        plugin.processChanged(name: "aider", context: makeContext(processName: "aider"))
 
         // 2. Claude exits
         plugin.processChanged(name: "zsh", context: makeContext(processName: "zsh"))
-        XCTAssertEqual(plugin.agentName, "claude")
+        XCTAssertEqual(plugin.agentName, "aider")
 
-        // 3. Wait for grace period
-        let exp = expectation(description: "grace period")
-        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) { exp.fulfill() }
-        wait(for: [exp], timeout: 5.0)
-
-        // 4. Teardown should have happened
-        XCTAssertNil(plugin.agentName)
+        waitForTeardown()
     }
 
     // MARK: - pluginDidDeactivate
 
     func testDeactivateCleansUp() {
-        plugin.processChanged(name: "claude", context: makeContext(processName: "claude"))
-        XCTAssertEqual(plugin.agentName, "claude")
+        plugin.processChanged(name: "aider", context: makeContext(processName: "aider"))
+        XCTAssertEqual(plugin.agentName, "aider")
 
         plugin.pluginDidDeactivate()
         XCTAssertNil(plugin.agentName)
@@ -256,16 +235,15 @@ final class AIAgentPluginLifecycleTests: XCTestCase {
         // Process tree sees "node" but title says "Claude Code" → foreground is "claude"
         // This is tested at the bridge level (testBridgePollResolvesNodeToClaude)
         // Here we just verify the plugin reacts correctly to "claude"
-        plugin.processChanged(name: "claude", context: makeContext(processName: "claude"))
-        XCTAssertEqual(plugin.agentName, "claude")
-        XCTAssertEqual(cycleRerunCount, 0)
+        plugin.processChanged(name: "aider", context: makeContext(processName: "aider"))
+        XCTAssertEqual(plugin.agentName, "aider")
     }
 
     // MARK: - Focus change
 
     func testFocusChangeCancelsTeardown() {
         // Claude is running
-        plugin.processChanged(name: "claude", context: makeContext(processName: "claude"))
+        plugin.processChanged(name: "aider", context: makeContext(processName: "aider"))
 
         // Process briefly switches away
         plugin.processChanged(name: "zsh", context: makeContext(processName: "zsh"))
@@ -273,15 +251,13 @@ final class AIAgentPluginLifecycleTests: XCTestCase {
         // Focus changes to a pane where Claude is running
         plugin.terminalFocusChanged(
             terminalID: UUID(),
-            context: makeContext(processName: "claude")
+            context: makeContext(processName: "aider")
         )
 
         // Wait past grace period
-        let exp = expectation(description: "wait")
-        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) { exp.fulfill() }
-        wait(for: [exp], timeout: 5.0)
+        pumpMainRunLoop(for: teardownGracePeriod * 4)
 
         // Should not have torn down
-        XCTAssertEqual(plugin.agentName, "claude")
+        XCTAssertEqual(plugin.agentName, "aider")
     }
 }

@@ -18,6 +18,10 @@ export default defineConfig({
       link: '/features',
     },
     {
+      text: 'Updates',
+      link: '/updates',
+    },
+    {
       text: 'Keyboard Shortcuts',
       link: '/keyboard-shortcuts',
     },
@@ -35,6 +39,10 @@ export default defineConfig({
         {
           text: 'Remote Sessions',
           link: '/remote-sessions',
+        },
+        {
+          text: 'IPC Socket',
+          link: '/ipc-socket',
         },
         {
           text: 'Plugin System',

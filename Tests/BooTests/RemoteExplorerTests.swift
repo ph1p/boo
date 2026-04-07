@@ -160,6 +160,20 @@ final class RemoteExplorerTests: XCTestCase {
         XCTAssertEqual(target, "web")
     }
 
+    func testVagrantSSHArgumentsIncludeDetectedTarget() {
+        XCTAssertEqual(
+            RemoteExplorer.sshBasedToolArguments(target: "default", tool: .vagrant, command: "pwd"),
+            ["ssh", "default", "-c", "pwd"]
+        )
+    }
+
+    func testColimaSSHArgumentsIncludeDetectedProfile() {
+        XCTAssertEqual(
+            RemoteExplorer.sshBasedToolArguments(target: "devbox", tool: .colima, command: "pwd"),
+            ["ssh", "--profile", "devbox", "--", "sh", "-c", "pwd"]
+        )
+    }
+
     func testDirectoryListCommandLeavesBareTildeUnquoted() {
         XCTAssertEqual(
             RemoteExplorer.directoryListCommand(for: "~"),
