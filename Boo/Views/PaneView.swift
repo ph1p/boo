@@ -12,7 +12,7 @@ protocol PaneViewDelegate: AnyObject {
     func paneView(_ paneView: PaneView, sessionEnded paneID: UUID)
     func paneView(_ paneView: PaneView, directoryListing path: String, output: String, paneID: UUID)
     func paneView(_ paneView: PaneView, didRequestCloseTab index: Int, paneID: UUID)
-    func paneView(_ paneView: PaneView, shellPIDDiscovered pid: pid_t, paneID: UUID)
+    func paneView(_ paneView: PaneView, shellPIDDiscovered pid: pid_t, paneID: UUID, tabID: UUID?)
     func paneView(_ paneView: PaneView, didRequestMoveTab index: Int, toWorkspaceAt workspaceIndex: Int, paneID: UUID)
     func paneViewWorkspaceNames(_ paneView: PaneView) -> [(index: Int, name: String)]
     /// Returns true if this pane is the only pane in its workspace (used for close-label wording).
@@ -262,8 +262,9 @@ class PaneView: NSView {
         gv.onShellPIDDiscovered = { [weak self] pid in
             guard let self = self else { return }
             let idx = self.pane.activeTabIndex
+            let tabID = idx >= 0 ? self.pane.tabs[idx].id : nil
             if idx >= 0 { self.pane.updateShellPID(at: idx, pid) }
-            self.paneDelegate?.paneView(self, shellPIDDiscovered: pid, paneID: self.paneID)
+            self.paneDelegate?.paneView(self, shellPIDDiscovered: pid, paneID: self.paneID, tabID: tabID)
         }
     }
 
@@ -428,7 +429,8 @@ class PaneView: NSView {
         }
     }
 
-    func addNewTab(workingDirectory: String) {
+    @discardableResult
+    func addNewTab(workingDirectory: String) -> UUID? {
         storeCurrentView()
         lastAutoScrolledTabIndex = -1
         _ = pane.addTab(workingDirectory: workingDirectory)
@@ -446,6 +448,7 @@ class PaneView: NSView {
             guard let self, let gv = self.ghosttyView else { return }
             self.window?.makeFirstResponder(gv)
         }
+        return pane.tabs.last?.id
     }
 
     func closeTab(at index: Int) {

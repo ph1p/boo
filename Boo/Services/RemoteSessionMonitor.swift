@@ -25,11 +25,18 @@ final class RemoteSessionMonitor {
     /// Called on the main thread when a container session's CWD changes.
     var onContainerCwdChanged: ((UUID, String) -> Void)?
 
-    func track(paneID: UUID, shellPID: pid_t) {
+    /// Called on the main thread when a fresh shell PID is registered for a pane.
+    /// `tabID` is the tab that owns the new shell, or nil if unknown.
+    var onShellPIDUpdated: ((UUID, pid_t, UUID?) -> Void)?
+
+    func track(paneID: UUID, shellPID: pid_t, tabID: UUID? = nil) {
         NSLog("[Monitor] track: paneID=\(paneID) shellPID=\(shellPID)")
         queue.async { [weak self] in
             self?.tracked[paneID] = TrackedPane(shellPID: shellPID, lastSession: nil)
             self?.ensureTimerRunning()
+            DispatchQueue.main.async { [weak self] in
+                self?.onShellPIDUpdated?(paneID, shellPID, tabID)
+            }
         }
     }
 
@@ -60,6 +67,14 @@ final class RemoteSessionMonitor {
     func shellPID(for paneID: UUID) -> pid_t? {
         let pid: pid_t? = queue.sync { tracked[paneID]?.shellPID }
         return (pid != nil && pid! > 0) ? pid : nil
+    }
+
+    /// Returns all tracked PIDs except the one for `excludingPane`.
+    /// Used to avoid sending images to the wrong pane's shell.
+    func otherTrackedPIDs(excluding paneID: UUID) -> Set<pid_t> {
+        queue.sync {
+            Set(tracked.compactMap { $0.key != paneID ? $0.value.shellPID : nil })
+        }
     }
 
     /// Manually start container CWD polling for a pane whose container session was

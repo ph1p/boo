@@ -1,6 +1,22 @@
 import CGhostty
 import Cocoa
 
+/// Process-level registry of direct-child PIDs already claimed by a GhosttyView.
+/// Prevents two concurrently-created views from walking down to the same shell.
+/// All access is on the main thread (GhosttyView is main-thread only).
+enum ClaimedDirectChildren {
+    private static var claimed: Set<pid_t> = []
+
+    /// Atomically claim `pid`. Returns true if the claim succeeded (pid was unclaimed).
+    static func claim(_ pid: pid_t) -> Bool {
+        guard !claimed.contains(pid) else { return false }
+        claimed.insert(pid)
+        return true
+    }
+
+    static func release(_ pid: pid_t) { claimed.remove(pid) }
+}
+
 /// NSView that hosts a Ghostty terminal surface with Metal rendering.
 /// Implements NSTextInputClient for proper keyboard input handling.
 class GhosttyView: NSView, NSTextInputClient {
@@ -80,30 +96,51 @@ class GhosttyView: NSView, NSTextInputClient {
     /// Ghostty forks: Boo → login → shell. We find the new direct child (login),
     /// then walk down to the actual shell process.
     /// Retries up to 5x at 100ms intervals if the child isn't visible yet.
+    private var claimedDirectChild: pid_t = 0
+
+    /// Re-walks from the claimed login process to find the current shell PID.
+    /// Called when sendImage fails with ESRCH — zsh re-exec'd to a new PID.
+    /// Fires onShellPIDDiscovered if a new shell is found.
+    func refreshShellPIDIfNeeded(currentPID: pid_t) {
+        guard claimedDirectChild != 0, shellPID == currentPID else { return }
+        let fresh = RemoteExplorer.walkToLeafShell(from: claimedDirectChild)
+        guard fresh != currentPID, KittyImageProtocol.ttyPath(for: fresh) != nil else { return }
+        NSLog("[GhosttyView] refreshShellPID: \(currentPID) → \(fresh) via directChild=\(claimedDirectChild)")
+        shellPID = fresh
+        onShellPIDDiscovered?(fresh)
+    }
+
     private func discoverShellPID(myPID: pid_t, pidsBefore: Set<pid_t>, attempt: Int = 0) {
         let pidsAfter = Set(RemoteExplorer.childPIDs(of: myPID))
+        // Exclude PIDs that have already been claimed by another GhosttyView this session.
         let newPIDs = pidsAfter.subtracting(pidsBefore)
 
-        if let directChild = newPIDs.first {
+        // Find the first unclaimed direct child (atomically claim it so concurrent discovery skips it).
+        let directChild = newPIDs.sorted().first { ClaimedDirectChildren.claim($0) }
+
+        if let directChild {
             // Walk down the single-child chain (login → shell).
             // On early attempts the shell may not have spawned yet — retry if
             // we're still at an intermediary like `login`.
             let shell = RemoteExplorer.walkToLeafShell(from: directChild)
             if shell != directChild || attempt >= 3 {
                 NSLog("[GhosttyView] shellPID discovered: directChild=\(directChild) shell=\(shell) attempt=\(attempt)")
+                claimedDirectChild = directChild
                 shellPID = shell
                 onShellPIDDiscovered?(shell)
                 return
             }
-            // Shell not yet visible — retry
+            // Shell not yet visible — release claim and retry so siblings can try
+            ClaimedDirectChildren.release(directChild)
         }
 
         guard attempt < 8 else {
-            // Last resort: use whatever we found
+            // Last resort: claim whatever is available
             let pidsNow = Set(RemoteExplorer.childPIDs(of: myPID))
-            if let directChild = pidsNow.subtracting(pidsBefore).first {
-                let shell = RemoteExplorer.walkToLeafShell(from: directChild)
-                NSLog("[GhosttyView] shellPID fallback: directChild=\(directChild) shell=\(shell)")
+            if let dc = pidsNow.subtracting(pidsBefore).sorted().first(where: { ClaimedDirectChildren.claim($0) }) {
+                let shell = RemoteExplorer.walkToLeafShell(from: dc)
+                NSLog("[GhosttyView] shellPID fallback: directChild=\(dc) shell=\(shell)")
+                claimedDirectChild = dc
                 shellPID = shell
                 onShellPIDDiscovered?(shell)
             }
@@ -271,6 +308,25 @@ class GhosttyView: NSView, NSTextInputClient {
         key.action = GHOSTTY_ACTION_RELEASE
         key.text = nil
         _ = ghostty_surface_key(surface, key)
+    }
+
+    /// Send text as keyboard input, splitting on \r/\n to synthesize Enter key events.
+    func sendRaw(_ text: String) {
+        var buf = ""
+        for char in text {
+            if char == "\r" || char == "\n" {
+                if !buf.isEmpty {
+                    sendKey(keyCode: 0, mods: GHOSTTY_MODS_NONE, text: buf)
+                    buf = ""
+                }
+                sendKey(keyCode: 0x24, mods: GHOSTTY_MODS_NONE, text: "\r")
+            } else {
+                buf.append(char)
+            }
+        }
+        if !buf.isEmpty {
+            sendKey(keyCode: 0, mods: GHOSTTY_MODS_NONE, text: buf)
+        }
     }
 
     // MARK: - NSTextInputClient
@@ -575,6 +631,10 @@ class GhosttyView: NSView, NSTextInputClient {
     }
 
     func destroy() {
+        if claimedDirectChild != 0 {
+            ClaimedDirectChildren.release(claimedDirectChild)
+            claimedDirectChild = 0
+        }
         guard let surface = surface else { return }
         self.surface = nil  // nil first to prevent callbacks reaching a freed surface
         GhosttyRuntime.shared.unregisterSurface(surface)

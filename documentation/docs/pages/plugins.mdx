@@ -214,12 +214,12 @@ The Settings window (Plugins tab) dynamically renders controls for each plugin's
 | **Files** (`file-tree-local`) | `showIcons` | Bool | `true` | Show file icons |
 | **Files** (`file-tree-local`) | `showPath` | Bool | `true` | Show current path above tree |
 | **Files** (`file-tree-local`) | `showProcess` | Bool | `true` | Show running process name |
-| **Files** (`file-tree-local`) | `useTimg` | Bool | `true` | Preview images with timg (if installed) |
+| **Files** (`file-tree-local`) | `useKitty` | Bool | `true` | Preview images inline using the Kitty Graphics Protocol |
 | **Files** (`file-tree-local`) | `editorExtensions` | String | *(see below)* | Comma-separated list of extensions that open in the terminal editor |
 
 The `editorExtensions` setting controls which file types open in the terminal editor (via the configured editor command or `$EDITOR`). All other types open with the default macOS app. The default list covers common source and text formats.
 
-If `timg` is installed (`brew install timg`), image files open inline in a new terminal tab. The `useTimg` toggle disables this if preferred.
+Image files are rendered inline using the Kitty Graphics Protocol, which Ghostty supports natively — no external tool required. The `useKitty` toggle disables this if preferred.
 
 ## Plugin Enable/Disable
 

@@ -1515,8 +1515,6 @@ private struct PluginSettingControl: View {
                     Spacer()
                     fontPicker(value: value, fonts: AppSettings.availableMonospaceFonts)
                 }
-            } else if setting.options == "timgStatus" {
-                timgStatusControl
             } else if setting.options == "editorExtensions" {
                 editorExtensionsControl(value: value)
             } else {
@@ -1535,26 +1533,6 @@ private struct PluginSettingControl: View {
                     .textFieldStyle(.roundedBorder)
                     .frame(width: 150)
                 }
-            }
-        }
-    }
-
-    private var timgStatusControl: some View {
-        let installed = LocalFileTreePlugin.timgPath
-        return HStack(spacing: 6) {
-            Circle()
-                .fill(installed != nil ? Color.green : Color(nsColor: .tertiaryLabelColor))
-                .frame(width: 7, height: 7)
-            if let path = installed {
-                Text(path)
-                    .font(.system(size: 11, design: .monospaced))
-                    .foregroundColor(Tokens.current.muted)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-            } else {
-                Text("timg not found — install via Homebrew: brew install timg")
-                    .font(.system(size: 11))
-                    .foregroundColor(Tokens.current.muted)
             }
         }
     }
