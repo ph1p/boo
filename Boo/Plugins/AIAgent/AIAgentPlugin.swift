@@ -371,6 +371,56 @@ final class AIAgentPlugin: BooPluginProtocol {
                 scope: "global", into: &config)
         }
 
+        // OpenCode
+        if agentKey == "opencode" {
+            // Project-level config
+            checkFile(
+                fm: fm, root: projectRoot, rel: "opencode.json", name: "opencode.json", icon: "gearshape",
+                scope: "project", into: &config)
+            checkFile(
+                fm: fm, root: projectRoot, rel: ".opencode/AGENTS.md", name: "AGENTS.md", icon: "doc.text",
+                scope: "project", into: &config)
+
+            // Global config
+            let xdgConfig = (home as NSString).appendingPathComponent(".config/opencode")
+            checkFile(
+                fm: fm, root: xdgConfig, rel: "opencode.json", name: "Global Config", icon: "gearshape",
+                scope: "global", into: &config)
+            checkFile(
+                fm: fm, root: xdgConfig, rel: "AGENTS.md", name: "Global AGENTS.md", icon: "doc.text",
+                scope: "global", into: &config)
+
+            // Scan skills from .opencode/skills/<name>/SKILL.md
+            let skillsDir = (projectRoot as NSString).appendingPathComponent(".opencode/skills")
+            if let entries = try? fm.contentsOfDirectory(atPath: skillsDir) {
+                for entry in entries.sorted() {
+                    let skillMd = (skillsDir as NSString).appendingPathComponent("\(entry)/SKILL.md")
+                    if fm.fileExists(atPath: skillMd) {
+                        let desc = parseSkillDescription(at: skillMd)
+                        config.skills.append(
+                            AgentConfig.SkillEntry(name: entry, description: desc, path: skillMd))
+                    }
+                }
+            }
+            // Global skills
+            let globalSkillsDir = (xdgConfig as NSString).appendingPathComponent("skills")
+            if let entries = try? fm.contentsOfDirectory(atPath: globalSkillsDir) {
+                let projectSkillNames = Set(config.skills.map(\.name))
+                for entry in entries.sorted() {
+                    guard !projectSkillNames.contains(entry) else { continue }
+                    let skillMd = (globalSkillsDir as NSString).appendingPathComponent("\(entry)/SKILL.md")
+                    if fm.fileExists(atPath: skillMd) {
+                        let desc = parseSkillDescription(at: skillMd)
+                        config.skills.append(
+                            AgentConfig.SkillEntry(name: entry, description: desc, path: skillMd))
+                    }
+                }
+            }
+
+            // Scan MCP servers from opencode.json
+            scanOpenCodeMCP(fm: fm, root: projectRoot, configDir: xdgConfig, into: &config)
+        }
+
         // Aider
         if agentKey == "aider" {
             checkFile(
@@ -441,7 +491,10 @@ final class AIAgentPlugin: BooPluginProtocol {
     nonisolated private static func findProjectRoot(from path: String) -> String? {
         let fm = FileManager.default
         var dir = path
-        let markers = [".git", ".claude", ".cursor", ".codex", ".aider.conf.yml", "AGENTS.md"]
+        let markers = [
+            ".git", ".claude", ".cursor", ".codex", ".opencode",
+            ".aider.conf.yml", "AGENTS.md", "opencode.json"
+        ]
         for _ in 0..<20 {
             for marker in markers {
                 let candidate = (dir as NSString).appendingPathComponent(marker)
@@ -522,6 +575,26 @@ final class AIAgentPlugin: BooPluginProtocol {
                 }
             }
             break  // Use the first settings file that has hooks
+        }
+    }
+
+    nonisolated private static func scanOpenCodeMCP(
+        fm: FileManager, root: String, configDir: String, into config: inout AgentConfig
+    ) {
+        for configPath in [
+            (root as NSString).appendingPathComponent("opencode.json"),
+            (configDir as NSString).appendingPathComponent("opencode.json")
+        ] {
+            guard let data = fm.contents(atPath: configPath),
+                let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                let mcp = json["mcp"] as? [String: Any]
+            else { continue }
+
+            for name in mcp.keys.sorted() {
+                if !config.mcpServers.contains(name) {
+                    config.mcpServers.append(name)
+                }
+            }
         }
     }
 

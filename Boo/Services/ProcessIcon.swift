@@ -89,7 +89,9 @@ enum ProcessIcon {
 
         // AI agents update their title dynamically (e.g. "⠂ General coding assistance").
         // Match titles that start with known spinner/status characters used by AI CLIs.
+        // Check the stripped text for known agent keywords before defaulting to claude.
         if let first = title.unicodeScalars.first, Self.isAISpinnerScalar(first) {
+            if stripped.hasPrefix("opencode") || stripped.hasPrefix("oc ") || stripped == "oc" { return "opencode" }
             return "claude"
         }
         return nil
@@ -99,7 +101,9 @@ enum ProcessIcon {
     private static let titleMap: [String: String] = [
         "claude code": "claude",
         "cursor": "cursor",
-        "codex cli": "codex"
+        "codex cli": "codex",
+        "opencode": "opencode",
+        "oc": "opencode"
     ]
 
     /// Braille pattern dots (U+2800..U+28FF) or ✳ (U+2733) — used by AI CLI spinners.
@@ -233,6 +237,7 @@ enum ProcessIcon {
         "claude": "sparkles",
         "codex": "sparkles",
         "opencode": "sparkles",
+        "oc": "sparkles",
         "aider": "sparkles",
         "copilot": "sparkles",
         "cody": "sparkles",
@@ -294,6 +299,7 @@ enum ProcessIcon {
         "claude": "Claude",
         "codex": "Codex",
         "opencode": "OpenCode",
+        "oc": "OpenCode",
         "aider": "Aider",
         "copilot": "Copilot",
         "cody": "Cody",
@@ -329,7 +335,7 @@ enum ProcessIcon {
         "zellij": "multiplexer",
         "ranger": "filemanager", "yazi": "filemanager", "lf": "filemanager",
         "nnn": "filemanager", "mc": "filemanager",
-        "claude": "ai", "codex": "ai", "opencode": "ai", "aider": "ai",
+        "claude": "ai", "codex": "ai", "opencode": "ai", "oc": "ai", "aider": "ai",
         "copilot": "ai", "cody": "ai", "continue": "ai", "cursor-cli": "ai",
         "goose": "ai", "mentat": "ai", "gpt": "ai", "ollama": "ai",
         "llm": "ai", "sgpt": "ai", "tgpt": "ai", "mods": "ai", "fabric": "ai"
