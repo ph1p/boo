@@ -8,15 +8,26 @@ import XCTest
 final class TabDragWorkspaceHoverTests: XCTestCase {
 
     private var coordinator: TabDragCoordinator!
+    private let hoverDelay: TimeInterval = 0.02
+    private let hoverWindow: TimeInterval = 0.08
 
     override func setUp() {
         super.setUp()
         coordinator = TabDragCoordinator()
+        coordinator.workspaceHoverDelay = hoverDelay
     }
 
     override func tearDown() {
         coordinator = nil
         super.tearDown()
+    }
+
+    private func waitForHoverWindow() {
+        let expectation = expectation(description: "hover window")
+        DispatchQueue.main.asyncAfter(deadline: .now() + hoverWindow) {
+            expectation.fulfill()
+        }
+        waitForExpectations(timeout: 0.2)
     }
 
     // MARK: - workspacePillFrames callback
@@ -94,10 +105,7 @@ final class TabDragWorkspaceHoverTests: XCTestCase {
         // Immediately move outside
         coordinator.simulateHoverAt(screenPoint: NSPoint(x: 400, y: 400))
 
-        // Wait longer than the hover delay
-        let expectation = expectation(description: "timer window passes")
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) { expectation.fulfill() }
-        waitForExpectations(timeout: 1.0)
+        waitForHoverWindow()
 
         XCTAssertEqual(firedCount, 0, "Timer should have been cancelled when cursor left pill")
     }
@@ -115,9 +123,7 @@ final class TabDragWorkspaceHoverTests: XCTestCase {
         coordinator.simulateHoverAt(screenPoint: NSPoint(x: 112, y: 19))
         coordinator.simulateHoverAt(screenPoint: NSPoint(x: 198, y: 19))
 
-        let expectation = expectation(description: "only pill1 fires")
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) { expectation.fulfill() }
-        waitForExpectations(timeout: 1.0)
+        waitForHoverWindow()
 
         XCTAssertEqual(firedIndexes.count, 1, "Only the final pill should fire")
         XCTAssertEqual(firedIndexes.first, 1)
@@ -135,9 +141,7 @@ final class TabDragWorkspaceHoverTests: XCTestCase {
         coordinator.simulateHoverAt(screenPoint: NSPoint(x: 100, y: 19))
         coordinator.simulateHoverAt(screenPoint: NSPoint(x: 120, y: 19))
 
-        let expectation = expectation(description: "timer fires once")
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) { expectation.fulfill() }
-        waitForExpectations(timeout: 1.0)
+        waitForHoverWindow()
 
         XCTAssertEqual(firedCount, 1)
     }
@@ -153,9 +157,7 @@ final class TabDragWorkspaceHoverTests: XCTestCase {
         // Point far from pill
         coordinator.simulateHoverAt(screenPoint: NSPoint(x: 500, y: 500))
 
-        let expectation = expectation(description: "no fire")
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) { expectation.fulfill() }
-        waitForExpectations(timeout: 1.0)
+        waitForHoverWindow()
 
         XCTAssertFalse(fired)
     }
@@ -169,9 +171,7 @@ final class TabDragWorkspaceHoverTests: XCTestCase {
 
         coordinator.simulateHoverAt(screenPoint: NSPoint(x: 112, y: 19))
 
-        let expectation = expectation(description: "no fire without frames")
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) { expectation.fulfill() }
-        waitForExpectations(timeout: 1.0)
+        waitForHoverWindow()
 
         XCTAssertFalse(fired)
     }

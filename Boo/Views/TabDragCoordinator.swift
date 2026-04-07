@@ -42,7 +42,8 @@ class TabDragCoordinator {
     // Workspace hover state
     private var hoveredWorkspaceIndex: Int?
     private var workspaceHoverTimer: Timer?
-    private let workspaceHoverDelay: TimeInterval = 0.5
+    /// Internal so tests can shorten the hover arm time without touching runtime defaults.
+    var workspaceHoverDelay: TimeInterval = 0.5
     private var cachedPillFrames: [(index: Int, screenFrame: NSRect)]?
 
     private let edgeFraction: CGFloat = 0.2

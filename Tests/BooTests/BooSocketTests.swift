@@ -104,151 +104,91 @@ final class BooSocketServerTests: XCTestCase {
 // MARK: - Socket Protocol Integration Tests
 
 @MainActor
-final class BooSocketProtocolTests: XCTestCase {
+final class BooSocketProtocolTests: BooSocketIntegrationTestCase {
 
-    override func setUp() {
-        super.setUp()
-        BooSocketServer.shared.start()
-        Thread.sleep(forTimeInterval: 0.5)
-    }
-
-    override func tearDown() {
-        BooSocketServer.shared.stop()
-        Thread.sleep(forTimeInterval: 0.2)
-        super.tearDown()
-    }
-
-    private func sendCommand(_ json: String) -> String? {
-        let path = BooSocketServer.shared.socketPath
-
-        let fd = socket(AF_UNIX, SOCK_STREAM, 0)
-        guard fd >= 0 else { return nil }
-        defer { close(fd) }
-
-        var addr = sockaddr_un()
-        addr.sun_family = sa_family_t(AF_UNIX)
-        _ = path.withCString { ptr in
-            withUnsafeMutablePointer(to: &addr.sun_path) { sunPath in
-                sunPath.withMemoryRebound(to: CChar.self, capacity: 104) { dest in
-                    strlcpy(dest, ptr, 104)
-                }
-            }
+    private func roundTrip(_ command: [String: Any]) throws -> [String: Any] {
+        try withBooSocketClient { client in
+            try client.roundTrip(command: command)
         }
-
-        let connectResult = withUnsafePointer(to: &addr) { ptr in
-            ptr.withMemoryRebound(to: sockaddr.self, capacity: 1) { sockPtr in
-                connect(fd, sockPtr, socklen_t(MemoryLayout<sockaddr_un>.size))
-            }
-        }
-        guard connectResult == 0 else { return nil }
-
-        let msg = json + "\n"
-        _ = msg.withCString { write(fd, $0, strlen($0)) }
-        Thread.sleep(forTimeInterval: 0.1)
-
-        var buf = [UInt8](repeating: 0, count: 4096)
-        let n = read(fd, &buf, buf.count)
-        guard n > 0 else { return nil }
-        return String(bytes: buf[0..<n], encoding: .utf8)?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    func testSetAndClearStatus() {
+    private func roundTrip(rawJSON: String) throws -> [String: Any] {
+        try withBooSocketClient { client in
+            try client.roundTrip(rawJSON: rawJSON)
+        }
+    }
+
+    func testSetAndClearStatus() throws {
         let pid = getpid()
 
-        let setResp = sendCommand(
-            """
-            {"cmd":"set_status","pid":\(pid),"name":"claude","category":"ai"}
-            """)
-        XCTAssertTrue(setResp?.contains("\"ok\":true") ?? false)
-
-        Thread.sleep(forTimeInterval: 0.2)
+        let setResponse = try roundTrip(["cmd": "set_status", "pid": pid, "name": "claude", "category": "ai"])
+        XCTAssertEqual(setResponse["ok"] as? Bool, true)
         XCTAssertEqual(BooSocketServer.shared.processes[pid]?.name, "claude")
         XCTAssertEqual(BooSocketServer.shared.processes[pid]?.category, "ai")
 
-        let clearResp = sendCommand(
-            """
-            {"cmd":"clear_status","pid":\(pid)}
-            """)
-        XCTAssertTrue(clearResp?.contains("\"ok\":true") ?? false)
-
-        Thread.sleep(forTimeInterval: 0.2)
+        let clearResponse = try roundTrip(["cmd": "clear_status", "pid": pid])
+        XCTAssertEqual(clearResponse["ok"] as? Bool, true)
         XCTAssertNil(BooSocketServer.shared.processes[pid])
     }
 
-    func testSetStatusWithMetadata() {
+    func testSetStatusWithMetadata() throws {
         let pid = getpid()
 
-        let resp = sendCommand(
-            """
-            {"cmd":"set_status","pid":\(pid),"name":"jest","category":"test","metadata":{"suite":"e2e"}}
-            """)
-        XCTAssertTrue(resp?.contains("\"ok\":true") ?? false)
-
-        Thread.sleep(forTimeInterval: 0.2)
+        let response = try roundTrip(
+            [
+                "cmd": "set_status",
+                "pid": pid,
+                "name": "jest",
+                "category": "test",
+                "metadata": ["suite": "e2e"]
+            ])
+        XCTAssertEqual(response["ok"] as? Bool, true)
         XCTAssertEqual(BooSocketServer.shared.processes[pid]?.metadata["suite"], "e2e")
 
-        _ = sendCommand(
-            """
-            {"cmd":"clear_status","pid":\(pid)}
-            """)
+        _ = try roundTrip(["cmd": "clear_status", "pid": pid])
     }
 
-    func testSetStatusRejectsDeadPID() {
-        let resp = sendCommand(
-            """
-            {"cmd":"set_status","pid":99999999,"name":"fake","category":"ai"}
-            """)
-        XCTAssertTrue(resp?.contains("not found") ?? false)
+    func testSetStatusRejectsDeadPID() throws {
+        let response = try roundTrip(
+            ["cmd": "set_status", "pid": 99_999_999, "name": "fake", "category": "ai"])
+        XCTAssertEqual(response["ok"] as? Bool, false)
+        XCTAssertTrue((response["error"] as? String)?.contains("not found") ?? false)
     }
 
-    func testListStatus() {
+    func testListStatus() throws {
         let pid = getpid()
-        _ = sendCommand(
-            """
-            {"cmd":"set_status","pid":\(pid),"name":"opencode","category":"ai"}
-            """)
-        Thread.sleep(forTimeInterval: 0.2)
+        _ = try roundTrip(["cmd": "set_status", "pid": pid, "name": "opencode", "category": "ai"])
 
-        let resp = sendCommand(
-            """
-            {"cmd":"list_status"}
-            """)
-        XCTAssertTrue(resp?.contains("opencode") ?? false)
-        XCTAssertTrue(resp?.contains("ai") ?? false)
+        let response = try roundTrip(["cmd": "list_status"])
+        XCTAssertEqual(response["ok"] as? Bool, true)
 
-        _ = sendCommand(
-            """
-            {"cmd":"clear_status","pid":\(pid)}
-            """)
+        let processes = try XCTUnwrap(response["processes"] as? [[String: Any]])
+        let entry = processes.first { ($0["pid"] as? Int) == Int(pid) }
+        XCTAssertEqual(entry?["name"] as? String, "opencode")
+        XCTAssertEqual(entry?["category"] as? String, "ai")
+
+        _ = try roundTrip(["cmd": "clear_status", "pid": pid])
     }
 
-    func testInvalidJSON() {
-        let resp = sendCommand("not json")
-        XCTAssertTrue(resp?.contains("invalid") ?? false)
+    func testInvalidJSON() throws {
+        let response = try roundTrip(rawJSON: "not json")
+        XCTAssertEqual(response["ok"] as? Bool, false)
+        XCTAssertEqual(response["error"] as? String, "invalid json")
     }
 
-    func testUnknownCommand() {
-        let resp = sendCommand(
-            """
-            {"cmd":"magic_spell"}
-            """)
-        XCTAssertTrue(resp?.contains("unknown") ?? false)
+    func testUnknownCommand() throws {
+        let response = try roundTrip(["cmd": "magic_spell"])
+        XCTAssertEqual(response["ok"] as? Bool, false)
+        XCTAssertTrue((response["error"] as? String)?.contains("unknown command") ?? false)
     }
 
-    func testDefaultCategoryIsUnknown() {
+    func testDefaultCategoryIsUnknown() throws {
         let pid = getpid()
-        _ = sendCommand(
-            """
-            {"cmd":"set_status","pid":\(pid),"name":"myprocess"}
-            """)
-        Thread.sleep(forTimeInterval: 0.2)
+        let response = try roundTrip(["cmd": "set_status", "pid": pid, "name": "myprocess"])
+        XCTAssertEqual(response["ok"] as? Bool, true)
         XCTAssertEqual(BooSocketServer.shared.processes[pid]?.category, "unknown")
 
-        _ = sendCommand(
-            """
-            {"cmd":"clear_status","pid":\(pid)}
-            """)
+        _ = try roundTrip(["cmd": "clear_status", "pid": pid])
     }
 }
 

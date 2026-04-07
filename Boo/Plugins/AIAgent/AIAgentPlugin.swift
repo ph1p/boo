@@ -58,7 +58,8 @@ final class AIAgentPlugin: BooPluginProtocol {
     private var teardownGeneration: UInt64 = 0
 
     /// Grace period before tearing down when the process switches away from AI.
-    private let teardownGracePeriod: TimeInterval = 2.0
+    /// Internal so tests can shorten it without changing production behavior.
+    var teardownGracePeriod: TimeInterval = 2.0
 
     struct DiffStatEntry: Identifiable {
         let id = UUID()

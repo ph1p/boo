@@ -949,17 +949,7 @@ final class RemoteExplorer {
         let pipe = Pipe()
         let errPipe = Pipe()
         process.executableURL = URL(fileURLWithPath: binary)
-
-        switch tool {
-        case .vagrant:
-            // vagrant ssh -c "command"
-            process.arguments = ["ssh", "-c", command]
-        case .colima:
-            // colima ssh -- sh -c "command"
-            process.arguments = ["ssh", "--", "sh", "-c", command]
-        default:
-            process.arguments = [tool.execSubcommand, target, "sh", "-c", command]
-        }
+        process.arguments = sshBasedToolArguments(target: target, tool: tool, command: command)
 
         process.standardOutput = pipe
         process.standardError = errPipe
@@ -979,6 +969,23 @@ final class RemoteExplorer {
         } catch {
             NSLog("[RemoteExplorer] \(tool.rawValue) ssh exception: \(error)")
             return nil
+        }
+    }
+
+    static func sshBasedToolArguments(target: String, tool: ContainerTool, command: String) -> [String] {
+        switch tool {
+        case .vagrant:
+            if target.isEmpty {
+                return ["ssh", "-c", command]
+            }
+            return ["ssh", target, "-c", command]
+        case .colima:
+            if target.isEmpty {
+                return ["ssh", "--", "sh", "-c", command]
+            }
+            return ["ssh", "--profile", target, "--", "sh", "-c", command]
+        default:
+            return [tool.execSubcommand, target, "sh", "-c", command]
         }
     }
 

@@ -8,19 +8,11 @@ extension BooSocketServer {
     /// Must be called on the socket `queue`.
     func broadcastEvent(name: String, data: [String: Any]) {
         let event: [String: Any] = ["event": name, "data": data]
-        guard let jsonData = try? JSONSerialization.data(withJSONObject: event),
-            var str = String(data: jsonData, encoding: .utf8)
-        else { return }
-        str += "\n"
-
         var deadFDs: [Int32] = []
 
         for (fd, events) in subscriptions {
             guard events.contains(name) || events.contains("*") else { continue }
-            let written = str.withCString { ptr -> Int in
-                write(fd, ptr, strlen(ptr))
-            }
-            if written <= 0 {
+            if !sendJSON(fd: fd, dict: event) {
                 deadFDs.append(fd)
             }
         }

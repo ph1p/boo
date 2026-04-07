@@ -6,237 +6,197 @@ import XCTest
 // MARK: - Subscription Infrastructure Tests
 
 @MainActor
-final class BooSocketSubscriptionTests: XCTestCase {
+final class BooSocketSubscriptionTests: BooSocketIntegrationTestCase {
 
-    override func setUp() {
-        super.setUp()
-        BooSocketServer.shared.start()
-        Thread.sleep(forTimeInterval: 0.5)
-    }
-
-    override func tearDown() {
-        BooSocketServer.shared.stop()
-        Thread.sleep(forTimeInterval: 0.2)
-        super.tearDown()
-    }
-
-    private func connectSocket() -> Int32 {
-        let path = BooSocketServer.shared.socketPath
-        let fd = socket(AF_UNIX, SOCK_STREAM, 0)
-        guard fd >= 0 else { return -1 }
-
-        var addr = sockaddr_un()
-        addr.sun_family = sa_family_t(AF_UNIX)
-        _ = path.withCString { ptr in
-            withUnsafeMutablePointer(to: &addr.sun_path) { sunPath in
-                sunPath.withMemoryRebound(to: CChar.self, capacity: 104) { dest in
-                    strlcpy(dest, ptr, 104)
-                }
-            }
+    private func roundTrip(_ command: [String: Any]) throws -> [String: Any] {
+        try withBooSocketClient { client in
+            try client.roundTrip(command: command)
         }
-        let result = withUnsafePointer(to: &addr) { ptr in
-            ptr.withMemoryRebound(to: sockaddr.self, capacity: 1) { sockPtr in
-                connect(fd, sockPtr, socklen_t(MemoryLayout<sockaddr_un>.size))
-            }
-        }
-        guard result == 0 else {
-            close(fd)
-            return -1
-        }
-        return fd
-    }
-
-    private func sendAndRead(fd: Int32, json: String) -> String? {
-        let msg = json + "\n"
-        _ = msg.withCString { write(fd, $0, strlen($0)) }
-        Thread.sleep(forTimeInterval: 0.15)
-
-        var buf = [UInt8](repeating: 0, count: 8192)
-        let n = read(fd, &buf, buf.count)
-        guard n > 0 else { return nil }
-        return String(bytes: buf[0..<n], encoding: .utf8)?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    private func sendCommand(_ json: String) -> String? {
-        let fd = connectSocket()
-        guard fd >= 0 else { return nil }
-        defer { close(fd) }
-        return sendAndRead(fd: fd, json: json)
     }
 
     // MARK: - Subscribe/Unsubscribe
 
-    func testSubscribeReturnsSubscribedEvents() {
-        let resp = sendCommand(
-            """
-            {"cmd":"subscribe","events":["cwd_changed","process_changed"]}
-            """)
-        XCTAssertTrue(resp?.contains("\"ok\":true") ?? false)
-        XCTAssertTrue(resp?.contains("cwd_changed") ?? false)
-        XCTAssertTrue(resp?.contains("process_changed") ?? false)
+    func testSubscribeReturnsSubscribedEvents() throws {
+        let response = try roundTrip(["cmd": "subscribe", "events": ["cwd_changed", "process_changed"]])
+        XCTAssertEqual(response["ok"] as? Bool, true)
+        XCTAssertEqual(socketStringSet(response["subscribed"]), Set(["cwd_changed", "process_changed"]))
     }
 
-    func testSubscribeWildcard() {
-        let resp = sendCommand(
-            """
-            {"cmd":"subscribe","events":["*"]}
-            """)
-        XCTAssertTrue(resp?.contains("\"ok\":true") ?? false)
-        // Should contain at least some of the available events
-        XCTAssertTrue(resp?.contains("cwd_changed") ?? false)
+    func testSubscribeWildcard() throws {
+        let response = try roundTrip(["cmd": "subscribe", "events": ["*"]])
+        XCTAssertEqual(response["ok"] as? Bool, true)
+        XCTAssertEqual(socketStringSet(response["subscribed"]), BooSocketServer.availableEvents)
     }
 
-    func testSubscribeRejectsInvalidEvents() {
-        let resp = sendCommand(
-            """
-            {"cmd":"subscribe","events":["nonexistent_event"]}
-            """)
-        XCTAssertTrue(resp?.contains("no valid events") ?? false)
+    func testSubscribeRejectsInvalidEvents() throws {
+        let response = try roundTrip(["cmd": "subscribe", "events": ["nonexistent_event"]])
+        XCTAssertEqual(response["ok"] as? Bool, false)
+        XCTAssertEqual(response["error"] as? String, "no valid events")
     }
 
-    func testSubscribeMissingEventsArray() {
-        let resp = sendCommand(
-            """
-            {"cmd":"subscribe"}
-            """)
-        XCTAssertTrue(resp?.contains("missing events") ?? false)
+    func testSubscribeMissingEventsArray() throws {
+        let response = try roundTrip(["cmd": "subscribe"])
+        XCTAssertEqual(response["ok"] as? Bool, false)
+        XCTAssertEqual(response["error"] as? String, "missing events array")
     }
 
-    func testUnsubscribeOK() {
-        let fd = connectSocket()
-        guard fd >= 0 else { return XCTFail("connect failed") }
-        defer { close(fd) }
+    func testUnsubscribeOK() throws {
+        try withBooSocketClient { client in
+            _ = try client.roundTrip(command: ["cmd": "subscribe", "events": ["cwd_changed"]])
+            let response = try client.roundTrip(command: ["cmd": "unsubscribe", "events": ["cwd_changed"]])
+            XCTAssertEqual(response["ok"] as? Bool, true)
 
-        _ = sendAndRead(
-            fd: fd,
-            json: """
-                {"cmd":"subscribe","events":["cwd_changed"]}
-                """)
-        let resp = sendAndRead(
-            fd: fd,
-            json: """
-                {"cmd":"unsubscribe","events":["cwd_changed"]}
-                """)
-        XCTAssertTrue(resp?.contains("\"ok\":true") ?? false)
+            let hasSubscription = BooSocketServer.shared.queue.sync {
+                BooSocketServer.shared.subscriptions[client.fd] != nil
+            }
+            XCTAssertFalse(hasSubscription)
+        }
     }
 
     // MARK: - Event Push
 
-    func testSubscriberReceivesEvent() {
-        // Use the simple sendCommand helper to subscribe (verifies it works)
-        let subResp = sendCommand(
-            """
-            {"cmd":"subscribe","events":["cwd_changed"]}
-            """)
-        XCTAssertTrue(
-            subResp?.contains("cwd_changed") ?? false,
-            "Subscribe should return subscribed events, got: \(subResp ?? "nil")")
-        // Note: the sendCommand helper closes the connection after reading the response,
-        // so the subscription is cleaned up. This test verifies subscribe/response works.
-        // The actual push delivery is tested structurally by checking subscription bookkeeping.
+    func testSubscriberReceivesEvent() throws {
+        try withBooSocketClient { client in
+            let subscribeResponse = try client.roundTrip(command: ["cmd": "subscribe", "events": ["cwd_changed"]])
+            XCTAssertEqual(socketStringSet(subscribeResponse["subscribed"]), Set(["cwd_changed"]))
 
-        // Verify subscription bookkeeping (unit test approach)
-        let server = BooSocketServer.shared
-        let fd = Int32(42)  // fake FD for bookkeeping test
-        server.queue.sync {
-            server.subscriptions[fd] = Set(["cwd_changed"])
+            let paneID = UUID()
+            BooSocketServer.shared.emitCwdChanged(path: "/tmp/project", isRemote: false, paneID: paneID)
+
+            let event = try XCTUnwrap(try client.readJSONObject(timeout: 1.0))
+            XCTAssertEqual(event["event"] as? String, "cwd_changed")
+
+            let payload = try XCTUnwrap(event["data"] as? [String: Any])
+            XCTAssertEqual(payload["path"] as? String, "/tmp/project")
+            XCTAssertEqual(payload["is_remote"] as? Bool, false)
+            XCTAssertEqual(payload["pane_id"] as? String, paneID.uuidString)
         }
-        let hasSub = server.queue.sync { server.subscriptions[fd]?.contains("cwd_changed") ?? false }
-        XCTAssertTrue(hasSub)
-
-        // Cleanup
-        server.queue.sync { server.subscriptions.removeValue(forKey: fd) }
     }
 
-    func testNonSubscriberDoesNotReceiveEvent() {
-        let fd = connectSocket()
-        guard fd >= 0 else { return XCTFail("connect failed") }
-        defer { close(fd) }
-
-        // Subscribe to a different event
-        _ = sendAndRead(
-            fd: fd,
-            json: """
-                {"cmd":"subscribe","events":["theme_changed"]}
-                """)
-
-        // Emit a CWD event
-        BooSocketServer.shared.emitCwdChanged(path: "/tmp/nope", isRemote: false, paneID: UUID())
-        Thread.sleep(forTimeInterval: 0.2)
-
-        // Set non-blocking to avoid hanging on read
-        var flags = fcntl(fd, F_GETFL)
-        flags |= O_NONBLOCK
-        fcntl(fd, F_SETFL, flags)
-
-        var buf = [UInt8](repeating: 0, count: 4096)
-        let n = read(fd, &buf, buf.count)
-        XCTAssertTrue(n <= 0, "Should not have received a cwd_changed event")
+    func testNonSubscriberDoesNotReceiveEvent() throws {
+        try withBooSocketClient { client in
+            _ = try client.roundTrip(command: ["cmd": "subscribe", "events": ["theme_changed"]])
+            BooSocketServer.shared.emitCwdChanged(path: "/tmp/nope", isRemote: false, paneID: UUID())
+            XCTAssertNil(try client.readJSONObject(timeout: 0.2))
+        }
     }
 }
 
 // MARK: - Query Command Tests
 
 @MainActor
-final class BooSocketQueryTests: XCTestCase {
+final class BooSocketQueryTests: BooSocketIntegrationTestCase {
+
+    private var originalContext: TerminalContext!
 
     override func setUp() {
         super.setUp()
-        BooSocketServer.shared.start()
-        Thread.sleep(forTimeInterval: 0.5)
+        originalContext = AppStore.shared.context
     }
 
     override func tearDown() {
-        BooSocketServer.shared.stop()
-        Thread.sleep(forTimeInterval: 0.2)
+        AppStore.shared.updateContext(originalContext)
         super.tearDown()
     }
 
-    private func sendCommand(_ json: String) -> String? {
-        let path = BooSocketServer.shared.socketPath
-        let fd = socket(AF_UNIX, SOCK_STREAM, 0)
-        guard fd >= 0 else { return nil }
-        defer { close(fd) }
-
-        var addr = sockaddr_un()
-        addr.sun_family = sa_family_t(AF_UNIX)
-        _ = path.withCString { ptr in
-            withUnsafeMutablePointer(to: &addr.sun_path) { sunPath in
-                sunPath.withMemoryRebound(to: CChar.self, capacity: 104) { dest in
-                    strlcpy(dest, ptr, 104)
-                }
-            }
+    private func roundTrip(_ command: [String: Any]) throws -> [String: Any] {
+        try withBooSocketClient { client in
+            try client.roundTrip(command: command)
         }
-        let result = withUnsafePointer(to: &addr) { ptr in
-            ptr.withMemoryRebound(to: sockaddr.self, capacity: 1) { sockPtr in
-                connect(fd, sockPtr, socklen_t(MemoryLayout<sockaddr_un>.size))
-            }
-        }
-        guard result == 0 else { return nil }
-
-        let msg = json + "\n"
-        _ = msg.withCString { write(fd, $0, strlen($0)) }
-        Thread.sleep(forTimeInterval: 0.2)
-
-        var buf = [UInt8](repeating: 0, count: 8192)
-        let n = read(fd, &buf, buf.count)
-        guard n > 0 else { return nil }
-        return String(bytes: buf[0..<n], encoding: .utf8)?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    // Note: get_context, get_theme, get_settings dispatch to main thread which blocks
-    // in test runner. We test list_themes (no main dispatch) and verify serialization separately.
+    func testListThemes() throws {
+        let response = try roundTrip(["cmd": "list_themes"])
+        XCTAssertEqual(response["ok"] as? Bool, true)
+        let themes = try XCTUnwrap(response["themes"] as? [String])
+        XCTAssertTrue(themes.contains("Default Dark"))
+    }
 
-    func testListThemes() {
-        let resp = sendCommand(
-            """
-            {"cmd":"list_themes"}
-            """)
-        XCTAssertTrue(resp?.contains("\"ok\":true") ?? false)
-        XCTAssertTrue(resp?.contains("themes") ?? false)
-        XCTAssertTrue(resp?.contains("Default Dark") ?? false)
+    func testGetContext() throws {
+        let context = TerminalContext(
+            terminalID: UUID(),
+            cwd: "/tmp/project",
+            remoteSession: .container(target: "dev-container", tool: .docker),
+            remoteCwd: "/workspace",
+            gitContext: TerminalContext.GitContext(
+                branch: "main",
+                repoRoot: "/tmp/project",
+                isDirty: true,
+                changedFileCount: 3,
+                stagedCount: 1,
+                aheadCount: 2,
+                behindCount: 1,
+                lastCommitShort: "abc1234"
+            ),
+            processName: "zsh",
+            paneCount: 2,
+            tabCount: 3
+        )
+        AppStore.shared.updateContext(context)
+
+        let response = try roundTrip(["cmd": "get_context"])
+        XCTAssertEqual(response["ok"] as? Bool, true)
+
+        let payload = try XCTUnwrap(response["context"] as? [String: Any])
+        XCTAssertEqual(payload["cwd"] as? String, "/tmp/project")
+        XCTAssertEqual(payload["process_name"] as? String, "zsh")
+        XCTAssertEqual(payload["pane_count"] as? Int, 2)
+        XCTAssertEqual(payload["tab_count"] as? Int, 3)
+        XCTAssertEqual(payload["is_remote"] as? Bool, true)
+        XCTAssertEqual(payload["remote_cwd"] as? String, "/workspace")
+
+        let remote = try XCTUnwrap(payload["remote_session"] as? [String: Any])
+        XCTAssertEqual(remote["type"] as? String, "container")
+        XCTAssertEqual(remote["target"] as? String, "dev-container")
+        XCTAssertEqual(remote["tool"] as? String, "docker")
+
+        let git = try XCTUnwrap(payload["git"] as? [String: Any])
+        XCTAssertEqual(git["branch"] as? String, "main")
+        XCTAssertEqual(git["repo_root"] as? String, "/tmp/project")
+        XCTAssertEqual(git["is_dirty"] as? Bool, true)
+        XCTAssertEqual(git["changed_count"] as? Int, 3)
+        XCTAssertEqual(git["staged_count"] as? Int, 1)
+        XCTAssertEqual(git["ahead"] as? Int, 2)
+        XCTAssertEqual(git["behind"] as? Int, 1)
+        XCTAssertEqual(git["last_commit"] as? String, "abc1234")
+    }
+
+    func testGetTheme() throws {
+        let expectedTheme = AppSettings.shared.theme
+        let response = try roundTrip(["cmd": "get_theme"])
+        XCTAssertEqual(response["ok"] as? Bool, true)
+
+        let theme = try XCTUnwrap(response["theme"] as? [String: Any])
+        XCTAssertEqual(theme["name"] as? String, expectedTheme.name)
+        XCTAssertEqual(theme["is_dark"] as? Bool, expectedTheme.isDark)
+    }
+
+    func testGetSettings() throws {
+        let settings = AppSettings.shared
+        let response = try roundTrip(["cmd": "get_settings"])
+        XCTAssertEqual(response["ok"] as? Bool, true)
+
+        let payload = try XCTUnwrap(response["settings"] as? [String: Any])
+        XCTAssertEqual(payload["theme_name"] as? String, settings.themeName)
+        XCTAssertEqual(payload["auto_theme"] as? Bool, settings.autoTheme)
+        XCTAssertEqual(payload["font_name"] as? String, settings.fontName)
+        XCTAssertEqual(payload["font_size"] as? Double, Double(settings.fontSize))
+        XCTAssertEqual(payload["cursor_style"] as? String, settings.cursorStyle.label.lowercased())
+        XCTAssertEqual(
+            payload["sidebar_position"] as? String,
+            settings.sidebarPosition == .left ? "left" : "right"
+        )
+        XCTAssertEqual(
+            payload["sidebar_density"] as? String,
+            settings.sidebarDensity == .compact ? "compact" : "comfortable"
+        )
+        XCTAssertEqual(payload["show_hidden_files"] as? Bool, settings.showHiddenFiles)
+        XCTAssertEqual(payload["auto_check_updates"] as? Bool, settings.autoCheckUpdates)
+        XCTAssertEqual(payload["status_bar_show_path"] as? Bool, settings.statusBarShowPath)
+        XCTAssertEqual(payload["status_bar_show_time"] as? Bool, settings.statusBarShowTime)
+        XCTAssertEqual(payload["status_bar_show_pane_info"] as? Bool, settings.statusBarShowPaneInfo)
+        XCTAssertEqual(payload["status_bar_show_shell"] as? Bool, settings.statusBarShowShell)
+        XCTAssertEqual(payload["status_bar_show_connection"] as? Bool, settings.statusBarShowConnection)
     }
 
     func testSerializeContextCoversQueryFields() {
@@ -257,78 +217,72 @@ final class BooSocketQueryTests: XCTestCase {
 // MARK: - Status Bar Command Tests
 
 @MainActor
-final class BooSocketStatusBarTests: XCTestCase {
+final class BooSocketStatusBarTests: BooSocketIntegrationTestCase {
 
-    override func setUp() {
-        super.setUp()
-        BooSocketServer.shared.start()
-        Thread.sleep(forTimeInterval: 0.5)
+    private func roundTrip(_ command: [String: Any]) throws -> [String: Any] {
+        try withBooSocketClient { client in
+            try client.roundTrip(command: command)
+        }
     }
 
-    override func tearDown() {
-        BooSocketServer.shared.stop()
-        Thread.sleep(forTimeInterval: 0.2)
-        super.tearDown()
-    }
+    func testStatusBarSetTracksOwnerConnection() throws {
+        try withBooSocketClient { client in
+            let response = try client.roundTrip(
+                command: [
+                    "cmd": "statusbar.set",
+                    "id": "test-build",
+                    "text": "Building...",
+                    "icon": "hammer",
+                    "tint": "yellow",
+                    "position": "left",
+                    "priority": 30
+                ])
+            XCTAssertEqual(response["ok"] as? Bool, true)
 
-    private func sendCommand(_ json: String) -> String? {
-        let path = BooSocketServer.shared.socketPath
-        let fd = socket(AF_UNIX, SOCK_STREAM, 0)
-        guard fd >= 0 else { return nil }
-        defer { close(fd) }
+            let segment = BooSocketServer.shared.queue.sync {
+                BooSocketServer.shared.externalSegments["test-build"]
+            }
+            XCTAssertEqual(segment?.text, "Building...")
+            XCTAssertEqual(segment?.icon, "hammer")
+            XCTAssertEqual(segment?.tint, "yellow")
+            XCTAssertEqual(segment?.position, .left)
+            XCTAssertEqual(segment?.priority, 30)
+            XCTAssertNotNil(segment?.ownerFD)
 
-        var addr = sockaddr_un()
-        addr.sun_family = sa_family_t(AF_UNIX)
-        _ = path.withCString { ptr in
-            withUnsafeMutablePointer(to: &addr.sun_path) { sunPath in
-                sunPath.withMemoryRebound(to: CChar.self, capacity: 104) { dest in
-                    strlcpy(dest, ptr, 104)
+            client.close()
+            BooSocketTestSupport.waitUntil {
+                BooSocketServer.shared.queue.sync {
+                    BooSocketServer.shared.externalSegments["test-build"] == nil
                 }
             }
         }
-        let result = withUnsafePointer(to: &addr) { ptr in
-            ptr.withMemoryRebound(to: sockaddr.self, capacity: 1) { sockPtr in
-                connect(fd, sockPtr, socklen_t(MemoryLayout<sockaddr_un>.size))
+    }
+
+    func testStatusBarClear() throws {
+        try withBooSocketClient { client in
+            _ = try client.roundTrip(command: ["cmd": "statusbar.set", "id": "active", "text": "Hello"])
+            let clearResponse = try client.roundTrip(command: ["cmd": "statusbar.clear", "id": "active"])
+            XCTAssertEqual(clearResponse["ok"] as? Bool, true)
+
+            let segment = BooSocketServer.shared.queue.sync {
+                BooSocketServer.shared.externalSegments["active"]
             }
+            XCTAssertNil(segment)
         }
-        guard result == 0 else { return nil }
-
-        let msg = json + "\n"
-        _ = msg.withCString { write(fd, $0, strlen($0)) }
-        Thread.sleep(forTimeInterval: 0.15)
-
-        var buf = [UInt8](repeating: 0, count: 8192)
-        let n = read(fd, &buf, buf.count)
-        guard n > 0 else { return nil }
-        return String(bytes: buf[0..<n], encoding: .utf8)?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    func testStatusBarSet() {
-        let resp = sendCommand(
-            """
-            {"cmd":"statusbar.set","id":"test-build","text":"Building...","icon":"hammer","tint":"yellow","position":"left","priority":30}
-            """)
-        XCTAssertTrue(resp?.contains("\"ok\":true") ?? false)
-        // Note: segment is auto-cleaned when sendCommand closes the connection.
-        // The set command itself works — verified by the ok response.
-    }
+    func testStatusBarList() throws {
+        try withBooSocketClient { client in
+            _ = try client.roundTrip(command: ["cmd": "statusbar.set", "id": "segment-a", "text": "A"])
+            let response = try client.roundTrip(command: ["cmd": "statusbar.list"])
+            XCTAssertEqual(response["ok"] as? Bool, true)
 
-    func testStatusBarClear() {
-        let resp = sendCommand(
-            """
-            {"cmd":"statusbar.clear","id":"nonexistent"}
-            """)
-        XCTAssertTrue(resp?.contains("\"ok\":true") ?? false)
-    }
-
-    func testStatusBarList() {
-        let resp = sendCommand(
-            """
-            {"cmd":"statusbar.list"}
-            """)
-        XCTAssertTrue(resp?.contains("\"ok\":true") ?? false)
-        XCTAssertTrue(resp?.contains("segments") ?? false)
+            let segments = try XCTUnwrap(response["segments"] as? [[String: Any]])
+            let segment = segments.first { ($0["id"] as? String) == "segment-a" }
+            XCTAssertEqual(segment?["text"] as? String, "A")
+            XCTAssertEqual(segment?["position"] as? String, "right")
+            XCTAssertEqual(segment?["priority"] as? Int, 50)
+        }
     }
 
     func testStatusBarSegmentBookkeeping() {
@@ -344,12 +298,10 @@ final class BooSocketStatusBarTests: XCTestCase {
         server.queue.sync { server.externalSegments.removeAll() }
     }
 
-    func testStatusBarSetMissingID() {
-        let resp = sendCommand(
-            """
-            {"cmd":"statusbar.set","text":"no id"}
-            """)
-        XCTAssertTrue(resp?.contains("missing id") ?? false)
+    func testStatusBarSetMissingID() throws {
+        let response = try roundTrip(["cmd": "statusbar.set", "text": "no id"])
+        XCTAssertEqual(response["ok"] as? Bool, false)
+        XCTAssertEqual(response["error"] as? String, "missing id or text")
     }
 }
 

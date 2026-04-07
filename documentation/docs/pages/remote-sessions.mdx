@@ -1,6 +1,19 @@
 # Remote Sessions
 
-Boo automatically detects and supports remote terminal sessions over SSH and Docker, providing file tree browsing and CWD tracking for remote hosts.
+Boo automatically detects remote terminal sessions and adapts the file explorer, status bar, and plugin context for them. Support includes classic SSH-style sessions plus common container, VM, and device shells.
+
+## Supported Session Types
+
+| Category                     | Examples                       |
+| ---------------------------- | ------------------------------ |
+| **SSH-style**                | `ssh`, `mosh`                  |
+| **Container shells**         | `docker`, `podman`, `nerdctl`  |
+| **Cluster / container exec** | `kubectl`, `oc`, `lxc`         |
+| **VM / desktop shells**      | `limactl`, `colima`, `vagrant` |
+| **Toolbox shells**           | `distrobox`, `toolbox`         |
+| **Device shells**            | `adb shell`                    |
+
+Only interactive sessions are treated as remote environments. Non-interactive commands such as `docker exec myapp cat /etc/hosts` do not switch the pane into remote mode.
 
 ## Detection
 
@@ -11,13 +24,13 @@ Remote sessions are detected via two mechanisms:
 `TerminalBridge.detectRemoteFromHeuristics` is triggered on every `GHOSTTY_ACTION_SET_TITLE`. It checks if the terminal title contains:
 
 - `user@host` patterns (SSH)
-- `docker exec/run` patterns (Docker)
+- interactive remote commands such as `docker exec`, `kubectl exec`, `vagrant ssh`, or `adb shell`
 
 AND the reported CWD doesn't exist locally. This is the primary detection path since remote shells don't have Ghostty's shell integration.
 
 ### Process Tree
 
-`RemoteExplorer.detectRemoteSession` uses `proc_listchildpids` + `proc_name` syscalls to find ssh/docker child processes and parse their command-line args via `sysctl(KERN_PROCARGS2)`.
+`RemoteExplorer.detectRemoteSession` uses `proc_listchildpids` + `proc_name` syscalls to find `ssh`, `mosh`, and known container / VM tools in the child process tree, then parses their command-line args via `sysctl(KERN_PROCARGS2)`.
 
 ## Detection Flow
 
@@ -33,45 +46,24 @@ paneView(_:titleChanged:) in MainWindowController
 
 Commands are executed differently depending on the session type:
 
-| Type | Command Pattern |
-|---|---|
-| **SSH** | `ssh -n -o BatchMode=yes <host> <cmd>` |
-| **Docker** | `docker exec <container> sh -c <cmd>` |
+| Type                                         | Command Pattern                               |
+| -------------------------------------------- | --------------------------------------------- |
+| **SSH**                                      | `ssh -n -o BatchMode=yes <host> <cmd>`        |
+| **Docker / Podman / nerdctl**                | `<tool> exec <target> sh -c <cmd>`            |
+| **kubectl / oc / lxc / distrobox / toolbox** | `<tool> <subcommand> <target> -- sh -c <cmd>` |
+| **limactl**                                  | `limactl shell <vm> sh -c <cmd>`              |
+| **colima / vagrant**                         | `<tool> ssh <target> ...`                     |
+| **adb**                                      | `adb shell sh -c <cmd>`                       |
 
-SSH prefers ControlMaster sockets when available (searched in `~/.ssh/`, `/tmp/`).
+SSH prefers ControlMaster sockets when available. Boo can reuse an existing user-managed socket, add ControlMaster config to `~/.ssh/config` with one-time approval, or spin up a Boo-managed background master when needed. Named Colima profiles and named Vagrant VMs are forwarded to the underlying command rather than falling back to the default target.
 
 ## Remote Shell Integration (CWD Tracking)
 
-Ghostty's shell integration only injects OSC 7 hooks into the **local** shell. Remote shells need their own mechanism.
+Ghostty's OSC 7 shell integration only reports the **local** shell's CWD. Boo therefore combines several remote-specific strategies instead of trying to treat remote shells like local ones:
 
-### How It Works
+1. **Title parsing** — Prompts that include `user@host:path` or tool-specific titles provide an immediate remote CWD hint.
+2. **Process-tree reconciliation** — Background polling confirms or clears remote-session state independently of the title.
+3. **SSH connection sharing** — The file explorer reuses the active SSH connection through ControlMaster when possible.
+4. **Container CWD watchers** — For title-detected container sessions, Boo can poll the shell CWD inside the container because Docker-style exec sessions may not remain visible in the macOS process tree.
 
-`GhosttyRuntime.installShellIntegration()` sets up wrapper scripts:
-
-1. **`~/.boo/shell-integration/remote-init.sh`** — A POSIX-compatible snippet that sets up `__boo_osc7()` function and registers it as a `chpwd`/`PROMPT_COMMAND` hook (works in zsh and bash)
-
-2. **`~/.boo/shell-integration/bin/ssh`** — A wrapper that detects interactive SSH sessions, base64-encodes the remote-init snippet, and injects it via:
-   ```bash
-   ssh -t host "eval $(echo <b64> | base64 -d); exec $SHELL -li"
-   ```
-
-3. **`~/.boo/shell-integration/bin/docker`** — Same pattern for `docker exec` sessions
-
-4. The bin directory is prepended to `PATH` so wrappers shadow the real binaries
-
-### Non-Interactive Bypass
-
-The wrappers detect if a remote command is given (e.g. `ssh host ls`) and skip injection, passing through to the real binary directly.
-
-### Remote Init Snippet
-
-```bash
-printf '\033]7;kitty-shell-cwd://<hostname><pwd>\a'
-```
-
-This emits the same OSC 7 format that Ghostty's own integration uses (kitty-shell-cwd scheme). It is registered via:
-
-- **zsh** — `add-zsh-hook chpwd`
-- **bash** — `PROMPT_COMMAND`
-
-When the remote shell has bash or zsh, `cd` triggers OSC 7 which flows back through the PTY to Ghostty's action callback, updating the explorer. For shells without `PROMPT_COMMAND`/`chpwd` support (dash, sh), only the initial CWD is reported.
+This keeps browsing reliable without requiring a separate remote shell injector layer.

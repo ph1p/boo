@@ -1,5 +1,7 @@
 # Installation
 
+Boo is currently documented and tested for macOS 13+ on Apple Silicon.
+
 ## Download
 
 Download the latest release from the [GitHub Releases](https://github.com/ph1p/boo/releases) page.
@@ -14,17 +16,9 @@ Download the latest release from the [GitHub Releases](https://github.com/ph1p/b
 On first launch, macOS may show a security prompt. Click "Open" to allow the app to run. Releases are signed and notarized with Apple Developer ID.
 :::
 
-### Linux (tar.gz)
-
-1. Download `boo-x.x.x-linux-x86_64.tar.gz`
-2. Extract: `tar xzf boo-*.tar.gz`
-3. Run: `./boo`
-
-The archive includes the `ghostty` GTK binary alongside `boo`. Requires GTK4 and libadwaita at runtime.
+Once installed, Boo can check GitHub Releases on launch and update in place. See [Updates](/updates).
 
 ## Build from Source
-
-### macOS
 
 **Prerequisites:** macOS 13+, Xcode CLT, Zig 0.15+, Rust, Metal Toolchain
 
@@ -34,22 +28,6 @@ cd boo
 make setup    # Builds GhosttyKit + Boo
 make run      # Build and launch
 ```
-
-### Linux
-
-**Prerequisites:** Swift 5.9+, Zig 0.15+, GTK4 dev libraries
-
-```bash
-# Ubuntu/Debian
-sudo apt install swift zig libgtk-4-dev libadwaita-1-dev
-
-git clone --recursive https://github.com/ph1p/boo.git
-cd boo
-make setup-linux    # Builds Ghostty GTK + Boo
-make run            # Launch
-```
-
-On Linux, Boo launches Ghostty's native GTK terminal configured with Boo's settings and shell integration. The sidebar/plugin UI is macOS-only for now.
 
 ### Step by Step
 
@@ -69,11 +47,7 @@ git submodule update --init --depth 1
 #### 2. Build
 
 ```bash
-# macOS
 make setup
-
-# Linux
-make setup-linux
 ```
 
 #### 3. Run
@@ -87,44 +61,27 @@ make run
 ```bash
 make release      # Optimized build
 make app          # macOS: create .app bundle
-make tarball      # Linux: create distributable tar.gz
+make dmg          # macOS: create distributable DMG
 ```
 
 ### Running Tests
 
 ```bash
-make test     # Runs all 717+ tests (macOS)
+make test     # Runs the macOS test suite
 ```
 
 ## System Requirements
 
-### macOS
-
-| Requirement | Minimum |
-|-------------|---------|
-| macOS | 13.0 (Ventura) |
-| Architecture | Apple Silicon (arm64) |
-| Disk space | ~200MB (including GhosttyKit) |
-| Zig (build only) | 0.15+ |
-| Rust (build only) | stable |
-
-### Linux
-
-| Requirement | Minimum |
-|-------------|---------|
-| Distribution | Ubuntu 22.04+ / Fedora 38+ (or equivalent) |
-| Swift | 5.9+ |
-| GTK | 4.0+ |
-| libadwaita | 1.0+ |
-| Zig (build only) | 0.15+ |
+| Requirement       | Minimum                       |
+| ----------------- | ----------------------------- |
+| macOS             | 13.0 (Ventura)                |
+| Architecture      | Apple Silicon (arm64)         |
+| Disk space        | ~200MB (including GhosttyKit) |
+| Zig (build only)  | 0.15+                         |
+| Rust (build only) | stable                        |
 
 ## Uninstall
 
-### macOS
 1. Quit Boo
 2. Delete `Boo.app` from Applications
 3. Optionally remove configuration: `rm -rf ~/.boo`
-
-### Linux
-1. Delete the extracted directory
-2. Optionally remove configuration: `rm -rf ~/.boo ~/.config/boo`

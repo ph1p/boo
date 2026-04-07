@@ -35,7 +35,7 @@ Download the latest release from [GitHub Releases](https://github.com/ph1p/boo/r
 - **Workspace colors** — Preset or custom colors per workspace, pinning, renaming
 - **Undo** — Cmd+Z reopens closed tabs and panes
 - **Mouse selection** — Click, double-click (word), triple-click (line)
-- **Auto-updater** — Checks GitHub Releases for new versions, downloads and installs updates
+- **Auto-updater** — Checks GitHub Releases for new versions and safely installs signed updates
 - **Focus memory** — Remembers last focused pane per workspace, restores on switch
 - **IPC socket** — Unix socket at `~/.boo/boo.sock` for reliable process detection and plugin commands
 - **Debug plugin** — Live event log and terminal state inspector for diagnostics
@@ -429,7 +429,7 @@ Control when your plugin is visible:
 | `"git.active"`                     | Only in git repos               |
 | `"!remote"`                        | Only in local sessions          |
 | `"remote"`                         | Only in remote sessions         |
-| `"remote.type == 'ssh'"`           | Only in SSH sessions            |
+| `"env.type == 'ssh'"`              | Only in SSH sessions            |
 | `"git.active && !remote"`          | Git repos, local only           |
 | `"process.name == 'vim'"`          | Only when vim is running        |
 | `"process.editor"`                 | Only when any editor is active  |
@@ -438,6 +438,10 @@ Control when your plugin is visible:
 | `"env.local"`                      | Only in local sessions          |
 | `"env.ssh"`                        | Only in SSH/MOSH sessions       |
 | `"env.docker"`                     | Only in Docker sessions         |
+| `"env.container"`                  | Any container/VM/device shell   |
+| `"env.type == 'kubectl'"`          | Only in kubectl sessions        |
+
+String comparisons use `env.type` and `remote.host`.
 
 See `examples/plugins/` for five working examples. Start with **hello-world**, then study **node-project** or **terminal-inspector** for the full plugin API.
 
@@ -470,7 +474,7 @@ See [AGENTS.md](AGENTS.md) for detailed protocol reference and architecture.
 
 Boo checks GitHub Releases for new versions on launch (once every 24 hours). You can also check manually via the app menu: **Boo → Check for Updates...**
 
-The update flow: download DMG → verify code signature → replace app → relaunch. Settings:
+The update flow: download DMG → verify code signature → stage replacement → swap app → relaunch. Settings:
 
 - Auto-check can be disabled in preferences
 - Individual versions can be skipped
@@ -496,7 +500,7 @@ Open with **Cmd+,**. Organized in tabs:
 swift test
 ```
 
-717 tests covering models, themes, plugins, terminal bridge, remote explorer, SSH control manager, sidebar layout, accessibility, E2E plugin lifecycle, split/workspace operations, IPC socket protocol, process detection, event subscriptions, JSC runtime, DSL parsing, and script plugin adapters.
+The test suite covers models, themes, plugins, terminal bridge, remote explorer, SSH control manager, sidebar layout, accessibility, E2E plugin lifecycle, split/workspace operations, IPC socket protocol, process detection, event subscriptions, JSC runtime, DSL parsing, and script plugin adapters.
 
 ## License
 

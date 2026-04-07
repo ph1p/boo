@@ -1,0 +1,33 @@
+# Updates
+
+Boo includes a built-in updater for signed macOS releases published on [GitHub Releases](https://github.com/ph1p/boo/releases).
+
+## How Checks Work
+
+- Boo checks for updates on launch, at most once every 24 hours.
+- You can trigger a manual check from **Boo → Check for Updates...**
+- Individual versions can be skipped.
+- Automatic checks can be disabled in Settings.
+
+## Install Flow
+
+When an update is installed, Boo:
+
+1. Downloads the release DMG.
+2. Extracts the app bundle and verifies its code signature.
+3. Stages a replacement copy beside the current app.
+4. Swaps the staged app into place.
+5. Relaunches the updated app.
+
+This keeps the installed app signed and avoids replacing the live app bundle before the downloaded update has been staged successfully.
+
+## Settings
+
+Update preferences live in **Settings → General**:
+
+- Enable or disable automatic update checks
+- Skip a specific release version
+
+## Release Pipeline
+
+Releases are automated with [semantic-release](https://github.com/semantic-release/semantic-release). Conventional commits on `main` determine the version bump, then CI builds, signs, notarizes, and publishes the release artifacts.

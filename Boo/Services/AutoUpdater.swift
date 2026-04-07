@@ -6,6 +6,20 @@ import Cocoa
 final class AutoUpdater: ObservableObject {
     static let shared = AutoUpdater()
 
+    struct InstallHooks {
+        let extractAppFromDMG: (URL) throws -> URL
+        let verifyCodeSignature: (URL) -> Bool
+        let launchReplacementScript: (String) -> Bool
+        let terminateApplication: @MainActor () -> Void
+
+        static let live = InstallHooks(
+            extractAppFromDMG: { try AutoUpdater.extractAppFromDMG($0) },
+            verifyCodeSignature: { AutoUpdater.verifyCodeSignature(at: $0) },
+            launchReplacementScript: { AutoUpdater.launchReplacementScript($0) },
+            terminateApplication: { NSApp.terminate(nil) }
+        )
+    }
+
     // MARK: - Configuration
 
     /// Set these to your GitHub repository coordinates.
@@ -63,6 +77,7 @@ final class AutoUpdater: ObservableObject {
     private var downloadTask: URLSessionDownloadTask?
 
     private static let checkInterval: TimeInterval = 86_400
+    nonisolated(unsafe) static var installHooks = InstallHooks.live
 
     // MARK: - Version Info
 
@@ -206,12 +221,13 @@ final class AutoUpdater: ObservableObject {
 
     func installAndRelaunch(dmgURL: URL) {
         state = .installing
+        let hooks = Self.installHooks
 
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             do {
-                let appURL = try Self.extractAppFromDMG(dmgURL)
+                let appURL = try hooks.extractAppFromDMG(dmgURL)
 
-                guard Self.verifyCodeSignature(at: appURL) else {
+                guard hooks.verifyCodeSignature(appURL) else {
                     DispatchQueue.main.async {
                         self?.state = .error("Code signature verification failed")
                     }
@@ -226,8 +242,11 @@ final class AutoUpdater: ObservableObject {
                 )
 
                 DispatchQueue.main.async {
-                    Self.launchReplacementScript(script)
-                    NSApp.terminate(nil)
+                    guard hooks.launchReplacementScript(script) else {
+                        self?.state = .error("Failed to launch installer helper")
+                        return
+                    }
+                    hooks.terminateApplication()
                 }
             } catch {
                 DispatchQueue.main.async {
@@ -306,17 +325,43 @@ final class AutoUpdater: ObservableObject {
 
     // MARK: - Replacement Script
 
-    nonisolated private static func buildReplacementScript(pid: Int32, currentApp: String, newApp: String) -> String {
+    nonisolated static func buildReplacementScript(pid: Int32, currentApp: String, newApp: String) -> String {
         let cur = shellEscapeForBash(currentApp)
         let new = shellEscapeForBash(newApp)
+        let replacement = shellEscapeForBash("\(currentApp).replacement.\(pid)")
+        let backup = shellEscapeForBash("\(currentApp).backup.\(pid)")
+        let stagedParent = shellEscapeForBash((newApp as NSString).deletingLastPathComponent)
         return """
             #!/bin/bash
+            current=\(cur)
+            new=\(new)
+            replacement=\(replacement)
+            backup=\(backup)
+            staged_parent=\(stagedParent)
+
+            cleanup() {
+                local status=$?
+                if [ -d "$backup" ] && [ ! -d "$current" ]; then
+                    mv "$backup" "$current" 2>/dev/null || true
+                fi
+                rm -rf "$replacement"
+                rm -- "$0"
+                exit $status
+            }
+            trap cleanup EXIT
+
             while kill -0 \(pid) 2>/dev/null; do sleep 0.2; done
-            xattr -dr com.apple.quarantine \(new) 2>/dev/null
-            rm -rf \(cur)
-            cp -R \(new) \(cur)
-            rm -rf "$(dirname \(new))"
-            open \(cur)
+            rm -rf "$replacement" "$backup"
+            xattr -dr com.apple.quarantine "$new" 2>/dev/null || true
+            /usr/bin/ditto "$new" "$replacement"
+            xattr -dr com.apple.quarantine "$replacement" 2>/dev/null || true
+            /usr/bin/codesign --verify --deep --strict "$replacement" >/dev/null 2>&1
+            mv "$current" "$backup"
+            mv "$replacement" "$current"
+            rm -rf "$backup"
+            rm -rf "$staged_parent"
+            open "$current"
+            trap - EXIT
             rm -- "$0"
             """
     }
@@ -327,7 +372,7 @@ final class AutoUpdater: ObservableObject {
         "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'"
     }
 
-    private static func launchReplacementScript(_ script: String) {
+    nonisolated private static func launchReplacementScript(_ script: String) -> Bool {
         let scriptURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("boo-update-\(UUID().uuidString).sh")
         do {
@@ -336,16 +381,23 @@ final class AutoUpdater: ObservableObject {
                 [.posixPermissions: 0o755], ofItemAtPath: scriptURL.path)
         } catch {
             debugLog("[AutoUpdater] failed to write replacement script: \(error)")
-            return
+            return false
         }
 
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/bash")
         process.arguments = [scriptURL.path]
-        process.standardOutput = nil
-        process.standardError = nil
+        process.standardInput = FileHandle.nullDevice
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
         // Detach so it outlives the parent
-        do { try process.run() } catch { debugLog("[AutoUpdater] failed to launch replacement script: \(error)") }
+        do {
+            try process.run()
+            return true
+        } catch {
+            debugLog("[AutoUpdater] failed to launch replacement script: \(error)")
+            return false
+        }
     }
 
     // MARK: - Version Comparison
@@ -387,6 +439,12 @@ final class AutoUpdater: ObservableObject {
             }
         }
     }
+
+    #if DEBUG
+        static func resetInstallHooksForTesting() {
+            installHooks = .live
+        }
+    #endif
 }
 
 // MARK: - Download Delegate
