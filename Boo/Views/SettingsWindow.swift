@@ -863,9 +863,11 @@ private struct GeneralSettingsView: View {
                 .labelsHidden()
                 .pickerStyle(.segmented)
                 .onChange(of: newTabCwdMode) { v in AppSettings.shared.newTabCwdMode = v }
-                Text("Whether new tabs and split panes open in the active tab's current directory or the workspace default folder.")
-                    .font(.system(size: 11))
-                    .foregroundColor(t.muted)
+                Text(
+                    "Whether new tabs and split panes open in the active tab's current directory or the workspace default folder."
+                )
+                .font(.system(size: 11))
+                .foregroundColor(t.muted)
             }
 
             Section(title: "File Editor") {
