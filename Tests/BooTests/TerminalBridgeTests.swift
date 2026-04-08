@@ -321,6 +321,20 @@ final class TerminalBridgeTests: XCTestCase {
         )
     }
 
+    func testCustomGitHostNotDetectedAsInteractiveRemote() {
+        // "git clone git@git.gwvs.de:org/repo" — user is "git", non-interactive transport
+        XCTAssertNil(
+            TerminalBridge.detectRemoteFromHeuristics(title: "git@git.gwvs.de:org/repo.git", cwd: "/tmp")
+        )
+    }
+
+    func testGitUserSSHCommandNotDetectedAsInteractiveRemote() {
+        // Terminal title shows "ssh git@git.gwvs.de" during a git clone — not a shell session
+        XCTAssertNil(
+            TerminalBridge.detectRemoteFromProcessName(title: "ssh git@git.gwvs.de")
+        )
+    }
+
     func testRealSSHStillDetectedAfterScopedPackageFix() {
         // Genuine SSH sessions must continue to be detected.
         // The prompt "user@remote-server:~" is the first (and only) word — still SSH.

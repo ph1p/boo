@@ -98,7 +98,10 @@ extension TerminalBridge {
                 !user.isEmpty,
                 !rawHost.contains("/"),  // path separators are not valid in hostnames
                 !isLocalHost(rawHost),
-                !isGitForgeHost(rawHost)
+                !isGitForgeHost(rawHost),
+                // "git" is the SSH user for git transports (git clone git@host:org/repo),
+                // never an interactive shell session.
+                user.lowercased() != "git"
             else {
                 return nil
             }
@@ -282,7 +285,9 @@ extension TerminalBridge {
                     if valueOpts.contains(arg) { skipNext = true }
                     continue
                 }
-                if arg != "localhost" && arg != "127.0.0.1" && !isGitForgeHost(arg) {
+                // Skip git transport targets: "git@host" is a non-interactive git SSH user
+                let isGitUser = arg.lowercased().hasPrefix("git@")
+                if arg != "localhost" && arg != "127.0.0.1" && !isGitForgeHost(arg) && !isGitUser {
                     return .ssh(host: arg)
                 }
                 break
