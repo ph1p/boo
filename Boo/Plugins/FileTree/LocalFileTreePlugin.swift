@@ -123,7 +123,8 @@ final class LocalFileTreePlugin: BooPluginProtocol {
                 let useKitty = AppSettings.shared.pluginBool(
                     "file-tree-local", "useKitty", default: true)
                 if isImage && useKitty {
-                    let newTab = AppSettings.shared.pluginBool(
+                    let busy = act?.isTerminalBusy?() ?? false
+                    let newTab = busy || AppSettings.shared.pluginBool(
                         "file-tree-local", "kittyNewTab", default: true)
                     act?.displayImageInTerminal?(path, newTab)
                 } else if Self.editorExtensionSet().contains(ext) {

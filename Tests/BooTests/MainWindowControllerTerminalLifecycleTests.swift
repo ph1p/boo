@@ -38,22 +38,28 @@ final class MainWindowControllerTerminalLifecycleTests: XCTestCase {
         let spy = TerminalCloseSpyPlugin()
         windowController.pluginRegistry.register(spy)
 
-        guard let workspace = windowController.activeWorkspace,
-            let pane = workspace.pane(for: workspace.activePaneID),
-            let firstTabID = pane.activeTab?.id
+        // Use the first workspace (index 0), which may have been restored from a session.
+        guard let workspace = windowController.appState.workspaces.first,
+            let pane = workspace.pane(for: workspace.activePaneID)
         else {
-            XCTFail("Expected an initial workspace with one pane and one tab")
+            XCTFail("Expected at least one workspace with an active pane")
             return
         }
 
+        // Snapshot all tab IDs in workspace 0 before adding our extra tab.
+        let initialTabIDs = Set(workspace.panes.values.flatMap { $0.tabs.map(\.id) })
+        XCTAssertFalse(initialTabIDs.isEmpty, "Expected at least one existing tab")
+
         _ = pane.addTab(workingDirectory: "/tmp/extra-tab")
-        let secondTabID = pane.activeTab?.id
+        let extraTabID = pane.activeTab?.id
+
+        let expectedTabIDs = initialTabIDs.union([extraTabID].compactMap { $0 })
 
         windowController.forceCloseWorkspace(at: 0)
 
         XCTAssertEqual(
             Set(spy.closedTerminalIDs),
-            Set([firstTabID, secondTabID].compactMap { $0 }),
+            expectedTabIDs,
             "Closing a workspace should emit terminalClosed for every tab it owns"
         )
     }
