@@ -11,6 +11,8 @@ final class PluginActions {
     /// Display an image using the Kitty Graphics Protocol.
     /// `newTab`: open a new tab first; false = inject into the focused terminal's PTY directly.
     var displayImageInTerminal: ((String, Bool) -> Void)?
+    /// Returns true when the active terminal has a non-shell foreground process running.
+    var isTerminalBusy: (() -> Bool)?
 
     func pastePath(_ path: String) {
         pastePathToActivePane?(path)

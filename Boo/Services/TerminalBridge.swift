@@ -153,11 +153,14 @@ final class TerminalBridge {
         )
 
         let previousProcess = state.foregroundProcess
-        state.foregroundProcess = resolveProcess(paneID: paneID, title: terminalTitle)
-
-        // Update the monitors with the active tab's shell PID
+        // When restoring a tab with no known shell PID (e.g. a brand-new tab), skip the
+        // socket-server lookup — the previous pane's shell PID is still registered and would
+        // incorrectly return the old foreground process (e.g. "claude") for the new tab.
         if shellPID > 0 {
+            state.foregroundProcess = resolveProcess(paneID: paneID, title: terminalTitle)
             monitor.updateShellPID(paneID: paneID, shellPID: shellPID)
+        } else {
+            state.foregroundProcess = TerminalBridge.extractProcessName(from: terminalTitle)
         }
 
         // Start container CWD polling for the restored tab
