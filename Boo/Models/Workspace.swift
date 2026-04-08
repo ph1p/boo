@@ -97,9 +97,14 @@ final class Workspace {
         let (newTree, newID) = splitTree.splitting(leafID: paneID, direction: direction)
         splitTree = newTree
 
-        // New pane inherits cwd from the source pane but starts with empty title
-        // to avoid briefly showing the old pane's process name.
-        let cwd = panes[paneID]?.activeTab?.workingDirectory ?? folderPath
+        // New pane starts with empty title to avoid briefly showing the old pane's process name.
+        // CWD follows the user's setting: inherit from source pane or use workspace default folder.
+        let cwd: String
+        if AppSettings.shared.newTabCwdMode == .samePath {
+            cwd = panes[paneID]?.activeTab?.workingDirectory ?? folderPath
+        } else {
+            cwd = folderPath
+        }
         let newPane = Pane(id: newID)
         _ = newPane.addTab(workingDirectory: cwd, title: "")
         panes[newID] = newPane
