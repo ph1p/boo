@@ -811,6 +811,7 @@ extension CustomThemeData {
 
 private struct GeneralSettingsView: View {
     @State private var defaultFolder = AppSettings.shared.defaultFolder
+    @State private var newTabCwdMode = AppSettings.shared.newTabCwdMode
     @State private var autoCheckUpdates = AppSettings.shared.autoCheckUpdates
     @State private var debugLogging = AppSettings.shared.debugLogging
     @State private var fileEditorCommand = AppSettings.shared.fileEditorCommand
@@ -853,6 +854,18 @@ private struct GeneralSettingsView: View {
                     .buttonStyle(.bordered)
                     .controlSize(.small)
                 }
+            }
+
+            Section(title: "New Tab & Pane Path") {
+                Picker("", selection: $newTabCwdMode) {
+                    ForEach(NewTabCwdMode.allCases, id: \.self) { Text($0.label).tag($0) }
+                }
+                .labelsHidden()
+                .pickerStyle(.segmented)
+                .onChange(of: newTabCwdMode) { v in AppSettings.shared.newTabCwdMode = v }
+                Text("Whether new tabs and split panes open in the active tab's current directory or the workspace default folder.")
+                    .font(.system(size: 11))
+                    .foregroundColor(t.muted)
             }
 
             Section(title: "File Editor") {

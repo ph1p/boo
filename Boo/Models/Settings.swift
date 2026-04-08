@@ -67,6 +67,18 @@ enum TabOverflowMode: Int, CaseIterable {
     }
 }
 
+enum NewTabCwdMode: Int, CaseIterable {
+    case samePath = 0
+    case defaultFolder = 1
+
+    var label: String {
+        switch self {
+        case .samePath: return "Same Path"
+        case .defaultFolder: return "Default Folder"
+        }
+    }
+}
+
 extension Notification.Name {
     static let settingsChanged = Notification.Name("BooSettingsChanged")
 }
@@ -127,6 +139,7 @@ final class AppSettings {
         static let defaultFolder = "defaultFolder"
         static let sshControlMasterApproved = "sshControlMasterApproved"
         static let customThemes = "customThemes"
+        static let newTabCwdMode = "newTabCwdMode"
     }
 
     /// Bool from UserDefaults with a custom default (since .bool returns false for unset keys).
@@ -356,6 +369,13 @@ final class AppSettings {
             return TabOverflowMode(rawValue: UserDefaults.standard.integer(forKey: K.tabOverflowMode)) ?? .scroll
         }
         set { set(newValue.rawValue, forKey: K.tabOverflowMode, topic: .layout) }
+    }
+
+    var newTabCwdMode: NewTabCwdMode {
+        get {
+            NewTabCwdMode(rawValue: UserDefaults.standard.integer(forKey: K.newTabCwdMode)) ?? .samePath
+        }
+        set { set(newValue.rawValue, forKey: K.newTabCwdMode, topic: .layout) }
     }
 
     // MARK: - Plugins

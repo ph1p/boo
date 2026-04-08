@@ -189,6 +189,11 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
         pluginActions.openDirectoryInNewTab = { [weak self] in self?.openDirectoryInNewTab($0) }
         pluginActions.openDirectoryInNewPane = { [weak self] in self?.openDirectoryInNewPane($0) }
         pluginActions.pastePathToActivePane = { [weak self] in self?.pastePathToActivePane($0) }
+        pluginActions.isTerminalBusy = { [weak self] in
+            guard let self else { return false }
+            let process = self.bridge.state.foregroundProcess
+            return !process.isEmpty && !ProcessIcon.isShell(process)
+        }
         pluginActions.displayImageInTerminal = { [weak self] path, newTab in
             guard let self, let workspace = self.activeWorkspace else { return }
             let paneID = workspace.activePaneID
@@ -860,7 +865,14 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
             workspace.pane(for: workspace.activePaneID) != nil,
             let pv = paneViews[workspace.activePaneID]
         else { return }
-        let cwd = workspace.folderPath
+        let cwd: String
+        if AppSettings.shared.newTabCwdMode == .samePath,
+            let activeCwd = workspace.pane(for: workspace.activePaneID)?.activeTab?.workingDirectory
+        {
+            cwd = activeCwd
+        } else {
+            cwd = workspace.folderPath
+        }
         pv.addNewTab(workingDirectory: cwd)
         saveSession()
     }
