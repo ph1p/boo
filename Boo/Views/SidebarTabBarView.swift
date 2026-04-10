@@ -6,9 +6,11 @@ class SidebarTabBarView: NSView {
     static let height: CGFloat = 26
 
     /// Width of each tab icon button.
-    private let tabW: CGFloat = 32
+    private let tabW: CGFloat = 30
+    /// Gap between each tab icon button.
+    private let tabGap: CGFloat = 3
     /// Width reserved for the overflow "···" button when tabs don't fit.
-    private let overflowW: CGFloat = 32
+    private let overflowW: CGFloat = 30
 
     /// Ordered list of plugin sidebar tabs. Set by the controller after plugin collection.
     var sidebarTabs: [SidebarTab] = [] {
@@ -75,7 +77,7 @@ class SidebarTabBarView: NSView {
         visibleTabs = []
         overflowTabs = []
 
-        let needsOverflow = CGFloat(sidebarTabs.count) * tabW > bounds.width
+        let needsOverflow = CGFloat(sidebarTabs.count) * (tabW - tabGap) > bounds.width
         let available = needsOverflow ? bounds.width - overflowW : bounds.width
 
         let isBottom = AppSettings.shared.sidebarTabBarPosition == .bottom
@@ -87,7 +89,7 @@ class SidebarTabBarView: NSView {
             if x + tabW <= available {
                 tabRects[tab.id] = NSRect(x: x, y: tabY, width: tabW, height: tabH)
                 visibleTabs.append(tab)
-                x += tabW
+                x += tabW - tabGap
             } else {
                 overflowTabs.append(tab)
             }
@@ -181,8 +183,9 @@ class SidebarTabBarView: NSView {
     }
 
     private func dropIndexFor(x: CGFloat) -> Int {
-        let index = Int((x + tabW / 2) / tabW)
-        return max(0, min(index, sidebarTabs.count))
+        let step = tabW - tabGap
+        let index = Int((x + step / 2) / step)
+        return max(0, min(index, visibleTabs.count))
     }
 
     override func rightMouseDown(with event: NSEvent) {
@@ -292,7 +295,7 @@ class SidebarTabBarView: NSView {
         // Compute drop index for indicator while dragging
         let dropIndex: Int? = isDragging ? dropIndexFor(x: dragCurrentX) : nil
 
-        for (index, tab) in sidebarTabs.enumerated() {
+        for (index, tab) in visibleTabs.enumerated() {
             guard let tabRect = tabRects[tab.id] else { continue }
             let isSelected = tab.id == selectedTab
             let isHovered = tab.id == hoveredTab && !isSelected
@@ -357,7 +360,7 @@ class SidebarTabBarView: NSView {
 
         // Drop indicator at the end of visible tabs
         if let di = dropIndex, di == visibleTabs.count {
-            let endX = CGFloat(visibleTabs.count) * tabW
+            let endX = CGFloat(visibleTabs.count) * (tabW - tabGap)
             drawDropIndicator(at: endX, ctx: ctx, theme: theme)
         }
 
@@ -394,7 +397,7 @@ class SidebarTabBarView: NSView {
         if isDragging, let draggedID = draggedTabID,
             let tab = sidebarTabs.first(where: { $0.id == draggedID })
         {
-            let ghostSize: CGFloat = 28
+            let ghostSize: CGFloat = 22
             let ghostX = dragCurrentX - ghostSize / 2
             let ghostY = (bounds.height - ghostSize) / 2 - 2
 
@@ -405,14 +408,6 @@ class SidebarTabBarView: NSView {
                     roundedRect: ghostRect.insetBy(dx: -1, dy: -1),
                     cornerWidth: 6, cornerHeight: 6, transform: nil))
             ctx.fillPath()
-
-            ctx.setStrokeColor(theme.chromeMuted.withAlphaComponent(0.25).cgColor)
-            ctx.setLineWidth(0.5)
-            ctx.addPath(
-                CGPath(
-                    roundedRect: ghostRect.insetBy(dx: -1, dy: -1),
-                    cornerWidth: 6, cornerHeight: 6, transform: nil))
-            ctx.strokePath()
 
             if let img = NSImage(systemSymbolName: tab.icon, accessibilityDescription: nil) {
                 let config = NSImage.SymbolConfiguration(
