@@ -192,7 +192,7 @@ extension PaneView {
         menu.addItem(closeItem)
 
         // Move to workspace submenu
-        if let workspaces = paneDelegate?.paneViewWorkspaceNames(self), workspaces.count > 0 {
+        if let workspaces = paneDelegate?.paneViewWorkspaceNames(self), !workspaces.isEmpty {
             menu.addItem(.separator())
             let moveMenu = NSMenu()
             for ws in workspaces {
