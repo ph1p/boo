@@ -6,6 +6,6 @@
   "description": "Lists Makefile targets. Click to run.",
   "when": "env.local",
   "runtime": "js",
-  "capabilities": { "sidebarPanel": true },
+  "capabilities": { "sidebarTab": true },
   "statusBar": { "position": "left", "priority": 45, "template": "make" }
 }

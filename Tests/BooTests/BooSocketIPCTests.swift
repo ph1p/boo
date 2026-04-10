@@ -392,7 +392,7 @@ final class ExternalStatusBarSegmentTests: XCTestCase {
         let segment = ExternalStatusBarSegment(info: info)
         let state = StatusBarState(
             currentDirectory: "/tmp", paneCount: 1, tabCount: 1,
-            runningProcess: "", visibleSidebarPlugins: [], isRemote: false
+            runningProcess: "", isRemote: false
         )
         XCTAssertTrue(segment.isVisible(settings: AppSettings.shared, state: state))
     }

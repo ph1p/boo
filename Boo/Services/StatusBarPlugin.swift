@@ -17,8 +17,6 @@ protocol StatusBarPlugin: AnyObject {
     var position: StatusBarPosition { get }
     /// Priority within position (lower = closer to edge).
     var priority: Int { get }
-    /// If set, clicking this segment toggles the corresponding sidebar panel.
-    var associatedPanelID: String? { get }
     /// Whether to show this segment given current terminal state.
     func isVisible(settings: AppSettings, state: StatusBarState) -> Bool
     /// Draw the segment and return width consumed.
@@ -38,7 +36,6 @@ protocol StatusBarPlugin: AnyObject {
 }
 
 extension StatusBarPlugin {
-    var associatedPanelID: String? { nil }
     func accessibilitySegmentLabel(state: StatusBarState) -> String? { nil }
     var tooltipText: String? { nil }
 }
@@ -49,7 +46,6 @@ struct StatusBarState {
     var paneCount: Int
     var tabCount: Int
     var runningProcess: String
-    var visibleSidebarPlugins: Set<String>
     var isRemote: Bool
     var remoteSession: RemoteSessionType?
     var gitBranch: String?

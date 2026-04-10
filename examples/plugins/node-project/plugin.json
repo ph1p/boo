@@ -7,7 +7,7 @@
   "when": "env.local",
   "runtime": "js",
   "capabilities": {
-    "sidebarPanel": true,
+    "sidebarTab": true,
     "statusBarSegment": true
   },
   "statusBar": {

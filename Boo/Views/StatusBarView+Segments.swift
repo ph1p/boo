@@ -103,7 +103,9 @@ final class GitBranchSegment: StatusBarPlugin {
     var hitRect: NSRect = .zero
 
     func isVisible(settings: AppSettings, state: StatusBarState) -> Bool {
-        settings.statusBarShowGitBranch && state.gitBranch != nil
+        settings.statusBarShowGitBranch
+            && state.gitBranch != nil
+            && settings.isPluginEnabled("git-panel")
     }
 
     func draw(
@@ -346,130 +348,6 @@ final class PaneInfoSegment: StatusBarPlugin {
         var info = "\(state.paneCount) pane\(state.paneCount == 1 ? "" : "s")"
         if state.tabCount > 1 { info += ", \(state.tabCount) tabs" }
         return info
-    }
-}
-
-// MARK: - File Tree Icon Segment
-
-final class FileTreeIconSegment: StatusBarPlugin {
-    let id = "filetree-icon"
-    let position: StatusBarPosition = .right
-    let priority = 5
-    let associatedPanelID: String? = "file-tree-local"
-    let tooltipText: String? = "Files"
-    var hitRect: NSRect = .zero
-    /// Whether any file-tree plugin is available in the current context.
-    var isAvailable: Bool = true
-
-    func isVisible(settings: AppSettings, state: StatusBarState) -> Bool { isAvailable }
-
-    func update(state: StatusBarState) {}
-
-    func draw(
-        at rx: CGFloat, y: CGFloat, theme: TerminalTheme, settings: AppSettings, state: StatusBarState, ctx: CGContext
-    ) -> CGFloat {
-        let barH = DensityMetrics.current.statusBarHeight
-        let isActive =
-            state.visibleSidebarPlugins.contains("file-tree-local")
-            || state.visibleSidebarPlugins.contains("file-tree-remote")
-        let color = isActive ? theme.accentColor : theme.chromeMuted.withAlphaComponent(0.5)
-
-        let image = NSImage(systemSymbolName: "folder", accessibilityDescription: "Files")
-        let config = NSImage.SymbolConfiguration(pointSize: 13, weight: .regular)
-        let configured = image?.withSymbolConfiguration(config)
-
-        let cellWidth: CGFloat = 24
-        hitRect = NSRect(x: rx - cellWidth, y: 0, width: cellWidth, height: barH)
-        if let img = configured {
-            let imgSize = img.size
-            let drawX = rx - cellWidth + (cellWidth - imgSize.width) / 2
-            let drawY = (barH - imgSize.height) / 2
-            let imgRect = NSRect(x: drawX, y: drawY, width: imgSize.width, height: imgSize.height)
-            drawTintedIcon(img, color: color, in: imgRect, ctx: ctx)
-        }
-
-        return cellWidth
-    }
-
-    func handleClick(at point: NSPoint, in barView: StatusBarView) -> Bool {
-        guard hitRect.contains(point) else { return false }
-        barView.onSidebarPluginToggle?("file-tree-local")
-        barView.onSidebarPluginToggle?("file-tree-remote")
-        return true
-    }
-
-    func accessibilitySegmentLabel(state: StatusBarState) -> String? {
-        let isActive =
-            state.visibleSidebarPlugins.contains("file-tree-local")
-            || state.visibleSidebarPlugins.contains("file-tree-remote")
-        return isActive ? "Files, selected" : "Files"
-    }
-}
-
-// MARK: - Generic Plugin Icon Segment
-
-/// A clickable status bar icon that toggles a sidebar plugin panel.
-/// Plugins register themselves by providing their manifest info.
-final class PluginIconSegment: StatusBarPlugin {
-    let id: String
-    let position: StatusBarPosition
-    let priority: Int
-    let associatedPanelID: String?
-    private let sfSymbol: String
-    private let label: String
-    /// Whether this plugin is currently available (context-dependent).
-    var isAvailable: Bool = true
-    private var hitRect: NSRect = .zero
-
-    var tooltipText: String? { label }
-
-    init(pluginID: String, sfSymbol: String, label: String, position: StatusBarPosition = .right, priority: Int) {
-        self.id = "\(pluginID)-icon"
-        self.associatedPanelID = pluginID
-        self.sfSymbol = sfSymbol
-        self.label = label
-        self.position = position
-        self.priority = priority
-    }
-
-    func isVisible(settings: AppSettings, state: StatusBarState) -> Bool { isAvailable }
-    func update(state: StatusBarState) {}
-
-    func draw(
-        at rx: CGFloat, y: CGFloat, theme: TerminalTheme, settings: AppSettings, state: StatusBarState, ctx: CGContext
-    ) -> CGFloat {
-        let barH = DensityMetrics.current.statusBarHeight
-        let isActive = state.visibleSidebarPlugins.contains(associatedPanelID ?? "")
-        let color = isActive ? theme.accentColor : theme.chromeMuted.withAlphaComponent(0.5)
-
-        let image = NSImage(systemSymbolName: sfSymbol, accessibilityDescription: label)
-        let config = NSImage.SymbolConfiguration(pointSize: 13, weight: .regular)
-        let configured = image?.withSymbolConfiguration(config)
-
-        let cellWidth: CGFloat = 24
-        hitRect = NSRect(x: rx - cellWidth, y: 0, width: cellWidth, height: barH)
-        if let img = configured {
-            let imgSize = img.size
-            let drawX = rx - cellWidth + (cellWidth - imgSize.width) / 2
-            let drawY = (barH - imgSize.height) / 2
-            let imgRect = NSRect(x: drawX, y: drawY, width: imgSize.width, height: imgSize.height)
-            drawTintedIcon(img, color: color, in: imgRect, ctx: ctx)
-        }
-
-        return cellWidth
-    }
-
-    func handleClick(at point: NSPoint, in barView: StatusBarView) -> Bool {
-        guard hitRect.contains(point) else { return false }
-        if let panelID = associatedPanelID {
-            barView.onSidebarPluginToggle?(panelID)
-        }
-        return true
-    }
-
-    func accessibilitySegmentLabel(state: StatusBarState) -> String? {
-        let isActive = state.visibleSidebarPlugins.contains(associatedPanelID ?? "")
-        return isActive ? "\(label), selected" : label
     }
 }
 

@@ -6,7 +6,6 @@ final class ExternalStatusBarSegment: StatusBarPlugin {
     let id: String
     let position: StatusBarPosition
     let priority: Int
-    let associatedPanelID: String? = nil
 
     private let text: String
     private let icon: String?

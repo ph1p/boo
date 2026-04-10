@@ -5,5 +5,5 @@
   "icon": "info.circle",
   "description": "Detects project type and shows key project files",
   "runtime": "js",
-  "capabilities": { "sidebarPanel": true }
+  "capabilities": { "sidebarTab": true }
 }
