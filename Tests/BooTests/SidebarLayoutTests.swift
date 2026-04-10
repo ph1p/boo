@@ -37,6 +37,18 @@ private func makeSection(id: String, name: String = "Test") -> SidebarSection {
     )
 }
 
+private func makeNonGrowableSection(id: String, name: String = "Info") -> SidebarSection {
+    sectionGenCounter += 1
+    return SidebarSection(
+        id: id,
+        name: name,
+        icon: "info.circle",
+        content: AnyView(MockPluginContent(label: name)),
+        prefersOuterScrollView: false,
+        generation: sectionGenCounter
+    )
+}
+
 private func makePanelView(width: CGFloat = 240, height: CGFloat = 500) -> SidebarPanelView {
     SidebarPanelView(frame: NSRect(x: 0, y: 0, width: width, height: height))
 }
@@ -1131,5 +1143,85 @@ final class SidebarLayoutTests: XCTestCase {
 
         XCTAssertEqual(scaleA, scaleB, accuracy: 0.02)
         XCTAssertEqual(scaleA, scaleC, accuracy: 0.02)
+    }
+
+    // MARK: - Non-growable section height
+
+    func testNonGrowableSectionGetsIntrinsicHeight() {
+        let v = makePanelView(height: 600)
+        let tree = makeSection(id: "tree")
+        let info = makeNonGrowableSection(id: "info")
+        v.updateSections([tree, info], expandedIDs: ["tree", "info"])
+
+        let infoHeight = v.sectionStates[1].contentHeight
+        let infoIntrinsic = v.sectionStates[1].intrinsicHeight
+        let expected = max(SidebarLayout.minSectionHeight, infoIntrinsic)
+
+        // Non-growable section should stay at its intrinsic height, not be inflated
+        XCTAssertEqual(
+            infoHeight, expected, accuracy: 1,
+            "Non-growable section should match intrinsic height, not receive extra space")
+
+        // Growable section should absorb the remaining space
+        let treeHeight = v.sectionStates[0].contentHeight
+        XCTAssertGreaterThan(
+            treeHeight, infoHeight,
+            "Growable section should absorb remaining space")
+    }
+
+    func testOverflowShrinksPrioritizesGrowable() {
+        // Very tight height: 3 headers (78) + 2 separators (2) = 80pt overhead,
+        // leaving only 120pt for content with 3 expanded sections.
+        let v = makePanelView(height: 200)
+        let tree = makeSection(id: "tree")
+        let git = makeSection(id: "git")
+        let info = makeNonGrowableSection(id: "info")
+        v.updateSections([tree, git, info], expandedIDs: ["tree", "git", "info"])
+
+        let infoHeight = v.sectionStates[2].contentHeight
+        let treeHeight = v.sectionStates[0].contentHeight
+        let gitHeight = v.sectionStates[1].contentHeight
+
+        // Growable sections should be at or near minimum before non-growable is touched
+        let minH = SidebarLayout.minSectionHeight
+        XCTAssertGreaterThanOrEqual(
+            infoHeight, min(minH, v.sectionStates[2].intrinsicHeight),
+            "Non-growable section should not be shrunk below intrinsic (or min)")
+        // If growable sections had room to absorb all overflow, they should be at min
+        if treeHeight <= minH + 1 && gitHeight <= minH + 1 {
+            // Growable at minimum — non-growable may need to shrink too, that's OK
+        } else {
+            // Growable still above minimum — non-growable should be at intrinsic
+            let infoIntrinsic = v.sectionStates[2].intrinsicHeight
+            let expected = max(minH, infoIntrinsic)
+            XCTAssertEqual(
+                infoHeight, expected, accuracy: 2,
+                "Non-growable section should stay at intrinsic when growable sections have room")
+        }
+    }
+
+    func testNonGrowableHeightRestoredAfterCollapseExpand() {
+        let v = makePanelView(height: 600)
+        let tree = makeSection(id: "tree")
+        let info = makeNonGrowableSection(id: "info")
+        v.updateSections([tree, info], expandedIDs: ["tree", "info"])
+
+        let infoHeight = v.sectionStates[1].contentHeight
+        XCTAssertGreaterThan(infoHeight, 0)
+
+        // Collapse info
+        v.updateSections([tree, info], expandedIDs: ["tree"])
+        XCTAssertEqual(v.sectionStates[1].contentHeight, 0)
+
+        // Simulate async content load completing after collapse: set the saved height
+        // as the KVO observer would after intrinsic size grows.
+        let biggerIntrinsic: CGFloat = 150
+        v.savedSectionHeights["info"] = biggerIntrinsic
+
+        // Re-expand info — should restore to the saved height from KVO update
+        v.updateSections([tree, info], expandedIDs: ["tree", "info"])
+        XCTAssertEqual(
+            v.sectionStates[1].contentHeight, biggerIntrinsic, accuracy: 2,
+            "Non-growable section should restore to updated intrinsic after collapse/expand")
     }
 }

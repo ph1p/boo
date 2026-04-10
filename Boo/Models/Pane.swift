@@ -16,6 +16,8 @@ struct TabState {
     var userCollapsedSectionIDs: Set<String> = []
     var sidebarSectionHeights: [String: CGFloat] = [:]
     var sidebarScrollOffsets: [String: CGPoint] = [:]
+    /// Per-plugin section order — keyed by plugin ID, values are ordered section IDs.
+    var sidebarSectionOrder: [String: [String]] = [:]
     /// The plugin tab ID the user last selected in this terminal tab.
     var selectedPluginTabID: String? = nil
 }
@@ -154,6 +156,7 @@ final class Pane {
         userCollapsed: Set<String>? = nil,
         sidebarSectionHeights: [String: CGFloat]? = nil,
         sidebarScrollOffsets: [String: CGPoint]? = nil,
+        sidebarSectionOrder: [String: [String]]? = nil,
         selectedPluginTabID: String? = nil
     ) {
         guard index >= 0, index < tabs.count else { return }
@@ -166,6 +169,9 @@ final class Pane {
         }
         if let sidebarScrollOffsets {
             tabs[index].state.sidebarScrollOffsets = sidebarScrollOffsets
+        }
+        if let sidebarSectionOrder {
+            tabs[index].state.sidebarSectionOrder = sidebarSectionOrder
         }
         if let selectedPluginTabID {
             tabs[index].state.selectedPluginTabID = selectedPluginTabID

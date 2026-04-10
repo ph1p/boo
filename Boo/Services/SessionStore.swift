@@ -12,6 +12,7 @@ struct SessionTab: Codable {
     let userCollapsedSectionIDs: [String]?
     let sidebarSectionHeights: [String: Double]?
     let sidebarScrollOffsets: [String: [Double]]?
+    let sidebarSectionOrder: [String: [String]]?
     let selectedPluginTabID: String?
 }
 
@@ -69,6 +70,7 @@ enum SessionStore {
                         sidebarScrollOffsets: tab.state.sidebarScrollOffsets.mapValues {
                             [$0.x, $0.y]
                         },
+                        sidebarSectionOrder: tab.state.sidebarSectionOrder,
                         selectedPluginTabID: tab.state.selectedPluginTabID
                     )
                 }
@@ -174,6 +176,7 @@ enum SessionStore {
                                     guard arr.count == 2 else { return nil }
                                     return CGPoint(x: arr[0], y: arr[1])
                                 },
+                            sidebarSectionOrder: tab.sidebarSectionOrder ?? [:],
                             selectedPluginTabID: tab.selectedPluginTabID
                         )
                     }

@@ -360,8 +360,17 @@ class SidebarPanelView: NSView {
             let oldH = self.sectionStates[idx].intrinsicHeight
             if abs(newH - oldH) > 0.5 {
                 self.sectionStates[idx].intrinsicHeight = newH
-                self.sectionStates[idx].contentHeight = max(
-                    SidebarLayout.minSectionHeight, newH)
+                let targetH = max(SidebarLayout.minSectionHeight, newH)
+                self.sectionStates[idx].contentHeight = targetH
+                // For non-growable sections, update saved height when intrinsic grows
+                // beyond what was previously saved. This handles async content loading
+                // where the initial measurement captured a "Loading…" placeholder.
+                if !self.sectionStates[idx].canGrow {
+                    let saved = self.savedSectionHeights[sectionID] ?? 0
+                    if targetH > saved {
+                        self.savedSectionHeights[sectionID] = targetH
+                    }
+                }
                 self.layoutAllSections()
             }
         }
@@ -403,8 +412,11 @@ class SidebarPanelView: NSView {
             // sections stay at their intrinsic size, empty space at the bottom.
         }
 
-        // Save distributed heights so they survive collapse/expand toggles
-        for i in expandedIndices {
+        // Save distributed heights so they survive collapse/expand toggles.
+        // Non-growable sections skip saving here — their intrinsic height may
+        // change (async loading) and resolvedHeight() uses intrinsicHeight as
+        // fallback until the KVO observer or a user drag sets the real value.
+        for i in expandedIndices where sectionStates[i].canGrow {
             savedSectionHeights[sectionStates[i].id] = sectionStates[i].contentHeight
         }
     }
@@ -571,11 +583,27 @@ class SidebarPanelView: NSView {
                         SidebarLayout.minSectionHeight, sectionStates[i].contentHeight * scale)
                 }
             } else {
-                // Proportional shrink across all expanded sections
-                let scale = available / currentSum
-                for i in expandedIndices {
-                    sectionStates[i].contentHeight = max(
-                        SidebarLayout.minSectionHeight, sectionStates[i].contentHeight * scale)
+                // Two-phase shrink: exhaust growable sections before touching non-growable.
+                // Phase A: shrink growable sections to their minimum first.
+                var absorbed: CGFloat = 0
+                for i in growable {
+                    absorbed += max(0, sectionStates[i].contentHeight - SidebarLayout.minSectionHeight)
+                    sectionStates[i].contentHeight = SidebarLayout.minSectionHeight
+                }
+                let remainingOverflow = overflow - absorbed
+                // Phase B: shrink non-growable sections for any remaining deficit.
+                if remainingOverflow > 0 {
+                    let nonGrowable = expandedIndices.filter { !sectionStates[$0].canGrow }
+                    let nonGrowableSum = nonGrowable.reduce(CGFloat(0)) {
+                        $0 + sectionStates[$1].contentHeight
+                    }
+                    if nonGrowableSum > 0 {
+                        let scale = max(0, (nonGrowableSum - remainingOverflow) / nonGrowableSum)
+                        for i in nonGrowable {
+                            sectionStates[i].contentHeight = max(
+                                SidebarLayout.minSectionHeight, sectionStates[i].contentHeight * scale)
+                        }
+                    }
                 }
             }
 
