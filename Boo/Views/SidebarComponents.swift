@@ -143,7 +143,7 @@ class SidebarSectionHeaderView: NSView {
         let density = AppSettings.shared.sidebarDensity
         let padH: CGFloat = density == .comfortable ? 12 : 8
 
-        ctx.setFillColor(theme.sidebarBg.cgColor)
+        ctx.setFillColor(theme.chromeBg.cgColor)
         ctx.fill(bounds)
 
         let chevronName = isExpanded ? "chevron.down" : "chevron.right"
