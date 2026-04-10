@@ -341,7 +341,7 @@ class SidebarPanelView: NSView {
 
     /// Resolved content height for a section — saved height if available, otherwise intrinsic.
     private func resolvedHeight(for sectionID: String, intrinsic: CGFloat) -> CGFloat {
-        max(SidebarLayout.minSectionHeight, savedSectionHeights[sectionID] ?? intrinsic)
+        return max(SidebarLayout.minSectionHeight, savedSectionHeights[sectionID] ?? intrinsic)
     }
 
     /// Distribute available space among expanded sections.
