@@ -75,6 +75,8 @@ class SidebarPanelView: NSView {
 
     /// Drag handle views placed between two expanded sections.
     private var dragHandles: [SidebarDragHandleView] = []
+    /// KVO observations for non-scroll hosting views whose intrinsic size changes.
+    private var intrinsicSizeObservations: [String: NSKeyValueObservation] = [:]
     /// Reentrancy guard for layout.
     private var isLayingOut = false
 
@@ -214,6 +216,7 @@ class SidebarPanelView: NSView {
 
         // Full rebuild — reset generation tracking
         sectionGenerations.removeAll()
+        intrinsicSizeObservations.removeAll()
         for handle in dragHandles { handle.removeFromSuperview() }
         dragHandles.removeAll()
         for state in sectionStates {
@@ -278,10 +281,14 @@ class SidebarPanelView: NSView {
 
         if !prefersOuterScrollView {
             let hosting = NSHostingView(rootView: aligned)
+            hosting.wantsLayer = true
+            hosting.layer?.masksToBounds = true
+            hosting.sizingOptions = [.intrinsicContentSize]
             hosting.frame.size.width = max(1, bounds.width)
             sectionStates[index].intrinsicHeight = hosting.fittingSize.height
             addSubview(hosting)
             sectionStates[index].contentContainer = hosting
+            observeIntrinsicSizeChanges(hosting, sectionID: sectionStates[index].id)
             return
         }
 
@@ -335,8 +342,30 @@ class SidebarPanelView: NSView {
 
     /// Remove the content view for a section.
     private func removeContentView(at index: Int) {
+        intrinsicSizeObservations.removeValue(forKey: sectionStates[index].id)
         sectionStates[index].contentContainer?.removeFromSuperview()
         sectionStates[index].contentContainer = nil
+    }
+
+    /// Watch a non-scroll hosting view for intrinsic size changes (e.g. when SwiftUI
+    /// async state loads) and re-layout when the section needs more or less height.
+    private func observeIntrinsicSizeChanges(_ hosting: NSHostingView<AnyView>, sectionID: String) {
+        let obs = hosting.observe(\.intrinsicContentSize, options: [.new]) { [weak self] hv, _ in
+            guard let self else { return }
+            let newH = hv.intrinsicContentSize.height
+            guard newH > 0,
+                let idx = self.sectionStates.firstIndex(where: { $0.id == sectionID }),
+                self.sectionStates[idx].isExpanded
+            else { return }
+            let oldH = self.sectionStates[idx].intrinsicHeight
+            if abs(newH - oldH) > 0.5 {
+                self.sectionStates[idx].intrinsicHeight = newH
+                self.sectionStates[idx].contentHeight = max(
+                    SidebarLayout.minSectionHeight, newH)
+                self.layoutAllSections()
+            }
+        }
+        intrinsicSizeObservations[sectionID] = obs
     }
 
     /// Resolved content height for a section — saved height if available, otherwise intrinsic.

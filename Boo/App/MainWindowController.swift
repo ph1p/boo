@@ -3,7 +3,7 @@ import Cocoa
 import Combine
 import SwiftUI
 
-// SidebarPanelView is added directly to sidebarContainer (no SwiftUI bridge).
+// SidebarScrollPanelView is added directly to sidebarContainer (no SwiftUI bridge).
 
 /// NSSplitView with themed divider color and a VS Code-style accent hover highlight.
 class ThemedSplitView: NSSplitView {
