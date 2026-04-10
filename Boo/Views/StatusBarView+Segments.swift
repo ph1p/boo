@@ -126,7 +126,11 @@ final class GitBranchSegment: StatusBarPlugin {
             .font: NSFont.monospacedSystemFont(ofSize: 10, weight: .regular),
             .foregroundColor: theme.accentColor
         ]
-        let str = branch as NSString
+        let maxBranchChars = 20
+        let displayBranch = branch.count > maxBranchChars
+            ? String(branch.prefix(maxBranchChars)) + "\u{2026}"
+            : branch
+        let str = displayBranch as NSString
         str.draw(at: NSPoint(x: cx, y: y), withAttributes: attrs)
         cx += str.size(withAttributes: attrs).width
 
