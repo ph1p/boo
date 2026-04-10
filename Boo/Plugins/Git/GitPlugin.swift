@@ -17,7 +17,11 @@ final class GitPlugin: BooPluginProtocol {
         settings: [
             PluginManifest.SettingManifest(
                 key: "showBranch", type: .bool, label: "Show git branch in status bar",
-                defaultValue: AnyCodableValue(true), options: nil)
+                defaultValue: AnyCodableValue(true), options: nil),
+            PluginManifest.SettingManifest(
+                key: "diffTool", type: .string,
+                label: "Diff tool",
+                defaultValue: AnyCodableValue(""), options: "gitDiffTool")
         ]
     )
 
@@ -32,6 +36,9 @@ final class GitPlugin: BooPluginProtocol {
     var changedFileCount: Int { cachedFiles.count }
     var lastRefreshedPath: String?
     var gitDirWatcher: FileSystemWatcher?
+    /// Watches working tree for file edits (create/modify/delete), so status updates without
+    /// needing a CWD change.
+    var workTreeWatcher: FileSystemWatcher?
     /// Watches CWD when no repo is active, to detect `git init`.
     var cwdWatcher: FileSystemWatcher?
     var watchedRepoRoot: String?
@@ -56,11 +63,24 @@ final class GitPlugin: BooPluginProtocol {
     var cachedRemotes: [GitRemote] = []
 
     struct GitChangedFile: Identifiable {
-        let id = UUID()
+        let id: UUID
         let path: String
         let indexStatus: Character  // column 1: staged status
         let workTreeStatus: Character  // column 2: work tree status
         let fullPath: String
+
+        init(path: String, indexStatus: Character, workTreeStatus: Character, fullPath: String) {
+            self.id = UUID()
+            self.path = path
+            self.indexStatus = indexStatus
+            self.workTreeStatus = workTreeStatus
+            self.fullPath = fullPath
+        }
+
+        /// Copy with new status columns, preserving path/fullPath/id.
+        func withStatus(index: Character, workTree: Character) -> GitChangedFile {
+            GitChangedFile(path: path, indexStatus: index, workTreeStatus: workTree, fullPath: fullPath)
+        }
 
         /// Legacy single-char status for display.
         var status: String {
@@ -137,6 +157,7 @@ final class GitPlugin: BooPluginProtocol {
         guard let git = context.terminal.gitContext else { return nil }
         let repoRoot = git.repoRoot
         let act = actions
+        let diffTool = AppSettings.shared.pluginString("git-panel", "diffTool", default: "")
         return AnyView(
             GitDetailView(
                 branch: git.branch,
@@ -153,16 +174,22 @@ final class GitPlugin: BooPluginProtocol {
                     self?.refreshGitStatus(cwd: repoRoot, repoRoot: repoRoot)
                 },
                 onGitAction: { [weak self] args in
+                    guard let self else { return }
+                    // Optimistic update — mutate cachedFiles immediately for instant UI feedback.
+                    self.applyOptimisticGitAction(args: args)
+                    self.onRequestCycleRerun?()
+                    // Background: run the real command, then do a full refresh to confirm.
                     DispatchQueue.global(qos: .userInitiated).async {
                         Self.runGitCommand(repoRoot: repoRoot, args: args)
                         DispatchQueue.main.async {
-                            self?.refreshGitStatus(cwd: repoRoot, repoRoot: repoRoot)
+                            self.refreshGitStatus(cwd: repoRoot, repoRoot: repoRoot)
                         }
                     }
                 },
                 onTerminalAction: { command in
                     act?.handle(DSLAction(type: "exec", path: nil, command: command, text: nil))
                 },
+                diffTool: diffTool.isEmpty ? nil : diffTool,
                 onCopyPath: { path in
                     act?.handle(DSLAction(type: "copy", path: path, command: nil, text: nil))
                 },
@@ -185,5 +212,66 @@ final class GitPlugin: BooPluginProtocol {
             "[Git] terminalFocusChanged: cwd=\(context.cwd) repoRoot=\(context.gitContext?.repoRoot ?? "nil") branch=\(context.gitContext?.branch ?? "nil")"
         )
         refreshGitStatus(cwd: context.cwd, repoRoot: context.gitContext?.repoRoot)
+    }
+
+    // MARK: - Optimistic Updates
+
+    /// Apply an immediate local mutation to `cachedFiles` based on the git command args,
+    /// so the UI reflects the action before the background git process completes.
+    func applyOptimisticGitAction(args: [String]) {
+        guard args.count >= 2 else { return }
+        switch args[0] {
+        case "add":
+            let target = args[1]
+            if target == "-u" {
+                // Stage all unstaged (tracked) files
+                cachedFiles = cachedFiles.map { f in
+                    f.isUnstaged && !f.isUntracked
+                        ? f.withStatus(index: f.workTreeStatus, workTree: " ")
+                        : f
+                }
+            } else {
+                // Stage a single file
+                cachedFiles = cachedFiles.map { f in
+                    guard f.path == target else { return f }
+                    if f.isUntracked {
+                        return f.withStatus(index: "A", workTree: " ")
+                    } else if f.isUnstaged {
+                        return f.withStatus(index: f.workTreeStatus, workTree: " ")
+                    }
+                    return f
+                }
+            }
+        case "restore":
+            guard args.count >= 3, args[1] == "--staged" else { return }
+            let target = args[2]
+            if target == "." {
+                // Unstage all staged files
+                cachedFiles = cachedFiles.map { f in
+                    guard f.isStaged else { return f }
+                    // A file staged as new (A) with no work-tree counterpart reverts to untracked
+                    if f.indexStatus == "A" && f.workTreeStatus == " " {
+                        return f.withStatus(index: "?", workTree: "?")
+                    }
+                    return f.withStatus(index: " ", workTree: f.indexStatus)
+                }
+            } else {
+                // Unstage a single file
+                cachedFiles = cachedFiles.map { f in
+                    guard f.path == target, f.isStaged else { return f }
+                    // A file staged as new (A) with no work-tree counterpart reverts to untracked
+                    if f.indexStatus == "A" && f.workTreeStatus == " " {
+                        return f.withStatus(index: "?", workTree: "?")
+                    }
+                    return f.withStatus(index: " ", workTree: f.indexStatus)
+                }
+            }
+        case "checkout":
+            guard args.count >= 3, args[1] == "--" else { return }
+            let target = args[2]
+            cachedFiles = cachedFiles.filter { $0.path != target }
+        default:
+            break
+        }
     }
 }

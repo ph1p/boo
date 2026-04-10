@@ -3,12 +3,15 @@ import Foundation
 // MARK: - Process Timeout Helper
 
 extension Process {
-    /// Wait for the process to exit, terminating it if it exceeds the timeout.
+    /// Launch the process and wait for it to exit, terminating it if it exceeds the timeout.
+    /// `terminationHandler` is set before `run()` to eliminate the race where a fast-exiting
+    /// process finishes before the handler is registered, leaving the semaphore unsignalled.
     /// Returns true if the process exited within the timeout with status 0.
     @discardableResult
-    func waitWithTimeout(seconds: TimeInterval) -> Bool {
+    func runAndWait(seconds: TimeInterval) -> Bool {
         let sem = DispatchSemaphore(value: 0)
         terminationHandler = { _ in sem.signal() }
+        do { try run() } catch { return false }
         let result = sem.wait(timeout: .now() + seconds)
         if result == .timedOut {
             terminate()
@@ -30,8 +33,7 @@ extension GitPlugin {
         task.arguments = ["-C", repoRoot] + args
         task.standardOutput = FileHandle.nullDevice
         task.standardError = FileHandle.nullDevice
-        do { try task.run() } catch { return false }
-        return task.waitWithTimeout(seconds: 10)
+        return task.runAndWait(seconds: 10)
     }
 
     // MARK: - Detection Helpers
@@ -39,20 +41,22 @@ extension GitPlugin {
     nonisolated static func detectChangedFiles(repoRoot: String) -> [GitChangedFile] {
         let task = Process()
         task.launchPath = "/usr/bin/git"
-        task.arguments = ["-C", repoRoot, "-no-optional-locks", "status", "--porcelain=v1"]
+        task.arguments = ["-C", repoRoot, "--no-optional-locks", "status", "--porcelain=v1"]
         task.standardError = FileHandle.nullDevice
 
         let pipe = Pipe()
         task.standardOutput = pipe
 
-        do {
-            try task.run()
-        } catch {
-            return []
+        // Read on a separate thread before waiting to prevent deadlock when output > 64KB.
+        var data = Data()
+        let readGroup = DispatchGroup()
+        readGroup.enter()
+        DispatchQueue.global(qos: .utility).async {
+            data = pipe.fileHandleForReading.readDataToEndOfFile()
+            readGroup.leave()
         }
-        // Read before waiting to prevent deadlock when output > 64KB
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        guard task.waitWithTimeout(seconds: 15) else { return [] }
+        guard task.runAndWait(seconds: 15) else { return [] }
+        readGroup.wait()
 
         guard let output = String(data: data, encoding: .utf8) else { return [] }
 
@@ -79,9 +83,15 @@ extension GitPlugin {
         task.standardError = FileHandle.nullDevice
         let pipe = Pipe()
         task.standardOutput = pipe
-        do { try task.run() } catch { return (0, 0) }
-        guard task.waitWithTimeout(seconds: 15) else { return (0, 0) }
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        var data = Data()
+        let readGroup = DispatchGroup()
+        readGroup.enter()
+        DispatchQueue.global(qos: .utility).async {
+            data = pipe.fileHandleForReading.readDataToEndOfFile()
+            readGroup.leave()
+        }
+        guard task.runAndWait(seconds: 15) else { return (0, 0) }
+        readGroup.wait()
         guard let output = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) else {
             return (0, 0)
         }
@@ -99,9 +109,15 @@ extension GitPlugin {
         task.standardError = FileHandle.nullDevice
         let pipe = Pipe()
         task.standardOutput = pipe
-        do { try task.run() } catch { return nil }
-        guard task.waitWithTimeout(seconds: 15) else { return nil }
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        var data = Data()
+        let readGroup = DispatchGroup()
+        readGroup.enter()
+        DispatchQueue.global(qos: .utility).async {
+            data = pipe.fileHandleForReading.readDataToEndOfFile()
+            readGroup.leave()
+        }
+        guard task.runAndWait(seconds: 15) else { return nil }
+        readGroup.wait()
         guard let output = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
             !output.isEmpty
         else {
@@ -150,9 +166,15 @@ extension GitPlugin {
         task.standardError = FileHandle.nullDevice
         let pipe = Pipe()
         task.standardOutput = pipe
-        do { try task.run() } catch { return [] }
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        guard task.waitWithTimeout(seconds: 15) else { return [] }
+        var data = Data()
+        let readGroup = DispatchGroup()
+        readGroup.enter()
+        DispatchQueue.global(qos: .utility).async {
+            data = pipe.fileHandleForReading.readDataToEndOfFile()
+            readGroup.leave()
+        }
+        guard task.runAndWait(seconds: 15) else { return [] }
+        readGroup.wait()
         guard let output = String(data: data, encoding: .utf8) else { return [] }
 
         // git remote -v outputs: origin\thttps://... (fetch)\norigin\thttps://... (push)
@@ -188,6 +210,8 @@ extension GitPlugin {
             lastRefreshedPath = cwd
             gitDirWatcher?.stop()
             gitDirWatcher = nil
+            workTreeWatcher?.stop()
+            workTreeWatcher = nil
             watchedRepoRoot = nil
             // Watch CWD so we detect `git init`
             setupCwdWatcher(cwd: cwd)
@@ -291,8 +315,9 @@ extension GitPlugin {
         guard watchedRepoRoot != repoRoot else { return }
         watchedRepoRoot = repoRoot
         gitDirWatcher?.stop()
+        workTreeWatcher?.stop()
 
-        let debouncedRefresh: () -> Void = { [weak self] in
+        let debouncedRefresh: (TimeInterval) -> Void = { [weak self] delay in
             guard let self = self else { return }
             self.debounceWork?.cancel()
             let work = DispatchWorkItem { [weak self] in
@@ -300,7 +325,7 @@ extension GitPlugin {
                 self.refreshGitStatus(cwd: self.lastRefreshedPath ?? repoRoot, repoRoot: repoRoot)
             }
             self.debounceWork = work
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15, execute: work)
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
         }
 
         // Watch .git/ but filter to only the files that indicate meaningful state changes:
@@ -315,9 +340,23 @@ extension GitPlugin {
                     return name == "HEAD" || name == "index" || name == "packed-refs"
                         || name == "MERGE_HEAD" || name == "CHERRY_PICK_HEAD"
                 },
-                onChange: debouncedRefresh
+                onChange: { debouncedRefresh(0.15) }
             )
             gitDirWatcher?.start()
         }
+
+        // Watch the working tree for file creates/modifies/deletes so the changed-file list
+        // stays live even when the user hasn't staged anything yet.
+        // FSEvents is recursive, so this covers all subdirectories.
+        // Skip .git/ paths to avoid double-firing with gitDirWatcher.
+        workTreeWatcher = FileSystemWatcher(
+            path: repoRoot,
+            filter: { path in
+                // Ignore anything inside .git/
+                !path.contains("/.git/") && !path.hasSuffix("/.git")
+            },
+            onChange: { debouncedRefresh(0.5) }
+        )
+        workTreeWatcher?.start()
     }
 }

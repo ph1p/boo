@@ -290,6 +290,8 @@ private struct PluginSettingControl: View {
                 }
             } else if setting.options == "editorExtensions" {
                 editorExtensionsControl(value: value)
+            } else if setting.options == "gitDiffTool" {
+                gitDiffToolControl(value: value)
             } else {
                 HStack {
                     Text(setting.label)
@@ -307,6 +309,27 @@ private struct PluginSettingControl: View {
                     .frame(width: 150)
                 }
             }
+        }
+    }
+
+    private func gitDiffToolControl(value: String) -> some View {
+        let t = Tokens.current
+        return VStack(alignment: .leading, spacing: 4) {
+            Text(setting.label)
+                .font(.system(size: 12))
+                .foregroundColor(t.text)
+            TextField(
+                "e.g. code --diff {file}",
+                text: Binding(
+                    get: { value },
+                    set: { AppSettings.shared.setPluginSetting(pluginID, setting.key, $0) }
+                )
+            )
+            .textFieldStyle(.roundedBorder)
+            .font(.system(size: 11, design: .monospaced))
+            Text("Leave empty to use \u{2018}git diff\u{2019} in the terminal. Use {file} for the full file path.")
+                .font(.system(size: 11))
+                .foregroundColor(t.muted)
         }
     }
 
