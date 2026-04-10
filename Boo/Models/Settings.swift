@@ -79,6 +79,36 @@ enum NewTabCwdMode: Int, CaseIterable {
     }
 }
 
+enum SidebarTabBarPosition: String, CaseIterable {
+    case top
+    case bottom
+
+    var label: String { rawValue.capitalized }
+}
+
+/// Identifies a sidebar tab. Built-in tabs use well-known IDs; plugin-contributed tabs
+/// use the plugin's ID as their identifier.
+struct SidebarTabID: Hashable, Codable, CustomStringConvertible {
+    let id: String
+
+    static let explorer = SidebarTabID("explorer")
+    static let search = SidebarTabID("search")
+
+    init(_ id: String) { self.id = id }
+
+    var description: String { id }
+
+    // MARK: - Codable
+    init(from decoder: Decoder) throws {
+        id = try decoder.singleValueContainer().decode(String.self)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.singleValueContainer()
+        try c.encode(id)
+    }
+}
+
 extension Notification.Name {
     static let settingsChanged = Notification.Name("BooSettingsChanged")
 }
@@ -125,7 +155,6 @@ final class AppSettings {
         static let sidebarDensity = "sidebarDensity"
         static let tabOverflowMode = "tabOverflowMode"
         static let disabledPluginIDs = "disabledPluginIDs"
-        static let defaultEnabledPluginIDs = "defaultEnabledPluginIDs"
         static let sidebarPluginOrder = "sidebarPluginOrder"
         static let sidebarWidth = "sidebarWidth"
         static let pluginSettings = "pluginSettings"
@@ -140,6 +169,8 @@ final class AppSettings {
         static let sshControlMasterApproved = "sshControlMasterApproved"
         static let customThemes = "customThemes"
         static let newTabCwdMode = "newTabCwdMode"
+        static let activeSidebarTab = "activeSidebarTab"
+        static let sidebarTabBarPosition = "sidebarTabBarPosition"
     }
 
     /// Bool from UserDefaults with a custom default (since .bool returns false for unset keys).
@@ -378,6 +409,19 @@ final class AppSettings {
         set { set(newValue.rawValue, forKey: K.newTabCwdMode, topic: .layout) }
     }
 
+    var activeSidebarTabID: String {
+        get { SidebarTabID.explorer.id }
+        set {}
+    }
+
+    var sidebarTabBarPosition: SidebarTabBarPosition {
+        get {
+            SidebarTabBarPosition(rawValue: UserDefaults.standard.string(forKey: K.sidebarTabBarPosition) ?? "")
+                ?? .top
+        }
+        set { set(newValue.rawValue, forKey: K.sidebarTabBarPosition, topic: .layout) }
+    }
+
     // MARK: - Plugins
 
     var disabledPluginIDs: [String] {
@@ -404,52 +448,10 @@ final class AppSettings {
     }
 
     /// Plugins open in the sidebar by default when opening a new pane or starting the app.
-    var defaultEnabledPluginIDs: [String] {
-        get {
-            UserDefaults.standard.stringArray(forKey: K.defaultEnabledPluginIDs)
-                ?? [
-                    "file-tree-local", "file-tree-remote", "git-panel", "bookmarks", "docker", "system-info",
-                    "ai-agent"
-                ]
-        }
-        set { set(newValue, forKey: K.defaultEnabledPluginIDs, topic: .plugins) }
-    }
-
-    /// Canonical ordering of all sidebar plugins (enabled and disabled).
-    /// The sidebar and settings panel use this to keep a stable order
-    /// even when plugins are toggled on/off individually.
-    var sidebarPluginOrder: [String] {
-        get {
-            UserDefaults.standard.stringArray(forKey: K.sidebarPluginOrder) ?? []
-        }
+    /// Saved tab order for the sidebar tab bar (plugin IDs in display order).
+    var sidebarTabOrder: [String] {
+        get { UserDefaults.standard.stringArray(forKey: K.sidebarPluginOrder) ?? [] }
         set { set(newValue, forKey: K.sidebarPluginOrder) }
-    }
-
-    /// Silently add or remove a plugin from the default-enabled list.
-    /// Does NOT fire the `.plugins` notification to avoid re-entrancy from the settings observer.
-    /// When adding, inserts at the position defined by `sidebarPluginOrder` to preserve
-    /// the user-configured order regardless of which plugins are currently active.
-    func updateDefaultEnabledPlugins(add addID: String? = nil, remove removeID: String? = nil) {
-        var ids = defaultEnabledPluginIDs
-        if let id = removeID { ids.removeAll { $0 == id } }
-        if let id = addID, !ids.contains(id) {
-            let order = sidebarPluginOrder
-            if let canonicalIdx = order.firstIndex(of: id) {
-                // Find the right insertion point to maintain canonical order
-                var insertAt = ids.count
-                for (i, existing) in ids.enumerated() {
-                    if let existingIdx = order.firstIndex(of: existing), existingIdx > canonicalIdx {
-                        insertAt = i
-                        break
-                    }
-                }
-                ids.insert(id, at: insertAt)
-            } else {
-                ids.append(id)
-            }
-        }
-        UserDefaults.standard.set(ids, forKey: K.defaultEnabledPluginIDs)
-        saveToFile()
     }
 
     // MARK: - Updates
@@ -519,6 +521,19 @@ final class AppSettings {
         notify(topic: topic)
     }
 
+    /// Returns the full settings dictionary for a given plugin ID.
+    func pluginSettingsDict(for pluginID: String) -> [String: Any] {
+        pluginSettingsDict[pluginID] ?? [:]
+    }
+
+    /// Replaces the full settings dictionary for a given plugin ID.
+    func setPluginSettingsDict(_ dict: [String: Any], for pluginID: String) {
+        var all = pluginSettingsDict
+        all[pluginID] = dict
+        pluginSettingsDict = all
+        saveToFile()
+    }
+
     // MARK: - Font Resolution
 
     func resolvedFont() -> NSFont {
@@ -586,12 +601,12 @@ final class AppSettings {
             K.sidebarDefaultHidden: sidebarDefaultHidden,
             K.tabOverflowMode: tabOverflowMode.rawValue,
             K.disabledPluginIDs: disabledPluginIDs,
-            K.defaultEnabledPluginIDs: defaultEnabledPluginIDs,
-            K.sidebarPluginOrder: sidebarPluginOrder,
+            K.sidebarPluginOrder: sidebarTabOrder,
             K.pluginSettings: pluginSettingsDict,
             K.sidebarFontSize: Double(sidebarFontSize),
             K.sidebarFontName: sidebarFontName,
-            K.fileEditorCommand: fileEditorCommand
+            K.fileEditorCommand: fileEditorCommand,
+            K.sidebarTabBarPosition: sidebarTabBarPosition.rawValue
         ]
         dict[K.autoCheckUpdates] = autoCheckUpdates
         if let skipVersion {

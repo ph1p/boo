@@ -17,7 +17,7 @@ final class DebugPlugin: BooPluginProtocol {
         description: "Logs all plugin lifecycle events and displays live terminal state",
         when: nil,
         runtime: nil,
-        capabilities: PluginManifest.Capabilities(sidebarPanel: true, statusBarSegment: true),
+        capabilities: PluginManifest.Capabilities(statusBarSegment: true, sidebarTab: true),
         statusBar: PluginManifest.StatusBarManifest(position: "right", priority: 99, template: nil),
         settings: [
             PluginManifest.SettingManifest(

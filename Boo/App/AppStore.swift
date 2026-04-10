@@ -29,9 +29,6 @@ final class AppStore: ObservableObject {
     /// Whether the sidebar is currently visible.
     @Published var sidebarVisible: Bool = false
 
-    /// IDs of plugins currently open in the sidebar.
-    @Published var openPluginIDs: Set<String> = []
-
     /// IDs of plugins passing their when-clause (context-dependent visibility).
     @Published private(set) var visiblePluginIDs: Set<String> = []
 

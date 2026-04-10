@@ -104,7 +104,8 @@ final class LayoutSettingsTests: XCTestCase {
     // MARK: - Sidebar User Hidden Flag
 
     @MainActor
-    func testUserToggleSetsUserHiddenFlag() {
+    func testUserToggleSetsUserHiddenFlag() throws {
+        try XCTSkipIf(!NSApplication.shared.isRunning, "Requires a running NSApplication event loop")
         let wc = MainWindowController()
         // Starts visible (default setting is false)
         XCTAssertTrue(wc.sidebarVisible)
@@ -122,7 +123,8 @@ final class LayoutSettingsTests: XCTestCase {
     }
 
     @MainActor
-    func testProgrammaticToggleDoesNotSetUserHiddenFlag() {
+    func testProgrammaticToggleDoesNotSetUserHiddenFlag() throws {
+        try XCTSkipIf(!NSApplication.shared.isRunning, "Requires a running NSApplication event loop")
         let wc = MainWindowController()
         XCTAssertFalse(wc.sidebarUserHidden)
 
@@ -133,7 +135,8 @@ final class LayoutSettingsTests: XCTestCase {
     }
 
     @MainActor
-    func testDefaultHiddenSetsUserHiddenFlag() {
+    func testDefaultHiddenSetsUserHiddenFlag() throws {
+        try XCTSkipIf(!NSApplication.shared.isRunning, "Requires a running NSApplication event loop")
         let original = AppSettings.shared.sidebarDefaultHidden
         AppSettings.shared.sidebarDefaultHidden = true
         defer { AppSettings.shared.sidebarDefaultHidden = original }
@@ -144,7 +147,8 @@ final class LayoutSettingsTests: XCTestCase {
     }
 
     @MainActor
-    func testDefaultVisibleClearsUserHiddenFlag() {
+    func testDefaultVisibleClearsUserHiddenFlag() throws {
+        try XCTSkipIf(!NSApplication.shared.isRunning, "Requires a running NSApplication event loop")
         let original = AppSettings.shared.sidebarDefaultHidden
         AppSettings.shared.sidebarDefaultHidden = false
         defer { AppSettings.shared.sidebarDefaultHidden = original }

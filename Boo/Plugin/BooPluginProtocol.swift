@@ -13,6 +13,20 @@ enum PluginEvent: Hashable {
     case remoteDirectoryListed
 }
 
+/// A top-level sidebar tab contributed by a plugin.
+/// When a plugin returns a non-nil `SidebarTab`, a dedicated tab button appears in the
+/// sidebar tab bar. Clicking it replaces the sidebar body with the plugin's tab view.
+struct SidebarTab {
+    /// Stable identifier — typically the plugin's ID.
+    let id: SidebarTabID
+    /// SF Symbol icon shown in the tab bar.
+    let icon: String
+    /// Accessibility / tooltip label.
+    let label: String
+    /// Sections to render inside the tab. Single section = no header; multiple = collapsible.
+    let sections: [SidebarSection]
+}
+
 /// Content for a status bar segment declared by a plugin.
 struct StatusBarContent {
     let text: String
@@ -23,7 +37,6 @@ struct StatusBarContent {
 
 /// Unified plugin protocol for both built-in and external plugins.
 /// Combines sidebar, status bar, and lifecycle into one protocol.
-/// Replaces the separate SidebarPlugin + StatusBarPlugin protocols.
 @MainActor
 protocol BooPluginProtocol: BooPlugin {
     /// Plugin manifest (inline for built-in plugins, parsed from JSON for external).
@@ -36,6 +49,11 @@ protocol BooPluginProtocol: BooPlugin {
 
     /// Create the detail panel content view using the structured plugin context.
     func makeDetailView(context: PluginContext) -> AnyView?
+
+    /// Create a dedicated sidebar tab for this plugin.
+    /// Returns nil if the plugin does not contribute a sidebar tab.
+    /// Default implementation builds a single-section tab from `makeDetailView`.
+    func makeSidebarTab(context: PluginContext) -> SidebarTab?
 
     /// Create status bar content using the structured plugin context.
     func makeStatusBarContent(context: PluginContext) -> StatusBarContent?
@@ -97,11 +115,11 @@ protocol BooPluginProtocol: BooPlugin {
 
     // MARK: - Activation Lifecycle
 
-    /// Called when the plugin is opened in the sidebar (status bar click or tab switch).
+    /// Called when the plugin's sidebar tab becomes active.
     /// Use this to start background work (watchers, sockets, timers).
     func pluginDidActivate()
 
-    /// Called when the plugin is closed from the sidebar.
+    /// Called when the plugin's sidebar tab is deactivated.
     /// Use this to stop all background work and release resources.
     func pluginDidDeactivate()
 }
@@ -118,8 +136,30 @@ extension BooPluginProtocol {
         return try? WhenClauseParser.parse(when)
     }
 
-    // PluginContext-based defaults forward to legacy TerminalContext methods.
     func makeDetailView(context: PluginContext) -> AnyView? { nil }
+
+    /// Default: build a single-section tab from makeDetailView.
+    /// Plugins with sidebarTab: true in their manifest get a tab automatically.
+    func makeSidebarTab(context: PluginContext) -> SidebarTab? {
+        guard manifest.capabilities?.sidebarTab == true else { return nil }
+        guard let view = makeDetailView(context: context) else { return nil }
+        let title = sectionTitle(context: context) ?? manifest.name
+        let section = SidebarSection(
+            id: manifest.id,
+            name: title,
+            icon: manifest.icon,
+            content: view,
+            prefersOuterScrollView: prefersOuterScrollView,
+            generation: 0
+        )
+        return SidebarTab(
+            id: SidebarTabID(manifest.id),
+            icon: manifest.icon,
+            label: manifest.name,
+            sections: [section]
+        )
+    }
+
     func makeStatusBarContent(context: PluginContext) -> StatusBarContent? { nil }
     func sectionTitle(context: PluginContext) -> String? { nil }
 

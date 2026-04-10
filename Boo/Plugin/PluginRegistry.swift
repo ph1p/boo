@@ -122,6 +122,14 @@ final class PluginRegistry {
         )
     }
 
+    /// Collect sidebar tabs contributed by all registered plugins for the given context.
+    func contributedSidebarTabs(terminal: TerminalContext) -> [SidebarTab] {
+        plugins.compactMap { plugin in
+            let ctx = buildPluginContext(for: plugin.pluginID, terminal: terminal)
+            return plugin.makeSidebarTab(context: ctx)
+        }
+    }
+
     /// Build a PluginContext for a specific plugin from a TerminalContext.
     /// Always reads live settings so font/theme changes are reflected immediately.
     func buildPluginContext(for pluginID: String, terminal: TerminalContext) -> PluginContext {
@@ -202,29 +210,6 @@ final class PluginRegistry {
         register(DebugPlugin())
     }
 
-    /// Auto-register status bar toggle icons from plugin manifests.
-    /// Skips file-tree plugins (they have a dedicated FileTreeIconSegment).
-    func registerStatusBarIcons(in statusBar: StatusBarView) {
-        let disabled = AppSettings.shared.disabledPluginIDsSet
-        let existingIDs = Set(
-            (statusBar.leftPlugins + statusBar.rightPlugins)
-                .compactMap { ($0 as? PluginIconSegment)?.associatedPanelID }
-        )
-        for plugin in plugins
-        where plugin.manifest.capabilities?.sidebarPanel == true && !disabled.contains(plugin.pluginID) {
-            let m = plugin.manifest
-            if m.id == "file-tree-local" || m.id == "file-tree-remote" { continue }
-            if existingIDs.contains(m.id) { continue }
-            let priority = m.statusBar?.priority ?? 50
-            let segment = PluginIconSegment(
-                pluginID: m.id,
-                sfSymbol: m.icon,
-                label: m.name,
-                priority: priority
-            )
-            statusBar.registerPlugin(segment)
-        }
-    }
 }
 
 /// Result of a plugin cycle execution.

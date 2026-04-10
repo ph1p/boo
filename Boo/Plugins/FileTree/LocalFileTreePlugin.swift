@@ -12,7 +12,7 @@ final class LocalFileTreePlugin: BooPluginProtocol {
         description: "File explorer for local directories",
         when: "!remote",
         runtime: nil,
-        capabilities: PluginManifest.Capabilities(sidebarPanel: true, statusBarSegment: true),
+        capabilities: PluginManifest.Capabilities(statusBarSegment: true, sidebarTab: true),
         statusBar: PluginManifest.StatusBarManifest(position: "left", priority: 5, template: nil),
         settings: [
             PluginManifest.SettingManifest(
@@ -97,6 +97,38 @@ final class LocalFileTreePlugin: BooPluginProtocol {
     func sectionTitle(context: PluginContext) -> String? {
         let dirName = (context.terminal.cwd as NSString).lastPathComponent
         return dirName.isEmpty ? nil : dirName
+    }
+
+    // MARK: - Sidebar Tab (two sections: file tree + folder info)
+
+    func makeSidebarTab(context: PluginContext) -> SidebarTab? {
+        guard manifest.capabilities?.sidebarTab == true else { return nil }
+        guard let treeView = makeDetailView(context: context) else { return nil }
+        let title = sectionTitle(context: context) ?? manifest.name
+        let cwd = context.terminal.cwd
+
+        let treeSection = SidebarSection(
+            id: manifest.id,
+            name: title,
+            icon: manifest.icon,
+            content: treeView,
+            prefersOuterScrollView: true,
+            generation: 0
+        )
+        let infoSection = SidebarSection(
+            id: "\(manifest.id).info",
+            name: "Folder Info",
+            icon: "info.circle",
+            content: AnyView(FolderInfoView(path: cwd)),
+            prefersOuterScrollView: false,
+            generation: 0
+        )
+        return SidebarTab(
+            id: SidebarTabID(manifest.id),
+            icon: manifest.icon,
+            label: manifest.name,
+            sections: [treeSection, infoSection]
+        )
     }
 
     // MARK: - Status Bar

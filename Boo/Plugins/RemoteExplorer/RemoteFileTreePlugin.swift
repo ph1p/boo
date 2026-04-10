@@ -12,7 +12,7 @@ final class RemoteFileTreePlugin: BooPluginProtocol {
         description: "File explorer for remote sessions",
         when: "env.ssh",
         runtime: nil,
-        capabilities: PluginManifest.Capabilities(sidebarPanel: true, statusBarSegment: false),
+        capabilities: PluginManifest.Capabilities(statusBarSegment: false, sidebarTab: true),
         statusBar: nil,
         settings: nil
     )
