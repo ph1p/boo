@@ -13,6 +13,8 @@ final class DockerService: ObservableObject {
         let status: String
         let state: ContainerState
         let ports: String
+        /// Unix timestamp when the container was created, for uptime display.
+        let createdAt: Date?
 
         enum ContainerState: String {
             case running
@@ -26,6 +28,27 @@ final class DockerService: ObservableObject {
         }
     }
 
+    struct DockerImage: Identifiable, Equatable {
+        let id: String
+        let repoTag: String
+        let size: Int64
+        let createdAt: Date?
+    }
+
+    struct DockerNetwork: Identifiable, Equatable {
+        let id: String
+        let name: String
+        let driver: String
+        let scope: String
+    }
+
+    struct DockerVolume: Identifiable, Equatable {
+        let name: String
+        var id: String { name }
+        let driver: String
+        let mountpoint: String
+    }
+
     private(set) var isAvailable = false
     /// Path to the Docker Unix socket.
     private(set) var socketPath: String?
@@ -36,6 +59,9 @@ final class DockerService: ObservableObject {
 
     var onContainersChanged: (([Container]) -> Void)?
     @Published private(set) var containers: [Container] = []
+    @Published private(set) var images: [DockerImage] = []
+    @Published private(set) var networks: [DockerNetwork] = []
+    @Published private(set) var volumes: [DockerVolume] = []
 
     /// Well-known socket locations, checked in order.
     private static let socketSearchPaths: [String] = {
@@ -228,7 +254,7 @@ final class DockerService: ObservableObject {
     /// Start watching Docker events via the socket event stream + initial refresh.
     func startWatching() {
         guard isAvailable else { return }
-        refresh()
+        refreshAll()
         startEventStream()
     }
 
@@ -255,7 +281,8 @@ final class DockerService: ObservableObject {
         let fd = Self.connectSocket(to: sock)
         guard fd >= 0 else { return }
 
-        let filters = #"{"type":["container"]}"#
+        // Listen for container, image, network, and volume events
+        let filters = #"{"type":["container","image","network","volume"]}"#
         let encoded =
             filters.addingPercentEncoding(
                 withAllowedCharacters: .urlQueryAllowed) ?? filters
@@ -279,13 +306,13 @@ final class DockerService: ObservableObject {
                 DispatchQueue.main.async { [weak self] in
                     self?.eventFD = -1
                     self?.eventSource = nil
-                    self?.refresh()
+                    self?.refreshAll()
                 }
                 return
             }
             // Debounce rapid events (e.g. docker-compose up)
             DispatchQueue.main.async { [weak self] in
-                self?.debouncedRefresh()
+                self?.debouncedRefreshAll()
             }
         }
         source.setCancelHandler {
@@ -295,13 +322,22 @@ final class DockerService: ObservableObject {
         eventSource = source
     }
 
-    private func debouncedRefresh() {
+    private func debouncedRefreshAll() {
         refreshDebounce?.cancel()
         let work = DispatchWorkItem { [weak self] in
-            self?.refresh()
+            self?.refreshAll()
         }
         refreshDebounce = work
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: work)
+    }
+
+    // MARK: - Refresh All
+
+    func refreshAll() {
+        refresh()
+        refreshImages()
+        refreshNetworks()
+        refreshVolumes()
     }
 
     // MARK: - Container List
@@ -323,6 +359,63 @@ final class DockerService: ObservableObject {
                 }
             }
         }
+    }
+
+    // MARK: - Images
+
+    func refreshImages() {
+        guard let sock = socketPath else { return }
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            let data = Self.socketRequest(
+                socketPath: sock, method: "GET", path: "/v1.43/images/json")
+            let newImages = Self.parseImagesJSON(data)
+            DispatchQueue.main.async {
+                guard let self = self else { return }
+                if newImages != self.images { self.images = newImages }
+            }
+        }
+    }
+
+    func removeImage(_ id: String, completion: (() -> Void)? = nil) {
+        postAction("/v1.43/images/\(id)", method: "DELETE", completion: completion)
+    }
+
+    // MARK: - Networks
+
+    func refreshNetworks() {
+        guard let sock = socketPath else { return }
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            let data = Self.socketRequest(
+                socketPath: sock, method: "GET", path: "/v1.43/networks")
+            let newNetworks = Self.parseNetworksJSON(data)
+            DispatchQueue.main.async {
+                guard let self = self else { return }
+                if newNetworks != self.networks { self.networks = newNetworks }
+            }
+        }
+    }
+
+    func removeNetwork(_ id: String, completion: (() -> Void)? = nil) {
+        postAction("/v1.43/networks/\(id)", method: "DELETE", completion: completion)
+    }
+
+    // MARK: - Volumes
+
+    func refreshVolumes() {
+        guard let sock = socketPath else { return }
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            let data = Self.socketRequest(
+                socketPath: sock, method: "GET", path: "/v1.43/volumes")
+            let newVolumes = Self.parseVolumesJSON(data)
+            DispatchQueue.main.async {
+                guard let self = self else { return }
+                if newVolumes != self.volumes { self.volumes = newVolumes }
+            }
+        }
+    }
+
+    func removeVolume(_ name: String, completion: (() -> Void)? = nil) {
+        postAction("/v1.43/volumes/\(name)", method: "DELETE", completion: completion)
     }
 
     // MARK: - Container Lifecycle
@@ -417,7 +510,7 @@ final class DockerService: ObservableObject {
             _ = Self.socketRequest(
                 socketPath: sock, method: method, path: path)
             DispatchQueue.main.async {
-                self?.refresh()
+                self?.refreshAll()
                 completion?()
             }
         }
@@ -446,6 +539,12 @@ final class DockerService: ObservableObject {
                 Container.ContainerState(rawValue: stateStr.lowercased())
                 ?? .unknown
             let ports = formatPorts(obj["Ports"])
+            let createdAt: Date?
+            if let createdEpoch = obj["Created"] as? TimeInterval {
+                createdAt = Date(timeIntervalSince1970: createdEpoch)
+            } else {
+                createdAt = nil
+            }
 
             return Container(
                 id: String(id.prefix(12)),
@@ -453,8 +552,58 @@ final class DockerService: ObservableObject {
                 image: image,
                 status: status,
                 state: state,
-                ports: ports
+                ports: ports,
+                createdAt: createdAt
             )
+        }
+    }
+
+    private static func parseImagesJSON(_ data: Data?) -> [DockerImage] {
+        guard let data = data,
+            let json = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]]
+        else { return [] }
+        return json.compactMap { obj in
+            guard let id = obj["Id"] as? String else { return nil }
+            let shortID = id.hasPrefix("sha256:") ? String(id.dropFirst(7).prefix(12)) : String(id.prefix(12))
+            let tags = obj["RepoTags"] as? [String] ?? []
+            let repoTag = tags.first(where: { !$0.contains("<none>") }) ?? tags.first ?? "<none>"
+            let size = obj["Size"] as? Int64 ?? 0
+            let createdAt: Date?
+            if let epoch = obj["Created"] as? TimeInterval {
+                createdAt = Date(timeIntervalSince1970: epoch)
+            } else {
+                createdAt = nil
+            }
+            return DockerImage(id: shortID, repoTag: repoTag, size: size, createdAt: createdAt)
+        }
+    }
+
+    private static func parseNetworksJSON(_ data: Data?) -> [DockerNetwork] {
+        guard let data = data,
+            let json = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]]
+        else { return [] }
+        return json.compactMap { obj in
+            guard let id = obj["Id"] as? String,
+                let name = obj["Name"] as? String
+            else { return nil }
+            let driver = obj["Driver"] as? String ?? ""
+            let scope = obj["Scope"] as? String ?? ""
+            return DockerNetwork(
+                id: String(id.prefix(12)), name: name, driver: driver, scope: scope)
+        }
+        .filter { !["bridge", "host", "none"].contains($0.name) }
+    }
+
+    private static func parseVolumesJSON(_ data: Data?) -> [DockerVolume] {
+        guard let data = data,
+            let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+            let volumes = json["Volumes"] as? [[String: Any]]
+        else { return [] }
+        return volumes.compactMap { obj in
+            guard let name = obj["Name"] as? String else { return nil }
+            let driver = obj["Driver"] as? String ?? ""
+            let mountpoint = obj["Mountpoint"] as? String ?? ""
+            return DockerVolume(name: name, driver: driver, mountpoint: mountpoint)
         }
     }
 
@@ -525,7 +674,8 @@ final class DockerService: ObservableObject {
                 image: parts[2],
                 status: parts[3],
                 state: state,
-                ports: parts.count > 5 ? parts[5] : ""
+                ports: parts.count > 5 ? parts[5] : "",
+                createdAt: nil
             )
         }
     }
