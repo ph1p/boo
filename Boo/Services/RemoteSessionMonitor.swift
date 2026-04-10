@@ -65,8 +65,10 @@ final class RemoteSessionMonitor {
 
     /// Synchronous query for the shell PID of a tracked pane.
     func shellPID(for paneID: UUID) -> pid_t? {
-        let pid: pid_t? = queue.sync { tracked[paneID]?.shellPID }
-        return (pid != nil && pid! > 0) ? pid : nil
+        guard let pid: pid_t = queue.sync(execute: { tracked[paneID]?.shellPID }),
+            pid > 0
+        else { return nil }
+        return pid
     }
 
     /// Returns all tracked PIDs except the one for `excludingPane`.

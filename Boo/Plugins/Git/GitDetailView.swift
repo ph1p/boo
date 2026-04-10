@@ -365,7 +365,7 @@ struct GitDetailView: View {
                         .font(fontScale.font(.base))
                         .foregroundColor(Color(nsColor: theme.chromeText))
                         .lineLimit(1)
-                    if (file.path as NSString).deletingLastPathComponent.count > 0 {
+                    if !(file.path as NSString).deletingLastPathComponent.isEmpty {
                         Text((file.path as NSString).deletingLastPathComponent)
                             .font(fontScale.font(.sm))
                             .foregroundColor(Color(nsColor: theme.chromeMuted))

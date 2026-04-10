@@ -949,7 +949,8 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
         panel.canChooseFiles = false
         panel.allowsMultipleSelection = false
         panel.message = "Choose a folder to open as a workspace"
-        panel.beginSheetModal(for: window!) { [weak self] response in
+        guard let window else { return }
+        panel.beginSheetModal(for: window) { [weak self] response in
             guard response == .OK, let url = panel.url else { return }
             self?.openWorkspace(path: url.path)
         }

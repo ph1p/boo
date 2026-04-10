@@ -342,74 +342,39 @@ final class BooSocketBridgeTests: XCTestCase {
 // MARK: - Plugin Command Handler Tests
 
 @MainActor
-final class BooSocketPluginHandlerTests: XCTestCase {
+final class BooSocketPluginHandlerTests: BooSocketIntegrationTestCase {
 
-    override func setUp() {
-        super.setUp()
-        BooSocketServer.shared.start()
-        Thread.sleep(forTimeInterval: 0.5)
-    }
-
-    override func tearDown() {
-        BooSocketServer.shared.stop()
-        Thread.sleep(forTimeInterval: 0.2)
-        super.tearDown()
-    }
-
-    private func sendCommand(_ json: String) -> String? {
-        let path = BooSocketServer.shared.socketPath
-
-        let fd = socket(AF_UNIX, SOCK_STREAM, 0)
-        guard fd >= 0 else { return nil }
-        defer { close(fd) }
-
-        var addr = sockaddr_un()
-        addr.sun_family = sa_family_t(AF_UNIX)
-        _ = path.withCString { ptr in
-            withUnsafeMutablePointer(to: &addr.sun_path) { sunPath in
-                sunPath.withMemoryRebound(to: CChar.self, capacity: 104) { dest in
-                    strlcpy(dest, ptr, 104)
-                }
-            }
+    private func roundTrip(_ json: [String: Any]) throws -> [String: Any] {
+        try withBooSocketClient { client in
+            try client.roundTrip(command: json)
         }
-
-        let connectResult = withUnsafePointer(to: &addr) { ptr in
-            ptr.withMemoryRebound(to: sockaddr.self, capacity: 1) { sockPtr in
-                connect(fd, sockPtr, socklen_t(MemoryLayout<sockaddr_un>.size))
-            }
-        }
-        guard connectResult == 0 else { return nil }
-
-        let msg = json + "\n"
-        _ = msg.withCString { write(fd, $0, strlen($0)) }
-        Thread.sleep(forTimeInterval: 0.1)
-
-        var buf = [UInt8](repeating: 0, count: 4096)
-        let n = read(fd, &buf, buf.count)
-        guard n > 0 else { return nil }
-        return String(bytes: buf[0..<n], encoding: .utf8)?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    func testCustomPluginHandler() {
+    private func roundTrip(rawJSON: String) throws -> [String: Any] {
+        try withBooSocketClient { client in
+            try client.roundTrip(rawJSON: rawJSON)
+        }
+    }
+
+    func testCustomPluginHandler() throws {
         var received: [String: Any]?
         BooSocketServer.shared.registerHandler(namespace: "myplugin") { json in
             received = json
             return ["ok": true, "echo": json["data"] ?? "none"]
         }
 
-        let resp = sendCommand(
-            """
-            {"cmd":"myplugin.refresh","data":"hello"}
-            """)
+        let resp = try roundTrip(
+            rawJSON: """
+                {"cmd":"myplugin.refresh","data":"hello"}
+                """)
 
-        Thread.sleep(forTimeInterval: 0.2)
-        XCTAssertTrue(resp?.contains("\"ok\":true") ?? false)
+        XCTAssertEqual(resp["ok"] as? Bool, true)
+        BooSocketTestSupport.waitUntil { received != nil }
         XCTAssertEqual(received?["cmd"] as? String, "myplugin.refresh")
         XCTAssertEqual(received?["data"] as? String, "hello")
     }
 
-    func testNamespacedCommandRouting() {
+    func testNamespacedCommandRouting() throws {
         var gitHandled = false
         var dockerHandled = false
 
@@ -422,52 +387,43 @@ final class BooSocketPluginHandlerTests: XCTestCase {
             return ["ok": true]
         }
 
-        _ = sendCommand(
-            """
-            {"cmd":"git.status"}
-            """)
-        Thread.sleep(forTimeInterval: 0.2)
+        _ = try roundTrip(
+            rawJSON: """
+                {"cmd":"git.status"}
+                """)
+        BooSocketTestSupport.waitUntil { gitHandled }
         XCTAssertTrue(gitHandled)
         XCTAssertFalse(dockerHandled)
 
-        _ = sendCommand(
-            """
-            {"cmd":"docker.list"}
-            """)
-        Thread.sleep(forTimeInterval: 0.2)
+        _ = try roundTrip(
+            rawJSON: """
+                {"cmd":"docker.list"}
+                """)
+        BooSocketTestSupport.waitUntil { dockerHandled }
         XCTAssertTrue(dockerHandled)
     }
 
-    func testUnregisteredNamespaceReturnsError() {
-        let resp = sendCommand(
-            """
-            {"cmd":"nonexistent.action"}
-            """)
-        XCTAssertTrue(resp?.contains("unknown") ?? false)
+    func testUnregisteredNamespaceReturnsError() throws {
+        let resp = try roundTrip(
+            rawJSON: """
+                {"cmd":"nonexistent.action"}
+                """)
+        XCTAssertTrue((resp["error"] as? String)?.contains("unknown") ?? false)
     }
 
-    func testMultipleCategories() {
+    func testMultipleCategories() throws {
         let pid = getpid()
 
-        _ = sendCommand(
-            """
-            {"cmd":"set_status","pid":\(pid),"name":"jest","category":"test"}
-            """)
-        Thread.sleep(forTimeInterval: 0.2)
+        _ = try roundTrip(["cmd": "set_status", "pid": pid, "name": "jest", "category": "test"])
+        BooSocketTestSupport.waitUntil { BooSocketServer.shared.processes[pid]?.category == "test" }
         XCTAssertEqual(BooSocketServer.shared.processes[pid]?.category, "test")
 
         // Replace with different category
-        _ = sendCommand(
-            """
-            {"cmd":"set_status","pid":\(pid),"name":"jest","category":"build"}
-            """)
-        Thread.sleep(forTimeInterval: 0.2)
+        _ = try roundTrip(["cmd": "set_status", "pid": pid, "name": "jest", "category": "build"])
+        BooSocketTestSupport.waitUntil { BooSocketServer.shared.processes[pid]?.category == "build" }
         XCTAssertEqual(BooSocketServer.shared.processes[pid]?.category, "build")
 
-        _ = sendCommand(
-            """
-            {"cmd":"clear_status","pid":\(pid)}
-            """)
+        _ = try roundTrip(["cmd": "clear_status", "pid": pid])
     }
 
     func testMultipleProcessesDifferentCategories() {

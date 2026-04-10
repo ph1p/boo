@@ -49,7 +49,6 @@ extension RemoteExplorer.RemoteEntry: Equatable {
 final class TerminalBridge {
     @Published private(set) var state: BridgeState
     let events = PassthroughSubject<TerminalEvent, Never>()
-    let injector = RemoteShellInjector()
     let monitor = RemoteSessionMonitor()
     /// Most recent in-session directory listing from OSC 2 EXTERM_LS protocol.
     private(set) var cachedRemoteListing: (path: String, entries: [RemoteExplorer.RemoteEntry])?
@@ -208,7 +207,6 @@ final class TerminalBridge {
             state.remoteSession = nil
             state.remoteCwd = nil
             state.workingDirectory = path
-            if previousRemote != nil { injector.sessionEnded(paneID: paneID) }
             events.send(.remoteSessionChanged(session: nil))
             events.send(.directoryChanged(path: path))
             return
@@ -221,7 +219,6 @@ final class TerminalBridge {
             state.remoteSession = nil
             state.remoteCwd = nil
             state.workingDirectory = path
-            injector.sessionEnded(paneID: paneID)
             events.send(.remoteSessionChanged(session: nil))
             events.send(.directoryChanged(path: path))
             return
@@ -341,10 +338,6 @@ final class TerminalBridge {
                 // Start container CWD polling (process tree may not detect docker)
                 ensureContainerCwdPolling()
             }
-            // Clean up injection state when remote session ends
-            if previousRemote != nil && state.remoteSession == nil {
-                injector.sessionEnded(paneID: state.paneID)
-            }
         }
     }
 
@@ -376,9 +369,6 @@ final class TerminalBridge {
     func handleProcessExit(paneID: UUID) {
         guard paneID == state.paneID else { return }
         let hadRemote = state.remoteSession != nil
-        if state.remoteSession != nil {
-            injector.sessionEnded(paneID: state.paneID)
-        }
         state.remoteSession = nil
         state.remoteCwd = nil
         state.foregroundProcess = ""
@@ -409,12 +399,6 @@ final class TerminalBridge {
         state.remoteSession = resolved
         if resolved == nil {
             state.remoteCwd = nil
-            if previous != nil {
-                injector.sessionEnded(paneID: paneID)
-            }
-        } else if previous == nil {
-            // New session detected — inject CWD reporter
-            injector.injectIfNeeded(paneID: paneID)
         }
         events.send(.remoteSessionChanged(session: resolved))
     }

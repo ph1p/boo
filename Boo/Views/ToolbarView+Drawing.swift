@@ -320,7 +320,7 @@ extension ToolbarView {
     internal func drawFadeEdge(_ ctx: CGContext, at x: CGFloat, width: CGFloat, leftToRight: Bool) {
         let bgColor = AppSettings.shared.theme.chromeBg.cgColor
         let components = bgColor.components ?? [0, 0, 0, 1]
-        let r = components.count > 0 ? components[0] : 0
+        let r = !components.isEmpty ? components[0] : 0
         let g = components.count > 1 ? components[1] : 0
         let b = components.count > 2 ? components[2] : 0
         let colors: [CGFloat] =

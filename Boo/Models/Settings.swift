@@ -410,11 +410,6 @@ final class AppSettings {
         set { set(newValue.rawValue, forKey: K.newTabCwdMode, topic: .layout) }
     }
 
-    var activeSidebarTabID: String {
-        get { SidebarTabID.explorer.id }
-        set {}
-    }
-
     var sidebarTabBarPosition: SidebarTabBarPosition {
         get {
             SidebarTabBarPosition(rawValue: UserDefaults.standard.string(forKey: K.sidebarTabBarPosition) ?? "")
