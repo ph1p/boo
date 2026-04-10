@@ -441,10 +441,11 @@ class SidebarPanelView: NSView {
             state.headerView.frame = NSRect(x: 0, y: y, width: w, height: SidebarLayout.headerHeight)
             y += SidebarLayout.headerHeight
 
-            // Content
+            // Content — inset 4pt top/bottom so content doesn't press against headers.
             if state.isExpanded, let container = state.contentContainer {
                 let ch = max(0, state.contentHeight)
-                container.frame = NSRect(x: 0, y: y, width: w, height: ch)
+                let pad: CGFloat = 4
+                container.frame = NSRect(x: 0, y: y + pad, width: w, height: max(0, ch - 2 * pad))
                 container.isHidden = false
                 y += ch
             } else {
