@@ -46,8 +46,8 @@ struct FolderStats {
 
 struct FolderInfoView: View {
     let path: String
+    let fontScale: SidebarFontScale
     @State private var stats: FolderStats?
-    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         Group {
@@ -57,7 +57,7 @@ struct FolderInfoView: View {
                 HStack {
                     ProgressView().scaleEffect(0.5)
                     Text("Loading…")
-                        .font(.system(size: 11))
+                        .font(fontScale.font(.sm))
                         .foregroundStyle(.secondary)
                 }
                 .padding(.horizontal, 12)
@@ -94,15 +94,15 @@ struct FolderInfoView: View {
     private func row(icon: String, label: String, value: String) -> some View {
         HStack(spacing: 6) {
             Image(systemName: icon)
-                .font(.system(size: 10))
+                .font(fontScale.font(.xs))
                 .foregroundStyle(.secondary)
                 .frame(width: 14)
             Text(label)
-                .font(.system(size: 11))
+                .font(fontScale.font(.sm))
                 .foregroundStyle(.secondary)
             Spacer()
             Text(value)
-                .font(.system(size: 11, design: .monospaced))
+                .font(fontScale.font(.sm, design: .monospaced))
                 .foregroundStyle(.primary)
         }
     }

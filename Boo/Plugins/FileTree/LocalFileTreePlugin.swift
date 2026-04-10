@@ -119,7 +119,7 @@ final class LocalFileTreePlugin: BooPluginProtocol {
             id: "\(manifest.id).info",
             name: "Folder Info",
             icon: "info.circle",
-            content: AnyView(FolderInfoView(path: cwd)),
+            content: AnyView(FolderInfoView(path: cwd, fontScale: context.fontScale)),
             prefersOuterScrollView: false,
             generation: 0
         )
