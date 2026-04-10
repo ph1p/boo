@@ -125,6 +125,7 @@ final class PluginRegistry {
     /// Collect sidebar tabs contributed by all registered plugins for the given context.
     func contributedSidebarTabs(terminal: TerminalContext) -> [SidebarTab] {
         plugins.compactMap { plugin in
+            guard plugin.isVisible(for: terminal) else { return nil }
             let ctx = buildPluginContext(for: plugin.pluginID, terminal: terminal)
             return plugin.makeSidebarTab(context: ctx)
         }
