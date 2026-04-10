@@ -11,10 +11,13 @@ struct TabState {
     var foregroundProcess: String = ""
 
     // Plugin UI State
-    var openPluginIDs: Set<String> = Set(AppSettings.shared.defaultEnabledPluginIDs)
-    var expandedPluginIDs: Set<String> = ["file-tree-local", "file-tree-remote"]
+    var expandedPluginIDs: Set<String> = []
+    /// Section IDs the user has *explicitly* collapsed. Used to suppress auto-expand on first show.
+    var userCollapsedSectionIDs: Set<String> = []
     var sidebarSectionHeights: [String: CGFloat] = [:]
     var sidebarScrollOffsets: [String: CGPoint] = [:]
+    /// The plugin tab ID the user last selected in this terminal tab.
+    var selectedPluginTabID: String? = nil
 }
 
 /// A pane is a leaf in the split tree. It has its own tab bar with multiple terminal tabs.
@@ -147,30 +150,26 @@ final class Pane {
 
     func updatePluginState(
         at index: Int,
-        open: Set<String>,
         expanded: Set<String>,
+        userCollapsed: Set<String>? = nil,
         sidebarSectionHeights: [String: CGFloat]? = nil,
-        sidebarScrollOffsets: [String: CGPoint]? = nil
+        sidebarScrollOffsets: [String: CGPoint]? = nil,
+        selectedPluginTabID: String? = nil
     ) {
         guard index >= 0, index < tabs.count else { return }
-        tabs[index].state.openPluginIDs = Self.migratePluginIDs(open)
-        tabs[index].state.expandedPluginIDs = Self.migratePluginIDs(expanded)
+        tabs[index].state.expandedPluginIDs = expanded
+        if let userCollapsed {
+            tabs[index].state.userCollapsedSectionIDs = userCollapsed
+        }
         if let sidebarSectionHeights {
             tabs[index].state.sidebarSectionHeights = sidebarSectionHeights
         }
         if let sidebarScrollOffsets {
             tabs[index].state.sidebarScrollOffsets = sidebarScrollOffsets
         }
-    }
-
-    /// Migrate old "file-tree" plugin ID to the new local/remote pair.
-    static func migratePluginIDs(_ ids: Set<String>) -> Set<String> {
-        guard ids.contains("file-tree") else { return ids }
-        var migrated = ids
-        migrated.remove("file-tree")
-        migrated.insert("file-tree-local")
-        migrated.insert("file-tree-remote")
-        return migrated
+        if let selectedPluginTabID {
+            tabs[index].state.selectedPluginTabID = selectedPluginTabID
+        }
     }
 
     /// Remove and return a tab without destroying its view. Used for cross-pane drag.

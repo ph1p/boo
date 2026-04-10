@@ -38,6 +38,9 @@ extension MainWindowController: PaneViewDelegate {
             coordinator.activateTab(tab, paneID: paneID) { [weak self] tabID in
                 self?.findPaneContainingTab(tabID)
             }
+            // Sync the restored selected plugin tab back to the controller so
+            // rebuildSidebarTabs uses the right tab instead of keeping the stale one.
+            activePluginTabID = coordinator.selectedPluginTabID
         } else {
             bridge.handleFocus(paneID: paneID, workingDirectory: cwd)
         }
@@ -258,25 +261,25 @@ extension MainWindowController {
             if let oldTab = workspace.pane(for: oldPaneID)?.activeTab {
                 newPane.updatePluginState(
                     at: newPane.activeTabIndex,
-                    open: oldTab.state.openPluginIDs,
                     expanded: oldTab.state.expandedPluginIDs,
                     sidebarSectionHeights: oldTab.state.sidebarSectionHeights,
                     sidebarScrollOffsets: remapSidebarScrollOffsets(
                         oldTab.state.sidebarScrollOffsets,
                         from: oldTab.id,
                         to: newTab.id
-                    ))
+                    ),
+                    selectedPluginTabID: oldTab.state.selectedPluginTabID)
             } else {
                 newPane.updatePluginState(
                     at: newPane.activeTabIndex,
-                    open: openPluginIDs,
                     expanded: expandedPluginIDs,
                     sidebarSectionHeights: savedSidebarHeights,
                     sidebarScrollOffsets: remapSidebarScrollOffsets(
                         savedSidebarScrollOffsets,
                         from: bridge.state.tabID,
                         to: newTab.id
-                    ))
+                    ),
+                    selectedPluginTabID: activePluginTabID)
             }
         }
         // Focus the newly created pane

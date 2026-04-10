@@ -7,6 +7,12 @@ struct SessionTab: Codable {
     let title: String
     let workingDirectory: String
     // Remote sessions are intentionally omitted — only local state is persisted.
+    // Sidebar state — optional so old session.json files decode without error.
+    let expandedPluginIDs: [String]?
+    let userCollapsedSectionIDs: [String]?
+    let sidebarSectionHeights: [String: Double]?
+    let sidebarScrollOffsets: [String: [Double]]?
+    let selectedPluginTabID: String?
 }
 
 struct SessionPane: Codable {
@@ -54,7 +60,16 @@ enum SessionStore {
                 let tabs = pane.tabs.map { tab in
                     SessionTab(
                         title: tab.title,
-                        workingDirectory: tab.workingDirectory
+                        workingDirectory: tab.workingDirectory,
+                        expandedPluginIDs: Array(tab.state.expandedPluginIDs),
+                        userCollapsedSectionIDs: Array(tab.state.userCollapsedSectionIDs),
+                        sidebarSectionHeights: tab.state.sidebarSectionHeights.mapValues {
+                            Double($0)
+                        },
+                        sidebarScrollOffsets: tab.state.sidebarScrollOffsets.mapValues {
+                            [$0.x, $0.y]
+                        },
+                        selectedPluginTabID: tab.state.selectedPluginTabID
                     )
                 }
                 return SessionPane(
@@ -146,6 +161,21 @@ enum SessionStore {
                 if let sp = paneByID[leafID], !sp.tabs.isEmpty {
                     for tab in sp.tabs {
                         pane.addTab(workingDirectory: tab.workingDirectory, title: tab.title)
+                        let idx = pane.tabs.count - 1
+                        pane.updatePluginState(
+                            at: idx,
+                            expanded: Set(tab.expandedPluginIDs ?? []),
+                            userCollapsed: Set(tab.userCollapsedSectionIDs ?? []),
+                            sidebarSectionHeights: (tab.sidebarSectionHeights ?? [:]).mapValues {
+                                CGFloat($0)
+                            },
+                            sidebarScrollOffsets: (tab.sidebarScrollOffsets ?? [:])
+                                .compactMapValues { arr in
+                                    guard arr.count == 2 else { return nil }
+                                    return CGPoint(x: arr[0], y: arr[1])
+                                },
+                            selectedPluginTabID: tab.selectedPluginTabID
+                        )
                     }
                     let safeIndex = min(max(sp.activeTabIndex, 0), sp.tabs.count - 1)
                     pane.setActiveTab(safeIndex)
