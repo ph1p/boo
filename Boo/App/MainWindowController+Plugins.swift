@@ -470,12 +470,13 @@ extension MainWindowController {
         ])
         container = scrollView
 
+        let edgePad: CGFloat = 4
         sidebarContainer.addSubview(container)
         NSLayoutConstraint.activate([
-            container.topAnchor.constraint(equalTo: sidebarContentTopAnchor),
+            container.topAnchor.constraint(equalTo: sidebarContentTopAnchor, constant: edgePad),
             container.leadingAnchor.constraint(equalTo: sidebarContainer.leadingAnchor),
             container.trailingAnchor.constraint(equalTo: sidebarContainer.trailingAnchor),
-            container.bottomAnchor.constraint(equalTo: sidebarContentBottomAnchor)
+            container.bottomAnchor.constraint(equalTo: sidebarContentBottomAnchor, constant: -edgePad)
         ])
 
         // When some sections are hidden (only one visible), show a small "···" button
