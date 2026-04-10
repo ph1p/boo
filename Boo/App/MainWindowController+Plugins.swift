@@ -470,7 +470,7 @@ extension MainWindowController {
         ])
         container = scrollView
 
-        let edgePad: CGFloat = 4
+        let edgePad: CGFloat = 2
         sidebarContainer.addSubview(container)
         NSLayoutConstraint.activate([
             container.topAnchor.constraint(equalTo: sidebarContentTopAnchor, constant: edgePad),
@@ -547,7 +547,6 @@ extension MainWindowController {
         }
         restoreSidebarPanelState(to: panel)
         panel.setTerminalID(context.terminalID)
-        panel.updateSections(sections, expandedIDs: expandedPluginIDs)
 
         sidebarContainer.addSubview(panel)
         NSLayoutConstraint.activate([
@@ -556,6 +555,8 @@ extension MainWindowController {
             panel.trailingAnchor.constraint(equalTo: sidebarContainer.trailingAnchor),
             panel.bottomAnchor.constraint(equalTo: sidebarContentBottomAnchor)
         ])
+        sidebarContainer.layoutSubtreeIfNeeded()
+        panel.updateSections(sections, expandedIDs: expandedPluginIDs)
         pluginPanelViews[pluginID] = panel
     }
 
