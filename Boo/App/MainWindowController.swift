@@ -5,10 +5,57 @@ import SwiftUI
 
 // SidebarPanelView is added directly to sidebarContainer (no SwiftUI bridge).
 
-/// NSSplitView with themed divider color.
+/// NSSplitView with themed divider color and a VS Code-style accent hover highlight.
 class ThemedSplitView: NSSplitView {
     override var dividerColor: NSColor {
         AppSettings.shared.theme.sidebarBorder
+    }
+
+    private var dividerHoverHighlighted = false
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        for area in trackingAreas { removeTrackingArea(area) }
+        addTrackingArea(
+            NSTrackingArea(
+                rect: bounds,
+                options: [.mouseMoved, .mouseEnteredAndExited, .activeInKeyWindow],
+                owner: self,
+                userInfo: nil))
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        super.mouseMoved(with: event)
+        guard subviews.count >= 2 else { return }
+        let localPoint = convert(event.locationInWindow, from: nil)
+        let divX = subviews[0].frame.maxX
+        let highlighted = abs(localPoint.x - divX) <= 4
+        if highlighted != dividerHoverHighlighted {
+            dividerHoverHighlighted = highlighted
+            // Invalidate only the divider strip, not the whole split view
+            let dividerStrip = CGRect(x: divX - 4, y: 0, width: 9, height: bounds.height)
+            setNeedsDisplay(dividerStrip)
+        }
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        super.mouseExited(with: event)
+        if dividerHoverHighlighted {
+            dividerHoverHighlighted = false
+            if subviews.count >= 2 {
+                let divX = subviews[0].frame.maxX
+                setNeedsDisplay(CGRect(x: divX - 4, y: 0, width: 9, height: bounds.height))
+            }
+        }
+    }
+
+    override func drawDivider(in rect: NSRect) {
+        super.drawDivider(in: rect)
+        guard dividerHoverHighlighted else { return }
+        let barW: CGFloat = 2
+        let bar = CGRect(x: rect.midX - barW / 2, y: rect.minY, width: barW, height: rect.height)
+        AppSettings.shared.theme.accentColor.withAlphaComponent(0.85).setFill()
+        NSBezierPath(rect: bar).fill()
     }
 }
 
@@ -73,13 +120,6 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
     /// Prevents redundant notifications when the same pane re-focuses.
     var lastFocusedPluginPaneID: UUID?
     var pluginRegistry: PluginRegistry { coordinator.pluginRegistry }
-    /// Set of plugin IDs currently visible in the sidebar stack.
-    var openPluginIDs: Set<String> {
-        get { coordinator.openPluginIDs }
-        set { coordinator.openPluginIDs = newValue }
-    }
-    /// Track last visible section IDs for skip-rebuild optimization.
-    var lastSidebarSectionIDs: [String] = []
     /// Persisted sidebar section heights — tracked per terminal/tab.
     var savedSidebarHeights: [String: CGFloat] {
         get { coordinator?.sidebarSectionHeights ?? [:] }
@@ -101,13 +141,23 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
         get { coordinator.expandedPluginIDs }
         set { coordinator.expandedPluginIDs = newValue }
     }
+    var userCollapsedSectionIDs: Set<String> {
+        get { coordinator.userCollapsedSectionIDs }
+        set { coordinator.userCollapsedSectionIDs = newValue }
+    }
     /// Track the previous tab for saving state on switch.
     var previousFocusedTabID: UUID? {
         get { coordinator.previousFocusedTabID }
         set { coordinator.previousFocusedTabID = newValue }
     }
-    /// Native sidebar panel view (no SwiftUI hosting).
-    var pluginSidebarPanelView: SidebarPanelView?
+    /// One panel view per plugin tab — keyed by plugin ID.
+    var pluginPanelViews: [String: NSView] = [:]
+    /// Currently active plugin tab ID.
+    var activePluginTabID: String?
+    /// Tab bar at the top (or bottom) of the sidebar for switching plugin tabs.
+    var sidebarTabBarView: SidebarTabBarView?
+    /// Active constraints positioning the tab bar — swapped when tab bar position changes.
+    var sidebarTabBarPositionConstraints: [NSLayoutConstraint] = []
 
     let tabDragCoordinator = TabDragCoordinator()
 
@@ -180,9 +230,28 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
             self.runPluginCycle(reason: .focusChanged)
         }
         pluginRegistry.registerBuiltins()
-        // Activate plugins that are open in the default sidebar state.
-        for pluginID in openPluginIDs {
-            pluginRegistry.activatePlugin(pluginID)
+        // Keep status bar branch cache in sync with GitPlugin's .git/HEAD watcher.
+        // This ensures the branch updates immediately after git switch/checkout without
+        // waiting for a CWD change event.
+        if let gitPlugin = pluginRegistry.plugin(for: "git-panel") as? GitPlugin {
+            gitPlugin.onBranchChanged = { [weak self] branch, repoRoot in
+                guard let self else { return }
+                let cwd = self.statusBar.currentDirectory
+                NSLog(
+                    "[Git] onBranchChanged: branch=\(branch ?? "nil") repoRoot=\(repoRoot ?? "nil") statusBar.cwd=\(cwd)"
+                )
+                // Only update the status bar branch if the focused terminal is inside this repo.
+                // Ignore watcher events from other terminals' repos.
+                guard let root = repoRoot,
+                    cwd == root || cwd.hasPrefix(root + "/")
+                else {
+                    NSLog("[Git] onBranchChanged: ignored (cwd not in repo)")
+                    return
+                }
+                self.statusBar.gitBranch = branch
+                self.statusBar.gitRepoRoot = repoRoot
+                self.statusBar.needsDisplay = true
+            }
         }
         let pluginActions = PluginActions()
         pluginActions.sendToTerminal = { [weak self] in self?.sendRawToActivePane($0) }
@@ -249,7 +318,6 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
             openDirectoryInNewPane: { [weak self] in self?.openDirectoryInNewPane($0) },
             sendRawToActivePane: { [weak self] in self?.sendRawToActivePane($0) }
         )
-        pluginRegistry.registerStatusBarIcons(in: statusBar)
         tabDragCoordinator.onDrop = { [weak self] source, tabIndex, dest, zone in
             self?.handleTabDrop(source: source, tabIndex: tabIndex, dest: dest, zone: zone)
         }
@@ -299,13 +367,9 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
                     pv.needsDisplay = true
                 }
                 // Rebuild plugin sidebar to pick up new theme
-                if !self.openPluginIDs.isEmpty {
-                    let registry = self.pluginRegistry
-                    Task { @MainActor in
-                        if let ctx = registry.lastContext {
-                            self.rebuildPluginSidebar(context: ctx)
-                        }
-                    }
+                if let ctx = MainActor.assumeIsolated({ self.pluginRegistry.lastContext }) {
+                    self.cachedDetailViews.removeAll()
+                    self.rebuildSidebarTabs(context: ctx)
                 }
             }
 
@@ -336,62 +400,37 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
                         pv.needsDisplay = true
                     }
                 }
+                // Tab bar position changed — swap constraints and re-install content views
+                self.applySidebarTabBarPositionConstraints()
+                if let ctx = MainActor.assumeIsolated({ self.pluginRegistry.lastContext }) {
+                    self.cachedDetailViews.removeAll()
+                    self.removeAllPluginContent()
+                    self.rebuildSidebarTabs(context: ctx)
+                }
             }
 
-            // Plugin default changes: sync live sidebar to match new defaults.
-            // Rebuild openPluginIDs from scratch: start with new defaults, keep auto-opened ones.
+            // Plugin changes: deactivate any now-disabled plugins and run a fresh cycle.
             if topic == .plugins {
                 let disabled = AppSettings.shared.disabledPluginIDsSet
-
-                // Tear down any open plugins that are now disabled
-                let disabledOpen = self.openPluginIDs.filter { disabled.contains($0) }
-                for pluginID in disabledOpen {
-                    self.cachedDetailViews.removeValue(forKey: pluginID)
-                    self.expandedPluginIDs.remove(pluginID)
-                    self.statusBar.unregisterPluginIcon(for: pluginID)
-                }
+                // Deactivate plugins that just got disabled
                 MainActor.assumeIsolated {
-                    for pluginID in disabledOpen {
-                        self.pluginRegistry.deactivatePlugin(pluginID)
+                    for plugin in self.pluginRegistry.plugins where disabled.contains(plugin.pluginID) {
+                        self.pluginRegistry.deactivatePlugin(plugin.pluginID)
+                        self.cachedDetailViews.removeValue(forKey: plugin.pluginID)
                     }
-                }
-
-                let newDefaults = Set(AppSettings.shared.defaultEnabledPluginIDs)
-                // Keep plugins that were auto-opened (not in any defaults list)
-                let autoOpened = self.openPluginIDs.filter { !newDefaults.contains($0) }
-                self.openPluginIDs = newDefaults.union(autoOpened).subtracting(disabled)
-                self.cachedDetailViews.removeAll()
-                MainActor.assumeIsolated {
                     self.pluginRegistry.clearChangeDetection()
-                    // Re-register status bar icons for any re-enabled plugins
-                    self.pluginRegistry.registerStatusBarIcons(in: self.statusBar)
-                }
-                self.syncStatusBarHighlight()
-
-                // Collapse sidebar if no plugins remain open
-                if !self.hasVisibleOpenPlugins() {
-                    self.syncSidebarPanelStateFromView()
-                    self.pluginSidebarPanelView?.removeFromSuperview()
-                    self.pluginSidebarPanelView = nil
-                    if self.sidebarVisible {
-                        self.toggleSidebar(userInitiated: false)
-                    }
                 }
             }
 
-            // Explorer/plugin changes: refresh sidebar via a cycle
+            // Explorer/plugin/font changes: refresh sidebar
             if topic == nil || topic == .explorer || topic == .sidebarFont || topic == .plugins {
-                if self.sidebarVisible {
-                    if topic == .sidebarFont, let ctx = MainActor.assumeIsolated({ self.pluginRegistry.lastContext }) {
-                        // Only font settings changed — wipe view cache so makeDetailView
-                        // is called again with the new fontScale, then rebuild directly.
-                        // rebuildPluginSidebar is guarded by contextChanged/visibilityChanged,
-                        // so we bypass runPluginCycle here to guarantee a rebuild.
+                if topic == .sidebarFont, let ctx = MainActor.assumeIsolated({ self.pluginRegistry.lastContext }) {
+                    if self.sidebarVisible {
                         self.cachedDetailViews.removeAll()
-                        self.rebuildPluginSidebar(context: ctx)
-                    } else {
-                        self.runPluginCycle(reason: .focusChanged)
+                        self.rebuildSidebarTabs(context: ctx)
                     }
+                } else {
+                    self.runPluginCycle(reason: .focusChanged)
                 }
             }
         }
@@ -489,6 +528,43 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
         sidebarContainer.wantsLayer = true
         sidebarContainer.layer?.backgroundColor = AppSettings.shared.theme.sidebarBg.cgColor
 
+        // Sidebar tab bar
+        let tabBar = SidebarTabBarView(frame: .zero)
+        tabBar.translatesAutoresizingMaskIntoConstraints = false
+        tabBar.onTabSelected = { [weak self] tab in
+            guard let self, let ctx = self.pluginRegistry.lastContext else { return }
+            self.activatePluginTab(tab, context: ctx)
+        }
+        tabBar.onTabDisabled = { tab in
+            var disabled = AppSettings.shared.disabledPluginIDs
+            if !disabled.contains(tab.id) {
+                disabled.append(tab.id)
+                AppSettings.shared.disabledPluginIDs = disabled
+            }
+        }
+        tabBar.onToggleSection = { [weak self] tabID, sectionID in
+            guard let self else { return }
+            let key = "hiddenSection_\(sectionID)"
+            let isCurrentlyHidden = AppSettings.shared.pluginBool(tabID.id, key, default: false)
+            AppSettings.shared.setPluginSetting(tabID.id, key, !isCurrentlyHidden, topic: nil)
+            self.cachedDetailViews.removeValue(forKey: tabID.id)
+            if let ctx = self.pluginRegistry.lastContext {
+                self.showPluginTabContent(id: tabID.id, context: ctx)
+            }
+        }
+        tabBar.onTabsReordered = { tabs in
+            AppSettings.shared.sidebarTabOrder = tabs.map(\.id)
+        }
+        sidebarContainer.addSubview(tabBar)
+        sidebarTabBarView = tabBar
+        let fixedConstraints = [
+            tabBar.leadingAnchor.constraint(equalTo: sidebarContainer.leadingAnchor),
+            tabBar.trailingAnchor.constraint(equalTo: sidebarContainer.trailingAnchor),
+            tabBar.heightAnchor.constraint(equalToConstant: SidebarTabBarView.height)
+        ]
+        NSLayoutConstraint.activate(fixedConstraints)
+        applySidebarTabBarPositionConstraints()
+
         currentSidebarPosition = AppSettings.shared.sidebarPosition
         if sidebarVisible {
             if currentSidebarPosition == .left {
@@ -506,9 +582,6 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
         statusBar.onBranchSwitch = { [weak self] branch in
             let escaped = RemoteExplorer.shellEscPath(branch)
             self?.sendRawToActivePane("git switch \(escaped)\r")
-        }
-        statusBar.onSidebarPluginToggle = { [weak self] pluginID in
-            self?.togglePluginInSidebar(pluginID)
         }
         statusBar.onSidebarToggle = { [weak self] in
             self?.toggleSidebar(userInitiated: true)
@@ -634,6 +707,23 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
     }
 
     /// Rebuild the sidebar position within the main split view.
+    /// Apply (or re-apply) the positional constraints for the sidebar tab bar based on
+    /// `AppSettings.shared.sidebarTabBarPosition`. Deactivates any previously active constraints.
+    func applySidebarTabBarPositionConstraints() {
+        guard let tabBar = sidebarTabBarView else { return }
+        NSLayoutConstraint.deactivate(sidebarTabBarPositionConstraints)
+        if AppSettings.shared.sidebarTabBarPosition == .bottom {
+            sidebarTabBarPositionConstraints = [
+                tabBar.bottomAnchor.constraint(equalTo: sidebarContainer.bottomAnchor)
+            ]
+        } else {
+            sidebarTabBarPositionConstraints = [
+                tabBar.topAnchor.constraint(equalTo: sidebarContainer.topAnchor)
+            ]
+        }
+        NSLayoutConstraint.activate(sidebarTabBarPositionConstraints)
+    }
+
     private func rebuildSidebarLayout() {
         let wasSidebarVisible = sidebarVisible
         // Remove both subviews
@@ -884,8 +974,8 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
     /// Toggle sidebar visibility. When `userInitiated` is true, the flag is
     /// recorded so the plugin system won't auto-show the sidebar on tab switch.
     func toggleSidebar(userInitiated: Bool) {
-        // Don't allow showing the sidebar when no plugin is active
-        if !sidebarVisible && !hasVisibleOpenPlugins() {
+        // Don't allow showing the sidebar when no tabs are available
+        if !sidebarVisible && sidebarTabBarView?.sidebarTabs.isEmpty == true {
             return
         }
         sidebarVisible.toggle()

@@ -33,7 +33,7 @@ final class MainWindowControllerTerminalLifecycleTests: XCTestCase {
     }
 
     func testForceCloseWorkspaceEmitsTerminalClosedForAllTabs() throws {
-        try XCTSkipIf(ProcessInfo.processInfo.environment["CI"] != nil, "Requires a display (NSWindow)")
+        try XCTSkipIf(!NSApplication.shared.isRunning, "Requires a running NSApplication event loop")
         let windowController = MainWindowController()
         let spy = TerminalCloseSpyPlugin()
         windowController.pluginRegistry.register(spy)
@@ -65,7 +65,7 @@ final class MainWindowControllerTerminalLifecycleTests: XCTestCase {
     }
 
     func testProcessChangeRefreshesStatusBarAfterPluginCycle() throws {
-        try XCTSkipIf(ProcessInfo.processInfo.environment["CI"] != nil, "Requires a display (NSWindow)")
+        try XCTSkipIf(!NSApplication.shared.isRunning, "Requires a running NSApplication event loop")
         let windowController = MainWindowController()
         guard let workspace = windowController.activeWorkspace else {
             XCTFail("Expected an active workspace")
@@ -89,7 +89,7 @@ final class MainWindowControllerTerminalLifecycleTests: XCTestCase {
     }
 
     func testSplitPaneRemapsSidebarScrollOffsetsToNewTerminal() throws {
-        try XCTSkipIf(ProcessInfo.processInfo.environment["CI"] != nil, "Requires a display (NSWindow)")
+        try XCTSkipIf(!NSApplication.shared.isRunning, "Requires a running NSApplication event loop")
         let windowController = MainWindowController()
         defer { windowController.window?.close() }
 
@@ -107,7 +107,6 @@ final class MainWindowControllerTerminalLifecycleTests: XCTestCase {
         ]
         parentPane.updatePluginState(
             at: parentPane.activeTabIndex,
-            open: ["file-tree-local", "bookmarks"],
             expanded: ["file-tree-local", "bookmarks"],
             sidebarSectionHeights: heights,
             sidebarScrollOffsets: offsets
@@ -131,8 +130,8 @@ final class MainWindowControllerTerminalLifecycleTests: XCTestCase {
         XCTAssertNil(newTab.state.sidebarScrollOffsets["\(parentTab.id.uuidString):bookmarks"])
     }
 
-    func testWorkspaceSwitchSavesAndRestoresSidebarPanelState() throws {
-        try XCTSkipIf(ProcessInfo.processInfo.environment["CI"] != nil, "Requires a display (NSWindow)")
+    func testWorkspaceSwitchSavesAndRestoresSidebarState() throws {
+        try XCTSkipIf(!NSApplication.shared.isRunning, "Requires a running NSApplication event loop")
         let windowController = MainWindowController()
         defer { windowController.window?.close() }
 
@@ -143,27 +142,18 @@ final class MainWindowControllerTerminalLifecycleTests: XCTestCase {
             return
         }
 
-        windowController.pluginSidebarPanelView?.removeFromSuperview()
-        windowController.pluginSidebarPanelView = nil
-
-        let firstOpen: Set<String> = ["file-tree-local", "bookmarks"]
         let firstExpanded: Set<String> = ["file-tree-local", "bookmarks"]
         let firstHeights: [String: CGFloat] = ["bookmarks": 196]
         let firstOffsets: [String: CGPoint] = [
             "\(firstTab.id.uuidString):bookmarks": CGPoint(x: 0, y: 44)
         ]
 
-        windowController.openPluginIDs = firstOpen
         windowController.expandedPluginIDs = firstExpanded
         windowController.savedSidebarHeights = firstHeights
         windowController.savedSidebarScrollOffsets = firstOffsets
 
         windowController.openWorkspace(path: "/tmp/boo-sidebar-state")
 
-        XCTAssertEqual(
-            firstWorkspace.pane(for: firstWorkspace.activePaneID)?.activeTab?.state.openPluginIDs,
-            firstOpen
-        )
         XCTAssertEqual(
             firstWorkspace.pane(for: firstWorkspace.activePaneID)?.activeTab?.state.sidebarSectionHeights,
             firstHeights
@@ -182,23 +172,18 @@ final class MainWindowControllerTerminalLifecycleTests: XCTestCase {
             return
         }
 
-        let secondOpen: Set<String> = ["file-tree-local", "git-panel"]
         let secondExpanded: Set<String> = ["file-tree-local", "git-panel"]
         let secondHeights: [String: CGFloat] = ["git-panel": 155]
         let secondOffsets: [String: CGPoint] = [
             "\(secondTab.id.uuidString):git-panel": CGPoint(x: 0, y: 28)
         ]
 
-        windowController.pluginSidebarPanelView?.removeFromSuperview()
-        windowController.pluginSidebarPanelView = nil
-        windowController.openPluginIDs = secondOpen
         windowController.expandedPluginIDs = secondExpanded
         windowController.savedSidebarHeights = secondHeights
         windowController.savedSidebarScrollOffsets = secondOffsets
 
         windowController.activateWorkspace(0)
 
-        XCTAssertEqual(windowController.openPluginIDs, firstOpen)
         XCTAssertEqual(windowController.expandedPluginIDs, firstExpanded)
         XCTAssertEqual(windowController.savedSidebarHeights, firstHeights)
         XCTAssertEqual(

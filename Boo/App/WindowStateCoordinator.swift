@@ -11,11 +11,14 @@ final class WindowStateCoordinator {
     /// Track the previous tab for saving state on switch.
     var previousFocusedTabID: UUID?
 
-    /// Active plugin UI state (working copy, saved/restored on tab switch).
-    var openPluginIDs: Set<String> = Set(AppSettings.shared.defaultEnabledPluginIDs)
-    var expandedPluginIDs: Set<String> = ["file-tree-local", "file-tree-remote"]
+    /// Per-plugin expanded section IDs (working copy, saved/restored on tab switch).
+    var expandedPluginIDs: Set<String> = []
+    /// Section IDs the user has explicitly collapsed — suppresses auto-expand on first show.
+    var userCollapsedSectionIDs: Set<String> = []
     var sidebarSectionHeights: [String: CGFloat] = [:]
     var sidebarScrollOffsets: [String: CGPoint] = [:]
+    /// The plugin tab the user last selected for this terminal tab.
+    var selectedPluginTabID: String? = nil
 
     init(bridge: TerminalBridge, pluginRegistry: PluginRegistry) {
         self.bridge = bridge
@@ -28,31 +31,21 @@ final class WindowStateCoordinator {
     func savePluginState(to pane: Pane, tabIndex: Int) {
         pane.updatePluginState(
             at: tabIndex,
-            open: openPluginIDs,
             expanded: expandedPluginIDs,
+            userCollapsed: userCollapsedSectionIDs,
             sidebarSectionHeights: sidebarSectionHeights,
-            sidebarScrollOffsets: sidebarScrollOffsets
+            sidebarScrollOffsets: sidebarScrollOffsets,
+            selectedPluginTabID: selectedPluginTabID
         )
     }
 
     /// Restore plugin UI state from a tab.
-    /// Deactivates plugins that were open before but aren't in the new tab,
-    /// and activates plugins that are newly open.
     func restorePluginState(from tab: Pane.Tab) {
-        let oldOpen = openPluginIDs
-        let newOpen = tab.state.openPluginIDs
-        // Deactivate plugins that are no longer open
-        for id in oldOpen.subtracting(newOpen) {
-            pluginRegistry.deactivatePlugin(id)
-        }
-        // Activate plugins that are newly open
-        for id in newOpen.subtracting(oldOpen) {
-            pluginRegistry.activatePlugin(id)
-        }
-        openPluginIDs = newOpen
         expandedPluginIDs = tab.state.expandedPluginIDs
+        userCollapsedSectionIDs = tab.state.userCollapsedSectionIDs
         sidebarSectionHeights = tab.state.sidebarSectionHeights
         sidebarScrollOffsets = tab.state.sidebarScrollOffsets
+        selectedPluginTabID = tab.state.selectedPluginTabID
     }
 
     /// Handle a tab switch: save previous tab's state, restore new tab's state,

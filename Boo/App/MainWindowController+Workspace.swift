@@ -179,6 +179,7 @@ extension MainWindowController {
     }
 
     func saveSession() {
+        savePluginStateForActiveTab()
         SessionStore.save(appState: appState)
     }
 
@@ -224,8 +225,10 @@ extension MainWindowController {
         if let activeTab = workspace.pane(for: workspace.activePaneID)?.activeTab {
             coordinator.restorePluginState(from: activeTab)
             previousFocusedTabID = activeTab.id
+            activePluginTabID = coordinator.selectedPluginTabID
         } else {
             previousFocusedTabID = nil
+            activePluginTabID = nil
             savedSidebarHeights = [:]
             savedSidebarScrollOffsets = [:]
         }
