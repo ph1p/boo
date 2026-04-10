@@ -314,13 +314,19 @@ extension MainWindowController {
         } else if let activeID = activePluginTabID,
             let activeTab = sorted.first(where: { $0.id.id == activeID })
         {
-            // Active tab still present — sync selection state and refresh content
-            sidebarTabBarView?.selectedTab = activeTab.id
-            sidebarTabBarView?.needsDisplay = true
-            refreshActivePluginTab(id: activeID, context: context)
-            // Ensure sidebar is visible
-            if !sidebarVisible && !sidebarUserHidden {
-                toggleSidebar(userInitiated: false)
+            // Active tab still present — if no panel exists yet (e.g. session restore on
+            // startup), run the full activation so pluginDidActivate() is called and the
+            // plugin can start background work before its content is shown.
+            if pluginPanelViews[activeID] == nil {
+                activatePluginTab(activeTab.id, context: context)
+            } else {
+                sidebarTabBarView?.selectedTab = activeTab.id
+                sidebarTabBarView?.needsDisplay = true
+                refreshActivePluginTab(id: activeID, context: context)
+                // Ensure sidebar is visible
+                if !sidebarVisible && !sidebarUserHidden {
+                    toggleSidebar(userInitiated: false)
+                }
             }
         } else {
             // No active tab or active tab disappeared — activate the first available,

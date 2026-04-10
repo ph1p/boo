@@ -78,10 +78,14 @@ class SidebarTabBarView: NSView {
         let needsOverflow = CGFloat(sidebarTabs.count) * tabW > bounds.width
         let available = needsOverflow ? bounds.width - overflowW : bounds.width
 
+        let isBottom = AppSettings.shared.sidebarTabBarPosition == .bottom
+        let tabY: CGFloat = isBottom ? 1 : 0
+        let tabH = bounds.height - 1
+
         var x: CGFloat = 0
         for tab in sidebarTabs {
             if x + tabW <= available {
-                tabRects[tab.id] = NSRect(x: x, y: 0, width: tabW, height: bounds.height - 1)
+                tabRects[tab.id] = NSRect(x: x, y: tabY, width: tabW, height: tabH)
                 visibleTabs.append(tab)
                 x += tabW
             } else {
@@ -91,7 +95,7 @@ class SidebarTabBarView: NSView {
 
         if needsOverflow {
             overflowRect = NSRect(
-                x: bounds.width - overflowW, y: 0, width: overflowW, height: bounds.height - 1)
+                x: bounds.width - overflowW, y: tabY, width: overflowW, height: tabH)
         } else {
             overflowRect = .zero
         }
@@ -280,9 +284,10 @@ class SidebarTabBarView: NSView {
         ctx.setFillColor(theme.sidebarBg.cgColor)
         ctx.fill(bounds)
 
-        // Bottom separator line
+        // Separator line — bottom edge when bar is at top, top edge when bar is at bottom
+        let isBottom = AppSettings.shared.sidebarTabBarPosition == .bottom
         ctx.setFillColor(theme.chromeMuted.withAlphaComponent(0.15).cgColor)
-        ctx.fill(CGRect(x: 0, y: bounds.height - 1, width: bounds.width, height: 1))
+        ctx.fill(CGRect(x: 0, y: isBottom ? 0 : bounds.height - 1, width: bounds.width, height: 1))
 
         // Compute drop index for indicator while dragging
         let dropIndex: Int? = isDragging ? dropIndexFor(x: dragCurrentX) : nil
