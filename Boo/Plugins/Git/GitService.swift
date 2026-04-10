@@ -39,7 +39,7 @@ extension GitPlugin {
     nonisolated static func detectChangedFiles(repoRoot: String) -> [GitChangedFile] {
         let task = Process()
         task.launchPath = "/usr/bin/git"
-        task.arguments = ["-C", repoRoot, "status", "--porcelain=v1"]
+        task.arguments = ["-C", repoRoot, "-no-optional-locks", "status", "--porcelain=v1"]
         task.standardError = FileHandle.nullDevice
 
         let pipe = Pipe()
@@ -176,20 +176,24 @@ extension GitPlugin {
 
     internal func refreshGitStatus(cwd: String, repoRoot: String?) {
         guard let root = repoRoot else {
-            let hadData = !cachedFiles.isEmpty || cachedLastCommit != nil
+            let hadData = !cachedFiles.isEmpty || cachedLastCommit != nil || cachedBranch != nil
+            let hadBranch = cachedBranch != nil
+            cachedBranch = nil
+            cachedRepoRoot = nil
             cachedFiles = []
             cachedAheadCount = 0
             cachedBehindCount = 0
             cachedLastCommit = nil
             cachedRemotes = []
             lastRefreshedPath = cwd
-            repoWatcher?.stop()
-            repoWatcher = nil
             gitDirWatcher?.stop()
             gitDirWatcher = nil
             watchedRepoRoot = nil
             // Watch CWD so we detect `git init`
             setupCwdWatcher(cwd: cwd)
+            if hadBranch {
+                onBranchChanged?(nil, nil)
+            }
             if hadData {
                 onRequestCycleRerun?()
             }
@@ -212,6 +216,9 @@ extension GitPlugin {
             var behindCount = 0
             var lastCommit: String?
             var remotes: [GitRemote] = []
+            // Read branch directly from .git/HEAD — works without git installed.
+            let (branch, _) = StatusBarView.detectGitInfo(in: root)
+            NSLog("[Git] refreshGitStatus: root=\(root) branch=\(branch ?? "nil")")
 
             group.enter()
             DispatchQueue.global(qos: .utility).async {
@@ -239,17 +246,25 @@ extension GitPlugin {
             group.wait()
             DispatchQueue.main.async {
                 guard let self = self else { return }
+                let branchChanged = branch != self.cachedBranch
                 let changed =
-                    self.cachedFiles.map(\.path) != files.map(\.path)
+                    branchChanged
+                    || self.cachedFiles.map(\.path) != files.map(\.path)
                     || self.cachedAheadCount != aheadCount
                     || self.cachedBehindCount != behindCount
                     || self.cachedLastCommit != lastCommit
                     || self.cachedRemotes != remotes
+                self.cachedBranch = branch
+                self.cachedRepoRoot = root
                 self.cachedFiles = files
                 self.cachedAheadCount = aheadCount
                 self.cachedBehindCount = behindCount
                 self.cachedLastCommit = lastCommit
                 self.cachedRemotes = remotes
+                if branchChanged {
+                    NSLog("[Git] branch changed: \(self.cachedBranch ?? "nil") -> \(branch ?? "nil") root=\(root)")
+                    self.onBranchChanged?(branch, root)
+                }
                 if changed {
                     self.onRequestCycleRerun?()
                 }
@@ -275,7 +290,6 @@ extension GitPlugin {
     internal func setupGitWatcher(repoRoot: String) {
         guard watchedRepoRoot != repoRoot else { return }
         watchedRepoRoot = repoRoot
-        repoWatcher?.stop()
         gitDirWatcher?.stop()
 
         let debouncedRefresh: () -> Void = { [weak self] in
@@ -289,12 +303,20 @@ extension GitPlugin {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.15, execute: work)
         }
 
-        repoWatcher = FileSystemWatcher(path: repoRoot, onChange: debouncedRefresh)
-        repoWatcher?.start()
-
+        // Watch .git/ but filter to only the files that indicate meaningful state changes:
+        // HEAD (branch switch), index (stage/unstage), packed-refs (remote tracking).
+        // This avoids thrashing on objects/, logs/, and other high-frequency writes.
         let gitDir = (repoRoot as NSString).appendingPathComponent(".git")
         if FileManager.default.fileExists(atPath: gitDir) {
-            gitDirWatcher = FileSystemWatcher(path: gitDir, onChange: debouncedRefresh)
+            gitDirWatcher = FileSystemWatcher(
+                path: gitDir,
+                filter: { path in
+                    let name = (path as NSString).lastPathComponent
+                    return name == "HEAD" || name == "index" || name == "packed-refs"
+                        || name == "MERGE_HEAD" || name == "CHERRY_PICK_HEAD"
+                },
+                onChange: debouncedRefresh
+            )
             gitDirWatcher?.start()
         }
     }

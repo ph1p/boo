@@ -13,7 +13,7 @@ final class PluginManifestTests: XCTestCase {
                 "icon": "arrow.triangle.branch",
                 "description": "Shows git status in sidebar",
                 "when": "git.active",
-                "capabilities": { "sidebarPanel": true, "statusBarSegment": true },
+                "capabilities": { "sidebarTab": true, "statusBarSegment": true },
                 "statusBar": { "position": "left", "priority": 10, "template": "{git.branch}" },
                 "settings": [
                     { "key": "showDiffs", "type": "bool", "label": "Show diffs", "default": true },
@@ -29,7 +29,7 @@ final class PluginManifestTests: XCTestCase {
         XCTAssertEqual(manifest.icon, "arrow.triangle.branch")
         XCTAssertEqual(manifest.description, "Shows git status in sidebar")
         XCTAssertEqual(manifest.when, "git.active")
-        XCTAssertEqual(manifest.capabilities?.sidebarPanel, true)
+        XCTAssertEqual(manifest.capabilities?.sidebarTab, true)
         XCTAssertEqual(manifest.capabilities?.statusBarSegment, true)
         XCTAssertEqual(manifest.statusBar?.position, "left")
         XCTAssertEqual(manifest.statusBar?.priority, 10)
