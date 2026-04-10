@@ -26,7 +26,7 @@ final class ScriptPluginAdapterTests: XCTestCase {
             description: "Test",
             when: when,
             runtime: nil,
-            capabilities: PluginManifest.Capabilities(sidebarPanel: true, statusBarSegment: true),
+            capabilities: PluginManifest.Capabilities(statusBarSegment: true, sidebarTab: true),
             statusBar: PluginManifest.StatusBarManifest(position: "left", priority: 50, template: statusBarTemplate),
             settings: nil
         )

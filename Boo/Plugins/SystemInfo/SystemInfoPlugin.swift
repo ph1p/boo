@@ -16,7 +16,7 @@ final class SystemInfoPlugin: BooPluginProtocol {
         description: "System resource usage (CPU, memory, disk)",
         when: "!remote",
         runtime: nil,
-        capabilities: PluginManifest.Capabilities(sidebarPanel: true, statusBarSegment: true),
+        capabilities: PluginManifest.Capabilities(statusBarSegment: true, sidebarTab: true),
         statusBar: PluginManifest.StatusBarManifest(position: "right", priority: 35, template: nil),
         settings: [
             PluginManifest.SettingManifest(

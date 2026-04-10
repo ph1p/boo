@@ -673,6 +673,30 @@ private struct EditorSection<Content: View>: View {
     }
 }
 
+// MARK: - Hex field color derivation (internal for testing)
+
+/// Outcome of evaluating a hex draft string for the color swatch text field.
+enum HexFieldState: Equatable {
+    /// Fewer than 6 hex digits entered — no styling yet.
+    case incomplete
+    /// Exactly 6 valid hex digits — show this color as background.
+    case valid(TerminalColor)
+    /// 6+ chars but not a valid hex color — show error styling.
+    case invalid
+}
+
+/// Pure function: derive display state from a raw draft string.
+/// - A bare `#` or partial input (< 6 hex chars after `#`) → `.incomplete`
+/// - A full 6-char valid hex → `.valid`
+/// - Anything else of sufficient length → `.invalid`
+func hexFieldState(for draft: String) -> HexFieldState {
+    var s = draft.trimmingCharacters(in: .whitespaces)
+    if s.hasPrefix("#") { s = String(s.dropFirst()) }
+    if s.count < 6 { return .incomplete }
+    if let c = TerminalColor(hex: draft) { return .valid(c) }
+    return .invalid
+}
+
 /// One row: color well + label + editable hex field.
 private struct SwatchRow: View {
     let label: String
@@ -681,9 +705,9 @@ private struct SwatchRow: View {
     // Draft text while typing — lets user type freely before committing
     @State private var draft: String = ""
     @State private var isEditing = false
-    @State private var isInvalid = false
 
-    private var isValid: Bool { TerminalColor(hex: draft) != nil }
+    private var fieldState: HexFieldState { hexFieldState(for: draft) }
+    private var isInvalid: Bool { fieldState == .invalid }
 
     var body: some View {
         let t = Tokens.current
@@ -703,19 +727,20 @@ private struct SwatchRow: View {
             // Editable hex field
             TextField("", text: $draft)
                 .font(.system(size: 10, design: .monospaced))
-                .foregroundColor(isInvalid ? Color.red.opacity(0.8) : t.muted.opacity(0.75))
+                .foregroundColor(hexFieldTextColor(fieldState, tokens: t))
                 .frame(width: 64)
                 .padding(.horizontal, 5)
                 .padding(.vertical, 2)
                 .background(
                     RoundedRectangle(cornerRadius: 4)
-                        .fill(isEditing ? t.muted.opacity(0.08) : Color.clear)
+                        .fill(hexFieldBg(fieldState, isEditing: isEditing, tokens: t))
                         .overlay(
                             RoundedRectangle(cornerRadius: 4)
                                 .strokeBorder(
                                     isInvalid
                                         ? Color.red.opacity(0.5)
-                                        : (isEditing ? t.accent.opacity(0.4) : Color.clear),
+                                        : (isEditing && fieldState == .incomplete
+                                            ? t.accent.opacity(0.4) : Color.clear),
                                     lineWidth: 1
                                 )
                         )
@@ -725,14 +750,10 @@ private struct SwatchRow: View {
                     if !isEditing { draft = newHex.uppercased() }
                 }
                 .onSubmit { commitDraft() }
-                .onChange(of: draft) { _ in
-                    isInvalid = !draft.isEmpty && TerminalColor(hex: draft) == nil
-                }
                 .onTapGesture { isEditing = true }
                 .onExitCommand {
                     isEditing = false
                     draft = hex.uppercased()
-                    isInvalid = false
                 }
         }
         .onChange(of: isEditing) { editing in
@@ -743,13 +764,33 @@ private struct SwatchRow: View {
     private func commitDraft() {
         if let c = TerminalColor(hex: draft) {
             hex = c.hexString.uppercased()
-            isInvalid = false
         } else {
             // Revert to last valid value
             draft = hex.uppercased()
-            isInvalid = false
         }
         isEditing = false
+    }
+}
+
+private func hexFieldBg(_ state: HexFieldState, isEditing: Bool, tokens t: Tokens) -> Color {
+    switch state {
+    case .valid(let c):
+        return Color(red: Double(c.r) / 255, green: Double(c.g) / 255, blue: Double(c.b) / 255)
+    case .incomplete:
+        return isEditing ? t.muted.opacity(0.08) : Color.clear
+    case .invalid:
+        return Color.clear
+    }
+}
+
+private func hexFieldTextColor(_ state: HexFieldState, tokens t: Tokens) -> Color {
+    switch state {
+    case .valid(let c):
+        return c.luminance > 0.5 ? Color.black.opacity(0.75) : Color.white.opacity(0.9)
+    case .incomplete:
+        return t.muted.opacity(0.75)
+    case .invalid:
+        return Color.red.opacity(0.8)
     }
 }
 
@@ -787,17 +828,6 @@ private struct ColorWell: NSViewRepresentable {
 }
 
 // MARK: - Helpers
-
-extension TerminalColor {
-    fileprivate var hexString: String { String(format: "#%02X%02X%02X", r, g, b) }
-
-    fileprivate init?(hex: String) {
-        var s = hex.trimmingCharacters(in: .whitespaces)
-        if s.hasPrefix("#") { s = String(s.dropFirst()) }
-        guard s.count == 6, let v = UInt32(s, radix: 16) else { return nil }
-        self.init(r: UInt8((v >> 16) & 0xFF), g: UInt8((v >> 8) & 0xFF), b: UInt8(v & 0xFF))
-    }
-}
 
 extension CustomThemeData {
     fileprivate func withName(_ newName: String) -> CustomThemeData {
@@ -1085,6 +1115,7 @@ private struct StatusBarSettingsView: View {
 struct LayoutSettingsView: View {
     @State private var sidebarPosition = AppSettings.shared.sidebarPosition
     @State private var sidebarDefaultHidden = AppSettings.shared.sidebarDefaultHidden
+    @State private var sidebarTabBarPosition = AppSettings.shared.sidebarTabBarPosition
     @State private var workspaceBarPosition = AppSettings.shared.workspaceBarPosition
     @State private var tabOverflowMode = AppSettings.shared.tabOverflowMode
     @ObservedObject private var observer = SettingsObserver(topics: [.theme, .layout])
@@ -1100,6 +1131,12 @@ struct LayoutSettingsView: View {
                 }
                 .pickerStyle(.segmented)
                 .onChange(of: sidebarPosition) { v in AppSettings.shared.sidebarPosition = v }
+
+                Picker("Tab Bar", selection: $sidebarTabBarPosition) {
+                    ForEach(SidebarTabBarPosition.allCases, id: \.self) { Text($0.label).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .onChange(of: sidebarTabBarPosition) { v in AppSettings.shared.sidebarTabBarPosition = v }
 
                 ToggleRow(label: "Hide sidebar by default", isOn: $sidebarDefaultHidden)
                     .onChange(of: sidebarDefaultHidden) { v in AppSettings.shared.sidebarDefaultHidden = v }
@@ -1143,6 +1180,7 @@ struct PluginSettingsView: View {
     static var registeredManifests: [PluginManifest] = []
 
     @ObservedObject private var observer = SettingsObserver(topics: [.theme, .plugins])
+    @State private var installError: String? = nil
 
     var body: some View {
         let _ = observer.revision
@@ -1160,12 +1198,48 @@ struct PluginSettingsView: View {
                 }
             }
 
-            Section(title: "Default Sidebar Plugins") {
-                Text("Plugins shown in the sidebar when opening a new pane. Drag or use arrows to reorder.")
-                    .font(.system(size: 10))
-                    .foregroundColor(t.muted)
-                DefaultPluginOrderView(manifests: manifests.filter { $0.capabilities?.sidebarPanel == true })
+            HStack {
+                if let err = installError {
+                    Text(err)
+                        .font(.system(size: 10))
+                        .foregroundColor(.red)
+                }
+                Spacer()
+                Button("Install Plugin…") {
+                    installError = nil
+                    let panel = NSOpenPanel()
+                    panel.canChooseFiles = false
+                    panel.canChooseDirectories = true
+                    panel.allowsMultipleSelection = false
+                    panel.prompt = "Install"
+                    panel.message = "Choose a plugin folder containing plugin.json"
+                    guard panel.runModal() == .OK, let src = panel.url else { return }
+                    let manifestURL = src.appendingPathComponent("plugin.json")
+                    guard let manifestData = try? Data(contentsOf: manifestURL),
+                        let newManifest = try? PluginManifest.parse(from: manifestData)
+                    else {
+                        installError = "No valid plugin.json found in selected folder."
+                        return
+                    }
+                    // Reject if a plugin with the same ID is already installed
+                    if Self.registeredManifests.contains(where: { $0.id == newManifest.id }) {
+                        installError =
+                            "A plugin with ID '\(newManifest.id)' is already installed."
+                        return
+                    }
+                    let pluginsDir = (BooPaths.configDir as NSString).appendingPathComponent("plugins")
+                    let dest = URL(fileURLWithPath: pluginsDir).appendingPathComponent(src.lastPathComponent)
+                    do {
+                        try? FileManager.default.removeItem(at: dest)
+                        try FileManager.default.copyItem(at: src, to: dest)
+                    } catch {
+                        installError = "Install failed: \(error.localizedDescription)"
+                    }
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
             }
+            .padding(.top, 4)
         }
     }
 
@@ -1176,11 +1250,23 @@ private struct PluginRow: View {
 
     @State private var isEnabled: Bool
     @State private var isExpanded: Bool = false
+    @State private var removeError: String? = nil
     @ObservedObject private var observer = SettingsObserver(topics: [.theme, .plugins])
 
     init(manifest: PluginManifest) {
         self.manifest = manifest
         self._isEnabled = State(initialValue: !AppSettings.shared.disabledPluginIDs.contains(manifest.id))
+    }
+
+    private func removePlugin() {
+        guard let folder = manifest.folderName else { return }
+        let pluginsDir = (BooPaths.configDir as NSString).appendingPathComponent("plugins")
+        let folderPath = (pluginsDir as NSString).appendingPathComponent(folder)
+        do {
+            try FileManager.default.removeItem(atPath: folderPath)
+        } catch {
+            removeError = error.localizedDescription
+        }
     }
 
     /// Returns true when at least one of the plugin's settings deviates from its declared default.
@@ -1233,6 +1319,16 @@ private struct PluginRow: View {
                 }
                 Spacer()
 
+                if manifest.isExternal {
+                    Button(action: removePlugin) {
+                        Image(systemName: "trash")
+                            .font(.system(size: 11))
+                            .foregroundColor(.red.opacity(0.8))
+                    }
+                    .buttonStyle(.plain)
+                    .help("Remove plugin")
+                }
+
                 if let settings = manifest.settings, !settings.isEmpty {
                     Button(action: { withAnimation(.easeInOut(duration: 0.15)) { isExpanded.toggle() } }) {
                         ZStack(alignment: .topTrailing) {
@@ -1276,6 +1372,14 @@ private struct PluginRow: View {
                 .padding(.trailing, 8)
                 .padding(.bottom, 8)
             }
+
+            if let err = removeError {
+                Text(err)
+                    .font(.system(size: 10))
+                    .foregroundColor(.red)
+                    .padding(.horizontal, 8)
+                    .padding(.bottom, 4)
+            }
         }
         .accessibilityLabel("\(manifest.name), \(isEnabled ? "enabled" : "disabled"), \(manifest.description ?? "")")
     }
@@ -1283,177 +1387,6 @@ private struct PluginRow: View {
 }
 
 /// Reorderable list of default sidebar plugins with toggle, drag-and-drop, and arrow buttons.
-private struct DefaultPluginOrderView: View {
-    let manifests: [PluginManifest]
-    @ObservedObject private var observer = SettingsObserver(topics: [.theme, .plugins])
-    @State private var orderedIDs: [String] = []
-    @State private var draggedID: String?
-
-    var body: some View {
-        let _ = observer.revision
-        let t = Tokens.current
-        let disabledSet = AppSettings.shared.disabledPluginIDsSet
-        let visibleIDs = orderedIDs.filter { !disabledSet.contains($0) }
-        let enabledSet = Set(AppSettings.shared.defaultEnabledPluginIDs)
-
-        VStack(alignment: .leading, spacing: 2) {
-            ForEach(Array(visibleIDs.enumerated()), id: \.element) { index, pluginID in
-                if let manifest = manifests.first(where: { $0.id == pluginID }) {
-                    let isEnabled = enabledSet.contains(pluginID)
-                    let realIndex = orderedIDs.firstIndex(of: pluginID) ?? index
-                    HStack(spacing: 8) {
-                        Image(systemName: "line.3.horizontal")
-                            .font(.system(size: 10))
-                            .foregroundColor(t.muted.opacity(0.5))
-                            .frame(width: 12)
-
-                        Image(systemName: manifest.icon)
-                            .font(.system(size: 12))
-                            .foregroundColor(isEnabled ? t.text : t.muted)
-                            .frame(width: 16)
-
-                        Text(manifest.name)
-                            .font(.system(size: 12))
-                            .foregroundColor(isEnabled ? t.text : t.muted)
-
-                        Spacer()
-
-                        Button(action: { moveUp(realIndex) }) {
-                            Image(systemName: "chevron.up")
-                                .font(.system(size: 10, weight: .semibold))
-                                .foregroundColor(index > 0 ? t.text : t.muted.opacity(0.3))
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(index == 0)
-
-                        Button(action: { moveDown(realIndex) }) {
-                            Image(systemName: "chevron.down")
-                                .font(.system(size: 10, weight: .semibold))
-                                .foregroundColor(index < visibleIDs.count - 1 ? t.text : t.muted.opacity(0.3))
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(index >= visibleIDs.count - 1)
-
-                        Toggle(
-                            "",
-                            isOn: Binding(
-                                get: { enabledSet.contains(pluginID) },
-                                set: { enabled in
-                                    var list = AppSettings.shared.defaultEnabledPluginIDs
-                                    if enabled {
-                                        if !list.contains(pluginID) { list.append(pluginID) }
-                                    } else {
-                                        list.removeAll { $0 == pluginID }
-                                    }
-                                    AppSettings.shared.defaultEnabledPluginIDs = list
-                                }
-                            )
-                        )
-                        .toggleStyle(.switch)
-                        .controlSize(.small)
-                    }
-                    .padding(.vertical, 4)
-                    .padding(.horizontal, 8)
-                    .background(
-                        RoundedRectangle(cornerRadius: 4)
-                            .fill(draggedID == pluginID ? t.accent.opacity(0.1) : t.muted.opacity(0.05))
-                    )
-                    .opacity(draggedID == pluginID ? 0.6 : 1.0)
-                    .onDrag {
-                        draggedID = pluginID
-                        return NSItemProvider(object: pluginID as NSString)
-                    }
-                    .onDrop(
-                        of: [.text],
-                        delegate: PluginDropDelegate(
-                            targetID: pluginID,
-                            orderedIDs: $orderedIDs,
-                            draggedID: $draggedID,
-                            onReorder: { persistOrder() }
-                        ))
-                }
-            }
-        }
-        .onAppear { syncOrder() }
-    }
-
-    /// Build the ordered list from the canonical order, falling back to enabled-first.
-    private func syncOrder() {
-        let canonical = AppSettings.shared.sidebarPluginOrder
-        let seed = canonical.isEmpty ? AppSettings.shared.defaultEnabledPluginIDs : canonical
-        let allIDs = manifests.map(\.id)
-        var result: [String] = []
-        for id in seed where allIDs.contains(id) {
-            result.append(id)
-        }
-        for id in allIDs where !result.contains(id) {
-            result.append(id)
-        }
-        orderedIDs = result
-    }
-
-    private func moveUp(_ index: Int) {
-        let disabledSet = AppSettings.shared.disabledPluginIDsSet
-        // Find the nearest visible predecessor in orderedIDs
-        guard index > 0,
-            let prevIndex = (0..<index).reversed().first(where: { !disabledSet.contains(orderedIDs[$0]) })
-        else { return }
-        orderedIDs.swapAt(index, prevIndex)
-        persistOrder()
-    }
-
-    private func moveDown(_ index: Int) {
-        let disabledSet = AppSettings.shared.disabledPluginIDsSet
-        // Find the nearest visible successor in orderedIDs
-        guard index < orderedIDs.count - 1,
-            let nextIndex = ((index + 1)..<orderedIDs.count).first(where: { !disabledSet.contains(orderedIDs[$0]) })
-        else { return }
-        orderedIDs.swapAt(index, nextIndex)
-        persistOrder()
-    }
-
-    /// Save the current order back to settings.
-    /// Persists both the enabled-only list and the full canonical order.
-    private func persistOrder() {
-        AppSettings.shared.sidebarPluginOrder = orderedIDs
-        let enabledSet = Set(AppSettings.shared.defaultEnabledPluginIDs)
-        let newOrder = orderedIDs.filter { enabledSet.contains($0) }
-        AppSettings.shared.defaultEnabledPluginIDs = newOrder
-    }
-}
-
-/// Drop delegate that reorders plugins by moving the dragged item to the drop target's position.
-private struct PluginDropDelegate: DropDelegate {
-    let targetID: String
-    @Binding var orderedIDs: [String]
-    @Binding var draggedID: String?
-    let onReorder: () -> Void
-
-    func performDrop(info: DropInfo) -> Bool {
-        draggedID = nil
-        onReorder()
-        return true
-    }
-
-    func dropEntered(info: DropInfo) {
-        guard let dragged = draggedID, dragged != targetID,
-            let fromIndex = orderedIDs.firstIndex(of: dragged),
-            let toIndex = orderedIDs.firstIndex(of: targetID)
-        else { return }
-        withAnimation(.easeInOut(duration: 0.15)) {
-            orderedIDs.move(
-                fromOffsets: IndexSet(integer: fromIndex), toOffset: toIndex > fromIndex ? toIndex + 1 : toIndex)
-        }
-    }
-
-    func dropUpdated(info: DropInfo) -> DropProposal? {
-        DropProposal(operation: .move)
-    }
-
-    func validateDrop(info: DropInfo) -> Bool {
-        draggedID != nil
-    }
-}
 
 private struct PluginSettingControl: View {
     let pluginID: String

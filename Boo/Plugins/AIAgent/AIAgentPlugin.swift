@@ -18,7 +18,7 @@ final class AIAgentPlugin: BooPluginProtocol {
         description: "Monitor running AI coding agents",
         when: "process.ai",
         runtime: nil,
-        capabilities: PluginManifest.Capabilities(sidebarPanel: true, statusBarSegment: true),
+        capabilities: PluginManifest.Capabilities(statusBarSegment: true, sidebarTab: true),
         statusBar: PluginManifest.StatusBarManifest(position: "right", priority: 20, template: nil),
         settings: nil
     )
