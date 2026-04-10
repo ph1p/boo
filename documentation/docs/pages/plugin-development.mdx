@@ -261,6 +261,27 @@ Use `env.type` for string comparisons and `remote.host` to match the current hos
 
 See [When-Clauses](/plugins#when-clauses) for the full list of variables.
 
+### Responding to directory changes
+
+JS plugins don't have a lifecycle hook — they respond to `cd` through their `render()` function, which is called automatically whenever the working directory changes. `ctx.cwd` always reflects the current directory:
+
+```javascript
+function render(ctx) {
+  // ctx.cwd is already the new directory — render() is called on every cd
+  var hasMakefile = fileExists("Makefile");
+  if (!hasMakefile) return { type: "label", text: "No Makefile", style: "muted" };
+
+  // Offer an action that runs in the new directory
+  return {
+    type: "button",
+    label: "Run make",
+    action: { type: "exec", command: "make" },
+  };
+}
+```
+
+To send a command to the terminal in response to a directory change, use the `"exec"` action on a button or list item — the user clicks it to trigger the command. For fully automatic reactions (no click required), use a [Swift plugin](#built-in-swift-plugins) with `cwdChanged` + `hostActions`, or an IPC socket tool that subscribes to `cwd_changed` and sends `send_text` (see [IPC Socket](/ipc-socket#reacting-to-directory-changes)).
+
 ### Example: Makefile targets plugin
 
 A JS plugin that reads a Makefile and lists its targets as clickable items:
@@ -540,6 +561,22 @@ func terminalFocusChanged(terminalID: UUID, context: TerminalContext) {
     // Update cached state for the new pane
 }
 ```
+
+#### Sending commands on directory change
+
+Use `cwdChanged` + `hostActions` to send a command to the terminal whenever the user `cd`s into a folder:
+
+```swift
+func cwdChanged(newPath: String, context: TerminalContext) {
+    // Example: activate a project environment automatically
+    let envFile = (newPath as NSString).appendingPathComponent(".envrc")
+    if FileManager.default.fileExists(atPath: envFile) {
+        hostActions?.exec("direnv allow .")
+    }
+}
+```
+
+`hostActions?.exec(_:)` sends the command followed by a newline (Enter), exactly as if the user typed it. Use `hostActions?.cd(to:)` to change directory, `hostActions?.pastePath(_:)` to insert a path without executing.
 
 ### Enrichment
 
