@@ -16,6 +16,9 @@ struct GitDetailView: View {
     var onGitAction: (([String]) -> Void)?
     /// Sends a command to the terminal for visible output (diff).
     var onTerminalAction: ((String) -> Void)?
+    /// Optional external diff tool command. Supports `{file}` placeholder for the full path.
+    /// When nil, falls back to `git diff`.
+    var diffTool: String? = nil
     var onCopyPath: ((String) -> Void)?
     var onReveal: ((String) -> Void)?
     var fontScale: SidebarFontScale = SidebarFontScale(base: AppSettings.shared.sidebarFontSize)
@@ -59,7 +62,7 @@ struct GitDetailView: View {
                         }
                     }) {
                         Text(commitCopied ? "Copied!" : commit)
-                            .font(.system(size: 10, design: .monospaced))
+                            .font(fontScale.font(.base, design: .monospaced))
                             .foregroundColor(
                                 Color(nsColor: commitCopied ? theme.accentColor : theme.chromeMuted)
                             )
@@ -76,6 +79,7 @@ struct GitDetailView: View {
                 // Remotes
                 if !remotes.isEmpty {
                     remotesSection(theme: theme, density: density)
+                        .padding(.bottom, density == .comfortable ? 6 : 4)
                 }
 
                 if !changedFiles.isEmpty {
@@ -146,6 +150,27 @@ struct GitDetailView: View {
         }
     }
 
+    // MARK: - Diff Command
+
+    /// Returns the shell command to show a diff for `file`.
+    /// If a custom `diffTool` is set, uses it (substituting `{file}` with the full path).
+    /// Otherwise falls back to `git diff [--cached] <path>`.
+    private func diffCommand(for file: GitPlugin.GitChangedFile, section: FileSection) -> String {
+        let escapedFull = RemoteExplorer.shellEscPath(file.fullPath)
+        if let tool = diffTool, !tool.isEmpty {
+            if tool.contains("{file}") {
+                return tool.replacingOccurrences(of: "{file}", with: escapedFull)
+            }
+            return "\(tool) \(escapedFull)"
+        }
+        let escapedRel = RemoteExplorer.shellEscPath(file.path)
+        switch section {
+        case .staged: return "git diff --cached \(escapedRel)"
+        case .unstaged: return "git diff \(escapedRel)"
+        case .untracked: return ""
+        }
+    }
+
     // MARK: - Remotes
 
     @ViewBuilder
@@ -155,7 +180,7 @@ struct GitDetailView: View {
             if let webURL = remote.webURL {
                 HStack(spacing: 4) {
                     Image(systemName: "link")
-                        .font(.system(size: 9))
+                        .font(fontScale.font(.sm))
                         .foregroundColor(Color(nsColor: theme.chromeMuted))
                     Text(remote.name)
                         .font(fontScale.font(.base).weight(Font.Weight.medium))
@@ -174,7 +199,7 @@ struct GitDetailView: View {
             } else {
                 HStack(spacing: 4) {
                     Image(systemName: "link")
-                        .font(.system(size: 9))
+                        .font(fontScale.font(.sm))
                         .foregroundColor(Color(nsColor: theme.chromeMuted))
                     Text(remote.name)
                         .font(fontScale.font(.base).weight(Font.Weight.medium))
@@ -197,20 +222,22 @@ struct GitDetailView: View {
     private func branchHeader(theme: TerminalTheme, density: SidebarDensity) -> some View {
         HStack(spacing: 6) {
             Image(systemName: "arrow.triangle.branch")
-                .font(.system(size: 12))
+                .font(fontScale.font(.base))
                 .foregroundColor(Color(nsColor: theme.accentColor))
             Text(branch)
-                .font(.system(size: 12, weight: .medium, design: .monospaced))
+                .font(fontScale.font(.base, design: .monospaced).weight(.medium))
                 .foregroundColor(Color(nsColor: theme.accentColor))
+                .lineLimit(1)
+                .truncationMode(.middle)
             if aheadCount > 0 || behindCount > 0 {
                 HStack(spacing: 2) {
                     if aheadCount > 0 {
                         Text("\u{2191}\(aheadCount)")
-                            .font(.system(size: 10, weight: .medium, design: .monospaced))
+                            .font(fontScale.font(.base, design: .monospaced).weight(.medium))
                     }
                     if behindCount > 0 {
                         Text("\u{2193}\(behindCount)")
-                            .font(.system(size: 10, weight: .medium, design: .monospaced))
+                            .font(fontScale.font(.base, design: .monospaced).weight(.medium))
                     }
                 }
                 .foregroundColor(Color(nsColor: theme.chromeMuted))
@@ -218,14 +245,14 @@ struct GitDetailView: View {
             Spacer()
             Button(action: { onRefresh?() }) {
                 Image(systemName: "arrow.clockwise")
-                    .font(.system(size: 10))
+                    .font(fontScale.font(.base))
                     .foregroundColor(Color(nsColor: theme.chromeMuted))
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Refresh git status")
         }
         .padding(.horizontal, density == .comfortable ? 12 : 8)
-        .padding(.vertical, density == .comfortable ? 8 : 6)
+        .padding(.vertical, density == .comfortable ? 12 : 8)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(
             "Branch: \(branch)\(changedFiles.isEmpty ? "" : ", \(changedFiles.count) changed files")")
@@ -252,56 +279,48 @@ struct GitDetailView: View {
             Button(action: { expanded.wrappedValue.toggle() }) {
                 HStack(spacing: 4) {
                     Image(systemName: expanded.wrappedValue ? "chevron.down" : "chevron.right")
-                        .font(.system(size: 8, weight: .bold))
+                        .font(fontScale.font(.sm).weight(.bold))
                         .foregroundColor(Color(nsColor: theme.chromeMuted))
                         .frame(width: 10)
                     Text("\(title) (\(count))")
-                        .font(.system(size: 10, weight: .semibold))
+                        .font(fontScale.font(.base).weight(.semibold))
                         .foregroundColor(Color(nsColor: color))
                 }
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             Spacer()
-            // Bulk action buttons
+            // Bulk action button — shown on hover
             switch section {
             case .staged:
-                Button(action: {
-                    onGitAction?(["restore", "--staged", "."])
-                }) {
-                    Image(systemName: "minus")
-                        .font(.system(size: 9, weight: .bold))
+                Button(action: { onGitAction?(["restore", "--staged", "."]) }) {
+                    Text("Unstage all")
+                        .font(fontScale.font(.sm))
                         .foregroundColor(Color(nsColor: theme.chromeMuted))
                 }
                 .buttonStyle(.plain)
                 .opacity(isHovered ? 1.0 : 0.0)
-                .help("Unstage all")
+                .help("Unstage all staged files")
                 .accessibilityLabel("Unstage all files")
             case .unstaged:
-                Button(action: {
-                    onGitAction?(["add", "-u"])
-                }) {
-                    Image(systemName: "plus")
-                        .font(.system(size: 9, weight: .bold))
+                Button(action: { onGitAction?(["add", "-u"]) }) {
+                    Text("Stage all")
+                        .font(fontScale.font(.sm))
                         .foregroundColor(Color(nsColor: theme.chromeMuted))
                 }
                 .buttonStyle(.plain)
                 .opacity(isHovered ? 1.0 : 0.0)
-                .help("Stage all changes")
+                .help("Stage all modified files")
                 .accessibilityLabel("Stage all changed files")
             case .untracked:
-                Button(action: {
-                    for file in untrackedFiles {
-                        onGitAction?(["add", file.path])
-                    }
-                }) {
-                    Image(systemName: "plus")
-                        .font(.system(size: 9, weight: .bold))
+                Button(action: { for f in untrackedFiles { onGitAction?(["add", f.path]) } }) {
+                    Text("Stage all")
+                        .font(fontScale.font(.sm))
                         .foregroundColor(Color(nsColor: theme.chromeMuted))
                 }
                 .buttonStyle(.plain)
                 .opacity(isHovered ? 1.0 : 0.0)
-                .help("Stage all untracked")
+                .help("Stage all untracked files")
                 .accessibilityLabel("Stage all untracked files")
             }
         }
@@ -326,75 +345,99 @@ struct GitDetailView: View {
     ) -> some View {
         let itemHeight: CGFloat = density == .comfortable ? 26 : 20
         let isHovered = hoveredFileID == file.id
-        let escapedPath = RemoteExplorer.shellEscPath(file.path)
+        let cmd = diffCommand(for: file, section: section)
 
-        Button(action: {
-            // Click = show diff in terminal
-            switch section {
-            case .staged:
-                onTerminalAction?("git diff --cached \(escapedPath)")
-            case .unstaged:
-                onTerminalAction?("git diff \(escapedPath)")
-            case .untracked:
-                onFileClicked?(file.fullPath)
-            }
-        }) {
-            HStack(spacing: 6) {
-                Text(file.status)
-                    .font(.system(size: 10, weight: .bold, design: .monospaced))
-                    .foregroundColor(Color(nsColor: file.statusColor))
-                    .frame(width: 14, alignment: .center)
-                Text((file.path as NSString).lastPathComponent)
-                    .font(fontScale.font(.base))
-                    .foregroundColor(Color(nsColor: theme.chromeText))
-                    .lineLimit(1)
-                if (file.path as NSString).deletingLastPathComponent.count > 0 {
-                    Text((file.path as NSString).deletingLastPathComponent)
-                        .font(fontScale.font(.xs))
-                        .foregroundColor(Color(nsColor: theme.chromeMuted))
-                        .lineLimit(1)
-                        .truncationMode(.head)
-                }
-                Spacer()
-                // Inline stage/unstage buttons — always present, opacity changes on hover
+        HStack(spacing: 0) {
+            // Left area as a Button — Spacer inside label so hit area fills available
+            // width; right-group buttons are siblings so they take gesture priority.
+            Button {
                 switch section {
-                case .staged:
-                    Button(action: {
-                        onGitAction?(["restore", "--staged", file.path])
-                    }) {
-                        Image(systemName: "minus")
-                            .font(.system(size: 9, weight: .bold))
+                case .staged, .unstaged: onTerminalAction?(cmd)
+                case .untracked: onFileClicked?(file.fullPath)
+                }
+            } label: {
+                HStack(spacing: 6) {
+                    Text(file.status)
+                        .font(fontScale.font(.base, design: .monospaced).weight(.bold))
+                        .foregroundColor(Color(nsColor: file.statusColor))
+                        .frame(width: 14, alignment: .center)
+                    Text((file.path as NSString).lastPathComponent)
+                        .font(fontScale.font(.base))
+                        .foregroundColor(Color(nsColor: theme.chromeText))
+                        .lineLimit(1)
+                    if (file.path as NSString).deletingLastPathComponent.count > 0 {
+                        Text((file.path as NSString).deletingLastPathComponent)
+                            .font(fontScale.font(.sm))
                             .foregroundColor(Color(nsColor: theme.chromeMuted))
+                            .lineLimit(1)
+                            .truncationMode(.head)
+                    }
+                    Spacer()
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            // Right action buttons — peer siblings, not children of the left button.
+            // Both hidden at rest (opacity 0), revealed on row hover.
+            HStack(spacing: 8) {
+                if section != .untracked {
+                    Button {
+                        onTerminalAction?(cmd)
+                    } label: {
+                        Image(systemName: "doc.text.magnifyingglass")
+                            .font(fontScale.font(.sm))
+                            .foregroundColor(Color(nsColor: theme.chromeMuted))
+                            .frame(minWidth: 20, minHeight: 20)
                     }
                     .buttonStyle(.plain)
-                    .opacity(isHovered ? 1.0 : 0.3)
+                    .opacity(isHovered ? 0.7 : 0)
+                    .help("Show diff")
+                }
+                switch section {
+                case .staged:
+                    Button {
+                        onGitAction?(["restore", "--staged", file.path])
+                    } label: {
+                        Image(systemName: "minus.circle")
+                            .font(fontScale.font(.base))
+                            .foregroundColor(Color(nsColor: theme.chromeMuted))
+                            .frame(minWidth: 20, minHeight: 20)
+                    }
+                    .buttonStyle(.plain)
+                    .opacity(isHovered ? 1.0 : 0)
                     .help("Unstage")
                     .accessibilityLabel("Unstage \(file.path)")
                 case .unstaged, .untracked:
-                    Button(action: {
+                    Button {
                         onGitAction?(["add", file.path])
-                    }) {
-                        Image(systemName: "plus")
-                            .font(.system(size: 9, weight: .bold))
+                    } label: {
+                        Image(systemName: "plus.circle")
+                            .font(fontScale.font(.base))
                             .foregroundColor(Color(nsColor: theme.chromeMuted))
+                            .frame(minWidth: 20, minHeight: 20)
                     }
                     .buttonStyle(.plain)
-                    .opacity(isHovered ? 1.0 : 0.3)
+                    .opacity(isHovered ? 1.0 : 0)
                     .help("Stage")
                     .accessibilityLabel("Stage \(file.path)")
                 }
             }
-            .frame(height: itemHeight)
-            .padding(.horizontal, density == .comfortable ? 12 : 8)
-            .padding(.leading, 10)  // indent under section header
-            .contentShape(Rectangle())
+            .padding(.trailing, 4)
         }
-        .buttonStyle(.plain)
+        .frame(height: itemHeight)
+        .padding(.horizontal, density == .comfortable ? 4 : 2)
+        .padding(.leading, density == .comfortable ? 16 : 12)
+        .background(
+            RoundedRectangle(cornerRadius: 4, style: .continuous)
+                .fill(Color(nsColor: isHovered ? theme.sidebarRowHover : .clear))
+        )
+        .padding(.horizontal, density == .comfortable ? 8 : 6)
         .onHover { hovering in
             hoveredFileID = hovering ? file.id : nil
         }
         .contextMenu {
-            fileContextMenu(file: file, section: section, escapedPath: escapedPath)
+            fileContextMenu(file: file, section: section)
         }
         .accessibilityLabel(
             "\(file.status == "M" ? "Modified" : file.status == "A" ? "Added" : file.status == "D" ? "Deleted" : "Changed"): \(file.path)"
@@ -407,8 +450,7 @@ struct GitDetailView: View {
     @ViewBuilder
     private func fileContextMenu(
         file: GitPlugin.GitChangedFile,
-        section: FileSection,
-        escapedPath: String
+        section: FileSection
     ) -> some View {
         switch section {
         case .unstaged, .untracked:
@@ -423,13 +465,9 @@ struct GitDetailView: View {
 
         Divider()
 
-        if section == .staged {
-            Button("Diff (staged)") {
-                onTerminalAction?("git diff --cached \(escapedPath)")
-            }
-        } else if section == .unstaged {
-            Button("Diff") {
-                onTerminalAction?("git diff \(escapedPath)")
+        if section == .staged || section == .unstaged {
+            Button(section == .staged ? "Diff (staged)" : "Diff") {
+                onTerminalAction?(diffCommand(for: file, section: section))
             }
         }
 

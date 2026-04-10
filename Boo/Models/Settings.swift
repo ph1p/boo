@@ -418,7 +418,7 @@ final class AppSettings {
     var sidebarTabBarPosition: SidebarTabBarPosition {
         get {
             SidebarTabBarPosition(rawValue: UserDefaults.standard.string(forKey: K.sidebarTabBarPosition) ?? "")
-                ?? .top
+                ?? .bottom
         }
         set { set(newValue.rawValue, forKey: K.sidebarTabBarPosition, topic: .layout) }
     }
