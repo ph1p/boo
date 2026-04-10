@@ -60,6 +60,52 @@ External processes can publish their own status bar segments. Segments are autom
 
 Tint colors accept named values such as `red`, `green`, `yellow`, `blue`, `orange`, `purple`, `accent`, or a `#hex` color.
 
+## Control Commands
+
+### `send_text`
+
+Write text directly to the active terminal's PTY — identical to typing it. Unlike paste, this goes straight to the terminal without clipboard involvement.
+
+| Field  | Required | Description                                               |
+| ------ | -------- | --------------------------------------------------------- |
+| `text` | Yes      | Text to send. Include `\n` or `\r` to submit a command.  |
+
+```bash
+# Run a command in the active terminal
+echo '{"cmd":"send_text","text":"echo hello\n"}' | nc -U "$BOO_SOCK"
+
+# Change directory
+echo '{"cmd":"send_text","text":"cd ~/projects/myapp\n"}' | nc -U "$BOO_SOCK"
+```
+
+### Reacting to directory changes
+
+Subscribe to `cwd_changed`, then respond with `send_text` to send a command whenever the user `cd`s into a folder. Keep the connection open for push events:
+
+```python
+#!/usr/bin/env python3
+import socket, json, os
+
+sock_path = os.path.expanduser("~/.boo/boo.sock")
+
+with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
+    s.connect(sock_path)
+    f = s.makefile("rb")
+
+    # Subscribe to directory changes
+    s.sendall(b'{"cmd":"subscribe","events":["cwd_changed"]}\n')
+    f.readline()  # consume ack
+
+    for line in f:
+        msg = json.loads(line)
+        if msg.get("event") == "cwd_changed":
+            path = msg["data"]["path"]
+            # Send a command to the terminal whenever cwd changes
+            cmd = json.dumps({"cmd": "send_text", "text": f"ls {path}\n"})
+            s.sendall((cmd + "\n").encode())
+            f.readline()  # consume ack
+```
+
 ## Reliability and Safety
 
 - Socket I/O runs on a dedicated serial queue.

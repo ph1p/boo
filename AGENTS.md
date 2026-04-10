@@ -63,15 +63,15 @@ documentation/        Vocs documentation site
 
 [Conventional Commits](https://www.conventionalcommits.org/) — semantic-release uses these for version bumps.
 
-| Prefix | Version bump | Use |
-|--------|-------------|-----|
-| `feat:` | Minor | New feature |
-| `fix:` | Patch | Bug fix |
-| `perf:` | Patch | Performance improvement |
-| `chore:` | None | Cleanup, deps, config |
-| `docs:` | None | Documentation only |
-| `ci:` | None | CI changes |
-| `refactor:` | None | Code restructuring |
-| `test:` | None | Test changes |
+| Prefix      | Version bump | Use                     |
+| ----------- | ------------ | ----------------------- |
+| `feat:`     | Minor        | New feature             |
+| `fix:`      | Patch        | Bug fix                 |
+| `perf:`     | Patch        | Performance improvement |
+| `chore:`    | None         | Cleanup, deps, config   |
+| `docs:`     | None         | Documentation only      |
+| `ci:`       | None         | CI changes              |
+| `refactor:` | None         | Code restructuring      |
+| `test:`     | None         | Test changes            |
 
 Breaking changes: `feat!:` or `BREAKING CHANGE:` in body → major bump.
