@@ -61,7 +61,7 @@ struct FolderInfoView: View {
                         .foregroundStyle(.secondary)
                 }
                 .padding(.horizontal, 12)
-                .padding(.vertical, 8)
+                .padding(.vertical, 0)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -87,7 +87,7 @@ struct FolderInfoView: View {
                 value: stats.formattedSize)
         }
         .padding(.horizontal, 12)
-        .padding(.vertical, 8)
+        .padding(.vertical, 0)
     }
 
     @ViewBuilder
