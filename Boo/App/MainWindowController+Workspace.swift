@@ -233,6 +233,7 @@ extension MainWindowController {
             activePluginTabID = nil
             savedSidebarHeights = [:]
             savedSidebarScrollOffsets = [:]
+            savedSidebarSectionOrder = [:]
         }
 
         let cwd = workspace.pane(for: workspace.activePaneID)?.activeTab?.workingDirectory ?? workspace.folderPath

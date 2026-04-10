@@ -17,6 +17,7 @@ final class WindowStateCoordinator {
     var userCollapsedSectionIDs: Set<String> = []
     var sidebarSectionHeights: [String: CGFloat] = [:]
     var sidebarScrollOffsets: [String: CGPoint] = [:]
+    var sidebarSectionOrder: [String: [String]] = [:]
     /// The plugin tab the user last selected for this terminal tab.
     var selectedPluginTabID: String? = nil
 
@@ -37,6 +38,7 @@ final class WindowStateCoordinator {
             userCollapsed: userCollapsedSectionIDs,
             sidebarSectionHeights: sidebarSectionHeights,
             sidebarScrollOffsets: sidebarScrollOffsets,
+            sidebarSectionOrder: sidebarSectionOrder,
             selectedPluginTabID: selectedPluginTabID
         )
     }
@@ -49,6 +51,7 @@ final class WindowStateCoordinator {
         userCollapsedSectionIDs = tab.state.userCollapsedSectionIDs
         sidebarSectionHeights = tab.state.sidebarSectionHeights
         sidebarScrollOffsets = tab.state.sidebarScrollOffsets
+        sidebarSectionOrder = tab.state.sidebarSectionOrder
         selectedPluginTabID = tab.state.selectedPluginTabID
     }
 

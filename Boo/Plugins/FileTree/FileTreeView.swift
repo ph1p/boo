@@ -580,7 +580,7 @@ struct ParentDirectoryButton: View {
         }
         .padding(.leading, 12)
         .padding(.vertical, 3)
-        .padding(.top, 4)
+        .padding(.top, 0)
         .background(
             RoundedRectangle(cornerRadius: 4)
                 .fill(isHovered ? hoverColor : .clear)

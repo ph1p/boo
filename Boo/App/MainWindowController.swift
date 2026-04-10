@@ -130,6 +130,11 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
         get { coordinator?.sidebarScrollOffsets ?? [:] }
         set { coordinator?.sidebarScrollOffsets = newValue }
     }
+    /// Persisted sidebar section order per plugin — tracked per terminal/tab.
+    var savedSidebarSectionOrder: [String: [String]] {
+        get { coordinator?.sidebarSectionOrder ?? [:] }
+        set { coordinator?.sidebarSectionOrder = newValue }
+    }
     /// Cached detail views per plugin, reused when context hasn't changed.
     var cachedDetailViews: [String: (context: TerminalContext, view: AnyView)] = [:]
     /// Generation counter per plugin — incremented only when the view is recreated.

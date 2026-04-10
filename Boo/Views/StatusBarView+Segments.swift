@@ -127,7 +127,8 @@ final class GitBranchSegment: StatusBarPlugin {
             .foregroundColor: theme.accentColor
         ]
         let maxBranchChars = 20
-        let displayBranch = branch.count > maxBranchChars
+        let displayBranch =
+            branch.count > maxBranchChars
             ? String(branch.prefix(maxBranchChars)) + "\u{2026}"
             : branch
         let str = displayBranch as NSString

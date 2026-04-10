@@ -328,26 +328,16 @@ extension MainWindowController {
         let filteredSections = visibleSections.isEmpty ? allSections : visibleSections
         // Apply saved section order
         let sectionOrder = savedSidebarSectionOrder[id] ?? []
-        let sections: [SidebarSection]
-        if sectionOrder.isEmpty {
-            sections = filteredSections
-        } else {
-            sections = filteredSections.sorted { a, b in
-                let ia = sectionOrder.firstIndex(of: a.id) ?? Int.max
-                let ib = sectionOrder.firstIndex(of: b.id) ?? Int.max
-                return ia < ib
-            }
+        let sections = filteredSections.sorted { a, b in
+            let ia = sectionOrder.firstIndex(of: a.id) ?? Int.max
+            let ib = sectionOrder.firstIndex(of: b.id) ?? Int.max
+            return ia < ib
         }
         guard !sections.isEmpty else { return }
 
         // Cache so future calls with same context skip rebuild
-        if let firstSection = sections.first,
-            let cached = cachedDetailViews[id], cached.context == context
-        {
-            _ = firstSection  // context already cached
-        } else {
+        if cachedDetailViews[id]?.context != context {
             viewGenerationCounter += 1
-            // Store a sentinel — the actual view is inside sections
             cachedDetailViews[id] = (context: context, view: sections[0].content)
         }
 
@@ -421,9 +411,6 @@ extension MainWindowController {
             container.bottomAnchor.constraint(equalTo: sidebarContentBottomAnchor, constant: -edgePad)
         ])
 
-
-
-
         pluginPanelViews[pluginID] = container
     }
 
@@ -452,7 +439,12 @@ extension MainWindowController {
         panel.translatesAutoresizingMaskIntoConstraints = false
         panel.onToggleExpand = toggleHandler
         panel.onReorderSections = { [weak self] newOrder in
-            self?.savedSidebarSectionOrder[pluginID] = newOrder
+            guard let self else { return }
+            self.savedSidebarSectionOrder[pluginID] = newOrder
+            self.cachedDetailViews.removeValue(forKey: pluginID)
+            if let ctx = self.pluginRegistry.lastContext {
+                self.showPluginTabContent(id: pluginID, context: ctx)
+            }
         }
         panel.onHideSection = { [weak self] sectionID in
             guard let self else { return }

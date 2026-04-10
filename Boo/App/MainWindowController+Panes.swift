@@ -271,6 +271,7 @@ extension MainWindowController {
                         from: oldTab.id,
                         to: newTab.id
                     ),
+                    sidebarSectionOrder: oldTab.state.sidebarSectionOrder,
                     selectedPluginTabID: oldTab.state.selectedPluginTabID)
             } else {
                 newPane.updatePluginState(
@@ -282,6 +283,7 @@ extension MainWindowController {
                         from: bridge.state.tabID,
                         to: newTab.id
                     ),
+                    sidebarSectionOrder: savedSidebarSectionOrder,
                     selectedPluginTabID: activePluginTabID)
             }
         }

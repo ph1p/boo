@@ -54,16 +54,23 @@ final class DockerServiceTests: XCTestCase {
             image: "nginx:latest",
             status: "Up 2 hours",
             state: .running,
-            ports: "80/tcp"
+            ports: "80/tcp",
+            createdAt: nil
         )
         let cmd = DockerService.shared.execCommand(for: container)
         XCTAssertEqual(cmd, "docker exec -it myapp sh\r")
     }
 
     func testContainerEquatable() {
-        let a = DockerService.Container(id: "abc", name: "x", image: "y", status: "Up", state: .running, ports: "")
-        let b = DockerService.Container(id: "abc", name: "x", image: "y", status: "Up", state: .running, ports: "")
-        let c = DockerService.Container(id: "def", name: "x", image: "y", status: "Up", state: .running, ports: "")
+        let a = DockerService.Container(
+            id: "abc", name: "x", image: "y", status: "Up",
+            state: .running, ports: "", createdAt: nil)
+        let b = DockerService.Container(
+            id: "abc", name: "x", image: "y", status: "Up",
+            state: .running, ports: "", createdAt: nil)
+        let c = DockerService.Container(
+            id: "def", name: "x", image: "y", status: "Up",
+            state: .running, ports: "", createdAt: nil)
         XCTAssertEqual(a, b)
         XCTAssertNotEqual(a, c)
     }
