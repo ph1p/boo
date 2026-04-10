@@ -5,6 +5,7 @@ import SwiftUI
 struct FolderStats {
     let visibleCount: Int
     let hiddenCount: Int
+    let subdirCount: Int
     let totalSizeBytes: Int64
 
     var formattedSize: String {
@@ -22,23 +23,26 @@ struct FolderStats {
         guard
             let items = try? fm.contentsOfDirectory(
                 at: url, includingPropertiesForKeys: keys, options: [])
-        else { return FolderStats(visibleCount: 0, hiddenCount: 0, totalSizeBytes: 0) }
+        else { return FolderStats(visibleCount: 0, hiddenCount: 0, subdirCount: 0, totalSizeBytes: 0) }
 
         var visible = 0
         var hidden = 0
+        var subdirs = 0
         var totalSize: Int64 = 0
 
         for item in items {
             let res = try? item.resourceValues(forKeys: Set(keys))
             let isHidden = res?.isHidden ?? item.lastPathComponent.hasPrefix(".")
+            let isDir = res?.isDirectory ?? false
             if isHidden {
                 hidden += 1
             } else {
                 visible += 1
+                if isDir { subdirs += 1 }
             }
             totalSize += Int64(res?.fileSize ?? 0)
         }
-        return FolderStats(visibleCount: visible, hiddenCount: hidden, totalSizeBytes: totalSize)
+        return FolderStats(visibleCount: visible, hiddenCount: hidden, subdirCount: subdirs, totalSizeBytes: totalSize)
     }
 }
 
@@ -47,34 +51,54 @@ struct FolderStats {
 struct FolderInfoView: View {
     let path: String
     let fontScale: SidebarFontScale
-    @State private var stats: FolderStats?
+    let theme: ThemeSnapshot
 
+    @State private var stats: FolderStats?
     var body: some View {
-        Group {
+        VStack(alignment: .leading, spacing: 0) {
             if let stats {
                 infoGrid(stats: stats)
             } else {
-                HStack {
-                    ProgressView().scaleEffect(0.5)
-                    Text("Loading…")
-                        .font(fontScale.font(.sm))
-                        .foregroundStyle(.secondary)
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 0)
+                loadingRow
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .task(id: path) { await loadStats() }
+        .task(id: path) {
+            stats = nil
+            await loadStats()
+        }
     }
+
+    // MARK: - Loading
+
+    private var loadingRow: some View {
+        HStack(spacing: 5) {
+            ProgressView()
+                .scaleEffect(0.5)
+                .frame(width: 14, height: 14)
+            Text("Loading…")
+                .font(fontScale.font(.base))
+                .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+    }
+
+    // MARK: - Info Grid
 
     @ViewBuilder
     private func infoGrid(stats: FolderStats) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 3) {
             row(
                 icon: "doc.fill",
-                label: "Items",
-                value: "\(stats.visibleCount)")
+                label: "Files",
+                value: "\(stats.visibleCount - stats.subdirCount)")
+            if stats.subdirCount > 0 {
+                row(
+                    icon: "folder.fill",
+                    label: "Folders",
+                    value: "\(stats.subdirCount)")
+            }
             if stats.hiddenCount > 0 {
                 row(
                     icon: "eye.slash",
@@ -87,25 +111,30 @@ struct FolderInfoView: View {
                 value: stats.formattedSize)
         }
         .padding(.horizontal, 12)
-        .padding(.vertical, 0)
+        .padding(.top, 4)
+        .padding(.bottom, 6)
     }
+
+    // MARK: - Subviews
 
     @ViewBuilder
     private func row(icon: String, label: String, value: String) -> some View {
         HStack(spacing: 6) {
             Image(systemName: icon)
-                .font(fontScale.font(.xs))
-                .foregroundStyle(.secondary)
+                .font(fontScale.font(.sm))
+                .foregroundColor(Color(theme.chromeMuted))
                 .frame(width: 14)
             Text(label)
-                .font(fontScale.font(.sm))
+                .font(fontScale.font(.base))
                 .foregroundStyle(.secondary)
             Spacer()
             Text(value)
-                .font(fontScale.font(.sm, design: .monospaced))
+                .font(fontScale.font(.base, design: .monospaced))
                 .foregroundStyle(.primary)
         }
     }
+
+    // MARK: - Data
 
     private func loadStats() async {
         let p = path
