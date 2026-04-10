@@ -40,7 +40,10 @@ extension MainWindowController: PaneViewDelegate {
             }
             // Sync the restored selected plugin tab back to the controller so
             // rebuildSidebarTabs uses the right tab instead of keeping the stale one.
-            activePluginTabID = coordinator.selectedPluginTabID
+            // Skip when sidebar global state is on — the sidebar is independent of tabs.
+            if !AppSettings.shared.sidebarGlobalState {
+                activePluginTabID = coordinator.selectedPluginTabID
+            }
         } else {
             bridge.handleFocus(paneID: paneID, workingDirectory: cwd)
         }

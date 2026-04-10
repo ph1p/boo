@@ -567,7 +567,9 @@ extension MainWindowController {
     }
 
     /// Persist current global plugin state to the active tab's TabState.
+    /// No-op when sidebar global state is enabled (sidebar is independent of tabs).
     func savePluginStateForActiveTab() {
+        guard !AppSettings.shared.sidebarGlobalState else { return }
         guard let ws = activeWorkspace,
             let pane = ws.pane(for: ws.activePaneID)
         else { return }

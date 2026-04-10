@@ -1116,6 +1116,7 @@ struct LayoutSettingsView: View {
     @State private var sidebarPosition = AppSettings.shared.sidebarPosition
     @State private var sidebarDefaultHidden = AppSettings.shared.sidebarDefaultHidden
     @State private var sidebarTabBarPosition = AppSettings.shared.sidebarTabBarPosition
+    @State private var sidebarGlobalState = AppSettings.shared.sidebarGlobalState
     @State private var workspaceBarPosition = AppSettings.shared.workspaceBarPosition
     @State private var tabOverflowMode = AppSettings.shared.tabOverflowMode
     @ObservedObject private var observer = SettingsObserver(topics: [.theme, .layout])
@@ -1140,6 +1141,11 @@ struct LayoutSettingsView: View {
 
                 ToggleRow(label: "Hide sidebar by default", isOn: $sidebarDefaultHidden)
                     .onChange(of: sidebarDefaultHidden) { v in AppSettings.shared.sidebarDefaultHidden = v }
+                ToggleRow(label: "Independent sidebar state", isOn: $sidebarGlobalState)
+                    .onChange(of: sidebarGlobalState) { v in AppSettings.shared.sidebarGlobalState = v }
+                Text("When on, the sidebar keeps its own state across all terminals — switching tabs or panes does not change the active plugin, expanded sections, or scroll position.")
+                    .font(.system(size: 11))
+                    .foregroundColor(t.muted)
                 Text("Toggle the sidebar with \u{2318}B.")
                     .font(.system(size: 11))
                     .foregroundColor(t.muted)

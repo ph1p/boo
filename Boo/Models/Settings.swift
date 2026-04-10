@@ -171,6 +171,7 @@ final class AppSettings {
         static let newTabCwdMode = "newTabCwdMode"
         static let activeSidebarTab = "activeSidebarTab"
         static let sidebarTabBarPosition = "sidebarTabBarPosition"
+        static let sidebarGlobalState = "sidebarGlobalState"
     }
 
     /// Bool from UserDefaults with a custom default (since .bool returns false for unset keys).
@@ -422,6 +423,13 @@ final class AppSettings {
         set { set(newValue.rawValue, forKey: K.sidebarTabBarPosition, topic: .layout) }
     }
 
+    /// When true, the sidebar keeps its own state independently of terminal tabs —
+    /// switching tabs does not change the active plugin, expanded sections, or scroll position.
+    var sidebarGlobalState: Bool {
+        get { bool(K.sidebarGlobalState, default: false) }
+        set { set(newValue, forKey: K.sidebarGlobalState, topic: .layout) }
+    }
+
     // MARK: - Plugins
 
     var disabledPluginIDs: [String] {
@@ -606,7 +614,8 @@ final class AppSettings {
             K.sidebarFontSize: Double(sidebarFontSize),
             K.sidebarFontName: sidebarFontName,
             K.fileEditorCommand: fileEditorCommand,
-            K.sidebarTabBarPosition: sidebarTabBarPosition.rawValue
+            K.sidebarTabBarPosition: sidebarTabBarPosition.rawValue,
+            K.sidebarGlobalState: sidebarGlobalState
         ]
         dict[K.autoCheckUpdates] = autoCheckUpdates
         if let skipVersion {
