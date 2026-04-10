@@ -28,7 +28,9 @@ final class WindowStateCoordinator {
     // MARK: - Tab State Management
 
     /// Save the current plugin UI state to the given tab.
+    /// No-op when sidebar global state is enabled (sidebar is independent of tabs).
     func savePluginState(to pane: Pane, tabIndex: Int) {
+        guard !AppSettings.shared.sidebarGlobalState else { return }
         pane.updatePluginState(
             at: tabIndex,
             expanded: expandedPluginIDs,
@@ -40,7 +42,9 @@ final class WindowStateCoordinator {
     }
 
     /// Restore plugin UI state from a tab.
+    /// No-op when sidebar global state is enabled (sidebar is independent of tabs).
     func restorePluginState(from tab: Pane.Tab) {
+        guard !AppSettings.shared.sidebarGlobalState else { return }
         expandedPluginIDs = tab.state.expandedPluginIDs
         userCollapsedSectionIDs = tab.state.userCollapsedSectionIDs
         sidebarSectionHeights = tab.state.sidebarSectionHeights

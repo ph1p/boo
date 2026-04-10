@@ -225,7 +225,9 @@ extension MainWindowController {
         if let activeTab = workspace.pane(for: workspace.activePaneID)?.activeTab {
             coordinator.restorePluginState(from: activeTab)
             previousFocusedTabID = activeTab.id
-            activePluginTabID = coordinator.selectedPluginTabID
+            if !AppSettings.shared.sidebarGlobalState {
+                activePluginTabID = coordinator.selectedPluginTabID
+            }
         } else {
             previousFocusedTabID = nil
             activePluginTabID = nil
