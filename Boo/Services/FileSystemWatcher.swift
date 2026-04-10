@@ -6,9 +6,12 @@ final class FileSystemWatcher {
     private var stream: FSEventStreamRef?
     private let path: String
     private let onChange: () -> Void
+    /// When set, only fire onChange if at least one changed path passes the filter.
+    private let filter: ((String) -> Bool)?
 
-    init(path: String, onChange: @escaping () -> Void) {
+    init(path: String, filter: ((String) -> Bool)? = nil, onChange: @escaping () -> Void) {
         self.path = path
+        self.filter = filter
         self.onChange = onChange
     }
 
@@ -22,8 +25,21 @@ final class FileSystemWatcher {
         let callback: FSEventStreamCallback = { _, info, numEvents, eventPaths, _, _ in
             guard let info = info else { return }
             let watcher = Unmanaged<FileSystemWatcher>.fromOpaque(info).takeUnretainedValue()
-            DispatchQueue.main.async {
-                watcher.onChange()
+            guard let filter = watcher.filter else {
+                DispatchQueue.main.async { watcher.onChange() }
+                return
+            }
+            // Extract changed paths and apply filter before dispatching.
+            let paths = unsafeBitCast(eventPaths, to: NSArray.self)
+            var matched = false
+            for i in 0..<numEvents {
+                if let p = paths[i] as? String, filter(p) {
+                    matched = true
+                    break
+                }
+            }
+            if matched {
+                DispatchQueue.main.async { watcher.onChange() }
             }
         }
 

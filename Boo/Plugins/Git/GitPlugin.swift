@@ -12,7 +12,7 @@ final class GitPlugin: BooPluginProtocol {
         description: "Git branch, status, and changed files",
         when: "git.active && !remote && !process.ai",
         runtime: nil,
-        capabilities: PluginManifest.Capabilities(sidebarPanel: true, statusBarSegment: true),
+        capabilities: PluginManifest.Capabilities(statusBarSegment: true, sidebarTab: true),
         statusBar: PluginManifest.StatusBarManifest(position: "left", priority: 15, template: nil),
         settings: [
             PluginManifest.SettingManifest(
@@ -31,7 +31,6 @@ final class GitPlugin: BooPluginProtocol {
     /// Current changed file count for status bar.
     var changedFileCount: Int { cachedFiles.count }
     var lastRefreshedPath: String?
-    var repoWatcher: FileSystemWatcher?
     var gitDirWatcher: FileSystemWatcher?
     /// Watches CWD when no repo is active, to detect `git init`.
     var cwdWatcher: FileSystemWatcher?
@@ -42,6 +41,13 @@ final class GitPlugin: BooPluginProtocol {
     var services: PluginServices?
     var hostActions: PluginHostActions?
     var onRequestCycleRerun: (() -> Void)?
+    /// Called when the detected branch or repo root changes (e.g. after git switch).
+    /// Lets the host update its branch cache without waiting for a CWD change event.
+    var onBranchChanged: ((_ branch: String?, _ repoRoot: String?) -> Void)?
+
+    /// Cached branch name, kept in sync with .git/HEAD by refreshGitStatus.
+    var cachedBranch: String?
+    var cachedRepoRoot: String?
 
     /// Cached extended git info.
     var cachedAheadCount: Int = 0
@@ -170,10 +176,14 @@ final class GitPlugin: BooPluginProtocol {
     // MARK: - Lifecycle
 
     func cwdChanged(newPath: String, context: TerminalContext) {
+        NSLog("[Git] cwdChanged: newPath=\(newPath) repoRoot=\(context.gitContext?.repoRoot ?? "nil")")
         refreshGitStatus(cwd: newPath, repoRoot: context.gitContext?.repoRoot)
     }
 
     func terminalFocusChanged(terminalID: UUID, context: TerminalContext) {
+        NSLog(
+            "[Git] terminalFocusChanged: cwd=\(context.cwd) repoRoot=\(context.gitContext?.repoRoot ?? "nil") branch=\(context.gitContext?.branch ?? "nil")"
+        )
         refreshGitStatus(cwd: context.cwd, repoRoot: context.gitContext?.repoRoot)
     }
 }

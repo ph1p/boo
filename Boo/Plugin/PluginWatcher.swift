@@ -115,6 +115,14 @@ final class PluginWatcher {
                 let data = try Data(contentsOf: URL(fileURLWithPath: manifestPath))
                 var manifest = try PluginManifest.parse(from: data)
                 manifest.isExternal = true
+                manifest.folderName = entry
+                // External plugins always get a sidebar tab — no need to declare it in plugin.json
+                if manifest.capabilities == nil {
+                    manifest.capabilities = PluginManifest.Capabilities(
+                        statusBarSegment: nil, sidebarTab: true)
+                } else {
+                    manifest.capabilities?.sidebarTab = true
+                }
 
                 if loadedPlugins[entry] == nil {
                     // New plugin

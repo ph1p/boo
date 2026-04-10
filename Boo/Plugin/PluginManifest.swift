@@ -10,20 +10,22 @@ struct PluginManifest: Codable {
     let description: String?
     let when: String?
     let runtime: PluginRuntime?
-    let capabilities: Capabilities?
+    var capabilities: Capabilities?
     let statusBar: StatusBarManifest?
     let settings: [SettingManifest]?
 
     /// True for plugins loaded from ~/.boo/plugins/ (not decoded from JSON).
     var isExternal: Bool = false
+    /// The folder name inside ~/.boo/plugins/ for external plugins (e.g. "my-plugin").
+    var folderName: String? = nil
 
     enum CodingKeys: String, CodingKey {
         case id, name, version, icon, description, when, runtime, capabilities, statusBar, settings
     }
 
     struct Capabilities: Codable, Equatable {
-        let sidebarPanel: Bool?
         let statusBarSegment: Bool?
+        var sidebarTab: Bool? = nil
     }
 
     enum PluginRuntime: String, Codable, Equatable {
