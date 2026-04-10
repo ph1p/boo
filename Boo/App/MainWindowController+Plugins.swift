@@ -567,13 +567,14 @@ extension MainWindowController {
     }
 
     /// Persist current global plugin state to the active tab's TabState.
-    /// No-op when sidebar global state is enabled (sidebar is independent of tabs).
+    /// When sidebar global state is enabled, still syncs in-memory coordinator state
+    /// from the live panel (so heights stay current) but skips writing to TabState.
     func savePluginStateForActiveTab() {
+        syncSidebarPanelStateFromView()
         guard !AppSettings.shared.sidebarGlobalState else { return }
         guard let ws = activeWorkspace,
             let pane = ws.pane(for: ws.activePaneID)
         else { return }
-        syncSidebarPanelStateFromView()
         pane.updatePluginState(
             at: pane.activeTabIndex,
             expanded: expandedPluginIDs,
