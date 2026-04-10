@@ -1,74 +1,6 @@
 import Cocoa
 import SwiftUI
 
-// MARK: - Section Options Button
-
-/// Small "···" overlay button shown in the top-right corner of a single-section plugin view
-/// when the plugin has hidden sections. Clicking it shows a menu to restore all hidden sections.
-final class SectionOptionsButton: NSView {
-    var pluginID: String = ""
-    var onUnhideAll: (() -> Void)?
-
-    private var isHovered = false
-
-    override init(frame: NSRect) {
-        super.init(frame: frame)
-        wantsLayer = true
-        let area = NSTrackingArea(
-            rect: bounds, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect],
-            owner: self, userInfo: nil)
-        addTrackingArea(area)
-    }
-
-    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
-
-    override func mouseEntered(with event: NSEvent) {
-        isHovered = true
-        needsDisplay = true
-    }
-
-    override func mouseExited(with event: NSEvent) {
-        isHovered = false
-        needsDisplay = true
-    }
-    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
-
-    override func mouseDown(with event: NSEvent) {
-        let menu = NSMenu()
-        let item = NSMenuItem(
-            title: "Show all sections",
-            action: #selector(unhideAll),
-            keyEquivalent: "")
-        item.target = self
-        menu.addItem(item)
-        NSMenu.popUpContextMenu(menu, with: event, for: self)
-    }
-
-    @objc private func unhideAll() { onUnhideAll?() }
-
-    override func draw(_ dirtyRect: NSRect) {
-        guard let ctx = NSGraphicsContext.current?.cgContext else { return }
-        let theme = AppSettings.shared.theme
-        if isHovered {
-            ctx.setFillColor(theme.chromeMuted.withAlphaComponent(0.12).cgColor)
-            ctx.addPath(CGPath(roundedRect: bounds, cornerWidth: 4, cornerHeight: 4, transform: nil))
-            ctx.fillPath()
-        }
-        if let img = NSImage(systemSymbolName: "ellipsis", accessibilityDescription: "Section options") {
-            let config = NSImage.SymbolConfiguration(pointSize: 9, weight: .medium)
-                .applying(.init(paletteColors: [theme.chromeMuted.withAlphaComponent(0.7)]))
-            if let tinted = img.withSymbolConfiguration(config) {
-                let sz = tinted.size
-                tinted.draw(
-                    in: NSRect(
-                        x: (bounds.width - sz.width) / 2,
-                        y: (bounds.height - sz.height) / 2,
-                        width: sz.width, height: sz.height))
-            }
-        }
-    }
-}
-
 // MARK: - Plugin Scroll View
 
 /// NSScrollView that pins document content to the top (flipped clip view).
@@ -393,7 +325,19 @@ extension MainWindowController {
             !AppSettings.shared.pluginBool(id, "hiddenSection_\(section.id)", default: false)
         }
         // Ensure at least one section always shows
-        let sections = visibleSections.isEmpty ? allSections : visibleSections
+        let filteredSections = visibleSections.isEmpty ? allSections : visibleSections
+        // Apply saved section order
+        let sectionOrder = savedSidebarSectionOrder[id] ?? []
+        let sections: [SidebarSection]
+        if sectionOrder.isEmpty {
+            sections = filteredSections
+        } else {
+            sections = filteredSections.sorted { a, b in
+                let ia = sectionOrder.firstIndex(of: a.id) ?? Int.max
+                let ib = sectionOrder.firstIndex(of: b.id) ?? Int.max
+                return ia < ib
+            }
+        }
         guard !sections.isEmpty else { return }
 
         // Cache so future calls with same context skip rebuild
@@ -417,7 +361,7 @@ extension MainWindowController {
         }
 
         if sections.count == 1 {
-            installSingleSection(sections[0], pluginID: id, totalSectionCount: allSections.count)
+            installSingleSection(sections[0], pluginID: id)
         } else {
             // Auto-expand the first section unless the user has explicitly collapsed it.
             if let firstID = sections.first?.id,
@@ -430,11 +374,9 @@ extension MainWindowController {
         }
     }
 
-    /// Install a single-section plugin view, with an outer scroll view when needed.
-    /// `totalSectionCount` is the number of sections in the plugin before hidden filtering —
-    /// when > 1 some sections are hidden and we show a "···" button to restore them.
+    /// Install a single-section plugin view with an outer scroll view.
     private func installSingleSection(
-        _ section: SidebarSection, pluginID: String, totalSectionCount: Int
+        _ section: SidebarSection, pluginID: String
     ) {
         let container: NSView
         // maxWidth: .infinity fills the hosting view width.
@@ -479,32 +421,8 @@ extension MainWindowController {
             container.bottomAnchor.constraint(equalTo: sidebarContentBottomAnchor, constant: -edgePad)
         ])
 
-        // When some sections are hidden (only one visible), show a small "···" button
-        // in the top-right corner to allow the user to restore hidden sections.
-        if totalSectionCount > 1 {
-            let btn = SectionOptionsButton()
-            btn.translatesAutoresizingMaskIntoConstraints = false
-            btn.pluginID = pluginID
-            btn.onUnhideAll = { [weak self] in
-                guard let self else { return }
-                // Clear all hidden section settings for this plugin
-                let pattern = "hiddenSection_"
-                var dict = AppSettings.shared.pluginSettingsDict(for: pluginID)
-                dict = dict.filter { !$0.key.hasPrefix(pattern) }
-                AppSettings.shared.setPluginSettingsDict(dict, for: pluginID)
-                self.cachedDetailViews.removeValue(forKey: pluginID)
-                if let ctx = self.pluginRegistry.lastContext {
-                    self.showPluginTabContent(id: pluginID, context: ctx)
-                }
-            }
-            container.addSubview(btn)
-            NSLayoutConstraint.activate([
-                btn.topAnchor.constraint(equalTo: container.topAnchor, constant: 4),
-                btn.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -4),
-                btn.widthAnchor.constraint(equalToConstant: 20),
-                btn.heightAnchor.constraint(equalToConstant: 20)
-            ])
-        }
+
+
 
         pluginPanelViews[pluginID] = container
     }
@@ -533,8 +451,8 @@ extension MainWindowController {
         let panel = SidebarPanelView(frame: .zero)
         panel.translatesAutoresizingMaskIntoConstraints = false
         panel.onToggleExpand = toggleHandler
-        panel.onReorderSections = { newOrder in
-            AppSettings.shared.sidebarTabOrder = newOrder
+        panel.onReorderSections = { [weak self] newOrder in
+            self?.savedSidebarSectionOrder[pluginID] = newOrder
         }
         panel.onHideSection = { [weak self] sectionID in
             guard let self else { return }
@@ -583,6 +501,7 @@ extension MainWindowController {
             userCollapsed: userCollapsedSectionIDs,
             sidebarSectionHeights: savedSidebarHeights,
             sidebarScrollOffsets: savedSidebarScrollOffsets,
+            sidebarSectionOrder: savedSidebarSectionOrder,
             selectedPluginTabID: activePluginTabID
         )
     }
