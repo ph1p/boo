@@ -43,8 +43,23 @@ class SidebarPanelView: NSView {
         var contentContainer: NSView?
     }
 
+    private struct SectionDragState {
+        let sourceIndex: Int
+        let ghostWindow: NSWindow
+        /// Index *before* which to insert the dragged section (nil = no valid target).
+        var dropTargetIndex: Int?
+        /// Pre-computed Y for the drop indicator line, in panel coordinates.
+        var indicatorY: CGFloat = 0
+    }
+
     private(set) var sectionStates: [SectionState] = []
     var onToggleExpand: ((String) -> Void)?
+    /// Called when the user reorders sections via drag-and-drop. Receives the new ordered IDs.
+    var onReorderSections: (([String]) -> Void)?
+    /// Called when the user hides a section via right-click. Receives the sectionID.
+    var onHideSection: ((String) -> Void)?
+
+    private var sectionDragState: SectionDragState?
 
     /// Last known generation per section ID — skip updateContentView when unchanged.
     private var sectionGenerations: [String: UInt64] = [:]
@@ -213,6 +228,11 @@ class SidebarPanelView: NSView {
                 sectionID: section.id, name: section.name,
                 icon: section.icon, isExpanded: isExpanded)
             header.onToggle = { [weak self] id in self?.onToggleExpand?(id) }
+            header.onBeginDrag = { [weak self] id, event in self?.beginSectionDrag(from: id, event: event) }
+            // Only allow hiding when there's more than one section (last section must stay)
+            if sections.count > 1 {
+                header.onHideSection = { [weak self] id in self?.onHideSection?(id) }
+            }
             addSubview(header)
 
             let idx = sectionStates.count
@@ -329,6 +349,7 @@ class SidebarPanelView: NSView {
     /// Remaining space is then distributed proportionally to growable sections
     /// so resize ratios remain stable, closer to VS Code's stacked views.
     private func distributeEqualExpanded() {
+        guard bounds.height > 0 else { return }
         let expandedIndices = sectionStates.indices.filter { sectionStates[$0].isExpanded }
         guard !expandedIndices.isEmpty else { return }
         let available = availableContentHeight()
@@ -495,6 +516,9 @@ class SidebarPanelView: NSView {
     /// Ensure expanded content heights fit available space.
     /// Shrinks when content overflows, and stretches growable sections to fill unused space.
     private func clampHeightsToFit() {
+        // Skip clamping before the view has real bounds — saved heights would be
+        // incorrectly scaled to zero. layout() fires again once bounds are valid.
+        guard bounds.height > 0 else { return }
         let available = availableContentHeight()
         let expandedIndices = sectionStates.indices.filter { sectionStates[$0].isExpanded }
         guard !expandedIndices.isEmpty else { return }
@@ -541,7 +565,132 @@ class SidebarPanelView: NSView {
         }
     }
 
-    // MARK: - Drawing (separators)
+    // MARK: - Section Drag-and-Drop Reordering
+
+    private func beginSectionDrag(from sectionID: String, event: NSEvent) {
+        guard let sourceIndex = sectionStates.firstIndex(where: { $0.id == sectionID }) else { return }
+        let sectionName = sectionStates[sourceIndex].name
+
+        let titleWidth = (sectionName.uppercased() as NSString).size(withAttributes: [
+            .font: NSFont.systemFont(ofSize: 10.5, weight: .semibold)
+        ]).width
+        let ghostWidth = min(titleWidth + 24, 160)
+        let ghostHeight: CGFloat = 22
+
+        let ghostView = NSView(frame: NSRect(x: 0, y: 0, width: ghostWidth, height: ghostHeight))
+        ghostView.wantsLayer = true
+        ghostView.layer?.backgroundColor = NSColor.windowBackgroundColor.withAlphaComponent(0.9).cgColor
+        ghostView.layer?.cornerRadius = 6
+        ghostView.layer?.borderColor = NSColor.separatorColor.cgColor
+        ghostView.layer?.borderWidth = 1
+
+        let label = NSTextField(labelWithString: sectionName.uppercased())
+        label.font = NSFont.systemFont(ofSize: 10.5, weight: .semibold)
+        label.textColor = AppSettings.shared.theme.chromeMuted
+        label.frame = NSRect(x: 6, y: 2, width: ghostWidth - 12, height: ghostHeight - 4)
+        ghostView.addSubview(label)
+
+        let screenPoint = NSEvent.mouseLocation
+        let win = NSWindow(
+            contentRect: NSRect(
+                x: screenPoint.x - ghostWidth / 2,
+                y: screenPoint.y - ghostHeight / 2,
+                width: ghostWidth, height: ghostHeight),
+            styleMask: .borderless,
+            backing: .buffered,
+            defer: false)
+        win.isOpaque = false
+        win.backgroundColor = .clear
+        win.level = .floating
+        win.ignoresMouseEvents = true
+        win.contentView = ghostView
+        win.orderFront(nil)
+
+        sectionDragState = SectionDragState(sourceIndex: sourceIndex, ghostWindow: win)
+
+        window?.trackEvents(matching: [.leftMouseDragged, .leftMouseUp], timeout: .infinity, mode: .eventTracking) {
+            [weak self] e, stop in
+            guard let self, let e else {
+                stop.pointee = true
+                return
+            }
+            if e.type == .leftMouseDragged {
+                self.updateSectionDrag(event: e)
+            } else {
+                self.finishSectionDrag()
+                stop.pointee = true
+            }
+        }
+    }
+
+    private func updateSectionDrag(event: NSEvent) {
+        guard var state = sectionDragState else { return }
+
+        let screenPoint = NSEvent.mouseLocation
+        let origin = NSPoint(
+            x: screenPoint.x - state.ghostWindow.frame.width / 2,
+            y: screenPoint.y - state.ghostWindow.frame.height / 2)
+        state.ghostWindow.setFrameOrigin(origin)
+
+        let localPoint = convert(event.locationInWindow, from: nil)
+        var dropIndex: Int? = nil
+        var y: CGFloat = 0
+        for (i, st) in sectionStates.enumerated() {
+            if i > 0 { y += SidebarLayout.separatorHeight }
+            let headerMid = y + SidebarLayout.headerHeight / 2
+            if localPoint.y < headerMid {
+                dropIndex = i
+                break
+            }
+            y += SidebarLayout.headerHeight
+            if st.isExpanded { y += st.contentHeight }
+        }
+        let finalY = y  // y is now past the last section — used as "append" position
+        if dropIndex == nil { dropIndex = sectionStates.count }
+
+        let src = state.sourceIndex
+        if let di = dropIndex, di == src || di == src + 1 {
+            dropIndex = nil
+        }
+
+        state.dropTargetIndex = dropIndex
+        // Compute indicator Y once here so draw() doesn't need to re-walk sectionStates
+        if let di = dropIndex {
+            state.indicatorY = di == sectionStates.count ? finalY : indicatorYOffset(before: di)
+        }
+        sectionDragState = state
+        needsDisplay = true
+    }
+
+    /// Returns the Y coordinate (in panel space) of the top of section at `index`.
+    private func indicatorYOffset(before index: Int) -> CGFloat {
+        var y: CGFloat = 0
+        for (i, st) in sectionStates.enumerated() {
+            if i == index { break }
+            if i > 0 { y += SidebarLayout.separatorHeight }
+            y += SidebarLayout.headerHeight
+            if st.isExpanded { y += st.contentHeight }
+        }
+        return y
+    }
+
+    private func finishSectionDrag() {
+        guard let state = sectionDragState else { return }
+        state.ghostWindow.orderOut(nil)
+
+        if let dropIndex = state.dropTargetIndex {
+            var ids = sectionStates.map(\.id)
+            let removedID = ids.remove(at: state.sourceIndex)
+            let insertAt = dropIndex > state.sourceIndex ? dropIndex - 1 : dropIndex
+            ids.insert(removedID, at: min(insertAt, ids.count))
+            onReorderSections?(ids)
+        }
+
+        sectionDragState = nil
+        needsDisplay = true
+    }
+
+    // MARK: - Drawing (separators + drop indicator)
 
     override func draw(_ dirtyRect: NSRect) {
         guard let ctx = NSGraphicsContext.current?.cgContext else { return }
@@ -561,6 +710,12 @@ class SidebarPanelView: NSView {
             if state.isExpanded {
                 y += state.contentHeight
             }
+        }
+
+        if let state = sectionDragState, state.dropTargetIndex != nil {
+            let barH: CGFloat = 2
+            ctx.setFillColor(theme.accentColor.cgColor)
+            ctx.fill(CGRect(x: 4, y: state.indicatorY - barH / 2, width: w - 8, height: barH))
         }
     }
 }
@@ -590,8 +745,9 @@ private class TopAlignedScrollView: NSScrollView {
 
 // MARK: - Drag Handle View
 
-/// Invisible view placed at the border between two expanded sections.
+/// View placed at the border between two expanded sections.
 /// Handles mouse drag to resize the sections above and below.
+/// Shows an accent-colored bar on hover/drag, like VS Code section resize handles.
 class SidebarDragHandleView: NSView {
     var aboveIndex: Int = 0
     var belowIndex: Int = 0
@@ -599,8 +755,38 @@ class SidebarDragHandleView: NSView {
 
     private var dragStartY: CGFloat = 0
     private var startHeights: (CGFloat, CGFloat) = (0, 0)
+    private var isActive = false  // true while hovered or dragging
 
     override var isFlipped: Bool { true }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        for area in trackingAreas { removeTrackingArea(area) }
+        addTrackingArea(
+            NSTrackingArea(
+                rect: bounds,
+                options: [.mouseEnteredAndExited, .activeInKeyWindow],
+                owner: self,
+                userInfo: nil))
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        isActive = true
+        needsDisplay = true
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        isActive = false
+        needsDisplay = true
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        guard isActive else { return }
+        let barH: CGFloat = 2
+        let r = CGRect(x: 0, y: (bounds.height - barH) / 2, width: bounds.width, height: barH)
+        AppSettings.shared.theme.accentColor.withAlphaComponent(0.85).setFill()
+        NSBezierPath(rect: r).fill()
+    }
 
     override func resetCursorRects() {
         addCursorRect(bounds, cursor: .resizeUpDown)
@@ -608,7 +794,6 @@ class SidebarDragHandleView: NSView {
 
     override func mouseDown(with event: NSEvent) {
         guard let panel = panelView else { return }
-        dragStartY = convert(event.locationInWindow, from: nil).y
         let globalPoint = panel.convert(event.locationInWindow, from: nil)
         dragStartY = globalPoint.y
         startHeights = (
@@ -638,6 +823,12 @@ class SidebarSectionHeaderView: NSView {
     private var icon: String
     private var isExpanded: Bool
     var onToggle: ((String) -> Void)?
+    /// Called when the user begins dragging this header to reorder sections.
+    var onBeginDrag: ((String, NSEvent) -> Void)?
+    /// Called when the user right-clicks and chooses "Hide Section".
+    /// The closure receives the sectionID. Will be nil when hiding is not allowed
+    /// (i.e. this is the last remaining visible section).
+    var onHideSection: ((String) -> Void)?
 
     override var isFlipped: Bool { true }
 
@@ -697,7 +888,50 @@ class SidebarSectionHeaderView: NSView {
     }
 
     override func mouseDown(with event: NSEvent) {
-        onToggle?(sectionID)
+        // Track mouse to distinguish click from drag
+        var didDrag = false
+        let startPoint = convert(event.locationInWindow, from: nil)
+
+        var nextEvent = event
+        while nextEvent.type != .leftMouseUp {
+            guard let e = window?.nextEvent(matching: [.leftMouseDragged, .leftMouseUp]) else { break }
+            nextEvent = e
+            if e.type == .leftMouseDragged {
+                let current = convert(e.locationInWindow, from: nil)
+                let dist = hypot(current.x - startPoint.x, current.y - startPoint.y)
+                if dist > 4 {
+                    didDrag = true
+                    onBeginDrag?(sectionID, event)
+                    break
+                }
+            }
+        }
+
+        if !didDrag {
+            onToggle?(sectionID)
+        }
+    }
+
+    override func rightMouseDown(with event: NSEvent) {
+        let menu = NSMenu()
+        if let onHide = onHideSection {
+            let item = NSMenuItem(
+                title: "Hide \"\(name)\"",
+                action: #selector(hideSectionFromMenu),
+                keyEquivalent: "")
+            item.target = self
+            menu.addItem(item)
+            _ = onHide  // captured via @objc method below
+        } else {
+            let item = NSMenuItem(title: "Cannot hide last section", action: nil, keyEquivalent: "")
+            item.isEnabled = false
+            menu.addItem(item)
+        }
+        NSMenu.popUpContextMenu(menu, with: event, for: self)
+    }
+
+    @objc private func hideSectionFromMenu() {
+        onHideSection?(sectionID)
     }
 }
 
