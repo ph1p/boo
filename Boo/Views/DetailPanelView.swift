@@ -7,6 +7,8 @@ enum SidebarLayout {
     static let headerHeight: CGFloat = 26
     static let separatorHeight: CGFloat = 1
     static let minSectionHeight: CGFloat = 50
+    /// Vertical padding applied inside each expanded section content area.
+    static let contentPadding: CGFloat = 4
 }
 
 // MARK: - Section Data
@@ -444,7 +446,8 @@ class SidebarPanelView: NSView {
             // Content
             if state.isExpanded, let container = state.contentContainer {
                 let ch = max(0, state.contentHeight)
-                container.frame = NSRect(x: 0, y: y, width: w, height: ch)
+                let pad = SidebarLayout.contentPadding
+                container.frame = NSRect(x: 0, y: y + pad, width: w, height: max(0, ch - 2 * pad))
                 container.isHidden = false
                 y += ch
             } else {
