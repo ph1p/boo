@@ -8,12 +8,8 @@ class StatusBarView: NSView {
 
     /// Called when user picks a branch from the popup.
     var onBranchSwitch: ((String) -> Void)?
-    /// Called when a sidebar plugin icon is clicked (plugin id).
-    var onSidebarPluginToggle: ((String) -> Void)?
     /// Called when the sidebar toggle button is clicked.
     var onSidebarToggle: (() -> Void)?
-    /// IDs of currently visible sidebar plugins.
-    var visibleSidebarPlugins: Set<String> = []
     /// Whether the sidebar is currently visible.
     var sidebarVisible: Bool = true
     /// Whether the sidebar toggle should be hidden (no active plugins).
@@ -85,7 +81,6 @@ class StatusBarView: NSView {
         registerPlugin(GitBranchSegment())
         registerPlugin(PathSegment())
         registerPlugin(ProcessSegment())
-        registerPlugin(FileTreeIconSegment())
         registerPlugin(systemInfoSegment)
         registerPlugin(PaneInfoSegment())
         registerPlugin(TimeSegment())
@@ -102,12 +97,6 @@ class StatusBarView: NSView {
         }
     }
 
-    /// Remove a plugin icon segment by its associated panel ID.
-    func unregisterPluginIcon(for pluginID: String) {
-        leftPlugins.removeAll { ($0 as? PluginIconSegment)?.associatedPanelID == pluginID }
-        rightPlugins.removeAll { ($0 as? PluginIconSegment)?.associatedPanelID == pluginID }
-    }
-
     /// Remove all external status bar segments (pushed via IPC socket).
     func unregisterExternalSegments() {
         leftPlugins.removeAll { $0 is ExternalStatusBarSegment }
@@ -118,6 +107,7 @@ class StatusBarView: NSView {
 
     func update(directory: String, paneCount: Int, tabCount: Int, runningProcess: String) {
         let dirChanged = directory != currentDirectory
+        NSLog("[Git] statusBar.update: dir=\(directory) dirChanged=\(dirChanged) currentBranch=\(gitBranch ?? "nil")")
         let changed =
             dirChanged || paneCount != self.paneCount || tabCount != self.tabCount
             || runningProcess != self.runningProcess
@@ -135,7 +125,6 @@ class StatusBarView: NSView {
             paneCount: paneCount,
             tabCount: tabCount,
             runningProcess: runningProcess,
-            visibleSidebarPlugins: visibleSidebarPlugins,
             isRemote: isRemote,
             remoteSession: remoteSession,
             gitBranch: gitBranch,
@@ -149,11 +138,14 @@ class StatusBarView: NSView {
 
     private func refreshGitBranch() {
         let dir = currentDirectory
+        NSLog("[Git] refreshGitBranch: dir=\(dir)")
         DispatchQueue.global(qos: .utility).async { [weak self] in
             let (branch, repoRoot) = Self.detectGitInfo(in: dir)
+            NSLog("[Git] refreshGitBranch result: branch=\(branch ?? "nil") repoRoot=\(repoRoot ?? "nil")")
             DispatchQueue.main.async {
                 guard let self = self else { return }
                 if self.gitBranch != branch || self.gitRepoRoot != repoRoot {
+                    NSLog("[Git] refreshGitBranch updating: \(self.gitBranch ?? "nil") -> \(branch ?? "nil")")
                     self.gitBranch = branch
                     self.gitRepoRoot = repoRoot
                     self.needsDisplay = true
@@ -280,7 +272,7 @@ class StatusBarView: NSView {
                     rect.contains(point)
                 else { continue }
                 // Only show hover for clickable segments
-                if plugin.associatedPanelID != nil || plugin is GitBranchSegment {
+                if plugin is GitBranchSegment {
                     newHovered = plugin.id
                 }
                 break

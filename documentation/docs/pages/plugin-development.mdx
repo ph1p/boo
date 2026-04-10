@@ -630,3 +630,69 @@ final class MySegment: StatusBarPlugin {
 Register in `StatusBarView.registerDefaultPlugins()`.
 
 Sidebar plugins **do not** need to create their own status bar segments — the registry auto-registers `PluginIconSegment` toggle icons for any plugin with `capabilities.sidebarPanel = true`.
+
+## Sidebar Tabs
+
+A plugin can contribute a **dedicated sidebar tab** — a button in the tab bar at the top of the sidebar. When the user clicks it, the plugin's content fills the full sidebar height instead of appearing as a collapsible section in the Explorer panel.
+
+### Declaring the capability
+
+Set `sidebarTab: true` in your manifest capabilities:
+
+```swift
+capabilities: PluginManifest.Capabilities(
+    sidebarPanel: true,   // still appears as a section in Explorer
+    statusBarSegment: true,
+    sidebarTab: true      // also gets a dedicated tab
+)
+```
+
+You can set both `sidebarPanel` and `sidebarTab` to make the plugin appear in both places, or use only `sidebarTab` to skip the Explorer section entirely.
+
+### Implementing `makeSidebarTab`
+
+Override `makeSidebarTab(context:)` in your plugin class:
+
+```swift
+func makeSidebarTab(context: PluginContext) -> SidebarTab? {
+    SidebarTab(
+        id: SidebarTabID("my-plugin"),      // must match your manifest id
+        icon: "magnifyingglass",             // SF Symbol name
+        label: "My Plugin",                 // shown as tooltip
+        content: makeDetailView(context: context) ?? AnyView(EmptyView())
+    )
+}
+```
+
+- `id` — use `SidebarTabID("your-plugin-id")` matching your manifest's `id` field.
+- `icon` — any SF Symbol name, shown in the tab bar button.
+- `label` — accessibility label and tooltip text.
+- `content` — any SwiftUI `AnyView`. Typically reuse your `makeDetailView` output.
+
+The default implementation returns `nil`, so plugins that don't override this method are unaffected.
+
+### Tab lifecycle
+
+- The tab bar is rebuilt on every plugin cycle, so tabs appear and disappear automatically based on plugin visibility and the `when` clause.
+- `pluginDidActivate()` / `pluginDidDeactivate()` are called when the user switches tabs.
+
+### Example: Debug plugin
+
+The built-in `DebugPlugin` uses `sidebarTab: true` to show a dedicated ladybug tab with its full event log:
+
+```swift
+capabilities: PluginManifest.Capabilities(
+    sidebarPanel: true,
+    statusBarSegment: true,
+    sidebarTab: true
+),
+
+func makeSidebarTab(context: PluginContext) -> SidebarTab? {
+    SidebarTab(
+        id: SidebarTabID("debug"),
+        icon: "ladybug.fill",
+        label: "Debug",
+        content: makeDetailView(context: context) ?? AnyView(EmptyView())
+    )
+}
+```

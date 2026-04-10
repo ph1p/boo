@@ -5,5 +5,5 @@
   "icon": "hand.wave",
   "description": "Minimal example - a JS plugin in two files",
   "runtime": "js",
-  "capabilities": { "sidebarPanel": true }
+  "capabilities": { "sidebarTab": true }
 }

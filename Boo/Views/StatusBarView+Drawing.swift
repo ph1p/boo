@@ -48,7 +48,7 @@ extension StatusBarView {
 
             // Hover underline for clickable segments
             if hoveredSegmentID == plugin.id {
-                let isClickable = plugin.associatedPanelID != nil || plugin is GitBranchSegment
+                let isClickable = plugin is GitBranchSegment
                 if isClickable {
                     ctx.setFillColor(theme.chromeMuted.withAlphaComponent(0.08).cgColor)
                     let hoverRect = CGRect(x: segRect.minX, y: 1, width: segRect.width, height: barHeight - 2)
@@ -63,40 +63,10 @@ extension StatusBarView {
         // Draw sidebar toggle at far right
         let sidebarToggleWidth = drawSidebarToggle(ctx: ctx, theme: theme)
 
-        // Split right plugins into panel icons (have associatedPanelID) and text segments
+        // Draw right plugins right-to-left
         let visibleRight = rightPlugins.filter { $0.isVisible(settings: settings, state: state) }
-        let panelIcons = visibleRight.filter { $0.associatedPanelID != nil }
-        let textSegments = visibleRight.filter { $0.associatedPanelID == nil }
-
-        // Draw panel icons right-to-left, with gap from sidebar toggle separator
-        let iconGap: CGFloat = 5
         var rx = bounds.width - sidebarToggleWidth + 2
-        for plugin in panelIcons {
-            let width = plugin.draw(at: rx, y: textY, theme: theme, settings: settings, state: state, ctx: ctx)
-            rx -= width
-            let iconRect = NSRect(x: rx, y: 0, width: width, height: barHeight)
-            segmentRects[plugin.id] = iconRect
-
-            // Hover highlight for plugin icons
-            if hoveredSegmentID == plugin.id {
-                ctx.setFillColor(theme.chromeMuted.withAlphaComponent(0.1).cgColor)
-                let hoverRect = CGRect(x: iconRect.minX + 2, y: 2, width: iconRect.width - 4, height: barHeight - 4)
-                ctx.addPath(CGPath(roundedRect: hoverRect, cornerWidth: 4, cornerHeight: 4, transform: nil))
-                ctx.fillPath()
-            }
-
-        }
-        // Draw separator between panel icons and text segments
-        if !panelIcons.isEmpty {
-            let sepInset = round(barHeight * 0.22)
-            rx -= iconGap
-            ctx.setFillColor(theme.chromeMuted.withAlphaComponent(0.25).cgColor)
-            ctx.fill(CGRect(x: rx, y: sepInset, width: 0.5, height: barHeight - sepInset * 2))
-            rx -= iconGap
-        }
-
-        // Draw text segments (time, pane info, etc.) right-to-left
-        for plugin in textSegments {
+        for plugin in visibleRight {
             let width = plugin.draw(at: rx, y: textY, theme: theme, settings: settings, state: state, ctx: ctx)
             rx -= width
             segmentRects[plugin.id] = NSRect(x: rx, y: 0, width: width, height: barHeight)
@@ -191,18 +161,6 @@ extension StatusBarView {
         for plugin in leftPlugins where plugin.isVisible(settings: settings, state: state) {
             if plugin.handleClick(at: point, in: self) { return }
         }
-
-        // Fall back to associatedPanelID-based toggle for segments that
-        // don't handle clicks themselves but have a linked panel.
-        let allPlugins: [StatusBarPlugin] = rightPlugins + leftPlugins
-        for plugin in allPlugins {
-            guard let panelID = plugin.associatedPanelID,
-                let rect = segmentRects[plugin.id],
-                rect.contains(point)
-            else { continue }
-            onSidebarPluginToggle?(panelID)
-            return
-        }
     }
 
     // MARK: - Accessibility
@@ -238,14 +196,11 @@ extension StatusBarView {
 
             // Label
             let label = plugin.accessibilitySegmentLabel(state: state) ?? plugin.id
-            let isClickable = plugin.associatedPanelID != nil || plugin is GitBranchSegment
-            let isActive = plugin.associatedPanelID.flatMap { visibleSidebarPlugins.contains($0) } ?? false
+            let isClickable = plugin is GitBranchSegment
 
             if isClickable {
                 element.setAccessibilityRole(.button)
-                var fullLabel = label
-                if isActive { fullLabel += ", selected" }
-                element.setAccessibilityLabel(fullLabel)
+                element.setAccessibilityLabel(label)
             } else {
                 element.setAccessibilityRole(.staticText)
                 element.setAccessibilityLabel(label)

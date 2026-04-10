@@ -16,6 +16,7 @@ final class StatusBarClickTests: XCTestCase {
         var isHidden = false
         var hitRect: NSRect = .zero
         var clickCount = 0
+        var onToggle: ((String) -> Void)?
 
         init(id: String, priority: Int, panelID: String) {
             self.id = id
@@ -42,7 +43,7 @@ final class StatusBarClickTests: XCTestCase {
         @MainActor func handleClick(at point: NSPoint, in barView: StatusBarView) -> Bool {
             guard hitRect.contains(point) else { return false }
             clickCount += 1
-            barView.onSidebarPluginToggle?(associatedPanelID ?? "")
+            onToggle?(associatedPanelID ?? "")
             return true
         }
 
@@ -91,7 +92,8 @@ final class StatusBarClickTests: XCTestCase {
         bar.registerPlugin(segB)
 
         var toggledIDs: [String] = []
-        bar.onSidebarPluginToggle = { toggledIDs.append($0) }
+        segA.onToggle = { toggledIDs.append($0) }
+        segB.onToggle = { toggledIDs.append($0) }
 
         // Draw with both visible to set hitRects
         bar.display()
@@ -113,7 +115,6 @@ final class StatusBarClickTests: XCTestCase {
             paneCount: 1,
             tabCount: 1,
             runningProcess: "",
-            visibleSidebarPlugins: [],
             isRemote: false,
             remoteSession: nil
         )
@@ -140,7 +141,8 @@ final class StatusBarClickTests: XCTestCase {
         bar.registerPlugin(segB)
 
         var toggledIDs: [String] = []
-        bar.onSidebarPluginToggle = { toggledIDs.append($0) }
+        segA.onToggle = { toggledIDs.append($0) }
+        segB.onToggle = { toggledIDs.append($0) }
 
         // Draw with both visible
         bar.display()
@@ -179,7 +181,8 @@ final class StatusBarClickTests: XCTestCase {
         bar.registerPlugin(segB)
 
         var toggledIDs: [String] = []
-        bar.onSidebarPluginToggle = { toggledIDs.append($0) }
+        segA.onToggle = { toggledIDs.append($0) }
+        segB.onToggle = { toggledIDs.append($0) }
 
         bar.display()
 
@@ -191,7 +194,6 @@ final class StatusBarClickTests: XCTestCase {
             paneCount: 1,
             tabCount: 1,
             runningProcess: "",
-            visibleSidebarPlugins: [],
             isRemote: false,
             remoteSession: nil
         )

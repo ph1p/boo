@@ -6,7 +6,7 @@
   "description": "Showcase plugin: displays all terminal context fields, settings, and available actions",
   "runtime": "js",
   "capabilities": {
-    "sidebarPanel": true,
+    "sidebarTab": true,
     "statusBarSegment": true
   },
   "statusBar": {
