@@ -24,5 +24,39 @@
 	<string></string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>A program running within Boo would like to use AppleScript.</string>
+	<key>NSAudioCaptureUsageDescription</key>
+	<string>A program running within Boo would like to access your system's audio.</string>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>A program running within Boo would like to use Bluetooth.</string>
+	<key>NSCalendarsUsageDescription</key>
+	<string>A program running within Boo would like to access your Calendar.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>A program running within Boo would like to use the camera.</string>
+	<key>NSContactsUsageDescription</key>
+	<string>A program running within Boo would like to access your Contacts.</string>
+	<key>NSDesktopFolderUsageDescription</key>
+	<string>A program running within Boo would like to access your Desktop folder.</string>
+	<key>NSDocumentsFolderUsageDescription</key>
+	<string>A program running within Boo would like to access your Documents folder.</string>
+	<key>NSDownloadsFolderUsageDescription</key>
+	<string>A program running within Boo would like to access your Downloads folder.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>A program running within Boo would like to access the local network.</string>
+	<key>NSLocationUsageDescription</key>
+	<string>A program running within Boo would like to access your location information.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>A program running within Boo would like to use your microphone.</string>
+	<key>NSMotionUsageDescription</key>
+	<string>A program running within Boo would like to access motion data.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>A program running within Boo would like to access your Photo Library.</string>
+	<key>NSRemindersUsageDescription</key>
+	<string>A program running within Boo would like to access your reminders.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>A program running within Boo would like to use speech recognition.</string>
+	<key>NSSystemAdministrationUsageDescription</key>
+	<string>A program running within Boo requires elevated privileges.</string>
 </dict>
 </plist>
