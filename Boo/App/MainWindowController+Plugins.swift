@@ -246,13 +246,11 @@ extension MainWindowController {
         // Collect all enabled+visible plugin tabs
         let allTabs = pluginRegistry.contributedSidebarTabs(terminal: context)
 
-        // Apply saved tab order
-        let order = AppSettings.shared.sidebarTabOrder
-        let sorted = allTabs.sorted { a, b in
-            let ia = order.firstIndex(of: a.id.id) ?? Int.max
-            let ib = order.firstIndex(of: b.id.id) ?? Int.max
-            return ia < ib
-        }
+        // Apply saved tab order (tabs missing from saved order keep their
+        // registration position instead of jumping to the end).
+        let sorted = SidebarTabOrdering.applied(
+            tabs: allTabs,
+            savedOrder: AppSettings.shared.sidebarTabOrder)
 
         sidebarTabBarView?.sidebarTabs = sorted
 
