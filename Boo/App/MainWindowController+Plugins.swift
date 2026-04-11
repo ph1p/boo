@@ -64,6 +64,7 @@ extension MainWindowController {
         watcher.onPluginLoaded = { [weak self] _ in
             guard let self else { return }
             self.runPluginCycle(reason: .focusChanged)
+            self.rebuildPluginsMenu()
             PluginSettingsView.registeredManifests = self.pluginRegistry.plugins.map(\.manifest)
             NotificationCenter.default.post(
                 name: .settingsChanged,
@@ -73,6 +74,7 @@ extension MainWindowController {
         watcher.onPluginRemoved = { [weak self] _ in
             guard let self else { return }
             self.runPluginCycle(reason: .focusChanged)
+            self.rebuildPluginsMenu()
             PluginSettingsView.registeredManifests = self.pluginRegistry.plugins.map(\.manifest)
             NotificationCenter.default.post(
                 name: .settingsChanged,
@@ -159,6 +161,11 @@ extension MainWindowController {
             rebuildSidebarTabs(context: result.context)
         } else if let active = activePluginTabID {
             refreshActivePluginTab(id: active, context: result.context)
+        }
+
+        // Rebuild the Plugins menu (menu items may change with plugin load/unload)
+        if result.visibilityChanged {
+            rebuildPluginsMenu()
         }
 
         refreshStatusBar()

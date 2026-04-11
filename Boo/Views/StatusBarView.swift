@@ -28,7 +28,16 @@ class StatusBarView: NSView {
     var gitChangedCount: Int = 0
 
     /// Status bar contents from plugin cycle results.
-    var pluginStatusBarContents: [(pluginID: String, content: StatusBarContent)] = []
+    /// Setting this property creates/updates/removes PluginContentSegment instances.
+    var pluginStatusBarContents: [(pluginID: String, content: StatusBarContent)] = [] {
+        didSet { syncPluginSegments() }
+    }
+
+    /// Called when a plugin's status bar segment is clicked. Receives the plugin ID.
+    var onPluginSegmentClick: ((String) -> Void)?
+
+    /// Active plugin content segments keyed by plugin ID.
+    private var pluginSegments: [String: PluginContentSegment] = [:]
 
     // Plugin arrays sorted by priority
     private(set) var leftPlugins: [StatusBarPlugin] = []
@@ -101,6 +110,46 @@ class StatusBarView: NSView {
     func unregisterExternalSegments() {
         leftPlugins.removeAll { $0 is ExternalStatusBarSegment }
         rightPlugins.removeAll { $0 is ExternalStatusBarSegment }
+    }
+
+    /// Sync PluginContentSegment instances with the latest plugin cycle output.
+    private func syncPluginSegments() {
+        let currentIDs = Set(pluginStatusBarContents.map(\.pluginID))
+        let existingIDs = Set(pluginSegments.keys)
+        var structuralChange = false
+
+        // Remove segments for plugins no longer contributing
+        let removedIDs = existingIDs.subtracting(currentIDs)
+        if !removedIDs.isEmpty {
+            for removedID in removedIDs {
+                pluginSegments.removeValue(forKey: removedID)
+            }
+            let removedSegmentIDs = Set(removedIDs.map { "plugin.\($0)" })
+            leftPlugins.removeAll { removedSegmentIDs.contains($0.id) }
+            rightPlugins.removeAll { removedSegmentIDs.contains($0.id) }
+            structuralChange = true
+        }
+
+        // Create or update segments
+        for (pluginID, content) in pluginStatusBarContents {
+            if let existing = pluginSegments[pluginID] {
+                existing.updateContent(content)
+            } else {
+                let segment = PluginContentSegment(
+                    pluginID: pluginID, position: .left, priority: 35)
+                segment.onPluginClick = { [weak self] id in
+                    self?.onPluginSegmentClick?(id)
+                }
+                segment.updateContent(content)
+                pluginSegments[pluginID] = segment
+                registerPlugin(segment)
+                structuralChange = true
+            }
+        }
+
+        if structuralChange {
+            needsDisplay = true
+        }
     }
 
     // MARK: - State
@@ -272,7 +321,7 @@ class StatusBarView: NSView {
                     rect.contains(point)
                 else { continue }
                 // Only show hover for clickable segments
-                if plugin is GitBranchSegment {
+                if plugin is GitBranchSegment || plugin is PluginContentSegment {
                     newHovered = plugin.id
                 }
                 break

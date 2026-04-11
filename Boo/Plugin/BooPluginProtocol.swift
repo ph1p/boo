@@ -35,6 +35,27 @@ struct StatusBarContent {
     let accessibilityLabel: String?
 }
 
+/// A single menu item contributed by a plugin.
+struct PluginMenuItem {
+    let label: String
+    let actionName: String
+    let shortcut: String?
+    let icon: String?
+}
+
+/// A plugin's menu contributions — grouped under the plugin's name in the Plugins menu.
+struct PluginMenuContribution {
+    let pluginID: String
+    let pluginName: String
+    let items: [PluginMenuEntry]
+}
+
+/// A menu entry: either an item or a separator.
+enum PluginMenuEntry {
+    case item(PluginMenuItem)
+    case separator
+}
+
 /// Unified plugin protocol for both built-in and external plugins.
 /// Combines sidebar, status bar, and lifecycle into one protocol.
 @MainActor
@@ -60,6 +81,15 @@ protocol BooPluginProtocol: BooPlugin {
 
     /// Dynamic section title using the structured plugin context.
     func sectionTitle(context: PluginContext) -> String?
+
+    // MARK: - Menu Contributions
+
+    /// Return menu items this plugin contributes to the Plugins menu.
+    /// Default: builds from manifest.menus if present.
+    func menuContributions() -> PluginMenuContribution?
+
+    /// Handle a menu action triggered by the user clicking a plugin menu item.
+    func handleMenuAction(_ actionName: String, context: TerminalContext)
 
     // MARK: - UI (Legacy — TerminalContext + actionHandler)
 
@@ -162,6 +192,21 @@ extension BooPluginProtocol {
 
     func makeStatusBarContent(context: PluginContext) -> StatusBarContent? { nil }
     func sectionTitle(context: PluginContext) -> String? { nil }
+
+    /// Default: build menu contributions from manifest.menus.
+    func menuContributions() -> PluginMenuContribution? {
+        guard let menus = manifest.menus, !menus.isEmpty else { return nil }
+        let entries: [PluginMenuEntry] = menus.compactMap { menu in
+            if menu.separator == true { return .separator }
+            guard let label = menu.label, let action = menu.action else { return nil }
+            return .item(PluginMenuItem(
+                label: label, actionName: action, shortcut: menu.shortcut, icon: menu.icon))
+        }
+        guard !entries.isEmpty else { return nil }
+        return PluginMenuContribution(pluginID: pluginID, pluginName: manifest.name, items: entries)
+    }
+
+    func handleMenuAction(_ actionName: String, context: TerminalContext) {}
 
     func makeDetailView(context: TerminalContext, actionHandler: DSLActionHandler) -> AnyView? { nil }
     func makeStatusBarContent(context: TerminalContext) -> StatusBarContent? { nil }

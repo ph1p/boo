@@ -591,6 +591,10 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
         statusBar.onSidebarToggle = { [weak self] in
             self?.toggleSidebar(userInitiated: true)
         }
+        statusBar.onPluginSegmentClick = { [weak self] pluginID in
+            guard let self, let ctx = self.pluginRegistry.lastContext else { return }
+            self.activatePluginTab(SidebarTabID(pluginID), context: ctx)
+        }
         contentView.addSubview(statusBar)
 
         currentWorkspaceBarPosition = AppSettings.shared.workspaceBarPosition

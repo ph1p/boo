@@ -1,4 +1,5 @@
 import Cocoa
+@preconcurrency import UserNotifications
 
 /// Routes DSL action identifiers to terminal and system operations.
 /// ADR-6: Actions are declared in DSL output, interpreted by boo.
@@ -6,6 +7,10 @@ final class DSLActionHandler {
 
     /// Callback to send a command string to the focused terminal.
     var sendToTerminal: ((String) -> Void)?
+    /// Callbacks for tab/pane creation.
+    var openDirectoryInNewTab: ((String) -> Void)?
+    var openDirectoryInNewPane: ((String) -> Void)?
+    var pastePathToActivePane: ((String) -> Void)?
 
     /// Handle a DSL action. Returns a result description for VoiceOver announcement.
     @discardableResult
@@ -37,8 +42,47 @@ final class DSLActionHandler {
             NSWorkspace.shared.selectFile(path, inFileViewerRootedAtPath: "")
             return "Revealed in Finder"
 
+        case "url":
+            guard let urlStr = action.url ?? action.text, !urlStr.isEmpty,
+                let url = URL(string: urlStr)
+            else { return nil }
+            NSWorkspace.shared.open(url)
+            return "Opened URL"
+
+        case "newTab":
+            openDirectoryInNewTab?(action.path ?? "")
+            return "Opened new tab"
+
+        case "newPane":
+            openDirectoryInNewPane?(action.path ?? "")
+            return "Opened new pane"
+
+        case "paste":
+            guard let text = action.text, !text.isEmpty else { return nil }
+            pastePathToActivePane?(text)
+            return "Pasted text"
+
+        case "notification":
+            guard let text = action.text ?? action.command, !text.isEmpty else { return nil }
+            let title = action.title ?? "Boo"
+            Self.sendNotification(title: title, body: text)
+            return nil
+
         default:
             return nil
+        }
+    }
+
+    private static func sendNotification(title: String, body: String) {
+        let center = UNUserNotificationCenter.current()
+        center.requestAuthorization(options: [.alert]) { granted, _ in
+            guard granted else { return }
+            let content = UNMutableNotificationContent()
+            content.title = title
+            content.body = body
+            let request = UNNotificationRequest(
+                identifier: UUID().uuidString, content: content, trigger: nil)
+            center.add(request)
         }
     }
 }

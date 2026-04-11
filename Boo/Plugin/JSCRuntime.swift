@@ -65,6 +65,62 @@ final class JSCRuntime {
         return result
     }
 
+    /// Call a plugin's `onAction(name, ctx)` function and return the resulting DSL action.
+    /// Returns nil if the function doesn't exist or returns null.
+    func callAction(
+        source: String,
+        actionName: String,
+        context: TerminalContext,
+        settings: [String: Any] = [:],
+        timeout: TimeInterval = 1.0
+    ) -> DSLAction? {
+        var ctxDict = buildContextDict(from: context)
+        if !settings.isEmpty {
+            ctxDict["settings"] = settings
+        }
+
+        var output: DSLAction?
+        let group = DispatchGroup()
+        group.enter()
+
+        let jsThread = Thread { [self] in
+            defer { group.leave() }
+            guard let jsContext = JSContext() else { return }
+            jsContext.exceptionHandler = { _, _ in }
+            jsContext.setObject(ctxDict, forKeyedSubscript: "ctx" as NSString)
+            injectHostFunctions(into: jsContext, cwd: ctxDict["cwd"] as? String ?? "/")
+            jsContext.evaluateScript(source)
+
+            guard let fn = jsContext.objectForKeyedSubscript("onAction"),
+                !fn.isUndefined
+            else { return }
+
+            let result = fn.call(withArguments: [actionName, ctxDict as Any])
+            guard let value = result, !value.isUndefined, !value.isNull,
+                let dict = value.toObject() as? [String: Any],
+                let type = dict["type"] as? String
+            else { return }
+
+            output = DSLAction(
+                type: type,
+                path: dict["path"] as? String,
+                command: dict["command"] as? String,
+                text: dict["text"] as? String,
+                url: dict["url"] as? String,
+                title: dict["title"] as? String
+            )
+        }
+        jsThread.qualityOfService = .userInitiated
+        jsThread.start()
+
+        let waitResult = group.wait(timeout: .now() + timeout)
+        if waitResult == .timedOut {
+            jsThread.cancel()
+            return nil
+        }
+        return output
+    }
+
     /// Run all JSC work on the current thread (must be called from the JS thread).
     private func runJS(source: String, functionName: String, ctxDict: [String: Any]) throws -> String {
         guard let jsContext = JSContext() else {
@@ -130,6 +186,43 @@ final class JSCRuntime {
             return FileManager.default.fileExists(atPath: resolved)
         }
         jsContext.setObject(fileExists, forKeyedSubscript: "fileExists" as NSString)
+
+        let listDir: @convention(block) (String) -> [[String: Any]]? = { path in
+            guard let resolved = Self.resolvePath(path, under: cwd) else { return nil }
+            guard let entries = try? FileManager.default.contentsOfDirectory(atPath: resolved) else { return nil }
+            return entries.prefix(500).map { name in
+                var isDir: ObjCBool = false
+                let full = (resolved as NSString).appendingPathComponent(name)
+                FileManager.default.fileExists(atPath: full, isDirectory: &isDir)
+                return ["name": name, "isDirectory": isDir.boolValue]
+            }
+        }
+        jsContext.setObject(listDir, forKeyedSubscript: "listDir" as NSString)
+
+        let readJSON: @convention(block) (String) -> Any? = { path in
+            guard let resolved = Self.resolvePath(path, under: cwd),
+                let data = try? Data(contentsOf: URL(fileURLWithPath: resolved)),
+                let json = try? JSONSerialization.jsonObject(with: data)
+            else { return nil }
+            return json
+        }
+        jsContext.setObject(readJSON, forKeyedSubscript: "readJSON" as NSString)
+
+        let allowedEnvVars: Set<String> = [
+            "HOME", "USER", "SHELL", "TERM", "LANG", "PATH",
+            "EDITOR", "VISUAL", "XDG_CONFIG_HOME"
+        ]
+        let getEnv: @convention(block) (String) -> String? = { name in
+            guard allowedEnvVars.contains(name) else { return nil }
+            return ProcessInfo.processInfo.environment[name]
+        }
+        jsContext.setObject(getEnv, forKeyedSubscript: "getEnv" as NSString)
+
+        let pluginLogger = logger
+        let log: @convention(block) (String) -> Void = { message in
+            pluginLogger.debug("[Plugin] \(message)")
+        }
+        jsContext.setObject(log, forKeyedSubscript: "log" as NSString)
     }
 
     /// Resolve a path relative to cwd. Absolute paths must be under cwd (security boundary).
@@ -150,7 +243,9 @@ final class JSCRuntime {
             "paneCount": context.paneCount,
             "tabCount": context.tabCount,
             "processName": context.processName,
-            "isRemote": context.isRemote
+            "isRemote": context.isRemote,
+            "terminalID": context.terminalID.uuidString,
+            "environmentLabel": context.environmentLabel
         ]
 
         if let session = context.remoteSession {
@@ -160,14 +255,24 @@ final class JSCRuntime {
             dict["envType"] = "local"
         }
 
+        if let remoteCwd = context.remoteCwd {
+            dict["remoteCwd"] = remoteCwd
+        }
+
         if let git = context.gitContext {
-            dict["git"] =
-                [
-                    "branch": git.branch,
-                    "repoRoot": git.repoRoot,
-                    "isDirty": git.isDirty,
-                    "changedFileCount": git.changedFileCount
-                ] as [String: Any]
+            var gitDict: [String: Any] = [
+                "branch": git.branch,
+                "repoRoot": git.repoRoot,
+                "isDirty": git.isDirty,
+                "changedFileCount": git.changedFileCount,
+                "stagedCount": git.stagedCount,
+                "aheadCount": git.aheadCount,
+                "behindCount": git.behindCount
+            ]
+            if let lastCommit = git.lastCommitShort {
+                gitDict["lastCommitShort"] = lastCommit
+            }
+            dict["git"] = gitDict
         }
 
         // Expose plugin-contributed enriched data

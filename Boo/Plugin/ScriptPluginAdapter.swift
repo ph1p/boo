@@ -105,6 +105,18 @@ final class ScriptPluginAdapter: BooPluginProtocol {
         }
     }
 
+    // MARK: - Menu Actions
+
+    func handleMenuAction(_ actionName: String, context: TerminalContext) {
+        let scriptPath = (pluginFolderPath as NSString).appendingPathComponent("main.js")
+        guard let source = try? String(contentsOfFile: scriptPath, encoding: .utf8) else { return }
+        let settings = buildSettingsDict()
+        guard let action = jscRuntime.callAction(
+            source: source, actionName: actionName, context: context, settings: settings)
+        else { return }
+        actions?.handle(action)
+    }
+
     // MARK: - Lifecycle
 
     func cwdChanged(newPath: String, context: TerminalContext) {
