@@ -13,6 +13,8 @@ enum SidebarTabOrdering {
     static func applied(tabs: [SidebarTab], savedOrder: [String]) -> [SidebarTab] {
         let orderMap = Dictionary(
             uniqueKeysWithValues: savedOrder.enumerated().map { ($1, $0) })
+        let registrationIndex = Dictionary(
+            uniqueKeysWithValues: tabs.enumerated().map { ($1.id, $0) })
 
         return tabs.sorted { a, b in
             let ia = orderMap[a.id.id]
@@ -22,16 +24,11 @@ enum SidebarTabOrdering {
             case let (.some(ai), .some(bi)):
                 return ai < bi
             case (.some, .none):
-                // a is in saved order, b is not — a comes first
                 return true
             case (.none, .some):
                 return false
             case (.none, .none):
-                // Neither in saved order — preserve registration (array) order
-                guard let idxA = tabs.firstIndex(where: { $0.id == a.id }),
-                    let idxB = tabs.firstIndex(where: { $0.id == b.id })
-                else { return false }
-                return idxA < idxB
+                return (registrationIndex[a.id] ?? 0) < (registrationIndex[b.id] ?? 0)
             }
         }
     }

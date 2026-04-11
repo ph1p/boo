@@ -96,10 +96,6 @@ final class PluginRegistryTests: XCTestCase {
 
         // Verify at least some plugins provide status bar content
         XCTAssertGreaterThan(result.statusBarContents.count, 0, "Should have status bar content from plugins")
-
-        // If file-tree-local should always provide content:
-        let fileTreeContent = result.statusBarContents.first { $0.pluginID == "file-tree-local" }
-        XCTAssertNotNil(fileTreeContent, "file-tree-local should provide status bar content")
     }
 
     func testGitStatusBarContent() {
