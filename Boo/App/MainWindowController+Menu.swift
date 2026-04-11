@@ -121,6 +121,14 @@ extension MainWindowController {
         bmMenuItem.submenu = bmMenu
         mainMenu.addItem(bmMenuItem)
 
+        // Plugins menu (rebuilt dynamically as plugins load/unload)
+        let pluginsMenuItem = NSMenuItem()
+        let pluginsMenu = NSMenu(title: "Plugins")
+        pluginsMenu.addItem(
+            withTitle: "No Plugin Commands", action: nil, keyEquivalent: "")
+        pluginsMenuItem.submenu = pluginsMenu
+        mainMenu.addItem(pluginsMenuItem)
+
         // Cmd+1 through Cmd+9 for workspace switching
         viewMenu.addItem(.separator())
         for i in 1...9 {
@@ -175,5 +183,120 @@ extension MainWindowController {
         let bookmarks = BookmarkService.shared.bookmarks
         guard idx >= 0, idx < bookmarks.count else { return }
         sendRawToActivePane("cd \(shellEscape(bookmarks[idx].path))\r")
+    }
+
+    // MARK: - Plugins Menu
+
+    /// Rebuild the Plugins top-level menu from current plugin contributions.
+    func rebuildPluginsMenu() {
+        guard let mainMenu = NSApplication.shared.mainMenu,
+            let pluginsMenuItem = mainMenu.items.first(where: { $0.submenu?.title == "Plugins" }),
+            let pluginsMenu = pluginsMenuItem.submenu
+        else { return }
+
+        pluginsMenu.removeAllItems()
+
+        guard let context = pluginRegistry.lastContext else {
+            pluginsMenu.addItem(withTitle: "No Plugin Commands", action: nil, keyEquivalent: "")
+            return
+        }
+
+        let contributions = pluginRegistry.collectMenuContributions(context: context)
+        if contributions.isEmpty {
+            pluginsMenu.addItem(withTitle: "No Plugin Commands", action: nil, keyEquivalent: "")
+            return
+        }
+
+        // Collect all built-in shortcuts to detect conflicts
+        let builtinShortcuts = collectBuiltinShortcuts()
+
+        for (idx, contribution) in contributions.enumerated() {
+            if idx > 0 { pluginsMenu.addItem(.separator()) }
+
+            // Plugin name as section header
+            let header = NSMenuItem(title: contribution.pluginName, action: nil, keyEquivalent: "")
+            header.isEnabled = false
+            pluginsMenu.addItem(header)
+
+            for entry in contribution.items {
+                switch entry {
+                case .separator:
+                    pluginsMenu.addItem(.separator())
+                case .item(let menuItem):
+                    let nsItem = NSMenuItem(
+                        title: menuItem.label,
+                        action: #selector(pluginMenuAction(_:)),
+                        keyEquivalent: "")
+                    nsItem.target = self
+                    nsItem.representedObject = [
+                        "pluginID": contribution.pluginID,
+                        "action": menuItem.actionName
+                    ]
+
+                    if let iconName = menuItem.icon,
+                        let img = NSImage(systemSymbolName: iconName, accessibilityDescription: menuItem.label)
+                    {
+                        nsItem.image = img
+                    }
+
+                    // Parse and apply keyboard shortcut
+                    if let shortcut = menuItem.shortcut {
+                        let (key, modifiers) = Self.parseShortcut(shortcut)
+                        if !key.isEmpty {
+                            let combo = "\(modifiers.rawValue):\(key)"
+                            if builtinShortcuts.contains(combo) {
+                                NSLog("[Plugins] Shortcut conflict for '\(shortcut)' in \(contribution.pluginName), skipping")
+                            } else {
+                                nsItem.keyEquivalent = key
+                                nsItem.keyEquivalentModifierMask = modifiers
+                            }
+                        }
+                    }
+
+                    pluginsMenu.addItem(nsItem)
+                }
+            }
+        }
+    }
+
+    @objc func pluginMenuAction(_ sender: NSMenuItem) {
+        guard let info = sender.representedObject as? [String: String],
+            let pluginID = info["pluginID"],
+            let actionName = info["action"],
+            let context = pluginRegistry.lastContext
+        else { return }
+        pluginRegistry.dispatchMenuAction(pluginID: pluginID, actionName: actionName, context: context)
+    }
+
+    /// Parse a shortcut string like "shift+cmd+t" into (keyEquivalent, modifierMask).
+    static func parseShortcut(_ shortcut: String) -> (String, NSEvent.ModifierFlags) {
+        let parts = shortcut.lowercased().split(separator: "+").map(String.init)
+        var modifiers: NSEvent.ModifierFlags = []
+        var key = ""
+
+        for part in parts {
+            switch part {
+            case "cmd", "command": modifiers.insert(.command)
+            case "shift": modifiers.insert(.shift)
+            case "ctrl", "control": modifiers.insert(.control)
+            case "opt", "option", "alt": modifiers.insert(.option)
+            default: key = part
+            }
+        }
+        return (key, modifiers)
+    }
+
+    /// Collect all built-in keyboard shortcuts as "modifiers:key" strings for conflict detection.
+    private func collectBuiltinShortcuts() -> Set<String> {
+        var shortcuts = Set<String>()
+        guard let mainMenu = NSApplication.shared.mainMenu else { return shortcuts }
+        for menuItem in mainMenu.items {
+            guard let submenu = menuItem.submenu, submenu.title != "Plugins" else { continue }
+            for item in submenu.items where !item.keyEquivalent.isEmpty {
+                let combo = "\(item.keyEquivalentModifierMask.rawValue):\(item.keyEquivalent)"
+                shortcuts.insert(combo)
+            }
+        }
+        return shortcuts
     }
 }

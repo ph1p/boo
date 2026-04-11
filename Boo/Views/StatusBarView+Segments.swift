@@ -501,3 +501,90 @@ final class TimeSegment: StatusBarPlugin {
         "Time: \(formatter.string(from: Date()))"
     }
 }
+
+// MARK: - Plugin Content Segment
+
+/// Bridges a plugin's StatusBarContent into the StatusBarPlugin protocol.
+/// Created dynamically when plugins contribute status bar content via their manifest.
+/// Click behavior: activates the plugin's sidebar tab.
+final class PluginContentSegment: StatusBarPlugin {
+    let id: String
+    let position: StatusBarPosition
+    let priority: Int
+    let pluginID: String
+
+    private var content: StatusBarContent?
+
+    /// Called when this segment is clicked — set by StatusBarView to focus the plugin's sidebar tab.
+    var onPluginClick: ((String) -> Void)?
+
+    init(pluginID: String, position: StatusBarPosition, priority: Int) {
+        self.id = "plugin.\(pluginID)"
+        self.pluginID = pluginID
+        self.position = position
+        self.priority = priority
+    }
+
+    func updateContent(_ content: StatusBarContent) {
+        self.content = content
+    }
+
+    func isVisible(settings: AppSettings, state: StatusBarState) -> Bool {
+        content != nil && settings.isPluginEnabled(pluginID)
+    }
+
+    func draw(
+        at x: CGFloat, y: CGFloat, theme: TerminalTheme, settings: AppSettings, state: StatusBarState, ctx: CGContext
+    ) -> CGFloat {
+        guard let content else { return 0 }
+        let font = NSFont.systemFont(ofSize: 10, weight: .medium)
+        let textColor = theme.chromeText
+        let tintColor = resolveTint(content.tint, theme: theme) ?? theme.chromeMuted
+        var cx = x
+
+        if let iconName = content.icon,
+            let img = NSImage(systemSymbolName: iconName, accessibilityDescription: nil)
+        {
+            let iconSize: CGFloat = 12
+            let iconY = (DensityMetrics.current.statusBarHeight - iconSize) / 2
+            let imgRect = NSRect(x: cx, y: iconY, width: iconSize, height: iconSize)
+            drawTintedIcon(img, color: tintColor, in: imgRect, ctx: ctx)
+            cx += iconSize + 4
+        }
+
+        let attrs: [NSAttributedString.Key: Any] = [
+            .font: font,
+            .foregroundColor: textColor
+        ]
+        let str = content.text as NSString
+        str.draw(at: NSPoint(x: cx, y: y), withAttributes: attrs)
+        cx += str.size(withAttributes: attrs).width
+
+        return cx - x
+    }
+
+    func handleClick(at point: NSPoint, in barView: StatusBarView) -> Bool {
+        guard let rect = barView.segmentRects[id], rect.contains(point) else { return false }
+        onPluginClick?(pluginID)
+        return true
+    }
+
+    func update(state: StatusBarState) {}
+
+    func accessibilitySegmentLabel(state: StatusBarState) -> String? {
+        content?.accessibilityLabel ?? content?.text
+    }
+
+    var tooltipText: String? { content?.text }
+
+    private func resolveTint(_ tint: DSLTint?, theme: TerminalTheme) -> NSColor? {
+        guard let tint else { return nil }
+        switch tint {
+        case .success: return .booLocal
+        case .error: return .systemRed
+        case .warning: return .booRemote
+        case .accent: return theme.accentColor
+        case .muted: return theme.chromeMuted
+        }
+    }
+}

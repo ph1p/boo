@@ -13,6 +13,7 @@ struct PluginManifest: Codable {
     var capabilities: Capabilities?
     let statusBar: StatusBarManifest?
     let settings: [SettingManifest]?
+    var menus: [MenuManifest]? = nil
 
     /// True for plugins loaded from ~/.boo/plugins/ (not decoded from JSON).
     var isExternal: Bool = false
@@ -20,7 +21,7 @@ struct PluginManifest: Codable {
     var folderName: String? = nil
 
     enum CodingKeys: String, CodingKey {
-        case id, name, version, icon, description, when, runtime, capabilities, statusBar, settings
+        case id, name, version, icon, description, when, runtime, capabilities, statusBar, settings, menus
     }
 
     struct Capabilities: Codable, Equatable {
@@ -36,6 +37,8 @@ struct PluginManifest: Codable {
         let position: String?
         let priority: Int?
         let template: String?
+        /// Click behavior: "showTab" (default) focuses the plugin's sidebar tab.
+        var onClick: String? = nil
     }
 
     struct SettingManifest: Codable, Equatable {
@@ -60,6 +63,15 @@ struct PluginManifest: Codable {
             case double
         }
     }
+
+    /// A menu item or separator contributed by a plugin.
+    struct MenuManifest: Codable, Equatable {
+        let label: String?
+        let action: String?
+        let shortcut: String?
+        let icon: String?
+        var separator: Bool? = nil
+    }
 }
 
 extension PluginManifest: Equatable {
@@ -68,7 +80,7 @@ extension PluginManifest: Equatable {
             && lhs.icon == rhs.icon && lhs.description == rhs.description
             && lhs.when == rhs.when && lhs.runtime == rhs.runtime
             && lhs.capabilities == rhs.capabilities && lhs.statusBar == rhs.statusBar
-            && lhs.settings == rhs.settings
+            && lhs.settings == rhs.settings && lhs.menus == rhs.menus
     }
 }
 

@@ -131,6 +131,19 @@ final class PluginRegistry {
         }
     }
 
+    /// Collect menu contributions from all visible plugins.
+    func collectMenuContributions(context: TerminalContext) -> [PluginMenuContribution] {
+        plugins.compactMap { plugin in
+            guard plugin.isVisible(for: context) else { return nil }
+            return plugin.menuContributions()
+        }
+    }
+
+    /// Dispatch a menu action to the target plugin.
+    func dispatchMenuAction(pluginID: String, actionName: String, context: TerminalContext) {
+        plugin(for: pluginID)?.handleMenuAction(actionName, context: context)
+    }
+
     /// Build a PluginContext for a specific plugin from a TerminalContext.
     /// Always reads live settings so font/theme changes are reflected immediately.
     func buildPluginContext(for pluginID: String, terminal: TerminalContext) -> PluginContext {

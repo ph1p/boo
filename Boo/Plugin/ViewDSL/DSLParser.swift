@@ -154,7 +154,9 @@ struct DSLParser {
             type: type,
             path: dict["path"] as? String,
             command: dict["command"] as? String,
-            text: dict["text"] as? String
+            text: dict["text"] as? String,
+            url: dict["url"] as? String,
+            title: dict["title"] as? String
         )
     }
 }

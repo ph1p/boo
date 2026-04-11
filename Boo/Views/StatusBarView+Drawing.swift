@@ -48,7 +48,7 @@ extension StatusBarView {
 
             // Hover underline for clickable segments
             if hoveredSegmentID == plugin.id {
-                let isClickable = plugin is GitBranchSegment
+                let isClickable = plugin is GitBranchSegment || plugin is PluginContentSegment
                 if isClickable {
                     ctx.setFillColor(theme.chromeMuted.withAlphaComponent(0.08).cgColor)
                     let hoverRect = CGRect(x: segRect.minX, y: 1, width: segRect.width, height: barHeight - 2)
@@ -196,7 +196,7 @@ extension StatusBarView {
 
             // Label
             let label = plugin.accessibilitySegmentLabel(state: state) ?? plugin.id
-            let isClickable = plugin is GitBranchSegment
+            let isClickable = plugin is GitBranchSegment || plugin is PluginContentSegment
 
             if isClickable {
                 element.setAccessibilityRole(.button)

@@ -34,17 +34,18 @@ Call `onRequestCycleRerun?()` when plugin data changes externally (e.g., Docker 
 
 Immutable snapshot passed to all plugin methods:
 
-| Field           | Type                 | Description                              |
-| --------------- | -------------------- | ---------------------------------------- |
-| `terminalID`    | `UUID`               | Active terminal identifier               |
-| `cwd`           | `String`             | Current working directory                |
-| `remoteSession` | `RemoteSessionType?` | Remote session info, if active           |
-| `remoteCwd`     | `String?`            | Remote working directory                 |
-| `gitContext`    | `GitContext?`        | Branch, dirty state, file counts         |
-| `processName`   | `String`             | Foreground process name                  |
-| `paneCount`     | `Int`                | Panes in workspace                       |
-| `tabCount`      | `Int`                | Tabs in active pane                      |
-| `isRemote`      | `Bool`               | Computed: `remoteSession != nil`         |
+| Field              | Type                 | Description                              |
+| ------------------ | -------------------- | ---------------------------------------- |
+| `terminalID`       | `UUID`               | Active terminal identifier               |
+| `cwd`              | `String`             | Current working directory                |
+| `remoteSession`    | `RemoteSessionType?` | Remote session info, if active           |
+| `remoteCwd`        | `String?`            | Remote working directory                 |
+| `environmentLabel` | `String`             | Display label for the terminal session   |
+| `gitContext`       | `GitContext?`        | Branch, dirty state, file counts         |
+| `processName`      | `String`             | Foreground process name                  |
+| `paneCount`        | `Int`                | Panes in workspace                       |
+| `tabCount`         | `Int`                | Tabs in active pane                      |
+| `isRemote`         | `Bool`               | Computed: `remoteSession != nil`         |
 
 `GitContext` fields: `branch`, `repoRoot`, `isDirty`, `changedFileCount`, `stagedCount`, `aheadCount`, `behindCount`, `lastCommitShort`.
 
@@ -59,6 +60,8 @@ pluginActions.pastePath("/foo/bar")  // Insert path without executing
 pluginActions.copy("text")           // Copy to clipboard
 pluginActions.reveal("/some/file")   // Show in Finder
 pluginActions.openInEditor("/file")  // Open with default app
+pluginActions.openDirectoryInNewTab?("/some/dir")   // Open dir in new tab
+pluginActions.openDirectoryInNewPane?("/some/dir")  // Open dir in new pane
 ```
 
 Also exposes closures: `sendToTerminal`, `openDirectoryInNewTab`, `openDirectoryInNewPane`, `displayImageInTerminal`, `isTerminalBusy`.
@@ -85,13 +88,18 @@ Operators: `&&`, `||`, `!`, `==`, `!=`, `()`.
 
 Interactive elements dispatch these actions:
 
-| Action    | Parameters       | Effect                  |
-| --------- | ---------------- | ----------------------- |
-| `"cd"`    | `path`           | Change terminal dir     |
-| `"open"`  | `path`           | Open in `$EDITOR`       |
-| `"exec"`  | `command`        | Send command to terminal|
-| `"copy"`  | `text` or `path` | Copy to clipboard       |
-| `"reveal"`| `path`           | Open in Finder          |
+| Action           | Parameters                  | Effect                   |
+| ---------------- | --------------------------- | ------------------------ |
+| `"cd"`           | `path`                      | Change terminal dir      |
+| `"open"`         | `path`                      | Open in `$EDITOR`        |
+| `"exec"`         | `command`                   | Send command to terminal |
+| `"copy"`         | `text` or `path`            | Copy to clipboard        |
+| `"reveal"`       | `path`                      | Open in Finder           |
+| `"url"`          | `url` or `text`             | Opens URL in browser     |
+| `"newTab"`       | `path` (optional)           | Opens new terminal tab   |
+| `"newPane"`      | `path` (optional)           | Opens new split pane     |
+| `"paste"`        | `text`                      | Inserts text at cursor   |
+| `"notification"` | `text`, `title` (optional)  | Shows notification       |
 
 ## Plugin Settings
 
@@ -118,6 +126,10 @@ AppSettings.shared.pluginDouble("my-plugin", "myKey", default: 12.0)
 Built-in segments: Environment, Git Branch, Path, Process (left); File Tree toggle, Pane Info, Clock (right).
 
 Sidebar plugins automatically get toggle icons in the status bar — no manual registration needed. Toggle segments in **Settings → Status Bar**.
+
+## Menu Contributions
+
+External plugins can contribute items to the "Plugins" menu bar via `menus` in `plugin.json`. See [Plugin Development](/plugin-development#menu-contributions) for details.
 
 ## External Plugins
 

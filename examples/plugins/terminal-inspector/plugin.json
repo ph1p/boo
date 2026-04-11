@@ -1,9 +1,9 @@
 {
   "id": "terminal-inspector",
   "name": "Terminal Inspector",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "icon": "magnifyingglass",
-  "description": "Showcase plugin: displays all terminal context fields, settings, and available actions",
+  "description": "Showcase plugin: displays all terminal context fields, settings, available actions, and menu contributions",
   "runtime": "js",
   "capabilities": {
     "sidebarTab": true,
@@ -12,10 +12,17 @@
   "statusBar": {
     "position": "right",
     "priority": 90,
-    "template": "{process.name}"
+    "template": "{process.name}",
+    "onClick": "showTab"
   },
   "settings": [
     { "key": "showGit", "type": "bool", "label": "Show git section", "default": true },
     { "key": "showFiles", "type": "bool", "label": "Show file detection", "default": true }
+  ],
+  "menus": [
+    { "label": "Copy Working Directory", "action": "copyCwd", "shortcut": "shift+ctrl+c", "icon": "doc.on.doc" },
+    { "label": "Reveal in Finder", "action": "revealCwd", "icon": "folder" },
+    { "separator": true },
+    { "label": "Open README", "action": "openReadme", "icon": "doc.text" }
   ]
 }

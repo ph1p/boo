@@ -20,10 +20,12 @@ enum DSLButtonStyle: String, Codable, Equatable {
 
 /// An action attached to an interactive DSL element.
 struct DSLAction: Codable, Equatable {
-    let type: String  // "cd", "open", "exec", "copy", "reveal"
+    let type: String  // "cd", "open", "exec", "copy", "reveal", "url", "newTab", "newPane", "paste", "notification"
     let path: String?
     let command: String?
     let text: String?
+    var url: String? = nil
+    var title: String? = nil
 }
 
 /// A context menu item attached to list items or buttons.
