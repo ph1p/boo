@@ -199,8 +199,9 @@ extension BooPluginProtocol {
         let entries: [PluginMenuEntry] = menus.compactMap { menu in
             if menu.separator == true { return .separator }
             guard let label = menu.label, let action = menu.action else { return nil }
-            return .item(PluginMenuItem(
-                label: label, actionName: action, shortcut: menu.shortcut, icon: menu.icon))
+            return .item(
+                PluginMenuItem(
+                    label: label, actionName: action, shortcut: menu.shortcut, icon: menu.icon))
         }
         guard !entries.isEmpty else { return nil }
         return PluginMenuContribution(pluginID: pluginID, pluginName: manifest.name, items: entries)
