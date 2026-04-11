@@ -61,7 +61,7 @@ extension MainWindowController {
     func setupPluginWatcher() {
         let watcher = PluginWatcher()
         watcher.registry = pluginRegistry
-        watcher.onPluginLoaded = { [weak self] _ in
+        let handlePluginChange: (String) -> Void = { [weak self] _ in
             guard let self else { return }
             self.runPluginCycle(reason: .focusChanged)
             self.rebuildPluginsMenu()
@@ -71,16 +71,8 @@ extension MainWindowController {
                 object: nil,
                 userInfo: ["topic": SettingsTopic.plugins.rawValue])
         }
-        watcher.onPluginRemoved = { [weak self] _ in
-            guard let self else { return }
-            self.runPluginCycle(reason: .focusChanged)
-            self.rebuildPluginsMenu()
-            PluginSettingsView.registeredManifests = self.pluginRegistry.plugins.map(\.manifest)
-            NotificationCenter.default.post(
-                name: .settingsChanged,
-                object: nil,
-                userInfo: ["topic": SettingsTopic.plugins.rawValue])
-        }
+        watcher.onPluginLoaded = handlePluginChange
+        watcher.onPluginRemoved = handlePluginChange
         watcher.start()
         pluginWatcher = watcher
     }
@@ -165,17 +157,13 @@ extension MainWindowController {
             refreshActivePluginTab(id: active, context: result.context)
         }
 
-        // Activate/deactivate plugins that have no sidebar tab (statusbar-only).
-        // These need explicit lifecycle management since they're not covered by sidebar tab selection.
         if result.visibilityChanged {
+            // Activate/deactivate plugins that have no sidebar tab (statusbar-only).
             let sidebarTabIDs = Set(
                 pluginRegistry.contributedSidebarTabs(terminal: result.context).map(\.id.id))
             pluginRegistry.reconcileSidebarlessPlugins(
                 visibleIDs: result.visiblePluginIDs, sidebarTabIDs: sidebarTabIDs)
-        }
 
-        // Rebuild the Plugins menu (menu items may change with plugin load/unload)
-        if result.visibilityChanged {
             rebuildPluginsMenu()
         }
 
