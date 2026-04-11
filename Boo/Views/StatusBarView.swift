@@ -28,10 +28,15 @@ class StatusBarView: NSView {
     var gitChangedCount: Int = 0
 
     /// Status bar contents from plugin cycle results.
-    /// Setting this property creates/updates/removes PluginContentSegment instances.
+    /// Setting this property creates/updates/removes PluginContentSegment instances
+    /// for external plugins only. Built-in plugins handle their own status bar rendering.
     var pluginStatusBarContents: [(pluginID: String, content: StatusBarContent)] = [] {
         didSet { syncPluginSegments() }
     }
+
+    /// Set of plugin IDs that are external (loaded from ~/.boo/plugins/).
+    /// Only external plugins get PluginContentSegment instances.
+    var externalPluginIDs: Set<String> = []
 
     /// Called when a plugin's status bar segment is clicked. Receives the plugin ID.
     var onPluginSegmentClick: ((String) -> Void)?
@@ -113,8 +118,12 @@ class StatusBarView: NSView {
     }
 
     /// Sync PluginContentSegment instances with the latest plugin cycle output.
+    /// Only creates segments for external plugins — built-in plugins have their
+    /// own dedicated StatusBarPlugin implementations.
     private func syncPluginSegments() {
-        let currentIDs = Set(pluginStatusBarContents.map(\.pluginID))
+        // Filter to external plugins only
+        let externalContents = pluginStatusBarContents.filter { externalPluginIDs.contains($0.pluginID) }
+        let currentIDs = Set(externalContents.map(\.pluginID))
         let existingIDs = Set(pluginSegments.keys)
         var structuralChange = false
 
@@ -131,7 +140,7 @@ class StatusBarView: NSView {
         }
 
         // Create or update segments
-        for (pluginID, content) in pluginStatusBarContents {
+        for (pluginID, content) in externalContents {
             if let existing = pluginSegments[pluginID] {
                 existing.updateContent(content)
             } else {

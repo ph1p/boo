@@ -126,7 +126,9 @@ extension MainWindowController {
         AppStore.shared.updateContext(result.context)
         AppStore.shared.updateVisiblePlugins(result.visiblePluginIDs)
 
-        // Feed plugin status bar contents to status bar
+        // Feed plugin status bar contents to status bar (only external plugins get segments)
+        statusBar.externalPluginIDs = Set(
+            pluginRegistry.plugins.compactMap { $0.manifest.isExternal ? $0.pluginID : nil })
         statusBar.pluginStatusBarContents = result.statusBarContents
 
         // Feed system info segment from plugin cached values (skip if plugin disabled)
