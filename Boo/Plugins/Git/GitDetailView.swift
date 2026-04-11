@@ -45,110 +45,108 @@ struct GitDetailView: View {
         let theme = AppSettings.shared.theme
         let density = AppSettings.shared.sidebarDensity
 
-        ScrollView {
-            VStack(alignment: .leading, spacing: 0) {
-                // Branch header
-                branchHeader(theme: theme, density: density)
+        VStack(alignment: .leading, spacing: 0) {
+            // Branch header
+            branchHeader(theme: theme, density: density)
 
-                // Last commit
-                if let commit = lastCommit {
-                    Button(action: {
-                        let hash = String(commit.prefix(while: { !$0.isWhitespace }))
-                        NSPasteboard.general.clearContents()
-                        if !NSPasteboard.general.setString(hash, forType: .string) {
-                            BooAlert.showTransient("Could not copy to clipboard")
-                        }
-                        commitCopied = true
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                            commitCopied = false
-                        }
-                    }) {
-                        Text(commitCopied ? "Copied!" : commit)
-                            .font(fontScale.font(.base, design: .monospaced))
-                            .foregroundColor(
-                                Color(nsColor: commitCopied ? theme.accentColor : theme.chromeMuted)
-                            )
-                            .lineLimit(1)
-                            .truncationMode(.tail)
+            // Last commit
+            if let commit = lastCommit {
+                Button(action: {
+                    let hash = String(commit.prefix(while: { !$0.isWhitespace }))
+                    NSPasteboard.general.clearContents()
+                    if !NSPasteboard.general.setString(hash, forType: .string) {
+                        BooAlert.showTransient("Could not copy to clipboard")
                     }
-                    .buttonStyle(.plain)
-                    .help("Click to copy commit hash")
-                    .accessibilityLabel("Copy commit hash")
-                    .padding(.horizontal, density == .comfortable ? 12 : 8)
-                    .padding(.bottom, 4)
-                }
-
-                // Remotes
-                if !remotes.isEmpty {
-                    remotesSection(theme: theme, density: density)
-                        .padding(.bottom, density == .comfortable ? 6 : 4)
-                }
-
-                if !changedFiles.isEmpty {
-                    Divider()
-
-                    // Staged changes
-                    if !stagedFiles.isEmpty {
-                        sectionHeader(
-                            title: "Staged Changes",
-                            count: stagedFiles.count,
-                            color: NSColor(calibratedRed: 0.25, green: 0.72, blue: 0.31, alpha: 1.0),
-                            section: .staged,
-                            expanded: $stagedExpanded,
-                            density: density,
-                            theme: theme
+                    commitCopied = true
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                        commitCopied = false
+                    }
+                }) {
+                    Text(commitCopied ? "Copied!" : commit)
+                        .font(fontScale.font(.base, design: .monospaced))
+                        .foregroundColor(
+                            Color(nsColor: commitCopied ? theme.accentColor : theme.chromeMuted)
                         )
-                        if stagedExpanded {
-                            ForEach(stagedFiles) { file in
-                                fileRow(file: file, section: .staged, theme: theme, density: density)
-                            }
-                        }
-                    }
-
-                    // Unstaged changes
-                    if !unstagedFiles.isEmpty {
-                        sectionHeader(
-                            title: "Changes",
-                            count: unstagedFiles.count,
-                            color: NSColor(calibratedRed: 0.9, green: 0.66, blue: 0.2, alpha: 1.0),
-                            section: .unstaged,
-                            expanded: $unstagedExpanded,
-                            density: density,
-                            theme: theme
-                        )
-                        if unstagedExpanded {
-                            ForEach(unstagedFiles) { file in
-                                fileRow(file: file, section: .unstaged, theme: theme, density: density)
-                            }
-                        }
-                    }
-
-                    // Untracked files
-                    if !untrackedFiles.isEmpty {
-                        sectionHeader(
-                            title: "Untracked",
-                            count: untrackedFiles.count,
-                            color: NSColor(calibratedRed: 0.5, green: 0.5, blue: 0.5, alpha: 1.0),
-                            section: .untracked,
-                            expanded: $untrackedExpanded,
-                            density: density,
-                            theme: theme
-                        )
-                        if untrackedExpanded {
-                            ForEach(untrackedFiles) { file in
-                                fileRow(file: file, section: .untracked, theme: theme, density: density)
-                            }
-                        }
-                    }
-                } else {
-                    Text("Working tree clean")
-                        .font(fontScale.font(.base))
-                        .foregroundColor(Color(nsColor: theme.chromeMuted))
-                        .padding(.horizontal, density == .comfortable ? 12 : 8)
-                        .padding(.vertical, density == .comfortable ? 8 : 6)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
                 }
-
+                .buttonStyle(.plain)
+                .help("Click to copy commit hash")
+                .accessibilityLabel("Copy commit hash")
+                .padding(.horizontal, density == .comfortable ? 12 : 8)
+                .padding(.bottom, 4)
             }
+
+            // Remotes
+            if !remotes.isEmpty {
+                remotesSection(theme: theme, density: density)
+                    .padding(.bottom, density == .comfortable ? 6 : 4)
+            }
+
+            if !changedFiles.isEmpty {
+                Divider()
+
+                // Staged changes
+                if !stagedFiles.isEmpty {
+                    sectionHeader(
+                        title: "Staged Changes",
+                        count: stagedFiles.count,
+                        color: NSColor(calibratedRed: 0.25, green: 0.72, blue: 0.31, alpha: 1.0),
+                        section: .staged,
+                        expanded: $stagedExpanded,
+                        density: density,
+                        theme: theme
+                    )
+                    if stagedExpanded {
+                        ForEach(stagedFiles) { file in
+                            fileRow(file: file, section: .staged, theme: theme, density: density)
+                        }
+                    }
+                }
+
+                // Unstaged changes
+                if !unstagedFiles.isEmpty {
+                    sectionHeader(
+                        title: "Changes",
+                        count: unstagedFiles.count,
+                        color: NSColor(calibratedRed: 0.9, green: 0.66, blue: 0.2, alpha: 1.0),
+                        section: .unstaged,
+                        expanded: $unstagedExpanded,
+                        density: density,
+                        theme: theme
+                    )
+                    if unstagedExpanded {
+                        ForEach(unstagedFiles) { file in
+                            fileRow(file: file, section: .unstaged, theme: theme, density: density)
+                        }
+                    }
+                }
+
+                // Untracked files
+                if !untrackedFiles.isEmpty {
+                    sectionHeader(
+                        title: "Untracked",
+                        count: untrackedFiles.count,
+                        color: NSColor(calibratedRed: 0.5, green: 0.5, blue: 0.5, alpha: 1.0),
+                        section: .untracked,
+                        expanded: $untrackedExpanded,
+                        density: density,
+                        theme: theme
+                    )
+                    if untrackedExpanded {
+                        ForEach(untrackedFiles) { file in
+                            fileRow(file: file, section: .untracked, theme: theme, density: density)
+                        }
+                    }
+                }
+            } else {
+                Text("Working tree clean")
+                    .font(fontScale.font(.base))
+                    .foregroundColor(Color(nsColor: theme.chromeMuted))
+                    .padding(.horizontal, density == .comfortable ? 12 : 8)
+                    .padding(.vertical, density == .comfortable ? 8 : 6)
+            }
+
         }
     }
 

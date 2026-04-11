@@ -347,6 +347,7 @@ final class LocalFileTreePlugin: BooPluginProtocol {
             for (rootPath, root) in self.cachedRoots where path.hasPrefix(rootPath) || rootPath.hasPrefix(path) {
                 root.refreshAll()
             }
+            FolderInfoCache.shared.invalidate(path)
         }
         fileWatcher?.start()
     }

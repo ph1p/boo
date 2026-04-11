@@ -4,7 +4,9 @@ This guide covers how to create plugins for Boo — both external JavaScript plu
 
 ## External Plugins
 
-External plugins live in `~/.boo/plugins/` and are hot-loaded at runtime. No restart required — save a file and it appears in the sidebar.
+External plugins live in `~/.boo/plugins/` and are hot-loaded at runtime. No restart required — save a file and it appears immediately.
+
+A plugin can contribute a sidebar tab, a status bar segment, or both. A plugin with only `statusBarSegment: true` lives entirely in the status bar — no sidebar tab required.
 
 Plugins are JavaScript, running in-process via JavaScriptCore — no dependencies, no shell, instant execution.
 
@@ -43,8 +45,8 @@ That's all you need to get started. The full set of fields:
 | `description`                   | No       | Human-readable description                                              |
 | `when`                          | No       | When-clause expression for visibility (null = always visible)           |
 | `runtime`                       | No       | `"js"` (only supported value)                                           |
-| `capabilities.sidebarPanel`     | No       | Show in sidebar                                                         |
-| `capabilities.statusBarSegment` | No       | Show in status bar                                                      |
+| `capabilities.sidebarPanel`     | No       | Show in sidebar (at least one of `sidebarPanel` or `statusBarSegment` should be `true`) |
+| `capabilities.statusBarSegment` | No       | Show in status bar (can be the only capability — no sidebar tab required) |
 | `statusBar.position`            | No       | `"left"` or `"right"`                                                   |
 | `statusBar.priority`            | No       | Lower = closer to edge                                                  |
 | `statusBar.template`            | No       | Template string for status bar text                                     |
@@ -743,6 +745,8 @@ Register in `StatusBarView.registerDefaultPlugins()`.
 
 Sidebar plugins **do not** need to create their own status bar segments — the registry auto-registers `PluginIconSegment` toggle icons for any plugin with `capabilities.sidebarPanel = true`.
 
+A plugin can also contribute **only** a status bar segment with no sidebar tab at all. Set `capabilities.statusBarSegment = true` and omit `sidebarTab`. The plugin will still receive lifecycle callbacks (`pluginDidActivate` / `pluginDidDeactivate`) when it becomes visible or hidden.
+
 ## Sidebar Tabs
 
 A plugin can contribute a **dedicated sidebar tab** — a button in the tab bar at the top of the sidebar. When the user clicks it, the plugin's content fills the full sidebar height instead of appearing as a collapsible section in the Explorer panel.
@@ -796,6 +800,7 @@ The default implementation returns `nil`, so plugins that don't override this ar
 
 - The tab bar is rebuilt on every plugin cycle, so tabs appear and disappear automatically based on plugin visibility and the `when` clause.
 - `pluginDidActivate()` / `pluginDidDeactivate()` are called when the user switches tabs.
+- For plugins **without a sidebar tab** (statusbar-only), `pluginDidActivate()` is called automatically when the plugin becomes visible, and `pluginDidDeactivate()` when it becomes hidden. This ensures background work (watchers, timers) starts and stops correctly even without a sidebar tab.
 
 ### Example: Debug plugin
 

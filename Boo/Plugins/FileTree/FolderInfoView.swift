@@ -61,6 +61,34 @@ struct FolderStats {
     }
 }
 
+// MARK: - Folder Info Cache
+
+@MainActor
+final class FolderInfoCache: ObservableObject {
+    static let shared = FolderInfoCache()
+
+    @Published private(set) var generation: UInt = 0
+    private var cache: [String: FolderStats] = [:]
+
+    func get(_ path: String) -> FolderStats? {
+        cache[path]
+    }
+
+    func set(_ path: String, stats: FolderStats) {
+        cache[path] = stats
+    }
+
+    func invalidate(_ path: String) {
+        cache.removeValue(forKey: path)
+        generation &+= 1
+    }
+
+    func invalidateAll() {
+        cache.removeAll()
+        generation &+= 1
+    }
+}
+
 // MARK: - Folder Info View
 
 struct FolderInfoView: View {
@@ -68,7 +96,9 @@ struct FolderInfoView: View {
     let fontScale: SidebarFontScale
     let theme: ThemeSnapshot
 
+    @ObservedObject private var cache = FolderInfoCache.shared
     @State private var stats: FolderStats?
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             if let stats {
@@ -78,7 +108,11 @@ struct FolderInfoView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .task(id: path) {
+        .task(id: "\(path)-\(cache.generation)") {
+            if let cached = cache.get(path) {
+                stats = cached
+                return
+            }
             stats = nil
             await loadStats()
         }
@@ -156,6 +190,7 @@ struct FolderInfoView: View {
         let result = await Task.detached(priority: .utility) {
             FolderStats.compute(at: p)
         }.value
+        cache.set(p, stats: result)
         stats = result
     }
 }
