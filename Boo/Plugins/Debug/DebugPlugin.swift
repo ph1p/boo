@@ -18,6 +18,7 @@ final class DebugPlugin: BooPluginProtocol {
         when: nil,
         runtime: nil,
         capabilities: PluginManifest.Capabilities(statusBarSegment: true, sidebarTab: true),
+        statusBar: nil,
         settings: [
             PluginManifest.SettingManifest(
                 key: "maxEntries", type: .double, label: "Max log entries",
