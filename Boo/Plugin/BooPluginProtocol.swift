@@ -145,11 +145,13 @@ protocol BooPluginProtocol: BooPlugin {
 
     // MARK: - Activation Lifecycle
 
-    /// Called when the plugin's sidebar tab becomes active.
+    /// Called when the plugin becomes active — either its sidebar tab is selected,
+    /// or (for statusbar-only plugins) when it becomes visible.
     /// Use this to start background work (watchers, sockets, timers).
     func pluginDidActivate()
 
-    /// Called when the plugin's sidebar tab is deactivated.
+    /// Called when the plugin is deactivated — either its sidebar tab is deselected,
+    /// or (for statusbar-only plugins) when it becomes hidden.
     /// Use this to stop all background work and release resources.
     func pluginDidDeactivate()
 }

@@ -165,6 +165,15 @@ extension MainWindowController {
             refreshActivePluginTab(id: active, context: result.context)
         }
 
+        // Activate/deactivate plugins that have no sidebar tab (statusbar-only).
+        // These need explicit lifecycle management since they're not covered by sidebar tab selection.
+        if result.visibilityChanged {
+            let sidebarTabIDs = Set(
+                pluginRegistry.contributedSidebarTabs(terminal: result.context).map(\.id.id))
+            pluginRegistry.reconcileSidebarlessPlugins(
+                visibleIDs: result.visiblePluginIDs, sidebarTabIDs: sidebarTabIDs)
+        }
+
         // Rebuild the Plugins menu (menu items may change with plugin load/unload)
         if result.visibilityChanged {
             rebuildPluginsMenu()
