@@ -69,16 +69,36 @@ final class PluginRegistry {
 
     // MARK: - Activate / Deactivate
 
-    /// Notify a plugin it has been opened in the sidebar.
+    /// Plugins without a sidebar tab that are currently activated.
+    private var activeSidebarlessPluginIDs: Set<String> = []
+
+    /// Notify a plugin it has become active (sidebar tab selected or statusbar-only plugin visible).
     /// Plugins use this to start background work (watchers, sockets).
     func activatePlugin(_ pluginID: String) {
         plugin(for: pluginID)?.pluginDidActivate()
     }
 
-    /// Notify a plugin it has been closed from the sidebar.
+    /// Notify a plugin it has been deactivated (sidebar tab deselected or statusbar-only plugin hidden).
     /// Plugins use this to stop background work and release resources.
     func deactivatePlugin(_ pluginID: String) {
         plugin(for: pluginID)?.pluginDidDeactivate()
+    }
+
+    /// Activate/deactivate plugins that are visible but have no sidebar tab.
+    /// These plugins live only in the status bar and need explicit lifecycle management.
+    func reconcileSidebarlessPlugins(visibleIDs: Set<String>, sidebarTabIDs: Set<String>) {
+        let sidebarlessVisible = visibleIDs.subtracting(sidebarTabIDs)
+
+        // Activate newly visible sidebarless plugins
+        for id in sidebarlessVisible where !activeSidebarlessPluginIDs.contains(id) {
+            activatePlugin(id)
+        }
+        // Deactivate sidebarless plugins that are no longer visible
+        for id in activeSidebarlessPluginIDs where !sidebarlessVisible.contains(id) {
+            deactivatePlugin(id)
+        }
+
+        activeSidebarlessPluginIDs = sidebarlessVisible
     }
 
     // MARK: - Cycle
@@ -220,6 +240,7 @@ final class PluginRegistry {
         register(AIAgentPlugin())
         register(DockerPluginNew())
         register(BookmarksPluginNew())
+        register(SnippetsPlugin())
         register(SystemInfoPlugin())
         register(DebugPlugin())
     }
