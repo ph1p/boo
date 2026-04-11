@@ -1,23 +1,13 @@
 # Claude Code Configuration
 
-See [AGENTS.md](../AGENTS.md) for project architecture and conventions.
-Full docs: https://ph1p.github.io/boo/
+See [AGENTS.md](../AGENTS.md) for project architecture, build commands, structure, and conventions.
 
-## Build
+## Behavioral Rules
 
-```bash
-make setup    # First time: clone Ghostty + build GhosttyKit + build ironmark + build Boo
-make run      # Build and launch
-make test     # Run tests
-make lint     # Check code style
-make format   # Format code in-place
-```
-
-## Rules
-
-- Zero warnings policy
-- All UI on main thread (PTY reads are background GCD)
-- Use `TerminalColor.cgColor`/`.nsColor` extensions, not inline conversions
-- Settings via `AppSettings.shared` with auto-notification
 - Don't add co-authored-by to commits
-- Use `RemoteExplorer.shellEscPath()` (not `shellEscape()`) for remote paths
+- Use pnpm, never npm/npx
+- Before implementing, ask clarifying questions about scope (guidance vs full implementation, library author vs consumer perspective). Don't over-help when the user just wants validation.
+- When fixing bugs, verify no regressions in surrounding functionality. If an approach fails 3 times, stop and propose an alternative.
+- Always clarify whether new state should be global (`AppSettings`) or per-instance (`TabState`) BEFORE implementing. Default to asking if unclear.
+- Don't remove Swift memberwise initializers without a project-wide grep for the init signature. swift-format hooks may silently revert manual changes.
+- Shell scripts must be compatible with bash 3.2 (no associative arrays, no bash 4+ features).
