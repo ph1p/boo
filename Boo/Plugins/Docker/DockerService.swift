@@ -117,6 +117,14 @@ final class DockerService: ObservableObject {
             }
         }
 
+        // Verify the socket is actually reachable by pinging the daemon
+        if isAvailable, let sock = socketPath {
+            if Self.socketRequest(socketPath: sock, method: "GET", path: "/_ping", timeout: 3) == nil {
+                isAvailable = false
+                connectionError = "Docker socket found but daemon is not responding"
+            }
+        }
+
         // Detect CLI path for execCommand (terminal paste)
         dockerPath = nil
         for bin in ["/usr/local/bin/docker", "/opt/homebrew/bin/docker", "/usr/bin/docker"] {
