@@ -558,7 +558,10 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
             }
         }
         tabBar.onTabsReordered = { tabs in
-            AppSettings.shared.sidebarTabOrder = tabs.map(\.id)
+            let visibleIDs = tabs.map(\.id)
+            AppSettings.shared.sidebarTabOrder = SidebarTabOrdering.mergeOrder(
+                saved: AppSettings.shared.sidebarTabOrder,
+                visible: visibleIDs)
         }
         sidebarContainer.addSubview(tabBar)
         sidebarTabBarView = tabBar
