@@ -499,27 +499,23 @@ func registerBuiltins() {
 }
 ```
 
-### Using Host Actions
+### Using PluginActions
 
-Access terminal and window actions through the injected `hostActions`:
+`PluginActions` is the unified action dispatch, available via the plugin context:
 
 ```swift
-// Paste a path into the active terminal
-hostActions?.pastePathToActivePane?("/some/path")
+// Convenience methods
+pluginActions.exec("ls -la")              // Send command + Enter
+pluginActions.cd(to: "/some/dir")         // cd + Enter
+pluginActions.pastePath("/some/path")     // Insert path without executing
+pluginActions.copy("text")                // Copy to clipboard
+pluginActions.reveal("/some/file")        // Show in Finder
+pluginActions.openInEditor("/some/file")  // Open with default app
 
-// Open a directory in a new tab
-hostActions?.openDirectoryInNewTab?("/some/dir")
-
-// Open a directory in a new split pane
-hostActions?.openDirectoryInNewPane?("/some/dir")
-
-// Send raw text to the active terminal
-hostActions?.sendRawToActivePane?("ls -la\r")
-
-// Access the terminal bridge for advanced integration
-if let bridge = hostActions?.bridge {
-    // Subscribe to bridge events, read terminal state, etc.
-}
+// Lower-level closures
+pluginActions.openDirectoryInNewTab?("/some/dir")
+pluginActions.openDirectoryInNewPane?("/some/dir")
+pluginActions.sendToTerminal?("raw text\r")
 ```
 
 ### Triggering Refreshes
@@ -564,19 +560,16 @@ func terminalFocusChanged(terminalID: UUID, context: TerminalContext) {
 
 #### Sending commands on directory change
 
-Use `cwdChanged` + `hostActions` to send a command to the terminal whenever the user `cd`s into a folder:
+Use `cwdChanged` + `PluginActions` to send a command to the terminal whenever the user `cd`s into a folder:
 
 ```swift
 func cwdChanged(newPath: String, context: TerminalContext) {
-    // Example: activate a project environment automatically
     let envFile = (newPath as NSString).appendingPathComponent(".envrc")
     if FileManager.default.fileExists(atPath: envFile) {
-        hostActions?.exec("direnv allow .")
+        pluginActions.exec("direnv allow .")
     }
 }
 ```
-
-`hostActions?.exec(_:)` sends the command followed by a newline (Enter), exactly as if the user typed it. Use `hostActions?.cd(to:)` to change directory, `hostActions?.pastePath(_:)` to insert a path without executing.
 
 ### Enrichment
 
@@ -693,20 +686,29 @@ Override `makeSidebarTab(context:)` in your plugin class:
 ```swift
 func makeSidebarTab(context: PluginContext) -> SidebarTab? {
     SidebarTab(
-        id: SidebarTabID("my-plugin"),      // must match your manifest id
-        icon: "magnifyingglass",             // SF Symbol name
-        label: "My Plugin",                 // shown as tooltip
-        content: makeDetailView(context: context) ?? AnyView(EmptyView())
+        id: SidebarTabID("my-plugin"),
+        icon: "magnifyingglass",
+        label: "My Plugin",
+        sections: [
+            SidebarSection(
+                id: "my-plugin-main",
+                name: "My Plugin",
+                icon: "magnifyingglass",
+                content: makeDetailView(context: context) ?? AnyView(EmptyView()),
+                prefersOuterScrollView: true,
+                generation: 0
+            )
+        ]
     )
 }
 ```
 
 - `id` — use `SidebarTabID("your-plugin-id")` matching your manifest's `id` field.
-- `icon` — any SF Symbol name, shown in the tab bar button.
+- `icon` — SF Symbol name shown in the tab bar button.
 - `label` — accessibility label and tooltip text.
-- `content` — any SwiftUI `AnyView`. Typically reuse your `makeDetailView` output.
+- `sections` — one or more `SidebarSection` entries; a single section skips the header.
 
-The default implementation returns `nil`, so plugins that don't override this method are unaffected.
+The default implementation returns `nil`, so plugins that don't override this are unaffected.
 
 ### Tab lifecycle
 
@@ -715,21 +717,12 @@ The default implementation returns `nil`, so plugins that don't override this me
 
 ### Example: Debug plugin
 
-The built-in `DebugPlugin` uses `sidebarTab: true` to show a dedicated ladybug tab with its full event log:
+The built-in `DebugPlugin` uses `sidebarTab: true` to show a dedicated ladybug tab:
 
 ```swift
 capabilities: PluginManifest.Capabilities(
     sidebarPanel: true,
     statusBarSegment: true,
     sidebarTab: true
-),
-
-func makeSidebarTab(context: PluginContext) -> SidebarTab? {
-    SidebarTab(
-        id: SidebarTabID("debug"),
-        icon: "ladybug.fill",
-        label: "Debug",
-        content: makeDetailView(context: context) ?? AnyView(EmptyView())
-    )
-}
+)
 ```

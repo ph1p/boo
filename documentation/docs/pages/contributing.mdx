@@ -1,115 +1,58 @@
 # Contributing
 
-## Development Setup
+## Setup
 
 1. Fork and clone the repository
-2. Run `make setup` to build all dependencies
-3. Run `make test` to verify everything works
-4. Install `swift-format` for linting: `brew install swift-format`
+2. `make setup` to build all dependencies
+3. `make test` to verify everything works
+4. Install swift-format: `brew install swift-format`
 
 ## Code Style
 
-Boo uses [swift-format](https://github.com/swiftlang/swift-format) for consistent code formatting. Configuration is in `.swift-format` at the project root.
+Boo uses [swift-format](https://github.com/swiftlang/swift-format) (config in `.swift-format`).
 
 ```bash
-make format   # Format all source files in-place
-make lint     # Check for style violations (fails on issues)
+make format   # Format all source files
+make lint     # Check for violations (CI runs this)
 ```
 
-**Rules:**
-
-- 4-space indentation
-- 120 character line length
-- Zero compiler warnings policy
-- All UI operations on the main thread
-
-CI runs `make lint` on every pull request. Format your code before pushing.
-
-## Project Structure
-
-```
-Boo/
-  App/              AppDelegate, MainWindowController, WindowStateCoordinator
-  Ghostty/          GhosttyRuntime, GhosttyView (Metal GPU rendering)
-  Terminal/         TerminalBackend protocol
-  Models/           Workspace, Pane, SplitTree, AppSettings, Theme
-  Plugin/           Core plugin framework (protocol, registry, runtime, DSL)
-  Plugins/          Built-in plugins (FileTree/, Git/, Docker/, Bookmarks/)
-  Views/            App-level views (ToolbarView, PaneView, StatusBarView)
-  Services/         Shared infrastructure (RemoteExplorer, TerminalBridge, MarkdownRenderer)
-CGhostty/           C module wrapping ghostty.h
-CIronmark/          C module wrapping ironmark (Rust markdown parser)
-CPTYHelper/         C helper for forkpty()
-Tests/              717+ tests mirroring source structure
-```
-
-See [Architecture](/architecture) for detailed design documentation.
+Rules: 4-space indent, 120-char lines, zero compiler warnings, all UI on main thread.
 
 ## Making Changes
 
-### Branch Strategy
-
-- `main` is the release branch
-- Create feature branches from `main`
-- Use descriptive branch names: `feature/plugin-name`, `fix/tab-close-crash`
-
-### Pull Request Process
-
-1. Create a feature branch
-2. Make your changes
-3. Run `make format` to format code
-4. Run `make test` to verify all tests pass
-5. Run `make lint` to check for style issues
-6. Push and open a pull request
-7. CI will automatically run lint, build, and tests
+1. Create a feature branch from `main` (e.g., `feature/plugin-name`, `fix/tab-close-crash`)
+2. Make changes
+3. `make format && make test && make lint`
+4. Push and open a pull request
 
 ### Adding a Plugin
 
-1. Create `Boo/Plugins/YourPlugin/YourPlugin.swift`
-2. Conform to `BooPluginProtocol`
-3. Register in `PluginRegistry.registerBuiltins()`
-4. Add tests in `Tests/BooTests/Plugins/YourPlugin/`
-5. No `Package.swift` changes needed
+1. Create `Boo/Plugins/YourPlugin/YourPlugin.swift` conforming to `BooPluginProtocol`
+2. Register in `PluginRegistry.registerBuiltins()`
+3. Add tests in `Tests/BooTests/Plugins/YourPlugin/`
 
 See [Plugin Development](/plugin-development) for the full guide.
 
 ## Testing
 
 ```bash
-make test             # Run all tests
-swift test --filter PluginTests  # Run specific test suite
+make test                              # Run all tests
+swift test --filter PluginTests        # Run specific suite
 ```
 
-Tests cover models, plugins, services, terminal bridge, remote explorer, and SSH control. Aim for test coverage on any new functionality.
+## Release
 
-## Release Process
-
-Releases are automated via GitHub Actions on tag push:
+Releases are automated via GitHub Actions using [semantic-release](https://github.com/semantic-release/semantic-release) with conventional commits.
 
 ```bash
-git tag v0.2.0
-git push origin v0.2.0
+make dist   # Manual: release build + sign + notarize + DMG
 ```
 
-This triggers the release workflow which builds, signs, notarizes, and publishes a DMG to GitHub Releases.
-
-### Manual Release
-
-```bash
-make dist   # Full pipeline: release build, app bundle, sign, notarize, DMG
-```
-
-Requires environment variables for signing:
-
-- `SIGNING_IDENTITY` — Developer ID certificate name
-- `APPLE_ID` — Apple ID email
-- `APPLE_TEAM_ID` — Developer Team ID
-- `APPLE_PASSWORD` — App-specific password
+Requires: `SIGNING_IDENTITY`, `APPLE_ID`, `APPLE_TEAM_ID`, `APPLE_PASSWORD` env vars.
 
 ## Conventions
 
-- Use `TerminalColor.cgColor`/`.nsColor` extensions, not inline conversions
-- Settings via `AppSettings.shared` with auto-notification
-- Safe screen access via `screenRead`/`screenWrite` helpers
-- Use `RemoteExplorer.shellEscPath()` for remote paths (preserves tilde expansion)
-- Plugin settings: `AppSettings.shared.pluginBool/pluginString/pluginDouble`
+- `TerminalColor.cgColor`/`.nsColor` for color conversions
+- `AppSettings.shared` with auto-notification for settings
+- `RemoteExplorer.shellEscPath()` for remote paths
+- `AppSettings.shared.pluginBool/pluginString/pluginDouble` for plugin settings

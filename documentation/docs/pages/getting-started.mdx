@@ -1,48 +1,22 @@
 # Getting Started
 
-## Prerequisites
+See [Installation](/installation) for download and build instructions.
 
-- **macOS 13+** (Ventura or later)
-- **Xcode Command Line Tools** — `xcode-select --install`
-- **Zig 0.15+** — `brew install zig`
-- **Rust** — `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`
-- **Metal Toolchain** — `xcodebuild -downloadComponent MetalToolchain` (if not already installed)
+## First Launch
 
-## Build
+1. Open Boo — it starts with a workspace in your home directory
+2. **Cmd+Shift+O** to open a project folder as a workspace
+3. **Cmd+B** to toggle the sidebar file explorer
+4. **Cmd+D** / **Cmd+Shift+D** to split panes
+5. **Cmd+,** to open settings and pick a theme
 
-### 1. Clone the repository
+## Key Concepts
 
-```bash
-git clone --recursive https://github.com/ph1p/boo.git
-cd boo
-```
+- **Workspaces** are project folders, each with its own color and state
+- **Panes** are split views within a workspace, each with its own tab bar
+- **Tabs** are terminal sessions within a pane
+- **Sidebar** shows plugins (file tree, git, docker, bookmarks) for the active tab
 
-If you already cloned without `--recursive`:
+Close order is smart: **Cmd+W** closes tab → pane → workspace.
 
-```bash
-git submodule update --init --depth 1
-```
-
-### 2. Build everything
-
-```bash
-make setup  # Builds GhosttyKit + Boo
-make run    # Build and launch
-```
-
-:::note
-First build downloads dependencies and compiles Metal shaders. Takes 2-5 minutes. Subsequent builds are cached.
-:::
-
-### Release Build
-
-```bash
-make release  # Optimized release build
-make app      # Create .app bundle
-```
-
-## Running Tests
-
-```bash
-make test
-```
+See [Features](/features) for the full list and [Keyboard Shortcuts](/keyboard-shortcuts) for all shortcuts.
