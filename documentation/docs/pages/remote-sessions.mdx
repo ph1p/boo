@@ -1,69 +1,42 @@
 # Remote Sessions
 
-Boo automatically detects remote terminal sessions and adapts the file explorer, status bar, and plugin context for them. Support includes classic SSH-style sessions plus common container, VM, and device shells.
+Boo auto-detects remote terminal sessions and adapts the file explorer, status bar, and plugin context.
 
-## Supported Session Types
+## Supported Sessions
 
-| Category                     | Examples                       |
-| ---------------------------- | ------------------------------ |
-| **SSH-style**                | `ssh`, `mosh`                  |
-| **Container shells**         | `docker`, `podman`, `nerdctl`  |
-| **Cluster / container exec** | `kubectl`, `oc`, `lxc`         |
-| **VM / desktop shells**      | `limactl`, `colima`, `vagrant` |
-| **Toolbox shells**           | `distrobox`, `toolbox`         |
-| **Device shells**            | `adb shell`                    |
+| Category          | Tools                                                |
+| ----------------- | ---------------------------------------------------- |
+| SSH-style         | `ssh`, `mosh`                                        |
+| Containers        | `docker`, `podman`, `nerdctl`, `kubectl`, `oc`, `lxc`|
+| VMs               | `limactl`, `colima`, `vagrant`                       |
+| Toolboxes         | `distrobox`, `toolbox`                               |
+| Devices           | `adb shell`                                          |
 
-Only interactive sessions are treated as remote environments. Non-interactive commands such as `docker exec myapp cat /etc/hosts` do not switch the pane into remote mode.
+Only interactive sessions trigger remote mode. Non-interactive commands (e.g. `docker exec myapp cat /etc/hosts`) don't switch the pane.
 
 ## Detection
 
-Remote sessions are detected via two mechanisms:
+Two mechanisms work together:
 
-### Title Heuristics
+1. **Title heuristics** — `TerminalBridge` checks terminal title changes for `user@host` patterns or known remote commands, combined with checking that the reported CWD doesn't exist locally
+2. **Process tree** — `RemoteExplorer` scans child processes for `ssh`, `mosh`, and container/VM tools via `proc_listchildpids`
 
-`TerminalBridge.detectRemoteFromHeuristics` is triggered on every `GHOSTTY_ACTION_SET_TITLE`. It checks if the terminal title contains:
+When a remote session is detected, the sidebar switches to `RemoteFileTreeView` and runs listing commands appropriate for the session type.
 
-- `user@host` patterns (SSH)
-- interactive remote commands such as `docker exec`, `kubectl exec`, `vagrant ssh`, or `adb shell`
+## Remote File Browsing
 
-AND the reported CWD doesn't exist locally. This is the primary detection path since remote shells don't have Ghostty's shell integration.
+Commands are adapted per session type:
 
-### Process Tree
+| Type                    | Pattern                                           |
+| ----------------------- | ------------------------------------------------- |
+| SSH                     | `ssh -n -o BatchMode=yes <host> <cmd>`            |
+| Docker/Podman/nerdctl   | `<tool> exec <target> sh -c <cmd>`                |
+| kubectl/oc/lxc/toolbox  | `<tool> <subcommand> <target> -- sh -c <cmd>`     |
+| limactl                 | `limactl shell <vm> sh -c <cmd>`                  |
+| adb                     | `adb shell sh -c <cmd>`                           |
 
-`RemoteExplorer.detectRemoteSession` uses `proc_listchildpids` + `proc_name` syscalls to find `ssh`, `mosh`, and known container / VM tools in the child process tree, then parses their command-line args via `sysctl(KERN_PROCARGS2)`.
+SSH prefers ControlMaster sockets when available for connection reuse.
 
-## Detection Flow
+## CWD Tracking
 
-```
-paneView(_:titleChanged:) in MainWindowController
-  → detectRemoteFromHeuristics
-    → if remote detected → handleRemoteSessionChange
-      → switches sidebar to RemoteFileTreeView
-        → RemoteExplorer.listRemoteDirectory
-```
-
-## Remote Commands
-
-Commands are executed differently depending on the session type:
-
-| Type                                         | Command Pattern                               |
-| -------------------------------------------- | --------------------------------------------- |
-| **SSH**                                      | `ssh -n -o BatchMode=yes <host> <cmd>`        |
-| **Docker / Podman / nerdctl**                | `<tool> exec <target> sh -c <cmd>`            |
-| **kubectl / oc / lxc / distrobox / toolbox** | `<tool> <subcommand> <target> -- sh -c <cmd>` |
-| **limactl**                                  | `limactl shell <vm> sh -c <cmd>`              |
-| **colima / vagrant**                         | `<tool> ssh <target> ...`                     |
-| **adb**                                      | `adb shell sh -c <cmd>`                       |
-
-SSH prefers ControlMaster sockets when available. Boo can reuse an existing user-managed socket, add ControlMaster config to `~/.ssh/config` with one-time approval, or spin up a Boo-managed background master when needed. Named Colima profiles and named Vagrant VMs are forwarded to the underlying command rather than falling back to the default target.
-
-## Remote Shell Integration (CWD Tracking)
-
-Ghostty's OSC 7 shell integration only reports the **local** shell's CWD. Boo therefore combines several remote-specific strategies instead of trying to treat remote shells like local ones:
-
-1. **Title parsing** — Prompts that include `user@host:path` or tool-specific titles provide an immediate remote CWD hint.
-2. **Process-tree reconciliation** — Background polling confirms or clears remote-session state independently of the title.
-3. **SSH connection sharing** — The file explorer reuses the active SSH connection through ControlMaster when possible.
-4. **Container CWD watchers** — For title-detected container sessions, Boo can poll the shell CWD inside the container because Docker-style exec sessions may not remain visible in the macOS process tree.
-
-This keeps browsing reliable without requiring a separate remote shell injector layer.
+Since Ghostty's OSC 7 only reports the local shell's CWD, Boo uses title parsing (`user@host:path`), process-tree polling, and container CWD watchers to track the remote working directory.

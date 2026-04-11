@@ -1,36 +1,33 @@
 # IPC Socket
 
-Boo exposes a Unix domain socket at `~/.boo/boo.sock` for communication between terminal child processes, plugins, and the app.
-
-The socket path is also available inside terminal sessions as `$BOO_SOCK`.
+Boo exposes a Unix domain socket at `~/.boo/boo.sock` (also available as `$BOO_SOCK` in terminal sessions) for communication between child processes, plugins, and the app.
 
 ## Protocol
 
-- Newline-delimited JSON
-- One request per line
-- One JSON response per request
-- Long-lived connections can subscribe to push events
+Newline-delimited JSON. One request per line, one response per request. Long-lived connections can subscribe to push events.
 
-## Command Categories
+## Commands
 
-| Category       | Examples                                                                                   |
-| -------------- | ------------------------------------------------------------------------------------------ |
-| **Process**    | `set_status`, `clear_status`, `list_status`                                                |
-| **Query**      | `get_context`, `get_theme`, `get_settings`, `get_workspaces`                               |
+| Category       | Commands                                                                          |
+| -------------- | --------------------------------------------------------------------------------- |
+| **Query**      | `get_context`, `get_theme`, `get_settings`, `get_workspaces`                      |
 | **Control**    | `set_theme`, `toggle_sidebar`, `switch_workspace`, `new_tab`, `new_workspace`, `send_text` |
-| **Events**     | `subscribe`, `unsubscribe`                                                                 |
-| **Status Bar** | `statusbar.set`, `statusbar.clear`, `statusbar.list`                                       |
-| **Plugin**     | `<namespace>.<action>`                                                                     |
+| **Process**    | `set_status`, `clear_status`, `list_status`                                       |
+| **Events**     | `subscribe`, `unsubscribe`                                                        |
+| **Status Bar** | `statusbar.set`, `statusbar.clear`, `statusbar.list`                              |
+| **Plugin**     | `<namespace>.<action>`                                                            |
 
 ## Examples
 
 ```bash
-# Register as an AI agent
-echo '{"cmd":"set_status","pid":'"$$"',"name":"claude","category":"ai"}' \
-  | nc -U "$BOO_SOCK"
-
 # Query current terminal context
 echo '{"cmd":"get_context"}' | nc -U "$BOO_SOCK"
+
+# Register as an AI agent
+echo '{"cmd":"set_status","pid":'"$$"',"name":"claude","category":"ai"}' | nc -U "$BOO_SOCK"
+
+# Send a command to the active terminal
+echo '{"cmd":"send_text","text":"echo hello\n"}' | nc -U "$BOO_SOCK"
 
 # Push a status bar segment
 echo '{"cmd":"statusbar.set","id":"ci","text":"CI: passing","icon":"checkmark.circle","tint":"green"}' \
@@ -54,61 +51,21 @@ Keep the connection open after `subscribe` to receive push events:
 
 Use `"events": ["*"]` to subscribe to all events.
 
-## Status Bar Segments
+## `send_text`
 
-External processes can publish their own status bar segments. Segments are automatically cleaned up when the client disconnects.
-
-Tint colors accept named values such as `red`, `green`, `yellow`, `blue`, `orange`, `purple`, `accent`, or a `#hex` color.
-
-## Control Commands
-
-### `send_text`
-
-Write text directly to the active terminal's PTY — identical to typing it. Unlike paste, this goes straight to the terminal without clipboard involvement.
-
-| Field  | Required | Description                                               |
-| ------ | -------- | --------------------------------------------------------- |
-| `text` | Yes      | Text to send. Include `\n` or `\r` to submit a command.  |
+Write text directly to the active terminal's PTY — identical to typing it.
 
 ```bash
-# Run a command in the active terminal
-echo '{"cmd":"send_text","text":"echo hello\n"}' | nc -U "$BOO_SOCK"
-
-# Change directory
 echo '{"cmd":"send_text","text":"cd ~/projects/myapp\n"}' | nc -U "$BOO_SOCK"
 ```
 
-### Reacting to directory changes
+## Status Bar Segments
 
-Subscribe to `cwd_changed`, then respond with `send_text` to send a command whenever the user `cd`s into a folder. Keep the connection open for push events:
+External processes can publish status bar segments. Tint accepts named colors (`red`, `green`, `yellow`, `blue`, `orange`, `purple`, `accent`) or `#hex`. Segments are auto-cleaned on disconnect.
 
-```python
-#!/usr/bin/env python3
-import socket, json, os
+## Security
 
-sock_path = os.path.expanduser("~/.boo/boo.sock")
-
-with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
-    s.connect(sock_path)
-    f = s.makefile("rb")
-
-    # Subscribe to directory changes
-    s.sendall(b'{"cmd":"subscribe","events":["cwd_changed"]}\n')
-    f.readline()  # consume ack
-
-    for line in f:
-        msg = json.loads(line)
-        if msg.get("event") == "cwd_changed":
-            path = msg["data"]["path"]
-            # Send a command to the terminal whenever cwd changes
-            cmd = json.dumps({"cmd": "send_text", "text": f"ls {path}\n"})
-            s.sendall((cmd + "\n").encode())
-            f.readline()  # consume ack
-```
-
-## Reliability and Safety
-
-- Socket I/O runs on a dedicated serial queue.
-- Connecting processes are verified with `LOCAL_PEERCRED`.
-- Registered PIDs are checked as descendants of the shell to avoid cross-pane interference.
-- Dead processes and disconnected clients are cleaned up automatically.
+- Socket I/O runs on a dedicated serial queue
+- Connecting processes are verified with `LOCAL_PEERCRED`
+- Registered PIDs are checked as descendants of the shell
+- Dead processes and disconnected clients are cleaned up automatically

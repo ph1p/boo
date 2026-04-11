@@ -433,6 +433,7 @@ struct GitDetailView: View {
                 .fill(Color(nsColor: isHovered ? theme.sidebarRowHover : .clear))
         )
         .padding(.horizontal, density == .comfortable ? 8 : 6)
+        .contentShape(Rectangle())
         .onHover { hovering in
             hoveredFileID = hovering ? file.id : nil
         }
