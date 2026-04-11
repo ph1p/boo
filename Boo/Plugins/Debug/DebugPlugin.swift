@@ -17,8 +17,7 @@ final class DebugPlugin: BooPluginProtocol {
         description: "Logs all plugin lifecycle events and displays live terminal state",
         when: nil,
         runtime: nil,
-        capabilities: PluginManifest.Capabilities(statusBarSegment: false, sidebarTab: true),
-        statusBar: nil,
+        capabilities: PluginManifest.Capabilities(statusBarSegment: true, sidebarTab: true),
         settings: [
             PluginManifest.SettingManifest(
                 key: "maxEntries", type: .double, label: "Max log entries",

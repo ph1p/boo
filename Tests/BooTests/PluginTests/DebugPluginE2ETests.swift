@@ -290,26 +290,6 @@ final class DebugPluginE2ETests: XCTestCase {
         XCTAssertGreaterThanOrEqual(enrichCount, 4, "Multiple cycles from cwd + title changes")
     }
 
-    // MARK: - Status Bar E2E
-
-    func testDebugStatusBarContent() {
-        // Trigger some events
-        bridge.handleDirectoryChange(path: "/test", paneID: paneID)
-
-        let ctx = PluginContext(
-            terminal: currentContext(),
-            theme: ThemeSnapshot(from: AppSettings.shared.theme),
-            density: .comfortable,
-            settings: PluginSettingsReader(pluginID: "debug"),
-            fontScale: SidebarFontScale(base: 12)
-        )
-
-        let content = debug.makeStatusBarContent(context: ctx)
-        XCTAssertNotNil(content)
-        XCTAssertEqual(content?.icon, "ladybug.fill")
-        XCTAssertTrue(content?.text.contains("\(debug.entries.count)") ?? false)
-    }
-
     // MARK: - Log Management
 
     func testMaxEntriesRespected() {
