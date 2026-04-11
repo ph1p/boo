@@ -128,6 +128,9 @@ enum SettingsTopic: String, CaseIterable {
 final class AppSettings {
     static let shared = AppSettings()
 
+    /// Show save-error feedback only once per session to avoid spam.
+    private var saveErrorShown = false
+
     // MARK: - Keys
 
     private enum K {
@@ -619,8 +622,17 @@ final class AppSettings {
         if let sshControlMasterApproved {
             dict[K.sshControlMasterApproved] = sshControlMasterApproved
         }
-        if let data = try? JSONSerialization.data(withJSONObject: dict, options: [.prettyPrinted, .sortedKeys]) {
-            try? data.write(to: URL(fileURLWithPath: BooPaths.settingsFile))
+        do {
+            let data = try JSONSerialization.data(withJSONObject: dict, options: [.prettyPrinted, .sortedKeys])
+            try data.write(to: URL(fileURLWithPath: BooPaths.settingsFile))
+        } catch {
+            debugLog("[Settings] Failed to save: \(error)")
+            if !saveErrorShown {
+                saveErrorShown = true
+                DispatchQueue.main.async {
+                    BooAlert.showTransient("Settings could not be saved")
+                }
+            }
         }
     }
 

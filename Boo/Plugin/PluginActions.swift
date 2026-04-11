@@ -29,7 +29,9 @@ final class PluginActions {
 
     func copy(_ text: String) {
         NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(text, forType: .string)
+        if !NSPasteboard.general.setString(text, forType: .string) {
+            BooAlert.showTransient("Could not copy to clipboard")
+        }
     }
 
     func reveal(_ path: String) {

@@ -34,7 +34,11 @@ final class DSLActionHandler {
         case "copy":
             guard let text = action.text ?? action.path, !text.isEmpty else { return nil }
             NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString(text, forType: .string)
+            if !NSPasteboard.general.setString(text, forType: .string) {
+                DispatchQueue.main.async {
+                    BooAlert.showTransient("Could not copy to clipboard")
+                }
+            }
             return "Copied to clipboard"
 
         case "reveal":

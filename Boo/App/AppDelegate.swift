@@ -16,6 +16,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var appearanceObserver: NSKeyValueObservation?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Verify ~/.boo directories are usable; warn once if not.
+        do {
+            try BooPaths.ensureDirectories()
+        } catch {
+            BooAlert.showError(
+                title: "Cannot Initialize Data Directory",
+                message: "Failed to set up ~/.boo: \(error.localizedDescription)\n\n"
+                    + "Boo will continue but settings, bookmarks, and session data cannot be saved."
+            )
+        }
+
         // Initialize Ghostty runtime (lazy, won't crash if fails)
         let ghosttyOK = GhosttyRuntime.shared.app != nil
         NSLog("[Boo] Ghostty runtime: \(ghosttyOK ? "OK" : "FAILED")")
