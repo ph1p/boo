@@ -150,6 +150,20 @@ final class AIProcessDetectionTests: XCTestCase {
         XCTAssertEqual(TerminalBridge.extractProcessName(from: "git status"), "git")
     }
 
+    // MARK: - extractProcessName: Colon titles extract first word
+
+    func testCargoInstallWithColonReturnsCargoOnly() {
+        XCTAssertEqual(TerminalBridge.extractProcessName(from: "cargo install rtk: Compiling"), "cargo")
+    }
+
+    func testCommandWithColonReturnsFirstWord() {
+        XCTAssertEqual(TerminalBridge.extractProcessName(from: "npm run build: watching"), "npm")
+    }
+
+    func testSingleWordCommandWithColon() {
+        XCTAssertEqual(TerminalBridge.extractProcessName(from: "make: building target"), "make")
+    }
+
     // MARK: - Title-only detection (no socket): process follows title
 
     func testTitleSetsAndClears() {

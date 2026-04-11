@@ -421,10 +421,11 @@ extension TerminalBridge {
                 }
                 return before
             }
-            // "command: args" — return command name
-            if shellNames.contains(before.lowercased()) { return "" }
-            if looksLikePath(before) { return "" }
-            return before
+            // "command: args" — return command name (first word only)
+            let cmd = before.split(separator: " ").first.map(String.init) ?? before
+            if shellNames.contains(cmd.lowercased()) { return "" }
+            if looksLikePath(cmd) { return "" }
+            return cmd
         }
 
         let firstWord = trimmed.split(separator: " ").first.map(String.init) ?? trimmed
