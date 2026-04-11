@@ -84,10 +84,16 @@ final class BookmarkService {
     }
 
     private func save() {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        if let data = try? encoder.encode(bookmarks) {
-            try? data.write(to: URL(fileURLWithPath: BooPaths.bookmarksFile))
+        do {
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            let data = try encoder.encode(bookmarks)
+            try data.write(to: URL(fileURLWithPath: BooPaths.bookmarksFile))
+        } catch {
+            debugLog("[Bookmarks] Failed to save: \(error)")
+            DispatchQueue.main.async {
+                BooAlert.showTransient("Bookmarks could not be saved")
+            }
         }
     }
 

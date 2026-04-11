@@ -55,7 +55,9 @@ struct GitDetailView: View {
                     Button(action: {
                         let hash = String(commit.prefix(while: { !$0.isWhitespace }))
                         NSPasteboard.general.clearContents()
-                        NSPasteboard.general.setString(hash, forType: .string)
+                        if !NSPasteboard.general.setString(hash, forType: .string) {
+                            BooAlert.showTransient("Could not copy to clipboard")
+                        }
                         commitCopied = true
                         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
                             commitCopied = false

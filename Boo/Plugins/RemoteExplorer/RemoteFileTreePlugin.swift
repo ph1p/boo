@@ -43,18 +43,6 @@ final class RemoteFileTreePlugin: BooPluginProtocol {
         return dirName.isEmpty ? nil : dirName
     }
 
-    // MARK: - Status Bar
-
-    func makeStatusBarContent(context: PluginContext) -> StatusBarContent? {
-        let dirName = (Self.remoteRootPath(for: context.terminal) as NSString).lastPathComponent
-        return StatusBarContent(
-            text: dirName,
-            icon: "folder.badge.gearshape",
-            tint: nil,
-            accessibilityLabel: "Files (remote): \(dirName)"
-        )
-    }
-
     // MARK: - Detail View
 
     func makeDetailView(context: PluginContext) -> AnyView? {

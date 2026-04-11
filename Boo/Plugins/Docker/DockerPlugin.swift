@@ -1,5 +1,13 @@
 import SwiftUI
 
+@MainActor
+private func copyToClipboard(_ text: String) {
+    NSPasteboard.general.clearContents()
+    if !NSPasteboard.general.setString(text, forType: .string) {
+        BooAlert.showTransient("Could not copy to clipboard")
+    }
+}
+
 /// Built-in Docker plugin. Shows running containers when Docker is available.
 /// Available locally (not in remote sessions).
 @MainActor
@@ -176,8 +184,7 @@ final class DockerPluginNew: BooPluginProtocol {
                     onUnpause: { c in DockerService.shared.unpauseContainer(c.id) },
                     onRemove: { c in DockerService.shared.removeContainer(c.id) },
                     onCopyID: { c in
-                        NSPasteboard.general.clearContents()
-                        NSPasteboard.general.setString(c.id, forType: .string)
+                        copyToClipboard(c.id)
                     },
                     onInspect: { c in
                         act?.handle(
@@ -663,13 +670,11 @@ private struct DockerContainerRow: View {
             Divider()
             Button("Copy Container ID") { onCopyID() }
             Button("Copy Name") {
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(container.name, forType: .string)
+                copyToClipboard(container.name)
             }
             if !container.ports.isEmpty {
                 Button("Copy Ports") {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(container.ports, forType: .string)
+                    copyToClipboard(container.ports)
                 }
             }
         }
@@ -781,12 +786,10 @@ private struct DockerImageRow: View {
         .onHover { isHovered = $0 }
         .contextMenu {
             Button("Copy ID") {
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(image.id, forType: .string)
+                copyToClipboard(image.id)
             }
             Button("Copy Tag") {
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(image.repoTag, forType: .string)
+                copyToClipboard(image.repoTag)
             }
             Divider()
             Button("Remove", role: .destructive) { onRemove() }
@@ -855,12 +858,10 @@ private struct DockerNetworkRow: View {
         .onHover { isHovered = $0 }
         .contextMenu {
             Button("Copy ID") {
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(network.id, forType: .string)
+                copyToClipboard(network.id)
             }
             Button("Copy Name") {
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(network.name, forType: .string)
+                copyToClipboard(network.name)
             }
             Divider()
             Button("Remove", role: .destructive) { onRemove() }
@@ -924,12 +925,10 @@ private struct DockerVolumeRow: View {
         .onHover { isHovered = $0 }
         .contextMenu {
             Button("Copy Name") {
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(volume.name, forType: .string)
+                copyToClipboard(volume.name)
             }
             Button("Copy Mountpoint") {
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(volume.mountpoint, forType: .string)
+                copyToClipboard(volume.mountpoint)
             }
             Divider()
             Button("Remove", role: .destructive) { onRemove() }

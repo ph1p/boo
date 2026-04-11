@@ -6,9 +6,8 @@ struct StatusBarSettingsView: View {
     @State private var showTime = AppSettings.shared.statusBarShowTime
     @State private var showPaneInfo = AppSettings.shared.statusBarShowPaneInfo
     @State private var showConnection = AppSettings.shared.statusBarShowConnection
-    @State private var showPath = AppSettings.shared.statusBarShowPath
-    @State private var showGitBranch = AppSettings.shared.statusBarShowGitBranch
-    @ObservedObject private var observer = SettingsObserver(topics: [.theme, .statusBar])
+    @State private var showPath = AppSettings.shared.pluginBool("file-tree-local", "showPath", default: true)
+    @ObservedObject private var observer = SettingsObserver(topics: [.theme, .statusBar, .plugins])
 
     var body: some View {
         let _ = observer.revision
@@ -18,27 +17,80 @@ struct StatusBarSettingsView: View {
                 statusBarPreview(t)
             }
 
-            Section(title: "Left Segments") {
+            Section(title: "Built-in Segments") {
                 VStack(alignment: .leading, spacing: 8) {
                     ToggleRow(label: "Connection", isOn: $showConnection)
                         .onChange(of: showConnection) { v in AppSettings.shared.statusBarShowConnection = v }
                     ToggleRow(label: "Current path", isOn: $showPath)
-                        .onChange(of: showPath) { v in AppSettings.shared.statusBarShowPath = v }
-                    ToggleRow(label: "Git branch", isOn: $showGitBranch)
-                        .onChange(of: showGitBranch) { v in AppSettings.shared.statusBarShowGitBranch = v }
-                }
-            }
-
-            Section(title: "Right Segments") {
-                VStack(alignment: .leading, spacing: 8) {
+                        .onChange(of: showPath) { v in
+                            AppSettings.shared.setPluginSetting("file-tree-local", "showPath", v, topic: .statusBar)
+                        }
                     ToggleRow(label: "Pane & tab count", isOn: $showPaneInfo)
                         .onChange(of: showPaneInfo) { v in AppSettings.shared.statusBarShowPaneInfo = v }
                     ToggleRow(label: "Clock", isOn: $showTime)
                         .onChange(of: showTime) { v in AppSettings.shared.statusBarShowTime = v }
                 }
             }
+
+            pluginSegmentsSection(t)
         }
     }
+
+    // MARK: - Plugin Segments (dynamic)
+
+    @ViewBuilder
+    private func pluginSegmentsSection(_ t: Tokens) -> some View {
+        let manifests = PluginSettingsView.registeredManifests
+            .filter { $0.capabilities?.statusBarSegment == true }
+            .sorted { ($0.statusBar?.priority ?? 50) < ($1.statusBar?.priority ?? 50) }
+
+        if !manifests.isEmpty {
+            Section(title: "Plugin Segments") {
+                VStack(alignment: .leading, spacing: 14) {
+                    ForEach(manifests, id: \.id) { manifest in
+                        pluginSettingsRows(for: manifest, t: t)
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func pluginSettingsRows(for manifest: PluginManifest, t: Tokens) -> some View {
+        let statusBarSettings = (manifest.settings ?? []).filter { $0.type == .bool }
+
+        VStack(alignment: .leading, spacing: 6) {
+            // Plugin header
+            HStack(spacing: 6) {
+                Image(systemName: manifest.icon)
+                    .font(.system(size: 10))
+                    .foregroundColor(t.accent)
+                    .frame(width: 14)
+                Text(manifest.name)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(t.text)
+            }
+
+            if statusBarSettings.isEmpty {
+                HStack {
+                    Text("Visible when active")
+                        .font(.system(size: 11))
+                        .foregroundColor(t.muted)
+                    Spacer()
+                }
+                .padding(.leading, 20)
+            } else {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(statusBarSettings, id: \.key) { setting in
+                        PluginStatusBarToggle(pluginID: manifest.id, setting: setting)
+                    }
+                }
+                .padding(.leading, 20)
+            }
+        }
+    }
+
+    // MARK: - Preview
 
     private func statusBarPreview(_ t: Tokens) -> some View {
         HStack(spacing: 0) {
@@ -48,9 +100,6 @@ struct StatusBarSettingsView: View {
                 }
                 if showPath {
                     statusChip(icon: "folder", label: "~/projects/boo", color: t.muted, t: t)
-                }
-                if showGitBranch {
-                    statusChip(icon: "arrow.triangle.branch", label: "main", color: t.muted, t: t)
                 }
             }
             Spacer()
@@ -84,5 +133,25 @@ struct StatusBarSettingsView: View {
                 .font(.system(size: 10))
                 .foregroundColor(color)
         }
+    }
+}
+
+// MARK: - Plugin Status Bar Toggle
+
+private struct PluginStatusBarToggle: View {
+    let pluginID: String
+    let setting: PluginManifest.SettingManifest
+    @ObservedObject private var observer = SettingsObserver(topics: [.theme, .statusBar, .plugins])
+
+    var body: some View {
+        let _ = observer.revision
+        let value = AppSettings.shared.pluginBool(
+            pluginID, setting.key, default: setting.defaultValue?.value as? Bool ?? false)
+        ToggleRow(
+            label: setting.label,
+            isOn: Binding(
+                get: { value },
+                set: { AppSettings.shared.setPluginSetting(pluginID, setting.key, $0, topic: .statusBar) }
+            ))
     }
 }

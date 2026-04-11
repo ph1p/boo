@@ -12,8 +12,8 @@ final class LocalFileTreePlugin: BooPluginProtocol {
         description: "File explorer for local directories",
         when: "!remote",
         runtime: nil,
-        capabilities: PluginManifest.Capabilities(statusBarSegment: true, sidebarTab: true),
-        statusBar: PluginManifest.StatusBarManifest(position: "left", priority: 5, template: nil),
+        capabilities: PluginManifest.Capabilities(statusBarSegment: false, sidebarTab: true),
+        statusBar: nil,
         settings: [
             PluginManifest.SettingManifest(
                 key: "showHiddenFiles", type: .bool, label: "Show hidden files",
@@ -120,7 +120,7 @@ final class LocalFileTreePlugin: BooPluginProtocol {
             name: "Folder Info",
             icon: "info.circle",
             content: AnyView(FolderInfoView(path: cwd, fontScale: context.fontScale, theme: context.theme)),
-            prefersOuterScrollView: false,
+            prefersOuterScrollView: true,
             generation: 0
         )
         return SidebarTab(
@@ -128,18 +128,6 @@ final class LocalFileTreePlugin: BooPluginProtocol {
             icon: manifest.icon,
             label: manifest.name,
             sections: [treeSection, infoSection]
-        )
-    }
-
-    // MARK: - Status Bar
-
-    func makeStatusBarContent(context: PluginContext) -> StatusBarContent? {
-        let dirName = (context.terminal.cwd as NSString).lastPathComponent
-        return StatusBarContent(
-            text: dirName,
-            icon: "folder",
-            tint: nil,
-            accessibilityLabel: "Files: \(dirName)"
         )
     }
 
@@ -213,7 +201,7 @@ final class LocalFileTreePlugin: BooPluginProtocol {
             },
             onRename: { oldPath, newName in
                 guard !newName.contains("/"), !newName.contains("..") else {
-                    NSSound.beep()
+                    BooAlert.showTransient("Invalid name")
                     return
                 }
                 let parentDir = (oldPath as NSString).deletingLastPathComponent
@@ -222,7 +210,7 @@ final class LocalFileTreePlugin: BooPluginProtocol {
                 do {
                     try FileManager.default.moveItem(atPath: oldPath, toPath: newPath)
                 } catch {
-                    NSSound.beep()
+                    BooAlert.showTransient("Rename failed: \(error.localizedDescription)")
                 }
             },
             onMove: { sourcePath, destinationDir in
@@ -234,8 +222,7 @@ final class LocalFileTreePlugin: BooPluginProtocol {
                 do {
                     try FileManager.default.moveItem(atPath: sourcePath, toPath: destPath)
                 } catch {
-                    // moveItem throws if dest exists — no need for pre-check
-                    NSSound.beep()
+                    BooAlert.showTransient("Move failed: \(error.localizedDescription)")
                 }
             },
             onCreateFolder: { parentPath in
@@ -251,13 +238,18 @@ final class LocalFileTreePlugin: BooPluginProtocol {
                     try FileManager.default.createDirectory(
                         atPath: destPath, withIntermediateDirectories: false)
                 } catch {
-                    NSSound.beep()
+                    BooAlert.showTransient("Create folder failed: \(error.localizedDescription)")
                 }
             },
             onCopyImage: { path in
-                guard let image = NSImage(contentsOfFile: path) else { return }
+                guard let image = NSImage(contentsOfFile: path) else {
+                    BooAlert.showTransient("Could not load image")
+                    return
+                }
                 NSPasteboard.general.clearContents()
-                NSPasteboard.general.writeObjects([image])
+                if !NSPasteboard.general.writeObjects([image]) {
+                    BooAlert.showTransient("Could not copy image to clipboard")
+                }
             },
             onReferenceInAI: { path in
                 act?.sendToTerminal?("@\(path) ")

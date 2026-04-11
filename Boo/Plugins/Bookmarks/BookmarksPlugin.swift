@@ -17,25 +17,12 @@ final class BookmarksPluginNew: BooPluginProtocol {
         description: "Saved directory bookmarks",
         when: "!process.ai",
         runtime: nil,
-        capabilities: PluginManifest.Capabilities(statusBarSegment: true, sidebarTab: true),
-        statusBar: PluginManifest.StatusBarManifest(position: "right", priority: 20, template: nil),
+        capabilities: PluginManifest.Capabilities(statusBarSegment: false, sidebarTab: true),
+        statusBar: nil,
         settings: nil
     )
 
     var subscribedEvents: Set<PluginEvent> { [] }
-
-    // MARK: - Status Bar
-
-    func makeStatusBarContent(context: PluginContext) -> StatusBarContent? {
-        let count = BookmarkService.shared.bookmarks.count
-        let text = count > 0 ? "\(count)" : "Bookmarks"
-        return StatusBarContent(
-            text: text,
-            icon: "bookmark",
-            tint: nil,
-            accessibilityLabel: "Bookmarks: \(count) saved"
-        )
-    }
 
     // MARK: - Detail View
 

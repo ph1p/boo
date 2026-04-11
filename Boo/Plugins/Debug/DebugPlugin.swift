@@ -17,8 +17,8 @@ final class DebugPlugin: BooPluginProtocol {
         description: "Logs all plugin lifecycle events and displays live terminal state",
         when: nil,
         runtime: nil,
-        capabilities: PluginManifest.Capabilities(statusBarSegment: true, sidebarTab: true),
-        statusBar: PluginManifest.StatusBarManifest(position: "right", priority: 99, template: nil),
+        capabilities: PluginManifest.Capabilities(statusBarSegment: false, sidebarTab: true),
+        statusBar: nil,
         settings: [
             PluginManifest.SettingManifest(
                 key: "maxEntries", type: .double, label: "Max log entries",
@@ -136,19 +136,6 @@ final class DebugPlugin: BooPluginProtocol {
         log("remoteDirectoryListed", "path=\(path) | dirs=\(dirs) files=\(files)")
     }
 
-    // MARK: - Status Bar
-
-    func makeStatusBarContent(context: PluginContext) -> StatusBarContent? {
-        let eventCount = entries.count
-        let lastEvent = entries.last?.event ?? "idle"
-        return StatusBarContent(
-            text: "\(eventCount) \(lastEvent)",
-            icon: "ladybug.fill",
-            tint: nil,
-            accessibilityLabel: "Debug: \(eventCount) events, last: \(lastEvent)"
-        )
-    }
-
     // MARK: - Section Title
 
     func sectionTitle(context: PluginContext) -> String? {
@@ -178,7 +165,9 @@ final class DebugPlugin: BooPluginProtocol {
                         return "[\(ts)] \(entry.event)\(entry.detail.isEmpty ? "" : ": \(entry.detail)")"
                     }.joined(separator: "\n")
                     NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(text, forType: .string)
+                    if !NSPasteboard.general.setString(text, forType: .string) {
+                        BooAlert.showTransient("Could not copy to clipboard")
+                    }
                 }
             )
         )

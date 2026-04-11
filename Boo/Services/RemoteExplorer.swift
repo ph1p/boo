@@ -341,7 +341,12 @@ final class RemoteExplorer {
 
         let sshDir = NSHomeDirectory() + "/.ssh"
         if !fm.fileExists(atPath: sshDir) {
-            try? fm.createDirectory(atPath: sshDir, withIntermediateDirectories: true)
+            do {
+                try fm.createDirectory(atPath: sshDir, withIntermediateDirectories: true)
+            } catch {
+                debugLog("[SSH] Failed to create ~/.ssh: \(error)")
+                return false
+            }
         }
 
         let block =

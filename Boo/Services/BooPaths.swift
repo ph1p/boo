@@ -93,4 +93,24 @@ enum BooPaths {
         return path
     }()
 
+    /// Verify that all critical directories exist and are writable.
+    /// Call once at startup; throws on the first directory that cannot be created.
+    static func ensureDirectories() throws {
+        let fm = FileManager.default
+        let dirs = [configDir, themesDir, logsDir, sshSocketsDir]
+        for dir in dirs {
+            var isDir: ObjCBool = false
+            if fm.fileExists(atPath: dir, isDirectory: &isDir), isDir.boolValue {
+                // Verify writable.
+                if !fm.isWritableFile(atPath: dir) {
+                    throw CocoaError(
+                        .fileWriteNoPermission,
+                        userInfo: [NSFilePathErrorKey: dir])
+                }
+                continue
+            }
+            // Attempt creation (the lazy lets already tried, but may have silently failed).
+            try fm.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        }
+    }
 }

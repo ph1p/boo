@@ -96,9 +96,18 @@ private struct PluginRow: View {
         }
     }
 
+    /// Settings shown in plugin settings — excludes bool settings for plugins
+    /// with statusBarSegment (those appear in Status Bar settings instead).
+    private var filteredSettings: [PluginManifest.SettingManifest] {
+        guard let settings = manifest.settings else { return [] }
+        if manifest.capabilities?.statusBarSegment == true {
+            return settings.filter { $0.type != .bool }
+        }
+        return settings
+    }
+
     private var hasCustomSettings: Bool {
-        guard let settings = manifest.settings else { return false }
-        for s in settings {
+        for s in filteredSettings {
             switch s.type {
             case .bool:
                 let def = s.defaultValue?.value as? Bool ?? false
@@ -155,7 +164,7 @@ private struct PluginRow: View {
                     .help("Remove plugin")
                 }
 
-                if let settings = manifest.settings, !settings.isEmpty {
+                if !filteredSettings.isEmpty {
                     Button(action: { withAnimation(.easeInOut(duration: 0.15)) { isExpanded.toggle() } }) {
                         ZStack(alignment: .topTrailing) {
                             Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
@@ -188,9 +197,9 @@ private struct PluginRow: View {
             .padding(.vertical, 6)
             .padding(.horizontal, 8)
 
-            if isExpanded, let settings = manifest.settings, !settings.isEmpty {
+            if isExpanded, !filteredSettings.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {
-                    ForEach(settings, id: \.key) { setting in
+                    ForEach(filteredSettings, id: \.key) { setting in
                         PluginSettingControl(pluginID: manifest.id, setting: setting)
                     }
                 }

@@ -19,19 +19,18 @@ struct FolderStats {
     static func compute(at path: String) -> FolderStats {
         let fm = FileManager.default
         let url = URL(fileURLWithPath: path, isDirectory: true)
-        let keys: [URLResourceKey] = [.fileSizeKey, .isHiddenKey, .isRegularFileKey, .isDirectoryKey]
+        let topKeys: [URLResourceKey] = [.fileSizeKey, .isHiddenKey, .isRegularFileKey, .isDirectoryKey]
         guard
             let items = try? fm.contentsOfDirectory(
-                at: url, includingPropertiesForKeys: keys, options: [])
+                at: url, includingPropertiesForKeys: topKeys, options: [])
         else { return FolderStats(visibleCount: 0, hiddenCount: 0, subdirCount: 0, totalSizeBytes: 0) }
 
         var visible = 0
         var hidden = 0
         var subdirs = 0
-        var totalSize: Int64 = 0
 
         for item in items {
-            let res = try? item.resourceValues(forKeys: Set(keys))
+            let res = try? item.resourceValues(forKeys: Set(topKeys))
             let isHidden = res?.isHidden ?? item.lastPathComponent.hasPrefix(".")
             let isDir = res?.isDirectory ?? false
             if isHidden {
@@ -40,8 +39,24 @@ struct FolderStats {
                 visible += 1
                 if isDir { subdirs += 1 }
             }
-            totalSize += Int64(res?.fileSize ?? 0)
         }
+
+        // Recursively sum file sizes for accurate total
+        var totalSize: Int64 = 0
+        let sizeKeys: Set<URLResourceKey> = [.fileSizeKey, .isRegularFileKey]
+        if let enumerator = fm.enumerator(
+            at: url, includingPropertiesForKeys: Array(sizeKeys),
+            options: [.skipsPackageDescendants])
+        {
+            for case let fileURL as URL in enumerator {
+                if let res = try? fileURL.resourceValues(forKeys: sizeKeys),
+                    res.isRegularFile == true
+                {
+                    totalSize += Int64(res.fileSize ?? 0)
+                }
+            }
+        }
+
         return FolderStats(visibleCount: visible, hiddenCount: hidden, subdirCount: subdirs, totalSizeBytes: totalSize)
     }
 }
