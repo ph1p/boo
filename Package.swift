@@ -6,6 +6,7 @@ let booExclude: [String] = [
     "App/Info.plist",
     "App/Boo.entitlements",
     "App/main.swift",
+    "Resources/Assets.xcassets"
 ]
 let booLinkerSettings: [LinkerSetting] = [
     .unsafeFlags(["-L", "Vendor/ghostty/macos/GhosttyKit.xcframework/macos-arm64"])
@@ -33,7 +34,7 @@ let targets: [Target] = [
             .linkedFramework("Foundation"),
             .linkedFramework("AppKit"),
             .linkedFramework("UniformTypeIdentifiers"),
-            .linkedFramework("Carbon"),
+            .linkedFramework("Carbon")
         ]
     ),
     .target(
@@ -45,7 +46,7 @@ let targets: [Target] = [
         ],
         linkerSettings: [
             .unsafeFlags(["-L", "Vendor/ironmark/macos-arm64"]),
-            .linkedLibrary("ironmark"),
+            .linkedLibrary("ironmark")
         ]
     ),
     .target(
@@ -53,6 +54,9 @@ let targets: [Target] = [
         dependencies: booDeps,
         path: "Boo",
         exclude: booExclude,
+        resources: [
+            .copy("Resources/Images")
+        ],
         linkerSettings: booLinkerSettings
     ),
     .executableTarget(
@@ -65,7 +69,7 @@ let targets: [Target] = [
         name: "BooTests",
         dependencies: ["Boo"],
         path: "Tests/BooTests"
-    ),
+    )
 ]
 
 let package = Package(
