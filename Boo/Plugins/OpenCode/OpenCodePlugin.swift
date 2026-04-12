@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Built-in plugin for OpenCode AI assistant.
 /// Shows sessions, config files, skills, MCP servers, and changed files.
-/// Appears when OpenCode is the foreground process.
+/// Always visible when enabled; shows active agent status when running.
 @MainActor
 final class OpenCodePlugin: BooPluginProtocol {
     var actions: PluginActions?
@@ -14,22 +14,19 @@ final class OpenCodePlugin: BooPluginProtocol {
         id: "opencode",
         name: "OpenCode",
         version: "1.0.0",
-        icon: "sparkles",
+        icon: "asset:opencode-icon",
         description: "OpenCode AI assistant",
-        when: "process.opencode || process.oc",
+        when: nil,  // Always visible
         runtime: nil,
         capabilities: PluginManifest.Capabilities(statusBarSegment: true, sidebarTab: true),
         statusBar: PluginManifest.StatusBarManifest(position: "right", priority: 20, template: nil),
         settings: nil
     )
 
-    var prefersOuterScrollView: Bool { false }
+    var prefersOuterScrollView: Bool { true }
 
     func isVisible(for context: TerminalContext) -> Bool {
-        if !AppSettings.shared.isPluginEnabled(pluginID) { return false }
-        if agentStartTime != nil { return true }
-        guard let clause = whenClause else { return true }
-        return WhenClauseEvaluator.evaluate(clause, context: context)
+        AppSettings.shared.isPluginEnabled(pluginID)
     }
 
     var subscribedEvents: Set<PluginEvent> { [.processChanged, .cwdChanged, .focusChanged] }
@@ -86,6 +83,7 @@ final class OpenCodePlugin: BooPluginProtocol {
     // MARK: - Enrich
 
     func enrich(context: EnrichmentContext) {
+        guard agentStartTime != nil else { return }
         context.setData(AnyHashable("opencode"), forKey: "ai-agent.name")
         if let start = agentStartTime {
             let runtime = Int(Date().timeIntervalSince(start))
@@ -127,39 +125,217 @@ final class OpenCodePlugin: BooPluginProtocol {
         return "OpenCode"
     }
 
-    // MARK: - Detail View
+    // MARK: - Sidebar Tab (multi-section)
 
-    func makeDetailView(context: PluginContext) -> AnyView? {
-        guard agentStartTime != nil else { return nil }
+    func makeSidebarTab(context: PluginContext) -> SidebarTab? {
+        guard manifest.capabilities?.sidebarTab == true else { return nil }
+
+        // If no agent running, scan config/sessions based on current terminal CWD
+        let isAgentActive = agentStartTime != nil
+        if !isAgentActive && currentCwd != context.terminal.cwd {
+            scanAgentConfig(cwd: context.terminal.cwd)
+            scanSessions(cwd: context.terminal.cwd)
+        }
+
         let act = actions
         let fontScale = context.fontScale
+        let textColor = Color(nsColor: context.theme.chromeText)
+        let mutedColor = Color(nsColor: context.theme.chromeMuted)
+        let accentColor =
+            context.theme.ansiColors.count > 13
+            ? Color(nsColor: context.theme.ansiColors[13])
+            : Color(nsColor: context.theme.accentColor)
 
-        return AnyView(
-            OpenCodeDetailView(
-                sessions: sessions,
-                diffStats: diffStats,
-                agentConfig: agentConfig,
-                fontScale: fontScale,
-                textColor: Color(nsColor: context.theme.chromeText),
-                mutedColor: Color(nsColor: context.theme.chromeMuted),
-                accentColor: context.theme.ansiColors.count > 13
-                    ? Color(nsColor: context.theme.ansiColors[13])
-                    : Color(nsColor: context.theme.accentColor),
-                onSessionClicked: { [weak self] session in
-                    self?.resumeSession(session)
-                },
-                onFileClicked: { path in
-                    act?.handle(DSLAction(type: "open", path: path, command: nil, text: nil))
-                },
-                onCopyPath: { path in
-                    act?.handle(DSLAction(type: "copy", path: nil, command: nil, text: path))
-                },
-                onPasteSkill: { name in
-                    act?.sendToTerminal?("/\(name)")
-                }
+        var sections: [SidebarSection] = []
+
+        // Active agent status section (only when running)
+        if isAgentActive {
+            let statusSection = SidebarSection(
+                id: "opencode.status",
+                name: "Active",
+                icon: "bolt.fill",
+                content: AnyView(
+                    HStack(spacing: 8) {
+                        Circle()
+                            .fill(Color.green)
+                            .frame(width: 8, height: 8)
+                        Text("OpenCode running")
+                            .font(fontScale.font(.base))
+                            .foregroundColor(textColor)
+                        Spacer()
+                        if let start = agentStartTime {
+                            Text(formatAgentRuntime(Date().timeIntervalSince(start)))
+                                .font(fontScale.font(.sm, design: .monospaced))
+                                .foregroundColor(mutedColor)
+                        }
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                ),
+                prefersOuterScrollView: false,
+                generation: UInt64(agentStartTime?.timeIntervalSince1970 ?? 0)
             )
-        )
+            sections.append(statusSection)
+        }
+
+        // Sessions section
+        if !sessions.isEmpty {
+            let sessionsSection = SidebarSection(
+                id: "opencode.sessions",
+                name: "Sessions (\(sessions.count))",
+                icon: "bubble.left.and.bubble.right",
+                content: AnyView(
+                    OpenCodeSessionsView(
+                        sessions: sessions,
+                        fontScale: fontScale,
+                        textColor: textColor,
+                        mutedColor: mutedColor,
+                        accentColor: accentColor,
+                        onSessionClicked: { [weak self] session in
+                            self?.resumeSession(session)
+                        },
+                        onCopyPath: { path in
+                            act?.handle(DSLAction(type: "copy", path: nil, command: nil, text: path))
+                        }
+                    )),
+                prefersOuterScrollView: true,
+                generation: UInt64(sessions.count))
+            sections.append(sessionsSection)
+        }
+
+        // Config section
+        if !agentConfig.configFiles.isEmpty {
+            let configSection = SidebarSection(
+                id: "opencode.config",
+                name: "Config (\(agentConfig.configFiles.count))",
+                icon: "doc.text",
+                content: AnyView(
+                    OpenCodeConfigView(
+                        configFiles: agentConfig.configFiles,
+                        fontScale: fontScale,
+                        textColor: textColor,
+                        mutedColor: mutedColor,
+                        accentColor: accentColor,
+                        onFileClicked: { path in
+                            act?.handle(DSLAction(type: "open", path: path, command: nil, text: nil))
+                        },
+                        onCopyPath: { path in
+                            act?.handle(DSLAction(type: "copy", path: nil, command: nil, text: path))
+                        }
+                    )),
+                prefersOuterScrollView: true,
+                generation: UInt64(agentConfig.configFiles.count))
+            sections.append(configSection)
+        }
+
+        // MCP Servers section
+        if !agentConfig.mcpServers.isEmpty {
+            let mcpSection = SidebarSection(
+                id: "opencode.mcp",
+                name: "MCP Servers (\(agentConfig.mcpServers.count))",
+                icon: "server.rack",
+                content: AnyView(
+                    OpenCodeMCPView(
+                        mcpServers: agentConfig.mcpServers,
+                        fontScale: fontScale,
+                        textColor: textColor,
+                        mutedColor: mutedColor
+                    )),
+                prefersOuterScrollView: true,
+                generation: UInt64(agentConfig.mcpServers.count))
+            sections.append(mcpSection)
+        }
+
+        // Skills section
+        if !agentConfig.skills.isEmpty {
+            let skillsSection = SidebarSection(
+                id: "opencode.skills",
+                name: "Skills (\(agentConfig.skills.count))",
+                icon: "star",
+                content: AnyView(
+                    OpenCodeSkillsView(
+                        skills: agentConfig.skills,
+                        fontScale: fontScale,
+                        textColor: textColor,
+                        mutedColor: mutedColor,
+                        accentColor: accentColor,
+                        onFileClicked: { path in
+                            act?.handle(DSLAction(type: "open", path: path, command: nil, text: nil))
+                        },
+                        onCopyPath: { path in
+                            act?.handle(DSLAction(type: "copy", path: nil, command: nil, text: path))
+                        },
+                        onPasteSkill: { name in
+                            act?.sendToTerminal?("/\(name)")
+                        }
+                    )),
+                prefersOuterScrollView: true,
+                generation: UInt64(agentConfig.skills.count))
+            sections.append(skillsSection)
+        }
+
+        // Changes section
+        if !diffStats.isEmpty {
+            let ins = diffStats.reduce(0) { $0 + $1.insertions }
+            let del = diffStats.reduce(0) { $0 + $1.deletions }
+            let changesSection = SidebarSection(
+                id: "opencode.changes",
+                name: "Changes (\(diffStats.count)) +\(ins) -\(del)",
+                icon: "doc.badge.plus",
+                content: AnyView(
+                    OpenCodeChangesView(
+                        diffStats: diffStats,
+                        fontScale: fontScale,
+                        textColor: textColor,
+                        mutedColor: mutedColor,
+                        onFileClicked: { path in
+                            act?.handle(DSLAction(type: "open", path: path, command: nil, text: nil))
+                        },
+                        onCopyPath: { path in
+                            act?.handle(DSLAction(type: "copy", path: nil, command: nil, text: path))
+                        }
+                    )),
+                prefersOuterScrollView: true,
+                generation: UInt64(diffStats.count))
+            sections.append(changesSection)
+        }
+
+        // If no sections, show getting started
+        if sections.isEmpty {
+            let emptySection = SidebarSection(
+                id: "opencode",
+                name: "OpenCode",
+                icon: "chevron.left.forwardslash.chevron.right",
+                content: AnyView(
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("No OpenCode sessions found")
+                            .font(fontScale.font(.base))
+                            .foregroundColor(textColor)
+                        Text("Run `opencode` in a terminal to start")
+                            .font(fontScale.font(.sm))
+                            .foregroundColor(mutedColor)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 12)
+                ),
+                prefersOuterScrollView: false,
+                generation: 0)
+            sections.append(emptySection)
+        }
+
+        // Badge shows active OpenCode agents
+        let agentCount = AIAgentTracker.shared.agents(named: "opencode").count
+
+        return SidebarTab(
+            id: SidebarTabID(manifest.id),
+            icon: manifest.icon,
+            label: manifest.name,
+            sections: sections,
+            badge: agentCount > 0 ? agentCount : nil)
     }
+
+    func makeDetailView(context: PluginContext) -> AnyView? { nil }
 
     // MARK: - Session Resume
 
@@ -247,14 +423,15 @@ final class OpenCodePlugin: BooPluginProtocol {
         DispatchQueue.global(qos: .utility).async { [weak self] in
             let projectRoot = findAgentProjectRoot(from: cwd, markers: Self.projectMarkers) ?? cwd
             DispatchQueue.main.async { [weak self] in
-                guard let self, self.agentStartTime != nil else { return }
+                guard let self else { return }
+                self.currentCwd = cwd
                 if self.lastSessionScanRoot == projectRoot { return }
                 self.lastSessionScanRoot = projectRoot
 
                 DispatchQueue.global(qos: .utility).async { [weak self] in
                     let sessions = Self.detectSessions(projectRoot: projectRoot)
                     DispatchQueue.main.async { [weak self] in
-                        guard let self, self.agentStartTime != nil else { return }
+                        guard let self else { return }
                         self.sessions = sessions
                         self.onRequestCycleRerun?()
                     }
@@ -325,14 +502,15 @@ final class OpenCodePlugin: BooPluginProtocol {
         DispatchQueue.global(qos: .utility).async { [weak self] in
             let projectRoot = findAgentProjectRoot(from: cwd, markers: Self.projectMarkers) ?? cwd
             DispatchQueue.main.async { [weak self] in
-                guard let self, self.agentStartTime != nil else { return }
+                guard let self else { return }
+                self.currentCwd = cwd
                 if self.lastConfigScanRoot == projectRoot { return }
                 self.lastConfigScanRoot = projectRoot
 
                 DispatchQueue.global(qos: .utility).async { [weak self] in
                     let config = Self.detectAgentConfig(cwd: cwd)
                     DispatchQueue.main.async { [weak self] in
-                        guard let self, self.agentStartTime != nil else { return }
+                        guard let self else { return }
                         self.agentConfig = config
                         self.onRequestCycleRerun?()
                     }

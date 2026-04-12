@@ -343,14 +343,16 @@ class SidebarTabBarView: NSView {
 
             let iconColor =
                 isSelected ? theme.accentColor : theme.chromeMuted.withAlphaComponent(0.6)
-            if let img = NSImage(systemSymbolName: tab.icon, accessibilityDescription: tab.label) {
-                let config = NSImage.SymbolConfiguration(pointSize: iconSize * 0.75, weight: .regular)
-                    .applying(.init(paletteColors: [iconColor]))
-                let tinted = img.withSymbolConfiguration(config) ?? img
-                let imgSize = tinted.size
+            if let img = resolveIcon(tab.icon, size: iconSize * 0.75, color: iconColor, label: tab.label) {
+                let imgSize = img.size
                 let iconX = tabRect.midX - imgSize.width / 2
                 let iconY = tabRect.minY + (tabRect.height - imgSize.height) / 2
-                tinted.draw(in: NSRect(x: iconX, y: iconY, width: imgSize.width, height: imgSize.height))
+                img.draw(in: NSRect(x: iconX, y: iconY, width: imgSize.width, height: imgSize.height))
+            }
+
+            // Draw badge if present
+            if let badge = tab.badge, badge > 0 {
+                drawBadge(badge, at: tabRect, ctx: ctx, theme: theme)
             }
 
             if let di = dropIndex, di == index {
@@ -432,5 +434,108 @@ class SidebarTabBarView: NSView {
         let indicatorY = (bounds.height - indicatorH) / 2
         ctx.setFillColor(theme.accentColor.cgColor)
         ctx.fill(CGRect(x: x - 1, y: indicatorY, width: 2, height: indicatorH))
+    }
+
+    /// Resolve an icon name to an NSImage.
+    /// Supports:
+    /// - SF Symbol names (default): "sparkles", "folder", etc.
+    /// - Asset prefix: "asset:icon-name" loads from bundle or creates a text-based icon
+    private func resolveIcon(_ name: String, size: CGFloat, color: NSColor, label: String) -> NSImage? {
+        if name.hasPrefix("asset:") {
+            let assetName = String(name.dropFirst(6))
+            // Try to load PDF from SPM Bundle.module Images folder
+            if let url = Bundle.module.url(forResource: assetName, withExtension: "pdf", subdirectory: "Images"),
+                let img = NSImage(contentsOf: url)
+            {
+                img.isTemplate = true
+                return img.tinted(with: color, size: NSSize(width: size, height: size))
+            }
+            // Try direct resource lookup
+            if let img = Bundle.module.image(forResource: assetName) {
+                img.isTemplate = true
+                return img.tinted(with: color, size: NSSize(width: size, height: size))
+            }
+            // Create a text-based icon as fallback
+            return createTextIcon(assetName, size: size, color: color)
+        }
+
+        // Default: SF Symbol
+        if let img = NSImage(systemSymbolName: name, accessibilityDescription: label) {
+            let config = NSImage.SymbolConfiguration(pointSize: size, weight: .regular)
+                .applying(.init(paletteColors: [color]))
+            return img.withSymbolConfiguration(config) ?? img
+        }
+        return nil
+    }
+
+    /// Create a simple text-based icon (first letter of name).
+    private func createTextIcon(_ name: String, size: CGFloat, color: NSColor) -> NSImage {
+        let img = NSImage(size: NSSize(width: size, height: size))
+        img.lockFocus()
+
+        // Draw a circle background
+        let bezier = NSBezierPath(ovalIn: NSRect(x: 0, y: 0, width: size, height: size))
+        color.withAlphaComponent(0.2).setFill()
+        bezier.fill()
+
+        // Draw the first letter
+        let letter = String(name.prefix(1)).uppercased()
+        let font = NSFont.systemFont(ofSize: size * 0.5, weight: .semibold)
+        let attrs: [NSAttributedString.Key: Any] = [
+            .font: font,
+            .foregroundColor: color
+        ]
+        let attrStr = NSAttributedString(string: letter, attributes: attrs)
+        let textSize = attrStr.size()
+        let textX = (size - textSize.width) / 2
+        let textY = (size - textSize.height) / 2
+        attrStr.draw(at: NSPoint(x: textX, y: textY))
+
+        img.unlockFocus()
+        return img
+    }
+
+    private func drawBadge(_ count: Int, at rect: NSRect, ctx: CGContext, theme: TerminalTheme) {
+        let badgeSize: CGFloat = 12
+        let badgeX = rect.maxX - badgeSize - 2
+        let badgeY = rect.minY + 2
+        let badgeRect = CGRect(x: badgeX, y: badgeY, width: badgeSize, height: badgeSize)
+
+        // Draw badge background
+        ctx.setFillColor(theme.accentColor.cgColor)
+        ctx.fillEllipse(in: badgeRect)
+
+        // Draw badge text
+        let text = count > 9 ? "9+" : "\(count)"
+        let font = NSFont.systemFont(ofSize: 8, weight: .bold)
+        let attrs: [NSAttributedString.Key: Any] = [
+            .font: font,
+            .foregroundColor: NSColor.white
+        ]
+        let attrStr = NSAttributedString(string: text, attributes: attrs)
+        let textSize = attrStr.size()
+        let textX = badgeRect.midX - textSize.width / 2
+        let textY = badgeRect.midY - textSize.height / 2
+        attrStr.draw(at: NSPoint(x: textX, y: textY))
+    }
+}
+
+// MARK: - NSImage Tinting Extension
+
+extension NSImage {
+    /// Create a tinted copy of a template image at the specified size.
+    fileprivate func tinted(with color: NSColor, size: NSSize) -> NSImage {
+        let img = NSImage(size: size, flipped: false) { rect in
+            // Draw the original image
+            self.draw(
+                in: rect, from: NSRect(origin: .zero, size: self.size),
+                operation: .sourceOver, fraction: 1.0)
+            // Apply tint color using sourceAtop to color only opaque pixels
+            color.setFill()
+            rect.fill(using: .sourceAtop)
+            return true
+        }
+        img.isTemplate = false
+        return img
     }
 }
