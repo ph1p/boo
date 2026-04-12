@@ -1,32 +1,104 @@
 import SwiftUI
 
-/// Sidebar detail view for the AI Agent Monitor plugin.
-/// Shows agent info, config files, hooks, skills, MCP servers, and changed files.
-struct AIAgentDetailView: View {
-    let diffStats: [AIAgentPlugin.DiffStatEntry]
-    let agentConfig: AIAgentPlugin.AgentConfig
+/// Sidebar detail view for the OpenCode plugin.
+/// Shows sessions, config files, skills, MCP servers, and changed files.
+struct OpenCodeDetailView: View {
+    let sessions: [OpenCodePlugin.OpenCodeSession]
+    let diffStats: [OpenCodePlugin.DiffStatEntry]
+    let agentConfig: OpenCodePlugin.AgentConfig
     let fontScale: SidebarFontScale
     let textColor: Color
     let mutedColor: Color
     let accentColor: Color
+    let onSessionClicked: (OpenCodePlugin.OpenCodeSession) -> Void
     let onFileClicked: (String) -> Void
     let onCopyPath: (String) -> Void
-    let onReferenceInAI: (String) -> Void
     let onPasteSkill: (String) -> Void
+
     @State private var hoveredItemID: UUID?
-    @State private var skillsExpanded = false
+    @State private var hoveredSessionID: String?
+    @State private var sessionsExpanded = true
     @State private var configExpanded = true
+    @State private var skillsExpanded = false
     @State private var changesExpanded = true
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
+                sessionsSection
                 configSection
-                hooksSection
                 mcpSection
                 skillsSection
                 changedFilesSection
             }
+        }
+    }
+
+    // MARK: - Sessions
+
+    @ViewBuilder
+    private var sessionsSection: some View {
+        if !sessions.isEmpty {
+            collapsibleHeader(
+                "Sessions", icon: "bubble.left.and.bubble.right", count: sessions.count,
+                isExpanded: $sessionsExpanded)
+
+            if sessionsExpanded {
+                ForEach(sessions.prefix(10)) { session in
+                    sessionRow(session: session)
+                }
+            }
+
+            Divider().opacity(0.3)
+        }
+    }
+
+    private func sessionRow(session: OpenCodePlugin.OpenCodeSession) -> some View {
+        let isHovered = hoveredSessionID == session.id
+
+        return Button(action: { onSessionClicked(session) }) {
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    if let slug = session.slug {
+                        Text(slug)
+                            .font(fontScale.font(.base).weight(.medium))
+                            .foregroundColor(accentColor)
+                            .lineLimit(1)
+                    } else {
+                        Text(String(session.id.prefix(12)))
+                            .font(fontScale.font(.base, design: .monospaced))
+                            .foregroundColor(accentColor)
+                            .lineLimit(1)
+                    }
+
+                    Spacer()
+
+                    Text(formatRelativeDate(session.timestamp))
+                        .font(fontScale.font(.xs))
+                        .foregroundColor(mutedColor)
+                }
+
+                if let title = session.title, !title.isEmpty {
+                    Text(title)
+                        .font(fontScale.font(.sm))
+                        .foregroundColor(mutedColor)
+                        .lineLimit(2)
+                        .truncationMode(.tail)
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering in
+            hoveredSessionID = hovering ? session.id : nil
+        }
+        .background(isHovered ? mutedColor.opacity(0.08) : Color.clear)
+        .contextMenu {
+            Button("Resume Session") { onSessionClicked(session) }
+            Divider()
+            Button("Copy Session ID") { onCopyPath(session.id) }
         }
     }
 
@@ -48,7 +120,7 @@ struct AIAgentDetailView: View {
         }
     }
 
-    private func configRow(file: AIAgentPlugin.AgentConfig.ConfigFile) -> some View {
+    private func configRow(file: OpenCodePlugin.AgentConfig.ConfigFile) -> some View {
         let isHovered = hoveredItemID == file.id
 
         return Button(action: { onFileClicked(file.path) }) {
@@ -89,43 +161,11 @@ struct AIAgentDetailView: View {
         .background(isHovered ? mutedColor.opacity(0.08) : Color.clear)
         .contextMenu {
             Button("Open in Editor") { onFileClicked(file.path) }
-            Button("Reference in AI (@)") { onReferenceInAI(file.path) }
             Divider()
             Button("Copy Path") { onCopyPath(file.path) }
             Button("Reveal in Finder") {
                 NSWorkspace.shared.selectFile(file.path, inFileViewerRootedAtPath: "")
             }
-        }
-    }
-
-    // MARK: - Hooks
-
-    @ViewBuilder
-    private var hooksSection: some View {
-        if !agentConfig.hooks.isEmpty {
-            staticHeader("Hooks", icon: "arrow.triangle.turn.up.right.diamond", count: agentConfig.hooks.count)
-
-            ForEach(agentConfig.hooks) { hook in
-                HStack(spacing: 6) {
-                    Text(hook.event)
-                        .font(.system(size: 9, weight: .medium, design: .monospaced))
-                        .foregroundColor(accentColor)
-                        .lineLimit(1)
-
-                    Spacer()
-
-                    Text(hook.command)
-                        .font(.system(size: 9, design: .monospaced))
-                        .foregroundColor(mutedColor)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                }
-                .padding(.horizontal, 12)
-                .padding(.leading, 4)
-                .padding(.vertical, 2)
-            }
-
-            Divider().opacity(0.3)
         }
     }
 
@@ -175,7 +215,7 @@ struct AIAgentDetailView: View {
         }
     }
 
-    private func skillRow(skill: AIAgentPlugin.AgentConfig.SkillEntry) -> some View {
+    private func skillRow(skill: OpenCodePlugin.AgentConfig.SkillEntry) -> some View {
         let isHovered = hoveredItemID == skill.id
 
         return Button(action: { onPasteSkill(skill.name) }) {
@@ -238,7 +278,7 @@ struct AIAgentDetailView: View {
         return "+\(ins) -\(del)"
     }
 
-    private func fileRow(entry: AIAgentPlugin.DiffStatEntry) -> some View {
+    private func fileRow(entry: OpenCodePlugin.DiffStatEntry) -> some View {
         Button(action: { onFileClicked(entry.fullPath) }) {
             HStack(spacing: 6) {
                 HStack(spacing: 2) {
@@ -266,7 +306,6 @@ struct AIAgentDetailView: View {
         }
         .buttonStyle(.plain)
         .contextMenu {
-            Button("Reference in AI (@)") { onReferenceInAI(entry.path) }
             Button("Open in Editor") { onFileClicked(entry.fullPath) }
             Divider()
             Button("Copy Path") { onCopyPath(entry.path) }
@@ -334,4 +373,26 @@ struct AIAgentDetailView: View {
     }
 }
 
-// abbreviatePath() is provided by BooPaths.swift as a global function
+// MARK: - Date Formatting
+
+private func formatRelativeDate(_ date: Date) -> String {
+    let now = Date()
+    let interval = now.timeIntervalSince(date)
+
+    if interval < 60 {
+        return "just now"
+    } else if interval < 3600 {
+        let mins = Int(interval / 60)
+        return "\(mins)m ago"
+    } else if interval < 86400 {
+        let hours = Int(interval / 3600)
+        return "\(hours)h ago"
+    } else if interval < 604_800 {
+        let days = Int(interval / 86400)
+        return "\(days)d ago"
+    } else {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMM d"
+        return formatter.string(from: date)
+    }
+}
