@@ -64,17 +64,32 @@ extension PaneView {
                 width: lay.width, rowH: singleRowTabHeight, isActive: isActive, termBgColor: termBgColor)
         }
 
-        // Plus button after last tab layout
-        let lastLay = layouts.last
-        let plusX = (lastLay?.x ?? 0) + (lastLay?.width ?? 0)
-        let plusY = lastLay?.y ?? 0
+        // Plus button position: use same logic as wrapLayout to determine if it fits
+        // on the last row. This avoids floating point drift from stretched tab widths.
+        let widths = allTabWidths()
+        var lastRowW: CGFloat = 0
+        var rowW: CGFloat = 0
         let availW = bounds.width
-        if plusX + plusButtonWidth > availW && plusX > 0 {
+        for w in widths {
+            if rowW + w > availW && rowW > 0 {
+                lastRowW = w
+                rowW = w
+            } else {
+                lastRowW = rowW + w
+                rowW += w
+            }
+        }
+        let plusOnLastRow = lastRowW + plusButtonWidth <= availW
+
+        let lastLay = layouts.last
+        let plusY = lastLay?.y ?? 0
+        if plusOnLastRow {
+            let plusX = (lastLay?.x ?? 0) + (lastLay?.width ?? 0)
+            drawPlusButton(ctx: ctx, theme: theme, x: plusX, y: plusY, width: plusButtonWidth, rowH: singleRowTabHeight)
+        } else {
             drawPlusButton(
                 ctx: ctx, theme: theme, x: 0, y: plusY + singleRowTabHeight, width: plusButtonWidth,
                 rowH: singleRowTabHeight)
-        } else {
-            drawPlusButton(ctx: ctx, theme: theme, x: plusX, y: plusY, width: plusButtonWidth, rowH: singleRowTabHeight)
         }
     }
 
@@ -111,31 +126,30 @@ extension PaneView {
         let showClose = showTabClose && (isActive || isHovered)
         let closeZone: CGFloat = showClose ? 18 : 8
 
-        // Process icon (when a non-shell process is running)
+        // Content type icon for non-terminal tabs
+        if tab.contentType != .terminal {
+            let iconColor = isActive ? theme.chromeText : theme.chromeMuted
+            if let drawn = Self.drawTabIcon(
+                symbolName: tab.contentType.symbolName, color: iconColor,
+                x: textX, midY: midY, isActive: isActive
+            ) {
+                drawn.draw()
+                textX += drawn.width
+            }
+        }
+
+        // Process icon (when a non-shell process is running) — terminal tabs only
         let process = tab.state.foregroundProcess
-        if !process.isEmpty, !ProcessIcon.isShell(process),
+        if tab.contentType == .terminal, !process.isEmpty, !ProcessIcon.isShell(process),
             let iconName = ProcessIcon.icon(for: process)
         {
             let iconColor = ProcessIcon.themeColor(for: process, theme: theme, isActive: isActive)
-            let iconImage = NSImage(
-                systemSymbolName: iconName, accessibilityDescription: process)
-            if let iconImage {
-                let config = NSImage.SymbolConfiguration(pointSize: 9, weight: .medium)
-                let configured = iconImage.withSymbolConfiguration(config) ?? iconImage
-                let iconSize: CGFloat = 12
-                let iconRect = CGRect(x: textX, y: midY - iconSize / 2, width: iconSize, height: iconSize)
-                // Tint the SF Symbol by drawing it as a template with the desired color
-                let tinted = NSImage(size: configured.size)
-                tinted.lockFocus()
-                iconColor.set()
-                let imageRect = NSRect(origin: .zero, size: configured.size)
-                configured.draw(in: imageRect, from: .zero, operation: .sourceOver, fraction: 1.0)
-                imageRect.fill(using: .sourceAtop)
-                tinted.unlockFocus()
-                tinted.draw(
-                    in: iconRect, from: .zero, operation: .sourceOver,
-                    fraction: isActive ? 1.0 : 0.7)
-                textX += iconSize + 3
+            if let drawn = Self.drawTabIcon(
+                symbolName: iconName, color: iconColor,
+                x: textX, midY: midY, isActive: isActive
+            ) {
+                drawn.draw()
+                textX += drawn.width
             }
         }
 
@@ -220,6 +234,11 @@ extension PaneView {
     // MARK: - Tab Display Helpers
 
     static func tabDisplayTitle(tab: Pane.Tab) -> String {
+        // Non-terminal tabs: use stored title
+        if tab.contentType != .terminal {
+            return tab.title
+        }
+
         let process = tab.state.foregroundProcess
 
         // Show process name when a non-shell process is running,
@@ -295,5 +314,47 @@ extension PaneView {
         case .container:
             return (.booDocker, "")
         }
+    }
+
+    // MARK: - Icon Drawing Helper
+
+    /// Result of preparing a tab icon for drawing.
+    struct TabIconDraw {
+        let image: NSImage
+        let rect: CGRect
+        let opacity: CGFloat
+        let width: CGFloat
+
+        func draw() {
+            image.draw(in: rect, from: .zero, operation: .sourceOver, fraction: opacity)
+        }
+    }
+
+    /// Prepare a tinted SF Symbol icon for drawing in the tab bar.
+    static func drawTabIcon(
+        symbolName: String, color: NSColor, x: CGFloat, midY: CGFloat, isActive: Bool
+    ) -> TabIconDraw? {
+        guard let iconImage = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil) else {
+            return nil
+        }
+        let config = NSImage.SymbolConfiguration(pointSize: 9, weight: .medium)
+        let configured = iconImage.withSymbolConfiguration(config) ?? iconImage
+        let iconSize: CGFloat = 12
+        let iconRect = CGRect(x: x, y: midY - iconSize / 2, width: iconSize, height: iconSize)
+
+        let tinted = NSImage(size: configured.size)
+        tinted.lockFocus()
+        color.set()
+        let imageRect = NSRect(origin: .zero, size: configured.size)
+        configured.draw(in: imageRect, from: .zero, operation: .sourceOver, fraction: 1.0)
+        imageRect.fill(using: .sourceAtop)
+        tinted.unlockFocus()
+
+        return TabIconDraw(
+            image: tinted,
+            rect: iconRect,
+            opacity: isActive ? 1.0 : 0.7,
+            width: iconSize + 3
+        )
     }
 }
