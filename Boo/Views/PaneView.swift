@@ -239,6 +239,11 @@ class PaneView: NSView {
         scrollWrapper = nil
         ghosttyView = nil
 
+        // Check if the active content view is already for this tab (avoid double-init)
+        if let active = activeContentView, active.superview == self, active.contentType == tab.contentType {
+            return
+        }
+
         // Check cache first
         if let stored = contentViews.removeValue(forKey: tab.id) {
             // Rewire callbacks in case this view was transferred from another pane
@@ -316,13 +321,17 @@ class PaneView: NSView {
     }
 
     /// Remove and return a ContentView for cross-pane transfer. Does not destroy it.
+    /// Call AFTER extractTab — the active tab will have shifted, so we check the
+    /// cache first, then fall back to the currently displayed activeContentView.
     func extractContentView(for tabID: UUID) -> ContentViewProtocol? {
         // Check the off-screen cache
         if let cv = contentViews.removeValue(forKey: tabID) {
             cv.removeFromSuperview()
             return cv
         }
-        // The dragged tab was likely the active/displayed one
+        // The dragged tab was likely the active/displayed one — extractTab already
+        // shifted activeTabIndex, so pane.activeTab no longer matches this tabID.
+        // Just hand over the currently displayed view.
         if let cv = activeContentView {
             cv.deactivate()
             cv.removeFromSuperview()

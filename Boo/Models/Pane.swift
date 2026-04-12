@@ -2,7 +2,11 @@ import Foundation
 
 /// Per-tab state — single source of truth for everything a tab owns.
 struct TabState {
-    // Terminal
+    // Content type (terminal, browser, etc.)
+    var contentType: ContentType = .terminal
+
+    // Terminal-specific fields (kept for backwards compatibility)
+    // These delegate to contentState when it's a TerminalContentState.
     var workingDirectory: String
     var remoteSession: RemoteSessionType?
     var remoteWorkingDirectory: String?
@@ -51,6 +55,11 @@ final class Pane {
             get { state.shellPID }
             set { state.shellPID = newValue }
         }
+
+        var contentType: ContentType {
+            get { state.contentType }
+            set { state.contentType = newValue }
+        }
     }
 
     private(set) var tabs: [Tab] = []
@@ -67,11 +76,24 @@ final class Pane {
 
     @discardableResult
     func addTab(workingDirectory: String, title: String? = nil) -> Int {
+        addTab(contentType: .terminal, workingDirectory: workingDirectory, title: title)
+    }
+
+    /// Add a tab with a specific content type.
+    @discardableResult
+    func addTab(contentType: ContentType, workingDirectory: String = "~", title: String? = nil) -> Int {
+        let defaultTitle =
+            title
+            ?? (contentType == .terminal
+                ? workingDirectory.lastPathComponent
+                : contentType.defaultTabTitle)
+
         let tab = Tab(
             id: UUID(),
             state: TabState(
+                contentType: contentType,
                 workingDirectory: workingDirectory,
-                title: title ?? workingDirectory.lastPathComponent
+                title: defaultTitle
             )
         )
         tabs.append(tab)

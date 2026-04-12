@@ -79,6 +79,20 @@ enum NewTabCwdMode: Int, CaseIterable {
     }
 }
 
+enum MarkdownOpenMode: String, CaseIterable, Codable {
+    case preview = "preview"
+    case editor = "editor"
+    case external = "external"
+
+    var displayName: String {
+        switch self {
+        case .preview: return "Markdown Preview"
+        case .editor: return "Terminal Editor"
+        case .external: return "External App"
+        }
+    }
+}
+
 enum SidebarTabBarPosition: String, CaseIterable {
     case top
     case bottom
@@ -175,6 +189,9 @@ final class AppSettings {
         static let activeSidebarTab = "activeSidebarTab"
         static let sidebarTabBarPosition = "sidebarTabBarPosition"
         static let sidebarGlobalState = "sidebarGlobalState"
+        static let defaultTabType = "defaultTabType"
+        static let autoDetectContentType = "autoDetectContentType"
+        static let markdownOpenMode = "markdownOpenMode"
     }
 
     /// Bool from UserDefaults with a custom default (since .bool returns false for unset keys).
@@ -426,6 +443,32 @@ final class AppSettings {
     var sidebarGlobalState: Bool {
         get { bool(K.sidebarGlobalState, default: false) }
         set { set(newValue, forKey: K.sidebarGlobalState, topic: .layout) }
+    }
+
+    // MARK: - Tabs
+
+    /// Default content type for new tabs (terminal, browser, etc.).
+    var defaultTabType: ContentType {
+        get {
+            guard let raw = UserDefaults.standard.string(forKey: K.defaultTabType) else { return .terminal }
+            return ContentType(rawValue: raw) ?? .terminal
+        }
+        set { set(newValue.rawValue, forKey: K.defaultTabType, topic: .layout) }
+    }
+
+    /// When true, auto-detect content type from pasted URLs/file paths.
+    var autoDetectContentType: Bool {
+        get { bool(K.autoDetectContentType, default: true) }
+        set { set(newValue, forKey: K.autoDetectContentType, topic: .layout) }
+    }
+
+    /// How to open markdown files from the file tree.
+    var markdownOpenMode: MarkdownOpenMode {
+        get {
+            guard let raw = UserDefaults.standard.string(forKey: K.markdownOpenMode) else { return .preview }
+            return MarkdownOpenMode(rawValue: raw) ?? .preview
+        }
+        set { set(newValue.rawValue, forKey: K.markdownOpenMode, topic: .explorer) }
     }
 
     // MARK: - Plugins

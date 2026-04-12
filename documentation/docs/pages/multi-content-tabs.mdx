@@ -1,0 +1,57 @@
+# Multi-Content Tabs
+
+Boo supports multiple content types within tabs — not just terminals. A tab can host a terminal, browser, text editor, image viewer, or markdown preview.
+
+## Supported Content Types
+
+| Type | Description | Icon |
+|------|-------------|------|
+| `terminal` | Default. Ghostty terminal emulator | Terminal icon |
+| `browser` | WebKit-based web browser | Globe icon |
+| `editor` | Text/code editor (non-terminal) | Document icon |
+| `imageViewer` | Image preview | Image icon |
+| `markdownPreview` | Rendered markdown | Markdown icon |
+
+## Creating Tabs
+
+### Menu
+
+- **File → New Terminal Tab** (default)
+- **File → New Browser Tab**
+- **File → New Editor Tab**
+
+### Auto-Detection
+
+When pasting content into the app, Boo can automatically detect the intended content type:
+
+- URLs (`https://...`) → Browser tab
+- File paths to images → Image viewer tab
+- File paths to `.md` files → Markdown preview tab
+
+Auto-detection can be disabled in **Settings → General → Auto-detect content type for new tabs**.
+
+## Mixing Tabs
+
+Tabs of different types can coexist in the same pane. Each tab displays a type-specific icon in the tab bar for easy identification.
+
+## Sidebar Behavior
+
+The sidebar displays for all tab types:
+
+- **Terminal tabs**: Full plugin functionality (FileTree, Git, Docker, etc.)
+- **Non-terminal tabs**: Sidebar visible but shows placeholder content (future: content-type-specific plugins)
+
+## Architecture
+
+See [Architecture](/architecture) for the underlying state model. Multi-content tabs extend this with:
+
+- `TabState.contentType` — identifies the content type
+- `ContentBridge` protocol — abstracts content-specific state and events
+- Content-specific views implementing `ContentView` protocol
+
+## Settings
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `defaultTabType` | `terminal` | Content type for new tabs |
+| `autoDetectContentType` | `true` | Auto-detect content type when pasting |

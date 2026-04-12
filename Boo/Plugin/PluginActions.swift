@@ -15,8 +15,16 @@ final class PluginActions {
     /// Returns true when the active terminal has a non-shell foreground process running.
     var isTerminalBusy: (() -> Bool)?
 
+    /// Open a new tab with the specified payload (terminal, browser, or file).
+    var openTab: ((TabPayload) -> Void)?
+
     func pastePath(_ path: String) {
         pastePathToActivePane?(path)
+    }
+
+    /// Convenience method to open a file in the appropriate viewer.
+    func openFile(_ path: String) {
+        openTab?(.file(path: path))
     }
 
     func cd(to path: String) {

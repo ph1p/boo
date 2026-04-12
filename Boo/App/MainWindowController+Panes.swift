@@ -128,9 +128,10 @@ extension MainWindowController: PaneViewDelegate {
         let destPaneID = destWorkspace.activePaneID
         guard let destPane = destWorkspace.pane(for: destPaneID) else { return }
 
-        // Extract the tab and its GhosttyView from the source pane
+        // Extract the tab and its view from the source pane
         guard let tab = sourcePane.extractTab(at: index) else { return }
-        let gv = pv.extractGhosttyView(for: tab.id)
+        let gv = tab.contentType == .terminal ? pv.extractGhosttyView(for: tab.id) : nil
+        let cv = tab.contentType != .terminal ? pv.extractContentView(for: tab.id) : nil
 
         // Restore source view if it still has tabs
         if !sourcePane.tabs.isEmpty {
@@ -143,9 +144,13 @@ extension MainWindowController: PaneViewDelegate {
         let insertIndex = destPane.tabs.count
         destPane.insertTab(tab, at: insertIndex)
 
-        // Cache the GhosttyView in the destination pane view (if it exists)
-        if let gv = gv, let destPV = workspacePaneViews[destWorkspace.id]?[destPaneID] {
-            destPV.insertGhosttyView(gv, for: tab.id)
+        // Cache the view in the destination pane view (if it exists)
+        if let destPV = workspacePaneViews[destWorkspace.id]?[destPaneID] {
+            if let gv = gv {
+                destPV.insertGhosttyView(gv, for: tab.id)
+            } else if let cv = cv {
+                destPV.insertContentView(cv, for: tab.id)
+            }
         }
 
         // If source pane is now empty, close it (which may close the workspace)
@@ -535,7 +540,8 @@ extension MainWindowController {
     ) {
         let sourcePane = source.pane
         guard let tab = sourcePane.extractTab(at: tabIndex) else { return }
-        let gv = source.extractGhosttyView(for: tab.id)
+        let gv = tab.contentType == .terminal ? source.extractGhosttyView(for: tab.id) : nil
+        let cv = tab.contentType != .terminal ? source.extractContentView(for: tab.id) : nil
 
         // Restore source view if still has tabs
         if !sourcePane.tabs.isEmpty {
@@ -549,10 +555,18 @@ extension MainWindowController {
         case .tabBarInsert(let insertIdx):
             let insertIndex = min(insertIdx, dest.pane.tabs.count)
             dest.pane.insertTab(tab, at: insertIndex)
-            if let gv = gv { dest.insertGhosttyView(gv, for: tab.id) }
+            if let gv = gv {
+                dest.insertGhosttyView(gv, for: tab.id)
+            } else if let cv = cv {
+                dest.insertContentView(cv, for: tab.id)
+            }
             dest.forceActivateTab(insertIndex)
             destWorkspace.activePaneID = dest.paneID
-            window?.makeFirstResponder(dest.ghosttyView)
+            if tab.contentType == .terminal {
+                window?.makeFirstResponder(dest.ghosttyView)
+            } else {
+                window?.makeFirstResponder(dest.activeContentView)
+            }
         case .left, .right, .top, .bottom:
             let direction: SplitTree.SplitDirection = (zone == .left || zone == .right) ? .horizontal : .vertical
             let insertBefore = (zone == .left || zone == .top)
@@ -566,13 +580,21 @@ extension MainWindowController {
             }
             destWorkspace.activePaneID = newPaneID
             splitContainer.update(tree: destWorkspace.splitTree)
-            DispatchQueue.main.async { [weak self] in
+            DispatchQueue.main.async { [weak self, tab, gv, cv] in
                 guard let self = self else { return }
                 if let newPV = self.paneViews[newPaneID] {
-                    if let gv = gv { newPV.insertGhosttyView(gv, for: tab.id) }
+                    if let gv = gv {
+                        newPV.insertGhosttyView(gv, for: tab.id)
+                    } else if let cv = cv {
+                        newPV.insertContentView(cv, for: tab.id)
+                    }
                     newPV.tabDragCoordinator = self.tabDragCoordinator
                     newPV.startActiveSession()
-                    self.window?.makeFirstResponder(newPV.ghosttyView)
+                    if tab.contentType == .terminal {
+                        self.window?.makeFirstResponder(newPV.ghosttyView)
+                    } else {
+                        self.window?.makeFirstResponder(newPV.activeContentView)
+                    }
                 }
                 for id in destWorkspace.splitTree.leafIDs where id != newPaneID {
                     self.paneViews[id]?.startActiveSession()
@@ -615,7 +637,13 @@ extension MainWindowController {
 
         // Extract tab + view from source
         guard let tab = sourcePane.extractTab(at: tabIndex) else { return }
-        guard let gv = source.extractGhosttyView(for: tab.id) else { return }
+        let gv = tab.contentType == .terminal ? source.extractGhosttyView(for: tab.id) : nil
+        let cv = tab.contentType != .terminal ? source.extractContentView(for: tab.id) : nil
+
+        // Ensure we have a view to transfer
+        guard gv != nil || cv != nil else {
+            return
+        }
 
         // If source still has tabs, show the now-active one
         if !sourcePane.tabs.isEmpty {
@@ -629,11 +657,19 @@ extension MainWindowController {
         // early-return guard would skip. Use forceActivateTab instead.
         let insertIndex = min(insertAt, destPane.tabs.count)
         destPane.insertTab(tab, at: insertIndex)
-        dest.insertGhosttyView(gv, for: tab.id)
+        if let gv = gv {
+            dest.insertGhosttyView(gv, for: tab.id)
+        } else if let cv = cv {
+            dest.insertContentView(cv, for: tab.id)
+        }
         dest.forceActivateTab(insertIndex)
 
         workspace.activePaneID = dest.paneID
-        window?.makeFirstResponder(dest.ghosttyView)
+        if tab.contentType == .terminal {
+            window?.makeFirstResponder(dest.ghosttyView)
+        } else {
+            window?.makeFirstResponder(dest.activeContentView)
+        }
     }
 
     private func splitPaneWithTab(
@@ -647,7 +683,11 @@ extension MainWindowController {
 
         // 1. Extract tab + view from source (before any tree changes)
         guard let tab = sourcePane.extractTab(at: tabIndex) else { return }
-        guard let gv = source.extractGhosttyView(for: tab.id) else { return }
+        let gv = tab.contentType == .terminal ? source.extractGhosttyView(for: tab.id) : nil
+        let cv = tab.contentType != .terminal ? source.extractContentView(for: tab.id) : nil
+
+        // Ensure we have a view to transfer
+        guard gv != nil || cv != nil else { return }
         sourceIsEmpty = sourcePane.tabs.isEmpty
 
         // 2. Split the target pane — creates new leaf in the tree
@@ -683,14 +723,18 @@ extension MainWindowController {
         splitContainer.update(tree: workspace.splitTree)
         saveSession()
 
-        DispatchQueue.main.async { [weak self] in
+        DispatchQueue.main.async { [weak self, tab, gv, cv] in
             guard let self = self else { return }
 
-            // Insert the transferred GhosttyView BEFORE starting sessions,
+            // Insert the transferred view BEFORE starting sessions,
             // so startActiveSession finds it in the cache instead of creating
-            // a new empty terminal.
+            // a new empty view.
             if let newPV = self.paneViews[newPaneID] {
-                newPV.insertGhosttyView(gv, for: tab.id)
+                if let gv = gv {
+                    newPV.insertGhosttyView(gv, for: tab.id)
+                } else if let cv = cv {
+                    newPV.insertContentView(cv, for: tab.id)
+                }
             }
 
             // Restart all pane sessions
@@ -702,7 +746,11 @@ extension MainWindowController {
             }
 
             if let newPV = self.paneViews[newPaneID] {
-                self.window?.makeFirstResponder(newPV.ghosttyView)
+                if tab.contentType == .terminal {
+                    self.window?.makeFirstResponder(newPV.ghosttyView)
+                } else {
+                    self.window?.makeFirstResponder(newPV.activeContentView)
+                }
             }
             self.refreshAllSurfaces()
             self.syncCoordinatorPaneViews()

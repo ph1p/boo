@@ -268,6 +268,9 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
             let process = self.bridge.state.foregroundProcess
             return !process.isEmpty && !ProcessIcon.isShell(process)
         }
+        pluginActions.openTab = { [weak self] payload in
+            self?.handleOpenTab(payload)
+        }
         pluginActions.displayImageInTerminal = { [weak self] path, newTab in
             guard let self, let workspace = self.activeWorkspace else { return }
             let paneID = workspace.activePaneID
@@ -977,6 +980,34 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
             cwd = workspace.folderPath
         }
         pv.addNewTab(workingDirectory: cwd)
+        saveSession()
+    }
+
+    @objc func newBrowserTabAction(_ sender: Any?) {
+        guard let workspace = activeWorkspace,
+            workspace.pane(for: workspace.activePaneID) != nil,
+            let pv = paneViews[workspace.activePaneID]
+        else { return }
+        pv.addNewTab(contentType: .browser, url: ContentType.blankURL)
+        saveSession()
+    }
+
+    /// Open a new tab of the specified content type (used by context menus).
+    @objc func newTabOfType(_ sender: NSMenuItem) {
+        guard let type = sender.representedObject as? ContentType,
+            let workspace = activeWorkspace,
+            workspace.pane(for: workspace.activePaneID) != nil,
+            let pv = paneViews[workspace.activePaneID]
+        else { return }
+        let cwd: String
+        if AppSettings.shared.newTabCwdMode == .samePath,
+            let activeCwd = workspace.pane(for: workspace.activePaneID)?.activeTab?.workingDirectory
+        {
+            cwd = activeCwd
+        } else {
+            cwd = workspace.folderPath
+        }
+        pv.addNewTab(contentType: type, workingDirectory: cwd)
         saveSession()
     }
 

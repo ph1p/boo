@@ -23,7 +23,11 @@ extension MainWindowController {
             title: "Open Folder...", action: #selector(openFolderAction(_:)), keyEquivalent: "O")
         openFolder.keyEquivalentModifierMask = [.command, .shift]
         fileMenu.addItem(openFolder)
-        fileMenu.addItem(withTitle: "New Tab", action: #selector(newTabAction(_:)), keyEquivalent: "t")
+        fileMenu.addItem(withTitle: "New Terminal Tab", action: #selector(newTabAction(_:)), keyEquivalent: "t")
+        let browserTab = NSMenuItem(
+            title: "New Browser Tab", action: #selector(newBrowserTabAction(_:)), keyEquivalent: "T")
+        browserTab.keyEquivalentModifierMask = [.command, .shift]
+        fileMenu.addItem(browserTab)
         fileMenu.addItem(.separator())
         fileMenu.addItem(withTitle: "Close", action: #selector(smartCloseAction(_:)), keyEquivalent: "w")
         fileMenu.addItem(withTitle: "Reopen Closed Tab", action: #selector(reopenTabAction(_:)), keyEquivalent: "z")
