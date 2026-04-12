@@ -46,11 +46,17 @@ final class LocalFileTreePlugin: BooPluginProtocol {
         "avif"
     ]
 
+    /// Markdown file extensions that route through openTab API.
+    private static let markdownExtensions: Set<String> = [
+        "md", "markdown", "mdown", "mkd"
+    ]
+
     /// Default comma-separated list of extensions that open in the terminal editor.
+    /// Note: "md" removed since markdown files now route through openTab API.
     static let defaultEditorExtensions =
         "swift,m,h,c,cpp,js,ts,jsx,tsx,py,rb,go,rs,java,kt,sh,bash,zsh,fish,"
         + "html,css,scss,sass,less,vue,svelte,json,yaml,yml,toml,xml,plist,"
-        + "md,txt,log,conf,cfg,ini,env,gitignore,dockerfile,makefile"
+        + "txt,log,conf,cfg,ini,env,gitignore,dockerfile,makefile"
 
     /// Returns the current set of editor extensions from plugin settings.
     private static func editorExtensionSet() -> Set<String> {
@@ -149,6 +155,9 @@ final class LocalFileTreePlugin: BooPluginProtocol {
                         || AppSettings.shared.pluginBool(
                             "file-tree-local", "kittyNewTab", default: true)
                     act?.displayImageInTerminal?(path, newTab)
+                } else if Self.markdownExtensions.contains(ext) {
+                    // Route markdown through openTab API (respects user setting)
+                    act?.openTab?(.file(path: path))
                 } else if Self.editorExtensionSet().contains(ext) {
                     let parentDir = (path as NSString).deletingLastPathComponent
                     act?.openDirectoryInNewTab?(parentDir)

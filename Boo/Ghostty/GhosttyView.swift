@@ -444,6 +444,19 @@ class GhosttyView: NSView, NSTextInputClient {
         flashItem.target = self
         menu.addItem(flashItem)
 
+        // New tab options
+        menu.addItem(.separator())
+        for type in ContentType.creatableTypes {
+            let item = NSMenuItem(
+                title: "New \(type.displayName) Tab",
+                action: #selector(MainWindowController.newTabOfType(_:)),
+                keyEquivalent: ""
+            )
+            item.image = type.icon
+            item.representedObject = type
+            menu.addItem(item)
+        }
+
         NSMenu.popUpContextMenu(menu, with: event, for: self)
     }
 

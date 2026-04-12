@@ -108,6 +108,95 @@ extension MainWindowController {
         refreshStatusBar()
     }
 
+    /// Handle opening a tab via plugin API with type-safe payload.
+    func handleOpenTab(_ payload: TabPayload) {
+        guard let workspace = activeWorkspace,
+            let pv = paneViews[workspace.activePaneID]
+        else { return }
+
+        switch payload {
+        case .terminal(let workingDirectory):
+            pv.addNewTab(contentType: .terminal, workingDirectory: workingDirectory)
+
+        case .browser(let url):
+            pv.addNewTab(contentType: .browser, url: url)
+
+        case .file(let path):
+            // Check if file has a known content type
+            if let type = ContentType.forFile(path) {
+                // Markdown respects user preference
+                if type == .markdownPreview {
+                    switch AppSettings.shared.markdownOpenMode {
+                    case .preview:
+                        openFileInTab(path: path, type: .markdownPreview)
+                    case .editor:
+                        openFileInTerminalEditor(path)
+                    case .external:
+                        NSWorkspace.shared.open(URL(fileURLWithPath: path))
+                    }
+                } else {
+                    openFileInTab(path: path, type: type)
+                }
+            } else {
+                // Unknown type: open in system default app
+                NSWorkspace.shared.open(URL(fileURLWithPath: path))
+            }
+        }
+        refreshStatusBar()
+    }
+
+    /// Open a file in a new tab with the specified content type.
+    private func openFileInTab(path: String, type: ContentType) {
+        guard let workspace = activeWorkspace,
+            let pv = paneViews[workspace.activePaneID]
+        else { return }
+
+        let parentDir = (path as NSString).deletingLastPathComponent
+        pv.addNewTab(contentType: type, workingDirectory: parentDir)
+
+        // For file-based content views, we need to load the file after tab creation
+        if let contentView = pv.activeContentView {
+            switch type {
+            case .markdownPreview:
+                let state = ContentState.markdownPreview(
+                    MarkdownPreviewContentState(
+                        title: (path as NSString).lastPathComponent,
+                        filePath: path,
+                        scrollPosition: 0
+                    )
+                )
+                contentView.restoreState(state)
+            case .imageViewer:
+                let state = ContentState.imageViewer(
+                    ImageViewerContentState(
+                        title: (path as NSString).lastPathComponent,
+                        filePath: path,
+                        zoom: 1.0
+                    )
+                )
+                contentView.restoreState(state)
+            default:
+                break
+            }
+        }
+    }
+
+    /// Open a file in the terminal editor (respects user's editor preference).
+    private func openFileInTerminalEditor(_ path: String) {
+        let parentDir = (path as NSString).deletingLastPathComponent
+        openDirectoryInNewTab(parentDir)
+
+        let configured = AppSettings.shared.fileEditorCommand.trimmingCharacters(in: .whitespaces)
+        let editorCmd =
+            configured.isEmpty
+            ? (ProcessInfo.processInfo.environment["EDITOR"] ?? "vi")
+            : configured
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+            self?.sendRawToActivePane("\(editorCmd) \(shellEscape(path))\r")
+        }
+    }
+
     func openDirectoryInNewPane(_ path: String) {
         guard let workspace = activeWorkspace else { return }
         window?.makeFirstResponder(nil)

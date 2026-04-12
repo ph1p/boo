@@ -37,6 +37,10 @@ export default defineConfig({
           link: '/ghostty-integration',
         },
         {
+          text: 'Multi-Content Tabs',
+          link: '/multi-content-tabs',
+        },
+        {
           text: 'Remote Sessions',
           link: '/remote-sessions',
         },

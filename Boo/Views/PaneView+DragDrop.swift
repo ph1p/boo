@@ -130,9 +130,9 @@ extension PaneView {
             return
         }
 
-        // Plus button — only trigger when clicking the actual button, not empty tab bar space
+        // Plus button — show dropdown menu for tab type selection
         guard isPlusButtonHit(at: point) else { return }
-        addNewTab(workingDirectory: pane.activeTab?.workingDirectory ?? "~")
+        showNewTabMenu(event: event)
     }
 
     override func mouseDragged(with event: NSEvent) {
@@ -210,7 +210,26 @@ extension PaneView {
             menu.addItem(moveItem)
         }
 
+        // New tab options
+        menu.addItem(.separator())
+        for type in ContentType.creatableTypes {
+            let item = NSMenuItem(
+                title: "New \(type.displayName) Tab",
+                action: #selector(contextNewTab(_:)),
+                keyEquivalent: ""
+            )
+            item.target = self
+            item.image = type.icon
+            item.representedObject = type
+            menu.addItem(item)
+        }
+
         NSMenu.popUpContextMenu(menu, with: event, for: self)
+    }
+
+    @objc private func contextNewTab(_ sender: NSMenuItem) {
+        guard let type = sender.representedObject as? ContentType else { return }
+        addNewTab(contentType: type, workingDirectory: pane.activeTab?.workingDirectory ?? "~")
     }
 
     /// Returns true when closing any tab would leave the workspace empty.

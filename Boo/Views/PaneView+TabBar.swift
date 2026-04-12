@@ -357,4 +357,28 @@ extension PaneView {
             width: iconSize + 3
         )
     }
+
+    // MARK: - New Tab Menu
+
+    /// Show dropdown menu for creating new tabs of different types.
+    func showNewTabMenu(event: NSEvent) {
+        let menu = NSMenu()
+        for type in ContentType.creatableTypes {
+            let item = NSMenuItem(
+                title: "New \(type.displayName) Tab",
+                action: #selector(newTabMenuAction(_:)),
+                keyEquivalent: ""
+            )
+            item.target = self
+            item.image = type.icon
+            item.representedObject = type
+            menu.addItem(item)
+        }
+        NSMenu.popUpContextMenu(menu, with: event, for: self)
+    }
+
+    @objc private func newTabMenuAction(_ sender: NSMenuItem) {
+        guard let type = sender.representedObject as? ContentType else { return }
+        addNewTab(contentType: type, workingDirectory: pane.activeTab?.workingDirectory ?? "~")
+    }
 }
