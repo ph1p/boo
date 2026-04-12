@@ -34,6 +34,10 @@ class PaneView: NSView {
     private var scrollWrapper: TerminalScrollView?
     private var tabViews: [UUID: GhosttyView] = [:]
 
+    /// Generic content view for non-terminal tabs (browser, editor, etc.)
+    private(set) var activeContentView: ContentViewProtocol?
+    private var contentViews: [UUID: ContentViewProtocol] = [:]
+
     // Drag state for tab reordering
     var dragTabIndex: Int?
     var dragStartPoint: NSPoint?
@@ -180,10 +184,34 @@ class PaneView: NSView {
 
     var currentTerminalView: NSView? { scrollWrapper ?? ghosttyView }
 
-    // MARK: - Terminal Lifecycle
+    /// The currently active content view (terminal or other content type).
+    var currentContentView: NSView? {
+        if let contentView = activeContentView {
+            return contentView
+        }
+        return scrollWrapper ?? ghosttyView
+    }
+
+    // MARK: - Content Lifecycle
 
     func startActiveSession() {
         guard let tab = pane.activeTab else { return }
+
+        // Handle based on content type
+        switch tab.contentType {
+        case .terminal:
+            startTerminalSession(for: tab)
+        default:
+            startContentSession(for: tab)
+        }
+        layoutTerminalView()
+    }
+
+    /// Start a terminal session for the given tab.
+    private func startTerminalSession(for tab: Pane.Tab) {
+        // Hide any non-terminal content view
+        activeContentView?.removeFromSuperview()
+        activeContentView = nil
 
         if let stored = tabViews.removeValue(forKey: tab.id) {
             scrollWrapper?.removeFromSuperview()
@@ -202,7 +230,61 @@ class PaneView: NSView {
             scrollWrapper = wrapper
             ghosttyView = gv
         }
-        layoutTerminalView()
+    }
+
+    /// Start a non-terminal content session for the given tab.
+    private func startContentSession(for tab: Pane.Tab) {
+        // Hide terminal view
+        scrollWrapper?.removeFromSuperview()
+        scrollWrapper = nil
+        ghosttyView = nil
+
+        // Check cache first
+        if let stored = contentViews.removeValue(forKey: tab.id) {
+            // Rewire callbacks in case this view was transferred from another pane
+            wireContentCallbacks(stored, tabID: tab.id)
+            addSubview(stored)
+            activeContentView = stored
+            stored.activate()
+        } else {
+            // Create new content view
+            let contentView = createContentView(for: tab)
+            wireContentCallbacks(contentView, tabID: tab.id)
+            addSubview(contentView)
+            activeContentView = contentView
+            contentView.activate()
+        }
+    }
+
+    /// Create a content view for the given tab's content type.
+    private func createContentView(for tab: Pane.Tab) -> ContentViewProtocol {
+        guard tab.contentType != .terminal else {
+            fatalError("Use startTerminalSession for terminal tabs")
+        }
+        return ContentViewFactory.createDefaultView(for: tab.contentType, workingDirectory: tab.workingDirectory)
+    }
+
+    /// Wire callbacks for non-terminal content views.
+    private func wireContentCallbacks(_ contentView: ContentViewProtocol, tabID: UUID) {
+        contentView.onFocused = { [weak self] in
+            guard let self = self else { return }
+            self.paneDelegate?.paneView(self, didFocus: self.paneID)
+        }
+
+        contentView.onTitleChanged = { [weak self] title in
+            guard let self = self else { return }
+            if let index = self.pane.tabs.firstIndex(where: { $0.id == tabID }) {
+                self.pane.updateTitle(at: index, title)
+                self.scheduleTabBarRedraw()
+            }
+        }
+
+        contentView.onCloseRequested = { [weak self] in
+            guard let self = self else { return }
+            if let index = self.pane.tabs.firstIndex(where: { $0.id == tabID }) {
+                self.paneDelegate?.paneView(self, didRequestCloseTab: index, paneID: self.paneID)
+            }
+        }
     }
 
     /// Remove and return a GhosttyView for cross-pane transfer. Does not destroy it.
@@ -231,6 +313,28 @@ class PaneView: NSView {
     /// Accept a GhosttyView transferred from another pane.
     func insertGhosttyView(_ gv: GhosttyView, for tabID: UUID) {
         tabViews[tabID] = gv
+    }
+
+    /// Remove and return a ContentView for cross-pane transfer. Does not destroy it.
+    func extractContentView(for tabID: UUID) -> ContentViewProtocol? {
+        // Check the off-screen cache
+        if let cv = contentViews.removeValue(forKey: tabID) {
+            cv.removeFromSuperview()
+            return cv
+        }
+        // The dragged tab was likely the active/displayed one
+        if let cv = activeContentView {
+            cv.deactivate()
+            cv.removeFromSuperview()
+            activeContentView = nil
+            return cv
+        }
+        return nil
+    }
+
+    /// Accept a ContentView transferred from another pane.
+    func insertContentView(_ cv: ContentViewProtocol, for tabID: UUID) {
+        contentViews[tabID] = cv
     }
 
     private func wireCallbacks(_ gv: GhosttyView) {
@@ -271,11 +375,18 @@ class PaneView: NSView {
     // MARK: - Layout
 
     func layoutTerminalView() {
-        let container: NSView? = scrollWrapper ?? ghosttyView
-        guard let view = container else { return }
         let barH = tabBarHeight
         let newFrame = NSRect(x: 0, y: barH, width: bounds.width, height: max(0, bounds.height - barH))
-        if view.frame != newFrame { view.frame = newFrame }
+
+        // Layout terminal view if present
+        if let container: NSView = scrollWrapper ?? ghosttyView {
+            if container.frame != newFrame { container.frame = newFrame }
+        }
+
+        // Layout content view if present (browser, editor, etc.)
+        if let contentView = activeContentView {
+            if contentView.frame != newFrame { contentView.frame = newFrame }
+        }
     }
 
     override func layout() {
@@ -403,7 +514,7 @@ class PaneView: NSView {
         startActiveSession()
         layoutTerminalView()
         needsDisplay = true
-        window?.makeFirstResponder(ghosttyView)
+        focusActiveView()
         if pane.activeTab != nil {
             paneDelegate?.paneView(self, didFocus: paneID)
         }
@@ -416,7 +527,7 @@ class PaneView: NSView {
         startActiveSession()
         layoutTerminalView()
         needsDisplay = true
-        window?.makeFirstResponder(ghosttyView)
+        focusActiveView()
         if let tab = pane.activeTab {
             debugLog(
                 "[TabSwitch] activateTab(\(index)) pane=\(paneID.uuidString.prefix(8)) title=\(tab.title) process=\(tab.state.foregroundProcess)"
@@ -429,25 +540,62 @@ class PaneView: NSView {
         }
     }
 
+    /// Focus the appropriate view based on the active tab's content type.
+    private func focusActiveView() {
+        guard let tab = pane.activeTab else { return }
+        if tab.contentType == .terminal {
+            window?.makeFirstResponder(ghosttyView)
+        } else {
+            window?.makeFirstResponder(activeContentView)
+        }
+    }
+
     @discardableResult
     func addNewTab(workingDirectory: String) -> UUID? {
+        addNewTab(contentType: .terminal, workingDirectory: workingDirectory)
+    }
+
+    /// Add a new tab with a specific content type.
+    @discardableResult
+    func addNewTab(contentType: ContentType, workingDirectory: String = "~", url: URL? = nil) -> UUID? {
         storeCurrentView()
         lastAutoScrolledTabIndex = -1
-        _ = pane.addTab(workingDirectory: workingDirectory)
+
+        switch contentType {
+        case .terminal:
+            _ = pane.addTab(contentType: .terminal, workingDirectory: workingDirectory)
+        case .browser:
+            _ = pane.addTab(contentType: .browser, workingDirectory: workingDirectory, title: url?.host ?? "New Tab")
+        case .editor:
+            _ = pane.addTab(contentType: .editor, workingDirectory: workingDirectory)
+        case .imageViewer:
+            _ = pane.addTab(contentType: .imageViewer, workingDirectory: workingDirectory)
+        case .markdownPreview:
+            _ = pane.addTab(contentType: .markdownPreview, workingDirectory: workingDirectory)
+        }
+
         startActiveSession()
-        layoutTerminalView()
+        // Trigger single layout + display pass, not redundant calls
         needsLayout = true
-        needsDisplay = true
-        // Try focusing synchronously first, then retry on next tick as fallback
-        // in case the view hierarchy isn't fully installed yet.
-        if let gv = ghosttyView {
-            window?.makeFirstResponder(gv)
+
+        // Focus the appropriate view
+        if contentType == .terminal {
+            if let gv = ghosttyView {
+                window?.makeFirstResponder(gv)
+            }
+            DispatchQueue.main.async { [weak self] in
+                guard let self, let gv = self.ghosttyView else { return }
+                self.window?.makeFirstResponder(gv)
+            }
+        } else if let contentView = activeContentView {
+            window?.makeFirstResponder(contentView)
+            // For browser tabs, navigate to the URL
+            if contentType == .browser, let url = url, let browserView = contentView as? BrowserContentView {
+                browserView.navigate(to: url)
+            }
         }
+
         paneDelegate?.paneView(self, didFocus: paneID)
-        DispatchQueue.main.async { [weak self] in
-            guard let self, let gv = self.ghosttyView else { return }
-            self.window?.makeFirstResponder(gv)
-        }
         return pane.tabs.last?.id
     }
 
@@ -455,12 +603,24 @@ class PaneView: NSView {
         lastAutoScrolledTabIndex = -1
         guard index >= 0, index < pane.tabs.count else { return }
         let tabID = pane.tabs[index].id
-        if let gv = tabViews.removeValue(forKey: tabID) { gv.destroy() }
-        if pane.activeTabIndex == index {
-            ghosttyView?.destroy()
-            scrollWrapper?.removeFromSuperview()
-            scrollWrapper = nil
-            ghosttyView = nil
+        let tab = pane.tabs[index]
+
+        // Clean up the appropriate view type
+        if tab.contentType == .terminal {
+            if let gv = tabViews.removeValue(forKey: tabID) { gv.destroy() }
+            if pane.activeTabIndex == index {
+                ghosttyView?.destroy()
+                scrollWrapper?.removeFromSuperview()
+                scrollWrapper = nil
+                ghosttyView = nil
+            }
+        } else {
+            if let cv = contentViews.removeValue(forKey: tabID) { cv.cleanup() }
+            if pane.activeTabIndex == index {
+                activeContentView?.cleanup()
+                activeContentView?.removeFromSuperview()
+                activeContentView = nil
+            }
         }
 
         let wasActive = index == pane.activeTabIndex
@@ -469,7 +629,14 @@ class PaneView: NSView {
         if wasActive {
             startActiveSession()
             layoutTerminalView()
-            window?.makeFirstResponder(ghosttyView)
+            // Focus the appropriate view
+            if let newTab = pane.activeTab {
+                if newTab.contentType == .terminal {
+                    window?.makeFirstResponder(ghosttyView)
+                } else {
+                    window?.makeFirstResponder(activeContentView)
+                }
+            }
             if pane.activeTab != nil {
                 // Restore bridge state from the newly active tab, same as activateTab.
                 paneDelegate?.paneView(self, didFocus: paneID)
@@ -494,12 +661,22 @@ class PaneView: NSView {
 
     private func storeCurrentView() {
         cancelPendingDebounces()
-        guard let gv = ghosttyView, let tab = pane.activeTab else { return }
-        gv.removeFromSuperview()
-        scrollWrapper?.removeFromSuperview()
-        scrollWrapper = nil
-        tabViews[tab.id] = gv
-        ghosttyView = nil
+        guard let tab = pane.activeTab else { return }
+
+        if tab.contentType == .terminal {
+            guard let gv = ghosttyView else { return }
+            gv.removeFromSuperview()
+            scrollWrapper?.removeFromSuperview()
+            scrollWrapper = nil
+            tabViews[tab.id] = gv
+            ghosttyView = nil
+        } else {
+            guard let cv = activeContentView else { return }
+            cv.deactivate()
+            cv.removeFromSuperview()
+            contentViews[tab.id] = cv
+            activeContentView = nil
+        }
     }
 
     var tabCount: Int { pane.tabs.count }
@@ -628,12 +805,20 @@ class PaneView: NSView {
     // MARK: - Cleanup
 
     func stopAll() {
+        // Clean up terminal views
         for (_, gv) in tabViews { gv.destroy() }
         tabViews.removeAll()
         ghosttyView?.destroy()
         scrollWrapper?.removeFromSuperview()
         scrollWrapper = nil
         ghosttyView = nil
+
+        // Clean up content views
+        for (_, cv) in contentViews { cv.cleanup() }
+        contentViews.removeAll()
+        activeContentView?.cleanup()
+        activeContentView?.removeFromSuperview()
+        activeContentView = nil
     }
 
     deinit { stopAll() }

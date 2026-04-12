@@ -203,4 +203,119 @@ final class PaneViewTabBarTests: XCTestCase {
         }
     }
 
+    // MARK: - Plus Button Visibility in Wrap Mode
+
+    func testWrapLayout_plusButtonPosition_fitsOnLastRow() {
+        // 2 tabs at ~100px in 250px = 200px, plus 32px = 232px fits
+        let pv = makePaneView(tabTitles: ["~", "~"], width: 250)
+        UserDefaults.standard.set(TabOverflowMode.wrap.rawValue, forKey: "tabOverflowMode")
+        defer { UserDefaults.standard.removeObject(forKey: "tabOverflowMode") }
+
+        let layouts = pv.wrapLayout()
+        let lastLay = layouts.last!
+        let plusX = lastLay.x + lastLay.width
+        let plusY = lastLay.y
+
+        // Plus button should fit on same row (y=0)
+        XCTAssertEqual(plusY, 0, "Plus should be on first row")
+        // plusX + plusButtonWidth should fit within bounds (with tolerance for floating point)
+        XCTAssertLessThanOrEqual(plusX + pv.plusButtonWidth, 250 + 1, "Plus button must fit within bounds")
+    }
+
+    func testWrapLayout_plusButtonPosition_overflowsToNewRow() {
+        // 3 tabs at ~100px in 250px: rows [[0,1], [2]]
+        // Tab 2 at ~100px + 32px = 132px > leftover? Let's use tight width
+        // 2 tabs at 100px = 200px in 220px, leaves 20px. Plus needs 32px → new row
+        let pv = makePaneView(tabTitles: ["~", "~"], width: 220)
+        UserDefaults.standard.set(TabOverflowMode.wrap.rawValue, forKey: "tabOverflowMode")
+        defer { UserDefaults.standard.removeObject(forKey: "tabOverflowMode") }
+
+        let layouts = pv.wrapLayout()
+        let lastLay = layouts.last!
+
+        // Both tabs on row 0, but tabs stretched to fill 220px
+        // Since 200 + 32 > 220, plus goes to new row
+        // wrapLayout should stretch tabs to full width when plus doesn't fit
+        let totalTabWidth = layouts.reduce(0) { $0 + $1.width }
+        XCTAssertEqual(totalTabWidth, 220, accuracy: 1, "Tabs should stretch to full width when plus overflows")
+
+        // Plus position should be at new row (validated via wrapRowCount)
+        let rows = Int(pv.tabBarHeight / pv.singleRowTabHeight)
+        XCTAssertEqual(rows, 2, "Should have 2 rows: 1 for tabs, 1 for plus button")
+    }
+
+    func testWrapLayout_plusButtonAlwaysAccessible_edgeCaseWidths() {
+        // Test various edge case widths where plus button might disappear
+        let pv = makePaneView(tabTitles: ["~", "~", "~"], width: 300)
+        UserDefaults.standard.set(TabOverflowMode.wrap.rawValue, forKey: "tabOverflowMode")
+        defer { UserDefaults.standard.removeObject(forKey: "tabOverflowMode") }
+
+        // Test resize from wide to narrow
+        for width in stride(from: 350, through: 150, by: -10) {
+            pv.frame = NSRect(x: 0, y: 0, width: CGFloat(width), height: 300)
+
+            let layouts = pv.wrapLayout()
+            guard let lastLay = layouts.last else { continue }
+
+            let plusX = lastLay.x + lastLay.width
+            let plusY = lastLay.y
+            let barHeight = pv.tabBarHeight
+
+            // Plus button must fit either:
+            // 1. On same row as last tab (plusX + 32 <= width), or
+            // 2. On new row (plusY + singleRowTabHeight <= barHeight)
+            let fitsOnLastRow = plusX + pv.plusButtonWidth <= CGFloat(width)
+            let fitsOnNewRow = plusY + pv.singleRowTabHeight <= barHeight
+
+            XCTAssertTrue(
+                fitsOnLastRow || fitsOnNewRow,
+                "Plus button must be visible at width \(width): plusX=\(plusX), plusY=\(plusY), barHeight=\(barHeight)")
+        }
+    }
+
+    func testWrapLayout_plusButtonDrawPosition_matchesBarHeight() {
+        // The actual plus button draw position (as computed in drawTabsWrapped)
+        // must always be within tabBarHeight bounds
+        let pv = makePaneView(tabTitles: ["~", "~", "~", "~"], width: 300)
+        UserDefaults.standard.set(TabOverflowMode.wrap.rawValue, forKey: "tabOverflowMode")
+        defer { UserDefaults.standard.removeObject(forKey: "tabOverflowMode") }
+
+        // Test at various widths including the previously failing width 250
+        for width in stride(from: 400, through: 100, by: -5) {
+            pv.frame = NSRect(x: 0, y: 0, width: CGFloat(width), height: 300)
+
+            let widths = pv.allTabWidths()
+            let layouts = pv.wrapLayout()
+            guard !layouts.isEmpty else { continue }
+
+            let lastLay = layouts.last!
+            let plusY = lastLay.y
+            let barHeight = pv.tabBarHeight
+            let availW = CGFloat(width)
+
+            // Mirror the FIXED draw logic: use natural widths like wrapLayout does
+            var lastRowW: CGFloat = 0
+            var rowW: CGFloat = 0
+            for w in widths {
+                if rowW + w > availW && rowW > 0 {
+                    lastRowW = w
+                    rowW = w
+                } else {
+                    lastRowW = rowW + w
+                    rowW += w
+                }
+            }
+            let plusOnLastRow = lastRowW + pv.plusButtonWidth <= availW
+
+            let actualPlusY = plusOnLastRow ? plusY : plusY + pv.singleRowTabHeight
+
+            // Plus button bottom edge must not exceed tab bar height
+            let plusBottomY = actualPlusY + pv.singleRowTabHeight
+            XCTAssertLessThanOrEqual(
+                plusBottomY, barHeight,
+                "Plus button overflows bar at width \(width): plusY=\(actualPlusY), bottom=\(plusBottomY), barHeight=\(barHeight)"
+            )
+        }
+    }
+
 }
