@@ -172,15 +172,13 @@ extension MainWindowController {
 
     /// Build git context from the current CWD.
     func buildGitContext(cwd: String) -> TerminalContext.GitContext? {
-        NSLog(
-            "[Git] buildGitContext: cwd=\(cwd) cached=\(statusBar.gitBranch ?? "nil") cachedRoot=\(statusBar.gitRepoRoot ?? "nil")"
-        )
+        booLog(.debug, .git, "buildGitContext: cwd=\(cwd) cached=\(statusBar.gitBranch ?? "nil") cachedRoot=\(statusBar.gitRepoRoot ?? "nil")")
         if let branch = statusBar.gitBranch, let repoRoot = statusBar.gitRepoRoot,
             cwd == repoRoot || cwd.hasPrefix(repoRoot + "/")
         {
             let gitDir = (repoRoot as NSString).appendingPathComponent(".git")
             if FileManager.default.fileExists(atPath: gitDir) {
-                NSLog("[Git] buildGitContext: cache HIT branch=\(branch)")
+                booLog(.debug, .git, "buildGitContext: cache HIT branch=\(branch)")
                 return TerminalContext.GitContext(
                     branch: branch,
                     repoRoot: repoRoot,
@@ -192,13 +190,13 @@ extension MainWindowController {
                     lastCommitShort: nil
                 )
             }
-            NSLog("[Git] buildGitContext: .git gone, clearing cache")
+            booLog(.debug, .git, "buildGitContext: .git gone, clearing cache")
             statusBar.gitBranch = nil
             statusBar.gitRepoRoot = nil
             statusBar.needsDisplay = true
         }
         let (branch, repoRoot) = StatusBarView.detectGitInfo(in: cwd)
-        NSLog("[Git] buildGitContext: fallback branch=\(branch ?? "nil") repoRoot=\(repoRoot ?? "nil")")
+        booLog(.debug, .git, "buildGitContext: fallback branch=\(branch ?? "nil") repoRoot=\(repoRoot ?? "nil")")
         guard let branch = branch, let repoRoot = repoRoot else { return nil }
         return TerminalContext.GitContext(
             branch: branch,
@@ -460,6 +458,11 @@ extension MainWindowController {
             if let ctx = self.pluginRegistry.lastContext {
                 self.showPluginTabContent(id: pluginID, context: ctx)
             }
+        }
+        panel.onDragEnded = { [weak self] in
+            // Persist heights to Settings when resize drag ends
+            self?.syncSidebarPanelStateFromView()
+            self?.coordinator?.saveSidebarStateToSettings()
         }
         restoreSidebarPanelState(to: panel)
         panel.setTerminalID(context.terminalID)

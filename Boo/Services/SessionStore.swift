@@ -115,7 +115,7 @@ enum SessionStore {
             let data = try JSONEncoder().encode(snapshot)
             try data.write(to: URL(fileURLWithPath: sessionFile), options: .atomic)
         } catch {
-            NSLog("[SessionStore] Failed to save session: \(error)")
+            booLog(.error, .app, "Failed to save session: \(error)")
         }
     }
 

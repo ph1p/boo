@@ -158,7 +158,7 @@ final class BooSocketServer {
 
             serverFD = socket(AF_UNIX, SOCK_STREAM, 0)
             guard serverFD >= 0 else {
-                NSLog("[BooSocket] Failed to create socket: \(errno)")
+                booLog(.error, .socket, "Failed to create socket: \(errno)")
                 return
             }
 
@@ -183,7 +183,7 @@ final class BooSocketServer {
                 }
             }
             guard bindResult == 0 else {
-                NSLog("[BooSocket] bind failed: \(errno)")
+                booLog(.error, .socket, "bind failed: \(errno)")
                 close(serverFD)
                 serverFD = -1
                 return
@@ -192,13 +192,13 @@ final class BooSocketServer {
             chmod(socketPath, 0o600)
 
             guard listen(serverFD, 8) == 0 else {
-                NSLog("[BooSocket] listen failed: \(errno)")
+                booLog(.error, .socket, "listen failed: \(errno)")
                 close(serverFD)
                 serverFD = -1
                 return
             }
 
-            NSLog("[BooSocket] Listening on \(socketPath)")
+            booLog(.info, .socket, "Listening on \(socketPath)")
 
             let source = DispatchSource.makeReadSource(fileDescriptor: serverFD, queue: queue)
             source.setEventHandler { [weak self] in self?.acceptClient() }
@@ -429,7 +429,7 @@ final class BooSocketServer {
         )
         _processes[p] = status
         ancestorCache.removeAll()
-        NSLog("[BooSocket] Status set: pid=\(pid) name=\(name) category=\(category)")
+        booLog(.debug, .socket, "Status set: pid=\(pid) name=\(name) category=\(category)")
         sendResponse(fd: clientFD, ok: true)
         notifyChanged()
     }
@@ -442,7 +442,7 @@ final class BooSocketServer {
         let p = pid_t(pid)
         if _processes.removeValue(forKey: p) != nil {
             ancestorCache.removeAll()
-            NSLog("[BooSocket] Status cleared: pid=\(pid)")
+            booLog(.debug, .socket, "Status cleared: pid=\(pid)")
             notifyChanged()
         }
         sendResponse(fd: clientFD, ok: true)
@@ -487,7 +487,7 @@ final class BooSocketServer {
         for (pid, status) in _processes {
             errno = 0
             if kill(pid, 0) == -1, errno == ESRCH {
-                NSLog("[BooSocket] Dead process: pid=\(pid) name=\(status.name)")
+                booLog(.debug, .socket, "Dead process: pid=\(pid) name=\(status.name)")
                 _processes.removeValue(forKey: pid)
                 removed = true
             }

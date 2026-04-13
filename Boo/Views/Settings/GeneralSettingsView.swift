@@ -114,7 +114,10 @@ struct GeneralSettingsView: View {
 
             Section(title: "Advanced") {
                 ToggleRow(label: "Debug logging", isOn: $debugLogging)
-                    .onChange(of: debugLogging) { v in AppSettings.shared.debugLogging = v }
+                    .onChange(of: debugLogging) { v in
+                        AppSettings.shared.debugLogging = v
+                        BooLogger.shared.applyDebugSetting(v)
+                    }
                 Text("Writes verbose output to the system log. Disable when not troubleshooting.")
                     .font(.system(size: 11))
                     .foregroundColor(t.muted)
