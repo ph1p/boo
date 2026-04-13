@@ -503,6 +503,32 @@ final class AppSettings {
         set { set(newValue, forKey: K.sidebarPluginOrder) }
     }
 
+    // MARK: - Sidebar State Persistence
+
+    /// Persisted section heights per section ID. Survives app restart.
+    var sidebarSectionHeights: [String: CGFloat] {
+        guard let dict = pluginSettingsDict["__sidebar"]?["sectionHeights"] as? [String: Double] else {
+            return [:]
+        }
+        return dict.mapValues { CGFloat($0) }
+    }
+
+    /// Persisted section order per plugin ID. Survives app restart.
+    var sidebarSectionOrder: [String: [String]] {
+        pluginSettingsDict["__sidebar"]?["sectionOrder"] as? [String: [String]] ?? [:]
+    }
+
+    /// Write both sidebar state keys in one dict mutation + one disk write.
+    func saveSidebarState(heights: [String: CGFloat], order: [String: [String]]) {
+        var sidebarDict = pluginSettingsDict["__sidebar"] ?? [:]
+        sidebarDict["sectionHeights"] = heights.mapValues { Double($0) }
+        sidebarDict["sectionOrder"] = order
+        var all = pluginSettingsDict
+        all["__sidebar"] = sidebarDict
+        pluginSettingsDict = all
+        saveToFile()
+    }
+
     // MARK: - Updates
 
     var autoCheckUpdates: Bool {

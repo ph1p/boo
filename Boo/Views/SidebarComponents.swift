@@ -93,6 +93,8 @@ class SidebarDragHandleView: NSView {
 
     override func mouseUp(with event: NSEvent) {
         NSCursor.pop()
+        // Notify panel that drag ended — triggers persistence of heights to Settings
+        panelView?.handleDragEnded()
     }
 }
 
