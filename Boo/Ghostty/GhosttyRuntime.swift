@@ -39,8 +39,7 @@ private func ghosttyAction(_ app: ghostty_app_t?, _ target: ghostty_target_s, _ 
         guard let titlePtr = action.action.set_title.title else { return false }
         let title = String(cString: titlePtr)
         guard let view = viewFromTarget() else { return false }
-        // Intercept BOO_LS: prefixed titles — these are directory listings,
-        // not real titles. Route to onDirectoryListing instead.
+        // Intercept BOO_LS: prefixed titles — directory listings, not real titles.
         if title.hasPrefix("BOO_LS:") {
             let payload = String(title.dropFirst("BOO_LS:".count))
             if let colonIdx = payload.firstIndex(of: ":") {
@@ -52,6 +51,33 @@ private func ghosttyAction(_ app: ghostty_app_t?, _ target: ghostty_target_s, _ 
             }
             return true
         }
+
+        // Intercept OSC 9999 command tracking events emitted by shell integration scripts.
+        // Format (packed into SET_TITLE): "BOO_CMD:<action>;<data>"
+        // Actions: cmd_start (data = command string), cmd_end (data = exit code)
+        if title.hasPrefix("BOO_CMD:") {
+            let payload = String(title.dropFirst("BOO_CMD:".count))
+            if let semicolonIdx = payload.firstIndex(of: ";") {
+                let action = String(payload[..<semicolonIdx])
+                let data = String(payload[payload.index(after: semicolonIdx)...])
+                switch action {
+                case "cmd_start":
+                    DispatchQueue.main.async { [weak view] in
+                        view?.onCommandStart?(data)
+                    }
+                case "cmd_end":
+                    if let code = Int32(data) {
+                        DispatchQueue.main.async { [weak view] in
+                            view?.onCommandEnd?(code)
+                        }
+                    }
+                default:
+                    break
+                }
+            }
+            return true
+        }
+
         DispatchQueue.main.async { [weak view] in
             view?.onTitleChanged?(title)
         }
@@ -272,7 +298,7 @@ final class GhosttyRuntime {
         // Set resources dir before ghostty_init so shell integration is available
         if let dir = GhosttyRuntime.findResourcesDir() {
             setenv("GHOSTTY_RESOURCES_DIR", dir, 1)
-            NSLog("[Ghostty] Set GHOSTTY_RESOURCES_DIR = \(dir)")
+            booLog(.info, .app, "Set GHOSTTY_RESOURCES_DIR = \(dir)")
 
             // Also set TERMINFO so xterm-ghostty terminfo is found
             let terminfo = ((dir as NSString).deletingLastPathComponent as NSString)
@@ -281,7 +307,7 @@ final class GhosttyRuntime {
                 setenv("TERMINFO", terminfo, 0)  // don't overwrite if already set
             }
         } else {
-            NSLog("[Ghostty] WARNING: Could not find resources dir — shell integration disabled")
+            booLog(.warning, .app, "Could not find resources dir — shell integration disabled")
         }
 
         // Expose the socket path so child processes can communicate with Boo
@@ -291,7 +317,7 @@ final class GhosttyRuntime {
         let argv = CommandLine.unsafeArgv
         let rc = ghostty_init(UInt(argc), argv)
         guard rc == 0 else {
-            NSLog("[Ghostty] ghostty_init failed with code \(rc)")
+            booLog(.error, .app, "ghostty_init failed with code \(rc)")
             return
         }
 
@@ -309,9 +335,9 @@ final class GhosttyRuntime {
 
         app = ghostty_app_new(&rtConfig, config)
         if app == nil {
-            NSLog("[Ghostty] Failed to create app")
+            booLog(.error, .app, "Failed to create Ghostty app")
         } else {
-            NSLog("[Ghostty] App initialized")
+            booLog(.info, .app, "Ghostty app initialized")
             // Periodic tick drives cursor blink and other time-based rendering.
             // Add to .common modes so the timer fires during event tracking
             // (resize, scroll) and modal panels, not just the default mode.
@@ -369,7 +395,7 @@ final class GhosttyRuntime {
 
         if let old = old { ghostty_config_free(old) }
 
-        NSLog("[Ghostty] Config reloaded, pushed to \(surfaces.count) surface(s)")
+        booLog(.info, .app, "Config reloaded, pushed to \(surfaces.count) surface(s)")
     }
 
     /// Write Boo settings as a Ghostty config file and load it.
@@ -429,9 +455,9 @@ final class GhosttyRuntime {
         let content = lines.joined(separator: "\n") + "\n"
         do {
             try content.write(toFile: tmpPath, atomically: true, encoding: .utf8)
-            NSLog("[Ghostty] Config written to \(tmpPath) (\(lines.count) options)")
+            booLog(.debug, .app, "Config written to \(tmpPath) (\(lines.count) options)")
         } catch {
-            NSLog("[Ghostty] Failed to write config: \(error)")
+            booLog(.error, .app, "Failed to write config: \(error)")
         }
 
         tmpPath.withCString { path in

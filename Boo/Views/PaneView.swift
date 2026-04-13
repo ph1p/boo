@@ -13,6 +13,8 @@ protocol PaneViewDelegate: AnyObject {
     func paneView(_ paneView: PaneView, directoryListing path: String, output: String, paneID: UUID)
     func paneView(_ paneView: PaneView, didRequestCloseTab index: Int, paneID: UUID)
     func paneView(_ paneView: PaneView, shellPIDDiscovered pid: pid_t, paneID: UUID, tabID: UUID?)
+    func paneView(_ paneView: PaneView, commandStarted command: String, paneID: UUID)
+    func paneView(_ paneView: PaneView, commandEnded exitCode: Int32, paneID: UUID)
     func paneView(_ paneView: PaneView, didRequestMoveTab index: Int, toWorkspaceAt workspaceIndex: Int, paneID: UUID)
     func paneViewWorkspaceNames(_ paneView: PaneView) -> [(index: Int, name: String)]
     /// Returns true if this pane is the only pane in its workspace (used for close-label wording).
@@ -378,6 +380,16 @@ class PaneView: NSView {
             let tabID = idx >= 0 ? self.pane.tabs[idx].id : nil
             if idx >= 0 { self.pane.updateShellPID(at: idx, pid) }
             self.paneDelegate?.paneView(self, shellPIDDiscovered: pid, paneID: self.paneID, tabID: tabID)
+        }
+
+        gv.onCommandStart = { [weak self] command in
+            guard let self = self else { return }
+            self.paneDelegate?.paneView(self, commandStarted: command, paneID: self.paneID)
+        }
+
+        gv.onCommandEnd = { [weak self] exitCode in
+            guard let self = self else { return }
+            self.paneDelegate?.paneView(self, commandEnded: exitCode, paneID: self.paneID)
         }
     }
 

@@ -83,6 +83,13 @@ enum BooPaths {
         return path
     }()
 
+    /// Shell integration scripts directory: ~/.boo/shell-integration/
+    static let shellIntegrationDir: String = {
+        let path = (configDir as NSString).appendingPathComponent("shell-integration")
+        try? FileManager.default.createDirectory(atPath: path, withIntermediateDirectories: true)
+        return path
+    }()
+
     /// SSH sockets directory: ~/.boo/ssh-sockets/
     static let sshSocketsDir: String = {
         let path = (configDir as NSString).appendingPathComponent("ssh-sockets")
@@ -93,11 +100,27 @@ enum BooPaths {
         return path
     }()
 
+    /// Copy bundled shell-integration scripts to ~/.boo/shell-integration/.
+    /// Called once at startup. Overwrites stale copies so scripts stay up-to-date.
+    static func installShellIntegration() {
+        guard let resourcesDir = Bundle.main.resourcePath else { return }
+        let sourceDir = (resourcesDir as NSString).appendingPathComponent("shell-integration")
+        let fm = FileManager.default
+        guard let scripts = try? fm.contentsOfDirectory(atPath: sourceDir) else { return }
+        for script in scripts {
+            let src = (sourceDir as NSString).appendingPathComponent(script)
+            let dst = (shellIntegrationDir as NSString).appendingPathComponent(script)
+            try? fm.removeItem(atPath: dst)
+            try? fm.copyItem(atPath: src, toPath: dst)
+            try? fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: dst)
+        }
+    }
+
     /// Verify that all critical directories exist and are writable.
     /// Call once at startup; throws on the first directory that cannot be created.
     static func ensureDirectories() throws {
         let fm = FileManager.default
-        let dirs = [configDir, themesDir, logsDir, sshSocketsDir]
+        let dirs = [configDir, themesDir, logsDir, sshSocketsDir, shellIntegrationDir]
         for dir in dirs {
             var isDir: ObjCBool = false
             if fm.fileExists(atPath: dir, isDirectory: &isDir), isDir.boolValue {

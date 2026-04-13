@@ -29,6 +29,10 @@ class GhosttyView: NSView, NSTextInputClient {
     var onProcessExited: (() -> Void)?
     var onShellPIDDiscovered: ((pid_t) -> Void)?
     var onScrollbarChanged: ((GhosttyScrollbar) -> Void)?
+    /// Called when OSC 9999 cmd_start fires. Argument is the command string.
+    var onCommandStart: ((String) -> Void)?
+    /// Called when OSC 9999 cmd_end fires. Argument is the exit code.
+    var onCommandEnd: ((Int32) -> Void)?
     let createdAt = Date()
     var shellPID: pid_t = 0
 
@@ -105,7 +109,7 @@ class GhosttyView: NSView, NSTextInputClient {
         guard claimedDirectChild != 0, shellPID == currentPID else { return }
         let fresh = RemoteExplorer.walkToLeafShell(from: claimedDirectChild)
         guard fresh != currentPID, KittyImageProtocol.ttyPath(for: fresh) != nil else { return }
-        NSLog("[GhosttyView] refreshShellPID: \(currentPID) → \(fresh) via directChild=\(claimedDirectChild)")
+        booLog(.debug, .terminal, "refreshShellPID: \(currentPID) → \(fresh) via directChild=\(claimedDirectChild)")
         shellPID = fresh
         onShellPIDDiscovered?(fresh)
     }
@@ -124,7 +128,7 @@ class GhosttyView: NSView, NSTextInputClient {
             // we're still at an intermediary like `login`.
             let shell = RemoteExplorer.walkToLeafShell(from: directChild)
             if shell != directChild || attempt >= 3 {
-                NSLog("[GhosttyView] shellPID discovered: directChild=\(directChild) shell=\(shell) attempt=\(attempt)")
+                booLog(.debug, .terminal, "shellPID discovered: directChild=\(directChild) shell=\(shell) attempt=\(attempt)")
                 claimedDirectChild = directChild
                 shellPID = shell
                 onShellPIDDiscovered?(shell)
@@ -139,7 +143,7 @@ class GhosttyView: NSView, NSTextInputClient {
             let pidsNow = Set(RemoteExplorer.childPIDs(of: myPID))
             if let dc = pidsNow.subtracting(pidsBefore).sorted().first(where: { ClaimedDirectChildren.claim($0) }) {
                 let shell = RemoteExplorer.walkToLeafShell(from: dc)
-                NSLog("[GhosttyView] shellPID fallback: directChild=\(dc) shell=\(shell)")
+                booLog(.debug, .terminal, "shellPID fallback: directChild=\(dc) shell=\(shell)")
                 claimedDirectChild = dc
                 shellPID = shell
                 onShellPIDDiscovered?(shell)

@@ -82,4 +82,19 @@ extension BooSocketServer {
     func emitSettingsChanged(topic: String) {
         emitEvent(name: "settings_changed", data: ["topic": topic])
     }
+
+    func emitCommandStarted(command: String, paneID: UUID) {
+        emitEvent(name: "cmd_started", data: ["command": command, "pane_id": paneID.uuidString])
+    }
+
+    func emitCommandEnded(result: CommandResult, paneID: UUID) {
+        emitEvent(
+            name: "cmd_ended",
+            data: [
+                "command": result.command,
+                "exit_code": result.exitCode,
+                "duration": result.duration,
+                "pane_id": paneID.uuidString
+            ])
+    }
 }
