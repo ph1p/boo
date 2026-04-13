@@ -198,8 +198,11 @@ final class SidebarController {
     /// Restore sidebar visibility and width from a SidebarWorkspaceState.
     func restoreState(_ state: SidebarWorkspaceState) {
         if let vis = state.isVisible {
-            guard vis != isVisible else { return }
-            toggle(userInitiated: false)
+            // isUserHidden must match the saved state so auto-show guards respect it.
+            isUserHidden = !vis
+            if vis != isVisible {
+                toggle(userInitiated: false)
+            }
         }
         if let w = state.width, isVisible, let wc = windowController {
             let pos: CGFloat = position == .left ? w : wc.mainSplitView.bounds.width - w
