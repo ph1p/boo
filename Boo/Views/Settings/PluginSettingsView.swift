@@ -1,6 +1,6 @@
 import SwiftUI
 
-// MARK: - Plugins
+// MARK: - Plugins Management
 
 struct PluginSettingsView: View {
     /// Set by MainWindowController before showing settings.
@@ -70,13 +70,46 @@ struct PluginSettingsView: View {
     }
 }
 
+// MARK: - Plugin Detail Settings
+
+/// Dedicated settings page for a single plugin, shown when selected in the settings sidebar.
+struct PluginDetailSettingsView: View {
+    let manifest: PluginManifest
+    @ObservedObject private var observer = SettingsObserver(topics: [.theme, .plugins])
+
+    private var filteredSettings: [PluginManifest.SettingManifest] {
+        guard let settings = manifest.settings else { return [] }
+        if manifest.capabilities?.statusBarSegment == true {
+            return settings.filter { $0.type != .bool }
+        }
+        return settings
+    }
+
+    var body: some View {
+        let _ = observer.revision
+
+        SettingsPage(title: manifest.name) {
+            if filteredSettings.isEmpty {
+                Text("No configurable settings for this plugin.")
+                    .font(.system(size: 12))
+                    .foregroundColor(Tokens.current.muted)
+            } else {
+                Section(title: "Settings") {
+                    ForEach(filteredSettings, id: \.key) { setting in
+                        PluginSettingControl(pluginID: manifest.id, setting: setting)
+                    }
+                }
+            }
+        }
+    }
+}
+
 // MARK: - Plugin Row
 
 private struct PluginRow: View {
     let manifest: PluginManifest
 
     @State private var isEnabled: Bool
-    @State private var isExpanded: Bool = false
     @State private var removeError: String? = nil
     @ObservedObject private var observer = SettingsObserver(topics: [.theme, .plugins])
 
@@ -104,25 +137,6 @@ private struct PluginRow: View {
             return settings.filter { $0.type != .bool }
         }
         return settings
-    }
-
-    private var hasCustomSettings: Bool {
-        for s in filteredSettings {
-            switch s.type {
-            case .bool:
-                let def = s.defaultValue?.value as? Bool ?? false
-                if AppSettings.shared.pluginBool(manifest.id, s.key, default: def) != def { return true }
-            case .double:
-                let def = s.defaultValue?.value as? Double ?? 0
-                if AppSettings.shared.pluginDouble(manifest.id, s.key, default: def) != def { return true }
-            case .string:
-                let def = s.defaultValue?.value as? String ?? ""
-                if AppSettings.shared.pluginString(manifest.id, s.key, default: def) != def { return true }
-            case .int:
-                break
-            }
-        }
-        return false
     }
 
     var body: some View {
@@ -164,23 +178,6 @@ private struct PluginRow: View {
                     .help("Remove plugin")
                 }
 
-                if !filteredSettings.isEmpty {
-                    Button(action: { withAnimation(.easeInOut(duration: 0.15)) { isExpanded.toggle() } }) {
-                        ZStack(alignment: .topTrailing) {
-                            Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-                                .font(.system(size: 10, weight: .semibold))
-                                .foregroundColor(t.muted)
-                            if hasCustomSettings && !isExpanded {
-                                Circle()
-                                    .fill(t.accent)
-                                    .frame(width: 5, height: 5)
-                                    .offset(x: 4, y: -3)
-                            }
-                        }
-                    }
-                    .buttonStyle(.plain)
-                }
-
                 Toggle("", isOn: $isEnabled)
                     .toggleStyle(.switch)
                     .controlSize(.small)
@@ -196,17 +193,6 @@ private struct PluginRow: View {
             }
             .padding(.vertical, 6)
             .padding(.horizontal, 8)
-
-            if isExpanded, !filteredSettings.isEmpty {
-                VStack(alignment: .leading, spacing: 8) {
-                    ForEach(filteredSettings, id: \.key) { setting in
-                        PluginSettingControl(pluginID: manifest.id, setting: setting)
-                    }
-                }
-                .padding(.leading, 48)
-                .padding(.trailing, 8)
-                .padding(.bottom, 8)
-            }
 
             if let err = removeError {
                 Text(err)
@@ -281,7 +267,9 @@ private struct PluginSettingControl: View {
         let value = AppSettings.shared.pluginString(
             pluginID, setting.key, default: setting.defaultValue?.value as? String ?? "")
         return Group {
-            if setting.options == "fontPicker:system" {
+            if setting.options == "markdownOpenMode" {
+                markdownOpenModeControl
+            } else if setting.options == "fontPicker:system" {
                 HStack {
                     Text(setting.label)
                         .font(.system(size: 12))
@@ -318,6 +306,25 @@ private struct PluginSettingControl: View {
                     .frame(width: 150)
                 }
             }
+        }
+    }
+
+    private var markdownOpenModeControl: some View {
+        let t = Tokens.current
+        return VStack(alignment: .leading, spacing: 6) {
+            Text(setting.label)
+                .font(.system(size: 12))
+                .foregroundColor(t.text)
+            Picker("", selection: Binding(
+                get: { AppSettings.shared.markdownOpenMode },
+                set: { AppSettings.shared.markdownOpenMode = $0 }
+            )) {
+                ForEach(MarkdownOpenMode.allCases, id: \.self) { mode in
+                    Text(mode.displayName).tag(mode)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
         }
     }
 

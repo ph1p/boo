@@ -37,7 +37,12 @@ final class LocalFileTreePlugin: BooPluginProtocol {
                 key: "editorExtensions", type: .string,
                 label: "Open in editor (extensions)",
                 defaultValue: AnyCodableValue(LocalFileTreePlugin.defaultEditorExtensions),
-                options: "editorExtensions")
+                options: "editorExtensions"),
+            PluginManifest.SettingManifest(
+                key: "markdownOpenMode", type: .string,
+                label: "Open markdown files as",
+                defaultValue: AnyCodableValue("preview"),
+                options: "markdownOpenMode"),
         ]
     )
 
