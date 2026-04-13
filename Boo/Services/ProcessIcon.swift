@@ -32,10 +32,46 @@ enum ProcessIcon {
     }
 
     #if canImport(AppKit)
+        /// Returns a custom NSImage for processes that have a dedicated icon asset, or nil to fall
+        /// back to the SF Symbol returned by `icon(for:)`. The image is tinted to the given color.
+        static func customImage(for process: String, color: NSColor, size: CGFloat) -> NSImage? {
+            let name = process.lowercased()
+            guard let assetName = customAssetMap[name] else { return nil }
+            guard
+                let url = Bundle.module.url(
+                    forResource: assetName, withExtension: "pdf", subdirectory: "Images"),
+                let img = NSImage(contentsOf: url)
+            else { return nil }
+            img.isTemplate = true
+            let targetSize = NSSize(width: size, height: size)
+            let tinted = NSImage(size: targetSize, flipped: false) { rect in
+                img.draw(
+                    in: rect, from: NSRect(origin: .zero, size: img.size),
+                    operation: .sourceOver, fraction: 1.0)
+                color.setFill()
+                rect.fill(using: .sourceAtop)
+                return true
+            }
+            tinted.isTemplate = false
+            return tinted
+        }
+
+        private static let customAssetMap: [String: String] = [
+            "claude": "claude-icon"
+        ]
+
+        /// Fixed brand colors for specific processes, bypassing theme palette.
+        private static let fixedColorMap: [String: NSColor] = [
+            "claude": NSColor(red: 0xD7 / 255.0, green: 0x77 / 255.0, blue: 0x57 / 255.0, alpha: 1.0)
+        ]
+    #endif
+
+    #if canImport(AppKit)
         /// Returns a theme-appropriate color for the process icon.
         /// Colors are derived from the terminal theme's ANSI palette and chrome colors.
         static func themeColor(for process: String, theme: TerminalTheme, isActive: Bool) -> NSColor {
             guard isActive else { return theme.chromeMuted }
+            if let fixed = fixedColorMap[process.lowercased()] { return fixed }
             let cat = category(for: process)
             switch cat {
             case "editor":
