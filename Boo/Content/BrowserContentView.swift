@@ -2,16 +2,22 @@ import Cocoa
 import WebKit
 
 /// ContentViewProtocol implementation for browser tabs.
-/// Uses WKWebView to display web content with an integrated URL bar.
+/// Uses WKWebView to display web content with a toolbar containing navigation buttons and URL bar.
 final class BrowserContentView: NSView, ContentViewProtocol, NSTextFieldDelegate {
     let contentType: ContentType = .browser
 
     private var urlBar: NSTextField?
+    private var backButton: NSButton?
+    private var forwardButton: NSButton?
+    private var reloadStopButton: NSButton?
     private var webView: WKWebView?
+    private weak var toolbarView: NSView?
+    private weak var toolbarSeparator: NSView?
     private var currentURL: URL
     private var currentTitle: String = "New Tab"
+    private var isLoading = false
 
-    private let urlBarHeight: CGFloat = 36
+    private let toolbarHeight: CGFloat = 44
 
     // MARK: - Callbacks
 
@@ -28,41 +34,154 @@ final class BrowserContentView: NSView, ContentViewProtocol, NSTextFieldDelegate
         self.currentURL = url
         super.init(frame: .zero)
         wantsLayer = true
-        layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
-        setupURLBar()
+        applyTheme()
+        setupToolbar()
         setupWebView()
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(themeDidChange),
+            name: .settingsChanged,
+            object: nil
+        )
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+    }
+
+    @objc private func themeDidChange() {
+        applyTheme()
+        applyToolbarTheme()
+    }
+
+    private func applyTheme() {
+        let theme = AppSettings.shared.theme
+        layer?.backgroundColor = theme.chromeBg.cgColor
     }
 
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
     }
 
-    private func setupURLBar() {
+    // MARK: - Toolbar Setup
+
+    private func setupToolbar() {
+        let theme = AppSettings.shared.theme
+        let toolbar = NSView()
+        toolbar.translatesAutoresizingMaskIntoConstraints = false
+        toolbar.wantsLayer = true
+        toolbar.layer?.backgroundColor = theme.chromeBg.cgColor
+        addSubview(toolbar)
+        toolbarView = toolbar
+
+        NSLayoutConstraint.activate([
+            toolbar.topAnchor.constraint(equalTo: topAnchor),
+            toolbar.leadingAnchor.constraint(equalTo: leadingAnchor),
+            toolbar.trailingAnchor.constraint(equalTo: trailingAnchor),
+            toolbar.heightAnchor.constraint(equalToConstant: toolbarHeight),
+        ])
+
+        // Bottom separator
+        let separator = NSView()
+        separator.translatesAutoresizingMaskIntoConstraints = false
+        separator.wantsLayer = true
+        separator.layer?.backgroundColor = theme.chromeBorder.cgColor
+        toolbar.addSubview(separator)
+        toolbarSeparator = separator
+        NSLayoutConstraint.activate([
+            separator.bottomAnchor.constraint(equalTo: toolbar.bottomAnchor),
+            separator.leadingAnchor.constraint(equalTo: toolbar.leadingAnchor),
+            separator.trailingAnchor.constraint(equalTo: toolbar.trailingAnchor),
+            separator.heightAnchor.constraint(equalToConstant: 0.5),
+        ])
+
+        // Back button
+        let back = makeNavButton(symbolName: "chevron.left", action: #selector(backAction), theme: theme)
+        toolbar.addSubview(back)
+        backButton = back
+
+        // Forward button
+        let fwd = makeNavButton(symbolName: "chevron.right", action: #selector(forwardAction), theme: theme)
+        toolbar.addSubview(fwd)
+        forwardButton = fwd
+
+        // Reload/Stop button
+        let reload = makeNavButton(symbolName: "arrow.clockwise", action: #selector(reloadStopAction), theme: theme)
+        toolbar.addSubview(reload)
+        reloadStopButton = reload
+
+        // URL field — themed to match the chrome
         let bar = NSTextField()
         bar.translatesAutoresizingMaskIntoConstraints = false
-        bar.placeholderString = "Enter URL or search..."
-        bar.font = .systemFont(ofSize: 13)
+        bar.placeholderString = "Enter URL or search…"
+        bar.font = .systemFont(ofSize: 12)
         bar.bezelStyle = .roundedBezel
         bar.isBordered = true
         bar.drawsBackground = true
-        bar.backgroundColor = .textBackgroundColor
-        bar.textColor = .labelColor
+        bar.backgroundColor = theme.sidebarBg
+        bar.textColor = theme.chromeText
         bar.delegate = self
         bar.target = self
         bar.action = #selector(urlBarAction(_:))
-        addSubview(bar)
-
-        NSLayoutConstraint.activate([
-            bar.topAnchor.constraint(equalTo: topAnchor, constant: 8),
-            bar.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
-            bar.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
-            bar.heightAnchor.constraint(equalToConstant: 24)
-        ])
+        toolbar.addSubview(bar)
         urlBar = bar
+
+        // Layout: [8] [back] [4] [fwd] [4] [reload] [8] [urlbar] [8]
+        NSLayoutConstraint.activate([
+            back.leadingAnchor.constraint(equalTo: toolbar.leadingAnchor, constant: 8),
+            back.centerYAnchor.constraint(equalTo: toolbar.centerYAnchor, constant: -1),
+
+            fwd.leadingAnchor.constraint(equalTo: back.trailingAnchor, constant: 2),
+            fwd.centerYAnchor.constraint(equalTo: toolbar.centerYAnchor, constant: -1),
+
+            reload.leadingAnchor.constraint(equalTo: fwd.trailingAnchor, constant: 2),
+            reload.centerYAnchor.constraint(equalTo: toolbar.centerYAnchor, constant: -1),
+
+            bar.leadingAnchor.constraint(equalTo: reload.trailingAnchor, constant: 8),
+            bar.trailingAnchor.constraint(equalTo: toolbar.trailingAnchor, constant: -8),
+            bar.centerYAnchor.constraint(equalTo: toolbar.centerYAnchor),
+            bar.heightAnchor.constraint(equalToConstant: 24),
+        ])
 
         if currentURL.absoluteString != "about:blank" {
             bar.stringValue = currentURL.absoluteString
         }
+
+        updateNavButtons()
+    }
+
+    private func makeNavButton(symbolName: String, action: Selector, theme: TerminalTheme) -> NSButton {
+        let btn = NSButton()
+        btn.translatesAutoresizingMaskIntoConstraints = false
+        btn.bezelStyle = .regularSquare
+        btn.isBordered = false
+        btn.imagePosition = .imageOnly
+        let cfg = NSImage.SymbolConfiguration(pointSize: 12, weight: .regular)
+        btn.image = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil)?
+            .withSymbolConfiguration(cfg)
+        btn.image?.isTemplate = true
+        btn.contentTintColor = theme.chromeMuted
+        btn.target = self
+        btn.action = action
+        NSLayoutConstraint.activate([
+            btn.widthAnchor.constraint(equalToConstant: 26),
+            btn.heightAnchor.constraint(equalToConstant: 26),
+        ])
+        return btn
+    }
+
+    private func applyToolbarTheme() {
+        let theme = AppSettings.shared.theme
+        toolbarView?.layer?.backgroundColor = theme.chromeBg.cgColor
+        toolbarSeparator?.layer?.backgroundColor = theme.chromeBorder.cgColor
+        urlBar?.backgroundColor = theme.sidebarBg
+        urlBar?.textColor = theme.chromeText
+        let activeColor = theme.chromeText
+        let mutedColor = theme.chromeMuted
+        backButton?.contentTintColor = (webView?.canGoBack ?? false) ? activeColor : mutedColor
+        forwardButton?.contentTintColor = (webView?.canGoForward ?? false) ? activeColor : mutedColor
+        reloadStopButton?.contentTintColor = mutedColor
+        layer?.backgroundColor = theme.chromeBg.cgColor
     }
 
     private func setupWebView() {
@@ -72,15 +191,28 @@ final class BrowserContentView: NSView, ContentViewProtocol, NSTextFieldDelegate
         wv.translatesAutoresizingMaskIntoConstraints = false
         addSubview(wv)
         NSLayoutConstraint.activate([
-            wv.topAnchor.constraint(equalTo: topAnchor, constant: urlBarHeight),
+            wv.topAnchor.constraint(equalTo: topAnchor, constant: toolbarHeight),
             wv.leadingAnchor.constraint(equalTo: leadingAnchor),
             wv.trailingAnchor.constraint(equalTo: trailingAnchor),
-            wv.bottomAnchor.constraint(equalTo: bottomAnchor)
+            wv.bottomAnchor.constraint(equalTo: bottomAnchor),
         ])
         webView = wv
 
         if currentURL.absoluteString != "about:blank" {
             wv.load(URLRequest(url: currentURL))
+        }
+    }
+
+    // MARK: - Toolbar Actions
+
+    @objc private func backAction() { webView?.goBack() }
+    @objc private func forwardAction() { webView?.goForward() }
+
+    @objc private func reloadStopAction() {
+        if isLoading {
+            webView?.stopLoading()
+        } else {
+            webView?.reload()
         }
     }
 
@@ -100,6 +232,25 @@ final class BrowserContentView: NSView, ContentViewProtocol, NSTextFieldDelegate
 
         navigate(to: url)
         window?.makeFirstResponder(webView)
+    }
+
+    private func updateNavButtons() {
+        let theme = AppSettings.shared.theme
+        let canBack = webView?.canGoBack ?? false
+        let canFwd = webView?.canGoForward ?? false
+        backButton?.isEnabled = canBack
+        forwardButton?.isEnabled = canFwd
+        backButton?.contentTintColor = canBack ? theme.chromeText : theme.chromeMuted
+        forwardButton?.contentTintColor = canFwd ? theme.chromeText : theme.chromeMuted
+    }
+
+    private func updateLoadingState() {
+        let cfg = NSImage.SymbolConfiguration(pointSize: 12, weight: .regular)
+        let symbolName = isLoading ? "xmark" : "arrow.clockwise"
+        reloadStopButton?.image = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil)?
+            .withSymbolConfiguration(cfg)
+        reloadStopButton?.image?.isTemplate = true
+        reloadStopButton?.contentTintColor = AppSettings.shared.theme.chromeMuted
     }
 
     // MARK: - ContentViewProtocol
@@ -148,24 +299,16 @@ final class BrowserContentView: NSView, ContentViewProtocol, NSTextFieldDelegate
     }
 
     /// Go back in history.
-    func goBack() {
-        webView?.goBack()
-    }
+    func goBack() { webView?.goBack() }
 
     /// Go forward in history.
-    func goForward() {
-        webView?.goForward()
-    }
+    func goForward() { webView?.goForward() }
 
     /// Reload the current page.
-    func reload() {
-        webView?.reload()
-    }
+    func reload() { webView?.reload() }
 
     /// Stop loading.
-    func stopLoading() {
-        webView?.stopLoading()
-    }
+    func stopLoading() { webView?.stopLoading() }
 
     var canGoBack: Bool { webView?.canGoBack ?? false }
     var canGoForward: Bool { webView?.canGoForward ?? false }
@@ -179,7 +322,15 @@ final class BrowserContentView: NSView, ContentViewProtocol, NSTextFieldDelegate
 // MARK: - WKNavigationDelegate
 
 extension BrowserContentView: WKNavigationDelegate {
+    func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+        isLoading = true
+        updateLoadingState()
+    }
+
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        isLoading = false
+        updateLoadingState()
+        updateNavButtons()
         if let url = webView.url {
             currentURL = url
             urlBar?.stringValue = url.absoluteString
@@ -191,7 +342,20 @@ extension BrowserContentView: WKNavigationDelegate {
         }
     }
 
+    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+        isLoading = false
+        updateLoadingState()
+        updateNavButtons()
+    }
+
+    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+        isLoading = false
+        updateLoadingState()
+        updateNavButtons()
+    }
+
     func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
+        updateNavButtons()
         if let url = webView.url {
             currentURL = url
             urlBar?.stringValue = url.absoluteString
