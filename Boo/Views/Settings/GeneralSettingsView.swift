@@ -9,7 +9,6 @@ struct GeneralSettingsView: View {
     @State private var autoCheckUpdates = AppSettings.shared.autoCheckUpdates
     @State private var debugLogging = AppSettings.shared.debugLogging
     @State private var fileEditorCommand = AppSettings.shared.fileEditorCommand
-    @State private var markdownOpenMode = AppSettings.shared.markdownOpenMode
     @ObservedObject private var observer = SettingsObserver(topics: [.theme])
 
     var body: some View {
@@ -87,22 +86,6 @@ struct GeneralSettingsView: View {
                         }
                 }
                 Text("Command run when clicking a file in the explorer. Leave empty to use $EDITOR.")
-                    .font(.system(size: 11))
-                    .foregroundColor(t.muted)
-            }
-
-            Section(title: "Markdown Files") {
-                Picker("", selection: $markdownOpenMode) {
-                    ForEach(MarkdownOpenMode.allCases, id: \.self) { mode in
-                        Text(mode.displayName).tag(mode)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .onChange(of: markdownOpenMode) { v in
-                    AppSettings.shared.markdownOpenMode = v
-                }
-                Text("How to open markdown files when clicked in the file explorer.")
                     .font(.system(size: 11))
                     .foregroundColor(t.muted)
             }

@@ -33,14 +33,33 @@ struct Tokens {
 // MARK: - Root
 
 struct SettingsView: View {
-    enum Tab: String, CaseIterable {
-        case general = "General"
-        case theme = "Theme"
-        case appearance = "Appearance"
-        case statusBar = "Status Bar"
-        case layout = "Layout"
-        case plugins = "Plugins"
-        case shortcuts = "Shortcuts"
+    enum Tab: Equatable {
+        case general
+        case theme
+        case appearance
+        case statusBar
+        case layout
+        case plugins
+        case shortcuts
+        case pluginSettings(pluginID: String)
+
+        static var fixed: [Tab] {
+            [.general, .theme, .appearance, .statusBar, .layout, .plugins, .shortcuts]
+        }
+
+        var label: String {
+            switch self {
+            case .general: return "General"
+            case .theme: return "Theme"
+            case .appearance: return "Appearance"
+            case .statusBar: return "Status Bar"
+            case .layout: return "Layout"
+            case .plugins: return "Plugins"
+            case .shortcuts: return "Shortcuts"
+            case .pluginSettings(let id):
+                return PluginSettingsView.registeredManifests.first(where: { $0.id == id })?.name ?? id
+            }
+        }
 
         var icon: String {
             switch self {
@@ -51,12 +70,14 @@ struct SettingsView: View {
             case .layout: return "rectangle.3.group"
             case .plugins: return "puzzlepiece"
             case .shortcuts: return "keyboard"
+            case .pluginSettings(let id):
+                return PluginSettingsView.registeredManifests.first(where: { $0.id == id })?.icon ?? "puzzlepiece"
             }
         }
     }
 
     @State private var selectedTab: Tab = .general
-    @ObservedObject private var observer = SettingsObserver(topics: [.theme])
+    @ObservedObject private var observer = SettingsObserver(topics: [.theme, .plugins])
 
     var body: some View {
         let _ = observer.revision
@@ -104,31 +125,69 @@ struct SettingsView: View {
     // MARK: Sidebar
 
     private func sidebar(_ t: Tokens) -> some View {
-        VStack(spacing: 1) {
-            ForEach(Tab.allCases, id: \.self) { tab in
-                HStack(spacing: 8) {
-                    Image(systemName: tab.icon)
-                        .font(.system(size: 12))
-                        .frame(width: 18)
-                    Text(tab.rawValue)
-                        .font(.system(size: 12))
-                    Spacer()
-                }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-                .foregroundColor(selectedTab == tab ? t.text : t.muted)
-                .background(
-                    RoundedRectangle(cornerRadius: 6)
-                        .fill(selectedTab == tab ? t.accent.opacity(0.15) : Color.clear)
-                )
-                .contentShape(Rectangle())
-                .onTapGesture { selectedTab = tab }
+        let pluginTabs: [Tab] = PluginSettingsView.registeredManifests
+            .filter { manifest in
+                let isEnabled = !AppSettings.shared.disabledPluginIDs.contains(manifest.id)
+                let hasSettings: Bool = {
+                    guard let settings = manifest.settings, !settings.isEmpty else { return false }
+                    if manifest.capabilities?.statusBarSegment == true {
+                        return settings.contains { $0.type != .bool }
+                    }
+                    return true
+                }()
+                return isEnabled && hasSettings
             }
-            Spacer()
+            .map { .pluginSettings(pluginID: $0.id) }
+
+        return ScrollView(.vertical, showsIndicators: false) {
+            VStack(spacing: 1) {
+                ForEach(Tab.fixed, id: \.label) { tab in
+                    sidebarRow(tab, t: t)
+                }
+
+                if !pluginTabs.isEmpty {
+                    HStack {
+                        Text("PLUGINS")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundColor(t.muted)
+                            .tracking(0.4)
+                        Spacer()
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.top, 10)
+                    .padding(.bottom, 2)
+
+                    ForEach(pluginTabs, id: \.label) { tab in
+                        sidebarRow(tab, t: t)
+                    }
+                }
+
+                Spacer(minLength: 10)
+            }
+            .padding(10)
         }
-        .padding(10)
         .fixedSize(horizontal: true, vertical: false)
         .background(t.chromeBg)
+    }
+
+    private func sidebarRow(_ tab: Tab, t: Tokens) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: tab.icon)
+                .font(.system(size: 12))
+                .frame(width: 18)
+            Text(tab.label)
+                .font(.system(size: 12))
+            Spacer()
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .foregroundColor(selectedTab == tab ? t.text : t.muted)
+        .background(
+            RoundedRectangle(cornerRadius: 6)
+                .fill(selectedTab == tab ? t.accent.opacity(0.15) : Color.clear)
+        )
+        .contentShape(Rectangle())
+        .onTapGesture { selectedTab = tab }
     }
 
     // MARK: Content Router
@@ -143,6 +202,10 @@ struct SettingsView: View {
         case .layout: LayoutSettingsView()
         case .plugins: PluginSettingsView()
         case .shortcuts: ShortcutsSettingsView()
+        case .pluginSettings(let id):
+            if let manifest = PluginSettingsView.registeredManifests.first(where: { $0.id == id }) {
+                PluginDetailSettingsView(manifest: manifest)
+            }
         }
     }
 }
