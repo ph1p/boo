@@ -14,6 +14,8 @@ enum ContentState: Codable {
     case editor(EditorContentState)
     case imageViewer(ImageViewerContentState)
     case markdownPreview(MarkdownPreviewContentState)
+    /// Plugin-owned view tab. State is ephemeral — not persisted across sessions.
+    case pluginView(PluginViewContentState)
 
     var contentType: ContentType {
         switch self {
@@ -22,6 +24,7 @@ enum ContentState: Codable {
         case .editor: return .editor
         case .imageViewer: return .imageViewer
         case .markdownPreview: return .markdownPreview
+        case .pluginView: return .pluginView
         }
     }
 
@@ -33,6 +36,7 @@ enum ContentState: Codable {
             case .editor(let s): return s.title
             case .imageViewer(let s): return s.title
             case .markdownPreview(let s): return s.title
+            case .pluginView(let s): return s.title
             }
         }
         set {
@@ -52,6 +56,9 @@ enum ContentState: Codable {
             case .markdownPreview(var s):
                 s.title = newValue
                 self = .markdownPreview(s)
+            case .pluginView(var s):
+                s.title = newValue
+                self = .pluginView(s)
             }
         }
     }
@@ -170,5 +177,20 @@ struct MarkdownPreviewContentState: ContentStateProtocol, Codable {
         self.title = title
         self.filePath = filePath
         self.scrollPosition = scrollPosition
+    }
+}
+
+// MARK: - Plugin View State
+
+/// Minimal state for a plugin-owned view tab.
+/// The view itself is not persisted — only the display title and icon symbol.
+struct PluginViewContentState: ContentStateProtocol, Codable {
+    let contentType: ContentType = .pluginView
+    var title: String
+    var iconSymbol: String
+
+    init(title: String, iconSymbol: String = "puzzlepiece") {
+        self.title = title
+        self.iconSymbol = iconSymbol
     }
 }

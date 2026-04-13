@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 
 /// Type-safe payload for tab creation via plugin API.
 enum TabPayload {
@@ -14,4 +15,8 @@ enum TabPayload {
     /// Open a file in the appropriate viewer (markdown, image, etc.).
     /// Routing respects user settings (e.g., markdownOpenMode).
     case file(path: String)
+
+    /// Open a custom SwiftUI view in a new tab.
+    /// The view is ephemeral — it is not persisted across app restarts.
+    case customView(title: String, icon: String, view: AnyView)
 }

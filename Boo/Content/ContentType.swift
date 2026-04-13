@@ -7,6 +7,7 @@ enum ContentType: String, Codable, CaseIterable {
     case editor
     case imageViewer
     case markdownPreview
+    case pluginView
 
     /// SF Symbol name for this content type.
     var symbolName: String {
@@ -16,6 +17,7 @@ enum ContentType: String, Codable, CaseIterable {
         case .editor: return "doc.text"
         case .imageViewer: return "photo"
         case .markdownPreview: return "doc.richtext"
+        case .pluginView: return "puzzlepiece"
         }
     }
 
@@ -33,6 +35,7 @@ enum ContentType: String, Codable, CaseIterable {
         case .editor: return "Editor"
         case .imageViewer: return "Image"
         case .markdownPreview: return "Markdown"
+        case .pluginView: return "Panel"
         }
     }
 
@@ -45,6 +48,14 @@ enum ContentType: String, Codable, CaseIterable {
         }
     }
 
+    /// Whether this content type's state can be persisted across sessions.
+    var isPersistable: Bool {
+        switch self {
+        case .pluginView: return false
+        default: return true
+        }
+    }
+
     /// Default title for new tabs of this type.
     var defaultTabTitle: String {
         switch self {
@@ -53,6 +64,7 @@ enum ContentType: String, Codable, CaseIterable {
         case .editor: return "Untitled"
         case .imageViewer: return "Image"
         case .markdownPreview: return "Markdown"
+        case .pluginView: return "Panel"
         }
     }
 

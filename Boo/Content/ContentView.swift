@@ -1,4 +1,5 @@
 import Cocoa
+import SwiftUI
 
 /// Protocol for views that can be hosted in a tab.
 /// Each content type (terminal, browser, etc.) implements this protocol.
@@ -48,6 +49,13 @@ enum ContentViewFactory {
             return ImageViewerContentView(filePath: imageState.filePath)
         case .markdownPreview(let markdownState):
             return MarkdownPreviewContentView(filePath: markdownState.filePath)
+        case .pluginView(let pluginState):
+            // Plugin views are ephemeral; restore shows a placeholder.
+            return PluginTabContentView(
+                view: AnyView(PluginViewPlaceholder()),
+                title: pluginState.title,
+                icon: pluginState.iconSymbol
+            )
         }
     }
 
@@ -64,6 +72,24 @@ enum ContentViewFactory {
             return ImageViewerContentView(filePath: nil)
         case .markdownPreview:
             return MarkdownPreviewContentView(filePath: nil)
+        case .pluginView:
+            return PluginTabContentView(view: AnyView(PluginViewPlaceholder()), title: "Panel")
         }
+    }
+}
+
+// MARK: - Placeholder
+
+private struct PluginViewPlaceholder: View {
+    var body: some View {
+        VStack(spacing: 8) {
+            Image(systemName: "puzzlepiece")
+                .font(.system(size: 32))
+                .foregroundColor(.secondary)
+            Text("Panel unavailable")
+                .font(.system(size: 13))
+                .foregroundColor(.secondary)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
