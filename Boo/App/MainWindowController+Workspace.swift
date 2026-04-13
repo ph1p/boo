@@ -217,6 +217,10 @@ extension MainWindowController {
             }
         }
 
+        if AppSettings.shared.sidebarPerWorkspaceState, let oldWS = activeWorkspace {
+            oldWS.sidebarState = sidebarController.captureState()
+        }
+
         savePluginStateForActiveTab()
 
         appState.setActiveWorkspace(index)
@@ -243,6 +247,10 @@ extension MainWindowController {
         // isRemoteSidebar/activeRemoteSession are now derived from bridge state,
         // which was just cleared by switchContext above.
         runPluginCycle(reason: .workspaceSwitched)
+
+        if AppSettings.shared.sidebarPerWorkspaceState {
+            sidebarController.restoreState(workspace.sidebarState)
+        }
 
         // Rebuild split container with the workspace's tree
         splitContainer.update(tree: workspace.splitTree)

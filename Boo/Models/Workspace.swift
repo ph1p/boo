@@ -26,6 +26,13 @@ enum WorkspaceColor: String, CaseIterable {
     var label: String { rawValue.capitalized }
 }
 
+struct SidebarWorkspaceState {
+    /// Overridden visibility for this workspace. nil = use global default.
+    var isVisible: Bool? = nil
+    /// Overridden sidebar width for this workspace. nil = use AppSettings.sidebarWidth.
+    var width: CGFloat? = nil
+}
+
 final class Workspace {
     let id: UUID
     let folderPath: String
@@ -34,6 +41,9 @@ final class Workspace {
     var color: WorkspaceColor = .none
     var customColor: NSColor?  // overrides color when set
     var isPinned: Bool = false
+
+    /// Per-workspace sidebar visibility and width overrides.
+    var sidebarState: SidebarWorkspaceState = SidebarWorkspaceState()
 
     /// Resolved color: custom color takes precedence, then preset, then nil.
     var resolvedColor: NSColor? {

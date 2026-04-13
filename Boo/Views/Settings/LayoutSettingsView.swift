@@ -7,6 +7,7 @@ struct LayoutSettingsView: View {
     @State private var sidebarDefaultHidden = AppSettings.shared.sidebarDefaultHidden
     @State private var sidebarTabBarPosition = AppSettings.shared.sidebarTabBarPosition
     @State private var sidebarGlobalState = AppSettings.shared.sidebarGlobalState
+    @State private var sidebarPerWorkspaceState = AppSettings.shared.sidebarPerWorkspaceState
     @State private var workspaceBarPosition = AppSettings.shared.workspaceBarPosition
     @State private var tabOverflowMode = AppSettings.shared.tabOverflowMode
     @ObservedObject private var observer = SettingsObserver(topics: [.theme, .layout])
@@ -38,6 +39,11 @@ struct LayoutSettingsView: View {
                 )
                 .font(.system(size: 11))
                 .foregroundColor(t.muted)
+                ToggleRow(label: "Per-workspace sidebar state", isOn: $sidebarPerWorkspaceState)
+                    .onChange(of: sidebarPerWorkspaceState) { v in AppSettings.shared.sidebarPerWorkspaceState = v }
+                Text("When on, each workspace remembers its own sidebar visibility and width.")
+                    .font(.system(size: 11))
+                    .foregroundColor(t.muted)
                 Text("Toggle the sidebar with \u{2318}B.")
                     .font(.system(size: 11))
                     .foregroundColor(t.muted)

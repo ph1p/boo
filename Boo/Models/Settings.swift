@@ -189,6 +189,7 @@ final class AppSettings {
         static let activeSidebarTab = "activeSidebarTab"
         static let sidebarTabBarPosition = "sidebarTabBarPosition"
         static let sidebarGlobalState = "sidebarGlobalState"
+        static let sidebarPerWorkspaceState = "sidebarPerWorkspaceState"
         static let defaultTabType = "defaultTabType"
         static let autoDetectContentType = "autoDetectContentType"
         static let markdownOpenMode = "markdownOpenMode"
@@ -443,6 +444,12 @@ final class AppSettings {
     var sidebarGlobalState: Bool {
         get { bool(K.sidebarGlobalState, default: false) }
         set { set(newValue, forKey: K.sidebarGlobalState, topic: .layout) }
+    }
+
+    /// When true, each workspace remembers its own sidebar visibility and width.
+    var sidebarPerWorkspaceState: Bool {
+        get { bool(K.sidebarPerWorkspaceState, default: false) }
+        set { set(newValue, forKey: K.sidebarPerWorkspaceState, topic: .layout) }
     }
 
     // MARK: - Tabs
