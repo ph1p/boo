@@ -60,6 +60,7 @@ final class ClaudeCodePlugin: BooPluginProtocol {
     private(set) var currentCwd: String?
     private(set) var diffStats: [DiffStatEntry] = []
     private(set) var sessions: [ClaudeSession] = []
+    private(set) var worktrees: [ClaudeWorktree] = []
     private(set) var agentConfig: AgentConfig = AgentConfig()
     private(set) var claudeSettings: ClaudeSettings = ClaudeSettings()
     /// Session ID currently being written to (detected via file watching)
@@ -68,6 +69,7 @@ final class ClaudeCodePlugin: BooPluginProtocol {
     private var lastDiffRepoRoot: String?
     private var lastConfigScanRoot: String?
     private var lastSessionScanRoot: String?
+    private var lastWorktreeScanRoot: String?
     private var refreshTimer: DispatchSourceTimer?
     private var sessionWatcher: DispatchSourceFileSystemObject?
     private var sessionDirPath: String?
@@ -100,6 +102,15 @@ final class ClaudeCodePlugin: BooPluginProtocol {
         var lastActivity: Date?
         /// Whether this session is currently active in a terminal
         var isActive: Bool = false
+    }
+
+    /// A Claude Code git worktree (isolated branch for parallel work).
+    struct ClaudeWorktree: Identifiable {
+        let id: String  // The slug/name (e.g., "feature-foo")
+        let path: String  // Full path to worktree directory
+        let branch: String  // Git branch name (e.g., "worktree-feature-foo")
+        let headCommit: String?  // Current HEAD SHA (short)
+        let created: Date?  // Creation timestamp from directory
     }
 
     struct AgentConfig {
@@ -203,11 +214,12 @@ final class ClaudeCodePlugin: BooPluginProtocol {
     func makeSidebarTab(context: PluginContext) -> SidebarTab? {
         guard manifest.capabilities?.sidebarTab == true else { return nil }
 
-        // If no agent running, scan config/sessions based on current terminal CWD
+        // If no agent running, scan config/sessions/worktrees based on current terminal CWD
         let isAgentActive = agentStartTime != nil
         if !isAgentActive && currentCwd != context.terminal.cwd {
             scanAgentConfig(cwd: context.terminal.cwd)
             scanSessions(cwd: context.terminal.cwd)
+            scanWorktrees(cwd: context.terminal.cwd)
             loadClaudeSettings()
         }
 
@@ -278,6 +290,31 @@ final class ClaudeCodePlugin: BooPluginProtocol {
                 prefersOuterScrollView: true,
                 generation: UInt64(sessions.count))
             sections.append(sessionsSection)
+        }
+
+        // Worktrees section
+        if !worktrees.isEmpty {
+            let worktreesSection = SidebarSection(
+                id: "claude-code.worktrees",
+                name: "Worktrees (\(worktrees.count))",
+                icon: "arrow.triangle.branch",
+                content: AnyView(
+                    ClaudeWorktreesView(
+                        worktrees: worktrees,
+                        fontScale: fontScale,
+                        textColor: textColor,
+                        mutedColor: mutedColor,
+                        accentColor: accentColor,
+                        onWorktreeClicked: { [weak self] worktree in
+                            self?.openWorktree(worktree)
+                        },
+                        onCopyPath: { path in
+                            act?.handle(DSLAction(type: "copy", path: nil, command: nil, text: path))
+                        }
+                    )),
+                prefersOuterScrollView: true,
+                generation: UInt64(worktrees.count))
+            sections.append(worktreesSection)
         }
 
         // Config section
@@ -481,6 +518,7 @@ final class ClaudeCodePlugin: BooPluginProtocol {
                 onRequestCycleRerun?()  // Immediate update for "Active" status
                 scanAgentConfig(cwd: context.cwd)
                 scanSessions(cwd: context.cwd)
+                scanWorktrees(cwd: context.cwd)
                 startSessionWatcher(cwd: context.cwd)
             }
             refreshDiffStats(repoRoot: context.gitContext?.repoRoot)
@@ -514,6 +552,7 @@ final class ClaudeCodePlugin: BooPluginProtocol {
                 currentCwd = context.cwd
                 scanAgentConfig(cwd: context.cwd)
                 scanSessions(cwd: context.cwd)
+                scanWorktrees(cwd: context.cwd)
             }
             refreshDiffStats(repoRoot: context.gitContext?.repoRoot)
             startRefreshTimer(repoRoot: context.gitContext?.repoRoot)
@@ -809,6 +848,165 @@ final class ClaudeCodePlugin: BooPluginProtocol {
             totalTokens: totalTokens,
             lastActivity: lastActivity
         )
+    }
+
+    // MARK: - Worktree Scanning
+
+    private func scanWorktrees(cwd: String?) {
+        guard let cwd = cwd else { return }
+
+        let markers = Self.projectMarkers
+        let projectRoot = findAgentProjectRoot(from: cwd, markers: markers) ?? cwd
+        guard lastWorktreeScanRoot != projectRoot else { return }
+        lastWorktreeScanRoot = projectRoot
+
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            let worktrees = Self.detectWorktrees(projectRoot: projectRoot)
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                self.worktrees = worktrees
+                self.onRequestCycleRerun?()
+            }
+        }
+    }
+
+    nonisolated static func detectWorktrees(projectRoot: String) -> [ClaudeWorktree] {
+        let fm = FileManager.default
+        let worktreesDir = (projectRoot as NSString).appendingPathComponent(".claude/worktrees")
+
+        guard fm.fileExists(atPath: worktreesDir) else { return [] }
+
+        var worktrees: [ClaudeWorktree] = []
+
+        do {
+            let entries = try fm.contentsOfDirectory(atPath: worktreesDir)
+            for entry in entries {
+                let worktreePath = (worktreesDir as NSString).appendingPathComponent(entry)
+
+                // Check if it's a directory (worktree)
+                var isDir: ObjCBool = false
+                guard fm.fileExists(atPath: worktreePath, isDirectory: &isDir), isDir.boolValue else {
+                    continue
+                }
+
+                // Get branch name from the .git file or HEAD
+                let branch = getWorktreeBranch(at: worktreePath) ?? "worktree-\(entry)"
+
+                // Get HEAD commit (short SHA)
+                let headCommit = getWorktreeHead(at: worktreePath)
+
+                // Get creation date from directory
+                let created: Date? = {
+                    if let attrs = try? fm.attributesOfItem(atPath: worktreePath),
+                        let date = attrs[.creationDate] as? Date
+                    {
+                        return date
+                    }
+                    return nil
+                }()
+
+                worktrees.append(
+                    ClaudeWorktree(
+                        id: entry,
+                        path: worktreePath,
+                        branch: branch,
+                        headCommit: headCommit,
+                        created: created
+                    ))
+            }
+        } catch {
+            return []
+        }
+
+        // Sort by creation date, newest first
+        return worktrees.sorted { a, b in
+            let aDate = a.created ?? .distantPast
+            let bDate = b.created ?? .distantPast
+            return aDate > bDate
+        }
+    }
+
+    /// Get the branch name for a worktree by reading its HEAD reference.
+    nonisolated private static func getWorktreeBranch(at path: String) -> String? {
+        let headPath = (path as NSString).appendingPathComponent(".git/HEAD")
+        // Worktrees have a .git file pointing to the main repo's .git/worktrees/<name>
+        let gitFilePath = (path as NSString).appendingPathComponent(".git")
+
+        // Check if .git is a file (worktree) or directory (main repo)
+        let fm = FileManager.default
+        var isDir: ObjCBool = false
+        if fm.fileExists(atPath: gitFilePath, isDirectory: &isDir), !isDir.boolValue {
+            // It's a worktree - read the gitdir pointer
+            guard let content = try? String(contentsOfFile: gitFilePath, encoding: .utf8) else {
+                return nil
+            }
+            // Format: "gitdir: /path/to/repo/.git/worktrees/<name>"
+            let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard trimmed.hasPrefix("gitdir: ") else { return nil }
+            let gitDir = String(trimmed.dropFirst("gitdir: ".count))
+
+            // Read HEAD from the worktree's git directory
+            let worktreeHeadPath = (gitDir as NSString).appendingPathComponent("HEAD")
+            guard let headContent = try? String(contentsOfFile: worktreeHeadPath, encoding: .utf8) else {
+                return nil
+            }
+
+            let headTrimmed = headContent.trimmingCharacters(in: .whitespacesAndNewlines)
+            // Format: "ref: refs/heads/<branch>"
+            if headTrimmed.hasPrefix("ref: refs/heads/") {
+                return String(headTrimmed.dropFirst("ref: refs/heads/".count))
+            }
+        }
+
+        return nil
+    }
+
+    /// Get the short HEAD SHA for a worktree.
+    nonisolated private static func getWorktreeHead(at path: String) -> String? {
+        let gitFilePath = (path as NSString).appendingPathComponent(".git")
+        let fm = FileManager.default
+        var isDir: ObjCBool = false
+
+        guard fm.fileExists(atPath: gitFilePath, isDirectory: &isDir), !isDir.boolValue else {
+            return nil
+        }
+
+        guard let content = try? String(contentsOfFile: gitFilePath, encoding: .utf8) else {
+            return nil
+        }
+
+        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.hasPrefix("gitdir: ") else { return nil }
+        let gitDir = String(trimmed.dropFirst("gitdir: ".count))
+
+        let worktreeHeadPath = (gitDir as NSString).appendingPathComponent("HEAD")
+        guard let headContent = try? String(contentsOfFile: worktreeHeadPath, encoding: .utf8) else {
+            return nil
+        }
+
+        let headTrimmed = headContent.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // If it's a ref, resolve it
+        if headTrimmed.hasPrefix("ref: ") {
+            let refPath = String(headTrimmed.dropFirst("ref: ".count))
+            // The ref is relative to the main repo's .git, not the worktree's gitdir
+            // Go up from .git/worktrees/<name> to .git
+            let mainGitDir = ((gitDir as NSString).deletingLastPathComponent as NSString).deletingLastPathComponent
+            let fullRefPath = (mainGitDir as NSString).appendingPathComponent(refPath)
+            if let sha = try? String(contentsOfFile: fullRefPath, encoding: .utf8) {
+                return String(sha.trimmingCharacters(in: .whitespacesAndNewlines).prefix(7))
+            }
+        } else if headTrimmed.count >= 7 {
+            // Detached HEAD - it's a SHA
+            return String(headTrimmed.prefix(7))
+        }
+
+        return nil
+    }
+
+    private func openWorktree(_ worktree: ClaudeWorktree) {
+        // Open the worktree directory in a new tab
+        actions?.openDirectoryInNewTab?(worktree.path)
     }
 
     // MARK: - Agent Config Scan
