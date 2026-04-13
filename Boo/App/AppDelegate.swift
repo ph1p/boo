@@ -27,9 +27,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             )
         }
 
+        // Apply initial log level from settings
+        BooLogger.shared.applyDebugSetting(AppSettings.shared.debugLogging)
+
+        // Install/update shell integration scripts to ~/.boo/shell-integration/
+        BooPaths.installShellIntegration()
+
         // Initialize Ghostty runtime (lazy, won't crash if fails)
         let ghosttyOK = GhosttyRuntime.shared.app != nil
-        NSLog("[Boo] Ghostty runtime: \(ghosttyOK ? "OK" : "FAILED")")
+        booLog(.info, .app, "Ghostty runtime: \(ghosttyOK ? "OK" : "FAILED")")
 
         // Enable SSH ControlMaster for connection sharing — allows the file explorer
         // to multiplex on the user's interactive SSH sessions (including password auth).
@@ -56,6 +62,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        // Save sidebar state (heights, order) to Settings before quit
+        windowController?.coordinator?.saveSidebarStateToSettings()
         windowController?.saveSession()
         SSHControlManager.shared.teardownAll()
         BooSocketServer.shared.stop()
