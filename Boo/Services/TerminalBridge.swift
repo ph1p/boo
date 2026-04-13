@@ -3,6 +3,19 @@ import Foundation
 
 /// Snapshot of the active terminal's state — single source of truth for the focused tab.
 /// TabState in Pane.Tab is the persistence copy, synced from bridge on every state change.
+/// A command currently executing in the shell (detected via OSC 9999 shell integration).
+struct RunningCommand: Equatable {
+    let command: String
+    let startTime: Date
+}
+
+/// Result of a completed command (exit code + duration).
+struct CommandResult: Equatable {
+    let command: String
+    let exitCode: Int32
+    let duration: TimeInterval
+}
+
 struct BridgeState: Equatable {
     var paneID: UUID
     var tabID: UUID = UUID()
@@ -13,6 +26,10 @@ struct BridgeState: Equatable {
     var remoteSession: RemoteSessionType?
     var remoteCwd: String?
     var isDockerAvailable: Bool
+    /// Currently executing command (nil when shell prompt is shown).
+    var currentCommand: RunningCommand?
+    /// Most recent completed command result.
+    var lastCommandResult: CommandResult?
 
     static let empty = BridgeState(
         paneID: UUID(),
@@ -35,7 +52,8 @@ enum TerminalEvent: Equatable {
     case focusChanged(paneID: UUID)
     case workspaceSwitched(workspaceID: UUID)
     case remoteDirectoryListed(path: String, entries: [RemoteExplorer.RemoteEntry])
-
+    case commandStarted(command: String)
+    case commandEnded(result: CommandResult)
 }
 
 extension RemoteExplorer.RemoteEntry: Equatable {
@@ -134,9 +152,7 @@ final class TerminalBridge {
         remoteCwd: String?,
         shellPID: pid_t = 0
     ) {
-        NSLog(
-            "[Bridge] restoreTabState: paneID=\(paneID), cwd=\(workingDirectory), title=\(terminalTitle), remote=\(String(describing: remoteSession)), remoteCwd=\(String(describing: remoteCwd))"
-        )
+        booLog(.debug, .terminal, "restoreTabState: paneID=\(paneID), cwd=\(workingDirectory), title=\(terminalTitle), remote=\(String(describing: remoteSession)), remoteCwd=\(String(describing: remoteCwd))")
         let previousRemote = state.remoteSession
         state.paneID = paneID
         state.tabID = tabID
@@ -147,9 +163,7 @@ final class TerminalBridge {
         state.remoteSession = remoteSession
         state.remoteCwd = remoteCwd
 
-        debugLog(
-            "[Bridge] restoreTabState: pane=\(paneID.uuidString.prefix(8)) title=\(terminalTitle) prevProcess=\(state.foregroundProcess)"
-        )
+        booLog(.debug, .terminal, "restoreTabState: pane=\(paneID.uuidString.prefix(8)) title=\(terminalTitle) prevProcess=\(state.foregroundProcess)")
 
         let previousProcess = state.foregroundProcess
         // When restoring a tab with no known shell PID (e.g. a brand-new tab), skip the
@@ -188,9 +202,7 @@ final class TerminalBridge {
         }
 
         let previousRemote = state.remoteSession
-        NSLog(
-            "[Bridge] handleDirectoryChange: path=\(path), title=\(state.terminalTitle), previousRemote=\(String(describing: previousRemote)), currentCwd=\(state.workingDirectory)"
-        )
+        booLog(.debug, .terminal, "handleDirectoryChange: path=\(path), title=\(state.terminalTitle), previousRemote=\(String(describing: previousRemote)), currentCwd=\(state.workingDirectory)")
 
         // If we were remote and the CWD is under the local user's home directory,
         // the SSH/Docker session has ended and the local shell took over.
@@ -203,7 +215,7 @@ final class TerminalBridge {
         // /Users/jane, SSH'd somewhere, and returned to /Users/jane).
         let localHome = FileManager.default.homeDirectoryForCurrentUser.path
         if previousRemote != nil && path.hasPrefix(localHome) {
-            NSLog("[Bridge] handleDirectoryChange: local home prefix detected, clearing remote session")
+            booLog(.debug, .terminal, "handleDirectoryChange: local home prefix detected, clearing remote session")
             state.remoteSession = nil
             state.remoteCwd = nil
             state.workingDirectory = path
@@ -215,7 +227,7 @@ final class TerminalBridge {
         // If the process-tree monitor confirms no remote child, any CWD change
         // proves the local shell is active (OSC 7 only fires from local shell).
         if previousRemote != nil, let hint = processTreeHint[paneID], hint == nil {
-            NSLog("[Bridge] handleDirectoryChange: process tree confirms no remote child, clearing")
+            booLog(.debug, .terminal, "handleDirectoryChange: process tree confirms no remote child, clearing")
             state.remoteSession = nil
             state.remoteCwd = nil
             state.workingDirectory = path
@@ -225,7 +237,7 @@ final class TerminalBridge {
         }
 
         guard path != state.workingDirectory else {
-            NSLog("[Bridge] handleDirectoryChange: path unchanged, skipping")
+            booLog(.debug, .terminal, "handleDirectoryChange: path unchanged, skipping")
             return
         }
         state.workingDirectory = path
@@ -236,7 +248,7 @@ final class TerminalBridge {
             previous: previousRemote,
             preferPreviousForCwdEvent: true
         )
-        NSLog("[Bridge] handleDirectoryChange: resolved remote=\(String(describing: state.remoteSession))")
+        booLog(.debug, .terminal, "handleDirectoryChange: resolved remote=\(String(describing: state.remoteSession))")
 
         // When remote, extract remoteCwd from title (OSC-7 path is local-relative)
         if state.remoteSession != nil {
@@ -259,16 +271,14 @@ final class TerminalBridge {
     func handleTitleChange(title: String, paneID: UUID) {
         guard paneID == state.paneID else { return }
         guard title != state.terminalTitle else { return }
-        debugLog("[Bridge] titleChanged: \(title) pane=\(paneID.uuidString.prefix(8))")
+        booLog(.debug, .terminal, "titleChanged: \(title) pane=\(paneID.uuidString.prefix(8))")
         state.terminalTitle = title
 
         let process = resolveProcess(paneID: paneID, title: title)
         let processChanged = process != state.foregroundProcess
         state.foregroundProcess = process
         if processChanged {
-            debugLog(
-                "[Bridge] processChanged: \(state.foregroundProcess.isEmpty ? "(empty)" : state.foregroundProcess) pane=\(paneID.uuidString.prefix(8))"
-            )
+            booLog(.debug, .terminal, "processChanged: \(state.foregroundProcess.isEmpty ? "(empty)" : state.foregroundProcess) pane=\(paneID.uuidString.prefix(8))")
         }
 
         let previousRemote = state.remoteSession
@@ -378,6 +388,27 @@ final class TerminalBridge {
         }
     }
 
+    // MARK: - Command Tracking (OSC 9999 Shell Integration)
+
+    /// Called by GhosttyRuntime when OSC 9999 `cmd_start` fires.
+    func handleCommandStart(command: String, paneID: UUID) {
+        guard paneID == state.paneID else { return }
+        state.currentCommand = RunningCommand(command: command, startTime: Date())
+        booLog(.debug, .terminal, "cmd_start: \(command.prefix(80))")
+        events.send(.commandStarted(command: command))
+    }
+
+    /// Called by GhosttyRuntime when OSC 9999 `cmd_end` fires.
+    func handleCommandEnd(exitCode: Int32, paneID: UUID) {
+        guard paneID == state.paneID, let running = state.currentCommand else { return }
+        let duration = Date().timeIntervalSince(running.startTime)
+        let result = CommandResult(command: running.command, exitCode: exitCode, duration: duration)
+        state.lastCommandResult = result
+        state.currentCommand = nil
+        booLog(.debug, .terminal, "cmd_end: exit=\(exitCode) duration=\(String(format: "%.2f", duration))s")
+        events.send(.commandEnded(result: result))
+    }
+
     // MARK: - Process Tree Detection
 
     /// Called by the monitor when process-tree inspection detects a state change.
@@ -392,9 +423,7 @@ final class TerminalBridge {
 
         guard resolved != previous else { return }
 
-        NSLog(
-            "[Bridge] processTree: \(String(describing: session)) → resolved=\(String(describing: resolved)) (was \(String(describing: previous)))"
-        )
+        booLog(.debug, .terminal, "processTree: \(String(describing: session)) → resolved=\(String(describing: resolved)) (was \(String(describing: previous)))")
 
         state.remoteSession = resolved
         if resolved == nil {

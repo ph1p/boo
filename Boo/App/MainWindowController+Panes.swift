@@ -25,13 +25,8 @@ extension MainWindowController: PaneViewDelegate {
         let tab = workspace.pane(for: paneID)?.activeTab
         let cwd = tab?.workingDirectory ?? workspace.folderPath
 
-        NSLog(
-            "[MWC] didFocus: paneID=\(paneID), tabTitle=\(tab?.title ?? "nil"), cwd=\(cwd), tabRemote=\(String(describing: tab?.remoteSession)), tabRemoteCwd=\(String(describing: tab?.remoteWorkingDirectory))"
-        )
-
-        debugLog(
-            "[Focus] didFocus pane=\(paneID.uuidString.prefix(8)) tab=\(tab?.id.uuidString.prefix(8) ?? "nil") title=\(tab?.title ?? "nil") process=\(tab?.state.foregroundProcess ?? "nil")"
-        )
+        booLog(.debug, .terminal, "didFocus: paneID=\(paneID), tabTitle=\(tab?.title ?? "nil"), cwd=\(cwd), tabRemote=\(String(describing: tab?.remoteSession)), tabRemoteCwd=\(String(describing: tab?.remoteWorkingDirectory))")
+        booLog(.debug, .terminal, "didFocus pane=\(paneID.uuidString.prefix(8)) tab=\(tab?.id.uuidString.prefix(8) ?? "nil") title=\(tab?.title ?? "nil") process=\(tab?.state.foregroundProcess ?? "nil")")
 
         // Restore the full bridge + plugin state from the tab model via coordinator.
         if let tab = tab {
@@ -93,6 +88,18 @@ extension MainWindowController: PaneViewDelegate {
 
     func paneView(_ paneView: PaneView, shellPIDDiscovered pid: pid_t, paneID: UUID, tabID: UUID?) {
         bridge.monitor.track(paneID: paneID, shellPID: pid, tabID: tabID)
+    }
+
+    func paneView(_ paneView: PaneView, commandStarted command: String, paneID: UUID) {
+        bridge.handleCommandStart(command: command, paneID: paneID)
+        BooSocketServer.shared.emitCommandStarted(command: command, paneID: paneID)
+    }
+
+    func paneView(_ paneView: PaneView, commandEnded exitCode: Int32, paneID: UUID) {
+        bridge.handleCommandEnd(exitCode: exitCode, paneID: paneID)
+        if let result = bridge.state.lastCommandResult {
+            BooSocketServer.shared.emitCommandEnded(result: result, paneID: paneID)
+        }
     }
 
     func paneViewIsOnlyPaneInWorkspace(_ paneView: PaneView) -> Bool {
@@ -257,11 +264,11 @@ extension MainWindowController {
     func splitActivePane(direction: SplitTree.SplitDirection) {
         guard let workspace = activeWorkspace else { return }
         let oldPaneID = workspace.activePaneID
-        debugLog("[Split] splitting pane=\(oldPaneID.uuidString.prefix(8)) direction=\(direction)")
+        booLog(.debug, .sidebar, "splitting pane=\(oldPaneID.uuidString.prefix(8)) direction=\(direction)")
         window?.makeFirstResponder(nil)
 
         let newID = workspace.splitPane(oldPaneID, direction: direction)
-        debugLog("[Split] created pane=\(newID.uuidString.prefix(8)) from=\(oldPaneID.uuidString.prefix(8))")
+        booLog(.debug, .sidebar, "created pane=\(newID.uuidString.prefix(8)) from=\(oldPaneID.uuidString.prefix(8))")
         // Inherit parent tab's plugin state so sidebar stays consistent
         if let newPane = workspace.pane(for: newID),
             let newTab = newPane.activeTab
@@ -320,7 +327,7 @@ extension MainWindowController {
     @objc func closePaneAction(_ sender: Any?) {
         guard let workspace = activeWorkspace else { return }
         let paneID = workspace.activePaneID
-        debugLog("[Close] closing pane=\(paneID.uuidString.prefix(8)) remainingPanes=\(workspace.panes.count - 1)")
+        booLog(.debug, .terminal, "closing pane=\(paneID.uuidString.prefix(8)) remainingPanes=\(workspace.panes.count - 1)")
         if workspace.panes.count > 1, let pane = workspace.pane(for: paneID) {
             notifyTerminalClosed(for: pane.tabs)
         }
