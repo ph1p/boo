@@ -51,6 +51,86 @@ documentation/        Vocs documentation site
 - **IPC**: Unix socket at `~/.boo/boo.sock` for child process communication
 - **Remote detection**: Title heuristics + process tree polling, reconciled in `TerminalBridge`
 
+## Plugin System
+
+Plugins implement `BooPluginProtocol`. The registry runs a cycle (enrich → freeze → react) with a <16ms budget.
+
+### Plugin API
+
+```swift
+// Open tabs from a plugin
+actions?.openTab?(.terminal(workingDirectory: path))
+actions?.openTab?(.browser(url: url))
+actions?.openTab?(.file(path: path))           // respects markdownOpenMode
+actions?.openTab?(.customView(title: "Panel", icon: "star", view: AnyView(MyView())))
+
+// Send to terminal
+actions?.exec("ls -la")
+actions?.sendToTerminal?("some text")
+```
+
+### Plugin Settings
+
+Declare settings in `PluginManifest.settings`. They appear in the Settings sidebar under a **PLUGINS** section — each plugin with settings gets its own dedicated page.
+
+Supported setting types: `bool` (toggle), `double` (slider), `string` (text field or special picker).
+
+Special `options` values for string settings:
+- `"fontPicker:system"` / `"fontPicker:mono"` — font picker dropdown
+- `"editorExtensions"` — comma-separated file extensions
+- `"gitDiffTool"` — diff tool command with `{file}` placeholder
+- `"markdownOpenMode"` — segmented picker bound to global `AppSettings.shared.markdownOpenMode`
+
+### Custom Tab Panels
+
+Plugins can open a SwiftUI view in a new tab:
+
+```swift
+actions?.openTab?(.customView(title: "My Panel", icon: "puzzlepiece", view: AnyView(MyPanelView())))
+```
+
+The view is ephemeral — it is not persisted across app restarts.
+
+### Sidebar Tabs
+
+Set `capabilities.sidebarTab = true` in the manifest and implement `makeDetailView(context:)` (or `makeSidebarTab(context:)` for multi-section panels) to contribute a sidebar tab.
+
+## Settings Architecture
+
+Settings window (`Boo/Views/SettingsWindow.swift`) uses a left sidebar + content pane layout.
+
+### Tab enum
+
+```swift
+enum Tab: Equatable {
+    case general, theme, appearance, statusBar, layout, plugins, shortcuts
+    case pluginSettings(pluginID: String)  // per-plugin settings page
+}
+```
+
+Fixed tabs are listed in `Tab.fixed`. The **PLUGINS** sidebar section is generated dynamically from enabled plugins that have settings.
+
+### Adding a setting to a built-in plugin
+
+1. Add a `PluginManifest.SettingManifest` entry to the plugin's `manifest.settings` array.
+2. Read it via `context.settings.bool("key", default: false)` (or `.string` / `.double`).
+3. The setting will automatically appear on the plugin's dedicated settings page.
+
+### Content Types
+
+`ContentType` enum: `terminal`, `browser`, `editor`, `imageViewer`, `markdownPreview`, `pluginView`.
+
+- `pluginView` — hosts a plugin-provided `AnyView` via `PluginTabContentView`. State is ephemeral.
+- Only `terminal` tabs support the plugin sidebar (`supportsPlugins = true`).
+
+## Browser Tab
+
+`BrowserContentView` (AppKit, `Boo/Content/`) renders a WKWebView with a themed toolbar:
+
+- Background, URL field, separator, and button tints all use `AppSettings.shared.theme` chrome colors (`chromeBg`, `chromeMuted`, `chromeText`, `sidebarBg`, `chromeBorder`).
+- Theme changes are applied live via `.settingsChanged` notification → `applyToolbarTheme()`.
+- Navigation buttons (back/forward/reload-stop) update their enabled state and tint after each navigation event.
+
 ## Guidelines
 
 - Zero warnings policy
