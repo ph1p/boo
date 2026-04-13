@@ -39,7 +39,7 @@ final class ClaudeCodePlugin: BooPluginProtocol {
         version: "1.0.0",
         icon: "asset:claude-icon",
         description: "Claude Code AI assistant",
-        when: nil,  // Always visible
+        when: "!remote",
         runtime: nil,
         capabilities: PluginManifest.Capabilities(statusBarSegment: true, sidebarTab: true),
         statusBar: PluginManifest.StatusBarManifest(position: "right", priority: 20, template: nil),
