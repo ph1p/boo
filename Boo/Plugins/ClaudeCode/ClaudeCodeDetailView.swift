@@ -642,3 +642,92 @@ struct ClaudeSettingsView: View {
         .padding(.vertical, 6)
     }
 }
+
+// MARK: - Worktrees Section View
+
+struct ClaudeWorktreesView: View {
+    let worktrees: [ClaudeCodePlugin.ClaudeWorktree]
+    let fontScale: SidebarFontScale
+    let textColor: Color
+    let mutedColor: Color
+    let accentColor: Color
+    let onWorktreeClicked: (ClaudeCodePlugin.ClaudeWorktree) -> Void
+    let onCopyPath: (String) -> Void
+
+    @State private var hoveredWorktreeID: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(worktrees) { worktree in
+                worktreeRow(worktree: worktree)
+            }
+        }
+    }
+
+    private func worktreeRow(worktree: ClaudeCodePlugin.ClaudeWorktree) -> some View {
+        let isHovered = hoveredWorktreeID == worktree.id
+
+        return Button(action: { onWorktreeClicked(worktree) }) {
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 6) {
+                    Image(systemName: "arrow.triangle.branch")
+                        .font(fontScale.font(.sm))
+                        .foregroundColor(accentColor)
+
+                    Text(worktree.id)
+                        .font(fontScale.font(.base).weight(.medium))
+                        .foregroundColor(accentColor)
+                        .lineLimit(1)
+
+                    Spacer()
+
+                    if let created = worktree.created {
+                        Text(formatAgentRelativeDate(created))
+                            .font(fontScale.font(.xs))
+                            .foregroundColor(mutedColor)
+                    }
+                }
+
+                HStack(spacing: 8) {
+                    HStack(spacing: 2) {
+                        Image(systemName: "chevron.left.forwardslash.chevron.right")
+                            .font(.system(size: 9))
+                        Text(worktree.branch)
+                            .lineLimit(1)
+                    }
+                    .font(fontScale.font(.xs, design: .monospaced))
+                    .foregroundColor(mutedColor.opacity(0.8))
+
+                    if let head = worktree.headCommit {
+                        HStack(spacing: 2) {
+                            Image(systemName: "number")
+                                .font(.system(size: 9))
+                            Text(head)
+                        }
+                        .font(fontScale.font(.xs, design: .monospaced))
+                        .foregroundColor(mutedColor.opacity(0.7))
+                    }
+
+                    Spacer()
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering in
+            hoveredWorktreeID = hovering ? worktree.id : nil
+        }
+        .background(isHovered ? mutedColor.opacity(0.08) : Color.clear)
+        .contextMenu {
+            Button("Open in New Tab") { onWorktreeClicked(worktree) }
+            Divider()
+            Button("Copy Path") { onCopyPath(worktree.path) }
+            Button("Copy Branch Name") { onCopyPath(worktree.branch) }
+            Button("Reveal in Finder") {
+                NSWorkspace.shared.selectFile(worktree.path, inFileViewerRootedAtPath: "")
+            }
+        }
+    }
+}
