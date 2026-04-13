@@ -135,8 +135,8 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
         get { coordinator?.sidebarSectionOrder ?? [:] }
         set { coordinator?.sidebarSectionOrder = newValue }
     }
-    /// Cached detail views per plugin, reused when context hasn't changed.
-    var cachedDetailViews: [String: (context: TerminalContext, view: AnyView)] = [:]
+    /// Cached detail views per plugin, reused when context and section generations haven't changed.
+    var cachedDetailViews: [String: (context: TerminalContext, generations: [UInt64], view: AnyView)] = [:]
     /// Generation counter per plugin — incremented only when the view is recreated.
     var pluginViewGeneration: [String: UInt64] = [:]
     /// Monotonic counter for assigning generations.
@@ -270,6 +270,20 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
         }
         pluginActions.openTab = { [weak self] payload in
             self?.handleOpenTab(payload)
+        }
+        pluginActions.setAgentSessionID = { [weak self] sessionID in
+            guard let self,
+                let workspace = self.activeWorkspace,
+                let pane = workspace.pane(for: workspace.activePaneID)
+            else { return }
+            pane.updateAgentSessionID(sessionID)
+        }
+        pluginActions.getAgentSessionID = { [weak self] in
+            guard let self,
+                let workspace = self.activeWorkspace,
+                let pane = workspace.pane(for: workspace.activePaneID)
+            else { return nil }
+            return pane.activeTab?.state.agentSessionID
         }
         pluginActions.displayImageInTerminal = { [weak self] path, newTab in
             guard let self, let workspace = self.activeWorkspace else { return }

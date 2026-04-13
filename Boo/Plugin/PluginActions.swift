@@ -18,6 +18,11 @@ final class PluginActions {
     /// Open a new tab with the specified payload (terminal, browser, or file).
     var openTab: ((TabPayload) -> Void)?
 
+    /// Set the AI agent session ID for the active tab.
+    var setAgentSessionID: ((String?) -> Void)?
+    /// Get the AI agent session ID for the active tab.
+    var getAgentSessionID: (() -> String?)?
+
     func pastePath(_ path: String) {
         pastePathToActivePane?(path)
     }

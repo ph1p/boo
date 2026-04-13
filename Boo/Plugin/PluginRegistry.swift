@@ -238,8 +238,6 @@ final class PluginRegistry {
         register(RemoteFileTreePlugin())
         register(GitPlugin())
         register(ClaudeCodePlugin())
-        register(CodexPlugin())
-        register(OpenCodePlugin())
         register(DockerPluginNew())
         register(BookmarksPluginNew())
         register(SnippetsPlugin())

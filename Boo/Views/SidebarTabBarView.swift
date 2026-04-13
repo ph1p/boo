@@ -350,11 +350,6 @@ class SidebarTabBarView: NSView {
                 img.draw(in: NSRect(x: iconX, y: iconY, width: imgSize.width, height: imgSize.height))
             }
 
-            // Draw badge if present
-            if let badge = tab.badge, badge > 0 {
-                drawBadge(badge, at: tabRect, ctx: ctx, theme: theme)
-            }
-
             if let di = dropIndex, di == index {
                 drawDropIndicator(at: tabRect.minX, ctx: ctx, theme: theme)
             }

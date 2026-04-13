@@ -1,5 +1,28 @@
 import SwiftUI
 
+// MARK: - Constants
+
+private enum ClaudeCodeConstants {
+    /// Maximum directory depth when walking up to find project root
+    static let maxProjectRootDepth = 20
+    /// Time threshold (seconds) to consider a session file as recently modified
+    static let recentlyModifiedThreshold: TimeInterval = 5
+    /// Time threshold (seconds) to consider a session as currently active
+    static let activeSessionThreshold: TimeInterval = 30
+    /// Debounce delay for diff detection (seconds)
+    static let diffDebounceDelay: TimeInterval = 0.2
+    /// Refresh timer interval for diff stats (seconds)
+    static let diffRefreshInterval: TimeInterval = 10
+}
+
+// MARK: - Cached Formatters
+
+private let relativeDateFormatter: DateFormatter = {
+    let formatter = DateFormatter()
+    formatter.dateFormat = "MMM d"
+    return formatter
+}()
+
 /// Built-in plugin for Claude Code AI assistant.
 /// Shows sessions, config files, hooks, skills, MCP servers, and changed files.
 /// Always visible when enabled; shows active agent status when running.
@@ -38,16 +61,28 @@ final class ClaudeCodePlugin: BooPluginProtocol {
     private(set) var diffStats: [DiffStatEntry] = []
     private(set) var sessions: [ClaudeSession] = []
     private(set) var agentConfig: AgentConfig = AgentConfig()
+    private(set) var claudeSettings: ClaudeSettings = ClaudeSettings()
+    /// Session ID currently being written to (detected via file watching)
+    private(set) var activeSessionID: String?
 
     private var lastDiffRepoRoot: String?
     private var lastConfigScanRoot: String?
     private var lastSessionScanRoot: String?
     private var refreshTimer: DispatchSourceTimer?
+    private var sessionWatcher: DispatchSourceFileSystemObject?
+    private var sessionDirPath: String?
     private var debounceWork: DispatchWorkItem?
     private var teardownGeneration: UInt64 = 0
-    var teardownGracePeriod: TimeInterval = 2.0
+    var teardownGracePeriod: TimeInterval = 0.3
 
-    typealias DiffStatEntry = AgentDiffStatEntry
+    /// Git diff stat entry for changed files.
+    struct DiffStatEntry: Identifiable {
+        let id = UUID()
+        let path: String
+        let insertions: Int
+        let deletions: Int
+        let fullPath: String
+    }
 
     static let projectMarkers = [".git", ".claude", "AGENTS.md", "CLAUDE.md"]
 
@@ -57,6 +92,14 @@ final class ClaudeCodePlugin: BooPluginProtocol {
         let timestamp: Date
         let firstMessage: String
         let path: String
+        /// Number of messages in session (user + assistant turns)
+        var messageCount: Int = 0
+        /// Total tokens used (if available from session file)
+        var totalTokens: Int = 0
+        /// Last activity timestamp
+        var lastActivity: Date?
+        /// Whether this session is currently active in a terminal
+        var isActive: Bool = false
     }
 
     struct AgentConfig {
@@ -85,6 +128,29 @@ final class ClaudeCodePlugin: BooPluginProtocol {
             let description: String
             let path: String
         }
+    }
+
+    struct ClaudeSettings {
+        var model: String = ""
+        var effortLevel: String = "medium"
+        var alwaysThinkingEnabled: Bool = false
+        var voiceEnabled: Bool = false
+        var enabledPlugins: [String] = []
+
+        /// Display-friendly model name (strips date suffix)
+        var modelDisplayName: String {
+            // claude-opus-4-5-20251101 -> claude-opus-4-5
+            let parts = model.split(separator: "-")
+            if parts.count > 1, let last = parts.last, last.count == 8, last.allSatisfy(\.isNumber) {
+                return parts.dropLast().joined(separator: "-")
+            }
+            return model.isEmpty ? "default" : model
+        }
+
+        static let settingsPath: String = {
+            let home = FileManager.default.homeDirectoryForCurrentUser.path
+            return (home as NSString).appendingPathComponent(".claude/settings.json")
+        }()
     }
 
     // MARK: - Enrich
@@ -142,6 +208,12 @@ final class ClaudeCodePlugin: BooPluginProtocol {
         if !isAgentActive && currentCwd != context.terminal.cwd {
             scanAgentConfig(cwd: context.terminal.cwd)
             scanSessions(cwd: context.terminal.cwd)
+            loadClaudeSettings()
+        }
+
+        // Load settings on first access if not loaded yet
+        if claudeSettings.model.isEmpty {
+            loadClaudeSettings()
         }
 
         let act = actions
@@ -157,30 +229,28 @@ final class ClaudeCodePlugin: BooPluginProtocol {
 
         // Active agent status section (only when running)
         if isAgentActive {
+            // Find active session details
+            let activeSession = sessions.first { $0.id == activeSessionID }
+
             let statusSection = SidebarSection(
                 id: "claude-code.status",
-                name: "Active",
+                name: "Active Session",
                 icon: "bolt.fill",
                 content: AnyView(
-                    HStack(spacing: 8) {
-                        Circle()
-                            .fill(Color.green)
-                            .frame(width: 8, height: 8)
-                        Text("Claude Code running")
-                            .font(fontScale.font(.base))
-                            .foregroundColor(textColor)
-                        Spacer()
-                        if let start = agentStartTime {
-                            Text(formatAgentRuntime(Date().timeIntervalSince(start)))
-                                .font(fontScale.font(.sm, design: .monospaced))
-                                .foregroundColor(mutedColor)
-                        }
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
+                    ClaudeActiveSessionView(
+                        agentStartTime: agentStartTime,
+                        activeSession: activeSession,
+                        activeSessionID: activeSessionID,
+                        diffStats: diffStats,
+                        fontScale: fontScale,
+                        textColor: textColor,
+                        mutedColor: mutedColor,
+                        accentColor: accentColor
+                    )
                 ),
                 prefersOuterScrollView: false,
                 generation: UInt64(agentStartTime?.timeIntervalSince1970 ?? 0)
+                    &+ UInt64(bitPattern: Int64(activeSessionID?.hashValue ?? 0))
             )
             sections.append(statusSection)
         }
@@ -332,6 +402,33 @@ final class ClaudeCodePlugin: BooPluginProtocol {
             sections.append(changesSection)
         }
 
+        // Settings section (always show if we have settings loaded)
+        if !claudeSettings.model.isEmpty {
+            let settingsSection = SidebarSection(
+                id: "claude-code.settings",
+                name: "Settings",
+                icon: "gearshape",
+                content: AnyView(
+                    ClaudeSettingsView(
+                        settings: claudeSettings,
+                        fontScale: fontScale,
+                        textColor: textColor,
+                        mutedColor: mutedColor,
+                        accentColor: accentColor,
+                        onSettingChanged: { [weak self] key, value in
+                            self?.updateClaudeSetting(key: key, value: value)
+                        },
+                        onOpenSettings: {
+                            act?.handle(
+                                DSLAction(type: "open", path: ClaudeSettings.settingsPath, command: nil, text: nil))
+                        }
+                    )),
+                prefersOuterScrollView: false,
+                generation: UInt64(
+                    bitPattern: Int64(claudeSettings.model.hashValue &+ claudeSettings.effortLevel.hashValue)))
+            sections.append(settingsSection)
+        }
+
         // If no sections (no agent, no sessions, no config), show getting started
         if sections.isEmpty {
             let emptySection = SidebarSection(
@@ -356,15 +453,11 @@ final class ClaudeCodePlugin: BooPluginProtocol {
             sections.append(emptySection)
         }
 
-        // Badge shows active Claude agents in current workspace
-        let agentCount = AIAgentTracker.shared.agents(named: "claude").count
-
         return SidebarTab(
             id: SidebarTabID(manifest.id),
             icon: manifest.icon,
             label: manifest.name,
-            sections: sections,
-            badge: agentCount > 0 ? agentCount : nil)
+            sections: sections)
     }
 
     func makeDetailView(context: PluginContext) -> AnyView? { nil }
@@ -372,7 +465,8 @@ final class ClaudeCodePlugin: BooPluginProtocol {
     // MARK: - Session Resume
 
     private func resumeSession(_ session: ClaudeSession) {
-        actions?.sendToTerminal?("claude --resume \(session.id)\n")
+        let cwd = currentCwd ?? "~"
+        actions?.openTab?(.terminalWithCommand(workingDirectory: cwd, command: "claude --resume \(session.id)"))
     }
 
     // MARK: - Lifecycle
@@ -384,8 +478,10 @@ final class ClaudeCodePlugin: BooPluginProtocol {
             if agentStartTime == nil {
                 agentStartTime = Date()
                 currentCwd = context.cwd
+                onRequestCycleRerun?()  // Immediate update for "Active" status
                 scanAgentConfig(cwd: context.cwd)
                 scanSessions(cwd: context.cwd)
+                startSessionWatcher(cwd: context.cwd)
             }
             refreshDiffStats(repoRoot: context.gitContext?.repoRoot)
             startRefreshTimer(repoRoot: context.gitContext?.repoRoot)
@@ -437,12 +533,116 @@ final class ClaudeCodePlugin: BooPluginProtocol {
         cancelTeardown()
         agentStartTime = nil
         diffStats = []
-        sessions = []
-        agentConfig = AgentConfig()
+        activeSessionID = nil
+        // Clear session ID from tab state when agent exits
+        actions?.setAgentSessionID?(nil)
+        // Update sessions to mark none as active
+        for i in sessions.indices {
+            sessions[i].isActive = false
+        }
+        // Don't clear sessions/agentConfig - they're project-scoped, not agent-scoped.
+        // Clearing them on deactivate causes "No sessions found" on tab switch back.
         lastDiffRepoRoot = nil
-        lastConfigScanRoot = nil
-        lastSessionScanRoot = nil
         stopRefreshTimer()
+        stopSessionWatcher()
+    }
+
+    // MARK: - Session Watching
+
+    /// Start watching the Claude session directory for file changes to detect active session.
+    private func startSessionWatcher(cwd: String?) {
+        stopSessionWatcher()
+        guard let cwd = cwd else { return }
+
+        let markers = Self.projectMarkers
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            let projectRoot = findAgentProjectRoot(from: cwd, markers: markers) ?? cwd
+            let fm = FileManager.default
+            let home = fm.homeDirectoryForCurrentUser.path
+            let projectDirName = projectRoot.replacingOccurrences(of: "/", with: "-")
+            let sessionDir = (home as NSString).appendingPathComponent(".claude/projects/\(projectDirName)")
+
+            guard fm.fileExists(atPath: sessionDir) else { return }
+
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                self.sessionDirPath = sessionDir
+                self.watchSessionDirectory(sessionDir)
+            }
+        }
+    }
+
+    private func watchSessionDirectory(_ path: String) {
+        let fd = open(path, O_EVTONLY)
+        guard fd >= 0 else { return }
+
+        let source = DispatchSource.makeFileSystemObjectSource(
+            fileDescriptor: fd,
+            eventMask: .write,
+            queue: DispatchQueue.global(qos: .utility)
+        )
+
+        source.setEventHandler { [weak self] in
+            self?.detectActiveSession()
+        }
+
+        source.setCancelHandler {
+            close(fd)
+        }
+
+        sessionWatcher = source
+        source.resume()
+
+        // Initial detection
+        detectActiveSession()
+    }
+
+    private func stopSessionWatcher() {
+        sessionWatcher?.cancel()
+        sessionWatcher = nil
+        sessionDirPath = nil
+    }
+
+    /// Find which session file was most recently modified (the active one).
+    private func detectActiveSession() {
+        guard let sessionDir = sessionDirPath else { return }
+
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            let fm = FileManager.default
+            var mostRecentID: String?
+            var mostRecentTime: Date?
+
+            guard let entries = try? fm.contentsOfDirectory(atPath: sessionDir) else { return }
+
+            for entry in entries where entry.hasSuffix(".jsonl") {
+                let path = (sessionDir as NSString).appendingPathComponent(entry)
+                guard let attrs = try? fm.attributesOfItem(atPath: path),
+                    let modTime = attrs[.modificationDate] as? Date
+                else { continue }
+
+                // Only consider recently modified files
+                if Date().timeIntervalSince(modTime) < ClaudeCodeConstants.recentlyModifiedThreshold {
+                    if mostRecentTime.map({ modTime > $0 }) ?? true {
+                        mostRecentTime = modTime
+                        mostRecentID = (entry as NSString).deletingPathExtension
+                    }
+                }
+            }
+
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                if self.activeSessionID != mostRecentID {
+                    self.activeSessionID = mostRecentID
+                    // Save to tab state so we know which session belongs to this tab
+                    self.actions?.setAgentSessionID?(mostRecentID)
+                    // Update sessions list with active state
+                    for i in self.sessions.indices {
+                        self.sessions[i].isActive = (self.sessions[i].id == mostRecentID)
+                    }
+                    self.onRequestCycleRerun?()
+                }
+            }
+        }
     }
 
     // MARK: - Session Scanning
@@ -450,8 +650,9 @@ final class ClaudeCodePlugin: BooPluginProtocol {
     private func scanSessions(cwd: String?) {
         guard let cwd = cwd else { return }
 
+        let markers = Self.projectMarkers
         DispatchQueue.global(qos: .utility).async { [weak self] in
-            let projectRoot = findAgentProjectRoot(from: cwd, markers: Self.projectMarkers) ?? cwd
+            let projectRoot = findAgentProjectRoot(from: cwd, markers: markers) ?? cwd
             DispatchQueue.main.async { [weak self] in
                 guard let self else { return }
                 if self.lastSessionScanRoot == projectRoot { return }
@@ -483,13 +684,27 @@ final class ClaudeCodePlugin: BooPluginProtocol {
 
         var sessions: [ClaudeSession] = []
 
+        // Track which session file was modified most recently (likely active)
+        var mostRecentModTime: Date?
+        var mostRecentSessionID: String?
+
         do {
             let entries = try fm.contentsOfDirectory(atPath: projectSessionDir)
             for entry in entries where entry.hasSuffix(".jsonl") {
                 let sessionID = (entry as NSString).deletingPathExtension
                 let sessionPath = (projectSessionDir as NSString).appendingPathComponent(entry)
 
-                if let session = parseSessionFile(path: sessionPath, sessionID: sessionID) {
+                // Check file modification time to detect active session
+                if let attrs = try? fm.attributesOfItem(atPath: sessionPath),
+                    let modDate = attrs[.modificationDate] as? Date
+                {
+                    if mostRecentModTime.map({ modDate > $0 }) ?? true {
+                        mostRecentModTime = modDate
+                        mostRecentSessionID = sessionID
+                    }
+                }
+
+                if var session = parseSessionFile(path: sessionPath, sessionID: sessionID) {
                     sessions.append(session)
                 }
             }
@@ -497,8 +712,23 @@ final class ClaudeCodePlugin: BooPluginProtocol {
             return []
         }
 
-        // Sort by timestamp descending (most recent first)
-        return sessions.sorted { $0.timestamp > $1.timestamp }
+        // Mark most recently modified session as active (if modified in last 30 seconds)
+        if let activeID = mostRecentSessionID,
+            let modTime = mostRecentModTime,
+            Date().timeIntervalSince(modTime) < ClaudeCodeConstants.activeSessionThreshold
+        {
+            if let idx = sessions.firstIndex(where: { $0.id == activeID }) {
+                sessions[idx].isActive = true
+            }
+        }
+
+        // Sort: active first, then by last activity descending
+        return sessions.sorted { a, b in
+            if a.isActive != b.isActive { return a.isActive }
+            let aTime = a.lastActivity ?? a.timestamp
+            let bTime = b.lastActivity ?? b.timestamp
+            return aTime > bTime
+        }
     }
 
     nonisolated private static func parseSessionFile(path: String, sessionID: String) -> ClaudeSession? {
@@ -507,7 +737,10 @@ final class ClaudeCodePlugin: BooPluginProtocol {
 
         var slug: String?
         var timestamp: Date?
+        var lastActivity: Date?
         var firstMessage: String?
+        var messageCount = 0
+        var totalTokens = 0
 
         guard let data = try? handle.readToEnd(),
             let content = String(data: data, encoding: .utf8)
@@ -517,7 +750,7 @@ final class ClaudeCodePlugin: BooPluginProtocol {
         let dateFormatter = ISO8601DateFormatter()
         dateFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
 
-        for line in lines.prefix(50) where !line.isEmpty {
+        for line in lines where !line.isEmpty {
             guard let lineData = line.data(using: .utf8),
                 let json = try? JSONSerialization.jsonObject(with: lineData) as? [String: Any]
             else { continue }
@@ -526,27 +759,41 @@ final class ClaudeCodePlugin: BooPluginProtocol {
                 slug = s
             }
 
-            if timestamp == nil,
-                let type = json["type"] as? String, type == "user",
+            // Count messages and track timestamps
+            if let type = json["type"] as? String,
                 let ts = json["timestamp"] as? String,
                 let date = dateFormatter.date(from: ts)
             {
-                timestamp = date
-                if let msg = json["message"] as? [String: Any],
-                    let content = msg["content"] as? String
-                {
-                    firstMessage = String(content.prefix(100))
-                } else if let msg = json["message"] as? [String: Any],
-                    let contentArray = msg["content"] as? [[String: Any]],
-                    let first = contentArray.first,
-                    let text = first["content"] as? String
-                {
-                    firstMessage = String(text.prefix(100))
+                if type == "user" || type == "assistant" {
+                    messageCount += 1
+                    lastActivity = date
+                }
+
+                // Get first user message for preview
+                if timestamp == nil && type == "user" {
+                    timestamp = date
+                    if let msg = json["message"] as? [String: Any],
+                        let content = msg["content"] as? String
+                    {
+                        firstMessage = String(content.prefix(100))
+                    } else if let msg = json["message"] as? [String: Any],
+                        let contentArray = msg["content"] as? [[String: Any]],
+                        let first = contentArray.first,
+                        let text = first["content"] as? String
+                    {
+                        firstMessage = String(text.prefix(100))
+                    }
                 }
             }
 
-            if slug != nil && timestamp != nil && firstMessage != nil {
-                break
+            // Sum up token usage
+            if let usage = json["usage"] as? [String: Any] {
+                if let input = usage["input_tokens"] as? Int {
+                    totalTokens += input
+                }
+                if let output = usage["output_tokens"] as? Int {
+                    totalTokens += output
+                }
             }
         }
 
@@ -557,7 +804,10 @@ final class ClaudeCodePlugin: BooPluginProtocol {
             slug: slug,
             timestamp: ts,
             firstMessage: firstMessage ?? "",
-            path: path
+            path: path,
+            messageCount: messageCount,
+            totalTokens: totalTokens,
+            lastActivity: lastActivity
         )
     }
 
@@ -566,8 +816,9 @@ final class ClaudeCodePlugin: BooPluginProtocol {
     private func scanAgentConfig(cwd: String?) {
         guard let cwd = cwd else { return }
 
+        let markers = Self.projectMarkers
         DispatchQueue.global(qos: .utility).async { [weak self] in
-            let projectRoot = findAgentProjectRoot(from: cwd, markers: Self.projectMarkers) ?? cwd
+            let projectRoot = findAgentProjectRoot(from: cwd, markers: markers) ?? cwd
             DispatchQueue.main.async { [weak self] in
                 guard let self else { return }
                 if self.lastConfigScanRoot == projectRoot { return }
@@ -732,7 +983,7 @@ final class ClaudeCodePlugin: BooPluginProtocol {
             self?.runDiffDetection(repoRoot: root)
         }
         debounceWork = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2, execute: work)
+        DispatchQueue.main.asyncAfter(deadline: .now() + ClaudeCodeConstants.diffDebounceDelay, execute: work)
     }
 
     private func runDiffDetection(repoRoot: String) {
@@ -757,7 +1008,9 @@ final class ClaudeCodePlugin: BooPluginProtocol {
         guard let root = repoRoot else { return }
 
         let timer = DispatchSource.makeTimerSource(queue: .main)
-        timer.schedule(deadline: .now() + 10, repeating: 10)
+        timer.schedule(
+            deadline: .now() + ClaudeCodeConstants.diffRefreshInterval,
+            repeating: .seconds(Int(ClaudeCodeConstants.diffRefreshInterval)))
         timer.setEventHandler { [weak self] in
             guard let self = self, self.agentStartTime != nil else {
                 self?.stopRefreshTimer()
@@ -774,7 +1027,180 @@ final class ClaudeCodePlugin: BooPluginProtocol {
         refreshTimer = nil
     }
 
+    // MARK: - Claude Settings
+
+    private func loadClaudeSettings() {
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            let settings = Self.parseClaudeSettings()
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                self.claudeSettings = settings
+                self.onRequestCycleRerun?()
+            }
+        }
+    }
+
+    nonisolated static func parseClaudeSettings() -> ClaudeSettings {
+        let fm = FileManager.default
+        let path = ClaudeSettings.settingsPath
+
+        guard let data = fm.contents(atPath: path),
+            let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else {
+            return ClaudeSettings()
+        }
+
+        var settings = ClaudeSettings()
+        settings.model = json["model"] as? String ?? ""
+        settings.effortLevel = json["effortLevel"] as? String ?? "medium"
+        settings.alwaysThinkingEnabled = json["alwaysThinkingEnabled"] as? Bool ?? false
+        settings.voiceEnabled = json["voiceEnabled"] as? Bool ?? false
+
+        if let plugins = json["enabledPlugins"] as? [String: Bool] {
+            settings.enabledPlugins = plugins.filter { $0.value }.map(\.key).sorted()
+        }
+
+        return settings
+    }
+
+    func updateClaudeSetting(key: String, value: Any) {
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            let fm = FileManager.default
+            let path = ClaudeSettings.settingsPath
+
+            // Read existing settings
+            var json: [String: Any] = [:]
+            if let data = fm.contents(atPath: path),
+                let existing = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+            {
+                json = existing
+            }
+
+            // Update the value
+            json[key] = value
+
+            // Write back
+            if let data = try? JSONSerialization.data(withJSONObject: json, options: [.prettyPrinted, .sortedKeys]) {
+                try? data.write(to: URL(fileURLWithPath: path))
+            }
+
+            // Reload settings
+            DispatchQueue.main.async { [weak self] in
+                self?.loadClaudeSettings()
+            }
+        }
+    }
+
     deinit {
         refreshTimer?.cancel()
+    }
+}
+
+// MARK: - Utilities
+
+/// Format runtime duration as human-readable string.
+func formatAgentRuntime(_ seconds: TimeInterval) -> String {
+    let totalSeconds = Int(seconds)
+    let hours = totalSeconds / 3600
+    let mins = (totalSeconds % 3600) / 60
+    if hours > 0 {
+        return "\(hours)h \(mins)m"
+    } else if mins > 0 {
+        return "\(mins)m"
+    } else {
+        return "<1m"
+    }
+}
+
+/// Format date as relative string (e.g., "2h ago", "3d ago").
+func formatAgentRelativeDate(_ date: Date) -> String {
+    let interval = Date().timeIntervalSince(date)
+    if interval < 60 {
+        return "just now"
+    } else if interval < 3600 {
+        return "\(Int(interval / 60))m ago"
+    } else if interval < 86400 {
+        return "\(Int(interval / 3600))h ago"
+    } else if interval < 604_800 {
+        return "\(Int(interval / 86400))d ago"
+    } else {
+        return relativeDateFormatter.string(from: date)
+    }
+}
+
+/// Find project root by walking up from path looking for marker files/dirs.
+func findAgentProjectRoot(from path: String, markers: [String]) -> String? {
+    let fm = FileManager.default
+    var dir = path
+    for _ in 0..<ClaudeCodeConstants.maxProjectRootDepth {
+        for marker in markers {
+            let candidate = (dir as NSString).appendingPathComponent(marker)
+            if fm.fileExists(atPath: candidate) {
+                return dir
+            }
+        }
+        let parent = (dir as NSString).deletingLastPathComponent
+        if parent == dir { break }
+        dir = parent
+    }
+    return nil
+}
+
+/// Parse skill description from YAML frontmatter in SKILL.md.
+func parseAgentSkillDescription(at path: String) -> String {
+    guard let data = FileManager.default.contents(atPath: path),
+        let content = String(data: data, encoding: .utf8)
+    else { return "" }
+
+    let lines = content.split(separator: "\n", omittingEmptySubsequences: false)
+    var inFrontmatter = false
+    for line in lines {
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        if trimmed == "---" {
+            if inFrontmatter { break }
+            inFrontmatter = true
+            continue
+        }
+        if inFrontmatter && trimmed.hasPrefix("description:") {
+            return String(trimmed.dropFirst("description:".count)).trimmingCharacters(in: .whitespaces)
+        }
+    }
+    return ""
+}
+
+/// Detect git diff stats for changed files in repo.
+func detectAgentDiffStats(repoRoot: String) -> [ClaudeCodePlugin.DiffStatEntry] {
+    let task = Process()
+    task.launchPath = "/usr/bin/git"
+    task.arguments = ["-C", repoRoot, "diff", "--numstat", "HEAD"]
+    task.standardError = FileHandle.nullDevice
+
+    let pipe = Pipe()
+    task.standardOutput = pipe
+
+    do {
+        try task.run()
+    } catch {
+        return []
+    }
+    task.waitUntilExit()
+    guard task.terminationStatus == 0 else { return [] }
+
+    let data = pipe.fileHandleForReading.readDataToEndOfFile()
+    guard let output = String(data: data, encoding: .utf8) else { return [] }
+
+    return output.split(separator: "\n").compactMap { line in
+        let parts = line.split(separator: "\t", maxSplits: 2)
+        guard parts.count == 3 else { return nil }
+        let insertions = Int(parts[0]) ?? 0
+        let deletions = Int(parts[1]) ?? 0
+        let filePath = String(parts[2])
+        let fullPath = (repoRoot as NSString).appendingPathComponent(filePath)
+        return ClaudeCodePlugin.DiffStatEntry(
+            path: filePath,
+            insertions: insertions,
+            deletions: deletions,
+            fullPath: fullPath
+        )
     }
 }

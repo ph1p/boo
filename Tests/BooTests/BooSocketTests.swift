@@ -35,10 +35,10 @@ final class BooSocketServerTests: XCTestCase {
         let parentPid = getppid()
 
         server.processes[myPid] = BooSocketServer.ProcessStatus(
-            pid: myPid, name: "codex", category: "ai", registeredAt: Date(), metadata: [:])
+            pid: myPid, name: "claude", category: "ai", registeredAt: Date(), metadata: [:])
 
         let status = server.activeProcess(shellPID: parentPid)
-        XCTAssertEqual(status?.name, "codex")
+        XCTAssertEqual(status?.name, "claude")
 
         server.processes.removeAll()
     }

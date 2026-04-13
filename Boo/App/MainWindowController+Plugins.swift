@@ -303,26 +303,16 @@ extension MainWindowController {
     }
 
     /// Show content for the given plugin tab ID in the sidebar container.
-    /// Reuses the existing panel view when context hasn't changed — only rebuilds on context change.
+    /// Always calls makeSidebarTab() to get fresh data, but reuses view when context and generations match.
     /// Single section → full-height content (with scroll view if prefersOuterScrollView).
     /// Multiple sections → SidebarPanelView with collapsible headers.
     func showPluginTabContent(id: String, context: TerminalContext) {
-        // If a panel already exists and context hasn't changed, just make it visible
-        if let existing = pluginPanelViews[id],
-            let cached = cachedDetailViews[id], cached.context == context
-        {
-            for (otherID, view) in pluginPanelViews where otherID != id {
-                view.isHidden = true
-            }
-            existing.isHidden = false
-            return
-        }
-
         guard let plugin = pluginRegistry.plugin(for: id) else { return }
         let pluginCtx = pluginRegistry.buildPluginContext(for: id, terminal: context)
 
-        // Get sections from the plugin's sidebar tab
+        // Always call makeSidebarTab to get fresh data from the plugin
         guard let sidebarTab = plugin.makeSidebarTab(context: pluginCtx) else { return }
+
         // Filter out sections the user has hidden (keeping at least one)
         let allSections = sidebarTab.sections
         let visibleSections = allSections.filter { section in
@@ -339,11 +329,23 @@ extension MainWindowController {
         }
         guard !sections.isEmpty else { return }
 
-        // Cache so future calls with same context skip rebuild
-        if cachedDetailViews[id]?.context != context {
-            viewGenerationCounter += 1
-            cachedDetailViews[id] = (context: context, view: sections[0].content)
+        // Check if we can reuse the cached panel (same context AND same generations)
+        let newGenerations = sections.map { $0.generation }
+        if let existing = pluginPanelViews[id],
+            let cached = cachedDetailViews[id],
+            cached.context == context,
+            cached.generations == newGenerations
+        {
+            for (otherID, view) in pluginPanelViews where otherID != id {
+                view.isHidden = true
+            }
+            existing.isHidden = false
+            return
         }
+
+        // Cache with generations so we detect data changes
+        viewGenerationCounter += 1
+        cachedDetailViews[id] = (context: context, generations: newGenerations, view: sections[0].content)
 
         // Remove old panel for this plugin
         pluginPanelViews[id]?.removeFromSuperview()
