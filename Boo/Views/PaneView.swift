@@ -1,5 +1,6 @@
 import CGhostty
 import Cocoa
+import SwiftUI
 
 protocol PaneViewDelegate: AnyObject {
     func paneView(_ paneView: PaneView, didFocus paneID: UUID)
@@ -593,6 +594,8 @@ class PaneView: NSView {
             _ = pane.addTab(contentType: .imageViewer, workingDirectory: workingDirectory)
         case .markdownPreview:
             _ = pane.addTab(contentType: .markdownPreview, workingDirectory: workingDirectory)
+        case .pluginView:
+            _ = pane.addTab(contentType: .pluginView, workingDirectory: workingDirectory, title: "Panel")
         }
 
         startActiveSession()
@@ -616,6 +619,31 @@ class PaneView: NSView {
             }
         }
 
+        paneDelegate?.paneView(self, didFocus: paneID)
+        return pane.tabs.last?.id
+    }
+
+    /// Add a plugin-owned SwiftUI view in a new tab.
+    @discardableResult
+    func addPluginViewTab(view: AnyView, title: String, icon: String) -> UUID? {
+        storeCurrentView()
+        lastAutoScrolledTabIndex = -1
+
+        _ = pane.addTab(contentType: .pluginView, workingDirectory: "~", title: title)
+
+        startActiveSession()
+        needsLayout = true
+
+        // Replace the placeholder content view with the real plugin view.
+        // The factory created a placeholder; swap it out before layout.
+        activeContentView?.cleanup()
+        activeContentView?.removeFromSuperview()
+        let pluginView = PluginTabContentView(view: view, title: title, icon: icon)
+        activeContentView = pluginView
+        addSubview(pluginView)
+        needsLayout = true
+
+        window?.makeFirstResponder(pluginView)
         paneDelegate?.paneView(self, didFocus: paneID)
         return pane.tabs.last?.id
     }

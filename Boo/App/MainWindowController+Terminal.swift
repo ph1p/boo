@@ -148,6 +148,9 @@ extension MainWindowController {
                 // Unknown type: open in system default app
                 NSWorkspace.shared.open(URL(fileURLWithPath: path))
             }
+
+        case .customView(let title, let icon, let view):
+            pv.addPluginViewTab(view: view, title: title, icon: icon)
         }
         refreshStatusBar()
     }
