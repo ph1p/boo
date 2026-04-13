@@ -141,13 +141,21 @@ extension PaneView {
         // Process icon (when a non-shell process is running) — terminal tabs only
         let process = tab.state.foregroundProcess
         if tab.contentType == .terminal, !process.isEmpty, !ProcessIcon.isShell(process),
-            let iconName = ProcessIcon.icon(for: process)
+            ProcessIcon.icon(for: process) != nil
         {
             let iconColor = ProcessIcon.themeColor(for: process, theme: theme, isActive: isActive)
-            if let drawn = Self.drawTabIcon(
-                symbolName: iconName, color: iconColor,
-                x: textX, midY: midY, isActive: isActive
-            ) {
+            let iconSize: CGFloat = 12
+            let opacity: CGFloat = isActive ? 1.0 : 0.7
+            if let customImg = ProcessIcon.customImage(for: process, color: iconColor, size: iconSize) {
+                let iconRect = CGRect(x: textX, y: midY - iconSize / 2, width: iconSize, height: iconSize)
+                customImg.draw(in: iconRect, from: .zero, operation: .sourceOver, fraction: opacity)
+                textX += iconSize + 3
+            } else if let iconName = ProcessIcon.icon(for: process),
+                let drawn = Self.drawTabIcon(
+                    symbolName: iconName, color: iconColor,
+                    x: textX, midY: midY, isActive: isActive
+                )
+            {
                 drawn.draw()
                 textX += drawn.width
             }

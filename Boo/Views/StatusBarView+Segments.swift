@@ -282,10 +282,16 @@ final class ProcessSegment: StatusBarPlugin {
         var cx = x
 
         // Draw process icon if available
-        if let iconName = ProcessIcon.icon(for: process),
+        let iconSize: CGFloat = 10
+        if let customImg = ProcessIcon.customImage(for: process, color: color, size: iconSize) {
+            let imgY = (barH - iconSize) / 2
+            let imgRect = NSRect(x: cx, y: imgY, width: iconSize, height: iconSize)
+            customImg.draw(in: imgRect, from: .zero, operation: .sourceOver, fraction: 1.0)
+            cx += iconSize + 3
+        } else if let iconName = ProcessIcon.icon(for: process),
             let image = NSImage(systemSymbolName: iconName, accessibilityDescription: process)
         {
-            let config = NSImage.SymbolConfiguration(pointSize: 10, weight: .medium)
+            let config = NSImage.SymbolConfiguration(pointSize: iconSize, weight: .medium)
             let configured = image.withSymbolConfiguration(config) ?? image
             let imgSize = configured.size
             let imgY = (barH - imgSize.height) / 2
