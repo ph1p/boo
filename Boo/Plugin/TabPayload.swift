@@ -5,6 +5,9 @@ enum TabPayload {
     /// Open a terminal tab with the given working directory.
     case terminal(workingDirectory: String)
 
+    /// Open a terminal tab and run a command.
+    case terminalWithCommand(workingDirectory: String, command: String)
+
     /// Open a browser tab with the given URL.
     case browser(url: URL)
 

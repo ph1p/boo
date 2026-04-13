@@ -32,7 +32,7 @@ Boo/                  Library target (all app code)
   Terminal/           TerminalBackend (PTY lifecycle protocol)
   Models/             Workspace, Pane, SplitTree, AppSettings, Theme
   Plugin/             Core plugin framework (protocol, registry, runtime, DSL)
-  Plugins/            Built-in plugins (FileTree, Git, AIAgent, Docker, Bookmarks, etc.)
+  Plugins/            Built-in plugins (FileTree, Git, ClaudeCode, Docker, Bookmarks, Snippets, etc.)
   Views/              PaneView, StatusBarView, ToolbarView, SettingsWindow
   Services/           TerminalBridge, RemoteExplorer, BooSocketServer, AutoUpdater
 BooApp/               Executable entry point (just calls BooMain.run())

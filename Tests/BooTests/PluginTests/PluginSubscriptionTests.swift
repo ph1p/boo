@@ -209,7 +209,7 @@ final class PluginSubscriptionTests: XCTestCase {
         XCTAssertFalse(git.subscribedEvents.contains(.processChanged), "Git doesn't need process events")
         XCTAssertFalse(git.subscribedEvents.contains(.remoteDirectoryListed))
 
-        let aiAgent = registry.plugin(for: "ai-agent")!
+        let aiAgent = registry.plugin(for: "claude-code")!
         XCTAssertTrue(aiAgent.subscribedEvents.contains(.processChanged))
         XCTAssertTrue(aiAgent.subscribedEvents.contains(.cwdChanged))
         XCTAssertTrue(aiAgent.subscribedEvents.contains(.focusChanged))

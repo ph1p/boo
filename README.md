@@ -27,7 +27,7 @@ Download the latest release from [GitHub Releases](https://github.com/ph1p/boo/r
 - **File explorer** — Live-updating sidebar with file tree (Cmd+B to toggle)
 - **32 color themes** — Catppuccin (all 4), Tokyo Night, Dracula, Nord, Solarized (dark/light), Gruvbox (dark/light), One Dark/Light, Rosé Pine, Kanagawa, Everforest (dark/light), GitHub (dark/light), Ayu (dark/light), Cobalt2, Horizon Dark, Material (dark/light), Monokai, Moonlight, Night Owl, Palenight, Synthwave '84, Default (dark/light)
 - **Custom themes** — Create your own themes with a full color picker editor
-- **AI agent monitor** — Auto-detects Claude, Codex, Aider, Cursor, Copilot sessions with config/diff overview
+- **AI agent monitor** — Auto-detects Claude, Aider, Cursor, Copilot sessions with config/diff overview
 - **Remote explorer** — Auto-detects SSH sessions, shows remote file tree
 - **Git integration** — Branch name in status bar, clickable branch switcher with local + remote branches
 - **Running process** — Status bar shows the foreground process (zsh, node, vim, etc.)
@@ -118,7 +118,7 @@ Boo/
   Models/           Workspace, Pane (+ TabState), SplitTree, AppSettings, Theme
   Plugin/           Core plugin framework (protocol, registry, runtime, DSL, watcher)
     ViewDSL/        DSL parser, renderer, elements, action handler
-  Plugins/          One directory per plugin (FileTree/, RemoteExplorer/, Git/, AIAgent/, Docker/, Bookmarks/, SystemInfo/, Debug/)
+  Plugins/          One directory per plugin (FileTree/, RemoteExplorer/, Git/, ClaudeCode/, Docker/, Bookmarks/, Snippets/, SystemInfo/, Debug/)
   Views/            App-level views (PaneView, StatusBarView, ToolbarView, SettingsWindow, UpdateWindow, etc.)
   Services/         Shared infrastructure (TerminalBridge, RemoteExplorer, BooSocketServer, AutoUpdater, etc.)
 CGhostty/           C module wrapping ghostty.h
@@ -170,7 +170,7 @@ Three layers of state:
 │  ┌────────▼───────────┐              v                              │
 │  │ GhosttyRuntime     │   ┌──────────────────────────────────┐      │
 │  │ GhosttyView        │   │ Plugins                          │      │
-│  │ (Metal surface)    │   │ FileTree  Git      AIAgent       │      │
+│  │ (Metal surface)    │   │ FileTree  Git      ClaudeCode    │      │
 │  │                    │   │ Remote    Docker   Bookmarks     │      │
 │  │ OSC 7 (CWD)       │   │ System    Debug    [External]    │      │
 │  │ OSC 2 (title)      │   └──────────────────────────────────┘      │
@@ -348,7 +348,8 @@ Boo has an extensible plugin system. Plugins provide sidebar panels, status bar 
 | **Files (Local)**  | `Plugins/FileTree/`       | Local file explorer with FSEvents watching (visible in local sessions)   |
 | **Files (Remote)** | `Plugins/RemoteExplorer/` | Remote file explorer for SSH/MOSH sessions                               |
 | **Git**            | `Plugins/Git/`            | Branch, status, staged/unstaged/untracked files, stash, ahead/behind     |
-| **AI Agent**       | `Plugins/AIAgent/`        | Monitors AI coding agents (Claude, Codex, Aider, Cursor, Copilot)        |
+| **Claude Code**    | `Plugins/ClaudeCode/`     | Claude Code AI assistant with sessions, config, hooks, skills, diffs     |
+| **Snippets**       | `Plugins/Snippets/`       | Saved code snippets with syntax highlighting and quick insertion         |
 | **Docker**         | `Plugins/Docker/`         | Running container list with exec, logs, start/stop/restart actions       |
 | **Bookmarks**      | `Plugins/Bookmarks/`      | Saved directory bookmarks with per-host namespacing                      |
 | **System**         | `Plugins/SystemInfo/`     | CPU load, memory, disk usage (example plugin demonstrating all patterns) |

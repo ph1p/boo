@@ -118,6 +118,13 @@ extension MainWindowController {
         case .terminal(let workingDirectory):
             pv.addNewTab(contentType: .terminal, workingDirectory: workingDirectory)
 
+        case .terminalWithCommand(let workingDirectory, let command):
+            pv.addNewTab(contentType: .terminal, workingDirectory: workingDirectory)
+            // Send command after tab is ready
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
+                self?.sendRawToActivePane(command + "\n")
+            }
+
         case .browser(let url):
             pv.addNewTab(contentType: .browser, url: url)
 

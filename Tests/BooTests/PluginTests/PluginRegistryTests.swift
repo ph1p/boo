@@ -32,15 +32,23 @@ final class PluginRegistryTests: XCTestCase {
         let registry = PluginRegistry()
         registry.registerBuiltins()
 
-        XCTAssertEqual(registry.plugins.count, 9)
-        XCTAssertNotNil(registry.plugin(for: "file-tree-local"))
-        XCTAssertNotNil(registry.plugin(for: "file-tree-remote"))
-        XCTAssertNotNil(registry.plugin(for: "git-panel"))
-        XCTAssertNotNil(registry.plugin(for: "ai-agent"))
-        XCTAssertNotNil(registry.plugin(for: "docker"))
-        XCTAssertNotNil(registry.plugin(for: "bookmarks"))
-        XCTAssertNotNil(registry.plugin(for: "system-info"))
-        XCTAssertNotNil(registry.plugin(for: "debug"))
+        // Verify all expected plugins are registered (don't hardcode count - it changes as plugins are added/removed)
+        let expectedPlugins = [
+            "file-tree-local",
+            "file-tree-remote",
+            "git-panel",
+            "claude-code",
+            "docker",
+            "bookmarks",
+            "snippets",
+            "system-info",
+            "debug"
+        ]
+        XCTAssertEqual(
+            registry.plugins.count, expectedPlugins.count, "Plugin count mismatch - update expectedPlugins array")
+        for pluginID in expectedPlugins {
+            XCTAssertNotNil(registry.plugin(for: pluginID), "Missing plugin: \(pluginID)")
+        }
     }
 
     func testUnregister() {

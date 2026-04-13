@@ -133,10 +133,6 @@ final class AIProcessDetectionTests: XCTestCase {
         XCTAssertEqual(TerminalBridge.extractProcessName(from: "✳ Claude Code"), "claude")
     }
 
-    func testCodexTitleDetected() {
-        XCTAssertEqual(TerminalBridge.extractProcessName(from: "Codex CLI"), "codex")
-    }
-
     func testRemoteUserHostDetected() {
         XCTAssertEqual(
             TerminalBridge.extractProcessName(from: "user@remote-server: ~/dir"), "user@remote-server")
@@ -305,7 +301,8 @@ final class AIProcessDetectionTests: XCTestCase {
         let myPid = getpid()
         bridge.monitor.track(paneID: paneID, shellPID: getppid())
 
-        for name in ["claude", "codex", "opencode"] {
+        // Test with Claude (main AI plugin) and generic AI processes
+        for name in ["claude", "aider", "goose"] {
             BooSocketServer.shared.processes[myPid] = BooSocketServer.ProcessStatus(
                 pid: myPid, name: name, category: "ai", registeredAt: Date(), metadata: [:])
             bridge.reevaluateSocketProcess()

@@ -14,6 +14,10 @@ struct TabState {
     var title: String
     var foregroundProcess: String = ""
 
+    // AI Agent State
+    /// Claude Code session ID currently running in this tab (detected via file watching)
+    var agentSessionID: String?
+
     // Plugin UI State
     var expandedPluginIDs: Set<String> = []
     /// Section IDs the user has *explicitly* collapsed. Used to suppress auto-expand on first show.
@@ -170,6 +174,11 @@ final class Pane {
     func updateShellPID(at index: Int, _ pid: pid_t) {
         guard index >= 0, index < tabs.count else { return }
         tabs[index].shellPID = pid
+    }
+
+    func updateAgentSessionID(_ sessionID: String?) {
+        guard activeTabIndex >= 0, activeTabIndex < tabs.count else { return }
+        tabs[activeTabIndex].state.agentSessionID = sessionID
     }
 
     func updatePluginState(
