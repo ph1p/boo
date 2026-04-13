@@ -66,19 +66,33 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
     let statusBar = StatusBarView(frame: .zero)
     var statusBarHeightConstraint: NSLayoutConstraint?
     var splitContainer: SplitContainerView!
-    var sidebarContainer: NSView!
     var mainSplitView: NSSplitView!
 
-    var sidebarVisible = !AppSettings.shared.sidebarDefaultHidden
-    /// True when the user explicitly hid the sidebar (Cmd+B or default-hidden setting).
-    /// Prevents the plugin cycle from auto-showing the sidebar on tab/pane switch.
-    var sidebarUserHidden = AppSettings.shared.sidebarDefaultHidden
-    var isRemoteSidebar: Bool {
-        get { coordinator?.isRemote ?? false }
-        set {  // derived from bridge state, no-op setter for migration
-        }
+    // MARK: - Sidebar Controller
+
+    /// Dedicated controller for sidebar panel management.
+    /// Handles plugin tabs, section heights, scroll offsets, and visibility.
+    var sidebarController: SidebarController!
+
+    var sidebarContainer: NSView! {
+        get { sidebarController?.sidebarContainer }
+        set { sidebarController?.sidebarContainer = newValue }
     }
-    var currentSidebarPosition: SidebarPosition = .right
+
+    var sidebarVisible: Bool {
+        get { sidebarController?.isVisible ?? !AppSettings.shared.sidebarDefaultHidden }
+        set { sidebarController?.isVisible = newValue }
+    }
+
+    var sidebarUserHidden: Bool {
+        get { sidebarController?.isUserHidden ?? AppSettings.shared.sidebarDefaultHidden }
+        set { sidebarController?.isUserHidden = newValue }
+    }
+    var isRemoteSidebar: Bool { coordinator?.isRemote ?? false }
+    var currentSidebarPosition: SidebarPosition {
+        get { sidebarController?.position ?? .right }
+        set { sidebarController?.position = newValue }
+    }
     var currentWorkspaceBarPosition: WorkspaceBarPosition = .left
     var currentTabOverflowMode: TabOverflowMode = .scroll
     var sideWorkspaceBar: WorkspaceBarView?
@@ -135,12 +149,18 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
         get { coordinator?.sidebarSectionOrder ?? [:] }
         set { coordinator?.sidebarSectionOrder = newValue }
     }
-    /// Cached detail views per plugin, reused when context and section generations haven't changed.
-    var cachedDetailViews: [String: (context: TerminalContext, generations: [UInt64], view: AnyView)] = [:]
-    /// Generation counter per plugin — incremented only when the view is recreated.
-    var pluginViewGeneration: [String: UInt64] = [:]
-    /// Monotonic counter for assigning generations.
-    var viewGenerationCounter: UInt64 = 0
+    var cachedDetailViews: [String: (context: TerminalContext, generations: [UInt64], view: AnyView)] {
+        get { sidebarController?.cachedDetailViews ?? [:] }
+        set { sidebarController?.cachedDetailViews = newValue }
+    }
+    var pluginViewGeneration: [String: UInt64] {
+        get { sidebarController?.pluginViewGeneration ?? [:] }
+        set { sidebarController?.pluginViewGeneration = newValue }
+    }
+    var viewGenerationCounter: UInt64 {
+        get { sidebarController?.viewGenerationCounter ?? 0 }
+        set { sidebarController?.viewGenerationCounter = newValue }
+    }
     /// Set of plugin IDs currently expanded (not collapsed) in the sidebar.
     var expandedPluginIDs: Set<String> {
         get { coordinator.expandedPluginIDs }
@@ -155,14 +175,22 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
         get { coordinator.previousFocusedTabID }
         set { coordinator.previousFocusedTabID = newValue }
     }
-    /// One panel view per plugin tab — keyed by plugin ID.
-    var pluginPanelViews: [String: NSView] = [:]
-    /// Currently active plugin tab ID.
-    var activePluginTabID: String?
-    /// Tab bar at the top (or bottom) of the sidebar for switching plugin tabs.
-    var sidebarTabBarView: SidebarTabBarView?
-    /// Active constraints positioning the tab bar — swapped when tab bar position changes.
-    var sidebarTabBarPositionConstraints: [NSLayoutConstraint] = []
+    var pluginPanelViews: [String: NSView] {
+        get { sidebarController?.pluginPanelViews ?? [:] }
+        set { sidebarController?.pluginPanelViews = newValue }
+    }
+    var activePluginTabID: String? {
+        get { sidebarController?.activePluginTabID }
+        set { sidebarController?.activePluginTabID = newValue }
+    }
+    var sidebarTabBarView: SidebarTabBarView? {
+        get { sidebarController?.sidebarTabBarView }
+        set { sidebarController?.sidebarTabBarView = newValue }
+    }
+    var sidebarTabBarPositionConstraints: [NSLayoutConstraint] {
+        get { sidebarController?.sidebarTabBarPositionConstraints ?? [] }
+        set { sidebarController?.sidebarTabBarPositionConstraints = newValue }
+    }
 
     let tabDragCoordinator = TabDragCoordinator()
 
@@ -191,6 +219,15 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
     func notifyTerminalClosed(for terminalID: UUID) {
         pluginRegistry.notifyTerminalClosed(terminalID: terminalID)
         pendingImageSends.removeValue(forKey: terminalID)
+        // Clean up stale scroll offsets for the closed terminal.
+        // Coordinator is authoritative; panel copy is cleaned to stay in sync.
+        let prefix = "\(terminalID.uuidString):"
+        coordinator?.sidebarScrollOffsets = coordinator?.sidebarScrollOffsets.filter {
+            !$0.key.hasPrefix(prefix)
+        } ?? [:]
+        if let panel = activePluginTabID.flatMap({ pluginPanelViews[$0] as? SidebarPanelView }) {
+            panel.cleanupScrollOffsets(for: terminalID)
+        }
     }
 
     func notifyTerminalClosed(for tabs: [Pane.Tab]) {
@@ -220,13 +257,16 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
 
         super.init(window: window)
 
+        // Initialize coordinator and sidebar controller before UI setup
+        let theBridge = TerminalBridge(paneID: UUID(), workspaceID: UUID(), workingDirectory: "")
+        let theRegistry = PluginRegistry()
+        coordinator = WindowStateCoordinator(bridge: theBridge, pluginRegistry: theRegistry)
+        sidebarController = SidebarController(windowController: self)
+
         setupUI()
         statusBar.sidebarVisible = sidebarVisible
         AppStore.shared.sidebarVisible = sidebarVisible
         setupMenuItems()
-        let theBridge = TerminalBridge(paneID: UUID(), workspaceID: UUID(), workingDirectory: "")
-        let theRegistry = PluginRegistry()
-        coordinator = WindowStateCoordinator(bridge: theBridge, pluginRegistry: theRegistry)
         pluginRegistry.onRequestCycleRerun = { [weak self] in
             guard let self = self else { return }
             // A plugin's internal state changed — clear view cache and force sidebar rebuild.
@@ -242,15 +282,13 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
             gitPlugin.onBranchChanged = { [weak self] branch, repoRoot in
                 guard let self else { return }
                 let cwd = self.statusBar.currentDirectory
-                NSLog(
-                    "[Git] onBranchChanged: branch=\(branch ?? "nil") repoRoot=\(repoRoot ?? "nil") statusBar.cwd=\(cwd)"
-                )
+                booLog(.debug, .git, "onBranchChanged: branch=\(branch ?? "nil") repoRoot=\(repoRoot ?? "nil") statusBar.cwd=\(cwd)")
                 // Only update the status bar branch if the focused terminal is inside this repo.
                 // Ignore watcher events from other terminals' repos.
                 guard let root = repoRoot,
                     cwd == root || cwd.hasPrefix(root + "/")
                 else {
-                    NSLog("[Git] onBranchChanged: ignored (cwd not in repo)")
+                    booLog(.debug, .git, "onBranchChanged: ignored (cwd not in repo)")
                     return
                 }
                 self.statusBar.gitBranch = branch
@@ -928,6 +966,10 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
                 case .remoteDirectoryListed(let path, let entries):
                     self.pluginRegistry.notifyRemoteDirectoryListed(path: path, entries: entries)
                     self.schedulePluginCycle(reason: .cwdChanged)
+
+                case .commandStarted, .commandEnded:
+                    // Emitted via paneView delegate before bridge events fire; no further action needed.
+                    break
 
                 }
             }

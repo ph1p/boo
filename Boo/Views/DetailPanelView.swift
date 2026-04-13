@@ -79,6 +79,10 @@ class SidebarPanelView: NSView {
     private var intrinsicSizeObservations: [String: NSKeyValueObservation] = [:]
     /// Reentrancy guard for layout.
     private var isLayingOut = false
+    /// Pending async layout work item — cancelled and replaced on each schedule call.
+    /// Coalesces rapid layout triggers (KVO, window resize, section toggle) into one pass.
+    private var pendingLayout: DispatchWorkItem?
+    private var lastLayoutBounds: CGRect = .zero
 
     override var isFlipped: Bool { true }
 
@@ -128,6 +132,12 @@ class SidebarPanelView: NSView {
     /// Lookup a saved scroll offset (for testing).
     func scrollOffset(for terminalID: UUID, sectionID: String) -> NSPoint? {
         savedScrollOffsets["\(terminalID.uuidString):\(sectionID)"]
+    }
+
+    /// Remove all saved scroll offsets for a closed terminal, preventing unbounded growth.
+    func cleanupScrollOffsets(for terminalID: UUID) {
+        let prefix = "\(terminalID.uuidString):"
+        savedScrollOffsets = savedScrollOffsets.filter { !$0.key.hasPrefix(prefix) }
     }
 
     /// Save the currently visible sidebar UI state into the persisted dictionaries.
@@ -371,7 +381,9 @@ class SidebarPanelView: NSView {
                         self.savedSectionHeights[sectionID] = targetH
                     }
                 }
-                self.layoutAllSections()
+                // Use scheduleLayout to coalesce with any pending layout from layout()
+                // and avoid recursive calls when multiple sections update simultaneously.
+                self.scheduleLayout()
             }
         }
         intrinsicSizeObservations[sectionID] = obs
@@ -448,10 +460,24 @@ class SidebarPanelView: NSView {
 
     // MARK: - Layout
 
+    /// Schedule layoutAllSections on the next main-queue tick, coalescing rapid calls.
+    /// This prevents KVO-induced re-entrancy and visual jumping from multiple simultaneous
+    /// triggers (window resize, intrinsic size change, section toggle) all running in one tick.
+    private func scheduleLayout() {
+        pendingLayout?.cancel()
+        let item = DispatchWorkItem { [weak self] in
+            self?.pendingLayout = nil
+            self?.layoutAllSections()
+        }
+        pendingLayout = item
+        DispatchQueue.main.async(execute: item)
+    }
+
     override func layout() {
         super.layout()
-        if !isLayingOut {
-            layoutAllSections()
+        if !isLayingOut, bounds != lastLayoutBounds {
+            lastLayoutBounds = bounds
+            scheduleLayout()
         }
     }
 
@@ -550,10 +576,21 @@ class SidebarPanelView: NSView {
         savedSectionHeights[sectionStates[aboveIndex].id] = newAbove
         savedSectionHeights[sectionStates[belowIndex].id] = newBelow
 
+        // Cancel any pending scheduled layout — we're about to layout directly.
+        pendingLayout?.cancel()
+        pendingLayout = nil
         isDragging = true
         layoutAllSections()
         isDragging = false
     }
+
+    /// Called when drag ends — triggers persistence of heights to Settings.
+    func handleDragEnded() {
+        onDragEnded?()
+    }
+
+    /// Callback when drag ends. Used to persist heights to AppSettings.
+    var onDragEnded: (() -> Void)?
 
     /// Ensure expanded content heights fit available space.
     /// Shrinks when content overflows, and stretches growable sections to fill unused space.

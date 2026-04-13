@@ -24,6 +24,23 @@ final class WindowStateCoordinator {
     init(bridge: TerminalBridge, pluginRegistry: PluginRegistry) {
         self.bridge = bridge
         self.pluginRegistry = pluginRegistry
+
+        // Restore persisted sidebar state from Settings
+        loadSidebarStateFromSettings()
+    }
+
+    // MARK: - Sidebar State Persistence
+
+    /// Load sidebar heights and order from AppSettings on startup.
+    func loadSidebarStateFromSettings() {
+        sidebarSectionHeights = AppSettings.shared.sidebarSectionHeights
+        sidebarSectionOrder = AppSettings.shared.sidebarSectionOrder
+    }
+
+    /// Save current sidebar heights and order to AppSettings.
+    /// Call on resize end, panel switch, and app quit.
+    func saveSidebarStateToSettings() {
+        AppSettings.shared.saveSidebarState(heights: sidebarSectionHeights, order: sidebarSectionOrder)
     }
 
     // MARK: - Tab State Management
