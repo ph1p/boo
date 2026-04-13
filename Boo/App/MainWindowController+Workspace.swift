@@ -243,14 +243,14 @@ extension MainWindowController {
         let cwd = workspace.pane(for: workspace.activePaneID)?.activeTab?.workingDirectory ?? workspace.folderPath
         bridge.switchContext(paneID: workspace.activePaneID, workspaceID: workspace.id, workingDirectory: cwd)
 
+        if AppSettings.shared.sidebarPerWorkspaceState {
+            sidebarController.restoreState(workspace.sidebarState)
+        }
+
         refreshToolbar()
         // isRemoteSidebar/activeRemoteSession are now derived from bridge state,
         // which was just cleared by switchContext above.
         runPluginCycle(reason: .workspaceSwitched)
-
-        if AppSettings.shared.sidebarPerWorkspaceState {
-            sidebarController.restoreState(workspace.sidebarState)
-        }
 
         // Rebuild split container with the workspace's tree
         splitContainer.update(tree: workspace.splitTree)
