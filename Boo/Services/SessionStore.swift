@@ -34,6 +34,9 @@ struct SessionWorkspace: Codable {
     let splitTree: SplitTree
     let panes: [SessionPane]
     let activePaneID: UUID
+    // Per-workspace sidebar state — optional for backwards compatibility
+    let sidebarIsVisible: Bool?
+    let sidebarWidth: Double?
 }
 
 struct SessionSnapshot: Codable {
@@ -102,7 +105,9 @@ enum SessionStore {
                 isPinned: ws.isPinned,
                 splitTree: ws.splitTree,
                 panes: panes,
-                activePaneID: ws.activePaneID
+                activePaneID: ws.activePaneID,
+                sidebarIsVisible: ws.sidebarState.isVisible,
+                sidebarWidth: ws.sidebarState.width.map { Double($0) }
             )
         }
 
@@ -153,6 +158,10 @@ enum SessionStore {
             if let r = sw.customColorRed, let g = sw.customColorGreen, let b = sw.customColorBlue {
                 ws.customColor = NSColor(srgbRed: r, green: g, blue: b, alpha: 1)
             }
+            ws.sidebarState = SidebarWorkspaceState(
+                isVisible: sw.sidebarIsVisible,
+                width: sw.sidebarWidth.map { CGFloat($0) }
+            )
 
             // Build a lookup so we can match panes to split-tree leaf IDs
             let paneByID = Dictionary(uniqueKeysWithValues: sw.panes.map { ($0.id, $0) })

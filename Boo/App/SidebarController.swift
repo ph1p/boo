@@ -184,6 +184,29 @@ final class SidebarController {
 
     // MARK: - Visibility
 
+    /// Capture current sidebar visibility and width into a SidebarWorkspaceState.
+    func captureState() -> SidebarWorkspaceState {
+        let width: CGFloat? = {
+            guard let wc = windowController, isVisible else { return nil }
+            let idx = position == .left ? 0 : 1
+            guard idx < wc.mainSplitView.subviews.count else { return nil }
+            return wc.mainSplitView.subviews[idx].frame.width
+        }()
+        return SidebarWorkspaceState(isVisible: isVisible, width: width)
+    }
+
+    /// Restore sidebar visibility and width from a SidebarWorkspaceState.
+    func restoreState(_ state: SidebarWorkspaceState) {
+        if let vis = state.isVisible {
+            guard vis != isVisible else { return }
+            toggle(userInitiated: false)
+        }
+        if let w = state.width, isVisible, let wc = windowController {
+            let pos: CGFloat = position == .left ? w : wc.mainSplitView.bounds.width - w
+            wc.mainSplitView.setPosition(pos, ofDividerAt: 0)
+        }
+    }
+
     /// Toggle sidebar visibility.
     /// - Parameter userInitiated: Whether the user explicitly toggled (prevents auto-show).
     func toggle(userInitiated: Bool) {
