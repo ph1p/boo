@@ -125,6 +125,11 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
     /// `failedPID` is the PID that last failed — only retry with a different PID.
     var pendingImageSends: [UUID: (path: String, size: ghostty_surface_size_s?, failedPID: pid_t)] = [:]
 
+    /// Registry of factories for named custom tab types (registerMultiContentTab API).
+    var multiContentTabFactories: [String: (PluginTabContext) -> AnyView] = [:]
+    /// Maps tabID → "typeID:key" for deduplication in openMultiContentTab.
+    var registeredTabKeys: [UUID: String] = [:]
+
     /// Focus debounce — prevents sidebar rebuild from causing a focus feedback loop.
     var lastFocusedPaneID: UUID?
     /// Debounce timer for saving the session after split-pane divider drags.
@@ -300,6 +305,7 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
         pluginActions.sendToTerminal = { [weak self] in self?.sendRawToActivePane($0) }
         pluginActions.openDirectoryInNewTab = { [weak self] in self?.openDirectoryInNewTab($0) }
         pluginActions.openDirectoryInNewPane = { [weak self] in self?.openDirectoryInNewPane($0) }
+        pluginActions.openFileInNewPane = { [weak self] in self?.openFileInNewPane($0) }
         pluginActions.pastePathToActivePane = { [weak self] in self?.pastePathToActivePane($0) }
         pluginActions.isTerminalBusy = { [weak self] in
             guard let self else { return false }
@@ -358,6 +364,12 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
                 }
                 send(tabID: tabID, to: shellPID)
             }
+        }
+        pluginActions.registerMultiContentTab = { [weak self] typeID, factory in
+            self?.multiContentTabFactories[typeID] = factory
+        }
+        pluginActions.openMultiContentTab = { [weak self] typeID, ctx in
+            self?.handleOpenMultiContentTab(typeID: typeID, context: ctx)
         }
         pluginRegistry.actions = pluginActions
         bridge.monitor.onShellPIDUpdated = { [weak self] paneID, shellPID, tabID in
@@ -503,6 +515,15 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
                 let action = info["action"] as? String
             else { return }
             self.handleGhosttyAction(action, userInfo: info)
+        }
+
+        NotificationCenter.default.addObserver(
+            forName: .ghosttyOpenURL, object: nil, queue: .main
+        ) { [weak self] notification in
+            guard let self = self,
+                  let url = notification.userInfo?["url"] as? URL
+            else { return }
+            self.handleOpenTab(.browser(url: url))
         }
     }
 
@@ -1044,7 +1065,7 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
             workspace.pane(for: workspace.activePaneID) != nil,
             let pv = paneViews[workspace.activePaneID]
         else { return }
-        pv.addNewTab(contentType: .browser, url: ContentType.blankURL)
+        pv.addNewTab(contentType: .browser, url: ContentType.newTabURL)
         saveSession()
     }
 

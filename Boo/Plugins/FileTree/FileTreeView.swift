@@ -6,8 +6,16 @@ import UniformTypeIdentifiers
 struct FileTreeActions {
     var onFileClicked: ((String) -> Void)?
     var onPastePath: ((String) -> Void)?
+    /// Open a directory as a terminal tab
     var onOpenInTab: ((String) -> Void)?
+    /// Open a directory as a terminal pane (split)
     var onOpenInPane: ((String) -> Void)?
+    /// Open a file in a new editor/viewer tab
+    var onOpenFileInTab: ((String) -> Void)?
+    /// Open a file in a new editor/viewer pane (split)
+    var onOpenFileInPane: ((String) -> Void)?
+    /// Open an HTML file directly in a browser tab
+    var onOpenFileInBrowser: ((String) -> Void)?
     var onCopyPath: ((String) -> Void)?
     var onRevealInFinder: ((String) -> Void)?
     var onRunCommand: ((String) -> Void)?
@@ -16,6 +24,8 @@ struct FileTreeActions {
     var onRename: ((_ oldPath: String, _ newName: String) -> Void)?
     var onMove: ((_ sourcePath: String, _ destinationDir: String) -> Void)?
     var onCreateFolder: ((_ parentPath: String) -> Void)?
+    var onCreateFile: ((_ parentPath: String) -> Void)?
+    var onDuplicate: ((String) -> Void)?
     var onCopyImage: ((String) -> Void)?
     var onReferenceInAI: ((String) -> Void)?
     var isAIAgentRunning: Bool = false
@@ -339,46 +349,85 @@ struct FileTreeRowView: View {
 
     // MARK: Context Menu
 
+    private enum FileOpenCapability { case image, markdown, editor, browser, externalOnly }
+
+    private func resolveCapability() -> FileOpenCapability {
+        guard !node.isDirectory else { return .externalOnly }
+        let ext = (node.name as NSString).pathExtension.lowercased()
+        let filename = node.name.lowercased()
+        if ContentType.imageExtensions.contains(ext)    { return .image }
+        if ContentType.markdownExtensions.contains(ext) { return .markdown }
+        if ContentType.htmlExtensions.contains(ext)     { return .browser }
+
+        if ContentType.isEditorFilePattern(filename: filename) { return .editor }
+        return .externalOnly
+    }
+
     @ViewBuilder
     private var contextMenuContent: some View {
-        // AI
+        let cap = resolveCapability()
+        contextMenuOpen(cap: cap)
+        contextMenuTerminal(cap: cap)
+        contextMenuFinderClipboard
+        contextMenuEdit
+    }
+
+    @ViewBuilder
+    private func contextMenuOpen(cap: FileOpenCapability) -> some View {
+        let htmlOpenInBrowser = AppSettings.shared.pluginBool(
+            "file-tree-local", "htmlOpenInBrowser", default: false)
+
         if actions.isAIAgentRunning {
             Button("Reference in AI (@)") { actions.onReferenceInAI?(node.path) }
             Divider()
         }
 
-        // Terminal
         if node.isDirectory {
             if !actions.isAIAgentRunning {
                 Button("cd into") { actions.onNavigate?(node.path) }
             }
+            Button("Open Terminal Tab")  { actions.onOpenInTab?(node.path) }
+            Button("Open Terminal Pane") { actions.onOpenInPane?(node.path) }
         } else {
-            Button("Open in Editor") { actions.onFileClicked?(node.path) }
-            let ext = (node.name as NSString).pathExtension
-            let isImage = UTType(filenameExtension: ext)?.conforms(to: .image) ?? false
-            if isImage {
+            Button("Open") { actions.onFileClicked?(node.path) }
+            if cap != .externalOnly {
+                Button("Open in New Tab")  { actions.onOpenFileInTab?(node.path) }
+                Button("Open in New Pane") { actions.onOpenFileInPane?(node.path) }
+            }
+            Button("Open with Default App") { NSWorkspace.shared.open(URL(fileURLWithPath: node.path)) }
+            if cap == .browser && !htmlOpenInBrowser {
+                Button("Open in Browser") { actions.onOpenFileInBrowser?(node.path) }
+            }
+            if cap == .image {
                 Button("Copy Image") { actions.onCopyImage?(node.path) }
-            } else {
-                Button("cat") { actions.onRunCommand?("cat \(shellEscape(node.path))\r") }
             }
         }
-        Button("Paste Path to Terminal") { actions.onPastePath?(node.path) }
-        Divider()
+    }
 
-        // OS
-        if node.isDirectory {
-            Button("Open in New Tab") { actions.onOpenInTab?(node.path) }
-            Button("Open in New Pane") { actions.onOpenInPane?(node.path) }
-        } else {
-            Button("Open with Default App") { NSWorkspace.shared.open(URL(fileURLWithPath: node.path)) }
+    @ViewBuilder
+    private func contextMenuTerminal(cap: FileOpenCapability) -> some View {
+        Divider()
+        Button("Paste Path to Terminal") { actions.onPastePath?(node.path) }
+        if !node.isDirectory && cap != .image {
+            Button("cat in Terminal") { actions.onRunCommand?("cat \(shellEscape(node.path))\r") }
         }
+    }
+
+    @ViewBuilder
+    private var contextMenuFinderClipboard: some View {
+        Divider()
         Button("Reveal in Finder") { actions.onRevealInFinder?(node.path) }
         Button("Copy Path") { actions.onCopyPath?(node.path) }
-        Divider()
+    }
 
-        // Edit
+    @ViewBuilder
+    private var contextMenuEdit: some View {
+        Divider()
         if node.isDirectory {
+            Button("New File")   { actions.onCreateFile?(node.path) }
             Button("New Folder") { actions.onCreateFolder?(node.path) }
+        } else {
+            Button("Duplicate") { actions.onDuplicate?(node.path) }
         }
         Button("Rename") { renameState.beginRename(path: node.path, currentName: node.name) }
         Button("Move to Trash", role: .destructive) { showTrashConfirm = true }

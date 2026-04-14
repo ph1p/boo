@@ -1,4 +1,5 @@
 import Cocoa
+import SwiftUI
 @preconcurrency import UserNotifications
 
 /// Unified action dispatch for plugins, replacing both PluginHostActions and DSLActionHandler.
@@ -8,6 +9,8 @@ final class PluginActions {
     var sendToTerminal: ((String) -> Void)?
     var openDirectoryInNewTab: ((String) -> Void)?
     var openDirectoryInNewPane: ((String) -> Void)?
+    /// Open a file content tab (editor, viewer, etc.) in a new split pane.
+    var openFileInNewPane: ((String) -> Void)?
     var pastePathToActivePane: ((String) -> Void)?
     /// Display an image using the Kitty Graphics Protocol.
     /// `newTab`: open a new tab first; false = inject into the focused terminal's PTY directly.
@@ -17,6 +20,16 @@ final class PluginActions {
 
     /// Open a new tab with the specified payload (terminal, browser, or file).
     var openTab: ((TabPayload) -> Void)?
+
+    /// Register a factory for a named custom tab type.
+    /// The factory is called each time a new tab of this type needs to be created.
+    /// Registering the same typeID twice replaces the previous factory.
+    var registerMultiContentTab: ((String, @escaping (PluginTabContext) -> AnyView) -> Void)?
+
+    /// Open (or focus an existing) custom tab by type.
+    /// If a tab with the same typeID + context.key already exists in the active workspace,
+    /// it is focused instead of creating a duplicate.
+    var openMultiContentTab: ((String, PluginTabContext) -> Void)?
 
     /// Set the AI agent session ID for the active tab.
     var setAgentSessionID: ((String?) -> Void)?

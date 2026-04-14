@@ -1,12 +1,10 @@
 import Cocoa
 
 /// ContentViewProtocol implementation for image viewer tabs.
-/// Placeholder implementation for Phase 3.
 final class ImageViewerContentView: NSView, ContentViewProtocol {
     let contentType: ContentType = .imageViewer
 
     private var imageView: NSImageView?
-    private var scrollView: NSScrollView?
     private var filePath: String?
     private var currentTitle: String = "Image"
     private var zoom: CGFloat = 1.0
@@ -35,28 +33,11 @@ final class ImageViewerContentView: NSView, ContentViewProtocol {
     }
 
     private func setupImageView() {
-        let sv = NSScrollView(frame: bounds)
-        sv.hasVerticalScroller = true
-        sv.hasHorizontalScroller = true
-        sv.autohidesScrollers = true
-        sv.backgroundColor = .black
-        sv.translatesAutoresizingMaskIntoConstraints = false
-
-        let iv = NSImageView(frame: sv.contentView.bounds)
+        let iv = NSImageView(frame: bounds)
         iv.imageScaling = .scaleProportionallyUpOrDown
         iv.imageAlignment = .alignCenter
-
-        sv.documentView = iv
-        addSubview(sv)
-
-        NSLayoutConstraint.activate([
-            sv.topAnchor.constraint(equalTo: topAnchor),
-            sv.leadingAnchor.constraint(equalTo: leadingAnchor),
-            sv.trailingAnchor.constraint(equalTo: trailingAnchor),
-            sv.bottomAnchor.constraint(equalTo: bottomAnchor)
-        ])
-
-        scrollView = sv
+        iv.autoresizingMask = [.width, .height]
+        addSubview(iv)
         imageView = iv
 
         if let path = filePath {
@@ -76,15 +57,12 @@ final class ImageViewerContentView: NSView, ContentViewProtocol {
         onFocused?()
     }
 
-    func deactivate() {
-        // Image view stays alive
-    }
+    func deactivate() {}
 
     func cleanup() {
         imageView?.image = nil
+        imageView?.removeFromSuperview()
         imageView = nil
-        scrollView?.removeFromSuperview()
-        scrollView = nil
     }
 
     func saveState() -> ContentState {

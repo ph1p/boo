@@ -200,8 +200,25 @@ extension MainWindowController: PaneViewDelegate {
             let pv = paneViews[paneID]
         else { return }
 
+        let tab = pane.tabs[index]
+
+        // Non-terminal tabs (browser, editor, image viewer, etc.) close immediately —
+        // no "end terminal session" confirmation needed.
+        guard tab.contentType == .terminal else {
+            if pane.tabs.count == 1 {
+                // Last tab in pane — close the whole pane (same as terminal path).
+                workspace.activePaneID = paneID
+                smartCloseAction(nil)
+            } else {
+                pv.closeTab(at: index)
+                refreshStatusBar()
+                saveSession()
+            }
+            return
+        }
+
         guard let window = window else { return }
-        let tabID = pane.tabs[index].id
+        let tabID = tab.id
         let isLastTab = pane.tabs.count == 1
         let alert = NSAlert()
         alert.messageText = isLastTab ? "Close this pane?" : "Close this tab?"
