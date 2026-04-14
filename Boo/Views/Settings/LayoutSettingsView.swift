@@ -2,14 +2,16 @@ import SwiftUI
 
 // MARK: - Layout
 
+enum LayoutSettingsBindings {
+    static func binding<Value>(_ keyPath: ReferenceWritableKeyPath<AppSettings, Value>) -> Binding<Value> {
+        Binding(
+            get: { AppSettings.shared[keyPath: keyPath] },
+            set: { AppSettings.shared[keyPath: keyPath] = $0 }
+        )
+    }
+}
+
 struct LayoutSettingsView: View {
-    @State private var sidebarPosition = AppSettings.shared.sidebarPosition
-    @State private var sidebarDefaultHidden = AppSettings.shared.sidebarDefaultHidden
-    @State private var sidebarTabBarPosition = AppSettings.shared.sidebarTabBarPosition
-    @State private var sidebarGlobalState = AppSettings.shared.sidebarGlobalState
-    @State private var sidebarPerWorkspaceState = AppSettings.shared.sidebarPerWorkspaceState
-    @State private var workspaceBarPosition = AppSettings.shared.workspaceBarPosition
-    @State private var tabOverflowMode = AppSettings.shared.tabOverflowMode
     @ObservedObject private var observer = SettingsObserver(topics: [.theme, .layout])
 
     var body: some View {
@@ -18,54 +20,55 @@ struct LayoutSettingsView: View {
 
         SettingsPage(title: "Layout") {
             Section(title: "Sidebar") {
-                Picker("Position", selection: $sidebarPosition) {
+                Picker("Position", selection: LayoutSettingsBindings.binding(\.sidebarPosition)) {
                     ForEach(SidebarPosition.allCases, id: \.self) { Text($0.label).tag($0) }
                 }
                 .pickerStyle(.segmented)
-                .onChange(of: sidebarPosition) { v in AppSettings.shared.sidebarPosition = v }
 
-                Picker("Tab Bar", selection: $sidebarTabBarPosition) {
+                Picker("Tab Bar", selection: LayoutSettingsBindings.binding(\.sidebarTabBarPosition)) {
                     ForEach(SidebarTabBarPosition.allCases, id: \.self) { Text($0.label).tag($0) }
                 }
                 .pickerStyle(.segmented)
-                .onChange(of: sidebarTabBarPosition) { v in AppSettings.shared.sidebarTabBarPosition = v }
 
-                ToggleRow(label: "Hide sidebar by default", isOn: $sidebarDefaultHidden)
-                    .onChange(of: sidebarDefaultHidden) { v in AppSettings.shared.sidebarDefaultHidden = v }
-                ToggleRow(label: "Independent sidebar state", isOn: $sidebarGlobalState)
-                    .onChange(of: sidebarGlobalState) { v in AppSettings.shared.sidebarGlobalState = v }
+                ToggleRow(
+                    label: "Hide sidebar by default", isOn: LayoutSettingsBindings.binding(\.sidebarDefaultHidden))
+                ToggleRow(
+                    label: "Share plugin sidebar state globally",
+                    isOn: LayoutSettingsBindings.binding(\.sidebarGlobalState))
                 Text(
                     "When on, the sidebar keeps its own state across all terminals — switching tabs or panes does not change the active plugin, expanded sections, or scroll position."
                 )
                 .font(.system(size: 11))
                 .foregroundColor(t.muted)
-                ToggleRow(label: "Per-workspace sidebar state", isOn: $sidebarPerWorkspaceState)
-                    .onChange(of: sidebarPerWorkspaceState) { v in AppSettings.shared.sidebarPerWorkspaceState = v }
-                Text("When on, each workspace remembers its own sidebar visibility and width.")
-                    .font(.system(size: 11))
-                    .foregroundColor(t.muted)
+                ToggleRow(
+                    label: "Remember width and visibility per workspace",
+                    isOn: LayoutSettingsBindings.binding(\.sidebarPerWorkspaceState)
+                )
+                Text(
+                    "When on, each workspace keeps its own sidebar width and visibility. When off, all workspaces share one width and visibility state."
+                )
+                .font(.system(size: 11))
+                .foregroundColor(t.muted)
                 Text("Toggle the sidebar with \u{2318}B.")
                     .font(.system(size: 11))
                     .foregroundColor(t.muted)
             }
 
             Section(title: "Workspace Bar") {
-                Picker("", selection: $workspaceBarPosition) {
+                Picker("", selection: LayoutSettingsBindings.binding(\.workspaceBarPosition)) {
                     ForEach(WorkspaceBarPosition.allCases, id: \.self) { Text($0.label).tag($0) }
                 }
                 .pickerStyle(.segmented)
-                .onChange(of: workspaceBarPosition) { v in AppSettings.shared.workspaceBarPosition = v }
                 Text("Position of the workspace switcher bar.")
                     .font(.system(size: 11))
                     .foregroundColor(t.muted)
             }
 
             Section(title: "Tab Overflow") {
-                Picker("", selection: $tabOverflowMode) {
+                Picker("", selection: LayoutSettingsBindings.binding(\.tabOverflowMode)) {
                     ForEach(TabOverflowMode.allCases, id: \.self) { Text($0.label).tag($0) }
                 }
                 .pickerStyle(.segmented)
-                .onChange(of: tabOverflowMode) { v in AppSettings.shared.tabOverflowMode = v }
                 Text("How tabs behave when they exceed the available bar width.")
                     .font(.system(size: 11))
                     .foregroundColor(t.muted)

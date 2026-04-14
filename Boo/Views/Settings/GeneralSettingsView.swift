@@ -5,6 +5,8 @@ import SwiftUI
 
 struct GeneralSettingsView: View {
     @State private var defaultFolder = AppSettings.shared.defaultFolder
+    @State private var defaultMainPage = AppSettings.shared.defaultMainPage
+    @State private var defaultTabType = AppSettings.shared.defaultTabType
     @State private var newTabCwdMode = AppSettings.shared.newTabCwdMode
     @State private var autoCheckUpdates = AppSettings.shared.autoCheckUpdates
     @State private var debugLogging = AppSettings.shared.debugLogging
@@ -48,6 +50,56 @@ struct GeneralSettingsView: View {
                     .buttonStyle(.bordered)
                     .controlSize(.small)
                 }
+            }
+
+            Section(title: "Startup") {
+                HStack(spacing: 8) {
+                    Text("Initial tab")
+                        .font(.system(size: 12))
+                        .foregroundColor(t.text)
+                        .frame(width: 80, alignment: .leading)
+                    Picker("", selection: $defaultTabType) {
+                        Text(ContentType.terminal.displayName).tag(ContentType.terminal)
+                        Text(ContentType.browser.displayName).tag(ContentType.browser)
+                        Text(ContentType.editor.displayName).tag(ContentType.editor)
+                        Text(ContentType.imageViewer.displayName).tag(ContentType.imageViewer)
+                        Text(ContentType.markdownPreview.displayName).tag(ContentType.markdownPreview)
+                    }
+                    .labelsHidden()
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .onChange(of: defaultTabType) { v in
+                        AppSettings.shared.defaultTabType = v
+                    }
+                }
+
+                HStack(spacing: 8) {
+                    Text("Main page")
+                        .font(.system(size: 12))
+                        .foregroundColor(t.text)
+                        .frame(width: 80, alignment: .leading)
+                    TextField("Path or URL", text: $defaultMainPage)
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 12, design: .monospaced))
+                        .foregroundColor(t.text)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 5)
+                        .background(
+                            RoundedRectangle(cornerRadius: 6)
+                                .stroke(t.border, lineWidth: 1)
+                        )
+                        .onSubmit {
+                            AppSettings.shared.defaultMainPage =
+                                defaultMainPage.trimmingCharacters(in: .whitespaces)
+                        }
+                        .onChange(of: defaultMainPage) { v in
+                            AppSettings.shared.defaultMainPage = v.trimmingCharacters(in: .whitespaces)
+                        }
+                }
+                Text(
+                    "Used for the first tab in a new workspace. Terminal expects a folder path, browser expects a URL, and editor/image/markdown expect a file path."
+                )
+                .font(.system(size: 11))
+                .foregroundColor(t.muted)
             }
 
             Section(title: "New Tab & Pane Path") {

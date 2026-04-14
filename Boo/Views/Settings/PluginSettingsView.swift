@@ -319,10 +319,13 @@ private struct PluginSettingControl: View {
             Text(setting.label)
                 .font(.system(size: 12))
                 .foregroundColor(t.text)
-            Picker("", selection: Binding(
-                get: { AppSettings.shared.markdownOpenMode },
-                set: { AppSettings.shared.markdownOpenMode = $0 }
-            )) {
+            Picker(
+                "",
+                selection: Binding(
+                    get: { AppSettings.shared.markdownOpenMode },
+                    set: { AppSettings.shared.markdownOpenMode = $0 }
+                )
+            ) {
                 ForEach(MarkdownOpenMode.allCases, id: \.self) { mode in
                     Text(mode.displayName).tag(mode)
                 }
@@ -334,17 +337,21 @@ private struct PluginSettingControl: View {
 
     private var imageOpenModeControl: some View {
         let t = Tokens.current
-        let current = ImageOpenMode(
-            rawValue: AppSettings.shared.pluginString(pluginID, setting.key, default: "imageViewer")
-        ) ?? .imageViewer
+        let current =
+            ImageOpenMode(
+                rawValue: AppSettings.shared.pluginString(pluginID, setting.key, default: "imageViewer")
+            ) ?? .imageViewer
         return VStack(alignment: .leading, spacing: 6) {
             Text(setting.label)
                 .font(.system(size: 12))
                 .foregroundColor(t.text)
-            Picker("", selection: Binding(
-                get: { current },
-                set: { AppSettings.shared.setPluginSetting(pluginID, setting.key, $0.rawValue) }
-            )) {
+            Picker(
+                "",
+                selection: Binding(
+                    get: { current },
+                    set: { AppSettings.shared.setPluginSetting(pluginID, setting.key, $0.rawValue) }
+                )
+            ) {
                 ForEach(ImageOpenMode.allCases, id: \.self) { mode in
                     Text(mode.displayName).tag(mode)
                 }
@@ -356,17 +363,21 @@ private struct PluginSettingControl: View {
 
     private var textOpenModeControl: some View {
         let t = Tokens.current
-        let current = TextOpenMode(
-            rawValue: AppSettings.shared.pluginString(pluginID, setting.key, default: "editor")
-        ) ?? .editor
+        let current =
+            TextOpenMode(
+                rawValue: AppSettings.shared.pluginString(pluginID, setting.key, default: "editor")
+            ) ?? .editor
         return VStack(alignment: .leading, spacing: 6) {
             Text(setting.label)
                 .font(.system(size: 12))
                 .foregroundColor(t.text)
-            Picker("", selection: Binding(
-                get: { current },
-                set: { AppSettings.shared.setPluginSetting(pluginID, setting.key, $0.rawValue) }
-            )) {
+            Picker(
+                "",
+                selection: Binding(
+                    get: { current },
+                    set: { AppSettings.shared.setPluginSetting(pluginID, setting.key, $0.rawValue) }
+                )
+            ) {
                 ForEach(TextOpenMode.allCases, id: \.self) { mode in
                     Text(mode.displayName).tag(mode)
                 }
@@ -412,9 +423,11 @@ private struct PluginSettingControl: View {
             )
             .textFieldStyle(.roundedBorder)
             .font(.system(size: 11, design: .monospaced))
-            Text("Comma-separated patterns. Examples: swift, .gitignore, *.{ts,tsx}, .env*. Other files open with the default app.")
-                .font(.system(size: 11))
-                .foregroundColor(t.muted)
+            Text(
+                "Comma-separated patterns. Examples: swift, .gitignore, *.{ts,tsx}, .env*. Other files open with the default app."
+            )
+            .font(.system(size: 11))
+            .foregroundColor(t.muted)
         }
     }
 

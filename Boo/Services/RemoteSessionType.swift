@@ -1,18 +1,32 @@
 import Darwin
 import Foundation
 
-/// Debug logger that writes to /tmp/boo-remote.log for diagnosing file tree issues.
+/// Debug logger for diagnosing remote file-tree issues. No-op in release builds.
 func remoteLog(_ message: String) {
-    let ts = ISO8601DateFormatter().string(from: Date())
-    let line = "\(ts) \(message)\n"
-    let path = "/tmp/boo-remote.log"
-    if let handle = FileHandle(forWritingAtPath: path) {
-        handle.seekToEndOfFile()
-        if let data = line.data(using: .utf8) { handle.write(data) }
-        handle.closeFile()
-    } else {
-        FileManager.default.createFile(atPath: path, contents: line.data(using: .utf8))
-    }
+    #if DEBUG
+        let ts = ISO8601DateFormatter().string(from: Date())
+        let line = "\(ts) \(message)\n"
+        // Use the app's private temp directory so the log is not world-readable.
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("boo", isDirectory: true)
+        try? FileManager.default.createDirectory(
+            at: dir, withIntermediateDirectories: true,
+            attributes: [
+                .posixPermissions: 0o700
+            ])
+        let logURL = dir.appendingPathComponent("remote.log")
+        let path = logURL.path
+        if let handle = FileHandle(forWritingAtPath: path) {
+            handle.seekToEndOfFile()
+            if let data = line.data(using: .utf8) { handle.write(data) }
+            handle.closeFile()
+        } else {
+            FileManager.default.createFile(
+                atPath: path, contents: line.data(using: .utf8),
+                attributes: [
+                    .posixPermissions: 0o600
+                ])
+        }
+    #endif
 }
 
 /// The tool used to connect to a container or VM.

@@ -172,7 +172,10 @@ extension MainWindowController {
 
     /// Build git context from the current CWD.
     func buildGitContext(cwd: String) -> TerminalContext.GitContext? {
-        booLog(.debug, .git, "buildGitContext: cwd=\(cwd) cached=\(statusBar.gitBranch ?? "nil") cachedRoot=\(statusBar.gitRepoRoot ?? "nil")")
+        booLog(
+            .debug, .git,
+            "buildGitContext: cwd=\(cwd) cached=\(statusBar.gitBranch ?? "nil") cachedRoot=\(statusBar.gitRepoRoot ?? "nil")"
+        )
         if let branch = statusBar.gitBranch, let repoRoot = statusBar.gitRepoRoot,
             cwd == repoRoot || cwd.hasPrefix(repoRoot + "/")
         {

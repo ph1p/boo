@@ -51,10 +51,14 @@ final class LocalFileTreePlugin: BooPluginProtocol {
                 key: "htmlOpenInBrowser", type: .bool,
                 label: "Open HTML files in browser",
                 defaultValue: AnyCodableValue(false), options: nil),
+            PluginManifest.SettingManifest(
+                key: "pdfOpenInBrowser", type: .bool,
+                label: "Open PDF files in browser",
+                defaultValue: AnyCodableValue(true), options: nil)
         ]
     )
 
-/// Cached file tree roots keyed by path for instant switching.
+    /// Cached file tree roots keyed by path for instant switching.
     private var cachedRoots: [String: FileTreeNode] = [:]
     private var fileWatcher: FileSystemWatcher?
 
@@ -132,11 +136,18 @@ final class LocalFileTreePlugin: BooPluginProtocol {
                 let isImage = ContentType.imageExtensions.contains(ext)
                 let isMarkdown = ContentType.markdownExtensions.contains(ext)
                 let isHTML = ContentType.htmlExtensions.contains(ext)
+                let isPDF = ContentType.pdfExtensions.contains(ext)
                 let isEditorFile = ContentType.isEditorFilePattern(filename: filename)
 
                 let htmlOpenInBrowser = AppSettings.shared.pluginBool(
                     "file-tree-local", "htmlOpenInBrowser", default: false)
-                if isHTML && htmlOpenInBrowser {
+                let pdfOpenInBrowser = AppSettings.shared.pluginBool(
+                    "file-tree-local", "pdfOpenInBrowser", default: true)
+                if isPDF && pdfOpenInBrowser {
+                    act?.openTab?(.browser(url: URL(fileURLWithPath: path)))
+                } else if isPDF {
+                    NSWorkspace.shared.open(URL(fileURLWithPath: path))
+                } else if isHTML && htmlOpenInBrowser {
                     act?.openTab?(.browser(url: URL(fileURLWithPath: path)))
                 } else if isImage {
                     let imageModeRaw = AppSettings.shared.pluginString(
@@ -163,7 +174,8 @@ final class LocalFileTreePlugin: BooPluginProtocol {
                         let configured = AppSettings.shared.fileEditorCommand.trimmingCharacters(
                             in: .whitespaces
                         )
-                        let editorCmd = configured.isEmpty
+                        let editorCmd =
+                            configured.isEmpty
                             ? (ProcessInfo.processInfo.environment["EDITOR"] ?? "vi")
                             : configured
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {

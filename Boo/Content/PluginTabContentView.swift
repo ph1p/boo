@@ -30,7 +30,7 @@ final class PluginTabContentView: NSView, ContentViewProtocol {
             hostingView.topAnchor.constraint(equalTo: topAnchor),
             hostingView.leadingAnchor.constraint(equalTo: leadingAnchor),
             hostingView.trailingAnchor.constraint(equalTo: trailingAnchor),
-            hostingView.bottomAnchor.constraint(equalTo: bottomAnchor),
+            hostingView.bottomAnchor.constraint(equalTo: bottomAnchor)
         ])
     }
 

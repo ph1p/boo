@@ -152,7 +152,10 @@ final class TerminalBridge {
         remoteCwd: String?,
         shellPID: pid_t = 0
     ) {
-        booLog(.debug, .terminal, "restoreTabState: paneID=\(paneID), cwd=\(workingDirectory), title=\(terminalTitle), remote=\(String(describing: remoteSession)), remoteCwd=\(String(describing: remoteCwd))")
+        booLog(
+            .debug, .terminal,
+            "restoreTabState: paneID=\(paneID), cwd=\(workingDirectory), title=\(terminalTitle), remote=\(String(describing: remoteSession)), remoteCwd=\(String(describing: remoteCwd))"
+        )
         let previousRemote = state.remoteSession
         state.paneID = paneID
         state.tabID = tabID
@@ -163,7 +166,10 @@ final class TerminalBridge {
         state.remoteSession = remoteSession
         state.remoteCwd = remoteCwd
 
-        booLog(.debug, .terminal, "restoreTabState: pane=\(paneID.uuidString.prefix(8)) title=\(terminalTitle) prevProcess=\(state.foregroundProcess)")
+        booLog(
+            .debug, .terminal,
+            "restoreTabState: pane=\(paneID.uuidString.prefix(8)) title=\(terminalTitle) prevProcess=\(state.foregroundProcess)"
+        )
 
         let previousProcess = state.foregroundProcess
         // When restoring a tab with no known shell PID (e.g. a brand-new tab), skip the
@@ -202,7 +208,10 @@ final class TerminalBridge {
         }
 
         let previousRemote = state.remoteSession
-        booLog(.debug, .terminal, "handleDirectoryChange: path=\(path), title=\(state.terminalTitle), previousRemote=\(String(describing: previousRemote)), currentCwd=\(state.workingDirectory)")
+        booLog(
+            .debug, .terminal,
+            "handleDirectoryChange: path=\(path), title=\(state.terminalTitle), previousRemote=\(String(describing: previousRemote)), currentCwd=\(state.workingDirectory)"
+        )
 
         // If we were remote and the CWD is under the local user's home directory,
         // the SSH/Docker session has ended and the local shell took over.
@@ -278,7 +287,10 @@ final class TerminalBridge {
         let processChanged = process != state.foregroundProcess
         state.foregroundProcess = process
         if processChanged {
-            booLog(.debug, .terminal, "processChanged: \(state.foregroundProcess.isEmpty ? "(empty)" : state.foregroundProcess) pane=\(paneID.uuidString.prefix(8))")
+            booLog(
+                .debug, .terminal,
+                "processChanged: \(state.foregroundProcess.isEmpty ? "(empty)" : state.foregroundProcess) pane=\(paneID.uuidString.prefix(8))"
+            )
         }
 
         let previousRemote = state.remoteSession
@@ -423,7 +435,10 @@ final class TerminalBridge {
 
         guard resolved != previous else { return }
 
-        booLog(.debug, .terminal, "processTree: \(String(describing: session)) → resolved=\(String(describing: resolved)) (was \(String(describing: previous)))")
+        booLog(
+            .debug, .terminal,
+            "processTree: \(String(describing: session)) → resolved=\(String(describing: resolved)) (was \(String(describing: previous)))"
+        )
 
         state.remoteSession = resolved
         if resolved == nil {
@@ -464,6 +479,9 @@ final class TerminalBridge {
     }
 
     func switchContext(paneID: UUID, workspaceID: UUID, workingDirectory: String) {
+        NSLog(
+            "[WorkspaceSwitch] bridgeSwitch workspace=\(workspaceID.uuidString) pane=\(paneID.uuidString) cwd=\(workingDirectory)"
+        )
         state = BridgeState(
             paneID: paneID,
             workspaceID: workspaceID,

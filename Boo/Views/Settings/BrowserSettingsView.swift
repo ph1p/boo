@@ -12,8 +12,8 @@ struct BrowserSettingsView: View {
     private var filteredEntries: [BrowserHistoryEntry] {
         guard !searchText.isEmpty else { return historyEntries }
         return historyEntries.filter {
-            $0.title.localizedCaseInsensitiveContains(searchText) ||
-            $0.url.absoluteString.localizedCaseInsensitiveContains(searchText)
+            $0.title.localizedCaseInsensitiveContains(searchText)
+                || $0.url.absoluteString.localizedCaseInsensitiveContains(searchText)
         }
     }
 

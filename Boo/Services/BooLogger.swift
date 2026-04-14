@@ -19,37 +19,37 @@ final class BooLogger: @unchecked Sendable {
     // MARK: - Types
 
     enum Category: String, CaseIterable {
-        case app      = "App"
+        case app = "App"
         case terminal = "Terminal"
-        case plugin   = "Plugin"
-        case sidebar  = "Sidebar"
-        case socket   = "Socket"
-        case git      = "Git"
+        case plugin = "Plugin"
+        case sidebar = "Sidebar"
+        case socket = "Socket"
+        case git = "Git"
     }
 
     enum Level: Int, Comparable {
-        case debug   = 0
-        case info    = 1
+        case debug = 0
+        case info = 1
         case warning = 2
-        case error   = 3
+        case error = 3
 
         static func < (lhs: Level, rhs: Level) -> Bool { lhs.rawValue < rhs.rawValue }
 
         var prefix: String {
             switch self {
-            case .debug:   return "DEBUG"
-            case .info:    return "INFO "
+            case .debug: return "DEBUG"
+            case .info: return "INFO "
             case .warning: return "WARN "
-            case .error:   return "ERROR"
+            case .error: return "ERROR"
             }
         }
 
         var osLogType: OSLogType {
             switch self {
-            case .debug:   return .debug
-            case .info:    return .info
+            case .debug: return .debug
+            case .info: return .info
             case .warning: return .default
-            case .error:   return .error
+            case .error: return .error
             }
         }
     }
@@ -83,10 +83,10 @@ final class BooLogger: @unchecked Sendable {
         let logger = osLoggers[category.rawValue]
 
         switch level {
-        case .debug:   logger?.debug("\(msg, privacy: .public)")
-        case .info:    logger?.info("\(msg, privacy: .public)")
+        case .debug: logger?.debug("\(msg, privacy: .public)")
+        case .info: logger?.info("\(msg, privacy: .public)")
         case .warning: logger?.warning("\(msg, privacy: .public)")
-        case .error:   logger?.error("\(msg, privacy: .public)")
+        case .error: logger?.error("\(msg, privacy: .public)")
         }
 
         let formatted = formatLine(level: level, category: category, message: msg)
@@ -158,8 +158,9 @@ private final class LogFileWriter: @unchecked Sendable {
         for file in files where file.hasPrefix("boo-") && file.hasSuffix(".log") {
             let fullPath = (logsDir as NSString).appendingPathComponent(file)
             if let attrs = try? fm.attributesOfItem(atPath: fullPath),
-               let modDate = attrs[.modificationDate] as? Date,
-               modDate < cutoff {
+                let modDate = attrs[.modificationDate] as? Date,
+                modDate < cutoff
+            {
                 try? fm.removeItem(atPath: fullPath)
             }
         }
@@ -191,6 +192,8 @@ func debugLog(_ message: @autoclosure () -> String, category: BooLogger.Category
 
 /// Log at a specific level and category. Drop-in for NSLog patterns.
 @inline(__always)
-func booLog(_ level: BooLogger.Level = .info, _ category: BooLogger.Category = .app, _ message: @autoclosure () -> String) {
+func booLog(
+    _ level: BooLogger.Level = .info, _ category: BooLogger.Category = .app, _ message: @autoclosure () -> String
+) {
     BooLogger.shared.log(level, category, message())
 }

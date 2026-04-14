@@ -76,7 +76,7 @@ final class BrowserHistory {
 
     private func load() {
         guard let data = try? Data(contentsOf: saveURL),
-              let decoded = try? JSONDecoder().decode([BrowserHistoryEntry].self, from: data)
+            let decoded = try? JSONDecoder().decode([BrowserHistoryEntry].self, from: data)
         else { return }
         entries = decoded
     }

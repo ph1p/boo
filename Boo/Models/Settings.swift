@@ -171,7 +171,7 @@ enum SettingsTopic: String, CaseIterable {
     case statusBar  // status bar toggles (path, git, time, pane info, shell, connection)
     case layout  // sidebar position, workspace bar, density, sidebar width, tab overflow
     case plugins  // disabled plugins, default enabled plugins, plugin settings
-    case editor  // editor theme, font size, font family
+    case editor  // editor font size, font family
 }
 
 final class AppSettings {
@@ -218,6 +218,7 @@ final class AppSettings {
         static let skipVersion = "skipVersion"
         static let sidebarDefaultHidden = "sidebarDefaultHidden"
         static let defaultFolder = "defaultFolder"
+        static let defaultMainPage = "defaultMainPage"
         static let sshControlMasterApproved = "sshControlMasterApproved"
         static let customThemes = "customThemes"
         static let newTabCwdMode = "newTabCwdMode"
@@ -232,7 +233,6 @@ final class AppSettings {
         static let browserHistoryEnabled = "browserHistoryEnabled"
         static let browserHistoryLimit = "browserHistoryLimit"
 
-        static let editorThemeName = "editorThemeName"
         static let editorFontSize = "editorFontSize"
         static let editorFontName = "editorFontName"
     }
@@ -442,6 +442,11 @@ final class AppSettings {
         set { set(newValue, forKey: K.defaultFolder, topic: .layout) }
     }
 
+    var defaultMainPage: String {
+        get { UserDefaults.standard.string(forKey: K.defaultMainPage) ?? "" }
+        set { set(newValue, forKey: K.defaultMainPage, topic: .layout) }
+    }
+
     var sidebarDensity: SidebarDensity { .comfortable }
 
     var sidebarWidth: CGFloat {
@@ -543,11 +548,6 @@ final class AppSettings {
 
     // MARK: - Editor
 
-    var editorThemeName: String {
-        get { UserDefaults.standard.string(forKey: K.editorThemeName) ?? "xcode-dark" }
-        set { set(newValue, forKey: K.editorThemeName, topic: .editor) }
-    }
-
     var editorFontSize: CGFloat {
         get {
             let v = UserDefaults.standard.double(forKey: K.editorFontSize)
@@ -613,11 +613,56 @@ final class AppSettings {
         pluginSettingsDict["__sidebar"]?["sectionOrder"] as? [String: [String]] ?? [:]
     }
 
+    /// Persisted expanded section IDs for global sidebar state.
+    var sidebarGlobalExpandedSectionIDs: Set<String> {
+        Set(pluginSettingsDict["__sidebar"]?["globalExpandedSectionIDs"] as? [String] ?? [])
+    }
+
+    /// Persisted explicitly-collapsed section IDs for global sidebar state.
+    var sidebarGlobalUserCollapsedSectionIDs: Set<String> {
+        Set(pluginSettingsDict["__sidebar"]?["globalUserCollapsedSectionIDs"] as? [String] ?? [])
+    }
+
+    /// Persisted selected plugin tab for global sidebar state.
+    var sidebarGlobalSelectedPluginTabID: String? {
+        pluginSettingsDict["__sidebar"]?["globalSelectedPluginTabID"] as? String
+    }
+
+    /// Persisted scroll offsets for global sidebar state.
+    var sidebarGlobalScrollOffsets: [String: CGPoint] {
+        guard let dict = pluginSettingsDict["__sidebar"]?["globalScrollOffsets"] as? [String: [Double]] else {
+            return [:]
+        }
+        return dict.compactMapValues { values in
+            guard values.count == 2 else { return nil }
+            return CGPoint(x: values[0], y: values[1])
+        }
+    }
+
     /// Write both sidebar state keys in one dict mutation + one disk write.
-    func saveSidebarState(heights: [String: CGFloat], order: [String: [String]]) {
+    func saveSidebarState(
+        heights: [String: CGFloat],
+        order: [String: [String]],
+        globalExpandedSectionIDs: Set<String>? = nil,
+        globalUserCollapsedSectionIDs: Set<String>? = nil,
+        globalSelectedPluginTabID: String? = nil,
+        globalScrollOffsets: [String: CGPoint]? = nil
+    ) {
         var sidebarDict = pluginSettingsDict["__sidebar"] ?? [:]
         sidebarDict["sectionHeights"] = heights.mapValues { Double($0) }
         sidebarDict["sectionOrder"] = order
+        if let globalExpandedSectionIDs {
+            sidebarDict["globalExpandedSectionIDs"] = Array(globalExpandedSectionIDs)
+        }
+        if let globalUserCollapsedSectionIDs {
+            sidebarDict["globalUserCollapsedSectionIDs"] = Array(globalUserCollapsedSectionIDs)
+        }
+        if let globalSelectedPluginTabID {
+            sidebarDict["globalSelectedPluginTabID"] = globalSelectedPluginTabID
+        }
+        if let globalScrollOffsets {
+            sidebarDict["globalScrollOffsets"] = globalScrollOffsets.mapValues { [Double($0.x), Double($0.y)] }
+        }
         var all = pluginSettingsDict
         all["__sidebar"] = sidebarDict
         pluginSettingsDict = all
@@ -704,8 +749,6 @@ final class AppSettings {
         saveToFile()
     }
 
-
-
     static var availableMonospaceFonts: [String] {
         let fm = NSFontManager.shared
         var fonts = Set<String>(["SF Mono"])
@@ -762,9 +805,13 @@ final class AppSettings {
             K.sidebarPosition: sidebarPosition.rawValue,
             K.workspaceBarPosition: workspaceBarPosition.rawValue,
             K.defaultFolder: defaultFolder,
+            K.defaultMainPage: defaultMainPage,
             K.sidebarWidth: Double(sidebarWidth),
             K.sidebarDefaultHidden: sidebarDefaultHidden,
             K.tabOverflowMode: tabOverflowMode.rawValue,
+            K.defaultTabType: defaultTabType.rawValue,
+            K.autoDetectContentType: autoDetectContentType,
+            K.browserHomePage: browserHomePage,
             K.disabledPluginIDs: disabledPluginIDs,
             K.sidebarPluginOrder: sidebarTabOrder,
             K.pluginSettings: pluginSettingsDict,
@@ -773,9 +820,9 @@ final class AppSettings {
             K.fileEditorCommand: fileEditorCommand,
             K.sidebarTabBarPosition: sidebarTabBarPosition.rawValue,
             K.sidebarGlobalState: sidebarGlobalState,
-            K.editorThemeName: editorThemeName,
+            K.sidebarPerWorkspaceState: sidebarPerWorkspaceState,
             K.editorFontSize: Double(editorFontSize),
-            K.editorFontName: editorFontName,
+            K.editorFontName: editorFontName
         ]
         dict[K.autoCheckUpdates] = autoCheckUpdates
         if let skipVersion {

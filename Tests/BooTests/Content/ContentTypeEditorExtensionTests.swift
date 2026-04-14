@@ -2,38 +2,38 @@ import XCTest
 
 @testable import Boo
 
-/// Tests for ContentType.isEditorExtension — routing text files to the built-in editor tab.
+/// Tests for ContentType.isEditorFilePattern — routing text files to the built-in editor tab.
 final class ContentTypeEditorExtensionTests: XCTestCase {
     // MARK: - Default extensions
 
     @MainActor
     func testSwiftFileIsEditorExtension() {
-        XCTAssertTrue(ContentType.isEditorExtension("/path/to/File.swift"))
+        XCTAssertTrue(ContentType.isEditorFilePattern(filename: "File.swift"))
     }
 
     @MainActor
     func testJavaScriptFileIsEditorExtension() {
-        XCTAssertTrue(ContentType.isEditorExtension("/path/to/app.js"))
+        XCTAssertTrue(ContentType.isEditorFilePattern(filename: "app.js"))
     }
 
     @MainActor
     func testTypeScriptFileIsEditorExtension() {
-        XCTAssertTrue(ContentType.isEditorExtension("/path/to/index.ts"))
+        XCTAssertTrue(ContentType.isEditorFilePattern(filename: "index.ts"))
     }
 
     @MainActor
     func testPythonFileIsEditorExtension() {
-        XCTAssertTrue(ContentType.isEditorExtension("/path/to/script.py"))
+        XCTAssertTrue(ContentType.isEditorFilePattern(filename: "script.py"))
     }
 
     @MainActor
     func testTxtFileIsEditorExtension() {
-        XCTAssertTrue(ContentType.isEditorExtension("/path/to/notes.txt"))
+        XCTAssertTrue(ContentType.isEditorFilePattern(filename: "notes.txt"))
     }
 
     @MainActor
     func testJsonFileIsEditorExtension() {
-        XCTAssertTrue(ContentType.isEditorExtension("/path/to/config.json"))
+        XCTAssertTrue(ContentType.isEditorFilePattern(filename: "config.json"))
     }
 
     // MARK: - Non-editor extensions
@@ -41,25 +41,25 @@ final class ContentTypeEditorExtensionTests: XCTestCase {
     @MainActor
     func testPngFileIsNotEditorExtension() {
         // Images are handled separately by imageViewer
-        XCTAssertFalse(ContentType.isEditorExtension("/path/to/image.png"))
+        XCTAssertFalse(ContentType.isEditorFilePattern(filename: "image.png"))
     }
 
     @MainActor
     func testMp4FileIsNotEditorExtension() {
-        XCTAssertFalse(ContentType.isEditorExtension("/path/to/video.mp4"))
+        XCTAssertFalse(ContentType.isEditorFilePattern(filename: "video.mp4"))
     }
 
     @MainActor
     func testNoExtensionIsNotEditorExtension() {
-        XCTAssertFalse(ContentType.isEditorExtension("/path/to/binary"))
+        XCTAssertFalse(ContentType.isEditorFilePattern(filename: "binary"))
     }
 
     // MARK: - Case insensitivity
 
     @MainActor
     func testEditorExtensionIsCaseInsensitive() {
-        XCTAssertTrue(ContentType.isEditorExtension("/path/to/File.SWIFT"))
-        XCTAssertTrue(ContentType.isEditorExtension("/path/to/File.Swift"))
-        XCTAssertTrue(ContentType.isEditorExtension("/path/to/App.JS"))
+        XCTAssertTrue(ContentType.isEditorFilePattern(filename: "File.SWIFT"))
+        XCTAssertTrue(ContentType.isEditorFilePattern(filename: "File.Swift"))
+        XCTAssertTrue(ContentType.isEditorFilePattern(filename: "App.JS"))
     }
 }

@@ -10,6 +10,7 @@ final class LayoutSettingsTests: XCTestCase {
         UserDefaults.standard.removeObject(forKey: "workspaceBarPosition")
         UserDefaults.standard.removeObject(forKey: "sidebarDensity")
         UserDefaults.standard.removeObject(forKey: "sidebarDefaultHidden")
+        UserDefaults.standard.removeObject(forKey: "sidebarPerWorkspaceState")
         super.tearDown()
     }
 
@@ -99,6 +100,21 @@ final class LayoutSettingsTests: XCTestCase {
         XCTAssertEqual(
             json["sidebarDefaultHidden"] as? Bool, true,
             "sidebarDefaultHidden should be persisted in settings.json")
+    }
+
+    func testSidebarPerWorkspaceStateDefault() {
+        UserDefaults.standard.removeObject(forKey: "sidebarPerWorkspaceState")
+        XCTAssertFalse(
+            AppSettings.shared.sidebarPerWorkspaceState,
+            "Sidebar width/visibility should be shared globally by default"
+        )
+    }
+
+    func testSidebarPerWorkspaceStateRoundTrip() {
+        AppSettings.shared.sidebarPerWorkspaceState = true
+        XCTAssertTrue(AppSettings.shared.sidebarPerWorkspaceState)
+        AppSettings.shared.sidebarPerWorkspaceState = false
+        XCTAssertFalse(AppSettings.shared.sidebarPerWorkspaceState)
     }
 
     // MARK: - Sidebar User Hidden Flag

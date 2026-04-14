@@ -35,12 +35,25 @@ final class WindowStateCoordinator {
     func loadSidebarStateFromSettings() {
         sidebarSectionHeights = AppSettings.shared.sidebarSectionHeights
         sidebarSectionOrder = AppSettings.shared.sidebarSectionOrder
+        if AppSettings.shared.sidebarGlobalState {
+            expandedPluginIDs = AppSettings.shared.sidebarGlobalExpandedSectionIDs
+            userCollapsedSectionIDs = AppSettings.shared.sidebarGlobalUserCollapsedSectionIDs
+            selectedPluginTabID = AppSettings.shared.sidebarGlobalSelectedPluginTabID
+            sidebarScrollOffsets = AppSettings.shared.sidebarGlobalScrollOffsets
+        }
     }
 
     /// Save current sidebar heights and order to AppSettings.
     /// Call on resize end, panel switch, and app quit.
     func saveSidebarStateToSettings() {
-        AppSettings.shared.saveSidebarState(heights: sidebarSectionHeights, order: sidebarSectionOrder)
+        AppSettings.shared.saveSidebarState(
+            heights: sidebarSectionHeights,
+            order: sidebarSectionOrder,
+            globalExpandedSectionIDs: AppSettings.shared.sidebarGlobalState ? expandedPluginIDs : nil,
+            globalUserCollapsedSectionIDs: AppSettings.shared.sidebarGlobalState ? userCollapsedSectionIDs : nil,
+            globalSelectedPluginTabID: AppSettings.shared.sidebarGlobalState ? selectedPluginTabID : nil,
+            globalScrollOffsets: AppSettings.shared.sidebarGlobalState ? sidebarScrollOffsets : nil
+        )
     }
 
     // MARK: - Tab State Management

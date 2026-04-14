@@ -122,6 +122,17 @@ Fixed tabs are listed in `Tab.fixed`. The **PLUGINS** sidebar section is generat
 
 - `pluginView` — hosts a plugin-provided `AnyView` via `PluginTabContentView`. State is ephemeral.
 - Only `terminal` tabs support the plugin sidebar (`supportsPlugins = true`).
+- PDF files resolve to `.browser` — WKWebView renders them natively without a plugin.
+
+`ContentType` exposes static extension sets used for routing: `imageExtensions`, `markdownExtensions`, `htmlExtensions`, `pdfExtensions`. Add new extension groups here and wire routing in `ContentType.forFile`, `ContentTypeDetector.detect`, and the file tree plugin.
+
+### Editor Themes
+
+`EditorThemeLibrary` (in `Boo/Content/EditorContentView.swift`) holds all built-in syntax themes.
+
+- Add a new theme as a `static let` `Entry(id:, name:, isDark:, theme:)` and append it to `all`.
+- The live editor overrides `theme.background` and `lineHighlight` with the global app theme so the editor blends with the UI; the Settings preview uses the raw theme background.
+- `isDark` drives the `Dark`/`Light` badge in the theme picker.
 
 ## Browser Tab
 

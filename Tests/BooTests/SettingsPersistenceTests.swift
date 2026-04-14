@@ -121,6 +121,77 @@ final class SettingsPersistenceTests: XCTestCase {
             "sidebarWidth should be persisted in settings.json")
     }
 
+    func testStartupSettingsPersistToFile() {
+        let settings = AppSettings.shared
+        let originalMainPage = settings.defaultMainPage
+        let originalTabType = settings.defaultTabType
+        let originalBrowserHomePage = settings.browserHomePage
+        settings.defaultMainPage = "https://example.com/start"
+        settings.defaultTabType = .browser
+        settings.browserHomePage = "https://example.com/home"
+        defer {
+            settings.defaultMainPage = originalMainPage
+            settings.defaultTabType = originalTabType
+            settings.browserHomePage = originalBrowserHomePage
+        }
+
+        let path = BooPaths.settingsFile
+        guard let data = try? Data(contentsOf: URL(fileURLWithPath: path)),
+            let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else {
+            XCTFail("Could not read settings.json")
+            return
+        }
+
+        XCTAssertEqual(json["defaultMainPage"] as? String, "https://example.com/start")
+        XCTAssertEqual(json["defaultTabType"] as? String, "browser")
+        XCTAssertEqual(json["browserHomePage"] as? String, "https://example.com/home")
+    }
+
+    func testGlobalSidebarStatePersistsExpandedSectionsSelectionAndScrollOffsets() {
+        let settings = AppSettings.shared
+        let originalGlobal = settings.sidebarGlobalState
+        settings.sidebarGlobalState = true
+        defer { settings.sidebarGlobalState = originalGlobal }
+
+        settings.saveSidebarState(
+            heights: ["files": 180],
+            order: ["git-panel": ["files", "status"]],
+            globalExpandedSectionIDs: ["files", "status"],
+            globalUserCollapsedSectionIDs: ["history"],
+            globalSelectedPluginTabID: "git-panel",
+            globalScrollOffsets: ["__global__:files": CGPoint(x: 0, y: 42)]
+        )
+
+        XCTAssertEqual(settings.sidebarSectionHeights["files"] ?? -1, 180, accuracy: 0.1)
+        XCTAssertEqual(settings.sidebarSectionOrder["git-panel"] ?? [], ["files", "status"])
+        XCTAssertEqual(settings.sidebarGlobalExpandedSectionIDs, Set(["files", "status"]))
+        XCTAssertEqual(settings.sidebarGlobalUserCollapsedSectionIDs, Set(["history"]))
+        XCTAssertEqual(settings.sidebarGlobalSelectedPluginTabID, "git-panel")
+        XCTAssertEqual(settings.sidebarGlobalScrollOffsets["__global__:files"]?.y ?? -1, 42, accuracy: 0.1)
+    }
+
+    func testSidebarPerWorkspaceStatePersistsInSettingsJSON() {
+        let settings = AppSettings.shared
+        let original = settings.sidebarPerWorkspaceState
+        settings.sidebarPerWorkspaceState = true
+        defer { settings.sidebarPerWorkspaceState = original }
+
+        let path = BooPaths.settingsFile
+        guard let data = try? Data(contentsOf: URL(fileURLWithPath: path)),
+            let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else {
+            XCTFail("Could not read settings.json")
+            return
+        }
+
+        XCTAssertEqual(
+            json["sidebarPerWorkspaceState"] as? Bool,
+            true,
+            "sidebarPerWorkspaceState should be persisted in settings.json"
+        )
+    }
+
     func testUpdaterAndSSHSettingsPersistToFile() {
         let settings = AppSettings.shared
         let originalAutoCheck = settings.autoCheckUpdates

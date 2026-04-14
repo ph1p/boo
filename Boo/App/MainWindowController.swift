@@ -7,6 +7,8 @@ import SwiftUI
 
 /// NSSplitView with themed divider color and a VS Code-style accent hover highlight.
 class ThemedSplitView: NSSplitView {
+    var onDividerDoubleClick: (() -> Void)?
+
     override var dividerColor: NSColor {
         AppSettings.shared.theme.sidebarBorder
     }
@@ -57,9 +59,28 @@ class ThemedSplitView: NSSplitView {
         AppSettings.shared.theme.accentColor.withAlphaComponent(0.85).setFill()
         NSBezierPath(rect: bar).fill()
     }
+
+    override func mouseDown(with event: NSEvent) {
+        let localPoint = convert(event.locationInWindow, from: nil)
+        if event.clickCount == 2, isPointOnPrimaryDivider(localPoint) {
+            onDividerDoubleClick?()
+            return
+        }
+        super.mouseDown(with: event)
+    }
+
+    private func isPointOnPrimaryDivider(_ point: CGPoint) -> Bool {
+        guard subviews.count >= 2 else { return false }
+        let dividerRect = CGRect(
+            x: subviews[0].frame.maxX,
+            y: 0,
+            width: dividerThickness,
+            height: bounds.height)
+        return dividerRect.insetBy(dx: -2, dy: 0).contains(point)
+    }
 }
 
-class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitViewDelegate {
+class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitViewDelegate, NSWindowDelegate {
     let appState = AppState()
 
     let toolbar = ToolbarView(frame: .zero)
@@ -104,11 +125,19 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
 
     /// PaneViews keyed by workspace ID → pane ID → PaneView
     var workspacePaneViews: [UUID: [UUID: PaneView]] = [:]
+    /// Workspace whose split tree is currently rendered in the split container.
+    var renderedWorkspaceID: UUID?
 
-    /// Convenience accessor for current workspace's pane views
+    /// Convenience accessor for current workspace's pane views.
     var paneViews: [UUID: PaneView] {
-        get { workspacePaneViews[activeWorkspace?.id ?? UUID()] ?? [:] }
-        set { if let id = activeWorkspace?.id { workspacePaneViews[id] = newValue } }
+        get {
+            guard let id = activeWorkspace?.id else { return [:] }
+            return workspacePaneViews[id] ?? [:]
+        }
+        set {
+            guard let id = activeWorkspace?.id else { return }
+            workspacePaneViews[id] = newValue
+        }
     }
     private var settingsObserver: Any?
     private var ghosttyActionObserver: Any?
@@ -132,8 +161,14 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
 
     /// Focus debounce — prevents sidebar rebuild from causing a focus feedback loop.
     var lastFocusedPaneID: UUID?
+    var allowNextWindowClose = false
     /// Debounce timer for saving the session after split-pane divider drags.
     private var splitRatioSaveTimer: Timer?
+    /// Debounce timer for saving workspace sidebar state after sidebar divider drags.
+    private var sidebarStateSaveTimer: Timer?
+    /// Suppresses layout refresh work triggered by sidebar width/visibility writes that
+    /// originate from live split-view persistence rather than an explicit settings edit.
+    private var sidebarSettingsRefreshSuppressionDepth = 0
     var lastFocusTimestamp: UInt64 = 0
     /// Last pane ID for which plugins received a focusChanged notification.
     /// Prevents redundant notifications when the same pane re-focuses.
@@ -153,6 +188,16 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
     var savedSidebarSectionOrder: [String: [String]] {
         get { coordinator?.sidebarSectionOrder ?? [:] }
         set { coordinator?.sidebarSectionOrder = newValue }
+    }
+
+    func performWhileIgnoringSidebarLayoutSettingsRefresh<T>(_ body: () -> T) -> T {
+        sidebarSettingsRefreshSuppressionDepth += 1
+        defer { sidebarSettingsRefreshSuppressionDepth -= 1 }
+        return body()
+    }
+
+    var isIgnoringSidebarLayoutSettingsRefresh: Bool {
+        sidebarSettingsRefreshSuppressionDepth > 0
     }
     var cachedDetailViews: [String: (context: TerminalContext, generations: [UInt64], view: AnyView)] {
         get { sidebarController?.cachedDetailViews ?? [:] }
@@ -227,9 +272,10 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
         // Clean up stale scroll offsets for the closed terminal.
         // Coordinator is authoritative; panel copy is cleaned to stay in sync.
         let prefix = "\(terminalID.uuidString):"
-        coordinator?.sidebarScrollOffsets = coordinator?.sidebarScrollOffsets.filter {
-            !$0.key.hasPrefix(prefix)
-        } ?? [:]
+        coordinator?.sidebarScrollOffsets =
+            coordinator?.sidebarScrollOffsets.filter {
+                !$0.key.hasPrefix(prefix)
+            } ?? [:]
         if let panel = activePluginTabID.flatMap({ pluginPanelViews[$0] as? SidebarPanelView }) {
             panel.cleanupScrollOffsets(for: terminalID)
         }
@@ -287,7 +333,9 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
             gitPlugin.onBranchChanged = { [weak self] branch, repoRoot in
                 guard let self else { return }
                 let cwd = self.statusBar.currentDirectory
-                booLog(.debug, .git, "onBranchChanged: branch=\(branch ?? "nil") repoRoot=\(repoRoot ?? "nil") statusBar.cwd=\(cwd)")
+                booLog(
+                    .debug, .git,
+                    "onBranchChanged: branch=\(branch ?? "nil") repoRoot=\(repoRoot ?? "nil") statusBar.cwd=\(cwd)")
                 // Only update the status bar branch if the focused terminal is inside this repo.
                 // Ignore watcher events from other terminals' repos.
                 guard let root = repoRoot,
@@ -452,11 +500,17 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
 
             // Layout changes: sidebar/workspace bar position, density
             if topic == nil || topic == .layout {
+                if self.isIgnoringSidebarLayoutSettingsRefresh {
+                    return
+                }
                 self.statusBarHeightConstraint?.constant = DensityMetrics.current.statusBarHeight
                 self.statusBar.needsDisplay = true
                 let newSidebarPos = AppSettings.shared.sidebarPosition
                 if newSidebarPos != self.currentSidebarPosition {
                     self.currentSidebarPosition = newSidebarPos
+                    MainActor.assumeIsolated {
+                        self.sidebarController.position = newSidebarPos
+                    }
                     self.rebuildSidebarLayout()
                 }
                 let newWsBarPos = AppSettings.shared.workspaceBarPosition
@@ -478,6 +532,10 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
                     self.cachedDetailViews.removeAll()
                     self.removeAllPluginContent()
                     self.rebuildSidebarTabs(context: ctx)
+                }
+                MainActor.assumeIsolated {
+                    self.sidebarController.persistLiveState()
+                    self.sidebarController.applyRestoredState(self.sidebarController.resolveEffectiveSidebarState())
                 }
             }
 
@@ -521,7 +579,7 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
             forName: .ghosttyOpenURL, object: nil, queue: .main
         ) { [weak self] notification in
             guard let self = self,
-                  let url = notification.userInfo?["url"] as? URL
+                let url = notification.userInfo?["url"] as? URL
             else { return }
             self.handleOpenTab(.browser(url: url))
         }
@@ -581,6 +639,7 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
 
     private func setupUI() {
         guard let window = window, let contentView = window.contentView else { return }
+        window.delegate = self
         contentView.wantsLayer = true
 
         toolbar.translatesAutoresizingMaskIntoConstraints = false
@@ -592,13 +651,26 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
         mainSplitView.isVertical = true
         mainSplitView.dividerStyle = .thin
         mainSplitView.delegate = self
+        (mainSplitView as? ThemedSplitView)?.onDividerDoubleClick = { [weak self] in
+            self?.resetSidebarWidthToDefault()
+        }
         contentView.addSubview(mainSplitView)
 
         splitContainer = SplitContainerView(frame: .zero)
         splitContainer.splitDelegate = self
         splitContainer.onRatioChanged = { [weak self] updatedTree in
-            guard let self, let ws = self.activeWorkspace else { return }
-            ws.splitTree = updatedTree
+            guard let self, let workspaceID = self.renderedWorkspaceID else { return }
+            guard self.appState.replaceSplitTree(for: workspaceID, with: updatedTree) else {
+                NSLog(
+                    "[WorkspaceSwitch] ignoredSplitRatio workspace=\(workspaceID.uuidString) activeWorkspace=\(self.activeWorkspace?.id.uuidString ?? "none")"
+                )
+                return
+            }
+            if workspaceID != self.activeWorkspace?.id {
+                NSLog(
+                    "[WorkspaceSwitch] applySplitRatio renderedWorkspace=\(workspaceID.uuidString) activeWorkspace=\(self.activeWorkspace?.id.uuidString ?? "none")"
+                )
+            }
             self.splitRatioSaveTimer?.invalidate()
             self.splitRatioSaveTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: false) { [weak self] _ in
                 self?.saveSession()
@@ -650,6 +722,7 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
         applySidebarTabBarPositionConstraints()
 
         currentSidebarPosition = AppSettings.shared.sidebarPosition
+        sidebarController.position = currentSidebarPosition
         if sidebarVisible {
             if currentSidebarPosition == .left {
                 mainSplitView.addSubview(sidebarContainer)
@@ -713,23 +786,6 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
         heightConstraint.isActive = true
         statusBarHeightConstraint = heightConstraint
 
-        DispatchQueue.main.async { [weak self] in
-            guard let self = self else { return }
-            let sidebarW = AppSettings.shared.sidebarWidth
-            let pos: CGFloat
-            if self.currentSidebarPosition == .left {
-                pos = sidebarW
-            } else {
-                pos = self.mainSplitView.bounds.width - sidebarW
-            }
-            if self.currentSidebarPosition == .left {
-                if pos < self.mainSplitView.bounds.width - 300 {
-                    self.mainSplitView.setPosition(pos, ofDividerAt: 0)
-                }
-            } else {
-                if pos > 300 { self.mainSplitView.setPosition(pos, ofDividerAt: 0) }
-            }
-        }
     }
 
     /// Setup a vertical workspace bar on the given edge.
@@ -798,18 +854,7 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
     /// Apply (or re-apply) the positional constraints for the sidebar tab bar based on
     /// `AppSettings.shared.sidebarTabBarPosition`. Deactivates any previously active constraints.
     func applySidebarTabBarPositionConstraints() {
-        guard let tabBar = sidebarTabBarView else { return }
-        NSLayoutConstraint.deactivate(sidebarTabBarPositionConstraints)
-        if AppSettings.shared.sidebarTabBarPosition == .bottom {
-            sidebarTabBarPositionConstraints = [
-                tabBar.bottomAnchor.constraint(equalTo: sidebarContainer.bottomAnchor)
-            ]
-        } else {
-            sidebarTabBarPositionConstraints = [
-                tabBar.topAnchor.constraint(equalTo: sidebarContainer.topAnchor)
-            ]
-        }
-        NSLayoutConstraint.activate(sidebarTabBarPositionConstraints)
+        sidebarController.applyTabBarPositionConstraints()
     }
 
     private func rebuildSidebarLayout() {
@@ -831,9 +876,7 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
             sidebarContainer.removeFromSuperview()
         } else {
             mainSplitView.adjustSubviews()
-            let sidebarW = AppSettings.shared.sidebarWidth
-            let pos: CGFloat = currentSidebarPosition == .left ? sidebarW : mainSplitView.bounds.width - sidebarW
-            mainSplitView.setPosition(pos, ofDividerAt: 0)
+            sidebarController.restoreActiveWorkspaceWidth()
         }
     }
 
@@ -869,17 +912,6 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
         guard splitView == mainSplitView, sidebarVisible else { return true }
         let sidebarIdx = currentSidebarPosition == .left ? 0 : 1
         return splitView.subviews[sidebarIdx] !== view
-    }
-
-    override func mouseUp(with event: NSEvent) {
-        super.mouseUp(with: event)
-        guard sidebarVisible else { return }
-        let sidebarIdx = currentSidebarPosition == .left ? 0 : 1
-        guard sidebarIdx < mainSplitView.subviews.count else { return }
-        let width = mainSplitView.subviews[sidebarIdx].frame.width
-        if abs(width - AppSettings.shared.sidebarWidth) > 2 {
-            AppSettings.shared.sidebarWidth = width
-        }
     }
 
     // MARK: - Terminal Bridge
@@ -1011,10 +1043,26 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
             return existing
         }
 
-        guard let workspace = activeWorkspace,
-            let pane = workspace.pane(for: paneID)
-        else {
-            return PaneView(paneID: paneID, pane: Pane(id: paneID))
+        guard let workspace = activeWorkspace else {
+            let fallbackPane = Pane(id: paneID)
+            _ = fallbackPane.addTab(workingDirectory: AppSettings.shared.defaultFolder)
+            let pv = PaneView(paneID: paneID, pane: fallbackPane)
+            pv.paneDelegate = self
+            pv.tabDragCoordinator = tabDragCoordinator
+            return pv
+        }
+
+        workspace.normalizePaneState()
+        guard let pane = workspace.pane(for: paneID) else {
+            NSLog(
+                "[WorkspaceSwitch] missingPaneView workspace=\(workspace.id.uuidString) pane=\(paneID.uuidString)"
+            )
+            let fallbackPane = Pane(id: paneID)
+            _ = fallbackPane.addTab(workingDirectory: workspace.folderPath)
+            let pv = PaneView(paneID: paneID, pane: fallbackPane)
+            pv.paneDelegate = self
+            pv.tabDragCoordinator = tabDragCoordinator
+            return pv
         }
 
         let pv = PaneView(paneID: paneID, pane: pane)
@@ -1095,36 +1143,32 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
     /// Toggle sidebar visibility. When `userInitiated` is true, the flag is
     /// recorded so the plugin system won't auto-show the sidebar on tab switch.
     func toggleSidebar(userInitiated: Bool) {
-        // Don't allow showing the sidebar when no tabs are available
-        if !sidebarVisible && sidebarTabBarView?.sidebarTabs.isEmpty == true {
-            return
-        }
-        sidebarVisible.toggle()
+        sidebarController.toggle(userInitiated: userInitiated)
         if userInitiated {
-            sidebarUserHidden = !sidebarVisible
+            saveSession()
         }
-        if sidebarVisible {
-            if currentSidebarPosition == .left {
-                // Insert sidebar before split container
-                mainSplitView.subviews.insert(sidebarContainer, at: 0)
-            } else {
-                mainSplitView.addSubview(sidebarContainer)
-            }
-            mainSplitView.adjustSubviews()
-            let sidebarW = AppSettings.shared.sidebarWidth
-            let pos: CGFloat = currentSidebarPosition == .left ? sidebarW : mainSplitView.bounds.width - sidebarW
-            mainSplitView.setPosition(pos, ofDividerAt: 0)
-        } else {
-            sidebarContainer.removeFromSuperview()
+    }
+
+    func splitViewDidResizeSubviews(_ notification: Notification) {
+        guard let splitView = notification.object as? NSSplitView else { return }
+        guard splitView == mainSplitView, sidebarVisible else { return }
+
+        sidebarController.syncWorkspaceSidebarState()
+
+        sidebarStateSaveTimer?.invalidate()
+        sidebarStateSaveTimer = Timer.scheduledTimer(withTimeInterval: 0.2, repeats: false) { [weak self] _ in
+            self?.saveSession()
         }
-        for (_, pv) in paneViews {
-            pv.currentTerminalView?.needsDisplay = true
-            pv.currentTerminalView?.needsLayout = true
-        }
-        statusBar.sidebarVisible = sidebarVisible
-        AppStore.shared.sidebarVisible = sidebarVisible
-        statusBar.needsDisplay = true
-        refreshToolbar()
+    }
+
+    func resetSidebarWidthToDefault() {
+        guard sidebarVisible else { return }
+        let defaultWidth = AppSettings.shared.sidebarWidth
+        var state = sidebarController.resolveEffectiveSidebarState()
+        state.width = defaultWidth
+        sidebarController.applyRestoredState(state)
+        sidebarController.persistResolvedState(state)
+        saveSession()
     }
 
     @objc func splitVerticalAction(_ sender: Any?) {

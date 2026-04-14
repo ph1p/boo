@@ -5,6 +5,9 @@ extension Notification.Name {
     static let ghosttyPwdChanged = Notification.Name("ghosttyPwdChanged")
     static let ghosttyChildExited = Notification.Name("ghosttyChildExited")
     static let ghosttyAction = Notification.Name("ghosttyAction")
+    /// Posted when Ghostty requests a URL to be opened (e.g. cmd+click on a hyperlink).
+    /// userInfo["url"] is a URL. Only http/https URLs are posted; other schemes fall through.
+    static let ghosttyOpenURL = Notification.Name("ghosttyOpenURL")
 }
 
 // C-compatible callback functions
@@ -175,6 +178,28 @@ private func ghosttyAction(_ app: ghostty_app_t?, _ target: ghostty_target_s, _ 
     case GHOSTTY_ACTION_RELOAD_CONFIG:
         DispatchQueue.main.async {
             GhosttyRuntime.shared.reloadConfig()
+        }
+        return true
+
+    case GHOSTTY_ACTION_OPEN_URL:
+        let openURL = action.action.open_url
+        guard let urlPtr = openURL.url else { return false }
+        let urlString: String
+        if openURL.len > 0 {
+            urlString = urlPtr.withMemoryRebound(to: UInt8.self, capacity: Int(openURL.len)) {
+                String(decoding: UnsafeBufferPointer(start: $0, count: Int(openURL.len)), as: UTF8.self)
+            }
+        } else {
+            urlString = String(cString: urlPtr)
+        }
+        guard urlString.hasPrefix("http://") || urlString.hasPrefix("https://") else { return false }
+        guard let url = URL(string: urlString) else { return false }
+        DispatchQueue.main.async {
+            NotificationCenter.default.post(
+                name: .ghosttyOpenURL,
+                object: nil,
+                userInfo: ["url": url]
+            )
         }
         return true
 

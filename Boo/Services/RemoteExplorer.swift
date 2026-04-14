@@ -490,15 +490,15 @@ final class RemoteExplorer {
             requiredTerms = [lowered]
         }
 
-        // Search common socket directories
+        // Search common socket directories (never /tmp — world-writable, attacker-plantable)
         let home = NSHomeDirectory()
         let searchDirs = [
             home + "/.ssh",
             home + "/.ssh/sockets",
-            home + "/.ssh/cm",
-            "/tmp"
+            home + "/.ssh/cm"
         ]
 
+        let myUID = getuid()
         let fm = FileManager.default
         for dir in searchDirs {
             guard let files = try? fm.contentsOfDirectory(atPath: dir) else { continue }
@@ -510,9 +510,11 @@ final class RemoteExplorer {
                 let path = dir + "/" + file
                 var statBuf = stat()
                 guard stat(path, &statBuf) == 0 else { continue }
-                if (statBuf.st_mode & S_IFMT) == S_IFSOCK {
-                    return path
+                // Must be a socket AND owned by the current user
+                guard (statBuf.st_mode & S_IFMT) == S_IFSOCK, statBuf.st_uid == myUID else {
+                    continue
                 }
+                return path
             }
         }
         return nil

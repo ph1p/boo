@@ -25,12 +25,16 @@ extension MainWindowController {
         sendRawToActivePane("printf '\\033[3J\\033[2J\\033[H'\r")
     }
 
-    @objc func copyAction(_ sender: Any?) {
-        // Ghostty handles copy/selection via its own keybindings
-    }
-
-    @objc func selectAllAction(_ sender: Any?) {
-        // Ghostty handles select-all via its own keybindings
+    @objc func saveAction(_ sender: Any?) {
+        guard let ws = activeWorkspace,
+            let pane = ws.pane(for: ws.activePaneID),
+            let pv = paneViews[pane.id]
+        else { return }
+        pv.activeContentView?.save { success in
+            if !success {
+                debugLog("[MainWindow] Save failed")
+            }
+        }
     }
 
     @objc func focusNextPaneAction(_ sender: Any?) {
@@ -129,7 +133,7 @@ extension MainWindowController {
             pv.addNewTab(contentType: .browser, url: url)
 
         case .file(let path):
-            // Check if file has a known content type (image, markdown, etc.)
+            // Check if file has a known content type (image, markdown, PDF, etc.)
             if let type = ContentType.forFile(path) {
                 // Markdown respects user preference
                 if type == .markdownPreview {
@@ -143,6 +147,9 @@ extension MainWindowController {
                     case .external:
                         NSWorkspace.shared.open(URL(fileURLWithPath: path))
                     }
+                } else if type == .browser {
+                    // PDF (and any future file-URL-browser types): open directly as browser tab
+                    pv.addNewTab(contentType: .browser, url: URL(fileURLWithPath: path))
                 } else {
                     openFileInTab(path: path, type: type)
                 }
@@ -232,7 +239,7 @@ extension MainWindowController {
         let dedupeKey = "\(typeID):\(context.key)"
         for (paneID, pane) in workspace.panes {
             if let pv = paneViews[paneID],
-               let idx = pane.tabs.firstIndex(where: { registeredTabKey(for: $0.id) == dedupeKey })
+                let idx = pane.tabs.firstIndex(where: { registeredTabKey(for: $0.id) == dedupeKey })
             {
                 // Focus existing tab
                 workspace.activePaneID = paneID

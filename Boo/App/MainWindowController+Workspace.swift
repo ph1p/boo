@@ -108,12 +108,35 @@ extension MainWindowController: WorkspaceBarViewDelegate {
 // MARK: - Workspace Management
 
 extension MainWindowController {
+    func normalizeWorkspaceState() {
+        appState.ensureUniquePaneIDsAcrossWorkspaces()
+    }
+
+    func persistActiveWorkspaceSidebarState() {
+        activeWorkspace?.normalizePaneState()
+        sidebarController.persistLiveState()
+    }
+
     /// Shared close-workspace logic used by both toolbar and workspace bar delegates.
     func toolbarDidCloseWorkspace(at index: Int) {
         guard index >= 0, index < appState.workspaces.count else { return }
         let ws = appState.workspaces[index]
         guard !ws.isPinned else { return }
 
+        if let location = unsavedEditorLocation(workspaceIndex: index) {
+            confirmUnsavedEditorClose(location) { [weak self] in
+                self?.presentCloseWorkspaceAlert(at: index)
+            }
+            return
+        }
+
+        presentCloseWorkspaceAlert(at: index)
+    }
+
+    func presentCloseWorkspaceAlert(at index: Int) {
+        guard index >= 0, index < appState.workspaces.count else { return }
+
+        let ws = appState.workspaces[index]
         let wsID = ws.id
         let totalTabs = ws.totalTabCount
         let alert = NSAlert()
@@ -167,6 +190,7 @@ extension MainWindowController {
                 for ws in restored {
                     appState.addWorkspace(ws)
                 }
+                normalizeWorkspaceState()
                 let safeIndex = min(
                     max(snapshot.activeWorkspaceIndex, 0),
                     appState.workspaces.count - 1
@@ -179,6 +203,11 @@ extension MainWindowController {
     }
 
     func saveSession() {
+        for paneView in paneViews.values {
+            paneView.persistContentStateToModel()
+        }
+        normalizeWorkspaceState()
+        persistActiveWorkspaceSidebarState()
         savePluginStateForActiveTab()
         SessionStore.save(appState: appState)
     }
@@ -186,12 +215,104 @@ extension MainWindowController {
     func openWorkspace(path: String) {
         let previousIndex = appState.activeWorkspaceIndex
         let workspace = Workspace(folderPath: path)
+        if AppSettings.shared.sidebarPerWorkspaceState {
+            let currentSidebarState = sidebarController.captureLiveState()
+            workspace.sidebarState = SidebarWorkspaceState(
+                isVisible: currentSidebarState.isVisible,
+                width: currentSidebarState.width
+            )
+        } else {
+            workspace.sidebarState = sidebarController.resolveEffectiveSidebarState()
+        }
+        workspace.customName = appState.nextGeneratedWorkspaceName()
+        configureInitialTab(for: workspace)
         appState.addWorkspace(workspace)
         if previousIndex >= 0 {
             appState.setActiveWorkspace(previousIndex)
         }
         activateWorkspace(appState.workspaces.count - 1)
-        saveSession()
+        savePluginStateForActiveTab()
+        SessionStore.save(appState: appState)
+    }
+
+    private func configureInitialTab(for workspace: Workspace) {
+        guard let pane = workspace.pane(for: workspace.activePaneID) else { return }
+
+        pane.stopAll()
+
+        let defaultType = AppSettings.shared.defaultTabType
+        let mainPage = AppSettings.shared.defaultMainPage.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        switch defaultType {
+        case .terminal:
+            _ = pane.addTab(workingDirectory: mainPage.isEmpty ? workspace.folderPath : mainPage)
+        case .browser:
+            let rawURL = mainPage.isEmpty ? AppSettings.shared.browserHomePage : mainPage
+            let url = URL(string: rawURL) ?? ContentType.newTabURL
+            let idx = pane.addTab(
+                contentType: .browser,
+                workingDirectory: workspace.folderPath,
+                title: url.host ?? "New Tab"
+            )
+            pane.updateContentState(
+                at: idx,
+                .browser(BrowserContentState(title: url.host ?? "New Tab", url: url))
+            )
+        case .editor:
+            let idx = pane.addTab(
+                contentType: .editor,
+                workingDirectory: workingDirectoryForMainPage(mainPage, workspacePath: workspace.folderPath),
+                title: mainPage.isEmpty ? nil : (mainPage as NSString).lastPathComponent
+            )
+            pane.updateContentState(
+                at: idx,
+                .editor(
+                    EditorContentState(
+                        title: mainPage.isEmpty ? "Untitled" : (mainPage as NSString).lastPathComponent,
+                        filePath: mainPage.isEmpty ? nil : mainPage
+                    )
+                )
+            )
+        case .imageViewer:
+            let idx = pane.addTab(
+                contentType: .imageViewer,
+                workingDirectory: workingDirectoryForMainPage(mainPage, workspacePath: workspace.folderPath),
+                title: mainPage.isEmpty ? nil : (mainPage as NSString).lastPathComponent
+            )
+            pane.updateContentState(
+                at: idx,
+                .imageViewer(
+                    ImageViewerContentState(
+                        title: mainPage.isEmpty ? "Image" : (mainPage as NSString).lastPathComponent,
+                        filePath: mainPage
+                    )
+                )
+            )
+        case .markdownPreview:
+            let idx = pane.addTab(
+                contentType: .markdownPreview,
+                workingDirectory: workingDirectoryForMainPage(mainPage, workspacePath: workspace.folderPath),
+                title: mainPage.isEmpty ? nil : (mainPage as NSString).lastPathComponent
+            )
+            pane.updateContentState(
+                at: idx,
+                .markdownPreview(
+                    MarkdownPreviewContentState(
+                        title: mainPage.isEmpty ? "Markdown" : (mainPage as NSString).lastPathComponent,
+                        filePath: mainPage
+                    )
+                )
+            )
+        case .pluginView:
+            _ = pane.addTab(workingDirectory: workspace.folderPath)
+        }
+    }
+
+    private func workingDirectoryForMainPage(_ mainPage: String, workspacePath: String) -> String {
+        guard !mainPage.isEmpty else { return workspacePath }
+        return (mainPage as NSString).deletingLastPathComponent.isEmpty
+            ? workspacePath
+            : (mainPage as NSString).deletingLastPathComponent
     }
 
     /// Collects screen-space rects for all workspace pills across toolbar and side bar.
@@ -205,6 +326,7 @@ extension MainWindowController {
     }
 
     func activateWorkspace(_ index: Int) {
+        let previousWorkspace = activeWorkspace
         // Save the currently focused pane before switching away.
         if let oldWS = activeWorkspace, let focusedView = window?.firstResponder as? NSView {
             for (paneID, pv) in paneViews {
@@ -217,14 +339,18 @@ extension MainWindowController {
             }
         }
 
-        if AppSettings.shared.sidebarPerWorkspaceState, let oldWS = activeWorkspace {
-            oldWS.sidebarState = sidebarController.captureState()
+        if activeWorkspace != nil {
+            persistActiveWorkspaceSidebarState()
         }
 
         savePluginStateForActiveTab()
 
         appState.setActiveWorkspace(index)
         guard let workspace = activeWorkspace else { return }
+        workspace.normalizePaneState()
+        NSLog(
+            "[WorkspaceSwitch] activate fromWorkspace=\(previousWorkspace?.id.uuidString ?? "none") toWorkspace=\(workspace.id.uuidString) targetPane=\(workspace.activePaneID.uuidString)"
+        )
 
         if let activeTab = workspace.pane(for: workspace.activePaneID)?.activeTab {
             coordinator.restorePluginState(from: activeTab)
@@ -243,9 +369,7 @@ extension MainWindowController {
         let cwd = workspace.pane(for: workspace.activePaneID)?.activeTab?.workingDirectory ?? workspace.folderPath
         bridge.switchContext(paneID: workspace.activePaneID, workspaceID: workspace.id, workingDirectory: cwd)
 
-        if AppSettings.shared.sidebarPerWorkspaceState {
-            sidebarController.restoreState(workspace.sidebarState)
-        }
+        sidebarController.applyRestoredState(sidebarController.resolveEffectiveSidebarState(for: workspace))
 
         refreshToolbar()
         // isRemoteSidebar/activeRemoteSession are now derived from bridge state,
@@ -253,15 +377,22 @@ extension MainWindowController {
         runPluginCycle(reason: .workspaceSwitched)
 
         // Rebuild split container with the workspace's tree
+        renderedWorkspaceID = workspace.id
         splitContainer.update(tree: workspace.splitTree)
 
         DispatchQueue.main.async { [weak self] in
             guard let self = self, let ws = self.activeWorkspace else { return }
 
-            for (_, pv) in self.paneViews {
-                // Ensure every pane has a session
-                if pv.currentTerminalView == nil {
-                    pv.startActiveSession()
+            // Iterate over the WORKSPACE'S PANES (data model), not paneViews, to ensure all panes
+            // have PaneViews created even if they're not yet in the view cache.
+            for (_, pane) in ws.panes {
+                // Get or create the PaneView for this pane - this triggers
+                // splitContainer(self:paneViewFor:) which creates and caches it.
+                if let pv = self.paneViews[pane.id] {
+                    // Ensure every pane has a session
+                    if pv.currentTerminalView == nil {
+                        pv.startActiveSession()
+                    }
                 }
             }
 
@@ -274,6 +405,9 @@ extension MainWindowController {
             }
             if let pv = self.paneViews[targetPaneID] {
                 ws.activePaneID = targetPaneID
+                NSLog(
+                    "[WorkspaceSwitch] restoreResponder workspace=\(ws.id.uuidString) pane=\(targetPaneID.uuidString) ghostty=\(pv.ghosttyView != nil)"
+                )
                 self.window?.makeFirstResponder(pv.ghosttyView)
             }
 

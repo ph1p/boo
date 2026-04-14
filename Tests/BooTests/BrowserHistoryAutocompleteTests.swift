@@ -89,6 +89,64 @@ final class BrowserHistoryAutocompleteTests: XCTestCase {
         XCTAssertTrue(matches.isEmpty)
     }
 
+    // MARK: - Autocomplete URL deduplication (mirrors BrowserContentView.showAutocomplete)
+
+    /// Helper that replicates the dedup logic from showAutocomplete.
+    private func deduped(from entries: [BrowserHistoryEntry], query: String) -> [BrowserHistoryEntry] {
+        let filtered: [BrowserHistoryEntry]
+        if query.isEmpty {
+            filtered = Array(entries.prefix(8))
+        } else {
+            filtered = entries.filter {
+                $0.url.absoluteString.localizedCaseInsensitiveContains(query)
+                    || $0.title.localizedCaseInsensitiveContains(query)
+            }
+        }
+        var seen = Set<URL>()
+        return filtered.filter { seen.insert($0.url).inserted }
+    }
+
+    func testAutocompleteDeduplicatesSameURLWithDifferentTitles() {
+        let url = URL(string: "https://example.com")!
+        // Same URL recorded twice (e.g. title changed between visits)
+        BrowserHistory.shared.record(title: "Example Old", url: url)
+        // Insert a different URL in between so BrowserHistory doesn't skip the second record
+        BrowserHistory.shared.record(title: "Other", url: URL(string: "https://other.com")!)
+        BrowserHistory.shared.record(title: "Example New", url: url)
+
+        let result = deduped(from: BrowserHistory.shared.entries, query: "example.com")
+        let urls = result.map(\.url)
+        XCTAssertEqual(urls.filter { $0 == url }.count, 1, "same URL should appear only once")
+    }
+
+    func testAutocompleteDeduplicatesToMostRecentEntry() {
+        let url = URL(string: "https://example.com")!
+        BrowserHistory.shared.record(title: "Example Old", url: url)
+        BrowserHistory.shared.record(title: "Spacer", url: URL(string: "https://spacer.com")!)
+        BrowserHistory.shared.record(title: "Example New", url: url)
+
+        // entries are newest-first, so deduped should keep the first occurrence = newest
+        let result = deduped(from: BrowserHistory.shared.entries, query: "example.com")
+        XCTAssertEqual(result.first(where: { $0.url == url })?.title, "Example New")
+    }
+
+    func testAutocompleteNoDuplicatesWhenAllUnique() {
+        let urls = ["https://a.com", "https://b.com", "https://c.com"].map { URL(string: $0)! }
+        for (i, url) in urls.enumerated() {
+            BrowserHistory.shared.record(title: "Site \(i)", url: url)
+        }
+        let result = deduped(from: BrowserHistory.shared.entries, query: "")
+        XCTAssertEqual(result.count, urls.count)
+    }
+
+    func testAutocompleteLimitedToEightResults() {
+        for i in 0..<12 {
+            BrowserHistory.shared.record(title: "Site \(i)", url: URL(string: "https://site\(i).com")!)
+        }
+        let result = deduped(from: BrowserHistory.shared.entries, query: "")
+        XCTAssertLessThanOrEqual(result.count, 8)
+    }
+
     // MARK: - Clear
 
     func testClearRemovesAllEntries() {

@@ -155,7 +155,10 @@ extension GitPlugin {
             if cleaned.hasSuffix(".git") {
                 cleaned = String(cleaned.dropLast(4))
             }
-            return URL(string: cleaned)
+            guard let url = URL(string: cleaned),
+                url.scheme == "https" || url.scheme == "http"
+            else { return nil }
+            return url
         }
     }
 

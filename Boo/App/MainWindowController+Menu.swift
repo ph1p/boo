@@ -29,6 +29,8 @@ extension MainWindowController {
         browserTab.keyEquivalentModifierMask = [.command, .shift]
         fileMenu.addItem(browserTab)
         fileMenu.addItem(.separator())
+        fileMenu.addItem(withTitle: "Save", action: #selector(saveAction(_:)), keyEquivalent: "s")
+        fileMenu.addItem(.separator())
         fileMenu.addItem(withTitle: "Close", action: #selector(smartCloseAction(_:)), keyEquivalent: "w")
         fileMenu.addItem(withTitle: "Reopen Closed Tab", action: #selector(reopenTabAction(_:)), keyEquivalent: "z")
         fileMenu.addItem(.separator())
@@ -55,10 +57,10 @@ extension MainWindowController {
 
         let editMenuItem = NSMenuItem()
         let editMenu = NSMenu(title: "Edit")
-        editMenu.addItem(withTitle: "Copy", action: #selector(copyAction(_:)), keyEquivalent: "c")
-        editMenu.addItem(withTitle: "Paste", action: #selector(GhosttyView.paste(_:)), keyEquivalent: "v")
+        editMenu.addItem(withTitle: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
+        editMenu.addItem(withTitle: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
         editMenu.addItem(.separator())
-        editMenu.addItem(withTitle: "Select All", action: #selector(selectAllAction(_:)), keyEquivalent: "a")
+        editMenu.addItem(withTitle: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
         editMenuItem.submenu = editMenu
         mainMenu.addItem(editMenuItem)
 

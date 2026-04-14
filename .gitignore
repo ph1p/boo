@@ -12,6 +12,9 @@ _bmad
 _bmad-output
 documentation/docs/dist
 documentation/node_modules
+Boo/Resources/MonacoBundle
+Boo/Resources/MonacoSource/node_modules
 *.dmg
 .DS_Store
 .swiftpm
+.pnpm-store

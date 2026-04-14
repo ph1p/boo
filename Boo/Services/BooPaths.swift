@@ -56,7 +56,10 @@ enum BooPaths {
     /// Base config directory: ~/.boo/
     static let configDir: String = {
         let path = (NSHomeDirectory() as NSString).appendingPathComponent(".boo")
-        try? FileManager.default.createDirectory(atPath: path, withIntermediateDirectories: true)
+        try? FileManager.default.createDirectory(
+            atPath: path, withIntermediateDirectories: true,
+            attributes: [.posixPermissions: 0o700]
+        )
         return path
     }()
 

@@ -5,9 +5,63 @@ final class AppState {
     private(set) var workspaces: [Workspace] = []
     private(set) var activeWorkspaceIndex: Int = -1
 
+    func nextGeneratedWorkspaceName() -> String {
+        "Workspace \(workspaces.count + 1)"
+    }
+
     var activeWorkspace: Workspace? {
         guard activeWorkspaceIndex >= 0, activeWorkspaceIndex < workspaces.count else { return nil }
         return workspaces[activeWorkspaceIndex]
+    }
+
+    func workspace(withID workspaceID: UUID) -> Workspace? {
+        workspaces.first(where: { $0.id == workspaceID })
+    }
+
+    func workspaceContainingPane(_ paneID: UUID) -> Workspace? {
+        workspaces.first(where: { $0.pane(for: paneID) != nil })
+    }
+
+    func indexOfWorkspace(containingPane paneID: UUID) -> Int? {
+        workspaces.firstIndex(where: { $0.pane(for: paneID) != nil })
+    }
+
+    static func ensureUniquePaneIDsAcrossWorkspaces(_ workspaces: [Workspace]) {
+        var seenPaneIDs = Set<UUID>()
+
+        for workspace in workspaces {
+            workspace.normalizePaneState()
+
+            let leafIDs = workspace.splitTree.leafIDs
+            var remappedPaneIDs: [UUID: UUID] = [:]
+
+            for paneID in leafIDs where seenPaneIDs.contains(paneID) {
+                var replacementID = UUID()
+                while seenPaneIDs.contains(replacementID) || remappedPaneIDs.values.contains(replacementID) {
+                    replacementID = UUID()
+                }
+                remappedPaneIDs[paneID] = replacementID
+                NSLog(
+                    "[WorkspaceSwitch] remapDuplicatePaneID workspace=\(workspace.id.uuidString) oldPane=\(paneID.uuidString) newPane=\(replacementID.uuidString)"
+                )
+            }
+
+            workspace.remapPaneIDs(remappedPaneIDs)
+            workspace.normalizePaneState()
+            seenPaneIDs.formUnion(workspace.splitTree.leafIDs)
+        }
+    }
+
+    func ensureUniquePaneIDsAcrossWorkspaces() {
+        Self.ensureUniquePaneIDsAcrossWorkspaces(workspaces)
+    }
+
+    @discardableResult
+    func replaceSplitTree(for workspaceID: UUID, with splitTree: SplitTree) -> Bool {
+        guard let workspace = workspace(withID: workspaceID) else { return false }
+        workspace.splitTree = splitTree
+        workspace.normalizePaneState()
+        return true
     }
 
     func addWorkspace(_ workspace: Workspace) {

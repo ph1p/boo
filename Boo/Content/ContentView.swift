@@ -32,6 +32,15 @@ protocol ContentViewProtocol: NSView {
 
     /// Called when the content requests to close (e.g., process exit).
     var onCloseRequested: (() -> Void)? { get set }
+
+    /// Save the content to disk if applicable.
+    func save(completion: ((Bool) -> Void)?)
+}
+
+extension ContentViewProtocol {
+    func save(completion: ((Bool) -> Void)?) {
+        completion?(true)
+    }
 }
 
 /// Factory for creating content views based on content type.

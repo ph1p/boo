@@ -24,7 +24,7 @@ final class ImageViewerContentView: NSView, ContentViewProtocol {
         }
         super.init(frame: .zero)
         wantsLayer = true
-        layer?.backgroundColor = NSColor.black.cgColor
+        layer?.backgroundColor = AppSettings.shared.theme.background.nsColor.cgColor
         setupImageView()
     }
 
@@ -80,6 +80,26 @@ final class ImageViewerContentView: NSView, ContentViewProtocol {
         currentTitle = imageState.title
         zoom = imageState.zoom
         loadImage(at: imageState.filePath)
+    }
+
+    // MARK: - Theme
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(settingsDidChange),
+            name: .settingsChanged,
+            object: nil
+        )
+    }
+
+    @objc private func settingsDidChange(_ note: Notification) {
+        guard let raw = note.userInfo?["topic"] as? String,
+            let topic = SettingsTopic(rawValue: raw),
+            topic == .theme
+        else { return }
+        layer?.backgroundColor = AppSettings.shared.theme.background.nsColor.cgColor
     }
 
     // MARK: - First Responder
