@@ -34,6 +34,13 @@ struct SidebarWorkspaceState {
 }
 
 final class Workspace {
+    static func defaultSidebarState() -> SidebarWorkspaceState {
+        SidebarWorkspaceState(
+            isVisible: !AppSettings.shared.sidebarDefaultHidden,
+            width: AppSettings.shared.sidebarWidth
+        )
+    }
+
     let id: UUID
     let folderPath: String
 
@@ -43,7 +50,7 @@ final class Workspace {
     var isPinned: Bool = false
 
     /// Per-workspace sidebar visibility and width overrides.
-    var sidebarState: SidebarWorkspaceState = SidebarWorkspaceState()
+    var sidebarState: SidebarWorkspaceState = Workspace.defaultSidebarState()
 
     /// Resolved color: custom color takes precedence, then preset, then nil.
     var resolvedColor: NSColor? {
@@ -94,13 +101,80 @@ final class Workspace {
     }
 
     /// Add a pre-built pane (used during restore).
-    func restorePane(_ pane: Pane) {
+    @discardableResult
+    func restorePane(_ pane: Pane) -> Bool {
+        guard splitTree.leafIDs.contains(pane.id) else {
+            NSLog(
+                "[WorkspaceSwitch] rejectedPaneRestore workspace=\(id.uuidString) pane=\(pane.id.uuidString)"
+            )
+            return false
+        }
         panes[pane.id] = pane
+        return true
     }
 
     func pane(for id: UUID) -> Pane? { panes[id] }
 
     var totalTabCount: Int { panes.values.reduce(0) { $0 + $1.tabs.count } }
+
+    func normalizePaneState() {
+        if splitTree.leafIDs.isEmpty {
+            let rootID = UUID()
+            splitTree = .leaf(id: rootID)
+            activePaneID = rootID
+        }
+
+        let leafIDs = splitTree.leafIDs
+        let leafSet = Set(leafIDs)
+
+        for paneID in panes.keys where !leafSet.contains(paneID) {
+            panes[paneID]?.stopAll()
+            panes.removeValue(forKey: paneID)
+        }
+
+        for leafID in leafIDs {
+            let pane: Pane
+            if let existing = panes[leafID] {
+                pane = existing
+            } else {
+                pane = Pane(id: leafID)
+                panes[leafID] = pane
+            }
+
+            if pane.tabs.isEmpty {
+                _ = pane.addTab(workingDirectory: folderPath)
+            }
+        }
+
+        if !leafSet.contains(activePaneID) {
+            activePaneID = leafIDs.first ?? activePaneID
+        }
+    }
+
+    func remapPaneIDs(_ mapping: [UUID: UUID]) {
+        guard !mapping.isEmpty else { return }
+
+        splitTree = splitTree.remappingLeafIDs(mapping)
+
+        var remappedPanes: [UUID: Pane] = [:]
+        for (paneID, pane) in panes {
+            let remappedID = mapping[paneID] ?? paneID
+            remappedPanes[remappedID] =
+                remappedID == paneID ? pane : pane.cloned(withID: remappedID)
+        }
+        panes = remappedPanes
+
+        activePaneID = mapping[activePaneID] ?? activePaneID
+
+        var remappedFocusHistory: [UUID] = []
+        for paneID in focusHistory {
+            let remappedID = mapping[paneID] ?? paneID
+            if !remappedFocusHistory.contains(remappedID) {
+                remappedFocusHistory.append(remappedID)
+            }
+        }
+        focusHistory = remappedFocusHistory
+    }
 
     @discardableResult
     func splitPane(_ paneID: UUID, direction: SplitTree.SplitDirection) -> UUID {

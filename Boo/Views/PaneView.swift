@@ -349,6 +349,13 @@ class PaneView: NSView {
         contentViews[tabID] = cv
     }
 
+    func editorView(for tabID: UUID) -> EditorContentView? {
+        if pane.activeTab?.id == tabID, let activeContentView = activeContentView as? EditorContentView {
+            return activeContentView
+        }
+        return contentViews[tabID] as? EditorContentView
+    }
+
     private func wireCallbacks(_ gv: GhosttyView) {
         gv.onFocused = { [weak self] in
             guard let self = self else { return }
@@ -725,6 +732,16 @@ class PaneView: NSView {
             cv.removeFromSuperview()
             contentViews[tab.id] = cv
             activeContentView = nil
+        }
+    }
+
+    func persistContentStateToModel() {
+        for (index, tab) in pane.tabs.enumerated() where tab.contentType != .terminal {
+            if pane.activeTab?.id == tab.id, let activeContentView {
+                pane.updateContentState(at: index, activeContentView.saveState())
+            } else if let contentView = contentViews[tab.id] {
+                pane.updateContentState(at: index, contentView.saveState())
+            }
         }
     }
 

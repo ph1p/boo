@@ -15,7 +15,7 @@ final class SnippetsPlugin: BooPluginProtocol {
         version: "1.0.0",
         icon: "text.page",
         description: "Save and paste frequently-used terminal commands",
-        when: "!process.ai",
+        when: nil,
         runtime: nil,
         capabilities: PluginManifest.Capabilities(statusBarSegment: false, sidebarTab: true),
         statusBar: nil,

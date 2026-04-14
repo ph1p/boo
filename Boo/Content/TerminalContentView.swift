@@ -146,7 +146,7 @@ final class TerminalContentView: NSView, ContentViewProtocol {
 
     /// Copy the current selection to clipboard.
     func copySelection() {
-        ghosttyView.copySelection(nil)
+        ghosttyView.copy(nil)
     }
 
     /// Paste from clipboard.

@@ -349,15 +349,16 @@ struct FileTreeRowView: View {
 
     // MARK: Context Menu
 
-    private enum FileOpenCapability { case image, markdown, editor, browser, externalOnly }
+    private enum FileOpenCapability { case image, markdown, editor, browser, pdf, externalOnly }
 
     private func resolveCapability() -> FileOpenCapability {
         guard !node.isDirectory else { return .externalOnly }
         let ext = (node.name as NSString).pathExtension.lowercased()
         let filename = node.name.lowercased()
-        if ContentType.imageExtensions.contains(ext)    { return .image }
+        if ContentType.imageExtensions.contains(ext) { return .image }
         if ContentType.markdownExtensions.contains(ext) { return .markdown }
-        if ContentType.htmlExtensions.contains(ext)     { return .browser }
+        if ContentType.htmlExtensions.contains(ext) { return .browser }
+        if ContentType.pdfExtensions.contains(ext) { return .pdf }
 
         if ContentType.isEditorFilePattern(filename: filename) { return .editor }
         return .externalOnly
@@ -376,6 +377,8 @@ struct FileTreeRowView: View {
     private func contextMenuOpen(cap: FileOpenCapability) -> some View {
         let htmlOpenInBrowser = AppSettings.shared.pluginBool(
             "file-tree-local", "htmlOpenInBrowser", default: false)
+        let pdfOpenInBrowser = AppSettings.shared.pluginBool(
+            "file-tree-local", "pdfOpenInBrowser", default: true)
 
         if actions.isAIAgentRunning {
             Button("Reference in AI (@)") { actions.onReferenceInAI?(node.path) }
@@ -386,16 +389,16 @@ struct FileTreeRowView: View {
             if !actions.isAIAgentRunning {
                 Button("cd into") { actions.onNavigate?(node.path) }
             }
-            Button("Open Terminal Tab")  { actions.onOpenInTab?(node.path) }
+            Button("Open Terminal Tab") { actions.onOpenInTab?(node.path) }
             Button("Open Terminal Pane") { actions.onOpenInPane?(node.path) }
         } else {
             Button("Open") { actions.onFileClicked?(node.path) }
             if cap != .externalOnly {
-                Button("Open in New Tab")  { actions.onOpenFileInTab?(node.path) }
+                Button("Open in New Tab") { actions.onOpenFileInTab?(node.path) }
                 Button("Open in New Pane") { actions.onOpenFileInPane?(node.path) }
             }
             Button("Open with Default App") { NSWorkspace.shared.open(URL(fileURLWithPath: node.path)) }
-            if cap == .browser && !htmlOpenInBrowser {
+            if (cap == .browser && !htmlOpenInBrowser) || (cap == .pdf && !pdfOpenInBrowser) {
                 Button("Open in Browser") { actions.onOpenFileInBrowser?(node.path) }
             }
             if cap == .image {
@@ -424,7 +427,7 @@ struct FileTreeRowView: View {
     private var contextMenuEdit: some View {
         Divider()
         if node.isDirectory {
-            Button("New File")   { actions.onCreateFile?(node.path) }
+            Button("New File") { actions.onCreateFile?(node.path) }
             Button("New Folder") { actions.onCreateFolder?(node.path) }
         } else {
             Button("Duplicate") { actions.onDuplicate?(node.path) }

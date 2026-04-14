@@ -98,6 +98,9 @@ enum ContentType: String, Codable, CaseIterable {
     /// HTML file extensions — can open in browser tab or built-in editor.
     static let htmlExtensions: Set<String> = ["html", "htm", "xhtml"]
 
+    /// PDF file extensions — can open in browser tab (WKWebView renders natively).
+    static let pdfExtensions: Set<String> = ["pdf"]
+
     /// Resolve content type for a file path based on extension.
     /// Returns nil for files that should fall back to external/editor handling.
     static func forFile(_ path: String) -> ContentType? {
@@ -107,6 +110,9 @@ enum ContentType: String, Codable, CaseIterable {
         }
         if imageExtensions.contains(ext) {
             return .imageViewer
+        }
+        if pdfExtensions.contains(ext) {
+            return .browser
         }
         return nil
     }
@@ -130,7 +136,7 @@ enum ContentType: String, Codable, CaseIterable {
     /// Only one brace group per pattern is supported. `*.{ts,tsx}` → `["*.ts", "*.tsx"]`.
     static func expandBraces(_ pattern: String) -> [String] {
         guard let open = pattern.firstIndex(of: "{"),
-              let close = pattern[open...].firstIndex(of: "}")
+            let close = pattern[open...].firstIndex(of: "}")
         else { return [pattern] }
         let prefix = String(pattern[..<open])
         let suffix = String(pattern[pattern.index(after: close)...])
@@ -173,18 +179,43 @@ enum ContentType: String, Codable, CaseIterable {
     /// Returns true if `filename` (lowercased) should open in the built-in editor.
     /// Checks the built-in floor first, then the user-stored setting.
     /// Old key "editorExtensions" is read as fallback for migration.
+    /// Split a comma-delimited pattern string, treating commas inside `{...}` as literals.
+    /// `"swift,*.{js,ts},py"` → `["swift", "*.{js,ts}", "py"]`
+    static func splitPatterns(_ raw: String) -> [String] {
+        var result: [String] = []
+        var current = ""
+        var depth = 0
+        for ch in raw {
+            switch ch {
+            case "{":
+                depth += 1
+                current.append(ch)
+            case "}":
+                depth -= 1
+                current.append(ch)
+            case "," where depth == 0:
+                let trimmed = current.trimmingCharacters(in: .whitespaces).lowercased()
+                if !trimmed.isEmpty { result.append(trimmed) }
+                current = ""
+            default: current.append(ch)
+            }
+        }
+        let trimmed = current.trimmingCharacters(in: .whitespaces).lowercased()
+        if !trimmed.isEmpty { result.append(trimmed) }
+        return result
+    }
+
     @MainActor
     static func isEditorFilePattern(filename: String) -> Bool {
+        let lower = filename.lowercased()
         func matchesPatterns(_ raw: String) -> Bool {
-            let patterns = raw.split(separator: ",")
-                .map { $0.trimmingCharacters(in: .whitespaces).lowercased() }
-                .filter { !$0.isEmpty }
-            let ext = (filename as NSString).pathExtension.lowercased()
+            let patterns = splitPatterns(raw)
+            let ext = (lower as NSString).pathExtension
             return patterns.contains { pattern in
                 if pattern.contains("*") || pattern.contains("{") {
-                    return globMatches(pattern: pattern, filename: filename)
+                    return globMatches(pattern: pattern, filename: lower)
                 }
-                return pattern == filename || pattern == ext
+                return pattern == lower || pattern == ext
             }
         }
 

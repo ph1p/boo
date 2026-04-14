@@ -128,7 +128,9 @@ class GhosttyView: NSView, NSTextInputClient {
             // we're still at an intermediary like `login`.
             let shell = RemoteExplorer.walkToLeafShell(from: directChild)
             if shell != directChild || attempt >= 3 {
-                booLog(.debug, .terminal, "shellPID discovered: directChild=\(directChild) shell=\(shell) attempt=\(attempt)")
+                booLog(
+                    .debug, .terminal,
+                    "shellPID discovered: directChild=\(directChild) shell=\(shell) attempt=\(attempt)")
                 claimedDirectChild = directChild
                 shellPID = shell
                 onShellPIDDiscovered?(shell)
@@ -422,7 +424,7 @@ class GhosttyView: NSView, NSTextInputClient {
         }
         let menu = NSMenu()
 
-        let copyItem = NSMenuItem(title: "Copy", action: #selector(copySelection(_:)), keyEquivalent: "")
+        let copyItem = NSMenuItem(title: "Copy", action: #selector(copy(_:)), keyEquivalent: "")
         copyItem.target = self
         menu.addItem(copyItem)
 
@@ -506,9 +508,15 @@ class GhosttyView: NSView, NSTextInputClient {
 
     // MARK: - Copy / Paste / Flash
 
-    @objc func copySelection(_ sender: Any?) {
+    @objc func copy(_ sender: Any?) {
         guard let surface = surface else { return }
         let action = "copy:clipboard"
+        _ = ghostty_surface_binding_action(surface, action, UInt(action.utf8.count))
+    }
+
+    @objc override func selectAll(_ sender: Any?) {
+        guard let surface = surface else { return }
+        let action = "select_all"
         _ = ghostty_surface_binding_action(surface, action, UInt(action.utf8.count))
     }
 

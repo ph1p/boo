@@ -41,6 +41,11 @@ enum ContentTypeDetector {
             return .markdownPreview
         }
 
+        // PDF files
+        if ContentType.pdfExtensions.contains(ext) {
+            return .browser
+        }
+
         // Don't auto-detect editor (too generic — most files would match)
         return nil
     }

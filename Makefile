@@ -1,4 +1,4 @@
-.PHONY: build run clean ghostty ghostty-linux ironmark setup setup-linux release test app sign notarize dmg dist lint format
+.PHONY: build run clean ghostty ghostty-linux ironmark monaco setup setup-linux release test app sign notarize dmg dist lint format
 
 UNAME := $(shell uname -s)
 
@@ -99,6 +99,16 @@ ironmark:
 		echo "==> ironmark already built"; \
 	fi
 
+# Build bundled Monaco editor assets with Vite
+monaco:
+	cd Boo/Resources/MonacoSource && CI=true pnpm install --frozen-lockfile && pnpm build
+
+monaco-lint:
+	cd Boo/Resources/MonacoSource && CI=true pnpm install --frozen-lockfile && pnpm lint
+
+monaco-format:
+	cd Boo/Resources/MonacoSource && CI=true pnpm install --frozen-lockfile && pnpm format
+
 # ── Build ────────────────────────────────────────────────────────────────────
 
 # Full setup (auto-detects platform)
@@ -112,7 +122,7 @@ endif
 setup-linux: build-linux
 
 # Build Boo (macOS — requires GhosttyKit)
-build:
+build: monaco
 	swift build
 	@# Bundle Ghostty resources next to the executable so shell integration works
 	@for dir in .build/debug .build/arm64-apple-macosx/debug; do \
@@ -125,7 +135,7 @@ build:
 	@echo "==> Ghostty resources bundled"
 
 # Build Boo for Linux (GTK4 + VTE terminal with sidebar)
-build-linux:
+build-linux: monaco
 	swift build
 	@echo "==> Linux build complete"
 
@@ -135,7 +145,7 @@ run: build
 
 # Release build
 ifeq ($(UNAME),Darwin)
-release:
+release: monaco
 	swift build -c release
 	@for dir in .build/release .build/arm64-apple-macosx/release; do \
 		if [ -d "$$dir" ]; then \
@@ -146,13 +156,13 @@ release:
 	done
 	@echo "==> Release build complete"
 else
-release:
+release: monaco
 	swift build -c release
 	@echo "==> Release build complete"
 endif
 
 # Run tests (macOS only — tests depend on AppKit types)
-test:
+test: monaco
 	swift test --disable-swift-testing
 
 # ── App Bundle (macOS) ───────────────────────────────────────────────────────
@@ -255,9 +265,11 @@ dist: app
 # ── Lint & Format ────────────────────────────────────────────────────────────
 
 lint:
+	$(MAKE) monaco-lint
 	swift-format lint --strict --recursive Boo/ BooApp/ Tests/
 
 format:
+	$(MAKE) monaco-format
 	swift-format format --in-place --recursive Boo/ BooApp/ Tests/
 
 # ── Cleanup ──────────────────────────────────────────────────────────────────

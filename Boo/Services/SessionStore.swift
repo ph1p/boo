@@ -6,6 +6,7 @@ import Foundation
 struct SessionTab: Codable {
     let title: String
     let workingDirectory: String
+    let contentState: ContentState?
     // Remote sessions are intentionally omitted — only local state is persisted.
     // Sidebar state — optional so old session.json files decode without error.
     let expandedPluginIDs: [String]?
@@ -14,6 +15,28 @@ struct SessionTab: Codable {
     let sidebarScrollOffsets: [String: [Double]]?
     let sidebarSectionOrder: [String: [String]]?
     let selectedPluginTabID: String?
+
+    init(
+        title: String,
+        workingDirectory: String,
+        contentState: ContentState? = nil,
+        expandedPluginIDs: [String]? = nil,
+        userCollapsedSectionIDs: [String]? = nil,
+        sidebarSectionHeights: [String: Double]? = nil,
+        sidebarScrollOffsets: [String: [Double]]? = nil,
+        sidebarSectionOrder: [String: [String]]? = nil,
+        selectedPluginTabID: String? = nil
+    ) {
+        self.title = title
+        self.workingDirectory = workingDirectory
+        self.contentState = contentState
+        self.expandedPluginIDs = expandedPluginIDs
+        self.userCollapsedSectionIDs = userCollapsedSectionIDs
+        self.sidebarSectionHeights = sidebarSectionHeights
+        self.sidebarScrollOffsets = sidebarScrollOffsets
+        self.sidebarSectionOrder = sidebarSectionOrder
+        self.selectedPluginTabID = selectedPluginTabID
+    }
 }
 
 struct SessionPane: Codable {
@@ -60,11 +83,13 @@ enum SessionStore {
 
     static func save(appState: AppState) {
         let workspaces = appState.workspaces.map { ws -> SessionWorkspace in
+            ws.normalizePaneState()
             let panes = ws.panes.values.map { pane -> SessionPane in
                 let tabs = pane.tabs.map { tab in
                     SessionTab(
                         title: tab.title,
                         workingDirectory: tab.workingDirectory,
+                        contentState: tab.contentType.isPersistable ? tab.state.contentState : nil,
                         expandedPluginIDs: Array(tab.state.expandedPluginIDs),
                         userCollapsedSectionIDs: Array(tab.state.userCollapsedSectionIDs),
                         sidebarSectionHeights: tab.state.sidebarSectionHeights.mapValues {
@@ -139,7 +164,7 @@ enum SessionStore {
     /// Reconstruct Workspace objects from a snapshot, skipping any workspaces
     /// whose folderPath no longer exists on disk.
     static func workspaces(from snapshot: SessionSnapshot) -> [Workspace] {
-        snapshot.workspaces.compactMap { sw in
+        let restored: [Workspace] = snapshot.workspaces.compactMap { sw -> Workspace? in
             // Only restore workspaces whose root folder still exists.
             guard FileManager.default.fileExists(atPath: sw.folderPath) else {
                 NSLog("[SessionStore] Skipping workspace at \(sw.folderPath) — path not found")
@@ -158,9 +183,10 @@ enum SessionStore {
             if let r = sw.customColorRed, let g = sw.customColorGreen, let b = sw.customColorBlue {
                 ws.customColor = NSColor(srgbRed: r, green: g, blue: b, alpha: 1)
             }
+            let defaultSidebarState = Workspace.defaultSidebarState()
             ws.sidebarState = SidebarWorkspaceState(
-                isVisible: sw.sidebarIsVisible,
-                width: sw.sidebarWidth.map { CGFloat($0) }
+                isVisible: sw.sidebarIsVisible ?? defaultSidebarState.isVisible,
+                width: sw.sidebarWidth.map { CGFloat($0) } ?? defaultSidebarState.width
             )
 
             // Build a lookup so we can match panes to split-tree leaf IDs
@@ -171,8 +197,27 @@ enum SessionStore {
                 let pane = Pane(id: leafID)
                 if let sp = paneByID[leafID], !sp.tabs.isEmpty {
                     for tab in sp.tabs {
-                        pane.addTab(workingDirectory: tab.workingDirectory, title: tab.title)
-                        let idx = pane.tabs.count - 1
+                        let restoredState =
+                            if let contentState = tab.contentState, contentState.contentType.isPersistable {
+                                contentState
+                            } else {
+                                ContentState.terminal(
+                                    TerminalContentState(
+                                        title: tab.title,
+                                        workingDirectory: tab.workingDirectory
+                                    )
+                                )
+                            }
+                        let idx = pane.addTab(
+                            contentType: restoredState.contentType,
+                            workingDirectory: restoredWorkingDirectory(
+                                for: restoredState,
+                                fallback: tab.workingDirectory,
+                                workspacePath: sw.folderPath
+                            ),
+                            title: restoredState.title
+                        )
+                        pane.updateContentState(at: idx, restoredState)
                         pane.updatePluginState(
                             at: idx,
                             expanded: Set(tab.expandedPluginIDs ?? []),
@@ -198,7 +243,42 @@ enum SessionStore {
                 ws.restorePane(pane)
             }
 
+            ws.normalizePaneState()
+
             return ws
         }
+
+        AppState.ensureUniquePaneIDsAcrossWorkspaces(restored)
+        return restored
+    }
+
+    private static func restoredWorkingDirectory(
+        for contentState: ContentState,
+        fallback: String,
+        workspacePath: String
+    ) -> String {
+        switch contentState {
+        case .terminal(let terminalState):
+            return terminalState.workingDirectory
+        case .browser(let browserState):
+            if browserState.url.isFileURL {
+                return browserState.url.deletingLastPathComponent().path
+            }
+        case .editor(let editorState):
+            if let filePath = editorState.filePath, !filePath.isEmpty {
+                return (filePath as NSString).deletingLastPathComponent
+            }
+        case .imageViewer(let imageState):
+            if !imageState.filePath.isEmpty {
+                return (imageState.filePath as NSString).deletingLastPathComponent
+            }
+        case .markdownPreview(let markdownState):
+            if !markdownState.filePath.isEmpty {
+                return (markdownState.filePath as NSString).deletingLastPathComponent
+            }
+        case .pluginView:
+            break
+        }
+        return fallback.isEmpty ? workspacePath : fallback
     }
 }

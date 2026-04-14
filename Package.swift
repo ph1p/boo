@@ -1,17 +1,21 @@
 // swift-tools-version: 5.9
 import PackageDescription
 
-let booDeps: [Target.Dependency] = ["CGhostty", "CIronmark"]
+let booDeps: [Target.Dependency] = [
+    "CGhostty",
+    "CIronmark"
+]
 let booExclude: [String] = [
     "App/Info.plist",
     "App/Boo.entitlements",
     "App/main.swift",
-    "Resources/Assets.xcassets"
+    "Resources/MonacoSource"
 ]
 let booLinkerSettings: [LinkerSetting] = [
     .unsafeFlags(["-L", "Vendor/ghostty/macos/GhosttyKit.xcframework/macos-arm64"])
 ]
-let targets: [Target] = [
+
+let allTargets: [Target] = [
     .target(
         name: "CGhostty",
         path: "CGhostty",
@@ -55,7 +59,8 @@ let targets: [Target] = [
         path: "Boo",
         exclude: booExclude,
         resources: [
-            .copy("Resources/Images")
+            .copy("Resources/Images"),
+            .copy("Resources/MonacoBundle")
         ],
         linkerSettings: booLinkerSettings
     ),
@@ -77,5 +82,6 @@ let package = Package(
     platforms: [
         .macOS(.v13)
     ],
-    targets: targets
+    dependencies: [],
+    targets: allTargets
 )

@@ -3,8 +3,24 @@ import Cocoa
 // MARK: - PaneViewDelegate
 
 extension MainWindowController: PaneViewDelegate {
+    private func activeWorkspaceForPaneEvent(_ paneID: UUID, event: String) -> Workspace? {
+        guard let workspace = activeWorkspace else { return nil }
+        guard workspace.pane(for: paneID) != nil else {
+            let owner = appState.workspaceContainingPane(paneID)
+            NSLog(
+                "[WorkspaceSwitch] ignoredPaneEvent event=\(event) pane=\(paneID.uuidString) activeWorkspace=\(workspace.id.uuidString) owner=\(owner?.id.uuidString ?? "none")"
+            )
+            booLog(
+                .debug, .terminal,
+                "ignoring \(event) for pane=\(paneID.uuidString.prefix(8)) activeWorkspace=\(workspace.id.uuidString.prefix(8)) owner=\(owner?.id.uuidString.prefix(8) ?? "none")"
+            )
+            return nil
+        }
+        return workspace
+    }
+
     func paneView(_ paneView: PaneView, didFocus paneID: UUID) {
-        guard let workspace = activeWorkspace else { return }
+        guard let workspace = activeWorkspaceForPaneEvent(paneID, event: "focus") else { return }
         if paneID != workspace.activePaneID {
             savePluginStateForActiveTab()
         }
@@ -24,9 +40,18 @@ extension MainWindowController: PaneViewDelegate {
         workspace.activePaneID = paneID
         let tab = workspace.pane(for: paneID)?.activeTab
         let cwd = tab?.workingDirectory ?? workspace.folderPath
+        NSLog(
+            "[WorkspaceSwitch] didFocus workspace=\(workspace.id.uuidString) pane=\(paneID.uuidString) cwd=\(cwd)"
+        )
 
-        booLog(.debug, .terminal, "didFocus: paneID=\(paneID), tabTitle=\(tab?.title ?? "nil"), cwd=\(cwd), tabRemote=\(String(describing: tab?.remoteSession)), tabRemoteCwd=\(String(describing: tab?.remoteWorkingDirectory))")
-        booLog(.debug, .terminal, "didFocus pane=\(paneID.uuidString.prefix(8)) tab=\(tab?.id.uuidString.prefix(8) ?? "nil") title=\(tab?.title ?? "nil") process=\(tab?.state.foregroundProcess ?? "nil")")
+        booLog(
+            .debug, .terminal,
+            "didFocus: paneID=\(paneID), tabTitle=\(tab?.title ?? "nil"), cwd=\(cwd), tabRemote=\(String(describing: tab?.remoteSession)), tabRemoteCwd=\(String(describing: tab?.remoteWorkingDirectory))"
+        )
+        booLog(
+            .debug, .terminal,
+            "didFocus pane=\(paneID.uuidString.prefix(8)) tab=\(tab?.id.uuidString.prefix(8) ?? "nil") title=\(tab?.title ?? "nil") process=\(tab?.state.foregroundProcess ?? "nil")"
+        )
 
         // Restore the full bridge + plugin state from the tab model via coordinator.
         if let tab = tab {
@@ -49,7 +74,9 @@ extension MainWindowController: PaneViewDelegate {
     }
 
     func paneView(_ paneView: PaneView, didChangeDirectory path: String, paneID: UUID) {
-        guard let workspace = activeWorkspace, workspace.activePaneID == paneID else { return }
+        guard let workspace = activeWorkspaceForPaneEvent(paneID, event: "cwdChanged"),
+            workspace.activePaneID == paneID
+        else { return }
         bridge.handleDirectoryChange(path: path, paneID: paneID)
         // Coordinator syncs bridge state → TabState
         if let pane = workspace.pane(for: paneID) {
@@ -59,7 +86,7 @@ extension MainWindowController: PaneViewDelegate {
     }
 
     func paneView(_ paneView: PaneView, titleChanged title: String, paneID: UUID) {
-        guard let workspace = activeWorkspace else { return }
+        guard let workspace = activeWorkspaceForPaneEvent(paneID, event: "titleChanged") else { return }
         bridge.handleTitleChange(title: title, paneID: paneID)
         guard workspace.activePaneID == paneID else { return }
         if let pane = workspace.pane(for: paneID) {
@@ -83,19 +110,23 @@ extension MainWindowController: PaneViewDelegate {
     }
 
     func paneView(_ paneView: PaneView, directoryListing path: String, output: String, paneID: UUID) {
+        guard activeWorkspaceForPaneEvent(paneID, event: "directoryListing") != nil else { return }
         bridge.handleDirectoryListing(path: path, output: output, paneID: paneID)
     }
 
     func paneView(_ paneView: PaneView, shellPIDDiscovered pid: pid_t, paneID: UUID, tabID: UUID?) {
+        guard activeWorkspaceForPaneEvent(paneID, event: "shellPIDDiscovered") != nil else { return }
         bridge.monitor.track(paneID: paneID, shellPID: pid, tabID: tabID)
     }
 
     func paneView(_ paneView: PaneView, commandStarted command: String, paneID: UUID) {
+        guard activeWorkspaceForPaneEvent(paneID, event: "commandStarted") != nil else { return }
         bridge.handleCommandStart(command: command, paneID: paneID)
         BooSocketServer.shared.emitCommandStarted(command: command, paneID: paneID)
     }
 
     func paneView(_ paneView: PaneView, commandEnded exitCode: Int32, paneID: UUID) {
+        guard activeWorkspaceForPaneEvent(paneID, event: "commandEnded") != nil else { return }
         bridge.handleCommandEnd(exitCode: exitCode, paneID: paneID)
         if let result = bridge.state.lastCommandResult {
             BooSocketServer.shared.emitCommandEnded(result: result, paneID: paneID)
@@ -205,14 +236,16 @@ extension MainWindowController: PaneViewDelegate {
         // Non-terminal tabs (browser, editor, image viewer, etc.) close immediately —
         // no "end terminal session" confirmation needed.
         guard tab.contentType == .terminal else {
-            if pane.tabs.count == 1 {
-                // Last tab in pane — close the whole pane (same as terminal path).
-                workspace.activePaneID = paneID
-                smartCloseAction(nil)
-            } else {
-                pv.closeTab(at: index)
-                refreshStatusBar()
-                saveSession()
+            closeTabAfterConfirmation(paneID: paneID, tabIndex: index) { [weak self] in
+                guard let self else { return }
+                if pane.tabs.count == 1 {
+                    workspace.activePaneID = paneID
+                    self.smartCloseAction(nil)
+                } else {
+                    pv.closeTab(at: index)
+                    self.refreshStatusBar()
+                    self.saveSession()
+                }
             }
             return
         }
@@ -249,7 +282,7 @@ extension MainWindowController: PaneViewDelegate {
     }
 
     func paneView(_ paneView: PaneView, sessionEnded paneID: UUID) {
-        guard let workspace = activeWorkspace else { return }
+        guard let workspace = activeWorkspaceForPaneEvent(paneID, event: "sessionEnded") else { return }
 
         if let pane = workspace.pane(for: paneID) {
             pane.updateRemoteSession(at: pane.activeTabIndex, nil)
@@ -269,6 +302,118 @@ extension MainWindowController: PaneViewDelegate {
 // MARK: - Pane Management
 
 extension MainWindowController {
+    struct UnsavedEditorLocation {
+        let workspaceIndex: Int
+        let paneID: UUID
+        let tabID: UUID
+        let tabIndex: Int
+        let editor: EditorContentView
+    }
+
+    func unsavedEditorLocation(
+        workspaceIndex: Int? = nil,
+        paneID: UUID? = nil,
+        tabIndex: Int? = nil
+    ) -> UnsavedEditorLocation? {
+        let workspaceIndices: [Int]
+        if let workspaceIndex {
+            workspaceIndices = [workspaceIndex]
+        } else {
+            let activeIndex = appState.activeWorkspaceIndex
+            workspaceIndices = [activeIndex] + appState.workspaces.indices.filter { $0 != activeIndex }
+        }
+
+        for currentWorkspaceIndex in workspaceIndices
+        where currentWorkspaceIndex >= 0 && currentWorkspaceIndex < appState.workspaces.count {
+            let workspace = appState.workspaces[currentWorkspaceIndex]
+            let paneIDs =
+                paneID.map { [$0] } ?? [workspace.activePaneID]
+                + workspace.panes.keys.filter { $0 != workspace.activePaneID }
+
+            for currentPaneID in paneIDs {
+                guard let pane = workspace.pane(for: currentPaneID),
+                    let paneView = workspacePaneViews[workspace.id]?[currentPaneID]
+                else { continue }
+
+                let tabIndices = tabIndex.map { [$0] } ?? Array(pane.tabs.indices)
+                for currentTabIndex in tabIndices where currentTabIndex >= 0 && currentTabIndex < pane.tabs.count {
+                    let tab = pane.tabs[currentTabIndex]
+                    guard tab.contentType == .editor,
+                        let editor = paneView.editorView(for: tab.id),
+                        editor.hasUnsavedChanges
+                    else { continue }
+
+                    return UnsavedEditorLocation(
+                        workspaceIndex: currentWorkspaceIndex,
+                        paneID: currentPaneID,
+                        tabID: tab.id,
+                        tabIndex: currentTabIndex,
+                        editor: editor
+                    )
+                }
+            }
+        }
+
+        return nil
+    }
+
+    func confirmUnsavedEditorClose(
+        _ location: UnsavedEditorLocation,
+        proceed: @escaping () -> Void
+    ) {
+        guard let window else {
+            proceed()
+            return
+        }
+
+        let alert = NSAlert()
+        alert.messageText = "Save changes to \"\(location.editor.fileDisplayName)\"?"
+        alert.informativeText = "Your changes will be lost if you don't save them."
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "Save")
+        alert.addButton(withTitle: "Don't Save")
+        alert.addButton(withTitle: "Cancel")
+
+        alert.beginSheetModal(for: window) { [weak self] response in
+            guard let self else { return }
+            switch response {
+            case .alertFirstButtonReturn:
+                location.editor.saveFile { success in
+                    guard success else {
+                        BooAlert.showError(
+                            title: "Could Not Save File",
+                            message: "Boo couldn't save \"\(location.editor.fileDisplayName)\".",
+                            window: self.window
+                        )
+                        return
+                    }
+                    self.saveSession()
+                    proceed()
+                }
+            case .alertSecondButtonReturn:
+                proceed()
+            default:
+                break
+            }
+        }
+    }
+
+    private func closeTabAfterConfirmation(
+        paneID: UUID,
+        tabIndex: Int,
+        proceed: @escaping () -> Void
+    ) {
+        if let location = unsavedEditorLocation(
+            workspaceIndex: appState.activeWorkspaceIndex,
+            paneID: paneID,
+            tabIndex: tabIndex
+        ) {
+            confirmUnsavedEditorClose(location, proceed: proceed)
+        } else {
+            proceed()
+        }
+    }
+
     /// Update all pane views' close-button visibility based on total pane count.
     func updatePaneCloseButtons() {
         let multiPane = activeWorkspace.map { $0.panes.count > 1 } ?? false
@@ -344,7 +489,9 @@ extension MainWindowController {
     @objc func closePaneAction(_ sender: Any?) {
         guard let workspace = activeWorkspace else { return }
         let paneID = workspace.activePaneID
-        booLog(.debug, .terminal, "closing pane=\(paneID.uuidString.prefix(8)) remainingPanes=\(workspace.panes.count - 1)")
+        booLog(
+            .debug, .terminal, "closing pane=\(paneID.uuidString.prefix(8)) remainingPanes=\(workspace.panes.count - 1)"
+        )
         if workspace.panes.count > 1, let pane = workspace.pane(for: paneID) {
             notifyTerminalClosed(for: pane.tabs)
         }
@@ -824,40 +971,70 @@ extension MainWindowController {
         else { return }
 
         if pane.tabs.count > 1 {
-            // Multiple tabs: close the active tab (undoable)
-            let item = ClosedItem.tab(
-                paneID: workspace.activePaneID,
-                workingDirectory: pane.activeTab?.workingDirectory ?? workspace.folderPath,
-                index: pane.activeTabIndex
-            )
-            pushUndo(item)
-            if let tab = pane.activeTab {
-                notifyTerminalClosed(for: tab.id)
+            closeTabAfterConfirmation(paneID: workspace.activePaneID, tabIndex: pane.activeTabIndex) { [weak self] in
+                guard let self else { return }
+                let item = ClosedItem.tab(
+                    paneID: workspace.activePaneID,
+                    workingDirectory: pane.activeTab?.workingDirectory ?? workspace.folderPath,
+                    index: pane.activeTabIndex
+                )
+                self.pushUndo(item)
+                if let tab = pane.activeTab {
+                    self.notifyTerminalClosed(for: tab.id)
+                }
+                pv.closeTab(at: pane.activeTabIndex)
+                self.refreshStatusBar()
+                self.saveSession()
             }
-            pv.closeTab(at: pane.activeTabIndex)
-            refreshStatusBar()
         } else if workspace.panes.count > 1 {
-            // Multiple panes but single tab: close the pane (undoable)
-            let cwd = pane.activeTab?.workingDirectory ?? workspace.folderPath
-            // Determine split direction from the tree
-            let direction = findSplitDirection(for: workspace.activePaneID, in: workspace.splitTree)
-            let siblingID = findSiblingID(for: workspace.activePaneID, in: workspace.splitTree)
-            let item = ClosedItem.pane(
-                siblingPaneID: siblingID ?? workspace.activePaneID,
-                workingDirectory: cwd,
-                direction: direction ?? .horizontal
-            )
-            pushUndo(item)
-            closePaneAction(nil)
-        } else if appState.workspaces.count > 1 {
-            // Multiple workspaces: close this workspace
-            toolbarDidCloseWorkspace(at: appState.activeWorkspaceIndex)
-        } else {
-            // Last tab, last pane, last workspace: just close
-            if let tab = pane.activeTab {
-                notifyTerminalClosed(for: tab.id)
+            closeTabAfterConfirmation(paneID: workspace.activePaneID, tabIndex: pane.activeTabIndex) { [weak self] in
+                guard let self else { return }
+                let cwd = pane.activeTab?.workingDirectory ?? workspace.folderPath
+                let direction = self.findSplitDirection(for: workspace.activePaneID, in: workspace.splitTree)
+                let siblingID = self.findSiblingID(for: workspace.activePaneID, in: workspace.splitTree)
+                let item = ClosedItem.pane(
+                    siblingPaneID: siblingID ?? workspace.activePaneID,
+                    workingDirectory: cwd,
+                    direction: direction ?? .horizontal
+                )
+                self.pushUndo(item)
+                self.closePaneAction(nil)
             }
-            window?.close()
+        } else if appState.workspaces.count > 1 {
+            if let location = unsavedEditorLocation(workspaceIndex: appState.activeWorkspaceIndex) {
+                confirmUnsavedEditorClose(location) { [weak self] in
+                    guard let self else { return }
+                    self.presentCloseWorkspaceAlert(at: self.appState.activeWorkspaceIndex)
+                }
+            } else {
+                toolbarDidCloseWorkspace(at: appState.activeWorkspaceIndex)
+            }
+        } else {
+            closeTabAfterConfirmation(paneID: workspace.activePaneID, tabIndex: pane.activeTabIndex) { [weak self] in
+                guard let self else { return }
+                if let tab = pane.activeTab {
+                    self.notifyTerminalClosed(for: tab.id)
+                }
+                self.allowNextWindowClose = true
+                self.window?.close()
+            }
         }
+    }
+
+    func windowShouldClose(_ sender: NSWindow) -> Bool {
+        if allowNextWindowClose {
+            allowNextWindowClose = false
+            return true
+        }
+
+        if let location = unsavedEditorLocation() {
+            confirmUnsavedEditorClose(location) { [weak self] in
+                self?.allowNextWindowClose = true
+                sender.close()
+            }
+            return false
+        }
+
+        return true
     }
 }

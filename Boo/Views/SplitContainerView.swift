@@ -28,8 +28,10 @@ class SplitContainerView: NSView, NSSplitViewDelegate {
     func update(tree: SplitTree) {
         currentTree = tree
 
-        // Remove old view hierarchy
-        currentView?.removeFromSuperview()
+        // Remove any existing hierarchy so workspace switches cannot leave stale panes behind.
+        for subview in subviews {
+            subview.removeFromSuperview()
+        }
         currentView = nil
 
         let view = buildView(from: tree)
@@ -37,6 +39,8 @@ class SplitContainerView: NSView, NSSplitViewDelegate {
         view.autoresizingMask = [.width, .height]
         addSubview(view)
         currentView = view
+        needsLayout = true
+        layoutSubtreeIfNeeded()
 
         // Defer split position setting until after layout
         DispatchQueue.main.async { [weak self] in

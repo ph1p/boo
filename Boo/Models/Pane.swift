@@ -4,6 +4,7 @@ import Foundation
 struct TabState {
     // Content type (terminal, browser, etc.)
     var contentType: ContentType = .terminal
+    var contentState: ContentState = .terminal(TerminalContentState())
 
     // Terminal-specific fields (kept for backwards compatibility)
     // These delegate to contentState when it's a TerminalContentState.
@@ -41,11 +42,19 @@ final class Pane {
         // Convenience accessors for backward compatibility
         var title: String {
             get { state.title }
-            set { state.title = newValue }
+            set {
+                state.title = newValue
+                state.contentState.title = newValue
+            }
         }
         var workingDirectory: String {
             get { state.workingDirectory }
-            set { state.workingDirectory = newValue }
+            set {
+                state.workingDirectory = newValue
+                state.contentState.updateTerminal { terminalState in
+                    terminalState.workingDirectory = newValue
+                }
+            }
         }
         var remoteSession: RemoteSessionType? {
             get { state.remoteSession }
@@ -62,7 +71,16 @@ final class Pane {
 
         var contentType: ContentType {
             get { state.contentType }
-            set { state.contentType = newValue }
+            set {
+                state.contentType = newValue
+                if state.contentState.contentType != newValue {
+                    state.contentState = Pane.defaultContentState(
+                        for: newValue,
+                        title: state.title,
+                        workingDirectory: state.workingDirectory
+                    )
+                }
+            }
         }
     }
 
@@ -76,6 +94,20 @@ final class Pane {
 
     init(id: UUID = UUID()) {
         self.id = id
+    }
+
+    init(id: UUID, tabs: [Tab], activeTabIndex: Int) {
+        self.id = id
+        self.tabs = tabs
+        if tabs.isEmpty {
+            self.activeTabIndex = -1
+        } else {
+            self.activeTabIndex = min(max(activeTabIndex, 0), tabs.count - 1)
+        }
+    }
+
+    func cloned(withID id: UUID) -> Pane {
+        Pane(id: id, tabs: tabs, activeTabIndex: activeTabIndex)
     }
 
     @discardableResult
@@ -96,6 +128,11 @@ final class Pane {
             id: UUID(),
             state: TabState(
                 contentType: contentType,
+                contentState: Self.defaultContentState(
+                    for: contentType,
+                    title: defaultTitle,
+                    workingDirectory: workingDirectory
+                ),
                 workingDirectory: workingDirectory,
                 title: defaultTitle
             )
@@ -169,11 +206,48 @@ final class Pane {
     func updateForegroundProcess(at index: Int, _ process: String) {
         guard index >= 0, index < tabs.count else { return }
         tabs[index].state.foregroundProcess = process
+        tabs[index].state.contentState.updateTerminal { terminalState in
+            terminalState.foregroundProcess = process
+        }
     }
 
     func updateShellPID(at index: Int, _ pid: pid_t) {
         guard index >= 0, index < tabs.count else { return }
         tabs[index].shellPID = pid
+        tabs[index].state.contentState.updateTerminal { terminalState in
+            terminalState.shellPID = pid
+        }
+    }
+
+    func updateContentState(at index: Int, _ contentState: ContentState) {
+        guard index >= 0, index < tabs.count else { return }
+        tabs[index].state.contentType = contentState.contentType
+        tabs[index].state.contentState = contentState
+        tabs[index].state.title = contentState.title
+        switch contentState {
+        case .terminal(let terminalState):
+            tabs[index].state.workingDirectory = terminalState.workingDirectory
+            tabs[index].state.shellPID = terminalState.shellPID
+            tabs[index].state.foregroundProcess = terminalState.foregroundProcess
+        case .browser(let browserState):
+            if browserState.url.isFileURL {
+                tabs[index].state.workingDirectory = browserState.url.deletingLastPathComponent().path
+            }
+        case .editor(let editorState):
+            if let filePath = editorState.filePath, !filePath.isEmpty {
+                tabs[index].state.workingDirectory = (filePath as NSString).deletingLastPathComponent
+            }
+        case .imageViewer(let imageState):
+            if !imageState.filePath.isEmpty {
+                tabs[index].state.workingDirectory = (imageState.filePath as NSString).deletingLastPathComponent
+            }
+        case .markdownPreview(let markdownState):
+            if !markdownState.filePath.isEmpty {
+                tabs[index].state.workingDirectory = (markdownState.filePath as NSString).deletingLastPathComponent
+            }
+        case .pluginView:
+            break
+        }
     }
 
     func updateAgentSessionID(_ sessionID: String?) {
@@ -231,5 +305,26 @@ final class Pane {
 
     func stopAll() {
         tabs.removeAll()
+    }
+
+    private static func defaultContentState(
+        for contentType: ContentType,
+        title: String,
+        workingDirectory: String
+    ) -> ContentState {
+        switch contentType {
+        case .terminal:
+            return .terminal(TerminalContentState(title: title, workingDirectory: workingDirectory))
+        case .browser:
+            return .browser(BrowserContentState(title: title, url: ContentType.newTabURL))
+        case .editor:
+            return .editor(EditorContentState(title: title))
+        case .imageViewer:
+            return .imageViewer(ImageViewerContentState(title: title, filePath: ""))
+        case .markdownPreview:
+            return .markdownPreview(MarkdownPreviewContentState(title: title, filePath: ""))
+        case .pluginView:
+            return .pluginView(PluginViewContentState(title: title))
+        }
     }
 }

@@ -6,7 +6,7 @@ import WebKit
 final class BrowserContentView: NSView, ContentViewProtocol, NSTextFieldDelegate {
     let contentType: ContentType = .browser
 
-    private var urlBar: NSTextField?
+    private var urlBar: SelectAllTextField?
     private var backButton: NSButton?
     private var forwardButton: NSButton?
     private var reloadStopButton: NSButton?
@@ -17,6 +17,7 @@ final class BrowserContentView: NSView, ContentViewProtocol, NSTextFieldDelegate
     private var currentTitle: String = "New Tab"
     private var isLoading = false
     private var autocompletePanel: URLAutocompletePanel?
+    private weak var urlBarPill: URLBarPillView?
 
     private let toolbarHeight: CGFloat = 44
 
@@ -71,7 +72,7 @@ final class BrowserContentView: NSView, ContentViewProtocol, NSTextFieldDelegate
         let toolbar = NSView()
         toolbar.translatesAutoresizingMaskIntoConstraints = false
         toolbar.wantsLayer = true
-        toolbar.layer?.backgroundColor = theme.chromeBg.cgColor
+        toolbar.layer?.backgroundColor = theme.background.nsColor.cgColor
         addSubview(toolbar)
         toolbarView = toolbar
 
@@ -79,7 +80,7 @@ final class BrowserContentView: NSView, ContentViewProtocol, NSTextFieldDelegate
             toolbar.topAnchor.constraint(equalTo: topAnchor),
             toolbar.leadingAnchor.constraint(equalTo: leadingAnchor),
             toolbar.trailingAnchor.constraint(equalTo: trailingAnchor),
-            toolbar.heightAnchor.constraint(equalToConstant: toolbarHeight),
+            toolbar.heightAnchor.constraint(equalToConstant: toolbarHeight)
         ])
 
         // Bottom separator
@@ -93,7 +94,7 @@ final class BrowserContentView: NSView, ContentViewProtocol, NSTextFieldDelegate
             separator.bottomAnchor.constraint(equalTo: toolbar.bottomAnchor),
             separator.leadingAnchor.constraint(equalTo: toolbar.leadingAnchor),
             separator.trailingAnchor.constraint(equalTo: toolbar.trailingAnchor),
-            separator.heightAnchor.constraint(equalToConstant: 0.5),
+            separator.heightAnchor.constraint(equalToConstant: 0.5)
         ])
 
         // Back button
@@ -111,23 +112,32 @@ final class BrowserContentView: NSView, ContentViewProtocol, NSTextFieldDelegate
         toolbar.addSubview(reload)
         reloadStopButton = reload
 
-        // URL field — themed to match the chrome
-        let bar = NSTextField()
+        // URL field — pill-style, matches active tab background
+        let bar = SelectAllTextField()
         bar.translatesAutoresizingMaskIntoConstraints = false
         bar.placeholderString = "Enter URL or search…"
         bar.font = .systemFont(ofSize: 12)
-        bar.bezelStyle = .roundedBezel
-        bar.isBordered = true
-        bar.drawsBackground = true
-        bar.backgroundColor = theme.sidebarBg
+        bar.isBordered = false
+        bar.drawsBackground = false
+        bar.focusRingType = .none
         bar.textColor = theme.chromeText
         bar.delegate = self
         bar.target = self
         bar.action = #selector(urlBarAction(_:))
+
+        // Pill container drawn behind the field
+        let pill = URLBarPillView()
+        pill.translatesAutoresizingMaskIntoConstraints = false
+        pill.theme = theme
+        toolbar.addSubview(pill)
         toolbar.addSubview(bar)
+        urlBarPill = pill
         urlBar = bar
 
-        // Layout: [8] [back] [4] [fwd] [4] [reload] [8] [urlbar] [8]
+        bar.onFocusGained = { [weak pill] in pill?.isFocused = true }
+        bar.onFocusLost = { [weak pill] in pill?.isFocused = false }
+
+        // Layout: [8] [back] [4] [fwd] [4] [reload] [8] [pill/urlbar] [8]
         NSLayoutConstraint.activate([
             back.leadingAnchor.constraint(equalTo: toolbar.leadingAnchor, constant: 8),
             back.centerYAnchor.constraint(equalTo: toolbar.centerYAnchor, constant: -1),
@@ -138,10 +148,14 @@ final class BrowserContentView: NSView, ContentViewProtocol, NSTextFieldDelegate
             reload.leadingAnchor.constraint(equalTo: fwd.trailingAnchor, constant: 2),
             reload.centerYAnchor.constraint(equalTo: toolbar.centerYAnchor, constant: -1),
 
-            bar.leadingAnchor.constraint(equalTo: reload.trailingAnchor, constant: 8),
-            bar.trailingAnchor.constraint(equalTo: toolbar.trailingAnchor, constant: -8),
-            bar.centerYAnchor.constraint(equalTo: toolbar.centerYAnchor),
-            bar.heightAnchor.constraint(equalToConstant: 24),
+            pill.leadingAnchor.constraint(equalTo: reload.trailingAnchor, constant: 8),
+            pill.trailingAnchor.constraint(equalTo: toolbar.trailingAnchor, constant: -8),
+            pill.centerYAnchor.constraint(equalTo: toolbar.centerYAnchor),
+            pill.heightAnchor.constraint(equalToConstant: 26),
+
+            bar.leadingAnchor.constraint(equalTo: pill.leadingAnchor, constant: 10),
+            bar.trailingAnchor.constraint(equalTo: pill.trailingAnchor, constant: -10),
+            bar.centerYAnchor.constraint(equalTo: pill.centerYAnchor)
         ])
 
         if currentURL.absoluteString != "about:blank" {
@@ -166,17 +180,17 @@ final class BrowserContentView: NSView, ContentViewProtocol, NSTextFieldDelegate
         btn.action = action
         NSLayoutConstraint.activate([
             btn.widthAnchor.constraint(equalToConstant: 26),
-            btn.heightAnchor.constraint(equalToConstant: 26),
+            btn.heightAnchor.constraint(equalToConstant: 26)
         ])
         return btn
     }
 
     private func applyToolbarTheme() {
         let theme = AppSettings.shared.theme
-        toolbarView?.layer?.backgroundColor = theme.chromeBg.cgColor
+        toolbarView?.layer?.backgroundColor = theme.background.nsColor.cgColor
         toolbarSeparator?.layer?.backgroundColor = theme.chromeBorder.cgColor
-        urlBar?.backgroundColor = theme.sidebarBg
         urlBar?.textColor = theme.chromeText
+        urlBarPill?.theme = theme
         let activeColor = theme.chromeText
         let mutedColor = theme.chromeMuted
         backButton?.contentTintColor = (webView?.canGoBack ?? false) ? activeColor : mutedColor
@@ -197,7 +211,7 @@ final class BrowserContentView: NSView, ContentViewProtocol, NSTextFieldDelegate
             wv.topAnchor.constraint(equalTo: topAnchor, constant: toolbarHeight),
             wv.leadingAnchor.constraint(equalTo: leadingAnchor),
             wv.trailingAnchor.constraint(equalTo: trailingAnchor),
-            wv.bottomAnchor.constraint(equalTo: bottomAnchor),
+            wv.bottomAnchor.constraint(equalTo: bottomAnchor)
         ])
         webView = wv
 
@@ -243,33 +257,69 @@ final class BrowserContentView: NSView, ContentViewProtocol, NSTextFieldDelegate
     func controlTextDidChange(_ obj: Notification) {
         guard let field = obj.object as? NSTextField else { return }
         let query = field.stringValue.trimmingCharacters(in: .whitespaces)
-        guard query.count >= 2 else {
-            autocompletePanel?.close()
-            return
-        }
-        let matches = BrowserHistory.shared.entries
-            .filter { $0.url.absoluteString.localizedCaseInsensitiveContains(query)
-                    || $0.title.localizedCaseInsensitiveContains(query) }
-            .prefix(8)
-            .map { URLAutocompletePanel.Item(title: $0.title, url: $0.url) }
-        guard !matches.isEmpty else {
-            autocompletePanel?.close()
-            return
-        }
+        showAutocomplete(query: query)
+    }
 
-        if autocompletePanel == nil {
-            autocompletePanel = URLAutocompletePanel()
-            autocompletePanel?.onSelect = { [weak self] url in
-                self?.urlBar?.stringValue = url.absoluteString
-                self?.navigate(to: url)
-                self?.window?.makeFirstResponder(self?.webView)
-            }
-        }
-        autocompletePanel?.show(below: field, items: Array(matches))
+    func controlTextDidBeginEditing(_ obj: Notification) {
+        guard let field = obj.object as? NSTextField else { return }
+        let query = field.stringValue.trimmingCharacters(in: .whitespaces)
+        showAutocomplete(query: query)
     }
 
     func controlTextDidEndEditing(_ obj: Notification) {
         autocompletePanel?.close()
+    }
+
+    func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
+        let event = NSApp.currentEvent
+        if commandSelector == #selector(NSResponder.moveDown(_:))
+            || commandSelector == #selector(NSResponder.moveUp(_:))
+            || commandSelector == #selector(NSResponder.cancelOperation(_:))
+            || commandSelector == #selector(NSResponder.insertNewline(_:))
+        {
+            if let event, autocompletePanel?.handleKeyDown(with: event) == true {
+                return true
+            }
+        }
+        return false
+    }
+
+    private func showAutocomplete(query: String) {
+        guard let anchor = urlBarPill else { return }
+        ensureAutocompletePanel()
+
+        let entries = BrowserHistory.shared.entries
+        let filtered: [BrowserHistoryEntry]
+        if query.count < 1 {
+            filtered = Array(entries.prefix(8))
+        } else {
+            filtered = entries.filter {
+                $0.url.absoluteString.localizedCaseInsensitiveContains(query)
+                    || $0.title.localizedCaseInsensitiveContains(query)
+            }
+        }
+
+        // Deduplicate by URL, preserving order (most recent first)
+        var seen = Set<URL>()
+        let deduped = filtered.filter { seen.insert($0.url).inserted }
+
+        let matches = deduped.prefix(8).map { URLAutocompletePanel.Item(title: $0.title, url: $0.url) }
+
+        if matches.isEmpty {
+            autocompletePanel?.close()
+        } else {
+            autocompletePanel?.show(below: anchor, items: matches)
+        }
+    }
+
+    private func ensureAutocompletePanel() {
+        guard autocompletePanel == nil else { return }
+        autocompletePanel = URLAutocompletePanel()
+        autocompletePanel?.onSelect = { [weak self] url in
+            self?.urlBar?.stringValue = url.absoluteString
+            self?.navigate(to: url)
+            self?.window?.makeFirstResponder(self?.webView)
+        }
     }
 
     private func updateNavButtons() {
@@ -360,14 +410,22 @@ final class BrowserContentView: NSView, ContentViewProtocol, NSTextFieldDelegate
     /// so they work even when focus is on the container rather than the WKWebView itself.
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         guard let wv = webView, event.type == .keyDown,
-              event.modifierFlags.contains(.command)
+            event.modifierFlags.contains(.command)
         else { return super.performKeyEquivalent(with: event) }
 
         switch event.charactersIgnoringModifiers {
-        case "c": wv.perform(#selector(NSText.copy(_:)), with: nil); return true
-        case "x": wv.perform(#selector(NSText.cut(_:)), with: nil); return true
-        case "v": wv.perform(#selector(NSText.paste(_:)), with: nil); return true
-        case "a": wv.perform(#selector(NSText.selectAll(_:)), with: nil); return true
+        case "c":
+            wv.perform(#selector(NSText.copy(_:)), with: nil)
+            return true
+        case "x":
+            wv.perform(#selector(NSText.cut(_:)), with: nil)
+            return true
+        case "v":
+            wv.perform(#selector(NSText.paste(_:)), with: nil)
+            return true
+        case "a":
+            wv.perform(#selector(NSText.selectAll(_:)), with: nil)
+            return true
         default: return super.performKeyEquivalent(with: event)
         }
     }
@@ -421,6 +479,118 @@ extension BrowserContentView: WKNavigationDelegate {
             currentURL = url
             urlBar?.stringValue = url.absoluteString
             onURLChanged?(url)
+        }
+    }
+}
+
+// MARK: - URLBarPillView
+
+/// Rounded-rect pill behind the URL text field.
+/// Background: sidebarBg (lighter than the active-tab toolbar).
+/// Draws a focus ring around itself when the embedded field is first responder.
+final class URLBarPillView: NSView {
+    var theme: TerminalTheme? { didSet { needsDisplay = true } }
+    /// Called by the text field's delegate to toggle focused appearance.
+    var isFocused: Bool = false { didSet { needsDisplay = true } }
+
+    override func draw(_ dirtyRect: NSRect) {
+        guard let theme else { return }
+        let radius = bounds.height / 2
+        let inset = bounds.insetBy(dx: 0.5, dy: 0.5)
+        let path = NSBezierPath(roundedRect: inset, xRadius: radius, yRadius: radius)
+
+        // Fill: sidebar background (lighter than active-tab bg)
+        theme.sidebarBg.setFill()
+        path.fill()
+
+        // Border: subtle when idle, accent-colored when focused
+        if isFocused {
+            theme.accentColor.withAlphaComponent(0.7).setStroke()
+            path.lineWidth = 1.5
+        } else {
+            theme.chromeMuted.withAlphaComponent(0.2).setStroke()
+            path.lineWidth = 0.5
+        }
+        path.stroke()
+    }
+}
+
+// MARK: - SelectAllTextField
+
+/// NSTextField that:
+/// - Calls `onFocusGained` immediately when it becomes first responder (click or Tab).
+/// - Selects all text on the next run loop tick (field editor is installed by then).
+/// - Watches `NSApplication.didUpdateNotification` to detect when focus leaves
+///   (works on macOS 13+; `NSWindow.firstResponderDidChangeNotification` needs 14+).
+/// - Calls `onFocusLost` and clears the observer when another view takes focus.
+final class SelectAllTextField: NSTextField {
+    var onFocusGained: (() -> Void)?
+    var onFocusLost: (() -> Void)?
+
+    private var focusObserver: NSObjectProtocol?
+    var isFieldActive = false
+
+    // True between becomeFirstResponder and the first mouseDown that follows.
+    // When a click causes focus, becomeFirstResponder fires before mouseDown —
+    // this flag lets mouseDown know whether it's the focus-gaining click or a
+    // subsequent click on an already-focused field.
+    var justBecameFirstResponder = false
+
+    override func becomeFirstResponder() -> Bool {
+        let result = super.becomeFirstResponder()
+        guard result else { return false }
+
+        justBecameFirstResponder = true
+        isFieldActive = true
+        onFocusGained?()
+
+        // For Tab / programmatic focus there is no mouseDown, so select-all must
+        // happen here. For click-focus, mouseDown will fire synchronously on the
+        // same run-loop iteration and clear justBecameFirstResponder — the async
+        // block then skips the selectAll to avoid fighting the cursor placement
+        // that super.mouseDown already performed.
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.justBecameFirstResponder else { return }
+            self.justBecameFirstResponder = false
+            self.currentEditor()?.selectAll(nil)
+        }
+
+        if let obs = focusObserver {
+            NotificationCenter.default.removeObserver(obs)
+            focusObserver = nil
+        }
+
+        focusObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didUpdateNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self, let window = self.window else { return }
+            let fr = window.firstResponder
+            let fieldEditorOwnedByUs = (fr as? NSTextView)?.delegate as? NSTextField === self
+            if fr !== self && !fieldEditorOwnedByUs {
+                self.isFieldActive = false
+                self.onFocusLost?()
+                if let obs = self.focusObserver {
+                    NotificationCenter.default.removeObserver(obs)
+                    self.focusObserver = nil
+                }
+            }
+        }
+
+        return true
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        if justBecameFirstResponder {
+            // This click caused focus. Don't call super — it would run a blocking
+            // mouse-tracking loop and place the cursor, overriding the selection.
+            // becomeFirstResponder already installed the field editor; just select all.
+            justBecameFirstResponder = false
+            currentEditor()?.selectAll(nil)
+        } else {
+            // Field was already focused — normal cursor placement.
+            super.mouseDown(with: event)
         }
     }
 }

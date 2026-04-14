@@ -8,6 +8,8 @@ import SwiftUI
 /// Coordinates with WindowStateCoordinator for state persistence.
 @MainActor
 final class SidebarController {
+    private static let globalScrollOffsetPrefix = "__global__:"
+
     // MARK: - Dependencies
 
     weak var windowController: MainWindowController?
@@ -53,6 +55,8 @@ final class SidebarController {
 
     /// Current sidebar position (left/right).
     var position: SidebarPosition = .right
+    /// Last intended visible width. This is the canonical width while hidden or restoring.
+    private var intendedVisibleWidth: CGFloat?
 
     // MARK: - Computed State Accessors
 
@@ -93,6 +97,7 @@ final class SidebarController {
         self.isVisible = !AppSettings.shared.sidebarDefaultHidden
         self.isUserHidden = AppSettings.shared.sidebarDefaultHidden
         self.position = AppSettings.shared.sidebarPosition
+        self.intendedVisibleWidth = AppSettings.shared.sidebarWidth
     }
 
     // MARK: - Setup
@@ -184,71 +189,200 @@ final class SidebarController {
 
     // MARK: - Visibility
 
-    /// Capture current sidebar visibility and width into a SidebarWorkspaceState.
-    func captureState() -> SidebarWorkspaceState {
-        let width: CGFloat? = {
-            guard let wc = windowController, isVisible else { return nil }
-            let idx = position == .left ? 0 : 1
-            guard idx < wc.mainSplitView.subviews.count else { return nil }
-            return wc.mainSplitView.subviews[idx].frame.width
+    /// Capture current sidebar visibility and intended width into a SidebarWorkspaceState.
+    func captureLiveState() -> SidebarWorkspaceState {
+        let fallbackState = resolveEffectiveSidebarState()
+        let width: CGFloat = {
+            if isVisible,
+                let renderedWidth = currentRenderedSidebarWidth()
+            {
+                intendedVisibleWidth = renderedWidth
+                return renderedWidth
+            }
+            return intendedVisibleWidth ?? fallbackState.width ?? AppSettings.shared.sidebarWidth
         }()
+
         return SidebarWorkspaceState(isVisible: isVisible, width: width)
     }
 
-    /// Restore sidebar visibility and width from a SidebarWorkspaceState.
-    func restoreState(_ state: SidebarWorkspaceState) {
-        if let vis = state.isVisible {
-            // isUserHidden must match the saved state so auto-show guards respect it.
-            isUserHidden = !vis
-            if vis != isVisible {
-                toggle(userInitiated: false)
-            }
-        }
-        if let w = state.width, isVisible, let wc = windowController {
-            let pos: CGFloat = position == .left ? w : wc.mainSplitView.bounds.width - w
-            wc.mainSplitView.setPosition(pos, ofDividerAt: 0)
-        }
+    /// Apply restored sidebar visibility and width without persisting transient layout state.
+    func applyRestoredState(_ state: SidebarWorkspaceState) {
+        let resolvedState = resolvedRestoredState(from: state)
+        let visible = resolvedState.isVisible ?? isVisible
+        let width = resolvedState.width ?? intendedVisibleWidth ?? AppSettings.shared.sidebarWidth
+        intendedVisibleWidth = width
+        isUserHidden = !visible
+        setVisibility(visible, desiredWidth: width, userInitiated: false, persist: false)
     }
 
     /// Toggle sidebar visibility.
     /// - Parameter userInitiated: Whether the user explicitly toggled (prevents auto-show).
     func toggle(userInitiated: Bool) {
-        guard let wc = windowController else { return }
-
         // Don't allow showing when no tabs available
         if !isVisible && sidebarTabBarView?.sidebarTabs.isEmpty == true {
             return
         }
+        let desiredWidth =
+            intendedVisibleWidth ?? resolveEffectiveSidebarState().width ?? AppSettings.shared.sidebarWidth
+        setVisibility(!isVisible, desiredWidth: desiredWidth, userInitiated: userInitiated, persist: true)
+    }
 
-        isVisible.toggle()
-        if userInitiated {
-            isUserHidden = !isVisible
+    private func applySidebarWidth(_ width: CGFloat) {
+        guard isVisible, let wc = windowController, wc.mainSplitView.subviews.count >= 2 else { return }
+        wc.mainSplitView.layoutSubtreeIfNeeded()
+        intendedVisibleWidth = width
+        let renderedWidth = SidebarStateResolver.normalizedWidth(
+            width,
+            environment: stateEnvironment(splitViewWidth: wc.mainSplitView.bounds.width)
+        )
+        let pos = SidebarStateResolver.dividerPosition(
+            forSidebarWidth: renderedWidth,
+            environment: stateEnvironment(splitViewWidth: wc.mainSplitView.bounds.width)
+        )
+        wc.mainSplitView.setPosition(pos, ofDividerAt: 0)
+    }
+
+    func syncWorkspaceSidebarState() {
+        persistLiveState()
+    }
+
+    func restoreActiveWorkspaceWidth() {
+        let state = resolveEffectiveSidebarState()
+        if state.isVisible ?? isVisible {
+            applyRestoredState(state)
         }
+    }
 
-        if isVisible {
-            if position == .left {
-                wc.mainSplitView.subviews.insert(sidebarContainer, at: 0)
-            } else {
-                wc.mainSplitView.addSubview(sidebarContainer)
+    func resolveEffectiveSidebarState(for workspace: Workspace? = nil) -> SidebarWorkspaceState {
+        SidebarStateResolver.effectiveState(
+            workspaceState: (workspace ?? windowController?.activeWorkspace)?.sidebarState,
+            environment: stateEnvironment()
+        )
+    }
+
+    @discardableResult
+    func persistLiveState(for workspace: Workspace? = nil) -> SidebarWorkspaceState {
+        let capturedState = captureLiveState()
+        return persistResolvedState(capturedState, for: workspace)
+    }
+
+    @discardableResult
+    func persistResolvedState(_ state: SidebarWorkspaceState, for workspace: Workspace? = nil) -> SidebarWorkspaceState
+    {
+        let target = SidebarStateResolver.persistenceTarget(
+            usesPerWorkspaceState: AppSettings.shared.sidebarPerWorkspaceState
+        )
+
+        switch target {
+        case .workspace:
+            (workspace ?? windowController?.activeWorkspace)?.sidebarState = state
+        case .appSettings:
+            let persistToSettings = { [state] in
+                if let isVisible = state.isVisible {
+                    let hidden = !isVisible
+                    if AppSettings.shared.sidebarDefaultHidden != hidden {
+                        AppSettings.shared.sidebarDefaultHidden = hidden
+                    }
+                }
+                if let width = state.width,
+                    abs(AppSettings.shared.sidebarWidth - width) > 0.001
+                {
+                    AppSettings.shared.sidebarWidth = width
+                }
             }
-            wc.mainSplitView.adjustSubviews()
-            let sidebarW = AppSettings.shared.sidebarWidth
-            let pos: CGFloat = position == .left ? sidebarW : wc.mainSplitView.bounds.width - sidebarW
-            wc.mainSplitView.setPosition(pos, ofDividerAt: 0)
-        } else {
-            sidebarContainer.removeFromSuperview()
+            if let windowController {
+                windowController.performWhileIgnoringSidebarLayoutSettingsRefresh {
+                    persistToSettings()
+                }
+            } else {
+                persistToSettings()
+            }
         }
 
-        // Notify UI
+        return state
+    }
+
+    private func resolvedRestoredState(from state: SidebarWorkspaceState) -> SidebarWorkspaceState {
+        let effectiveState = SidebarWorkspaceState(
+            isVisible: state.isVisible ?? resolveEffectiveSidebarState().isVisible,
+            width: state.width ?? resolveEffectiveSidebarState().width ?? intendedVisibleWidth
+        )
+        return SidebarStateResolver.renderedState(
+            from: effectiveState,
+            environment: stateEnvironment()
+        )
+    }
+
+    private func stateEnvironment(splitViewWidth: CGFloat? = nil) -> SidebarStateEnvironment {
+        SidebarStateEnvironment(
+            defaultState: Workspace.defaultSidebarState(),
+            usesPerWorkspaceState: AppSettings.shared.sidebarPerWorkspaceState,
+            position: position,
+            splitViewWidth: splitViewWidth ?? windowController?.mainSplitView.bounds.width,
+            dividerThickness: windowController?.mainSplitView.dividerThickness ?? 1,
+            backingScaleFactor: windowController?.window?.backingScaleFactor
+                ?? windowController?.mainSplitView.window?.backingScaleFactor
+                ?? NSScreen.main?.backingScaleFactor
+                ?? 1
+        )
+    }
+
+    private func currentRenderedSidebarWidth() -> CGFloat? {
+        guard let wc = windowController else { return nil }
+        let idx = position == .left ? 0 : 1
+        guard idx < wc.mainSplitView.subviews.count else { return nil }
+        return SidebarStateResolver.normalizedWidth(
+            wc.mainSplitView.subviews[idx].frame.width,
+            environment: stateEnvironment(splitViewWidth: wc.mainSplitView.bounds.width)
+        )
+    }
+
+    private func setVisibility(
+        _ visible: Bool,
+        desiredWidth: CGFloat,
+        userInitiated: Bool,
+        persist: Bool
+    ) {
+        guard let wc = windowController else { return }
+
+        if userInitiated {
+            isUserHidden = !visible
+        }
+        intendedVisibleWidth = desiredWidth
+
+        if isVisible != visible {
+            isVisible = visible
+            if visible {
+                if position == .left {
+                    wc.mainSplitView.subviews.insert(sidebarContainer, at: 0)
+                } else {
+                    wc.mainSplitView.addSubview(sidebarContainer)
+                }
+                wc.mainSplitView.adjustSubviews()
+            } else {
+                sidebarContainer.removeFromSuperview()
+            }
+        }
+
+        if visible {
+            applySidebarWidth(desiredWidth)
+            DispatchQueue.main.async { [weak self] in
+                self?.applySidebarWidth(desiredWidth)
+            }
+        }
+
         wc.statusBar.sidebarVisible = isVisible
         AppStore.shared.sidebarVisible = isVisible
         wc.statusBar.needsDisplay = true
         wc.refreshToolbar()
 
-        // Redraw terminals
         for (_, pv) in wc.paneViews {
             pv.currentTerminalView?.needsDisplay = true
             pv.currentTerminalView?.needsLayout = true
+        }
+
+        if persist {
+            persistLiveState()
         }
     }
 
@@ -271,7 +405,7 @@ final class SidebarController {
             removeAllContent()
             if isVisible { toggle(userInitiated: false) }
         } else if let activeID = activePluginTabID,
-                  let activeTab = sorted.first(where: { $0.id.id == activeID })
+            let activeTab = sorted.first(where: { $0.id.id == activeID })
         {
             // Active tab still present
             if pluginPanelViews[activeID] == nil {
@@ -286,7 +420,8 @@ final class SidebarController {
             }
         } else {
             // Activate first available or last-selected tab
-            let target = activePluginTabID.flatMap { id in sorted.first(where: { $0.id.id == id }) }
+            let target =
+                activePluginTabID.flatMap { id in sorted.first(where: { $0.id.id == id }) }
                 ?? coordinator.selectedPluginTabID.flatMap { id in sorted.first(where: { $0.id.id == id }) }
                 ?? sorted.first
             if let tab = target {
@@ -346,9 +481,9 @@ final class SidebarController {
         // Check cache
         let newGenerations = sections.map { $0.generation }
         if let existing = pluginPanelViews[id],
-           let cached = cachedDetailViews[id],
-           cached.context == context,
-           cached.generations == newGenerations
+            let cached = cachedDetailViews[id],
+            cached.context == context,
+            cached.generations == newGenerations
         {
             for (otherID, view) in pluginPanelViews where otherID != id {
                 view.isHidden = true
@@ -376,8 +511,8 @@ final class SidebarController {
         } else {
             // Auto-expand first section unless user collapsed it
             if let firstID = sections.first?.id,
-               !expandedPluginIDs.contains(firstID),
-               !userCollapsedSectionIDs.contains(firstID)
+                !expandedPluginIDs.contains(firstID),
+                !userCollapsedSectionIDs.contains(firstID)
             {
                 expandedPluginIDs.insert(firstID)
             }
@@ -453,8 +588,8 @@ final class SidebarController {
             }
         }
 
-        restorePanelState(to: panel)
         panel.setTerminalID(context.terminalID)
+        restorePanelState(to: panel)
 
         container.addSubview(panel)
         NSLayoutConstraint.activate([
@@ -490,13 +625,16 @@ final class SidebarController {
     /// Sync state from the active panel view to coordinator.
     func syncStateFromView() {
         guard let activeTabID = activePluginTabID,
-              let panel = pluginPanelViews[activeTabID] as? SidebarPanelView
+            let panel = pluginPanelViews[activeTabID] as? SidebarPanelView
         else { return }
 
         panel.capturePersistentState()
         savedSectionHeights = panel.savedSectionHeights
 
-        if let terminalID = panel.currentTerminalID {
+        if AppSettings.shared.sidebarGlobalState {
+            savedScrollOffsets = remapScrollOffsetsToGlobal(
+                panel.savedScrollOffsetsSnapshot, terminalID: panel.currentTerminalID)
+        } else if let terminalID = panel.currentTerminalID {
             let prefix = "\(terminalID.uuidString):"
             savedScrollOffsets = panel.savedScrollOffsetsSnapshot.filter {
                 $0.key.hasPrefix(prefix)
@@ -507,7 +645,14 @@ final class SidebarController {
     /// Restore state to a panel view.
     private func restorePanelState(to panel: SidebarPanelView) {
         panel.savedSectionHeights = savedSectionHeights
-        panel.savedScrollOffsetsSnapshot = savedScrollOffsets
+        if AppSettings.shared.sidebarGlobalState {
+            panel.savedScrollOffsetsSnapshot = remapGlobalScrollOffsetsToTerminal(
+                savedScrollOffsets,
+                terminalID: panel.currentTerminalID
+            )
+        } else {
+            panel.savedScrollOffsetsSnapshot = savedScrollOffsets
+        }
     }
 
     /// Save plugin state to the active tab's TabState.
@@ -515,8 +660,8 @@ final class SidebarController {
         syncStateFromView()
         guard !AppSettings.shared.sidebarGlobalState else { return }
         guard let wc = windowController,
-              let ws = wc.activeWorkspace,
-              let pane = ws.pane(for: ws.activePaneID)
+            let ws = wc.activeWorkspace,
+            let pane = ws.pane(for: ws.activePaneID)
         else { return }
 
         pane.updatePluginState(
@@ -547,8 +692,32 @@ final class SidebarController {
 
     /// Clean up scroll offsets for a closed terminal.
     func cleanupScrollOffsets(for terminalID: UUID) {
+        guard !AppSettings.shared.sidebarGlobalState else { return }
         let prefix = "\(terminalID.uuidString):"
         savedScrollOffsets = savedScrollOffsets.filter { !$0.key.hasPrefix(prefix) }
+    }
+
+    private func remapScrollOffsetsToGlobal(_ offsets: [String: CGPoint], terminalID: UUID?) -> [String: CGPoint] {
+        guard let terminalID else { return offsets }
+        let prefix = "\(terminalID.uuidString):"
+        var globalOffsets: [String: CGPoint] = [:]
+        for (key, value) in offsets where key.hasPrefix(prefix) {
+            let suffix = String(key.dropFirst(prefix.count))
+            globalOffsets[Self.globalScrollOffsetPrefix + suffix] = value
+        }
+        return globalOffsets
+    }
+
+    private func remapGlobalScrollOffsetsToTerminal(
+        _ offsets: [String: CGPoint], terminalID: UUID?
+    ) -> [String: CGPoint] {
+        guard let terminalID else { return [:] }
+        var remapped: [String: CGPoint] = [:]
+        for (key, value) in offsets where key.hasPrefix(Self.globalScrollOffsetPrefix) {
+            let suffix = String(key.dropFirst(Self.globalScrollOffsetPrefix.count))
+            remapped["\(terminalID.uuidString):\(suffix)"] = value
+        }
+        return remapped
     }
 
     // MARK: - Utilities

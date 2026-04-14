@@ -52,14 +52,70 @@ struct TerminalTheme {
 
     /// Whether this is a dark theme (background luminance < 0.5).
     var isDark: Bool {
-        let r = CGFloat(background.r) / 255
-        let g = CGFloat(background.g) / 255
-        let b = CGFloat(background.b) / 255
-        return (0.299 * r + 0.587 * g + 0.114 * b) < 0.5
+        background.luminance < 0.5
     }
 
     /// Whether this theme was created by the user (not a built-in).
     var isCustom: Bool = false
+
+    // MARK: - Monaco Helpers
+
+    var ansiRed: TerminalColor { ansiColors[1] }
+    var ansiGreen: TerminalColor { ansiColors[2] }
+    var ansiYellow: TerminalColor { ansiColors[3] }
+    var ansiBlue: TerminalColor { ansiColors[4] }
+    var ansiMagenta: TerminalColor { ansiColors[5] }
+    var ansiCyan: TerminalColor { ansiColors[6] }
+}
+
+// MARK: - Color Models
+
+struct TerminalColor: Codable, Equatable, Hashable {
+    var r: UInt8
+    var g: UInt8
+    var b: UInt8
+
+    var hexString: String {
+        String(format: "#%02X%02X%02X", r, g, b)
+    }
+
+    var nsColor: NSColor {
+        NSColor(red: CGFloat(r) / 255, green: CGFloat(g) / 255, blue: CGFloat(b) / 255, alpha: 1)
+    }
+
+    var cgColor: CGColor {
+        CGColor(red: CGFloat(r) / 255, green: CGFloat(g) / 255, blue: CGFloat(b) / 255, alpha: 1)
+    }
+
+    /// Relative luminance (0–1) used for contrast decisions.
+    var luminance: Double {
+        0.299 * Double(r) / 255 + 0.587 * Double(g) / 255 + 0.114 * Double(b) / 255
+    }
+
+    func highlight(_ amount: CGFloat) -> TerminalColor {
+        let rf = min(max(CGFloat(r) / 255 + amount, 0), 1)
+        let gf = min(max(CGFloat(g) / 255 + amount, 0), 1)
+        let bf = min(max(CGFloat(b) / 255 + amount, 0), 1)
+        return TerminalColor(r: UInt8(rf * 255), g: UInt8(gf * 255), b: UInt8(bf * 255))
+    }
+
+    static let defaultFG = TerminalColor(r: 228, g: 228, b: 232)
+    static let defaultBG = TerminalColor(r: 21, g: 21, b: 23)
+    static let black = TerminalColor(r: 0, g: 0, b: 0)
+    static let white = TerminalColor(r: 255, g: 255, b: 255)
+
+    init(r: UInt8, g: UInt8, b: UInt8) {
+        self.r = r
+        self.g = g
+        self.b = b
+    }
+
+    init?(hex: String) {
+        var s = hex.trimmingCharacters(in: .whitespaces)
+        if s.hasPrefix("#") { s = String(s.dropFirst()) }
+        guard s.count == 6, let v = UInt32(s, radix: 16) else { return nil }
+        self.init(r: UInt8((v >> 16) & 0xFF), g: UInt8((v >> 8) & 0xFF), b: UInt8(v & 0xFF))
+    }
 }
 
 // MARK: - Custom theme persistence

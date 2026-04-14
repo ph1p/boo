@@ -1,0 +1,25 @@
+{
+  "name": "boo-monaco-bundle",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "vite build",
+    "format": "oxfmt --write",
+    "lint": "tsc --noEmit && oxlint && oxfmt --check ."
+  },
+  "dependencies": {
+    "monaco-editor": "0.55.1"
+  },
+  "devDependencies": {
+    "oxfmt": "^0.45.0",
+    "oxlint": "^1.60.0",
+    "typescript": "latest",
+    "vite": "8.0.8"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
+  }
+}

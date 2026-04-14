@@ -92,4 +92,56 @@ final class WorkspaceTests: XCTestCase {
         ws.color = .green
         XCTAssertEqual(ws.resolvedColor, WorkspaceColor.green.nsColor)
     }
+
+    func testNormalizePaneStateRestoresFallbackTabForEmptyLeafPane() {
+        let ws = Workspace(folderPath: "/tmp")
+        let secondID = ws.splitPane(ws.activePaneID, direction: .horizontal)
+        let pane = ws.pane(for: secondID)!
+
+        _ = pane.extractTab(at: 0)
+        XCTAssertTrue(pane.tabs.isEmpty)
+
+        ws.normalizePaneState()
+
+        XCTAssertEqual(ws.pane(for: secondID)?.tabs.count, 1)
+        XCTAssertEqual(ws.pane(for: secondID)?.activeTab?.workingDirectory, "/tmp")
+    }
+
+    func testNormalizePaneStateRecreatesMissingLeafPane() {
+        let rootID = UUID()
+        let secondID = UUID()
+        let ws = Workspace(
+            folderPath: "/tmp",
+            id: UUID(),
+            splitTree: .split(
+                direction: .horizontal,
+                first: .leaf(id: rootID),
+                second: .leaf(id: secondID),
+                ratio: 0.5
+            ),
+            activePaneID: rootID
+        )
+
+        let rootPane = Pane(id: rootID)
+        _ = rootPane.addTab(workingDirectory: "/tmp/root")
+        ws.restorePane(rootPane)
+
+        ws.normalizePaneState()
+
+        XCTAssertEqual(ws.panes.count, 2)
+        XCTAssertEqual(ws.pane(for: secondID)?.tabs.count, 1)
+        XCTAssertEqual(ws.pane(for: secondID)?.activeTab?.workingDirectory, "/tmp")
+    }
+
+    func testRestorePaneRejectsPaneOutsideSplitTree() {
+        let ws = Workspace(folderPath: "/tmp")
+        let foreignPaneID = UUID()
+        let foreignPane = Pane(id: foreignPaneID)
+        _ = foreignPane.addTab(workingDirectory: "/tmp/foreign")
+
+        XCTAssertFalse(ws.restorePane(foreignPane))
+        XCTAssertNil(ws.pane(for: foreignPaneID))
+        XCTAssertEqual(ws.panes.count, 1)
+        XCTAssertEqual(ws.splitTree.leafIDs, [ws.activePaneID])
+    }
 }

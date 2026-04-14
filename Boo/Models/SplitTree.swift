@@ -110,6 +110,20 @@ indirect enum SplitTree {
         }
     }
 
+    func remappingLeafIDs(_ mapping: [UUID: UUID]) -> SplitTree {
+        switch self {
+        case .leaf(let id):
+            return .leaf(id: mapping[id] ?? id)
+        case .split(let direction, let first, let second, let ratio):
+            return .split(
+                direction: direction,
+                first: first.remappingLeafIDs(mapping),
+                second: second.remappingLeafIDs(mapping),
+                ratio: ratio
+            )
+        }
+    }
+
     private var direction: SplitDirection? {
         if case .split(let d, _, _, _) = self { return d }
         return nil

@@ -193,6 +193,158 @@ final class SessionStoreTests: XCTestCase {
         XCTAssertTrue(restoredPane!.tabs.contains(where: { $0.workingDirectory == "/tmp/bar" }))
     }
 
+    func testSaveAndRestoreContentTabs() {
+        let state = AppState()
+        let ws = Workspace(folderPath: "/tmp")
+        let pane = ws.pane(for: ws.activePaneID)!
+
+        let browserIndex = pane.addTab(contentType: .browser, workingDirectory: "/tmp", title: "Example")
+        pane.updateContentState(
+            at: browserIndex,
+            .browser(BrowserContentState(title: "Example", url: URL(string: "https://example.com/docs")!))
+        )
+
+        let editorIndex = pane.addTab(contentType: .editor, workingDirectory: "/tmp", title: "notes.md")
+        pane.updateContentState(
+            at: editorIndex,
+            .editor(EditorContentState(title: "notes.md", filePath: "/tmp/notes.md", isDirty: true))
+        )
+
+        let markdownIndex = pane.addTab(contentType: .markdownPreview, workingDirectory: "/tmp", title: "README.md")
+        pane.updateContentState(
+            at: markdownIndex,
+            .markdownPreview(MarkdownPreviewContentState(title: "README.md", filePath: "/tmp/README.md"))
+        )
+
+        state.addWorkspace(ws)
+
+        SessionStore.save(appState: state)
+        let snapshot = SessionStore.load()!
+        let savedTabs = snapshot.workspaces[0].panes.first!.tabs
+        XCTAssertEqual(savedTabs[browserIndex].contentState?.contentType, .browser)
+        XCTAssertEqual(savedTabs[editorIndex].contentState?.contentType, .editor)
+        XCTAssertEqual(savedTabs[markdownIndex].contentState?.contentType, .markdownPreview)
+
+        let restored = SessionStore.workspaces(from: snapshot)
+        let restoredPane = restored[0].pane(for: restored[0].activePaneID)!
+
+        XCTAssertEqual(restoredPane.tabs[browserIndex].contentType, .browser)
+        if case .browser(let browserState) = restoredPane.tabs[browserIndex].state.contentState {
+            XCTAssertEqual(browserState.url.absoluteString, "https://example.com/docs")
+        } else {
+            XCTFail("Expected restored browser content state")
+        }
+
+        XCTAssertEqual(restoredPane.tabs[editorIndex].contentType, .editor)
+        if case .editor(let editorState) = restoredPane.tabs[editorIndex].state.contentState {
+            XCTAssertEqual(editorState.filePath, "/tmp/notes.md")
+            XCTAssertTrue(editorState.isDirty)
+        } else {
+            XCTFail("Expected restored editor content state")
+        }
+
+        XCTAssertEqual(restoredPane.tabs[markdownIndex].contentType, .markdownPreview)
+        if case .markdownPreview(let markdownState) = restoredPane.tabs[markdownIndex].state.contentState {
+            XCTAssertEqual(markdownState.filePath, "/tmp/README.md")
+        } else {
+            XCTFail("Expected restored markdown content state")
+        }
+    }
+
+    func testRestoreWorkspacesRemapsDuplicatePaneIDsAcrossWorkspaces() {
+        let sharedPaneID = UUID()
+
+        let snapshot = SessionSnapshot(
+            activeWorkspaceIndex: 0,
+            workspaces: [
+                SessionWorkspace(
+                    id: UUID(),
+                    folderPath: "/tmp",
+                    customName: "A",
+                    color: WorkspaceColor.none.rawValue,
+                    customColorRed: nil,
+                    customColorGreen: nil,
+                    customColorBlue: nil,
+                    isPinned: false,
+                    splitTree: .leaf(id: sharedPaneID),
+                    panes: [
+                        SessionPane(
+                            id: sharedPaneID,
+                            tabs: [
+                                SessionTab(
+                                    title: "a",
+                                    workingDirectory: "/tmp/a",
+                                    expandedPluginIDs: nil,
+                                    userCollapsedSectionIDs: nil,
+                                    sidebarSectionHeights: nil,
+                                    sidebarScrollOffsets: nil,
+                                    sidebarSectionOrder: nil,
+                                    selectedPluginTabID: nil
+                                )
+                            ],
+                            activeTabIndex: 0
+                        )
+                    ],
+                    activePaneID: sharedPaneID,
+                    sidebarIsVisible: true,
+                    sidebarWidth: 240
+                ),
+                SessionWorkspace(
+                    id: UUID(),
+                    folderPath: "/tmp",
+                    customName: "B",
+                    color: WorkspaceColor.none.rawValue,
+                    customColorRed: nil,
+                    customColorGreen: nil,
+                    customColorBlue: nil,
+                    isPinned: false,
+                    splitTree: .leaf(id: sharedPaneID),
+                    panes: [
+                        SessionPane(
+                            id: sharedPaneID,
+                            tabs: [
+                                SessionTab(
+                                    title: "b1",
+                                    workingDirectory: "/tmp/b1",
+                                    expandedPluginIDs: nil,
+                                    userCollapsedSectionIDs: nil,
+                                    sidebarSectionHeights: nil,
+                                    sidebarScrollOffsets: nil,
+                                    sidebarSectionOrder: nil,
+                                    selectedPluginTabID: nil
+                                ),
+                                SessionTab(
+                                    title: "b2",
+                                    workingDirectory: "/tmp/b2",
+                                    expandedPluginIDs: nil,
+                                    userCollapsedSectionIDs: nil,
+                                    sidebarSectionHeights: nil,
+                                    sidebarScrollOffsets: nil,
+                                    sidebarSectionOrder: nil,
+                                    selectedPluginTabID: nil
+                                )
+                            ],
+                            activeTabIndex: 1
+                        )
+                    ],
+                    activePaneID: sharedPaneID,
+                    sidebarIsVisible: false,
+                    sidebarWidth: 321
+                )
+            ]
+        )
+
+        let restored = SessionStore.workspaces(from: snapshot)
+
+        XCTAssertEqual(restored.count, 2)
+        XCTAssertTrue(Set(restored[0].splitTree.leafIDs).isDisjoint(with: Set(restored[1].splitTree.leafIDs)))
+        XCTAssertEqual(restored[1].totalTabCount, 2)
+        XCTAssertEqual(restored[1].sidebarState.isVisible, false)
+        XCTAssertEqual(restored[1].sidebarState.width ?? -1, 321, accuracy: 0.1)
+        XCTAssertNotEqual(restored[1].activePaneID, sharedPaneID)
+        XCTAssertEqual(restored[1].pane(for: restored[1].activePaneID)?.activeTab?.workingDirectory, "/tmp/b2")
+    }
+
     func testRestorePreservesCustomColor() {
         let state = AppState()
         let ws = Workspace(folderPath: "/tmp")
@@ -225,6 +377,86 @@ final class SessionStoreTests: XCTestCase {
         let restored = SessionStore.workspaces(from: snapshot)
 
         XCTAssertEqual(restored.map(\.customName), ["A", "B", "C"])
+    }
+
+    func testWorkspaceSidebarStateRoundtrip() {
+        let state = AppState()
+        let ws = Workspace(folderPath: "/tmp")
+        ws.sidebarState = SidebarWorkspaceState(isVisible: false, width: 312)
+        state.addWorkspace(ws)
+
+        SessionStore.save(appState: state)
+        let snapshot = SessionStore.load()!
+        XCTAssertEqual(snapshot.workspaces[0].sidebarIsVisible, false)
+        XCTAssertEqual(snapshot.workspaces[0].sidebarWidth ?? -1, 312, accuracy: 0.1)
+
+        let restored = SessionStore.workspaces(from: snapshot)
+        XCTAssertEqual(restored[0].sidebarState.isVisible, false)
+        XCTAssertEqual(restored[0].sidebarState.width ?? -1, 312, accuracy: 0.1)
+    }
+
+    func testRestoreWorkspaceSidebarStateFallsBackToDefaults() {
+        let originalHidden = AppSettings.shared.sidebarDefaultHidden
+        let originalWidth = AppSettings.shared.sidebarWidth
+        AppSettings.shared.sidebarDefaultHidden = true
+        AppSettings.shared.sidebarWidth = 287
+        defer {
+            AppSettings.shared.sidebarDefaultHidden = originalHidden
+            AppSettings.shared.sidebarWidth = originalWidth
+        }
+
+        let snapshot = SessionSnapshot(
+            activeWorkspaceIndex: 0,
+            workspaces: [
+                SessionWorkspace(
+                    id: UUID(),
+                    folderPath: "/tmp",
+                    customName: nil,
+                    color: WorkspaceColor.none.rawValue,
+                    customColorRed: nil,
+                    customColorGreen: nil,
+                    customColorBlue: nil,
+                    isPinned: false,
+                    splitTree: .leaf(id: UUID()),
+                    panes: [],
+                    activePaneID: UUID(),
+                    sidebarIsVisible: nil,
+                    sidebarWidth: nil
+                )
+            ]
+        )
+
+        let restored = SessionStore.workspaces(from: snapshot)
+        XCTAssertEqual(restored.count, 1)
+        XCTAssertEqual(restored[0].sidebarState.isVisible, false)
+        XCTAssertEqual(restored[0].sidebarState.width ?? -1, 287, accuracy: 0.1)
+    }
+
+    func testSnapshotCanPreserveDifferentSidebarWidthsAcrossSequentialWorkspaces() {
+        let state = AppState()
+        let first = Workspace(folderPath: "/tmp")
+        first.customName = "Workspace 11"
+        first.sidebarState = SidebarWorkspaceState(isVisible: true, width: 246)
+        let second = Workspace(folderPath: "/tmp")
+        second.customName = "Workspace 12"
+        second.sidebarState = SidebarWorkspaceState(isVisible: true, width: 246)
+        let third = Workspace(folderPath: "/tmp")
+        third.customName = "Workspace 13"
+        third.sidebarState = SidebarWorkspaceState(isVisible: true, width: 246)
+
+        state.addWorkspace(first)
+        state.addWorkspace(second)
+        state.addWorkspace(third)
+        state.setActiveWorkspace(2)
+
+        SessionStore.save(appState: state)
+        let snapshot = SessionStore.load()!
+
+        XCTAssertEqual(snapshot.activeWorkspaceIndex, 2)
+        XCTAssertEqual(snapshot.workspaces.count, 3)
+        XCTAssertEqual(snapshot.workspaces[0].sidebarWidth ?? -1, 246, accuracy: 0.1)
+        XCTAssertEqual(snapshot.workspaces[1].sidebarWidth ?? -1, 246, accuracy: 0.1)
+        XCTAssertEqual(snapshot.workspaces[2].sidebarWidth ?? -1, 246, accuracy: 0.1)
     }
 
     func testSavePreservesActiveWorkspaceIndex() {
@@ -429,5 +661,22 @@ final class SessionStoreTests: XCTestCase {
         let pane = restored[0].pane(for: restored[0].activePaneID)
         XCTAssertNotNil(pane)
         XCTAssertEqual(pane!.tabs.first?.workingDirectory, "/tmp")
+    }
+
+    func testSaveNormalizesEmptyPaneBeforeSnapshot() {
+        let state = AppState()
+        let ws = Workspace(folderPath: "/tmp")
+        let secondID = ws.splitPane(ws.activePaneID, direction: .horizontal)
+        _ = ws.pane(for: secondID)?.extractTab(at: 0)
+        XCTAssertTrue(ws.pane(for: secondID)?.tabs.isEmpty ?? false)
+        state.addWorkspace(ws)
+
+        SessionStore.save(appState: state)
+
+        let snapshot = SessionStore.load()!
+        let savedPane = snapshot.workspaces[0].panes.first(where: { $0.id == secondID })
+        XCTAssertNotNil(savedPane)
+        XCTAssertEqual(savedPane?.tabs.count, 1)
+        XCTAssertEqual(savedPane?.tabs.first?.workingDirectory, "/tmp")
     }
 }

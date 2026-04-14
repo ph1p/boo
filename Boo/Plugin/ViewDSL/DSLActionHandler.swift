@@ -48,7 +48,8 @@ final class DSLActionHandler {
 
         case "url":
             guard let urlStr = action.url ?? action.text, !urlStr.isEmpty,
-                let url = URL(string: urlStr)
+                let url = URL(string: urlStr),
+                url.scheme == "https" || url.scheme == "http"
             else { return nil }
             NSWorkspace.shared.open(url)
             return "Opened URL"
