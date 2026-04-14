@@ -269,6 +269,10 @@ private struct PluginSettingControl: View {
         return Group {
             if setting.options == "markdownOpenMode" {
                 markdownOpenModeControl
+            } else if setting.options == "imageOpenMode" {
+                imageOpenModeControl
+            } else if setting.options == "textOpenMode" {
+                textOpenModeControl
             } else if setting.options == "fontPicker:system" {
                 HStack {
                     Text(setting.label)
@@ -285,8 +289,8 @@ private struct PluginSettingControl: View {
                     Spacer()
                     fontPicker(value: value, fonts: AppSettings.availableMonospaceFonts)
                 }
-            } else if setting.options == "editorExtensions" {
-                editorExtensionsControl(value: value)
+            } else if setting.options == "editorFilePatterns" {
+                editorFilePatternsControl(value: value)
             } else if setting.options == "gitDiffTool" {
                 gitDiffToolControl(value: value)
             } else {
@@ -323,7 +327,51 @@ private struct PluginSettingControl: View {
                     Text(mode.displayName).tag(mode)
                 }
             }
-            .pickerStyle(.segmented)
+            .pickerStyle(.menu)
+            .labelsHidden()
+        }
+    }
+
+    private var imageOpenModeControl: some View {
+        let t = Tokens.current
+        let current = ImageOpenMode(
+            rawValue: AppSettings.shared.pluginString(pluginID, setting.key, default: "imageViewer")
+        ) ?? .imageViewer
+        return VStack(alignment: .leading, spacing: 6) {
+            Text(setting.label)
+                .font(.system(size: 12))
+                .foregroundColor(t.text)
+            Picker("", selection: Binding(
+                get: { current },
+                set: { AppSettings.shared.setPluginSetting(pluginID, setting.key, $0.rawValue) }
+            )) {
+                ForEach(ImageOpenMode.allCases, id: \.self) { mode in
+                    Text(mode.displayName).tag(mode)
+                }
+            }
+            .pickerStyle(.menu)
+            .labelsHidden()
+        }
+    }
+
+    private var textOpenModeControl: some View {
+        let t = Tokens.current
+        let current = TextOpenMode(
+            rawValue: AppSettings.shared.pluginString(pluginID, setting.key, default: "editor")
+        ) ?? .editor
+        return VStack(alignment: .leading, spacing: 6) {
+            Text(setting.label)
+                .font(.system(size: 12))
+                .foregroundColor(t.text)
+            Picker("", selection: Binding(
+                get: { current },
+                set: { AppSettings.shared.setPluginSetting(pluginID, setting.key, $0.rawValue) }
+            )) {
+                ForEach(TextOpenMode.allCases, id: \.self) { mode in
+                    Text(mode.displayName).tag(mode)
+                }
+            }
+            .pickerStyle(.menu)
             .labelsHidden()
         }
     }
@@ -349,14 +397,14 @@ private struct PluginSettingControl: View {
         }
     }
 
-    private func editorExtensionsControl(value: String) -> some View {
+    private func editorFilePatternsControl(value: String) -> some View {
         let t = Tokens.current
         return VStack(alignment: .leading, spacing: 4) {
             Text(setting.label)
                 .font(.system(size: 12))
                 .foregroundColor(t.text)
             TextField(
-                LocalFileTreePlugin.defaultEditorExtensions,
+                ContentType.builtInEditorFilePatterns,
                 text: Binding(
                     get: { value },
                     set: { AppSettings.shared.setPluginSetting(pluginID, setting.key, $0) }
@@ -364,7 +412,7 @@ private struct PluginSettingControl: View {
             )
             .textFieldStyle(.roundedBorder)
             .font(.system(size: 11, design: .monospaced))
-            Text("Comma-separated. Other file types open with the default app.")
+            Text("Comma-separated patterns. Examples: swift, .gitignore, *.{ts,tsx}, .env*. Other files open with the default app.")
                 .font(.system(size: 11))
                 .foregroundColor(t.muted)
         }

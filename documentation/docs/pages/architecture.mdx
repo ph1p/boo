@@ -87,3 +87,54 @@ make run           # Build and launch
 make test          # Run tests
 make clean-ghostty # Rebuild GhosttyKit after updating Vendor/ghostty
 ```
+
+## State Contracts
+
+### Single Source of Truth
+
+| Data | Source of Truth | Persistence | Sync Rule |
+|------|-----------------|-------------|-----------|
+| **Working Directory** | BridgeState (live) | TabState | Sync to TabState on tab switch |
+| **Remote Session** | BridgeState (live) | NOT persisted | Re-detected on restore via process tree |
+| **Remote CWD** | BridgeState (live) | TabState | Sync to TabState on tab switch |
+| **Foreground Process** | BridgeState (live) | TabState | Sync to TabState on tab switch |
+| **Shell PID** | TabState | SessionStore | Set once on terminal creation |
+| **Terminal Title** | BridgeState (live) | TabState | Sync to TabState on tab switch |
+| **Agent Session ID** | TabState | SessionStore | Updated by plugin detection |
+| **Plugin Expanded IDs** | WindowStateCoordinator | TabState | Sync on tab switch |
+| **Section Heights** | DetailPanelView | AppSettings.`__sidebar` | Sync on panel switch, app quit |
+| **Section Order** | WindowStateCoordinator | AppSettings.`__sidebar` | Sync on reorder, app quit |
+| **Scroll Offsets** | DetailPanelView | TabState | Sync on tab switch |
+| **Active Plugin Tab** | WindowStateCoordinator | TabState | Sync on tab switch |
+| **Theme** | AppSettings | UserDefaults + file | Immediate |
+| **Sidebar Visible** | MainWindowController | NOT persisted | Runtime only |
+
+### Key Invariants
+
+1. `BridgeState` must be synced to `TabState` via `syncBridgeToTab()` before any tab switch.
+2. Remote session is intentionally not persisted — always re-detected on restore.
+3. Plugin settings use namespace: `pluginSettings[pluginID][key]`.
+4. Changes to `AppSettings` emit `.settingsChanged` via `NotificationCenter`.
+
+### Sync Points
+
+**Tab Switch:**
+1. `syncBridgeToTab(previousPane, previousTabIndex)` — save bridge → tab
+2. `savePluginState()` — save plugin UI → tab
+3. `restorePluginState(newTab)` — restore plugin UI ← tab
+4. `bridge.restoreTabState(...)` — restore bridge ← tab
+
+**App Quit:**
+1. For each workspace: sync bridge + plugin state
+2. `saveSidebarHeightsToSettings()`
+3. `saveSidebarOrderToSettings()`
+4. `SessionStore.save(appState)`
+
+### Controller Responsibilities
+
+| Controller | Responsibility |
+|------------|---------------|
+| **MainWindowController** | Window lifecycle, menu actions, high-level coordination |
+| **SidebarController** | Panel visibility, tab selection, heights sync |
+| **WindowStateCoordinator** | Bridge↔Tab sync, plugin state save/restore |
+| **TerminalBridge** | Event parsing, heuristics, remote detection |
