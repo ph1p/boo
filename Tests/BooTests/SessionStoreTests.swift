@@ -346,7 +346,9 @@ final class SessionStoreTests: XCTestCase {
             isPinned: sw.isPinned,
             splitTree: sw.splitTree,
             panes: sw.panes,
-            activePaneID: UUID()  // random — not in tree
+            activePaneID: UUID(),  // random — not in tree
+            sidebarIsVisible: nil,
+            sidebarWidth: nil
         )
         snapshot = SessionSnapshot(
             activeWorkspaceIndex: snapshot.activeWorkspaceIndex,
@@ -413,7 +415,9 @@ final class SessionStoreTests: XCTestCase {
             isPinned: sw.isPinned,
             splitTree: sw.splitTree,
             panes: [],  // no panes
-            activePaneID: sw.activePaneID
+            activePaneID: sw.activePaneID,
+            sidebarIsVisible: nil,
+            sidebarWidth: nil
         )
         snapshot = SessionSnapshot(
             activeWorkspaceIndex: snapshot.activeWorkspaceIndex,

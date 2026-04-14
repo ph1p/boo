@@ -39,12 +39,14 @@ struct SettingsView: View {
         case appearance
         case statusBar
         case layout
+        case editor
+        case browser
         case plugins
         case shortcuts
         case pluginSettings(pluginID: String)
 
         static var fixed: [Tab] {
-            [.general, .theme, .appearance, .statusBar, .layout, .plugins, .shortcuts]
+            [.general, .theme, .appearance, .statusBar, .layout, .editor, .browser, .plugins, .shortcuts]
         }
 
         var label: String {
@@ -54,6 +56,8 @@ struct SettingsView: View {
             case .appearance: return "Appearance"
             case .statusBar: return "Status Bar"
             case .layout: return "Layout"
+            case .editor: return "Editor"
+            case .browser: return "Browser"
             case .plugins: return "Plugins"
             case .shortcuts: return "Shortcuts"
             case .pluginSettings(let id):
@@ -68,6 +72,8 @@ struct SettingsView: View {
             case .appearance: return "textformat"
             case .statusBar: return "rectangle.bottomthird.inset.filled"
             case .layout: return "rectangle.3.group"
+            case .editor: return "chevron.left.forwardslash.chevron.right"
+            case .browser: return "globe"
             case .plugins: return "puzzlepiece"
             case .shortcuts: return "keyboard"
             case .pluginSettings(let id):
@@ -200,6 +206,8 @@ struct SettingsView: View {
         case .appearance: AppearanceSettingsView()
         case .statusBar: StatusBarSettingsView()
         case .layout: LayoutSettingsView()
+        case .editor: EditorSettingsView()
+        case .browser: BrowserSettingsView()
         case .plugins: PluginSettingsView()
         case .shortcuts: ShortcutsSettingsView()
         case .pluginSettings(let id):

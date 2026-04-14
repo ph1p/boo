@@ -8,9 +8,10 @@ Boo supports multiple content types within tabs — not just terminals. A tab ca
 |------|-------------|------|
 | `terminal` | Default. Ghostty terminal emulator | Terminal icon |
 | `browser` | WebKit-based web browser | Globe icon |
-| `editor` | Text/code editor (non-terminal) | Document icon |
+| `editor` | Text/code editor (CodeEditTextView) | Document icon |
 | `imageViewer` | Image preview | Image icon |
 | `markdownPreview` | Rendered markdown | Markdown icon |
+| `pluginView` | Ephemeral custom SwiftUI view | Puzzle piece icon |
 
 ## Creating Tabs
 
@@ -18,40 +19,95 @@ Boo supports multiple content types within tabs — not just terminals. A tab ca
 
 - **File → New Terminal Tab** (default)
 - **File → New Browser Tab**
-- **File → New Editor Tab**
 
 ### Auto-Detection
 
-When pasting content into the app, Boo can automatically detect the intended content type:
+When opening a file from the file explorer, Boo routes to the correct tab type:
 
-- URLs (`https://...`) → Browser tab
-- File paths to images → Image viewer tab
-- File paths to `.md` files → Markdown preview tab
+- Image files → Image viewer tab (configurable)
+- Markdown files → Markdown preview tab (configurable)
+- Text/code files in `editorExtensions` → Editor tab (configurable)
+- URLs cmd+clicked in terminal → Browser tab
 
-Auto-detection can be disabled in **Settings → General → Auto-detect content type for new tabs**.
+### Plugin API
+
+Plugins can open any tab type using the `openTab` action:
+
+```swift
+// Open a browser tab
+actions.openTab?(.browser(url: url))
+
+// Open a file in the appropriate viewer
+actions.openFile("/path/to/file.swift")
+
+// Open a custom ephemeral SwiftUI view
+actions.openTab?(.customView(title: "My Panel", icon: "star", view: AnyView(MyView())))
+```
+
+## Plugin Multi-Content Tab API
+
+For persistent, deduplicated custom tabs use the typed registration API:
+
+```swift
+// In plugin setup — register a factory once
+actions.registerMultiContentTab?("my-diff-view") { ctx in
+    AnyView(MyDiffView(context: ctx))
+}
+
+// Open the tab (or focus it if already open)
+let ctx = PluginTabContext(title: "Diff", icon: "doc.badge.plus", key: filePath)
+actions.openMultiContentTab?("my-diff-view", ctx)
+```
+
+**Deduplication:** two calls with the same type ID and `context.key` focus the existing tab in the active workspace rather than opening a duplicate.
+
+## Browser Features
+
+- **Back/Forward:** trackpad swipe gestures (macOS native `allowsBackForwardNavigationGestures`)
+- **URL Autocomplete:** history-based suggestions shown as you type in the address bar
+- **Copy/Paste:** fully functional via standard keyboard shortcuts
+- **History:** configurable in Settings → Browser
+
+## Editor Features
+
+- **Syntax Highlighting:** powered by [CodeEditTextView](https://github.com/CodeEditApp/CodeEditTextView)
+- **Theme Integration:** follows the active Boo theme
+- **Save:** Cmd+S writes to disk; new (unsaved) files prompt with a save dialog
+- **File Routing:** files whose extension is in Settings → Files → "Open in editor" open in the built-in editor tab
+
+## File Explorer Settings
+
+### Image Opening Mode
+
+Settings → Plugins → Files → "Open images as":
+
+| Value | Behavior |
+|-------|----------|
+| `imageViewer` (default) | Opens in a Boo image viewer tab |
+| `kitty` | Displays inline via Kitty Graphics Protocol |
+| `external` | Opens in the system default image app |
+
+### Text File Opening Mode
+
+Settings → Plugins → Files → "Open text files as":
+
+| Value | Behavior |
+|-------|----------|
+| `editor` (default) | Opens in the built-in editor tab |
+| `terminalEditor` | Opens in a terminal using `$EDITOR` |
+| `external` | Opens in the system default app |
 
 ## Mixing Tabs
 
-Tabs of different types can coexist in the same pane. Each tab displays a type-specific icon in the tab bar for easy identification.
+Tabs of different types can coexist in the same pane. Each tab shows a type-specific icon in the tab bar.
 
 ## Sidebar Behavior
 
-The sidebar displays for all tab types:
-
 - **Terminal tabs**: Full plugin functionality (FileTree, Git, Docker, etc.)
-- **Non-terminal tabs**: Sidebar visible but shows placeholder content (future: content-type-specific plugins)
+- **Non-terminal tabs**: Sidebar visible; future: content-type-specific plugins
 
 ## Architecture
 
-See [Architecture](/architecture) for the underlying state model. Multi-content tabs extend this with:
+Tab content type is stored in `TabState.contentType` (`ContentType` enum). The `ContentViewProtocol` abstracts the view layer for each content type. Factories are in `ContentViewFactory`.
 
-- `TabState.contentType` — identifies the content type
-- `ContentBridge` protocol — abstracts content-specific state and events
-- Content-specific views implementing `ContentView` protocol
-
-## Settings
-
-| Setting | Default | Description |
-|---------|---------|-------------|
-| `defaultTabType` | `terminal` | Content type for new tabs |
-| `autoDetectContentType` | `true` | Auto-detect content type when pasting |
+Tab close confirmation only appears for terminal tabs — browser, editor, and image viewer tabs close immediately.
