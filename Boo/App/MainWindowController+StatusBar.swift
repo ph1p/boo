@@ -26,7 +26,14 @@ extension MainWindowController {
         refreshStatusBar()
     }
 
+    /// Debounced entry point — coalesces rapid-fire calls (e.g. every bridge tick)
+    /// into a single update on the next run-loop pass.
     func refreshStatusBar() {
+        NSObject.cancelPreviousPerformRequests(withTarget: self, selector: #selector(_doRefreshStatusBar), object: nil)
+        perform(#selector(_doRefreshStatusBar), with: nil, afterDelay: 0)
+    }
+
+    @objc private func _doRefreshStatusBar() {
         guard let ws = activeWorkspace else {
             statusBar.update(directory: "", paneCount: 0, tabCount: 0, runningProcess: "")
             return

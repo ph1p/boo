@@ -82,12 +82,46 @@ enum NewTabCwdMode: Int, CaseIterable {
 enum MarkdownOpenMode: String, CaseIterable, Codable {
     case preview = "preview"
     case editor = "editor"
+    case multiContent = "multiContent"
     case external = "external"
 
     var displayName: String {
         switch self {
         case .preview: return "Markdown Preview"
         case .editor: return "Terminal Editor"
+        case .multiContent: return "Multi-content Editor"
+        case .external: return "External App"
+        }
+    }
+}
+
+enum ImageOpenMode: String, CaseIterable, Codable {
+    case imageViewer = "imageViewer"
+    case multiContent = "multiContent"
+    case kitty = "kitty"
+    case external = "external"
+
+    var displayName: String {
+        switch self {
+        case .imageViewer: return "Image Viewer"
+        case .multiContent: return "Multi-content Editor"
+        case .kitty: return "Inline (Kitty)"
+        case .external: return "External App"
+        }
+    }
+}
+
+enum TextOpenMode: String, CaseIterable, Codable {
+    case editor = "editor"
+    case multiContent = "multiContent"
+    case terminalEditor = "terminalEditor"
+    case external = "external"
+
+    var displayName: String {
+        switch self {
+        case .editor: return "Editor"
+        case .multiContent: return "Multi-content Editor"
+        case .terminalEditor: return "Terminal Editor"
         case .external: return "External App"
         }
     }
@@ -137,6 +171,7 @@ enum SettingsTopic: String, CaseIterable {
     case statusBar  // status bar toggles (path, git, time, pane info, shell, connection)
     case layout  // sidebar position, workspace bar, density, sidebar width, tab overflow
     case plugins  // disabled plugins, default enabled plugins, plugin settings
+    case editor  // editor theme, font size, font family
 }
 
 final class AppSettings {
@@ -193,6 +228,13 @@ final class AppSettings {
         static let defaultTabType = "defaultTabType"
         static let autoDetectContentType = "autoDetectContentType"
         static let markdownOpenMode = "markdownOpenMode"
+        static let browserHomePage = "browserHomePage"
+        static let browserHistoryEnabled = "browserHistoryEnabled"
+        static let browserHistoryLimit = "browserHistoryLimit"
+
+        static let editorThemeName = "editorThemeName"
+        static let editorFontSize = "editorFontSize"
+        static let editorFontName = "editorFontName"
     }
 
     /// Bool from UserDefaults with a custom default (since .bool returns false for unset keys).
@@ -478,6 +520,52 @@ final class AppSettings {
         set { set(newValue.rawValue, forKey: K.markdownOpenMode, topic: .explorer) }
     }
 
+    // MARK: - Browser
+
+    var browserHomePage: String {
+        get { UserDefaults.standard.string(forKey: K.browserHomePage) ?? "https://google.com" }
+        set { set(newValue, forKey: K.browserHomePage, topic: .layout) }
+    }
+
+    var browserHistoryEnabled: Bool {
+        get { bool(K.browserHistoryEnabled, default: true) }
+        set { set(newValue, forKey: K.browserHistoryEnabled, topic: .layout) }
+    }
+
+    /// Maximum number of history entries to keep.
+    var browserHistoryLimit: Int {
+        get {
+            let v = UserDefaults.standard.integer(forKey: K.browserHistoryLimit)
+            return v > 0 ? v : 5000
+        }
+        set { set(newValue, forKey: K.browserHistoryLimit, topic: .layout) }
+    }
+
+    // MARK: - Editor
+
+    var editorThemeName: String {
+        get { UserDefaults.standard.string(forKey: K.editorThemeName) ?? "xcode-dark" }
+        set { set(newValue, forKey: K.editorThemeName, topic: .editor) }
+    }
+
+    var editorFontSize: CGFloat {
+        get {
+            let v = UserDefaults.standard.double(forKey: K.editorFontSize)
+            return v > 0 ? CGFloat(v) : 13.0
+        }
+        set { set(Double(newValue), forKey: K.editorFontSize, topic: .editor) }
+    }
+
+    var editorFontName: String {
+        get { UserDefaults.standard.string(forKey: K.editorFontName) ?? "SF Mono" }
+        set { set(newValue, forKey: K.editorFontName, topic: .editor) }
+    }
+
+    func resolvedEditorFont() -> NSFont {
+        if let font = NSFont(name: editorFontName, size: editorFontSize) { return font }
+        return NSFont.monospacedSystemFont(ofSize: editorFontSize, weight: .regular)
+    }
+
     // MARK: - Plugins
 
     var disabledPluginIDs: [String] {
@@ -616,12 +704,7 @@ final class AppSettings {
         saveToFile()
     }
 
-    // MARK: - Font Resolution
 
-    func resolvedFont() -> NSFont {
-        if let font = NSFont(name: fontName, size: fontSize) { return font }
-        return NSFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
-    }
 
     static var availableMonospaceFonts: [String] {
         let fm = NSFontManager.shared
@@ -689,7 +772,10 @@ final class AppSettings {
             K.sidebarFontName: sidebarFontName,
             K.fileEditorCommand: fileEditorCommand,
             K.sidebarTabBarPosition: sidebarTabBarPosition.rawValue,
-            K.sidebarGlobalState: sidebarGlobalState
+            K.sidebarGlobalState: sidebarGlobalState,
+            K.editorThemeName: editorThemeName,
+            K.editorFontSize: Double(editorFontSize),
+            K.editorFontName: editorFontName,
         ]
         dict[K.autoCheckUpdates] = autoCheckUpdates
         if let skipVersion {

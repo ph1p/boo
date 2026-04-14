@@ -16,6 +16,7 @@ final class BrowserContentView: NSView, ContentViewProtocol, NSTextFieldDelegate
     private var currentURL: URL
     private var currentTitle: String = "New Tab"
     private var isLoading = false
+    private var autocompletePanel: URLAutocompletePanel?
 
     private let toolbarHeight: CGFloat = 44
 
@@ -186,8 +187,10 @@ final class BrowserContentView: NSView, ContentViewProtocol, NSTextFieldDelegate
 
     private func setupWebView() {
         let config = WKWebViewConfiguration()
+        config.websiteDataStore = .default()
         let wv = WKWebView(frame: bounds, configuration: config)
         wv.navigationDelegate = self
+        wv.allowsBackForwardNavigationGestures = true
         wv.translatesAutoresizingMaskIntoConstraints = false
         addSubview(wv)
         NSLayoutConstraint.activate([
@@ -217,6 +220,7 @@ final class BrowserContentView: NSView, ContentViewProtocol, NSTextFieldDelegate
     }
 
     @objc private func urlBarAction(_ sender: NSTextField) {
+        autocompletePanel?.close()
         let input = sender.stringValue.trimmingCharacters(in: .whitespaces)
         guard !input.isEmpty else { return }
 
@@ -232,6 +236,40 @@ final class BrowserContentView: NSView, ContentViewProtocol, NSTextFieldDelegate
 
         navigate(to: url)
         window?.makeFirstResponder(webView)
+    }
+
+    // MARK: - NSTextFieldDelegate (autocomplete)
+
+    func controlTextDidChange(_ obj: Notification) {
+        guard let field = obj.object as? NSTextField else { return }
+        let query = field.stringValue.trimmingCharacters(in: .whitespaces)
+        guard query.count >= 2 else {
+            autocompletePanel?.close()
+            return
+        }
+        let matches = BrowserHistory.shared.entries
+            .filter { $0.url.absoluteString.localizedCaseInsensitiveContains(query)
+                    || $0.title.localizedCaseInsensitiveContains(query) }
+            .prefix(8)
+            .map { URLAutocompletePanel.Item(title: $0.title, url: $0.url) }
+        guard !matches.isEmpty else {
+            autocompletePanel?.close()
+            return
+        }
+
+        if autocompletePanel == nil {
+            autocompletePanel = URLAutocompletePanel()
+            autocompletePanel?.onSelect = { [weak self] url in
+                self?.urlBar?.stringValue = url.absoluteString
+                self?.navigate(to: url)
+                self?.window?.makeFirstResponder(self?.webView)
+            }
+        }
+        autocompletePanel?.show(below: field, items: Array(matches))
+    }
+
+    func controlTextDidEndEditing(_ obj: Notification) {
+        autocompletePanel?.close()
     }
 
     private func updateNavButtons() {
@@ -317,6 +355,22 @@ final class BrowserContentView: NSView, ContentViewProtocol, NSTextFieldDelegate
     // MARK: - First Responder
 
     override var acceptsFirstResponder: Bool { true }
+
+    /// Forward standard edit commands (copy/cut/paste/select-all) to the web view
+    /// so they work even when focus is on the container rather than the WKWebView itself.
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        guard let wv = webView, event.type == .keyDown,
+              event.modifierFlags.contains(.command)
+        else { return super.performKeyEquivalent(with: event) }
+
+        switch event.charactersIgnoringModifiers {
+        case "c": wv.perform(#selector(NSText.copy(_:)), with: nil); return true
+        case "x": wv.perform(#selector(NSText.cut(_:)), with: nil); return true
+        case "v": wv.perform(#selector(NSText.paste(_:)), with: nil); return true
+        case "a": wv.perform(#selector(NSText.selectAll(_:)), with: nil); return true
+        default: return super.performKeyEquivalent(with: event)
+        }
+    }
 }
 
 // MARK: - WKNavigationDelegate
@@ -339,6 +393,13 @@ extension BrowserContentView: WKNavigationDelegate {
         if let title = webView.title, !title.isEmpty {
             currentTitle = title
             onTitleChanged?(title)
+        }
+        // Record in browser history after title + URL are both known
+        if let url = webView.url {
+            let title = webView.title ?? ""
+            Task { @MainActor in
+                BrowserHistory.shared.record(title: title, url: url)
+            }
         }
     }
 

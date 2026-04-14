@@ -2,16 +2,6 @@ import Foundation
 
 /// Detects content type from user input (URLs, file paths, etc.).
 enum ContentTypeDetector {
-    /// Image file extensions that trigger image viewer.
-    private static let imageExtensions: Set<String> = [
-        "png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "tiff", "tif", "ico", "heic", "heif"
-    ]
-
-    /// Markdown file extensions that trigger markdown preview.
-    private static let markdownExtensions: Set<String> = [
-        "md", "markdown", "mdown", "mkd", "mkdn"
-    ]
-
     /// Detect content type from a string input.
     /// Returns nil if no specific content type is detected (defaults to terminal).
     static func detect(from input: String) -> ContentType? {
@@ -42,12 +32,12 @@ enum ContentTypeDetector {
         let ext = (path as NSString).pathExtension.lowercased()
 
         // Image files
-        if imageExtensions.contains(ext) {
+        if ContentType.imageExtensions.contains(ext) {
             return .imageViewer
         }
 
         // Markdown files
-        if markdownExtensions.contains(ext) {
+        if ContentType.markdownExtensions.contains(ext) {
             return .markdownPreview
         }
 

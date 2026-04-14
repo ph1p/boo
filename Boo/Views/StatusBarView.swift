@@ -165,7 +165,6 @@ class StatusBarView: NSView {
 
     func update(directory: String, paneCount: Int, tabCount: Int, runningProcess: String) {
         let dirChanged = directory != currentDirectory
-        NSLog("[Git] statusBar.update: dir=\(directory) dirChanged=\(dirChanged) currentBranch=\(gitBranch ?? "nil")")
         let changed =
             dirChanged || paneCount != self.paneCount || tabCount != self.tabCount
             || runningProcess != self.runningProcess
@@ -196,14 +195,11 @@ class StatusBarView: NSView {
 
     private func refreshGitBranch() {
         let dir = currentDirectory
-        NSLog("[Git] refreshGitBranch: dir=\(dir)")
         DispatchQueue.global(qos: .utility).async { [weak self] in
             let (branch, repoRoot) = Self.detectGitInfo(in: dir)
-            NSLog("[Git] refreshGitBranch result: branch=\(branch ?? "nil") repoRoot=\(repoRoot ?? "nil")")
             DispatchQueue.main.async {
                 guard let self = self else { return }
                 if self.gitBranch != branch || self.gitRepoRoot != repoRoot {
-                    NSLog("[Git] refreshGitBranch updating: \(self.gitBranch ?? "nil") -> \(branch ?? "nil")")
                     self.gitBranch = branch
                     self.gitRepoRoot = repoRoot
                     self.needsDisplay = true

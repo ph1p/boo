@@ -28,55 +28,33 @@ final class LocalFileTreePlugin: BooPluginProtocol {
                 key: "showProcess", type: .bool, label: "Show running process",
                 defaultValue: AnyCodableValue(true), options: nil),
             PluginManifest.SettingManifest(
-                key: "useKitty", type: .bool, label: "Preview images inline",
-                defaultValue: AnyCodableValue(true), options: nil),
-            PluginManifest.SettingManifest(
-                key: "kittyNewTab", type: .bool, label: "Open image in new tab",
-                defaultValue: AnyCodableValue(true), options: nil),
-            PluginManifest.SettingManifest(
-                key: "editorExtensions", type: .string,
-                label: "Open in editor (extensions)",
-                defaultValue: AnyCodableValue(LocalFileTreePlugin.defaultEditorExtensions),
-                options: "editorExtensions"),
+                key: "editorFilePatterns", type: .string,
+                label: "Open in editor (file patterns)",
+                defaultValue: AnyCodableValue(ContentType.builtInEditorFilePatterns),
+                options: "editorFilePatterns"),
             PluginManifest.SettingManifest(
                 key: "markdownOpenMode", type: .string,
                 label: "Open markdown files as",
                 defaultValue: AnyCodableValue("preview"),
                 options: "markdownOpenMode"),
+            PluginManifest.SettingManifest(
+                key: "imageOpenMode", type: .string,
+                label: "Open images as",
+                defaultValue: AnyCodableValue("imageViewer"),
+                options: "imageOpenMode"),
+            PluginManifest.SettingManifest(
+                key: "textOpenMode", type: .string,
+                label: "Open text files as",
+                defaultValue: AnyCodableValue("editor"),
+                options: "textOpenMode"),
+            PluginManifest.SettingManifest(
+                key: "htmlOpenInBrowser", type: .bool,
+                label: "Open HTML files in browser",
+                defaultValue: AnyCodableValue(false), options: nil),
         ]
     )
 
-    private static let imageExtensions: Set<String> = [
-        "png", "jpg", "jpeg", "gif", "webp", "bmp", "tiff", "tif", "ico", "svg", "heic", "heif",
-        "avif"
-    ]
-
-    /// Markdown file extensions that route through openTab API.
-    private static let markdownExtensions: Set<String> = [
-        "md", "markdown", "mdown", "mkd"
-    ]
-
-    /// Default comma-separated list of extensions that open in the terminal editor.
-    /// Note: "md" removed since markdown files now route through openTab API.
-    static let defaultEditorExtensions =
-        "swift,m,h,c,cpp,js,ts,jsx,tsx,py,rb,go,rs,java,kt,sh,bash,zsh,fish,"
-        + "html,css,scss,sass,less,vue,svelte,json,yaml,yml,toml,xml,plist,"
-        + "txt,log,conf,cfg,ini,env,gitignore,dockerfile,makefile"
-
-    /// Returns the current set of editor extensions from plugin settings.
-    private static func editorExtensionSet() -> Set<String> {
-        let raw = AppSettings.shared.pluginString(
-            "file-tree-local", "editorExtensions",
-            default: defaultEditorExtensions
-        )
-        return Set(
-            raw.split(separator: ",")
-                .map { $0.trimmingCharacters(in: .whitespaces).lowercased() }
-                .filter { !$0.isEmpty }
-        )
-    }
-
-    /// Cached file tree roots keyed by path for instant switching.
+/// Cached file tree roots keyed by path for instant switching.
     private var cachedRoots: [String: FileTreeNode] = [:]
     private var fileWatcher: FileSystemWatcher?
 
@@ -150,31 +128,51 @@ final class LocalFileTreePlugin: BooPluginProtocol {
         let treeActions = FileTreeActions(
             onFileClicked: { path in
                 let ext = (path as NSString).pathExtension.lowercased()
-                let isImage = Self.imageExtensions.contains(ext)
-                let useKitty = AppSettings.shared.pluginBool(
-                    "file-tree-local", "useKitty", default: true)
-                if isImage && useKitty {
-                    let busy = act?.isTerminalBusy?() ?? false
-                    let newTab =
-                        busy
-                        || AppSettings.shared.pluginBool(
-                            "file-tree-local", "kittyNewTab", default: true)
-                    act?.displayImageInTerminal?(path, newTab)
-                } else if Self.markdownExtensions.contains(ext) {
-                    // Route markdown through openTab API (respects user setting)
-                    act?.openTab?(.file(path: path))
-                } else if Self.editorExtensionSet().contains(ext) {
-                    let parentDir = (path as NSString).deletingLastPathComponent
-                    act?.openDirectoryInNewTab?(parentDir)
-                    let configured = AppSettings.shared.fileEditorCommand.trimmingCharacters(
-                        in: .whitespaces
-                    )
-                    var editorCmd = configured
-                    if editorCmd.isEmpty {
-                        editorCmd = ProcessInfo.processInfo.environment["EDITOR"] ?? "vi"
+                let filename = ((path as NSString).lastPathComponent).lowercased()
+                let isImage = ContentType.imageExtensions.contains(ext)
+                let isMarkdown = ContentType.markdownExtensions.contains(ext)
+                let isHTML = ContentType.htmlExtensions.contains(ext)
+                let isEditorFile = ContentType.isEditorFilePattern(filename: filename)
+
+                let htmlOpenInBrowser = AppSettings.shared.pluginBool(
+                    "file-tree-local", "htmlOpenInBrowser", default: false)
+                if isHTML && htmlOpenInBrowser {
+                    act?.openTab?(.browser(url: URL(fileURLWithPath: path)))
+                } else if isImage {
+                    let imageModeRaw = AppSettings.shared.pluginString(
+                        "file-tree-local", "imageOpenMode", default: "imageViewer")
+                    let imageMode = ImageOpenMode(rawValue: imageModeRaw) ?? .imageViewer
+                    switch imageMode {
+                    case .kitty:
+                        act?.displayImageInTerminal?(path, false)
+                    case .external:
+                        NSWorkspace.shared.open(URL(fileURLWithPath: path))
+                    case .multiContent, .imageViewer:
+                        act?.openTab?(.file(path: path))
                     }
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                        act?.sendToTerminal?("\(editorCmd) \(shellEscape(path))\r")
+                } else if isMarkdown {
+                    act?.openTab?(.file(path: path))
+                } else if isEditorFile {
+                    let textModeRaw = AppSettings.shared.pluginString(
+                        "file-tree-local", "textOpenMode", default: "editor")
+                    let textMode = TextOpenMode(rawValue: textModeRaw) ?? .editor
+                    switch textMode {
+                    case .terminalEditor:
+                        let parentDir = (path as NSString).deletingLastPathComponent
+                        act?.openDirectoryInNewTab?(parentDir)
+                        let configured = AppSettings.shared.fileEditorCommand.trimmingCharacters(
+                            in: .whitespaces
+                        )
+                        let editorCmd = configured.isEmpty
+                            ? (ProcessInfo.processInfo.environment["EDITOR"] ?? "vi")
+                            : configured
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                            act?.sendToTerminal?("\(editorCmd) \(shellEscape(path))\r")
+                        }
+                    case .external:
+                        NSWorkspace.shared.open(URL(fileURLWithPath: path))
+                    case .editor, .multiContent:
+                        act?.openTab?(.file(path: path))
                     }
                 } else {
                     NSWorkspace.shared.open(URL(fileURLWithPath: path))
@@ -188,6 +186,15 @@ final class LocalFileTreePlugin: BooPluginProtocol {
             },
             onOpenInPane: { path in
                 act?.openDirectoryInNewPane?(path)
+            },
+            onOpenFileInTab: { path in
+                act?.openTab?(.file(path: path))
+            },
+            onOpenFileInPane: { path in
+                act?.openFileInNewPane?(path)
+            },
+            onOpenFileInBrowser: { path in
+                act?.openTab?(.browser(url: URL(fileURLWithPath: path)))
             },
             onCopyPath: { path in
                 act?.handle(DSLAction(type: "copy", path: path, command: nil, text: nil))
@@ -206,7 +213,6 @@ final class LocalFileTreePlugin: BooPluginProtocol {
                 NSWorkspace.shared.recycle([url]) { _, _ in
                     DispatchQueue.main.async {
                         guard let self else { return }
-                        // Refresh any cached root that contains the trashed path.
                         for (rootPath, root) in self.cachedRoots where path.hasPrefix(rootPath) {
                             root.refreshAll()
                         }
@@ -253,6 +259,37 @@ final class LocalFileTreePlugin: BooPluginProtocol {
                         atPath: destPath, withIntermediateDirectories: false)
                 } catch {
                     BooAlert.showTransient("Create folder failed: \(error.localizedDescription)")
+                }
+            },
+            onCreateFile: { parentPath in
+                var fileName = "New File"
+                var destPath = (parentPath as NSString).appendingPathComponent(fileName)
+                var counter = 2
+                while FileManager.default.fileExists(atPath: destPath) {
+                    fileName = "New File \(counter)"
+                    destPath = (parentPath as NSString).appendingPathComponent(fileName)
+                    counter += 1
+                }
+                FileManager.default.createFile(atPath: destPath, contents: nil)
+            },
+            onDuplicate: { path in
+                let parentDir = (path as NSString).deletingLastPathComponent
+                let name = (path as NSString).lastPathComponent
+                let ext = (name as NSString).pathExtension
+                let stem = (name as NSString).deletingPathExtension
+                let suffix = ext.isEmpty ? "" : ".\(ext)"
+                var candidate = "\(stem) copy\(suffix)"
+                var destPath = (parentDir as NSString).appendingPathComponent(candidate)
+                var counter = 2
+                while FileManager.default.fileExists(atPath: destPath) {
+                    candidate = "\(stem) copy \(counter)\(suffix)"
+                    destPath = (parentDir as NSString).appendingPathComponent(candidate)
+                    counter += 1
+                }
+                do {
+                    try FileManager.default.copyItem(atPath: path, toPath: destPath)
+                } catch {
+                    BooAlert.showTransient("Duplicate failed: \(error.localizedDescription)")
                 }
             },
             onCopyImage: { path in

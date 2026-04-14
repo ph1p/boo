@@ -65,7 +65,7 @@ enum ContentViewFactory {
         case .terminal:
             return TerminalContentView(workingDirectory: workingDirectory)
         case .browser:
-            return BrowserContentView(url: ContentType.blankURL)
+            return BrowserContentView(url: ContentType.newTabURL)
         case .editor:
             return EditorContentView(filePath: nil)
         case .imageViewer:

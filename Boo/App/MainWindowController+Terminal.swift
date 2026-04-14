@@ -129,7 +129,7 @@ extension MainWindowController {
             pv.addNewTab(contentType: .browser, url: url)
 
         case .file(let path):
-            // Check if file has a known content type
+            // Check if file has a known content type (image, markdown, etc.)
             if let type = ContentType.forFile(path) {
                 // Markdown respects user preference
                 if type == .markdownPreview {
@@ -138,12 +138,17 @@ extension MainWindowController {
                         openFileInTab(path: path, type: .markdownPreview)
                     case .editor:
                         openFileInTerminalEditor(path)
+                    case .multiContent:
+                        openFileInTab(path: path, type: .editor)
                     case .external:
                         NSWorkspace.shared.open(URL(fileURLWithPath: path))
                     }
                 } else {
                     openFileInTab(path: path, type: type)
                 }
+            } else if ContentType.isEditorFilePattern(filename: ((path as NSString).lastPathComponent).lowercased()) {
+                // File matches user-configured editor patterns — open in built-in editor tab
+                openFileInTab(path: path, type: .editor)
             } else {
                 // Unknown type: open in system default app
                 NSWorkspace.shared.open(URL(fileURLWithPath: path))
@@ -185,6 +190,15 @@ extension MainWindowController {
                     )
                 )
                 contentView.restoreState(state)
+            case .editor:
+                let state = ContentState.editor(
+                    EditorContentState(
+                        title: (path as NSString).lastPathComponent,
+                        filePath: path,
+                        isDirty: false
+                    )
+                )
+                contentView.restoreState(state)
             default:
                 break
             }
@@ -204,6 +218,64 @@ extension MainWindowController {
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
             self?.sendRawToActivePane("\(editorCmd) \(shellEscape(path))\r")
+        }
+    }
+
+    /// Open or focus a custom tab registered via registerMultiContentTab.
+    /// If a tab with the same typeID + context.key already exists in the active workspace,
+    /// it is focused rather than creating a duplicate.
+    func handleOpenMultiContentTab(typeID: String, context: PluginTabContext) {
+        guard let factory = multiContentTabFactories[typeID] else { return }
+        guard let workspace = activeWorkspace else { return }
+
+        // Search all panes in the active workspace for an existing tab with this typeID+key
+        let dedupeKey = "\(typeID):\(context.key)"
+        for (paneID, pane) in workspace.panes {
+            if let pv = paneViews[paneID],
+               let idx = pane.tabs.firstIndex(where: { registeredTabKey(for: $0.id) == dedupeKey })
+            {
+                // Focus existing tab
+                workspace.activePaneID = paneID
+                pv.forceActivateTab(idx)
+                return
+            }
+        }
+
+        // Not found — create a new one
+        guard let pv = paneViews[workspace.activePaneID] else { return }
+        let view = factory(context)
+        if let tabID = pv.addPluginViewTab(view: view, title: context.title, icon: context.icon) {
+            registeredTabKeys[tabID] = dedupeKey
+        }
+        refreshStatusBar()
+    }
+
+    /// Returns the registered typeID:key string for a tab, if it was opened via registerMultiContentTab.
+    private func registeredTabKey(for tabID: UUID) -> String? {
+        registeredTabKeys[tabID]
+    }
+
+    /// Open a file content tab (editor, image viewer, etc.) in a new split pane.
+    func openFileInNewPane(_ path: String) {
+        guard let workspace = activeWorkspace else { return }
+        window?.makeFirstResponder(nil)
+
+        let newID = workspace.splitPane(workspace.activePaneID, direction: .horizontal)
+        workspace.activePaneID = newID
+        splitContainer.update(tree: workspace.splitTree)
+        saveSession()
+
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            if let pv = self.paneViews[newID] {
+                pv.startActiveSession()
+                self.window?.makeFirstResponder(pv.ghosttyView)
+            }
+            self.refreshAllSurfaces()
+            self.syncCoordinatorPaneViews()
+            self.updatePaneCloseButtons()
+            // Now open the file in the new pane (which is now active)
+            self.handleOpenTab(.file(path: path))
         }
     }
 
