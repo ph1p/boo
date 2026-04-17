@@ -28,6 +28,7 @@ struct FileTreeActions {
     var onDuplicate: ((String) -> Void)?
     var onCopyImage: ((String) -> Void)?
     var onReferenceInAI: ((String) -> Void)?
+    var onSetFileRoot: ((String) -> Void)?
     var isAIAgentRunning: Bool = false
 }
 
@@ -367,6 +368,10 @@ struct FileTreeRowView: View {
     @ViewBuilder
     private var contextMenuContent: some View {
         let cap = resolveCapability()
+        if node.isDirectory && node.path == rootPath {
+            Button("Set as Root") { actions.onSetFileRoot?(node.path) }
+            Divider()
+        }
         contextMenuOpen(cap: cap)
         contextMenuTerminal(cap: cap)
         contextMenuFinderClipboard

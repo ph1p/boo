@@ -360,7 +360,7 @@ final class DockerService: ObservableObject {
                 path: "/v1.43/containers/json?all=true")
             let newContainers = Self.parseContainersJSON(data)
             DispatchQueue.main.async {
-                guard let self = self else { return }
+                guard let self else { return }
                 if newContainers != self.containers {
                     self.containers = newContainers
                     self.onContainersChanged?(newContainers)
@@ -378,7 +378,7 @@ final class DockerService: ObservableObject {
                 socketPath: sock, method: "GET", path: "/v1.43/images/json")
             let newImages = Self.parseImagesJSON(data)
             DispatchQueue.main.async {
-                guard let self = self else { return }
+                guard let self else { return }
                 if newImages != self.images { self.images = newImages }
             }
         }
@@ -397,7 +397,7 @@ final class DockerService: ObservableObject {
                 socketPath: sock, method: "GET", path: "/v1.43/networks")
             let newNetworks = Self.parseNetworksJSON(data)
             DispatchQueue.main.async {
-                guard let self = self else { return }
+                guard let self else { return }
                 if newNetworks != self.networks { self.networks = newNetworks }
             }
         }
@@ -416,7 +416,7 @@ final class DockerService: ObservableObject {
                 socketPath: sock, method: "GET", path: "/v1.43/volumes")
             let newVolumes = Self.parseVolumesJSON(data)
             DispatchQueue.main.async {
-                guard let self = self else { return }
+                guard let self else { return }
                 if newVolumes != self.volumes { self.volumes = newVolumes }
             }
         }
@@ -661,7 +661,10 @@ final class DockerService: ObservableObject {
             guard process.terminationStatus == 0 else { return nil }
             let data = pipe.fileHandleForReading.readDataToEndOfFile()
             return String(data: data, encoding: .utf8)
-        } catch { return nil }
+        } catch {
+            debugLog("[DockerService] process.run() exception: \(error)")
+            return nil
+        }
     }
 
     /// Parse CLI tab-separated output (used for remote containers via SSH).

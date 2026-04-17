@@ -23,11 +23,11 @@ Boo embeds [GhosttyKit](https://github.com/ghostty-org/ghostty) as a static libr
 
 Ghostty surfaces emit action callbacks for terminal state changes:
 
-| Action                             | Trigger                           |
-| ---------------------------------- | --------------------------------- |
-| `GHOSTTY_ACTION_PWD`               | Shell `cd` (via OSC 7)           |
-| `GHOSTTY_ACTION_SET_TITLE`         | Terminal title change             |
-| `GHOSTTY_ACTION_SHOW_CHILD_EXITED` | Shell process exited              |
+| Action                             | Trigger                |
+| ---------------------------------- | ---------------------- |
+| `GHOSTTY_ACTION_PWD`               | Shell `cd` (via OSC 7) |
+| `GHOSTTY_ACTION_SET_TITLE`         | Terminal title change  |
+| `GHOSTTY_ACTION_SHOW_CHILD_EXITED` | Shell process exited   |
 
 These flow through: `GhosttyView` → `PaneView` delegate → `MainWindowController` → `TerminalBridge` + sidebar update.
 

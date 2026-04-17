@@ -81,50 +81,73 @@ enum NewTabCwdMode: Int, CaseIterable {
 
 enum MarkdownOpenMode: String, CaseIterable, Codable {
     case preview = "preview"
-    case editor = "editor"
-    case multiContent = "multiContent"
+    case builtInEditor = "builtInEditor"
+    case terminalEditor = "editor"
     case external = "external"
+    /// Legacy value — treated as builtInEditor.
+    case multiContent = "multiContent"
 
     var displayName: String {
         switch self {
         case .preview: return "Markdown Preview"
-        case .editor: return "Terminal Editor"
-        case .multiContent: return "Multi-content Editor"
+        case .builtInEditor: return "Editor"
+        case .terminalEditor: return "Terminal Editor"
         case .external: return "External App"
+        case .multiContent: return "Editor"  // hidden legacy alias
         }
     }
+
+    /// Maps legacy cases to their canonical replacement for UI display.
+    var normalized: MarkdownOpenMode { self == .multiContent ? .builtInEditor : self }
+
+    /// Cases shown in the UI picker (excludes the legacy multiContent alias).
+    static var visibleCases: [MarkdownOpenMode] { [.preview, .builtInEditor, .terminalEditor, .external] }
 }
 
 enum ImageOpenMode: String, CaseIterable, Codable {
     case imageViewer = "imageViewer"
-    case multiContent = "multiContent"
     case kitty = "kitty"
     case external = "external"
+    /// Legacy value — treated as imageViewer.
+    case multiContent = "multiContent"
 
     var displayName: String {
         switch self {
         case .imageViewer: return "Image Viewer"
-        case .multiContent: return "Multi-content Editor"
         case .kitty: return "Inline (Kitty)"
         case .external: return "External App"
+        case .multiContent: return "Image Viewer"
         }
     }
+
+    /// Maps legacy cases to their canonical replacement for UI display.
+    var normalized: ImageOpenMode { self == .multiContent ? .imageViewer : self }
+
+    /// Cases shown in the UI picker (excludes the legacy multiContent alias).
+    static var visibleCases: [ImageOpenMode] { [.imageViewer, .kitty, .external] }
 }
 
 enum TextOpenMode: String, CaseIterable, Codable {
     case editor = "editor"
-    case multiContent = "multiContent"
     case terminalEditor = "terminalEditor"
     case external = "external"
+    /// Legacy value — treated as editor.
+    case multiContent = "multiContent"
 
     var displayName: String {
         switch self {
         case .editor: return "Editor"
-        case .multiContent: return "Multi-content Editor"
         case .terminalEditor: return "Terminal Editor"
         case .external: return "External App"
+        case .multiContent: return "Editor"
         }
     }
+
+    /// Maps legacy cases to their canonical replacement for UI display.
+    var normalized: TextOpenMode { self == .multiContent ? .editor : self }
+
+    /// Cases shown in the UI picker (excludes the legacy multiContent alias).
+    static var visibleCases: [TextOpenMode] { [.editor, .terminalEditor, .external] }
 }
 
 enum SidebarTabBarPosition: String, CaseIterable {
@@ -908,7 +931,7 @@ final class SettingsObserver: ObservableObject {
         observer = NotificationCenter.default.addObserver(
             forName: .settingsChanged, object: nil, queue: .main
         ) { [weak self] notification in
-            guard let self = self else { return }
+            guard let self else { return }
             // If this observer filters by topic, check the notification's topic
             if !self.topics.isEmpty,
                 let topicRaw = notification.userInfo?["topic"] as? String,

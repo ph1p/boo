@@ -140,9 +140,9 @@ extension MainWindowController {
                     switch AppSettings.shared.markdownOpenMode {
                     case .preview:
                         openFileInTab(path: path, type: .markdownPreview)
-                    case .editor:
+                    case .terminalEditor:
                         openFileInTerminalEditor(path)
-                    case .multiContent:
+                    case .builtInEditor, .multiContent:
                         openFileInTab(path: path, type: .editor)
                     case .external:
                         NSWorkspace.shared.open(URL(fileURLWithPath: path))
@@ -302,7 +302,7 @@ extension MainWindowController {
         saveSession()
 
         DispatchQueue.main.async { [weak self] in
-            guard let self = self else { return }
+            guard let self else { return }
             if let pv = self.paneViews[newID] {
                 pv.startActiveSession()
                 self.window?.makeFirstResponder(pv.ghosttyView)

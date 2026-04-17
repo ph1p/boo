@@ -27,32 +27,30 @@ Plugins are JavaScript, running in-process via JavaScriptCore — no dependencie
   "version": "1.0.0",
   "icon": "star",
   "description": "A custom sidebar plugin",
-  "runtime": "js",
-  "capabilities": { "sidebarPanel": true }
+  "runtime": "js"
 }
 ```
 
-That's all you need to get started. The full set of fields:
+That's all you need to get started — external plugins automatically get a sidebar tab. The full set of fields:
 
 #### Manifest Fields
 
-| Field                           | Required | Description                                                             |
-| ------------------------------- | -------- | ----------------------------------------------------------------------- |
-| `id`                            | Yes      | Unique plugin identifier                                                |
-| `name`                          | Yes      | Display name in sidebar and status bar                                  |
-| `version`                       | Yes      | Semver version string                                                   |
-| `icon`                          | Yes      | [SF Symbol](https://developer.apple.com/sf-symbols/) name               |
-| `description`                   | No       | Human-readable description                                              |
-| `when`                          | No       | When-clause expression for visibility (null = always visible)           |
-| `runtime`                       | No       | `"js"` (only supported value)                                           |
-| `capabilities.sidebarPanel`     | No       | Show in sidebar (at least one of `sidebarPanel` or `statusBarSegment` should be `true`) |
-| `capabilities.statusBarSegment` | No       | Show in status bar (can be the only capability — no sidebar tab required) |
-| `statusBar.position`            | No       | `"left"` or `"right"`                                                   |
-| `statusBar.priority`            | No       | Lower = closer to edge                                                  |
-| `statusBar.template`            | No       | Template string for status bar text                                     |
-| `statusBar.onClick`             | No       | `"showTab"` — clicking the status bar segment focuses the plugin's sidebar tab |
+| Field                           | Required | Description                                                                     |
+| ------------------------------- | -------- | ------------------------------------------------------------------------------- |
+| `id`                            | Yes      | Unique plugin identifier                                                        |
+| `name`                          | Yes      | Display name in sidebar and status bar                                          |
+| `version`                       | Yes      | Semver version string                                                           |
+| `icon`                          | Yes      | [SF Symbol](https://developer.apple.com/sf-symbols/) name                       |
+| `description`                   | No       | Human-readable description                                                      |
+| `when`                          | No       | When-clause expression for visibility (null = always visible)                   |
+| `runtime`                       | No       | `"js"` (only supported value)                                                   |
+| `capabilities.statusBarSegment` | No       | Show in status bar (can be the only capability — no sidebar tab required)       |
+| `statusBar.position`            | No       | `"left"` or `"right"`                                                           |
+| `statusBar.priority`            | No       | Lower = closer to edge                                                          |
+| `statusBar.template`            | No       | Template string for status bar text                                             |
+| `statusBar.onClick`             | No       | `"showTab"` — clicking the status bar segment focuses the plugin's sidebar tab  |
 | `menus`                         | No       | Array of menu item declarations (see [Menu Contributions](#menu-contributions)) |
-| `settings`                      | No       | Array of setting declarations (see [Plugin Settings](#plugin-settings)) |
+| `settings`                      | No       | Array of setting declarations (see [Plugin Settings](#plugin-settings))         |
 
 #### Plugin Settings
 
@@ -75,7 +73,6 @@ Example manifest with settings:
   "version": "1.0.0",
   "icon": "star",
   "runtime": "js",
-  "capabilities": { "sidebarPanel": true },
   "settings": [
     { "key": "enabled", "type": "bool", "label": "Enable feature", "default": true },
     { "key": "fontSize", "type": "double", "label": "Font size", "default": 12.0 },
@@ -165,14 +162,14 @@ Font rendering for JS plugins is handled automatically by the DSL renderer — i
 
 JS plugins have access to these functions provided by the host:
 
-| Function           | Returns                                  | Description                                                                                                                     |
-| ------------------ | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `readFile(path)`   | string or null                           | Read a file relative to `ctx.cwd`. Returns null if not found.                                                                   |
-| `fileExists(path)` | bool                                     | Check if a file exists relative to `ctx.cwd`.                                                                                   |
-| `listDir(path)`    | `[{name: string, isDirectory: bool}]` or null | List directory contents relative to `ctx.cwd`. Returns null if not found. Sandboxed to cwd, max 500 entries.                |
-| `readJSON(path)`   | object or null                           | Shorthand for `JSON.parse(readFile(path))`. Returns null if the file is missing or not valid JSON.                              |
-| `getEnv(name)`     | string or null                           | Read an environment variable. Restricted to an allowlist: `HOME`, `USER`, `SHELL`, `TERM`, `LANG`, `PATH`, `EDITOR`, `VISUAL`, `XDG_CONFIG_HOME`. |
-| `log(message)`     | void                                     | Write a message to Boo's debug log (visible in Console.app).                                                                    |
+| Function           | Returns                                       | Description                                                                                                                                       |
+| ------------------ | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `readFile(path)`   | string or null                                | Read a file relative to `ctx.cwd`. Returns null if not found.                                                                                     |
+| `fileExists(path)` | bool                                          | Check if a file exists relative to `ctx.cwd`.                                                                                                     |
+| `listDir(path)`    | `[{name: string, isDirectory: bool}]` or null | List directory contents relative to `ctx.cwd`. Returns null if not found. Sandboxed to cwd, max 500 entries.                                      |
+| `readJSON(path)`   | object or null                                | Shorthand for `JSON.parse(readFile(path))`. Returns null if the file is missing or not valid JSON.                                                |
+| `getEnv(name)`     | string or null                                | Read an environment variable. Restricted to an allowlist: `HOME`, `USER`, `SHELL`, `TERM`, `LANG`, `PATH`, `EDITOR`, `VISUAL`, `XDG_CONFIG_HOME`. |
+| `log(message)`     | void                                          | Write a message to Boo's debug log (visible in Console.app).                                                                                      |
 
 Absolute paths are allowed but must be under `ctx.cwd` (security boundary).
 
@@ -222,18 +219,18 @@ Your `render` function returns a JSON object or array of elements. Each element 
 
 Actions are attached to interactive elements (buttons, list items):
 
-| Action Type      | Parameters                                  | Effect                                      |
-| ---------------- | ------------------------------------------- | ------------------------------------------- |
-| `"cd"`           | `path`                                      | Changes terminal directory                  |
-| `"open"`         | `path`                                      | Opens file in `$EDITOR`                     |
-| `"exec"`         | `command`                                   | Sends command to terminal                   |
-| `"copy"`         | `text` or `path`                            | Copies to clipboard                         |
-| `"reveal"`       | `path`                                      | Opens in Finder                             |
-| `"url"`          | `url` or `text`                             | Opens URL in default browser                |
-| `"newTab"`       | `path` (optional)                           | Opens a new terminal tab                    |
-| `"newPane"`      | `path` (optional)                           | Opens a new split pane                      |
-| `"paste"`        | `text`                                      | Inserts text at cursor without executing    |
-| `"notification"` | `text`, `title` (optional, defaults to "Boo") | Shows macOS notification                  |
+| Action Type      | Parameters                                    | Effect                                   |
+| ---------------- | --------------------------------------------- | ---------------------------------------- |
+| `"cd"`           | `path`                                        | Changes terminal directory               |
+| `"open"`         | `path`                                        | Opens file in `$EDITOR`                  |
+| `"exec"`         | `command`                                     | Sends command to terminal                |
+| `"copy"`         | `text` or `path`                              | Copies to clipboard                      |
+| `"reveal"`       | `path`                                        | Opens in Finder                          |
+| `"url"`          | `url` or `text`                               | Opens URL in default browser             |
+| `"newTab"`       | `path` (optional)                             | Opens a new terminal tab                 |
+| `"newPane"`      | `path` (optional)                             | Opens a new split pane                   |
+| `"paste"`        | `text`                                        | Inserts text at cursor without executing |
+| `"notification"` | `text`, `title` (optional, defaults to "Boo") | Shows macOS notification                 |
 
 ### Context Menus
 
@@ -309,7 +306,12 @@ Plugins can add items to a "Plugins" top-level menu in the menu bar by declaring
 ```json
 {
   "menus": [
-    { "label": "Run Tests", "action": "runTests", "shortcut": "shift+cmd+t", "icon": "checkmark.circle" },
+    {
+      "label": "Run Tests",
+      "action": "runTests",
+      "shortcut": "shift+cmd+t",
+      "icon": "checkmark.circle"
+    },
     { "separator": true },
     { "label": "Open Coverage", "action": "openCoverage" }
   ]
@@ -318,13 +320,13 @@ Plugins can add items to a "Plugins" top-level menu in the menu bar by declaring
 
 #### Menu item fields
 
-| Field       | Type   | Required | Description                                                       |
-| ----------- | ------ | -------- | ----------------------------------------------------------------- |
-| `label`     | string | Yes      | Menu item text                                                    |
-| `action`    | string | Yes      | Name passed to `onAction()` in `main.js`                         |
+| Field       | Type   | Required | Description                                                                     |
+| ----------- | ------ | -------- | ------------------------------------------------------------------------------- |
+| `label`     | string | Yes      | Menu item text                                                                  |
+| `action`    | string | Yes      | Name passed to `onAction()` in `main.js`                                        |
 | `shortcut`  | string | No       | Keyboard shortcut in modifier+key format (e.g. `"shift+cmd+t"`, `"ctrl+alt+r"`) |
-| `icon`      | string | No       | SF Symbol name                                                    |
-| `separator` | bool   | No       | Set to `true` for a separator item (no other fields needed)       |
+| `icon`      | string | No       | SF Symbol name                                                                  |
+| `separator` | bool   | No       | Set to `true` for a separator item (no other fields needed)                     |
 
 Shortcuts use modifier+key format. Conflicts with built-in shortcuts are detected and skipped.
 
@@ -380,8 +382,7 @@ A JS plugin that reads a Makefile and lists its targets as clickable items:
   "icon": "hammer",
   "description": "Lists Makefile targets. Click to run.",
   "when": "env.local",
-  "runtime": "js",
-  "capabilities": { "sidebarPanel": true }
+  "runtime": "js"
 }
 ```
 
@@ -480,7 +481,7 @@ final class MyPlugin: BooPluginProtocol {
         description: "Example built-in plugin",
         when: nil,             // nil = always visible; or use "git.active", "!remote", etc.
         runtime: nil,
-        capabilities: PluginManifest.Capabilities(sidebarPanel: true, statusBarSegment: true),
+        capabilities: PluginManifest.Capabilities(statusBarSegment: true, sidebarTab: true),
         statusBar: PluginManifest.StatusBarManifest(position: "right", priority: 25, template: nil),
         settings: [
             PluginManifest.SettingManifest(key: "greeting", type: .string, label: "Greeting text", defaultValue: AnyCodableValue("Hello"), options: nil)
@@ -596,10 +597,31 @@ pluginActions.copy("text")                // Copy to clipboard
 pluginActions.reveal("/some/file")        // Show in Finder
 pluginActions.openInEditor("/some/file")  // Open with default app
 
-// Lower-level closures
+// Navigation closures
 pluginActions.openDirectoryInNewTab?("/some/dir")
 pluginActions.openDirectoryInNewPane?("/some/dir")
 pluginActions.sendToTerminal?("raw text\r")
+
+// Multi-content tab (reusable tab type)
+// Register a factory once (e.g. in pluginDidActivate)
+pluginActions.registerMultiContentTab?("my-panel") { ctx in
+    AnyView(MyPanelView(title: ctx.title, key: ctx.key))
+}
+// Open an instance
+pluginActions.openMultiContentTab?("my-panel", PluginTabContext(title: "Output", icon: "terminal", key: "run-1"))
+```
+
+`PluginTabContext` fields: `title` (String), `icon` (SF Symbol name), `key` (String, optional — use to distinguish instances).
+
+For a one-shot custom tab (simpler, non-reusable), use `openTab?(.customView(...))` instead.
+
+#### Agent session ID
+
+Plugins that manage AI agent sessions can store and retrieve a session identifier:
+
+```swift
+pluginActions.setAgentSessionID?("session-abc123")
+let id = pluginActions.getAgentSessionID?()
 ```
 
 ### Triggering Refreshes
@@ -619,7 +641,27 @@ This triggers a full plugin cycle, which rebuilds the sidebar and status bar.
 
 ### Lifecycle Callbacks
 
-Override lifecycle methods to respond to terminal state changes:
+Plugins declare which events they handle via `subscribedEvents`. Only declared callbacks fire — undeclared ones are skipped entirely:
+
+```swift
+var subscribedEvents: Set<PluginEvent> {
+    [.cwdChanged, .remoteSessionChanged]
+}
+```
+
+Available `PluginEvent` cases:
+
+| Case                     | Fires when                         |
+| ------------------------ | ---------------------------------- |
+| `.cwdChanged`            | Terminal working directory changed |
+| `.processChanged`        | Foreground process changed         |
+| `.remoteSessionChanged`  | Remote session started or ended    |
+| `.focusChanged`          | Focus moved to a different pane    |
+| `.terminalCreated`       | A new terminal was created         |
+| `.terminalClosed`        | A terminal was closed              |
+| `.remoteDirectoryListed` | Remote directory listing completed |
+
+Override the corresponding methods to respond to terminal state changes:
 
 ```swift
 // Terminal changed working directory
@@ -641,6 +683,24 @@ func terminalFocusChanged(terminalID: UUID, context: TerminalContext) {
     // Update cached state for the new pane
 }
 ```
+
+#### Tab activation callbacks
+
+`pluginDidActivate()` and `pluginDidDeactivate()` fire when the user switches sidebar tabs. Both have empty default implementations — override only when needed:
+
+```swift
+func pluginDidActivate() {
+    // Tab selected — start watchers, timers, background work
+    startRefreshTimer()
+}
+
+func pluginDidDeactivate() {
+    // Tab deselected — pause background work to save resources
+    stopRefreshTimer()
+}
+```
+
+For statusbar-only plugins (no sidebar tab), these are called when the plugin becomes visible or hidden.
 
 #### Sending commands on directory change
 
@@ -666,6 +726,8 @@ func enrich(context: EnrichmentContext) {
 }
 ```
 
+Key convention: prefix with your plugin ID to avoid collisions (`"plugin-id.keyName"`).
+
 Other plugins read this in their `react()` phase via the frozen `TerminalContext`:
 
 ```swift
@@ -676,7 +738,7 @@ func react(context: TerminalContext) {
 }
 ```
 
-JavaScript plugins can access enriched data via `context.enrichedData["key"]`.
+JavaScript plugins can access enriched data via `ctx.enrichedData["my-plugin.myKey"]`.
 
 ### Conditional Visibility
 
@@ -743,7 +805,7 @@ final class MySegment: StatusBarPlugin {
 
 Register in `StatusBarView.registerDefaultPlugins()`.
 
-Sidebar plugins **do not** need to create their own status bar segments — the registry auto-registers `PluginIconSegment` toggle icons for any plugin with `capabilities.sidebarPanel = true`.
+Sidebar plugins **do not** need to create their own status bar segments — the registry auto-registers `PluginIconSegment` toggle icons for any plugin with `capabilities.sidebarTab = true`.
 
 A plugin can also contribute **only** a status bar segment with no sidebar tab at all. Set `capabilities.statusBarSegment = true` and omit `sidebarTab`. The plugin will still receive lifecycle callbacks (`pluginDidActivate` / `pluginDidDeactivate`) when it becomes visible or hidden.
 
@@ -757,13 +819,10 @@ Set `sidebarTab: true` in your manifest capabilities:
 
 ```swift
 capabilities: PluginManifest.Capabilities(
-    sidebarPanel: true,   // still appears as a section in Explorer
     statusBarSegment: true,
-    sidebarTab: true      // also gets a dedicated tab
+    sidebarTab: true
 )
 ```
-
-You can set both `sidebarPanel` and `sidebarTab` to make the plugin appear in both places, or use only `sidebarTab` to skip the Explorer section entirely.
 
 ### Implementing `makeSidebarTab`
 
@@ -808,7 +867,6 @@ The built-in `DebugPlugin` uses `sidebarTab: true` to show a dedicated ladybug t
 
 ```swift
 capabilities: PluginManifest.Capabilities(
-    sidebarPanel: true,
     statusBarSegment: true,
     sidebarTab: true
 )

@@ -43,7 +43,7 @@ final class SSHControlManager {
     /// Calls completion(true) on success, completion(false) on failure. Always on main thread.
     func ensureConnection(alias: String, completion: @escaping (Bool) -> Void) {
         queue.async { [weak self] in
-            guard let self = self else { return }
+            guard let self else { return }
 
             if let existing = self.connections[alias] {
                 switch existing.state {
@@ -68,7 +68,7 @@ final class SSHControlManager {
                 alias, "echo", "ok"
             ])
             if probeResult {
-                NSLog("[SSHControl] Probe succeeded for \(alias) — user's ControlMaster works")
+                debugLog("[SSHControl] Probe succeeded for \(alias) — user's ControlMaster works")
                 self.connections[alias] = ManagedConnection(state: .ready, isManaged: false)
                 DispatchQueue.main.async { completion(true) }
                 return
@@ -76,7 +76,7 @@ final class SSHControlManager {
 
             // Step 2: Spawn our own master
             let socketPath = Self.socketFilePath(for: alias)
-            NSLog("[SSHControl] Spawning master for \(alias) at \(socketPath)")
+            debugLog("[SSHControl] Spawning master for \(alias) at \(socketPath)")
 
             let spawnResult = Self.runSSHCommand([
                 "-o", "ControlMaster=yes",
@@ -90,7 +90,7 @@ final class SSHControlManager {
             ])
 
             guard spawnResult else {
-                NSLog("[SSHControl] Master spawn failed for \(alias)")
+                debugLog("[SSHControl] Master spawn failed for \(alias)")
                 self.connections[alias] = ManagedConnection(state: .failed, isManaged: true)
                 DispatchQueue.main.async { completion(false) }
                 return
@@ -104,11 +104,11 @@ final class SSHControlManager {
             ])
 
             if checkResult {
-                NSLog("[SSHControl] Master verified for \(alias)")
+                debugLog("[SSHControl] Master verified for \(alias)")
                 self.connections[alias] = ManagedConnection(state: .ready, isManaged: true)
                 DispatchQueue.main.async { completion(true) }
             } else {
-                NSLog("[SSHControl] Master check failed for \(alias)")
+                debugLog("[SSHControl] Master check failed for \(alias)")
                 self.connections[alias] = ManagedConnection(state: .failed, isManaged: true)
                 DispatchQueue.main.async { completion(false) }
             }
@@ -118,7 +118,7 @@ final class SSHControlManager {
     /// Tear down the master connection for an alias.
     func teardown(alias: String) {
         queue.async { [weak self] in
-            guard let self = self else { return }
+            guard let self else { return }
             guard let conn = self.connections[alias] else { return }
 
             if conn.isManaged {
@@ -134,7 +134,7 @@ final class SSHControlManager {
             }
 
             self.connections.removeValue(forKey: alias)
-            NSLog("[SSHControl] Torn down \(alias)")
+            debugLog("[SSHControl] Torn down \(alias)")
         }
     }
 
@@ -155,7 +155,7 @@ final class SSHControlManager {
                 }
             }
             connections.removeAll()
-            NSLog("[SSHControl] All connections torn down")
+            debugLog("[SSHControl] All connections torn down")
         }
     }
 
@@ -183,6 +183,7 @@ final class SSHControlManager {
             process.waitUntilExit()
             return process.terminationStatus == 0
         } catch {
+            debugLog("[SSHControl] process.run() exception: \(error)")
             return false
         }
     }

@@ -156,7 +156,7 @@ enum SessionStore {
             let data = try Data(contentsOf: URL(fileURLWithPath: sessionFile))
             return try JSONDecoder().decode(SessionSnapshot.self, from: data)
         } catch {
-            NSLog("[SessionStore] Failed to load session: \(error)")
+            debugLog("[SessionStore] Failed to load session: \(error)")
             return nil
         }
     }
@@ -167,7 +167,7 @@ enum SessionStore {
         let restored: [Workspace] = snapshot.workspaces.compactMap { sw -> Workspace? in
             // Only restore workspaces whose root folder still exists.
             guard FileManager.default.fileExists(atPath: sw.folderPath) else {
-                NSLog("[SessionStore] Skipping workspace at \(sw.folderPath) — path not found")
+                debugLog("[SessionStore] Skipping workspace at \(sw.folderPath) — path not found")
                 return nil
             }
 
@@ -198,7 +198,10 @@ enum SessionStore {
                 if let sp = paneByID[leafID], !sp.tabs.isEmpty {
                     for tab in sp.tabs {
                         let restoredState =
-                            if let contentState = tab.contentState, contentState.contentType.isPersistable {
+                            if let contentState = tab.contentState,
+                                contentState.contentType.isPersistable,
+                                isContentStateRestorable(contentState)
+                            {
                                 contentState
                             } else {
                                 ContentState.terminal(
@@ -250,6 +253,20 @@ enum SessionStore {
 
         AppState.ensureUniquePaneIDsAcrossWorkspaces(restored)
         return restored
+    }
+
+    private static func isContentStateRestorable(_ state: ContentState) -> Bool {
+        switch state {
+        case .editor(let s):
+            guard let path = s.filePath, !path.isEmpty else { return true }
+            return FileManager.default.fileExists(atPath: path)
+        case .imageViewer(let s):
+            return s.filePath.isEmpty || FileManager.default.fileExists(atPath: s.filePath)
+        case .markdownPreview(let s):
+            return s.filePath.isEmpty || FileManager.default.fileExists(atPath: s.filePath)
+        default:
+            return true
+        }
     }
 
     private static func restoredWorkingDirectory(

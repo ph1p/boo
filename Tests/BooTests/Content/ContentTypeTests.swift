@@ -96,7 +96,7 @@ final class ContentTypeTests: XCTestCase {
         XCTAssertEqual(ContentType.forFile("/path/to/photo.jpeg"), .imageViewer)
         XCTAssertEqual(ContentType.forFile("/path/to/anim.gif"), .imageViewer)
         XCTAssertEqual(ContentType.forFile("/path/to/image.webp"), .imageViewer)
-        XCTAssertEqual(ContentType.forFile("/path/to/icon.svg"), .imageViewer)
+        XCTAssertNil(ContentType.forFile("/path/to/icon.svg"))
         XCTAssertEqual(ContentType.forFile("/path/to/photo.heic"), .imageViewer)
     }
 

@@ -716,7 +716,7 @@ extension ToolbarView {
 
         guard let window = window else { return }
         alert.beginSheetModal(for: window) { [weak self] response in
-            guard let self = self else { return }
+            guard let self else { return }
             if response == .alertFirstButtonReturn {
                 let name = input.stringValue.trimmingCharacters(in: .whitespaces)
                 if !name.isEmpty {

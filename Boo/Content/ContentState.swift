@@ -90,6 +90,10 @@ struct TerminalContentState: ContentStateProtocol, Codable {
     var shellPID: pid_t = 0
     var foregroundProcess: String = ""
 
+    enum CodingKeys: String, CodingKey {
+        case title, workingDirectory, shellPID, foregroundProcess
+    }
+
     init(
         title: String = "",
         workingDirectory: String = "~",
@@ -111,6 +115,10 @@ struct BrowserContentState: ContentStateProtocol, Codable {
     var url: URL
     var canGoBack: Bool = false
     var canGoForward: Bool = false
+
+    enum CodingKeys: String, CodingKey {
+        case title, url, canGoBack, canGoForward
+    }
 
     init(
         title: String = "New Tab",
@@ -135,6 +143,10 @@ struct EditorContentState: ContentStateProtocol, Codable {
     var cursorLine: Int = 1
     var cursorColumn: Int = 1
 
+    enum CodingKeys: String, CodingKey {
+        case title, filePath, isDirty, cursorLine, cursorColumn
+    }
+
     init(
         title: String = "Untitled",
         filePath: String? = nil,
@@ -158,6 +170,10 @@ struct ImageViewerContentState: ContentStateProtocol, Codable {
     var filePath: String
     var zoom: CGFloat = 1.0
 
+    enum CodingKeys: String, CodingKey {
+        case title, filePath, zoom
+    }
+
     init(title: String, filePath: String, zoom: CGFloat = 1.0) {
         self.title = title
         self.filePath = filePath
@@ -172,6 +188,10 @@ struct MarkdownPreviewContentState: ContentStateProtocol, Codable {
     var title: String
     var filePath: String
     var scrollPosition: CGFloat = 0
+
+    enum CodingKeys: String, CodingKey {
+        case title, filePath, scrollPosition
+    }
 
     init(title: String, filePath: String, scrollPosition: CGFloat = 0) {
         self.title = title
@@ -188,6 +208,10 @@ struct PluginViewContentState: ContentStateProtocol, Codable {
     let contentType: ContentType = .pluginView
     var title: String
     var iconSymbol: String
+
+    enum CodingKeys: String, CodingKey {
+        case title, iconSymbol
+    }
 
     init(title: String, iconSymbol: String = "puzzlepiece") {
         self.title = title

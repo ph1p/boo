@@ -319,7 +319,7 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
         AppStore.shared.sidebarVisible = sidebarVisible
         setupMenuItems()
         pluginRegistry.onRequestCycleRerun = { [weak self] in
-            guard let self = self else { return }
+            guard let self else { return }
             // A plugin's internal state changed — clear view cache and force sidebar rebuild.
             self.cachedDetailViews.removeAll()
             self.pluginRegistry.clearChangeDetection()
@@ -436,13 +436,18 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
             pastePathToActivePane: { [weak self] in self?.pastePathToActivePane($0) },
             openDirectoryInNewTab: { [weak self] in self?.openDirectoryInNewTab($0) },
             openDirectoryInNewPane: { [weak self] in self?.openDirectoryInNewPane($0) },
-            sendRawToActivePane: { [weak self] in self?.sendRawToActivePane($0) }
+            sendRawToActivePane: { [weak self] in self?.sendRawToActivePane($0) },
+            setWorkspaceRoot: { [weak self] path in
+                guard let self else { return }
+                self.appState.activeWorkspace?.folderPath = path
+                self.saveSession()
+            }
         )
         tabDragCoordinator.onDrop = { [weak self] source, tabIndex, dest, zone in
             self?.handleTabDrop(source: source, tabIndex: tabIndex, dest: dest, zone: zone)
         }
         tabDragCoordinator.onWorkspaceHover = { [weak self] index in
-            guard let self = self, index != self.appState.activeWorkspaceIndex else { return }
+            guard let self, index != self.appState.activeWorkspaceIndex else { return }
             self.activateWorkspace(index)
         }
         tabDragCoordinator.workspacePillFrames = { [weak self] in
@@ -461,7 +466,7 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
         settingsObserver = NotificationCenter.default.addObserver(
             forName: .settingsChanged, object: nil, queue: .main
         ) { [weak self] notification in
-            guard let self = self, self.window?.isVisible == true else { return }
+            guard let self, self.window?.isVisible == true else { return }
             let topic = (notification.userInfo?["topic"] as? String).flatMap(SettingsTopic.init(rawValue:))
 
             // Broadcast settings/theme changes to socket subscribers
@@ -568,7 +573,7 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
         ghosttyActionObserver = NotificationCenter.default.addObserver(
             forName: .ghosttyAction, object: nil, queue: .main
         ) { [weak self] notification in
-            guard let self = self else { return }
+            guard let self else { return }
             guard let info = notification.userInfo,
                 let action = info["action"] as? String
             else { return }
@@ -578,7 +583,7 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
         NotificationCenter.default.addObserver(
             forName: .ghosttyOpenURL, object: nil, queue: .main
         ) { [weak self] notification in
-            guard let self = self,
+            guard let self,
                 let url = notification.userInfo?["url"] as? URL
             else { return }
             self.handleOpenTab(.browser(url: url))
@@ -661,13 +666,13 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
         splitContainer.onRatioChanged = { [weak self] updatedTree in
             guard let self, let workspaceID = self.renderedWorkspaceID else { return }
             guard self.appState.replaceSplitTree(for: workspaceID, with: updatedTree) else {
-                NSLog(
+                debugLog(
                     "[WorkspaceSwitch] ignoredSplitRatio workspace=\(workspaceID.uuidString) activeWorkspace=\(self.activeWorkspace?.id.uuidString ?? "none")"
                 )
                 return
             }
             if workspaceID != self.activeWorkspace?.id {
-                NSLog(
+                debugLog(
                     "[WorkspaceSwitch] applySplitRatio renderedWorkspace=\(workspaceID.uuidString) activeWorkspace=\(self.activeWorkspace?.id.uuidString ?? "none")"
                 )
             }
@@ -927,7 +932,7 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
         guard !cycleScheduled else { return }
         cycleScheduled = true
         DispatchQueue.main.async { [weak self] in
-            guard let self = self, let reason = self.pendingCycleReason else { return }
+            guard let self, let reason = self.pendingCycleReason else { return }
             self.pendingCycleReason = nil
             self.cycleScheduled = false
             self.runPluginCycle(reason: reason)
@@ -957,7 +962,7 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
             .receive(on: DispatchQueue.main)
             .removeDuplicates()
             .sink { [weak self] state in
-                guard let self = self else { return }
+                guard let self else { return }
                 // Sync bridge state to the active tab immediately so tab bar
                 // and all UI reads from tab state are always fresh.
                 if let ws = self.activeWorkspace,
@@ -982,7 +987,7 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
         bridge.events
             .receive(on: DispatchQueue.main)
             .sink { [weak self] event in
-                guard let self = self else { return }
+                guard let self else { return }
                 let socket = BooSocketServer.shared
                 switch event {
                 case .directoryChanged(let path):
@@ -1054,7 +1059,7 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
 
         workspace.normalizePaneState()
         guard let pane = workspace.pane(for: paneID) else {
-            NSLog(
+            debugLog(
                 "[WorkspaceSwitch] missingPaneView workspace=\(workspace.id.uuidString) pane=\(paneID.uuidString)"
             )
             let fallbackPane = Pane(id: paneID)

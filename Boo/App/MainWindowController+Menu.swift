@@ -251,7 +251,7 @@ extension MainWindowController {
                         if !key.isEmpty {
                             let combo = "\(modifiers.rawValue):\(key)"
                             if builtinShortcuts.contains(combo) {
-                                NSLog(
+                                debugLog(
                                     "[Plugins] Shortcut conflict for '\(shortcut)' in \(contribution.pluginName), skipping"
                                 )
                             } else {

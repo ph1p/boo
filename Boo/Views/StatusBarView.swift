@@ -198,7 +198,7 @@ class StatusBarView: NSView {
         DispatchQueue.global(qos: .utility).async { [weak self] in
             let (branch, repoRoot) = Self.detectGitInfo(in: dir)
             DispatchQueue.main.async {
-                guard let self = self else { return }
+                guard let self else { return }
                 if self.gitBranch != branch || self.gitRepoRoot != repoRoot {
                     self.gitBranch = branch
                     self.gitRepoRoot = repoRoot

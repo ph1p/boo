@@ -245,7 +245,7 @@ extension GitPlugin {
             var remotes: [GitRemote] = []
             // Read branch directly from .git/HEAD — works without git installed.
             let (branch, _) = StatusBarView.detectGitInfo(in: root)
-            NSLog("[Git] refreshGitStatus: root=\(root) branch=\(branch ?? "nil")")
+            debugLog("[Git] refreshGitStatus: root=\(root) branch=\(branch ?? "nil")")
 
             group.enter()
             DispatchQueue.global(qos: .utility).async {
@@ -272,7 +272,7 @@ extension GitPlugin {
 
             group.wait()
             DispatchQueue.main.async {
-                guard let self = self else { return }
+                guard let self else { return }
                 let branchChanged = branch != self.cachedBranch
                 let changed =
                     branchChanged
@@ -289,7 +289,7 @@ extension GitPlugin {
                 self.cachedLastCommit = lastCommit
                 self.cachedRemotes = remotes
                 if branchChanged {
-                    NSLog("[Git] branch changed: \(self.cachedBranch ?? "nil") -> \(branch ?? "nil") root=\(root)")
+                    debugLog("[Git] branch changed: \(self.cachedBranch ?? "nil") -> \(branch ?? "nil") root=\(root)")
                     self.onBranchChanged?(branch, root)
                 }
                 if changed {
@@ -303,7 +303,7 @@ extension GitPlugin {
     private func setupCwdWatcher(cwd: String) {
         cwdWatcher?.stop()
         cwdWatcher = FileSystemWatcher(path: cwd) { [weak self] in
-            guard let self = self else { return }
+            guard let self else { return }
             let gitDir = (cwd as NSString).appendingPathComponent(".git")
             guard FileManager.default.fileExists(atPath: gitDir) else { return }
             // .git appeared — trigger a full cycle rerun so buildGitContext picks it up
@@ -321,10 +321,10 @@ extension GitPlugin {
         workTreeWatcher?.stop()
 
         let debouncedRefresh: (TimeInterval) -> Void = { [weak self] delay in
-            guard let self = self else { return }
+            guard let self else { return }
             self.debounceWork?.cancel()
             let work = DispatchWorkItem { [weak self] in
-                guard let self = self else { return }
+                guard let self else { return }
                 self.refreshGitStatus(cwd: self.lastRefreshedPath ?? repoRoot, repoRoot: repoRoot)
             }
             self.debounceWork = work

@@ -83,7 +83,6 @@ final class EditorContentView: NSView, ContentViewProtocol {
 
     deinit {
         NotificationCenter.default.removeObserver(self)
-        webView?.configuration.userContentController.removeScriptMessageHandler(forName: "boo")
     }
 
     @objc private func settingsDidChange() {
@@ -139,6 +138,13 @@ final class EditorContentView: NSView, ContentViewProtocol {
         webView?.loadFileURL(bundleURL, allowingReadAccessTo: bundleURL.deletingLastPathComponent())
     }
 
+    private func jsonString(from object: [String: Any]) -> String? {
+        guard let data = try? JSONSerialization.data(withJSONObject: object),
+            let str = String(data: data, encoding: .utf8)
+        else { return nil }
+        return str
+    }
+
     private func sendInitialData() {
         let language = getMonacoLanguage()
         let monacoTheme = buildMonacoTheme()
@@ -150,16 +156,13 @@ final class EditorContentView: NSView, ContentViewProtocol {
             "options": buildEditorOptions()
         ]
 
-        if let json = try? JSONSerialization.data(withJSONObject: initData),
-            let jsonString = String(data: json, encoding: .utf8)
-        {
-            debugLog("[Editor] Sending initial data to JS (\(initialContent.count) chars)")
-            webView?.evaluateJavaScript("initEditorFromJSON(\(jsonString))") { result, error in
-                if let error = error {
-                    debugLog("[Editor] JS Init Error: \(error.localizedDescription)")
-                } else {
-                    debugLog("[Editor] Initial data sent successfully")
-                }
+        guard let jsonStr = jsonString(from: initData) else { return }
+        debugLog("[Editor] Sending initial data to JS (\(initialContent.count) chars)")
+        webView?.evaluateJavaScript("initEditorFromJSON(\(jsonStr))") { _, error in
+            if let error = error {
+                debugLog("[Editor] JS Init Error: \(error.localizedDescription)")
+            } else {
+                debugLog("[Editor] Initial data sent successfully")
             }
         }
     }
@@ -187,8 +190,10 @@ final class EditorContentView: NSView, ContentViewProtocol {
     }
 
     private func applyEditorAppearance() {
-        updateTheme()
-        updateEditorOptions()
+        guard let themeStr = jsonString(from: buildMonacoTheme()),
+            let optionsStr = jsonString(from: buildEditorOptions())
+        else { return }
+        webView?.evaluateJavaScript("setAppearance(\(themeStr), \(optionsStr))")
     }
 
     private func buildMonacoTheme() -> [String: Any] {
@@ -228,25 +233,6 @@ final class EditorContentView: NSView, ContentViewProtocol {
         ]
     }
 
-    private func updateTheme() {
-        let monacoTheme = buildMonacoTheme()
-
-        if let json = try? JSONSerialization.data(withJSONObject: monacoTheme),
-            let jsonString = String(data: json, encoding: .utf8)
-        {
-            webView?.evaluateJavaScript("setTheme(\(jsonString))")
-        }
-    }
-
-    private func updateEditorOptions() {
-        let options = buildEditorOptions()
-        if let json = try? JSONSerialization.data(withJSONObject: options),
-            let jsonString = String(data: json, encoding: .utf8)
-        {
-            webView?.evaluateJavaScript("setEditorOptions(\(jsonString))")
-        }
-    }
-
     // MARK: - ContentViewProtocol
 
     func save(completion: ((Bool) -> Void)?) {
@@ -262,6 +248,7 @@ final class EditorContentView: NSView, ContentViewProtocol {
     func deactivate() {}
 
     func cleanup() {
+        webView?.configuration.userContentController.removeScriptMessageHandler(forName: "boo")
         webView?.removeFromSuperview()
         webView = nil
     }
@@ -306,7 +293,7 @@ final class EditorContentView: NSView, ContentViewProtocol {
             return
         }
         webView?.evaluateJavaScript("getContent()") { [weak self] result, error in
-            guard let self = self else {
+            guard let self else {
                 completion?(false)
                 return
             }

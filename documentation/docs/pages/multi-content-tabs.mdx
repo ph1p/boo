@@ -4,14 +4,14 @@ Boo supports multiple content types within tabs — not just terminals. A tab ca
 
 ## Supported Content Types
 
-| Type | Description | Icon |
-|------|-------------|------|
-| `terminal` | Default. Ghostty terminal emulator | Terminal icon |
-| `browser` | WebKit-based web browser | Globe icon |
-| `editor` | Text/code editor (CodeEditTextView) | Document icon |
-| `imageViewer` | Image preview | Image icon |
-| `markdownPreview` | Rendered markdown | Markdown icon |
-| `pluginView` | Ephemeral custom SwiftUI view | Puzzle piece icon |
+| Type              | Description                         | Icon              |
+| ----------------- | ----------------------------------- | ----------------- |
+| `terminal`        | Default. Ghostty terminal emulator  | Terminal icon     |
+| `browser`         | WebKit-based web browser            | Globe icon        |
+| `editor`          | Text/code editor (CodeEditTextView) | Document icon     |
+| `imageViewer`     | Image preview                       | Image icon        |
+| `markdownPreview` | Rendered markdown                   | Markdown icon     |
+| `pluginView`      | Ephemeral custom SwiftUI view       | Puzzle piece icon |
 
 ## Creating Tabs
 
@@ -38,7 +38,7 @@ Plugins can open any tab type using the `openTab` action:
 actions.openTab?(.browser(url: url))
 
 // Open a file in the appropriate viewer
-actions.openFile("/path/to/file.swift")
+actions.openTab?(.file(path: "/path/to/file.swift"))
 
 // Open a custom ephemeral SwiftUI view
 actions.openTab?(.customView(title: "My Panel", icon: "star", view: AnyView(MyView())))
@@ -81,21 +81,21 @@ actions.openMultiContentTab?("my-diff-view", ctx)
 
 Settings → Plugins → Files → "Open images as":
 
-| Value | Behavior |
-|-------|----------|
-| `imageViewer` (default) | Opens in a Boo image viewer tab |
-| `kitty` | Displays inline via Kitty Graphics Protocol |
-| `external` | Opens in the system default image app |
+| Value                   | Behavior                                    |
+| ----------------------- | ------------------------------------------- |
+| `imageViewer` (default) | Opens in a Boo image viewer tab             |
+| `kitty`                 | Displays inline via Kitty Graphics Protocol |
+| `external`              | Opens in the system default image app       |
 
 ### Text File Opening Mode
 
 Settings → Plugins → Files → "Open text files as":
 
-| Value | Behavior |
-|-------|----------|
-| `editor` (default) | Opens in the built-in editor tab |
-| `terminalEditor` | Opens in a terminal using `$EDITOR` |
-| `external` | Opens in the system default app |
+| Value              | Behavior                            |
+| ------------------ | ----------------------------------- |
+| `editor` (default) | Opens in the built-in editor tab    |
+| `terminalEditor`   | Opens in a terminal using `$EDITOR` |
+| `external`         | Opens in the system default app     |
 
 ## Mixing Tabs
 

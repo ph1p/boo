@@ -53,7 +53,28 @@ documentation/        Vocs documentation site
 
 ## Plugin System
 
-Plugins implement `BooPluginProtocol`. The registry runs a cycle (enrich → freeze → react) with a <16ms budget.
+Plugins implement `BooPluginProtocol`. The registry runs a cycle (enrich → freeze → react) with a <16ms budget. Each cycle carries a `PluginCycleReason`: `.focusChanged`, `.cwdChanged`, `.titleChanged`, `.processChanged`, `.remoteSessionChanged`, `.workspaceSwitched`.
+
+### Subscribed Events
+
+Plugins declare which lifecycle callbacks they receive. Undeclared events are never dispatched:
+
+```swift
+var subscribedEvents: Set<PluginEvent> {
+    [.cwdChanged, .processChanged]
+}
+```
+
+`PluginEvent` cases: `.cwdChanged`, `.processChanged`, `.remoteSessionChanged`, `.focusChanged`, `.terminalCreated`, `.terminalClosed`, `.remoteDirectoryListed`.
+
+### Activation Hooks
+
+```swift
+func pluginDidActivate()    // sidebar tab selected, or statusbar-only plugin becomes visible
+func pluginDidDeactivate()  // tab deselected / plugin hidden — pause background work here
+```
+
+Both have empty default implementations.
 
 ### Plugin API
 
@@ -67,6 +88,14 @@ actions?.openTab?(.customView(title: "Panel", icon: "star", view: AnyView(MyView
 // Send to terminal
 actions?.exec("ls -la")
 actions?.sendToTerminal?("some text")
+
+// Multi-content tab (reusable factory — register once, open many)
+actions?.registerMultiContentTab?("type-id") { ctx in AnyView(MyView(ctx: ctx)) }
+actions?.openMultiContentTab?("type-id", PluginTabContext(title: "Output", icon: "terminal"))
+
+// Agent session tracking
+actions?.setAgentSessionID?("session-123")
+let id = actions?.getAgentSessionID?()
 ```
 
 ### Plugin Settings

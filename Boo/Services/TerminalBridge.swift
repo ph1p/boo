@@ -479,7 +479,7 @@ final class TerminalBridge {
     }
 
     func switchContext(paneID: UUID, workspaceID: UUID, workingDirectory: String) {
-        NSLog(
+        debugLog(
             "[WorkspaceSwitch] bridgeSwitch workspace=\(workspaceID.uuidString) pane=\(paneID.uuidString) cwd=\(workingDirectory)"
         )
         state = BridgeState(

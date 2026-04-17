@@ -84,10 +84,8 @@ struct BrowserSettingsView: View {
                             titleVisibility: .visible
                         ) {
                             Button("Clear History", role: .destructive) {
-                                Task { @MainActor in
-                                    BrowserHistory.shared.clear()
-                                    historyEntries = BrowserHistory.shared.entries
-                                }
+                                BrowserHistory.shared.clear()
+                                historyEntries = BrowserHistory.shared.entries
                             }
                             Button("Cancel", role: .cancel) {}
                         }
@@ -117,10 +115,8 @@ struct BrowserSettingsView: View {
                         VStack(alignment: .leading, spacing: 0) {
                             ForEach(filteredEntries.prefix(200)) { entry in
                                 HistoryRow(entry: entry, t: t) {
-                                    Task { @MainActor in
-                                        BrowserHistory.shared.remove(id: entry.id)
-                                        historyEntries = BrowserHistory.shared.entries
-                                    }
+                                    BrowserHistory.shared.remove(id: entry.id)
+                                    historyEntries = BrowserHistory.shared.entries
                                 }
                                 if entry.id != filteredEntries.prefix(200).last?.id {
                                     Divider()
@@ -154,9 +150,7 @@ struct BrowserSettingsView: View {
     }
 
     private func loadHistory() {
-        Task { @MainActor in
-            historyEntries = BrowserHistory.shared.entries
-        }
+        historyEntries = BrowserHistory.shared.entries
     }
 }
 

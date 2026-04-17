@@ -8,4 +8,5 @@ struct PluginHostActions {
     var openDirectoryInNewTab: ((String) -> Void)?
     var openDirectoryInNewPane: ((String) -> Void)?
     var sendRawToActivePane: ((String) -> Void)?
+    var setWorkspaceRoot: ((String) -> Void)?
 }

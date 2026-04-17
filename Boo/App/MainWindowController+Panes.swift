@@ -7,7 +7,7 @@ extension MainWindowController: PaneViewDelegate {
         guard let workspace = activeWorkspace else { return nil }
         guard workspace.pane(for: paneID) != nil else {
             let owner = appState.workspaceContainingPane(paneID)
-            NSLog(
+            debugLog(
                 "[WorkspaceSwitch] ignoredPaneEvent event=\(event) pane=\(paneID.uuidString) activeWorkspace=\(workspace.id.uuidString) owner=\(owner?.id.uuidString ?? "none")"
             )
             booLog(
@@ -40,7 +40,7 @@ extension MainWindowController: PaneViewDelegate {
         workspace.activePaneID = paneID
         let tab = workspace.pane(for: paneID)?.activeTab
         let cwd = tab?.workingDirectory ?? workspace.folderPath
-        NSLog(
+        debugLog(
             "[WorkspaceSwitch] didFocus workspace=\(workspace.id.uuidString) pane=\(paneID.uuidString) cwd=\(cwd)"
         )
 
@@ -467,7 +467,7 @@ extension MainWindowController {
         saveSession()
 
         DispatchQueue.main.async { [weak self] in
-            guard let self = self else { return }
+            guard let self else { return }
             // Reattach the original pane's session to its (rebuilt) view
             if let oldPV = self.paneViews[oldPaneID] {
                 oldPV.startActiveSession()
@@ -517,7 +517,7 @@ extension MainWindowController {
             saveSession()
 
             DispatchQueue.main.async { [weak self] in
-                guard let self = self, let ws = self.activeWorkspace else { return }
+                guard let self, let ws = self.activeWorkspace else { return }
                 for id in validIDs {
                     if let pv = self.paneViews[id] {
                         pv.startActiveSession()
@@ -562,7 +562,7 @@ extension MainWindowController {
             saveSession()
 
             DispatchQueue.main.async { [weak self] in
-                guard let self = self else { return }
+                guard let self else { return }
                 // Reattach all panes
                 for id in workspace.splitTree.leafIDs {
                     if let pv = self.paneViews[id] {
@@ -752,7 +752,7 @@ extension MainWindowController {
             destWorkspace.activePaneID = newPaneID
             splitContainer.update(tree: destWorkspace.splitTree)
             DispatchQueue.main.async { [weak self, tab, gv, cv] in
-                guard let self = self else { return }
+                guard let self else { return }
                 if let newPV = self.paneViews[newPaneID] {
                     if let gv = gv {
                         newPV.insertGhosttyView(gv, for: tab.id)
@@ -895,7 +895,7 @@ extension MainWindowController {
         saveSession()
 
         DispatchQueue.main.async { [weak self, tab, gv, cv] in
-            guard let self = self else { return }
+            guard let self else { return }
 
             // Insert the transferred view BEFORE starting sessions,
             // so startActiveSession finds it in the cache instead of creating
@@ -948,7 +948,7 @@ extension MainWindowController {
         splitContainer.update(tree: workspace.splitTree)
 
         DispatchQueue.main.async { [weak self] in
-            guard let self = self, let ws = self.activeWorkspace else { return }
+            guard let self, let ws = self.activeWorkspace else { return }
             for id in validIDs {
                 if let pv = self.paneViews[id] {
                     pv.tabDragCoordinator = self.tabDragCoordinator

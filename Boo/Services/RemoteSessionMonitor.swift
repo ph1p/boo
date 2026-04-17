@@ -30,7 +30,7 @@ final class RemoteSessionMonitor {
     var onShellPIDUpdated: ((UUID, pid_t, UUID?) -> Void)?
 
     func track(paneID: UUID, shellPID: pid_t, tabID: UUID? = nil) {
-        NSLog("[Monitor] track: paneID=\(paneID) shellPID=\(shellPID)")
+        debugLog("[Monitor] track: paneID=\(paneID) shellPID=\(shellPID)")
         queue.async { [weak self] in
             self?.tracked[paneID] = TrackedPane(shellPID: shellPID, lastSession: nil)
             self?.ensureTimerRunning()
@@ -161,7 +161,7 @@ final class RemoteSessionMonitor {
             }
 
             if session != entry.lastSession && !entry.titleDetected {
-                NSLog(
+                debugLog(
                     "[Monitor] transition: shellPID=\(entry.shellPID) \(String(describing: entry.lastSession)) → \(String(describing: session))"
                 )
                 let previous = entry.lastSession

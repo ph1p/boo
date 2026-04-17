@@ -557,13 +557,14 @@ final class RemoteExplorer {
             process.waitUntilExit()
             guard process.terminationStatus == 0 else {
                 let stderr = String(data: errPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-                NSLog(
+                debugLog(
                     "[RemoteExplorer] SSH failed: host=\(host) exit=\(process.terminationStatus) stderr=\(stderr.prefix(200))"
                 )
                 return nil
             }
             return String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)
         } catch {
+            debugLog("[RemoteExplorer] process.run() exception: \(error)")
             return nil
         }
     }
@@ -603,7 +604,7 @@ final class RemoteExplorer {
     /// Run a command inside a container/VM via `<tool> exec <target> sh -c <command>`.
     private static func runContainerExec(target: String, tool: ContainerTool, command: String) -> String? {
         guard let binary = findBinary(tool.rawValue) else {
-            NSLog("[RemoteExplorer] \(tool.rawValue) binary not found")
+            debugLog("[RemoteExplorer] \(tool.rawValue) binary not found")
             return nil
         }
 
@@ -655,7 +656,7 @@ final class RemoteExplorer {
             remoteLog("[RemoteExplorer] \(tool.rawValue) exec OK: target=\(target) outputLen=\(output?.count ?? 0)")
             return output
         } catch {
-            NSLog("[RemoteExplorer] \(tool.rawValue) exec exception: \(error)")
+            debugLog("[RemoteExplorer] \(tool.rawValue) exec exception: \(error)")
             return nil
         }
     }
@@ -663,7 +664,7 @@ final class RemoteExplorer {
     /// Run a command on a VM via SSH-based tools (vagrant, colima).
     private static func runContainerSSH(target: String, tool: ContainerTool, command: String) -> String? {
         guard let binary = findBinary(tool.rawValue) else {
-            NSLog("[RemoteExplorer] \(tool.rawValue) binary not found")
+            debugLog("[RemoteExplorer] \(tool.rawValue) binary not found")
             return nil
         }
 
@@ -682,14 +683,14 @@ final class RemoteExplorer {
             process.waitUntilExit()
             guard process.terminationStatus == 0 else {
                 let stderr = String(data: errPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-                NSLog(
+                debugLog(
                     "[RemoteExplorer] \(tool.rawValue) ssh failed: exit=\(process.terminationStatus) stderr=\(stderr.prefix(200))"
                 )
                 return nil
             }
             return String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)
         } catch {
-            NSLog("[RemoteExplorer] \(tool.rawValue) ssh exception: \(error)")
+            debugLog("[RemoteExplorer] \(tool.rawValue) ssh exception: \(error)")
             return nil
         }
     }

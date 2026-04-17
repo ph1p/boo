@@ -86,7 +86,7 @@ final class ClaudeCodePlugin: BooPluginProtocol {
         let fullPath: String
     }
 
-    static let projectMarkers = [".git", ".claude", "AGENTS.md", "CLAUDE.md"]
+    nonisolated static let projectMarkers = [".git", ".claude", "AGENTS.md", "CLAUDE.md"]
 
     struct ClaudeSession: Identifiable {
         let id: String
@@ -167,28 +167,24 @@ final class ClaudeCodePlugin: BooPluginProtocol {
     // MARK: - Enrich
 
     func enrich(context: EnrichmentContext) {
-        guard agentStartTime != nil else { return }
+        guard let start = agentStartTime else { return }
         context.setData(AnyHashable("claude"), forKey: "ai-agent.name")
-        if let start = agentStartTime {
-            let runtime = Int(Date().timeIntervalSince(start))
-            context.setData(AnyHashable(runtime), forKey: "ai-agent.runtime")
-        }
+        let runtime = Int(Date().timeIntervalSince(start))
+        context.setData(AnyHashable(runtime), forKey: "ai-agent.runtime")
     }
 
     // MARK: - Status Bar
 
     func makeStatusBarContent(context: PluginContext) -> StatusBarContent? {
-        guard agentStartTime != nil else { return nil }
+        guard let start = agentStartTime else { return nil }
         var text = "Claude"
         if !diffStats.isEmpty {
             let count = diffStats.count
             text += " \u{00B7} \(count) file\(count == 1 ? "" : "s")"
         }
-        if let start = agentStartTime {
-            let mins = Int(Date().timeIntervalSince(start) / 60)
-            if mins > 0 {
-                text += " \u{00B7} \(formatAgentRuntime(Date().timeIntervalSince(start)))"
-            }
+        let mins = Int(Date().timeIntervalSince(start) / 60)
+        if mins > 0 {
+            text += " \u{00B7} \(formatAgentRuntime(Date().timeIntervalSince(start)))"
         }
         return StatusBarContent(
             text: text,
@@ -201,12 +197,9 @@ final class ClaudeCodePlugin: BooPluginProtocol {
     // MARK: - Section Title
 
     func sectionTitle(context: PluginContext) -> String? {
-        guard agentStartTime != nil else { return nil }
-        if let start = agentStartTime {
-            let runtime = Date().timeIntervalSince(start)
-            return "Claude \u{00B7} \(formatAgentRuntime(runtime))"
-        }
-        return "Claude"
+        guard let start = agentStartTime else { return nil }
+        let runtime = Date().timeIntervalSince(start)
+        return "Claude \u{00B7} \(formatAgentRuntime(runtime))"
     }
 
     // MARK: - Sidebar Tab (multi-section)
@@ -220,7 +213,6 @@ final class ClaudeCodePlugin: BooPluginProtocol {
             scanAgentConfig(cwd: context.terminal.cwd)
             scanSessions(cwd: context.terminal.cwd)
             scanWorktrees(cwd: context.terminal.cwd)
-            loadClaudeSettings()
         }
 
         // Load settings on first access if not loaded yet
@@ -536,7 +528,7 @@ final class ClaudeCodePlugin: BooPluginProtocol {
         teardownGeneration &+= 1
         let gen = teardownGeneration
         DispatchQueue.main.asyncAfter(deadline: .now() + teardownGracePeriod) { [weak self] in
-            guard let self = self, self.teardownGeneration == gen else { return }
+            guard let self, self.teardownGeneration == gen else { return }
             self.performTeardown()
         }
     }
@@ -743,11 +735,12 @@ final class ClaudeCodePlugin: BooPluginProtocol {
                     }
                 }
 
-                if var session = parseSessionFile(path: sessionPath, sessionID: sessionID) {
+                if let session = parseSessionFile(path: sessionPath, sessionID: sessionID) {
                     sessions.append(session)
                 }
             }
         } catch {
+            debugLog("[ClaudeCode] Failed to enumerate session directory: \(error)")
             return []
         }
 
@@ -915,6 +908,7 @@ final class ClaudeCodePlugin: BooPluginProtocol {
                     ))
             }
         } catch {
+            debugLog("[ClaudeCode] Failed to enumerate worktrees directory: \(error)")
             return []
         }
 
@@ -928,7 +922,6 @@ final class ClaudeCodePlugin: BooPluginProtocol {
 
     /// Get the branch name for a worktree by reading its HEAD reference.
     nonisolated private static func getWorktreeBranch(at path: String) -> String? {
-        let headPath = (path as NSString).appendingPathComponent(".git/HEAD")
         // Worktrees have a .git file pointing to the main repo's .git/worktrees/<name>
         let gitFilePath = (path as NSString).appendingPathComponent(".git")
 
@@ -1188,7 +1181,7 @@ final class ClaudeCodePlugin: BooPluginProtocol {
         DispatchQueue.global(qos: .utility).async { [weak self] in
             let stats = detectAgentDiffStats(repoRoot: repoRoot)
             DispatchQueue.main.async {
-                guard let self = self, self.agentStartTime != nil else { return }
+                guard let self, self.agentStartTime != nil else { return }
                 let oldPaths = self.diffStats.map(\.path)
                 let newPaths = stats.map(\.path)
                 self.diffStats = stats
@@ -1210,7 +1203,7 @@ final class ClaudeCodePlugin: BooPluginProtocol {
             deadline: .now() + ClaudeCodeConstants.diffRefreshInterval,
             repeating: .seconds(Int(ClaudeCodeConstants.diffRefreshInterval)))
         timer.setEventHandler { [weak self] in
-            guard let self = self, self.agentStartTime != nil else {
+            guard let self, self.agentStartTime != nil else {
                 self?.stopRefreshTimer()
                 return
             }
@@ -1379,6 +1372,7 @@ func detectAgentDiffStats(repoRoot: String) -> [ClaudeCodePlugin.DiffStatEntry] 
     do {
         try task.run()
     } catch {
+        debugLog("[ClaudeCode] git diff task failed: \(error)")
         return []
     }
     task.waitUntilExit()

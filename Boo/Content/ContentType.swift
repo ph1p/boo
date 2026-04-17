@@ -85,9 +85,11 @@ enum ContentType: String, Codable, CaseIterable {
     // MARK: - File Association
 
     /// Image file extensions that open in image viewer.
+    /// SVG is intentionally excluded — it is text-based and can be opened in the editor
+    /// if the user adds "svg" to their editor file patterns.
     static let imageExtensions: Set<String> = [
         "png", "jpg", "jpeg", "gif", "webp", "heic", "heif", "avif",
-        "bmp", "tiff", "tif", "ico", "svg"
+        "bmp", "tiff", "tif", "ico"
     ]
 
     /// Markdown file extensions that open in markdown preview.
