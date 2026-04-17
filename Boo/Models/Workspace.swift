@@ -42,7 +42,7 @@ final class Workspace {
     }
 
     let id: UUID
-    let folderPath: String
+    var folderPath: String
 
     var customName: String?
     var color: WorkspaceColor = .none
@@ -104,7 +104,7 @@ final class Workspace {
     @discardableResult
     func restorePane(_ pane: Pane) -> Bool {
         guard splitTree.leafIDs.contains(pane.id) else {
-            NSLog(
+            debugLog(
                 "[WorkspaceSwitch] rejectedPaneRestore workspace=\(id.uuidString) pane=\(pane.id.uuidString)"
             )
             return false

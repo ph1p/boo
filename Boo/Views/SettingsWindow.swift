@@ -248,8 +248,12 @@ struct SettingsPage<Content: View>: View {
 }
 
 /// Labeled group within a page — renders a header label above a card-style container.
+/// When `divided` is true the inner VStack uses zero spacing and children are expected
+/// to supply their own vertical padding; a hairline is drawn between them automatically
+/// via `SettingsRowDivider` inserted by the caller.
 struct Section<Content: View>: View {
     let title: String
+    var divided: Bool = false
     @ViewBuilder let content: () -> Content
 
     var body: some View {
@@ -258,22 +262,29 @@ struct Section<Content: View>: View {
             Text(title.uppercased())
                 .font(.system(size: 10, weight: .semibold))
                 .foregroundColor(t.muted)
-                .tracking(0.4)
-            VStack(alignment: .leading, spacing: 8) {
+                .tracking(0.5)
+            VStack(alignment: .leading, spacing: divided ? 0 : 8) {
                 content()
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 10)
+            .padding(divided ? 0 : 12)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
                 RoundedRectangle(cornerRadius: 8)
                     .fill(t.chromeBg)
                     .overlay(
                         RoundedRectangle(cornerRadius: 8)
-                            .strokeBorder(t.border.opacity(0.6), lineWidth: 0.5)
+                            .strokeBorder(t.border.opacity(0.5), lineWidth: 0.5)
                     )
             )
+            .clipShape(RoundedRectangle(cornerRadius: 8))
         }
+    }
+}
+
+/// A thin horizontal rule used between rows inside a divided Section.
+struct SettingsRowDivider: View {
+    var body: some View {
+        Tokens.current.border.opacity(0.5).frame(height: 0.5)
     }
 }
 

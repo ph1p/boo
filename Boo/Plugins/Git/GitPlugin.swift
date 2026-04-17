@@ -203,12 +203,12 @@ final class GitPlugin: BooPluginProtocol {
     // MARK: - Lifecycle
 
     func cwdChanged(newPath: String, context: TerminalContext) {
-        NSLog("[Git] cwdChanged: newPath=\(newPath) repoRoot=\(context.gitContext?.repoRoot ?? "nil")")
+        debugLog("[Git] cwdChanged: newPath=\(newPath) repoRoot=\(context.gitContext?.repoRoot ?? "nil")")
         refreshGitStatus(cwd: newPath, repoRoot: context.gitContext?.repoRoot)
     }
 
     func terminalFocusChanged(terminalID: UUID, context: TerminalContext) {
-        NSLog(
+        debugLog(
             "[Git] terminalFocusChanged: cwd=\(context.cwd) repoRoot=\(context.gitContext?.repoRoot ?? "nil") branch=\(context.gitContext?.branch ?? "nil")"
         )
         refreshGitStatus(cwd: context.cwd, repoRoot: context.gitContext?.repoRoot)

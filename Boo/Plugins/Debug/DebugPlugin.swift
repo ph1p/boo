@@ -53,7 +53,7 @@ final class DebugPlugin: BooPluginProtocol {
     private var lastEnrichRemote: String?
 
     private func log(_ event: String, _ detail: String = "") {
-        NSLog("[DebugPlugin] \(event)\(detail.isEmpty ? "" : ": \(detail)")")
+        debugLog("[DebugPlugin] \(event)\(detail.isEmpty ? "" : ": \(detail)")")
         let entry = LogEntry(timestamp: Date(), event: event, detail: detail)
         entries.append(entry)
         if entries.count > maxEntries {

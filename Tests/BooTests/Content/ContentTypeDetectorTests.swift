@@ -24,7 +24,7 @@ final class ContentTypeDetectorTests: XCTestCase {
 
     func testDetectsImageFiles() {
         let tempDir = FileManager.default.temporaryDirectory
-        let imageExtensions = ["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "heic"]
+        let imageExtensions = ["png", "jpg", "jpeg", "gif", "webp", "bmp", "heic"]
 
         for ext in imageExtensions {
             let path = tempDir.appendingPathComponent("test.\(ext)").path

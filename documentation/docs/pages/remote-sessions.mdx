@@ -4,13 +4,13 @@ Boo auto-detects remote terminal sessions and adapts the file explorer, status b
 
 ## Supported Sessions
 
-| Category          | Tools                                                |
-| ----------------- | ---------------------------------------------------- |
-| SSH-style         | `ssh`, `mosh`                                        |
-| Containers        | `docker`, `podman`, `nerdctl`, `kubectl`, `oc`, `lxc`|
-| VMs               | `limactl`, `colima`, `vagrant`                       |
-| Toolboxes         | `distrobox`, `toolbox`                               |
-| Devices           | `adb shell`                                          |
+| Category   | Tools                                                 |
+| ---------- | ----------------------------------------------------- |
+| SSH-style  | `ssh`, `mosh`                                         |
+| Containers | `docker`, `podman`, `nerdctl`, `kubectl`, `oc`, `lxc` |
+| VMs        | `limactl`, `colima`, `vagrant`                        |
+| Toolboxes  | `distrobox`, `toolbox`                                |
+| Devices    | `adb shell`                                           |
 
 Only interactive sessions trigger remote mode. Non-interactive commands (e.g. `docker exec myapp cat /etc/hosts`) don't switch the pane.
 
@@ -27,13 +27,13 @@ When a remote session is detected, the sidebar switches to `RemoteFileTreeView` 
 
 Commands are adapted per session type:
 
-| Type                    | Pattern                                           |
-| ----------------------- | ------------------------------------------------- |
-| SSH                     | `ssh -n -o BatchMode=yes <host> <cmd>`            |
-| Docker/Podman/nerdctl   | `<tool> exec <target> sh -c <cmd>`                |
-| kubectl/oc/lxc/toolbox  | `<tool> <subcommand> <target> -- sh -c <cmd>`     |
-| limactl                 | `limactl shell <vm> sh -c <cmd>`                  |
-| adb                     | `adb shell sh -c <cmd>`                           |
+| Type                   | Pattern                                       |
+| ---------------------- | --------------------------------------------- |
+| SSH                    | `ssh -n -o BatchMode=yes <host> <cmd>`        |
+| Docker/Podman/nerdctl  | `<tool> exec <target> sh -c <cmd>`            |
+| kubectl/oc/lxc/toolbox | `<tool> <subcommand> <target> -- sh -c <cmd>` |
+| limactl                | `limactl shell <vm> sh -c <cmd>`              |
+| adb                    | `adb shell sh -c <cmd>`                       |
 
 SSH prefers ControlMaster sockets when available for connection reuse.
 

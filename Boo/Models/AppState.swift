@@ -41,7 +41,7 @@ final class AppState {
                     replacementID = UUID()
                 }
                 remappedPaneIDs[paneID] = replacementID
-                NSLog(
+                debugLog(
                     "[WorkspaceSwitch] remapDuplicatePaneID workspace=\(workspace.id.uuidString) oldPane=\(paneID.uuidString) newPane=\(replacementID.uuidString)"
                 )
             }

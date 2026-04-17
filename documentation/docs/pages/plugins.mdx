@@ -9,19 +9,30 @@ Boo has an extensible plugin architecture for sidebar panels, status bar segment
 
 ## Built-in Plugins
 
-| Plugin       | ID                                    | Description                                                          |
-| ------------ | ------------------------------------- | -------------------------------------------------------------------- |
-| **Files**    | `file-tree-local`, `file-tree-remote` | File explorer with local FSEvents and remote browsing                |
-| **Git**      | `git-panel`                           | Branch, staged/unstaged/untracked files, ahead/behind counts         |
-| **Claude Code** | `claude-code`                      | Claude Code AI assistant; shows sessions, config, hooks, skills, diffs |
-| **Snippets** | `snippets`                               | Saved code snippets with syntax highlighting and quick insertion    |
-| **Docker**   | `docker`                              | Container list with exec, logs, start/stop/restart                   |
-| **Bookmarks**| `bookmarks`                           | Saved directory shortcuts with per-host namespacing                  |
-| **System**   | `system-info`                         | CPU, memory, disk — reference example for plugin patterns            |
+| Plugin          | ID                                    | Description                                                            |
+| --------------- | ------------------------------------- | ---------------------------------------------------------------------- |
+| **Files**       | `file-tree-local`, `file-tree-remote` | File explorer with local FSEvents and remote browsing                  |
+| **Git**         | `git-panel`                           | Branch, staged/unstaged/untracked files, ahead/behind counts           |
+| **Claude Code** | `claude-code`                         | Claude Code AI assistant; shows sessions, config, hooks, skills, diffs |
+| **Snippets**    | `snippets`                            | Saved code snippets with syntax highlighting and quick insertion       |
+| **Docker**      | `docker`                              | Container list with exec, logs, start/stop/restart                     |
+| **Bookmarks**   | `bookmarks`                           | Saved directory shortcuts with per-host namespacing                    |
+| **System**      | `system-info`                         | CPU, memory, disk — reference example for plugin patterns              |
 
 ## Plugin Lifecycle
 
-Every terminal state change triggers a **plugin cycle**:
+Every terminal state change triggers a **plugin cycle** with a `PluginCycleReason`:
+
+| Reason                  | Triggered by                    |
+| ----------------------- | ------------------------------- |
+| `.focusChanged`         | Pane focus moved                |
+| `.cwdChanged`           | Working directory changed       |
+| `.titleChanged`         | Terminal title changed          |
+| `.processChanged`       | Foreground process changed      |
+| `.remoteSessionChanged` | Remote session started or ended |
+| `.workspaceSwitched`    | Active workspace switched       |
+
+The cycle phases (total budget: **&lt;16ms**):
 
 1. **Enrich** — Plugins write shared data to a mutable `EnrichmentContext`
 2. **Freeze** — Produces an immutable `TerminalContext` snapshot
@@ -35,18 +46,18 @@ Call `onRequestCycleRerun?()` when plugin data changes externally (e.g., Docker 
 
 Immutable snapshot passed to all plugin methods:
 
-| Field              | Type                 | Description                              |
-| ------------------ | -------------------- | ---------------------------------------- |
-| `terminalID`       | `UUID`               | Active terminal identifier               |
-| `cwd`              | `String`             | Current working directory                |
-| `remoteSession`    | `RemoteSessionType?` | Remote session info, if active           |
-| `remoteCwd`        | `String?`            | Remote working directory                 |
-| `environmentLabel` | `String`             | Display label for the terminal session   |
-| `gitContext`       | `GitContext?`        | Branch, dirty state, file counts         |
-| `processName`      | `String`             | Foreground process name                  |
-| `paneCount`        | `Int`                | Panes in workspace                       |
-| `tabCount`         | `Int`                | Tabs in active pane                      |
-| `isRemote`         | `Bool`               | Computed: `remoteSession != nil`         |
+| Field              | Type                 | Description                            |
+| ------------------ | -------------------- | -------------------------------------- |
+| `terminalID`       | `UUID`               | Active terminal identifier             |
+| `cwd`              | `String`             | Current working directory              |
+| `remoteSession`    | `RemoteSessionType?` | Remote session info, if active         |
+| `remoteCwd`        | `String?`            | Remote working directory               |
+| `environmentLabel` | `String`             | Display label for the terminal session |
+| `gitContext`       | `GitContext?`        | Branch, dirty state, file counts       |
+| `processName`      | `String`             | Foreground process name                |
+| `paneCount`        | `Int`                | Panes in workspace                     |
+| `tabCount`         | `Int`                | Tabs in active pane                    |
+| `isRemote`         | `Bool`               | Computed: `remoteSession != nil`       |
 
 `GitContext` fields: `branch`, `repoRoot`, `isDirty`, `changedFileCount`, `stagedCount`, `aheadCount`, `behindCount`, `lastCommitShort`.
 
@@ -65,23 +76,36 @@ pluginActions.openDirectoryInNewTab?("/some/dir")   // Open dir in new tab
 pluginActions.openDirectoryInNewPane?("/some/dir")  // Open dir in new pane
 ```
 
-Also exposes closures: `sendToTerminal`, `openDirectoryInNewTab`, `openDirectoryInNewPane`, `displayImageInTerminal`, `isTerminalBusy`.
+Also exposes closures: `sendToTerminal`, `openDirectoryInNewTab`, `openDirectoryInNewPane`, `displayImageInTerminal`, `isTerminalBusy`, `registerMultiContentTab`, `openMultiContentTab`, `setAgentSessionID`, `getAgentSessionID`.
+
+## Capabilities
+
+Manifest capability flags that control where a plugin appears:
+
+| Flag                            | Description                                                         |
+| ------------------------------- | ------------------------------------------------------------------- |
+| `capabilities.sidebarTab`       | Contribute a dedicated full-height sidebar tab (Swift plugins)      |
+| `capabilities.statusBarSegment` | Contribute a segment to the status bar (can be the sole capability) |
+
+External JS plugins automatically get a sidebar tab — no `capabilities` field needed in `plugin.json`. Use `statusBarSegment: true` only when adding a status bar segment.
+
+See [Plugin Development](/plugin-development#sidebar-tabs) for `makeSidebarTab` details.
 
 ## When-Clauses
 
 Control plugin visibility via the `when` manifest field:
 
-| Expression                | Meaning                            |
-| ------------------------- | ---------------------------------- |
-| `null`                    | Always visible                     |
-| `"git.active"`            | Only in git repos                  |
-| `"!remote"`               | Only local sessions                |
-| `"remote"`                | Only remote sessions               |
-| `"env.ssh"`               | SSH or Mosh                        |
-| `"env.docker"`            | Docker sessions                    |
-| `"env.container"`         | Any container/VM/device shell      |
-| `"env.type == 'kubectl'"` | Specific tool match                |
-| `"git.active && !remote"` | Combined conditions                |
+| Expression                | Meaning                       |
+| ------------------------- | ----------------------------- |
+| `null`                    | Always visible                |
+| `"git.active"`            | Only in git repos             |
+| `"!remote"`               | Only local sessions           |
+| `"remote"`                | Only remote sessions          |
+| `"env.ssh"`               | SSH or Mosh                   |
+| `"env.docker"`            | Docker sessions               |
+| `"env.container"`         | Any container/VM/device shell |
+| `"env.type == 'kubectl'"` | Specific tool match           |
+| `"git.active && !remote"` | Combined conditions           |
 
 Operators: `&&`, `||`, `!`, `==`, `!=`, `()`.
 
@@ -89,18 +113,18 @@ Operators: `&&`, `||`, `!`, `==`, `!=`, `()`.
 
 Interactive elements dispatch these actions:
 
-| Action           | Parameters                  | Effect                   |
-| ---------------- | --------------------------- | ------------------------ |
-| `"cd"`           | `path`                      | Change terminal dir      |
-| `"open"`         | `path`                      | Open in `$EDITOR`        |
-| `"exec"`         | `command`                   | Send command to terminal |
-| `"copy"`         | `text` or `path`            | Copy to clipboard        |
-| `"reveal"`       | `path`                      | Open in Finder           |
-| `"url"`          | `url` or `text`             | Opens URL in browser     |
-| `"newTab"`       | `path` (optional)           | Opens new terminal tab   |
-| `"newPane"`      | `path` (optional)           | Opens new split pane     |
-| `"paste"`        | `text`                      | Inserts text at cursor   |
-| `"notification"` | `text`, `title` (optional)  | Shows notification       |
+| Action           | Parameters                 | Effect                   |
+| ---------------- | -------------------------- | ------------------------ |
+| `"cd"`           | `path`                     | Change terminal dir      |
+| `"open"`         | `path`                     | Open in `$EDITOR`        |
+| `"exec"`         | `command`                  | Send command to terminal |
+| `"copy"`         | `text` or `path`           | Copy to clipboard        |
+| `"reveal"`       | `path`                     | Open in Finder           |
+| `"url"`          | `url` or `text`            | Opens URL in browser     |
+| `"newTab"`       | `path` (optional)          | Opens new terminal tab   |
+| `"newPane"`      | `path` (optional)          | Opens new split pane     |
+| `"paste"`        | `text`                     | Inserts text at cursor   |
+| `"notification"` | `text`, `title` (optional) | Shows notification       |
 
 ## Plugin Settings
 
@@ -112,15 +136,15 @@ AppSettings.shared.pluginString("my-plugin", "myKey", default: "")
 AppSettings.shared.pluginDouble("my-plugin", "myKey", default: 12.0)
 ```
 
-| Plugin    | Key                | Type   | Default | Description                     |
-| --------- | ------------------ | ------ | ------- | ------------------------------- |
-| Git       | `showBranch`       | Bool   | `true`  | Show branch in status bar       |
-| Files     | `showHiddenFiles`  | Bool   | `false` | Show hidden files               |
-| Files     | `showIcons`        | Bool   | `true`  | Show file icons                 |
-| Files     | `showPath`         | Bool   | `true`  | Show path above tree            |
-| Files     | `showProcess`      | Bool   | `true`  | Show running process            |
-| Files     | `useKitty`         | Bool   | `true`  | Inline image preview (Kitty)    |
-| Files     | `editorExtensions` | String | —       | Extensions that open in editor  |
+| Plugin | Key                | Type   | Default | Description                    |
+| ------ | ------------------ | ------ | ------- | ------------------------------ |
+| Git    | `showBranch`       | Bool   | `true`  | Show branch in status bar      |
+| Files  | `showHiddenFiles`  | Bool   | `false` | Show hidden files              |
+| Files  | `showIcons`        | Bool   | `true`  | Show file icons                |
+| Files  | `showPath`         | Bool   | `true`  | Show path above tree           |
+| Files  | `showProcess`      | Bool   | `true`  | Show running process           |
+| Files  | `useKitty`         | Bool   | `true`  | Inline image preview (Kitty)   |
+| Files  | `editorExtensions` | String | —       | Extensions that open in editor |
 
 ## Status Bar
 
@@ -130,7 +154,9 @@ Sidebar plugins automatically get toggle icons in the status bar — no manual r
 
 ## Menu Contributions
 
-External plugins can contribute items to the "Plugins" menu bar via `menus` in `plugin.json`. See [Plugin Development](/plugin-development#menu-contributions) for details.
+**External plugins** contribute items to the "Plugins" menu bar via `menus` in `plugin.json`. See [Plugin Development](/plugin-development#menu-contributions) for details.
+
+**Swift plugins** implement `menuContributions() -> [PluginMenuItem]` and `handleMenuAction(_ action: String, context: TerminalContext)` on `BooPluginProtocol`.
 
 ## External Plugins
 

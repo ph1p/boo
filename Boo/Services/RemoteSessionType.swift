@@ -44,78 +44,87 @@ enum ContainerTool: String, Equatable {
     case vagrant
     case adb
 
-    /// Subcommands that give an interactive shell where file browsing works.
-    /// For tools like docker/podman/nerdctl, both `exec` and `run` can be interactive.
-    var interactiveSubcommands: [String] {
+    // MARK: - Spec
+
+    private struct Spec {
+        let interactiveSubcommands: [String]
+        let execSubcommand: String
+        /// Whether -i or -t flags are required for interactive exec/run.
+        let requiresInteractiveFlag: Bool
+        let icon: String
+        let label: String
+        let processNames: [String]
+    }
+
+    // Factories for groups sharing the same fixed properties.
+    private static func dockerCompatSpec(label: String) -> Spec {
+        Spec(
+            interactiveSubcommands: ["exec", "run"], execSubcommand: "exec",
+            requiresInteractiveFlag: true, icon: "shippingbox",
+            label: label, processNames: [label])
+    }
+
+    private static func k8sSpec(label: String, processName: String) -> Spec {
+        Spec(
+            interactiveSubcommands: ["exec"], execSubcommand: "exec",
+            requiresInteractiveFlag: true, icon: "helm",
+            label: label, processNames: [processName])
+    }
+
+    private static func enterSpec(label: String) -> Spec {
+        Spec(
+            interactiveSubcommands: ["enter"], execSubcommand: "enter",
+            requiresInteractiveFlag: false, icon: "wrench.and.screwdriver",
+            label: label, processNames: [label])
+    }
+
+    private var spec: Spec {
         switch self {
-        case .docker, .podman, .nerdctl: return ["exec", "run"]
-        case .kubectl, .oc: return ["exec"]
-        case .lxc: return ["exec"]
-        case .limactl: return ["shell"]
-        case .colima, .vagrant: return ["ssh"]
-        case .distrobox, .toolbox: return ["enter"]
-        case .adb: return ["shell"]
+        case .docker: return Self.dockerCompatSpec(label: "docker")
+        case .podman: return Self.dockerCompatSpec(label: "podman")
+        case .nerdctl: return Self.dockerCompatSpec(label: "nerdctl")
+        case .kubectl: return Self.k8sSpec(label: "kubectl", processName: "kubectl")
+        case .oc: return Self.k8sSpec(label: "openshift", processName: "oc")
+        case .lxc:
+            return Spec(
+                interactiveSubcommands: ["exec"], execSubcommand: "exec",
+                requiresInteractiveFlag: false, icon: "cube",
+                label: "lxc", processNames: ["lxc"])
+        case .limactl:
+            return Spec(
+                interactiveSubcommands: ["shell"], execSubcommand: "shell",
+                requiresInteractiveFlag: false, icon: "desktopcomputer",
+                label: "limactl", processNames: ["limactl", "lima"])
+        case .colima:
+            return Spec(
+                interactiveSubcommands: ["ssh"], execSubcommand: "ssh",
+                requiresInteractiveFlag: false, icon: "desktopcomputer",
+                label: "colima", processNames: ["colima"])
+        case .distrobox: return Self.enterSpec(label: "distrobox")
+        case .toolbox: return Self.enterSpec(label: "toolbox")
+        case .vagrant:
+            return Spec(
+                interactiveSubcommands: ["ssh"], execSubcommand: "ssh",
+                requiresInteractiveFlag: false, icon: "server.rack",
+                label: "vagrant", processNames: ["vagrant"])
+        case .adb:
+            return Spec(
+                interactiveSubcommands: ["shell"], execSubcommand: "shell",
+                requiresInteractiveFlag: false, icon: "iphone",
+                label: "adb", processNames: ["adb"])
         }
     }
 
-    /// The primary subcommand used for remote command execution (file listing).
-    var execSubcommand: String {
-        switch self {
-        case .docker, .podman, .nerdctl, .kubectl, .oc, .lxc: return "exec"
-        case .limactl: return "shell"
-        case .colima, .vagrant: return "ssh"
-        case .distrobox, .toolbox: return "enter"
-        case .adb: return "shell"
-        }
-    }
+    // MARK: - Public API
 
-    /// Whether this tool requires -i or -t flags on `exec`/`run` to be interactive.
-    /// Tools like distrobox/toolbox/limactl/vagrant are always interactive.
-    var requiresInteractiveFlag: Bool {
-        switch self {
-        case .docker, .podman, .nerdctl, .kubectl, .oc: return true
-        case .lxc, .limactl, .colima, .distrobox, .toolbox, .vagrant, .adb: return false
-        }
-    }
+    var interactiveSubcommands: [String] { spec.interactiveSubcommands }
+    var execSubcommand: String { spec.execSubcommand }
+    var requiresInteractiveFlag: Bool { spec.requiresInteractiveFlag }
+    var icon: String { spec.icon }
+    var label: String { spec.label }
+    var processNames: [String] { spec.processNames }
 
-    /// SF Symbol icon name.
-    var icon: String {
-        switch self {
-        case .docker, .podman, .nerdctl: return "shippingbox"
-        case .kubectl, .oc: return "helm"
-        case .lxc: return "cube"
-        case .limactl, .colima: return "desktopcomputer"
-        case .distrobox, .toolbox: return "wrench.and.screwdriver"
-        case .vagrant: return "server.rack"
-        case .adb: return "iphone"
-        }
-    }
-
-    /// Display label for the tool.
-    var label: String {
-        switch self {
-        case .oc: return "openshift"
-        default: return rawValue
-        }
-    }
-
-    /// All process names that should be detected for this tool.
-    var processNames: [String] {
-        switch self {
-        case .docker: return ["docker"]
-        case .podman: return ["podman"]
-        case .nerdctl: return ["nerdctl"]
-        case .kubectl: return ["kubectl"]
-        case .oc: return ["oc"]
-        case .lxc: return ["lxc"]
-        case .limactl: return ["limactl", "lima"]
-        case .colima: return ["colima"]
-        case .distrobox: return ["distrobox"]
-        case .toolbox: return ["toolbox"]
-        case .vagrant: return ["vagrant"]
-        case .adb: return ["adb"]
-        }
-    }
+    // MARK: - Static helpers
 
     /// All container tools, used for process tree scanning.
     static let all: [ContainerTool] = [
@@ -133,6 +142,8 @@ enum ContainerTool: String, Equatable {
         }
         return map
     }()
+
+    // MARK: - Interactive target detection
 
     /// Extract the interactive target (container/pod/VM/image) from a shell-split command line.
     /// Returns nil for non-interactive commands such as `docker exec` without `-it`.

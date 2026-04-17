@@ -17,6 +17,7 @@ declare global {
     getContent: () => string;
     setTheme: (themeData: MonacoThemeData) => void;
     setEditorOptions: (options: EditorOptions) => void;
+    setAppearance: (themeData: MonacoThemeData, options: EditorOptions) => void;
     focusEditor: () => void;
     webkit?: {
       messageHandlers?: {
@@ -68,6 +69,18 @@ type BooMessage =
 
 let editor: monaco.editor.IStandaloneCodeEditor | undefined;
 let isDirty = false;
+let dirtyTimer: ReturnType<typeof setTimeout> | undefined;
+
+const workerCache = new Map<string, Worker>();
+
+function getOrCreateWorker(key: string, factory: () => Worker): Worker {
+  let worker = workerCache.get(key);
+  if (!worker) {
+    worker = factory();
+    workerCache.set(key, worker);
+  }
+  return worker;
+}
 
 function postMessage(message: BooMessage): void {
   window.webkit?.messageHandlers?.boo?.postMessage(message);
@@ -85,20 +98,20 @@ window.MonacoEnvironment = {
   getWorker(_: string, label: string): Worker {
     switch (label) {
       case "json":
-        return new jsonWorker();
+        return getOrCreateWorker("json", () => new jsonWorker());
       case "css":
       case "scss":
       case "less":
-        return new cssWorker();
+        return getOrCreateWorker("css", () => new cssWorker());
       case "html":
       case "handlebars":
       case "razor":
-        return new htmlWorker();
+        return getOrCreateWorker("html", () => new htmlWorker());
       case "typescript":
       case "javascript":
-        return new tsWorker();
+        return getOrCreateWorker("typescript", () => new tsWorker());
       default:
-        return new editorWorker();
+        return getOrCreateWorker("editor", () => new editorWorker());
     }
   },
 };
@@ -111,16 +124,15 @@ function ensureTheme(themeData?: MonacoThemeData): string {
   if (!themeData) {
     return "vs-dark";
   }
-
   monaco.editor.defineTheme("boo-theme", themeData);
   return "boo-theme";
 }
 
 function resolveEditorOptions(options?: EditorOptions): EditorOptions {
   return {
-    fontFamily: options?.fontFamily || "SF Mono",
-    fontSize: options?.fontSize || 13,
-    lineHeight: options?.lineHeight || 20,
+    fontFamily: options?.fontFamily ?? "SF Mono",
+    fontSize: options?.fontSize ?? 13,
+    lineHeight: options?.lineHeight ?? 20,
   };
 }
 
@@ -129,6 +141,8 @@ window.initEditorFromJSON = (data: EditorInitData): void => {
 
   try {
     editor?.dispose();
+    workerCache.forEach((w) => w.terminate());
+    workerCache.clear();
 
     const theme = ensureTheme(data.themeData);
     const container = document.getElementById("container");
@@ -143,16 +157,17 @@ window.initEditorFromJSON = (data: EditorInitData): void => {
       theme,
       automaticLayout: true,
       minimap: { enabled: false },
-      ...resolveEditorOptions(data.options),
       scrollBeyondLastLine: false,
+      ...resolveEditorOptions(data.options),
     });
 
     editor.onDidChangeModelContent(() => {
-      if (isDirty) {
-        return;
-      }
-      isDirty = true;
-      postMessage({ type: "dirty" });
+      if (isDirty) return;
+      clearTimeout(dirtyTimer);
+      dirtyTimer = setTimeout(() => {
+        isDirty = true;
+        postMessage({ type: "dirty" });
+      }, 100);
     });
 
     editor.onDidFocusEditorWidget(() => {
@@ -169,6 +184,7 @@ window.initEditorFromJSON = (data: EditorInitData): void => {
 };
 
 window.setContent = (content: string): void => {
+  clearTimeout(dirtyTimer);
   editor?.setValue(content);
   isDirty = false;
 };
@@ -181,6 +197,12 @@ window.setTheme = (themeData: MonacoThemeData): void => {
 };
 
 window.setEditorOptions = (options: EditorOptions): void => {
+  editor?.updateOptions(resolveEditorOptions(options));
+};
+
+window.setAppearance = (themeData: MonacoThemeData, options: EditorOptions): void => {
+  monaco.editor.defineTheme("boo-theme", themeData);
+  monaco.editor.setTheme("boo-theme");
   editor?.updateOptions(resolveEditorOptions(options));
 };
 

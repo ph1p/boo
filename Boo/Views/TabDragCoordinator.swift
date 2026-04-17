@@ -114,7 +114,7 @@ class TabDragCoordinator {
     private func installEventMonitor() {
         eventMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDragged, .leftMouseUp, .keyDown]) {
             [weak self] event in
-            guard let self = self else { return event }
+            guard let self else { return event }
 
             switch event.type {
             case .leftMouseDragged:
@@ -198,8 +198,7 @@ class TabDragCoordinator {
         if let (pv, zone) = foundTarget {
             currentDropTarget = (pv, zone)
             // Auto-scroll tab bar when dragging near edges in scroll mode
-            if case .tabBarInsert = zone {
-                let pvWindow = pv.window!
+            if case .tabBarInsert = zone, let pvWindow = pv.window {
                 let windowPoint = pvWindow.convertPoint(fromScreen: screenLoc)
                 let localPoint = pv.convert(windowPoint, from: nil)
                 pv.autoscrollTabBar(localX: localPoint.x)

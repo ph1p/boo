@@ -193,27 +193,37 @@ final class SessionStoreTests: XCTestCase {
         XCTAssertTrue(restoredPane!.tabs.contains(where: { $0.workingDirectory == "/tmp/bar" }))
     }
 
-    func testSaveAndRestoreContentTabs() {
+    func testSaveAndRestoreContentTabs() throws {
+        let tmpDir = FileManager.default.temporaryDirectory.path
+        let notesPath = (tmpDir as NSString).appendingPathComponent("boo_test_notes_\(UUID().uuidString).md")
+        let readmePath = (tmpDir as NSString).appendingPathComponent("boo_test_readme_\(UUID().uuidString).md")
+        FileManager.default.createFile(atPath: notesPath, contents: nil)
+        FileManager.default.createFile(atPath: readmePath, contents: nil)
+        defer {
+            try? FileManager.default.removeItem(atPath: notesPath)
+            try? FileManager.default.removeItem(atPath: readmePath)
+        }
+
         let state = AppState()
-        let ws = Workspace(folderPath: "/tmp")
+        let ws = Workspace(folderPath: tmpDir)
         let pane = ws.pane(for: ws.activePaneID)!
 
-        let browserIndex = pane.addTab(contentType: .browser, workingDirectory: "/tmp", title: "Example")
+        let browserIndex = pane.addTab(contentType: .browser, workingDirectory: tmpDir, title: "Example")
         pane.updateContentState(
             at: browserIndex,
             .browser(BrowserContentState(title: "Example", url: URL(string: "https://example.com/docs")!))
         )
 
-        let editorIndex = pane.addTab(contentType: .editor, workingDirectory: "/tmp", title: "notes.md")
+        let editorIndex = pane.addTab(contentType: .editor, workingDirectory: tmpDir, title: "notes.md")
         pane.updateContentState(
             at: editorIndex,
-            .editor(EditorContentState(title: "notes.md", filePath: "/tmp/notes.md", isDirty: true))
+            .editor(EditorContentState(title: "notes.md", filePath: notesPath, isDirty: true))
         )
 
-        let markdownIndex = pane.addTab(contentType: .markdownPreview, workingDirectory: "/tmp", title: "README.md")
+        let markdownIndex = pane.addTab(contentType: .markdownPreview, workingDirectory: tmpDir, title: "README.md")
         pane.updateContentState(
             at: markdownIndex,
-            .markdownPreview(MarkdownPreviewContentState(title: "README.md", filePath: "/tmp/README.md"))
+            .markdownPreview(MarkdownPreviewContentState(title: "README.md", filePath: readmePath))
         )
 
         state.addWorkspace(ws)
@@ -237,7 +247,7 @@ final class SessionStoreTests: XCTestCase {
 
         XCTAssertEqual(restoredPane.tabs[editorIndex].contentType, .editor)
         if case .editor(let editorState) = restoredPane.tabs[editorIndex].state.contentState {
-            XCTAssertEqual(editorState.filePath, "/tmp/notes.md")
+            XCTAssertEqual(editorState.filePath, notesPath)
             XCTAssertTrue(editorState.isDirty)
         } else {
             XCTFail("Expected restored editor content state")
@@ -245,10 +255,43 @@ final class SessionStoreTests: XCTestCase {
 
         XCTAssertEqual(restoredPane.tabs[markdownIndex].contentType, .markdownPreview)
         if case .markdownPreview(let markdownState) = restoredPane.tabs[markdownIndex].state.contentState {
-            XCTAssertEqual(markdownState.filePath, "/tmp/README.md")
+            XCTAssertEqual(markdownState.filePath, readmePath)
         } else {
             XCTFail("Expected restored markdown content state")
         }
+    }
+
+    func testMissingFilePathFallsBackToTerminal() {
+        let state = AppState()
+        let ws = Workspace(folderPath: "/tmp")
+        let pane = ws.pane(for: ws.activePaneID)!
+
+        let editorIndex = pane.addTab(contentType: .editor, workingDirectory: "/tmp", title: "gone.swift")
+        pane.updateContentState(
+            at: editorIndex,
+            .editor(EditorContentState(title: "gone.swift", filePath: "/nonexistent/path/gone.swift"))
+        )
+
+        let markdownIndex = pane.addTab(
+            contentType: .markdownPreview, workingDirectory: "/tmp", title: "gone.md")
+        pane.updateContentState(
+            at: markdownIndex,
+            .markdownPreview(MarkdownPreviewContentState(title: "gone.md", filePath: "/nonexistent/path/gone.md"))
+        )
+
+        state.addWorkspace(ws)
+
+        SessionStore.save(appState: state)
+        let snapshot = SessionStore.load()!
+        let restored = SessionStore.workspaces(from: snapshot)
+        let restoredPane = restored[0].pane(for: restored[0].activePaneID)!
+
+        XCTAssertEqual(
+            restoredPane.tabs[editorIndex].contentType, .terminal,
+            "Editor tab with missing file should fall back to terminal")
+        XCTAssertEqual(
+            restoredPane.tabs[markdownIndex].contentType, .terminal,
+            "Markdown tab with missing file should fall back to terminal")
     }
 
     func testRestoreWorkspacesRemapsDuplicatePaneIDsAcrossWorkspaces() {

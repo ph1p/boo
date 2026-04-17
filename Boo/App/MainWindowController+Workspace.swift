@@ -154,7 +154,7 @@ extension MainWindowController {
         guard let window = window else { return }
         alert.beginSheetModal(for: window) { [weak self] response in
             guard response == .alertFirstButtonReturn else { return }
-            guard let self = self,
+            guard let self,
                 let resolvedIndex = self.appState.workspaces.firstIndex(where: { $0.id == wsID })
             else { return }
             self.forceCloseWorkspace(at: resolvedIndex)
@@ -348,7 +348,7 @@ extension MainWindowController {
         appState.setActiveWorkspace(index)
         guard let workspace = activeWorkspace else { return }
         workspace.normalizePaneState()
-        NSLog(
+        debugLog(
             "[WorkspaceSwitch] activate fromWorkspace=\(previousWorkspace?.id.uuidString ?? "none") toWorkspace=\(workspace.id.uuidString) targetPane=\(workspace.activePaneID.uuidString)"
         )
 
@@ -381,7 +381,7 @@ extension MainWindowController {
         splitContainer.update(tree: workspace.splitTree)
 
         DispatchQueue.main.async { [weak self] in
-            guard let self = self, let ws = self.activeWorkspace else { return }
+            guard let self, let ws = self.activeWorkspace else { return }
 
             // Iterate over the WORKSPACE'S PANES (data model), not paneViews, to ensure all panes
             // have PaneViews created even if they're not yet in the view cache.
@@ -405,7 +405,7 @@ extension MainWindowController {
             }
             if let pv = self.paneViews[targetPaneID] {
                 ws.activePaneID = targetPaneID
-                NSLog(
+                debugLog(
                     "[WorkspaceSwitch] restoreResponder workspace=\(ws.id.uuidString) pane=\(targetPaneID.uuidString) ghostty=\(pv.ghosttyView != nil)"
                 )
                 self.window?.makeFirstResponder(pv.ghosttyView)

@@ -269,18 +269,18 @@ class PaneView: NSView {
         guard tab.contentType != .terminal else {
             fatalError("Use startTerminalSession for terminal tabs")
         }
-        return ContentViewFactory.createDefaultView(for: tab.contentType, workingDirectory: tab.workingDirectory)
+        return ContentViewFactory.createView(for: tab.state.contentState)
     }
 
     /// Wire callbacks for non-terminal content views.
     private func wireContentCallbacks(_ contentView: ContentViewProtocol, tabID: UUID) {
         contentView.onFocused = { [weak self] in
-            guard let self = self else { return }
+            guard let self else { return }
             self.paneDelegate?.paneView(self, didFocus: self.paneID)
         }
 
         contentView.onTitleChanged = { [weak self] title in
-            guard let self = self else { return }
+            guard let self else { return }
             if let index = self.pane.tabs.firstIndex(where: { $0.id == tabID }) {
                 self.pane.updateTitle(at: index, title)
                 self.scheduleTabBarRedraw()
@@ -288,7 +288,7 @@ class PaneView: NSView {
         }
 
         contentView.onCloseRequested = { [weak self] in
-            guard let self = self else { return }
+            guard let self else { return }
             if let index = self.pane.tabs.firstIndex(where: { $0.id == tabID }) {
                 self.paneDelegate?.paneView(self, didRequestCloseTab: index, paneID: self.paneID)
             }
@@ -358,32 +358,32 @@ class PaneView: NSView {
 
     private func wireCallbacks(_ gv: GhosttyView) {
         gv.onFocused = { [weak self] in
-            guard let self = self else { return }
+            guard let self else { return }
             self.paneDelegate?.paneView(self, didFocus: self.paneID)
         }
 
         gv.onPwdChanged = { [weak self] path in
-            guard let self = self else { return }
+            guard let self else { return }
             self.debounceCwdUpdate(path)
         }
 
         gv.onTitleChanged = { [weak self] title in
-            guard let self = self else { return }
+            guard let self else { return }
             self.debounceTitleUpdate(title)
         }
 
         gv.onDirectoryListing = { [weak self] path, output in
-            guard let self = self else { return }
+            guard let self else { return }
             self.paneDelegate?.paneView(self, directoryListing: path, output: output, paneID: self.paneID)
         }
 
         gv.onProcessExited = { [weak self] in
-            guard let self = self else { return }
+            guard let self else { return }
             self.paneDelegate?.paneView(self, sessionEnded: self.paneID)
         }
 
         gv.onShellPIDDiscovered = { [weak self] pid in
-            guard let self = self else { return }
+            guard let self else { return }
             let idx = self.pane.activeTabIndex
             let tabID = idx >= 0 ? self.pane.tabs[idx].id : nil
             if idx >= 0 { self.pane.updateShellPID(at: idx, pid) }
@@ -391,12 +391,12 @@ class PaneView: NSView {
         }
 
         gv.onCommandStart = { [weak self] command in
-            guard let self = self else { return }
+            guard let self else { return }
             self.paneDelegate?.paneView(self, commandStarted: command, paneID: self.paneID)
         }
 
         gv.onCommandEnd = { [weak self] exitCode in
-            guard let self = self else { return }
+            guard let self else { return }
             self.paneDelegate?.paneView(self, commandEnded: exitCode, paneID: self.paneID)
         }
     }
@@ -484,7 +484,7 @@ class PaneView: NSView {
         titleDebounce?.cancel()
         let capturedIndex = pane.activeTabIndex
         let work = DispatchWorkItem { [weak self] in
-            guard let self = self, let title = self.pendingTitle else { return }
+            guard let self, let title = self.pendingTitle else { return }
             self.pendingTitle = nil
             self.titleDebounce = nil
             self.paneDelegate?.paneView(self, titleChanged: title, paneID: self.paneID)
@@ -504,7 +504,7 @@ class PaneView: NSView {
         cwdDebounce?.cancel()
         let capturedIndex = pane.activeTabIndex
         let work = DispatchWorkItem { [weak self] in
-            guard let self = self, let cwd = self.pendingCwd else { return }
+            guard let self, let cwd = self.pendingCwd else { return }
             self.pendingCwd = nil
             self.cwdDebounce = nil
             if capturedIndex >= 0, capturedIndex < self.pane.tabs.count {
@@ -522,7 +522,7 @@ class PaneView: NSView {
         guard !redrawScheduled else { return }
         redrawScheduled = true
         DispatchQueue.main.async { [weak self] in
-            guard let self = self else { return }
+            guard let self else { return }
             self.redrawScheduled = false
             self.needsDisplay = true
         }

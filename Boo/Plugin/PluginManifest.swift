@@ -47,12 +47,15 @@ struct PluginManifest: Codable {
         let label: String
         let defaultValue: AnyCodableValue?
         let options: String?
+        /// Optional section group label. Settings with the same group are rendered together
+        /// under a shared section header in the plugin's settings page.
+        var group: String? = nil
         var min: Double? = nil
         var max: Double? = nil
         var step: Double? = nil
 
         enum CodingKeys: String, CodingKey {
-            case key, type, label, options, min, max, step
+            case key, type, label, options, group, min, max, step
             case defaultValue = "default"
         }
 

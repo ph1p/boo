@@ -17,44 +17,44 @@ final class LocalFileTreePlugin: BooPluginProtocol {
         settings: [
             PluginManifest.SettingManifest(
                 key: "showHiddenFiles", type: .bool, label: "Show hidden files",
-                defaultValue: AnyCodableValue(false), options: nil),
+                defaultValue: AnyCodableValue(false), options: nil, group: "Display"),
             PluginManifest.SettingManifest(
                 key: "showIcons", type: .bool, label: "Show file icons",
-                defaultValue: AnyCodableValue(true), options: nil),
+                defaultValue: AnyCodableValue(true), options: nil, group: "Display"),
             PluginManifest.SettingManifest(
                 key: "showPath", type: .bool, label: "Show current path",
-                defaultValue: AnyCodableValue(true), options: nil),
+                defaultValue: AnyCodableValue(true), options: nil, group: "Display"),
             PluginManifest.SettingManifest(
                 key: "showProcess", type: .bool, label: "Show running process",
-                defaultValue: AnyCodableValue(true), options: nil),
+                defaultValue: AnyCodableValue(true), options: nil, group: "Display"),
             PluginManifest.SettingManifest(
                 key: "editorFilePatterns", type: .string,
                 label: "Open in editor (file patterns)",
                 defaultValue: AnyCodableValue(ContentType.builtInEditorFilePatterns),
-                options: "editorFilePatterns"),
+                options: "editorFilePatterns", group: "File Opening"),
             PluginManifest.SettingManifest(
                 key: "markdownOpenMode", type: .string,
                 label: "Open markdown files as",
                 defaultValue: AnyCodableValue("preview"),
-                options: "markdownOpenMode"),
+                options: "markdownOpenMode", group: "File Opening"),
             PluginManifest.SettingManifest(
                 key: "imageOpenMode", type: .string,
                 label: "Open images as",
                 defaultValue: AnyCodableValue("imageViewer"),
-                options: "imageOpenMode"),
+                options: "imageOpenMode", group: "File Opening"),
             PluginManifest.SettingManifest(
                 key: "textOpenMode", type: .string,
                 label: "Open text files as",
                 defaultValue: AnyCodableValue("editor"),
-                options: "textOpenMode"),
+                options: "textOpenMode", group: "File Opening"),
             PluginManifest.SettingManifest(
                 key: "htmlOpenInBrowser", type: .bool,
                 label: "Open HTML files in browser",
-                defaultValue: AnyCodableValue(false), options: nil),
+                defaultValue: AnyCodableValue(false), options: nil, group: "File Opening"),
             PluginManifest.SettingManifest(
                 key: "pdfOpenInBrowser", type: .bool,
                 label: "Open PDF files in browser",
-                defaultValue: AnyCodableValue(true), options: nil)
+                defaultValue: AnyCodableValue(true), options: nil, group: "File Opening")
         ]
     )
 
@@ -316,6 +316,19 @@ final class LocalFileTreePlugin: BooPluginProtocol {
             },
             onReferenceInAI: { path in
                 act?.sendToTerminal?("@\(path) ")
+            },
+            onSetFileRoot: { [weak self] _ in
+                guard let self else { return }
+                let panel = NSOpenPanel()
+                panel.canChooseDirectories = true
+                panel.canChooseFiles = false
+                panel.allowsMultipleSelection = false
+                panel.prompt = "Set as Root"
+                panel.begin { [weak self] response in
+                    guard response == .OK, let url = panel.url else { return }
+                    self?.cachedRoots.removeAll()
+                    self?.hostActions?.setWorkspaceRoot?(url.path)
+                }
             },
             isAIAgentRunning: isAI
         )

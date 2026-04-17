@@ -231,7 +231,7 @@ final class PaneViewTabBarTests: XCTestCase {
         defer { UserDefaults.standard.removeObject(forKey: "tabOverflowMode") }
 
         let layouts = pv.wrapLayout()
-        let lastLay = layouts.last!
+        _ = layouts.last!
 
         // Both tabs on row 0, but tabs stretched to fill 220px
         // Since 200 + 32 > 220, plus goes to new row

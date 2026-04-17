@@ -85,6 +85,19 @@ struct PluginDetailSettingsView: View {
         return settings
     }
 
+    /// Settings bucketed by group, preserving declaration order within each group.
+    /// Ungrouped (nil group) settings use title `""`.
+    private var groupedSettings: [(title: String, settings: [PluginManifest.SettingManifest])] {
+        let grouped = Dictionary(grouping: filteredSettings) { $0.group ?? "" }
+        // Preserve declaration order of groups by scanning filteredSettings for first appearance.
+        var seen = Set<String>()
+        let order = filteredSettings.compactMap { s -> String? in
+            let key = s.group ?? ""
+            return seen.insert(key).inserted ? key : nil
+        }
+        return order.map { (title: $0, settings: grouped[$0]!) }
+    }
+
     var body: some View {
         let _ = observer.revision
 
@@ -94,9 +107,12 @@ struct PluginDetailSettingsView: View {
                     .font(.system(size: 12))
                     .foregroundColor(Tokens.current.muted)
             } else {
-                Section(title: "Settings") {
-                    ForEach(filteredSettings, id: \.key) { setting in
-                        PluginSettingControl(pluginID: manifest.id, setting: setting)
+                ForEach(groupedSettings, id: \.title) { group in
+                    Section(title: group.title.isEmpty ? "Settings" : group.title, divided: true) {
+                        ForEach(Array(group.settings.enumerated()), id: \.element.key) { idx, setting in
+                            if idx > 0 { SettingsRowDivider() }
+                            PluginSettingControl(pluginID: manifest.id, setting: setting)
+                        }
                     }
                 }
             }
@@ -217,11 +233,11 @@ private struct PluginSettingControl: View {
         let _ = observer.revision
         switch setting.type {
         case .bool:
-            boolControl
+            boolControl.padding(.horizontal, 12).padding(.vertical, 8)
         case .double:
-            doubleControl
+            doubleControl.padding(.horizontal, 12).padding(.vertical, 8)
         case .string:
-            stringControl
+            stringControl.padding(.horizontal, 12).padding(.vertical, 8)
         case .int:
             EmptyView()
         }
@@ -289,6 +305,8 @@ private struct PluginSettingControl: View {
                     Spacer()
                     fontPicker(value: value, fonts: AppSettings.availableMonospaceFonts)
                 }
+            } else if setting.options == "dockerSocket" {
+                dockerSocketControl(value: value)
             } else if setting.options == "editorFilePatterns" {
                 editorFilePatternsControl(value: value)
             } else if setting.options == "gitDiffTool" {
@@ -322,11 +340,11 @@ private struct PluginSettingControl: View {
             Picker(
                 "",
                 selection: Binding(
-                    get: { AppSettings.shared.markdownOpenMode },
+                    get: { AppSettings.shared.markdownOpenMode.normalized },
                     set: { AppSettings.shared.markdownOpenMode = $0 }
                 )
             ) {
-                ForEach(MarkdownOpenMode.allCases, id: \.self) { mode in
+                ForEach(MarkdownOpenMode.visibleCases, id: \.self) { mode in
                     Text(mode.displayName).tag(mode)
                 }
             }
@@ -338,9 +356,9 @@ private struct PluginSettingControl: View {
     private var imageOpenModeControl: some View {
         let t = Tokens.current
         let current =
-            ImageOpenMode(
+            (ImageOpenMode(
                 rawValue: AppSettings.shared.pluginString(pluginID, setting.key, default: "imageViewer")
-            ) ?? .imageViewer
+            ) ?? .imageViewer).normalized
         return VStack(alignment: .leading, spacing: 6) {
             Text(setting.label)
                 .font(.system(size: 12))
@@ -352,7 +370,7 @@ private struct PluginSettingControl: View {
                     set: { AppSettings.shared.setPluginSetting(pluginID, setting.key, $0.rawValue) }
                 )
             ) {
-                ForEach(ImageOpenMode.allCases, id: \.self) { mode in
+                ForEach(ImageOpenMode.visibleCases, id: \.self) { mode in
                     Text(mode.displayName).tag(mode)
                 }
             }
@@ -364,9 +382,9 @@ private struct PluginSettingControl: View {
     private var textOpenModeControl: some View {
         let t = Tokens.current
         let current =
-            TextOpenMode(
+            (TextOpenMode(
                 rawValue: AppSettings.shared.pluginString(pluginID, setting.key, default: "editor")
-            ) ?? .editor
+            ) ?? .editor).normalized
         return VStack(alignment: .leading, spacing: 6) {
             Text(setting.label)
                 .font(.system(size: 12))
@@ -378,12 +396,40 @@ private struct PluginSettingControl: View {
                     set: { AppSettings.shared.setPluginSetting(pluginID, setting.key, $0.rawValue) }
                 )
             ) {
-                ForEach(TextOpenMode.allCases, id: \.self) { mode in
+                ForEach(TextOpenMode.visibleCases, id: \.self) { mode in
                     Text(mode.displayName).tag(mode)
                 }
             }
             .pickerStyle(.menu)
             .labelsHidden()
+        }
+    }
+
+    private func dockerSocketControl(value: String) -> some View {
+        let t = Tokens.current
+        let detected = DockerService.shared.socketPath
+        return VStack(alignment: .leading, spacing: 4) {
+            Text(setting.label)
+                .font(.system(size: 12))
+                .foregroundColor(t.text)
+            TextField(
+                detected ?? "/var/run/docker.sock",
+                text: Binding(
+                    get: { value },
+                    set: { AppSettings.shared.setPluginSetting(pluginID, setting.key, $0) }
+                )
+            )
+            .textFieldStyle(.roundedBorder)
+            .font(.system(size: 11, design: .monospaced))
+            if let path = detected {
+                Text("Leave empty to auto-detect. Currently using: \(path)")
+                    .font(.system(size: 11))
+                    .foregroundColor(t.muted)
+            } else {
+                Text("Leave empty to auto-detect.")
+                    .font(.system(size: 11))
+                    .foregroundColor(t.muted)
+            }
         }
     }
 

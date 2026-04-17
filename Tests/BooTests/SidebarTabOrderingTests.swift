@@ -143,8 +143,6 @@ final class SidebarTabOrderingTests: XCTestCase {
         var saved = ["file-tree-local", "git-panel", "bookmarks", "docker"]
 
         // Switch to remote with different visible tabs
-        let remoteVisible = ["file-tree-remote", "bookmarks"]
-
         // Reorder remote: bookmarks first
         saved = SidebarTabOrdering.mergeOrder(
             saved: saved,
@@ -176,7 +174,7 @@ final class SidebarTabOrderingTests: XCTestCase {
     /// Exit remote → local should still show file-tree-local first
     func testScenario_moveRemoteExplorerToFront_localExplorerStaysFirst() {
         let localTabs = [tab("file-tree-local"), tab("bookmarks"), tab("snippets")]
-        let remoteTabs = [tab("bookmarks"), tab("snippets"), tab("file-tree-remote")]
+        _ = [tab("bookmarks"), tab("snippets"), tab("file-tree-remote")]
 
         // Initial saved order from local context
         var saved = ["file-tree-local", "bookmarks", "snippets"]

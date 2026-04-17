@@ -1,5 +1,14 @@
 import SwiftUI
 
+private func formatTokenCount(_ tokens: Int) -> String {
+    if tokens >= 1_000_000 {
+        return String(format: "%.1fM", Double(tokens) / 1_000_000)
+    } else if tokens >= 1_000 {
+        return String(format: "%.1fK", Double(tokens) / 1_000)
+    }
+    return "\(tokens)"
+}
+
 // MARK: - Sessions Section View
 
 struct ClaudeSessionsView: View {
@@ -116,14 +125,6 @@ struct ClaudeSessionsView: View {
         }
     }
 
-    private func formatTokenCount(_ tokens: Int) -> String {
-        if tokens >= 1_000_000 {
-            return String(format: "%.1fM", Double(tokens) / 1_000_000)
-        } else if tokens >= 1_000 {
-            return String(format: "%.1fK", Double(tokens) / 1_000)
-        }
-        return "\(tokens)"
-    }
 }
 
 // MARK: - Config Section View
@@ -504,14 +505,6 @@ struct ClaudeActiveSessionView: View {
         .padding(.vertical, 8)
     }
 
-    private func formatTokenCount(_ tokens: Int) -> String {
-        if tokens >= 1_000_000 {
-            return String(format: "%.1fM", Double(tokens) / 1_000_000)
-        } else if tokens >= 1_000 {
-            return String(format: "%.1fK", Double(tokens) / 1_000)
-        }
-        return "\(tokens)"
-    }
 }
 
 // MARK: - Settings Section View

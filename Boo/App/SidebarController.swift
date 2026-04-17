@@ -13,7 +13,12 @@ final class SidebarController {
     // MARK: - Dependencies
 
     weak var windowController: MainWindowController?
-    private var coordinator: WindowStateCoordinator { windowController!.coordinator }
+    private var coordinator: WindowStateCoordinator {
+        guard let wc = windowController else {
+            fatalError("SidebarController accessed after windowController was deallocated")
+        }
+        return wc.coordinator
+    }
     private var pluginRegistry: PluginRegistry { coordinator.pluginRegistry }
 
     // MARK: - UI Components
@@ -129,7 +134,7 @@ final class SidebarController {
         tabBar.onToggleSection = { [weak self] tabID, sectionID in
             self?.handleSectionToggle(pluginID: tabID.id, sectionID: sectionID)
         }
-        tabBar.onTabsReordered = { [weak self] newOrder in
+        tabBar.onTabsReordered = { newOrder in
             AppSettings.shared.sidebarTabOrder = SidebarTabOrdering.mergeOrder(
                 saved: AppSettings.shared.sidebarTabOrder,
                 visible: newOrder.map(\.id))

@@ -55,7 +55,7 @@ final class RemoteFileTreeNode: Identifiable, ObservableObject {
 
         RemoteExplorer.listRemoteDirectory(session: session, path: remotePath) { [weak self] entries in
             let apply = { [weak self] in
-                guard let self = self else { return }
+                guard let self else { return }
 
                 guard let entries = entries else {
                     remoteLog(
@@ -90,7 +90,7 @@ final class RemoteFileTreeNode: Identifiable, ObservableObject {
                         self.retriesLeft -= 1
                         self.retryTimer = Timer.scheduledTimer(withTimeInterval: retryInterval, repeats: false) {
                             [weak self] _ in
-                            guard let self = self else { return }
+                            guard let self else { return }
                             self.isLoading = false
                             self.loadChildren()
                         }

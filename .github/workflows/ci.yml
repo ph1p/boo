@@ -26,15 +26,16 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10
+
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: 22
+          node-version: 24
           cache: pnpm
           cache-dependency-path: Boo/Resources/MonacoSource/pnpm-lock.yaml
-
-      - name: Enable corepack
-        run: corepack enable
 
       - name: Install swift-format
         run: brew install swift-format
@@ -51,15 +52,16 @@ jobs:
         with:
           submodules: true
 
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10
+
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: 22
+          node-version: 24
           cache: pnpm
           cache-dependency-path: Boo/Resources/MonacoSource/pnpm-lock.yaml
-
-      - name: Enable corepack
-        run: corepack enable
 
       - name: Install Zig
         run: |
@@ -115,18 +117,16 @@ jobs:
           submodules: true
           fetch-depth: 0
 
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10
+
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: 22
+          node-version: 24
           cache: pnpm
           cache-dependency-path: Boo/Resources/MonacoSource/pnpm-lock.yaml
-
-      - name: Enable corepack
-        run: corepack enable
-
-      - name: Install semantic-release plugins
-        run: npm install -g semantic-release@25.0.3 @semantic-release/exec @semantic-release/git lodash-es@4.17.21
 
       - name: Install Zig
         run: |
@@ -187,4 +187,4 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-        run: npx semantic-release
+        run: pnpm dlx --package=semantic-release@25.0.3 --package=@semantic-release/exec --package=@semantic-release/git --package=lodash-es@4.17.21 semantic-release
