@@ -70,6 +70,8 @@ type BooMessage =
 let editor: monaco.editor.IStandaloneCodeEditor | undefined;
 let isDirty = false;
 let dirtyTimer: ReturnType<typeof setTimeout> | undefined;
+let dropDragoverHandler: ((e: DragEvent) => void) | null = null;
+let dropDropHandler: ((e: DragEvent) => void) | null = null;
 
 const workerCache = new Map<string, Worker>();
 
@@ -136,6 +138,64 @@ function resolveEditorOptions(options?: EditorOptions): EditorOptions {
   };
 }
 
+function setupDropHandler(ed: monaco.editor.IStandaloneCodeEditor): void {
+  // Remove previous listeners before re-registering (initEditorFromJSON can be called multiple times).
+  if (dropDragoverHandler) document.removeEventListener("dragover", dropDragoverHandler);
+  if (dropDropHandler) document.removeEventListener("drop", dropDropHandler);
+
+  // Listen on document so drops anywhere in the webview are caught,
+  // preventing WKWebView from navigating to dropped URLs.
+  dropDragoverHandler = (e) => {
+    if (!hasDraggableUrl(e.dataTransfer)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer!.dropEffect = "copy";
+  };
+
+  dropDropHandler = (e) => {
+    const dt = e.dataTransfer;
+    if (!dt) return;
+    const url = extractDroppedUrl(dt);
+    if (!url) return;
+    e.preventDefault();
+    e.stopPropagation();
+
+    const position = ed.getPosition();
+    if (!position) return;
+
+    ed.executeEdits("url-drop", [
+      {
+        range: new monaco.Range(
+          position.lineNumber,
+          position.column,
+          position.lineNumber,
+          position.column
+        ),
+        text: url,
+        forceMoveMarkers: true,
+      },
+    ]);
+    ed.focus();
+  };
+
+  document.addEventListener("dragover", dropDragoverHandler);
+  document.addEventListener("drop", dropDropHandler);
+}
+
+function hasDraggableUrl(dt: DataTransfer | null): boolean {
+  if (!dt) return false;
+  return dt.types.includes("text/uri-list");
+}
+
+function extractDroppedUrl(dt: DataTransfer): string | null {
+  const uriList = dt.getData("text/uri-list");
+  if (uriList) {
+    const first = uriList.split(/\r?\n/).find((l) => !l.startsWith("#"))?.trim();
+    if (first) return first;
+  }
+  return null;
+}
+
 window.initEditorFromJSON = (data: EditorInitData): void => {
   log(`initEditorFromJSON received for language: ${data.language}`);
 
@@ -173,6 +233,8 @@ window.initEditorFromJSON = (data: EditorInitData): void => {
     editor.onDidFocusEditorWidget(() => {
       postMessage({ type: "focused" });
     });
+
+    setupDropHandler(editor);
 
     isDirty = false;
     log(`Editor instance created successfully with ${data.content?.length ?? 0} chars`);
