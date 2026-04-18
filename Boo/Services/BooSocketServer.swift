@@ -35,7 +35,7 @@ import Foundation
 ///
 /// The socket path is exposed to child processes via `BOO_SOCK`.
 final class BooSocketServer: @unchecked Sendable {
-    nonisolated(unsafe) static let shared = BooSocketServer()
+    static let shared = BooSocketServer()
 
     // MARK: - Process Status Tracking
 
@@ -66,7 +66,7 @@ final class BooSocketServer: @unchecked Sendable {
 
     /// Plugin command handlers. Key is the namespace prefix (e.g. "git", "docker").
     /// Handler receives the full JSON dict and returns a response dict.
-    private var commandHandlers: [String: ([String: Any]) -> [String: Any]?] = [:]
+    private var commandHandlers: [String: @Sendable ([String: Any]) -> [String: Any]?] = [:]
 
     private var serverFD: Int32 = -1
     private var acceptSource: DispatchSourceRead?
@@ -119,7 +119,7 @@ final class BooSocketServer: @unchecked Sendable {
 
     /// Register a handler for a command namespace. Commands matching "namespace.action"
     /// or just "namespace" will be routed to this handler.
-    func registerHandler(namespace: String, handler: @escaping ([String: Any]) -> [String: Any]?) {
+    func registerHandler(namespace: String, handler: @escaping @Sendable ([String: Any]) -> [String: Any]?) {
         queue.async { [self] in
             commandHandlers[namespace] = handler
         }

@@ -24,25 +24,28 @@ final class SplitWorkspaceE2ETests: XCTestCase {
         debug = DebugPlugin()
         registry.register(debug)
 
-        bridge.events.sink { [weak self] event in
-            guard let self else { return }
-            let ctx = self.makeContext()
-            switch event {
-            case .directoryChanged(let path):
-                self.registry.notifyCwdChanged(newPath: path, context: ctx)
-                self.registry.runCycle(baseContext: ctx, reason: .cwdChanged)
-            case .processChanged(let name):
-                self.registry.notifyProcessChanged(name: name, context: ctx)
-                self.registry.runCycle(baseContext: ctx, reason: .processChanged)
-            case .remoteSessionChanged(let session):
-                self.registry.notifyRemoteSessionChanged(session: session, context: ctx)
-                self.registry.runCycle(baseContext: ctx, reason: .remoteSessionChanged)
-            case .titleChanged:
-                self.registry.runCycle(baseContext: ctx, reason: .titleChanged)
-            case .focusChanged:
-                break
-            default:
-                break
+        nonisolated(unsafe) weak var weakSelf = self
+        bridge.events.sink { event in
+            MainActor.assumeIsolated {
+                guard let self = weakSelf else { return }
+                let ctx = self.makeContext()
+                switch event {
+                case .directoryChanged(let path):
+                    self.registry.notifyCwdChanged(newPath: path, context: ctx)
+                    self.registry.runCycle(baseContext: ctx, reason: .cwdChanged)
+                case .processChanged(let name):
+                    self.registry.notifyProcessChanged(name: name, context: ctx)
+                    self.registry.runCycle(baseContext: ctx, reason: .processChanged)
+                case .remoteSessionChanged(let session):
+                    self.registry.notifyRemoteSessionChanged(session: session, context: ctx)
+                    self.registry.runCycle(baseContext: ctx, reason: .remoteSessionChanged)
+                case .titleChanged:
+                    self.registry.runCycle(baseContext: ctx, reason: .titleChanged)
+                case .focusChanged:
+                    break
+                default:
+                    break
+                }
             }
         }.store(in: &cancellables)
     }

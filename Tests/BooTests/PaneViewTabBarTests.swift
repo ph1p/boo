@@ -2,7 +2,7 @@ import XCTest
 
 @testable import Boo
 
-final class PaneViewTabBarTests: XCTestCase {
+@MainActor final class PaneViewTabBarTests: XCTestCase {
 
     private func makePaneView(tabTitles: [String], width: CGFloat = 600) -> PaneView {
         let pane = Pane()

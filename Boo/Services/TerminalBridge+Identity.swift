@@ -17,7 +17,7 @@ extension TerminalBridge {
 
         // gethostname(2)  e.g. "phinnoq"
         var buf = [CChar](repeating: 0, count: 256)
-        if gethostname(&buf, buf.count) == 0, let hn = String(validatingUTF8: buf), !hn.isEmpty {
+        if gethostname(&buf, buf.count) == 0, let hn = String(validating: buf.prefix(while: { $0 != 0 }).map(UInt8.init(bitPattern:)), as: UTF8.self), !hn.isEmpty {
             names.insert(hn.lowercased())
             if let short = hn.split(separator: ".").first {
                 names.insert(String(short).lowercased())

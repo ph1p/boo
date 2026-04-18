@@ -169,7 +169,7 @@ function setupDropHandler(ed: monaco.editor.IStandaloneCodeEditor): void {
           position.lineNumber,
           position.column,
           position.lineNumber,
-          position.column
+          position.column,
         ),
         text: url,
         forceMoveMarkers: true,
@@ -190,7 +190,10 @@ function hasDraggableUrl(dt: DataTransfer | null): boolean {
 function extractDroppedUrl(dt: DataTransfer): string | null {
   const uriList = dt.getData("text/uri-list");
   if (uriList) {
-    const first = uriList.split(/\r?\n/).find((l) => !l.startsWith("#"))?.trim();
+    const first = uriList
+      .split(/\r?\n/)
+      .find((l) => !l.startsWith("#"))
+      ?.trim();
     if (first) return first;
   }
   return null;

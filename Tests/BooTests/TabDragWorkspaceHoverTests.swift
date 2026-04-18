@@ -5,7 +5,7 @@ import XCTest
 /// Tests for TabDragCoordinator's workspace hover behaviour:
 /// hovering over a workspace pill for long enough fires onWorkspaceHover,
 /// moving away cancels the timer, and cleanup resets all state.
-final class TabDragWorkspaceHoverTests: XCTestCase {
+@MainActor final class TabDragWorkspaceHoverTests: XCTestCase {
 
     private var coordinator: TabDragCoordinator!
     private let hoverDelay: TimeInterval = 0.02

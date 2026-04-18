@@ -529,7 +529,7 @@ import Cocoa
             ctx.duration = 0.15
             overlay.animator().alphaValue = 0
         }) {
-            overlay.removeFromSuperview()
+            MainActor.assumeIsolated { overlay.removeFromSuperview() }
         }
     }
 
@@ -677,7 +677,7 @@ import Cocoa
     }
 
     override func performDragOperation(_ sender: any NSDraggingInfo) -> Bool {
-        guard let surface = surface else { return false }
+        guard surface != nil else { return false }
         let pb = sender.draggingPasteboard
 
         // Local file URLs (Finder drag) — shell-escape the path
@@ -704,7 +704,10 @@ import Cocoa
         claimedDirectChild = 0
         Task { @MainActor in
             if dc != 0 { ClaimedDirectChildren.release(dc) }
-            if let s { GhosttyRuntime.shared.unregisterSurface(s); ghostty_surface_free(s) }
+            if let s {
+                GhosttyRuntime.shared.unregisterSurface(s)
+                ghostty_surface_free(s)
+            }
         }
     }
 }

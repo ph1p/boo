@@ -12,9 +12,10 @@ extension BooSocketServer {
             guard let self else { return }
             let ctx = AppStore.shared.context
             let dict = Self.serializeContext(ctx)
+            nonisolated(unsafe) let sendableDict = dict
             self.queue.async {
                 guard self.clientSources[clientFD] != nil else { return }
-                self.sendJSON(fd: clientFD, dict: ["ok": true, "context": dict])
+                self.sendJSON(fd: clientFD, dict: ["ok": true, "context": sendableDict])
             }
         }
     }
@@ -123,8 +124,9 @@ extension BooSocketServer {
         }
         let fd = clientFD
         handler(cmd, json) { [weak self] response in
+            nonisolated(unsafe) let sendableResponse = response
             self?.queue.async {
-                self?.sendJSON(fd: fd, dict: response)
+                self?.sendJSON(fd: fd, dict: sendableResponse)
             }
         }
     }

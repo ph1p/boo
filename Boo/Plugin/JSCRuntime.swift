@@ -4,7 +4,7 @@ import os.log
 
 /// JavaScriptCore runtime for inline plugin transforms.
 /// ADR-3: JSC for fast inline logic without shell overhead.
-final class JSCRuntime {
+final class JSCRuntime: @unchecked Sendable {
 
     struct JSError: Error, CustomStringConvertible {
         let message: String
@@ -27,15 +27,15 @@ final class JSCRuntime {
         settings: [String: Any] = [:],
         timeout: TimeInterval = 1.0
     ) throws -> String {
-        var ctxDict = buildContextDict(from: context)
+        nonisolated(unsafe) var ctxDict = buildContextDict(from: context)
         if !settings.isEmpty {
             ctxDict["settings"] = settings
         }
 
         // All JSC work runs on a dedicated thread (JSContext is thread-bound).
         // The calling thread waits with a deadline so infinite loops don't hang.
-        var output: String?
-        var thrownError: (any Error)?
+        nonisolated(unsafe) var output: String?
+        nonisolated(unsafe) var thrownError: (any Error)?
 
         let group = DispatchGroup()
         group.enter()
@@ -74,12 +74,12 @@ final class JSCRuntime {
         settings: [String: Any] = [:],
         timeout: TimeInterval = 1.0
     ) -> DSLAction? {
-        var ctxDict = buildContextDict(from: context)
+        nonisolated(unsafe) var ctxDict = buildContextDict(from: context)
         if !settings.isEmpty {
             ctxDict["settings"] = settings
         }
 
-        var output: DSLAction?
+        nonisolated(unsafe) var output: DSLAction?
         let group = DispatchGroup()
         group.enter()
 

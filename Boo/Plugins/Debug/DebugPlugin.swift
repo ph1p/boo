@@ -328,7 +328,7 @@ private struct DebugDetailView: View {
                     }
                     .padding(.horizontal, 10)
                 }
-                .onChange(of: entries.count) { _ in
+                .onChange(of: entries.count) {
                     if let last = filteredEntries.last {
                         proxy.scrollTo(last.id, anchor: .bottom)
                     }

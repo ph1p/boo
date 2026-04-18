@@ -27,22 +27,26 @@ final class AIProcessDetectionTests: XCTestCase {
         debug = DebugPlugin()
         registry.register(debug)
 
-        bridge.events.sink { [weak self] event in
-            guard let self else { return }
-            let ctx = self.currentContext()
-            switch event {
-            case .directoryChanged(let path):
-                self.registry.notifyCwdChanged(newPath: path, context: ctx)
-                self.registry.runCycle(baseContext: ctx, reason: .cwdChanged)
-            case .processChanged(let name):
-                self.registry.notifyProcessChanged(name: name, context: ctx)
-                self.registry.runCycle(baseContext: ctx, reason: .processChanged)
-            case .titleChanged:
-                self.registry.runCycle(baseContext: ctx, reason: .titleChanged)
-            default:
-                break
-            }
-        }.store(in: &cancellables)
+        nonisolated(unsafe) weak var weakSelf = self
+        bridge.events
+            .sink { event in
+                MainActor.assumeIsolated {
+                    guard let self = weakSelf else { return }
+                    let ctx = self.currentContext()
+                    switch event {
+                    case .directoryChanged(let path):
+                        self.registry.notifyCwdChanged(newPath: path, context: ctx)
+                        self.registry.runCycle(baseContext: ctx, reason: .cwdChanged)
+                    case .processChanged(let name):
+                        self.registry.notifyProcessChanged(name: name, context: ctx)
+                        self.registry.runCycle(baseContext: ctx, reason: .processChanged)
+                    case .titleChanged:
+                        self.registry.runCycle(baseContext: ctx, reason: .titleChanged)
+                    default:
+                        break
+                    }
+                }
+            }.store(in: &cancellables)
     }
 
     override func tearDown() {

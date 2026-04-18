@@ -12,7 +12,7 @@ final class AutoUpdater: ObservableObject {
         let launchReplacementScript: (String) -> Bool
         let terminateApplication: @MainActor () -> Void
 
-        nonisolated(unsafe) static let live = InstallHooks(
+        static let live = InstallHooks(
             extractAppFromDMG: { try AutoUpdater.extractAppFromDMG($0) },
             verifyCodeSignature: { AutoUpdater.verifyCodeSignature(at: $0) },
             launchReplacementScript: { AutoUpdater.launchReplacementScript($0) },
@@ -450,11 +450,11 @@ final class AutoUpdater: ObservableObject {
 // MARK: - Download Delegate
 
 private final class DownloadDelegate: NSObject, URLSessionDownloadDelegate {
-    let onProgress: (Double) -> Void
-    let onCompletion: (URL?, Error?) -> Void
+    let onProgress: @Sendable (Double) -> Void
+    let onCompletion: @Sendable (URL?, Error?) -> Void
     let destinationURL: URL
 
-    init(destinationURL: URL, onProgress: @escaping (Double) -> Void, completion: @escaping (URL?, Error?) -> Void) {
+    init(destinationURL: URL, onProgress: @escaping @Sendable (Double) -> Void, completion: @escaping @Sendable (URL?, Error?) -> Void) {
         self.destinationURL = destinationURL
         self.onProgress = onProgress
         self.onCompletion = completion

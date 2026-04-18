@@ -110,7 +110,7 @@ final class RemoteFileTreeNode: Identifiable, ObservableObject, @unchecked Senda
             if Thread.isMainThread {
                 apply()
             } else {
-                DispatchQueue.main.async(execute: apply)
+                DispatchQueue.main.async { apply() }
             }
         }
     }

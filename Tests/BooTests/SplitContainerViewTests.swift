@@ -3,7 +3,7 @@ import XCTest
 
 @testable import Boo
 
-final class SplitContainerViewTests: XCTestCase {
+@MainActor final class SplitContainerViewTests: XCTestCase {
     private final class Delegate: SplitContainerDelegate {
         var panes: [UUID: PaneView] = [:]
 

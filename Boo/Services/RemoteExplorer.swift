@@ -85,7 +85,7 @@ final class RemoteExplorer: @unchecked Sendable {
             // Try proc_name first (fast, kernel-level)
             var nameBuffer = [CChar](repeating: 0, count: Int(MAXCOMLEN) + 1)
             proc_name(child, &nameBuffer, UInt32(nameBuffer.count))
-            let procName = String(cString: nameBuffer)
+            let procName = String(decoding: nameBuffer.prefix(while: { $0 != 0 }).map(UInt8.init(bitPattern:)), as: UTF8.self)
             if procName.contains(name) { return child }
             // Fallback: proc_name can return empty for PTY child processes on macOS.
             // Use sysctl KERN_PROCARGS2 to get the executable path instead.
@@ -194,7 +194,7 @@ final class RemoteExplorer: @unchecked Sendable {
     static func processName(pid: pid_t) -> String {
         var nameBuffer = [CChar](repeating: 0, count: Int(MAXCOMLEN) + 1)
         proc_name(pid, &nameBuffer, UInt32(nameBuffer.count))
-        let name = String(cString: nameBuffer)
+        let name = String(decoding: nameBuffer.prefix(while: { $0 != 0 }).map(UInt8.init(bitPattern:)), as: UTF8.self)
         return name.hasPrefix("-") ? String(name.dropFirst()) : name
     }
 

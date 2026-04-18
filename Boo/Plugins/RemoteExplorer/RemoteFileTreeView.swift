@@ -78,8 +78,10 @@ struct RemoteConnectionFailedView: View {
                     isRetrying = true
                     if session.isSSHBased {
                         SSHControlManager.shared.ensureConnection(alias: session.sshConnectionTarget) { [self] _ in
-                            self.isRetrying = false
-                            self.onRetry?()
+                            MainActor.assumeIsolated {
+                                self.isRetrying = false
+                                self.onRetry?()
+                            }
                         }
                     } else {
                         isRetrying = false

@@ -2,7 +2,7 @@ import XCTest
 
 @testable import Boo
 
-final class WorkspaceSwitchTests: XCTestCase {
+@MainActor final class WorkspaceSwitchTests: XCTestCase {
 
     func testWorkspaceCreation() {
         let ws = Workspace(folderPath: "/tmp")

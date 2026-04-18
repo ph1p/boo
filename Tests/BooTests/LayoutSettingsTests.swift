@@ -2,7 +2,7 @@ import XCTest
 
 @testable import Boo
 
-final class LayoutSettingsTests: XCTestCase {
+@MainActor final class LayoutSettingsTests: XCTestCase {
 
     override func tearDown() {
         // Reset to defaults
