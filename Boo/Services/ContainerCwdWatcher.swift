@@ -11,7 +11,7 @@ import Foundation
 /// 6. CWD changes for a tab's assigned PID are reported to that tab.
 final class ContainerCwdWatcher {
     /// One watcher per container target.
-    private static var watchers: [String: ContainerCwdWatcher] = [:]
+    private nonisolated(unsafe) static var watchers: [String: ContainerCwdWatcher] = [:]
     private static let lock = NSLock()
 
     /// Get or create a watcher for a container target.

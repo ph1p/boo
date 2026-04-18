@@ -26,7 +26,7 @@ protocol StatusBarPlugin: AnyObject {
         at x: CGFloat, y: CGFloat, theme: TerminalTheme, settings: AppSettings, state: StatusBarState, ctx: CGContext
     ) -> CGFloat
     /// Handle click at point within the given rect. Return true if handled.
-    func handleClick(at point: NSPoint, in barView: StatusBarView) -> Bool
+    @MainActor func handleClick(at point: NSPoint, in barView: StatusBarView) -> Bool
     /// Update cached state (called before draw).
     func update(state: StatusBarState)
     /// Accessibility label for VoiceOver. Return nil to use the segment ID.

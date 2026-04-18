@@ -1,7 +1,7 @@
 import Cocoa
 
 public enum BooMain {
-    public static func run() {
+    @MainActor public static func run() {
         let app = NSApplication.shared
         app.setActivationPolicy(.regular)
         let delegate = AppDelegate()
@@ -11,7 +11,7 @@ public enum BooMain {
     }
 }
 
-class AppDelegate: NSObject, NSApplicationDelegate {
+@MainActor class AppDelegate: NSObject, NSApplicationDelegate {
     private var windowController: MainWindowController?
     private var appearanceObserver: NSKeyValueObservation?
 

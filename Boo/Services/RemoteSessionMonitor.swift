@@ -3,7 +3,7 @@ import Foundation
 /// Polls process trees to detect SSH/Docker child processes for tracked panes.
 /// Fires `onSessionChanged` only on state transitions.
 /// For container sessions, also polls the container's CWD via /proc.
-final class RemoteSessionMonitor {
+final class RemoteSessionMonitor: @unchecked Sendable {
     struct TrackedPane {
         var shellPID: pid_t
         var lastSession: RemoteSessionType?
@@ -23,7 +23,7 @@ final class RemoteSessionMonitor {
     var onSessionChanged: ((UUID, RemoteSessionType?) -> Void)?
 
     /// Called on the main thread when a container session's CWD changes.
-    var onContainerCwdChanged: ((UUID, String) -> Void)?
+    var onContainerCwdChanged: (@Sendable (UUID, String) -> Void)?
 
     /// Called on the main thread when a fresh shell PID is registered for a pane.
     /// `tabID` is the tab that owns the new shell, or nil if unknown.

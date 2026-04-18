@@ -80,7 +80,7 @@ class ThemedSplitView: NSSplitView {
     }
 }
 
-class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitViewDelegate, NSWindowDelegate {
+@MainActor class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitViewDelegate, NSWindowDelegate {
     let appState = AppState()
 
     let toolbar = ToolbarView(frame: .zero)
@@ -139,11 +139,11 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
             workspacePaneViews[id] = newValue
         }
     }
-    private var settingsObserver: Any?
-    private var ghosttyActionObserver: Any?
+    nonisolated(unsafe) private var settingsObserver: Any?
+    nonisolated(unsafe) private var ghosttyActionObserver: Any?
     var coordinator: WindowStateCoordinator!
     var bridge: TerminalBridge! { coordinator.bridge }
-    var bridgeCancellables = Set<AnyCancellable>()
+    nonisolated(unsafe) var bridgeCancellables = Set<AnyCancellable>()
     private let contextAnnouncer = ContextAnnouncementEngine()
 
     /// Coalesced plugin cycle scheduling — batches rapid-fire events within one run loop tick.
@@ -577,7 +577,9 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
             guard let info = notification.userInfo,
                 let action = info["action"] as? String
             else { return }
-            self.handleGhosttyAction(action, userInfo: info)
+            let direction = info["direction"] as? String
+            let safeInfo: [String: String] = direction.map { ["direction": $0] } ?? [:]
+            Task { @MainActor [weak self] in self?.handleGhosttyAction(action, userInfo: safeInfo) }
         }
 
         NotificationCenter.default.addObserver(
@@ -590,10 +592,10 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
         }
     }
 
-    private func handleGhosttyAction(_ action: String, userInfo: [AnyHashable: Any]) {
+    private func handleGhosttyAction(_ action: String, userInfo: [String: String]) {
         switch action {
         case "new_split":
-            let dirStr = userInfo["direction"] as? String ?? "vertical"
+            let dirStr = userInfo["direction"] ?? "vertical"
             if dirStr == "horizontal" {
                 splitHorizontalAction(nil)
             } else {
@@ -601,7 +603,7 @@ class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitV
             }
 
         case "goto_split":
-            let dir = userInfo["direction"] as? String ?? "next"
+            let dir = userInfo["direction"] ?? "next"
             if dir == "next" {
                 focusNextPaneAction(nil)
             } else {

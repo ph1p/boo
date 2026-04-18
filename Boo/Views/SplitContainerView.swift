@@ -1,6 +1,6 @@
 import Cocoa
 
-protocol SplitContainerDelegate: AnyObject {
+@MainActor protocol SplitContainerDelegate: AnyObject {
     func splitContainer(_ container: SplitContainerView, paneViewFor paneID: UUID) -> PaneView
 }
 

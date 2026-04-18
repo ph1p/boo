@@ -184,21 +184,23 @@ final class RemoteFileTreePlugin: BooPluginProtocol {
 
         if resolved.hasPrefix("~") {
             RemoteExplorer.resolveRemoteHome(session: session) { [weak root, weak self] home in
-                guard let root = root, let self = self, let home = home else {
-                    root?.loadChildren()
-                    return
+                Task { @MainActor [weak root, weak self] in
+                    guard let root = root, let self = self, let home = home else {
+                        root?.loadChildren()
+                        return
+                    }
+                    let absolutePath: String
+                    if resolved == "~" {
+                        absolutePath = home
+                    } else {
+                        absolutePath = home + String(resolved.dropFirst(1))
+                    }
+                    let newKey = "\(host):\(absolutePath)"
+                    self.cachedRemoteRoots.removeValue(forKey: key)
+                    root.updatePath(absolutePath)
+                    self.cachedRemoteRoots[newKey] = root
+                    root.loadChildren()
                 }
-                let absolutePath: String
-                if resolved == "~" {
-                    absolutePath = home
-                } else {
-                    absolutePath = home + String(resolved.dropFirst(1))
-                }
-                let newKey = "\(host):\(absolutePath)"
-                self.cachedRemoteRoots.removeValue(forKey: key)
-                root.updatePath(absolutePath)
-                self.cachedRemoteRoots[newKey] = root
-                root.loadChildren()
             }
         } else {
             root.loadChildren()

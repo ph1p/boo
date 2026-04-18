@@ -2,7 +2,7 @@ import Foundation
 
 /// Manages directory bookmarks, persisted in UserDefaults.
 final class BookmarkService {
-    static let shared = BookmarkService()
+    nonisolated(unsafe) static let shared = BookmarkService()
 
     struct Bookmark: Codable, Equatable, Identifiable {
         let id: UUID

@@ -64,7 +64,7 @@ extension RemoteExplorer.RemoteEntry: Equatable {
 
 /// Centralized event bus and state holder for terminal events.
 /// One instance per MainWindowController.
-final class TerminalBridge {
+final class TerminalBridge: @unchecked Sendable {
     @Published private(set) var state: BridgeState
     let events = PassthroughSubject<TerminalEvent, Never>()
     let monitor = RemoteSessionMonitor()

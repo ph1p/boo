@@ -1,6 +1,6 @@
 import Cocoa
 
-protocol WorkspaceBarViewDelegate: AnyObject {
+@MainActor protocol WorkspaceBarViewDelegate: AnyObject {
     func workspaceBar(_ bar: WorkspaceBarView, didSelectAt index: Int)
     func workspaceBar(_ bar: WorkspaceBarView, didCloseAt index: Int)
     func workspaceBar(_ bar: WorkspaceBarView, renameWorkspaceAt index: Int, to name: String)

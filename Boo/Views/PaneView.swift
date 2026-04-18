@@ -2,7 +2,7 @@ import CGhostty
 import Cocoa
 import SwiftUI
 
-protocol PaneViewDelegate: AnyObject {
+@MainActor protocol PaneViewDelegate: AnyObject {
     func paneView(_ paneView: PaneView, didFocus paneID: UUID)
     func paneView(_ paneView: PaneView, didChangeDirectory path: String, paneID: UUID)
     func paneView(_ paneView: PaneView, titleChanged title: String, paneID: UUID)

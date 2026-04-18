@@ -3,11 +3,11 @@ import os.log
 
 /// Watches `~/.boo/plugins/` for new, modified, and deleted plugin folders.
 /// Hot-loads/unloads plugins via PluginRegistry.
-final class PluginWatcher {
+@MainActor final class PluginWatcher {
 
     private let pluginsPath: String
-    private var stream: FSEventStreamRef?
-    private var debounceTimer: Timer?
+    nonisolated(unsafe) private var stream: FSEventStreamRef?
+    nonisolated(unsafe) private var debounceTimer: Timer?
     private let debounceInterval: TimeInterval = 0.3
     private let logger = Logger(subsystem: "com.boo", category: "PluginWatcher")
 
@@ -65,7 +65,7 @@ final class PluginWatcher {
     }
 
     /// Stop watching.
-    func stop() {
+    nonisolated func stop() {
         debounceTimer?.invalidate()
         if let stream = stream {
             FSEventStreamStop(stream)

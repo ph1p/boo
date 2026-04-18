@@ -6,13 +6,13 @@ import Cocoa
 final class AutoUpdater: ObservableObject {
     static let shared = AutoUpdater()
 
-    struct InstallHooks {
+    struct InstallHooks: @unchecked Sendable {
         let extractAppFromDMG: (URL) throws -> URL
         let verifyCodeSignature: (URL) -> Bool
         let launchReplacementScript: (String) -> Bool
         let terminateApplication: @MainActor () -> Void
 
-        static let live = InstallHooks(
+        nonisolated(unsafe) static let live = InstallHooks(
             extractAppFromDMG: { try AutoUpdater.extractAppFromDMG($0) },
             verifyCodeSignature: { AutoUpdater.verifyCodeSignature(at: $0) },
             launchReplacementScript: { AutoUpdater.launchReplacementScript($0) },
@@ -449,7 +449,7 @@ final class AutoUpdater: ObservableObject {
 
 // MARK: - Download Delegate
 
-private class DownloadDelegate: NSObject, URLSessionDownloadDelegate {
+private final class DownloadDelegate: NSObject, URLSessionDownloadDelegate {
     let onProgress: (Double) -> Void
     let onCompletion: (URL?, Error?) -> Void
     let destinationURL: URL

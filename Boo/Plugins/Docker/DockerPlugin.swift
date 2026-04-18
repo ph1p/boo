@@ -17,7 +17,7 @@ final class DockerPluginNew: BooPluginProtocol {
     var hostActions: PluginHostActions?
     var onRequestCycleRerun: (() -> Void)?
 
-    private var settingsObserver: NSObjectProtocol?
+    nonisolated(unsafe) private var settingsObserver: NSObjectProtocol?
     private var isActivated = false
 
     init() {
@@ -30,10 +30,9 @@ final class DockerPluginNew: BooPluginProtocol {
         settingsObserver = NotificationCenter.default.addObserver(
             forName: .settingsChanged, object: nil, queue: .main
         ) { [weak self] notification in
-            MainActor.assumeIsolated {
-                guard let topic = notification.userInfo?["topic"] as? String,
-                    topic == "plugins"
-                else { return }
+            let topic = notification.userInfo?["topic"] as? String
+            Task { @MainActor [weak self] in
+                guard topic == "plugins" else { return }
                 let oldSocket = DockerService.shared.socketPath
                 self?.applySocketPathSetting()
                 guard DockerService.shared.socketPath != oldSocket else { return }

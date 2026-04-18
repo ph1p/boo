@@ -1,6 +1,6 @@
 import Cocoa
 
-class StatusBarView: NSView {
+@MainActor class StatusBarView: NSView {
     var currentDirectory: String = ""
     var paneCount: Int = 0
     var tabCount: Int = 0
@@ -20,7 +20,7 @@ class StatusBarView: NSView {
     var remoteSession: RemoteSessionType?
 
     var barHeight: CGFloat { DensityMetrics.current.statusBarHeight }
-    private var settingsObserver: Any?
+    nonisolated(unsafe) private var settingsObserver: Any?
 
     // Git state (shared with GitBranchSegment)
     var gitBranch: String?
