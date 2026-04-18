@@ -91,7 +91,7 @@ ironmark:
 	@if [ ! -f Vendor/ironmark/macos-arm64/libironmark.a ]; then \
 		echo "==> Building ironmark..."; \
 		cd Vendor/ironmark && \
-			MACOSX_DEPLOYMENT_TARGET=13.0 RUSTFLAGS="-C link-arg=-mmacosx-version-min=13.0" \
+			MACOSX_DEPLOYMENT_TARGET=15.0 RUSTFLAGS="-C link-arg=-mmacosx-version-min=15.0" \
 			cargo build --release --target aarch64-apple-darwin && \
 			mkdir -p macos-arm64 && \
 			cp target/aarch64-apple-darwin/release/libironmark.a macos-arm64/; \

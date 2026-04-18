@@ -1,4 +1,4 @@
-// swift-tools-version: 5.9
+// swift-tools-version: 6.3
 import PackageDescription
 
 let booDeps: [Target.Dependency] = [
@@ -80,7 +80,7 @@ let allTargets: [Target] = [
 let package = Package(
     name: "Boo",
     platforms: [
-        .macOS(.v13)
+        .macOS(.v15)
     ],
     dependencies: [],
     targets: allTargets
