@@ -275,7 +275,7 @@ private func ghosttyCloseSurface(_ userdata: UnsafeMutableRawPointer?, _ process
     /// Find Ghostty's resources directory so shell integration (OSC 7) works.
     /// Looks for bundled resources in the app bundle first, then next to the
     /// executable (standalone), then falls back to the Vendor directory (development).
-    static func resolveResourcesDir(
+    nonisolated static func resolveResourcesDir(
         execPath: String?,
         bundleResourcePath: String?,
         fileExists: (String) -> Bool = { FileManager.default.fileExists(atPath: $0) }
@@ -367,8 +367,10 @@ private func ghosttyCloseSurface(_ userdata: UnsafeMutableRawPointer?, _ process
             // Add to .common modes so the timer fires during event tracking
             // (resize, scroll) and modal panels, not just the default mode.
             let timer = Timer(timeInterval: 1.0 / 30.0, repeats: true) { [weak self] _ in
-                guard let app = self?.app else { return }
-                ghostty_app_tick(app)
+                MainActor.assumeIsolated {
+                    guard let app = self?.app else { return }
+                    ghostty_app_tick(app)
+                }
             }
             RunLoop.main.add(timer, forMode: .common)
             tickTimer = timer
@@ -378,7 +380,7 @@ private func ghosttyCloseSurface(_ userdata: UnsafeMutableRawPointer?, _ process
         settingsObserver = NotificationCenter.default.addObserver(
             forName: .settingsChanged, object: nil, queue: .main
         ) { [weak self] _ in
-            self?.reloadConfig()
+            MainActor.assumeIsolated { self?.reloadConfig() }
         }
     }
 

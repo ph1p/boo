@@ -1255,7 +1255,9 @@ final class ClaudeCodePlugin: BooPluginProtocol {
     }
 
     func updateClaudeSetting(key: String, value: Any) {
+        nonisolated(unsafe) let capturedValue = value
         DispatchQueue.global(qos: .utility).async { [weak self] in
+        let value = capturedValue
             let fm = FileManager.default
             let path = ClaudeSettings.settingsPath
 

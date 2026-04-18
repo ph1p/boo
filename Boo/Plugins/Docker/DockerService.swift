@@ -4,7 +4,7 @@ import Foundation
 /// Manages Docker container discovery and lifecycle via the Docker Engine API
 /// over the Unix domain socket (`docker.sock`).
 final class DockerService: ObservableObject, @unchecked Sendable {
-    nonisolated(unsafe) static let shared = DockerService()
+    static let shared = DockerService()
 
     struct Container: Identifiable, Equatable {
         let id: String

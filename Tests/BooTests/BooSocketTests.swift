@@ -357,7 +357,7 @@ final class BooSocketPluginHandlerTests: BooSocketIntegrationTestCase {
     }
 
     func testCustomPluginHandler() throws {
-        var received: [String: Any]?
+        nonisolated(unsafe) var received: [String: Any]?
         BooSocketServer.shared.registerHandler(namespace: "myplugin") { json in
             received = json
             return ["ok": true, "echo": json["data"] ?? "none"]
@@ -375,8 +375,8 @@ final class BooSocketPluginHandlerTests: BooSocketIntegrationTestCase {
     }
 
     func testNamespacedCommandRouting() throws {
-        var gitHandled = false
-        var dockerHandled = false
+        nonisolated(unsafe) var gitHandled = false
+        nonisolated(unsafe) var dockerHandled = false
 
         BooSocketServer.shared.registerHandler(namespace: "git") { _ in
             gitHandled = true

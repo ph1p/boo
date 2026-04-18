@@ -4,7 +4,7 @@ import Foundation
 /// Enables the remote file tree to multiplex commands over a persistent connection
 /// without requiring ControlMaster in the user's ~/.ssh/config.
 final class SSHControlManager: @unchecked Sendable {
-    nonisolated(unsafe) static let shared = SSHControlManager()
+    static let shared = SSHControlManager()
 
     enum ConnectionState {
         case connecting

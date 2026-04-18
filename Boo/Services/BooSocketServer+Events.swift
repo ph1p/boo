@@ -26,9 +26,10 @@ extension BooSocketServer {
 
     /// Broadcast an event from any thread — dispatches to the socket queue.
     func emitEvent(name: String, data: [String: Any]) {
+        nonisolated(unsafe) let sendableData = data
         queue.async { [self] in
             guard !subscriptions.isEmpty else { return }
-            broadcastEvent(name: name, data: data)
+            broadcastEvent(name: name, data: sendableData)
         }
     }
 

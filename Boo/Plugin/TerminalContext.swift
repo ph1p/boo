@@ -30,7 +30,7 @@ struct TerminalContext: Equatable, @unchecked Sendable {
     }
 
     /// Empty context used as a default before any terminal state is available.
-    nonisolated(unsafe) static let empty = TerminalContext(
+    static let empty = TerminalContext(
         terminalID: UUID(),
         cwd: "",
         remoteSession: nil,

@@ -24,7 +24,7 @@ private struct MockPluginContent: View {
     }
 }
 
-private var sectionGenCounter: UInt64 = 0
+nonisolated(unsafe) private var sectionGenCounter: UInt64 = 0
 private func makeSection(id: String, name: String = "Test") -> SidebarSection {
     sectionGenCounter += 1
     return SidebarSection(
@@ -67,7 +67,7 @@ private func mouseDownEvent(for window: NSWindow) -> NSEvent {
     )!
 }
 
-final class SidebarLayoutTests: XCTestCase {
+@MainActor final class SidebarLayoutTests: XCTestCase {
 
     // MARK: - Adding Panels
 

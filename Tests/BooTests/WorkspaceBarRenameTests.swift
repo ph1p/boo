@@ -25,7 +25,7 @@ private class SpyDelegate: WorkspaceBarViewDelegate {
 
 // MARK: - Tests
 
-final class WorkspaceBarRenameTests: XCTestCase {
+@MainActor final class WorkspaceBarRenameTests: XCTestCase {
 
     private var bar: WorkspaceBarView!
     private var spy: SpyDelegate!
@@ -171,7 +171,7 @@ private class ToolbarSpyDelegate: ToolbarViewDelegate {
 
 // MARK: - ToolbarView rename tests (top/horizontal workspace bar)
 
-final class ToolbarViewRenameTests: XCTestCase {
+@MainActor final class ToolbarViewRenameTests: XCTestCase {
 
     private var toolbar: ToolbarView!
     private var spy: ToolbarSpyDelegate!

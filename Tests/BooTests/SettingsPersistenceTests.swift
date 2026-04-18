@@ -36,7 +36,7 @@ final class SettingsPersistenceTests: XCTestCase {
         XCTAssertEqual(json?["fontSize"] as? Double, 16.0)
     }
 
-    func testGhosttyConfigFileCreated() {
+    @MainActor func testGhosttyConfigFileCreated() {
         // GhosttyRuntime writes config on init
         _ = GhosttyRuntime.shared
 
@@ -46,7 +46,7 @@ final class SettingsPersistenceTests: XCTestCase {
             "ghostty.conf should exist after runtime init")
     }
 
-    func testGhosttyConfigContainsFont() {
+    @MainActor func testGhosttyConfigContainsFont() {
         _ = GhosttyRuntime.shared
 
         let path = BooPaths.ghosttyConfigFile

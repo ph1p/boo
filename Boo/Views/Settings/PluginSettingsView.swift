@@ -197,7 +197,7 @@ private struct PluginRow: View {
                 Toggle("", isOn: $isEnabled)
                     .toggleStyle(.switch)
                     .controlSize(.small)
-                    .onChange(of: isEnabled) { enabled in
+                    .onChange(of: isEnabled) { _, enabled in
                         var disabled = AppSettings.shared.disabledPluginIDs
                         if enabled {
                             disabled.removeAll { $0 == manifest.id }
