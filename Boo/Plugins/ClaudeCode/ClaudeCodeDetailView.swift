@@ -46,12 +46,12 @@ struct ClaudeSessionsView: View {
                     if let slug = session.slug {
                         Text(slug)
                             .font(fontScale.font(.base).weight(.medium))
-                            .foregroundColor(session.isActive ? .green : accentColor)
+                            .foregroundStyle(session.isActive ? .green : accentColor)
                             .lineLimit(1)
                     } else {
                         Text(String(session.id.prefix(8)))
                             .font(fontScale.font(.base, design: .monospaced))
-                            .foregroundColor(session.isActive ? .green : accentColor)
+                            .foregroundStyle(session.isActive ? .green : accentColor)
                             .lineLimit(1)
                     }
 
@@ -60,13 +60,13 @@ struct ClaudeSessionsView: View {
                     // Relative time
                     Text(formatAgentRelativeDate(session.lastActivity ?? session.timestamp))
                         .font(fontScale.font(.xs))
-                        .foregroundColor(mutedColor)
+                        .foregroundStyle(mutedColor)
                 }
 
                 if !session.firstMessage.isEmpty {
                     Text(session.firstMessage)
                         .font(fontScale.font(.sm))
-                        .foregroundColor(mutedColor)
+                        .foregroundStyle(mutedColor)
                         .lineLimit(2)
                         .truncationMode(.tail)
                 }
@@ -80,7 +80,7 @@ struct ClaudeSessionsView: View {
                             Text("\(session.messageCount)")
                         }
                         .font(fontScale.font(.xs))
-                        .foregroundColor(mutedColor.opacity(0.7))
+                        .foregroundStyle(mutedColor.opacity(0.7))
                     }
 
                     if session.totalTokens > 0 {
@@ -90,7 +90,7 @@ struct ClaudeSessionsView: View {
                             Text(formatTokenCount(session.totalTokens))
                         }
                         .font(fontScale.font(.xs))
-                        .foregroundColor(mutedColor.opacity(0.7))
+                        .foregroundStyle(mutedColor.opacity(0.7))
                     }
 
                     Spacer()
@@ -156,12 +156,12 @@ struct ClaudeConfigView: View {
             HStack(spacing: 6) {
                 Image(systemName: file.icon)
                     .font(fontScale.font(.sm))
-                    .foregroundColor(file.scope == "global" ? mutedColor : accentColor)
+                    .foregroundStyle(file.scope == "global" ? mutedColor : accentColor)
                     .frame(width: 14)
 
                 Text(file.name)
                     .font(fontScale.font(.base))
-                    .foregroundColor(textColor)
+                    .foregroundStyle(textColor)
                     .lineLimit(1)
 
                 Spacer()
@@ -169,7 +169,7 @@ struct ClaudeConfigView: View {
                 if file.scope == "global" {
                     Text("global")
                         .font(fontScale.font(.xs).weight(.medium))
-                        .foregroundColor(mutedColor.opacity(0.7))
+                        .foregroundStyle(mutedColor.opacity(0.7))
                         .padding(.horizontal, 4)
                         .padding(.vertical, 1)
                         .background(
@@ -215,14 +215,14 @@ struct ClaudeHooksView: View {
                 HStack(spacing: 6) {
                     Text(hook.event)
                         .font(fontScale.font(.sm, design: .monospaced).weight(.medium))
-                        .foregroundColor(accentColor)
+                        .foregroundStyle(accentColor)
                         .lineLimit(1)
 
                     Spacer()
 
                     Text(hook.command)
                         .font(fontScale.font(.sm, design: .monospaced))
-                        .foregroundColor(mutedColor)
+                        .foregroundStyle(mutedColor)
                         .lineLimit(1)
                         .truncationMode(.middle)
                 }
@@ -252,7 +252,7 @@ struct ClaudeMCPView: View {
 
                     Text(server)
                         .font(fontScale.font(.base, design: .monospaced))
-                        .foregroundColor(textColor)
+                        .foregroundStyle(textColor)
                         .lineLimit(1)
 
                     Spacer()
@@ -294,13 +294,13 @@ struct ClaudeSkillsView: View {
             HStack(spacing: 6) {
                 Text("/\(skill.name)")
                     .font(fontScale.font(.base).weight(.medium))
-                    .foregroundColor(accentColor)
+                    .foregroundStyle(accentColor)
                     .lineLimit(1)
 
                 if !skill.description.isEmpty {
                     Text(skill.description)
                         .font(fontScale.font(.sm))
-                        .foregroundColor(mutedColor)
+                        .foregroundStyle(mutedColor)
                         .lineLimit(1)
                         .truncationMode(.tail)
                 }
@@ -353,16 +353,16 @@ struct ClaudeChangesView: View {
                 HStack(spacing: 2) {
                     Text("+\(entry.insertions)")
                         .font(fontScale.font(.xs, design: .monospaced))
-                        .foregroundColor(Color(nsColor: .systemGreen))
+                        .foregroundStyle(Color(nsColor: .systemGreen))
                     Text("-\(entry.deletions)")
                         .font(fontScale.font(.xs, design: .monospaced))
-                        .foregroundColor(Color(nsColor: .systemRed))
+                        .foregroundStyle(Color(nsColor: .systemRed))
                 }
                 .frame(width: 56, alignment: .leading)
 
                 Text(entry.path)
                     .font(fontScale.font(.base))
-                    .foregroundColor(textColor)
+                    .foregroundStyle(textColor)
                     .lineLimit(1)
                     .truncationMode(.middle)
 
@@ -409,14 +409,14 @@ struct ClaudeActiveSessionView: View {
 
                 Text("Claude Code")
                     .font(fontScale.font(.base).weight(.medium))
-                    .foregroundColor(textColor)
+                    .foregroundStyle(textColor)
 
                 Spacer()
 
                 if let start = agentStartTime {
                     Text(formatAgentRuntime(Date().timeIntervalSince(start)))
                         .font(fontScale.font(.sm, design: .monospaced))
-                        .foregroundColor(mutedColor)
+                        .foregroundStyle(mutedColor)
                 }
             }
 
@@ -427,16 +427,16 @@ struct ClaudeActiveSessionView: View {
                     HStack(spacing: 6) {
                         Image(systemName: "bubble.left.and.bubble.right")
                             .font(.system(size: 10))
-                            .foregroundColor(mutedColor)
+                            .foregroundStyle(mutedColor)
 
                         if let slug = session.slug {
                             Text(slug)
                                 .font(fontScale.font(.sm).weight(.medium))
-                                .foregroundColor(accentColor)
+                                .foregroundStyle(accentColor)
                         } else {
                             Text(String(session.id.prefix(8)))
                                 .font(fontScale.font(.sm, design: .monospaced))
-                                .foregroundColor(accentColor)
+                                .foregroundStyle(accentColor)
                         }
                     }
 
@@ -444,7 +444,7 @@ struct ClaudeActiveSessionView: View {
                     if !session.firstMessage.isEmpty {
                         Text(session.firstMessage)
                             .font(fontScale.font(.xs))
-                            .foregroundColor(mutedColor)
+                            .foregroundStyle(mutedColor)
                             .lineLimit(2)
                     }
 
@@ -457,7 +457,7 @@ struct ClaudeActiveSessionView: View {
                                 Text("\(session.messageCount)")
                             }
                             .font(fontScale.font(.xs))
-                            .foregroundColor(mutedColor.opacity(0.8))
+                            .foregroundStyle(mutedColor.opacity(0.8))
                         }
 
                         if session.totalTokens > 0 {
@@ -467,7 +467,7 @@ struct ClaudeActiveSessionView: View {
                                 Text(formatTokenCount(session.totalTokens))
                             }
                             .font(fontScale.font(.xs))
-                            .foregroundColor(mutedColor.opacity(0.8))
+                            .foregroundStyle(mutedColor.opacity(0.8))
                         }
 
                         if !diffStats.isEmpty {
@@ -478,12 +478,12 @@ struct ClaudeActiveSessionView: View {
                                     .font(.system(size: 9))
                                 Text("\(diffStats.count)")
                                 Text("+\(ins)")
-                                    .foregroundColor(Color(nsColor: .systemGreen))
+                                    .foregroundStyle(Color(nsColor: .systemGreen))
                                 Text("-\(del)")
-                                    .foregroundColor(Color(nsColor: .systemRed))
+                                    .foregroundStyle(Color(nsColor: .systemRed))
                             }
                             .font(fontScale.font(.xs, design: .monospaced))
-                            .foregroundColor(mutedColor.opacity(0.8))
+                            .foregroundStyle(mutedColor.opacity(0.8))
                         }
                     }
                 }
@@ -493,10 +493,10 @@ struct ClaudeActiveSessionView: View {
                 HStack(spacing: 6) {
                     Image(systemName: "bubble.left.and.bubble.right")
                         .font(.system(size: 10))
-                        .foregroundColor(mutedColor)
+                        .foregroundStyle(mutedColor)
                     Text(String(sessionID.prefix(8)))
                         .font(fontScale.font(.sm, design: .monospaced))
-                        .foregroundColor(mutedColor)
+                        .foregroundStyle(mutedColor)
                 }
                 .padding(.leading, 16)
             }
@@ -527,7 +527,7 @@ struct ClaudeSettingsView: View {
                 content: AnyView(
                     Text(settings.modelDisplayName)
                         .font(fontScale.font(.sm, design: .monospaced))
-                        .foregroundColor(accentColor)
+                        .foregroundStyle(accentColor)
                 )
             )
 
@@ -594,7 +594,7 @@ struct ClaudeSettingsView: View {
                     content: AnyView(
                         Text("\(settings.enabledPlugins.count) enabled")
                             .font(fontScale.font(.sm))
-                            .foregroundColor(mutedColor)
+                            .foregroundStyle(mutedColor)
                     )
                 )
             }
@@ -607,7 +607,7 @@ struct ClaudeSettingsView: View {
                     Text("Open settings.json")
                         .font(fontScale.font(.sm))
                 }
-                .foregroundColor(accentColor)
+                .foregroundStyle(accentColor)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
@@ -620,12 +620,12 @@ struct ClaudeSettingsView: View {
         HStack(spacing: 8) {
             Image(systemName: icon)
                 .font(.system(size: 11))
-                .foregroundColor(mutedColor)
+                .foregroundStyle(mutedColor)
                 .frame(width: 16)
 
             Text(label)
                 .font(fontScale.font(.base))
-                .foregroundColor(textColor)
+                .foregroundStyle(textColor)
 
             Spacer()
 
@@ -665,11 +665,11 @@ struct ClaudeWorktreesView: View {
                 HStack(spacing: 6) {
                     Image(systemName: "arrow.triangle.branch")
                         .font(fontScale.font(.sm))
-                        .foregroundColor(accentColor)
+                        .foregroundStyle(accentColor)
 
                     Text(worktree.id)
                         .font(fontScale.font(.base).weight(.medium))
-                        .foregroundColor(accentColor)
+                        .foregroundStyle(accentColor)
                         .lineLimit(1)
 
                     Spacer()
@@ -677,7 +677,7 @@ struct ClaudeWorktreesView: View {
                     if let created = worktree.created {
                         Text(formatAgentRelativeDate(created))
                             .font(fontScale.font(.xs))
-                            .foregroundColor(mutedColor)
+                            .foregroundStyle(mutedColor)
                     }
                 }
 
@@ -689,7 +689,7 @@ struct ClaudeWorktreesView: View {
                             .lineLimit(1)
                     }
                     .font(fontScale.font(.xs, design: .monospaced))
-                    .foregroundColor(mutedColor.opacity(0.8))
+                    .foregroundStyle(mutedColor.opacity(0.8))
 
                     if let head = worktree.headCommit {
                         HStack(spacing: 2) {
@@ -698,7 +698,7 @@ struct ClaudeWorktreesView: View {
                             Text(head)
                         }
                         .font(fontScale.font(.xs, design: .monospaced))
-                        .foregroundColor(mutedColor.opacity(0.7))
+                        .foregroundStyle(mutedColor.opacity(0.7))
                     }
 
                     Spacer()

@@ -6,13 +6,15 @@ import XCTest
 final class AutoUpdaterTests: XCTestCase {
     private var tempDirectories: [URL] = []
 
-    override func tearDown() {
-        AutoUpdater.resetInstallHooksForTesting()
-        for url in tempDirectories {
-            try? FileManager.default.removeItem(at: url)
+    override func tearDown() async throws {
+        await MainActor.run {
+            AutoUpdater.resetInstallHooksForTesting()
+            for url in tempDirectories {
+                try? FileManager.default.removeItem(at: url)
+            }
+            tempDirectories.removeAll()
         }
-        tempDirectories.removeAll()
-        super.tearDown()
+        try await super.tearDown()
     }
 
     func testBuildReplacementScriptStagesReplacementBeforeSwappingCurrentApp() {

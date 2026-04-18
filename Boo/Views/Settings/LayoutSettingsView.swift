@@ -4,9 +4,10 @@ import SwiftUI
 
 enum LayoutSettingsBindings {
     static func binding<Value>(_ keyPath: ReferenceWritableKeyPath<AppSettings, Value>) -> Binding<Value> {
-        Binding(
-            get: { AppSettings.shared[keyPath: keyPath] },
-            set: { AppSettings.shared[keyPath: keyPath] = $0 }
+        nonisolated(unsafe) let kp = keyPath
+        return Binding(
+            get: { AppSettings.shared[keyPath: kp] },
+            set: { AppSettings.shared[keyPath: kp] = $0 }
         )
     }
 }
@@ -39,7 +40,7 @@ struct LayoutSettingsView: View {
                     "When on, the sidebar keeps its own state across all terminals — switching tabs or panes does not change the active plugin, expanded sections, or scroll position."
                 )
                 .font(.system(size: 11))
-                .foregroundColor(t.muted)
+                .foregroundStyle(t.muted)
                 ToggleRow(
                     label: "Remember width and visibility per workspace",
                     isOn: LayoutSettingsBindings.binding(\.sidebarPerWorkspaceState)
@@ -48,10 +49,10 @@ struct LayoutSettingsView: View {
                     "When on, each workspace keeps its own sidebar width and visibility. When off, all workspaces share one width and visibility state."
                 )
                 .font(.system(size: 11))
-                .foregroundColor(t.muted)
+                .foregroundStyle(t.muted)
                 Text("Toggle the sidebar with \u{2318}B.")
                     .font(.system(size: 11))
-                    .foregroundColor(t.muted)
+                    .foregroundStyle(t.muted)
             }
 
             Section(title: "Workspace Bar") {
@@ -61,7 +62,7 @@ struct LayoutSettingsView: View {
                 .pickerStyle(.segmented)
                 Text("Position of the workspace switcher bar.")
                     .font(.system(size: 11))
-                    .foregroundColor(t.muted)
+                    .foregroundStyle(t.muted)
             }
 
             Section(title: "Tab Overflow") {
@@ -71,9 +72,9 @@ struct LayoutSettingsView: View {
                 .pickerStyle(.segmented)
                 Text("How tabs behave when they exceed the available bar width.")
                     .font(.system(size: 11))
-                    .foregroundColor(t.muted)
+                    .foregroundStyle(t.muted)
             }
         }
-        .foregroundColor(t.text)
+        .foregroundStyle(t.text)
     }
 }

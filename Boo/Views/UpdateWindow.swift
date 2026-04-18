@@ -50,7 +50,7 @@ struct UpdateView: View {
                         .controlSize(.small)
                     Text("Checking for updates...")
                         .font(.subheadline)
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.secondary)
                 }
 
             case .available(let release, let changelog):
@@ -68,7 +68,7 @@ struct UpdateView: View {
                         .controlSize(.small)
                     Text("Installing update...")
                         .font(.subheadline)
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.secondary)
                 }
 
             case .error(let message):
@@ -78,10 +78,10 @@ struct UpdateView: View {
                 statusView {
                     Image(systemName: "checkmark.circle")
                         .font(.system(size: 20))
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.secondary)
                     Text("You're up to date.")
                         .font(.subheadline)
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.secondary)
                 }
             }
         }
@@ -102,14 +102,14 @@ struct UpdateView: View {
             HStack(spacing: 12) {
                 Image(systemName: "arrow.down.app.fill")
                     .font(.system(size: 28))
-                    .foregroundColor(.accentColor)
+                    .foregroundStyle(Color.accentColor)
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Boo \(release.version)")
                         .font(.headline)
                     Text("Current version: \(AutoUpdater.currentVersion)")
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.secondary)
                 }
 
                 Spacer()
@@ -121,7 +121,7 @@ struct UpdateView: View {
                     Text("Release Notes")
                         .font(.caption)
                         .fontWeight(.medium)
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.secondary)
                         .textCase(.uppercase)
 
                     MarkdownWebView(
@@ -183,7 +183,7 @@ struct UpdateView: View {
             HStack {
                 Text("\(Int(progress * 100))%")
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundStyle(.secondary)
                 Spacer()
                 Button("Cancel") {
                     updater.cancelDownload()
@@ -199,13 +199,13 @@ struct UpdateView: View {
         VStack(spacing: 12) {
             Image(systemName: "checkmark.circle.fill")
                 .font(.system(size: 28))
-                .foregroundColor(.green)
+                .foregroundStyle(.green)
             Text("Ready to install")
                 .font(.subheadline)
                 .fontWeight(.medium)
             Text("Boo will quit, install the update, and relaunch.")
                 .font(.caption)
-                .foregroundColor(.secondary)
+                .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
             Button("Install & Relaunch") {
                 updater.installAndRelaunch(dmgURL: dmgURL)
@@ -220,13 +220,13 @@ struct UpdateView: View {
         VStack(spacing: 12) {
             Image(systemName: "exclamationmark.triangle.fill")
                 .font(.system(size: 28))
-                .foregroundColor(.orange)
+                .foregroundStyle(.orange)
             Text("Update Error")
                 .font(.subheadline)
                 .fontWeight(.medium)
             Text(message)
                 .font(.caption)
-                .foregroundColor(.secondary)
+                .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
             Button("Dismiss") {
                 updater.dismiss()

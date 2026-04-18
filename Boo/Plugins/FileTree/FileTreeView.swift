@@ -291,7 +291,7 @@ struct FileTreeRowView: View {
             if node.isDirectory {
                 Image(systemName: node.isExpanded ? "chevron.down" : "chevron.right")
                     .font(.system(size: 9, weight: .semibold))
-                    .foregroundColor(style.mutedColor)
+                    .foregroundStyle(style.mutedColor)
                     .frame(width: 10)
             } else {
                 Spacer().frame(width: 10)
@@ -301,7 +301,7 @@ struct FileTreeRowView: View {
                 Image(systemName: node.isDirectory ? "folder.fill" : fileIcon(for: node.name))
                     .font(.system(size: style.fontSize))
                     .frame(width: 16, height: 16)
-                    .foregroundColor(node.isDirectory ? style.accentColor.opacity(0.8) : style.mutedColor)
+                    .foregroundStyle(node.isDirectory ? style.accentColor.opacity(0.8) : style.mutedColor)
             }
 
             if isRenaming {
@@ -313,7 +313,7 @@ struct FileTreeRowView: View {
             } else {
                 Text(node.name)
                     .font(style.font)
-                    .foregroundColor(style.textColor)
+                    .foregroundStyle(style.textColor)
                     .lineLimit(1)
             }
 
@@ -630,9 +630,9 @@ struct ParentDirectoryButton: View {
         HStack(spacing: 5) {
             Image(systemName: "arrowshape.turn.up.left.fill")
                 .font(.system(size: 9))
-                .foregroundColor(mutedColor)
+                .foregroundStyle(mutedColor)
                 .frame(width: 10)
-            Text("..").font(explorerFont).foregroundColor(mutedColor).lineLimit(1)
+            Text("..").font(explorerFont).foregroundStyle(mutedColor).lineLimit(1)
             Spacer()
         }
         .padding(.leading, 12)

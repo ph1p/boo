@@ -25,7 +25,7 @@ final class BooSocketWriteTests: XCTestCase {
 
         let payload = String(repeating: "x", count: 200_000)
         let receivedLine = expectation(description: "received full JSON line")
-        var received = Data()
+        nonisolated(unsafe) var received = Data()
 
         DispatchQueue.global(qos: .userInitiated).async {
             var buffer = [UInt8](repeating: 0, count: 2048)

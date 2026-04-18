@@ -63,6 +63,12 @@ final class SidebarController {
     /// Last intended visible width. This is the canonical width while hidden or restoring.
     private var intendedVisibleWidth: CGFloat?
 
+    /// When > 0, splitViewDidResizeSubviews should not overwrite workspace sidebar state.
+    var suppressSidebarStateSync: Int = 0
+
+    /// Incremented on each workspace activation; async callbacks check this to self-cancel if stale.
+    private var activationGeneration: UInt64 = 0
+
     // MARK: - Computed State Accessors
 
     /// Expanded plugin section IDs.
@@ -195,8 +201,9 @@ final class SidebarController {
     // MARK: - Visibility
 
     /// Capture current sidebar visibility and intended width into a SidebarWorkspaceState.
-    func captureLiveState() -> SidebarWorkspaceState {
-        let fallbackState = resolveEffectiveSidebarState()
+    func captureLiveState(for workspace: Workspace? = nil) -> SidebarWorkspaceState {
+        let targetWorkspace = workspace ?? windowController?.activeWorkspace
+        let fallbackState = resolveEffectiveSidebarState(for: targetWorkspace)
         let width: CGFloat = {
             if isVisible,
                 let renderedWidth = currentRenderedSidebarWidth()
@@ -204,10 +211,15 @@ final class SidebarController {
                 intendedVisibleWidth = renderedWidth
                 return renderedWidth
             }
-            return intendedVisibleWidth ?? fallbackState.width ?? AppSettings.shared.sidebarWidth
+            // When hidden, prefer the workspace's own stored width over intendedVisibleWidth,
+            // since intendedVisibleWidth may have been stomped by a different workspace's restore.
+            return fallbackState.width ?? intendedVisibleWidth ?? AppSettings.shared.sidebarWidth
         }()
-
-        return SidebarWorkspaceState(isVisible: isVisible, width: width)
+        let captured = SidebarWorkspaceState(isVisible: isVisible, width: width)
+        debugLog(
+            "[Sidebar] captureLiveState → visible=\(String(describing: captured.isVisible)), width=\(captured.width ?? -1), ws=\(targetWorkspace?.id.uuidString.prefix(8) ?? "nil"), suppress=\(suppressSidebarStateSync)"
+        )
+        return captured
     }
 
     /// Apply restored sidebar visibility and width without persisting transient layout state.
@@ -215,6 +227,9 @@ final class SidebarController {
         let resolvedState = resolvedRestoredState(from: state)
         let visible = resolvedState.isVisible ?? isVisible
         let width = resolvedState.width ?? intendedVisibleWidth ?? AppSettings.shared.sidebarWidth
+        debugLog(
+            "[Sidebar] applyRestoredState → visible=\(visible), width=\(width), ws=\(windowController?.activeWorkspace?.id.uuidString.prefix(8) ?? "nil")"
+        )
         intendedVisibleWidth = width
         isUserHidden = !visible
         setVisibility(visible, desiredWidth: width, userInitiated: false, persist: false)
@@ -229,6 +244,9 @@ final class SidebarController {
         }
         let desiredWidth =
             intendedVisibleWidth ?? resolveEffectiveSidebarState().width ?? AppSettings.shared.sidebarWidth
+        debugLog(
+            "[Sidebar] toggle userInitiated=\(userInitiated) isVisible=\(isVisible)→\(!isVisible) ws=\(windowController?.activeWorkspace?.id.uuidString.prefix(8) ?? "nil")"
+        )
         setVisibility(!isVisible, desiredWidth: desiredWidth, userInitiated: userInitiated, persist: true)
     }
 
@@ -248,14 +266,30 @@ final class SidebarController {
     }
 
     func syncWorkspaceSidebarState() {
+        guard suppressSidebarStateSync == 0 else {
+            debugLog("[Sidebar] syncWorkspaceSidebarState suppressed (suppress=\(suppressSidebarStateSync))")
+            return
+        }
         persistLiveState()
     }
 
-    func restoreActiveWorkspaceWidth() {
-        let state = resolveEffectiveSidebarState()
-        if state.isVisible ?? isVisible {
-            applyRestoredState(state)
+    /// Bump activation generation and return the new value. The async width-restore
+    /// callback captures this and no-ops if the generation has since advanced.
+    func beginActivation() -> UInt64 {
+        activationGeneration &+= 1
+        return activationGeneration
+    }
+
+    func restoreActiveWorkspaceWidth(ifGeneration gen: UInt64? = nil) {
+        if let gen, gen != activationGeneration {
+            debugLog("[Sidebar] restoreActiveWorkspaceWidth cancelled (stale gen \(gen) vs \(activationGeneration))")
+            return
         }
+        guard isVisible, let width = resolveEffectiveSidebarState().width else { return }
+        debugLog(
+            "[Sidebar] restoreActiveWorkspaceWidth applying width=\(width) ws=\(windowController?.activeWorkspace?.id.uuidString.prefix(8) ?? "nil")"
+        )
+        applySidebarWidth(width)
     }
 
     func resolveEffectiveSidebarState(for workspace: Workspace? = nil) -> SidebarWorkspaceState {
@@ -267,7 +301,7 @@ final class SidebarController {
 
     @discardableResult
     func persistLiveState(for workspace: Workspace? = nil) -> SidebarWorkspaceState {
-        let capturedState = captureLiveState()
+        let capturedState = captureLiveState(for: workspace)
         return persistResolvedState(capturedState, for: workspace)
     }
 
@@ -280,7 +314,11 @@ final class SidebarController {
 
         switch target {
         case .workspace:
-            (workspace ?? windowController?.activeWorkspace)?.sidebarState = state
+            let targetWS = workspace ?? windowController?.activeWorkspace
+            debugLog(
+                "[Sidebar] persistResolvedState → target=workspace ws=\(targetWS?.id.uuidString.prefix(8) ?? "nil") visible=\(String(describing: state.isVisible)), width=\(state.width ?? -1)"
+            )
+            targetWS?.sidebarState = state
         case .appSettings:
             let persistToSettings = { [state] in
                 if let isVisible = state.isVisible {

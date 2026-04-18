@@ -30,23 +30,27 @@ private class SpyDelegate: WorkspaceBarViewDelegate {
     private var bar: WorkspaceBarView!
     private var spy: SpyDelegate!
 
-    override func setUp() {
-        super.setUp()
-        spy = SpyDelegate()
-        bar = WorkspaceBarView(frame: NSRect(x: 0, y: 0, width: 400, height: 28))
-        bar.delegate = spy
+    override func setUp() async throws {
+        try await super.setUp()
+        await MainActor.run {
+            spy = SpyDelegate()
+            bar = WorkspaceBarView(frame: NSRect(x: 0, y: 0, width: 400, height: 28))
+            bar.delegate = spy
 
-        let items = [
-            WorkspaceBarView.Item(name: "alpha", path: "/tmp"),
-            WorkspaceBarView.Item(name: "beta", path: "/tmp/b")
-        ]
-        bar.setItems(items, selectedIndex: 0)
+            let items = [
+                WorkspaceBarView.Item(name: "alpha", path: "/tmp"),
+                WorkspaceBarView.Item(name: "beta", path: "/tmp/b")
+            ]
+            bar.setItems(items, selectedIndex: 0)
+        }
     }
 
-    override func tearDown() {
-        bar = nil
-        spy = nil
-        super.tearDown()
+    override func tearDown() async throws {
+        await MainActor.run {
+            bar = nil
+            spy = nil
+        }
+        try await super.tearDown()
     }
 
     // MARK: - Double-click routing
@@ -176,28 +180,32 @@ private class ToolbarSpyDelegate: ToolbarViewDelegate {
     private var toolbar: ToolbarView!
     private var spy: ToolbarSpyDelegate!
 
-    override func setUp() {
-        super.setUp()
-        spy = ToolbarSpyDelegate()
-        toolbar = ToolbarView(frame: NSRect(x: 0, y: 0, width: 600, height: 38))
-        toolbar.delegate = spy
+    override func setUp() async throws {
+        try await super.setUp()
+        await MainActor.run {
+            spy = ToolbarSpyDelegate()
+            toolbar = ToolbarView(frame: NSRect(x: 0, y: 0, width: 600, height: 38))
+            toolbar.delegate = spy
 
-        toolbar.update(
-            workspaces: [
-                ToolbarView.WorkspaceItem(
-                    name: "alpha", isActive: true, resolvedColor: nil, isPinned: false),
-                ToolbarView.WorkspaceItem(
-                    name: "beta", isActive: false, resolvedColor: nil, isPinned: false)
-            ],
-            tabs: [],
-            sidebarVisible: false
-        )
+            toolbar.update(
+                workspaces: [
+                    ToolbarView.WorkspaceItem(
+                        name: "alpha", isActive: true, resolvedColor: nil, isPinned: false),
+                    ToolbarView.WorkspaceItem(
+                        name: "beta", isActive: false, resolvedColor: nil, isPinned: false)
+                ],
+                tabs: [],
+                sidebarVisible: false
+            )
+        }
     }
 
-    override func tearDown() {
-        toolbar = nil
-        spy = nil
-        super.tearDown()
+    override func tearDown() async throws {
+        await MainActor.run {
+            toolbar = nil
+            spy = nil
+        }
+        try await super.tearDown()
     }
 
     // MARK: - Double-click routing

@@ -25,17 +25,17 @@ struct AppearanceSettingsView: View {
                 }
                 .labelsHidden()
                 .pickerStyle(.segmented)
-                .onChange(of: cursorStyle) { v in AppSettings.shared.cursorStyle = v }
+                .onChange(of: cursorStyle) { _, v in AppSettings.shared.cursorStyle = v }
             }
 
             Section(title: "Terminal Font") {
                 FontChooser(selectedFont: $termSelectedFont, fonts: monoFonts)
-                    .onChange(of: termSelectedFont) { v in AppSettings.shared.fontName = v }
+                    .onChange(of: termSelectedFont) { _, v in AppSettings.shared.fontName = v }
                 FontSizePicker(value: $termFontSize, range: 10...28)
-                    .onChange(of: termFontSize) { v in AppSettings.shared.fontSize = CGFloat(v) }
+                    .onChange(of: termFontSize) { _, v in AppSettings.shared.fontSize = CGFloat(v) }
                 Text("$ echo \"Hello, Boo\"")
                     .font(.custom(termSelectedFont, size: CGFloat(termFontSize)))
-                    .foregroundColor(t.fg)
+                    .foregroundStyle(t.fg)
                     .padding(8)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(RoundedRectangle(cornerRadius: 6).fill(t.termBg))
@@ -43,18 +43,18 @@ struct AppearanceSettingsView: View {
 
             Section(title: "Sidebar Font") {
                 FontChooser(selectedFont: $sidebarSelectedFont, fonts: systemFonts)
-                    .onChange(of: sidebarSelectedFont) { v in
+                    .onChange(of: sidebarSelectedFont) { _, v in
                         AppSettings.shared.sidebarFontName = v == "System Default" ? "" : v
                     }
                 FontSizePicker(value: $sidebarFontSize, range: 10...20)
-                    .onChange(of: sidebarFontSize) { v in AppSettings.shared.sidebarFontSize = CGFloat(v) }
+                    .onChange(of: sidebarFontSize) { _, v in AppSettings.shared.sidebarFontSize = CGFloat(v) }
                 Text("Applied to file trees and content only — not to section headers.")
                     .font(.system(size: 11))
-                    .foregroundColor(t.muted)
+                    .foregroundStyle(t.muted)
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Section Header")
                         .font(.system(size: 11, weight: .medium))
-                        .foregroundColor(t.muted)
+                        .foregroundStyle(t.muted)
                     let previewFont: Font = {
                         let name = sidebarSelectedFont == "System Default" ? "" : sidebarSelectedFont
                         if name.isEmpty { return .system(size: CGFloat(sidebarFontSize)) }
@@ -62,19 +62,19 @@ struct AppearanceSettingsView: View {
                     }()
                     Text("  Documents")
                         .font(previewFont)
-                        .foregroundColor(t.text)
+                        .foregroundStyle(t.text)
                     Text("  Projects")
                         .font(previewFont)
-                        .foregroundColor(t.text)
+                        .foregroundStyle(t.text)
                     Text("  README.md")
                         .font(previewFont)
-                        .foregroundColor(t.muted)
+                        .foregroundStyle(t.muted)
                 }
                 .padding(8)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(RoundedRectangle(cornerRadius: 6).fill(t.chromeBg))
             }
         }
-        .foregroundColor(t.text)
+        .foregroundStyle(t.text)
     }
 }

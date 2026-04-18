@@ -9,7 +9,7 @@ import Foundation
 /// 4. Tabs register/unregister and get assigned to specific PIDs.
 /// 5. When a tab registers, it gets the newest unassigned PID.
 /// 6. CWD changes for a tab's assigned PID are reported to that tab.
-final class ContainerCwdWatcher {
+final class ContainerCwdWatcher: @unchecked Sendable {
     /// One watcher per container target.
     private nonisolated(unsafe) static var watchers: [String: ContainerCwdWatcher] = [:]
     private static let lock = NSLock()
@@ -44,7 +44,7 @@ final class ContainerCwdWatcher {
 
     /// Tab registrations: paneID → (assignedPID, callback).
     /// Access only on watcherQueue.
-    private(set) var tabCallbacks: [UUID: (pid: String?, onChange: (String) -> Void)] = [:]
+    private(set) var tabCallbacks: [UUID: (pid: String?, onChange: @Sendable (String) -> Void)] = [:]
 
     /// Current PID→CWD map from the latest poll.
     private var pidCwdMap: [String: String] = [:]
@@ -57,7 +57,7 @@ final class ContainerCwdWatcher {
     }
 
     /// Register a tab to receive CWD updates. The tab gets the newest unassigned PID.
-    func registerTab(paneID: UUID, onChange: @escaping (String) -> Void) {
+    func registerTab(paneID: UUID, onChange: @escaping @Sendable (String) -> Void) {
         watcherQueue.async { [weak self] in
             guard let self else { return }
             let existingPID = self.tabCallbacks[paneID]?.pid
@@ -162,7 +162,7 @@ final class ContainerCwdWatcher {
                     if line == "---" {
                         // End of one poll cycle — process the batch on watcherQueue
                         let batch = currentBatch
-                        self?.watcherQueue.async { self?.processPollBatch(batch) }
+                        if let self { watcherQueue.async { self.processPollBatch(batch) } }
                         currentBatch = []
                     } else {
                         let parts = line.split(separator: " ", maxSplits: 1)

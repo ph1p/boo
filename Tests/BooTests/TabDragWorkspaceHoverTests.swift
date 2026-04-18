@@ -11,15 +11,19 @@ import XCTest
     private let hoverDelay: TimeInterval = 0.02
     private let hoverWindow: TimeInterval = 0.08
 
-    override func setUp() {
-        super.setUp()
-        coordinator = TabDragCoordinator()
-        coordinator.workspaceHoverDelay = hoverDelay
+    override func setUp() async throws {
+        try await super.setUp()
+        await MainActor.run {
+            coordinator = TabDragCoordinator()
+            coordinator.workspaceHoverDelay = hoverDelay
+        }
     }
 
-    override func tearDown() {
-        coordinator = nil
-        super.tearDown()
+    override func tearDown() async throws {
+        await MainActor.run {
+            coordinator = nil
+        }
+        try await super.tearDown()
     }
 
     private func waitForHoverWindow() {
@@ -28,6 +32,26 @@ import XCTest
             expectation.fulfill()
         }
         waitForExpectations(timeout: 0.2)
+    }
+
+    private func waitUntil(
+        timeout: TimeInterval = 0.3,
+        pollInterval: TimeInterval = 0.01,
+        _ predicate: @escaping @MainActor () -> Bool
+    ) {
+        let expectation = expectation(description: "condition")
+        let deadline = Date().addingTimeInterval(timeout)
+
+        func poll() {
+            if predicate() || Date() >= deadline {
+                expectation.fulfill()
+                return
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + pollInterval, execute: poll)
+        }
+
+        DispatchQueue.main.async(execute: poll)
+        waitForExpectations(timeout: timeout + 0.2)
     }
 
     // MARK: - workspacePillFrames callback
@@ -123,7 +147,7 @@ import XCTest
         coordinator.simulateHoverAt(screenPoint: NSPoint(x: 112, y: 19))
         coordinator.simulateHoverAt(screenPoint: NSPoint(x: 198, y: 19))
 
-        waitForHoverWindow()
+        waitUntil { firedIndexes.count == 1 }
 
         XCTAssertEqual(firedIndexes.count, 1, "Only the final pill should fire")
         XCTAssertEqual(firedIndexes.first, 1)

@@ -80,7 +80,8 @@ class ThemedSplitView: NSSplitView {
     }
 }
 
-@MainActor class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitViewDelegate, NSWindowDelegate {
+@MainActor class MainWindowController: NSWindowController, SplitContainerDelegate, NSSplitViewDelegate, NSWindowDelegate
+{
     let appState = AppState()
 
     let toolbar = ToolbarView(frame: .zero)
@@ -188,6 +189,11 @@ class ThemedSplitView: NSSplitView {
     var savedSidebarSectionOrder: [String: [String]] {
         get { coordinator?.sidebarSectionOrder ?? [:] }
         set { coordinator?.sidebarSectionOrder = newValue }
+    }
+
+    func cancelPendingSidebarStateSave() {
+        sidebarStateSaveTimer?.invalidate()
+        sidebarStateSaveTimer = nil
     }
 
     func performWhileIgnoringSidebarLayoutSettingsRefresh<T>(_ body: () -> T) -> T {
@@ -466,108 +472,105 @@ class ThemedSplitView: NSSplitView {
         settingsObserver = NotificationCenter.default.addObserver(
             forName: .settingsChanged, object: nil, queue: .main
         ) { [weak self] notification in
-            guard let self, self.window?.isVisible == true else { return }
-            let topic = (notification.userInfo?["topic"] as? String).flatMap(SettingsTopic.init(rawValue:))
+            let topicString = notification.userInfo?["topic"] as? String
+            MainActor.assumeIsolated {
+                guard let self, self.window?.isVisible == true else { return }
+                let topic = topicString.flatMap(SettingsTopic.init(rawValue:))
 
-            // Broadcast settings/theme changes to socket subscribers
-            if let t = topic {
-                BooSocketServer.shared.emitSettingsChanged(topic: t.rawValue)
-            }
+                // Broadcast settings/theme changes to socket subscribers
+                if let t = topic {
+                    BooSocketServer.shared.emitSettingsChanged(topic: t.rawValue)
+                }
 
-            // Theme changes: refresh chrome colors, pane backgrounds, sidebar, status bar
-            if topic == nil || topic == .theme {
-                MainActor.assumeIsolated { AppStore.shared.refreshTheme() }
-                let theme = AppSettings.shared.theme
-                BooSocketServer.shared.emitThemeChanged(name: theme.name, isDark: theme.isDark)
-                self.window?.backgroundColor = theme.chromeBg
-                self.window?.appearance = NSAppearance(named: theme.isDark ? .darkAqua : .aqua)
-                self.sidebarContainer.layer?.backgroundColor = theme.sidebarBg.cgColor
-                self.splitContainer.layer?.backgroundColor = theme.background.nsColor.cgColor
-                self.mainSplitView.needsDisplay = true
-                self.toolbar.needsDisplay = true
-                self.statusBar.needsDisplay = true
-                for (_, pv) in self.paneViews {
-                    pv.layer?.backgroundColor = theme.background.nsColor.cgColor
-                    pv.needsLayout = true
-                    pv.needsDisplay = true
-                }
-                // Rebuild plugin sidebar to pick up new theme
-                if let ctx = MainActor.assumeIsolated({ self.pluginRegistry.lastContext }) {
-                    self.cachedDetailViews.removeAll()
-                    self.rebuildSidebarTabs(context: ctx)
-                }
-            }
-
-            // Status bar changes
-            if topic == nil || topic == .statusBar {
-                self.statusBar.needsDisplay = true
-            }
-
-            // Layout changes: sidebar/workspace bar position, density
-            if topic == nil || topic == .layout {
-                if self.isIgnoringSidebarLayoutSettingsRefresh {
-                    return
-                }
-                self.statusBarHeightConstraint?.constant = DensityMetrics.current.statusBarHeight
-                self.statusBar.needsDisplay = true
-                let newSidebarPos = AppSettings.shared.sidebarPosition
-                if newSidebarPos != self.currentSidebarPosition {
-                    self.currentSidebarPosition = newSidebarPos
-                    MainActor.assumeIsolated {
-                        self.sidebarController.position = newSidebarPos
-                    }
-                    self.rebuildSidebarLayout()
-                }
-                let newWsBarPos = AppSettings.shared.workspaceBarPosition
-                if newWsBarPos != self.currentWorkspaceBarPosition {
-                    self.currentWorkspaceBarPosition = newWsBarPos
-                    self.rebuildWorkspaceBarLayout()
-                }
-                let newTabOverflow = AppSettings.shared.tabOverflowMode
-                if newTabOverflow != self.currentTabOverflowMode {
-                    self.currentTabOverflowMode = newTabOverflow
+                // Theme changes: refresh chrome colors, pane backgrounds, sidebar, status bar
+                if topic == nil || topic == .theme {
+                    AppStore.shared.refreshTheme()
+                    let theme = AppSettings.shared.theme
+                    BooSocketServer.shared.emitThemeChanged(name: theme.name, isDark: theme.isDark)
+                    self.window?.backgroundColor = theme.chromeBg
+                    self.window?.appearance = NSAppearance(named: theme.isDark ? .darkAqua : .aqua)
+                    self.sidebarContainer.layer?.backgroundColor = theme.sidebarBg.cgColor
+                    self.splitContainer.layer?.backgroundColor = theme.background.nsColor.cgColor
+                    self.mainSplitView.needsDisplay = true
+                    self.toolbar.needsDisplay = true
+                    self.statusBar.needsDisplay = true
                     for (_, pv) in self.paneViews {
+                        pv.layer?.backgroundColor = theme.background.nsColor.cgColor
                         pv.needsLayout = true
                         pv.needsDisplay = true
                     }
+                    // Rebuild plugin sidebar to pick up new theme
+                    if let ctx = self.pluginRegistry.lastContext {
+                        self.cachedDetailViews.removeAll()
+                        self.rebuildSidebarTabs(context: ctx)
+                    }
                 }
-                // Tab bar position changed — swap constraints and re-install content views
-                self.applySidebarTabBarPositionConstraints()
-                if let ctx = MainActor.assumeIsolated({ self.pluginRegistry.lastContext }) {
-                    self.cachedDetailViews.removeAll()
-                    self.removeAllPluginContent()
-                    self.rebuildSidebarTabs(context: ctx)
+
+                // Status bar changes
+                if topic == nil || topic == .statusBar {
+                    self.statusBar.needsDisplay = true
                 }
-                MainActor.assumeIsolated {
+
+                // Layout changes: sidebar/workspace bar position, density
+                if topic == nil || topic == .layout {
+                    if self.isIgnoringSidebarLayoutSettingsRefresh {
+                        return
+                    }
+                    self.statusBarHeightConstraint?.constant = DensityMetrics.current.statusBarHeight
+                    self.statusBar.needsDisplay = true
+                    let newSidebarPos = AppSettings.shared.sidebarPosition
+                    if newSidebarPos != self.currentSidebarPosition {
+                        self.currentSidebarPosition = newSidebarPos
+                        self.sidebarController.position = newSidebarPos
+                        self.rebuildSidebarLayout()
+                    }
+                    let newWsBarPos = AppSettings.shared.workspaceBarPosition
+                    if newWsBarPos != self.currentWorkspaceBarPosition {
+                        self.currentWorkspaceBarPosition = newWsBarPos
+                        self.rebuildWorkspaceBarLayout()
+                    }
+                    let newTabOverflow = AppSettings.shared.tabOverflowMode
+                    if newTabOverflow != self.currentTabOverflowMode {
+                        self.currentTabOverflowMode = newTabOverflow
+                        for (_, pv) in self.paneViews {
+                            pv.needsLayout = true
+                            pv.needsDisplay = true
+                        }
+                    }
+                    // Tab bar position changed — swap constraints and re-install content views
+                    self.applySidebarTabBarPositionConstraints()
+                    if let ctx = self.pluginRegistry.lastContext {
+                        self.cachedDetailViews.removeAll()
+                        self.removeAllPluginContent()
+                        self.rebuildSidebarTabs(context: ctx)
+                    }
                     self.sidebarController.persistLiveState()
                     self.sidebarController.applyRestoredState(self.sidebarController.resolveEffectiveSidebarState())
                 }
-            }
 
-            // Plugin changes: deactivate any now-disabled plugins and run a fresh cycle.
-            if topic == .plugins {
-                let disabled = AppSettings.shared.disabledPluginIDsSet
-                // Deactivate plugins that just got disabled
-                MainActor.assumeIsolated {
+                // Plugin changes: deactivate any now-disabled plugins and run a fresh cycle.
+                if topic == .plugins {
+                    let disabled = AppSettings.shared.disabledPluginIDsSet
+                    // Deactivate plugins that just got disabled
                     for plugin in self.pluginRegistry.plugins where disabled.contains(plugin.pluginID) {
                         self.pluginRegistry.deactivatePlugin(plugin.pluginID)
                         self.cachedDetailViews.removeValue(forKey: plugin.pluginID)
                     }
                     self.pluginRegistry.clearChangeDetection()
                 }
-            }
 
-            // Explorer/plugin/font changes: refresh sidebar
-            if topic == nil || topic == .explorer || topic == .sidebarFont || topic == .plugins {
-                if topic == .sidebarFont, let ctx = MainActor.assumeIsolated({ self.pluginRegistry.lastContext }) {
-                    if self.sidebarVisible {
-                        self.cachedDetailViews.removeAll()
-                        self.rebuildSidebarTabs(context: ctx)
+                // Explorer/plugin/font changes: refresh sidebar
+                if topic == nil || topic == .explorer || topic == .sidebarFont || topic == .plugins {
+                    if topic == .sidebarFont, let ctx = self.pluginRegistry.lastContext {
+                        if self.sidebarVisible {
+                            self.cachedDetailViews.removeAll()
+                            self.rebuildSidebarTabs(context: ctx)
+                        }
+                    } else {
+                        self.runPluginCycle(reason: .focusChanged)
                     }
-                } else {
-                    self.runPluginCycle(reason: .focusChanged)
                 }
-            }
+            }  // end MainActor.assumeIsolated
         }
 
         ghosttyActionObserver = NotificationCenter.default.addObserver(
@@ -588,7 +591,7 @@ class ThemedSplitView: NSSplitView {
             guard let self,
                 let url = notification.userInfo?["url"] as? URL
             else { return }
-            self.handleOpenTab(.browser(url: url))
+            MainActor.assumeIsolated { self.handleOpenTab(.browser(url: url)) }
         }
     }
 
@@ -680,7 +683,7 @@ class ThemedSplitView: NSSplitView {
             }
             self.splitRatioSaveTimer?.invalidate()
             self.splitRatioSaveTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: false) { [weak self] _ in
-                self?.saveSession()
+                MainActor.assumeIsolated { self?.saveSession() }
             }
         }
 
@@ -1164,7 +1167,7 @@ class ThemedSplitView: NSSplitView {
 
         sidebarStateSaveTimer?.invalidate()
         sidebarStateSaveTimer = Timer.scheduledTimer(withTimeInterval: 0.2, repeats: false) { [weak self] _ in
-            self?.saveSession()
+            MainActor.assumeIsolated { self?.saveSession() }
         }
     }
 

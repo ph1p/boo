@@ -76,16 +76,16 @@ struct ShortcutsSettingsView: View {
             HStack(spacing: 6) {
                 Image(systemName: "magnifyingglass")
                     .font(.system(size: 11))
-                    .foregroundColor(t.muted)
+                    .foregroundStyle(t.muted)
                 TextField("Filter shortcuts", text: $searchText)
                     .font(.system(size: 12))
                     .textFieldStyle(.plain)
-                    .foregroundColor(t.text)
+                    .foregroundStyle(t.text)
                 if !searchText.isEmpty {
                     Button(action: { searchText = "" }) {
                         Image(systemName: "xmark.circle.fill")
                             .font(.system(size: 11))
-                            .foregroundColor(t.muted)
+                            .foregroundStyle(t.muted)
                     }
                     .buttonStyle(.plain)
                 }
@@ -101,7 +101,7 @@ struct ShortcutsSettingsView: View {
             if filteredGroups.isEmpty {
                 Text("No shortcuts matching \"\(searchText)\"")
                     .font(.system(size: 12))
-                    .foregroundColor(t.muted)
+                    .foregroundStyle(t.muted)
                     .frame(maxWidth: .infinity, alignment: .center)
                     .padding(.top, 24)
             } else {
@@ -116,16 +116,16 @@ struct ShortcutsSettingsView: View {
         VStack(alignment: .leading, spacing: 6) {
             Text(title)
                 .font(.system(size: 11, weight: .medium))
-                .foregroundColor(t.muted)
+                .foregroundStyle(t.muted)
             ForEach(items, id: \.0) { item in
                 HStack {
                     Text(item.0)
                         .font(.system(size: 12))
-                        .foregroundColor(t.text)
+                        .foregroundStyle(t.text)
                     Spacer()
                     Text(item.1)
                         .font(.system(size: 11, design: .monospaced))
-                        .foregroundColor(t.accent)
+                        .foregroundStyle(t.accent)
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
                         .background(

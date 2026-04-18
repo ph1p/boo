@@ -17,7 +17,7 @@ struct SidebarSearchView: View {
                 Spacer()
                 Text(query.isEmpty ? "Type to search files" : "Search coming soon")
                     .font(.system(size: 11))
-                    .foregroundColor(Color(nsColor: AppSettings.shared.theme.chromeMuted).opacity(0.5))
+                    .foregroundStyle(Color(nsColor: AppSettings.shared.theme.chromeMuted).opacity(0.5))
                 Spacer()
             }
             Spacer()

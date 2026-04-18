@@ -454,7 +454,10 @@ private final class DownloadDelegate: NSObject, URLSessionDownloadDelegate {
     let onCompletion: @Sendable (URL?, Error?) -> Void
     let destinationURL: URL
 
-    init(destinationURL: URL, onProgress: @escaping @Sendable (Double) -> Void, completion: @escaping @Sendable (URL?, Error?) -> Void) {
+    init(
+        destinationURL: URL, onProgress: @escaping @Sendable (Double) -> Void,
+        completion: @escaping @Sendable (URL?, Error?) -> Void
+    ) {
         self.destinationURL = destinationURL
         self.onProgress = onProgress
         self.onCompletion = completion

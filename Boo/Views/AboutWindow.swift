@@ -44,11 +44,11 @@ struct AboutView: View {
 
             Text("Version \(AutoUpdater.currentVersion)")
                 .font(.subheadline)
-                .foregroundColor(.secondary)
+                .foregroundStyle(.secondary)
 
             Text("\u{00A9} 2025 Philip Stapelfeldt. All rights reserved.")
                 .font(.caption)
-                .foregroundColor(.secondary)
+                .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding()

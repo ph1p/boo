@@ -4,7 +4,7 @@ import Combine
 /// Composes and posts VoiceOver announcements when terminal focus changes.
 /// This is the accessibility equivalent of the visual sidebar transformation —
 /// screen reader users hear the context summary on every pane switch.
-final class ContextAnnouncementEngine {
+@MainActor final class ContextAnnouncementEngine {
     private var cancellables = Set<AnyCancellable>()
     private var debounceTimer: Timer?
     private let debounceInterval: TimeInterval = 0.2
@@ -29,7 +29,7 @@ final class ContextAnnouncementEngine {
     private func scheduleAnnouncement(for state: BridgeState) {
         debounceTimer?.invalidate()
         debounceTimer = Timer.scheduledTimer(withTimeInterval: debounceInterval, repeats: false) { [weak self] _ in
-            self?.announce(state: state)
+            MainActor.assumeIsolated { self?.announce(state: state) }
         }
     }
 
@@ -55,7 +55,7 @@ final class ContextAnnouncementEngine {
 
     /// Compose the announcement string from terminal state.
     /// Format: "{environment}, {path}, {git branch if present}"
-    static func composeAnnouncement(from state: BridgeState) -> String {
+    nonisolated static func composeAnnouncement(from state: BridgeState) -> String {
         var parts: [String] = []
 
         // Environment type
@@ -80,6 +80,6 @@ final class ContextAnnouncementEngine {
     }
 
     deinit {
-        debounceTimer?.invalidate()
+        MainActor.assumeIsolated { debounceTimer?.invalidate() }
     }
 }

@@ -565,15 +565,17 @@ final class SelectAllTextField: NSTextField {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            guard let self, let window = self.window else { return }
-            let fr = window.firstResponder
-            let fieldEditorOwnedByUs = (fr as? NSTextView)?.delegate as? NSTextField === self
-            if fr !== self && !fieldEditorOwnedByUs {
-                self.isFieldActive = false
-                self.onFocusLost?()
-                if let obs = self.focusObserver {
-                    NotificationCenter.default.removeObserver(obs)
-                    self.focusObserver = nil
+            MainActor.assumeIsolated {
+                guard let self, let window = self.window else { return }
+                let fr = window.firstResponder
+                let fieldEditorOwnedByUs = (fr as? NSTextView)?.delegate as? NSTextField === self
+                if fr !== self && !fieldEditorOwnedByUs {
+                    self.isFieldActive = false
+                    self.onFocusLost?()
+                    if let obs = self.focusObserver {
+                        NotificationCenter.default.removeObserver(obs)
+                        self.focusObserver = nil
+                    }
                 }
             }
         }

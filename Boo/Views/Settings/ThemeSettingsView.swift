@@ -23,17 +23,17 @@ struct ThemeSettingsView: View {
             HStack(spacing: 8) {
                 Image(systemName: "circle.lefthalf.filled")
                     .font(.system(size: 11))
-                    .foregroundColor(t.muted)
+                    .foregroundStyle(t.muted)
                 ToggleRow(label: "Match system dark/light mode", isOn: $autoTheme)
-                    .onChange(of: autoTheme) { v in AppSettings.shared.autoTheme = v }
+                    .onChange(of: autoTheme) { _, v in AppSettings.shared.autoTheme = v }
             }
 
             if autoTheme {
                 HStack(spacing: 12) {
                     variantPicker("Dark", icon: "moon.fill", selection: $darkTheme, options: darkThemes)
-                        .onChange(of: darkTheme) { v in AppSettings.shared.darkThemeName = v }
+                        .onChange(of: darkTheme) { _, v in AppSettings.shared.darkThemeName = v }
                     variantPicker("Light", icon: "sun.max.fill", selection: $lightTheme, options: lightThemes)
-                        .onChange(of: lightTheme) { v in AppSettings.shared.lightThemeName = v }
+                        .onChange(of: lightTheme) { _, v in AppSettings.shared.lightThemeName = v }
                 }
             } else {
                 Section(title: "Dark") { themeGrid(darkThemes, tokens: t) }
@@ -54,7 +54,7 @@ struct ThemeSettingsView: View {
                             Text("New Theme…")
                                 .font(.system(size: 12))
                         }
-                        .foregroundColor(t.accent)
+                        .foregroundStyle(t.accent)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 6)
                     }
@@ -86,8 +86,8 @@ struct ThemeSettingsView: View {
         let t = Tokens.current
         return VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 4) {
-                Image(systemName: icon).font(.system(size: 9)).foregroundColor(t.muted)
-                Text(label).font(.system(size: 10, weight: .medium)).foregroundColor(t.muted)
+                Image(systemName: icon).font(.system(size: 9)).foregroundStyle(t.muted)
+                Text(label).font(.system(size: 10, weight: .medium)).foregroundStyle(t.muted)
             }
             Picker("", selection: selection) {
                 ForEach(options, id: \.name) { Text($0.name).tag($0.name) }
@@ -133,7 +133,7 @@ struct ThemeRow: View {
 
             Text(theme.name)
                 .font(.system(size: 12, weight: active ? .semibold : .regular))
-                .foregroundColor(active ? t.text : t.muted)
+                .foregroundStyle(active ? t.text : t.muted)
 
             Spacer()
 
@@ -157,7 +157,7 @@ struct ThemeRow: View {
             if active {
                 Image(systemName: "checkmark")
                     .font(.system(size: 10, weight: .bold))
-                    .foregroundColor(t.accent)
+                    .foregroundStyle(t.accent)
             }
         }
         .padding(.horizontal, 8)
@@ -199,7 +199,7 @@ struct ThemeRow: View {
             Image(systemName: systemName)
                 .font(.system(size: 10))
                 .frame(width: 20, height: 20)
-                .foregroundColor(color)
+                .foregroundStyle(color)
                 .background(RoundedRectangle(cornerRadius: 4).fill(color.opacity(0.12)))
         }
         .buttonStyle(.plain)

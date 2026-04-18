@@ -27,12 +27,12 @@ struct BrowserSettingsView: View {
                 HStack(spacing: 8) {
                     Text("Home page")
                         .font(.system(size: 12))
-                        .foregroundColor(t.text)
+                        .foregroundStyle(t.text)
                         .frame(width: 80, alignment: .leading)
                     TextField("https://google.com", text: $homePage)
                         .textFieldStyle(.plain)
                         .font(.system(size: 12, design: .monospaced))
-                        .foregroundColor(t.text)
+                        .foregroundStyle(t.text)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 5)
                         .background(
@@ -40,27 +40,27 @@ struct BrowserSettingsView: View {
                                 .stroke(t.border, lineWidth: 1)
                         )
                         .onSubmit { save() }
-                        .onChange(of: homePage) { _ in save() }
+                        .onChange(of: homePage) { _, _ in save() }
                 }
                 Text("Opened when creating a new browser tab.")
                     .font(.system(size: 11))
-                    .foregroundColor(t.muted)
+                    .foregroundStyle(t.muted)
             }
 
             // MARK: History
             Section(title: "History") {
                 ToggleRow(label: "Save browsing history", isOn: $historyEnabled)
-                    .onChange(of: historyEnabled) { v in AppSettings.shared.browserHistoryEnabled = v }
+                    .onChange(of: historyEnabled) { _, v in AppSettings.shared.browserHistoryEnabled = v }
 
                 HStack(spacing: 8) {
                     Text("Keep up to")
                         .font(.system(size: 12))
-                        .foregroundColor(t.text)
+                        .foregroundStyle(t.text)
                     TextField("5000", value: $historyLimit, format: .number)
                         .textFieldStyle(.plain)
                         .font(.system(size: 12, design: .monospaced))
                         .multilineTextAlignment(.trailing)
-                        .foregroundColor(t.text)
+                        .foregroundStyle(t.text)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 4)
                         .frame(width: 70)
@@ -68,12 +68,12 @@ struct BrowserSettingsView: View {
                             RoundedRectangle(cornerRadius: 6)
                                 .stroke(t.border, lineWidth: 1)
                         )
-                        .onChange(of: historyLimit) { v in
+                        .onChange(of: historyLimit) { _, v in
                             AppSettings.shared.browserHistoryLimit = max(1, v)
                         }
                     Text("entries")
                         .font(.system(size: 12))
-                        .foregroundColor(t.text)
+                        .foregroundStyle(t.text)
                     Spacer()
                     Button("Clear All…") { showClearConfirm = true }
                         .buttonStyle(.bordered)
@@ -98,7 +98,7 @@ struct BrowserSettingsView: View {
                     TextField("Search history…", text: $searchText)
                         .textFieldStyle(.plain)
                         .font(.system(size: 12))
-                        .foregroundColor(t.text)
+                        .foregroundStyle(t.text)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 5)
                         .background(
@@ -109,7 +109,7 @@ struct BrowserSettingsView: View {
                     if filteredEntries.isEmpty {
                         Text(historyEntries.isEmpty ? "No history yet." : "No results.")
                             .font(.system(size: 12))
-                            .foregroundColor(t.muted)
+                            .foregroundStyle(t.muted)
                             .padding(.vertical, 4)
                     } else {
                         VStack(alignment: .leading, spacing: 0) {
@@ -132,13 +132,13 @@ struct BrowserSettingsView: View {
                         if filteredEntries.count > 200 {
                             Text("Showing 200 of \(filteredEntries.count) entries.")
                                 .font(.system(size: 11))
-                                .foregroundColor(t.muted)
+                                .foregroundStyle(t.muted)
                         }
                     }
                 }
             }
         }
-        .foregroundColor(t.text)
+        .foregroundStyle(t.text)
         .onAppear { loadHistory() }
         .onReceive(NotificationCenter.default.publisher(for: .browserHistoryChanged)) { _ in
             loadHistory()
@@ -168,25 +168,25 @@ private struct HistoryRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(entry.title)
                     .font(.system(size: 12))
-                    .foregroundColor(t.text)
+                    .foregroundStyle(t.text)
                     .lineLimit(1)
                 Text(entry.url.absoluteString)
                     .font(.system(size: 11, design: .monospaced))
-                    .foregroundColor(t.muted)
+                    .foregroundStyle(t.muted)
                     .lineLimit(1)
                     .truncationMode(.middle)
             }
             Spacer()
             Text(entry.visitedAt, style: .relative)
                 .font(.system(size: 10))
-                .foregroundColor(t.muted)
+                .foregroundStyle(t.muted)
             if isHovered {
                 Button {
                     onDelete()
                 } label: {
                     Image(systemName: "xmark")
                         .font(.system(size: 10, weight: .medium))
-                        .foregroundColor(t.muted)
+                        .foregroundStyle(t.muted)
                 }
                 .buttonStyle(.plain)
             }

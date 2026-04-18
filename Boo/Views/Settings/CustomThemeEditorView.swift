@@ -19,7 +19,7 @@ struct CustomThemeEditorView: View {
                 TextField("Theme name", text: $data.name)
                     .font(.system(size: 14, weight: .semibold))
                     .textFieldStyle(.plain)
-                    .foregroundColor(t.text)
+                    .foregroundStyle(t.text)
                 Spacer()
                 HStack(spacing: 0) {
                     Rectangle().fill(tc(preview.background)).frame(width: 18)
@@ -141,7 +141,7 @@ struct EditorSection<Content: View>: View {
         VStack(alignment: .leading, spacing: 6) {
             Text(title)
                 .font(.system(size: 9, weight: .semibold))
-                .foregroundColor(t.muted)
+                .foregroundStyle(t.muted)
                 .tracking(0.6)
                 .textCase(.uppercase)
             VStack(alignment: .leading, spacing: 4) { content() }
@@ -194,12 +194,12 @@ struct SwatchRow: View {
 
             Text(label)
                 .font(.system(size: 11))
-                .foregroundColor(t.muted)
+                .foregroundStyle(t.muted)
                 .frame(width: 88, alignment: .leading)
 
             TextField("", text: $draft)
                 .font(.system(size: 10, design: .monospaced))
-                .foregroundColor(hexFieldTextColor(fieldState, tokens: t))
+                .foregroundStyle(hexFieldTextColor(fieldState, tokens: t))
                 .frame(width: 64)
                 .padding(.horizontal, 5)
                 .padding(.vertical, 2)
@@ -218,7 +218,7 @@ struct SwatchRow: View {
                         )
                 )
                 .onAppear { draft = hex.uppercased() }
-                .onChange(of: hex) { newHex in
+                .onChange(of: hex) { _, newHex in
                     if !isEditing { draft = newHex.uppercased() }
                 }
                 .onSubmit { commitDraft() }
@@ -228,7 +228,7 @@ struct SwatchRow: View {
                     draft = hex.uppercased()
                 }
         }
-        .onChange(of: isEditing) { editing in
+        .onChange(of: isEditing) { _, editing in
             if !editing { commitDraft() }
         }
     }
@@ -285,7 +285,7 @@ struct ColorWell: NSViewRepresentable {
 
     func makeCoordinator() -> Coordinator { Coordinator(hex: $hex) }
 
-    final class Coordinator: NSObject {
+    @MainActor final class Coordinator: NSObject {
         var hex: Binding<String>
         init(hex: Binding<String>) { self.hex = hex }
         @objc func colorChanged(_ sender: NSColorWell) {

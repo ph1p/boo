@@ -20,15 +20,15 @@ struct StatusBarSettingsView: View {
             Section(title: "Built-in Segments") {
                 VStack(alignment: .leading, spacing: 8) {
                     ToggleRow(label: "Connection", isOn: $showConnection)
-                        .onChange(of: showConnection) { v in AppSettings.shared.statusBarShowConnection = v }
+                        .onChange(of: showConnection) { _, v in AppSettings.shared.statusBarShowConnection = v }
                     ToggleRow(label: "Current path", isOn: $showPath)
-                        .onChange(of: showPath) { v in
+                        .onChange(of: showPath) { _, v in
                             AppSettings.shared.setPluginSetting("file-tree-local", "showPath", v, topic: .statusBar)
                         }
                     ToggleRow(label: "Pane & tab count", isOn: $showPaneInfo)
-                        .onChange(of: showPaneInfo) { v in AppSettings.shared.statusBarShowPaneInfo = v }
+                        .onChange(of: showPaneInfo) { _, v in AppSettings.shared.statusBarShowPaneInfo = v }
                     ToggleRow(label: "Clock", isOn: $showTime)
-                        .onChange(of: showTime) { v in AppSettings.shared.statusBarShowTime = v }
+                        .onChange(of: showTime) { _, v in AppSettings.shared.statusBarShowTime = v }
                 }
             }
 
@@ -64,18 +64,18 @@ struct StatusBarSettingsView: View {
             HStack(spacing: 6) {
                 Image(systemName: manifest.icon)
                     .font(.system(size: 10))
-                    .foregroundColor(t.accent)
+                    .foregroundStyle(t.accent)
                     .frame(width: 14)
                 Text(manifest.name)
                     .font(.system(size: 11, weight: .semibold))
-                    .foregroundColor(t.text)
+                    .foregroundStyle(t.text)
             }
 
             if statusBarSettings.isEmpty {
                 HStack {
                     Text("Visible when active")
                         .font(.system(size: 11))
-                        .foregroundColor(t.muted)
+                        .foregroundStyle(t.muted)
                     Spacer()
                 }
                 .padding(.leading, 20)
@@ -127,11 +127,11 @@ struct StatusBarSettingsView: View {
             if let icon {
                 Image(systemName: icon)
                     .font(.system(size: 9))
-                    .foregroundColor(color)
+                    .foregroundStyle(color)
             }
             Text(label)
                 .font(.system(size: 10))
-                .foregroundColor(color)
+                .foregroundStyle(color)
         }
     }
 }

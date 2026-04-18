@@ -887,5 +887,5 @@ class PaneView: NSView {
         activeContentView = nil
     }
 
-    deinit { stopAll() }
+    deinit { MainActor.assumeIsolated { stopAll() } }
 }

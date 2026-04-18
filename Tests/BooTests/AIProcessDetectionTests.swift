@@ -19,43 +19,54 @@ final class AIProcessDetectionTests: XCTestCase {
     private let paneID = UUID()
     private let workspaceID = UUID()
 
-    override func setUp() {
-        super.setUp()
-        cancellables = []
-        bridge = TerminalBridge(paneID: paneID, workspaceID: workspaceID, workingDirectory: "/tmp")
-        registry = PluginRegistry()
-        debug = DebugPlugin()
-        registry.register(debug)
+    override func setUp() async throws {
+        try await super.setUp()
+        await MainActor.run {
+            cancellables = []
+            bridge = TerminalBridge(paneID: paneID, workspaceID: workspaceID, workingDirectory: "/tmp")
+            registry = PluginRegistry()
+            debug = DebugPlugin()
+            registry.register(debug)
 
-        nonisolated(unsafe) weak var weakSelf = self
-        bridge.events
-            .sink { event in
-                MainActor.assumeIsolated {
-                    guard let self = weakSelf else { return }
-                    let ctx = self.currentContext()
+            let bridge = bridge!
+            let registry = registry!
+            self.bridge.events
+                .receive(on: DispatchQueue.main)
+                .sink { event in
+                    let ctx = TerminalContext(
+                        terminalID: bridge.state.tabID,
+                        cwd: bridge.state.workingDirectory,
+                        remoteSession: bridge.state.remoteSession,
+                        gitContext: nil,
+                        processName: bridge.state.foregroundProcess,
+                        paneCount: 1,
+                        tabCount: 1
+                    )
                     switch event {
                     case .directoryChanged(let path):
-                        self.registry.notifyCwdChanged(newPath: path, context: ctx)
-                        self.registry.runCycle(baseContext: ctx, reason: .cwdChanged)
+                        registry.notifyCwdChanged(newPath: path, context: ctx)
+                        registry.runCycle(baseContext: ctx, reason: .cwdChanged)
                     case .processChanged(let name):
-                        self.registry.notifyProcessChanged(name: name, context: ctx)
-                        self.registry.runCycle(baseContext: ctx, reason: .processChanged)
+                        registry.notifyProcessChanged(name: name, context: ctx)
+                        registry.runCycle(baseContext: ctx, reason: .processChanged)
                     case .titleChanged:
-                        self.registry.runCycle(baseContext: ctx, reason: .titleChanged)
+                        registry.runCycle(baseContext: ctx, reason: .titleChanged)
                     default:
                         break
                     }
-                }
-            }.store(in: &cancellables)
+                }.store(in: &cancellables)
+        }
     }
 
-    override func tearDown() {
-        BooSocketServer.shared.processes.removeAll()
-        cancellables = nil
-        bridge = nil
-        registry = nil
-        debug = nil
-        super.tearDown()
+    override func tearDown() async throws {
+        await MainActor.run {
+            BooSocketServer.shared.processes.removeAll()
+            cancellables = nil
+            bridge = nil
+            registry = nil
+            debug = nil
+        }
+        try await super.tearDown()
     }
 
     private func currentContext() -> TerminalContext {
@@ -72,6 +83,26 @@ final class AIProcessDetectionTests: XCTestCase {
 
     private func processEvents() -> [DebugPlugin.LogEntry] {
         debug.entries.filter { $0.event == "processChanged" }
+    }
+
+    private func waitUntil(
+        timeout: TimeInterval = 1.0,
+        pollInterval: TimeInterval = 0.01,
+        _ predicate: @escaping @MainActor () -> Bool
+    ) {
+        let expectation = expectation(description: "condition")
+        let deadline = Date().addingTimeInterval(timeout)
+
+        func poll() {
+            if predicate() || Date() >= deadline {
+                expectation.fulfill()
+                return
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + pollInterval, execute: poll)
+        }
+
+        DispatchQueue.main.async(execute: poll)
+        waitForExpectations(timeout: timeout + 0.2)
     }
 
     // MARK: - extractProcessName: Path Rejection
@@ -290,6 +321,12 @@ final class AIProcessDetectionTests: XCTestCase {
         XCTAssertEqual(bridge.state.foregroundProcess, "")
 
         // Verify plugin log
+        waitUntil {
+            let procEvents = self.processEvents()
+            let starts = procEvents.filter { $0.detail.contains("name=claude") }
+            let clears = procEvents.filter { $0.detail.contains("name=(empty)") }
+            return !starts.isEmpty && !clears.isEmpty
+        }
         let procEvents = processEvents()
         let starts = procEvents.filter { $0.detail.contains("name=claude") }
         let clears = procEvents.filter { $0.detail.contains("name=(empty)") }

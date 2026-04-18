@@ -44,6 +44,7 @@ extension ContentViewProtocol {
 }
 
 /// Factory for creating content views based on content type.
+@MainActor
 enum ContentViewFactory {
     /// Create a content view for the given state.
     static func createView(for state: ContentState) -> ContentViewProtocol {
@@ -94,10 +95,10 @@ private struct PluginViewPlaceholder: View {
         VStack(spacing: 8) {
             Image(systemName: "puzzlepiece")
                 .font(.system(size: 32))
-                .foregroundColor(.secondary)
+                .foregroundStyle(.secondary)
             Text("Panel unavailable")
                 .font(.system(size: 13))
-                .foregroundColor(.secondary)
+                .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }

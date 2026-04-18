@@ -112,9 +112,13 @@ extension MainWindowController {
         appState.ensureUniquePaneIDsAcrossWorkspaces()
     }
 
-    func persistActiveWorkspaceSidebarState() {
-        activeWorkspace?.normalizePaneState()
-        sidebarController.persistLiveState()
+    func persistActiveWorkspaceSidebarState(for workspace: Workspace? = nil) {
+        let target = workspace ?? activeWorkspace
+        target?.normalizePaneState()
+        sidebarController.persistLiveState(for: target)
+        debugLog(
+            "[Sidebar] persistActiveWorkspaceSidebarState ws=\(target?.id.uuidString.prefix(8) ?? "nil") → sidebarState=\(String(describing: target?.sidebarState))"
+        )
     }
 
     /// Shared close-workspace logic used by both toolbar and workspace bar delegates.
@@ -203,12 +207,18 @@ extension MainWindowController {
     }
 
     func saveSession() {
+        cancelPendingSidebarStateSave()
         for paneView in paneViews.values {
             paneView.persistContentStateToModel()
         }
         normalizeWorkspaceState()
         persistActiveWorkspaceSidebarState()
         savePluginStateForActiveTab()
+        for (i, ws) in appState.workspaces.enumerated() {
+            debugLog(
+                "[Sidebar] saveSession ws[\(i)] id=\(ws.id.uuidString.prefix(8)) sidebarState=visible:\(String(describing: ws.sidebarState.isVisible)) width:\(ws.sidebarState.width ?? -1)"
+            )
+        }
         SessionStore.save(appState: appState)
     }
 
@@ -339,14 +349,15 @@ extension MainWindowController {
             }
         }
 
-        if activeWorkspace != nil {
-            persistActiveWorkspaceSidebarState()
+        appState.setActiveWorkspace(index)
+        guard let workspace = activeWorkspace else { return }
+
+        // Skip self-activation (startup restore): isVisible is uninitialized and would overwrite the loaded state.
+        if let prev = previousWorkspace, prev.id != workspace.id {
+            persistActiveWorkspaceSidebarState(for: prev)
         }
 
         savePluginStateForActiveTab()
-
-        appState.setActiveWorkspace(index)
-        guard let workspace = activeWorkspace else { return }
         workspace.normalizePaneState()
         debugLog(
             "[WorkspaceSwitch] activate fromWorkspace=\(previousWorkspace?.id.uuidString ?? "none") toWorkspace=\(workspace.id.uuidString) targetPane=\(workspace.activePaneID.uuidString)"
@@ -369,7 +380,13 @@ extension MainWindowController {
         let cwd = workspace.pane(for: workspace.activePaneID)?.activeTab?.workingDirectory ?? workspace.folderPath
         bridge.switchContext(paneID: workspace.activePaneID, workspaceID: workspace.id, workingDirectory: cwd)
 
-        sidebarController.applyRestoredState(sidebarController.resolveEffectiveSidebarState(for: workspace))
+        let restoredSidebarState = sidebarController.resolveEffectiveSidebarState(for: workspace)
+        debugLog(
+            "[Sidebar] activateWorkspace → resolvedState for ws=\(workspace.id.uuidString.prefix(8)) visible=\(String(describing: restoredSidebarState.isVisible)) width=\(restoredSidebarState.width ?? -1) storedState=\(String(describing: workspace.sidebarState))"
+        )
+        sidebarController.suppressSidebarStateSync += 1
+        let activationGen = sidebarController.beginActivation()
+        sidebarController.applyRestoredState(restoredSidebarState)
 
         refreshToolbar()
         // isRemoteSidebar/activeRemoteSession are now derived from bridge state,
@@ -379,15 +396,17 @@ extension MainWindowController {
         // Rebuild split container with the workspace's tree
         renderedWorkspaceID = workspace.id
         splitContainer.update(tree: workspace.splitTree)
+        sidebarController.suppressSidebarStateSync -= 1
 
         DispatchQueue.main.async { [weak self] in
             guard let self, let ws = self.activeWorkspace else { return }
+            // splitContainer.update can reset the divider; re-apply after layout settles.
+            debugLog(
+                "[Sidebar] async restoreActiveWorkspaceWidth for ws=\(ws.id.uuidString.prefix(8)) stored=\(String(describing: ws.sidebarState))"
+            )
+            self.sidebarController.restoreActiveWorkspaceWidth(ifGeneration: activationGen)
 
-            // Iterate over the WORKSPACE'S PANES (data model), not paneViews, to ensure all panes
-            // have PaneViews created even if they're not yet in the view cache.
             for (_, pane) in ws.panes {
-                // Get or create the PaneView for this pane - this triggers
-                // splitContainer(self:paneViewFor:) which creates and caches it.
                 if let pv = self.paneViews[pane.id] {
                     // Ensure every pane has a session
                     if pv.currentTerminalView == nil {

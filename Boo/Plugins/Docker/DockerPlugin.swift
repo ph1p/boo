@@ -258,17 +258,17 @@ private struct DockerConnectionErrorView: View {
             Spacer()
             Image(systemName: "exclamationmark.triangle")
                 .font(.system(size: 24))
-                .foregroundColor(.orange)
+                .foregroundStyle(.orange)
             Text("Docker Disconnected")
                 .font(fontScale.font(.base).weight(.medium))
-                .foregroundColor(Color(nsColor: theme.chromeText))
+                .foregroundStyle(Color(nsColor: theme.chromeText))
             Text(error)
                 .font(fontScale.font(.base))
-                .foregroundColor(Color(nsColor: theme.chromeMuted))
+                .foregroundStyle(Color(nsColor: theme.chromeMuted))
                 .multilineTextAlignment(.center)
             Text("Set the socket path in Settings > Plugins > Docker")
                 .font(fontScale.font(.base))
-                .foregroundColor(Color(nsColor: theme.chromeMuted).opacity(0.7))
+                .foregroundStyle(Color(nsColor: theme.chromeMuted).opacity(0.7))
                 .multilineTextAlignment(.center)
             Spacer()
         }
@@ -510,7 +510,7 @@ private struct DockerEmptyView: View {
             Spacer()
             Text(label)
                 .font(fontScale.font(.base))
-                .foregroundColor(Color(nsColor: theme.chromeMuted).opacity(0.4))
+                .foregroundStyle(Color(nsColor: theme.chromeMuted).opacity(0.4))
             Spacer()
         }
         .padding(.vertical, 12)
@@ -574,13 +574,13 @@ private struct DockerContainerRow: View {
         HStack(spacing: 6) {
             Image(systemName: stateIcon)
                 .font(.system(size: fontScale.size(.base) - 2))
-                .foregroundColor(stateColor)
+                .foregroundStyle(stateColor)
                 .frame(width: 14)
 
             VStack(alignment: .leading, spacing: 1) {
                 Text(container.name)
                     .font(fontScale.font(.base).weight(.medium))
-                    .foregroundColor(Color(nsColor: theme.chromeText))
+                    .foregroundStyle(Color(nsColor: theme.chromeText))
                     .lineLimit(1)
 
                 HStack(spacing: 4) {
@@ -589,12 +589,12 @@ private struct DockerContainerRow: View {
                         ? String(container.image.prefix(19)) : container.image
                     Text(imageName)
                         .font(fontScale.font(.sm))
-                        .foregroundColor(Color(nsColor: theme.chromeMuted).opacity(0.7))
+                        .foregroundStyle(Color(nsColor: theme.chromeMuted).opacity(0.7))
                         .lineLimit(1)
                     if !container.ports.isEmpty {
                         Text(container.ports)
                             .font(fontScale.font(.sm, design: .monospaced))
-                            .foregroundColor(Color(nsColor: theme.chromeMuted).opacity(0.5))
+                            .foregroundStyle(Color(nsColor: theme.chromeMuted).opacity(0.5))
                             .lineLimit(1)
                     }
                 }
@@ -610,11 +610,11 @@ private struct DockerContainerRow: View {
                 {
                     Text(uptime)
                         .font(fontScale.font(.sm, design: .monospaced))
-                        .foregroundColor(stateColor.opacity(0.7))
+                        .foregroundStyle(stateColor.opacity(0.7))
                 } else if container.state != .running {
                     Text(container.state.rawValue)
                         .font(fontScale.font(.sm, design: .monospaced))
-                        .foregroundColor(stateColor.opacity(0.8))
+                        .foregroundStyle(stateColor.opacity(0.8))
                         .lineLimit(1)
                 }
             }
@@ -709,7 +709,7 @@ private struct DockerContainerRow: View {
         Button(action: action) {
             Image(systemName: icon)
                 .font(.system(size: fontScale.size(.base) - 2))
-                .foregroundColor(Color(nsColor: theme.chromeMuted).opacity(0.7))
+                .foregroundStyle(Color(nsColor: theme.chromeMuted).opacity(0.7))
                 .frame(width: 22, height: 22)
                 .contentShape(Rectangle())
         }
@@ -734,23 +734,23 @@ private struct DockerImageRow: View {
         HStack(spacing: 6) {
             Image(systemName: "square.stack")
                 .font(.system(size: fontScale.size(.base) - 2))
-                .foregroundColor(Color(nsColor: theme.chromeMuted).opacity(0.5))
+                .foregroundStyle(Color(nsColor: theme.chromeMuted).opacity(0.5))
                 .frame(width: 14)
 
             VStack(alignment: .leading, spacing: 1) {
                 Text(image.repoTag)
                     .font(fontScale.font(.base).weight(.medium))
-                    .foregroundColor(Color(nsColor: theme.chromeText))
+                    .foregroundStyle(Color(nsColor: theme.chromeText))
                     .lineLimit(1)
 
                 HStack(spacing: 4) {
                     Text(image.id)
                         .font(fontScale.font(.sm, design: .monospaced))
-                        .foregroundColor(Color(nsColor: theme.chromeMuted).opacity(0.5))
+                        .foregroundStyle(Color(nsColor: theme.chromeMuted).opacity(0.5))
                     if let age = relativeUptime(from: image.createdAt) {
                         Text(age)
                             .font(fontScale.font(.sm))
-                            .foregroundColor(Color(nsColor: theme.chromeMuted).opacity(0.4))
+                            .foregroundStyle(Color(nsColor: theme.chromeMuted).opacity(0.4))
                     }
                 }
             }
@@ -761,7 +761,7 @@ private struct DockerImageRow: View {
                 Button(action: onRemove) {
                     Image(systemName: "trash")
                         .font(.system(size: fontScale.size(.base) - 2))
-                        .foregroundColor(Color(nsColor: theme.chromeMuted).opacity(0.7))
+                        .foregroundStyle(Color(nsColor: theme.chromeMuted).opacity(0.7))
                         .frame(width: 22, height: 22)
                         .contentShape(Rectangle())
                 }
@@ -770,7 +770,7 @@ private struct DockerImageRow: View {
             } else {
                 Text(formatBytes(image.size))
                     .font(fontScale.font(.sm, design: .monospaced))
-                    .foregroundColor(Color(nsColor: theme.chromeMuted).opacity(0.4))
+                    .foregroundStyle(Color(nsColor: theme.chromeMuted).opacity(0.4))
             }
         }
         .frame(minHeight: itemHeight)
@@ -812,22 +812,22 @@ private struct DockerNetworkRow: View {
         HStack(spacing: 6) {
             Image(systemName: "network")
                 .font(.system(size: fontScale.size(.base) - 2))
-                .foregroundColor(Color(nsColor: theme.chromeMuted).opacity(0.5))
+                .foregroundStyle(Color(nsColor: theme.chromeMuted).opacity(0.5))
                 .frame(width: 14)
 
             VStack(alignment: .leading, spacing: 1) {
                 Text(network.name)
                     .font(fontScale.font(.base).weight(.medium))
-                    .foregroundColor(Color(nsColor: theme.chromeText))
+                    .foregroundStyle(Color(nsColor: theme.chromeText))
                     .lineLimit(1)
 
                 HStack(spacing: 4) {
                     Text(network.driver)
                         .font(fontScale.font(.sm))
-                        .foregroundColor(Color(nsColor: theme.chromeMuted).opacity(0.6))
+                        .foregroundStyle(Color(nsColor: theme.chromeMuted).opacity(0.6))
                     Text(network.scope)
                         .font(fontScale.font(.sm))
-                        .foregroundColor(Color(nsColor: theme.chromeMuted).opacity(0.4))
+                        .foregroundStyle(Color(nsColor: theme.chromeMuted).opacity(0.4))
                 }
             }
 
@@ -837,7 +837,7 @@ private struct DockerNetworkRow: View {
                 Button(action: onRemove) {
                     Image(systemName: "trash")
                         .font(.system(size: fontScale.size(.base) - 2))
-                        .foregroundColor(Color(nsColor: theme.chromeMuted).opacity(0.7))
+                        .foregroundStyle(Color(nsColor: theme.chromeMuted).opacity(0.7))
                         .frame(width: 22, height: 22)
                         .contentShape(Rectangle())
                 }
@@ -884,18 +884,18 @@ private struct DockerVolumeRow: View {
         HStack(spacing: 6) {
             Image(systemName: "cylinder")
                 .font(.system(size: fontScale.size(.base) - 2))
-                .foregroundColor(Color(nsColor: theme.chromeMuted).opacity(0.5))
+                .foregroundStyle(Color(nsColor: theme.chromeMuted).opacity(0.5))
                 .frame(width: 14)
 
             VStack(alignment: .leading, spacing: 1) {
                 Text(volume.name)
                     .font(fontScale.font(.base).weight(.medium))
-                    .foregroundColor(Color(nsColor: theme.chromeText))
+                    .foregroundStyle(Color(nsColor: theme.chromeText))
                     .lineLimit(1)
 
                 Text(volume.driver)
                     .font(fontScale.font(.sm))
-                    .foregroundColor(Color(nsColor: theme.chromeMuted).opacity(0.6))
+                    .foregroundStyle(Color(nsColor: theme.chromeMuted).opacity(0.6))
             }
 
             Spacer()
@@ -904,7 +904,7 @@ private struct DockerVolumeRow: View {
                 Button(action: onRemove) {
                     Image(systemName: "trash")
                         .font(.system(size: fontScale.size(.base) - 2))
-                        .foregroundColor(Color(nsColor: theme.chromeMuted).opacity(0.7))
+                        .foregroundStyle(Color(nsColor: theme.chromeMuted).opacity(0.7))
                         .frame(width: 22, height: 22)
                         .contentShape(Rectangle())
                 }

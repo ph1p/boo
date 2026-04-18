@@ -50,7 +50,7 @@ public enum BooMain {
 
         // Watch system appearance changes for auto-theme
         appearanceObserver = NSApp.observe(\.effectiveAppearance) { _, _ in
-            AppSettings.shared.applySystemAppearance()
+            Task { @MainActor in AppSettings.shared.applySystemAppearance() }
         }
         AppSettings.shared.applySystemAppearance()
 

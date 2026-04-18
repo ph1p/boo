@@ -88,16 +88,13 @@ ironmark:
 		echo "==> Initializing ironmark submodule..."; \
 		git submodule update --init --depth 1 Vendor/ironmark; \
 	fi
-	@if [ ! -f Vendor/ironmark/macos-arm64/libironmark.a ]; then \
-		echo "==> Building ironmark..."; \
-		cd Vendor/ironmark && \
-			MACOSX_DEPLOYMENT_TARGET=15.0 RUSTFLAGS="-C link-arg=-mmacosx-version-min=15.0" \
-			cargo build --release --target aarch64-apple-darwin && \
-			mkdir -p macos-arm64 && \
-			cp target/aarch64-apple-darwin/release/libironmark.a macos-arm64/; \
-	else \
-		echo "==> ironmark already built"; \
-	fi
+	@echo "==> Building ironmark..."
+	@cd Vendor/ironmark && \
+		CARGO_TARGET_DIR=target-macos15 \
+		MACOSX_DEPLOYMENT_TARGET=15.0 RUSTFLAGS="-C link-arg=-mmacosx-version-min=15.0" \
+		cargo build --release --target aarch64-apple-darwin && \
+		mkdir -p macos-arm64 && \
+		cp target-macos15/aarch64-apple-darwin/release/libironmark.a macos-arm64/
 
 # Build bundled Monaco editor assets with Vite
 monaco:

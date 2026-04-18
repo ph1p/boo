@@ -115,7 +115,7 @@ struct SettingsView: View {
             t.chromeBg
             Text("Settings")
                 .font(.system(size: 12, weight: .medium))
-                .foregroundColor(t.muted)
+                .foregroundStyle(t.muted)
                 .offset(y: -1)
             VStack(spacing: 0) {
                 Spacer()
@@ -155,7 +155,7 @@ struct SettingsView: View {
                     HStack {
                         Text("PLUGINS")
                             .font(.system(size: 10, weight: .semibold))
-                            .foregroundColor(t.muted)
+                            .foregroundStyle(t.muted)
                             .tracking(0.4)
                         Spacer()
                     }
@@ -187,7 +187,7 @@ struct SettingsView: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
-        .foregroundColor(selectedTab == tab ? t.text : t.muted)
+        .foregroundStyle(selectedTab == tab ? t.text : t.muted)
         .background(
             RoundedRectangle(cornerRadius: 6)
                 .fill(selectedTab == tab ? t.accent.opacity(0.15) : Color.clear)
@@ -232,7 +232,7 @@ struct SettingsPage<Content: View>: View {
                 VStack(alignment: .leading, spacing: 10) {
                     Text(title)
                         .font(.system(size: 14, weight: .semibold))
-                        .foregroundColor(t.text)
+                        .foregroundStyle(t.text)
                     Rectangle()
                         .fill(t.border.opacity(0.8))
                         .frame(maxWidth: .infinity)
@@ -261,7 +261,7 @@ struct Section<Content: View>: View {
         VStack(alignment: .leading, spacing: 4) {
             Text(title.uppercased())
                 .font(.system(size: 10, weight: .semibold))
-                .foregroundColor(t.muted)
+                .foregroundStyle(t.muted)
                 .tracking(0.5)
             VStack(alignment: .leading, spacing: divided ? 0 : 8) {
                 content()
@@ -317,7 +317,7 @@ struct FontSizePicker: NSViewRepresentable {
 
     func makeCoordinator() -> Coordinator { Coordinator(value: $value) }
 
-    final class Coordinator: NSObject {
+    @MainActor final class Coordinator: NSObject {
         var value: Binding<Double>
         init(value: Binding<Double>) { self.value = value }
 
@@ -356,7 +356,7 @@ struct FontChooser: NSViewRepresentable {
 
     func makeCoordinator() -> Coordinator { Coordinator(selectedFont: $selectedFont) }
 
-    final class Coordinator: NSObject {
+    @MainActor final class Coordinator: NSObject {
         var selectedFont: Binding<String>
         init(selectedFont: Binding<String>) { self.selectedFont = selectedFont }
 
@@ -377,7 +377,7 @@ struct ToggleRow: View {
         HStack {
             Text(label)
                 .font(.system(size: 12))
-                .foregroundColor(t.text)
+                .foregroundStyle(t.text)
             Spacer()
             Toggle("", isOn: $isOn)
                 .labelsHidden()
@@ -423,9 +423,11 @@ class SettingsWindowController: NSWindowController {
         settingsObserver = NotificationCenter.default.addObserver(
             forName: .settingsChanged, object: nil, queue: .main
         ) { [weak self] _ in
-            let t = AppSettings.shared.theme
-            self?.window?.backgroundColor = t.chromeBg
-            self?.window?.appearance = NSAppearance(named: t.isDark ? .darkAqua : .aqua)
+            MainActor.assumeIsolated {
+                let t = AppSettings.shared.theme
+                self?.window?.backgroundColor = t.chromeBg
+                self?.window?.appearance = NSAppearance(named: t.isDark ? .darkAqua : .aqua)
+            }
         }
     }
 

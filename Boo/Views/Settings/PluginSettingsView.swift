@@ -4,7 +4,7 @@ import SwiftUI
 
 struct PluginSettingsView: View {
     /// Set by MainWindowController before showing settings.
-    static var registeredManifests: [PluginManifest] = []
+    nonisolated(unsafe) static var registeredManifests: [PluginManifest] = []
 
     @ObservedObject private var observer = SettingsObserver(topics: [.theme, .plugins])
     @State private var installError: String? = nil
@@ -17,7 +17,7 @@ struct PluginSettingsView: View {
         SettingsPage(title: "Plugins") {
             Text("Built-in plugins provide core functionality. External plugins are loaded from ~/.boo/plugins/")
                 .font(.system(size: 11))
-                .foregroundColor(t.muted)
+                .foregroundStyle(t.muted)
 
             VStack(alignment: .leading, spacing: 2) {
                 ForEach(manifests, id: \.id) { manifest in
@@ -29,7 +29,7 @@ struct PluginSettingsView: View {
                 if let err = installError {
                     Text(err)
                         .font(.system(size: 10))
-                        .foregroundColor(.red)
+                        .foregroundStyle(.red)
                 }
                 Spacer()
                 Button("Install Plugin…") {
@@ -105,7 +105,7 @@ struct PluginDetailSettingsView: View {
             if filteredSettings.isEmpty {
                 Text("No configurable settings for this plugin.")
                     .font(.system(size: 12))
-                    .foregroundColor(Tokens.current.muted)
+                    .foregroundStyle(Tokens.current.muted)
             } else {
                 ForEach(groupedSettings, id: \.title) { group in
                     Section(title: group.title.isEmpty ? "Settings" : group.title, divided: true) {
@@ -163,16 +163,16 @@ private struct PluginRow: View {
             HStack(spacing: 10) {
                 Image(systemName: manifest.icon)
                     .font(.system(size: 14))
-                    .foregroundColor(isEnabled ? t.text : t.muted)
+                    .foregroundStyle(isEnabled ? t.text : t.muted)
                     .frame(width: 20)
                 VStack(alignment: .leading, spacing: 1) {
                     HStack(spacing: 4) {
                         Text(manifest.name)
                             .font(.system(size: 12, weight: .medium))
-                            .foregroundColor(isEnabled ? t.text : t.muted)
+                            .foregroundStyle(isEnabled ? t.text : t.muted)
                         Text(manifest.isExternal ? "External" : "Built-in")
                             .font(.system(size: 9, weight: .medium))
-                            .foregroundColor(t.muted)
+                            .foregroundStyle(t.muted)
                             .padding(.horizontal, 4)
                             .padding(.vertical, 1)
                             .background(t.muted.opacity(0.15))
@@ -180,7 +180,7 @@ private struct PluginRow: View {
                     }
                     Text(manifest.description ?? "")
                         .font(.system(size: 10))
-                        .foregroundColor(t.muted)
+                        .foregroundStyle(t.muted)
                 }
                 Spacer()
 
@@ -188,7 +188,7 @@ private struct PluginRow: View {
                     Button(action: removePlugin) {
                         Image(systemName: "trash")
                             .font(.system(size: 11))
-                            .foregroundColor(.red.opacity(0.8))
+                            .foregroundStyle(.red.opacity(0.8))
                     }
                     .buttonStyle(.plain)
                     .help("Remove plugin")
@@ -213,7 +213,7 @@ private struct PluginRow: View {
             if let err = removeError {
                 Text(err)
                     .font(.system(size: 10))
-                    .foregroundColor(.red)
+                    .foregroundStyle(.red)
                     .padding(.horizontal, 8)
                     .padding(.bottom, 4)
             }
@@ -263,7 +263,7 @@ private struct PluginSettingControl: View {
         return HStack {
             Text(setting.label)
                 .font(.system(size: 12))
-                .foregroundColor(Tokens.current.text)
+                .foregroundStyle(Tokens.current.text)
             Spacer()
             Slider(
                 value: Binding(
@@ -273,7 +273,7 @@ private struct PluginSettingControl: View {
             )
             Text(step < 1 ? String(format: "%.1f", value) : "\(Int(value))")
                 .font(.system(size: 11, design: .monospaced))
-                .foregroundColor(Tokens.current.text)
+                .foregroundStyle(Tokens.current.text)
                 .frame(width: 32)
         }
         .frame(width: 200)
@@ -293,7 +293,7 @@ private struct PluginSettingControl: View {
                 HStack {
                     Text(setting.label)
                         .font(.system(size: 12))
-                        .foregroundColor(Tokens.current.text)
+                        .foregroundStyle(Tokens.current.text)
                     Spacer()
                     fontPicker(value: value, fonts: AppSettings.availableSystemFonts)
                 }
@@ -301,7 +301,7 @@ private struct PluginSettingControl: View {
                 HStack {
                     Text(setting.label)
                         .font(.system(size: 12))
-                        .foregroundColor(Tokens.current.text)
+                        .foregroundStyle(Tokens.current.text)
                     Spacer()
                     fontPicker(value: value, fonts: AppSettings.availableMonospaceFonts)
                 }
@@ -315,7 +315,7 @@ private struct PluginSettingControl: View {
                 HStack {
                     Text(setting.label)
                         .font(.system(size: 12))
-                        .foregroundColor(Tokens.current.text)
+                        .foregroundStyle(Tokens.current.text)
                     Spacer()
                     TextField(
                         "",
@@ -336,7 +336,7 @@ private struct PluginSettingControl: View {
         return VStack(alignment: .leading, spacing: 6) {
             Text(setting.label)
                 .font(.system(size: 12))
-                .foregroundColor(t.text)
+                .foregroundStyle(t.text)
             Picker(
                 "",
                 selection: Binding(
@@ -362,7 +362,7 @@ private struct PluginSettingControl: View {
         return VStack(alignment: .leading, spacing: 6) {
             Text(setting.label)
                 .font(.system(size: 12))
-                .foregroundColor(t.text)
+                .foregroundStyle(t.text)
             Picker(
                 "",
                 selection: Binding(
@@ -388,7 +388,7 @@ private struct PluginSettingControl: View {
         return VStack(alignment: .leading, spacing: 6) {
             Text(setting.label)
                 .font(.system(size: 12))
-                .foregroundColor(t.text)
+                .foregroundStyle(t.text)
             Picker(
                 "",
                 selection: Binding(
@@ -411,7 +411,7 @@ private struct PluginSettingControl: View {
         return VStack(alignment: .leading, spacing: 4) {
             Text(setting.label)
                 .font(.system(size: 12))
-                .foregroundColor(t.text)
+                .foregroundStyle(t.text)
             TextField(
                 detected ?? "/var/run/docker.sock",
                 text: Binding(
@@ -424,11 +424,11 @@ private struct PluginSettingControl: View {
             if let path = detected {
                 Text("Leave empty to auto-detect. Currently using: \(path)")
                     .font(.system(size: 11))
-                    .foregroundColor(t.muted)
+                    .foregroundStyle(t.muted)
             } else {
                 Text("Leave empty to auto-detect.")
                     .font(.system(size: 11))
-                    .foregroundColor(t.muted)
+                    .foregroundStyle(t.muted)
             }
         }
     }
@@ -438,7 +438,7 @@ private struct PluginSettingControl: View {
         return VStack(alignment: .leading, spacing: 4) {
             Text(setting.label)
                 .font(.system(size: 12))
-                .foregroundColor(t.text)
+                .foregroundStyle(t.text)
             TextField(
                 "e.g. code --diff {file}",
                 text: Binding(
@@ -450,7 +450,7 @@ private struct PluginSettingControl: View {
             .font(.system(size: 11, design: .monospaced))
             Text("Leave empty to use \u{2018}git diff\u{2019} in the terminal. Use {file} for the full file path.")
                 .font(.system(size: 11))
-                .foregroundColor(t.muted)
+                .foregroundStyle(t.muted)
         }
     }
 
@@ -459,7 +459,7 @@ private struct PluginSettingControl: View {
         return VStack(alignment: .leading, spacing: 4) {
             Text(setting.label)
                 .font(.system(size: 12))
-                .foregroundColor(t.text)
+                .foregroundStyle(t.text)
             TextField(
                 ContentType.builtInEditorFilePatterns,
                 text: Binding(
@@ -473,7 +473,7 @@ private struct PluginSettingControl: View {
                 "Comma-separated patterns. Examples: swift, .gitignore, *.{ts,tsx}, .env*. Other files open with the default app."
             )
             .font(.system(size: 11))
-            .foregroundColor(t.muted)
+            .foregroundStyle(t.muted)
         }
     }
 
