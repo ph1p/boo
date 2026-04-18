@@ -4,7 +4,7 @@ import Cocoa
 /// Process-level registry of direct-child PIDs already claimed by a GhosttyView.
 /// Prevents two concurrently-created views from walking down to the same shell.
 /// All access is on the main thread (GhosttyView is main-thread only).
-enum ClaimedDirectChildren {
+@MainActor enum ClaimedDirectChildren {
     private static var claimed: Set<pid_t> = []
 
     /// Atomically claim `pid`. Returns true if the claim succeeded (pid was unclaimed).
@@ -19,8 +19,8 @@ enum ClaimedDirectChildren {
 
 /// NSView that hosts a Ghostty terminal surface with Metal rendering.
 /// Implements NSTextInputClient for proper keyboard input handling.
-class GhosttyView: NSView, NSTextInputClient {
-    private(set) var surface: ghostty_surface_t?
+@MainActor class GhosttyView: NSView, @preconcurrency NSTextInputClient {
+    nonisolated(unsafe) private(set) var surface: ghostty_surface_t?
 
     var onFocused: (() -> Void)?
     var onPwdChanged: ((String) -> Void)?
@@ -56,7 +56,7 @@ class GhosttyView: NSView, NSTextInputClient {
         super.init(frame: .zero)
         wantsLayer = true
         layer?.backgroundColor = NSColor.black.cgColor
-        registerForDraggedTypes([.fileURL])
+        registerForDraggedTypes([.fileURL, .URL])
         createSurface(workingDirectory: workingDirectory)
     }
 
@@ -100,7 +100,7 @@ class GhosttyView: NSView, NSTextInputClient {
     /// Ghostty forks: Boo → login → shell. We find the new direct child (login),
     /// then walk down to the actual shell process.
     /// Retries up to 5x at 100ms intervals if the child isn't visible yet.
-    private var claimedDirectChild: pid_t = 0
+    nonisolated(unsafe) private var claimedDirectChild: pid_t = 0
 
     /// Re-walks from the claimed login process to find the current shell PID.
     /// Called when sendImage fails with ESRCH — zsh re-exec'd to a new PID.
@@ -533,12 +533,14 @@ class GhosttyView: NSView, NSTextInputClient {
         }
     }
 
-    @objc func paste(_ sender: Any?) {
+    private func sendText(_ text: String) {
         guard let surface = surface else { return }
+        text.withCString { ghostty_surface_text(surface, $0, UInt(strlen($0))) }
+    }
+
+    @objc func paste(_ sender: Any?) {
         guard let str = NSPasteboard.general.string(forType: .string) else { return }
-        str.withCString { cstr in
-            ghostty_surface_text(surface, cstr, UInt(strlen(cstr)))
-        }
+        sendText(str)
     }
 
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
@@ -669,21 +671,40 @@ class GhosttyView: NSView, NSTextInputClient {
     // MARK: - Drag & Drop
 
     override func draggingEntered(_ sender: any NSDraggingInfo) -> NSDragOperation {
-        guard let types = sender.draggingPasteboard.types, types.contains(.fileURL) else { return [] }
+        let types = sender.draggingPasteboard.types ?? []
+        guard types.contains(.fileURL) || types.contains(.URL) else { return [] }
         return .copy
     }
 
     override func performDragOperation(_ sender: any NSDraggingInfo) -> Bool {
         guard let surface = surface else { return false }
-        guard let urls = sender.draggingPasteboard.readObjects(forClasses: [NSURL.self]) as? [URL],
-            !urls.isEmpty
-        else { return false }
-        let text = urls.map { shellEscape($0.path) }.joined(separator: " ")
-        text.withCString { cstr in
-            ghostty_surface_text(surface, cstr, UInt(strlen(cstr)))
+        let pb = sender.draggingPasteboard
+
+        // Local file URLs (Finder drag) — shell-escape the path
+        if let urls = pb.readObjects(forClasses: [NSURL.self]) as? [URL],
+            !urls.isEmpty, urls.allSatisfy({ $0.isFileURL })
+        {
+            sendText(urls.map { shellEscape($0.path) }.joined(separator: " "))
+            return true
         }
-        return true
+
+        // Browser URL drops — paste the full URL raw
+        if let urlString = pb.string(forType: .URL), !urlString.isEmpty {
+            sendText(urlString)
+            return true
+        }
+
+        return false
     }
 
-    deinit { destroy() }
+    deinit {
+        let s = surface
+        let dc = claimedDirectChild
+        surface = nil
+        claimedDirectChild = 0
+        Task { @MainActor in
+            if dc != 0 { ClaimedDirectChildren.release(dc) }
+            if let s { GhosttyRuntime.shared.unregisterSurface(s); ghostty_surface_free(s) }
+        }
+    }
 }
