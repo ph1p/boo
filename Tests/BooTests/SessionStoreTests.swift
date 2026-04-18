@@ -502,6 +502,55 @@ final class SessionStoreTests: XCTestCase {
         XCTAssertEqual(snapshot.workspaces[2].sidebarWidth ?? -1, 246, accuracy: 0.1)
     }
 
+    func testPerWorkspaceSidebarWidthAndVisibilityAreIndependent() {
+        // Each workspace has a distinct sidebar width and visibility.
+        // After save + restore, every workspace gets back its own values — not the others'.
+        let state = AppState()
+
+        let ws1 = Workspace(folderPath: "/tmp")
+        ws1.customName = "Alpha"
+        ws1.sidebarState = SidebarWorkspaceState(isVisible: true, width: 200)
+
+        let ws2 = Workspace(folderPath: "/tmp")
+        ws2.customName = "Beta"
+        ws2.sidebarState = SidebarWorkspaceState(isVisible: false, width: 350)
+
+        let ws3 = Workspace(folderPath: "/tmp")
+        ws3.customName = "Gamma"
+        ws3.sidebarState = SidebarWorkspaceState(isVisible: true, width: 500)
+
+        state.addWorkspace(ws1)
+        state.addWorkspace(ws2)
+        state.addWorkspace(ws3)
+
+        SessionStore.save(appState: state)
+
+        // Verify the raw JSON values are correct.
+        let snapshot = SessionStore.load()!
+        XCTAssertEqual(snapshot.workspaces[0].sidebarIsVisible, true, "ws1 visible")
+        XCTAssertEqual(snapshot.workspaces[0].sidebarWidth ?? -1, 200, accuracy: 0.1, "ws1 width")
+        XCTAssertEqual(snapshot.workspaces[1].sidebarIsVisible, false, "ws2 hidden")
+        XCTAssertEqual(snapshot.workspaces[1].sidebarWidth ?? -1, 350, accuracy: 0.1, "ws2 width")
+        XCTAssertEqual(snapshot.workspaces[2].sidebarIsVisible, true, "ws3 visible")
+        XCTAssertEqual(snapshot.workspaces[2].sidebarWidth ?? -1, 500, accuracy: 0.1, "ws3 width")
+
+        // Verify restored Workspace objects carry distinct, correct sidebar states.
+        let restored = SessionStore.workspaces(from: snapshot)
+        XCTAssertEqual(restored.count, 3)
+
+        XCTAssertEqual(restored[0].sidebarState.isVisible, true, "restored ws1 visible")
+        XCTAssertEqual(restored[0].sidebarState.width ?? -1, 200, accuracy: 0.1, "restored ws1 width")
+        XCTAssertEqual(restored[1].sidebarState.isVisible, false, "restored ws2 hidden")
+        XCTAssertEqual(restored[1].sidebarState.width ?? -1, 350, accuracy: 0.1, "restored ws2 width")
+        XCTAssertEqual(restored[2].sidebarState.isVisible, true, "restored ws3 visible")
+        XCTAssertEqual(restored[2].sidebarState.width ?? -1, 500, accuracy: 0.1, "restored ws3 width")
+
+        // No values leaked across workspaces.
+        XCTAssertNotEqual(restored[0].sidebarState.width ?? -1, 350, "ws1 must not have ws2 width")
+        XCTAssertNotEqual(restored[1].sidebarState.isVisible, true, "ws2 must not have ws1 visibility")
+        XCTAssertNotEqual(restored[2].sidebarState.width ?? -1, 200, "ws3 must not have ws1 width")
+    }
+
     func testSavePreservesActiveWorkspaceIndex() {
         let state = AppState()
         state.addWorkspace(Workspace(folderPath: "/tmp"))
