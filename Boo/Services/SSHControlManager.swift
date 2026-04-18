@@ -3,8 +3,8 @@ import Foundation
 /// Manages per-session background SSH master connections with Boo-owned sockets.
 /// Enables the remote file tree to multiplex commands over a persistent connection
 /// without requiring ControlMaster in the user's ~/.ssh/config.
-final class SSHControlManager {
-    static let shared = SSHControlManager()
+final class SSHControlManager: @unchecked Sendable {
+    nonisolated(unsafe) static let shared = SSHControlManager()
 
     enum ConnectionState {
         case connecting
@@ -41,7 +41,7 @@ final class SSHControlManager {
 
     /// Ensure a background SSH master connection exists for the given alias.
     /// Calls completion(true) on success, completion(false) on failure. Always on main thread.
-    func ensureConnection(alias: String, completion: @escaping (Bool) -> Void) {
+    func ensureConnection(alias: String, completion: @escaping @Sendable (Bool) -> Void) {
         queue.async { [weak self] in
             guard let self else { return }
 

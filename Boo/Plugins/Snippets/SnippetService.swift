@@ -2,7 +2,7 @@ import Foundation
 
 /// Manages terminal command snippets, persisted to ~/.boo/snippets.json.
 final class SnippetService {
-    static let shared = SnippetService()
+    nonisolated(unsafe) static let shared = SnippetService()
 
     struct Snippet: Codable, Equatable, Identifiable {
         let id: UUID

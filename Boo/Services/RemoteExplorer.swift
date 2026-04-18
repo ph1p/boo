@@ -2,10 +2,10 @@ import Darwin
 import Foundation
 
 /// Detects remote sessions (SSH, Mosh, Docker, kubectl, etc.) and provides file listing.
-final class RemoteExplorer {
+final class RemoteExplorer: @unchecked Sendable {
     /// When true, `runSSH` returns nil immediately instead of spawning `/usr/bin/ssh`.
     /// Automatically enabled when running under XCTest to avoid real network calls.
-    static var disableRealSSH: Bool = {
+    nonisolated(unsafe) static var disableRealSSH: Bool = {
         NSClassFromString("XCTestCase") != nil
     }()
 
@@ -262,7 +262,7 @@ final class RemoteExplorer {
 
     /// Resolve a container hostname (truncated container ID) to a container name.
     /// Tries docker, podman, and nerdctl. Returns nil if not a container ID.
-    private static var containerHostnameCache: [String: (name: String?, expires: Date)] = [:]
+    private nonisolated(unsafe) static var containerHostnameCache: [String: (name: String?, expires: Date)] = [:]
 
     static func resolveDockerHostname(_ hostname: String) -> String? {
         resolveContainerHostname(hostname)
@@ -369,11 +369,11 @@ final class RemoteExplorer {
     // MARK: - Home Path Resolution
 
     /// Cached absolute home paths keyed by session display name.
-    private static var homePathCache: [String: String] = [:]
+    private nonisolated(unsafe) static var homePathCache: [String: String] = [:]
 
     /// Resolve the remote home directory (`~`) to an absolute path.
     /// Result is cached per session. Calls completion on main thread.
-    static func resolveRemoteHome(session: RemoteSessionType, completion: @escaping (String?) -> Void) {
+    static func resolveRemoteHome(session: RemoteSessionType, completion: @escaping @Sendable (String?) -> Void) {
         let key = session.sshConnectionTarget
         if let cached = homePathCache[key] {
             remoteLog("[RemoteExplorer] resolveRemoteHome cache hit: key=\(key) home=\(cached)")
@@ -419,13 +419,13 @@ final class RemoteExplorer {
 
     /// Run a command on the remote target. Public API for plugins that need custom commands.
     static func runPublicRemoteCommand(
-        session: RemoteSessionType, command: String, completion: @escaping (String?) -> Void
+        session: RemoteSessionType, command: String, completion: @escaping @Sendable (String?) -> Void
     ) {
         runRemoteCommand(session: session, command: command, completion: completion)
     }
 
     /// Get the remote working directory.
-    static func getRemoteCwd(session: RemoteSessionType, completion: @escaping (String?) -> Void) {
+    static func getRemoteCwd(session: RemoteSessionType, completion: @escaping @Sendable (String?) -> Void) {
         runRemoteCommand(session: session, command: "pwd") { output in
             completion(output?.trimmingCharacters(in: .whitespacesAndNewlines))
         }
@@ -434,7 +434,7 @@ final class RemoteExplorer {
     /// List directory contents on the remote target.
     /// Completion receives `nil` on connection/command failure, empty array for empty directory.
     static func listRemoteDirectory(
-        session: RemoteSessionType, path: String, completion: @escaping ([RemoteEntry]?) -> Void
+        session: RemoteSessionType, path: String, completion: @escaping @Sendable ([RemoteEntry]?) -> Void
     ) {
         let cmd = directoryListCommand(for: path)
         remoteLog(
@@ -570,7 +570,7 @@ final class RemoteExplorer {
     }
 
     private static func runRemoteCommand(
-        session: RemoteSessionType, command: String, completion: @escaping (String?) -> Void
+        session: RemoteSessionType, command: String, completion: @escaping @Sendable (String?) -> Void
     ) {
         DispatchQueue.global(qos: .userInitiated).async {
             remoteLog(

@@ -3,7 +3,7 @@ import Foundation
 /// Immutable snapshot of a terminal's context at a point in time.
 /// Value type — plugins in the react phase receive a frozen copy.
 /// ADR-1: TerminalContext as Value Type.
-struct TerminalContext: Equatable {
+struct TerminalContext: Equatable, @unchecked Sendable {
     let terminalID: UUID
     let cwd: String
     let remoteSession: RemoteSessionType?
@@ -30,7 +30,7 @@ struct TerminalContext: Equatable {
     }
 
     /// Empty context used as a default before any terminal state is available.
-    static let empty = TerminalContext(
+    nonisolated(unsafe) static let empty = TerminalContext(
         terminalID: UUID(),
         cwd: "",
         remoteSession: nil,

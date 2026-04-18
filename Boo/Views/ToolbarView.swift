@@ -1,6 +1,6 @@
 import Cocoa
 
-protocol ToolbarViewDelegate: AnyObject {
+@MainActor protocol ToolbarViewDelegate: AnyObject {
     func toolbar(_ toolbar: ToolbarView, didSelectWorkspaceAt index: Int)
     func toolbar(_ toolbar: ToolbarView, didCloseWorkspaceAt index: Int)
     func toolbar(_ toolbar: ToolbarView, didSelectTabAt index: Int)

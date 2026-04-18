@@ -56,7 +56,7 @@ struct HostSystemInfoService: SystemInfoService {
             }
         }
         guard result == KERN_SUCCESS else { return (0, 0) }
-        let pageSize = Double(vm_kernel_page_size)
+        let pageSize = Double(sysconf(_SC_PAGESIZE))
         let active = Double(stats.active_count) * pageSize
         let wired = Double(stats.wire_count) * pageSize
         let compressed = Double(stats.compressor_page_count) * pageSize

@@ -253,7 +253,7 @@ private func ghosttyCloseSurface(_ userdata: UnsafeMutableRawPointer?, _ process
 }
 
 /// Singleton managing the Ghostty app instance.
-final class GhosttyRuntime {
+@MainActor final class GhosttyRuntime {
     static let shared = GhosttyRuntime()
 
     private(set) var app: ghostty_app_t?

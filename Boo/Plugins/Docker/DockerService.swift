@@ -3,8 +3,8 @@ import Foundation
 
 /// Manages Docker container discovery and lifecycle via the Docker Engine API
 /// over the Unix domain socket (`docker.sock`).
-final class DockerService: ObservableObject {
-    static let shared = DockerService()
+final class DockerService: ObservableObject, @unchecked Sendable {
+    nonisolated(unsafe) static let shared = DockerService()
 
     struct Container: Identifiable, Equatable {
         let id: String
@@ -384,7 +384,7 @@ final class DockerService: ObservableObject {
         }
     }
 
-    func removeImage(_ id: String, completion: (() -> Void)? = nil) {
+    func removeImage(_ id: String, completion: (@Sendable () -> Void)? = nil) {
         postAction("/v1.43/images/\(id)", method: "DELETE", completion: completion)
     }
 
@@ -403,7 +403,7 @@ final class DockerService: ObservableObject {
         }
     }
 
-    func removeNetwork(_ id: String, completion: (() -> Void)? = nil) {
+    func removeNetwork(_ id: String, completion: (@Sendable () -> Void)? = nil) {
         postAction("/v1.43/networks/\(id)", method: "DELETE", completion: completion)
     }
 
@@ -422,41 +422,41 @@ final class DockerService: ObservableObject {
         }
     }
 
-    func removeVolume(_ name: String, completion: (() -> Void)? = nil) {
+    func removeVolume(_ name: String, completion: (@Sendable () -> Void)? = nil) {
         postAction("/v1.43/volumes/\(name)", method: "DELETE", completion: completion)
     }
 
     // MARK: - Container Lifecycle
 
     /// Start a container.
-    func startContainer(_ id: String, completion: (() -> Void)? = nil) {
+    func startContainer(_ id: String, completion: (@Sendable () -> Void)? = nil) {
         postAction("/v1.43/containers/\(id)/start", completion: completion)
     }
 
     /// Stop a container.
-    func stopContainer(_ id: String, completion: (() -> Void)? = nil) {
+    func stopContainer(_ id: String, completion: (@Sendable () -> Void)? = nil) {
         postAction("/v1.43/containers/\(id)/stop", completion: completion)
     }
 
     /// Restart a container.
-    func restartContainer(_ id: String, completion: (() -> Void)? = nil) {
+    func restartContainer(_ id: String, completion: (@Sendable () -> Void)? = nil) {
         postAction(
             "/v1.43/containers/\(id)/restart", completion: completion)
     }
 
     /// Pause a running container.
-    func pauseContainer(_ id: String, completion: (() -> Void)? = nil) {
+    func pauseContainer(_ id: String, completion: (@Sendable () -> Void)? = nil) {
         postAction("/v1.43/containers/\(id)/pause", completion: completion)
     }
 
     /// Unpause a paused container.
-    func unpauseContainer(_ id: String, completion: (() -> Void)? = nil) {
+    func unpauseContainer(_ id: String, completion: (@Sendable () -> Void)? = nil) {
         postAction(
             "/v1.43/containers/\(id)/unpause", completion: completion)
     }
 
     /// Remove a stopped container.
-    func removeContainer(_ id: String, completion: (() -> Void)? = nil) {
+    func removeContainer(_ id: String, completion: (@Sendable () -> Void)? = nil) {
         postAction(
             "/v1.43/containers/\(id)", method: "DELETE",
             completion: completion)
@@ -471,7 +471,7 @@ final class DockerService: ObservableObject {
 
     /// List containers on a remote host via SSH.
     static func remoteContainers(
-        host: String, completion: @escaping ([Container]) -> Void
+        host: String, completion: @escaping @Sendable ([Container]) -> Void
     ) {
         DispatchQueue.global(qos: .utility).async {
             let fmt =
@@ -492,7 +492,7 @@ final class DockerService: ObservableObject {
 
     /// Run a Docker command on a remote host.
     static func remoteDockerCommand(
-        host: String, args: [String], completion: (() -> Void)? = nil
+        host: String, args: [String], completion: (@Sendable () -> Void)? = nil
     ) {
         let cmd = "docker " + args.joined(separator: " ")
         DispatchQueue.global(qos: .utility).async {
@@ -511,7 +511,7 @@ final class DockerService: ObservableObject {
 
     private func postAction(
         _ path: String, method: String = "POST",
-        completion: (() -> Void)? = nil
+        completion: (@Sendable () -> Void)? = nil
     ) {
         guard let sock = socketPath else { return }
         DispatchQueue.global(qos: .utility).async { [weak self] in

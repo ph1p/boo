@@ -2,7 +2,7 @@ import Combine
 import Foundation
 
 /// File tree node backed by remote directory listing (SSH or Docker).
-final class RemoteFileTreeNode: Identifiable, ObservableObject {
+final class RemoteFileTreeNode: Identifiable, ObservableObject, @unchecked Sendable {
     let id: UUID
     private(set) var name: String
     private(set) var remotePath: String

@@ -34,8 +34,8 @@ import Foundation
 ///   statusbar.list  — list external segments
 ///
 /// The socket path is exposed to child processes via `BOO_SOCK`.
-final class BooSocketServer {
-    static let shared = BooSocketServer()
+final class BooSocketServer: @unchecked Sendable {
+    nonisolated(unsafe) static let shared = BooSocketServer()
 
     // MARK: - Process Status Tracking
 

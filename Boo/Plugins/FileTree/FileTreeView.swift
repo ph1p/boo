@@ -3,39 +3,39 @@ import UniformTypeIdentifiers
 
 // MARK: - Actions
 
-struct FileTreeActions {
-    var onFileClicked: ((String) -> Void)?
-    var onPastePath: ((String) -> Void)?
+struct FileTreeActions: @unchecked Sendable {
+    var onFileClicked: (@MainActor (String) -> Void)?
+    var onPastePath: (@MainActor (String) -> Void)?
     /// Open a directory as a terminal tab
-    var onOpenInTab: ((String) -> Void)?
+    var onOpenInTab: (@MainActor (String) -> Void)?
     /// Open a directory as a terminal pane (split)
-    var onOpenInPane: ((String) -> Void)?
+    var onOpenInPane: (@MainActor (String) -> Void)?
     /// Open a file in a new editor/viewer tab
-    var onOpenFileInTab: ((String) -> Void)?
+    var onOpenFileInTab: (@MainActor (String) -> Void)?
     /// Open a file in a new editor/viewer pane (split)
-    var onOpenFileInPane: ((String) -> Void)?
+    var onOpenFileInPane: (@MainActor (String) -> Void)?
     /// Open an HTML file directly in a browser tab
-    var onOpenFileInBrowser: ((String) -> Void)?
-    var onCopyPath: ((String) -> Void)?
-    var onRevealInFinder: ((String) -> Void)?
-    var onRunCommand: ((String) -> Void)?
-    var onNavigate: ((String) -> Void)?
-    var onMoveToTrash: ((String) -> Void)?
-    var onRename: ((_ oldPath: String, _ newName: String) -> Void)?
-    var onMove: ((_ sourcePath: String, _ destinationDir: String) -> Void)?
-    var onCreateFolder: ((_ parentPath: String) -> Void)?
-    var onCreateFile: ((_ parentPath: String) -> Void)?
-    var onDuplicate: ((String) -> Void)?
-    var onCopyImage: ((String) -> Void)?
-    var onReferenceInAI: ((String) -> Void)?
-    var onSetFileRoot: ((String) -> Void)?
+    var onOpenFileInBrowser: (@MainActor (String) -> Void)?
+    var onCopyPath: (@MainActor (String) -> Void)?
+    var onRevealInFinder: (@MainActor (String) -> Void)?
+    var onRunCommand: (@MainActor (String) -> Void)?
+    var onNavigate: (@MainActor (String) -> Void)?
+    var onMoveToTrash: (@MainActor (String) -> Void)?
+    var onRename: (@MainActor (_ oldPath: String, _ newName: String) -> Void)?
+    var onMove: (@MainActor (_ sourcePath: String, _ destinationDir: String) -> Void)?
+    var onCreateFolder: (@MainActor (_ parentPath: String) -> Void)?
+    var onCreateFile: (@MainActor (_ parentPath: String) -> Void)?
+    var onDuplicate: (@MainActor (String) -> Void)?
+    var onCopyImage: (@MainActor (String) -> Void)?
+    var onReferenceInAI: (@MainActor (String) -> Void)?
+    var onSetFileRoot: (@MainActor (String) -> Void)?
     var isAIAgentRunning: Bool = false
 }
 
 // MARK: - Shared State
 
 /// Rename state lifted out of per-row @State so it survives row rebuilds.
-final class FileTreeRenameState: ObservableObject {
+@MainActor final class FileTreeRenameState: ObservableObject {
     @Published var renamingPath: String?
     @Published var renameText: String = ""
 

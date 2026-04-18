@@ -2,7 +2,7 @@ import CoreServices
 import Foundation
 
 /// Watches a directory for file system changes using FSEvents.
-final class FileSystemWatcher {
+final class FileSystemWatcher: @unchecked Sendable {
     private var stream: FSEventStreamRef?
     private let path: String
     private let onChange: () -> Void

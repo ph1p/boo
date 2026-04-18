@@ -177,7 +177,7 @@ final class GitBranchSegment: StatusBarPlugin {
         return "Git: \(branch)"
     }
 
-    private func showBranchMenu(in barView: StatusBarView, repoRoot: String) {
+    @MainActor private func showBranchMenu(in barView: StatusBarView, repoRoot: String) {
         let branches = StatusBarView.listBranches(repoRoot: repoRoot)
         guard !branches.local.isEmpty || !branches.remote.isEmpty else { return }
 

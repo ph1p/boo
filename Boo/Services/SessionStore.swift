@@ -70,7 +70,7 @@ struct SessionSnapshot: Codable {
 // MARK: - SessionStore
 
 enum SessionStore {
-    private static var _testFilePath: String? = nil
+    private nonisolated(unsafe) static var _testFilePath: String? = nil
 
     /// Override the storage path. Pass `nil` to revert to the default. Tests only.
     static func overrideFilePathForTesting(_ path: String?) {

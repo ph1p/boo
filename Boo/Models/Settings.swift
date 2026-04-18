@@ -198,7 +198,7 @@ enum SettingsTopic: String, CaseIterable {
 }
 
 final class AppSettings {
-    static let shared = AppSettings()
+    nonisolated(unsafe) static let shared = AppSettings()
 
     /// Show save-error feedback only once per session to avoid spam.
     private var saveErrorShown = false
