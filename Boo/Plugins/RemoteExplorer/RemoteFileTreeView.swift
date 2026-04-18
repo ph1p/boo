@@ -12,15 +12,15 @@ struct RemoteConnectingView: View {
 
             Image(systemName: session.icon)
                 .font(.system(size: 28))
-                .foregroundColor(Color(nsColor: theme.accentColor).opacity(0.6))
+                .foregroundStyle(Color(nsColor: theme.accentColor).opacity(0.6))
 
             Text("Connecting to")
                 .font(.system(size: 12))
-                .foregroundColor(Color(nsColor: theme.chromeMuted))
+                .foregroundStyle(Color(nsColor: theme.chromeMuted))
 
             Text(session.displayName)
                 .font(.system(size: 13, weight: .medium, design: .monospaced))
-                .foregroundColor(Color(nsColor: theme.chromeText))
+                .foregroundStyle(Color(nsColor: theme.chromeText))
 
             ProgressView()
                 .scaleEffect(0.7)
@@ -28,7 +28,7 @@ struct RemoteConnectingView: View {
 
             Text(session.connectingHint)
                 .font(.system(size: 10))
-                .foregroundColor(Color(nsColor: theme.chromeMuted).opacity(0.6))
+                .foregroundStyle(Color(nsColor: theme.chromeMuted).opacity(0.6))
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 20)
 
@@ -54,19 +54,19 @@ struct RemoteConnectionFailedView: View {
 
             Image(systemName: "xmark.circle")
                 .font(.system(size: 28))
-                .foregroundColor(Color(nsColor: theme.chromeMuted).opacity(0.6))
+                .foregroundStyle(Color(nsColor: theme.chromeMuted).opacity(0.6))
 
             Text("Could not connect to")
                 .font(.system(size: 12))
-                .foregroundColor(Color(nsColor: theme.chromeMuted))
+                .foregroundStyle(Color(nsColor: theme.chromeMuted))
 
             Text(session.displayName)
                 .font(.system(size: 13, weight: .medium, design: .monospaced))
-                .foregroundColor(Color(nsColor: theme.chromeText))
+                .foregroundStyle(Color(nsColor: theme.chromeText))
 
             Text("File explorer requires key-based\nSSH auth or SSH agent.")
                 .font(.system(size: 10))
-                .foregroundColor(Color(nsColor: theme.chromeMuted).opacity(0.6))
+                .foregroundStyle(Color(nsColor: theme.chromeMuted).opacity(0.6))
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 16)
 
@@ -221,7 +221,7 @@ struct RemoteFileTreeRowView: View {
                 } else {
                     Image(systemName: node.isExpanded ? "chevron.down" : "chevron.right")
                         .font(.system(size: 9, weight: .semibold))
-                        .foregroundColor(mutedColor)
+                        .foregroundStyle(mutedColor)
                         .frame(width: 10)
                 }
             } else {
@@ -232,12 +232,12 @@ struct RemoteFileTreeRowView: View {
                 Image(systemName: node.isDirectory ? "folder.fill" : fileIcon(for: node.name))
                     .font(.system(size: iconSize))
                     .frame(width: 16, height: 16)
-                    .foregroundColor(node.isDirectory ? accentColor.opacity(0.8) : mutedColor)
+                    .foregroundStyle(node.isDirectory ? accentColor.opacity(0.8) : mutedColor)
             }
 
             Text(node.name)
                 .font(explorerFont)
-                .foregroundColor(textColor)
+                .foregroundStyle(textColor)
                 .lineLimit(1)
 
             Spacer()

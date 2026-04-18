@@ -171,7 +171,7 @@ struct FolderInfoView: View {
         HStack(spacing: 6) {
             Image(systemName: icon)
                 .font(fontScale.font(.sm))
-                .foregroundColor(Color(theme.chromeMuted))
+                .foregroundStyle(Color(theme.chromeMuted))
                 .frame(width: 14)
             Text(label)
                 .font(fontScale.font(.base))

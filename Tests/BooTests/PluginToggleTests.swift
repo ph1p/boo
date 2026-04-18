@@ -8,14 +8,18 @@ final class PluginToggleTests: XCTestCase {
 
     private var originalDisabled: [String] = []
 
-    override func setUp() {
-        super.setUp()
-        originalDisabled = AppSettings.shared.disabledPluginIDs
+    override func setUp() async throws {
+        try await super.setUp()
+        await MainActor.run {
+            originalDisabled = AppSettings.shared.disabledPluginIDs
+        }
     }
 
-    override func tearDown() {
-        AppSettings.shared.disabledPluginIDs = originalDisabled
-        super.tearDown()
+    override func tearDown() async throws {
+        await MainActor.run {
+            AppSettings.shared.disabledPluginIDs = originalDisabled
+        }
+        try await super.tearDown()
     }
 
     // MARK: - disabledPluginIDs toggling

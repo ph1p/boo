@@ -468,10 +468,10 @@ final class ClaudeCodePlugin: BooPluginProtocol {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("No Claude Code sessions found")
                             .font(fontScale.font(.base))
-                            .foregroundColor(textColor)
+                            .foregroundStyle(textColor)
                         Text("Run `claude` in a terminal to start")
                             .font(fontScale.font(.sm))
-                            .foregroundColor(mutedColor)
+                            .foregroundStyle(mutedColor)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 12)
@@ -1257,7 +1257,7 @@ final class ClaudeCodePlugin: BooPluginProtocol {
     func updateClaudeSetting(key: String, value: Any) {
         nonisolated(unsafe) let capturedValue = value
         DispatchQueue.global(qos: .utility).async { [weak self] in
-        let value = capturedValue
+            let value = capturedValue
             let fm = FileManager.default
             let path = ClaudeSettings.settingsPath
 

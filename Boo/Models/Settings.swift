@@ -282,7 +282,7 @@ final class AppSettings {
         get { bool(K.autoTheme, default: false) }
         set {
             set(newValue, forKey: K.autoTheme, topic: .theme)
-            if newValue { applySystemAppearance() }
+            if newValue { DispatchQueue.main.async { AppSettings.shared.applySystemAppearance() } }
         }
     }
 
@@ -290,7 +290,7 @@ final class AppSettings {
         get { UserDefaults.standard.string(forKey: K.darkThemeName) ?? "Default Dark" }
         set {
             set(newValue, forKey: K.darkThemeName, topic: .theme)
-            if autoTheme { applySystemAppearance() }
+            if autoTheme { DispatchQueue.main.async { AppSettings.shared.applySystemAppearance() } }
         }
     }
 
@@ -298,7 +298,7 @@ final class AppSettings {
         get { UserDefaults.standard.string(forKey: K.lightThemeName) ?? "Solarized Light" }
         set {
             set(newValue, forKey: K.lightThemeName, topic: .theme)
-            if autoTheme { applySystemAppearance() }
+            if autoTheme { DispatchQueue.main.async { AppSettings.shared.applySystemAppearance() } }
         }
     }
 
@@ -335,7 +335,7 @@ final class AppSettings {
     }
 
     /// Apply the correct theme based on system dark/light mode.
-    func applySystemAppearance() {
+    @MainActor func applySystemAppearance() {
         guard autoTheme else { return }
         let isDark = NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
         let target = isDark ? darkThemeName : lightThemeName
@@ -921,9 +921,9 @@ final class AppSettings {
 /// Observable wrapper so SwiftUI views re-render when settings change.
 /// Pass `topics` to limit re-renders to only the settings categories the view cares about.
 /// An empty `topics` set (the default) matches all changes (backward-compatible).
-final class SettingsObserver: ObservableObject {
+@MainActor final class SettingsObserver: ObservableObject {
     @Published var revision: Int = 0
-    private var observer: Any?
+    nonisolated(unsafe) private var observer: Any?
     private let topics: Set<SettingsTopic>
 
     init(topics: Set<SettingsTopic> = []) {
@@ -931,16 +931,18 @@ final class SettingsObserver: ObservableObject {
         observer = NotificationCenter.default.addObserver(
             forName: .settingsChanged, object: nil, queue: .main
         ) { [weak self] notification in
-            guard let self else { return }
-            // If this observer filters by topic, check the notification's topic
-            if !self.topics.isEmpty,
-                let topicRaw = notification.userInfo?["topic"] as? String,
-                let topic = SettingsTopic(rawValue: topicRaw),
-                !self.topics.contains(topic)
-            {
-                return  // Not a topic we care about — skip re-render
+            let topicRaw = notification.userInfo?["topic"] as? String
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                if !self.topics.isEmpty,
+                    let topicRaw,
+                    let topic = SettingsTopic(rawValue: topicRaw),
+                    !self.topics.contains(topic)
+                {
+                    return
+                }
+                self.revision += 1
             }
-            self.revision += 1
         }
     }
 

@@ -22,10 +22,10 @@ struct SnippetsPanelView: View {
             HStack {
                 Image(systemName: "text.page.fill")
                     .font(.system(size: 10))
-                    .foregroundColor(accentColor)
+                    .foregroundStyle(accentColor)
                 Text("SNIPPETS")
                     .font(.system(size: 10.5, weight: .semibold))
-                    .foregroundColor(mutedColor)
+                    .foregroundStyle(mutedColor)
                     .tracking(0.8)
 
                 Spacer()
@@ -33,7 +33,7 @@ struct SnippetsPanelView: View {
                 Button(action: { isAdding = true }) {
                     Image(systemName: "plus")
                         .font(.system(size: 10))
-                        .foregroundColor(mutedColor)
+                        .foregroundStyle(mutedColor)
                 }
                 .buttonStyle(.plain)
                 .help("Add snippet")
@@ -47,13 +47,13 @@ struct SnippetsPanelView: View {
                     Spacer()
                     Image(systemName: "text.page")
                         .font(.system(size: 24))
-                        .foregroundColor(mutedColor.opacity(0.3))
+                        .foregroundStyle(mutedColor.opacity(0.3))
                     Text("No snippets yet")
                         .font(fontScale.font(.base))
-                        .foregroundColor(mutedColor.opacity(0.5))
+                        .foregroundStyle(mutedColor.opacity(0.5))
                     Text("Add commands you use often")
                         .font(fontScale.font(.xs))
-                        .foregroundColor(mutedColor.opacity(0.35))
+                        .foregroundStyle(mutedColor.opacity(0.35))
                     Spacer()
                 }
                 .frame(maxWidth: .infinity)
@@ -146,24 +146,24 @@ struct SnippetRow: View {
         HStack(spacing: 6) {
             Image(systemName: "terminal")
                 .font(.system(size: 10))
-                .foregroundColor(mutedColor.opacity(0.6))
+                .foregroundStyle(mutedColor.opacity(0.6))
                 .frame(width: 14)
 
             VStack(alignment: .leading, spacing: 1) {
                 Text(snippet.name)
                     .font(fontScale.font(.base).weight(.medium))
-                    .foregroundColor(textColor)
+                    .foregroundStyle(textColor)
                     .lineLimit(1)
 
                 Text(snippet.command)
                     .font(.system(size: fontScale.size(.xs), design: .monospaced))
-                    .foregroundColor(accentColor.opacity(0.7))
+                    .foregroundStyle(accentColor.opacity(0.7))
                     .lineLimit(1)
 
                 if !snippet.description.isEmpty {
                     Text(snippet.description)
                         .font(fontScale.font(.xs))
-                        .foregroundColor(mutedColor.opacity(0.5))
+                        .foregroundStyle(mutedColor.opacity(0.5))
                         .lineLimit(1)
                 }
             }
@@ -174,7 +174,7 @@ struct SnippetRow: View {
                 Button(action: onRun) {
                     Image(systemName: "play.fill")
                         .font(.system(size: 9))
-                        .foregroundColor(accentColor)
+                        .foregroundStyle(accentColor)
                 }
                 .buttonStyle(.plain)
                 .help("Run in terminal")
@@ -228,10 +228,10 @@ struct SnippetEditRow: View {
             HStack(spacing: 4) {
                 Image(systemName: "pencil")
                     .font(.system(size: 8))
-                    .foregroundColor(accentColor.opacity(0.7))
+                    .foregroundStyle(accentColor.opacity(0.7))
                 Text(initialName.isEmpty ? "NEW SNIPPET" : "EDIT SNIPPET")
                     .font(.system(size: 9, weight: .medium))
-                    .foregroundColor(mutedColor.opacity(0.6))
+                    .foregroundStyle(mutedColor.opacity(0.6))
                     .tracking(0.5)
                 Spacer()
             }
@@ -241,7 +241,7 @@ struct SnippetEditRow: View {
             TextField("Name", text: $name)
                 .textFieldStyle(.plain)
                 .font(fontScale.font(.base))
-                .foregroundColor(textColor)
+                .foregroundStyle(textColor)
                 .padding(.horizontal, 6)
                 .padding(.vertical, 4)
                 .background(
@@ -258,7 +258,7 @@ struct SnippetEditRow: View {
             TextField("Command", text: $command)
                 .textFieldStyle(.plain)
                 .font(.system(size: fontScale.size(.xs), design: .monospaced))
-                .foregroundColor(accentColor)
+                .foregroundStyle(accentColor)
                 .padding(.horizontal, 6)
                 .padding(.vertical, 4)
                 .background(
@@ -275,7 +275,7 @@ struct SnippetEditRow: View {
             TextField("Description (optional)", text: $description)
                 .textFieldStyle(.plain)
                 .font(fontScale.font(.xs))
-                .foregroundColor(mutedColor)
+                .foregroundStyle(mutedColor)
                 .padding(.horizontal, 6)
                 .padding(.vertical, 4)
                 .background(
@@ -294,7 +294,7 @@ struct SnippetEditRow: View {
                 Button("Cancel") { onCancel() }
                     .buttonStyle(.plain)
                     .font(fontScale.font(.xs))
-                    .foregroundColor(mutedColor.opacity(0.7))
+                    .foregroundStyle(mutedColor.opacity(0.7))
 
                 Button("Save") {
                     let trimmedName = name.trimmingCharacters(in: .whitespaces)
@@ -306,7 +306,7 @@ struct SnippetEditRow: View {
                 }
                 .buttonStyle(.plain)
                 .font(fontScale.font(.xs).weight(.semibold))
-                .foregroundColor(canSave ? accentColor : accentColor.opacity(0.3))
+                .foregroundStyle(canSave ? accentColor : accentColor.opacity(0.3))
                 .padding(.horizontal, 10)
                 .padding(.vertical, 3)
                 .background(

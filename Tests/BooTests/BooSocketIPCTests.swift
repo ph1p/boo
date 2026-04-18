@@ -89,14 +89,18 @@ final class BooSocketQueryTests: BooSocketIntegrationTestCase {
 
     private var originalContext: TerminalContext!
 
-    override func setUp() {
-        super.setUp()
-        originalContext = AppStore.shared.context
+    override func setUp() async throws {
+        try await super.setUp()
+        await MainActor.run {
+            originalContext = AppStore.shared.context
+        }
     }
 
-    override func tearDown() {
-        AppStore.shared.updateContext(originalContext)
-        super.tearDown()
+    override func tearDown() async throws {
+        await MainActor.run {
+            AppStore.shared.updateContext(originalContext)
+        }
+        try await super.tearDown()
     }
 
     private func roundTrip(_ command: [String: Any]) throws -> [String: Any] {

@@ -3,23 +3,27 @@ import XCTest
 
 @testable import Boo
 
-final class TerminalBridgeTests: XCTestCase {
-    private var bridge: TerminalBridge!
-    private var cancellables: Set<AnyCancellable>!
+@MainActor final class TerminalBridgeTests: XCTestCase {
+    nonisolated(unsafe) private var bridge: TerminalBridge!
+    nonisolated(unsafe) private var cancellables: Set<AnyCancellable>!
     private let paneID = UUID()
     private let workspaceID = UUID()
     private let localHome = NSHomeDirectory()
 
-    override func setUp() {
-        super.setUp()
-        cancellables = []
-        bridge = TerminalBridge(paneID: paneID, workspaceID: workspaceID, workingDirectory: "/tmp")
+    override func setUp() async throws {
+        try await super.setUp()
+        await MainActor.run {
+            cancellables = []
+            bridge = TerminalBridge(paneID: paneID, workspaceID: workspaceID, workingDirectory: "/tmp")
+        }
     }
 
-    override func tearDown() {
-        cancellables = nil
-        bridge = nil
-        super.tearDown()
+    override func tearDown() async throws {
+        await MainActor.run {
+            cancellables = nil
+            bridge = nil
+        }
+        try await super.tearDown()
     }
 
     func testInitialState() {
@@ -579,7 +583,7 @@ final class TerminalBridgeTests: XCTestCase {
 
         // gethostname(2) result
         var buf = [CChar](repeating: 0, count: 256)
-        if gethostname(&buf, buf.count) == 0, let hn = String(validatingUTF8: buf), !hn.isEmpty {
+        if gethostname(&buf, buf.count) == 0, let hn = String(validating: buf, as: UTF8.self), !hn.isEmpty {
             XCTAssertTrue(TerminalBridge.isLocalHost(hn), "gethostname '\(hn)' should be local")
         }
     }
@@ -595,7 +599,7 @@ final class TerminalBridgeTests: XCTestCase {
         // The real local hostname from gethostname — simulates "user@hostname" style prompt
         var buf = [CChar](repeating: 0, count: 256)
         guard gethostname(&buf, buf.count) == 0,
-            let hn = String(validatingUTF8: buf), !hn.isEmpty
+            let hn = String(validating: buf, as: UTF8.self), !hn.isEmpty
         else {
             return  // Can't test without a hostname
         }
@@ -632,7 +636,7 @@ final class TerminalBridgeTests: XCTestCase {
     func testTitleLooksRemoteWithActualLocalHostname() {
         var buf = [CChar](repeating: 0, count: 256)
         guard gethostname(&buf, buf.count) == 0,
-            let hn = String(validatingUTF8: buf), !hn.isEmpty
+            let hn = String(validating: buf, as: UTF8.self), !hn.isEmpty
         else { return }
         XCTAssertFalse(TerminalBridge.titleLooksRemote("user@\(hn): ~/dir"))
         XCTAssertTrue(TerminalBridge.titleLooksRemote("user@definitely-remote-box: ~/dir"))
@@ -718,7 +722,7 @@ final class TerminalBridgeTests: XCTestCase {
         // Use the real local hostname so the detection recognizes it as local
         var buf = [CChar](repeating: 0, count: 256)
         guard gethostname(&buf, buf.count) == 0,
-            let localHost = String(validatingUTF8: buf), !localHost.isEmpty
+            let localHost = String(validating: buf, as: UTF8.self), !localHost.isEmpty
         else {
             return  // Can't test without a hostname
         }
@@ -789,7 +793,7 @@ final class TerminalBridgeTests: XCTestCase {
     func testSSHExitFastRetypeWithCwdRace() {
         var buf = [CChar](repeating: 0, count: 256)
         guard gethostname(&buf, buf.count) == 0,
-            let localHost = String(validatingUTF8: buf), !localHost.isEmpty
+            let localHost = String(validating: buf, as: UTF8.self), !localHost.isEmpty
         else { return }
         let localUser = NSUserName()
 
@@ -1177,7 +1181,7 @@ final class TerminalBridgeTests: XCTestCase {
         let localUser = NSUserName()
         var buf = [CChar](repeating: 0, count: 256)
         guard gethostname(&buf, buf.count) == 0,
-            let localHost = String(validatingUTF8: buf), !localHost.isEmpty
+            let localHost = String(validating: buf, as: UTF8.self), !localHost.isEmpty
         else { return }
 
         bridge = TerminalBridge(paneID: paneID, workspaceID: workspaceID, workingDirectory: "/Users/\(localUser)")

@@ -21,15 +21,15 @@ struct BookmarksPanelView: View {
             HStack {
                 Image(systemName: "bookmark.fill")
                     .font(.system(size: 10))
-                    .foregroundColor(accentColor)
+                    .foregroundStyle(accentColor)
                 Text("BOOKMARKS")
                     .font(.system(size: 10.5, weight: .semibold))
-                    .foregroundColor(mutedColor)
+                    .foregroundStyle(mutedColor)
                     .tracking(0.8)
                 if namespace != "local" {
                     Text(namespace)
                         .font(.system(size: 9, weight: .medium))
-                        .foregroundColor(accentColor.opacity(0.7))
+                        .foregroundStyle(accentColor.opacity(0.7))
                         .padding(.horizontal, 4)
                         .padding(.vertical, 1)
                         .background(accentColor.opacity(0.1))
@@ -44,7 +44,7 @@ struct BookmarksPanelView: View {
                 }) {
                     Image(systemName: isCurrentBookmarked ? "bookmark.slash" : "plus")
                         .font(.system(size: 10))
-                        .foregroundColor(mutedColor)
+                        .foregroundStyle(mutedColor)
                 }
                 .buttonStyle(.plain)
                 .help(isCurrentBookmarked ? "Remove bookmark" : "Bookmark current directory")
@@ -58,10 +58,10 @@ struct BookmarksPanelView: View {
                     Spacer()
                     Image(systemName: "bookmark")
                         .font(.system(size: 24))
-                        .foregroundColor(mutedColor.opacity(0.3))
+                        .foregroundStyle(mutedColor.opacity(0.3))
                     Text("No bookmarks yet")
                         .font(fontScale.font(.base))
-                        .foregroundColor(mutedColor.opacity(0.5))
+                        .foregroundStyle(mutedColor.opacity(0.5))
                     Spacer()
                 }
                 .frame(maxWidth: .infinity)
@@ -116,19 +116,19 @@ struct BookmarkRow: View {
         HStack(spacing: 6) {
             Image(systemName: bookmark.icon)
                 .font(.system(size: 10))
-                .foregroundColor(isCurrent ? accentColor : mutedColor.opacity(0.6))
+                .foregroundStyle(isCurrent ? accentColor : mutedColor.opacity(0.6))
                 .frame(width: 14)
 
             VStack(alignment: .leading, spacing: 1) {
                 let nameWeight: Font.Weight = isCurrent ? .semibold : .medium
                 Text(bookmark.name)
                     .font(fontScale.font(.base).weight(nameWeight))
-                    .foregroundColor(isCurrent ? accentColor : textColor)
+                    .foregroundStyle(isCurrent ? accentColor : textColor)
                     .lineLimit(1)
 
                 Text(abbreviatePath(bookmark.path))
                     .font(fontScale.font(.xs))
-                    .foregroundColor(mutedColor.opacity(0.6))
+                    .foregroundStyle(mutedColor.opacity(0.6))
                     .lineLimit(1)
             }
 
@@ -137,7 +137,7 @@ struct BookmarkRow: View {
             if isCurrent {
                 Image(systemName: "checkmark")
                     .font(.system(size: 8, weight: .bold))
-                    .foregroundColor(accentColor.opacity(0.7))
+                    .foregroundStyle(accentColor.opacity(0.7))
             }
         }
         .padding(.horizontal, 12)

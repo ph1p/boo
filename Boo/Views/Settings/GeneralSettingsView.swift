@@ -22,7 +22,7 @@ struct GeneralSettingsView: View {
                 HStack(spacing: 8) {
                     Text(defaultFolder)
                         .font(.system(size: 12, design: .monospaced))
-                        .foregroundColor(t.muted)
+                        .foregroundStyle(t.muted)
                         .lineLimit(1)
                         .truncationMode(.middle)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -56,7 +56,7 @@ struct GeneralSettingsView: View {
                 HStack(spacing: 8) {
                     Text("Initial tab")
                         .font(.system(size: 12))
-                        .foregroundColor(t.text)
+                        .foregroundStyle(t.text)
                         .frame(width: 80, alignment: .leading)
                     Picker("", selection: $defaultTabType) {
                         Text(ContentType.terminal.displayName).tag(ContentType.terminal)
@@ -67,7 +67,7 @@ struct GeneralSettingsView: View {
                     }
                     .labelsHidden()
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .onChange(of: defaultTabType) { v in
+                    .onChange(of: defaultTabType) { _, v in
                         AppSettings.shared.defaultTabType = v
                     }
                 }
@@ -75,12 +75,12 @@ struct GeneralSettingsView: View {
                 HStack(spacing: 8) {
                     Text("Main page")
                         .font(.system(size: 12))
-                        .foregroundColor(t.text)
+                        .foregroundStyle(t.text)
                         .frame(width: 80, alignment: .leading)
                     TextField("Path or URL", text: $defaultMainPage)
                         .textFieldStyle(.plain)
                         .font(.system(size: 12, design: .monospaced))
-                        .foregroundColor(t.text)
+                        .foregroundStyle(t.text)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 5)
                         .background(
@@ -91,7 +91,7 @@ struct GeneralSettingsView: View {
                             AppSettings.shared.defaultMainPage =
                                 defaultMainPage.trimmingCharacters(in: .whitespaces)
                         }
-                        .onChange(of: defaultMainPage) { v in
+                        .onChange(of: defaultMainPage) { _, v in
                             AppSettings.shared.defaultMainPage = v.trimmingCharacters(in: .whitespaces)
                         }
                 }
@@ -99,7 +99,7 @@ struct GeneralSettingsView: View {
                     "Used for the first tab in a new workspace. Terminal expects a folder path, browser expects a URL, and editor/image/markdown expect a file path."
                 )
                 .font(.system(size: 11))
-                .foregroundColor(t.muted)
+                .foregroundStyle(t.muted)
             }
 
             Section(title: "New Tab & Pane Path") {
@@ -108,12 +108,12 @@ struct GeneralSettingsView: View {
                 }
                 .labelsHidden()
                 .pickerStyle(.segmented)
-                .onChange(of: newTabCwdMode) { v in AppSettings.shared.newTabCwdMode = v }
+                .onChange(of: newTabCwdMode) { _, v in AppSettings.shared.newTabCwdMode = v }
                 Text(
                     "Whether new tabs and split panes open in the active tab's current directory or the workspace default folder."
                 )
                 .font(.system(size: 11))
-                .foregroundColor(t.muted)
+                .foregroundStyle(t.muted)
             }
 
             Section(title: "File Editor") {
@@ -121,7 +121,7 @@ struct GeneralSettingsView: View {
                     TextField("vim, nvim, nano… (empty = $EDITOR)", text: $fileEditorCommand)
                         .textFieldStyle(.plain)
                         .font(.system(size: 12, design: .monospaced))
-                        .foregroundColor(t.text)
+                        .foregroundStyle(t.text)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 5)
                         .background(
@@ -132,32 +132,32 @@ struct GeneralSettingsView: View {
                             AppSettings.shared.fileEditorCommand =
                                 fileEditorCommand.trimmingCharacters(in: .whitespaces)
                         }
-                        .onChange(of: fileEditorCommand) { v in
+                        .onChange(of: fileEditorCommand) { _, v in
                             AppSettings.shared.fileEditorCommand =
                                 v.trimmingCharacters(in: .whitespaces)
                         }
                 }
                 Text("Command run when clicking a file in the explorer. Leave empty to use $EDITOR.")
                     .font(.system(size: 11))
-                    .foregroundColor(t.muted)
+                    .foregroundStyle(t.muted)
             }
 
             Section(title: "Updates") {
                 ToggleRow(label: "Check for updates automatically", isOn: $autoCheckUpdates)
-                    .onChange(of: autoCheckUpdates) { v in AppSettings.shared.autoCheckUpdates = v }
+                    .onChange(of: autoCheckUpdates) { _, v in AppSettings.shared.autoCheckUpdates = v }
             }
 
             Section(title: "Advanced") {
                 ToggleRow(label: "Debug logging", isOn: $debugLogging)
-                    .onChange(of: debugLogging) { v in
+                    .onChange(of: debugLogging) { _, v in
                         AppSettings.shared.debugLogging = v
                         BooLogger.shared.applyDebugSetting(v)
                     }
                 Text("Writes verbose output to the system log. Disable when not troubleshooting.")
                     .font(.system(size: 11))
-                    .foregroundColor(t.muted)
+                    .foregroundStyle(t.muted)
             }
         }
-        .foregroundColor(t.text)
+        .foregroundStyle(t.text)
     }
 }

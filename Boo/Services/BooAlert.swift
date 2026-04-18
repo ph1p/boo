@@ -51,7 +51,7 @@ enum BooAlert {
                 ctx.duration = 0.4
                 label.animator().alphaValue = 0
             }) {
-                label.removeFromSuperview()
+                MainActor.assumeIsolated { label.removeFromSuperview() }
             }
         }
     }

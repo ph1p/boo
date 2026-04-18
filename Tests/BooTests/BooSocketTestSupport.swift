@@ -6,14 +6,18 @@ import XCTest
 
 @MainActor
 class BooSocketIntegrationTestCase: XCTestCase {
-    override func setUp() {
-        super.setUp()
-        BooSocketTestSupport.startSharedServer()
+    override func setUp() async throws {
+        try await super.setUp()
+        await MainActor.run {
+            BooSocketTestSupport.startSharedServer()
+        }
     }
 
-    override func tearDown() {
-        BooSocketTestSupport.stopSharedServer()
-        super.tearDown()
+    override func tearDown() async throws {
+        await MainActor.run {
+            BooSocketTestSupport.stopSharedServer()
+        }
+        try await super.tearDown()
     }
 }
 

@@ -8,14 +8,18 @@ final class SidebarPluginOrderTests: XCTestCase {
 
     private var originalOrder: [String] = []
 
-    override func setUp() {
-        super.setUp()
-        originalOrder = AppSettings.shared.sidebarTabOrder
+    override func setUp() async throws {
+        try await super.setUp()
+        await MainActor.run {
+            originalOrder = AppSettings.shared.sidebarTabOrder
+        }
     }
 
-    override func tearDown() {
-        AppSettings.shared.sidebarTabOrder = originalOrder
-        super.tearDown()
+    override func tearDown() async throws {
+        await MainActor.run {
+            AppSettings.shared.sidebarTabOrder = originalOrder
+        }
+        try await super.tearDown()
     }
 
     // MARK: - Round-trip persistence

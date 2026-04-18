@@ -72,7 +72,7 @@ import Cocoa
         settingsObserver = NotificationCenter.default.addObserver(
             forName: .settingsChanged, object: nil, queue: .main
         ) { [weak self] _ in
-            self?.needsDisplay = true
+            MainActor.assumeIsolated { self?.needsDisplay = true }
         }
     }
 
@@ -209,7 +209,7 @@ import Cocoa
     }
 
     /// Returns (branchName, repoRoot) or (nil, nil).
-    static func detectGitInfo(in directory: String) -> (String?, String?) {
+    nonisolated static func detectGitInfo(in directory: String) -> (String?, String?) {
         var dir = directory
         while !dir.isEmpty && dir != "/" {
             let gitDir = (dir as NSString).appendingPathComponent(".git")

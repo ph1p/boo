@@ -1,7 +1,7 @@
 import Cocoa
 
 /// Floating dropdown panel that shows URL history matches beneath the browser address bar.
-final class URLAutocompletePanel: NSObject, NSTableViewDataSource, NSTableViewDelegate {
+@MainActor final class URLAutocompletePanel: NSObject, NSTableViewDataSource, NSTableViewDelegate {
     struct Item {
         let title: String
         let url: URL

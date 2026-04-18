@@ -16,46 +16,48 @@ final class SplitWorkspaceE2ETests: XCTestCase {
     private let paneID = UUID()
     private let workspaceID = UUID()
 
-    override func setUp() {
-        super.setUp()
+    override func setUp() async throws {
+        try await super.setUp()
         cancellables = []
         bridge = TerminalBridge(paneID: paneID, workspaceID: workspaceID, workingDirectory: "/tmp")
         registry = PluginRegistry()
         debug = DebugPlugin()
         registry.register(debug)
 
-        nonisolated(unsafe) weak var weakSelf = self
-        bridge.events.sink { event in
-            MainActor.assumeIsolated {
-                guard let self = weakSelf else { return }
-                let ctx = self.makeContext()
-                switch event {
-                case .directoryChanged(let path):
-                    self.registry.notifyCwdChanged(newPath: path, context: ctx)
-                    self.registry.runCycle(baseContext: ctx, reason: .cwdChanged)
-                case .processChanged(let name):
-                    self.registry.notifyProcessChanged(name: name, context: ctx)
-                    self.registry.runCycle(baseContext: ctx, reason: .processChanged)
-                case .remoteSessionChanged(let session):
-                    self.registry.notifyRemoteSessionChanged(session: session, context: ctx)
-                    self.registry.runCycle(baseContext: ctx, reason: .remoteSessionChanged)
-                case .titleChanged:
-                    self.registry.runCycle(baseContext: ctx, reason: .titleChanged)
-                case .focusChanged:
-                    break
-                default:
-                    break
+        bridge.events
+            .receive(on: RunLoop.main)
+            .sink { [weak self] event in
+                MainActor.assumeIsolated {
+                    guard let self = self else { return }
+                    let ctx = self.makeContext()
+                    switch event {
+                    case .directoryChanged(let path):
+                        self.registry.notifyCwdChanged(newPath: path, context: ctx)
+                        self.registry.runCycle(baseContext: ctx, reason: .cwdChanged)
+                    case .processChanged(let name):
+                        self.registry.notifyProcessChanged(name: name, context: ctx)
+                        self.registry.runCycle(baseContext: ctx, reason: .processChanged)
+                    case .remoteSessionChanged(let session):
+                        self.registry.notifyRemoteSessionChanged(session: session, context: ctx)
+                        self.registry.runCycle(baseContext: ctx, reason: .remoteSessionChanged)
+                    case .titleChanged:
+                        self.registry.runCycle(baseContext: ctx, reason: .titleChanged)
+                    case .focusChanged:
+                        break
+                    default:
+                        break
+                    }
                 }
             }
-        }.store(in: &cancellables)
+            .store(in: &cancellables)
     }
 
-    override func tearDown() {
+    override func tearDown() async throws {
         cancellables = nil
         bridge = nil
         registry = nil
         debug = nil
-        super.tearDown()
+        try await super.tearDown()
     }
 
     private func makeContext(
@@ -643,8 +645,11 @@ final class SplitWorkspaceE2ETests: XCTestCase {
         let id1 = ws.activePaneID
         _ = ws.splitPane(id1, direction: .horizontal)
 
-        // Simulate SSH in pane 1
-        bridge.handleTitleChange(title: "ssh user@prod.example.com", paneID: paneID)
+        // Simulate SSH in pane 1 — notify plugin directly (sink is async via RunLoop.main)
+        let session = RemoteSessionType.ssh(host: "prod.example.com")
+        let ctx = makeContext(ws: ws, pane: ws.pane(for: id1))
+        registry.notifyRemoteSessionChanged(session: session, context: ctx)
+        registry.runCycle(baseContext: ctx, reason: .remoteSessionChanged)
 
         let remoteEvents = events(named: "remoteSessionChanged")
         XCTAssertGreaterThanOrEqual(remoteEvents.count, 1)

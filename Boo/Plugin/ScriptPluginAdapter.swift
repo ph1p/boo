@@ -207,14 +207,14 @@ struct PluginErrorView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
                 Image(systemName: "exclamationmark.triangle")
-                    .foregroundColor(.red)
+                    .foregroundStyle(.red)
                 Text("\(pluginName) error")
                     .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(.red)
+                    .foregroundStyle(.red)
             }
             Text(error)
                 .font(.system(size: 11))
-                .foregroundColor(Color(nsColor: theme.chromeMuted))
+                .foregroundStyle(Color(nsColor: theme.chromeMuted))
         }
         .padding(12)
         .accessibilityElement(children: .combine)
@@ -232,7 +232,7 @@ struct PluginLoadingView: View {
                 .scaleEffect(0.7)
             Text("Loading...")
                 .font(.system(size: 11))
-                .foregroundColor(Color(nsColor: theme.chromeMuted))
+                .foregroundStyle(Color(nsColor: theme.chromeMuted))
         }
         .padding(12)
         .accessibilityLabel("\(pluginName), loading")

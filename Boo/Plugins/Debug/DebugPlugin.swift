@@ -206,7 +206,7 @@ private struct DebugDetailView: View {
                 }
                 .buttonStyle(.plain)
                 .font(fontScale.font(.base))
-                .foregroundColor(accentColor)
+                .foregroundStyle(accentColor)
                 .padding(.horizontal, 6)
                 .padding(.vertical, 2)
                 .background(accentColor.opacity(0.1))
@@ -217,7 +217,7 @@ private struct DebugDetailView: View {
                 Button("Copy") { onCopyLog() }
                     .buttonStyle(.plain)
                     .font(fontScale.font(.base))
-                    .foregroundColor(mutedColor)
+                    .foregroundStyle(mutedColor)
                     .padding(.horizontal, 6)
                     .padding(.vertical, 2)
                     .background(mutedColor.opacity(0.1))
@@ -226,7 +226,7 @@ private struct DebugDetailView: View {
                 Button("Clear") { onClear() }
                     .buttonStyle(.plain)
                     .font(fontScale.font(.base))
-                    .foregroundColor(mutedColor)
+                    .foregroundStyle(mutedColor)
                     .padding(.horizontal, 6)
                     .padding(.vertical, 2)
                     .background(mutedColor.opacity(0.1))
@@ -289,11 +289,11 @@ private struct DebugDetailView: View {
         HStack(alignment: .top, spacing: 6) {
             Text(label)
                 .font(fontScale.font(.base).weight(.medium))
-                .foregroundColor(mutedColor)
+                .foregroundStyle(mutedColor)
                 .frame(width: 80, alignment: .trailing)
             Text(value)
                 .font(fontScale.font(.base, design: .monospaced))
-                .foregroundColor(textColor)
+                .foregroundStyle(textColor)
                 .lineLimit(2)
                 .textSelection(.enabled)
             Spacer(minLength: 0)
@@ -308,11 +308,11 @@ private struct DebugDetailView: View {
             HStack {
                 Image(systemName: "line.3.horizontal.decrease")
                     .font(fontScale.font(.base))
-                    .foregroundColor(mutedColor)
+                    .foregroundStyle(mutedColor)
                 TextField("Filter events...", text: $filter)
                     .textFieldStyle(.plain)
                     .font(fontScale.font(.base))
-                    .foregroundColor(textColor)
+                    .foregroundStyle(textColor)
             }
             .padding(.horizontal, 10)
             .padding(.bottom, 4)
@@ -328,7 +328,7 @@ private struct DebugDetailView: View {
                     }
                     .padding(.horizontal, 10)
                 }
-                .onChange(of: entries.count) {
+                .onChange(of: entries.count) { _, _ in
                     if let last = filteredEntries.last {
                         proxy.scrollTo(last.id, anchor: .bottom)
                     }
@@ -349,14 +349,14 @@ private struct DebugDetailView: View {
         HStack(alignment: .top, spacing: 4) {
             Text(DebugPlugin.timeFormatter.string(from: entry.timestamp))
                 .font(fontScale.font(.sm, design: .monospaced))
-                .foregroundColor(mutedColor.opacity(0.7))
+                .foregroundStyle(mutedColor.opacity(0.7))
             Text(entry.event)
                 .font(fontScale.font(.base, design: .monospaced).weight(.medium))
-                .foregroundColor(eventColor(entry.event))
+                .foregroundStyle(eventColor(entry.event))
             if !entry.detail.isEmpty {
                 Text(entry.detail)
                     .font(fontScale.font(.sm, design: .monospaced))
-                    .foregroundColor(textColor.opacity(0.8))
+                    .foregroundStyle(textColor.opacity(0.8))
                     .lineLimit(3)
             }
             Spacer(minLength: 0)

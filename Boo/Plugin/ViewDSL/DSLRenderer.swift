@@ -86,7 +86,7 @@ struct DSLRenderer: View {
 
         Text(text)
             .font(font)
-            .foregroundColor(color)
+            .foregroundStyle(color)
             .lineLimit(style == .mono ? 2 : nil)
             .accessibilityLabel(text)
     }
@@ -125,7 +125,7 @@ struct DSLRenderer: View {
         Button(action: { onAction?(action) }) {
             Text(label)
                 .font(.system(size: fontSize, weight: .medium))
-                .foregroundColor(color)
+                .foregroundStyle(color)
                 .padding(.horizontal, density == .comfortable ? 12 : 8)
                 .padding(.vertical, density == .comfortable ? 6 : 4)
                 .background(color.opacity(0.1))
@@ -144,7 +144,7 @@ struct DSLRenderer: View {
         let color = tint.map { tintColor($0) } ?? Color(nsColor: theme.accentColor)
         Text(text)
             .font(.system(size: density == .comfortable ? 10 : 9, weight: .bold))
-            .foregroundColor(.white)
+            .foregroundStyle(.white)
             .padding(.horizontal, 6)
             .padding(.vertical, 2)
             .background(color)
@@ -189,18 +189,18 @@ private struct DSLListItemView: View {
             if let icon = item.icon {
                 Image(systemName: icon)
                     .font(.system(size: density == .comfortable ? 13 : 11))
-                    .foregroundColor(item.tint.map { tintColor($0) } ?? Color(nsColor: theme.chromeMuted))
+                    .foregroundStyle(item.tint.map { tintColor($0) } ?? Color(nsColor: theme.chromeMuted))
                     .frame(width: 16)
             }
             VStack(alignment: .leading, spacing: 1) {
                 Text(item.label)
                     .font(.system(size: fontSize))
-                    .foregroundColor(Color(nsColor: theme.chromeText))
+                    .foregroundStyle(Color(nsColor: theme.chromeText))
                     .lineLimit(1)
                 if let detail = item.detail {
                     Text(detail)
                         .font(.system(size: fontSize - 2, design: .monospaced))
-                        .foregroundColor(Color(nsColor: theme.chromeMuted))
+                        .foregroundStyle(Color(nsColor: theme.chromeMuted))
                         .lineLimit(1)
                 }
             }
@@ -248,7 +248,7 @@ private struct DSLContextMenuModifier: ViewModifier {
                             Text(item.label)
                         }
                     }
-                    .foregroundColor(item.style == .destructive ? .red : nil)
+                    .foregroundStyle(item.style == .destructive ? Color.red : Color.primary)
                 }
             }
         } else {

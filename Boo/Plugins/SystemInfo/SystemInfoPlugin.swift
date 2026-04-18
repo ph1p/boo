@@ -273,44 +273,44 @@ private struct SystemInfoDetailView: View {
             HStack {
                 Text("Load avg")
                     .font(fontScale.font(.base))
-                    .foregroundColor(mutedColor)
+                    .foregroundStyle(mutedColor)
                 Spacer()
                 Text(String(format: "%.2f", loadAverage))
                     .font(fontScale.font(.base, design: .monospaced))
-                    .foregroundColor(textColor)
+                    .foregroundStyle(textColor)
             }
 
             HStack {
                 Text("Uptime")
                     .font(fontScale.font(.base))
-                    .foregroundColor(mutedColor)
+                    .foregroundStyle(mutedColor)
                 Spacer()
                 Text(formatUptime(uptimeSeconds))
                     .font(fontScale.font(.base, design: .monospaced))
-                    .foregroundColor(textColor)
+                    .foregroundStyle(textColor)
             }
 
             HStack {
                 Text("Network")
                     .font(fontScale.font(.base))
-                    .foregroundColor(mutedColor)
+                    .foregroundStyle(mutedColor)
                 Spacer()
                 HStack(spacing: 8) {
                     HStack(spacing: 2) {
                         Image(systemName: "arrow.down")
                             .font(fontScale.font(.xs))
-                            .foregroundColor(mutedColor)
+                            .foregroundStyle(mutedColor)
                         Text(formatBytes(netRateIn))
                             .font(fontScale.font(.base, design: .monospaced))
-                            .foregroundColor(textColor)
+                            .foregroundStyle(textColor)
                     }
                     HStack(spacing: 2) {
                         Image(systemName: "arrow.up")
                             .font(fontScale.font(.xs))
-                            .foregroundColor(mutedColor)
+                            .foregroundStyle(mutedColor)
                         Text(formatBytes(netRateOut))
                             .font(fontScale.font(.base, design: .monospaced))
-                            .foregroundColor(textColor)
+                            .foregroundStyle(textColor)
                     }
                 }
             }
@@ -353,7 +353,7 @@ private struct QuickActionButton: View {
         Button(label) { action() }
             .buttonStyle(.plain)
             .font(fontScale.font(.sm))
-            .foregroundColor(color)
+            .foregroundStyle(color)
             .padding(.horizontal, 6)
             .padding(.vertical, 2)
             .background(color.opacity(0.1))
@@ -375,11 +375,11 @@ private struct ResourceRow: View {
             HStack {
                 Text(label)
                     .font(fontScale.font(.base))
-                    .foregroundColor(mutedColor)
+                    .foregroundStyle(mutedColor)
                 Spacer()
                 Text(value)
                     .font(fontScale.font(.base, design: .monospaced))
-                    .foregroundColor(textColor)
+                    .foregroundStyle(textColor)
             }
             GeometryReader { geo in
                 ZStack(alignment: .leading) {

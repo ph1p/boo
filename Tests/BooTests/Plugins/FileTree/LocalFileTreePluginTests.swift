@@ -28,7 +28,7 @@ final class LocalFileTreePluginTests: XCTestCase {
 
     // MARK: - Temp directory helpers
 
-    private var tmpDir: URL!
+    nonisolated(unsafe) private var tmpDir: URL!
 
     override func setUpWithError() throws {
         tmpDir = URL(fileURLWithPath: NSTemporaryDirectory())

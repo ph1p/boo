@@ -49,11 +49,11 @@ private func makeNonGrowableSection(id: String, name: String = "Info") -> Sideba
     )
 }
 
-private func makePanelView(width: CGFloat = 240, height: CGFloat = 500) -> SidebarPanelView {
+@MainActor private func makePanelView(width: CGFloat = 240, height: CGFloat = 500) -> SidebarPanelView {
     SidebarPanelView(frame: NSRect(x: 0, y: 0, width: width, height: height))
 }
 
-private func mouseDownEvent(for window: NSWindow) -> NSEvent {
+@MainActor private func mouseDownEvent(for window: NSWindow) -> NSEvent {
     NSEvent.mouseEvent(
         with: .leftMouseDown,
         location: window.convertPoint(fromScreen: .zero),

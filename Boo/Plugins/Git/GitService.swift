@@ -48,7 +48,7 @@ extension GitPlugin {
         task.standardOutput = pipe
 
         // Read on a separate thread before waiting to prevent deadlock when output > 64KB.
-        var data = Data()
+        nonisolated(unsafe) var data = Data()
         let readGroup = DispatchGroup()
         readGroup.enter()
         DispatchQueue.global(qos: .utility).async {
@@ -83,7 +83,7 @@ extension GitPlugin {
         task.standardError = FileHandle.nullDevice
         let pipe = Pipe()
         task.standardOutput = pipe
-        var data = Data()
+        nonisolated(unsafe) var data = Data()
         let readGroup = DispatchGroup()
         readGroup.enter()
         DispatchQueue.global(qos: .utility).async {
@@ -109,7 +109,7 @@ extension GitPlugin {
         task.standardError = FileHandle.nullDevice
         let pipe = Pipe()
         task.standardOutput = pipe
-        var data = Data()
+        nonisolated(unsafe) var data = Data()
         let readGroup = DispatchGroup()
         readGroup.enter()
         DispatchQueue.global(qos: .utility).async {
@@ -169,7 +169,7 @@ extension GitPlugin {
         task.standardError = FileHandle.nullDevice
         let pipe = Pipe()
         task.standardOutput = pipe
-        var data = Data()
+        nonisolated(unsafe) var data = Data()
         let readGroup = DispatchGroup()
         readGroup.enter()
         DispatchQueue.global(qos: .utility).async {
@@ -238,11 +238,11 @@ extension GitPlugin {
         setupGitWatcher(repoRoot: root)
         DispatchQueue.global(qos: .utility).async { [weak self] in
             let group = DispatchGroup()
-            var files: [GitChangedFile] = []
-            var aheadCount = 0
-            var behindCount = 0
-            var lastCommit: String?
-            var remotes: [GitRemote] = []
+            nonisolated(unsafe) var files: [GitChangedFile] = []
+            nonisolated(unsafe) var aheadCount = 0
+            nonisolated(unsafe) var behindCount = 0
+            nonisolated(unsafe) var lastCommit: String?
+            nonisolated(unsafe) var remotes: [GitRemote] = []
             // Read branch directly from .git/HEAD — works without git installed.
             let (branch, _) = StatusBarView.detectGitInfo(in: root)
             debugLog("[Git] refreshGitStatus: root=\(root) branch=\(branch ?? "nil")")

@@ -18,49 +18,59 @@ final class DebugPluginE2ETests: XCTestCase {
     private let paneID = UUID()
     private let workspaceID = UUID()
 
-    override func setUp() {
-        super.setUp()
-        cancellables = []
-        bridge = TerminalBridge(paneID: paneID, workspaceID: workspaceID, workingDirectory: "/tmp")
+    override func setUp() async throws {
+        try await super.setUp()
+        await MainActor.run {
+            cancellables = []
+            bridge = TerminalBridge(paneID: paneID, workspaceID: workspaceID, workingDirectory: "/tmp")
 
-        registry = PluginRegistry()
-        debug = DebugPlugin()
-        registry.register(debug)
+            registry = PluginRegistry()
+            debug = DebugPlugin()
+            registry.register(debug)
 
-        // Wire bridge events → registry notifications, mirroring MainWindowController
-        nonisolated(unsafe) weak var weakSelf = self
-        bridge.events
-            .sink { event in
-                MainActor.assumeIsolated {
-                    guard let self = weakSelf else { return }
-                    let ctx = self.currentContext()
+            let bridge = bridge!
+            let registry = registry!
+            self.bridge.events
+                .receive(on: DispatchQueue.main)
+                .sink { event in
+                    let ctx = TerminalContext(
+                        terminalID: bridge.state.tabID,
+                        cwd: bridge.state.workingDirectory,
+                        remoteSession: bridge.state.remoteSession,
+                        gitContext: nil,
+                        processName: bridge.state.foregroundProcess,
+                        paneCount: 1,
+                        tabCount: 1
+                    )
                     switch event {
                     case .directoryChanged(let path):
-                        self.registry.notifyCwdChanged(newPath: path, context: ctx)
-                        self.registry.runCycle(baseContext: ctx, reason: .cwdChanged)
+                        registry.notifyCwdChanged(newPath: path, context: ctx)
+                        registry.runCycle(baseContext: ctx, reason: .cwdChanged)
                     case .processChanged(let name):
-                        self.registry.notifyProcessChanged(name: name, context: ctx)
-                        self.registry.runCycle(baseContext: ctx, reason: .processChanged)
+                        registry.notifyProcessChanged(name: name, context: ctx)
+                        registry.runCycle(baseContext: ctx, reason: .processChanged)
                     case .remoteSessionChanged(let session):
-                        self.registry.notifyRemoteSessionChanged(session: session, context: ctx)
-                        self.registry.runCycle(baseContext: ctx, reason: .remoteSessionChanged)
+                        registry.notifyRemoteSessionChanged(session: session, context: ctx)
+                        registry.runCycle(baseContext: ctx, reason: .remoteSessionChanged)
                     case .titleChanged:
-                        self.registry.runCycle(baseContext: ctx, reason: .titleChanged)
+                        registry.runCycle(baseContext: ctx, reason: .titleChanged)
                     case .focusChanged:
                         break
                     default:
                         break
                     }
-                }
-            }.store(in: &cancellables)
+                }.store(in: &cancellables)
+        }
     }
 
-    override func tearDown() {
-        cancellables = nil
-        bridge = nil
-        registry = nil
-        debug = nil
-        super.tearDown()
+    override func tearDown() async throws {
+        await MainActor.run {
+            cancellables = nil
+            bridge = nil
+            registry = nil
+            debug = nil
+        }
+        try await super.tearDown()
     }
 
     // MARK: - Helpers
@@ -81,12 +91,37 @@ final class DebugPluginE2ETests: XCTestCase {
         debug.entries.filter { $0.event == name }
     }
 
+    private func waitUntil(
+        timeout: TimeInterval = 1.0,
+        pollInterval: TimeInterval = 0.01,
+        _ predicate: @escaping @MainActor () -> Bool
+    ) {
+        let expectation = expectation(description: "condition")
+        let deadline = Date().addingTimeInterval(timeout)
+
+        func poll() {
+            if predicate() || Date() >= deadline {
+                expectation.fulfill()
+                return
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + pollInterval, execute: poll)
+        }
+
+        DispatchQueue.main.async(execute: poll)
+        waitForExpectations(timeout: timeout + 0.2)
+    }
+
+    private func waitForEvents(named name: String, count: Int) -> [DebugPlugin.LogEntry] {
+        waitUntil { self.events(named: name).count >= count }
+        return events(named: name)
+    }
+
     // MARK: - Directory Change E2E
 
     func testCwdChangePropagates() {
         bridge.handleDirectoryChange(path: "/Users/test/project", paneID: paneID)
 
-        let cwdEvents = events(named: "cwdChanged")
+        let cwdEvents = waitForEvents(named: "cwdChanged", count: 1)
         XCTAssertEqual(cwdEvents.count, 1)
         XCTAssertTrue(cwdEvents[0].detail.contains("/Users/test/project"))
     }
@@ -101,7 +136,7 @@ final class DebugPluginE2ETests: XCTestCase {
         bridge.handleDirectoryChange(path: "/b", paneID: paneID)
         bridge.handleDirectoryChange(path: "/c", paneID: paneID)
 
-        let cwdEvents = events(named: "cwdChanged")
+        let cwdEvents = waitForEvents(named: "cwdChanged", count: 3)
         XCTAssertEqual(cwdEvents.count, 3)
         XCTAssertTrue(cwdEvents[0].detail.contains("/a"))
         XCTAssertTrue(cwdEvents[1].detail.contains("/b"))
@@ -113,7 +148,7 @@ final class DebugPluginE2ETests: XCTestCase {
     func testProcessChangePropagates() {
         bridge.handleTitleChange(title: "vim", paneID: paneID)
 
-        let procEvents = events(named: "processChanged")
+        let procEvents = waitForEvents(named: "processChanged", count: 1)
         XCTAssertEqual(procEvents.count, 1)
         XCTAssertTrue(procEvents[0].detail.contains("name=vim"))
         XCTAssertTrue(procEvents[0].detail.contains("category=editor"))
@@ -122,7 +157,7 @@ final class DebugPluginE2ETests: XCTestCase {
     func testProcessCategoryDetected() {
         bridge.handleTitleChange(title: "node server.js", paneID: paneID)
 
-        let procEvents = events(named: "processChanged")
+        let procEvents = waitForEvents(named: "processChanged", count: 1)
         XCTAssertEqual(procEvents.count, 1)
         XCTAssertTrue(procEvents[0].detail.contains("name=node"))
         XCTAssertTrue(procEvents[0].detail.contains("category=runtime"))
@@ -132,7 +167,7 @@ final class DebugPluginE2ETests: XCTestCase {
         bridge.handleTitleChange(title: "vim", paneID: paneID)
         bridge.handleTitleChange(title: "~/project", paneID: paneID)
 
-        let procEvents = events(named: "processChanged")
+        let procEvents = waitForEvents(named: "processChanged", count: 2)
         XCTAssertEqual(procEvents.count, 2)
         XCTAssertTrue(procEvents[0].detail.contains("name=vim"))
         XCTAssertTrue(procEvents[1].detail.contains("name=(empty)"))
@@ -142,7 +177,7 @@ final class DebugPluginE2ETests: XCTestCase {
         bridge.handleTitleChange(title: "vim", paneID: paneID)
         bridge.handleTitleChange(title: "zsh", paneID: paneID)
 
-        let procEvents = events(named: "processChanged")
+        let procEvents = waitForEvents(named: "processChanged", count: 2)
         XCTAssertEqual(procEvents.count, 2)
         XCTAssertTrue(procEvents[0].detail.contains("name=vim"))
         XCTAssertTrue(procEvents[1].detail.contains("name=(empty)"))
@@ -152,7 +187,7 @@ final class DebugPluginE2ETests: XCTestCase {
         bridge.handleTitleChange(title: "vim", paneID: paneID)
         bridge.handleTitleChange(title: "vim", paneID: paneID)
 
-        let procEvents = events(named: "processChanged")
+        let procEvents = waitForEvents(named: "processChanged", count: 1)
         XCTAssertEqual(procEvents.count, 1, "Duplicate title should not emit duplicate processChanged")
     }
 
@@ -161,7 +196,7 @@ final class DebugPluginE2ETests: XCTestCase {
     func testSSHSessionDetected() {
         bridge.handleTitleChange(title: "ssh user@server.example.com", paneID: paneID)
 
-        let remoteEvents = events(named: "remoteSessionChanged")
+        let remoteEvents = waitForEvents(named: "remoteSessionChanged", count: 1)
         XCTAssertEqual(remoteEvents.count, 1)
         XCTAssertTrue(remoteEvents[0].detail.contains("ssh"))
     }
@@ -170,7 +205,7 @@ final class DebugPluginE2ETests: XCTestCase {
         bridge.handleTitleChange(title: "ssh user@server.example.com", paneID: paneID)
         bridge.handleTitleChange(title: "zsh", paneID: paneID)
 
-        let remoteEvents = events(named: "remoteSessionChanged")
+        let remoteEvents = waitForEvents(named: "remoteSessionChanged", count: 2)
         XCTAssertEqual(remoteEvents.count, 2, "Should get session start + session end")
         // Last event should be session cleared
         XCTAssertTrue(remoteEvents[1].detail.contains("session=nil"))
@@ -179,7 +214,7 @@ final class DebugPluginE2ETests: XCTestCase {
     func testDockerSessionDetected() {
         bridge.handleTitleChange(title: "docker exec -it myapp bash", paneID: paneID)
 
-        let remoteEvents = events(named: "remoteSessionChanged")
+        let remoteEvents = waitForEvents(named: "remoteSessionChanged", count: 1)
         XCTAssertEqual(remoteEvents.count, 1)
         XCTAssertTrue(remoteEvents[0].detail.contains("docker") || remoteEvents[0].detail.contains("container"))
     }
@@ -190,7 +225,7 @@ final class DebugPluginE2ETests: XCTestCase {
         let termID = UUID()
         registry.notifyTerminalCreated(terminalID: termID)
 
-        let createEvents = events(named: "terminalCreated")
+        let createEvents = waitForEvents(named: "terminalCreated", count: 1)
         XCTAssertEqual(createEvents.count, 1)
         XCTAssertTrue(createEvents[0].detail.contains(termID.uuidString.prefix(8)))
     }
@@ -211,7 +246,7 @@ final class DebugPluginE2ETests: XCTestCase {
         let ctx = currentContext()
         registry.notifyFocusChanged(terminalID: termID, context: ctx)
 
-        let focusEvents = events(named: "focusChanged")
+        let focusEvents = waitForEvents(named: "focusChanged", count: 1)
         XCTAssertEqual(focusEvents.count, 1)
         XCTAssertTrue(focusEvents[0].detail.contains(termID.uuidString.prefix(8)))
     }
@@ -226,7 +261,7 @@ final class DebugPluginE2ETests: XCTestCase {
         ]
         registry.notifyRemoteDirectoryListed(path: "/home/user/project", entries: entries)
 
-        let listEvents = events(named: "remoteDirectoryListed")
+        let listEvents = waitForEvents(named: "remoteDirectoryListed", count: 1)
         XCTAssertEqual(listEvents.count, 1)
         XCTAssertTrue(listEvents[0].detail.contains("dirs=2"))
         XCTAssertTrue(listEvents[0].detail.contains("files=1"))
@@ -238,6 +273,9 @@ final class DebugPluginE2ETests: XCTestCase {
         let ctx = currentContext()
         registry.runCycle(baseContext: ctx, reason: .focusChanged)
 
+        waitUntil {
+            !self.events(named: "enrich").isEmpty && !self.events(named: "react").isEmpty
+        }
         XCTAssertFalse(events(named: "enrich").isEmpty, "enrich should be logged")
         XCTAssertFalse(events(named: "react").isEmpty, "react should be logged")
     }
@@ -246,6 +284,10 @@ final class DebugPluginE2ETests: XCTestCase {
         let ctx = currentContext()
         registry.runCycle(baseContext: ctx, reason: .focusChanged)
 
+        waitUntil {
+            self.debug.entries.contains { $0.event == "enrich" }
+                && self.debug.entries.contains { $0.event == "react" }
+        }
         let enrichIdx = debug.entries.firstIndex { $0.event == "enrich" }
         let reactIdx = debug.entries.firstIndex { $0.event == "react" }
         XCTAssertNotNil(enrichIdx)
@@ -273,6 +315,14 @@ final class DebugPluginE2ETests: XCTestCase {
         // 5. User exits SSH — shell resumes
         bridge.handleTitleChange(title: "zsh", paneID: paneID)
 
+        waitUntil {
+            self.events(named: "cwdChanged").count >= 1
+                && self.events(named: "processChanged").count >= 2
+                && self.events(named: "remoteSessionChanged").count >= 1
+                && self.events(named: "enrich").count >= 4
+                && self.events(named: "react").count >= 4
+        }
+
         // Verify event sequence
         let allEvents = debug.entries.map(\.event)
 
@@ -280,14 +330,18 @@ final class DebugPluginE2ETests: XCTestCase {
         XCTAssertTrue(allEvents.contains("cwdChanged"))
 
         // Should have process changes from title detection
-        let procEvents = events(named: "processChanged")
+        let procEvents = waitForEvents(named: "processChanged", count: 2)
         XCTAssertGreaterThanOrEqual(procEvents.count, 2, "At least vim start + vim end")
 
         // Should have remote session start + end
-        let remoteEvents = events(named: "remoteSessionChanged")
+        let remoteEvents = waitForEvents(named: "remoteSessionChanged", count: 1)
         XCTAssertGreaterThanOrEqual(remoteEvents.count, 1, "SSH should trigger remote session")
 
         // Should have multiple enrich/react cycles
+        waitUntil {
+            self.events(named: "enrich").count >= 4
+                && self.events(named: "react").count >= 4
+        }
         let enrichCount = events(named: "enrich").count
         let reactCount = events(named: "react").count
         XCTAssertEqual(enrichCount, reactCount, "Every enrich has a matching react")

@@ -197,22 +197,26 @@ final class BooSocketProtocolTests: BooSocketIntegrationTestCase {
 @MainActor
 final class BooSocketBridgeTests: XCTestCase {
 
-    private var bridge: TerminalBridge!
-    private var cancellables: Set<AnyCancellable>!
+    nonisolated(unsafe) private var bridge: TerminalBridge!
+    nonisolated(unsafe) private var cancellables: Set<AnyCancellable>!
     private let paneID = UUID()
     private let workspaceID = UUID()
 
-    override func setUp() {
-        super.setUp()
-        cancellables = []
-        bridge = TerminalBridge(paneID: paneID, workspaceID: workspaceID, workingDirectory: "/tmp")
+    override func setUp() async throws {
+        try await super.setUp()
+        await MainActor.run {
+            cancellables = []
+            bridge = TerminalBridge(paneID: paneID, workspaceID: workspaceID, workingDirectory: "/tmp")
+        }
     }
 
-    override func tearDown() {
-        BooSocketServer.shared.processes.removeAll()
-        cancellables = nil
-        bridge = nil
-        super.tearDown()
+    override func tearDown() async throws {
+        await MainActor.run {
+            BooSocketServer.shared.processes.removeAll()
+            cancellables = nil
+            bridge = nil
+        }
+        try await super.tearDown()
     }
 
     func testReevaluateWithRegisteredProcess() {
@@ -460,49 +464,74 @@ final class BooSocketFullE2ETests: XCTestCase {
     private let paneID = UUID()
     private let workspaceID = UUID()
 
-    override func setUp() {
-        super.setUp()
-        cancellables = []
-        bridge = TerminalBridge(paneID: paneID, workspaceID: workspaceID, workingDirectory: "/tmp")
-        registry = PluginRegistry()
-        debug = DebugPlugin()
-        registry.register(debug)
+    override func setUp() async throws {
+        try await super.setUp()
+        await MainActor.run {
+            cancellables = []
+            bridge = TerminalBridge(paneID: paneID, workspaceID: workspaceID, workingDirectory: "/tmp")
+            registry = PluginRegistry()
+            debug = DebugPlugin()
+            registry.register(debug)
 
-        bridge.events.sink { [weak self] event in
-            guard let self else { return }
-            let ctx = TerminalContext(
-                terminalID: self.bridge.state.tabID,
-                cwd: self.bridge.state.workingDirectory,
-                remoteSession: nil, gitContext: nil,
-                processName: self.bridge.state.foregroundProcess,
-                paneCount: 1, tabCount: 1
-            )
-            switch event {
-            case .processChanged(let name):
-                self.registry.notifyProcessChanged(name: name, context: ctx)
-                self.registry.runCycle(baseContext: ctx, reason: .processChanged)
-            case .titleChanged:
-                self.registry.runCycle(baseContext: ctx, reason: .titleChanged)
-            case .directoryChanged(let path):
-                self.registry.notifyCwdChanged(newPath: path, context: ctx)
-                self.registry.runCycle(baseContext: ctx, reason: .cwdChanged)
-            default:
-                break
-            }
-        }.store(in: &cancellables)
+            let bridge = bridge!
+            let registry = registry!
+            self.bridge.events.receive(on: DispatchQueue.main).sink { event in
+                let ctx = TerminalContext(
+                    terminalID: bridge.state.tabID,
+                    cwd: bridge.state.workingDirectory,
+                    remoteSession: nil, gitContext: nil,
+                    processName: bridge.state.foregroundProcess,
+                    paneCount: 1, tabCount: 1
+                )
+                switch event {
+                case .processChanged(let name):
+                    registry.notifyProcessChanged(name: name, context: ctx)
+                    registry.runCycle(baseContext: ctx, reason: .processChanged)
+                case .titleChanged:
+                    registry.runCycle(baseContext: ctx, reason: .titleChanged)
+                case .directoryChanged(let path):
+                    registry.notifyCwdChanged(newPath: path, context: ctx)
+                    registry.runCycle(baseContext: ctx, reason: .cwdChanged)
+                default:
+                    break
+                }
+            }.store(in: &cancellables)
+        }
     }
 
-    override func tearDown() {
-        BooSocketServer.shared.processes.removeAll()
-        cancellables = nil
-        bridge = nil
-        registry = nil
-        debug = nil
-        super.tearDown()
+    override func tearDown() async throws {
+        await MainActor.run {
+            BooSocketServer.shared.processes.removeAll()
+            cancellables = nil
+            bridge = nil
+            registry = nil
+            debug = nil
+        }
+        try await super.tearDown()
     }
 
     private func processEvents() -> [DebugPlugin.LogEntry] {
         debug.entries.filter { $0.event == "processChanged" }
+    }
+
+    private func waitUntil(
+        timeout: TimeInterval = 1.0,
+        pollInterval: TimeInterval = 0.01,
+        _ predicate: @escaping @MainActor () -> Bool
+    ) {
+        let expectation = expectation(description: "condition")
+        let deadline = Date().addingTimeInterval(timeout)
+
+        func poll() {
+            if predicate() || Date() >= deadline {
+                expectation.fulfill()
+                return
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + pollInterval, execute: poll)
+        }
+
+        DispatchQueue.main.async(execute: poll)
+        waitForExpectations(timeout: timeout + 0.2)
     }
 
     /// Full scenario: cd to project → agent registers via socket → dynamic titles →
@@ -543,6 +572,12 @@ final class BooSocketFullE2ETests: XCTestCase {
         XCTAssertEqual(bridge.state.foregroundProcess, "")
 
         // 6. Verify DebugPlugin saw the lifecycle
+        waitUntil {
+            let procEvents = self.processEvents()
+            let starts = procEvents.filter { $0.detail.contains("name=claude") }
+            let clears = procEvents.filter { $0.detail.contains("name=(empty)") }
+            return !starts.isEmpty && !clears.isEmpty
+        }
         let procEvents = processEvents()
         let starts = procEvents.filter { $0.detail.contains("name=claude") }
         let clears = procEvents.filter { $0.detail.contains("name=(empty)") }

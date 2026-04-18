@@ -11,7 +11,7 @@ enum TabDropZone: Equatable {
 
 /// Centralized drag state machine for cross-pane tab drag & drop.
 /// Owned by MainWindowController; PaneViews hold a weak reference.
-class TabDragCoordinator {
+@MainActor class TabDragCoordinator {
     /// Callback to execute a cross-pane drop.
     var onDrop:
         (
@@ -48,7 +48,7 @@ class TabDragCoordinator {
 
     private let edgeFraction: CGFloat = 0.2
 
-    deinit { cleanup() }
+    deinit { MainActor.assumeIsolated { cleanup() } }
 
     // MARK: - Drag lifecycle
 
@@ -170,8 +170,10 @@ class TabDragCoordinator {
         workspaceHoverTimer = Timer.scheduledTimer(
             withTimeInterval: workspaceHoverDelay, repeats: false
         ) { [weak self] _ in
-            self?.onWorkspaceHover?(idx)
-            self?.workspaceHoverTimer = nil
+            MainActor.assumeIsolated {
+                self?.onWorkspaceHover?(idx)
+                self?.workspaceHoverTimer = nil
+            }
         }
     }
 

@@ -59,7 +59,7 @@ class WorkspaceBarView: NSView {
     }
 
     deinit {
-        cleanupDrag()
+        MainActor.assumeIsolated { cleanupDrag() }
     }
 
     override var isFlipped: Bool { true }

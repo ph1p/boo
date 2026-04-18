@@ -12,7 +12,7 @@ import XCTest
 ///   - isFieldActive transitions on becomeFirstResponder
 ///   - nil-safety
 ///   - pill state toggling
-final class SelectAllTextFieldTests: XCTestCase {
+@MainActor final class SelectAllTextFieldTests: XCTestCase {
 
     // MARK: - becomeFirstResponder
 

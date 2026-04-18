@@ -361,29 +361,26 @@ class SidebarPanelView: NSView {
     /// async state loads) and re-layout when the section needs more or less height.
     private func observeIntrinsicSizeChanges(_ hosting: NSHostingView<AnyView>, sectionID: String) {
         let obs = hosting.observe(\.intrinsicContentSize, options: [.new]) { [weak self] hv, _ in
-            guard let self else { return }
-            let newH = hv.intrinsicContentSize.height
-            guard newH > 0,
-                let idx = self.sectionStates.firstIndex(where: { $0.id == sectionID }),
-                self.sectionStates[idx].isExpanded
-            else { return }
-            let oldH = self.sectionStates[idx].intrinsicHeight
-            if abs(newH - oldH) > 0.5 {
-                self.sectionStates[idx].intrinsicHeight = newH
-                let targetH = max(SidebarLayout.minSectionHeight, newH)
-                self.sectionStates[idx].contentHeight = targetH
-                // For non-growable sections, update saved height when intrinsic grows
-                // beyond what was previously saved. This handles async content loading
-                // where the initial measurement captured a "Loading…" placeholder.
-                if !self.sectionStates[idx].canGrow {
-                    let saved = self.savedSectionHeights[sectionID] ?? 0
-                    if targetH > saved {
-                        self.savedSectionHeights[sectionID] = targetH
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                let newH = hv.intrinsicContentSize.height
+                guard newH > 0,
+                    let idx = self.sectionStates.firstIndex(where: { $0.id == sectionID }),
+                    self.sectionStates[idx].isExpanded
+                else { return }
+                let oldH = self.sectionStates[idx].intrinsicHeight
+                if abs(newH - oldH) > 0.5 {
+                    self.sectionStates[idx].intrinsicHeight = newH
+                    let targetH = max(SidebarLayout.minSectionHeight, newH)
+                    self.sectionStates[idx].contentHeight = targetH
+                    if !self.sectionStates[idx].canGrow {
+                        let saved = self.savedSectionHeights[sectionID] ?? 0
+                        if targetH > saved {
+                            self.savedSectionHeights[sectionID] = targetH
+                        }
                     }
+                    self.scheduleLayout()
                 }
-                // Use scheduleLayout to coalesce with any pending layout from layout()
-                // and avoid recursive calls when multiple sections update simultaneously.
-                self.scheduleLayout()
             }
         }
         intrinsicSizeObservations[sectionID] = obs

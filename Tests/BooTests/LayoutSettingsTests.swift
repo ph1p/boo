@@ -4,14 +4,15 @@ import XCTest
 
 @MainActor final class LayoutSettingsTests: XCTestCase {
 
-    override func tearDown() {
-        // Reset to defaults
-        UserDefaults.standard.removeObject(forKey: "sidebarPosition")
-        UserDefaults.standard.removeObject(forKey: "workspaceBarPosition")
-        UserDefaults.standard.removeObject(forKey: "sidebarDensity")
-        UserDefaults.standard.removeObject(forKey: "sidebarDefaultHidden")
-        UserDefaults.standard.removeObject(forKey: "sidebarPerWorkspaceState")
-        super.tearDown()
+    override func tearDown() async throws {
+        await MainActor.run {
+            UserDefaults.standard.removeObject(forKey: "sidebarPosition")
+            UserDefaults.standard.removeObject(forKey: "workspaceBarPosition")
+            UserDefaults.standard.removeObject(forKey: "sidebarDensity")
+            UserDefaults.standard.removeObject(forKey: "sidebarDefaultHidden")
+            UserDefaults.standard.removeObject(forKey: "sidebarPerWorkspaceState")
+        }
+        try await super.tearDown()
     }
 
     func testSidebarPositionDefault() {

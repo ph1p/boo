@@ -124,9 +124,10 @@ extension BooSocketServer {
         }
         let fd = clientFD
         handler(cmd, json) { [weak self] response in
+            guard let self else { return }
             nonisolated(unsafe) let sendableResponse = response
-            self?.queue.async {
-                self?.sendJSON(fd: fd, dict: sendableResponse)
+            queue.async {
+                self.sendJSON(fd: fd, dict: sendableResponse)
             }
         }
     }

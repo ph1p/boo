@@ -16,11 +16,11 @@ struct EditorSettingsView: View {
                 HStack(spacing: 8) {
                     Text("Family")
                         .font(.system(size: 12))
-                        .foregroundColor(t.text)
+                        .foregroundStyle(t.text)
                         .frame(width: 80, alignment: .leading)
                     FontChooser(selectedFont: $fontName, fonts: monoFonts)
                         .frame(maxWidth: 200)
-                        .onChange(of: fontName) { v in
+                        .onChange(of: fontName) { _, v in
                             AppSettings.shared.editorFontName = v
                         }
                 }
@@ -28,7 +28,7 @@ struct EditorSettingsView: View {
                 HStack(spacing: 8) {
                     Text("Size")
                         .font(.system(size: 12))
-                        .foregroundColor(t.text)
+                        .foregroundStyle(t.text)
                         .frame(width: 80, alignment: .leading)
                     FontSizePicker(
                         value: Binding(
@@ -37,7 +37,7 @@ struct EditorSettingsView: View {
                         ), range: 9...24
                     )
                     .frame(maxWidth: 200)
-                    .onChange(of: fontSize) { v in
+                    .onChange(of: fontSize) { _, v in
                         AppSettings.shared.editorFontSize = v
                     }
                 }
