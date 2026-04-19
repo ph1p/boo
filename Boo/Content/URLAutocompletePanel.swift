@@ -2,6 +2,10 @@ import Cocoa
 
 /// Floating dropdown panel that shows URL history matches beneath the browser address bar.
 @MainActor final class URLAutocompletePanel: NSObject, NSTableViewDataSource, NSTableViewDelegate {
+    static let defaultRowHeight: CGFloat = 44
+    static let maxVisibleRows: CGFloat = 6
+    static let minimumVisibleRows: CGFloat = 1.5
+
     struct Item {
         let title: String
         let url: URL
@@ -12,7 +16,7 @@ import Cocoa
     private var panel: NSPanel?
     private var tableView: HoverTableView?
     private var items: [Item] = []
-    private let rowHeight: CGFloat = 44
+    private let rowHeight: CGFloat = defaultRowHeight
 
     override init() {
         super.init()
@@ -34,8 +38,7 @@ import Cocoa
         let screenFrame = anchorWindow.convertToScreen(anchorFrame)
 
         let panelWidth = screenFrame.width
-        let minHeight = items.count > 1 ? rowHeight * 1.5 : rowHeight
-        let panelHeight = min(max(CGFloat(items.count) * rowHeight, minHeight), rowHeight * 6)
+        let panelHeight = Self.panelHeight(forItemCount: items.count, rowHeight: rowHeight)
         let origin = NSPoint(x: screenFrame.minX, y: screenFrame.minY - panelHeight - 6)
         panel.setFrame(NSRect(origin: origin, size: NSSize(width: panelWidth, height: panelHeight)), display: true)
         tableView?.enclosingScrollView?.frame = NSRect(x: 0, y: 0, width: panelWidth, height: panelHeight)
@@ -49,6 +52,13 @@ import Cocoa
     /// Legacy overload kept for call-sites passing NSTextField directly.
     func show(below field: NSTextField, items: [Item]) {
         show(below: field as NSView, items: items)
+    }
+
+    static func panelHeight(forItemCount itemCount: Int, rowHeight: CGFloat = defaultRowHeight) -> CGFloat {
+        guard itemCount > 0 else { return 0 }
+        let minimumHeight = rowHeight * minimumVisibleRows
+        let maximumHeight = rowHeight * maxVisibleRows
+        return min(max(CGFloat(itemCount) * rowHeight, minimumHeight), maximumHeight)
     }
 
     func close() {

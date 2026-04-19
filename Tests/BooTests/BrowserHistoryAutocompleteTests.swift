@@ -26,6 +26,15 @@ final class BrowserHistoryAutocompleteTests: XCTestCase {
         XCTAssertEqual(BrowserHistory.shared.entries.count, 1)
     }
 
+    func testConsecutiveDuplicateRefreshesMostRecentTitle() {
+        let url = URL(string: "https://example.com")!
+        BrowserHistory.shared.record(title: "Example Old", url: url)
+        BrowserHistory.shared.record(title: "Example New", url: url)
+
+        XCTAssertEqual(BrowserHistory.shared.entries.count, 1)
+        XCTAssertEqual(BrowserHistory.shared.entries.first?.title, "Example New")
+    }
+
     func testDifferentURLsAreNotDeduplicated() {
         BrowserHistory.shared.record(title: "A", url: URL(string: "https://a.com")!)
         BrowserHistory.shared.record(title: "B", url: URL(string: "https://b.com")!)
@@ -145,6 +154,32 @@ final class BrowserHistoryAutocompleteTests: XCTestCase {
         }
         let result = deduped(from: BrowserHistory.shared.entries, query: "")
         XCTAssertLessThanOrEqual(result.count, 8)
+    }
+
+    // MARK: - Autocomplete panel sizing
+
+    func testAutocompletePanelHeightIsZeroForNoItems() {
+        XCTAssertEqual(URLAutocompletePanel.panelHeight(forItemCount: 0), 0)
+    }
+
+    func testAutocompletePanelHeightKeepsSingleItemAboveOneRow() {
+        let height = URLAutocompletePanel.panelHeight(forItemCount: 1)
+        XCTAssertEqual(height, URLAutocompletePanel.defaultRowHeight * URLAutocompletePanel.minimumVisibleRows)
+        XCTAssertGreaterThan(height, URLAutocompletePanel.defaultRowHeight)
+    }
+
+    func testAutocompletePanelHeightUsesContentHeightForTwoItems() {
+        XCTAssertEqual(
+            URLAutocompletePanel.panelHeight(forItemCount: 2),
+            URLAutocompletePanel.defaultRowHeight * 2
+        )
+    }
+
+    func testAutocompletePanelHeightCapsAtMaximumVisibleRows() {
+        XCTAssertEqual(
+            URLAutocompletePanel.panelHeight(forItemCount: 20),
+            URLAutocompletePanel.defaultRowHeight * URLAutocompletePanel.maxVisibleRows
+        )
     }
 
     // MARK: - Clear

@@ -18,6 +18,8 @@ final class BrowserContentView: NSView, ContentViewProtocol, NSTextFieldDelegate
     private var isLoading = false
     private var autocompletePanel: URLAutocompletePanel?
     private weak var urlBarPill: URLBarPillView?
+    private var urlObservation: NSKeyValueObservation?
+    private var completedDownloadDestinations: [ObjectIdentifier: URL] = [:]
 
     private let toolbarHeight: CGFloat = 44
 
@@ -29,6 +31,7 @@ final class BrowserContentView: NSView, ContentViewProtocol, NSTextFieldDelegate
 
     /// Browser-specific: called when URL changes.
     var onURLChanged: ((URL) -> Void)?
+    var onOpenURLInNewTab: ((URL) -> Void)?
 
     // MARK: - Init
 
@@ -48,6 +51,7 @@ final class BrowserContentView: NSView, ContentViewProtocol, NSTextFieldDelegate
     }
 
     deinit {
+        urlObservation?.invalidate()
         NotificationCenter.default.removeObserver(self)
     }
 
@@ -201,11 +205,19 @@ final class BrowserContentView: NSView, ContentViewProtocol, NSTextFieldDelegate
 
     private func setupWebView() {
         let config = WKWebViewConfiguration()
-        config.websiteDataStore = .default()
+        config.websiteDataStore =
+            AppSettings.shared.browserPersistentWebsiteDataEnabled ? .default() : .nonPersistent()
         let wv = WKWebView(frame: bounds, configuration: config)
         wv.navigationDelegate = self
+        wv.uiDelegate = self
         wv.allowsBackForwardNavigationGestures = true
         wv.translatesAutoresizingMaskIntoConstraints = false
+        urlObservation = wv.observe(\.url, options: [.initial, .new]) { [weak self] _, change in
+            guard let url = change.newValue ?? nil else { return }
+            Task { @MainActor [weak self] in
+                self?.syncVisibleURL(url)
+            }
+        }
         addSubview(wv)
         NSLayoutConstraint.activate([
             wv.topAnchor.constraint(equalTo: topAnchor, constant: toolbarHeight),
@@ -353,6 +365,8 @@ final class BrowserContentView: NSView, ContentViewProtocol, NSTextFieldDelegate
     }
 
     func cleanup() {
+        urlObservation?.invalidate()
+        urlObservation = nil
         webView?.stopLoading()
         webView?.removeFromSuperview()
         webView = nil
@@ -381,8 +395,7 @@ final class BrowserContentView: NSView, ContentViewProtocol, NSTextFieldDelegate
 
     /// Navigate to a URL.
     func navigate(to url: URL) {
-        currentURL = url
-        urlBar?.stringValue = url.absoluteString
+        syncVisibleURL(url)
         webView?.load(URLRequest(url: url))
     }
 
@@ -401,6 +414,69 @@ final class BrowserContentView: NSView, ContentViewProtocol, NSTextFieldDelegate
     var canGoBack: Bool { webView?.canGoBack ?? false }
     var canGoForward: Bool { webView?.canGoForward ?? false }
     var url: URL { currentURL }
+    var displayedURLString: String { urlBar?.stringValue ?? "" }
+
+    func syncVisibleURL(_ url: URL) {
+        currentURL = url
+        urlBar?.stringValue = url.absoluteString
+        onURLChanged?(url)
+    }
+
+    func openURLInNewTab(_ url: URL) {
+        if let onOpenURLInNewTab {
+            onOpenURLInNewTab(url)
+            return
+        }
+        if let paneView = enclosingPaneView() {
+            _ = paneView.addNewTab(contentType: .browser, url: url)
+        }
+    }
+
+    static func downloadDestinationURL(
+        in directory: URL,
+        suggestedFilename: String,
+        fileExists: (URL) -> Bool = { FileManager.default.fileExists(atPath: $0.path) }
+    ) -> URL {
+        let fallbackName = suggestedFilename.isEmpty ? "download" : suggestedFilename
+        let baseURL = directory.appendingPathComponent(fallbackName)
+        guard fileExists(baseURL) else { return baseURL }
+
+        let directoryURL = baseURL.deletingLastPathComponent()
+        let fileExtension = baseURL.pathExtension
+        let stem = baseURL.deletingPathExtension().lastPathComponent
+        var suffix = 2
+
+        while true {
+            let candidateName = fileExtension.isEmpty ? "\(stem) \(suffix)" : "\(stem) \(suffix).\(fileExtension)"
+            let candidateURL = directoryURL.appendingPathComponent(candidateName)
+            if !fileExists(candidateURL) {
+                return candidateURL
+            }
+            suffix += 1
+        }
+    }
+
+    private func enclosingPaneView() -> PaneView? {
+        var current = superview
+        while let view = current {
+            if let paneView = view as? PaneView {
+                return paneView
+            }
+            current = view.superview
+        }
+        return nil
+    }
+
+    private func downloadsDirectoryURL() -> URL {
+        let fileManager = FileManager.default
+        if let downloadsURL = fileManager.urls(for: .downloadsDirectory, in: .userDomainMask).first {
+            try? fileManager.createDirectory(at: downloadsURL, withIntermediateDirectories: true)
+            return downloadsURL
+        }
+        let fallbackURL = fileManager.homeDirectoryForCurrentUser.appendingPathComponent("Downloads", isDirectory: true)
+        try? fileManager.createDirectory(at: fallbackURL, withIntermediateDirectories: true)
+        return fallbackURL
+    }
 
     // MARK: - First Responder
 
@@ -433,7 +509,32 @@ final class BrowserContentView: NSView, ContentViewProtocol, NSTextFieldDelegate
 
 // MARK: - WKNavigationDelegate
 
+@MainActor
 extension BrowserContentView: WKNavigationDelegate {
+    func webView(
+        _ webView: WKWebView,
+        decidePolicyFor navigationAction: WKNavigationAction,
+        decisionHandler: @escaping @MainActor @Sendable (WKNavigationActionPolicy) -> Void
+    ) {
+        if navigationAction.shouldPerformDownload {
+            decisionHandler(.download)
+            return
+        }
+        decisionHandler(.allow)
+    }
+
+    func webView(
+        _ webView: WKWebView,
+        decidePolicyFor navigationResponse: WKNavigationResponse,
+        decisionHandler: @escaping @MainActor @Sendable (WKNavigationResponsePolicy) -> Void
+    ) {
+        if !navigationResponse.canShowMIMEType {
+            decisionHandler(.download)
+            return
+        }
+        decisionHandler(.allow)
+    }
+
     func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
         isLoading = true
         updateLoadingState()
@@ -444,9 +545,7 @@ extension BrowserContentView: WKNavigationDelegate {
         updateLoadingState()
         updateNavButtons()
         if let url = webView.url {
-            currentURL = url
-            urlBar?.stringValue = url.absoluteString
-            onURLChanged?(url)
+            syncVisibleURL(url)
         }
         if let title = webView.title, !title.isEmpty {
             currentTitle = title
@@ -476,10 +575,64 @@ extension BrowserContentView: WKNavigationDelegate {
     func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
         updateNavButtons()
         if let url = webView.url {
-            currentURL = url
-            urlBar?.stringValue = url.absoluteString
-            onURLChanged?(url)
+            syncVisibleURL(url)
         }
+    }
+
+    func webView(_ webView: WKWebView, navigationAction: WKNavigationAction, didBecome download: WKDownload) {
+        download.delegate = self
+    }
+
+    func webView(_ webView: WKWebView, navigationResponse: WKNavigationResponse, didBecome download: WKDownload) {
+        download.delegate = self
+    }
+}
+
+// MARK: - WKUIDelegate
+
+@MainActor
+extension BrowserContentView: WKUIDelegate {
+    func webView(
+        _ webView: WKWebView,
+        createWebViewWith configuration: WKWebViewConfiguration,
+        for navigationAction: WKNavigationAction,
+        windowFeatures: WKWindowFeatures
+    ) -> WKWebView? {
+        guard let url = navigationAction.request.url else { return nil }
+        openURLInNewTab(url)
+        return nil
+    }
+
+    func webViewDidClose(_ webView: WKWebView) {
+        onCloseRequested?()
+    }
+}
+
+// MARK: - WKDownloadDelegate
+
+@MainActor
+extension BrowserContentView: WKDownloadDelegate {
+    func download(
+        _ download: WKDownload,
+        decideDestinationUsing response: URLResponse,
+        suggestedFilename: String,
+        completionHandler: @escaping @MainActor @Sendable (URL?) -> Void
+    ) {
+        let destination = Self.downloadDestinationURL(
+            in: downloadsDirectoryURL(),
+            suggestedFilename: suggestedFilename
+        )
+        completedDownloadDestinations[ObjectIdentifier(download)] = destination
+        completionHandler(destination)
+    }
+
+    func downloadDidFinish(_ download: WKDownload) {
+        _ = completedDownloadDestinations.removeValue(forKey: ObjectIdentifier(download))
+    }
+
+    func download(_ download: WKDownload, didFailWithError error: Error, resumeData: Data?) {
+        _ = completedDownloadDestinations.removeValue(forKey: ObjectIdentifier(download))
+        NSSound.beep()
     }
 }
 

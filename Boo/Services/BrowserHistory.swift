@@ -39,13 +39,16 @@ final class BrowserHistory {
         guard AppSettings.shared.browserHistoryEnabled else { return }
         // Skip internal/blank pages
         guard url.scheme == "http" || url.scheme == "https" else { return }
-        // Deduplicate consecutive same URL
-        if entries.first?.url == url { return }
         let entry = BrowserHistoryEntry(
             title: title.isEmpty ? url.host ?? url.absoluteString : title,
             url: url
         )
-        entries.insert(entry, at: 0)
+        // Refresh the newest entry for the same URL instead of silently dropping it.
+        if entries.first?.url == url {
+            entries[0] = entry
+        } else {
+            entries.insert(entry, at: 0)
+        }
         // Cap at configured limit
         let limit = AppSettings.shared.browserHistoryLimit
         if entries.count > limit {

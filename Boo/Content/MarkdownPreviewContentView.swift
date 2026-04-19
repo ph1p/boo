@@ -35,6 +35,7 @@ final class MarkdownPreviewContentView: NSView, ContentViewProtocol {
 
     private func setupWebView() {
         let config = WKWebViewConfiguration()
+        config.websiteDataStore = .nonPersistent()
         let wv = WKWebView(frame: bounds, configuration: config)
         wv.translatesAutoresizingMaskIntoConstraints = false
         addSubview(wv)
