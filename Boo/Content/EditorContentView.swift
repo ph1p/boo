@@ -119,7 +119,7 @@ final class EditorContentView: NSView, ContentViewProtocol {
     }
 
     private func loadMonaco() {
-        guard let bundleRoot = Bundle.module.resourceURL else {
+        guard let bundleRoot = BooResourceBundle.bundle.resourceURL else {
             debugLog("[Editor] CRITICAL: MonacoBundle/index.html NOT FOUND in bundle")
             return
         }

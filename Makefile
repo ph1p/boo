@@ -178,6 +178,12 @@ app: release
 	@mkdir -p "$(APP_BUNDLE)/Contents/Resources"
 	@cp "$(RELEASE_BIN)" "$(APP_BUNDLE)/Contents/MacOS/$(APP_NAME)"
 	@cp Boo/App/Info.plist "$(APP_BUNDLE)/Contents/"
+	@RESOURCE_BUILD_DIR="$$(dirname "$(RELEASE_BIN)")"; \
+	for bundle in "$$RESOURCE_BUILD_DIR"/*.bundle; do \
+		if [ -d "$$bundle" ]; then \
+			rsync -a "$$bundle" "$(APP_BUNDLE)/Contents/Resources/"; \
+		fi; \
+	done
 	@rsync -a Vendor/ghostty/zig-out/share/ghostty/ "$(APP_BUNDLE)/Contents/Resources/ghostty/"
 	@rsync -a Vendor/ghostty/zig-out/share/terminfo/ "$(APP_BUNDLE)/Contents/Resources/terminfo/"
 	@if [ -f assets/AppIcon.icns ]; then \
