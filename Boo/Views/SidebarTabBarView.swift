@@ -439,14 +439,15 @@ class SidebarTabBarView: NSView {
         if name.hasPrefix("asset:") {
             let assetName = String(name.dropFirst(6))
             // Try to load PDF from SPM Bundle.module Images folder
-            if let url = Bundle.module.url(forResource: assetName, withExtension: "pdf", subdirectory: "Images"),
+            if let url = BooResourceBundle.bundle.url(
+                forResource: assetName, withExtension: "pdf", subdirectory: "Images"),
                 let img = NSImage(contentsOf: url)
             {
                 img.isTemplate = true
                 return img.tinted(with: color, size: NSSize(width: size, height: size))
             }
             // Try direct resource lookup
-            if let img = Bundle.module.image(forResource: assetName) {
+            if let img = BooResourceBundle.bundle.image(forResource: assetName) {
                 img.isTemplate = true
                 return img.tinted(with: color, size: NSSize(width: size, height: size))
             }

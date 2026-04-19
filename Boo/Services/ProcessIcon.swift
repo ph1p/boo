@@ -38,7 +38,7 @@ enum ProcessIcon {
             let name = process.lowercased()
             guard let assetName = customAssetMap[name] else { return nil }
             guard
-                let url = Bundle.module.url(
+                let url = BooResourceBundle.bundle.url(
                     forResource: assetName, withExtension: "pdf", subdirectory: "Images"),
                 let img = NSImage(contentsOf: url)
             else { return nil }
