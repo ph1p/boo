@@ -126,13 +126,16 @@ final class SettingsPersistenceTests: XCTestCase {
         let originalMainPage = settings.defaultMainPage
         let originalTabType = settings.defaultTabType
         let originalBrowserHomePage = settings.browserHomePage
+        let originalPersistentWebsiteData = settings.browserPersistentWebsiteDataEnabled
         settings.defaultMainPage = "https://example.com/start"
         settings.defaultTabType = .browser
         settings.browserHomePage = "https://example.com/home"
+        settings.browserPersistentWebsiteDataEnabled = true
         defer {
             settings.defaultMainPage = originalMainPage
             settings.defaultTabType = originalTabType
             settings.browserHomePage = originalBrowserHomePage
+            settings.browserPersistentWebsiteDataEnabled = originalPersistentWebsiteData
         }
 
         let path = BooPaths.settingsFile
@@ -146,6 +149,7 @@ final class SettingsPersistenceTests: XCTestCase {
         XCTAssertEqual(json["defaultMainPage"] as? String, "https://example.com/start")
         XCTAssertEqual(json["defaultTabType"] as? String, "browser")
         XCTAssertEqual(json["browserHomePage"] as? String, "https://example.com/home")
+        XCTAssertEqual(json["browserPersistentWebsiteDataEnabled"] as? Bool, true)
     }
 
     func testGlobalSidebarStatePersistsExpandedSectionsSelectionAndScrollOffsets() {

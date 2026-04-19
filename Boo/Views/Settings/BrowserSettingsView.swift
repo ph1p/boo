@@ -2,6 +2,7 @@ import SwiftUI
 
 struct BrowserSettingsView: View {
     @State private var homePage = AppSettings.shared.browserHomePage
+    @State private var persistentWebsiteDataEnabled = AppSettings.shared.browserPersistentWebsiteDataEnabled
     @State private var historyEnabled = AppSettings.shared.browserHistoryEnabled
     @State private var historyLimit = AppSettings.shared.browserHistoryLimit
     @State private var showClearConfirm = false
@@ -45,6 +46,17 @@ struct BrowserSettingsView: View {
                 Text("Opened when creating a new browser tab.")
                     .font(.system(size: 11))
                     .foregroundStyle(t.muted)
+
+                ToggleRow(label: "Allow persistent website data", isOn: $persistentWebsiteDataEnabled)
+                    .onChange(of: persistentWebsiteDataEnabled) { _, value in
+                        AppSettings.shared.browserPersistentWebsiteDataEnabled = value
+                    }
+
+                Text(
+                    "When off, browser tabs use an ephemeral data store to avoid system WebCrypto/Keychain prompts. Changes apply to new browser tabs."
+                )
+                .font(.system(size: 11))
+                .foregroundStyle(t.muted)
             }
 
             // MARK: History

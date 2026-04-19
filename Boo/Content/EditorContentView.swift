@@ -91,6 +91,7 @@ final class EditorContentView: NSView, ContentViewProtocol {
 
     private func setupWebView() {
         let config = WKWebViewConfiguration()
+        config.websiteDataStore = .nonPersistent()
         let contentController = WKUserContentController()
         contentController.add(self, name: "boo")
         config.userContentController = contentController

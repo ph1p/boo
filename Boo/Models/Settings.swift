@@ -253,6 +253,7 @@ final class AppSettings {
         static let autoDetectContentType = "autoDetectContentType"
         static let markdownOpenMode = "markdownOpenMode"
         static let browserHomePage = "browserHomePage"
+        static let browserPersistentWebsiteDataEnabled = "browserPersistentWebsiteDataEnabled"
         static let browserHistoryEnabled = "browserHistoryEnabled"
         static let browserHistoryLimit = "browserHistoryLimit"
 
@@ -555,6 +556,11 @@ final class AppSettings {
         set { set(newValue, forKey: K.browserHomePage, topic: .layout) }
     }
 
+    var browserPersistentWebsiteDataEnabled: Bool {
+        get { bool(K.browserPersistentWebsiteDataEnabled, default: false) }
+        set { set(newValue, forKey: K.browserPersistentWebsiteDataEnabled, topic: .layout) }
+    }
+
     var browserHistoryEnabled: Bool {
         get { bool(K.browserHistoryEnabled, default: true) }
         set { set(newValue, forKey: K.browserHistoryEnabled, topic: .layout) }
@@ -835,6 +841,7 @@ final class AppSettings {
             K.defaultTabType: defaultTabType.rawValue,
             K.autoDetectContentType: autoDetectContentType,
             K.browserHomePage: browserHomePage,
+            K.browserPersistentWebsiteDataEnabled: browserPersistentWebsiteDataEnabled,
             K.disabledPluginIDs: disabledPluginIDs,
             K.sidebarPluginOrder: sidebarTabOrder,
             K.pluginSettings: pluginSettingsDict,
