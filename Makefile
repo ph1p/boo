@@ -136,9 +136,20 @@ build-linux: monaco
 	swift build
 	@echo "==> Linux build complete"
 
-# Build and run (auto-detects platform)
+# Build and run as a proper .app bundle so macOS menu/shortcut wiring works
 run: build
-	.build/debug/BooApp
+	@mkdir -p .build/debug/Boo.app/Contents/MacOS
+	@mkdir -p .build/debug/Boo.app/Contents/Resources
+	@cp .build/debug/BooApp .build/debug/Boo.app/Contents/MacOS/Boo
+	@cp Boo/App/Info.plist .build/debug/Boo.app/Contents/
+	@for bundle in .build/debug/*.bundle; do \
+		if [ -d "$$bundle" ]; then \
+			rsync -a "$$bundle" .build/debug/Boo.app/Contents/Resources/; \
+		fi; \
+	done
+	@rsync -a .build/debug/ghostty-resources/ .build/debug/Boo.app/Contents/Resources/ 2>/dev/null || true
+	@pkill -x Boo 2>/dev/null || true; for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do pkill -0 -x Boo 2>/dev/null || break; sleep 0.02; done
+	open .build/debug/Boo.app
 
 # Release build
 ifeq ($(UNAME),Darwin)

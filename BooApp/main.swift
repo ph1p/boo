@@ -1,3 +1,0 @@
-import Boo
-
-BooMain.run()

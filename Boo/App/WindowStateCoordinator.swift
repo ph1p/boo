@@ -1,9 +1,10 @@
-import Combine
 import Foundation
+import Observation
 
 /// Centralized state coordinator between TerminalBridge, TabState, and PluginRegistry.
 /// Extracts state-management responsibilities from MainWindowController.
 @MainActor
+@Observable
 final class WindowStateCoordinator {
     let bridge: TerminalBridge
     let pluginRegistry: PluginRegistry
