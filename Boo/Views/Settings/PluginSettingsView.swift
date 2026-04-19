@@ -108,9 +108,8 @@ struct PluginDetailSettingsView: View {
                     .foregroundStyle(Tokens.current.muted)
             } else {
                 ForEach(groupedSettings, id: \.title) { group in
-                    Section(title: group.title.isEmpty ? "Settings" : group.title, divided: true) {
+                    Section(title: group.title.isEmpty ? "Settings" : group.title) {
                         ForEach(Array(group.settings.enumerated()), id: \.element.key) { idx, setting in
-                            if idx > 0 { SettingsRowDivider() }
                             PluginSettingControl(pluginID: manifest.id, setting: setting)
                         }
                     }

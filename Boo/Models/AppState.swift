@@ -1,6 +1,8 @@
 import Foundation
+import Observation
 
 /// Global application state: manages workspaces.
+@Observable
 final class AppState {
     private(set) var workspaces: [Workspace] = []
     private(set) var activeWorkspaceIndex: Int = -1

@@ -14,6 +14,15 @@ struct Tokens {
     var bg: Color { Color(nsColor: theme.sidebarBg) }
     var chromeBg: Color { Color(nsColor: theme.chromeBg) }
     var border: Color { Color(nsColor: theme.sidebarBorder) }
+    var cardBg: Color {
+        let alpha: CGFloat = 0.12
+        let fg = theme.chromeMuted
+        let bg = theme.sidebarBg
+        let r = fg.redComponent * alpha + bg.redComponent * (1 - alpha)
+        let g = fg.greenComponent * alpha + bg.greenComponent * (1 - alpha)
+        let b = fg.blueComponent * alpha + bg.blueComponent * (1 - alpha)
+        return Color(red: Double(r), green: Double(g), blue: Double(b))
+    }
     var fg: Color {
         Color(
             red: Double(theme.foreground.r) / 255,
@@ -33,7 +42,7 @@ struct Tokens {
 // MARK: - Root
 
 struct SettingsView: View {
-    enum Tab: Equatable {
+    enum Tab: Hashable {
         case general
         case theme
         case appearance
@@ -82,56 +91,11 @@ struct SettingsView: View {
         }
     }
 
-    @State private var selectedTab: Tab = .general
+    @State private var selectedTab: Tab? = .general
     @ObservedObject private var observer = SettingsObserver(topics: [.theme, .plugins])
 
-    var body: some View {
-        let _ = observer.revision
-        let t = Tokens.current
-
-        VStack(spacing: 0) {
-            titleBar(t)
-
-            HStack(spacing: 0) {
-                sidebar(t)
-
-                Rectangle()
-                    .fill(t.border)
-                    .frame(width: 0.5)
-
-                content
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-        }
-        .frame(width: 620, height: 500)
-        .background(t.bg)
-    }
-
-    // MARK: Title Bar
-
-    private func titleBar(_ t: Tokens) -> some View {
-        ZStack {
-            t.chromeBg
-            Text("Settings")
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(t.muted)
-                .offset(y: -1)
-            VStack(spacing: 0) {
-                Spacer()
-                Rectangle()
-                    .fill(t.border)
-                    .frame(height: 0.5)
-            }
-        }
-        .frame(maxWidth: .infinity)
-        .frame(height: 30)
-    }
-
-    // MARK: Sidebar
-
-    private func sidebar(_ t: Tokens) -> some View {
-        let pluginTabs: [Tab] = PluginSettingsView.registeredManifests
+    private var pluginTabs: [Tab] {
+        PluginSettingsView.registeredManifests
             .filter { manifest in
                 let isEnabled = !AppSettings.shared.disabledPluginIDs.contains(manifest.id)
                 let hasSettings: Bool = {
@@ -144,56 +108,41 @@ struct SettingsView: View {
                 return isEnabled && hasSettings
             }
             .map { .pluginSettings(pluginID: $0.id) }
-
-        return ScrollView(.vertical, showsIndicators: false) {
-            VStack(spacing: 1) {
-                ForEach(Tab.fixed, id: \.label) { tab in
-                    sidebarRow(tab, t: t)
-                }
-
-                if !pluginTabs.isEmpty {
-                    HStack {
-                        Text("PLUGINS")
-                            .font(.system(size: 10, weight: .semibold))
-                            .foregroundStyle(t.muted)
-                            .tracking(0.4)
-                        Spacer()
-                    }
-                    .padding(.horizontal, 10)
-                    .padding(.top, 10)
-                    .padding(.bottom, 2)
-
-                    ForEach(pluginTabs, id: \.label) { tab in
-                        sidebarRow(tab, t: t)
-                    }
-                }
-
-                Spacer(minLength: 10)
-            }
-            .padding(10)
-        }
-        .fixedSize(horizontal: true, vertical: false)
-        .background(t.chromeBg)
     }
 
-    private func sidebarRow(_ tab: Tab, t: Tokens) -> some View {
-        HStack(spacing: 8) {
-            Image(systemName: tab.icon)
-                .font(.system(size: 12))
-                .frame(width: 18)
-            Text(tab.label)
-                .font(.system(size: 12))
-            Spacer()
+    var body: some View {
+        let _ = observer.revision
+        let t = Tokens.current
+        HStack(spacing: 0) {
+            // Sidebar
+            VStack(spacing: 0) {
+                List(selection: $selectedTab) {
+                    SwiftUI.Section("Settings") {
+                        ForEach(Tab.fixed, id: \.label) { tab in
+                            Label(tab.label, systemImage: tab.icon).tag(tab)
+                        }
+                    }
+                    if !pluginTabs.isEmpty {
+                        SwiftUI.Section("Plugins") {
+                            ForEach(pluginTabs, id: \.label) { tab in
+                                Label(tab.label, systemImage: tab.icon).tag(tab)
+                            }
+                        }
+                    }
+                }
+                .listStyle(.sidebar)
+                .safeAreaInset(edge: .top) { Color.clear.frame(height: 20) }
+            }
+            .frame(width: 220)
+
+            Divider()
+
+            // Detail
+            content
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
-        .foregroundStyle(selectedTab == tab ? t.text : t.muted)
-        .background(
-            RoundedRectangle(cornerRadius: 6)
-                .fill(selectedTab == tab ? t.accent.opacity(0.15) : Color.clear)
-        )
-        .contentShape(Rectangle())
-        .onTapGesture { selectedTab = tab }
+        .background(t.bg)
+        .frame(width: 720, height: 520)
     }
 
     // MARK: Content Router
@@ -214,77 +163,57 @@ struct SettingsView: View {
             if let manifest = PluginSettingsView.registeredManifests.first(where: { $0.id == id }) {
                 PluginDetailSettingsView(manifest: manifest)
             }
+        case nil:
+            GeneralSettingsView()
         }
     }
 }
 
 // MARK: - Settings Page Shell
 
-/// Every tab uses this wrapper so layout is identical: title, scroll, consistent padding.
 struct SettingsPage<Content: View>: View {
     let title: String
     @ViewBuilder let content: () -> Content
 
     var body: some View {
-        let t = Tokens.current
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                VStack(alignment: .leading, spacing: 10) {
-                    Text(title)
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(t.text)
-                    Rectangle()
-                        .fill(t.border.opacity(0.8))
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 0.5)
-                }
+            VStack(alignment: .leading, spacing: 24) {
+                Text(title)
+                    .font(.title2)
+                    .fontWeight(.semibold)
                 content()
-                Spacer()
+                Spacer(minLength: 0)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(18)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 20)
         }
     }
 }
 
-/// Labeled group within a page — renders a header label above a card-style container.
-/// When `divided` is true the inner VStack uses zero spacing and children are expected
-/// to supply their own vertical padding; a hairline is drawn between them automatically
-/// via `SettingsRowDivider` inserted by the caller.
 struct Section<Content: View>: View {
     let title: String
-    var divided: Bool = false
     @ViewBuilder let content: () -> Content
 
     var body: some View {
-        let t = Tokens.current
-        VStack(alignment: .leading, spacing: 4) {
-            Text(title.uppercased())
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(t.muted)
-                .tracking(0.5)
-            VStack(alignment: .leading, spacing: divided ? 0 : 8) {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.headline)
+                .foregroundStyle(.primary)
+            VStack(alignment: .leading, spacing: 10) {
                 content()
             }
-            .padding(divided ? 0 : 12)
+            .padding(12)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(t.chromeBg)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8)
-                            .strokeBorder(t.border.opacity(0.5), lineWidth: 0.5)
-                    )
-            )
-            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .background(Tokens.current.cardBg, in: RoundedRectangle(cornerRadius: 10))
+            .clipShape(RoundedRectangle(cornerRadius: 10))
         }
     }
 }
 
-/// A thin horizontal rule used between rows inside a divided Section.
 struct SettingsRowDivider: View {
     var body: some View {
-        Tokens.current.border.opacity(0.5).frame(height: 0.5)
+        Divider()
     }
 }
 
@@ -373,17 +302,18 @@ struct ToggleRow: View {
     @Binding var isOn: Bool
 
     var body: some View {
-        let t = Tokens.current
         HStack {
             Text(label)
                 .font(.system(size: 12))
-                .foregroundStyle(t.text)
+                .foregroundStyle(Tokens.current.text)
             Spacer()
             Toggle("", isOn: $isOn)
                 .labelsHidden()
                 .toggleStyle(.switch)
                 .controlSize(.small)
         }
+        .padding(.vertical, 8)
+        .padding(.horizontal, 0)
     }
 }
 
@@ -402,7 +332,7 @@ class SettingsWindowController: NSWindowController {
 
     private init() {
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 560, height: 480),
+            contentRect: NSRect(x: 0, y: 0, width: 720, height: 520),
             styleMask: [.titled, .closable, .fullSizeContentView],
             backing: .buffered,
             defer: false

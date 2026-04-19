@@ -295,15 +295,9 @@ class ThemedSplitView: NSSplitView {
 
     var activeWorkspace: Workspace? { appState.activeWorkspace }
 
-    init() {
-        let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 1000, height: 700),
-            styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
-            backing: .buffered,
-            defer: false
-        )
+    /// Apply Boo chrome settings to an NSWindow.
+    static func applyWindowChrome(_ window: NSWindow) {
         window.title = "Boo"
-        window.center()
         window.minSize = NSSize(width: 600, height: 400)
         window.setFrameAutosaveName("BooMainWindow")
         window.backgroundColor = AppSettings.shared.theme.chromeBg
@@ -311,9 +305,33 @@ class ThemedSplitView: NSSplitView {
         window.titlebarAppearsTransparent = true
         window.titleVisibility = .hidden
         window.isMovable = false
+    }
 
+    /// Init used when SwiftUI WindowGroup creates and owns the NSWindow.
+    /// Replaces the SwiftUI hosting contentView with a plain NSView so setupUI
+    /// can build the AppKit hierarchy on top of it.
+    init(swiftUIWindow window: NSWindow) {
+        Self.applyWindowChrome(window)
+        // Replace SwiftUI's hosting view with a plain container so setupUI works normally.
+        window.contentView = NSView()
         super.init(window: window)
+        performSetup()
+    }
 
+    init() {
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 1000, height: 700),
+            styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
+            backing: .buffered,
+            defer: false
+        )
+        window.center()
+        Self.applyWindowChrome(window)
+        super.init(window: window)
+        performSetup()
+    }
+
+    private func performSetup() {
         // Initialize coordinator and sidebar controller before UI setup
         let theBridge = TerminalBridge(paneID: UUID(), workspaceID: UUID(), workingDirectory: "")
         let theRegistry = PluginRegistry()

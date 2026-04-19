@@ -11,11 +11,14 @@ public enum BooMain {
     }
 }
 
-@MainActor class AppDelegate: NSObject, NSApplicationDelegate {
-    private var windowController: MainWindowController?
+@MainActor public class AppDelegate: NSObject, NSApplicationDelegate {
     private var appearanceObserver: NSKeyValueObservation?
 
-    func applicationDidFinishLaunching(_ notification: Notification) {
+    private var windowController: MainWindowController? {
+        WindowBridgeModel.shared.windowController
+    }
+
+    public func applicationDidFinishLaunching(_ notification: Notification) {
         // Verify ~/.boo directories are usable; warn once if not.
         do {
             try BooPaths.ensureDirectories()
@@ -37,16 +40,13 @@ public enum BooMain {
         let ghosttyOK = GhosttyRuntime.shared.app != nil
         booLog(.info, .app, "Ghostty runtime: \(ghosttyOK ? "OK" : "FAILED")")
 
-        // Enable SSH ControlMaster for connection sharing — allows the file explorer
-        // to multiplex on the user's interactive SSH sessions (including password auth).
+        // Enable SSH ControlMaster for connection sharing
         setupSSHControlMaster()
 
         // Start the IPC socket server for child process communication
         BooSocketServer.shared.start()
 
-        windowController = MainWindowController()
-        windowController?.showWindow(nil)
-        windowController?.window?.makeKeyAndOrderFront(nil)
+        // WindowGroup creates the NSWindow; WindowBridgeView boots MainWindowController when ready.
 
         // Watch system appearance changes for auto-theme
         appearanceObserver = NSApp.observe(\.effectiveAppearance) { _, _ in
@@ -61,23 +61,21 @@ public enum BooMain {
         }
     }
 
-    func applicationWillTerminate(_ notification: Notification) {
-        // Save sidebar state (heights, order) to Settings before quit
+    public func applicationWillTerminate(_ notification: Notification) {
         windowController?.coordinator?.saveSidebarStateToSettings()
         windowController?.saveSession()
         SSHControlManager.shared.teardownAll()
         BooSocketServer.shared.stop()
     }
 
-    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+    public func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         true
     }
 
-    func applicationSupportsSecureRestorableState(_ app: NSApplication) -> Bool {
+    public func applicationSupportsSecureRestorableState(_ app: NSApplication) -> Bool {
         true
     }
 
-    /// Ask user once before modifying ~/.ssh/config; remember the choice.
     private func setupSSHControlMaster() {
         DispatchQueue.global(qos: .utility).async {
             let alreadyConfigured = RemoteExplorer.hasControlMaster()
