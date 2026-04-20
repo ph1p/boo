@@ -83,6 +83,10 @@ extension ToolbarView {
                 ctx.setFillColor(theme.chromeMuted.withAlphaComponent(0.12).cgColor)
                 ctx.addPath(CGPath(roundedRect: rect, cornerWidth: 6, cornerHeight: 6, transform: nil))
                 ctx.fillPath()
+            } else {
+                ctx.setFillColor(theme.chromeMuted.withAlphaComponent(0.06).cgColor)
+                ctx.addPath(CGPath(roundedRect: rect, cornerWidth: 6, cornerHeight: 6, transform: nil))
+                ctx.fillPath()
             }
 
             var contentX = x + 10
@@ -182,20 +186,19 @@ extension ToolbarView {
 
         // Workspace plus button (drawn outside scroll clip)
         let plusRect = workspacePlusButtonRect
-        if isWorkspacePlusButtonHovered {
-            ctx.setFillColor(theme.chromeMuted.withAlphaComponent(0.12).cgColor)
-            ctx.addPath(CGPath(roundedRect: plusRect, cornerWidth: 5, cornerHeight: 5, transform: nil))
-            ctx.fillPath()
-        }
+        let plusBgAlpha: CGFloat = isWorkspacePlusButtonHovered ? 0.12 : 0.06
+        ctx.setFillColor(theme.chromeMuted.withAlphaComponent(plusBgAlpha).cgColor)
+        ctx.addPath(CGPath(roundedRect: plusRect, cornerWidth: 5, cornerHeight: 5, transform: nil))
+        ctx.fillPath()
         let wsPlusAlpha: CGFloat = isWorkspacePlusButtonHovered ? 0.9 : 0.45
         let wsPlusAttrs: [NSAttributedString.Key: Any] = [
-            .font: NSFont.systemFont(ofSize: 13, weight: .light),
+            .font: NSFont.systemFont(ofSize: 15, weight: .light),
             .foregroundColor: theme.chromeMuted.withAlphaComponent(wsPlusAlpha)
         ]
         let wsPlusStr = "+" as NSString
         let wsPlusSize = wsPlusStr.size(withAttributes: wsPlusAttrs)
         wsPlusStr.draw(
-            at: NSPoint(x: plusRect.midX - wsPlusSize.width / 2, y: plusRect.midY - wsPlusSize.height / 2),
+            at: NSPoint(x: plusRect.midX - wsPlusSize.width / 2, y: plusRect.midY - 1 - wsPlusSize.height / 2),
             withAttributes: wsPlusAttrs)
     }
 

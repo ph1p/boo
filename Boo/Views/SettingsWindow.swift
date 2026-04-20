@@ -371,5 +371,10 @@ class SettingsWindowController: NSWindowController {
     func showSettings() {
         showWindow(nil)
         window?.makeKeyAndOrderFront(nil)
+        if let w = window {
+            DispatchQueue.main.async {
+                TrafficLightPositioner.apply(to: w)
+            }
+        }
     }
 }
