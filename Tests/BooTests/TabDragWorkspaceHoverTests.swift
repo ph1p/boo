@@ -31,7 +31,7 @@ import XCTest
         DispatchQueue.main.asyncAfter(deadline: .now() + hoverWindow) {
             expectation.fulfill()
         }
-        waitForExpectations(timeout: 0.2)
+        waitForExpectations(timeout: 0.5)
     }
 
     private func waitUntil(

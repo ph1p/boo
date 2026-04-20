@@ -24,6 +24,7 @@ extension MainWindowController {
             sideBar.setItems(barItems, selectedIndex: appState.activeWorkspaceIndex)
         }
         refreshStatusBar()
+        if let w = window { TrafficLightPositioner.apply(to: w) }
     }
 
     /// Debounced entry point — coalesces rapid-fire calls (e.g. every bridge tick)

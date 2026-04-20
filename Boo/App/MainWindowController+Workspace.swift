@@ -433,6 +433,7 @@ extension MainWindowController {
             self.refreshAllSurfaces()
             self.syncCoordinatorPaneViews()
             self.updatePaneCloseButtons()
+            if let w = self.window { TrafficLightPositioner.apply(to: w) }
         }
     }
 }

@@ -349,6 +349,7 @@ class SettingsWindowController: NSWindowController {
         window.appearance = NSAppearance(named: theme.isDark ? .darkAqua : .aqua)
         let hostingView = NoSafeAreaHostingView(rootView: SettingsView())
         window.contentView = hostingView
+        TrafficLightPositioner.attach(to: window)
 
         super.init(window: window)
 
