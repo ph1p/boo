@@ -319,7 +319,7 @@ class ThemedSplitView: NSSplitView {
     }
 
     init() {
-        let window = NSWindow(
+        let window = BooWindow(
             contentRect: NSRect(x: 0, y: 0, width: 1000, height: 700),
             styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
             backing: .buffered,
@@ -813,6 +813,8 @@ class ThemedSplitView: NSSplitView {
             equalToConstant: DensityMetrics.current.statusBarHeight)
         heightConstraint.isActive = true
         statusBarHeightConstraint = heightConstraint
+
+        TrafficLightPositioner.attach(to: window)
 
     }
 
