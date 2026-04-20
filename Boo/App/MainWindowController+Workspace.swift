@@ -171,6 +171,9 @@ extension MainWindowController {
         for pane in ws.panes.values {
             notifyTerminalClosed(for: pane.tabs)
         }
+        // Persist the closing workspace's sidebar state before removal while the
+        // live sidebar state still belongs to it.
+        persistActiveWorkspaceSidebarState(for: ws)
         // Destroy all pane views for this workspace
         if let views = workspacePaneViews.removeValue(forKey: ws.id) {
             for (_, pv) in views {
@@ -182,7 +185,9 @@ extension MainWindowController {
             saveSession()
             window?.close()
         } else {
-            saveSession()
+            // Skip sidebar state persist: activeWorkspace now points to the next
+            // workspace which hasn't been activated yet, so live state is stale.
+            saveSession(persistSidebarState: false)
             activateWorkspace(appState.activeWorkspaceIndex)
         }
     }
@@ -206,13 +211,15 @@ extension MainWindowController {
         openWorkspace(path: AppSettings.shared.defaultFolder)
     }
 
-    func saveSession() {
+    func saveSession(persistSidebarState: Bool = true) {
         cancelPendingSidebarStateSave()
         for paneView in paneViews.values {
             paneView.persistContentStateToModel()
         }
         normalizeWorkspaceState()
-        persistActiveWorkspaceSidebarState()
+        if persistSidebarState {
+            persistActiveWorkspaceSidebarState()
+        }
         savePluginStateForActiveTab()
         for (i, ws) in appState.workspaces.enumerated() {
             debugLog(
@@ -349,6 +356,19 @@ extension MainWindowController {
             }
         }
 
+        // Save outgoing workspace's plugin/panel state BEFORE switching active index,
+        // so the save targets the old workspace's tab, not the incoming one.
+        // Skipped when there is no real previous workspace (startup) or when the index
+        // resolves to the same workspace after a removal (prev == incoming).
+        if let prev = previousWorkspace {
+            let incomingID =
+                index >= 0 && index < appState.workspaces.count
+                ? appState.workspaces[index].id : nil
+            if incomingID == nil || prev.id != incomingID {
+                savePluginStateForActiveTab()
+            }
+        }
+
         appState.setActiveWorkspace(index)
         guard let workspace = activeWorkspace else { return }
 
@@ -357,7 +377,6 @@ extension MainWindowController {
             persistActiveWorkspaceSidebarState(for: prev)
         }
 
-        savePluginStateForActiveTab()
         workspace.normalizePaneState()
         debugLog(
             "[WorkspaceSwitch] activate fromWorkspace=\(previousWorkspace?.id.uuidString ?? "none") toWorkspace=\(workspace.id.uuidString) targetPane=\(workspace.activePaneID.uuidString)"

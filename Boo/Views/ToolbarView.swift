@@ -267,8 +267,8 @@ class ToolbarView: NSView {
 
     /// The `+` button rect for adding a new workspace (top bar only).
     var workspacePlusButtonRect: CGRect {
-        let btnSize: CGFloat = 20
-        let x = workspaceZoneEnd + zoneGap / 2 - btnSize / 2
+        let btnSize: CGFloat = 24
+        let x = workspaceZoneEnd
         let y = (barHeight - btnSize) / 2
         return CGRect(x: x, y: y, width: btnSize, height: btnSize)
     }

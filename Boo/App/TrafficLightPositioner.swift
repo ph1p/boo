@@ -89,8 +89,14 @@ enum TrafficLightPositioner {
         let origin = btn.frame.origin
         guard origin.x != 0 || origin.y != 0 else { return }
         let id = ObjectIdentifier(btn)
-        let native = entry.nativeOrigins[id] ?? NSPoint(x: origin.x - offsetX, y: origin.y - offsetY)
-        entry.nativeOrigins[id] = native
+        let native: NSPoint
+        if let stored = entry.nativeOrigins[id] {
+            native = stored
+        } else {
+            // Swizzle hasn't intercepted this button yet — treat current origin as native.
+            native = origin
+            entry.nativeOrigins[id] = native
+        }
         let target = NSPoint(x: native.x + offsetX, y: native.y + offsetY)
         guard btn.frame.origin != target else { return }
         CATransaction.begin()
