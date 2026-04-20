@@ -730,8 +730,15 @@ class PaneView: NSView {
             guard let cv = activeContentView else { return }
             cv.deactivate()
             cv.removeFromSuperview()
-            contentViews[tab.id] = cv
             activeContentView = nil
+            // After a cross-pane drop, activeTabIndex has already shifted to the
+            // just-inserted tab while cv still belongs to the previous tab.
+            // Caching under the new tab.id would clobber the transferred view.
+            if cv.contentType == tab.contentType {
+                contentViews[tab.id] = cv
+            } else {
+                cv.cleanup()
+            }
         }
     }
 
