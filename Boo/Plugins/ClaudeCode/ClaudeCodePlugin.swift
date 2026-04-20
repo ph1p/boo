@@ -63,6 +63,7 @@ final class ClaudeCodePlugin: BooPluginProtocol {
     private(set) var worktrees: [ClaudeWorktree] = []
     private(set) var agentConfig: AgentConfig = AgentConfig()
     private(set) var claudeSettings: ClaudeSettings = ClaudeSettings()
+    private var claudeSettingsLoaded = false
     /// Session ID currently being written to (detected via file watching)
     private(set) var activeSessionID: String?
 
@@ -216,7 +217,8 @@ final class ClaudeCodePlugin: BooPluginProtocol {
         }
 
         // Load settings on first access if not loaded yet
-        if claudeSettings.model.isEmpty {
+        if !claudeSettingsLoaded {
+            claudeSettingsLoaded = true
             loadClaudeSettings()
         }
 

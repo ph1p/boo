@@ -156,6 +156,9 @@ final class MarkdownPreviewContentView: NSView, ContentViewProtocol {
     }
 
     private func showPlaceholder() {
+        let theme = AppSettings.shared.theme
+        let bgColor = theme.background.hexString
+        let mutedColor = theme.chromeMuted.hexString
         let html = """
             <!DOCTYPE html>
             <html>
@@ -167,8 +170,8 @@ final class MarkdownPreviewContentView: NSView, ContentViewProtocol {
                         justify-content: center;
                         height: 100vh;
                         margin: 0;
-                        background: #1e1e1e;
-                        color: #666;
+                        background: \(bgColor);
+                        color: \(mutedColor);
                         font-family: -apple-system, sans-serif;
                     }
                 </style>

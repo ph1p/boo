@@ -108,8 +108,8 @@ struct PluginDetailSettingsView: View {
                     .foregroundStyle(Tokens.current.muted)
             } else {
                 ForEach(groupedSettings, id: \.title) { group in
-                    Section(title: group.title.isEmpty ? "Settings" : group.title) {
-                        ForEach(Array(group.settings.enumerated()), id: \.element.key) { idx, setting in
+                    Section(title: group.title.isEmpty ? "Settings" : group.title, spacing: 4, padding: 8) {
+                        ForEach(group.settings, id: \.key) { setting in
                             PluginSettingControl(pluginID: manifest.id, setting: setting)
                         }
                     }
@@ -232,11 +232,11 @@ private struct PluginSettingControl: View {
         let _ = observer.revision
         switch setting.type {
         case .bool:
-            boolControl.padding(.horizontal, 12).padding(.vertical, 8)
+            boolControl
         case .double:
-            doubleControl.padding(.horizontal, 12).padding(.vertical, 8)
+            doubleControl
         case .string:
-            stringControl.padding(.horizontal, 12).padding(.vertical, 8)
+            stringControl
         case .int:
             EmptyView()
         }

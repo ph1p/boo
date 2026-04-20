@@ -1191,7 +1191,7 @@ class ThemedSplitView: NSSplitView {
 
     func resetSidebarWidthToDefault() {
         guard sidebarVisible else { return }
-        let defaultWidth = AppSettings.shared.sidebarWidth
+        let defaultWidth: CGFloat = 220
         var state = sidebarController.resolveEffectiveSidebarState()
         state.width = defaultWidth
         sidebarController.applyRestoredState(state)

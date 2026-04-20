@@ -133,7 +133,7 @@ struct SettingsView: View {
                 .listStyle(.sidebar)
                 .safeAreaInset(edge: .top) { Color.clear.frame(height: 20) }
             }
-            .frame(width: 220)
+            .frame(width: 190)
 
             Divider()
 
@@ -193,17 +193,19 @@ struct SettingsPage<Content: View>: View {
 
 struct Section<Content: View>: View {
     let title: String
+    var spacing: CGFloat = 10
+    var padding: CGFloat = 12
     @ViewBuilder let content: () -> Content
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 6) {
             Text(title)
                 .font(.headline)
                 .foregroundStyle(.primary)
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: spacing) {
                 content()
             }
-            .padding(12)
+            .padding(padding)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(Tokens.current.cardBg, in: RoundedRectangle(cornerRadius: 10))
             .clipShape(RoundedRectangle(cornerRadius: 10))
@@ -312,7 +314,7 @@ struct ToggleRow: View {
                 .toggleStyle(.switch)
                 .controlSize(.small)
         }
-        .padding(.vertical, 8)
+        .padding(.vertical, 5)
         .padding(.horizontal, 0)
     }
 }
