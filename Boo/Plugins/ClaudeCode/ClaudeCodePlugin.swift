@@ -613,11 +613,11 @@ final class ClaudeCodePlugin: BooPluginProtocol {
         let source = DispatchSource.makeFileSystemObjectSource(
             fileDescriptor: fd,
             eventMask: .write,
-            queue: DispatchQueue.global(qos: .utility)
+            queue: .main
         )
 
         source.setEventHandler { [weak self] in
-            DispatchQueue.main.async { self?.detectActiveSession() }
+            self?.detectActiveSession()
         }
 
         Self.installCancelHandler(source: source, fd: fd)
