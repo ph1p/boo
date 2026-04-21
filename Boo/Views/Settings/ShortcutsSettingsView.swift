@@ -6,18 +6,21 @@ struct ShortcutsSettingsView: View {
     @ObservedObject private var observer = SettingsObserver(topics: [.theme])
     @State private var searchText: String = ""
 
-    private static let groups: [(String, [(String, String)])] = [
+    static let groups: [(String, [(String, String)])] = [
         (
             "General",
             [
                 ("Settings", "\u{2318},"),
                 ("New Workspace", "\u{2318}N"),
                 ("Open Folder", "\u{21E7}\u{2318}O"),
-                ("New Tab", "\u{2318}T"),
+                ("New Terminal Tab", "\u{2318}T"),
+                ("New Browser Tab", "\u{21E7}\u{2318}T"),
+                ("Save", "\u{2318}S"),
                 ("Close", "\u{2318}W"),
-                ("Reopen Tab", "\u{2318}Z"),
+                ("Reopen Closed Tab", "\u{2325}\u{2318}Z"),
                 ("Close Pane", "\u{21E7}\u{2318}W"),
-                ("Switch Workspace 1-9", "\u{2318}1-9")
+                ("Switch Workspace 1-9", "\u{2318}1-9"),
+                ("Switch Tab 1-9", "\u{2325}\u{2318}1-9")
             ]
         ),
         (
@@ -28,21 +31,27 @@ struct ShortcutsSettingsView: View {
                 ("Split Right", "\u{2318}D"),
                 ("Split Down", "\u{21E7}\u{2318}D"),
                 ("Focus Next Pane", "\u{2318}]"),
-                ("Focus Previous Pane", "\u{2318}[")
+                ("Focus Previous Pane", "\u{2318}["),
+                ("Equalize Splits", "\u{2303}\u{2318}="),
+                ("Increase Font Size", "\u{2318}+"),
+                ("Decrease Font Size", "\u{2318}-"),
+                ("Reset Font Size", "\u{2318}0")
             ]
         ),
         (
             "View",
             [
                 ("Toggle Sidebar", "\u{2318}B"),
-                ("Increase Font", "\u{2318}+"),
-                ("Decrease Font", "\u{2318}-"),
-                ("Reset Font", "\u{2318}0")
+                ("Toggle Full Screen", "\u{2318}\u{23CE}"),
+                ("Toggle Full Screen", "\u{2303}\u{2318}F")
             ]
         ),
         (
             "Edit",
             [
+                ("Undo", "\u{2318}Z"),
+                ("Redo", "\u{21E7}\u{2318}Z"),
+                ("Cut", "\u{2318}X"),
                 ("Copy", "\u{2318}C"),
                 ("Paste", "\u{2318}V"),
                 ("Select All", "\u{2318}A")
@@ -117,7 +126,7 @@ struct ShortcutsSettingsView: View {
             Text(title)
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(t.muted)
-            ForEach(items, id: \.0) { item in
+            ForEach(Array(items.enumerated()), id: \.offset) { _, item in
                 HStack {
                     Text(item.0)
                         .font(.system(size: 12))

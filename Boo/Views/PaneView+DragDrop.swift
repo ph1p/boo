@@ -161,7 +161,14 @@ extension PaneView {
     override func mouseUp(with event: NSEvent) {
         if let idx = dragTabIndex {
             // Activate the tab now that mouse is released (click or drag-end)
-            activateTab(idx)
+            if idx == pane.activeTabIndex {
+                focusActiveView()
+                if pane.activeTab != nil {
+                    paneDelegate?.paneView(self, didFocus: paneID)
+                }
+            } else {
+                activateTab(idx)
+            }
         }
         dragTabIndex = nil
         dragStartPoint = nil

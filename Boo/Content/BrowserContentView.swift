@@ -501,7 +501,8 @@ final class BrowserContentView: NSView, ContentViewProtocol, NSTextFieldDelegate
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         guard let wv = webView, event.type == .keyDown,
             event.modifierFlags.contains(.command),
-            window?.firstResponder !== wv
+            window?.firstResponder !== wv,
+            !urlBarOwnsFirstResponder
         else { return super.performKeyEquivalent(with: event) }
 
         switch event.charactersIgnoringModifiers {
@@ -513,6 +514,13 @@ final class BrowserContentView: NSView, ContentViewProtocol, NSTextFieldDelegate
         default:
             return super.performKeyEquivalent(with: event)
         }
+    }
+
+    private var urlBarOwnsFirstResponder: Bool {
+        guard let urlBar, let firstResponder = window?.firstResponder else { return false }
+        if firstResponder === urlBar { return true }
+        guard let textView = firstResponder as? NSTextView else { return false }
+        return (textView.delegate as? NSTextField) === urlBar
     }
 }
 

@@ -221,7 +221,15 @@ private func ghosttyAction(_ app: ghostty_app_t?, _ target: ghostty_target_s, _ 
 private func ghosttyReadClipboard(
     _ userdata: UnsafeMutableRawPointer?, _ clipboard: ghostty_clipboard_e, _ state: UnsafeMutableRawPointer?
 ) -> Bool {
-    false
+    guard clipboard == GHOSTTY_CLIPBOARD_STANDARD else { return false }
+    guard let surface = userdata.flatMap({ Unmanaged<GhosttyView>.fromOpaque($0).takeUnretainedValue().surface })
+    else { return false }
+    guard let str = NSPasteboard.general.ghosttyStringContents else { return false }
+
+    str.withCString { cstr in
+        ghostty_surface_complete_clipboard_request(surface, cstr, state, false)
+    }
+    return true
 }
 
 private func ghosttyConfirmReadClipboard(
@@ -234,11 +242,32 @@ private func ghosttyWriteClipboard(
     _ userdata: UnsafeMutableRawPointer?, _ clipboard: ghostty_clipboard_e,
     _ content: UnsafePointer<ghostty_clipboard_content_s>?, _ count: Int, _ confirmed: Bool
 ) {
+    guard clipboard == GHOSTTY_CLIPBOARD_STANDARD else { return }
     guard let content = content, count > 0 else { return }
     let pb = NSPasteboard.general
     pb.clearContents()
+    for i in 0..<count {
+        guard let mime = content[i].mime, let data = content[i].data else { continue }
+        let mimeString = String(cString: mime)
+        let text = String(cString: data)
+        if mimeString == "text/plain" {
+            pb.setString(text, forType: .string)
+            return
+        }
+    }
     if let data = content[0].data {
         pb.setString(String(cString: data), forType: .string)
+    }
+}
+
+extension NSPasteboard {
+    fileprivate var ghosttyStringContents: String? {
+        if let urls = readObjects(forClasses: [NSURL.self]) as? [URL], !urls.isEmpty {
+            return urls.map { url in
+                url.isFileURL ? RemoteExplorer.shellEscPath(url.path) : url.absoluteString
+            }.joined(separator: " ")
+        }
+        return string(forType: .string)
     }
 }
 
