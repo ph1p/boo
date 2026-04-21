@@ -112,7 +112,8 @@ final class WindowStateCoordinator {
             terminalTitle: tab.title,
             remoteSession: tab.remoteSession,
             remoteCwd: tab.remoteWorkingDirectory,
-            shellPID: tab.shellPID
+            shellPID: tab.shellPID,
+            foregroundProcess: tab.state.foregroundProcess
         )
     }
 

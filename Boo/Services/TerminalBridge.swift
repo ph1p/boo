@@ -150,7 +150,8 @@ final class TerminalBridge: @unchecked Sendable {
         terminalTitle: String,
         remoteSession: RemoteSessionType?,
         remoteCwd: String?,
-        shellPID: pid_t = 0
+        shellPID: pid_t = 0,
+        foregroundProcess: String = ""
     ) {
         booLog(
             .debug, .terminal,
@@ -178,6 +179,10 @@ final class TerminalBridge: @unchecked Sendable {
         if shellPID > 0 {
             state.foregroundProcess = resolveProcess(paneID: paneID, title: terminalTitle)
             monitor.updateShellPID(paneID: paneID, shellPID: shellPID)
+        } else if !foregroundProcess.isEmpty {
+            // Use persisted process name — title-extraction would lose e.g. "claude" from
+            // a spinner title like "✳ Claude Code" before the shell PID is known.
+            state.foregroundProcess = foregroundProcess
         } else {
             state.foregroundProcess = TerminalBridge.extractProcessName(from: terminalTitle)
         }

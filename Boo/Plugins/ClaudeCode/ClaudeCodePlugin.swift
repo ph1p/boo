@@ -588,6 +588,7 @@ final class ClaudeCodePlugin: BooPluginProtocol {
         guard let cwd = cwd else { return }
 
         let markers = Self.projectMarkers
+        let gen = teardownGeneration
         DispatchQueue.global(qos: .utility).async { [weak self] in
             let projectRoot = findAgentProjectRoot(from: cwd, markers: markers) ?? cwd
             let fm = FileManager.default
@@ -598,7 +599,7 @@ final class ClaudeCodePlugin: BooPluginProtocol {
             guard fm.fileExists(atPath: sessionDir) else { return }
 
             DispatchQueue.main.async { [weak self] in
-                guard let self else { return }
+                guard let self, self.teardownGeneration == gen else { return }
                 self.sessionDirPath = sessionDir
                 self.watchSessionDirectory(sessionDir)
             }
@@ -616,18 +617,22 @@ final class ClaudeCodePlugin: BooPluginProtocol {
         )
 
         source.setEventHandler { [weak self] in
-            self?.detectActiveSession()
+            DispatchQueue.main.async { self?.detectActiveSession() }
         }
 
-        source.setCancelHandler {
-            close(fd)
-        }
+        Self.installCancelHandler(source: source, fd: fd)
 
         sessionWatcher = source
         source.resume()
 
         // Initial detection
         detectActiveSession()
+    }
+
+    nonisolated private static func installCancelHandler(
+        source: DispatchSourceFileSystemObject, fd: Int32
+    ) {
+        source.setCancelHandler { close(fd) }
     }
 
     private func stopSessionWatcher() {
