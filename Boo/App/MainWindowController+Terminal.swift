@@ -44,9 +44,7 @@ extension MainWindowController {
         if let idx = ids.firstIndex(of: workspace.activePaneID) {
             let next = ids[(idx + 1) % ids.count]
             workspace.activePaneID = next
-            if let pv = paneViews[next] {
-                window?.makeFirstResponder(pv.ghosttyView)
-            }
+            paneViews[next]?.focusActiveView()
             runPluginCycle(reason: .focusChanged)
         }
     }
@@ -58,9 +56,7 @@ extension MainWindowController {
         if let idx = ids.firstIndex(of: workspace.activePaneID) {
             let prev = ids[(idx - 1 + ids.count) % ids.count]
             workspace.activePaneID = prev
-            if let pv = paneViews[prev] {
-                window?.makeFirstResponder(pv.ghosttyView)
-            }
+            paneViews[prev]?.focusActiveView()
             runPluginCycle(reason: .focusChanged)
         }
     }
@@ -354,18 +350,15 @@ extension MainWindowController {
         guard let ws = activeWorkspace else { return }
         for (paneID, pv) in paneViews {
             pv.layoutTerminalView()
-            if let gv = pv.currentTerminalView as? GhosttyView,
-                let surface = gv.surface
-            {
-                ghostty_surface_set_focus(surface, paneID == ws.activePaneID)
-                let scaledSize = gv.convertToBacking(gv.bounds.size)
-                let w = UInt32(scaledSize.width)
-                let h = UInt32(scaledSize.height)
-                if w > 0 && h > 0 {
-                    ghostty_surface_set_size(surface, w, h)
-                }
-                ghostty_surface_refresh(surface)
+            guard let gv = pv.ghosttyView, let surface = gv.surface else { continue }
+            gv.setFocused(paneID == ws.activePaneID)
+            let scaledSize = gv.convertToBacking(gv.bounds.size)
+            let w = UInt32(scaledSize.width)
+            let h = UInt32(scaledSize.height)
+            if w > 0 && h > 0 {
+                ghostty_surface_set_size(surface, w, h)
             }
+            ghostty_surface_refresh(surface)
         }
     }
 }

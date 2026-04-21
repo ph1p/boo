@@ -5,6 +5,7 @@ struct BrowserSettingsView: View {
     @State private var persistentWebsiteDataEnabled = AppSettings.shared.browserPersistentWebsiteDataEnabled
     @State private var historyEnabled = AppSettings.shared.browserHistoryEnabled
     @State private var historyLimit = AppSettings.shared.browserHistoryLimit
+    @State private var linkOpenMode = AppSettings.shared.linkOpenMode
     @State private var showClearConfirm = false
     @State private var historyEntries: [BrowserHistoryEntry] = []
     @State private var searchText = ""
@@ -57,6 +58,21 @@ struct BrowserSettingsView: View {
                 )
                 .font(.system(size: 11))
                 .foregroundStyle(t.muted)
+
+                HStack(spacing: 8) {
+                    Text("Terminal links")
+                        .font(.system(size: 12))
+                        .foregroundStyle(t.text)
+                        .frame(width: 120, alignment: .leading)
+                    Picker("", selection: $linkOpenMode) {
+                        ForEach(LinkOpenMode.allCases, id: \.self) {
+                            Text($0.displayName).tag($0)
+                        }
+                    }
+                    .labelsHidden()
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .onChange(of: linkOpenMode) { _, v in AppSettings.shared.linkOpenMode = v }
+                }
             }
 
             // MARK: History

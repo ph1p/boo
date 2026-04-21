@@ -609,7 +609,14 @@ class ThemedSplitView: NSSplitView {
             guard let self,
                 let url = notification.userInfo?["url"] as? URL
             else { return }
-            MainActor.assumeIsolated { self.handleOpenTab(.browser(url: url)) }
+            MainActor.assumeIsolated {
+                switch AppSettings.shared.linkOpenMode {
+                case .browserTab:
+                    self.handleOpenTab(.browser(url: url))
+                case .externalBrowser:
+                    NSWorkspace.shared.open(url)
+                }
+            }
         }
     }
 
