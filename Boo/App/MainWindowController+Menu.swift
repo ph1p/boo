@@ -5,6 +5,7 @@ extension MainWindowController {
         let mainMenu = NSMenu()
 
         let appMenuItem = NSMenuItem()
+        appMenuItem.title = "Boo"
         let appMenu = NSMenu()
         appMenu.addItem(withTitle: "About Boo", action: #selector(showAboutAction(_:)), keyEquivalent: "")
         appMenu.addItem(.separator())
@@ -17,6 +18,7 @@ extension MainWindowController {
         mainMenu.addItem(appMenuItem)
 
         let fileMenuItem = NSMenuItem()
+        fileMenuItem.title = "File"
         let fileMenu = NSMenu(title: "File")
         fileMenu.addItem(withTitle: "New Workspace", action: #selector(newWorkspaceAction(_:)), keyEquivalent: "n")
         let openFolder = NSMenuItem(
@@ -41,6 +43,7 @@ extension MainWindowController {
         mainMenu.addItem(fileMenuItem)
 
         let viewMenuItem = NSMenuItem()
+        viewMenuItem.title = "View"
         let viewMenu = NSMenu(title: "View")
         viewMenu.addItem(withTitle: "Toggle Sidebar", action: #selector(toggleSidebarAction(_:)), keyEquivalent: "b")
         let fullscreen = NSMenuItem(
@@ -56,7 +59,14 @@ extension MainWindowController {
         mainMenu.addItem(viewMenuItem)
 
         let editMenuItem = NSMenuItem()
+        editMenuItem.title = "Edit"
         let editMenu = NSMenu(title: "Edit")
+        editMenu.addItem(withTitle: "Undo", action: Selector(("undo:")), keyEquivalent: "z")
+        let redo = NSMenuItem(title: "Redo", action: Selector(("redo:")), keyEquivalent: "Z")
+        redo.keyEquivalentModifierMask = [.command, .shift]
+        editMenu.addItem(redo)
+        editMenu.addItem(.separator())
+        editMenu.addItem(withTitle: "Cut", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
         editMenu.addItem(withTitle: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
         editMenu.addItem(withTitle: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
         editMenu.addItem(.separator())
@@ -65,6 +75,7 @@ extension MainWindowController {
         mainMenu.addItem(editMenuItem)
 
         let termMenuItem = NSMenuItem()
+        termMenuItem.title = "Terminal"
         let termMenu = NSMenu(title: "Terminal")
         termMenu.addItem(withTitle: "Clear Screen", action: #selector(clearScreenAction(_:)), keyEquivalent: "k")
         termMenu.addItem(
@@ -110,6 +121,7 @@ extension MainWindowController {
 
         // Bookmarks menu
         let bmMenuItem = NSMenuItem()
+        bmMenuItem.title = "Bookmarks"
         let bmMenu = NSMenu(title: "Bookmarks")
         let addBm = NSMenuItem(
             title: "Bookmark Current Directory", action: #selector(bookmarkCurrentAction(_:)), keyEquivalent: "B")
@@ -129,6 +141,7 @@ extension MainWindowController {
 
         // Plugins menu (rebuilt dynamically as plugins load/unload)
         let pluginsMenuItem = NSMenuItem()
+        pluginsMenuItem.title = "Plugins"
         let pluginsMenu = NSMenu(title: "Plugins")
         pluginsMenu.addItem(
             withTitle: "No Plugin Commands", action: nil, keyEquivalent: "")
