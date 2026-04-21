@@ -197,16 +197,21 @@ import Cocoa
     // MARK: - Focus
 
     override func becomeFirstResponder() -> Bool {
-        isFocused = true
-        surface.map { ghostty_surface_set_focus($0, true) }
+        setFocused(true)
         onFocused?()
         return super.becomeFirstResponder()
     }
 
     override func resignFirstResponder() -> Bool {
-        isFocused = false
-        surface.map { ghostty_surface_set_focus($0, false) }
+        setFocused(false)
         return super.resignFirstResponder()
+    }
+
+    /// Sync both the Swift `isFocused` flag and the Ghostty C surface focus in one call.
+    /// Use instead of direct `ghostty_surface_set_focus` to keep the two in sync.
+    func setFocused(_ focused: Bool) {
+        isFocused = focused
+        surface.map { ghostty_surface_set_focus($0, focused) }
     }
 
     // MARK: - Keyboard (via NSTextInputClient)

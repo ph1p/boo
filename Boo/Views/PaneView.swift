@@ -570,7 +570,7 @@ class PaneView: NSView {
     }
 
     /// Focus the appropriate view based on the active tab's content type.
-    private func focusActiveView() {
+    func focusActiveView() {
         guard let tab = pane.activeTab else { return }
         if tab.contentType == .terminal {
             window?.makeFirstResponder(ghosttyView)
@@ -609,21 +609,12 @@ class PaneView: NSView {
         // Trigger single layout + display pass, not redundant calls
         needsLayout = true
 
-        // Focus the appropriate view
-        if contentType == .terminal {
-            if let gv = ghosttyView {
-                window?.makeFirstResponder(gv)
-            }
-            DispatchQueue.main.async { [weak self] in
-                guard let self, let gv = self.ghosttyView else { return }
-                self.window?.makeFirstResponder(gv)
-            }
-        } else if let contentView = activeContentView {
-            window?.makeFirstResponder(contentView)
-            // For browser tabs, navigate to the URL
-            if contentType == .browser, let url = url, let browserView = contentView as? BrowserContentView {
-                browserView.navigate(to: url)
-            }
+        // For browser tabs, navigate to the URL before focus
+        if contentType == .browser, let url = url, let browserView = activeContentView as? BrowserContentView {
+            browserView.navigate(to: url)
+        }
+        DispatchQueue.main.async { [weak self] in
+            self?.focusActiveView()
         }
 
         paneDelegate?.paneView(self, didFocus: paneID)

@@ -472,16 +472,20 @@ extension MainWindowController {
             if let oldPV = self.paneViews[oldPaneID] {
                 oldPV.startActiveSession()
             }
-            // Start the new pane's session and focus it
+            // Start the new pane's session
             if let newPV = self.paneViews[newID] {
                 newPV.startActiveSession()
-                self.window?.makeFirstResponder(newPV.ghosttyView)
             }
             // Refresh all Ghostty surfaces after layout settles
             self.refreshAllSurfaces()
             self.syncCoordinatorPaneViews()
             self.updatePaneCloseButtons()
             self.runPluginCycle(reason: .focusChanged)
+            // Focus after layout and plugin cycle complete so nothing steals the responder
+            DispatchQueue.main.async { [weak self] in
+                guard let self, let newPV = self.paneViews[newID] else { return }
+                newPV.focusActiveView()
+            }
         }
         refreshStatusBar()
     }
@@ -517,19 +521,22 @@ extension MainWindowController {
             saveSession()
 
             DispatchQueue.main.async { [weak self] in
-                guard let self, let ws = self.activeWorkspace else { return }
+                guard let self, self.activeWorkspace != nil else { return }
                 for id in validIDs {
                     if let pv = self.paneViews[id] {
                         pv.startActiveSession()
                     }
                 }
-                if let pv = self.paneViews[ws.activePaneID] {
-                    self.window?.makeFirstResponder(pv.ghosttyView)
-                }
                 self.refreshAllSurfaces()
                 self.syncCoordinatorPaneViews()
                 self.updatePaneCloseButtons()
                 self.runPluginCycle(reason: .focusChanged)
+                DispatchQueue.main.async { [weak self] in
+                    guard let self, let ws = self.activeWorkspace,
+                        let pv = self.paneViews[ws.activePaneID]
+                    else { return }
+                    pv.focusActiveView()
+                }
             }
         } else {
             toolbarDidCloseWorkspace(at: appState.activeWorkspaceIndex)
@@ -569,11 +576,11 @@ extension MainWindowController {
                         pv.startActiveSession()
                     }
                 }
-                if let pv = self.paneViews[newID] {
-                    pv.startActiveSession()
-                    self.window?.makeFirstResponder(pv.ghosttyView)
-                }
                 self.updatePaneCloseButtons()
+                DispatchQueue.main.async { [weak self] in
+                    guard let self, let pv = self.paneViews[newID] else { return }
+                    pv.focusActiveView()
+                }
             }
         }
         refreshStatusBar()
@@ -761,11 +768,6 @@ extension MainWindowController {
                     }
                     newPV.tabDragCoordinator = self.tabDragCoordinator
                     newPV.startActiveSession()
-                    if tab.contentType == .terminal {
-                        self.window?.makeFirstResponder(newPV.ghosttyView)
-                    } else {
-                        self.window?.makeFirstResponder(newPV.activeContentView)
-                    }
                 }
                 for id in destWorkspace.splitTree.leafIDs where id != newPaneID {
                     self.paneViews[id]?.startActiveSession()
@@ -773,6 +775,10 @@ extension MainWindowController {
                 self.refreshAllSurfaces()
                 self.syncCoordinatorPaneViews()
                 self.updatePaneCloseButtons()
+                DispatchQueue.main.async { [weak self] in
+                    guard let self, let newPV = self.paneViews[newPaneID] else { return }
+                    newPV.focusActiveView()
+                }
             }
         }
 
@@ -916,16 +922,13 @@ extension MainWindowController {
                 }
             }
 
-            if let newPV = self.paneViews[newPaneID] {
-                if tab.contentType == .terminal {
-                    self.window?.makeFirstResponder(newPV.ghosttyView)
-                } else {
-                    self.window?.makeFirstResponder(newPV.activeContentView)
-                }
-            }
             self.refreshAllSurfaces()
             self.syncCoordinatorPaneViews()
             self.updatePaneCloseButtons()
+            DispatchQueue.main.async { [weak self] in
+                guard let self, let newPV = self.paneViews[newPaneID] else { return }
+                newPV.focusActiveView()
+            }
         }
     }
 

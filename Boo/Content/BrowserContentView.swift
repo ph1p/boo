@@ -7,9 +7,9 @@ final class BrowserContentView: NSView, ContentViewProtocol, NSTextFieldDelegate
     let contentType: ContentType = .browser
 
     private var urlBar: SelectAllTextField?
-    private var backButton: NSButton?
-    private var forwardButton: NSButton?
-    private var reloadStopButton: NSButton?
+    private var backButton: NavHoverButton?
+    private var forwardButton: NavHoverButton?
+    private var reloadStopButton: NavHoverButton?
     private var webView: WKWebView?
     private weak var toolbarView: NSView?
     private weak var toolbarSeparator: NSView?
@@ -20,6 +20,7 @@ final class BrowserContentView: NSView, ContentViewProtocol, NSTextFieldDelegate
     private weak var urlBarPill: URLBarPillView?
     private var urlObservation: NSKeyValueObservation?
     private var completedDownloadDestinations: [ObjectIdentifier: URL] = [:]
+    private weak var openExternalButton: NavHoverButton?
 
     private let toolbarHeight: CGFloat = 44
 
@@ -129,6 +130,12 @@ final class BrowserContentView: NSView, ContentViewProtocol, NSTextFieldDelegate
         bar.target = self
         bar.action = #selector(urlBarAction(_:))
 
+        // Open in external browser button
+        let openExt = makeNavButton(
+            symbolName: "arrow.up.right.square", action: #selector(openInExternalBrowserAction), theme: theme)
+        toolbar.addSubview(openExt)
+        openExternalButton = openExt
+
         // Pill container drawn behind the field
         let pill = URLBarPillView()
         pill.translatesAutoresizingMaskIntoConstraints = false
@@ -141,25 +148,28 @@ final class BrowserContentView: NSView, ContentViewProtocol, NSTextFieldDelegate
         bar.onFocusGained = { [weak pill] in pill?.isFocused = true }
         bar.onFocusLost = { [weak pill] in pill?.isFocused = false }
 
-        // Layout: [8] [back] [4] [fwd] [4] [reload] [8] [pill/urlbar] [8]
+        // Layout: [8] [back] [4] [fwd] [4] [reload] [8] [pill/urlbar] [4] [openExt] [8]
         NSLayoutConstraint.activate([
             back.leadingAnchor.constraint(equalTo: toolbar.leadingAnchor, constant: 8),
-            back.centerYAnchor.constraint(equalTo: toolbar.centerYAnchor, constant: -1),
+            back.centerYAnchor.constraint(equalTo: toolbar.centerYAnchor),
 
             fwd.leadingAnchor.constraint(equalTo: back.trailingAnchor, constant: 2),
-            fwd.centerYAnchor.constraint(equalTo: toolbar.centerYAnchor, constant: -1),
+            fwd.centerYAnchor.constraint(equalTo: toolbar.centerYAnchor),
 
             reload.leadingAnchor.constraint(equalTo: fwd.trailingAnchor, constant: 2),
-            reload.centerYAnchor.constraint(equalTo: toolbar.centerYAnchor, constant: -1),
+            reload.centerYAnchor.constraint(equalTo: toolbar.centerYAnchor),
 
             pill.leadingAnchor.constraint(equalTo: reload.trailingAnchor, constant: 8),
-            pill.trailingAnchor.constraint(equalTo: toolbar.trailingAnchor, constant: -8),
+            pill.trailingAnchor.constraint(equalTo: openExt.leadingAnchor, constant: -4),
             pill.centerYAnchor.constraint(equalTo: toolbar.centerYAnchor),
             pill.heightAnchor.constraint(equalToConstant: 26),
 
             bar.leadingAnchor.constraint(equalTo: pill.leadingAnchor, constant: 10),
             bar.trailingAnchor.constraint(equalTo: pill.trailingAnchor, constant: -10),
-            bar.centerYAnchor.constraint(equalTo: pill.centerYAnchor)
+            bar.centerYAnchor.constraint(equalTo: pill.centerYAnchor),
+
+            openExt.trailingAnchor.constraint(equalTo: toolbar.trailingAnchor, constant: -8),
+            openExt.centerYAnchor.constraint(equalTo: toolbar.centerYAnchor)
         ])
 
         if currentURL.absoluteString != "about:blank" {
@@ -169,17 +179,14 @@ final class BrowserContentView: NSView, ContentViewProtocol, NSTextFieldDelegate
         updateNavButtons()
     }
 
-    private func makeNavButton(symbolName: String, action: Selector, theme: TerminalTheme) -> NSButton {
-        let btn = NSButton()
+    private func makeNavButton(symbolName: String, action: Selector, theme: TerminalTheme) -> NavHoverButton {
+        let btn = NavHoverButton()
         btn.translatesAutoresizingMaskIntoConstraints = false
-        btn.bezelStyle = .regularSquare
-        btn.isBordered = false
-        btn.imagePosition = .imageOnly
         let cfg = NSImage.SymbolConfiguration(pointSize: 12, weight: .regular)
         btn.image = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil)?
             .withSymbolConfiguration(cfg)
-        btn.image?.isTemplate = true
         btn.contentTintColor = theme.chromeMuted
+        btn.hoverBackground = theme.chromeMuted.withAlphaComponent(0.15)
         btn.target = self
         btn.action = action
         NSLayoutConstraint.activate([
@@ -197,9 +204,14 @@ final class BrowserContentView: NSView, ContentViewProtocol, NSTextFieldDelegate
         urlBarPill?.theme = theme
         let activeColor = theme.chromeText
         let mutedColor = theme.chromeMuted
+        let hoverBg = theme.chromeMuted.withAlphaComponent(0.15)
         backButton?.contentTintColor = (webView?.canGoBack ?? false) ? activeColor : mutedColor
         forwardButton?.contentTintColor = (webView?.canGoForward ?? false) ? activeColor : mutedColor
         reloadStopButton?.contentTintColor = mutedColor
+        openExternalButton?.contentTintColor = mutedColor
+        for btn in [backButton, forwardButton, reloadStopButton, openExternalButton] {
+            btn?.hoverBackground = hoverBg
+        }
         layer?.backgroundColor = theme.chromeBg.cgColor
     }
 
@@ -236,6 +248,7 @@ final class BrowserContentView: NSView, ContentViewProtocol, NSTextFieldDelegate
 
     @objc private func backAction() { webView?.goBack() }
     @objc private func forwardAction() { webView?.goForward() }
+    @objc private func openInExternalBrowserAction() { NSWorkspace.shared.open(currentURL) }
 
     @objc private func reloadStopAction() {
         if isLoading {
@@ -347,9 +360,11 @@ final class BrowserContentView: NSView, ContentViewProtocol, NSTextFieldDelegate
     private func updateLoadingState() {
         let cfg = NSImage.SymbolConfiguration(pointSize: 12, weight: .regular)
         let symbolName = isLoading ? "xmark" : "arrow.clockwise"
-        reloadStopButton?.image = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil)?
+        if let img = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil)?
             .withSymbolConfiguration(cfg)
-        reloadStopButton?.image?.isTemplate = true
+        {
+            reloadStopButton?.image = img
+        }
         reloadStopButton?.contentTintColor = AppSettings.shared.theme.chromeMuted
     }
 
@@ -482,27 +497,103 @@ final class BrowserContentView: NSView, ContentViewProtocol, NSTextFieldDelegate
 
     override var acceptsFirstResponder: Bool { true }
 
-    /// Forward standard edit commands (copy/cut/paste/select-all) to the web view
-    /// so they work even when focus is on the container rather than the WKWebView itself.
+    // WKWebView only handles Cmd+C/V/X/A/Z/Y when it is first responder.
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         guard let wv = webView, event.type == .keyDown,
-            event.modifierFlags.contains(.command)
+            event.modifierFlags.contains(.command),
+            window?.firstResponder !== wv
         else { return super.performKeyEquivalent(with: event) }
 
         switch event.charactersIgnoringModifiers {
-        case "c":
-            wv.perform(#selector(NSText.copy(_:)), with: nil)
-            return true
-        case "x":
-            wv.perform(#selector(NSText.cut(_:)), with: nil)
-            return true
-        case "v":
-            wv.perform(#selector(NSText.paste(_:)), with: nil)
-            return true
-        case "a":
-            wv.perform(#selector(NSText.selectAll(_:)), with: nil)
-            return true
-        default: return super.performKeyEquivalent(with: event)
+        case "c", "x", "v", "a", "z", "y":
+            guard window?.makeFirstResponder(wv) == true else {
+                return super.performKeyEquivalent(with: event)
+            }
+            return wv.performKeyEquivalent(with: event)
+        default:
+            return super.performKeyEquivalent(with: event)
+        }
+    }
+}
+
+// MARK: - NavHoverButton
+
+/// Square toolbar button with a rounded-rect hover background.
+/// Uses a layer-backed NSImageView for the icon so NSButton's cell never clips it.
+final class NavHoverButton: NSView {
+    var hoverBackground: NSColor = NSColor.labelColor.withAlphaComponent(0.12) {
+        didSet { needsDisplay = true }
+    }
+
+    var contentTintColor: NSColor? {
+        didSet { imageView.contentTintColor = contentTintColor }
+    }
+
+    var image: NSImage? {
+        didSet { imageView.image = image }
+    }
+
+    var isEnabled: Bool = true {
+        didSet { alphaValue = isEnabled ? 1 : 0.4 }
+    }
+
+    var target: AnyObject?
+    var action: Selector?
+
+    private let imageView = NSImageView()
+    private var isHovered = false
+    private var trackingArea: NSTrackingArea?
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        wantsLayer = true
+        imageView.translatesAutoresizingMaskIntoConstraints = false
+        imageView.imageScaling = .scaleProportionallyUpOrDown
+        imageView.imageAlignment = .alignCenter
+        addSubview(imageView)
+        NSLayoutConstraint.activate([
+            imageView.centerXAnchor.constraint(equalTo: centerXAnchor),
+            imageView.centerYAnchor.constraint(equalTo: centerYAnchor),
+            imageView.widthAnchor.constraint(equalToConstant: 16),
+            imageView.heightAnchor.constraint(equalToConstant: 16)
+        ])
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func mouseDown(with event: NSEvent) {
+        guard isEnabled, let action, let target else { return }
+        NSApp.sendAction(action, to: target, from: self)
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let old = trackingArea { removeTrackingArea(old) }
+        let area = NSTrackingArea(
+            rect: bounds,
+            options: [.mouseEnteredAndExited, .activeInKeyWindow],
+            owner: self,
+            userInfo: nil
+        )
+        addTrackingArea(area)
+        trackingArea = area
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        isHovered = true
+        needsDisplay = true
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        isHovered = false
+        needsDisplay = true
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+        if isHovered {
+            hoverBackground.setFill()
+            NSBezierPath(roundedRect: bounds, xRadius: 5, yRadius: 5).fill()
         }
     }
 }

@@ -150,6 +150,18 @@ enum TextOpenMode: String, CaseIterable, Codable {
     static var visibleCases: [TextOpenMode] { [.editor, .terminalEditor, .external] }
 }
 
+enum LinkOpenMode: String, CaseIterable, Codable {
+    case browserTab = "browserTab"
+    case externalBrowser = "externalBrowser"
+
+    var displayName: String {
+        switch self {
+        case .browserTab: return "Browser Tab"
+        case .externalBrowser: return "External Browser"
+        }
+    }
+}
+
 enum SidebarTabBarPosition: String, CaseIterable {
     case top
     case bottom
@@ -252,6 +264,7 @@ final class AppSettings {
         static let defaultTabType = "defaultTabType"
         static let autoDetectContentType = "autoDetectContentType"
         static let markdownOpenMode = "markdownOpenMode"
+        static let linkOpenMode = "linkOpenMode"
         static let browserHomePage = "browserHomePage"
         static let browserPersistentWebsiteDataEnabled = "browserPersistentWebsiteDataEnabled"
         static let browserHistoryEnabled = "browserHistoryEnabled"
@@ -551,6 +564,14 @@ final class AppSettings {
 
     // MARK: - Browser
 
+    var linkOpenMode: LinkOpenMode {
+        get {
+            guard let raw = UserDefaults.standard.string(forKey: K.linkOpenMode) else { return .browserTab }
+            return LinkOpenMode(rawValue: raw) ?? .browserTab
+        }
+        set { set(newValue.rawValue, forKey: K.linkOpenMode, topic: .layout) }
+    }
+
     var browserHomePage: String {
         get { UserDefaults.standard.string(forKey: K.browserHomePage) ?? "https://google.com" }
         set { set(newValue, forKey: K.browserHomePage, topic: .layout) }
@@ -842,6 +863,7 @@ final class AppSettings {
             K.autoDetectContentType: autoDetectContentType,
             K.browserHomePage: browserHomePage,
             K.browserPersistentWebsiteDataEnabled: browserPersistentWebsiteDataEnabled,
+            K.linkOpenMode: linkOpenMode.rawValue,
             K.disabledPluginIDs: disabledPluginIDs,
             K.sidebarPluginOrder: sidebarTabOrder,
             K.pluginSettings: pluginSettingsDict,

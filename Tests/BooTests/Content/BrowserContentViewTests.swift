@@ -74,4 +74,63 @@ final class BrowserContentViewTests: XCTestCase {
 
         XCTAssertEqual(result.lastPathComponent, "asset 3.zip")
     }
+
+    // MARK: - External browser button
+
+    func testExternalBrowserButtonExistsInToolbar() {
+        let view = BrowserContentView(url: ContentType.blankURL)
+
+        // Walk subview tree to find a button whose action is openInExternalBrowserAction
+        let sel = NSSelectorFromString("openInExternalBrowserAction")
+        func findButton(in v: NSView) -> NavHoverButton? {
+            if let btn = v as? NavHoverButton, btn.action == sel { return btn }
+            for sub in v.subviews {
+                if let found = findButton(in: sub) { return found }
+            }
+            return nil
+        }
+        XCTAssertNotNil(findButton(in: view), "External browser button must exist in the toolbar")
+    }
+
+    // MARK: - performKeyEquivalent: non-edit keys pass through normally
+
+    func testPerformKeyEquivalentNonEditKeyPassesThrough() {
+        let view = BrowserContentView(url: ContentType.blankURL)
+        // Cmd+N is not an edit key — should NOT be intercepted
+        let event = NSEvent.keyEvent(
+            with: .keyDown,
+            location: .zero,
+            modifierFlags: .command,
+            timestamp: 0,
+            windowNumber: 0,
+            context: nil,
+            characters: "n",
+            charactersIgnoringModifiers: "n",
+            isARepeat: false,
+            keyCode: 45
+        )!
+        // Without a window the guard `window?.firstResponder !== wv` is false,
+        // so the switch default branch fires → super is called → returns false.
+        let handled = view.performKeyEquivalent(with: event)
+        XCTAssertFalse(handled, "Non-edit Cmd+key must not be consumed by BrowserContentView")
+    }
+
+    func testPerformKeyEquivalentNonCommandEventPassesThrough() {
+        let view = BrowserContentView(url: ContentType.blankURL)
+        // Plain key press without Cmd — guard fails immediately
+        let event = NSEvent.keyEvent(
+            with: .keyDown,
+            location: .zero,
+            modifierFlags: [],
+            timestamp: 0,
+            windowNumber: 0,
+            context: nil,
+            characters: "c",
+            charactersIgnoringModifiers: "c",
+            isARepeat: false,
+            keyCode: 8
+        )!
+        let handled = view.performKeyEquivalent(with: event)
+        XCTAssertFalse(handled, "Non-command key must not be intercepted")
+    }
 }
