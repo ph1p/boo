@@ -37,6 +37,14 @@ extension MainWindowController {
         }
     }
 
+    @objc func copy(_ sender: Any?) {
+        activeGhosttyView?.copy(sender)
+    }
+
+    @objc func paste(_ sender: Any?) {
+        activeGhosttyView?.paste(sender)
+    }
+
     @objc func focusNextPaneAction(_ sender: Any?) {
         guard let workspace = activeWorkspace else { return }
         let ids = workspace.splitTree.leafIDs

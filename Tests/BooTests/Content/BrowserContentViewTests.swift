@@ -94,6 +94,51 @@ final class BrowserContentViewTests: XCTestCase {
 
     // MARK: - performKeyEquivalent: non-edit keys pass through normally
 
+    func testPerformKeyEquivalentDoesNotStealAddressBarPaste() {
+        assertAddressBarEditShortcutPassesThrough(
+            characters: "v",
+            keyCode: 9,
+            message: "BrowserContentView must not redirect address-bar paste to WKWebView")
+    }
+
+    func testPerformKeyEquivalentDoesNotStealAddressBarUndo() {
+        assertAddressBarEditShortcutPassesThrough(
+            characters: "z",
+            keyCode: 6,
+            message: "BrowserContentView must not redirect address-bar undo to WKWebView")
+    }
+
+    private func assertAddressBarEditShortcutPassesThrough(characters: String, keyCode: UInt16, message: String) {
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 800, height: 600),
+            styleMask: .borderless,
+            backing: .buffered,
+            defer: false
+        )
+        let view = BrowserContentView(url: ContentType.blankURL)
+        view.frame = window.contentView?.bounds ?? .zero
+        window.contentView?.addSubview(view)
+        guard let addressBar = findSubview(of: SelectAllTextField.self, in: view) else {
+            return XCTFail("Expected browser address bar")
+        }
+        window.makeFirstResponder(addressBar)
+
+        let event = NSEvent.keyEvent(
+            with: .keyDown,
+            location: .zero,
+            modifierFlags: .command,
+            timestamp: 0,
+            windowNumber: window.windowNumber,
+            context: nil,
+            characters: characters,
+            charactersIgnoringModifiers: characters,
+            isARepeat: false,
+            keyCode: keyCode
+        )!
+
+        XCTAssertFalse(view.performKeyEquivalent(with: event), message)
+    }
+
     func testPerformKeyEquivalentNonEditKeyPassesThrough() {
         let view = BrowserContentView(url: ContentType.blankURL)
         // Cmd+N is not an edit key — should NOT be intercepted
@@ -132,5 +177,15 @@ final class BrowserContentViewTests: XCTestCase {
         )!
         let handled = view.performKeyEquivalent(with: event)
         XCTAssertFalse(handled, "Non-command key must not be intercepted")
+    }
+
+    private func findSubview<T: NSView>(of type: T.Type, in view: NSView) -> T? {
+        if let match = view as? T { return match }
+        for subview in view.subviews {
+            if let match = findSubview(of: type, in: subview) {
+                return match
+            }
+        }
+        return nil
     }
 }
