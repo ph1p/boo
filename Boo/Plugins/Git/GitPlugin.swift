@@ -29,6 +29,13 @@ final class GitPlugin: BooPluginProtocol {
 
     var subscribedEvents: Set<PluginEvent> { [.cwdChanged, .focusChanged] }
 
+    func checkAvailability() async -> Bool {
+        await Task.detached(priority: .utility) {
+            FileManager.default.isExecutableFile(atPath: "/usr/bin/git")
+                || BinaryScanner.isInstalled("git")
+        }.value
+    }
+
     /// Cached changed files per repo root.
     var cachedFiles: [GitChangedFile] = []
 

@@ -3,6 +3,7 @@ import Foundation
 /// Protocol for content-type-specific state that can be persisted per tab.
 protocol ContentStateProtocol: Codable {
     var contentType: ContentType { get }
+    /// Runtime display title — not persisted, regenerated after restore.
     var title: String { get set }
 }
 
@@ -84,14 +85,14 @@ enum ContentState: Codable {
 /// Note: remoteSession is not included here because it's managed by TabState/TerminalBridge
 /// and RemoteSessionType is not Codable. Terminal state restoration uses TabState fields.
 struct TerminalContentState: ContentStateProtocol, Codable {
-    let contentType: ContentType = .terminal
-    var title: String
+    var contentType: ContentType { .terminal }
+    var title: String = ""
     var workingDirectory: String
     var shellPID: pid_t = 0
     var foregroundProcess: String = ""
 
     enum CodingKeys: String, CodingKey {
-        case title, workingDirectory, shellPID, foregroundProcess
+        case workingDirectory
     }
 
     init(
@@ -110,14 +111,14 @@ struct TerminalContentState: ContentStateProtocol, Codable {
 // MARK: - Browser State
 
 struct BrowserContentState: ContentStateProtocol, Codable {
-    let contentType: ContentType = .browser
-    var title: String
+    var contentType: ContentType { .browser }
+    var title: String = ""
     var url: URL
     var canGoBack: Bool = false
     var canGoForward: Bool = false
 
     enum CodingKeys: String, CodingKey {
-        case title, url, canGoBack, canGoForward
+        case url
     }
 
     init(
@@ -136,15 +137,15 @@ struct BrowserContentState: ContentStateProtocol, Codable {
 // MARK: - Editor State
 
 struct EditorContentState: ContentStateProtocol, Codable {
-    let contentType: ContentType = .editor
-    var title: String
+    var contentType: ContentType { .editor }
+    var title: String = ""
     var filePath: String?
     var isDirty: Bool = false
     var cursorLine: Int = 1
     var cursorColumn: Int = 1
 
     enum CodingKeys: String, CodingKey {
-        case title, filePath, isDirty, cursorLine, cursorColumn
+        case filePath, isDirty, cursorLine, cursorColumn
     }
 
     init(
@@ -165,13 +166,13 @@ struct EditorContentState: ContentStateProtocol, Codable {
 // MARK: - Image Viewer State
 
 struct ImageViewerContentState: ContentStateProtocol, Codable {
-    let contentType: ContentType = .imageViewer
-    var title: String
+    var contentType: ContentType { .imageViewer }
+    var title: String = ""
     var filePath: String
     var zoom: CGFloat = 1.0
 
     enum CodingKeys: String, CodingKey {
-        case title, filePath, zoom
+        case filePath, zoom
     }
 
     init(title: String, filePath: String, zoom: CGFloat = 1.0) {
@@ -184,13 +185,13 @@ struct ImageViewerContentState: ContentStateProtocol, Codable {
 // MARK: - Markdown Preview State
 
 struct MarkdownPreviewContentState: ContentStateProtocol, Codable {
-    let contentType: ContentType = .markdownPreview
-    var title: String
+    var contentType: ContentType { .markdownPreview }
+    var title: String = ""
     var filePath: String
     var scrollPosition: CGFloat = 0
 
     enum CodingKeys: String, CodingKey {
-        case title, filePath, scrollPosition
+        case filePath, scrollPosition
     }
 
     init(title: String, filePath: String, scrollPosition: CGFloat = 0) {
@@ -205,12 +206,12 @@ struct MarkdownPreviewContentState: ContentStateProtocol, Codable {
 /// Minimal state for a plugin-owned view tab.
 /// The view itself is not persisted — only the display title and icon symbol.
 struct PluginViewContentState: ContentStateProtocol, Codable {
-    let contentType: ContentType = .pluginView
-    var title: String
+    var contentType: ContentType { .pluginView }
+    var title: String = ""
     var iconSymbol: String
 
     enum CodingKeys: String, CodingKey {
-        case title, iconSymbol
+        case iconSymbol
     }
 
     init(title: String, iconSymbol: String = "puzzlepiece") {

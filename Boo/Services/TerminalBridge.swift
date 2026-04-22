@@ -23,6 +23,9 @@ struct BridgeState: Equatable {
     var workingDirectory: String
     var terminalTitle: String
     var foregroundProcess: String
+    var foregroundProcessPID: pid_t? = nil
+    var foregroundProcessCategory: String? = nil
+    var foregroundProcessMetadata: [String: String] = [:]
     var remoteSession: RemoteSessionType?
     var remoteCwd: String?
     var isDockerAvailable: Bool
@@ -37,6 +40,9 @@ struct BridgeState: Equatable {
         workingDirectory: "",
         terminalTitle: "",
         foregroundProcess: "",
+        foregroundProcessPID: nil,
+        foregroundProcessCategory: nil,
+        foregroundProcessMetadata: [:],
         remoteSession: nil,
         remoteCwd: nil,
         isDockerAvailable: false
@@ -85,6 +91,9 @@ final class TerminalBridge: @unchecked Sendable {
             workingDirectory: workingDirectory,
             terminalTitle: "",
             foregroundProcess: "",
+            foregroundProcessPID: nil,
+            foregroundProcessCategory: nil,
+            foregroundProcessMetadata: [:],
             remoteSession: nil,
             remoteCwd: nil,
             isDockerAvailable: false
@@ -116,24 +125,63 @@ final class TerminalBridge: @unchecked Sendable {
         monitor.startContainerCwdPolling(paneID: state.paneID, tabID: state.tabID, session: session)
     }
 
-    /// Resolve the foreground process name from title + socket registration.
-    private func resolveProcess(paneID: UUID, title: String) -> String {
+    /// Resolve the foreground process from title + socket registration.
+    private func resolveProcess(
+        paneID: UUID, title: String
+    ) -> (
+        name: String, pid: pid_t?, category: String?, metadata: [String: String]
+    ) {
+        let shellPID = monitor.shellPID(for: paneID)
+
+        // Socket-registered agent takes highest priority.
         if BooSocketServer.shared.hasActiveProcesses,
-            let shellPID = monitor.shellPID(for: paneID),
-            let status = BooSocketServer.shared.activeProcess(shellPID: shellPID)
+            let pid = shellPID,
+            let status = BooSocketServer.shared.activeProcess(shellPID: pid)
         {
-            return status.name
+            return (status.name, status.pid, status.category, status.metadata)
         }
-        return TerminalBridge.extractProcessName(from: title)
+
+        // Query the real OS process tree when the shell PID is known.
+        // This avoids false positives from folder names in the terminal title
+        // (e.g. ~/.config/opencode would otherwise match "opencode" via title parsing).
+        if let pid = shellPID, pid > 0 {
+            if let procName = RemoteExplorer.foregroundProcess(shellPID: pid) {
+                return (procName, nil, ProcessIcon.category(for: procName), [:])
+            }
+            // Suppress AI title matches only when the shell is alive and idle.
+            // If the shell is dead (stale PID), fall through to plain title heuristics.
+            if kill(pid, 0) == 0 {
+                let name = TerminalBridge.extractProcessName(from: title, suppressAIAgents: true)
+                return (name, nil, ProcessIcon.category(for: name), [:])
+            }
+        }
+
+        // Shell PID unknown or stale — pure title heuristics.
+        let name = TerminalBridge.extractProcessName(from: title)
+        return (name, nil, ProcessIcon.category(for: name), [:])
+    }
+
+    private func applyResolvedProcess(
+        _ resolved: (name: String, pid: pid_t?, category: String?, metadata: [String: String])
+    ) -> Bool {
+        let changed =
+            state.foregroundProcess != resolved.name
+            || state.foregroundProcessPID != resolved.pid
+            || state.foregroundProcessCategory != resolved.category
+            || state.foregroundProcessMetadata != resolved.metadata
+        state.foregroundProcess = resolved.name
+        state.foregroundProcessPID = resolved.pid
+        state.foregroundProcessCategory = resolved.category
+        state.foregroundProcessMetadata = resolved.metadata
+        return changed
     }
 
     /// Re-evaluate the foreground process based on socket-registered processes.
     /// Called when the BooSocketServer's status set changes.
     func reevaluateSocketProcess() {
-        let process = resolveProcess(paneID: state.paneID, title: state.terminalTitle)
-        if state.foregroundProcess != process {
-            state.foregroundProcess = process
-            events.send(.processChanged(name: process))
+        let resolved = resolveProcess(paneID: state.paneID, title: state.terminalTitle)
+        if applyResolvedProcess(resolved) {
+            events.send(.processChanged(name: resolved.name))
         }
     }
 
@@ -151,7 +199,10 @@ final class TerminalBridge: @unchecked Sendable {
         remoteSession: RemoteSessionType?,
         remoteCwd: String?,
         shellPID: pid_t = 0,
-        foregroundProcess: String = ""
+        foregroundProcess: String = "",
+        foregroundProcessPID: pid_t? = nil,
+        foregroundProcessCategory: String? = nil,
+        foregroundProcessMetadata: [String: String] = [:]
     ) {
         booLog(
             .debug, .terminal,
@@ -177,14 +228,20 @@ final class TerminalBridge: @unchecked Sendable {
         // socket-server lookup — the previous pane's shell PID is still registered and would
         // incorrectly return the old foreground process (e.g. "claude") for the new tab.
         if shellPID > 0 {
-            state.foregroundProcess = resolveProcess(paneID: paneID, title: terminalTitle)
+            _ = applyResolvedProcess(resolveProcess(paneID: paneID, title: terminalTitle))
             monitor.updateShellPID(paneID: paneID, shellPID: shellPID)
         } else if !foregroundProcess.isEmpty {
             // Use persisted process name — title-extraction would lose e.g. "claude" from
             // a spinner title like "✳ Claude Code" before the shell PID is known.
             state.foregroundProcess = foregroundProcess
+            state.foregroundProcessPID = foregroundProcessPID
+            state.foregroundProcessCategory = foregroundProcessCategory ?? ProcessIcon.category(for: foregroundProcess)
+            state.foregroundProcessMetadata = foregroundProcessMetadata
         } else {
             state.foregroundProcess = TerminalBridge.extractProcessName(from: terminalTitle)
+            state.foregroundProcessPID = nil
+            state.foregroundProcessCategory = ProcessIcon.category(for: state.foregroundProcess)
+            state.foregroundProcessMetadata = [:]
         }
 
         // Start container CWD polling for the restored tab
@@ -288,9 +345,8 @@ final class TerminalBridge: @unchecked Sendable {
         booLog(.debug, .terminal, "titleChanged: \(title) pane=\(paneID.uuidString.prefix(8))")
         state.terminalTitle = title
 
-        let process = resolveProcess(paneID: paneID, title: title)
-        let processChanged = process != state.foregroundProcess
-        state.foregroundProcess = process
+        let resolvedProcess = resolveProcess(paneID: paneID, title: title)
+        let processChanged = applyResolvedProcess(resolvedProcess)
         if processChanged {
             booLog(
                 .debug, .terminal,
@@ -351,7 +407,7 @@ final class TerminalBridge: @unchecked Sendable {
 
         events.send(.titleChanged(title: title))
         if processChanged {
-            events.send(.processChanged(name: process))
+            events.send(.processChanged(name: resolvedProcess.name))
         }
         if state.remoteSession != previousRemote {
             events.send(.remoteSessionChanged(session: state.remoteSession))
@@ -399,6 +455,9 @@ final class TerminalBridge: @unchecked Sendable {
         state.remoteSession = nil
         state.remoteCwd = nil
         state.foregroundProcess = ""
+        state.foregroundProcessPID = nil
+        state.foregroundProcessCategory = nil
+        state.foregroundProcessMetadata = [:]
         state.terminalTitle = ""
         if hadRemote {
             events.send(.remoteSessionChanged(session: nil))
@@ -493,6 +552,9 @@ final class TerminalBridge: @unchecked Sendable {
             workingDirectory: workingDirectory,
             terminalTitle: "",
             foregroundProcess: "",
+            foregroundProcessPID: nil,
+            foregroundProcessCategory: nil,
+            foregroundProcessMetadata: [:],
             remoteSession: nil,
             remoteCwd: nil,
             isDockerAvailable: state.isDockerAvailable

@@ -37,7 +37,7 @@ final class PluginRegistryTests: XCTestCase {
             "file-tree-local",
             "file-tree-remote",
             "git-panel",
-            "claude-code",
+            "agents",
             "docker",
             "bookmarks",
             "snippets",

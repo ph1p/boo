@@ -208,11 +208,19 @@ final class BooSocketQueryTests: BooSocketIntegrationTestCase {
         let ctx = TerminalContext(
             terminalID: UUID(), cwd: "/home/user",
             remoteSession: nil, gitContext: nil,
-            processName: "zsh", paneCount: 2, tabCount: 3
+            processName: "codex",
+            processPID: 123,
+            processCategory: "ai",
+            processMetadata: ["agent_kind": "codex", "session_id": "s1"],
+            paneCount: 2, tabCount: 3
         )
         let dict = BooSocketServer.serializeContext(ctx)
         XCTAssertEqual(dict["cwd"] as? String, "/home/user")
-        XCTAssertEqual(dict["process_name"] as? String, "zsh")
+        XCTAssertEqual(dict["process_name"] as? String, "codex")
+        XCTAssertEqual(dict["process_pid"] as? Int, 123)
+        XCTAssertEqual(dict["process_category"] as? String, "ai")
+        let metadata = dict["process_metadata"] as? [String: String]
+        XCTAssertEqual(metadata?["session_id"], "s1")
         XCTAssertEqual(dict["pane_count"] as? Int, 2)
         XCTAssertEqual(dict["tab_count"] as? Int, 3)
     }

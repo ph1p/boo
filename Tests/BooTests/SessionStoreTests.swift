@@ -97,7 +97,7 @@ final class SessionStoreTests: XCTestCase {
         let sp = snapshot.workspaces[0].panes.first!
         // Original tab + the one we added
         XCTAssertEqual(sp.tabs.count, 2)
-        XCTAssertTrue(sp.tabs.contains(where: { $0.workingDirectory == "/tmp/foo" }))
+        XCTAssertTrue(sp.tabs.contains(where: { $0.contentState?.asTerminal?.workingDirectory == "/tmp/foo" }))
     }
 
     func testRemoteSessionNotPersisted() {
@@ -114,8 +114,8 @@ final class SessionStoreTests: XCTestCase {
         let tabs = snapshot.workspaces[0].panes.first!.tabs
         for tab in tabs {
             // SessionTab has no remoteSession field — the type itself enforces this.
-            // Verify the working directory was still captured.
-            XCTAssertFalse(tab.workingDirectory.isEmpty)
+            // Verify the working directory was still captured via contentState.
+            XCTAssertFalse(tab.contentState?.asTerminal?.workingDirectory.isEmpty ?? true)
         }
     }
 
@@ -315,14 +315,7 @@ final class SessionStoreTests: XCTestCase {
                             id: sharedPaneID,
                             tabs: [
                                 SessionTab(
-                                    title: "a",
-                                    workingDirectory: "/tmp/a",
-                                    expandedPluginIDs: nil,
-                                    userCollapsedSectionIDs: nil,
-                                    sidebarSectionHeights: nil,
-                                    sidebarScrollOffsets: nil,
-                                    sidebarSectionOrder: nil,
-                                    selectedPluginTabID: nil
+                                    contentState: .terminal(TerminalContentState(workingDirectory: "/tmp/a"))
                                 )
                             ],
                             activeTabIndex: 0
@@ -347,24 +340,10 @@ final class SessionStoreTests: XCTestCase {
                             id: sharedPaneID,
                             tabs: [
                                 SessionTab(
-                                    title: "b1",
-                                    workingDirectory: "/tmp/b1",
-                                    expandedPluginIDs: nil,
-                                    userCollapsedSectionIDs: nil,
-                                    sidebarSectionHeights: nil,
-                                    sidebarScrollOffsets: nil,
-                                    sidebarSectionOrder: nil,
-                                    selectedPluginTabID: nil
+                                    contentState: .terminal(TerminalContentState(workingDirectory: "/tmp/b1"))
                                 ),
                                 SessionTab(
-                                    title: "b2",
-                                    workingDirectory: "/tmp/b2",
-                                    expandedPluginIDs: nil,
-                                    userCollapsedSectionIDs: nil,
-                                    sidebarSectionHeights: nil,
-                                    sidebarScrollOffsets: nil,
-                                    sidebarSectionOrder: nil,
-                                    selectedPluginTabID: nil
+                                    contentState: .terminal(TerminalContentState(workingDirectory: "/tmp/b2"))
                                 )
                             ],
                             activeTabIndex: 1
@@ -752,7 +731,7 @@ final class SessionStoreTests: XCTestCase {
         XCTAssertEqual(restored.count, 1)
         let pane = restored[0].pane(for: restored[0].activePaneID)
         XCTAssertNotNil(pane)
-        XCTAssertEqual(pane!.tabs.first?.workingDirectory, "/tmp")
+        XCTAssertEqual(pane!.tabs.first?.workingDirectory, "/tmp")  // Tab.workingDirectory (runtime)
     }
 
     func testSaveNormalizesEmptyPaneBeforeSnapshot() {
@@ -769,6 +748,6 @@ final class SessionStoreTests: XCTestCase {
         let savedPane = snapshot.workspaces[0].panes.first(where: { $0.id == secondID })
         XCTAssertNotNil(savedPane)
         XCTAssertEqual(savedPane?.tabs.count, 1)
-        XCTAssertEqual(savedPane?.tabs.first?.workingDirectory, "/tmp")
+        XCTAssertEqual(savedPane?.tabs.first?.contentState?.asTerminal?.workingDirectory, "/tmp")
     }
 }

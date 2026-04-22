@@ -123,6 +123,8 @@ extension MainWindowController: PaneViewDelegate {
         guard activeWorkspaceForPaneEvent(paneID, event: "commandStarted") != nil else { return }
         bridge.handleCommandStart(command: command, paneID: paneID)
         BooSocketServer.shared.emitCommandStarted(command: command, paneID: paneID)
+        pluginRegistry.notifyCommandStarted(command: command, context: AppStore.shared.context)
+        schedulePluginCycle(reason: .processChanged)
     }
 
     func paneView(_ paneView: PaneView, commandEnded exitCode: Int32, paneID: UUID) {
@@ -130,6 +132,8 @@ extension MainWindowController: PaneViewDelegate {
         bridge.handleCommandEnd(exitCode: exitCode, paneID: paneID)
         if let result = bridge.state.lastCommandResult {
             BooSocketServer.shared.emitCommandEnded(result: result, paneID: paneID)
+            pluginRegistry.notifyCommandEnded(result: result, context: AppStore.shared.context)
+            schedulePluginCycle(reason: .processChanged)
         }
     }
 

@@ -453,7 +453,8 @@ final class BooSocketServer: @unchecked Sendable {
             [
                 "pid": Int($0.pid),
                 "name": $0.name,
-                "category": $0.category
+                "category": $0.category,
+                "metadata": $0.metadata
             ] as [String: Any]
         }
         sendJSON(fd: clientFD, dict: ["ok": true, "processes": list])

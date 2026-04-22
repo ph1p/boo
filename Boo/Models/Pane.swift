@@ -14,6 +14,9 @@ struct TabState {
     var shellPID: pid_t = 0
     var title: String
     var foregroundProcess: String = ""
+    var foregroundProcessPID: pid_t?
+    var foregroundProcessCategory: String?
+    var foregroundProcessMetadata: [String: String] = [:]
 
     // AI Agent State
     /// Claude Code session ID currently running in this tab (detected via file watching)
@@ -203,9 +206,18 @@ final class Pane {
         tabs[index].remoteWorkingDirectory = path
     }
 
-    func updateForegroundProcess(at index: Int, _ process: String) {
+    func updateForegroundProcess(
+        at index: Int,
+        _ process: String,
+        pid: pid_t? = nil,
+        category: String? = nil,
+        metadata: [String: String] = [:]
+    ) {
         guard index >= 0, index < tabs.count else { return }
         tabs[index].state.foregroundProcess = process
+        tabs[index].state.foregroundProcessPID = pid
+        tabs[index].state.foregroundProcessCategory = category
+        tabs[index].state.foregroundProcessMetadata = metadata
         tabs[index].state.contentState.updateTerminal { terminalState in
             terminalState.foregroundProcess = process
         }
@@ -229,6 +241,9 @@ final class Pane {
             tabs[index].state.workingDirectory = terminalState.workingDirectory
             tabs[index].state.shellPID = terminalState.shellPID
             tabs[index].state.foregroundProcess = terminalState.foregroundProcess
+            tabs[index].state.foregroundProcessPID = nil
+            tabs[index].state.foregroundProcessCategory = ProcessIcon.category(for: terminalState.foregroundProcess)
+            tabs[index].state.foregroundProcessMetadata = [:]
         case .browser(let browserState):
             if browserState.url.isFileURL {
                 tabs[index].state.workingDirectory = browserState.url.deletingLastPathComponent().path

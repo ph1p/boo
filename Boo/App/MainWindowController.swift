@@ -401,6 +401,56 @@ class ThemedSplitView: NSSplitView {
             else { return nil }
             return pane.activeTab?.state.agentSessionID
         }
+        pluginActions.workspaceAgentSessions = { [weak self] in
+            guard let self, let workspace = self.activeWorkspace else { return [] }
+            return workspace.panes.values.flatMap { pane -> [WorkspaceAgentSession] in
+                pane.tabs.compactMap { tab in
+                    let isFocused = workspace.activePaneID == pane.id && pane.activeTab?.id == tab.id
+                    let processName = isFocused ? self.bridge.state.foregroundProcess : tab.state.foregroundProcess
+                    let processPID = isFocused ? self.bridge.state.foregroundProcessPID : tab.state.foregroundProcessPID
+                    let processCategory =
+                        isFocused ? self.bridge.state.foregroundProcessCategory : tab.state.foregroundProcessCategory
+                    let processMetadata =
+                        isFocused ? self.bridge.state.foregroundProcessMetadata : tab.state.foregroundProcessMetadata
+                    let context = TerminalContext(
+                        terminalID: tab.id,
+                        cwd: tab.workingDirectory,
+                        remoteSession: isFocused ? self.bridge.state.remoteSession : tab.remoteSession,
+                        remoteCwd: isFocused ? self.bridge.state.remoteCwd : tab.remoteWorkingDirectory,
+                        gitContext: nil,
+                        processName: processName,
+                        processPID: processPID,
+                        processCategory: processCategory,
+                        processMetadata: processMetadata,
+                        paneCount: workspace.panes.count,
+                        tabCount: pane.tabs.count
+                    )
+                    guard let agent = AgentsPlugin.agentSession(from: context, existingStart: nil) else { return nil }
+                    return WorkspaceAgentSession(
+                        id: tab.id,
+                        paneID: pane.id,
+                        tabID: tab.id,
+                        tabTitle: tab.title,
+                        isFocused: isFocused,
+                        agent: agent
+                    )
+                }
+            }
+        }
+        pluginActions.focusAgentSession = { [weak self] sessionID in
+            guard let self, let workspace = self.activeWorkspace else { return }
+            for pane in workspace.panes.values {
+                guard let tabIndex = pane.tabs.firstIndex(where: { $0.id == sessionID }) else { continue }
+                workspace.activePaneID = pane.id
+                if let paneView = self.paneViews[pane.id] {
+                    paneView.forceActivateTab(tabIndex)
+                } else {
+                    pane.setActiveTab(tabIndex)
+                    self.runPluginCycle(reason: .focusChanged)
+                }
+                return
+            }
+        }
         pluginActions.displayImageInTerminal = { [weak self] path, newTab in
             guard let self, let workspace = self.activeWorkspace else { return }
             let paneID = workspace.activePaneID
@@ -1032,8 +1082,17 @@ class ThemedSplitView: NSSplitView {
                     self.schedulePluginCycle(reason: .titleChanged)
 
                 case .processChanged(let name):
+                    if let workspace = self.activeWorkspace,
+                        let pane = workspace.pane(for: self.bridge.state.paneID)
+                    {
+                        self.coordinator.syncBridgeToTab(pane: pane, tabIndex: pane.activeTabIndex)
+                    }
                     socket.emitProcessChanged(
-                        name: name, category: ProcessIcon.category(for: name), paneID: self.bridge.state.paneID)
+                        name: name,
+                        category: self.bridge.state.foregroundProcessCategory ?? ProcessIcon.category(for: name),
+                        paneID: self.bridge.state.paneID,
+                        pid: self.bridge.state.foregroundProcessPID,
+                        metadata: self.bridge.state.foregroundProcessMetadata)
                     self.schedulePluginCycle(reason: .processChanged)
 
                 case .remoteSessionChanged(let session):

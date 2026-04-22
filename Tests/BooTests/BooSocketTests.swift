@@ -157,7 +157,14 @@ final class BooSocketProtocolTests: BooSocketIntegrationTestCase {
 
     func testListStatus() throws {
         let pid = getpid()
-        _ = try roundTrip(["cmd": "set_status", "pid": pid, "name": "opencode", "category": "ai"])
+        _ = try roundTrip(
+            [
+                "cmd": "set_status",
+                "pid": pid,
+                "name": "opencode",
+                "category": "ai",
+                "metadata": ["agent_kind": "opencode", "session_id": "session-1"]
+            ])
 
         let response = try roundTrip(["cmd": "list_status"])
         XCTAssertEqual(response["ok"] as? Bool, true)
@@ -166,6 +173,9 @@ final class BooSocketProtocolTests: BooSocketIntegrationTestCase {
         let entry = processes.first { ($0["pid"] as? Int) == Int(pid) }
         XCTAssertEqual(entry?["name"] as? String, "opencode")
         XCTAssertEqual(entry?["category"] as? String, "ai")
+        let metadata = try XCTUnwrap(entry?["metadata"] as? [String: String])
+        XCTAssertEqual(metadata["agent_kind"], "opencode")
+        XCTAssertEqual(metadata["session_id"], "session-1")
 
         _ = try roundTrip(["cmd": "clear_status", "pid": pid])
     }

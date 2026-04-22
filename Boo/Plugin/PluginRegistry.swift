@@ -18,6 +18,9 @@ final class PluginRegistry {
     private var lastCycleVisibleIDs: Set<String>?
     private var lastCycleContext: TerminalContext?
 
+    /// Cached availability per pluginID. nil = check not yet completed (optimistic: treat as available).
+    private var pluginAvailability: [String: Bool] = [:]
+
     /// Callback for plugins to request a cycle rerun.
     var onRequestCycleRerun: (() -> Void)?
 
@@ -59,6 +62,14 @@ final class PluginRegistry {
         plugins.append(p)
         runtime.register(p)
         logger.info("Registered plugin: \(plugin.pluginID)")
+        // Kick off async availability check — result cached, triggers cycle rerun when ready.
+        let pluginID = p.pluginID
+        Task { [weak self] in
+            guard let self else { return }
+            let available = await p.checkAvailability()
+            self.pluginAvailability[pluginID] = available
+            self.onRequestCycleRerun?()
+        }
     }
 
     func unregister(pluginID: String) {
@@ -75,7 +86,16 @@ final class PluginRegistry {
     /// Notify a plugin it has become active (sidebar tab selected or statusbar-only plugin visible).
     /// Plugins use this to start background work (watchers, sockets).
     func activatePlugin(_ pluginID: String) {
-        plugin(for: pluginID)?.pluginDidActivate()
+        guard let p = plugin(for: pluginID) else { return }
+        p.pluginDidActivate()
+        // Re-check availability on activation (user may have installed a tool since launch).
+        Task { [weak self] in
+            guard let self else { return }
+            let available = await p.checkAvailability()
+            let changed = self.pluginAvailability[pluginID] != available
+            self.pluginAvailability[pluginID] = available
+            if changed { self.onRequestCycleRerun?() }
+        }
     }
 
     /// Notify a plugin it has been deactivated (sidebar tab deselected or statusbar-only plugin hidden).
@@ -108,8 +128,11 @@ final class PluginRegistry {
     func runCycle(baseContext: TerminalContext, reason: PluginCycleReason) -> PluginCycleResult {
         let frozenContext = runtime.runCycle(baseContext: baseContext, reason: reason)
 
-        // Evaluate when-clauses to determine visible plugins
-        let visiblePlugins = plugins.filter { $0.isVisible(for: frozenContext) }
+        // Evaluate when-clauses and availability to determine visible plugins.
+        // nil availability = check still running → optimistic show to avoid flicker.
+        let visiblePlugins = plugins.filter { plugin in
+            (pluginAvailability[plugin.pluginID] ?? true) && plugin.isVisible(for: frozenContext)
+        }
         let visibleIDs = Set(visiblePlugins.map(\.pluginID))
 
         // Build per-plugin contexts and collect status bar content
@@ -145,7 +168,9 @@ final class PluginRegistry {
     /// Collect sidebar tabs contributed by all registered plugins for the given context.
     func contributedSidebarTabs(terminal: TerminalContext) -> [SidebarTab] {
         plugins.compactMap { plugin in
-            guard plugin.isVisible(for: terminal) else { return nil }
+            guard pluginAvailability[plugin.pluginID] ?? true,
+                plugin.isVisible(for: terminal)
+            else { return nil }
             let ctx = buildPluginContext(for: plugin.pluginID, terminal: terminal)
             return plugin.makeSidebarTab(context: ctx)
         }
@@ -226,6 +251,18 @@ final class PluginRegistry {
         }
     }
 
+    func notifyCommandStarted(command: String, context: TerminalContext) {
+        for plugin in activePlugins where plugin.subscribedEvents.contains(.commandStarted) {
+            plugin.commandStarted(command: command, context: context)
+        }
+    }
+
+    func notifyCommandEnded(result: CommandResult, context: TerminalContext) {
+        for plugin in activePlugins where plugin.subscribedEvents.contains(.commandEnded) {
+            plugin.commandEnded(result: result, context: context)
+        }
+    }
+
     // MARK: - Query
 
     func plugin(for id: String) -> BooPluginProtocol? {
@@ -234,10 +271,11 @@ final class PluginRegistry {
 
     /// Register the default built-in plugins.
     func registerBuiltins() {
+        AppSettings.shared.migratePluginIdentity(from: "claude-code", to: "agents")
         register(LocalFileTreePlugin())
         register(RemoteFileTreePlugin())
         register(GitPlugin())
-        register(ClaudeCodePlugin())
+        register(AgentsPlugin())
         register(DockerPluginNew())
         register(BookmarksPluginNew())
         register(SnippetsPlugin())

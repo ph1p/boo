@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 private func formatTokenCount(_ tokens: Int) -> String {
@@ -9,128 +10,143 @@ private func formatTokenCount(_ tokens: Int) -> String {
     return "\(tokens)"
 }
 
-// MARK: - Sessions Section View
+// MARK: - Agent Center Views
 
-struct ClaudeSessionsView: View {
-    let sessions: [ClaudeCodePlugin.ClaudeSession]
+struct AgentActiveSessionView: View {
+    let agent: AgentSession?
+    let fallbackStartTime: Date?
+    let diffStats: [AgentsPlugin.DiffStatEntry]
     let fontScale: SidebarFontScale
     let textColor: Color
     let mutedColor: Color
     let accentColor: Color
-    let onSessionClicked: (ClaudeCodePlugin.ClaudeSession) -> Void
-    let onCopyPath: (String) -> Void
+    let onResume: () -> Void
+    let onCopySessionID: () -> Void
+    let onOpenTranscript: () -> Void
+    let onPromptNudge: () -> Void
 
-    @State private var hoveredSessionID: String?
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: "sparkles")
+                    .foregroundStyle(accentColor)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(agent?.displayName ?? "AI Agent")
+                        .font(fontScale.font(.base).weight(.semibold))
+                        .foregroundStyle(textColor)
+                    Text(statusLine)
+                        .font(fontScale.font(.sm))
+                        .foregroundStyle(mutedColor)
+                        .lineLimit(1)
+                }
+                Spacer()
+            }
+
+            if let cwd = agent?.cwd, !cwd.isEmpty {
+                infoRow("cwd", cwd)
+            }
+            if let model = agent?.model, !model.isEmpty {
+                infoRow("model", model)
+            }
+            if let mode = agent?.mode, !mode.isEmpty {
+                infoRow("mode", mode)
+            }
+            if let sessionID = agent?.sessionID {
+                infoRow("session", String(sessionID.prefix(12)))
+            }
+            if let transcript = agent?.transcriptPath {
+                infoRow("transcript", (transcript as NSString).lastPathComponent)
+            }
+
+            HStack(spacing: 8) {
+                Button("Resume", action: onResume)
+                    .buttonStyle(.borderless)
+                Button("Copy ID", action: onCopySessionID)
+                    .buttonStyle(.borderless)
+                    .disabled(agent?.sessionID == nil)
+                Button("Open", action: onOpenTranscript)
+                    .buttonStyle(.borderless)
+                    .disabled(agent?.transcriptPath == nil)
+                Button("Nudge", action: onPromptNudge)
+                    .buttonStyle(.borderless)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+    }
+
+    private var statusLine: String {
+        let runtime = formatAgentRuntime(Date().timeIntervalSince(agent?.startedAt ?? fallbackStartTime ?? Date()))
+        let state = agent?.state.displayName ?? "unknown"
+        return "\(state) · \(runtime)"
+    }
+
+    private func infoRow(_ label: String, _ value: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text(label)
+                .font(fontScale.font(.xs, design: .monospaced).weight(.medium))
+                .foregroundStyle(mutedColor)
+                .frame(width: 58, alignment: .leading)
+            Text(value)
+                .font(fontScale.font(.sm, design: label == "session" ? .monospaced : .default))
+                .foregroundStyle(textColor)
+                .lineLimit(1)
+                .truncationMode(.middle)
+        }
+    }
+}
+
+struct AgentOpenSessionsView: View {
+    let sessions: [WorkspaceAgentSession]
+    let fontScale: SidebarFontScale
+    let textColor: Color
+    let mutedColor: Color
+    let accentColor: Color
+    let onSessionClicked: (WorkspaceAgentSession) -> Void
+
+    @State private var hoveredSessionID: UUID?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             ForEach(sessions) { session in
-                sessionRow(session: session)
+                sessionRow(session)
             }
         }
     }
 
-    private func sessionRow(session: ClaudeCodePlugin.ClaudeSession) -> some View {
+    private func sessionRow(_ session: WorkspaceAgentSession) -> some View {
         let isHovered = hoveredSessionID == session.id
-
         return Button(action: { onSessionClicked(session) }) {
-            VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 6) {
-                    // Active indicator
-                    if session.isActive {
-                        Circle()
-                            .fill(Color.green)
-                            .frame(width: 6, height: 6)
-                    }
-
-                    if let slug = session.slug {
-                        Text(slug)
-                            .font(fontScale.font(.base).weight(.medium))
-                            .foregroundStyle(session.isActive ? .green : accentColor)
-                            .lineLimit(1)
-                    } else {
-                        Text(String(session.id.prefix(8)))
-                            .font(fontScale.font(.base, design: .monospaced))
-                            .foregroundStyle(session.isActive ? .green : accentColor)
-                            .lineLimit(1)
-                    }
-
-                    Spacer()
-
-                    // Relative time
-                    Text(formatAgentRelativeDate(session.lastActivity ?? session.timestamp))
-                        .font(fontScale.font(.xs))
-                        .foregroundStyle(mutedColor)
-                }
-
-                if !session.firstMessage.isEmpty {
-                    Text(session.firstMessage)
-                        .font(fontScale.font(.sm))
-                        .foregroundStyle(mutedColor)
-                        .lineLimit(2)
-                        .truncationMode(.tail)
-                }
-
-                // Stats row
-                HStack(spacing: 8) {
-                    if session.messageCount > 0 {
-                        HStack(spacing: 2) {
-                            Image(systemName: "bubble.left.and.bubble.right")
-                                .font(.system(size: 9))
-                            Text("\(session.messageCount)")
-                        }
-                        .font(fontScale.font(.xs))
-                        .foregroundStyle(mutedColor.opacity(0.7))
-                    }
-
-                    if session.totalTokens > 0 {
-                        HStack(spacing: 2) {
-                            Image(systemName: "number")
-                                .font(.system(size: 9))
-                            Text(formatTokenCount(session.totalTokens))
-                        }
-                        .font(fontScale.font(.xs))
-                        .foregroundStyle(mutedColor.opacity(0.7))
-                    }
-
-                    Spacer()
-                }
+            HStack(spacing: 6) {
+                Circle()
+                    .fill(session.isFocused ? Color.green : accentColor.opacity(0.65))
+                    .frame(width: 7, height: 7)
+                Text(session.agent.kind.shortName)
+                    .font(fontScale.font(.base).weight(.semibold))
+                    .foregroundStyle(textColor)
+                    .lineLimit(1)
+                Text(session.agent.cwd)
+                    .font(fontScale.font(.xs))
+                    .foregroundStyle(mutedColor)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .contentShape(Rectangle())
+            .padding(.vertical, 7)
+            .background(isHovered ? accentColor.opacity(0.08) : Color.clear)
         }
         .buttonStyle(.plain)
-        .onHover { hovering in
-            hoveredSessionID = hovering ? session.id : nil
-        }
-        .background(
-            Group {
-                if session.isActive {
-                    Color.green.opacity(0.08)
-                } else if isHovered {
-                    mutedColor.opacity(0.08)
-                } else {
-                    Color.clear
-                }
-            }
-        )
-        .contextMenu {
-            Button("Resume in New Tab") { onSessionClicked(session) }
-            Divider()
-            Button("Copy Session ID") { onCopyPath(session.id) }
-            Button("Reveal Session File") {
-                NSWorkspace.shared.selectFile(session.path, inFileViewerRootedAtPath: "")
-            }
+        .onHover { hovered in
+            hoveredSessionID = hovered ? session.id : nil
         }
     }
-
 }
 
 // MARK: - Config Section View
 
 struct ClaudeConfigView: View {
-    let configFiles: [ClaudeCodePlugin.AgentConfig.ConfigFile]
+    let configFiles: [AgentsPlugin.AgentConfig.ConfigFile]
     let fontScale: SidebarFontScale
     let textColor: Color
     let mutedColor: Color
@@ -149,7 +165,7 @@ struct ClaudeConfigView: View {
         }
     }
 
-    private func configRow(file: ClaudeCodePlugin.AgentConfig.ConfigFile) -> some View {
+    private func configRow(file: AgentsPlugin.AgentConfig.ConfigFile) -> some View {
         let isHovered = hoveredItemID == file.id
 
         return Button(action: { onFileClicked(file.path) }) {
@@ -165,6 +181,18 @@ struct ClaudeConfigView: View {
                     .lineLimit(1)
 
                 Spacer()
+
+                if file.provider != .claudeCode {
+                    Text(file.provider.shortName)
+                        .font(fontScale.font(.xs).weight(.medium))
+                        .foregroundStyle(accentColor.opacity(0.8))
+                        .padding(.horizontal, 4)
+                        .padding(.vertical, 1)
+                        .background(
+                            RoundedRectangle(cornerRadius: 3)
+                                .fill(accentColor.opacity(0.08))
+                        )
+                }
 
                 if file.scope == "global" {
                     Text("global")
@@ -200,75 +228,112 @@ struct ClaudeConfigView: View {
     }
 }
 
-// MARK: - Hooks Section View
+// MARK: - Agent Center Settings View
 
-struct ClaudeHooksView: View {
-    let hooks: [ClaudeCodePlugin.AgentConfig.HookEntry]
-    let fontScale: SidebarFontScale
-    let textColor: Color
-    let mutedColor: Color
-    let accentColor: Color
+struct AgentCenterSettingsView: View {
+    var installedAgents: Set<AgentKind> = Set(AgentKind.allCases).subtracting([.custom])
+
+    @ObservedObject private var observer = SettingsObserver(topics: [.theme, .plugins])
+    @State private var refreshID = UUID()
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            ForEach(hooks) { hook in
-                HStack(spacing: 6) {
-                    Text(hook.event)
-                        .font(fontScale.font(.sm, design: .monospaced).weight(.medium))
-                        .foregroundStyle(accentColor)
-                        .lineLimit(1)
+        let _ = observer.revision
+        let _ = refreshID
+        let t = Tokens.current
 
-                    Spacer()
+        VStack(alignment: .leading, spacing: 12) {
+            Section(title: "Providers", spacing: 8, padding: 10) {
+                let providers = [AgentKind.claudeCode, .codex, .openCode]
+                    .filter { installedAgents.contains($0) }
+                if providers.isEmpty {
+                    Text("No agent CLIs found. Install claude, codex, or opencode.")
+                        .font(.system(size: 11))
+                        .foregroundStyle(t.muted)
+                } else {
+                    ForEach(providers, id: \.self) { kind in
+                        mergedProviderRow(kind: kind, t: t)
+                    }
+                }
+            }
+        }
+    }
 
-                    Text(hook.command)
-                        .font(fontScale.font(.sm, design: .monospaced))
-                        .foregroundStyle(mutedColor)
+    private func mergedProviderRow(kind: AgentKind, t: Tokens) -> some View {
+        let files = AgentsPlugin.detectAgentConfig(cwd: NSHomeDirectory()).configFiles.filter {
+            $0.provider == kind
+        }
+        let binaryName = kind.processNames.first ?? ""
+        let binaryPath = BinaryScanner.searchPaths
+            .map { ($0 as NSString).appendingPathComponent(binaryName) }
+            .first { FileManager.default.isExecutableFile(atPath: $0) }
+        let isFound = binaryPath != nil
+
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Circle()
+                    .fill(isFound ? Color.green : Color.orange)
+                    .frame(width: 7, height: 7)
+                Text(kind.displayName)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(t.text)
+                Spacer()
+                Text(isFound ? "Installed" : "Not found")
+                    .font(.system(size: 10))
+                    .foregroundStyle(isFound ? Color.green : t.muted)
+            }
+
+            if let path = binaryPath {
+                HStack(spacing: 4) {
+                    Image(systemName: "terminal")
+                        .font(.system(size: 9))
+                        .foregroundStyle(t.muted)
+                    Text(path)
+                        .font(.system(size: 10, design: .monospaced))
+                        .foregroundStyle(t.muted)
                         .lineLimit(1)
                         .truncationMode(.middle)
                 }
-                .padding(.horizontal, 12)
-                .padding(.leading, 4)
-                .padding(.vertical, 4)
             }
-        }
-    }
-}
 
-// MARK: - MCP Servers Section View
-
-struct ClaudeMCPView: View {
-    let mcpServers: [String]
-    let fontScale: SidebarFontScale
-    let textColor: Color
-    let mutedColor: Color
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            ForEach(mcpServers, id: \.self) { server in
-                HStack(spacing: 6) {
-                    Circle()
-                        .fill(Color(nsColor: .systemGreen))
-                        .frame(width: 4, height: 4)
-
-                    Text(server)
-                        .font(fontScale.font(.base, design: .monospaced))
-                        .foregroundStyle(textColor)
-                        .lineLimit(1)
-
-                    Spacer()
+            if !files.isEmpty {
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(files) { file in
+                        HStack(spacing: 6) {
+                            Image(systemName: file.icon)
+                                .font(.system(size: 9))
+                                .foregroundStyle(t.muted)
+                                .frame(width: 12)
+                            Text(file.path.replacingOccurrences(of: NSHomeDirectory(), with: "~"))
+                                .font(.system(size: 10))
+                                .foregroundStyle(t.muted)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                            Spacer()
+                            Button("Open") {
+                                NSWorkspace.shared.open(URL(fileURLWithPath: file.path))
+                            }
+                            .buttonStyle(.bordered)
+                            .controlSize(.mini)
+                        }
+                    }
                 }
-                .padding(.horizontal, 12)
-                .padding(.leading, 4)
-                .padding(.vertical, 4)
+            } else {
+                Text("No config file found.")
+                    .font(.system(size: 10))
+                    .foregroundStyle(t.muted)
             }
         }
+        .padding(10)
+        .background(t.cardBg)
+        .clipShape(RoundedRectangle(cornerRadius: 7))
     }
+
 }
 
 // MARK: - Skills Section View
 
 struct ClaudeSkillsView: View {
-    let skills: [ClaudeCodePlugin.AgentConfig.SkillEntry]
+    let skills: [AgentsPlugin.AgentConfig.SkillEntry]
     let fontScale: SidebarFontScale
     let textColor: Color
     let mutedColor: Color
@@ -287,7 +352,7 @@ struct ClaudeSkillsView: View {
         }
     }
 
-    private func skillRow(skill: ClaudeCodePlugin.AgentConfig.SkillEntry) -> some View {
+    private func skillRow(skill: AgentsPlugin.AgentConfig.SkillEntry) -> some View {
         let isHovered = hoveredItemID == skill.id
 
         return Button(action: { onPasteSkill(skill.name) }) {
@@ -331,7 +396,7 @@ struct ClaudeSkillsView: View {
 // MARK: - Changes Section View
 
 struct ClaudeChangesView: View {
-    let diffStats: [ClaudeCodePlugin.DiffStatEntry]
+    let diffStats: [AgentsPlugin.DiffStatEntry]
     let fontScale: SidebarFontScale
     let textColor: Color
     let mutedColor: Color
@@ -347,7 +412,7 @@ struct ClaudeChangesView: View {
         }
     }
 
-    private func fileRow(entry: ClaudeCodePlugin.DiffStatEntry) -> some View {
+    private func fileRow(entry: AgentsPlugin.DiffStatEntry) -> some View {
         Button(action: { onFileClicked(entry.fullPath) }) {
             HStack(spacing: 6) {
                 HStack(spacing: 2) {
@@ -387,130 +452,10 @@ struct ClaudeChangesView: View {
     }
 }
 
-// MARK: - Active Session View
-
-struct ClaudeActiveSessionView: View {
-    let agentStartTime: Date?
-    let activeSession: ClaudeCodePlugin.ClaudeSession?
-    let activeSessionID: String?
-    let diffStats: [ClaudeCodePlugin.DiffStatEntry]
-    let fontScale: SidebarFontScale
-    let textColor: Color
-    let mutedColor: Color
-    let accentColor: Color
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            // Status row
-            HStack(spacing: 8) {
-                Circle()
-                    .fill(Color.green)
-                    .frame(width: 8, height: 8)
-
-                Text("Claude Code")
-                    .font(fontScale.font(.base).weight(.medium))
-                    .foregroundStyle(textColor)
-
-                Spacer()
-
-                if let start = agentStartTime {
-                    Text(formatAgentRuntime(Date().timeIntervalSince(start)))
-                        .font(fontScale.font(.sm, design: .monospaced))
-                        .foregroundStyle(mutedColor)
-                }
-            }
-
-            // Session info
-            if let session = activeSession {
-                VStack(alignment: .leading, spacing: 4) {
-                    // Session name/slug
-                    HStack(spacing: 6) {
-                        Image(systemName: "bubble.left.and.bubble.right")
-                            .font(.system(size: 10))
-                            .foregroundStyle(mutedColor)
-
-                        if let slug = session.slug {
-                            Text(slug)
-                                .font(fontScale.font(.sm).weight(.medium))
-                                .foregroundStyle(accentColor)
-                        } else {
-                            Text(String(session.id.prefix(8)))
-                                .font(fontScale.font(.sm, design: .monospaced))
-                                .foregroundStyle(accentColor)
-                        }
-                    }
-
-                    // First message preview
-                    if !session.firstMessage.isEmpty {
-                        Text(session.firstMessage)
-                            .font(fontScale.font(.xs))
-                            .foregroundStyle(mutedColor)
-                            .lineLimit(2)
-                    }
-
-                    // Stats
-                    HStack(spacing: 12) {
-                        if session.messageCount > 0 {
-                            HStack(spacing: 3) {
-                                Image(systemName: "text.bubble")
-                                    .font(.system(size: 9))
-                                Text("\(session.messageCount)")
-                            }
-                            .font(fontScale.font(.xs))
-                            .foregroundStyle(mutedColor.opacity(0.8))
-                        }
-
-                        if session.totalTokens > 0 {
-                            HStack(spacing: 3) {
-                                Image(systemName: "number")
-                                    .font(.system(size: 9))
-                                Text(formatTokenCount(session.totalTokens))
-                            }
-                            .font(fontScale.font(.xs))
-                            .foregroundStyle(mutedColor.opacity(0.8))
-                        }
-
-                        if !diffStats.isEmpty {
-                            let ins = diffStats.reduce(0) { $0 + $1.insertions }
-                            let del = diffStats.reduce(0) { $0 + $1.deletions }
-                            HStack(spacing: 3) {
-                                Image(systemName: "doc.badge.plus")
-                                    .font(.system(size: 9))
-                                Text("\(diffStats.count)")
-                                Text("+\(ins)")
-                                    .foregroundStyle(Color(nsColor: .systemGreen))
-                                Text("-\(del)")
-                                    .foregroundStyle(Color(nsColor: .systemRed))
-                            }
-                            .font(fontScale.font(.xs, design: .monospaced))
-                            .foregroundStyle(mutedColor.opacity(0.8))
-                        }
-                    }
-                }
-                .padding(.leading, 16)
-            } else if let sessionID = activeSessionID {
-                // Session ID known but details not loaded
-                HStack(spacing: 6) {
-                    Image(systemName: "bubble.left.and.bubble.right")
-                        .font(.system(size: 10))
-                        .foregroundStyle(mutedColor)
-                    Text(String(sessionID.prefix(8)))
-                        .font(fontScale.font(.sm, design: .monospaced))
-                        .foregroundStyle(mutedColor)
-                }
-                .padding(.leading, 16)
-            }
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-    }
-
-}
-
 // MARK: - Settings Section View
 
 struct ClaudeSettingsView: View {
-    let settings: ClaudeCodePlugin.ClaudeSettings
+    let settings: AgentsPlugin.ClaudeSettings
     let fontScale: SidebarFontScale
     let textColor: Color
     let mutedColor: Color
@@ -639,12 +584,12 @@ struct ClaudeSettingsView: View {
 // MARK: - Worktrees Section View
 
 struct ClaudeWorktreesView: View {
-    let worktrees: [ClaudeCodePlugin.ClaudeWorktree]
+    let worktrees: [AgentsPlugin.ClaudeWorktree]
     let fontScale: SidebarFontScale
     let textColor: Color
     let mutedColor: Color
     let accentColor: Color
-    let onWorktreeClicked: (ClaudeCodePlugin.ClaudeWorktree) -> Void
+    let onWorktreeClicked: (AgentsPlugin.ClaudeWorktree) -> Void
     let onCopyPath: (String) -> Void
 
     @State private var hoveredWorktreeID: String?
@@ -657,7 +602,7 @@ struct ClaudeWorktreesView: View {
         }
     }
 
-    private func worktreeRow(worktree: ClaudeCodePlugin.ClaudeWorktree) -> some View {
+    private func worktreeRow(worktree: AgentsPlugin.ClaudeWorktree) -> some View {
         let isHovered = hoveredWorktreeID == worktree.id
 
         return Button(action: { onWorktreeClicked(worktree) }) {

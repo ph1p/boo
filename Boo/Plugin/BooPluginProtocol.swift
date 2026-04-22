@@ -11,6 +11,8 @@ enum PluginEvent: Hashable {
     case terminalCreated
     case terminalClosed
     case remoteDirectoryListed
+    case commandStarted
+    case commandEnded
 }
 
 /// A top-level sidebar tab contributed by a plugin.
@@ -142,6 +144,8 @@ protocol BooPluginProtocol: BooPlugin {
 
     /// Called when a remote directory listing arrives from the bridge.
     func remoteDirectoryListed(path: String, entries: [RemoteExplorer.RemoteEntry])
+    func commandStarted(command: String, context: TerminalContext)
+    func commandEnded(result: CommandResult, context: TerminalContext)
 
     // MARK: - Activation Lifecycle
 
@@ -154,6 +158,11 @@ protocol BooPluginProtocol: BooPlugin {
     /// or (for statusbar-only plugins) when it becomes hidden.
     /// Use this to stop all background work and release resources.
     func pluginDidDeactivate()
+
+    /// One-time async prerequisite check run after registration and on each activation.
+    /// Return false to mark the plugin unavailable — it will be hidden from all UI.
+    /// Default: true (no check needed). Override to gate on an external binary or service.
+    func checkAvailability() async -> Bool
 }
 
 /// Default no-op implementations for all optional methods.
@@ -227,9 +236,12 @@ extension BooPluginProtocol {
     func terminalClosed(terminalID: UUID) {}
     func terminalFocusChanged(terminalID: UUID, context: TerminalContext) {}
     func remoteDirectoryListed(path: String, entries: [RemoteExplorer.RemoteEntry]) {}
+    func commandStarted(command: String, context: TerminalContext) {}
+    func commandEnded(result: CommandResult, context: TerminalContext) {}
 
     func pluginDidActivate() {}
     func pluginDidDeactivate() {}
+    func checkAvailability() async -> Bool { true }
 }
 
 /// Evaluates whether a plugin should be visible given a terminal context.

@@ -401,12 +401,15 @@ extension TerminalBridge {
 
     /// Extract a short process name from a terminal title.
     /// Returns empty for shell prompts, local user@host patterns, and path-only titles.
-    static func extractProcessName(from title: String) -> String {
+    /// When `suppressAIAgents` is true, AI agent keyword matches are skipped — used when
+    /// the shell PID is known and idle (title is the CWD, not an agent name).
+    static func extractProcessName(from title: String, suppressAIAgents: Bool = false) -> String {
         let trimmed = title.trimmingCharacters(in: .whitespaces)
         if trimmed.isEmpty { return "" }
 
         // Check for known app title patterns (e.g. "✳ Claude Code" → "claude")
         if let matched = ProcessIcon.matchTitle(trimmed) {
+            if suppressAIAgents && ProcessIcon.category(for: matched) == "ai" { return "" }
             return matched
         }
 

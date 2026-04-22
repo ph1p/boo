@@ -32,13 +32,13 @@ Boo/                  Library target (all app code)
   Terminal/           TerminalBackend (PTY lifecycle protocol)
   Models/             Workspace, Pane, SplitTree, AppSettings, Theme
   Plugin/             Core plugin framework (protocol, registry, runtime, DSL)
-  Plugins/            Built-in plugins (FileTree, Git, ClaudeCode, Docker, Bookmarks, Snippets, etc.)
+  Plugins/            Built-in plugins (FileTree, Git, Agents, Docker, Bookmarks, Snippets, etc.)
   Views/              PaneView, StatusBarView, ToolbarView, SettingsWindow
-  Services/           TerminalBridge, RemoteExplorer, BooSocketServer, AutoUpdater
+  Services/           TerminalBridge, RemoteExplorer, BooSocketServer, BinaryScanner, AutoUpdater
 BooApp/               Executable entry point (just calls BooMain.run())
 CGhostty/             C module wrapping ghostty.h
 CIronmark/            C module wrapping ironmark (Rust markdown parser)
-Tests/BooTests/       717 tests
+Tests/BooTests/       1072 tests
 documentation/        Vocs documentation site
 ```
 
@@ -55,6 +55,22 @@ documentation/        Vocs documentation site
 
 Plugins implement `BooPluginProtocol`. The registry runs a cycle (enrich → freeze → react) with a <16ms budget. Each cycle carries a `PluginCycleReason`: `.focusChanged`, `.cwdChanged`, `.titleChanged`, `.processChanged`, `.remoteSessionChanged`, `.workspaceSwitched`.
 
+### Availability Check
+
+Plugins can gate themselves on external prerequisites (binary installed, socket reachable, etc.) via an async one-time check:
+
+```swift
+func checkAvailability() async -> Bool {
+    await Task.detached(priority: .utility) {
+        BinaryScanner.isInstalled("mytool")
+    }.value
+}
+```
+
+The registry calls this after registration and again whenever the plugin's sidebar tab is activated (so a tool installed while Boo is running is picked up on next focus). Until the check completes the plugin is shown optimistically to avoid flicker. Return `false` to hide the plugin from all UI — sidebar tab, status bar, and when-clauses all become inactive.
+
+`BinaryScanner` (`Boo/Services/BinaryScanner.swift`) searches `$PATH` plus common install locations (`/opt/homebrew/bin`, `~/.local/bin`, `~/.cargo/bin`, `~/.bun/bin`, `~/.volta/bin`, `~/.nvm/current/bin`).
+
 ### Subscribed Events
 
 Plugins declare which lifecycle callbacks they receive. Undeclared events are never dispatched:
@@ -65,7 +81,7 @@ var subscribedEvents: Set<PluginEvent> {
 }
 ```
 
-`PluginEvent` cases: `.cwdChanged`, `.processChanged`, `.remoteSessionChanged`, `.focusChanged`, `.terminalCreated`, `.terminalClosed`, `.remoteDirectoryListed`.
+`PluginEvent` cases: `.cwdChanged`, `.processChanged`, `.remoteSessionChanged`, `.focusChanged`, `.terminalCreated`, `.terminalClosed`, `.remoteDirectoryListed`, `.commandStarted`, `.commandEnded`.
 
 ### Activation Hooks
 
@@ -93,10 +109,27 @@ actions?.sendToTerminal?("some text")
 actions?.registerMultiContentTab?("type-id") { ctx in AnyView(MyView(ctx: ctx)) }
 actions?.openMultiContentTab?("type-id", PluginTabContext(title: "Output", icon: "terminal"))
 
-// Agent session tracking
+// Agent session tracking (per-tab, stored in TabState)
 actions?.setAgentSessionID?("session-123")
 let id = actions?.getAgentSessionID?()
+
+// Query active agent sessions across all terminal tabs in the workspace
+let sessions: [WorkspaceAgentSession] = actions?.workspaceAgentSessions?() ?? []
+actions?.focusAgentSession?(session.id)
 ```
+
+### TerminalContext — Process Fields
+
+`TerminalContext` now exposes full foreground process metadata resolved from the socket registry:
+
+| Field | Type | Description |
+|---|---|---|
+| `process` | `String` | Process name (e.g. `"claude"`) |
+| `processPID` | `pid_t?` | PID reported by the socket registration |
+| `processCategory` | `String?` | Category tag (e.g. `"ai"`, `"editor"`) |
+| `processMetadata` | `[String: String]` | Arbitrary key/value metadata from `set_status` |
+
+These are populated from `BooSocketServer.activeProcess(shellPID:)` when a socket registration exists, and fall back to title-heuristic detection otherwise.
 
 ### Plugin Settings
 
@@ -123,6 +156,51 @@ The view is ephemeral — it is not persisted across app restarts.
 ### Sidebar Tabs
 
 Set `capabilities.sidebarTab = true` in the manifest and implement `makeDetailView(context:)` (or `makeSidebarTab(context:)` for multi-section panels) to contribute a sidebar tab.
+
+## Agent Center (Agents Plugin)
+
+`Boo/Plugins/Agents/` — unified plugin for Claude Code, Codex, OpenCode, and generic AI CLI sessions.
+
+### Agent detection
+
+Agents are detected via process tree polling: `TerminalBridge` matches the foreground process name against `AgentKind.processNames`. This provides the process name, PID, and cwd.
+
+### `AgentKind`
+
+```swift
+enum AgentKind: String, CaseIterable {
+    case claudeCode = "claude-code"
+    case codex
+    case openCode = "opencode"
+    case custom          // no associated binary — always excluded from binary scans
+}
+```
+
+`AgentBinaryScanner.detectInstalledAgents()` (in `AgentCenterModels.swift`) returns the subset of non-custom kinds whose CLI binary is found on disk via `BinaryScanner.isInstalled`.
+
+### `AgentsPlugin.checkAvailability()`
+
+Runs `AgentBinaryScanner.detectInstalledAgents()` on a background task and stores the result in `installedAgents`. This controls:
+
+- **Empty state** — shows provider-specific "Start X" buttons only for installed CLIs; shows a plain "No agent CLIs installed" message when none are found
+- **Settings view** — `AgentCenterSettingsView(installedAgents:)` filters the Providers section to show only installed agents
+
+### `AgentSession` fields
+
+| Field | Source |
+|---|---|
+| `kind` | Inferred from process name or `agent_kind` metadata |
+| `sessionID` | `session_id` from MCP metadata |
+| `transcriptPath` | `transcript_path` from MCP metadata |
+| `model` | `model` from MCP metadata |
+| `mode` | `mode` / `permission_mode` from MCP metadata |
+| `state` | `AgentRunState`: `running`, `idle`, `needs-input`, `unknown` |
+| `pid` | `pid` from MCP metadata or process tree |
+| `cwd` | CWD at session start |
+
+### `WorkspaceAgentSession`
+
+Wraps `AgentSession` with `paneID`, `tabID`, `tabTitle`, and `isFocused` so the plugin can present all active agent tabs across the workspace in a single "Open Sessions" section.
 
 ## Settings Architecture
 

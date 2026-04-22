@@ -102,7 +102,9 @@ struct PluginDetailSettingsView: View {
         let _ = observer.revision
 
         SettingsPage(title: manifest.name) {
-            if filteredSettings.isEmpty {
+            if manifest.id == "agents" {
+                AgentCenterSettingsView()
+            } else if filteredSettings.isEmpty {
                 Text("No configurable settings for this plugin.")
                     .font(.system(size: 12))
                     .foregroundStyle(Tokens.current.muted)
