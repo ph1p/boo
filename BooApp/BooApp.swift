@@ -11,6 +11,5 @@ struct BooSwiftUIApp: App {
         }
         .windowStyle(.hiddenTitleBar)
         .defaultSize(width: 1000, height: 700)
-
     }
 }

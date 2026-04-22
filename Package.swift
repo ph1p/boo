@@ -1,4 +1,4 @@
-// swift-tools-version: 6.2
+// swift-tools-version: 6.3
 import PackageDescription
 
 let booDeps: [Target.Dependency] = [
@@ -81,6 +81,10 @@ let package = Package(
     name: "Boo",
     platforms: [
         .macOS(.v15)
+    ],
+    products: [
+        .library(name: "Boo", targets: ["Boo"]),
+        .executable(name: "BooApp", targets: ["BooApp"])
     ],
     dependencies: [],
     targets: allTargets
