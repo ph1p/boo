@@ -117,24 +117,59 @@ enum ProcessIcon {
     /// Match a terminal title against known app title patterns.
     /// Returns a canonical process name (key into iconMap) or nil.
     static func matchTitle(_ title: String) -> String? {
+        // Skip keyword scan for path-style titles before any stripping — the shell sets
+        // the title to the CWD (e.g. "~/.config/opencode", "~/.claude", "/home/user/foo")
+        // which must not be misidentified as a running process.
+        // Check the raw title: paths start with ~, /, or …
+        let rawTrimmed = title.trimmingCharacters(in: .whitespaces)
+        if rawTrimmed.hasPrefix("/") || rawTrimmed.hasPrefix("~/") || rawTrimmed.hasPrefix("~.")
+            || rawTrimmed.hasPrefix("…/") || rawTrimmed.hasPrefix("./") || rawTrimmed.hasPrefix("../")
+        {
+            return nil
+        }
+
         // Strip leading emoji/symbols/spinners to get the text content
         let stripped = String(
             title.drop { !$0.isLetter && !$0.isNumber }
         ).trimmingCharacters(in: .whitespaces).lowercased()
         if let exact = titleMap[stripped] { return exact }
 
+        // After stripping, a "/" in the result means the original title was a relative path
+        // like "config/opencode" from a title that started mid-path.
+        if stripped.contains("/") { return nil }
+
         // AI agents update their title dynamically (e.g. "⠂ General coding assistance").
         // Match titles that start with known spinner/status characters used by AI CLIs.
-        // Check the stripped text for known agent keywords before defaulting to claude.
+        if titleContainsKeyword(stripped, "codex") { return "codex" }
+        if titleContainsKeyword(stripped, "opencode") || titleContainsKeyword(stripped, "open code") {
+            return "opencode"
+        }
+        if titleContainsKeyword(stripped, "claude") { return "claude" }
         if let first = title.unicodeScalars.first, Self.isAISpinnerScalar(first) {
             return "claude"
         }
         return nil
     }
 
+    /// True when `keyword` appears in `title` as a whole word — not embedded in a longer
+    /// word or path component. `-` and `_` count as word-internal characters so that
+    /// "my-opencode-tool" does not match "opencode".
+    private static func titleContainsKeyword(_ title: String, _ keyword: String) -> Bool {
+        guard let range = title.range(of: keyword, options: .caseInsensitive) else { return false }
+        let isBoundary: (Character) -> Bool = { !$0.isLetter && !$0.isNumber && $0 != "-" && $0 != "_" }
+        let before: Character =
+            range.lowerBound > title.startIndex
+            ? title[title.index(before: range.lowerBound)] : " "
+        let after: Character = range.upperBound < title.endIndex ? title[range.upperBound] : " "
+        return isBoundary(before) && isBoundary(after)
+    }
+
     /// Maps cleaned terminal titles to canonical process names.
     private static let titleMap: [String: String] = [
         "claude code": "claude",
+        "codex": "codex",
+        "open code": "opencode",
+        "opencode": "opencode",
         "cursor": "cursor"
     ]
 
@@ -267,6 +302,8 @@ enum ProcessIcon {
 
         // AI coding assistants
         "claude": "sparkles",
+        "codex": "sparkles",
+        "opencode": "sparkles",
         "aider": "sparkles",
         "copilot": "sparkles",
         "cody": "sparkles",
@@ -326,6 +363,8 @@ enum ProcessIcon {
         "tmux": "tmux",
         "zellij": "Zellij",
         "claude": "Claude",
+        "codex": "Codex",
+        "opencode": "OpenCode",
         "aider": "Aider",
         "copilot": "Copilot",
         "cody": "Cody",
@@ -361,7 +400,7 @@ enum ProcessIcon {
         "zellij": "multiplexer",
         "ranger": "filemanager", "yazi": "filemanager", "lf": "filemanager",
         "nnn": "filemanager", "mc": "filemanager",
-        "claude": "ai", "aider": "ai",
+        "claude": "ai", "codex": "ai", "opencode": "ai", "aider": "ai",
         "copilot": "ai", "cody": "ai", "continue": "ai", "cursor-cli": "ai",
         "goose": "ai", "mentat": "ai", "gpt": "ai", "ollama": "ai",
         "llm": "ai", "sgpt": "ai", "tgpt": "ai", "mods": "ai", "fabric": "ai"

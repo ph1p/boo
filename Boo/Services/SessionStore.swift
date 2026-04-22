@@ -4,8 +4,6 @@ import Foundation
 // MARK: - Codable session snapshot types
 
 struct SessionTab: Codable {
-    let title: String
-    let workingDirectory: String
     let contentState: ContentState?
     // Remote sessions are intentionally omitted — only local state is persisted.
     // Sidebar state — optional so old session.json files decode without error.
@@ -17,8 +15,6 @@ struct SessionTab: Codable {
     let selectedPluginTabID: String?
 
     init(
-        title: String,
-        workingDirectory: String,
         contentState: ContentState? = nil,
         expandedPluginIDs: [String]? = nil,
         userCollapsedSectionIDs: [String]? = nil,
@@ -27,8 +23,6 @@ struct SessionTab: Codable {
         sidebarSectionOrder: [String: [String]]? = nil,
         selectedPluginTabID: String? = nil
     ) {
-        self.title = title
-        self.workingDirectory = workingDirectory
         self.contentState = contentState
         self.expandedPluginIDs = expandedPluginIDs
         self.userCollapsedSectionIDs = userCollapsedSectionIDs
@@ -87,8 +81,6 @@ enum SessionStore {
             let panes = ws.panes.values.map { pane -> SessionPane in
                 let tabs = pane.tabs.map { tab in
                     SessionTab(
-                        title: tab.title,
-                        workingDirectory: tab.workingDirectory,
                         contentState: tab.contentType.isPersistable ? tab.state.contentState : nil,
                         expandedPluginIDs: Array(tab.state.expandedPluginIDs),
                         userCollapsedSectionIDs: Array(tab.state.userCollapsedSectionIDs),
@@ -205,17 +197,14 @@ enum SessionStore {
                                 contentState
                             } else {
                                 ContentState.terminal(
-                                    TerminalContentState(
-                                        title: tab.title,
-                                        workingDirectory: tab.workingDirectory
-                                    )
+                                    TerminalContentState(workingDirectory: sw.folderPath)
                                 )
                             }
                         let idx = pane.addTab(
                             contentType: restoredState.contentType,
                             workingDirectory: restoredWorkingDirectory(
                                 for: restoredState,
-                                fallback: tab.workingDirectory,
+                                fallback: sw.folderPath,
                                 workspacePath: sw.folderPath
                             ),
                             title: restoredState.title

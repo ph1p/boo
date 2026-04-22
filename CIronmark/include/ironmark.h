@@ -5,12 +5,12 @@
 extern "C" {
 #endif
 
-/// Parse markdown input and return a heap-allocated HTML string.
+/// Render markdown input and return a heap-allocated HTML string.
 /// Returns NULL if input is NULL or contains invalid UTF-8.
 /// Caller must free the result with ironmark_free().
-char* ironmark_parse(const char* input);
+char* ironmark_render_html(const char* input);
 
-/// Free a string returned by ironmark_parse().
+/// Free a string returned by ironmark_render_html().
 void ironmark_free(char* ptr);
 
 #ifdef __cplusplus

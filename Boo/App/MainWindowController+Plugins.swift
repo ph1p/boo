@@ -90,6 +90,9 @@ extension MainWindowController {
             tabState: tabState,
             gitContext: buildGitContext(cwd: cwd),
             processName: bridge.state.foregroundProcess,
+            processPID: bridge.state.foregroundProcessPID,
+            processCategory: bridge.state.foregroundProcessCategory,
+            processMetadata: bridge.state.foregroundProcessMetadata,
             paneCount: ws.panes.count,
             tabCount: ws.pane(for: ws.activePaneID)?.tabs.count ?? 1
         )

@@ -26,11 +26,18 @@ extension BooSocketServer {
             "pane_id": ctx.terminalID.uuidString,
             "cwd": ctx.cwd,
             "process_name": ctx.processName,
+            "process_metadata": ctx.processMetadata,
             "pane_count": ctx.paneCount,
             "tab_count": ctx.tabCount,
             "is_remote": ctx.isRemote,
             "environment": ctx.environmentLabel
         ]
+        if let processPID = ctx.processPID {
+            dict["process_pid"] = Int(processPID)
+        }
+        if let processCategory = ctx.processCategory {
+            dict["process_category"] = processCategory
+        }
         if let remote = ctx.remoteSession {
             dict["remote_session"] = serializeRemoteSession(remote)
         }

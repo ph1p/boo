@@ -1,14 +1,11 @@
+import AppKit
 import SwiftUI
 
 // MARK: - Constants
 
-private enum ClaudeCodeConstants {
+private enum AgentsConstants {
     /// Maximum directory depth when walking up to find project root
     static let maxProjectRootDepth = 20
-    /// Time threshold (seconds) to consider a session file as recently modified
-    static let recentlyModifiedThreshold: TimeInterval = 5
-    /// Time threshold (seconds) to consider a session as currently active
-    static let activeSessionThreshold: TimeInterval = 30
     /// Debounce delay for diff detection (seconds)
     static let diffDebounceDelay: TimeInterval = 0.2
     /// Refresh timer interval for diff stats (seconds)
@@ -23,27 +20,35 @@ private let relativeDateFormatter: DateFormatter = {
     return formatter
 }()
 
-/// Built-in plugin for Claude Code AI assistant.
-/// Shows sessions, config files, hooks, skills, MCP servers, and changed files.
-/// Always visible when enabled; shows active agent status when running.
+/// Built-in Agent Center plugin.
+/// Shows active AI agent sessions, setup health, config, skills, MCP servers, and changed files.
+/// V1 keeps Claude Code as the richest provider while preparing Codex and OpenCode scanners.
 @MainActor
-final class ClaudeCodePlugin: BooPluginProtocol {
+final class AgentsPlugin: BooPluginProtocol {
     var actions: PluginActions?
     var services: PluginServices?
     var hostActions: PluginHostActions?
     var onRequestCycleRerun: (() -> Void)?
 
     let manifest = PluginManifest(
-        id: "claude-code",
-        name: "Claude Code",
+        id: "agents",
+        name: "Agents",
         version: "1.0.0",
-        icon: "asset:claude-icon",
-        description: "Claude Code AI assistant",
+        icon: "sparkles",
+        description: "Agent Center for Claude Code, Codex, OpenCode, and AI CLI sessions",
         when: "!remote",
         runtime: nil,
         capabilities: PluginManifest.Capabilities(statusBarSegment: true, sidebarTab: true),
         statusBar: PluginManifest.StatusBarManifest(position: "right", priority: 20, template: nil),
-        settings: nil
+        settings: [
+            PluginManifest.SettingManifest(
+                key: "settingsPage",
+                type: .string,
+                label: "Settings Page",
+                defaultValue: AnyCodableValue("custom"),
+                options: nil,
+                group: "Agents")
+        ]
     )
 
     var prefersOuterScrollView: Bool { true }
@@ -52,14 +57,20 @@ final class ClaudeCodePlugin: BooPluginProtocol {
         AppSettings.shared.isPluginEnabled(pluginID)
     }
 
-    var subscribedEvents: Set<PluginEvent> { [.processChanged, .cwdChanged, .focusChanged] }
+    var subscribedEvents: Set<PluginEvent> {
+        [.processChanged, .cwdChanged, .focusChanged]
+    }
 
     // MARK: - Cached State
 
+    /// Which agent CLIs are installed on this machine (populated async at startup).
+    /// Defaults to all kinds so the UI is not empty during the initial check.
+    private(set) var installedAgents: Set<AgentKind> = Set(AgentKind.allCases).subtracting([.custom])
+
     private(set) var agentStartTime: Date?
+    private(set) var activeAgent: AgentSession?
     private(set) var currentCwd: String?
     private(set) var diffStats: [DiffStatEntry] = []
-    private(set) var sessions: [ClaudeSession] = []
     private(set) var worktrees: [ClaudeWorktree] = []
     private(set) var agentConfig: AgentConfig = AgentConfig()
     private(set) var claudeSettings: ClaudeSettings = ClaudeSettings()
@@ -69,11 +80,8 @@ final class ClaudeCodePlugin: BooPluginProtocol {
 
     private var lastDiffRepoRoot: String?
     private var lastConfigScanRoot: String?
-    private var lastSessionScanRoot: String?
     private var lastWorktreeScanRoot: String?
     private var refreshTimer: DispatchSourceTimer?
-    private var sessionWatcher: DispatchSourceFileSystemObject?
-    private var sessionDirPath: String?
     private var debounceWork: DispatchWorkItem?
     private var teardownGeneration: UInt64 = 0
     var teardownGracePeriod: TimeInterval = 0.3
@@ -89,22 +97,6 @@ final class ClaudeCodePlugin: BooPluginProtocol {
 
     nonisolated static let projectMarkers = [".git", ".claude", "AGENTS.md", "CLAUDE.md"]
 
-    struct ClaudeSession: Identifiable {
-        let id: String
-        let slug: String?
-        let timestamp: Date
-        let firstMessage: String
-        let path: String
-        /// Number of messages in session (user + assistant turns)
-        var messageCount: Int = 0
-        /// Total tokens used (if available from session file)
-        var totalTokens: Int = 0
-        /// Last activity timestamp
-        var lastActivity: Date?
-        /// Whether this session is currently active in a terminal
-        var isActive: Bool = false
-    }
-
     /// A Claude Code git worktree (isolated branch for parallel work).
     struct ClaudeWorktree: Identifiable {
         let id: String  // The slug/name (e.g., "feature-foo")
@@ -116,9 +108,9 @@ final class ClaudeCodePlugin: BooPluginProtocol {
 
     struct AgentConfig {
         var configFiles: [ConfigFile] = []
-        var hooks: [HookEntry] = []
         var skills: [SkillEntry] = []
-        var mcpServers: [String] = []
+        var setupRecommendations: [AgentSetupRecommendation] = []
+        var toolSummaries: [AgentToolSummary] = []
 
         struct ConfigFile: Identifiable {
             let id = UUID()
@@ -126,12 +118,15 @@ final class ClaudeCodePlugin: BooPluginProtocol {
             let path: String
             let icon: String
             let scope: String
-        }
+            let provider: AgentKind
 
-        struct HookEntry: Identifiable {
-            let id = UUID()
-            let event: String
-            let command: String
+            init(name: String, path: String, icon: String, scope: String, provider: AgentKind = .claudeCode) {
+                self.name = name
+                self.path = path
+                self.icon = icon
+                self.scope = scope
+                self.provider = provider
+            }
         }
 
         struct SkillEntry: Identifiable {
@@ -139,7 +134,16 @@ final class ClaudeCodePlugin: BooPluginProtocol {
             let name: String
             let description: String
             let path: String
+            let provider: AgentKind
+
+            init(name: String, description: String, path: String, provider: AgentKind = .claudeCode) {
+                self.name = name
+                self.description = description
+                self.path = path
+                self.provider = provider
+            }
         }
+
     }
 
     struct ClaudeSettings {
@@ -169,7 +173,8 @@ final class ClaudeCodePlugin: BooPluginProtocol {
 
     func enrich(context: EnrichmentContext) {
         guard let start = agentStartTime else { return }
-        context.setData(AnyHashable("claude"), forKey: "ai-agent.name")
+        context.setData(AnyHashable(activeAgent?.kind.rawValue ?? "ai"), forKey: "ai-agent.kind")
+        context.setData(AnyHashable(activeAgent?.displayName ?? "Agent"), forKey: "ai-agent.name")
         let runtime = Int(Date().timeIntervalSince(start))
         context.setData(AnyHashable(runtime), forKey: "ai-agent.runtime")
     }
@@ -178,7 +183,7 @@ final class ClaudeCodePlugin: BooPluginProtocol {
 
     func makeStatusBarContent(context: PluginContext) -> StatusBarContent? {
         guard let start = agentStartTime else { return nil }
-        var text = "Claude"
+        var text = activeAgent?.kind.shortName ?? "Agent"
         if !diffStats.isEmpty {
             let count = diffStats.count
             text += " \u{00B7} \(count) file\(count == 1 ? "" : "s")"
@@ -191,7 +196,7 @@ final class ClaudeCodePlugin: BooPluginProtocol {
             text: text,
             icon: "sparkles",
             tint: .accent,
-            accessibilityLabel: "Claude Code: \(text)"
+            accessibilityLabel: "Agent Center: \(text)"
         )
     }
 
@@ -200,7 +205,7 @@ final class ClaudeCodePlugin: BooPluginProtocol {
     func sectionTitle(context: PluginContext) -> String? {
         guard let start = agentStartTime else { return nil }
         let runtime = Date().timeIntervalSince(start)
-        return "Claude \u{00B7} \(formatAgentRuntime(runtime))"
+        return "\(activeAgent?.kind.shortName ?? "Agent") \u{00B7} \(formatAgentRuntime(runtime))"
     }
 
     // MARK: - Sidebar Tab (multi-section)
@@ -212,7 +217,6 @@ final class ClaudeCodePlugin: BooPluginProtocol {
         let isAgentActive = agentStartTime != nil
         if !isAgentActive && currentCwd != context.terminal.cwd {
             scanAgentConfig(cwd: context.terminal.cwd)
-            scanSessions(cwd: context.terminal.cwd)
             scanWorktrees(cwd: context.terminal.cwd)
         }
 
@@ -233,63 +237,73 @@ final class ClaudeCodePlugin: BooPluginProtocol {
 
         var sections: [SidebarSection] = []
 
-        // Active agent status section (only when running)
-        if isAgentActive {
-            // Find active session details
-            let activeSession = sessions.first { $0.id == activeSessionID }
-
-            let statusSection = SidebarSection(
-                id: "claude-code.status",
-                name: "Active Session",
-                icon: "bolt.fill",
+        let openSessions = actions?.workspaceAgentSessions?() ?? []
+        if !openSessions.isEmpty {
+            let openSessionsSection = SidebarSection(
+                id: "agents.open.sessions",
+                name: "Open Sessions (\(openSessions.count))",
+                icon: "rectangle.3.group",
                 content: AnyView(
-                    ClaudeActiveSessionView(
-                        agentStartTime: agentStartTime,
-                        activeSession: activeSession,
-                        activeSessionID: activeSessionID,
-                        diffStats: diffStats,
-                        fontScale: fontScale,
-                        textColor: textColor,
-                        mutedColor: mutedColor,
-                        accentColor: accentColor
-                    )
-                ),
-                prefersOuterScrollView: false,
-                generation: UInt64(agentStartTime?.timeIntervalSince1970 ?? 0)
-                    &+ UInt64(bitPattern: Int64(activeSessionID?.hashValue ?? 0))
-            )
-            sections.append(statusSection)
-        }
-
-        // Sessions section
-        if !sessions.isEmpty {
-            let sessionsSection = SidebarSection(
-                id: "claude-code.sessions",
-                name: "Sessions (\(sessions.count))",
-                icon: "bubble.left.and.bubble.right",
-                content: AnyView(
-                    ClaudeSessionsView(
-                        sessions: sessions,
+                    AgentOpenSessionsView(
+                        sessions: openSessions,
                         fontScale: fontScale,
                         textColor: textColor,
                         mutedColor: mutedColor,
                         accentColor: accentColor,
-                        onSessionClicked: { [weak self] session in
-                            self?.resumeSession(session)
-                        },
-                        onCopyPath: { path in
-                            act?.handle(DSLAction(type: "copy", path: nil, command: nil, text: path))
+                        onSessionClicked: { session in
+                            act?.focusAgentSession?(session.id)
                         }
                     )),
                 prefersOuterScrollView: true,
-                generation: UInt64(sessions.count))
-            sections.append(sessionsSection)
+                generation: UInt64(openSessions.count)
+                    &+ UInt64(bitPattern: Int64(openSessions.map(\.id.hashValue).reduce(0, &+))))
+            sections.append(openSessionsSection)
+        }
+
+        // Active agent status section (only when running)
+        if isAgentActive {
+            let statusSection = SidebarSection(
+                id: "agents.status",
+                name: "Active Agent",
+                icon: "bolt.fill",
+                content: AnyView(
+                    AgentActiveSessionView(
+                        agent: activeAgent,
+                        fallbackStartTime: agentStartTime,
+                        diffStats: diffStats,
+                        fontScale: fontScale,
+                        textColor: textColor,
+                        mutedColor: mutedColor,
+                        accentColor: accentColor,
+                        onResume: { [weak self] in
+                            if let agent = self?.activeAgent {
+                                self?.startAgent(kind: agent.kind)
+                            }
+                        },
+                        onCopySessionID: { [weak self] in
+                            guard let id = self?.activeAgent?.sessionID ?? self?.activeSessionID else { return }
+                            act?.handle(DSLAction(type: "copy", path: nil, command: nil, text: id))
+                        },
+                        onOpenTranscript: { [weak self] in
+                            guard let path = self?.activeAgent?.transcriptPath else { return }
+                            act?.handle(DSLAction(type: "open", path: path, command: nil, text: nil))
+                        },
+                        onPromptNudge: {
+                            act?.sendToTerminal?("Summarize your current state, blockers, and next step.")
+                        }
+                    )
+                ),
+                prefersOuterScrollView: false,
+                generation: UInt64(agentStartTime?.timeIntervalSince1970 ?? 0)
+                    &+ UInt64(bitPattern: Int64((activeAgent?.sessionID ?? activeSessionID)?.hashValue ?? 0))
+            )
+            sections.append(statusSection)
         }
 
         // Worktrees section
         if !worktrees.isEmpty {
             let worktreesSection = SidebarSection(
-                id: "claude-code.worktrees",
+                id: "agents.claude.worktrees",
                 name: "Worktrees (\(worktrees.count))",
                 icon: "arrow.triangle.branch",
                 content: AnyView(
@@ -314,7 +328,7 @@ final class ClaudeCodePlugin: BooPluginProtocol {
         // Config section
         if !agentConfig.configFiles.isEmpty {
             let configSection = SidebarSection(
-                id: "claude-code.config",
+                id: "agents.config",
                 name: "Config (\(agentConfig.configFiles.count))",
                 icon: "doc.text",
                 content: AnyView(
@@ -339,47 +353,12 @@ final class ClaudeCodePlugin: BooPluginProtocol {
             sections.append(configSection)
         }
 
-        // Hooks section
-        if !agentConfig.hooks.isEmpty {
-            let hooksSection = SidebarSection(
-                id: "claude-code.hooks",
-                name: "Hooks (\(agentConfig.hooks.count))",
-                icon: "arrow.triangle.turn.up.right.diamond",
-                content: AnyView(
-                    ClaudeHooksView(
-                        hooks: agentConfig.hooks,
-                        fontScale: fontScale,
-                        textColor: textColor,
-                        mutedColor: mutedColor,
-                        accentColor: accentColor
-                    )),
-                prefersOuterScrollView: true,
-                generation: UInt64(agentConfig.hooks.count))
-            sections.append(hooksSection)
-        }
 
-        // MCP Servers section
-        if !agentConfig.mcpServers.isEmpty {
-            let mcpSection = SidebarSection(
-                id: "claude-code.mcp",
-                name: "MCP Servers (\(agentConfig.mcpServers.count))",
-                icon: "server.rack",
-                content: AnyView(
-                    ClaudeMCPView(
-                        mcpServers: agentConfig.mcpServers,
-                        fontScale: fontScale,
-                        textColor: textColor,
-                        mutedColor: mutedColor
-                    )),
-                prefersOuterScrollView: true,
-                generation: UInt64(agentConfig.mcpServers.count))
-            sections.append(mcpSection)
-        }
 
         // Skills section
         if !agentConfig.skills.isEmpty {
             let skillsSection = SidebarSection(
-                id: "claude-code.skills",
+                id: "agents.skills",
                 name: "Skills (\(agentConfig.skills.count))",
                 icon: "star",
                 content: AnyView(
@@ -404,39 +383,10 @@ final class ClaudeCodePlugin: BooPluginProtocol {
             sections.append(skillsSection)
         }
 
-        // Changes section
-        if !diffStats.isEmpty {
-            let ins = diffStats.reduce(0) { $0 + $1.insertions }
-            let del = diffStats.reduce(0) { $0 + $1.deletions }
-            let changesSection = SidebarSection(
-                id: "claude-code.changes",
-                name: "Changes (\(diffStats.count)) +\(ins) -\(del)",
-                icon: "doc.badge.plus",
-                content: AnyView(
-                    ClaudeChangesView(
-                        diffStats: diffStats,
-                        fontScale: fontScale,
-                        textColor: textColor,
-                        mutedColor: mutedColor,
-                        onFileClicked: { path in
-                            act?.handle(DSLAction(type: "open", path: path, command: nil, text: nil))
-                        },
-                        onCopyPath: { path in
-                            act?.handle(DSLAction(type: "copy", path: nil, command: nil, text: path))
-                        },
-                        onReferenceInAI: { path in
-                            act?.sendToTerminal?("@\(path) ")
-                        }
-                    )),
-                prefersOuterScrollView: true,
-                generation: UInt64(diffStats.count))
-            sections.append(changesSection)
-        }
-
         // Settings section (always show if we have settings loaded)
         if !claudeSettings.model.isEmpty {
             let settingsSection = SidebarSection(
-                id: "claude-code.settings",
+                id: "agents.claude.settings",
                 name: "Settings",
                 icon: "gearshape",
                 content: AnyView(
@@ -462,25 +412,51 @@ final class ClaudeCodePlugin: BooPluginProtocol {
 
         // If no sections (no agent, no sessions, no config), show getting started
         if sections.isEmpty {
-            let emptySection = SidebarSection(
-                id: "claude-code",
-                name: "Claude Code",
-                icon: "sparkles",
-                content: AnyView(
+            let available = [AgentKind.claudeCode, .codex, .openCode]
+                .filter { installedAgents.contains($0) }
+            let emptyContent: AnyView
+            if available.isEmpty {
+                emptyContent = AnyView(
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("No Claude Code sessions found")
+                        Text("No agent CLIs installed")
                             .font(fontScale.font(.base))
                             .foregroundStyle(textColor)
-                        Text("Run `claude` in a terminal to start")
+                        Text("Install claude, codex, or opencode to get started.")
                             .font(fontScale.font(.sm))
                             .foregroundStyle(mutedColor)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 12)
-                ),
+                )
+            } else {
+                emptyContent = AnyView(
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("No active agent in this tab")
+                            .font(fontScale.font(.base))
+                            .foregroundStyle(textColor)
+                        Text("Start an agent here to see workspace sessions.")
+                            .font(fontScale.font(.sm))
+                            .foregroundStyle(mutedColor)
+                        HStack(spacing: 8) {
+                            ForEach(available, id: \.self) { kind in
+                                Button("Start \(kind.shortName)") { self.startAgent(kind: kind) }
+                                    .buttonStyle(.borderless)
+                            }
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 12)
+                )
+            }
+            let emptySection = SidebarSection(
+                id: "agents.empty",
+                name: "Agents",
+                icon: "sparkles",
+                content: emptyContent,
                 prefersOuterScrollView: false,
-                generation: 0)
+                generation: UInt64(installedAgents.count))
             sections.append(emptySection)
         }
 
@@ -493,27 +469,39 @@ final class ClaudeCodePlugin: BooPluginProtocol {
 
     func makeDetailView(context: PluginContext) -> AnyView? { nil }
 
-    // MARK: - Session Resume
-
-    private func resumeSession(_ session: ClaudeSession) {
-        let cwd = currentCwd ?? "~"
-        actions?.openTab?(.terminalWithCommand(workingDirectory: cwd, command: "claude --resume \(session.id)"))
+    private func startAgent(kind: AgentKind) {
+        let cwd = currentCwd ?? activeAgent?.cwd ?? "~"
+        let command: String
+        switch kind {
+        case .claudeCode:
+            command = "claude"
+        case .codex:
+            command = "codex"
+        case .openCode:
+            command = "opencode"
+        case .custom:
+            return
+        }
+        actions?.openTab?(.terminalWithCommand(workingDirectory: cwd, command: command))
     }
 
     // MARK: - Lifecycle
 
     func processChanged(name: String, context: TerminalContext) {
-        let isClaude = name.lowercased() == "claude"
-        if isClaude {
+        let active = Self.agentSession(from: context, existingStart: agentStartTime)
+        if let active {
             cancelTeardown()
             if agentStartTime == nil {
-                agentStartTime = Date()
+                agentStartTime = active.startedAt
                 currentCwd = context.cwd
-                onRequestCycleRerun?()  // Immediate update for "Active" status
+                onRequestCycleRerun?()
                 scanAgentConfig(cwd: context.cwd)
-                scanSessions(cwd: context.cwd)
                 scanWorktrees(cwd: context.cwd)
-                startSessionWatcher(cwd: context.cwd)
+            }
+            activeAgent = active
+            if let sessionID = active.sessionID, activeSessionID != sessionID {
+                activeSessionID = sessionID
+                actions?.setAgentSessionID?(sessionID)
             }
             refreshDiffStats(repoRoot: context.gitContext?.repoRoot)
             startRefreshTimer(repoRoot: context.gitContext?.repoRoot)
@@ -538,19 +526,32 @@ final class ClaudeCodePlugin: BooPluginProtocol {
     func cwdChanged(newPath: String, context: TerminalContext) {}
 
     func terminalFocusChanged(terminalID: UUID, context: TerminalContext) {
-        let isClaude = context.processName.lowercased() == "claude"
-        if isClaude {
+        let active = Self.agentSession(from: context, existingStart: agentStartTime)
+        if let active {
             cancelTeardown()
             if agentStartTime == nil {
-                agentStartTime = Date()
+                agentStartTime = active.startedAt
+                activeAgent = active
                 currentCwd = context.cwd
                 scanAgentConfig(cwd: context.cwd)
-                scanSessions(cwd: context.cwd)
                 scanWorktrees(cwd: context.cwd)
             }
+            activeAgent = active
             refreshDiffStats(repoRoot: context.gitContext?.repoRoot)
             startRefreshTimer(repoRoot: context.gitContext?.repoRoot)
+        } else {
+            currentCwd = context.cwd
+            scanAgentConfig(cwd: context.cwd)
+            scanWorktrees(cwd: context.cwd)
         }
+    }
+
+    func checkAvailability() async -> Bool {
+        let found = await Task.detached(priority: .utility) {
+            AgentBinaryScanner.detectInstalledAgents()
+        }.value
+        installedAgents = found
+        return true
     }
 
     func pluginDidDeactivate() {
@@ -565,290 +566,61 @@ final class ClaudeCodePlugin: BooPluginProtocol {
     private func clearAgentState() {
         cancelTeardown()
         agentStartTime = nil
+        activeAgent = nil
         diffStats = []
         activeSessionID = nil
-        // Clear session ID from tab state when agent exits
         actions?.setAgentSessionID?(nil)
-        // Update sessions to mark none as active
-        for i in sessions.indices {
-            sessions[i].isActive = false
-        }
-        // Don't clear sessions/agentConfig - they're project-scoped, not agent-scoped.
-        // Clearing them on deactivate causes "No sessions found" on tab switch back.
         lastDiffRepoRoot = nil
         stopRefreshTimer()
-        stopSessionWatcher()
+    }
+
+    nonisolated static func agentSession(from context: TerminalContext, existingStart: Date?) -> AgentSession? {
+        let category = context.processCategory ?? ProcessIcon.category(for: context.processName)
+        guard category == "ai" else { return nil }
+        let cwd = context.processMetadata["cwd"].flatMap { $0.isEmpty ? nil : $0 } ?? context.cwd
+        let startedAt =
+            context.processMetadata["started_at"]
+            .flatMap(TimeInterval.init)
+            .map { Date(timeIntervalSince1970: $0) } ?? existingStart ?? Date()
+        guard let kind = AgentKind.infer(processName: context.processName, metadata: context.processMetadata) else {
+            guard !context.processName.isEmpty else { return nil }
+            return AgentSession(
+                kind: .custom,
+                displayName: ProcessIcon.displayName(for: context.processName) ?? context.processName,
+                processName: context.processName,
+                pid: context.processPID,
+                cwd: cwd,
+                startedAt: startedAt,
+                state: AgentRunState(rawValue: context.processMetadata["state"] ?? "") ?? .unknown,
+                sessionID: sessionID(from: context.processMetadata),
+                transcriptPath: context.processMetadata["transcript_path"],
+                model: context.processMetadata["model"],
+                mode: context.processMetadata["permission_mode"] ?? context.processMetadata["mode"],
+                metadata: context.processMetadata
+            )
+        }
+        return AgentSession(
+            kind: kind,
+            displayName: kind.displayName,
+            processName: context.processName,
+            pid: context.processPID,
+            cwd: cwd,
+            startedAt: startedAt,
+            state: AgentRunState(rawValue: context.processMetadata["state"] ?? "") ?? .running,
+            sessionID: sessionID(from: context.processMetadata),
+            transcriptPath: context.processMetadata["transcript_path"],
+            model: context.processMetadata["model"],
+            mode: context.processMetadata["permission_mode"] ?? context.processMetadata["mode"],
+            metadata: context.processMetadata
+        )
+    }
+
+    nonisolated private static func sessionID(from metadata: [String: String]) -> String? {
+        metadata["session_id"].flatMap { $0.isEmpty ? nil : $0 }
     }
 
     // MARK: - Session Watching
 
-    /// Start watching the Claude session directory for file changes to detect active session.
-    private func startSessionWatcher(cwd: String?) {
-        stopSessionWatcher()
-        guard let cwd = cwd else { return }
-
-        let markers = Self.projectMarkers
-        let gen = teardownGeneration
-        DispatchQueue.global(qos: .utility).async { [weak self] in
-            let projectRoot = findAgentProjectRoot(from: cwd, markers: markers) ?? cwd
-            let fm = FileManager.default
-            let home = fm.homeDirectoryForCurrentUser.path
-            let projectDirName = projectRoot.replacingOccurrences(of: "/", with: "-")
-            let sessionDir = (home as NSString).appendingPathComponent(".claude/projects/\(projectDirName)")
-
-            guard fm.fileExists(atPath: sessionDir) else { return }
-
-            DispatchQueue.main.async { [weak self] in
-                guard let self, self.teardownGeneration == gen else { return }
-                self.sessionDirPath = sessionDir
-                self.watchSessionDirectory(sessionDir)
-            }
-        }
-    }
-
-    private func watchSessionDirectory(_ path: String) {
-        let fd = open(path, O_EVTONLY)
-        guard fd >= 0 else { return }
-
-        let source = DispatchSource.makeFileSystemObjectSource(
-            fileDescriptor: fd,
-            eventMask: .write,
-            queue: .main
-        )
-
-        source.setEventHandler { [weak self] in
-            self?.detectActiveSession()
-        }
-
-        Self.installCancelHandler(source: source, fd: fd)
-
-        sessionWatcher = source
-        source.resume()
-
-        // Initial detection
-        detectActiveSession()
-    }
-
-    nonisolated private static func installCancelHandler(
-        source: DispatchSourceFileSystemObject, fd: Int32
-    ) {
-        source.setCancelHandler { close(fd) }
-    }
-
-    private func stopSessionWatcher() {
-        sessionWatcher?.cancel()
-        sessionWatcher = nil
-        sessionDirPath = nil
-    }
-
-    /// Find which session file was most recently modified (the active one).
-    private func detectActiveSession() {
-        guard let sessionDir = sessionDirPath else { return }
-
-        DispatchQueue.global(qos: .utility).async { [weak self] in
-            let fm = FileManager.default
-            var mostRecentID: String?
-            var mostRecentTime: Date?
-
-            guard let entries = try? fm.contentsOfDirectory(atPath: sessionDir) else { return }
-
-            for entry in entries where entry.hasSuffix(".jsonl") {
-                let path = (sessionDir as NSString).appendingPathComponent(entry)
-                guard let attrs = try? fm.attributesOfItem(atPath: path),
-                    let modTime = attrs[.modificationDate] as? Date
-                else { continue }
-
-                // Only consider recently modified files
-                if Date().timeIntervalSince(modTime) < ClaudeCodeConstants.recentlyModifiedThreshold {
-                    if mostRecentTime.map({ modTime > $0 }) ?? true {
-                        mostRecentTime = modTime
-                        mostRecentID = (entry as NSString).deletingPathExtension
-                    }
-                }
-            }
-
-            DispatchQueue.main.async { [weak self] in
-                guard let self else { return }
-                if self.activeSessionID != mostRecentID {
-                    self.activeSessionID = mostRecentID
-                    // Save to tab state so we know which session belongs to this tab
-                    self.actions?.setAgentSessionID?(mostRecentID)
-                    // Update sessions list with active state
-                    for i in self.sessions.indices {
-                        self.sessions[i].isActive = (self.sessions[i].id == mostRecentID)
-                    }
-                    self.onRequestCycleRerun?()
-                }
-            }
-        }
-    }
-
-    // MARK: - Session Scanning
-
-    private func scanSessions(cwd: String?) {
-        guard let cwd = cwd else { return }
-
-        let markers = Self.projectMarkers
-        DispatchQueue.global(qos: .utility).async { [weak self] in
-            let projectRoot = findAgentProjectRoot(from: cwd, markers: markers) ?? cwd
-            DispatchQueue.main.async { [weak self] in
-                guard let self else { return }
-                if self.lastSessionScanRoot == projectRoot { return }
-                self.lastSessionScanRoot = projectRoot
-                self.currentCwd = cwd
-
-                DispatchQueue.global(qos: .utility).async { [weak self] in
-                    let sessions = Self.detectSessions(projectRoot: projectRoot)
-                    DispatchQueue.main.async { [weak self] in
-                        guard let self else { return }
-                        self.sessions = sessions
-                        self.onRequestCycleRerun?()
-                    }
-                }
-            }
-        }
-    }
-
-    nonisolated static func detectSessions(projectRoot: String) -> [ClaudeSession] {
-        let fm = FileManager.default
-        let home = fm.homeDirectoryForCurrentUser.path
-        let claudeProjectsDir = (home as NSString).appendingPathComponent(".claude/projects")
-
-        // Convert project path to Claude's folder naming: /Users/foo/bar -> -Users-foo-bar
-        let projectDirName = projectRoot.replacingOccurrences(of: "/", with: "-")
-        let projectSessionDir = (claudeProjectsDir as NSString).appendingPathComponent(projectDirName)
-
-        guard fm.fileExists(atPath: projectSessionDir) else { return [] }
-
-        var sessions: [ClaudeSession] = []
-
-        // Track which session file was modified most recently (likely active)
-        var mostRecentModTime: Date?
-        var mostRecentSessionID: String?
-
-        do {
-            let entries = try fm.contentsOfDirectory(atPath: projectSessionDir)
-            for entry in entries where entry.hasSuffix(".jsonl") {
-                let sessionID = (entry as NSString).deletingPathExtension
-                let sessionPath = (projectSessionDir as NSString).appendingPathComponent(entry)
-
-                // Check file modification time to detect active session
-                if let attrs = try? fm.attributesOfItem(atPath: sessionPath),
-                    let modDate = attrs[.modificationDate] as? Date
-                {
-                    if mostRecentModTime.map({ modDate > $0 }) ?? true {
-                        mostRecentModTime = modDate
-                        mostRecentSessionID = sessionID
-                    }
-                }
-
-                if let session = parseSessionFile(path: sessionPath, sessionID: sessionID) {
-                    sessions.append(session)
-                }
-            }
-        } catch {
-            debugLog("[ClaudeCode] Failed to enumerate session directory: \(error)")
-            return []
-        }
-
-        // Mark most recently modified session as active (if modified in last 30 seconds)
-        if let activeID = mostRecentSessionID,
-            let modTime = mostRecentModTime,
-            Date().timeIntervalSince(modTime) < ClaudeCodeConstants.activeSessionThreshold
-        {
-            if let idx = sessions.firstIndex(where: { $0.id == activeID }) {
-                sessions[idx].isActive = true
-            }
-        }
-
-        // Sort: active first, then by last activity descending
-        return sessions.sorted { a, b in
-            if a.isActive != b.isActive { return a.isActive }
-            let aTime = a.lastActivity ?? a.timestamp
-            let bTime = b.lastActivity ?? b.timestamp
-            return aTime > bTime
-        }
-    }
-
-    nonisolated private static func parseSessionFile(path: String, sessionID: String) -> ClaudeSession? {
-        guard let handle = FileHandle(forReadingAtPath: path) else { return nil }
-        defer { try? handle.close() }
-
-        var slug: String?
-        var timestamp: Date?
-        var lastActivity: Date?
-        var firstMessage: String?
-        var messageCount = 0
-        var totalTokens = 0
-
-        guard let data = try? handle.readToEnd(),
-            let content = String(data: data, encoding: .utf8)
-        else { return nil }
-
-        let lines = content.components(separatedBy: "\n")
-        let dateFormatter = ISO8601DateFormatter()
-        dateFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-
-        for line in lines where !line.isEmpty {
-            guard let lineData = line.data(using: .utf8),
-                let json = try? JSONSerialization.jsonObject(with: lineData) as? [String: Any]
-            else { continue }
-
-            if slug == nil, let s = json["slug"] as? String {
-                slug = s
-            }
-
-            // Count messages and track timestamps
-            if let type = json["type"] as? String,
-                let ts = json["timestamp"] as? String,
-                let date = dateFormatter.date(from: ts)
-            {
-                if type == "user" || type == "assistant" {
-                    messageCount += 1
-                    lastActivity = date
-                }
-
-                // Get first user message for preview
-                if timestamp == nil && type == "user" {
-                    timestamp = date
-                    if let msg = json["message"] as? [String: Any],
-                        let content = msg["content"] as? String
-                    {
-                        firstMessage = String(content.prefix(100))
-                    } else if let msg = json["message"] as? [String: Any],
-                        let contentArray = msg["content"] as? [[String: Any]],
-                        let first = contentArray.first,
-                        let text = first["content"] as? String
-                    {
-                        firstMessage = String(text.prefix(100))
-                    }
-                }
-            }
-
-            // Sum up token usage
-            if let usage = json["usage"] as? [String: Any] {
-                if let input = usage["input_tokens"] as? Int {
-                    totalTokens += input
-                }
-                if let output = usage["output_tokens"] as? Int {
-                    totalTokens += output
-                }
-            }
-        }
-
-        guard let ts = timestamp else { return nil }
-
-        return ClaudeSession(
-            id: sessionID,
-            slug: slug,
-            timestamp: ts,
-            firstMessage: firstMessage ?? "",
-            path: path,
-            messageCount: messageCount,
-            totalTokens: totalTokens,
-            lastActivity: lastActivity
-        )
-    }
 
     // MARK: - Worktree Scanning
 
@@ -915,7 +687,7 @@ final class ClaudeCodePlugin: BooPluginProtocol {
                     ))
             }
         } catch {
-            debugLog("[ClaudeCode] Failed to enumerate worktrees directory: \(error)")
+            debugLog("[Agents] Failed to enumerate worktrees directory: \(error)")
             return []
         }
 
@@ -1094,8 +866,9 @@ final class ClaudeCodePlugin: BooPluginProtocol {
             }
         }
 
-        scanClaudeHooks(fm: fm, root: projectRoot, home: home, into: &config)
-        scanClaudeMCP(fm: fm, root: projectRoot, home: home, into: &config)
+        scanCodexConfig(fm: fm, root: projectRoot, home: home, into: &config)
+        scanOpenCodeConfig(fm: fm, root: projectRoot, home: home, into: &config)
+        populateAgentSetup(projectRoot: projectRoot, config: &config)
 
         return config
     }
@@ -1104,63 +877,135 @@ final class ClaudeCodePlugin: BooPluginProtocol {
         fm: FileManager, root: String, rel: String, name: String,
         icon: String, scope: String, into config: inout AgentConfig
     ) {
+        checkFile(
+            fm: fm, root: root, rel: rel, name: name, icon: icon, scope: scope, provider: .claudeCode, into: &config)
+    }
+
+    nonisolated private static func checkFile(
+        fm: FileManager, root: String, rel: String, name: String,
+        icon: String, scope: String, provider: AgentKind, into config: inout AgentConfig
+    ) {
         let fullPath = (root as NSString).appendingPathComponent(rel)
         if fm.fileExists(atPath: fullPath) {
             if !config.configFiles.contains(where: { $0.path == fullPath }) {
                 config.configFiles.append(
-                    AgentConfig.ConfigFile(name: name, path: fullPath, icon: icon, scope: scope))
+                    AgentConfig.ConfigFile(name: name, path: fullPath, icon: icon, scope: scope, provider: provider))
             }
         }
     }
 
-    nonisolated private static func scanClaudeHooks(
+    nonisolated private static func scanCodexConfig(
         fm: FileManager, root: String, home: String, into config: inout AgentConfig
     ) {
-        for settingsPath in [
-            (root as NSString).appendingPathComponent(".claude/settings.json"),
-            (root as NSString).appendingPathComponent(".claude/settings.local.json"),
-            (home as NSString).appendingPathComponent(".claude/settings.json")
-        ] {
-            guard let data = fm.contents(atPath: settingsPath),
-                let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                let hooks = json["hooks"] as? [String: Any]
-            else { continue }
+        checkFile(
+            fm: fm, root: root, rel: ".codex/config.toml", name: "Codex Config", icon: "gearshape",
+            scope: "project", provider: .codex, into: &config)
+        checkFile(
+            fm: fm, root: home, rel: ".codex/config.toml", name: "Global Codex Config", icon: "gearshape",
+            scope: "global", provider: .codex, into: &config)
+    }
 
-            for (event, value) in hooks.sorted(by: { $0.key < $1.key }) {
-                guard let entries = value as? [[String: Any]] else { continue }
-                for entry in entries {
-                    if let hookList = entry["hooks"] as? [[String: Any]] {
-                        for hook in hookList {
-                            if let cmd = hook["command"] as? String {
-                                let shortCmd = (cmd as NSString).lastPathComponent
-                                config.hooks.append(AgentConfig.HookEntry(event: event, command: shortCmd))
-                            }
-                        }
-                    }
+    nonisolated private static func scanOpenCodeConfig(
+        fm: FileManager, root: String, home: String, into config: inout AgentConfig
+    ) {
+        checkFile(
+            fm: fm, root: root, rel: "opencode.json", name: "OpenCode Config", icon: "gearshape",
+            scope: "project", provider: .openCode, into: &config)
+        checkFile(
+            fm: fm, root: root, rel: "opencode.jsonc", name: "OpenCode Config", icon: "gearshape",
+            scope: "project", provider: .openCode, into: &config)
+        checkFile(
+            fm: fm, root: root, rel: ".opencode", name: "OpenCode Plugins", icon: "puzzlepiece.extension",
+            scope: "project", provider: .openCode, into: &config)
+        checkFile(
+            fm: fm, root: home, rel: ".config/opencode/opencode.json", name: "Global OpenCode Config",
+            icon: "gearshape", scope: "global", provider: .openCode, into: &config)
+
+        for path in [
+            (root as NSString).appendingPathComponent("opencode.json"),
+            (root as NSString).appendingPathComponent("opencode.jsonc"),
+            (home as NSString).appendingPathComponent(".config/opencode/opencode.json")
+        ] {
+            guard let data = fm.contents(atPath: path),
+                let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+            else { continue }
+            if let agent = json["agent"] as? [String: Any] {
+                for name in agent.keys.sorted() {
+                    config.skills.append(
+                        AgentConfig.SkillEntry(
+                            name: "@\(name)", description: "OpenCode agent", path: path, provider: .openCode))
                 }
             }
+        }
+    }
+
+    nonisolated private static func populateAgentSetup(projectRoot: String, config: inout AgentConfig) {
+        let claudeConfigCount = config.configFiles.filter { $0.provider == .claudeCode }.count
+        let codexConfigCount = config.configFiles.filter { $0.provider == .codex }.count
+        let openCodeConfigCount = config.configFiles.filter { $0.provider == .openCode }.count
+
+        config.toolSummaries = [
+            AgentToolSummary(
+                kind: .claudeCode,
+                status: claudeConfigCount > 0 ? .detected : .missing,
+                configCount: claudeConfigCount,
+                detail: claudeConfigCount > 0 ? "Claude project or user config found" : "No Claude Code config found"),
+            AgentToolSummary(
+                kind: .codex,
+                status: codexConfigCount > 0 ? .detected : .missing,
+                configCount: codexConfigCount,
+                detail: codexConfigCount > 0 ? "Codex config visible" : "No Codex config found"),
+            AgentToolSummary(
+                kind: .openCode,
+                status: openCodeConfigCount > 0 ? .detected : .missing,
+                configCount: openCodeConfigCount,
+                detail: openCodeConfigCount > 0 ? "OpenCode config/plugins visible" : "No OpenCode config found")
+        ]
+
+        config.setupRecommendations = [
+            AgentSetupRecommendation(
+                kind: .claudeCode,
+                status: claudeConfigCount > 0 ? .detected : .missing,
+                title: "Claude Code",
+                detail: claudeConfigCount > 0
+                    ? "Boo detects Claude by process."
+                    : "No Claude Code config found.",
+                primaryAction: claudeConfigCount > 0 ? "Open config" : nil),
+            AgentSetupRecommendation(
+                kind: .codex,
+                status: codexConfigCount > 0 ? .detected : .missing,
+                title: "Codex",
+                detail: codexConfigCount > 0
+                    ? "Boo detects Codex by process."
+                    : "No Codex config found.",
+                primaryAction: codexConfigCount > 0 ? "Open config" : nil),
+            AgentSetupRecommendation(
+                kind: .openCode,
+                status: openCodeConfigCount > 0 ? .detected : .missing,
+                title: "OpenCode",
+                detail: openCodeConfigCount > 0
+                    ? "Boo detects OpenCode by process."
+                    : "No OpenCode config found.",
+                primaryAction: openCodeConfigCount > 0 ? "Open config" : nil)
+        ]
+    }
+
+    private func handleSetupAction(_ recommendation: AgentSetupRecommendation) {
+        switch recommendation.kind {
+        case .claudeCode:
+            openFirstConfig(for: .claudeCode)
+        case .codex:
+            openFirstConfig(for: .codex)
+        case .openCode:
+            openFirstConfig(for: .openCode)
+        case .custom:
             break
         }
     }
 
-    nonisolated private static func scanClaudeMCP(
-        fm: FileManager, root: String, home: String, into config: inout AgentConfig
-    ) {
-        for mcpPath in [
-            (root as NSString).appendingPathComponent(".claude/mcp.json"),
-            (home as NSString).appendingPathComponent(".claude.json")
-        ] {
-            guard let data = fm.contents(atPath: mcpPath),
-                let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                let servers = json["mcpServers"] as? [String: Any]
-            else { continue }
-
-            for name in servers.keys.sorted() {
-                if !config.mcpServers.contains(name) {
-                    config.mcpServers.append(name)
-                }
-            }
-        }
+    private func openFirstConfig(for kind: AgentKind) {
+        guard let path = agentConfig.configFiles.first(where: { $0.provider == kind })?.path else { return }
+        actions?.handle(DSLAction(type: "open", path: path, command: nil, text: nil))
     }
 
     // MARK: - Git Diff Stats
@@ -1181,7 +1026,7 @@ final class ClaudeCodePlugin: BooPluginProtocol {
             self?.runDiffDetection(repoRoot: root)
         }
         debounceWork = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + ClaudeCodeConstants.diffDebounceDelay, execute: work)
+        DispatchQueue.main.asyncAfter(deadline: .now() + AgentsConstants.diffDebounceDelay, execute: work)
     }
 
     private func runDiffDetection(repoRoot: String) {
@@ -1207,8 +1052,8 @@ final class ClaudeCodePlugin: BooPluginProtocol {
 
         let timer = DispatchSource.makeTimerSource(queue: .main)
         timer.schedule(
-            deadline: .now() + ClaudeCodeConstants.diffRefreshInterval,
-            repeating: .seconds(Int(ClaudeCodeConstants.diffRefreshInterval)))
+            deadline: .now() + AgentsConstants.diffRefreshInterval,
+            repeating: .seconds(Int(AgentsConstants.diffRefreshInterval)))
         timer.setEventHandler { [weak self] in
             guard let self, self.agentStartTime != nil else {
                 self?.stopRefreshTimer()
@@ -1332,7 +1177,7 @@ func formatAgentRelativeDate(_ date: Date) -> String {
 func findAgentProjectRoot(from path: String, markers: [String]) -> String? {
     let fm = FileManager.default
     var dir = path
-    for _ in 0..<ClaudeCodeConstants.maxProjectRootDepth {
+    for _ in 0..<AgentsConstants.maxProjectRootDepth {
         for marker in markers {
             let candidate = (dir as NSString).appendingPathComponent(marker)
             if fm.fileExists(atPath: candidate) {
@@ -1369,7 +1214,7 @@ func parseAgentSkillDescription(at path: String) -> String {
 }
 
 /// Detect git diff stats for changed files in repo.
-func detectAgentDiffStats(repoRoot: String) -> [ClaudeCodePlugin.DiffStatEntry] {
+func detectAgentDiffStats(repoRoot: String) -> [AgentsPlugin.DiffStatEntry] {
     let task = Process()
     task.launchPath = "/usr/bin/git"
     task.arguments = ["-C", repoRoot, "diff", "--numstat", "HEAD"]
@@ -1381,7 +1226,7 @@ func detectAgentDiffStats(repoRoot: String) -> [ClaudeCodePlugin.DiffStatEntry] 
     do {
         try task.run()
     } catch {
-        debugLog("[ClaudeCode] git diff task failed: \(error)")
+        debugLog("[Agents] git diff task failed: \(error)")
         return []
     }
     task.waitUntilExit()
@@ -1397,7 +1242,7 @@ func detectAgentDiffStats(repoRoot: String) -> [ClaudeCodePlugin.DiffStatEntry] 
         let deletions = Int(parts[1]) ?? 0
         let filePath = String(parts[2])
         let fullPath = (repoRoot as NSString).appendingPathComponent(filePath)
-        return ClaudeCodePlugin.DiffStatEntry(
+        return AgentsPlugin.DiffStatEntry(
             path: filePath,
             insertions: insertions,
             deletions: deletions,

@@ -113,7 +113,10 @@ final class WindowStateCoordinator {
             remoteSession: tab.remoteSession,
             remoteCwd: tab.remoteWorkingDirectory,
             shellPID: tab.shellPID,
-            foregroundProcess: tab.state.foregroundProcess
+            foregroundProcess: tab.state.foregroundProcess,
+            foregroundProcessPID: tab.state.foregroundProcessPID,
+            foregroundProcessCategory: tab.state.foregroundProcessCategory,
+            foregroundProcessMetadata: tab.state.foregroundProcessMetadata
         )
     }
 
@@ -122,7 +125,13 @@ final class WindowStateCoordinator {
     func syncBridgeToTab(pane: Pane, tabIndex: Int) {
         pane.updateRemoteSession(at: tabIndex, bridge.state.remoteSession)
         pane.updateRemoteWorkingDirectory(at: tabIndex, bridge.state.remoteCwd)
-        pane.updateForegroundProcess(at: tabIndex, bridge.state.foregroundProcess)
+        pane.updateForegroundProcess(
+            at: tabIndex,
+            bridge.state.foregroundProcess,
+            pid: bridge.state.foregroundProcessPID,
+            category: bridge.state.foregroundProcessCategory,
+            metadata: bridge.state.foregroundProcessMetadata
+        )
         remoteLog(
             "[Coordinator] syncBridgeToTab: idx=\(tabIndex) remoteCwd=\(bridge.state.remoteCwd ?? "nil") session=\(bridge.state.remoteSession?.envType ?? "nil") process=\(bridge.state.foregroundProcess) title=\(bridge.state.terminalTitle.prefix(40))"
         )
@@ -137,6 +146,9 @@ final class WindowStateCoordinator {
         tabState: TabState,
         gitContext: TerminalContext.GitContext?,
         processName: String,
+        processPID: pid_t? = nil,
+        processCategory: String? = nil,
+        processMetadata: [String: String] = [:],
         paneCount: Int,
         tabCount: Int
     ) -> TerminalContext {
@@ -145,13 +157,20 @@ final class WindowStateCoordinator {
         let isActivePaneBridge = paneID == bridge.state.paneID
         let remoteSession = isActivePaneBridge ? bridge.state.remoteSession : tabState.remoteSession
         let remoteCwd = isActivePaneBridge ? bridge.state.remoteCwd : tabState.remoteWorkingDirectory
+        let resolvedProcessName = isActivePaneBridge ? processName : tabState.foregroundProcess
+        let resolvedProcessPID = isActivePaneBridge ? processPID : tabState.foregroundProcessPID
+        let resolvedProcessCategory = isActivePaneBridge ? processCategory : tabState.foregroundProcessCategory
+        let resolvedProcessMetadata = isActivePaneBridge ? processMetadata : tabState.foregroundProcessMetadata
         return TerminalContext(
             terminalID: tabID ?? paneID,
             cwd: tabState.workingDirectory,
             remoteSession: remoteSession,
             remoteCwd: remoteCwd,
             gitContext: gitContext,
-            processName: processName,
+            processName: resolvedProcessName,
+            processPID: resolvedProcessPID,
+            processCategory: resolvedProcessCategory,
+            processMetadata: resolvedProcessMetadata,
             paneCount: paneCount,
             tabCount: tabCount
         )

@@ -199,6 +199,100 @@ final class RemoteExplorer: @unchecked Sendable {
         return name.hasPrefix("-") ? String(name.dropFirst()) : name
     }
 
+    /// Returns the foreground non-shell process running under a known shell PID, or nil
+    /// when the shell itself is the foreground process (idle prompt).
+    /// Looks one level deep into direct children — avoids false positives from folder
+    /// names in the terminal title that contain tool keywords like "opencode" or "claude".
+    /// When the child is a runtime (node, bun, deno, python…), inspects its argv to
+    /// remap shim-launched agents (e.g. `node codex.js` → "codex").
+    static func foregroundProcess(shellPID: pid_t) -> String? {
+        let children = childPIDs(of: shellPID)
+        guard !children.isEmpty else { return nil }
+        // With exactly one child, it's unambiguously the foreground process.
+        // With multiple children (e.g. agent + spawned subprocesses during tool calls),
+        // scan all direct children for a known AI agent before giving up.
+        if children.count == 1 {
+            return resolvedProcessName(pid: children[0])
+        }
+        for childPID in children {
+            if let name = resolvedProcessName(pid: childPID),
+                ProcessIcon.category(for: name) == "ai"
+            {
+                return name
+            }
+        }
+        return nil
+    }
+
+    /// Resolve a canonical process name for `pid`.
+    /// Some processes (e.g. Claude Code) set their progname to a version string via
+    /// setprogname(), so proc_name() returns "2.1.117" instead of "claude".
+    /// Falls back to argv[0] (KERN_PROCARGS2) to get the real binary name.
+    private static func resolvedProcessName(pid: pid_t) -> String? {
+        let raw = processName(pid: pid).lowercased()
+        let argv0 = argv0Name(pid: pid)
+        if ProcessIcon.shells.contains(raw) { return nil }
+        if !raw.isEmpty {
+            // If proc_name gave us a recognizable name (not a version string), use it.
+            if !raw.first!.isNumber && !raw.contains(".") {
+                if scriptRuntimes.contains(raw) { return agentFromArgs(pid: pid) }
+                return raw
+            }
+        }
+        // proc_name returned empty or a version string — fall back to argv[0].
+        if let argv0 {
+            if ProcessIcon.shells.contains(argv0) { return nil }
+            if scriptRuntimes.contains(argv0) { return agentFromArgs(pid: pid) }
+            return argv0
+        }
+        return raw.isEmpty ? nil : raw
+    }
+
+    /// Extract the binary name from the exec path in KERN_PROCARGS2.
+    /// getProcessArgs() skips the exec path and returns args only; this reads the exec path directly.
+    private static func argv0Name(pid: pid_t) -> String? {
+        var mib: [Int32] = [CTL_KERN, KERN_PROCARGS2, pid]
+        var size: Int = 0
+        guard sysctl(&mib, UInt32(mib.count), nil, &size, nil, 0) == 0, size > 4 else { return nil }
+        var buffer = [UInt8](repeating: 0, count: size)
+        guard sysctl(&mib, UInt32(mib.count), &buffer, &size, nil, 0) == 0 else { return nil }
+        // Skip argc (4 bytes), then read the null-terminated exec path.
+        let execPath = buffer.withUnsafeBufferPointer { buf -> String? in
+            var offset = MemoryLayout<Int32>.size
+            var pathBytes: [UInt8] = []
+            while offset < size && buf[offset] != 0 {
+                pathBytes.append(buf[offset])
+                offset += 1
+            }
+            return pathBytes.isEmpty ? nil : String(bytes: pathBytes, encoding: .utf8)
+        }
+        guard let path = execPath else { return nil }
+        let name = URL(fileURLWithPath: path).lastPathComponent.lowercased()
+        return name.isEmpty ? nil : name
+    }
+
+    /// Runtimes that commonly wrap agent CLIs via a JS/PY script shim.
+    private static let scriptRuntimes: Set<String> = ["node", "bun", "deno", "python", "python3"]
+
+    /// Maps substrings found in process argv to canonical agent process names.
+    private static let argAgentPatterns: [(substring: String, canonical: String)] = [
+        ("codex", "codex"),
+        ("opencode", "opencode"),
+        ("claude", "claude"),
+        ("aider", "aider"),
+        ("goose", "goose"),
+    ]
+
+    /// Inspects the process argv for known agent script patterns, returns canonical name or nil.
+    private static func agentFromArgs(pid: pid_t) -> String? {
+        guard let args = getProcessArgs(pid: pid) else { return nil }
+        let lower = args.lowercased()
+        for (substring, canonical) in argAgentPatterns {
+            if lower.contains(substring) { return canonical }
+        }
+        return nil
+    }
+
     /// Walk from a process down single-child chains to find the actual shell.
     /// Ghostty forks: Boo → login → shell. This walks login → shell.
     /// Stops when: the process has 0 children, >1 children, or is a known shell.

@@ -144,6 +144,37 @@ final class AIProcessDetectionTests: XCTestCase {
         XCTAssertEqual(TerminalBridge.extractProcessName(from: "~/Library/Application Support"), "")
     }
 
+    // MARK: - Keyword false-positive regression (folder names containing AI tool names)
+
+    func testFolderContainingOpencodeNotTagged() {
+        XCTAssertEqual(TerminalBridge.extractProcessName(from: "~/.config/opencode"), "")
+        XCTAssertEqual(TerminalBridge.extractProcessName(from: "~/dev/opencode-stuff"), "")
+        XCTAssertEqual(TerminalBridge.extractProcessName(from: "~/projects/my-opencode-tool"), "")
+        XCTAssertEqual(TerminalBridge.extractProcessName(from: "/Users/dev/opencode_workspace"), "")
+    }
+
+    func testFolderContainingClaudeNotTagged() {
+        XCTAssertEqual(TerminalBridge.extractProcessName(from: "~/.claude"), "")
+        XCTAssertEqual(TerminalBridge.extractProcessName(from: "~/.claude/projects"), "")
+        XCTAssertEqual(TerminalBridge.extractProcessName(from: "~/claude-projects/foo"), "")
+        XCTAssertEqual(TerminalBridge.extractProcessName(from: "~/dev/claude_backup"), "")
+    }
+
+    func testFolderContainingCodexNotTagged() {
+        XCTAssertEqual(TerminalBridge.extractProcessName(from: "~/my-codex-project"), "")
+        XCTAssertEqual(TerminalBridge.extractProcessName(from: "~/dev/codex_tools"), "")
+    }
+
+    func testStandaloneKeywordsStillMatch() {
+        XCTAssertEqual(ProcessIcon.matchTitle("opencode"), "opencode")
+        XCTAssertEqual(ProcessIcon.matchTitle("codex"), "codex")
+        XCTAssertEqual(ProcessIcon.matchTitle("codex: working on task"), "codex")
+        XCTAssertEqual(ProcessIcon.matchTitle("⠂ opencode task"), "opencode")
+        XCTAssertNil(ProcessIcon.matchTitle("~/.config/opencode"))
+        XCTAssertNil(ProcessIcon.matchTitle("~/.claude"))
+        XCTAssertNil(ProcessIcon.matchTitle("~/.claude/projects"))
+    }
+
     // MARK: - extractProcessName: Normal processes
 
     func testVimDetected() {

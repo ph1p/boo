@@ -148,19 +148,32 @@ final class ContentStateTests: XCTestCase {
         let encoder = JSONEncoder()
         let decoder = JSONDecoder()
 
-        let states: [ContentState] = [
-            .terminal(TerminalContentState(title: "zsh", workingDirectory: "/tmp")),
-            .browser(BrowserContentState(title: "Google", url: URL(string: "https://google.com")!)),
-            .editor(EditorContentState(title: "file.swift")),
-            .imageViewer(ImageViewerContentState(title: "photo.png", filePath: "/path/photo.png")),
-            .markdownPreview(MarkdownPreviewContentState(title: "README.md", filePath: "/path/README.md"))
-        ]
+        // title is a runtime-only field — intentionally not persisted.
+        // After decode, title resets to "". Essential fields (path, url, etc.) survive.
+        let terminal = ContentState.terminal(TerminalContentState(title: "zsh", workingDirectory: "/tmp"))
+        let browser = ContentState.browser(BrowserContentState(title: "Google", url: URL(string: "https://google.com")!))
+        let editor = ContentState.editor(EditorContentState(title: "file.swift", filePath: "/path/file.swift"))
+        let image = ContentState.imageViewer(ImageViewerContentState(title: "photo.png", filePath: "/path/photo.png"))
+        let markdown = ContentState.markdownPreview(MarkdownPreviewContentState(title: "README.md", filePath: "/path/README.md"))
 
-        for state in states {
+        for state in [terminal, browser, editor, image, markdown] {
             let data = try encoder.encode(state)
             let decoded = try decoder.decode(ContentState.self, from: data)
             XCTAssertEqual(decoded.contentType, state.contentType)
-            XCTAssertEqual(decoded.title, state.title)
+            // title not persisted — resets to "" on decode
+            XCTAssertEqual(decoded.title, "")
         }
+
+        // Essential fields survive roundtrip
+        let terminalDecoded = try decoder.decode(ContentState.self, from: encoder.encode(terminal))
+        XCTAssertEqual(terminalDecoded.asTerminal?.workingDirectory, "/tmp")
+
+        let browserDecoded = try decoder.decode(ContentState.self, from: encoder.encode(browser))
+        if case .browser(let b) = browserDecoded { XCTAssertEqual(b.url.absoluteString, "https://google.com") }
+        else { XCTFail("Expected browser state") }
+
+        let editorDecoded = try decoder.decode(ContentState.self, from: encoder.encode(editor))
+        if case .editor(let e) = editorDecoded { XCTAssertEqual(e.filePath, "/path/file.swift") }
+        else { XCTFail("Expected editor state") }
     }
 }

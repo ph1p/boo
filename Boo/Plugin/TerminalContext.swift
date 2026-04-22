@@ -10,6 +10,9 @@ struct TerminalContext: Equatable, @unchecked Sendable {
     let remoteCwd: String?
     let gitContext: GitContext?
     let processName: String
+    let processPID: pid_t?
+    let processCategory: String?
+    let processMetadata: [String: String]
     let paneCount: Int
     let tabCount: Int
 
@@ -36,6 +39,9 @@ struct TerminalContext: Equatable, @unchecked Sendable {
         remoteSession: nil,
         gitContext: nil,
         processName: "",
+        processPID: nil,
+        processCategory: nil,
+        processMetadata: [:],
         paneCount: 0,
         tabCount: 0
     )
@@ -56,6 +62,9 @@ struct TerminalContext: Equatable, @unchecked Sendable {
         remoteCwd: String? = nil,
         gitContext: GitContext?,
         processName: String,
+        processPID: pid_t? = nil,
+        processCategory: String? = nil,
+        processMetadata: [String: String] = [:],
         paneCount: Int,
         tabCount: Int,
         enrichedData: [String: AnyHashable] = [:]
@@ -66,6 +75,9 @@ struct TerminalContext: Equatable, @unchecked Sendable {
         self.remoteCwd = remoteCwd
         self.gitContext = gitContext
         self.processName = processName
+        self.processPID = processPID
+        self.processCategory = processCategory
+        self.processMetadata = processMetadata
         self.paneCount = paneCount
         self.tabCount = tabCount
         self.enrichedData = enrichedData
@@ -108,6 +120,9 @@ extension TerminalContext {
             remoteCwd: terminalState.remoteCwd,
             gitContext: gitContext,
             processName: terminalState.foregroundProcess,
+            processPID: terminalState.foregroundProcessPID,
+            processCategory: terminalState.foregroundProcessCategory,
+            processMetadata: terminalState.foregroundProcessMetadata,
             paneCount: paneCount,
             tabCount: tabCount
         )
@@ -119,6 +134,9 @@ extension TerminalContext {
         terminalID: UUID,
         gitContext: GitContext?,
         processName: String,
+        processPID: pid_t? = nil,
+        processCategory: String? = nil,
+        processMetadata: [String: String] = [:],
         paneCount: Int,
         tabCount: Int
     ) -> TerminalContext {
@@ -129,6 +147,9 @@ extension TerminalContext {
             remoteCwd: tabState.remoteWorkingDirectory,
             gitContext: gitContext,
             processName: processName,
+            processPID: processPID,
+            processCategory: processCategory,
+            processMetadata: processMetadata,
             paneCount: paneCount,
             tabCount: tabCount
         )

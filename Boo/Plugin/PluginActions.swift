@@ -35,6 +35,10 @@ final class PluginActions {
     var setAgentSessionID: ((String?) -> Void)?
     /// Get the AI agent session ID for the active tab.
     var getAgentSessionID: (() -> String?)?
+    /// Running agent sessions in terminal tabs of the active workspace.
+    var workspaceAgentSessions: (() -> [WorkspaceAgentSession])?
+    /// Focus a terminal tab that owns a workspace-scoped agent session.
+    var focusAgentSession: ((WorkspaceAgentSession.ID) -> Void)?
 
     func pastePath(_ path: String) {
         pastePathToActivePane?(path)

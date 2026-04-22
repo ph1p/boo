@@ -47,9 +47,13 @@ extension BooSocketServer {
         emitEvent(name: "title_changed", data: ["title": title, "pane_id": paneID.uuidString])
     }
 
-    func emitProcessChanged(name: String, category: String?, paneID: UUID) {
+    func emitProcessChanged(
+        name: String, category: String?, paneID: UUID, pid: pid_t? = nil, metadata: [String: String] = [:]
+    ) {
         var data: [String: Any] = ["name": name, "pane_id": paneID.uuidString]
         if let cat = category { data["category"] = cat }
+        if let pid { data["pid"] = Int(pid) }
+        if !metadata.isEmpty { data["metadata"] = metadata }
         emitEvent(name: "process_changed", data: data)
     }
 
