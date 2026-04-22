@@ -12,90 +12,6 @@ private func formatTokenCount(_ tokens: Int) -> String {
 
 // MARK: - Agent Center Views
 
-struct AgentActiveSessionView: View {
-    let agent: AgentSession?
-    let fallbackStartTime: Date?
-    let diffStats: [AgentsPlugin.DiffStatEntry]
-    let fontScale: SidebarFontScale
-    let textColor: Color
-    let mutedColor: Color
-    let accentColor: Color
-    let onResume: () -> Void
-    let onCopySessionID: () -> Void
-    let onOpenTranscript: () -> Void
-    let onPromptNudge: () -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 8) {
-                Image(systemName: "sparkles")
-                    .foregroundStyle(accentColor)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(agent?.displayName ?? "AI Agent")
-                        .font(fontScale.font(.base).weight(.semibold))
-                        .foregroundStyle(textColor)
-                    Text(statusLine)
-                        .font(fontScale.font(.sm))
-                        .foregroundStyle(mutedColor)
-                        .lineLimit(1)
-                }
-                Spacer()
-            }
-
-            if let cwd = agent?.cwd, !cwd.isEmpty {
-                infoRow("cwd", cwd)
-            }
-            if let model = agent?.model, !model.isEmpty {
-                infoRow("model", model)
-            }
-            if let mode = agent?.mode, !mode.isEmpty {
-                infoRow("mode", mode)
-            }
-            if let sessionID = agent?.sessionID {
-                infoRow("session", String(sessionID.prefix(12)))
-            }
-            if let transcript = agent?.transcriptPath {
-                infoRow("transcript", (transcript as NSString).lastPathComponent)
-            }
-
-            HStack(spacing: 8) {
-                Button("Resume", action: onResume)
-                    .buttonStyle(.borderless)
-                Button("Copy ID", action: onCopySessionID)
-                    .buttonStyle(.borderless)
-                    .disabled(agent?.sessionID == nil)
-                Button("Open", action: onOpenTranscript)
-                    .buttonStyle(.borderless)
-                    .disabled(agent?.transcriptPath == nil)
-                Button("Nudge", action: onPromptNudge)
-                    .buttonStyle(.borderless)
-            }
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
-    }
-
-    private var statusLine: String {
-        let runtime = formatAgentRuntime(Date().timeIntervalSince(agent?.startedAt ?? fallbackStartTime ?? Date()))
-        let state = agent?.state.displayName ?? "unknown"
-        return "\(state) · \(runtime)"
-    }
-
-    private func infoRow(_ label: String, _ value: String) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Text(label)
-                .font(fontScale.font(.xs, design: .monospaced).weight(.medium))
-                .foregroundStyle(mutedColor)
-                .frame(width: 58, alignment: .leading)
-            Text(value)
-                .font(fontScale.font(.sm, design: label == "session" ? .monospaced : .default))
-                .foregroundStyle(textColor)
-                .lineLimit(1)
-                .truncationMode(.middle)
-        }
-    }
-}
-
 struct AgentOpenSessionsView: View {
     let sessions: [WorkspaceAgentSession]
     let fontScale: SidebarFontScale
@@ -103,6 +19,9 @@ struct AgentOpenSessionsView: View {
     let mutedColor: Color
     let accentColor: Color
     let onSessionClicked: (WorkspaceAgentSession) -> Void
+    let onResume: (WorkspaceAgentSession) -> Void
+    let onCopySessionID: (WorkspaceAgentSession) -> Void
+    let onOpenTranscript: (WorkspaceAgentSession) -> Void
 
     @State private var hoveredSessionID: UUID?
 
@@ -139,6 +58,15 @@ struct AgentOpenSessionsView: View {
         .buttonStyle(.plain)
         .onHover { hovered in
             hoveredSessionID = hovered ? session.id : nil
+        }
+        .contextMenu {
+            Button("Focus") { onSessionClicked(session) }
+            Button("Resume") { onResume(session) }
+            Divider()
+            Button("Copy Session ID") { onCopySessionID(session) }
+                .disabled(session.agent.sessionID == nil)
+            Button("Open Transcript") { onOpenTranscript(session) }
+                .disabled(session.agent.transcriptPath == nil)
         }
     }
 }

@@ -151,10 +151,12 @@ final class ContentStateTests: XCTestCase {
         // title is a runtime-only field — intentionally not persisted.
         // After decode, title resets to "". Essential fields (path, url, etc.) survive.
         let terminal = ContentState.terminal(TerminalContentState(title: "zsh", workingDirectory: "/tmp"))
-        let browser = ContentState.browser(BrowserContentState(title: "Google", url: URL(string: "https://google.com")!))
+        let browser = ContentState.browser(
+            BrowserContentState(title: "Google", url: URL(string: "https://google.com")!))
         let editor = ContentState.editor(EditorContentState(title: "file.swift", filePath: "/path/file.swift"))
         let image = ContentState.imageViewer(ImageViewerContentState(title: "photo.png", filePath: "/path/photo.png"))
-        let markdown = ContentState.markdownPreview(MarkdownPreviewContentState(title: "README.md", filePath: "/path/README.md"))
+        let markdown = ContentState.markdownPreview(
+            MarkdownPreviewContentState(title: "README.md", filePath: "/path/README.md"))
 
         for state in [terminal, browser, editor, image, markdown] {
             let data = try encoder.encode(state)
@@ -169,11 +171,17 @@ final class ContentStateTests: XCTestCase {
         XCTAssertEqual(terminalDecoded.asTerminal?.workingDirectory, "/tmp")
 
         let browserDecoded = try decoder.decode(ContentState.self, from: encoder.encode(browser))
-        if case .browser(let b) = browserDecoded { XCTAssertEqual(b.url.absoluteString, "https://google.com") }
-        else { XCTFail("Expected browser state") }
+        if case .browser(let b) = browserDecoded {
+            XCTAssertEqual(b.url.absoluteString, "https://google.com")
+        } else {
+            XCTFail("Expected browser state")
+        }
 
         let editorDecoded = try decoder.decode(ContentState.self, from: encoder.encode(editor))
-        if case .editor(let e) = editorDecoded { XCTAssertEqual(e.filePath, "/path/file.swift") }
-        else { XCTFail("Expected editor state") }
+        if case .editor(let e) = editorDecoded {
+            XCTAssertEqual(e.filePath, "/path/file.swift")
+        } else {
+            XCTFail("Expected editor state")
+        }
     }
 }

@@ -252,52 +252,23 @@ final class AgentsPlugin: BooPluginProtocol {
                         accentColor: accentColor,
                         onSessionClicked: { session in
                             act?.focusAgentSession?(session.id)
+                        },
+                        onResume: { [weak self] session in
+                            self?.startAgent(kind: session.agent.kind, cwd: session.agent.cwd)
+                        },
+                        onCopySessionID: { session in
+                            guard let id = session.agent.sessionID else { return }
+                            act?.handle(DSLAction(type: "copy", path: nil, command: nil, text: id))
+                        },
+                        onOpenTranscript: { session in
+                            guard let path = session.agent.transcriptPath else { return }
+                            act?.handle(DSLAction(type: "open", path: path, command: nil, text: nil))
                         }
                     )),
                 prefersOuterScrollView: true,
                 generation: UInt64(openSessions.count)
                     &+ UInt64(bitPattern: Int64(openSessions.map(\.id.hashValue).reduce(0, &+))))
             sections.append(openSessionsSection)
-        }
-
-        // Active agent status section (only when running)
-        if isAgentActive {
-            let statusSection = SidebarSection(
-                id: "agents.status",
-                name: "Active Agent",
-                icon: "bolt.fill",
-                content: AnyView(
-                    AgentActiveSessionView(
-                        agent: activeAgent,
-                        fallbackStartTime: agentStartTime,
-                        diffStats: diffStats,
-                        fontScale: fontScale,
-                        textColor: textColor,
-                        mutedColor: mutedColor,
-                        accentColor: accentColor,
-                        onResume: { [weak self] in
-                            if let agent = self?.activeAgent {
-                                self?.startAgent(kind: agent.kind)
-                            }
-                        },
-                        onCopySessionID: { [weak self] in
-                            guard let id = self?.activeAgent?.sessionID ?? self?.activeSessionID else { return }
-                            act?.handle(DSLAction(type: "copy", path: nil, command: nil, text: id))
-                        },
-                        onOpenTranscript: { [weak self] in
-                            guard let path = self?.activeAgent?.transcriptPath else { return }
-                            act?.handle(DSLAction(type: "open", path: path, command: nil, text: nil))
-                        },
-                        onPromptNudge: {
-                            act?.sendToTerminal?("Summarize your current state, blockers, and next step.")
-                        }
-                    )
-                ),
-                prefersOuterScrollView: false,
-                generation: UInt64(agentStartTime?.timeIntervalSince1970 ?? 0)
-                    &+ UInt64(bitPattern: Int64((activeAgent?.sessionID ?? activeSessionID)?.hashValue ?? 0))
-            )
-            sections.append(statusSection)
         }
 
         // Worktrees section
@@ -352,8 +323,6 @@ final class AgentsPlugin: BooPluginProtocol {
                 generation: UInt64(agentConfig.configFiles.count))
             sections.append(configSection)
         }
-
-
 
         // Skills section
         if !agentConfig.skills.isEmpty {
@@ -469,8 +438,8 @@ final class AgentsPlugin: BooPluginProtocol {
 
     func makeDetailView(context: PluginContext) -> AnyView? { nil }
 
-    private func startAgent(kind: AgentKind) {
-        let cwd = currentCwd ?? activeAgent?.cwd ?? "~"
+    private func startAgent(kind: AgentKind, cwd: String? = nil) {
+        let cwd = cwd ?? currentCwd ?? activeAgent?.cwd ?? "~"
         let command: String
         switch kind {
         case .claudeCode:
@@ -620,7 +589,6 @@ final class AgentsPlugin: BooPluginProtocol {
     }
 
     // MARK: - Session Watching
-
 
     // MARK: - Worktree Scanning
 
