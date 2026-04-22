@@ -272,7 +272,16 @@ final class RemoteExplorer: @unchecked Sendable {
     }
 
     /// Runtimes that commonly wrap agent CLIs via a JS/PY script shim.
-    private static let scriptRuntimes: Set<String> = ["node", "bun", "deno", "python", "python3"]
+    private static let scriptRuntimes: Set<String> = [
+        // JS runtimes
+        "node", "bun", "deno",
+        // JS package manager launchers (npx codex, bunx codex, pnpm exec codex, yarn dlx codex)
+        "npx", "bunx", "pnpx", "yarn", "pnpm",
+        // Python runtimes and launchers (uv run aider, uvx aider, pipx run aider)
+        "python", "python3", "uv", "uvx", "pipx",
+        // Ruby (ruby -e / gem-installed agents)
+        "ruby"
+    ]
 
     /// Maps substrings found in process argv to canonical agent process names.
     private static let argAgentPatterns: [(substring: String, canonical: String)] = [
@@ -280,7 +289,7 @@ final class RemoteExplorer: @unchecked Sendable {
         ("opencode", "opencode"),
         ("claude", "claude"),
         ("aider", "aider"),
-        ("goose", "goose"),
+        ("goose", "goose")
     ]
 
     /// Inspects the process argv for known agent script patterns, returns canonical name or nil.

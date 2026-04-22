@@ -406,12 +406,22 @@ class ThemedSplitView: NSSplitView {
             return workspace.panes.values.flatMap { pane -> [WorkspaceAgentSession] in
                 pane.tabs.compactMap { tab in
                     let isFocused = workspace.activePaneID == pane.id && pane.activeTab?.id == tab.id
-                    let processName = isFocused ? self.bridge.state.foregroundProcess : tab.state.foregroundProcess
+                    var processName = isFocused ? self.bridge.state.foregroundProcess : tab.state.foregroundProcess
                     let processPID = isFocused ? self.bridge.state.foregroundProcessPID : tab.state.foregroundProcessPID
-                    let processCategory =
+                    var processCategory =
                         isFocused ? self.bridge.state.foregroundProcessCategory : tab.state.foregroundProcessCategory
                     let processMetadata =
                         isFocused ? self.bridge.state.foregroundProcessMetadata : tab.state.foregroundProcessMetadata
+                    // For background tabs where process category is unknown, re-resolve via
+                    // the live process tree so runtimes like node/bun (used by codex) are
+                    // remapped to their canonical agent name.
+                    if !isFocused && processCategory == nil {
+                        let shellPID = tab.state.shellPID
+                        if shellPID > 0, let resolved = RemoteExplorer.foregroundProcess(shellPID: shellPID) {
+                            processName = resolved
+                            processCategory = ProcessIcon.category(for: resolved)
+                        }
+                    }
                     let context = TerminalContext(
                         terminalID: tab.id,
                         cwd: tab.workingDirectory,

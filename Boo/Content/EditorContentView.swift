@@ -227,11 +227,23 @@ final class EditorContentView: NSView, ContentViewProtocol {
     private func buildEditorOptions() -> [String: Any] {
         let settings = AppSettings.shared
         let fontSize = Double(settings.editorFontSize)
-        return [
+        var opts: [String: Any] = [
             "fontFamily": settings.editorFontName,
             "fontSize": fontSize,
-            "lineHeight": Int((fontSize * 1.5).rounded(.up))
+            "lineHeight": Int((fontSize * 1.5).rounded(.up)),
+            "tabSize": settings.editorTabSize,
+            "insertSpaces": settings.editorInsertSpaces,
+            "wordWrap": settings.editorWordWrap ? "on" : "off",
+            "lineNumbers": settings.editorLineNumbers ? "on" : "off",
+            "minimap": settings.editorMinimap,
+            "formatOnSave": settings.editorFormatOnSave
         ]
+        if settings.editorRulerColumn > 0 {
+            opts["rulers"] = [settings.editorRulerColumn]
+        } else {
+            opts["rulers"] = [Int]()
+        }
+        return opts
     }
 
     // MARK: - ContentViewProtocol
@@ -244,6 +256,7 @@ final class EditorContentView: NSView, ContentViewProtocol {
         window?.makeFirstResponder(webView)
         webView?.evaluateJavaScript("focusEditor()")
         onFocused?()
+        onTitleChanged?(currentTitle)
     }
 
     func deactivate() {}

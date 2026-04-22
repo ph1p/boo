@@ -58,6 +58,13 @@ type EditorOptions = {
   fontFamily: string;
   fontSize: number;
   lineHeight: number;
+  tabSize?: number;
+  insertSpaces?: boolean;
+  wordWrap?: "off" | "on";
+  lineNumbers?: "on" | "off";
+  minimap?: boolean;
+  rulers?: number[];
+  formatOnSave?: boolean;
 };
 
 type BooMessage =
@@ -130,11 +137,19 @@ function ensureTheme(themeData?: MonacoThemeData): string {
   return "boo-theme";
 }
 
-function resolveEditorOptions(options?: EditorOptions): EditorOptions {
+function resolveEditorOptions(
+  options?: EditorOptions,
+): monaco.editor.IEditorOptions & monaco.editor.IGlobalEditorOptions {
   return {
     fontFamily: options?.fontFamily ?? "SF Mono",
     fontSize: options?.fontSize ?? 13,
     lineHeight: options?.lineHeight ?? 20,
+    tabSize: options?.tabSize ?? 4,
+    insertSpaces: options?.insertSpaces ?? true,
+    wordWrap: options?.wordWrap ?? "off",
+    lineNumbers: options?.lineNumbers ?? "on",
+    minimap: { enabled: options?.minimap ?? false },
+    rulers: options?.rulers ?? [],
   };
 }
 
@@ -219,7 +234,6 @@ window.initEditorFromJSON = (data: EditorInitData): void => {
       language: data.language || "plaintext",
       theme,
       automaticLayout: true,
-      minimap: { enabled: false },
       scrollBeyondLastLine: false,
       ...resolveEditorOptions(data.options),
     });

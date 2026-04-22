@@ -52,27 +52,8 @@ extension MainWindowController {
         let paneCount = ctx == .empty ? ws.panes.count : ctx.paneCount
         let tabCount = ctx == .empty ? (ws.pane(for: ws.activePaneID)?.tabs.count ?? 0) : ctx.tabCount
         var process = ctx.processName
-        // Don't show process when it duplicates the path, looks like a directory,
-        // is a local user@host prompt, or is a connection command redundant with
-        // the remote session indicator
-        if !process.isEmpty {
-            let cwdLast = cwd.lastPathComponent
-            let abbrevCwd = abbreviatePath(cwd)
-            let looksLikePath =
-                process.hasPrefix("~") || process.hasPrefix("/")
-                || process.hasPrefix("\u{2026}") || process.hasPrefix("...")
-                || process.contains("/")
-            let isLocalPrompt = process.contains("@") && !TerminalBridge.titleLooksRemote(process)
-            // Always hide connection commands (ssh, docker, etc.) — they're not user-facing processes
-            let isConnectionCommand = Self.connectionProcessNames.contains(process.lowercased())
-            // Hide when process matches the remote session name (e.g. "user@devbox")
-            let isRemotePrompt = process.contains("@") && TerminalBridge.titleLooksRemote(process)
-            if process == cwdLast || process == cwd || process == abbrevCwd
-                || looksLikePath || process.hasSuffix(cwdLast) || isLocalPrompt
-                || isConnectionCommand || isRemotePrompt
-            {
-                process = ""
-            }
+        if !process.isEmpty, shouldHideProcess(process, cwd: cwd) {
+            process = ""
         }
         statusBar.isRemote = activeRemoteSession != nil
         statusBar.remoteSession = activeRemoteSession
@@ -82,6 +63,23 @@ extension MainWindowController {
         }
         statusBar.update(directory: cwd, paneCount: paneCount, tabCount: tabCount, runningProcess: process)
         refreshWindowTitle()
+    }
+
+    /// Returns true when the process name should be hidden from the status bar.
+    /// Hides when it duplicates the path, looks like a directory, is a local shell
+    /// prompt, or is a connection command already shown via the remote session indicator.
+    private func shouldHideProcess(_ process: String, cwd: String) -> Bool {
+        let cwdLast = cwd.lastPathComponent
+        let looksLikePath =
+            process.hasPrefix("~") || process.hasPrefix("/")
+            || process.hasPrefix("\u{2026}") || process.hasPrefix("...")
+            || process.contains("/")
+        let isLocalPrompt = process.contains("@") && !TerminalBridge.titleLooksRemote(process)
+        let isRemotePrompt = process.contains("@") && TerminalBridge.titleLooksRemote(process)
+        let isConnectionCommand = Self.connectionProcessNames.contains(process.lowercased())
+        return process == cwdLast || process == cwd || process == abbreviatePath(cwd)
+            || process.hasSuffix(cwdLast) || looksLikePath
+            || isLocalPrompt || isRemotePrompt || isConnectionCommand
     }
 
     /// Contract an absolute remote path to tilde notation for display.
@@ -114,7 +112,13 @@ extension MainWindowController {
             window?.title = "Boo"
             return
         }
-        // Use the terminal title if available (shows running process or shell prompt info),
+        // Editor tabs: use file name from state (tab.title starts as "Untitled" before first save)
+        if case .editor(let editorState) = tab.state.contentState {
+            let name = editorState.filePath.map { ($0 as NSString).lastPathComponent } ?? "Untitled"
+            window?.title = editorState.isDirty ? "\(name) ●" : name
+            return
+        }
+        // Terminal tabs: use the terminal title if available (shows running process or shell prompt info),
         // otherwise fall back to the last path component of the working directory.
         // Filter out transient command titles (cd, git switch, etc.) that flash briefly.
         let title = tab.title.trimmingCharacters(in: .whitespaces)

@@ -272,6 +272,13 @@ final class AppSettings {
 
         static let editorFontSize = "editorFontSize"
         static let editorFontName = "editorFontName"
+        static let editorTabSize = "editorTabSize"
+        static let editorInsertSpaces = "editorInsertSpaces"
+        static let editorWordWrap = "editorWordWrap"
+        static let editorLineNumbers = "editorLineNumbers"
+        static let editorMinimap = "editorMinimap"
+        static let editorFormatOnSave = "editorFormatOnSave"
+        static let editorRulerColumn = "editorRulerColumn"
     }
 
     /// Bool from UserDefaults with a custom default (since .bool returns false for unset keys).
@@ -616,6 +623,44 @@ final class AppSettings {
         return NSFont.monospacedSystemFont(ofSize: editorFontSize, weight: .regular)
     }
 
+    var editorTabSize: Int {
+        get {
+            let v = UserDefaults.standard.integer(forKey: K.editorTabSize)
+            return v > 0 ? v : 4
+        }
+        set { set(newValue, forKey: K.editorTabSize, topic: .editor) }
+    }
+
+    var editorInsertSpaces: Bool {
+        get { bool(K.editorInsertSpaces, default: true) }
+        set { set(newValue, forKey: K.editorInsertSpaces, topic: .editor) }
+    }
+
+    var editorWordWrap: Bool {
+        get { bool(K.editorWordWrap, default: false) }
+        set { set(newValue, forKey: K.editorWordWrap, topic: .editor) }
+    }
+
+    var editorLineNumbers: Bool {
+        get { bool(K.editorLineNumbers, default: true) }
+        set { set(newValue, forKey: K.editorLineNumbers, topic: .editor) }
+    }
+
+    var editorMinimap: Bool {
+        get { bool(K.editorMinimap, default: false) }
+        set { set(newValue, forKey: K.editorMinimap, topic: .editor) }
+    }
+
+    var editorFormatOnSave: Bool {
+        get { bool(K.editorFormatOnSave, default: false) }
+        set { set(newValue, forKey: K.editorFormatOnSave, topic: .editor) }
+    }
+
+    var editorRulerColumn: Int {
+        get { UserDefaults.standard.integer(forKey: K.editorRulerColumn) }
+        set { set(newValue, forKey: K.editorRulerColumn, topic: .editor) }
+    }
+
     // MARK: - Plugins
 
     var disabledPluginIDs: [String] {
@@ -761,19 +806,21 @@ final class AppSettings {
         set { UserDefaults.standard.set(newValue, forKey: K.pluginSettings) }
     }
 
-    func pluginBool(_ pluginID: String, _ key: String, default defaultValue: Bool) -> Bool {
-        guard let dict = pluginSettingsDict[pluginID], let val = dict[key] as? Bool else { return defaultValue }
+    func pluginSetting<T>(_ pluginID: String, _ key: String, default defaultValue: T) -> T {
+        guard let dict = pluginSettingsDict[pluginID], let val = dict[key] as? T else { return defaultValue }
         return val
+    }
+
+    func pluginBool(_ pluginID: String, _ key: String, default defaultValue: Bool) -> Bool {
+        pluginSetting(pluginID, key, default: defaultValue)
     }
 
     func pluginString(_ pluginID: String, _ key: String, default defaultValue: String) -> String {
-        guard let dict = pluginSettingsDict[pluginID], let val = dict[key] as? String else { return defaultValue }
-        return val
+        pluginSetting(pluginID, key, default: defaultValue)
     }
 
     func pluginDouble(_ pluginID: String, _ key: String, default defaultValue: Double) -> Double {
-        guard let dict = pluginSettingsDict[pluginID], let val = dict[key] as? Double else { return defaultValue }
-        return val
+        pluginSetting(pluginID, key, default: defaultValue)
     }
 
     func setPluginSetting(_ pluginID: String, _ key: String, _ value: Any, topic: SettingsTopic? = .plugins) {
@@ -797,6 +844,58 @@ final class AppSettings {
         all[pluginID] = dict
         pluginSettingsDict = all
         saveToFile()
+    }
+
+    func migratePluginIdentity(from oldID: String, to newID: String) {
+        guard oldID != newID else { return }
+        var didChange = false
+
+        var all = pluginSettingsDict
+        if all[newID] == nil, let oldSettings = all[oldID] {
+            all[newID] = oldSettings
+            didChange = true
+        }
+
+        if var sidebar = all["__sidebar"] {
+            if var order = sidebar["sectionOrder"] as? [String: [String]],
+                order[newID] == nil,
+                let oldOrder = order[oldID]
+            {
+                order[newID] = oldOrder
+                order.removeValue(forKey: oldID)
+                sidebar["sectionOrder"] = order
+                didChange = true
+            }
+            if sidebar["globalSelectedPluginTabID"] as? String == oldID {
+                sidebar["globalSelectedPluginTabID"] = newID
+                didChange = true
+            }
+            all["__sidebar"] = sidebar
+        }
+
+        if didChange {
+            pluginSettingsDict = all
+        }
+
+        let migratedOrder = sidebarTabOrder.map { $0 == oldID ? newID : $0 }
+        if migratedOrder != sidebarTabOrder {
+            var seen = Set<String>()
+            sidebarTabOrder = migratedOrder.filter { seen.insert($0).inserted }
+            didChange = true
+        }
+
+        var disabled = disabledPluginIDs
+        if disabled.contains(oldID) {
+            disabled.removeAll { $0 == oldID || $0 == newID }
+            disabled.append(newID)
+            disabledPluginIDs = disabled
+            didChange = true
+        }
+
+        if didChange {
+            saveToFile()
+            notify(topic: .plugins)
+        }
     }
 
     static var availableMonospaceFonts: [String] {
@@ -874,7 +973,14 @@ final class AppSettings {
             K.sidebarGlobalState: sidebarGlobalState,
             K.sidebarPerWorkspaceState: sidebarPerWorkspaceState,
             K.editorFontSize: Double(editorFontSize),
-            K.editorFontName: editorFontName
+            K.editorFontName: editorFontName,
+            K.editorTabSize: editorTabSize,
+            K.editorInsertSpaces: editorInsertSpaces,
+            K.editorWordWrap: editorWordWrap,
+            K.editorLineNumbers: editorLineNumbers,
+            K.editorMinimap: editorMinimap,
+            K.editorFormatOnSave: editorFormatOnSave,
+            K.editorRulerColumn: editorRulerColumn
         ]
         dict[K.autoCheckUpdates] = autoCheckUpdates
         if let skipVersion {
