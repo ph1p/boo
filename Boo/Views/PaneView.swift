@@ -104,7 +104,10 @@ class PaneView: NSView {
 
     /// Compute wrap-mode layout: tabs distributed across rows, stretched to fill width.
     func wrapLayout() -> [TabLayout] {
-        let widths = allTabWidths()
+        wrapLayout(widths: allTabWidths())
+    }
+
+    func wrapLayout(widths: [CGFloat]) -> [TabLayout] {
         let availW = bounds.width
         guard !widths.isEmpty, availW > 0 else { return [] }
 
@@ -161,6 +164,27 @@ class PaneView: NSView {
         return max(1, rows)
     }
 
+    private let dimOverlay: NSView = {
+        let v = NSView()
+        v.wantsLayer = true
+        v.autoresizingMask = [.width, .height]
+        return v
+    }()
+
+    var isFocused: Bool = false {
+        didSet {
+            guard isFocused != oldValue else { return }
+            dimOverlay.isHidden = isFocused
+            needsDisplay = true
+        }
+    }
+
+    func updateDimOverlayColor() {
+        let theme = AppSettings.shared.theme
+        let color = theme.isDark ? NSColor.black : NSColor.white
+        dimOverlay.layer?.backgroundColor = color.withAlphaComponent(theme.isDark ? 0.35 : 0.55).cgColor
+    }
+
     // Coalesce tab bar redraws to avoid flicker from rapid title updates
     private var redrawScheduled = false
 
@@ -178,6 +202,8 @@ class PaneView: NSView {
         super.init(frame: .zero)
         wantsLayer = true
         layer?.backgroundColor = AppSettings.shared.theme.background.nsColor.cgColor
+        addSubview(dimOverlay)
+        updateDimOverlayColor()
         updateTabBarTrackingArea()
     }
 
@@ -416,21 +442,28 @@ class PaneView: NSView {
         if let contentView = activeContentView {
             if contentView.frame != newFrame { contentView.frame = newFrame }
         }
+
+        // Keep dim overlay covering the full pane (terminal + tab bar) and on top of all content
+        if dimOverlay.frame != bounds { dimOverlay.frame = bounds }
+        if subviews.last !== dimOverlay {
+            addSubview(dimOverlay, positioned: .above, relativeTo: nil)
+        }
     }
 
     override func layout() {
         super.layout()
         layoutTerminalView()
         updateTabBarTrackingArea()
-        needsDisplay = true
     }
 
     // MARK: - Tab Bar Hover Tracking
 
     func updateTabBarTrackingArea() {
+        let newRect = NSRect(x: 0, y: 0, width: bounds.width, height: tabBarHeight)
+        guard tabBarTrackingArea?.rect != newRect else { return }
         if let existing = tabBarTrackingArea { removeTrackingArea(existing) }
         let area = NSTrackingArea(
-            rect: NSRect(x: 0, y: 0, width: bounds.width, height: tabBarHeight),
+            rect: newRect,
             options: [.mouseMoved, .mouseEnteredAndExited, .activeInKeyWindow],
             owner: self, userInfo: nil)
         addTrackingArea(area)
@@ -812,6 +845,7 @@ class PaneView: NSView {
                 }
             }
         }
+
     }
 
     // MARK: - Tab Bar Accessibility

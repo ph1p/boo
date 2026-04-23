@@ -266,11 +266,15 @@ final class AIProcessDetectionTests: XCTestCase {
 
     // MARK: - Socket-based: process set via reevaluateSocketProcess
 
+    // Use getpid() as shellPID so isDescendant(getpid(), of: getpid()) = true (direct match)
+    // and RemoteExplorer.foregroundProcess(shellPID: getpid()) finds no child processes,
+    // falling through to title heuristics when the socket is cleared.
+    private var selfPID: pid_t { getpid() }
+
     func testSocketAgentSetViaReeval() {
-        let myPid = getpid()
-        bridge.monitor.track(paneID: paneID, shellPID: getppid())
-        BooSocketServer.shared.processes[myPid] = BooSocketServer.ProcessStatus(
-            pid: myPid, name: "claude", category: "ai", registeredAt: Date(), metadata: [:])
+        bridge.monitor.track(paneID: paneID, shellPID: selfPID)
+        BooSocketServer.shared.processes[selfPID] = BooSocketServer.ProcessStatus(
+            pid: selfPID, name: "claude", category: "ai", registeredAt: Date(), metadata: [:])
 
         bridge.reevaluateSocketProcess()
         XCTAssertEqual(bridge.state.foregroundProcess, "claude")
@@ -289,28 +293,26 @@ final class AIProcessDetectionTests: XCTestCase {
     }
 
     func testSocketSurvivesTitleChanges() {
-        let myPid = getpid()
-        bridge.monitor.track(paneID: paneID, shellPID: getppid())
-        BooSocketServer.shared.processes[myPid] = BooSocketServer.ProcessStatus(
-            pid: myPid, name: "claude", category: "ai", registeredAt: Date(), metadata: [:])
+        bridge.monitor.track(paneID: paneID, shellPID: selfPID)
+        BooSocketServer.shared.processes[selfPID] = BooSocketServer.ProcessStatus(
+            pid: selfPID, name: "opencode", category: "ai", registeredAt: Date(), metadata: [:])
         bridge.reevaluateSocketProcess()
-        XCTAssertEqual(bridge.state.foregroundProcess, "claude")
+        XCTAssertEqual(bridge.state.foregroundProcess, "opencode")
 
         // Title changes don't downgrade socket-registered process
         bridge.handleTitleChange(title: "⠂ General coding assistance", paneID: paneID)
-        XCTAssertEqual(bridge.state.foregroundProcess, "claude")
+        XCTAssertEqual(bridge.state.foregroundProcess, "opencode")
 
         bridge.monitor.untrack(paneID: paneID)
     }
 
     func testSocketAgentClearsOnUnregister() {
-        let myPid = getpid()
-        bridge.monitor.track(paneID: paneID, shellPID: getppid())
-        BooSocketServer.shared.processes[myPid] = BooSocketServer.ProcessStatus(
-            pid: myPid, name: "claude", category: "ai", registeredAt: Date(), metadata: [:])
+        bridge.monitor.track(paneID: paneID, shellPID: selfPID)
+        BooSocketServer.shared.processes[selfPID] = BooSocketServer.ProcessStatus(
+            pid: selfPID, name: "codex", category: "ai", registeredAt: Date(), metadata: [:])
 
         bridge.reevaluateSocketProcess()
-        XCTAssertEqual(bridge.state.foregroundProcess, "claude")
+        XCTAssertEqual(bridge.state.foregroundProcess, "codex")
 
         // Agent exits — socket cleared
         BooSocketServer.shared.processes.removeAll()
@@ -320,11 +322,10 @@ final class AIProcessDetectionTests: XCTestCase {
         bridge.monitor.untrack(paneID: paneID)
     }
 
-    // MARK: - Full E2E: Socket-based Claude session
+    // MARK: - Full E2E: Socket-based agent session
 
-    func testFullClaudeSessionWithSocket() {
-        let myPid = getpid()
-        bridge.monitor.track(paneID: paneID, shellPID: getppid())
+    func testFullAgentSessionWithSocket() {
+        bridge.monitor.track(paneID: paneID, shellPID: selfPID)
 
         // 1. cd to project
         bridge.handleDirectoryChange(path: "/Users/dev/project", paneID: paneID)
@@ -333,8 +334,8 @@ final class AIProcessDetectionTests: XCTestCase {
         XCTAssertEqual(bridge.state.foregroundProcess, "")
 
         // 3. Agent registers via socket
-        BooSocketServer.shared.processes[myPid] = BooSocketServer.ProcessStatus(
-            pid: myPid, name: "claude", category: "ai", registeredAt: Date(), metadata: [:])
+        BooSocketServer.shared.processes[selfPID] = BooSocketServer.ProcessStatus(
+            pid: selfPID, name: "claude", category: "ai", registeredAt: Date(), metadata: [:])
         bridge.reevaluateSocketProcess()
         XCTAssertEqual(bridge.state.foregroundProcess, "claude")
 
@@ -370,13 +371,11 @@ final class AIProcessDetectionTests: XCTestCase {
     // MARK: - Sequential AI sessions with socket
 
     func testSequentialSocketSessions() {
-        let myPid = getpid()
-        bridge.monitor.track(paneID: paneID, shellPID: getppid())
+        bridge.monitor.track(paneID: paneID, shellPID: selfPID)
 
-        // Test with Claude (main AI plugin) and generic AI processes
-        for name in ["claude", "aider", "goose"] {
-            BooSocketServer.shared.processes[myPid] = BooSocketServer.ProcessStatus(
-                pid: myPid, name: name, category: "ai", registeredAt: Date(), metadata: [:])
+        for name in ["claude", "codex", "opencode", "aider"] {
+            BooSocketServer.shared.processes[selfPID] = BooSocketServer.ProcessStatus(
+                pid: selfPID, name: name, category: "ai", registeredAt: Date(), metadata: [:])
             bridge.reevaluateSocketProcess()
             XCTAssertEqual(bridge.state.foregroundProcess, name)
 
@@ -391,17 +390,16 @@ final class AIProcessDetectionTests: XCTestCase {
     // MARK: - CWD changes don't affect socket process
 
     func testSocketProcessSurvivesCwdChanges() {
-        let myPid = getpid()
-        bridge.monitor.track(paneID: paneID, shellPID: getppid())
-        BooSocketServer.shared.processes[myPid] = BooSocketServer.ProcessStatus(
-            pid: myPid, name: "claude", category: "ai", registeredAt: Date(), metadata: [:])
+        bridge.monitor.track(paneID: paneID, shellPID: selfPID)
+        BooSocketServer.shared.processes[selfPID] = BooSocketServer.ProcessStatus(
+            pid: selfPID, name: "opencode", category: "ai", registeredAt: Date(), metadata: [:])
         bridge.reevaluateSocketProcess()
 
         bridge.handleDirectoryChange(path: "/Users/dev/project", paneID: paneID)
-        XCTAssertEqual(bridge.state.foregroundProcess, "claude")
+        XCTAssertEqual(bridge.state.foregroundProcess, "opencode")
 
         bridge.handleDirectoryChange(path: "/Users/dev/other", paneID: paneID)
-        XCTAssertEqual(bridge.state.foregroundProcess, "claude")
+        XCTAssertEqual(bridge.state.foregroundProcess, "opencode")
 
         bridge.monitor.untrack(paneID: paneID)
     }

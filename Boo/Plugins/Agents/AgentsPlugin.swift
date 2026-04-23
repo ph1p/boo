@@ -73,8 +73,6 @@ final class AgentsPlugin: BooPluginProtocol {
     private(set) var diffStats: [DiffStatEntry] = []
     private(set) var worktrees: [ClaudeWorktree] = []
     private(set) var agentConfig: AgentConfig = AgentConfig()
-    private(set) var claudeSettings: ClaudeSettings = ClaudeSettings()
-    private var claudeSettingsLoaded = false
     /// Session ID currently being written to (detected via file watching)
     private(set) var activeSessionID: String?
 
@@ -146,29 +144,6 @@ final class AgentsPlugin: BooPluginProtocol {
 
     }
 
-    struct ClaudeSettings {
-        var model: String = ""
-        var effortLevel: String = "medium"
-        var alwaysThinkingEnabled: Bool = false
-        var voiceEnabled: Bool = false
-        var enabledPlugins: [String] = []
-
-        /// Display-friendly model name (strips date suffix)
-        var modelDisplayName: String {
-            // claude-opus-4-5-20251101 -> claude-opus-4-5
-            let parts = model.split(separator: "-")
-            if parts.count > 1, let last = parts.last, last.count == 8, last.allSatisfy(\.isNumber) {
-                return parts.dropLast().joined(separator: "-")
-            }
-            return model.isEmpty ? "default" : model
-        }
-
-        static let settingsPath: String = {
-            let home = FileManager.default.homeDirectoryForCurrentUser.path
-            return (home as NSString).appendingPathComponent(".claude/settings.json")
-        }()
-    }
-
     // MARK: - Enrich
 
     func enrich(context: EnrichmentContext) {
@@ -220,20 +195,11 @@ final class AgentsPlugin: BooPluginProtocol {
             scanWorktrees(cwd: context.terminal.cwd)
         }
 
-        // Load settings on first access if not loaded yet
-        if !claudeSettingsLoaded {
-            claudeSettingsLoaded = true
-            loadClaudeSettings()
-        }
-
         let act = actions
         let fontScale = context.fontScale
         let textColor = Color(nsColor: context.theme.chromeText)
         let mutedColor = Color(nsColor: context.theme.chromeMuted)
-        let accentColor =
-            context.theme.ansiColors.count > 13
-            ? Color(nsColor: context.theme.ansiColors[13])
-            : Color(nsColor: context.theme.accentColor)
+        let accentColor = Color(nsColor: context.theme.accentColor)
 
         var sections: [SidebarSection] = []
 
@@ -350,33 +316,6 @@ final class AgentsPlugin: BooPluginProtocol {
                 prefersOuterScrollView: true,
                 generation: UInt64(agentConfig.skills.count))
             sections.append(skillsSection)
-        }
-
-        // Settings section (always show if we have settings loaded)
-        if !claudeSettings.model.isEmpty {
-            let settingsSection = SidebarSection(
-                id: "agents.claude.settings",
-                name: "Settings",
-                icon: "gearshape",
-                content: AnyView(
-                    ClaudeSettingsView(
-                        settings: claudeSettings,
-                        fontScale: fontScale,
-                        textColor: textColor,
-                        mutedColor: mutedColor,
-                        accentColor: accentColor,
-                        onSettingChanged: { [weak self] key, value in
-                            self?.updateClaudeSetting(key: key, value: value)
-                        },
-                        onOpenSettings: {
-                            act?.handle(
-                                DSLAction(type: "open", path: ClaudeSettings.settingsPath, command: nil, text: nil))
-                        }
-                    )),
-                prefersOuterScrollView: false,
-                generation: UInt64(
-                    bitPattern: Int64(claudeSettings.model.hashValue &+ claudeSettings.effortLevel.hashValue)))
-            sections.append(settingsSection)
         }
 
         // If no sections (no agent, no sessions, no config), show getting started
@@ -1036,72 +975,6 @@ final class AgentsPlugin: BooPluginProtocol {
     private func stopRefreshTimer() {
         refreshTimer?.cancel()
         refreshTimer = nil
-    }
-
-    // MARK: - Claude Settings
-
-    private func loadClaudeSettings() {
-        DispatchQueue.global(qos: .utility).async { [weak self] in
-            let settings = Self.parseClaudeSettings()
-            DispatchQueue.main.async { [weak self] in
-                guard let self else { return }
-                self.claudeSettings = settings
-                self.onRequestCycleRerun?()
-            }
-        }
-    }
-
-    nonisolated static func parseClaudeSettings() -> ClaudeSettings {
-        let fm = FileManager.default
-        let path = ClaudeSettings.settingsPath
-
-        guard let data = fm.contents(atPath: path),
-            let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-        else {
-            return ClaudeSettings()
-        }
-
-        var settings = ClaudeSettings()
-        settings.model = json["model"] as? String ?? ""
-        settings.effortLevel = json["effortLevel"] as? String ?? "medium"
-        settings.alwaysThinkingEnabled = json["alwaysThinkingEnabled"] as? Bool ?? false
-        settings.voiceEnabled = json["voiceEnabled"] as? Bool ?? false
-
-        if let plugins = json["enabledPlugins"] as? [String: Bool] {
-            settings.enabledPlugins = plugins.filter { $0.value }.map(\.key).sorted()
-        }
-
-        return settings
-    }
-
-    func updateClaudeSetting(key: String, value: Any) {
-        nonisolated(unsafe) let capturedValue = value
-        DispatchQueue.global(qos: .utility).async { [weak self] in
-            let value = capturedValue
-            let fm = FileManager.default
-            let path = ClaudeSettings.settingsPath
-
-            // Read existing settings
-            var json: [String: Any] = [:]
-            if let data = fm.contents(atPath: path),
-                let existing = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-            {
-                json = existing
-            }
-
-            // Update the value
-            json[key] = value
-
-            // Write back
-            if let data = try? JSONSerialization.data(withJSONObject: json, options: [.prettyPrinted, .sortedKeys]) {
-                try? data.write(to: URL(fileURLWithPath: path))
-            }
-
-            // Reload settings
-            DispatchQueue.main.async { [weak self] in
-                self?.loadClaudeSettings()
-            }
-        }
     }
 
     deinit {

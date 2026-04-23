@@ -38,6 +38,7 @@ extension MainWindowController: PaneViewDelegate {
         lastFocusTimestamp = now
 
         workspace.activePaneID = paneID
+        for (id, pv) in paneViews { pv.isFocused = id == paneID }
         let tab = workspace.pane(for: paneID)?.activeTab
         let cwd = tab?.workingDirectory ?? workspace.folderPath
         debugLog(
@@ -421,9 +422,10 @@ extension MainWindowController {
     /// Update all pane views' close-button visibility based on total pane count.
     func updatePaneCloseButtons() {
         let multiPane = activeWorkspace.map { $0.panes.count > 1 } ?? false
-        for (_, pv) in paneViews {
+        let activePaneID = activeWorkspace?.activePaneID
+        for (paneID, pv) in paneViews {
             pv.showCloseOnSingleTab = multiPane
-            pv.needsDisplay = true
+            pv.isFocused = paneID == activePaneID
         }
     }
 

@@ -53,7 +53,8 @@ extension PaneView {
 
     func drawTabsWrapped(ctx: CGContext, theme: TerminalTheme, barH: CGFloat, termBgColor: CGColor) {
         tabScrollOffset = 0
-        let layouts = wrapLayout()
+        let widths = allTabWidths()
+        let layouts = wrapLayout(widths: widths)
 
         for (i, tab) in pane.tabs.enumerated() {
             guard i < layouts.count else { break }
@@ -64,9 +65,6 @@ extension PaneView {
                 width: lay.width, rowH: singleRowTabHeight, isActive: isActive, termBgColor: termBgColor)
         }
 
-        // Plus button position: use same logic as wrapLayout to determine if it fits
-        // on the last row. This avoids floating point drift from stretched tab widths.
-        let widths = allTabWidths()
         var lastRowW: CGFloat = 0
         var rowW: CGFloat = 0
         let availW = bounds.width

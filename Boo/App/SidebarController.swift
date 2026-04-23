@@ -252,7 +252,9 @@ final class SidebarController {
 
     private func applySidebarWidth(_ width: CGFloat) {
         guard isVisible, let wc = windowController, wc.mainSplitView.subviews.count >= 2 else { return }
-        wc.mainSplitView.layoutSubtreeIfNeeded()
+        // layoutSubtreeIfNeeded on mainSplitView alone won't update its bounds when
+        // the parent constraint pass hasn't run yet; force from the window root.
+        wc.window?.contentView?.layoutSubtreeIfNeeded()
         intendedVisibleWidth = width
         let renderedWidth = SidebarStateResolver.normalizedWidth(
             width,
