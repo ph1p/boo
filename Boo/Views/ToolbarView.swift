@@ -87,6 +87,7 @@ class ToolbarView: NSView {
     // MARK: - Hover Tracking
 
     private func updateTrackingArea() {
+        guard toolbarTrackingArea?.rect != bounds else { return }
         if let existing = toolbarTrackingArea { removeTrackingArea(existing) }
         let area = NSTrackingArea(
             rect: bounds,

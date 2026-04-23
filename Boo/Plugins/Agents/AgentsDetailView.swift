@@ -86,9 +86,29 @@ struct ClaudeConfigView: View {
     @State private var hoveredItemID: UUID?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            ForEach(configFiles) { file in
-                configRow(file: file)
+        let grouped = Dictionary(grouping: configFiles, by: \.provider)
+        let providers = [AgentKind.claudeCode, .codex, .openCode]
+            .filter { grouped[$0] != nil }
+        let needsHeaders = providers.count > 1
+
+        return VStack(alignment: .leading, spacing: 0) {
+            ForEach(providers, id: \.self) { provider in
+                if needsHeaders {
+                    Text(provider.displayName)
+                        .font(fontScale.font(.xs).weight(.semibold))
+                        .foregroundStyle(mutedColor)
+                        .padding(.horizontal, 12)
+                        .padding(.top, 8)
+                        .padding(.bottom, 2)
+                }
+                ForEach(grouped[provider] ?? []) { file in
+                    configRow(file: file)
+                }
+                if needsHeaders && provider != providers.last {
+                    Divider()
+                        .padding(.horizontal, 8)
+                        .padding(.top, 4)
+                }
             }
         }
     }
@@ -109,18 +129,6 @@ struct ClaudeConfigView: View {
                     .lineLimit(1)
 
                 Spacer()
-
-                if file.provider != .claudeCode {
-                    Text(file.provider.shortName)
-                        .font(fontScale.font(.xs).weight(.medium))
-                        .foregroundStyle(accentColor.opacity(0.8))
-                        .padding(.horizontal, 4)
-                        .padding(.vertical, 1)
-                        .background(
-                            RoundedRectangle(cornerRadius: 3)
-                                .fill(accentColor.opacity(0.08))
-                        )
-                }
 
                 if file.scope == "global" {
                     Text("global")
@@ -377,135 +385,6 @@ struct ClaudeChangesView: View {
             }
         }
         .accessibilityLabel("\(entry.path): \(entry.insertions) insertions, \(entry.deletions) deletions")
-    }
-}
-
-// MARK: - Settings Section View
-
-struct ClaudeSettingsView: View {
-    let settings: AgentsPlugin.ClaudeSettings
-    let fontScale: SidebarFontScale
-    let textColor: Color
-    let mutedColor: Color
-    let accentColor: Color
-    let onSettingChanged: (String, Any) -> Void
-    let onOpenSettings: () -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            // Model display
-            settingRow(
-                icon: "cpu",
-                label: "Model",
-                content: AnyView(
-                    Text(settings.modelDisplayName)
-                        .font(fontScale.font(.sm, design: .monospaced))
-                        .foregroundStyle(accentColor)
-                )
-            )
-
-            // Effort level picker
-            settingRow(
-                icon: "gauge.with.dots.needle.50percent",
-                label: "Effort",
-                content: AnyView(
-                    Picker(
-                        "",
-                        selection: Binding(
-                            get: { settings.effortLevel },
-                            set: { onSettingChanged("effortLevel", $0) }
-                        )
-                    ) {
-                        Text("Low").tag("low")
-                        Text("Medium").tag("medium")
-                        Text("High").tag("high")
-                    }
-                    .pickerStyle(.segmented)
-                    .frame(width: 140)
-                )
-            )
-
-            // Extended thinking toggle
-            settingRow(
-                icon: "brain",
-                label: "Extended Thinking",
-                content: AnyView(
-                    Toggle(
-                        "",
-                        isOn: Binding(
-                            get: { settings.alwaysThinkingEnabled },
-                            set: { onSettingChanged("alwaysThinkingEnabled", $0) }
-                        )
-                    )
-                    .toggleStyle(.switch)
-                    .controlSize(.small)
-                )
-            )
-
-            // Voice toggle
-            settingRow(
-                icon: "waveform",
-                label: "Voice",
-                content: AnyView(
-                    Toggle(
-                        "",
-                        isOn: Binding(
-                            get: { settings.voiceEnabled },
-                            set: { onSettingChanged("voiceEnabled", $0) }
-                        )
-                    )
-                    .toggleStyle(.switch)
-                    .controlSize(.small)
-                )
-            )
-
-            // Enabled plugins count
-            if !settings.enabledPlugins.isEmpty {
-                settingRow(
-                    icon: "puzzlepiece.extension",
-                    label: "Plugins",
-                    content: AnyView(
-                        Text("\(settings.enabledPlugins.count) enabled")
-                            .font(fontScale.font(.sm))
-                            .foregroundStyle(mutedColor)
-                    )
-                )
-            }
-
-            // Open settings button
-            Button(action: onOpenSettings) {
-                HStack(spacing: 6) {
-                    Image(systemName: "arrow.up.forward.square")
-                        .font(.system(size: 10))
-                    Text("Open settings.json")
-                        .font(fontScale.font(.sm))
-                }
-                .foregroundStyle(accentColor)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-            }
-            .buttonStyle(.plain)
-        }
-    }
-
-    private func settingRow(icon: String, label: String, content: AnyView) -> some View {
-        HStack(spacing: 8) {
-            Image(systemName: icon)
-                .font(.system(size: 11))
-                .foregroundStyle(mutedColor)
-                .frame(width: 16)
-
-            Text(label)
-                .font(fontScale.font(.base))
-                .foregroundStyle(textColor)
-
-            Spacer()
-
-            content
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
     }
 }
 

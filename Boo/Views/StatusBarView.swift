@@ -289,6 +289,7 @@ import Cocoa
     // MARK: - Hover Tracking
 
     func updateStatusBarTrackingArea() {
+        guard statusBarTrackingArea?.rect != bounds else { return }
         if let existing = statusBarTrackingArea { removeTrackingArea(existing) }
         let area = NSTrackingArea(
             rect: bounds,

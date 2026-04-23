@@ -837,6 +837,7 @@ class WorkspaceBarView: NSView {
     // MARK: - Hover Tracking
 
     private func updateWSBarTrackingArea() {
+        guard wsBarTrackingArea?.rect != bounds else { return }
         if let existing = wsBarTrackingArea { removeTrackingArea(existing) }
         let area = NSTrackingArea(
             rect: bounds,

@@ -356,17 +356,23 @@ extension MainWindowController {
     /// Refresh all Ghostty surfaces — call after view hierarchy changes (splits, close, resize).
     func refreshAllSurfaces() {
         guard let ws = activeWorkspace else { return }
+        let activeID = ws.activePaneID
         for (paneID, pv) in paneViews {
             pv.layoutTerminalView()
+            let isActive = paneID == activeID
+            pv.isFocused = isActive
             guard let gv = pv.ghosttyView, let surface = gv.surface else { continue }
-            gv.setFocused(paneID == ws.activePaneID)
+            gv.setFocused(isActive)
             let scaledSize = gv.convertToBacking(gv.bounds.size)
             let w = UInt32(scaledSize.width)
             let h = UInt32(scaledSize.height)
             if w > 0 && h > 0 {
                 ghostty_surface_set_size(surface, w, h)
             }
-            ghostty_surface_refresh(surface)
+            // Only force-refresh the active pane; inactive panes repaint via normal display cycle
+            if isActive {
+                ghostty_surface_refresh(surface)
+            }
         }
     }
 }
