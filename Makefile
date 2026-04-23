@@ -202,6 +202,7 @@ app: release
 	@mkdir -p "$(APP_BUNDLE)/Contents/Resources"
 	@mkdir -p "$(APP_BUNDLE)/Contents/Frameworks"
 	@cp "$(RELEASE_BIN)" "$(APP_BUNDLE)/Contents/MacOS/$(APP_NAME)"
+	@strip "$(APP_BUNDLE)/Contents/MacOS/$(APP_NAME)"
 	@cp Boo/App/Info.plist "$(APP_BUNDLE)/Contents/"
 	@RESOURCE_BUILD_DIR="$$(dirname "$(RELEASE_BIN)")"; \
 	for bundle in "$$RESOURCE_BUILD_DIR"/*.bundle; do \
