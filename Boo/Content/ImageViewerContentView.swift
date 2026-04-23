@@ -105,4 +105,12 @@ final class ImageViewerContentView: NSView, ContentViewProtocol {
     // MARK: - First Responder
 
     override var acceptsFirstResponder: Bool { true }
+
+    override func mouseDown(with event: NSEvent) {
+        super.mouseDown(with: event)
+        if window?.firstResponder !== self {
+            window?.makeFirstResponder(self)
+        }
+        onFocused?()
+    }
 }

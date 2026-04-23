@@ -239,9 +239,17 @@ final class BrowserContentView: NSView, ContentViewProtocol, NSTextFieldDelegate
         ])
         webView = wv
 
+        let click = NSClickGestureRecognizer(target: self, action: #selector(webViewClicked))
+        click.delaysPrimaryMouseButtonEvents = false
+        wv.addGestureRecognizer(click)
+
         if currentURL.absoluteString != "about:blank" {
             wv.load(URLRequest(url: currentURL))
         }
+    }
+
+    @objc private func webViewClicked() {
+        onFocused?()
     }
 
     // MARK: - Toolbar Actions

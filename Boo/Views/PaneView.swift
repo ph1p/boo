@@ -164,8 +164,16 @@ class PaneView: NSView {
         return max(1, rows)
     }
 
-    private let dimOverlay: NSView = {
-        let v = NSView()
+    private class DimOverlay: NSView {
+        var onClicked: (() -> Void)?
+        override func mouseDown(with event: NSEvent) {
+            onClicked?()
+            super.mouseDown(with: event)
+        }
+    }
+
+    private let dimOverlay: DimOverlay = {
+        let v = DimOverlay()
         v.wantsLayer = true
         v.autoresizingMask = [.width, .height]
         return v
@@ -203,6 +211,10 @@ class PaneView: NSView {
         wantsLayer = true
         layer?.backgroundColor = AppSettings.shared.theme.background.nsColor.cgColor
         addSubview(dimOverlay)
+        dimOverlay.onClicked = { [weak self] in
+            guard let self else { return }
+            self.paneDelegate?.paneView(self, didFocus: self.paneID)
+        }
         updateDimOverlayColor()
         updateTabBarTrackingArea()
     }
