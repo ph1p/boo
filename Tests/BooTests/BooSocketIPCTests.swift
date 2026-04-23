@@ -195,7 +195,6 @@ final class BooSocketQueryTests: BooSocketIntegrationTestCase {
             settings.sidebarDensity == .compact ? "compact" : "comfortable"
         )
         XCTAssertEqual(payload["show_hidden_files"] as? Bool, settings.showHiddenFiles)
-        XCTAssertEqual(payload["auto_check_updates"] as? Bool, settings.autoCheckUpdates)
         XCTAssertEqual(payload["status_bar_show_path"] as? Bool, settings.statusBarShowPath)
         XCTAssertEqual(payload["status_bar_show_time"] as? Bool, settings.statusBarShowTime)
         XCTAssertEqual(payload["status_bar_show_pane_info"] as? Bool, settings.statusBarShowPaneInfo)

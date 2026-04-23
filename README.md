@@ -35,7 +35,7 @@ Download the latest release from [GitHub Releases](https://github.com/ph1p/boo/r
 - **Workspace colors** — Preset or custom colors per workspace, pinning, renaming
 - **Undo** — Cmd+Z reopens closed tabs and panes
 - **Mouse selection** — Click, double-click (word), triple-click (line)
-- **Auto-updater** — Checks GitHub Releases for new versions and safely installs signed updates
+- **Signed auto-updater** — Sparkle-based updates with appcast metadata on GitHub Pages and release archives on GitHub Releases
 - **Focus memory** — Remembers last focused pane per workspace, restores on switch
 - **IPC socket** — Unix socket at `~/.boo/boo.sock` for reliable process detection and plugin commands
 - **Debug plugin** — Live event log and terminal state inspector for diagnostics
@@ -59,6 +59,8 @@ make setup    # Builds GhosttyKit + ironmark + Boo
 make run      # Build and launch
 ```
 
+`make run` builds a local debug app bundle with Sparkle disabled so development builds never poll the production update feed. Release bundles created via `make app`, `make zip`, `make dmg`, or `make dist` keep the Sparkle feed configuration.
+
 ### Make Targets
 
 | Target               | Description                                                |
@@ -69,8 +71,9 @@ make run      # Build and launch
 | `make release`       | Optimized release build                                    |
 | `make test`          | Run all tests                                              |
 | `make app`           | Create `.app` bundle from release build                    |
-| `make dmg`           | Create distributable DMG                                   |
-| `make dist`          | Full release pipeline (build, bundle, sign, notarize, DMG) |
+| `make zip`           | Create distributable ZIP from the signed `.app` bundle     |
+| `make dmg`           | Create optional distributable DMG                          |
+| `make dist`          | Full release pipeline (build, bundle, sign, notarize, ZIP) |
 | `make lint`          | Check code style with swift-format                         |
 | `make format`        | Format source code in-place                                |
 | `make clean`         | Clean build artifacts                                      |
@@ -119,8 +122,8 @@ Boo/
   Plugin/           Core plugin framework (protocol, registry, runtime, DSL, watcher)
     ViewDSL/        DSL parser, renderer, elements, action handler
   Plugins/          One directory per plugin (FileTree/, RemoteExplorer/, Git/, ClaudeCode/, Docker/, Bookmarks/, Snippets/, SystemInfo/, Debug/)
-  Views/            App-level views (PaneView, StatusBarView, ToolbarView, SettingsWindow, UpdateWindow, etc.)
-  Services/         Shared infrastructure (TerminalBridge, RemoteExplorer, BooSocketServer, AutoUpdater, etc.)
+  Views/            App-level views (PaneView, StatusBarView, ToolbarView, SettingsWindow, AboutWindow, etc.)
+  Services/         Shared infrastructure (TerminalBridge, RemoteExplorer, BooSocketServer, SparkleUpdater, etc.)
 CGhostty/           C module wrapping ghostty.h
 CIronmark/          C module wrapping ironmark (Rust markdown parser)
 CPTYHelper/         C helper for forkpty()
@@ -473,12 +476,9 @@ See [AGENTS.md](AGENTS.md) for detailed protocol reference and architecture.
 
 ## Auto-Update
 
-Boo checks GitHub Releases for new versions on launch (once every 24 hours). You can also check manually via the app menu: **Boo → Check for Updates...**
+Boo uses Sparkle for update checks and installation. You can trigger a manual check via **Boo → Check for Updates...**
 
-The update flow: download DMG → verify code signature → stage replacement → swap app → relaunch. Settings:
-
-- Auto-check can be disabled in preferences
-- Individual versions can be skipped
+The update flow is: fetch appcast → download release ZIP → verify Sparkle signature and Apple code signature → install → relaunch.
 
 Releases are automated via [semantic-release](https://github.com/semantic-release/semantic-release) — conventional commits on `main` trigger version bumps, builds, and GitHub Releases.
 
@@ -486,7 +486,7 @@ Releases are automated via [semantic-release](https://github.com/semantic-releas
 
 Open with **Cmd+,**. Organized in tabs:
 
-- **General** — Auto-update preferences
+- **General** — Core editor and file-opening preferences
 - **Theme** — 32 built-in color themes with live preview swatches, custom theme editor
 - **Terminal** — Font, font size, cursor style (block/beam/underline/outline)
 - **Explorer** — Font, font size, show header/icons/hidden files

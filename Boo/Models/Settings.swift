@@ -248,9 +248,6 @@ final class AppSettings {
         static let migratedPluginSettings_v1 = "migratedPluginSettings_v1"
         static let fileEditorCommand = "fileEditorCommand"
 
-        static let autoCheckUpdates = "autoCheckUpdates"
-        static let lastUpdateCheck = "lastUpdateCheck"
-        static let skipVersion = "skipVersion"
         static let sidebarDefaultHidden = "sidebarDefaultHidden"
         static let defaultFolder = "defaultFolder"
         static let defaultMainPage = "defaultMainPage"
@@ -764,29 +761,6 @@ final class AppSettings {
         saveToFile()
     }
 
-    // MARK: - Updates
-
-    var autoCheckUpdates: Bool {
-        get { bool(K.autoCheckUpdates, default: true) }
-        set {
-            UserDefaults.standard.set(newValue, forKey: K.autoCheckUpdates)
-            saveToFile()
-        }
-    }
-
-    var lastUpdateCheck: Date? {
-        get { UserDefaults.standard.object(forKey: K.lastUpdateCheck) as? Date }
-        set { UserDefaults.standard.set(newValue, forKey: K.lastUpdateCheck) }
-    }
-
-    var skipVersion: String? {
-        get { UserDefaults.standard.string(forKey: K.skipVersion) }
-        set {
-            UserDefaults.standard.set(newValue, forKey: K.skipVersion)
-            saveToFile()
-        }
-    }
-
     /// nil = never asked, true = user approved, false = user declined.
     var sshControlMasterApproved: Bool? {
         get {
@@ -982,10 +956,6 @@ final class AppSettings {
             K.editorFormatOnSave: editorFormatOnSave,
             K.editorRulerColumn: editorRulerColumn
         ]
-        dict[K.autoCheckUpdates] = autoCheckUpdates
-        if let skipVersion {
-            dict[K.skipVersion] = skipVersion
-        }
         if let sshControlMasterApproved {
             dict[K.sshControlMasterApproved] = sshControlMasterApproved
         }

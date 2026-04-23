@@ -12,6 +12,7 @@ _bmad
 _bmad-output
 documentation/docs/dist
 documentation/node_modules
+documentation/docs/public/updates/appcast.xml
 Boo/Resources/MonacoBundle
 Boo/Resources/MonacoSource/node_modules
 *.dmg

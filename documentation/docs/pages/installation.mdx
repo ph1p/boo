@@ -4,9 +4,10 @@
 
 Download the latest release from [GitHub Releases](https://github.com/ph1p/boo/releases).
 
-1. Download `Boo-x.x.x.dmg`
-2. Open the DMG and drag **Boo** to **Applications**
-3. Launch Boo
+1. Download `Boo-x.x.x.zip`
+2. Unzip the archive
+3. Move **Boo.app** to **Applications**
+4. Launch Boo
 
 :::note
 On first launch, macOS may show a security prompt. Click "Open" to allow it. Releases are signed and notarized.
@@ -25,6 +26,8 @@ make setup    # Builds GhosttyKit + ironmark + Boo
 make run      # Build and launch
 ```
 
+`make run` creates a local debug app bundle with Sparkle disabled. That keeps development builds from checking the production update feed while preserving the full Sparkle setup in release bundles.
+
 If you already cloned without `--recursive`:
 
 ```bash
@@ -40,8 +43,11 @@ First build downloads dependencies and compiles Metal shaders. Takes a few minut
 ```bash
 make release      # Optimized build
 make app          # Create .app bundle
+make zip          # Create distributable ZIP
 make dmg          # Create distributable DMG
 ```
+
+`make app`, `make zip`, `make dmg`, and `make dist` keep the Sparkle feed configuration from `Boo/App/Info.plist`, so those bundles behave like real release candidates.
 
 ### Tests
 

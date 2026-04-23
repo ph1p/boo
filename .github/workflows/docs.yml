@@ -37,6 +37,13 @@ jobs:
         run: pnpm install --frozen-lockfile
         working-directory: documentation
 
+      - name: Restore published Sparkle appcast
+        run: |
+          mkdir -p docs/public/updates
+          curl -fsSL "https://ph1p.github.io/boo/updates/appcast.xml" \
+            -o docs/public/updates/appcast.xml || true
+        working-directory: documentation
+
       - name: Build
         run: pnpm build
         working-directory: documentation

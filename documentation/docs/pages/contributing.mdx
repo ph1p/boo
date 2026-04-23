@@ -40,15 +40,31 @@ make test                              # Run all tests
 swift test --filter PluginTests        # Run specific suite
 ```
 
+## Local Development Builds
+
+- `make run` strips `SUFeedURL` and `SUPublicEDKey` from the temporary debug app bundle in `.build/debug/Boo.app`
+- That disables Sparkle for local development so debug builds never poll the production appcast
+- `make app`, `make zip`, `make dmg`, and `make dist` keep the release Sparkle configuration intact
+- Manual release testing should therefore use `make app`, `make zip`, or `make dmg`, not `make run`
+
 ## Release
 
 Releases are automated via GitHub Actions using [semantic-release](https://github.com/semantic-release/semantic-release) with conventional commits.
 
 ```bash
-make dist   # Manual: release build + sign + notarize + DMG
+make dist   # Manual: release build + sign + notarize + ZIP
 ```
 
 Requires: `SIGNING_IDENTITY`, `APPLE_ID`, `APPLE_TEAM_ID`, `APPLE_PASSWORD` env vars.
+For Sparkle appcast signing in CI, also set `SPARKLE_PRIVATE_KEY`.
+
+Release flow summary:
+
+1. `semantic-release` computes the next version and updates `Boo/App/Info.plist`
+2. `scripts/prepare-release.sh` sets both `CFBundleShortVersionString` and `CFBundleVersion`, builds the release app bundle, signs it, optionally notarizes it, and only then packages the already-signed app into a ZIP archive
+3. `scripts/update-appcast.sh` generates an appcast artifact from the freshly built ZIP archive
+4. `semantic-release` commits the version bump
+5. The release workflow injects the generated appcast into the documentation site artifact and deploys GitHub Pages
 
 ## Conventions
 

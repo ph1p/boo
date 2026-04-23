@@ -8,7 +8,6 @@ struct GeneralSettingsView: View {
     @State private var defaultMainPage = AppSettings.shared.defaultMainPage
     @State private var defaultTabType = AppSettings.shared.defaultTabType
     @State private var newTabCwdMode = AppSettings.shared.newTabCwdMode
-    @State private var autoCheckUpdates = AppSettings.shared.autoCheckUpdates
     @State private var debugLogging = AppSettings.shared.debugLogging
     @State private var fileEditorCommand = AppSettings.shared.fileEditorCommand
     @ObservedObject private var observer = SettingsObserver(topics: [.theme])
@@ -140,11 +139,6 @@ struct GeneralSettingsView: View {
                 Text("Command run when clicking a file in the explorer. Leave empty to use $EDITOR.")
                     .font(.system(size: 11))
                     .foregroundStyle(t.muted)
-            }
-
-            Section(title: "Updates") {
-                ToggleRow(label: "Check for updates automatically", isOn: $autoCheckUpdates)
-                    .onChange(of: autoCheckUpdates) { _, v in AppSettings.shared.autoCheckUpdates = v }
             }
 
             Section(title: "Advanced") {

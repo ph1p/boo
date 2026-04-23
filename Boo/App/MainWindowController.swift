@@ -1296,9 +1296,6 @@ class ThemedSplitView: NSSplitView {
     }
 
     @objc func checkForUpdatesAction(_ sender: Any?) {
-        Task { @MainActor in
-            await AutoUpdater.shared.checkForUpdates(userInitiated: true)
-            UpdateWindowController.shared.showIfUpdateAvailable()
-        }
+        SparkleUpdater.shared.checkForUpdates()
     }
 }

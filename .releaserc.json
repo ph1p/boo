@@ -6,7 +6,7 @@
     [
       "@semantic-release/exec",
       {
-        "prepareCmd": "/usr/libexec/PlistBuddy -c \"Set CFBundleShortVersionString ${nextRelease.version}\" Boo/App/Info.plist && make release app && ([ -n \"$SIGNING_IDENTITY\" ] && make sign || codesign --force --deep --sign - .build/Boo.app) && ([ -n \"$APPLE_ID\" ] && make notarize || true) && make dmg && ditto -c -k --keepParent .build/Boo.app .build/Boo-${nextRelease.version}.app.zip"
+        "prepareCmd": "bash scripts/prepare-release.sh ${nextRelease.version}"
       }
     ],
     [
@@ -21,12 +21,8 @@
       {
         "assets": [
           {
-            "path": ".build/Boo-*.dmg",
-            "label": "Boo-${nextRelease.version}.dmg"
-          },
-          {
-            "path": ".build/Boo-*.app.zip",
-            "label": "Boo-${nextRelease.version}.app.zip"
+            "path": ".build/Boo-*.zip",
+            "label": "Boo-${nextRelease.version}.zip"
           }
         ]
       }

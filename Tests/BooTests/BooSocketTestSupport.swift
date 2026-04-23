@@ -88,31 +88,7 @@ final class BooSocketTestClient {
     private var isClosed = false
 
     init(path: String = BooSocketServer.shared.socketPath) throws {
-        let fd = socket(AF_UNIX, SOCK_STREAM, 0)
-        guard fd >= 0 else { throw ClientError.connectFailed(errno) }
-
-        var addr = sockaddr_un()
-        addr.sun_family = sa_family_t(AF_UNIX)
-        _ = path.withCString { ptr in
-            withUnsafeMutablePointer(to: &addr.sun_path) { sunPath in
-                sunPath.withMemoryRebound(to: CChar.self, capacity: 104) { dest in
-                    strlcpy(dest, ptr, 104)
-                }
-            }
-        }
-
-        let result = withUnsafePointer(to: &addr) { ptr in
-            ptr.withMemoryRebound(to: sockaddr.self, capacity: 1) { sockPtr in
-                connect(fd, sockPtr, socklen_t(MemoryLayout<sockaddr_un>.size))
-            }
-        }
-        guard result == 0 else {
-            let error = errno
-            Darwin.close(fd)
-            throw ClientError.connectFailed(error)
-        }
-
-        self.fd = fd
+        self.fd = try Self.connectWithRetry(path: path)
         configureSocket()
     }
 
@@ -170,6 +146,48 @@ final class BooSocketTestClient {
         var noSigPipe: Int32 = 1
         _ = withUnsafePointer(to: &noSigPipe) {
             setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, $0, socklen_t(MemoryLayout<Int32>.size))
+        }
+    }
+
+    private static func connectWithRetry(
+        path: String,
+        timeout: TimeInterval = 1.0,
+        pollInterval: TimeInterval = 0.01
+    ) throws -> Int32 {
+        let deadline = Date().addingTimeInterval(timeout)
+        var lastError: Int32 = ECONNREFUSED
+
+        while true {
+            let fd = socket(AF_UNIX, SOCK_STREAM, 0)
+            guard fd >= 0 else { throw ClientError.connectFailed(errno) }
+
+            var addr = sockaddr_un()
+            addr.sun_family = sa_family_t(AF_UNIX)
+            _ = path.withCString { ptr in
+                withUnsafeMutablePointer(to: &addr.sun_path) { sunPath in
+                    sunPath.withMemoryRebound(to: CChar.self, capacity: 104) { dest in
+                        strlcpy(dest, ptr, 104)
+                    }
+                }
+            }
+
+            let result = withUnsafePointer(to: &addr) { ptr in
+                ptr.withMemoryRebound(to: sockaddr.self, capacity: 1) { sockPtr in
+                    connect(fd, sockPtr, socklen_t(MemoryLayout<sockaddr_un>.size))
+                }
+            }
+            if result == 0 {
+                return fd
+            }
+
+            lastError = errno
+            Darwin.close(fd)
+
+            if Date() >= deadline || (lastError != ECONNREFUSED && lastError != ENOENT) {
+                throw ClientError.connectFailed(lastError)
+            }
+
+            Thread.sleep(forTimeInterval: pollInterval)
         }
     }
 

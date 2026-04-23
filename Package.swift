@@ -1,9 +1,10 @@
-// swift-tools-version: 6.3
+// swift-tools-version: 6.2
 import PackageDescription
 
 let booDeps: [Target.Dependency] = [
     "CGhostty",
-    "CIronmark"
+    "CIronmark",
+    .product(name: "Sparkle", package: "Sparkle")
 ]
 let booExclude: [String] = [
     "App/Info.plist",
@@ -12,7 +13,11 @@ let booExclude: [String] = [
     "Resources/MonacoSource"
 ]
 let booLinkerSettings: [LinkerSetting] = [
-    .unsafeFlags(["-L", "Vendor/ghostty/macos/GhosttyKit.xcframework/macos-arm64"])
+    .unsafeFlags([
+        "-L", "Vendor/ghostty/macos/GhosttyKit.xcframework/macos-arm64",
+        "-Xlinker", "-rpath",
+        "-Xlinker", "@executable_path/../Frameworks"
+    ])
 ]
 
 let allTargets: [Target] = [
@@ -86,6 +91,8 @@ let package = Package(
         .library(name: "Boo", targets: ["Boo"]),
         .executable(name: "BooApp", targets: ["BooApp"])
     ],
-    dependencies: [],
+    dependencies: [
+        .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.9.1")
+    ],
     targets: allTargets
 )

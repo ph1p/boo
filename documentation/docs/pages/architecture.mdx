@@ -17,7 +17,7 @@ Boo/
   Plugin/           Core framework (protocol, registry, runtime, DSL)
   Plugins/          Built-in plugins (FileTree, Git, ClaudeCode, Docker, Bookmarks, Snippets, etc.)
   Views/            PaneView, StatusBarView, ToolbarView, SettingsWindow
-  Services/         TerminalBridge, RemoteExplorer, BooSocketServer
+  Services/         TerminalBridge, RemoteExplorer, BooSocketServer, SparkleUpdater
 CGhostty/           C module wrapping ghostty.h
 CPTYHelper/         C helper for forkpty()
 CIronmark/          C module wrapping ironmark (Rust markdown parser)
@@ -87,6 +87,8 @@ make run           # Build and launch
 make test          # Run tests
 make clean-ghostty # Rebuild GhosttyKit after updating Vendor/ghostty
 ```
+
+Development note: `make run` produces a debug app bundle with Sparkle feed keys removed, so local builds cannot check the production update feed. Release-oriented targets (`make app`, `make zip`, `make dmg`, `make dist`) keep the Sparkle configuration and bundle `Sparkle.framework` inside `Contents/Frameworks`.
 
 ## State Contracts
 
