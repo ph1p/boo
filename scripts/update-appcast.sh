@@ -11,7 +11,7 @@ APPCAST_TOOL=".build/artifacts/sparkle/Sparkle/bin/generate_appcast"
 OUTPUT_DIR=".build/updates"
 OUTPUT_PATH="${OUTPUT_DIR}/appcast.xml"
 SITE_URL="https://${OWNER}.github.io/${REPO}"
-DOWNLOAD_PREFIX="https://github.com/${REPOSITORY_SLUG}/releases/download/v${VERSION}"
+DOWNLOAD_PREFIX="https://github.com/${REPOSITORY_SLUG}/releases/download/v${VERSION}/"
 
 if [ ! -f "${ARCHIVE_PATH}" ]; then
   echo "ZIP archive not found at ${ARCHIVE_PATH}" >&2
