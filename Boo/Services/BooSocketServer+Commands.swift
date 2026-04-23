@@ -105,7 +105,6 @@ extension BooSocketServer {
                     "sidebar_position": s.sidebarPosition == .left ? "left" : "right",
                     "sidebar_density": s.sidebarDensity == .compact ? "compact" : "comfortable",
                     "show_hidden_files": s.showHiddenFiles,
-                    "auto_check_updates": s.autoCheckUpdates,
                     "status_bar_show_path": s.statusBarShowPath,
                     "status_bar_show_time": s.statusBarShowTime,
                     "status_bar_show_pane_info": s.statusBarShowPaneInfo,

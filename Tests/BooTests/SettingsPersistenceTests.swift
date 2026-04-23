@@ -196,18 +196,12 @@ final class SettingsPersistenceTests: XCTestCase {
         )
     }
 
-    func testUpdaterAndSSHSettingsPersistToFile() {
+    func testSSHSettingsPersistToFile() {
         let settings = AppSettings.shared
-        let originalAutoCheck = settings.autoCheckUpdates
-        let originalSkipVersion = settings.skipVersion
         let originalSSHApproval = settings.sshControlMasterApproved
 
-        settings.autoCheckUpdates = false
-        settings.skipVersion = "9.9.9"
         settings.sshControlMasterApproved = false
         defer {
-            settings.autoCheckUpdates = originalAutoCheck
-            settings.skipVersion = originalSkipVersion
             settings.sshControlMasterApproved = originalSSHApproval
         }
 
@@ -219,8 +213,6 @@ final class SettingsPersistenceTests: XCTestCase {
             return
         }
 
-        XCTAssertEqual(json["autoCheckUpdates"] as? Bool, false)
-        XCTAssertEqual(json["skipVersion"] as? String, "9.9.9")
         XCTAssertEqual(json["sshControlMasterApproved"] as? Bool, false)
     }
 

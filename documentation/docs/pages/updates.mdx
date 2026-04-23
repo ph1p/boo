@@ -1,33 +1,30 @@
 # Updates
 
-Boo includes a built-in updater for signed macOS releases published on [GitHub Releases](https://github.com/ph1p/boo/releases).
+Boo uses [Sparkle](https://sparkle-project.org/) for signed macOS updates.
 
 ## How Checks Work
 
-- Boo checks for updates on launch, at most once every 24 hours.
+- Sparkle manages background update checks after it has been initialized by the app.
 - You can trigger a manual check from **Boo → Check for Updates...**
-- Individual versions can be skipped.
-- Automatic checks can be disabled in Settings.
+- Update metadata is published at `https://ph1p.github.io/boo/updates/appcast.xml`
+- Release archives are downloaded from [GitHub Releases](https://github.com/ph1p/boo/releases)
+- Local `make run` builds have Sparkle disabled because the debug bundle removes `SUFeedURL` and `SUPublicEDKey`
 
 ## Install Flow
 
 When an update is installed, Boo:
 
-1. Downloads the release DMG.
-2. Extracts the app bundle and verifies its code signature.
-3. Stages a replacement copy beside the current app.
-4. Swaps the staged app into place.
-5. Relaunches the updated app.
+1. Fetches the Sparkle appcast feed.
+2. Downloads the signed release archive for the selected update.
+3. Verifies the Sparkle EdDSA signature and Apple code signature.
+4. Installs the updated app and relaunches.
 
-This keeps the installed app signed and avoids replacing the live app bundle before the downloaded update has been staged successfully.
-
-## Settings
-
-Update preferences live in **Settings → General**:
-
-- Enable or disable automatic update checks
-- Skip a specific release version
+Appcast XML is hosted on GitHub Pages, while release archives remain on GitHub Releases.
 
 ## Release Pipeline
 
-Releases are automated with [semantic-release](https://github.com/semantic-release/semantic-release). Conventional commits on `main` determine the version bump, then CI builds, signs, notarizes, and publishes the release artifacts.
+Releases are automated with [semantic-release](https://github.com/semantic-release/semantic-release). Conventional commits on `main` determine the version bump, then CI builds, signs, notarizes, publishes the release artifacts, and updates the Sparkle appcast deployed via GitHub Pages.
+
+The appcast is generated during release preparation from the newly built ZIP archive. It is then injected into the GitHub Pages site during the release Pages deploy, rather than being committed to the repository. Ordinary documentation deploys fetch the currently published appcast first so `/updates/appcast.xml` stays stable across docs-only changes.
+
+Release packaging uses the already-built `Boo.app` bundle for the ZIP archive instead of rebuilding the app after signing. This keeps Sparkle's bundled framework and helper tools in the exact signed/notarized state that was validated earlier in the pipeline.

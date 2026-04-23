@@ -42,7 +42,7 @@ struct AboutView: View {
                 .font(.title2)
                 .fontWeight(.bold)
 
-            Text("Version \(AutoUpdater.currentVersion)")
+            Text("Version \(SparkleUpdater.currentVersion)")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
 

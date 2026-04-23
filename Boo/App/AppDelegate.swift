@@ -54,11 +54,8 @@ public enum BooMain {
         }
         AppSettings.shared.applySystemAppearance()
 
-        // Background update check on launch
-        Task { @MainActor in
-            await AutoUpdater.shared.checkForUpdates()
-            UpdateWindowController.shared.showIfUpdateAvailable()
-        }
+        // Start Sparkle so it can manage automatic update checks and installs.
+        SparkleUpdater.shared.start()
     }
 
     public func applicationWillTerminate(_ notification: Notification) {

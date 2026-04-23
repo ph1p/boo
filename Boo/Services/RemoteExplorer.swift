@@ -231,7 +231,7 @@ final class RemoteExplorer: @unchecked Sendable {
     private static func resolvedProcessName(pid: pid_t) -> String? {
         let raw = processName(pid: pid).lowercased()
         let argv0 = argv0Name(pid: pid)
-        if ProcessIcon.shells.contains(raw) { return nil }
+        if ProcessIcon.shells.contains(raw) || ignoredForegroundProcesses.contains(raw) { return nil }
         if !raw.isEmpty {
             // If proc_name gave us a recognizable name (not a version string), use it.
             if !raw.first!.isNumber && !raw.contains(".") {
@@ -241,7 +241,7 @@ final class RemoteExplorer: @unchecked Sendable {
         }
         // proc_name returned empty or a version string — fall back to argv[0].
         if let argv0 {
-            if ProcessIcon.shells.contains(argv0) { return nil }
+            if ProcessIcon.shells.contains(argv0) || ignoredForegroundProcesses.contains(argv0) { return nil }
             if scriptRuntimes.contains(argv0) { return agentFromArgs(pid: pid) }
             return argv0
         }
@@ -281,6 +281,12 @@ final class RemoteExplorer: @unchecked Sendable {
         "python", "python3", "uv", "uvx", "pipx",
         // Ruby (ruby -e / gem-installed agents)
         "ruby"
+    ]
+
+    /// Development/test host processes that may appear in the PTY parent-child chain
+    /// but are never meaningful terminal foreground commands.
+    private static let ignoredForegroundProcesses: Set<String> = [
+        "xctest", "xctestbootstrap"
     ]
 
     /// Maps substrings found in process argv to canonical agent process names.

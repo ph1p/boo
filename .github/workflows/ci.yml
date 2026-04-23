@@ -107,6 +107,8 @@ jobs:
     needs: build-and-test
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     runs-on: macos-15
+    outputs:
+      has_appcast: ${{ steps.release_outputs.outputs.has_appcast }}
     permissions:
       contents: write
       issues: write
@@ -187,4 +189,86 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
         run: pnpm dlx --package=semantic-release@25.0.3 --package=@semantic-release/exec --package=@semantic-release/git --package=lodash-es@4.17.21 semantic-release
+
+      - name: Capture release outputs
+        id: release_outputs
+        run: |
+          if [ -f .build/updates/appcast.xml ]; then
+            echo "has_appcast=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_appcast=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Upload generated appcast
+        if: steps.release_outputs.outputs.has_appcast == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: sparkle-appcast
+          path: .build/updates/appcast.xml
+
+  release-pages-build:
+    name: Release Pages Build
+    needs: release
+    if: needs.release.outputs.has_appcast == 'true'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: pages
+      cancel-in-progress: true
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/download-artifact@v5
+        with:
+          name: sparkle-appcast
+          path: /tmp/sparkle-appcast
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: documentation/pnpm-lock.yaml
+
+      - name: Install documentation dependencies
+        run: pnpm install --frozen-lockfile
+        working-directory: documentation
+
+      - name: Inject generated Sparkle appcast
+        run: |
+          mkdir -p documentation/docs/public/updates
+          cp /tmp/sparkle-appcast/appcast.xml documentation/docs/public/updates/appcast.xml
+
+      - name: Build documentation site
+        run: pnpm build
+        working-directory: documentation
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: documentation/docs/dist
+
+  release-pages-deploy:
+    name: Release Pages Deploy
+    needs: release-pages-build
+    if: needs.release-pages-build.result == 'success'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: pages
+      cancel-in-progress: true
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

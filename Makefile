@@ -1,4 +1,4 @@
-.PHONY: build run clean ghostty ghostty-linux ironmark monaco setup setup-linux release test app sign notarize dmg dist lint format
+.PHONY: build run clean ghostty ghostty-linux ironmark monaco setup setup-linux release test app sign notarize zip zip-from-app dmg dmg-from-app dist lint format
 
 UNAME := $(shell uname -s)
 
@@ -9,6 +9,7 @@ BUNDLE_ID    := com.boo.app
 VERSION      := $(shell /usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" Boo/App/Info.plist 2>/dev/null || echo "0.1.0")
 BUILD_DIR    := .build
 APP_BUNDLE   := $(BUILD_DIR)/$(APP_NAME).app
+ZIP_NAME     := $(APP_NAME)-$(VERSION).zip
 DMG_NAME     := $(APP_NAME)-$(VERSION).dmg
 
 # Signing (set via environment or CI secrets)
@@ -140,11 +141,23 @@ build-linux: monaco
 run: build
 	@mkdir -p .build/debug/Boo.app/Contents/MacOS
 	@mkdir -p .build/debug/Boo.app/Contents/Resources
+	@mkdir -p .build/debug/Boo.app/Contents/Frameworks
 	@cp .build/debug/BooApp .build/debug/Boo.app/Contents/MacOS/Boo
 	@cp Boo/App/Info.plist .build/debug/Boo.app/Contents/
+	@/usr/libexec/PlistBuddy -c "Delete SUFeedURL" .build/debug/Boo.app/Contents/Info.plist 2>/dev/null || true
+	@/usr/libexec/PlistBuddy -c "Delete SUPublicEDKey" .build/debug/Boo.app/Contents/Info.plist 2>/dev/null || true
 	@for bundle in .build/debug/*.bundle; do \
 		if [ -d "$$bundle" ]; then \
 			rsync -a "$$bundle" .build/debug/Boo.app/Contents/Resources/; \
+		fi; \
+	done
+	@for dir in .build/debug .build/arm64-apple-macosx/debug; do \
+		if [ -d "$$dir" ]; then \
+			for framework in "$$dir"/*.framework; do \
+				if [ -d "$$framework" ]; then \
+					rsync -a "$$framework" .build/debug/Boo.app/Contents/Frameworks/; \
+				fi; \
+			done; \
 		fi; \
 	done
 	@rsync -a .build/debug/ghostty-resources/ .build/debug/Boo.app/Contents/Resources/ 2>/dev/null || true
@@ -187,12 +200,22 @@ app: release
 	@rm -rf "$(APP_BUNDLE)"
 	@mkdir -p "$(APP_BUNDLE)/Contents/MacOS"
 	@mkdir -p "$(APP_BUNDLE)/Contents/Resources"
+	@mkdir -p "$(APP_BUNDLE)/Contents/Frameworks"
 	@cp "$(RELEASE_BIN)" "$(APP_BUNDLE)/Contents/MacOS/$(APP_NAME)"
 	@cp Boo/App/Info.plist "$(APP_BUNDLE)/Contents/"
 	@RESOURCE_BUILD_DIR="$$(dirname "$(RELEASE_BIN)")"; \
 	for bundle in "$$RESOURCE_BUILD_DIR"/*.bundle; do \
 		if [ -d "$$bundle" ]; then \
 			rsync -a "$$bundle" "$(APP_BUNDLE)/Contents/Resources/"; \
+		fi; \
+	done
+	@for dir in .build/release .build/arm64-apple-macosx/release; do \
+		if [ -d "$$dir" ]; then \
+			for framework in "$$dir"/*.framework; do \
+				if [ -d "$$framework" ]; then \
+					rsync -a "$$framework" "$(APP_BUNDLE)/Contents/Frameworks/"; \
+				fi; \
+			done; \
 		fi; \
 	done
 	@rsync -a Vendor/ghostty/zig-out/share/ghostty/ "$(APP_BUNDLE)/Contents/Resources/ghostty/"
@@ -224,7 +247,7 @@ sign:
 		exit 1; \
 	fi
 	@echo "==> Signing $(APP_BUNDLE)..."
-	codesign --force --options runtime --sign "$(SIGNING_IDENTITY)" \
+	codesign --force --deep --options runtime --sign "$(SIGNING_IDENTITY)" \
 		--entitlements Boo/App/Boo.entitlements \
 		"$(APP_BUNDLE)"
 	@echo "==> Signed"
@@ -249,7 +272,17 @@ notarize:
 
 # ── DMG Packaging (macOS) ───────────────────────────────────────────────────
 
-dmg: app
+zip: app zip-from-app
+
+zip-from-app:
+	@echo "==> Creating $(ZIP_NAME)..."
+	@rm -f "$(BUILD_DIR)/$(ZIP_NAME)"
+	@ditto -c -k --keepParent "$(APP_BUNDLE)" "$(BUILD_DIR)/$(ZIP_NAME)"
+	@echo "==> $(BUILD_DIR)/$(ZIP_NAME) created"
+
+dmg: app dmg-from-app
+
+dmg-from-app:
 	@echo "==> Creating $(DMG_NAME)..."
 	@rm -f "$(BUILD_DIR)/$(DMG_NAME)"
 	@mkdir -p "$(BUILD_DIR)/dmg-staging"
@@ -274,7 +307,7 @@ dist: app
 	else \
 		echo "==> Skipping notarization (Apple credentials not set)"; \
 	fi
-	$(MAKE) dmg
+	$(MAKE) zip-from-app
 
 # ── Lint & Format ────────────────────────────────────────────────────────────
 
