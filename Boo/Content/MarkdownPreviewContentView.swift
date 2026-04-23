@@ -49,11 +49,19 @@ final class MarkdownPreviewContentView: NSView, ContentViewProtocol {
 
         webView = wv
 
+        let click = NSClickGestureRecognizer(target: self, action: #selector(webViewClicked))
+        click.delaysPrimaryMouseButtonEvents = false
+        wv.addGestureRecognizer(click)
+
         if let path = filePath {
             loadMarkdown(at: path)
         } else {
             showPlaceholder()
         }
+    }
+
+    @objc private func webViewClicked() {
+        onFocused?()
     }
 
     private func loadMarkdown(at path: String) {
