@@ -15,9 +15,9 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.16.6</string>
+	<string>1.17.0</string>
 	<key>CFBundleVersion</key>
-	<string>1</string>
+	<string>1.17.0</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>13.0</string>
 	<key>NSAppleEventsUsageDescription</key>
@@ -58,11 +58,11 @@
 	<string>A program running within Boo would like to use speech recognition.</string>
 	<key>NSSystemAdministrationUsageDescription</key>
 	<string>A program running within Boo requires elevated privileges.</string>
+	<key>SUEnableInstallerLauncherService</key>
+	<true/>
 	<key>SUFeedURL</key>
 	<string>https://ph1p.github.io/boo/updates/appcast.xml</string>
 	<key>SUPublicEDKey</key>
 	<string>Lfj3PfeUMPV4wmMExtcg/hlNdVxACJnrcIJQ8igHCgQ=</string>
-	<key>SUEnableInstallerLauncherService</key>
-	<true/>
 </dict>
 </plist>
