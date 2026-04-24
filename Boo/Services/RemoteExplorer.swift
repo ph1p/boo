@@ -839,6 +839,8 @@ final class RemoteExplorer: @unchecked Sendable {
     }
 
     /// Get process command line arguments using sysctl (no subprocess).
+    /// Reads only argv — stops before environment variables to avoid false matches
+    /// on system PATH entries like `/var/run/com.apple.security.cryptexd/codex.system/...`.
     private static func getProcessArgs(pid: pid_t) -> String? {
         var mib: [Int32] = [CTL_KERN, KERN_PROCARGS2, pid]
         var size: Int = 0
@@ -847,27 +849,31 @@ final class RemoteExplorer: @unchecked Sendable {
         var buffer = [UInt8](repeating: 0, count: size)
         guard sysctl(&mib, UInt32(mib.count), &buffer, &size, nil, 0) == 0 else { return nil }
 
-        // Skip argc (first 4 bytes)
-        guard size > 4 else { return nil }
+        // KERN_PROCARGS2 layout: argc (int32) | exec_path (NUL) | padding (NULs) | argv[0] (NUL) | ... | argv[argc-1] (NUL) | env[0] ...
+        guard size > MemoryLayout<Int32>.size else { return nil }
         let args = buffer.withUnsafeBufferPointer { buf -> String? in
-            // Skip argc int
+            // Read argc so we can stop before environment variables.
+            var argc: Int32 = 0
+            withUnsafeMutableBytes(of: &argc) { dst in
+                dst.copyMemory(from: UnsafeRawBufferPointer(start: buf.baseAddress, count: MemoryLayout<Int32>.size))
+            }
+            let argCount = max(0, Int(argc))
+
             var offset = MemoryLayout<Int32>.size
             // Skip exec path (null-terminated)
             while offset < size && buf[offset] != 0 { offset += 1 }
             // Skip padding nulls
             while offset < size && buf[offset] == 0 { offset += 1 }
-            // Remaining is null-separated args
+            // Read exactly argc null-terminated argv strings (argv[0] is the binary path)
             var result: [String] = []
-            var current = ""
-            while offset < size {
-                if buf[offset] == 0 {
-                    if !current.isEmpty { result.append(current) }
-                    current = ""
-                    if result.count > 20 { break }  // Safety limit
-                } else {
-                    current += String(UnicodeScalar(buf[offset]))
+            while offset < size && result.count < argCount {
+                var argBytes: [UInt8] = []
+                while offset < size && buf[offset] != 0 {
+                    argBytes.append(buf[offset])
+                    offset += 1
                 }
-                offset += 1
+                result.append(String(bytes: argBytes, encoding: .utf8) ?? "")
+                if offset < size { offset += 1 }
             }
             return result.joined(separator: " ")
         }

@@ -74,6 +74,8 @@ extension MainWindowController {
         editMenu.addItem(withTitle: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
         editMenu.addItem(.separator())
         editMenu.addItem(withTitle: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+        editMenu.addItem(.separator())
+        editMenu.addItem(withTitle: "Find…", action: #selector(findAction(_:)), keyEquivalent: "f")
         editMenuItem.submenu = editMenu
         mainMenu.addItem(editMenuItem)
 

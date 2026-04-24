@@ -148,8 +148,6 @@ final class ContentStateTests: XCTestCase {
         let encoder = JSONEncoder()
         let decoder = JSONDecoder()
 
-        // title is a runtime-only field — intentionally not persisted.
-        // After decode, title resets to "". Essential fields (path, url, etc.) survive.
         let terminal = ContentState.terminal(TerminalContentState(title: "zsh", workingDirectory: "/tmp"))
         let browser = ContentState.browser(
             BrowserContentState(title: "Google", url: URL(string: "https://google.com")!))
@@ -162,9 +160,21 @@ final class ContentStateTests: XCTestCase {
             let data = try encoder.encode(state)
             let decoded = try decoder.decode(ContentState.self, from: data)
             XCTAssertEqual(decoded.contentType, state.contentType)
-            // title not persisted — resets to "" on decode
-            XCTAssertEqual(decoded.title, "")
         }
+
+        // Terminal title is runtime-only (not in CodingKeys) — resets to "" on decode.
+        let terminalDecoded2 = try decoder.decode(ContentState.self, from: encoder.encode(terminal))
+        XCTAssertEqual(terminalDecoded2.title, "")
+
+        // Non-terminal titles are persisted and survive roundtrip.
+        let browserDecoded2 = try decoder.decode(ContentState.self, from: encoder.encode(browser))
+        XCTAssertEqual(browserDecoded2.title, "Google")
+        let editorDecoded2 = try decoder.decode(ContentState.self, from: encoder.encode(editor))
+        XCTAssertEqual(editorDecoded2.title, "file.swift")
+        let imageDecoded2 = try decoder.decode(ContentState.self, from: encoder.encode(image))
+        XCTAssertEqual(imageDecoded2.title, "photo.png")
+        let markdownDecoded2 = try decoder.decode(ContentState.self, from: encoder.encode(markdown))
+        XCTAssertEqual(markdownDecoded2.title, "README.md")
 
         // Essential fields survive roundtrip
         let terminalDecoded = try decoder.decode(ContentState.self, from: encoder.encode(terminal))

@@ -213,6 +213,37 @@ private func ghosttyAction(_ app: ghostty_app_t?, _ target: ghostty_target_s, _ 
         }
         return true
 
+    case GHOSTTY_ACTION_START_SEARCH:
+        let needle = action.action.start_search.needle.map { String(cString: $0) } ?? ""
+        guard let view = viewFromTarget() else { return false }
+        DispatchQueue.main.async { [weak view] in
+            view?.onSearchRequested?(needle)
+        }
+        return true
+
+    case GHOSTTY_ACTION_END_SEARCH:
+        guard let view = viewFromTarget() else { return false }
+        DispatchQueue.main.async { [weak view] in
+            view?.onSearchEnded?()
+        }
+        return true
+
+    case GHOSTTY_ACTION_SEARCH_TOTAL:
+        let total = Int(action.action.search_total.total)
+        guard let view = viewFromTarget() else { return false }
+        DispatchQueue.main.async { [weak view] in
+            view?.onSearchTotal?(total)
+        }
+        return true
+
+    case GHOSTTY_ACTION_SEARCH_SELECTED:
+        let selected = Int(action.action.search_selected.selected)
+        guard let view = viewFromTarget() else { return false }
+        DispatchQueue.main.async { [weak view] in
+            view?.onSearchSelected?(selected)
+        }
+        return true
+
     default:
         return false
     }

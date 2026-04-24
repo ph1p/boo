@@ -187,6 +187,11 @@ class PaneView: NSView {
         }
     }
 
+    func updateFindBarTheme() {
+        findBar?.applyTheme()
+        findBar?.needsDisplay = true
+    }
+
     func updateDimOverlayColor() {
         let theme = AppSettings.shared.theme
         let color = theme.isDark ? NSColor.black : NSColor.white
@@ -203,6 +208,13 @@ class PaneView: NSView {
     private var pendingTitle: String?
     private var pendingCwd: String?
     private static let debounceInterval: TimeInterval = 0.12
+
+    // MARK: - Find Bar
+
+    private var findBar: FindBarView?
+    private var searchMatchTotal: Int = -1
+
+    var isFindBarVisible: Bool { findBar != nil }
 
     init(paneID: UUID, pane: Pane) {
         self.paneID = paneID
@@ -437,13 +449,84 @@ class PaneView: NSView {
             guard let self else { return }
             self.paneDelegate?.paneView(self, commandEnded: exitCode, paneID: self.paneID)
         }
+
+        gv.onSearchRequested = { [weak self] needle in
+            guard let self else { return }
+            self.showFindBar()
+            if !needle.isEmpty {
+                self.ghosttyView?.updateSearch(needle: needle)
+            }
+        }
+
+        gv.onSearchTotal = { [weak self] total in
+            guard let self else { return }
+            self.searchMatchTotal = total
+            self.findBar?.updateMatches(selected: -1, total: total)
+        }
+
+        gv.onSearchSelected = { [weak self] selected in
+            guard let self else { return }
+            self.findBar?.updateMatches(selected: selected, total: self.searchMatchTotal)
+        }
+
+        gv.onSearchEnded = { [weak self] in
+            guard let self, self.isFindBarVisible else { return }
+            self.findBar?.removeFromSuperview()
+            self.findBar = nil
+            self.layoutTerminalView()
+        }
+    }
+
+    func showFindBar() {
+        guard pane.activeTab?.contentType == .terminal else { return }
+        guard findBar == nil else {
+            findBar?.focusField()
+            return
+        }
+        searchMatchTotal = -1
+        let bar = FindBarView()
+        bar.onSearch = { [weak self] needle in
+            self?.ghosttyView?.updateSearch(needle: needle)
+        }
+        bar.onNavigate = { [weak self] next in
+            self?.ghosttyView?.navigateSearch(next: next)
+        }
+        bar.onClose = { [weak self] in
+            self?.hideFindBar()
+        }
+        findBar = bar
+        addSubview(bar)
+        layoutTerminalView()
+        bar.focusField()
+    }
+
+    func hideFindBar() {
+        guard let bar = findBar else { return }
+        ghosttyView?.endSearch()
+        bar.removeFromSuperview()
+        findBar = nil
+        searchMatchTotal = -1
+        layoutTerminalView()
+        focusActiveView()
+    }
+
+    private func dismissFindBarIfNeeded(forTabAt index: Int) {
+        guard isFindBarVisible else { return }
+        let targetType = index < pane.tabs.count ? pane.tabs[index].contentType : nil
+        if targetType != .terminal {
+            ghosttyView?.endSearch()
+            findBar?.removeFromSuperview()
+            findBar = nil
+            searchMatchTotal = -1
+        }
     }
 
     // MARK: - Layout
 
     func layoutTerminalView() {
         let barH = tabBarHeight
-        let newFrame = NSRect(x: 0, y: barH, width: bounds.width, height: max(0, bounds.height - barH))
+        let findH = findBar != nil ? FindBarView.height : 0
+        let newFrame = NSRect(x: 0, y: barH + findH, width: bounds.width, height: max(0, bounds.height - barH - findH))
 
         // Layout terminal view if present
         if let container: NSView = scrollWrapper ?? ghosttyView {
@@ -453,6 +536,12 @@ class PaneView: NSView {
         // Layout content view if present (browser, editor, etc.)
         if let contentView = activeContentView {
             if contentView.frame != newFrame { contentView.frame = newFrame }
+        }
+
+        // Layout find bar just above tab bar
+        if let bar = findBar {
+            let barFrame = NSRect(x: 0, y: barH, width: bounds.width, height: FindBarView.height)
+            if bar.frame != barFrame { bar.frame = barFrame }
         }
 
         // Keep dim overlay covering the full pane (terminal + tab bar) and on top of all content
@@ -583,6 +672,7 @@ class PaneView: NSView {
     /// Activate a tab unconditionally — used after insertTab which already
     /// sets activeTabIndex, making the normal guard in activateTab skip.
     func forceActivateTab(_ index: Int) {
+        dismissFindBarIfNeeded(forTabAt: index)
         storeCurrentView()
         pane.setActiveTab(index)
         startActiveSession()
@@ -596,6 +686,7 @@ class PaneView: NSView {
 
     func activateTab(_ index: Int) {
         guard index != pane.activeTabIndex else { return }
+        dismissFindBarIfNeeded(forTabAt: index)
         storeCurrentView()
         pane.setActiveTab(index)
         startActiveSession()

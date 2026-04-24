@@ -118,7 +118,7 @@ struct BrowserContentState: ContentStateProtocol, Codable {
     var canGoForward: Bool = false
 
     enum CodingKeys: String, CodingKey {
-        case url
+        case title, url
     }
 
     init(
@@ -145,7 +145,7 @@ struct EditorContentState: ContentStateProtocol, Codable {
     var cursorColumn: Int = 1
 
     enum CodingKeys: String, CodingKey {
-        case filePath, isDirty, cursorLine, cursorColumn
+        case title, filePath, isDirty, cursorLine, cursorColumn
     }
 
     init(
@@ -172,7 +172,7 @@ struct ImageViewerContentState: ContentStateProtocol, Codable {
     var zoom: CGFloat = 1.0
 
     enum CodingKeys: String, CodingKey {
-        case filePath, zoom
+        case title, filePath, zoom
     }
 
     init(title: String, filePath: String, zoom: CGFloat = 1.0) {
@@ -191,7 +191,7 @@ struct MarkdownPreviewContentState: ContentStateProtocol, Codable {
     var scrollPosition: CGFloat = 0
 
     enum CodingKeys: String, CodingKey {
-        case filePath, scrollPosition
+        case title, filePath, scrollPosition
     }
 
     init(title: String, filePath: String, scrollPosition: CGFloat = 0) {

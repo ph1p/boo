@@ -415,7 +415,8 @@ extension MainWindowController {
         // Rebuild split container with the workspace's tree
         renderedWorkspaceID = workspace.id
         splitContainer.update(tree: workspace.splitTree)
-        sidebarController.suppressSidebarStateSync -= 1
+        // suppressSidebarStateSync stays elevated until after layout settles in the async block below,
+        // preventing splitViewDidResizeSubviews from capturing a transient collapsed width.
 
         DispatchQueue.main.async { [weak self] in
             guard let self, let ws = self.activeWorkspace else { return }
@@ -424,6 +425,7 @@ extension MainWindowController {
                 "[Sidebar] async restoreActiveWorkspaceWidth for ws=\(ws.id.uuidString.prefix(8)) stored=\(String(describing: ws.sidebarState))"
             )
             self.sidebarController.restoreActiveWorkspaceWidth(ifGeneration: activationGen)
+            self.sidebarController.suppressSidebarStateSync -= 1
 
             for (_, pane) in ws.panes {
                 if let pv = self.paneViews[pane.id] {
