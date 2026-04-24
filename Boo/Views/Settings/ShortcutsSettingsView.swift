@@ -82,29 +82,11 @@ struct ShortcutsSettingsView: View {
         let t = Tokens.current
 
         SettingsPage(title: "Keyboard Shortcuts") {
-            HStack(spacing: 6) {
-                Image(systemName: "magnifyingglass")
-                    .font(.system(size: 11))
-                    .foregroundStyle(t.muted)
-                TextField("Filter shortcuts", text: $searchText)
-                    .font(.system(size: 12))
-                    .textFieldStyle(.plain)
-                    .foregroundStyle(t.text)
-                if !searchText.isEmpty {
-                    Button(action: { searchText = "" }) {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 11))
-                            .foregroundStyle(t.muted)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 6)
-            .background(
-                RoundedRectangle(cornerRadius: 6)
-                    .fill(t.chromeBg)
-                    .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(t.border.opacity(0.6), lineWidth: 0.5))
+            SettingTextField(
+                placeholder: "Filter shortcuts",
+                text: $searchText,
+                icon: "magnifyingglass",
+                trailingClear: true
             )
 
             if filteredGroups.isEmpty {
@@ -115,34 +97,24 @@ struct ShortcutsSettingsView: View {
                     .padding(.top, 24)
             } else {
                 ForEach(filteredGroups, id: \.0) { group in
-                    shortcutGroup(title: group.0, items: group.1, tokens: t)
+                    Section(title: group.0) {
+                        ForEach(Array(group.1.enumerated()), id: \.offset) { _, item in
+                            shortcutRow(label: item.0, binding: item.1, t: t)
+                        }
+                    }
                 }
             }
         }
     }
 
-    private func shortcutGroup(title: String, items: [(String, String)], tokens t: Tokens) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(title)
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(t.muted)
-            ForEach(Array(items.enumerated()), id: \.offset) { _, item in
-                HStack {
-                    Text(item.0)
-                        .font(.system(size: 12))
-                        .foregroundStyle(t.text)
-                    Spacer()
-                    Text(item.1)
-                        .font(.system(size: 11, design: .monospaced))
-                        .foregroundStyle(t.accent)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(
-                            RoundedRectangle(cornerRadius: 4)
-                                .fill(t.accent.opacity(0.1))
-                        )
-                }
-            }
+    private func shortcutRow(label: String, binding: String, t: Tokens) -> some View {
+        HStack {
+            Text(label)
+                .font(.system(size: 12))
+                .foregroundStyle(t.text)
+            Spacer()
+            ShortcutPill(text: binding)
         }
+        .padding(.vertical, 2)
     }
 }

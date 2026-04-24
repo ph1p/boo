@@ -21,58 +21,59 @@ struct LayoutSettingsView: View {
 
         SettingsPage(title: "Layout") {
             Section(title: "Sidebar") {
-                Picker("Position", selection: LayoutSettingsBindings.binding(\.sidebarPosition)) {
-                    ForEach(SidebarPosition.allCases, id: \.self) { Text($0.label).tag($0) }
+                SettingStack(label: "Position") {
+                    Picker("", selection: LayoutSettingsBindings.binding(\.sidebarPosition)) {
+                        ForEach(SidebarPosition.allCases, id: \.self) { Text($0.label).tag($0) }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.segmented)
                 }
-                .pickerStyle(.segmented)
 
-                Picker("Tab Bar", selection: LayoutSettingsBindings.binding(\.sidebarTabBarPosition)) {
-                    ForEach(SidebarTabBarPosition.allCases, id: \.self) { Text($0.label).tag($0) }
+                SettingStack(label: "Tab bar") {
+                    Picker("", selection: LayoutSettingsBindings.binding(\.sidebarTabBarPosition)) {
+                        ForEach(SidebarTabBarPosition.allCases, id: \.self) { Text($0.label).tag($0) }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.segmented)
                 }
-                .pickerStyle(.segmented)
 
                 ToggleRow(
-                    label: "Hide sidebar by default", isOn: LayoutSettingsBindings.binding(\.sidebarDefaultHidden))
+                    label: "Hide sidebar by default",
+                    help: "Toggle the sidebar with \u{2318}B.",
+                    isOn: LayoutSettingsBindings.binding(\.sidebarDefaultHidden)
+                )
                 ToggleRow(
                     label: "Share plugin sidebar state globally",
-                    isOn: LayoutSettingsBindings.binding(\.sidebarGlobalState))
-                Text(
-                    "When on, the sidebar keeps its own state across all terminals — switching tabs or panes does not change the active plugin, expanded sections, or scroll position."
+                    help:
+                        "When on, the sidebar keeps its own state across all terminals — switching tabs or panes does not change the active plugin, expanded sections, or scroll position.",
+                    isOn: LayoutSettingsBindings.binding(\.sidebarGlobalState)
                 )
-                .font(.system(size: 11))
-                .foregroundStyle(t.muted)
                 ToggleRow(
                     label: "Remember width and visibility per workspace",
+                    help:
+                        "When on, each workspace keeps its own sidebar width and visibility. When off, all workspaces share one width and visibility state.",
                     isOn: LayoutSettingsBindings.binding(\.sidebarPerWorkspaceState)
                 )
-                Text(
-                    "When on, each workspace keeps its own sidebar width and visibility. When off, all workspaces share one width and visibility state."
-                )
-                .font(.system(size: 11))
-                .foregroundStyle(t.muted)
-                Text("Toggle the sidebar with \u{2318}B.")
-                    .font(.system(size: 11))
-                    .foregroundStyle(t.muted)
             }
 
             Section(title: "Workspace Bar") {
-                Picker("", selection: LayoutSettingsBindings.binding(\.workspaceBarPosition)) {
-                    ForEach(WorkspaceBarPosition.allCases, id: \.self) { Text($0.label).tag($0) }
+                SettingStack(label: "Position", help: "Position of the workspace switcher bar.") {
+                    Picker("", selection: LayoutSettingsBindings.binding(\.workspaceBarPosition)) {
+                        ForEach(WorkspaceBarPosition.allCases, id: \.self) { Text($0.label).tag($0) }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.segmented)
                 }
-                .pickerStyle(.segmented)
-                Text("Position of the workspace switcher bar.")
-                    .font(.system(size: 11))
-                    .foregroundStyle(t.muted)
             }
 
             Section(title: "Tab Overflow") {
-                Picker("", selection: LayoutSettingsBindings.binding(\.tabOverflowMode)) {
-                    ForEach(TabOverflowMode.allCases, id: \.self) { Text($0.label).tag($0) }
+                SettingStack(label: "Behavior", help: "How tabs behave when they exceed the available bar width.") {
+                    Picker("", selection: LayoutSettingsBindings.binding(\.tabOverflowMode)) {
+                        ForEach(TabOverflowMode.allCases, id: \.self) { Text($0.label).tag($0) }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.segmented)
                 }
-                .pickerStyle(.segmented)
-                Text("How tabs behave when they exceed the available bar width.")
-                    .font(.system(size: 11))
-                    .foregroundStyle(t.muted)
             }
         }
         .foregroundStyle(t.text)

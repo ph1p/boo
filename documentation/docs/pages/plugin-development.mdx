@@ -56,13 +56,31 @@ That's all you need to get started — external plugins automatically get a side
 
 Plugins can declare their own settings, which appear in the Settings → Plugins UI under an expandable section. Each setting in the `settings` array has:
 
-| Field     | Required | Description                                                                                          |
-| --------- | -------- | ---------------------------------------------------------------------------------------------------- |
-| `key`     | Yes      | Setting key (unique within this plugin)                                                              |
-| `type`    | Yes      | `"bool"`, `"string"`, `"int"`, or `"double"`                                                         |
-| `label`   | Yes      | Human-readable label shown in UI                                                                     |
-| `default` | No       | Default value                                                                                        |
-| `options` | No       | UI hint: `"fontPicker:system"` for system font picker, `"fontPicker:mono"` for monospace font picker |
+| Field         | Required | Description                                              |
+| ------------- | -------- | -------------------------------------------------------- |
+| `key`         | Yes      | Setting key (unique within this plugin)                  |
+| `type`        | Yes      | `"bool"`, `"string"`, `"int"`, or `"double"`             |
+| `label`       | Yes      | Human-readable label shown in UI                         |
+| `description` | No       | Help text shown below the control                        |
+| `default`     | No       | Default value                                            |
+| `options`     | No       | UI hint for string settings — see table below            |
+| `group`       | No       | Section header label; settings sharing a group are grouped together |
+| `min`         | No       | Minimum value for `double` sliders                       |
+| `max`         | No       | Maximum value for `double` sliders                       |
+| `step`        | No       | Step increment for `double` sliders                      |
+
+Special `options` values for `string` settings:
+
+| Value                 | Description                                              |
+| --------------------- | -------------------------------------------------------- |
+| `"fontPicker:system"` | System font picker dropdown                              |
+| `"fontPicker:mono"`   | Monospace font picker dropdown                           |
+| `"editorFilePatterns"`| Comma-separated file patterns (e.g. `*.ts, .env*`)       |
+| `"dockerSocket"`      | Socket path with auto-detect fallback                    |
+| `"gitDiffTool"`       | Diff tool command; use `{file}` for the full path        |
+| `"markdownOpenMode"`  | Picker bound to the global markdown open mode setting    |
+| `"imageOpenMode"`     | Picker bound to the global image open mode setting       |
+| `"textOpenMode"`      | Picker bound to the global text open mode setting        |
 
 Example manifest with settings:
 
@@ -74,14 +92,15 @@ Example manifest with settings:
   "icon": "star",
   "runtime": "js",
   "settings": [
-    { "key": "enabled", "type": "bool", "label": "Enable feature", "default": true },
-    { "key": "fontSize", "type": "double", "label": "Font size", "default": 12.0 },
+    { "key": "enabled", "type": "bool", "label": "Enable feature", "default": true, "description": "Turn the feature on or off" },
+    { "key": "fontSize", "type": "double", "label": "Font size", "default": 12.0, "min": 8, "max": 32, "step": 1, "group": "Appearance" },
     {
       "key": "fontName",
       "type": "string",
       "label": "Font",
       "default": "",
-      "options": "fontPicker:system"
+      "options": "fontPicker:system",
+      "group": "Appearance"
     }
   ]
 }

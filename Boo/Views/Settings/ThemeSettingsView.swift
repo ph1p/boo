@@ -19,23 +19,26 @@ struct ThemeSettingsView: View {
         let _ = observer.revision
         let t = Tokens.current
 
-        SettingsPage(title: "Color Theme") {
-            HStack(spacing: 8) {
-                Image(systemName: "circle.lefthalf.filled")
-                    .font(.system(size: 11))
-                    .foregroundStyle(t.muted)
-                ToggleRow(label: "Match system dark/light mode", isOn: $autoTheme)
-                    .onChange(of: autoTheme) { _, v in AppSettings.shared.autoTheme = v }
+        SettingsPage(title: "Theme") {
+            Section(title: "Appearance Mode") {
+                ToggleRow(
+                    label: "Match system dark/light mode",
+                    help: "Follow the system setting and switch between the two themes below.",
+                    isOn: $autoTheme
+                )
+                .onChange(of: autoTheme) { _, v in AppSettings.shared.autoTheme = v }
+
+                if autoTheme {
+                    HStack(spacing: 12) {
+                        variantPicker("Dark", icon: "moon.fill", selection: $darkTheme, options: darkThemes)
+                            .onChange(of: darkTheme) { _, v in AppSettings.shared.darkThemeName = v }
+                        variantPicker("Light", icon: "sun.max.fill", selection: $lightTheme, options: lightThemes)
+                            .onChange(of: lightTheme) { _, v in AppSettings.shared.lightThemeName = v }
+                    }
+                }
             }
 
-            if autoTheme {
-                HStack(spacing: 12) {
-                    variantPicker("Dark", icon: "moon.fill", selection: $darkTheme, options: darkThemes)
-                        .onChange(of: darkTheme) { _, v in AppSettings.shared.darkThemeName = v }
-                    variantPicker("Light", icon: "sun.max.fill", selection: $lightTheme, options: lightThemes)
-                        .onChange(of: lightTheme) { _, v in AppSettings.shared.lightThemeName = v }
-                }
-            } else {
+            if !autoTheme {
                 Section(title: "Dark") { themeGrid(darkThemes, tokens: t) }
                 Section(title: "Light") { themeGrid(lightThemes, tokens: t) }
             }
@@ -139,10 +142,10 @@ struct ThemeRow: View {
 
             if theme.isCustom && (hovered || active) {
                 HStack(spacing: 2) {
-                    iconBtn(systemName: "pencil", color: t.muted) {
+                    IconButton(systemName: "pencil", size: 10, frame: 20) {
                         editingTheme = AppSettings.shared.customThemes.first { $0.name == theme.name }
                     }
-                    iconBtn(systemName: "trash", color: t.muted) {
+                    IconButton(systemName: "trash", size: 10, frame: 20) {
                         var customs = AppSettings.shared.customThemes
                         customs.removeAll { $0.name == theme.name }
                         AppSettings.shared.customThemes = customs
@@ -194,14 +197,4 @@ struct ThemeRow: View {
         }
     }
 
-    private func iconBtn(systemName: String, color: Color, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: systemName)
-                .font(.system(size: 10))
-                .frame(width: 20, height: 20)
-                .foregroundStyle(color)
-                .background(RoundedRectangle(cornerRadius: 4).fill(color.opacity(0.12)))
-        }
-        .buttonStyle(.plain)
-    }
 }

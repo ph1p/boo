@@ -19,7 +19,7 @@ struct PluginSettingsView: View {
                 .font(.system(size: 11))
                 .foregroundStyle(t.muted)
 
-            VStack(alignment: .leading, spacing: 2) {
+            Section(title: "Installed") {
                 ForEach(manifests, id: \.id) { manifest in
                     PluginRow(manifest: manifest)
                 }
@@ -49,8 +49,7 @@ struct PluginSettingsView: View {
                         return
                     }
                     if Self.registeredManifests.contains(where: { $0.id == newManifest.id }) {
-                        installError =
-                            "A plugin with ID '\(newManifest.id)' is already installed."
+                        installError = "A plugin with ID '\(newManifest.id)' is already installed."
                         return
                     }
                     let pluginsDir = (BooPaths.configDir as NSString).appendingPathComponent("plugins")
@@ -72,29 +71,18 @@ struct PluginSettingsView: View {
 
 // MARK: - Plugin Detail Settings
 
-/// Dedicated settings page for a single plugin, shown when selected in the settings sidebar.
 struct PluginDetailSettingsView: View {
     let manifest: PluginManifest
     @ObservedObject private var observer = SettingsObserver(topics: [.theme, .plugins])
 
-    private var filteredSettings: [PluginManifest.SettingManifest] {
-        guard let settings = manifest.settings else { return [] }
-        if manifest.capabilities?.statusBarSegment == true {
-            return settings.filter { $0.type != .bool }
-        }
-        return settings
-    }
-
-    /// Settings bucketed by group, preserving declaration order within each group.
-    /// Ungrouped (nil group) settings use title `""`.
     private var groupedSettings: [(title: String, settings: [PluginManifest.SettingManifest])] {
-        let grouped = Dictionary(grouping: filteredSettings) { $0.group ?? "" }
-        // Preserve declaration order of groups by scanning filteredSettings for first appearance.
+        let visible = manifest.visibleSettings
         var seen = Set<String>()
-        let order = filteredSettings.compactMap { s -> String? in
+        let order = visible.compactMap { s -> String? in
             let key = s.group ?? ""
             return seen.insert(key).inserted ? key : nil
         }
+        let grouped = Dictionary(grouping: visible) { $0.group ?? "" }
         return order.map { (title: $0, settings: grouped[$0]!) }
     }
 
@@ -104,13 +92,13 @@ struct PluginDetailSettingsView: View {
         SettingsPage(title: manifest.name) {
             if manifest.id == "agents" {
                 AgentCenterSettingsView()
-            } else if filteredSettings.isEmpty {
+            } else if manifest.visibleSettings.isEmpty {
                 Text("No configurable settings for this plugin.")
                     .font(.system(size: 12))
                     .foregroundStyle(Tokens.current.muted)
             } else {
                 ForEach(groupedSettings, id: \.title) { group in
-                    Section(title: group.title.isEmpty ? "Settings" : group.title, spacing: 4, padding: 8) {
+                    Section(title: group.title.isEmpty ? "Settings" : group.title) {
                         ForEach(group.settings, id: \.key) { setting in
                             PluginSettingControl(pluginID: manifest.id, setting: setting)
                         }
@@ -146,16 +134,6 @@ private struct PluginRow: View {
         }
     }
 
-    /// Settings shown in plugin settings — excludes bool settings for plugins
-    /// with statusBarSegment (those appear in Status Bar settings instead).
-    private var filteredSettings: [PluginManifest.SettingManifest] {
-        guard let settings = manifest.settings else { return [] }
-        if manifest.capabilities?.statusBarSegment == true {
-            return settings.filter { $0.type != .bool }
-        }
-        return settings
-    }
-
     var body: some View {
         let _ = observer.revision
         let t = Tokens.current
@@ -186,13 +164,12 @@ private struct PluginRow: View {
                 Spacer()
 
                 if manifest.isExternal {
-                    Button(action: removePlugin) {
-                        Image(systemName: "trash")
-                            .font(.system(size: 11))
-                            .foregroundStyle(.red.opacity(0.8))
-                    }
-                    .buttonStyle(.plain)
-                    .help("Remove plugin")
+                    IconButton(
+                        systemName: "trash",
+                        tint: .red.opacity(0.8),
+                        help: "Remove plugin",
+                        action: removePlugin
+                    )
                 }
 
                 Toggle("", isOn: $isEnabled)
@@ -220,6 +197,9 @@ private struct PluginRow: View {
             }
         }
         .accessibilityLabel("\(manifest.name), \(isEnabled ? "enabled" : "disabled"), \(manifest.description ?? "")")
+        .onChange(of: observer.revision) { _, _ in
+            isEnabled = !AppSettings.shared.disabledPluginIDs.contains(manifest.id)
+        }
     }
 }
 
@@ -249,6 +229,7 @@ private struct PluginSettingControl: View {
             pluginID, setting.key, default: setting.defaultValue?.value as? Bool ?? false)
         return ToggleRow(
             label: setting.label,
+            help: setting.description,
             isOn: Binding(
                 get: { value },
                 set: { AppSettings.shared.setPluginSetting(pluginID, setting.key, $0) }
@@ -261,23 +242,21 @@ private struct PluginSettingControl: View {
         let lo = setting.min ?? 0
         let hi = setting.max ?? 100
         let step = setting.step ?? 1
-        return HStack {
-            Text(setting.label)
-                .font(.system(size: 12))
-                .foregroundStyle(Tokens.current.text)
-            Spacer()
-            Slider(
-                value: Binding(
-                    get: { value },
-                    set: { AppSettings.shared.setPluginSetting(pluginID, setting.key, $0) }
-                ), in: lo...hi, step: step
-            )
-            Text(step < 1 ? String(format: "%.1f", value) : "\(Int(value))")
-                .font(.system(size: 11, design: .monospaced))
-                .foregroundStyle(Tokens.current.text)
-                .frame(width: 32)
+        return SettingRow(label: setting.label, help: setting.description) {
+            HStack(spacing: 8) {
+                Slider(
+                    value: Binding(
+                        get: { value },
+                        set: { AppSettings.shared.setPluginSetting(pluginID, setting.key, $0) }
+                    ), in: lo...hi, step: step
+                )
+                Text(step < 1 ? String(format: "%.1f", value) : "\(Int(value))")
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(Tokens.current.text)
+                    .frame(width: 32, alignment: .trailing)
+            }
+            .frame(maxWidth: 260)
         }
-        .frame(width: 200)
     }
 
     private var stringControl: some View {
@@ -285,196 +264,77 @@ private struct PluginSettingControl: View {
             pluginID, setting.key, default: setting.defaultValue?.value as? String ?? "")
         return Group {
             if setting.options == "markdownOpenMode" {
-                markdownOpenModeControl
+                openModePicker(
+                    cases: MarkdownOpenMode.visibleCases,
+                    current: (MarkdownOpenMode(rawValue: AppSettings.shared.markdownOpenMode.rawValue) ?? .builtInEditor)
+                        .normalized,
+                    set: { AppSettings.shared.markdownOpenMode = $0 }
+                )
             } else if setting.options == "imageOpenMode" {
-                imageOpenModeControl
+                openModePicker(
+                    cases: ImageOpenMode.visibleCases,
+                    current: (ImageOpenMode(
+                        rawValue: AppSettings.shared.pluginString(pluginID, setting.key, default: "imageViewer"))
+                        ?? .imageViewer).normalized,
+                    set: { AppSettings.shared.setPluginSetting(pluginID, setting.key, $0.rawValue) }
+                )
             } else if setting.options == "textOpenMode" {
-                textOpenModeControl
+                openModePicker(
+                    cases: TextOpenMode.visibleCases,
+                    current: (TextOpenMode(
+                        rawValue: AppSettings.shared.pluginString(pluginID, setting.key, default: "editor")) ?? .editor)
+                        .normalized,
+                    set: { AppSettings.shared.setPluginSetting(pluginID, setting.key, $0.rawValue) }
+                )
             } else if setting.options == "fontPicker:system" {
-                HStack {
-                    Text(setting.label)
-                        .font(.system(size: 12))
-                        .foregroundStyle(Tokens.current.text)
-                    Spacer()
+                SettingRow(label: setting.label, help: setting.description) {
                     fontPicker(value: value, fonts: AppSettings.availableSystemFonts)
                 }
             } else if setting.options == "fontPicker:mono" {
-                HStack {
-                    Text(setting.label)
-                        .font(.system(size: 12))
-                        .foregroundStyle(Tokens.current.text)
-                    Spacer()
+                SettingRow(label: setting.label, help: setting.description) {
                     fontPicker(value: value, fonts: AppSettings.availableMonospaceFonts)
                 }
-            } else if setting.options == "dockerSocket" {
-                dockerSocketControl(value: value)
-            } else if setting.options == "editorFilePatterns" {
-                editorFilePatternsControl(value: value)
-            } else if setting.options == "gitDiffTool" {
-                gitDiffToolControl(value: value)
             } else {
-                HStack {
-                    Text(setting.label)
-                        .font(.system(size: 12))
-                        .foregroundStyle(Tokens.current.text)
-                    Spacer()
-                    TextField(
-                        "",
+                SettingRow(label: setting.label, help: stringHelp) {
+                    SettingTextField(
+                        placeholder: stringPlaceholder,
                         text: Binding(
                             get: { value },
                             set: { AppSettings.shared.setPluginSetting(pluginID, setting.key, $0) }
-                        )
+                        ),
+                        monospaced: true
                     )
-                    .textFieldStyle(.roundedBorder)
-                    .frame(width: 150)
                 }
             }
         }
     }
 
-    private var markdownOpenModeControl: some View {
-        let t = Tokens.current
-        return VStack(alignment: .leading, spacing: 6) {
-            Text(setting.label)
-                .font(.system(size: 12))
-                .foregroundStyle(t.text)
-            Picker(
-                "",
-                selection: Binding(
-                    get: { AppSettings.shared.markdownOpenMode.normalized },
-                    set: { AppSettings.shared.markdownOpenMode = $0 }
-                )
-            ) {
-                ForEach(MarkdownOpenMode.visibleCases, id: \.self) { mode in
-                    Text(mode.displayName).tag(mode)
-                }
+    private var stringPlaceholder: String {
+        switch setting.options {
+        case "dockerSocket": return DockerService.shared.socketPath ?? "/var/run/docker.sock"
+        case "gitDiffTool": return "e.g. code --diff {file}"
+        case "editorFilePatterns": return ContentType.builtInEditorFilePatterns
+        default: return ""
+        }
+    }
+
+    private var stringHelp: String? {
+        if setting.options == "dockerSocket", let detected = DockerService.shared.socketPath {
+            return "Leave empty to auto-detect. Currently using: \(detected)"
+        }
+        return setting.description
+    }
+
+    private func openModePicker<M: OpenModePickable>(
+        cases: [M], current: M, set: @escaping @Sendable (M) -> Void
+    ) -> some View {
+        SettingRow(label: setting.label, help: setting.description) {
+            Picker("", selection: Binding(get: { current }, set: set)) {
+                ForEach(cases, id: \.self) { Text($0.displayName).tag($0) }
             }
             .pickerStyle(.menu)
             .labelsHidden()
-        }
-    }
-
-    private var imageOpenModeControl: some View {
-        let t = Tokens.current
-        let current =
-            (ImageOpenMode(
-                rawValue: AppSettings.shared.pluginString(pluginID, setting.key, default: "imageViewer")
-            ) ?? .imageViewer).normalized
-        return VStack(alignment: .leading, spacing: 6) {
-            Text(setting.label)
-                .font(.system(size: 12))
-                .foregroundStyle(t.text)
-            Picker(
-                "",
-                selection: Binding(
-                    get: { current },
-                    set: { AppSettings.shared.setPluginSetting(pluginID, setting.key, $0.rawValue) }
-                )
-            ) {
-                ForEach(ImageOpenMode.visibleCases, id: \.self) { mode in
-                    Text(mode.displayName).tag(mode)
-                }
-            }
-            .pickerStyle(.menu)
-            .labelsHidden()
-        }
-    }
-
-    private var textOpenModeControl: some View {
-        let t = Tokens.current
-        let current =
-            (TextOpenMode(
-                rawValue: AppSettings.shared.pluginString(pluginID, setting.key, default: "editor")
-            ) ?? .editor).normalized
-        return VStack(alignment: .leading, spacing: 6) {
-            Text(setting.label)
-                .font(.system(size: 12))
-                .foregroundStyle(t.text)
-            Picker(
-                "",
-                selection: Binding(
-                    get: { current },
-                    set: { AppSettings.shared.setPluginSetting(pluginID, setting.key, $0.rawValue) }
-                )
-            ) {
-                ForEach(TextOpenMode.visibleCases, id: \.self) { mode in
-                    Text(mode.displayName).tag(mode)
-                }
-            }
-            .pickerStyle(.menu)
-            .labelsHidden()
-        }
-    }
-
-    private func dockerSocketControl(value: String) -> some View {
-        let t = Tokens.current
-        let detected = DockerService.shared.socketPath
-        return VStack(alignment: .leading, spacing: 4) {
-            Text(setting.label)
-                .font(.system(size: 12))
-                .foregroundStyle(t.text)
-            TextField(
-                detected ?? "/var/run/docker.sock",
-                text: Binding(
-                    get: { value },
-                    set: { AppSettings.shared.setPluginSetting(pluginID, setting.key, $0) }
-                )
-            )
-            .textFieldStyle(.roundedBorder)
-            .font(.system(size: 11, design: .monospaced))
-            if let path = detected {
-                Text("Leave empty to auto-detect. Currently using: \(path)")
-                    .font(.system(size: 11))
-                    .foregroundStyle(t.muted)
-            } else {
-                Text("Leave empty to auto-detect.")
-                    .font(.system(size: 11))
-                    .foregroundStyle(t.muted)
-            }
-        }
-    }
-
-    private func gitDiffToolControl(value: String) -> some View {
-        let t = Tokens.current
-        return VStack(alignment: .leading, spacing: 4) {
-            Text(setting.label)
-                .font(.system(size: 12))
-                .foregroundStyle(t.text)
-            TextField(
-                "e.g. code --diff {file}",
-                text: Binding(
-                    get: { value },
-                    set: { AppSettings.shared.setPluginSetting(pluginID, setting.key, $0) }
-                )
-            )
-            .textFieldStyle(.roundedBorder)
-            .font(.system(size: 11, design: .monospaced))
-            Text("Leave empty to use \u{2018}git diff\u{2019} in the terminal. Use {file} for the full file path.")
-                .font(.system(size: 11))
-                .foregroundStyle(t.muted)
-        }
-    }
-
-    private func editorFilePatternsControl(value: String) -> some View {
-        let t = Tokens.current
-        return VStack(alignment: .leading, spacing: 4) {
-            Text(setting.label)
-                .font(.system(size: 12))
-                .foregroundStyle(t.text)
-            TextField(
-                ContentType.builtInEditorFilePatterns,
-                text: Binding(
-                    get: { value },
-                    set: { AppSettings.shared.setPluginSetting(pluginID, setting.key, $0) }
-                )
-            )
-            .textFieldStyle(.roundedBorder)
-            .font(.system(size: 11, design: .monospaced))
-            Text(
-                "Comma-separated patterns. Examples: swift, .gitignore, *.{ts,tsx}, .env*. Other files open with the default app."
-            )
-            .font(.system(size: 11))
-            .foregroundStyle(t.muted)
+            .frame(maxWidth: 200, alignment: .leading)
         }
     }
 
@@ -490,6 +350,6 @@ private struct PluginSettingControl: View {
             ForEach(fonts, id: \.self) { Text($0).tag($0) }
         }
         .labelsHidden()
-        .frame(width: 150)
+        .frame(maxWidth: 200, alignment: .leading)
     }
 }

@@ -24,115 +24,84 @@ struct BrowserSettingsView: View {
         let t = Tokens.current
 
         SettingsPage(title: "Browser") {
-            // MARK: General
             Section(title: "General") {
-                HStack(spacing: 8) {
-                    Text("Home page")
-                        .font(.system(size: 12))
-                        .foregroundStyle(t.text)
-                        .frame(width: 80, alignment: .leading)
-                    TextField("https://google.com", text: $homePage)
-                        .textFieldStyle(.plain)
-                        .font(.system(size: 12, design: .monospaced))
-                        .foregroundStyle(t.text)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 5)
-                        .background(
-                            RoundedRectangle(cornerRadius: 6)
-                                .stroke(t.border, lineWidth: 1)
-                        )
-                        .onSubmit { save() }
-                        .onChange(of: homePage) { _, _ in save() }
+                SettingRow(
+                    label: "Home page",
+                    help: "Opened when creating a new browser tab."
+                ) {
+                    SettingTextField(
+                        placeholder: "https://google.com",
+                        text: $homePage,
+                        monospaced: true,
+                        onCommit: save
+                    )
+                    .onChange(of: homePage) { _, _ in save() }
                 }
-                Text("Opened when creating a new browser tab.")
-                    .font(.system(size: 11))
-                    .foregroundStyle(t.muted)
 
-                ToggleRow(label: "Allow persistent website data", isOn: $persistentWebsiteDataEnabled)
-                    .onChange(of: persistentWebsiteDataEnabled) { _, value in
-                        AppSettings.shared.browserPersistentWebsiteDataEnabled = value
-                    }
-
-                Text(
-                    "When off, browser tabs use an ephemeral data store to avoid system WebCrypto/Keychain prompts. Changes apply to new browser tabs."
+                ToggleRow(
+                    label: "Allow persistent website data",
+                    help:
+                        "When off, browser tabs use an ephemeral data store to avoid system WebCrypto/Keychain prompts. Changes apply to new browser tabs.",
+                    isOn: $persistentWebsiteDataEnabled
                 )
-                .font(.system(size: 11))
-                .foregroundStyle(t.muted)
+                .onChange(of: persistentWebsiteDataEnabled) { _, value in
+                    AppSettings.shared.browserPersistentWebsiteDataEnabled = value
+                }
 
-                HStack(spacing: 8) {
-                    Text("Terminal links")
-                        .font(.system(size: 12))
-                        .foregroundStyle(t.text)
-                        .frame(width: 120, alignment: .leading)
+                SettingRow(label: "Terminal links") {
                     Picker("", selection: $linkOpenMode) {
                         ForEach(LinkOpenMode.allCases, id: \.self) {
                             Text($0.displayName).tag($0)
                         }
                     }
                     .labelsHidden()
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .frame(maxWidth: 220, alignment: .leading)
                     .onChange(of: linkOpenMode) { _, v in AppSettings.shared.linkOpenMode = v }
                 }
             }
 
-            // MARK: History
             Section(title: "History") {
                 ToggleRow(label: "Save browsing history", isOn: $historyEnabled)
                     .onChange(of: historyEnabled) { _, v in AppSettings.shared.browserHistoryEnabled = v }
 
-                HStack(spacing: 8) {
-                    Text("Keep up to")
-                        .font(.system(size: 12))
-                        .foregroundStyle(t.text)
-                    TextField("5000", value: $historyLimit, format: .number)
-                        .textFieldStyle(.plain)
-                        .font(.system(size: 12, design: .monospaced))
-                        .multilineTextAlignment(.trailing)
-                        .foregroundStyle(t.text)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .frame(width: 70)
-                        .background(
-                            RoundedRectangle(cornerRadius: 6)
-                                .stroke(t.border, lineWidth: 1)
+                SettingRow(label: "History limit", help: "Older entries are removed automatically.") {
+                    HStack(spacing: 8) {
+                        SettingNumberField(
+                            value: $historyLimit,
+                            width: 80,
+                            alignment: .leading,
+                            onCommit: { v in AppSettings.shared.browserHistoryLimit = max(1, v) }
                         )
-                        .onChange(of: historyLimit) { _, v in
-                            AppSettings.shared.browserHistoryLimit = max(1, v)
-                        }
-                    Text("entries")
-                        .font(.system(size: 12))
-                        .foregroundStyle(t.text)
-                    Spacer()
-                    Button("Clear All…") { showClearConfirm = true }
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
-                        .confirmationDialog(
-                            "Clear all browser history?",
-                            isPresented: $showClearConfirm,
-                            titleVisibility: .visible
-                        ) {
-                            Button("Clear History", role: .destructive) {
-                                BrowserHistory.shared.clear()
-                                historyEntries = BrowserHistory.shared.entries
+                        Text("entries")
+                            .font(.system(size: 12))
+                            .foregroundStyle(t.text)
+                        Spacer()
+                        Button("Clear All…") { showClearConfirm = true }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                            .confirmationDialog(
+                                "Clear all browser history?",
+                                isPresented: $showClearConfirm,
+                                titleVisibility: .visible
+                            ) {
+                                Button("Clear History", role: .destructive) {
+                                    BrowserHistory.shared.clear()
+                                    historyEntries = BrowserHistory.shared.entries
+                                }
+                                Button("Cancel", role: .cancel) {}
                             }
-                            Button("Cancel", role: .cancel) {}
-                        }
+                    }
                 }
             }
 
-            // MARK: History List
             if historyEnabled {
                 Section(title: "Recent History") {
-                    TextField("Search history…", text: $searchText)
-                        .textFieldStyle(.plain)
-                        .font(.system(size: 12))
-                        .foregroundStyle(t.text)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 5)
-                        .background(
-                            RoundedRectangle(cornerRadius: 6)
-                                .stroke(t.border, lineWidth: 1)
-                        )
+                    SettingTextField(
+                        placeholder: "Search history…",
+                        text: $searchText,
+                        icon: "magnifyingglass",
+                        trailingClear: true
+                    )
 
                     if filteredEntries.isEmpty {
                         Text(historyEntries.isEmpty ? "No history yet." : "No results.")
@@ -158,9 +127,7 @@ struct BrowserSettingsView: View {
                         )
 
                         if filteredEntries.count > 200 {
-                            Text("Showing 200 of \(filteredEntries.count) entries.")
-                                .font(.system(size: 11))
-                                .foregroundStyle(t.muted)
+                            DescriptionLabel(text: "Showing 200 of \(filteredEntries.count) entries.")
                         }
                     }
                 }
@@ -209,14 +176,7 @@ private struct HistoryRow: View {
                 .font(.system(size: 10))
                 .foregroundStyle(t.muted)
             if isHovered {
-                Button {
-                    onDelete()
-                } label: {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(t.muted)
-                }
-                .buttonStyle(.plain)
+                IconButton(systemName: "xmark", size: 10, frame: 20, fillOpacity: 0, action: onDelete)
             }
         }
         .padding(.horizontal, 8)

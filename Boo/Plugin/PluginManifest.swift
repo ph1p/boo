@@ -45,6 +45,7 @@ struct PluginManifest: Codable {
         let key: String
         let type: SettingType
         let label: String
+        var description: String? = nil
         let defaultValue: AnyCodableValue?
         let options: String?
         /// Optional section group label. Settings with the same group are rendered together
@@ -55,7 +56,7 @@ struct PluginManifest: Codable {
         var step: Double? = nil
 
         enum CodingKeys: String, CodingKey {
-            case key, type, label, options, group, min, max, step
+            case key, type, label, description, options, group, min, max, step
             case defaultValue = "default"
         }
 
@@ -74,6 +75,18 @@ struct PluginManifest: Codable {
         let shortcut: String?
         let icon: String?
         var separator: Bool? = nil
+    }
+}
+
+extension PluginManifest {
+    /// Settings to show on the plugin's settings page. Bool settings are excluded for
+    /// statusBarSegment plugins because they appear in Status Bar settings instead.
+    var visibleSettings: [SettingManifest] {
+        guard let settings else { return [] }
+        if capabilities?.statusBarSegment == true {
+            return settings.filter { $0.type != .bool }
+        }
+        return settings
     }
 }
 
