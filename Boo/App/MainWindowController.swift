@@ -575,6 +575,7 @@ class ThemedSplitView: NSSplitView {
                     for (_, pv) in self.paneViews {
                         pv.layer?.backgroundColor = theme.background.nsColor.cgColor
                         pv.updateDimOverlayColor()
+                        pv.updateFindBarTheme()
                         pv.needsLayout = true
                         pv.needsDisplay = true
                     }

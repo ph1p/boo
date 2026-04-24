@@ -15,6 +15,15 @@ extension MainWindowController {
         return nil
     }
 
+    @objc func findAction(_ sender: Any?) {
+        guard let workspace = activeWorkspace,
+            let pv = paneViews[workspace.activePaneID]
+        else { return }
+        let wasVisible = pv.isFindBarVisible
+        pv.showFindBar()
+        if !wasVisible { activeGhosttyView?.startSearch() }
+    }
+
     @objc func clearScreenAction(_ sender: Any?) {
         // Simulate Ctrl+L key press — the standard terminal clear screen
         activeGhosttyView?.sendKey(keyCode: 0x25, mods: GHOSTTY_MODS_CTRL, text: "l")

@@ -54,7 +54,8 @@ struct ShortcutsSettingsView: View {
                 ("Cut", "\u{2318}X"),
                 ("Copy", "\u{2318}C"),
                 ("Paste", "\u{2318}V"),
-                ("Select All", "\u{2318}A")
+                ("Select All", "\u{2318}A"),
+                ("Find…", "\u{2318}F")
             ]
         ),
         (

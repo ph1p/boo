@@ -33,6 +33,14 @@ import Cocoa
     var onCommandStart: ((String) -> Void)?
     /// Called when OSC 9999 cmd_end fires. Argument is the exit code.
     var onCommandEnd: ((Int32) -> Void)?
+    /// Called when Ghostty requests the search UI to open (needle may be empty).
+    var onSearchRequested: ((String) -> Void)?
+    /// Called when Ghostty reports the total number of search matches.
+    var onSearchTotal: ((Int) -> Void)?
+    /// Called when Ghostty reports the currently selected match index.
+    var onSearchSelected: ((Int) -> Void)?
+    /// Called when Ghostty requests the search UI to close.
+    var onSearchEnded: (() -> Void)?
     let createdAt = Date()
     var shellPID: pid_t = 0
 
@@ -511,17 +519,21 @@ import Cocoa
             surface, Double(point.x), Double(bounds.height - point.y), translateMods(event.modifierFlags))
     }
 
+    // MARK: - Search
+
+    func startSearch() { sendBindingAction("start_search") }
+    func updateSearch(needle: String) { sendBindingAction(needle.isEmpty ? "end_search" : "search:\(needle)") }
+    func endSearch() { sendBindingAction("end_search") }
+    func navigateSearch(next: Bool) { sendBindingAction(next ? "navigate_search:next" : "navigate_search:previous") }
+
     // MARK: - Copy / Paste / Flash
 
-    @objc func copy(_ sender: Any?) {
-        guard let surface = surface else { return }
-        let action = "copy:clipboard"
-        _ = ghostty_surface_binding_action(surface, action, UInt(action.utf8.count))
-    }
+    @objc func copy(_ sender: Any?) { sendBindingAction("copy:clipboard") }
 
-    @objc override func selectAll(_ sender: Any?) {
+    @objc override func selectAll(_ sender: Any?) { sendBindingAction("select_all") }
+
+    private func sendBindingAction(_ action: String) {
         guard let surface = surface else { return }
-        let action = "select_all"
         _ = ghostty_surface_binding_action(surface, action, UInt(action.utf8.count))
     }
 

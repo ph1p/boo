@@ -88,6 +88,8 @@ extension MainWindowController: PaneViewDelegate {
 
     func paneView(_ paneView: PaneView, titleChanged title: String, paneID: UUID) {
         guard let workspace = activeWorkspaceForPaneEvent(paneID, event: "titleChanged") else { return }
+        let findBarActive = paneViews[paneID]?.isFindBarVisible ?? false
+        if findBarActive { return }
         bridge.handleTitleChange(title: title, paneID: paneID)
         guard workspace.activePaneID == paneID else { return }
         if let pane = workspace.pane(for: paneID) {
