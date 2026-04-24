@@ -137,11 +137,16 @@ Declare settings in `PluginManifest.settings`. They appear in the Settings sideb
 
 Supported setting types: `bool` (toggle), `double` (slider), `string` (text field or special picker).
 
+Each setting supports an optional `description` field shown as help text below the control.
+
 Special `options` values for string settings:
 - `"fontPicker:system"` / `"fontPicker:mono"` — font picker dropdown
-- `"editorExtensions"` — comma-separated file extensions
+- `"editorFilePatterns"` — comma-separated file patterns (e.g. `*.ts, .env*`)
+- `"dockerSocket"` — socket path with auto-detect fallback
 - `"gitDiffTool"` — diff tool command with `{file}` placeholder
-- `"markdownOpenMode"` — segmented picker bound to global `AppSettings.shared.markdownOpenMode`
+- `"markdownOpenMode"` — picker bound to global markdown open mode setting
+- `"imageOpenMode"` — picker bound to global image open mode setting
+- `"textOpenMode"` — picker bound to global text open mode setting
 
 ### Custom Tab Panels
 

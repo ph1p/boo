@@ -52,11 +52,7 @@ struct GeneralSettingsView: View {
             }
 
             Section(title: "Startup") {
-                HStack(spacing: 8) {
-                    Text("Initial tab")
-                        .font(.system(size: 12))
-                        .foregroundStyle(t.text)
-                        .frame(width: 80, alignment: .leading)
+                SettingRow(label: "Initial tab") {
                     Picker("", selection: $defaultTabType) {
                         Text(ContentType.terminal.displayName).tag(ContentType.terminal)
                         Text(ContentType.browser.displayName).tag(ContentType.browser)
@@ -65,40 +61,30 @@ struct GeneralSettingsView: View {
                         Text(ContentType.markdownPreview.displayName).tag(ContentType.markdownPreview)
                     }
                     .labelsHidden()
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .frame(maxWidth: 220, alignment: .leading)
                     .onChange(of: defaultTabType) { _, v in
                         AppSettings.shared.defaultTabType = v
                     }
                 }
 
-                HStack(spacing: 8) {
-                    Text("Main page")
-                        .font(.system(size: 12))
-                        .foregroundStyle(t.text)
-                        .frame(width: 80, alignment: .leading)
-                    TextField("Path or URL", text: $defaultMainPage)
-                        .textFieldStyle(.plain)
-                        .font(.system(size: 12, design: .monospaced))
-                        .foregroundStyle(t.text)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 5)
-                        .background(
-                            RoundedRectangle(cornerRadius: 6)
-                                .stroke(t.border, lineWidth: 1)
-                        )
-                        .onSubmit {
+                SettingRow(
+                    label: "Main page",
+                    help:
+                        "Used for the first tab in a new workspace. Terminal expects a folder path, browser expects a URL, and editor/image/markdown expect a file path."
+                ) {
+                    SettingTextField(
+                        placeholder: "Path or URL",
+                        text: $defaultMainPage,
+                        monospaced: true,
+                        onCommit: {
                             AppSettings.shared.defaultMainPage =
                                 defaultMainPage.trimmingCharacters(in: .whitespaces)
                         }
-                        .onChange(of: defaultMainPage) { _, v in
-                            AppSettings.shared.defaultMainPage = v.trimmingCharacters(in: .whitespaces)
-                        }
+                    )
+                    .onChange(of: defaultMainPage) { _, v in
+                        AppSettings.shared.defaultMainPage = v.trimmingCharacters(in: .whitespaces)
+                    }
                 }
-                Text(
-                    "Used for the first tab in a new workspace. Terminal expects a folder path, browser expects a URL, and editor/image/markdown expect a file path."
-                )
-                .font(.system(size: 11))
-                .foregroundStyle(t.muted)
             }
 
             Section(title: "New Tab & Pane Path") {
@@ -108,48 +94,43 @@ struct GeneralSettingsView: View {
                 .labelsHidden()
                 .pickerStyle(.segmented)
                 .onChange(of: newTabCwdMode) { _, v in AppSettings.shared.newTabCwdMode = v }
-                Text(
-                    "Whether new tabs and split panes open in the active tab's current directory or the workspace default folder."
+                DescriptionLabel(
+                    text:
+                        "Whether new tabs and split panes open in the active tab's current directory or the workspace default folder."
                 )
-                .font(.system(size: 11))
-                .foregroundStyle(t.muted)
             }
 
             Section(title: "File Editor") {
-                HStack(spacing: 8) {
-                    TextField("vim, nvim, nano… (empty = $EDITOR)", text: $fileEditorCommand)
-                        .textFieldStyle(.plain)
-                        .font(.system(size: 12, design: .monospaced))
-                        .foregroundStyle(t.text)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 5)
-                        .background(
-                            RoundedRectangle(cornerRadius: 6)
-                                .stroke(t.border, lineWidth: 1)
-                        )
-                        .onSubmit {
+                SettingRow(
+                    label: "Command",
+                    help: "Command run when clicking a file in the explorer. Leave empty to use $EDITOR."
+                ) {
+                    SettingTextField(
+                        placeholder: "vim, nvim, nano… (empty = $EDITOR)",
+                        text: $fileEditorCommand,
+                        monospaced: true,
+                        onCommit: {
                             AppSettings.shared.fileEditorCommand =
                                 fileEditorCommand.trimmingCharacters(in: .whitespaces)
                         }
-                        .onChange(of: fileEditorCommand) { _, v in
-                            AppSettings.shared.fileEditorCommand =
-                                v.trimmingCharacters(in: .whitespaces)
-                        }
+                    )
+                    .onChange(of: fileEditorCommand) { _, v in
+                        AppSettings.shared.fileEditorCommand =
+                            v.trimmingCharacters(in: .whitespaces)
+                    }
                 }
-                Text("Command run when clicking a file in the explorer. Leave empty to use $EDITOR.")
-                    .font(.system(size: 11))
-                    .foregroundStyle(t.muted)
             }
 
             Section(title: "Advanced") {
-                ToggleRow(label: "Debug logging", isOn: $debugLogging)
-                    .onChange(of: debugLogging) { _, v in
-                        AppSettings.shared.debugLogging = v
-                        BooLogger.shared.applyDebugSetting(v)
-                    }
-                Text("Writes verbose output to the system log. Disable when not troubleshooting.")
-                    .font(.system(size: 11))
-                    .foregroundStyle(t.muted)
+                ToggleRow(
+                    label: "Debug logging",
+                    help: "Writes verbose output to the system log. Disable when not troubleshooting.",
+                    isOn: $debugLogging
+                )
+                .onChange(of: debugLogging) { _, v in
+                    AppSettings.shared.debugLogging = v
+                    BooLogger.shared.applyDebugSetting(v)
+                }
             }
         }
         .foregroundStyle(t.text)

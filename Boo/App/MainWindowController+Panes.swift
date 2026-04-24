@@ -1030,6 +1030,17 @@ extension MainWindowController {
         }
     }
 
+    func windowDidBecomeMain(_ notification: Notification) {
+        // SwiftUI's WindowGroup can overwrite NSApplication.shared.mainMenu after our
+        // setupMenuItems() runs (on activation, scene-phase transitions, etc.).
+        // Reinstall our menu whenever this window regains main status.
+        let menu = NSApplication.shared.mainMenu
+        let hasOurMenu = menu?.items.contains(where: { $0.submenu?.title == "Terminal" }) ?? false
+        if !hasOurMenu {
+            setupMenuItems()
+        }
+    }
+
     func windowShouldClose(_ sender: NSWindow) -> Bool {
         if allowNextWindowClose {
             allowNextWindowClose = false

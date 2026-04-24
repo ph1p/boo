@@ -178,7 +178,7 @@ struct AgentCenterSettingsView: View {
         let t = Tokens.current
 
         VStack(alignment: .leading, spacing: 12) {
-            Section(title: "Providers", spacing: 8, padding: 10) {
+            Section(title: "Providers") {
                 let providers = [AgentKind.claudeCode, .codex, .openCode]
                     .filter { installedAgents.contains($0) }
                 if providers.isEmpty {

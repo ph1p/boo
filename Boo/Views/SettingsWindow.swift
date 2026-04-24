@@ -37,6 +37,10 @@ struct Tokens {
     }
 
     static var current: Tokens { Tokens(theme: AppSettings.shared.theme) }
+
+    static let labelWidth: CGFloat = 112
+    static let rowSpacing: CGFloat = 10
+    static let sectionPadding: CGFloat = 12
 }
 
 // MARK: - Root
@@ -142,7 +146,7 @@ struct SettingsView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
         .background(t.bg)
-        .frame(width: 720, height: 520)
+        .frame(width: 780, height: 560)
     }
 
     // MARK: Content Router
@@ -193,19 +197,22 @@ struct SettingsPage<Content: View>: View {
 
 struct Section<Content: View>: View {
     let title: String
-    var spacing: CGFloat = 10
-    var padding: CGFloat = 12
     @ViewBuilder let content: () -> Content
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(title)
-                .font(.headline)
-                .foregroundStyle(.primary)
-            VStack(alignment: .leading, spacing: spacing) {
+            if !title.isEmpty {
+                Text(title)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(Tokens.current.muted)
+                    .textCase(.uppercase)
+                    .tracking(0.4)
+                    .padding(.leading, 2)
+            }
+            VStack(alignment: .leading, spacing: Tokens.rowSpacing) {
                 content()
             }
-            .padding(padding)
+            .padding(Tokens.sectionPadding)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(Tokens.current.cardBg, in: RoundedRectangle(cornerRadius: 10))
             .clipShape(RoundedRectangle(cornerRadius: 10))
@@ -301,21 +308,249 @@ struct FontChooser: NSViewRepresentable {
 
 struct ToggleRow: View {
     let label: String
+    var help: String? = nil
     @Binding var isOn: Bool
 
     var body: some View {
-        HStack {
+        let t = Tokens.current
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text(label)
+                    .font(.system(size: 12))
+                    .foregroundStyle(t.text)
+                Spacer()
+                Toggle("", isOn: $isOn)
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+                    .controlSize(.small)
+            }
+            if let help {
+                Text(help)
+                    .font(.system(size: 11))
+                    .foregroundStyle(t.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(.vertical, 2)
+    }
+}
+
+// MARK: - Unified Settings Row
+
+/// Label + control + optional help text. Primary building block for settings pages.
+struct SettingRow<Control: View>: View {
+    let label: String
+    var help: String? = nil
+    var alignment: VerticalAlignment = .firstTextBaseline
+    @ViewBuilder let control: () -> Control
+
+    var body: some View {
+        let t = Tokens.current
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: alignment, spacing: 10) {
+                Text(label)
+                    .font(.system(size: 12))
+                    .foregroundStyle(t.text)
+                    .frame(width: Tokens.labelWidth, alignment: .leading)
+                control()
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            if let help {
+                Text(help)
+                    .font(.system(size: 11))
+                    .foregroundStyle(t.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.leading, Tokens.labelWidth + 10)
+            }
+        }
+        .padding(.vertical, 2)
+    }
+}
+
+/// Standalone 11pt muted description line — use when a row is unlabeled (e.g. segmented pickers).
+struct DescriptionLabel: View {
+    let text: String
+
+    var body: some View {
+        Text(text)
+            .font(.system(size: 11))
+            .foregroundStyle(Tokens.current.muted)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
+/// Label-above-control layout for full-width controls (segmented pickers, pickers with long options).
+struct SettingStack<Control: View>: View {
+    let label: String
+    var help: String? = nil
+    @ViewBuilder let control: () -> Control
+
+    var body: some View {
+        let t = Tokens.current
+        VStack(alignment: .leading, spacing: 6) {
             Text(label)
                 .font(.system(size: 12))
-                .foregroundStyle(Tokens.current.text)
-            Spacer()
-            Toggle("", isOn: $isOn)
-                .labelsHidden()
-                .toggleStyle(.switch)
-                .controlSize(.small)
+                .foregroundStyle(t.text)
+            control()
+            if let help {
+                Text(help)
+                    .font(.system(size: 11))
+                    .foregroundStyle(t.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
+        .padding(.vertical, 2)
+    }
+}
+
+// MARK: - Text Field
+
+/// Themed text field matching the settings visual language.
+struct SettingTextField: View {
+    let placeholder: String
+    @Binding var text: String
+    var monospaced: Bool = false
+    var width: CGFloat? = nil
+    var icon: String? = nil
+    var trailingClear: Bool = false
+    var onCommit: (() -> Void)? = nil
+
+    var body: some View {
+        let t = Tokens.current
+        HStack(spacing: 6) {
+            if let icon {
+                Image(systemName: icon)
+                    .font(.system(size: 11))
+                    .foregroundStyle(t.muted)
+            }
+            TextField(placeholder, text: $text)
+                .textFieldStyle(.plain)
+                .font(monospaced ? .system(size: 12, design: .monospaced) : .system(size: 12))
+                .foregroundStyle(t.text)
+                .onSubmit { onCommit?() }
+            if trailingClear && !text.isEmpty {
+                Button(action: { text = "" }) {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 11))
+                        .foregroundStyle(t.muted)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.horizontal, 8)
         .padding(.vertical, 5)
-        .padding(.horizontal, 0)
+        .frame(width: width)
+        .background(
+            RoundedRectangle(cornerRadius: 6)
+                .fill(t.chromeBg.opacity(0.4))
+                .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(t.border, lineWidth: 1))
+        )
+    }
+}
+
+struct SettingNumberField: View {
+    @Binding var value: Int
+    var width: CGFloat = 70
+    var alignment: TextAlignment = .trailing
+    var onCommit: ((Int) -> Void)? = nil
+
+    var body: some View {
+        let t = Tokens.current
+        TextField("", value: $value, format: .number)
+            .textFieldStyle(.plain)
+            .font(.system(size: 12, design: .monospaced))
+            .multilineTextAlignment(alignment)
+            .foregroundStyle(t.text)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 5)
+            .frame(width: width)
+            .background(
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(t.chromeBg.opacity(0.4))
+                    .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(t.border, lineWidth: 1))
+            )
+            .onChange(of: value) { _, v in onCommit?(v) }
+    }
+}
+
+// MARK: - Icon Button
+
+/// Small icon button used for inline row actions (delete, edit).
+struct IconButton: View {
+    let systemName: String
+    var tint: Color? = nil
+    var size: CGFloat = 11
+    var frame: CGFloat = 22
+    var fillOpacity: Double = 0.12
+    var help: String? = nil
+    let action: () -> Void
+
+    var body: some View {
+        let t = Tokens.current
+        let color = tint ?? t.muted
+        let button = Button(action: action) {
+            Image(systemName: systemName)
+                .font(.system(size: size, weight: .medium))
+                .frame(width: frame, height: frame)
+                .foregroundStyle(color)
+                .background(
+                    RoundedRectangle(cornerRadius: 5)
+                        .fill(color.opacity(fillOpacity))
+                )
+        }
+        .buttonStyle(.plain)
+        if let help {
+            button.help(help)
+        } else {
+            button
+        }
+    }
+}
+
+// MARK: - Shortcut Pill
+
+struct ShortcutPill: View {
+    let text: String
+
+    var body: some View {
+        let t = Tokens.current
+        Text(text)
+            .font(.system(size: 11, design: .monospaced))
+            .foregroundStyle(t.accent)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(
+                RoundedRectangle(cornerRadius: 4)
+                    .fill(t.accent.opacity(0.1))
+            )
+    }
+}
+
+// MARK: - Plugin Segment Group
+
+/// Plugin header + indented toggle list used in Status Bar plugin segments and similar nested groups.
+struct PluginSegmentGroup<Content: View>: View {
+    let icon: String
+    let name: String
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        let t = Tokens.current
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Image(systemName: icon)
+                    .font(.system(size: 10))
+                    .foregroundStyle(t.accent)
+                    .frame(width: 14)
+                Text(name)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(t.text)
+            }
+            VStack(alignment: .leading, spacing: 6) {
+                content()
+            }
+            .padding(.leading, 20)
+        }
     }
 }
 
@@ -334,7 +569,7 @@ class SettingsWindowController: NSWindowController {
 
     private init() {
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 720, height: 520),
+            contentRect: NSRect(x: 0, y: 0, width: 780, height: 560),
             styleMask: [.titled, .closable, .fullSizeContentView],
             backing: .buffered,
             defer: false

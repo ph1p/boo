@@ -79,7 +79,12 @@ enum NewTabCwdMode: Int, CaseIterable {
     }
 }
 
-enum MarkdownOpenMode: String, CaseIterable, Codable {
+protocol OpenModePickable: RawRepresentable, Hashable where RawValue == String {
+    var displayName: String { get }
+    static var visibleCases: [Self] { get }
+}
+
+enum MarkdownOpenMode: String, CaseIterable, Codable, OpenModePickable {
     case preview = "preview"
     case builtInEditor = "builtInEditor"
     case terminalEditor = "editor"
@@ -104,7 +109,7 @@ enum MarkdownOpenMode: String, CaseIterable, Codable {
     static var visibleCases: [MarkdownOpenMode] { [.preview, .builtInEditor, .terminalEditor, .external] }
 }
 
-enum ImageOpenMode: String, CaseIterable, Codable {
+enum ImageOpenMode: String, CaseIterable, Codable, OpenModePickable {
     case imageViewer = "imageViewer"
     case kitty = "kitty"
     case external = "external"
@@ -127,7 +132,7 @@ enum ImageOpenMode: String, CaseIterable, Codable {
     static var visibleCases: [ImageOpenMode] { [.imageViewer, .kitty, .external] }
 }
 
-enum TextOpenMode: String, CaseIterable, Codable {
+enum TextOpenMode: String, CaseIterable, Codable, OpenModePickable {
     case editor = "editor"
     case terminalEditor = "terminalEditor"
     case external = "external"

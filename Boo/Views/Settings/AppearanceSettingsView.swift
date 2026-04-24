@@ -29,10 +29,16 @@ struct AppearanceSettingsView: View {
             }
 
             Section(title: "Terminal Font") {
-                FontChooser(selectedFont: $termSelectedFont, fonts: monoFonts)
-                    .onChange(of: termSelectedFont) { _, v in AppSettings.shared.fontName = v }
-                FontSizePicker(value: $termFontSize, range: 10...28)
-                    .onChange(of: termFontSize) { _, v in AppSettings.shared.fontSize = CGFloat(v) }
+                SettingRow(label: "Family") {
+                    FontChooser(selectedFont: $termSelectedFont, fonts: monoFonts)
+                        .frame(maxWidth: 240, alignment: .leading)
+                        .onChange(of: termSelectedFont) { _, v in AppSettings.shared.fontName = v }
+                }
+                SettingRow(label: "Size") {
+                    FontSizePicker(value: $termFontSize, range: 10...28)
+                        .frame(maxWidth: 120, alignment: .leading)
+                        .onChange(of: termFontSize) { _, v in AppSettings.shared.fontSize = CGFloat(v) }
+                }
                 Text("$ echo \"Hello, Boo\"")
                     .font(.custom(termSelectedFont, size: CGFloat(termFontSize)))
                     .foregroundStyle(t.fg)
@@ -42,15 +48,21 @@ struct AppearanceSettingsView: View {
             }
 
             Section(title: "Sidebar Font") {
-                FontChooser(selectedFont: $sidebarSelectedFont, fonts: systemFonts)
-                    .onChange(of: sidebarSelectedFont) { _, v in
-                        AppSettings.shared.sidebarFontName = v == "System Default" ? "" : v
-                    }
-                FontSizePicker(value: $sidebarFontSize, range: 10...20)
-                    .onChange(of: sidebarFontSize) { _, v in AppSettings.shared.sidebarFontSize = CGFloat(v) }
-                Text("Applied to file trees and content only — not to section headers.")
-                    .font(.system(size: 11))
-                    .foregroundStyle(t.muted)
+                SettingRow(label: "Family") {
+                    FontChooser(selectedFont: $sidebarSelectedFont, fonts: systemFonts)
+                        .frame(maxWidth: 240, alignment: .leading)
+                        .onChange(of: sidebarSelectedFont) { _, v in
+                            AppSettings.shared.sidebarFontName = v == "System Default" ? "" : v
+                        }
+                }
+                SettingRow(
+                    label: "Size",
+                    help: "Applied to file trees and content only — not to section headers."
+                ) {
+                    FontSizePicker(value: $sidebarFontSize, range: 10...20)
+                        .frame(maxWidth: 120, alignment: .leading)
+                        .onChange(of: sidebarFontSize) { _, v in AppSettings.shared.sidebarFontSize = CGFloat(v) }
+                }
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Section Header")
                         .font(.system(size: 11, weight: .medium))

@@ -57,33 +57,15 @@ struct StatusBarSettingsView: View {
     private func pluginSettingsRows(for manifest: PluginManifest, t: Tokens) -> some View {
         let statusBarSettings = (manifest.settings ?? []).filter { $0.type == .bool }
 
-        VStack(alignment: .leading, spacing: 6) {
-            // Plugin header
-            HStack(spacing: 6) {
-                Image(systemName: manifest.icon)
-                    .font(.system(size: 10))
-                    .foregroundStyle(t.accent)
-                    .frame(width: 14)
-                Text(manifest.name)
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(t.text)
-            }
-
+        PluginSegmentGroup(icon: manifest.icon, name: manifest.name) {
             if statusBarSettings.isEmpty {
-                HStack {
-                    Text("Visible when active")
-                        .font(.system(size: 11))
-                        .foregroundStyle(t.muted)
-                    Spacer()
-                }
-                .padding(.leading, 20)
+                Text("Visible when active")
+                    .font(.system(size: 11))
+                    .foregroundStyle(t.muted)
             } else {
-                VStack(alignment: .leading, spacing: 6) {
-                    ForEach(statusBarSettings, id: \.key) { setting in
-                        PluginStatusBarToggle(pluginID: manifest.id, setting: setting)
-                    }
+                ForEach(statusBarSettings, id: \.key) { setting in
+                    PluginStatusBarToggle(pluginID: manifest.id, setting: setting)
                 }
-                .padding(.leading, 20)
             }
         }
     }

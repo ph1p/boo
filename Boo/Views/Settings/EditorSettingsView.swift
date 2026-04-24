@@ -17,27 +17,26 @@ struct EditorSettingsView: View {
 
     var body: some View {
         let _ = observer.revision
-        let t = Tokens.current
 
         SettingsPage(title: "Editor") {
             Section(title: "Font") {
-                settingRow("Family", t: t) {
+                SettingRow(label: "Family") {
                     FontChooser(selectedFont: $fontName, fonts: monoFonts)
-                        .frame(maxWidth: 200)
+                        .frame(maxWidth: 220, alignment: .leading)
                         .onChange(of: fontName) { _, v in AppSettings.shared.editorFontName = v }
                 }
-                settingRow("Size", t: t) {
+                SettingRow(label: "Size") {
                     FontSizePicker(
                         value: Binding(get: { Double(fontSize) }, set: { fontSize = CGFloat($0) }),
                         range: 9...24
                     )
-                    .frame(maxWidth: 200)
+                    .frame(maxWidth: 120, alignment: .leading)
                     .onChange(of: fontSize) { _, v in AppSettings.shared.editorFontSize = v }
                 }
             }
 
             Section(title: "Editing") {
-                settingRow("Tab size", t: t) {
+                SettingRow(label: "Tab size") {
                     Picker("", selection: $tabSize) {
                         Text("2").tag(2)
                         Text("4").tag(4)
@@ -45,7 +44,7 @@ struct EditorSettingsView: View {
                     }
                     .pickerStyle(.menu)
                     .labelsHidden()
-                    .frame(width: 72)
+                    .frame(width: 72, alignment: .leading)
                     .onChange(of: tabSize) { _, v in AppSettings.shared.editorTabSize = v }
                 }
                 ToggleRow(label: "Insert spaces", isOn: $insertSpaces)
@@ -59,41 +58,27 @@ struct EditorSettingsView: View {
                     .onChange(of: lineNumbers) { _, v in AppSettings.shared.editorLineNumbers = v }
                 ToggleRow(label: "Minimap", isOn: $minimap)
                     .onChange(of: minimap) { _, v in AppSettings.shared.editorMinimap = v }
-                settingRow("Ruler column", t: t) {
-                    HStack(spacing: 6) {
-                        TextField("", value: $rulerColumn, format: .number)
-                            .frame(width: 52)
-                            .textFieldStyle(.roundedBorder)
-                            .onChange(of: rulerColumn) { _, v in
-                                AppSettings.shared.editorRulerColumn = max(0, v)
-                            }
-                        Text("(0 = off)")
-                            .font(.system(size: 11))
-                            .foregroundStyle(t.muted)
-                    }
+                SettingRow(
+                    label: "Ruler column",
+                    help: "Column where the vertical ruler is drawn. 0 disables the ruler."
+                ) {
+                    SettingNumberField(
+                        value: $rulerColumn,
+                        width: 64,
+                        alignment: .leading,
+                        onCommit: { v in AppSettings.shared.editorRulerColumn = max(0, v) }
+                    )
                 }
             }
 
             Section(title: "Formatting") {
-                ToggleRow(label: "Format on save", isOn: $formatOnSave)
-                    .onChange(of: formatOnSave) { _, v in AppSettings.shared.editorFormatOnSave = v }
-                Text("Uses Monaco's built-in formatters (JSON, TypeScript, CSS, HTML).")
-                    .font(.system(size: 11))
-                    .foregroundStyle(t.muted)
-                    .padding(.top, 2)
+                ToggleRow(
+                    label: "Format on save",
+                    help: "Uses Monaco's built-in formatters (JSON, TypeScript, CSS, HTML).",
+                    isOn: $formatOnSave
+                )
+                .onChange(of: formatOnSave) { _, v in AppSettings.shared.editorFormatOnSave = v }
             }
         }
-    }
-
-    private func settingRow<C: View>(_ label: String, t: Tokens, @ViewBuilder control: () -> C) -> some View {
-        HStack(spacing: 8) {
-            Text(label)
-                .font(.system(size: 12))
-                .foregroundStyle(t.text)
-                .frame(width: 100, alignment: .leading)
-            control()
-            Spacer()
-        }
-        .padding(.vertical, 2)
     }
 }
