@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# Boo Claude Stop hook — called by Claude Code when it finishes a response.
+# Signals Boo to show an activity dot + notification on the tab.
+# BOO_PANE_ID is set per-surface by Boo when the terminal starts.
+
+[[ -z "$BOO_SOCK" || -z "$BOO_PANE_ID" ]] && exit 0
+
+python3 - "$BOO_SOCK" "$BOO_PANE_ID" <<'PYEOF'
+import sys, socket, json
+
+sock_path, pane_id = sys.argv[1], sys.argv[2]
+try:
+    s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    s.settimeout(2)
+    s.connect(sock_path)
+    s.sendall(json.dumps({"cmd": "agent_idle", "pane_id": pane_id}).encode() + b"\n")
+    s.recv(256)
+    s.close()
+except Exception:
+    pass
+PYEOF

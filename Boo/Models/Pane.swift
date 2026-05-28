@@ -22,6 +22,9 @@ struct TabState {
     /// Claude Code session ID currently running in this tab (detected via file watching)
     var agentSessionID: String?
 
+    var hasActivity: Bool = false
+    var isCommandRunning: Bool = false
+
     // Plugin UI State
     var expandedPluginIDs: Set<String> = []
     /// Section IDs the user has *explicitly* collapsed. Used to suppress auto-expand on first show.
@@ -173,6 +176,23 @@ final class Pane {
     func setActiveTab(_ index: Int) {
         guard index >= 0, index < tabs.count else { return }
         activeTabIndex = index
+    }
+
+    @discardableResult
+    func setActivity(_ active: Bool, at index: Int) -> Bool {
+        guard index >= 0, index < tabs.count else { return false }
+        guard tabs[index].state.hasActivity != active else { return false }
+        tabs[index].state.hasActivity = active
+        return true
+    }
+
+    func setCommandRunning(_ running: Bool, at index: Int) {
+        guard index >= 0, index < tabs.count else { return }
+        tabs[index].state.isCommandRunning = running
+    }
+
+    func runningCommandTabIndex() -> Int? {
+        tabs.indices.first { tabs[$0].state.isCommandRunning }
     }
 
     func updateTitle(at index: Int, _ title: String) {

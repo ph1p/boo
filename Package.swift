@@ -30,7 +30,7 @@ let allTargets: [Target] = [
         ],
         linkerSettings: [
             .unsafeFlags(["-L", "Vendor/ghostty/macos/GhosttyKit.xcframework/macos-arm64"]),
-            .linkedLibrary("ghostty-fat"),
+            .linkedLibrary("ghostty-internal-fat"),
             .linkedLibrary("c++"),
             .linkedLibrary("z"),
             .linkedFramework("Metal"),

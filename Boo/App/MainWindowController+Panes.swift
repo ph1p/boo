@@ -39,6 +39,12 @@ extension MainWindowController: PaneViewDelegate {
 
         workspace.activePaneID = paneID
         for (id, pv) in paneViews { pv.isFocused = id == paneID }
+
+        if let pane = workspace.pane(for: paneID),
+           pane.setActivity(false, at: pane.activeTabIndex) {
+            refreshToolbar()
+        }
+
         let tab = workspace.pane(for: paneID)?.activeTab
         let cwd = tab?.workingDirectory ?? workspace.folderPath
         debugLog(
@@ -123,21 +129,73 @@ extension MainWindowController: PaneViewDelegate {
     }
 
     func paneView(_ paneView: PaneView, commandStarted command: String, paneID: UUID) {
-        guard activeWorkspaceForPaneEvent(paneID, event: "commandStarted") != nil else { return }
-        bridge.handleCommandStart(command: command, paneID: paneID)
-        BooSocketServer.shared.emitCommandStarted(command: command, paneID: paneID)
-        pluginRegistry.notifyCommandStarted(command: command, context: AppStore.shared.context)
-        schedulePluginCycle(reason: .processChanged)
+        if let workspace = appState.workspaceContainingPane(paneID),
+           let pane = workspace.pane(for: paneID) {
+            pane.setCommandRunning(true, at: pane.activeTabIndex)
+            booLog(.debug, .terminal, "[Activity] cmd_start pane=\(paneID.uuidString.prefix(8)) tab=\(pane.activeTabIndex) cmd=\(command.prefix(40))")
+            if workspace.id == appState.activeWorkspace?.id {
+                bridge.handleCommandStart(command: command, paneID: paneID)
+                BooSocketServer.shared.emitCommandStarted(command: command, paneID: paneID)
+                pluginRegistry.notifyCommandStarted(command: command, context: AppStore.shared.context)
+                schedulePluginCycle(reason: .processChanged)
+            }
+        }
     }
 
     func paneView(_ paneView: PaneView, commandEnded exitCode: Int32, paneID: UUID) {
-        guard activeWorkspaceForPaneEvent(paneID, event: "commandEnded") != nil else { return }
-        bridge.handleCommandEnd(exitCode: exitCode, paneID: paneID)
-        if let result = bridge.state.lastCommandResult {
-            BooSocketServer.shared.emitCommandEnded(result: result, paneID: paneID)
-            pluginRegistry.notifyCommandEnded(result: result, context: AppStore.shared.context)
-            schedulePluginCycle(reason: .processChanged)
+        guard let workspace = appState.workspaceContainingPane(paneID) else {
+            booLog(.debug, .terminal, "[Activity] cmd_end pane=\(paneID.uuidString.prefix(8)) exit=\(exitCode) — no workspace found, dropped")
+            return
         }
+
+        if workspace.id == appState.activeWorkspace?.id {
+            bridge.handleCommandEnd(exitCode: exitCode, paneID: paneID)
+            if let result = bridge.state.lastCommandResult {
+                BooSocketServer.shared.emitCommandEnded(result: result, paneID: paneID)
+                pluginRegistry.notifyCommandEnded(result: result, context: AppStore.shared.context)
+                schedulePluginCycle(reason: .processChanged)
+            }
+        }
+
+        guard let pane = workspace.pane(for: paneID) else { return }
+
+        // Find the tab that has isCommandRunning set — it may differ from activeTabIndex
+        // if the user switched tabs while the command was running.
+        // Falls back to activeTabIndex for native OSC 133 COMMAND_FINISHED events (e.g. Claude Code)
+        // which fire without a prior BOO_CMD:cmd_start.
+        let runningTabIndex = pane.runningCommandTabIndex()
+        let tabIndex = runningTabIndex ?? pane.activeTabIndex
+        guard tabIndex >= 0 else { return }
+        pane.setCommandRunning(false, at: tabIndex)
+
+        signalActivity(paneID: paneID, tabIndex: tabIndex, exitCode: exitCode)
+    }
+
+    func signalActivity(paneID: UUID, tabIndex: Int, exitCode: Int32, skipIfFocused: Bool = true) {
+        guard let workspace = appState.workspaceContainingPane(paneID),
+              let pane = workspace.pane(for: paneID)
+        else { return }
+        signalActivity(workspace: workspace, pane: pane, tabIndex: tabIndex, exitCode: exitCode, skipIfFocused: skipIfFocused)
+    }
+
+    func signalActivity(workspace: Workspace, pane: Pane, tabIndex: Int, exitCode: Int32, skipIfFocused: Bool = true) {
+        guard tabIndex >= 0, tabIndex < pane.tabs.count else { return }
+
+        if skipIfFocused {
+            let isFocused = workspace.id == appState.activeWorkspace?.id
+                && workspace.activePaneID == pane.id
+                && pane.activeTabIndex == tabIndex
+                && NSApp.isActive && window?.isKeyWindow == true
+            guard !isFocused else { return }
+        }
+
+        pane.setActivity(true, at: tabIndex)
+        workspacePaneViews[workspace.id]?[pane.id]?.needsDisplay = true
+        refreshToolbar()
+        let tabTitle = pane.tabs[tabIndex].state.title.isEmpty ? "Terminal" : pane.tabs[tabIndex].state.title
+        ActivityNotifier.shared.notifyCommandEnded(
+            tabTitle: tabTitle, workspaceName: workspace.displayName, exitCode: exitCode,
+            workspaceID: workspace.id, paneID: pane.id, tabIndex: tabIndex)
     }
 
     func paneViewIsOnlyPaneInWorkspace(_ paneView: PaneView) -> Bool {

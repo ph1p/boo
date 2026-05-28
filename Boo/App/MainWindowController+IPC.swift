@@ -45,6 +45,8 @@ extension MainWindowController {
             ipcSendText(json: json, reply: reply)
         case "get_workspaces":
             ipcGetWorkspaces(reply: reply)
+        case "agent_idle":
+            ipcAgentIdle(json: json, reply: reply)
         default:
             reply(["ok": false, "error": "unknown control command: \(cmd)"])
         }
@@ -117,6 +119,21 @@ extension MainWindowController {
             return
         }
         sendRawToActivePane(text)
+        reply(["ok": true])
+    }
+
+    private func ipcAgentIdle(json: [String: Any], reply: @escaping ([String: Any]) -> Void) {
+        guard let paneIDStr = json["pane_id"] as? String, let paneID = UUID(uuidString: paneIDStr) else {
+            reply(["ok": false, "error": "missing pane_id"])
+            return
+        }
+        guard let workspace = appState.workspaceContainingPane(paneID),
+              let pane = workspace.pane(for: paneID)
+        else {
+            reply(["ok": false, "error": "pane not found"])
+            return
+        }
+        signalActivity(workspace: workspace, pane: pane, tabIndex: pane.activeTabIndex, exitCode: 0, skipIfFocused: false)
         reply(["ok": true])
     }
 

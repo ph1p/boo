@@ -367,7 +367,7 @@ final class BooSocketServer: @unchecked Sendable {
 
         // Control commands
         case "set_theme", "toggle_sidebar", "switch_workspace", "new_tab", "new_workspace",
-            "send_text":
+            "send_text", "agent_idle":
             handleControlCommand(cmd: cmd, json: json, clientFD: clientFD)
             return
 

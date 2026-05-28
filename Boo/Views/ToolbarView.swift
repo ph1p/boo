@@ -25,12 +25,35 @@ class ToolbarView: NSView {
         let isPinned: Bool
         var color: WorkspaceColor = .none
         var hasCustomColor: Bool = false
+        var hasActivity: Bool = false
     }
 
     struct TabItem {
         let title: String
         let isActive: Bool
     }
+
+    // MARK: - Font Cache (avoids NSFont alloc on every draw pass)
+
+    enum Fonts {
+        nonisolated(unsafe) static let ws11Regular  = NSFont.systemFont(ofSize: 11, weight: .regular)
+        nonisolated(unsafe) static let ws11Medium   = NSFont.systemFont(ofSize: 11, weight: .medium)
+        nonisolated(unsafe) static let tab11Regular = NSFont.systemFont(ofSize: 11.5, weight: .regular)
+        nonisolated(unsafe) static let tab11Medium  = NSFont.systemFont(ofSize: 11.5, weight: .medium)
+        nonisolated(unsafe) static let closeSmall   = NSFont.systemFont(ofSize: 8, weight: .bold)
+        nonisolated(unsafe) static let plus9Bold    = NSFont.systemFont(ofSize: 9, weight: .bold)
+        nonisolated(unsafe) static let plus15Light  = NSFont.systemFont(ofSize: 15, weight: .light)
+    }
+
+    // MARK: - Measure Cache
+
+    /// Cached pill widths keyed by workspace index. Cleared on every `update()` call.
+    private var _measureCache: [Int: CGFloat] = [:]
+    private var _cachedTotalWorkspaceWidth: CGFloat?
+
+    // MARK: - Traffic Light Width Cache
+
+    private var _cachedTrafficLightWidth: CGFloat?
 
     private(set) var workspaces: [WorkspaceItem] = []
     private(set) var tabs: [TabItem] = []
@@ -79,6 +102,7 @@ class ToolbarView: NSView {
 
     override func setFrameSize(_ newSize: NSSize) {
         super.setFrameSize(newSize)
+        _cachedTrafficLightWidth = nil
         clampScrollOffset()
         updateTrackingArea()
         needsDisplay = true
@@ -112,8 +136,8 @@ class ToolbarView: NSView {
         var newWSHover = -1
         if !hideWorkspaces && point.x >= trafficLightWidth && point.x < workspaceZoneEnd + zoneGap && !sidebarHover {
             var x = trafficLightWidth - workspaceScrollOffset
-            for (i, ws) in workspaces.enumerated() {
-                let w = measureWorkspace(ws)
+            for i in workspaces.indices {
+                let w = measureWorkspace(at: i)
                 if point.x >= x && point.x < x + w + 6 {
                     newWSHover = i
                     break
@@ -181,7 +205,7 @@ class ToolbarView: NSView {
             NSColorPanel.shared.setAction(nil)
             colorPickerActive = false
         }
-        // Recalculate now that traffic light positions are available
+        _cachedTrafficLightWidth = nil
         clampScrollOffset()
         needsDisplay = true
     }
@@ -194,6 +218,8 @@ class ToolbarView: NSView {
         self.workspaces = workspaces
         self.tabs = tabs
         self.sidebarVisible = sidebarVisible
+        _measureCache.removeAll(keepingCapacity: true)
+        _cachedTotalWorkspaceWidth = nil
         scrollToActiveWorkspace()
         clampScrollOffset()
         needsDisplay = true
@@ -205,9 +231,9 @@ class ToolbarView: NSView {
         guard let activeIndex = workspaces.firstIndex(where: { $0.isActive }) else { return }
         var x: CGFloat = 0
         for i in 0..<activeIndex {
-            x += measureWorkspace(workspaces[i]) + 6
+            x += measureWorkspace(at: i) + 6
         }
-        let activeWidth = measureWorkspace(workspaces[activeIndex]) + 6
+        let activeWidth = measureWorkspace(at: activeIndex) + 6
         let visibleStart = workspaceScrollOffset
         let visibleEnd = workspaceScrollOffset + workspaceZoneWidth
 
@@ -223,27 +249,32 @@ class ToolbarView: NSView {
     /// Minimum width reserved for traffic lights; used as fallback.
     private let trafficLightMinWidth: CGFloat = 78
 
-    /// Actual width past the traffic light buttons, computed from window.
+    /// Actual width past the traffic light buttons, computed from window (cached per layout pass).
     var trafficLightWidth: CGFloat {
-        guard let window = window else { return trafficLightMinWidth }
-        // The zoom button is the rightmost traffic light
-        if let zoom = window.standardWindowButton(.zoomButton) {
+        if let cached = _cachedTrafficLightWidth { return cached }
+        let value: CGFloat
+        if let window = window, let zoom = window.standardWindowButton(.zoomButton) {
             let frame = zoom.convert(zoom.bounds, to: nil)
             let inContentView = convert(frame, from: nil)
-            return max(trafficLightMinWidth, inContentView.maxX + 12)
+            value = max(trafficLightMinWidth, inContentView.maxX + 12)
+        } else {
+            value = trafficLightMinWidth
         }
-        return trafficLightMinWidth
+        _cachedTrafficLightWidth = value
+        return value
     }
     var sidebarButtonWidth: CGFloat { sidebarButtonHidden ? 10 : 38 }
     let dividerWidth: CGFloat = 1
     let zoneGap: CGFloat = 12
 
-    /// Total content width of all workspace pills.
+    /// Total content width of all workspace pills (cached until next `update()`).
     var totalWorkspaceContentWidth: CGFloat {
+        if let cached = _cachedTotalWorkspaceWidth { return cached }
         var w: CGFloat = 0
-        for ws in workspaces {
-            w += measureWorkspace(ws) + 6
+        for (i, _) in workspaces.enumerated() {
+            w += measureWorkspace(at: i) + 6
         }
+        _cachedTotalWorkspaceWidth = w
         return w
     }
 
@@ -295,13 +326,25 @@ class ToolbarView: NSView {
         max(0, totalTabContentWidth - tabZoneWidth)
     }
 
-    func measureWorkspace(_ ws: WorkspaceItem) -> CGFloat {
-        let attrs: [NSAttributedString.Key: Any] = [
-            .font: NSFont.systemFont(ofSize: 11, weight: ws.isActive ? .medium : .regular)
-        ]
-        var w = (ws.name as NSString).size(withAttributes: attrs).width + 18
+    /// Measure workspace pill by index, using the measure cache.
+    func measureWorkspace(at index: Int) -> CGFloat {
+        if let cached = _measureCache[index] { return cached }
+        let ws = workspaces[index]
+        let font = ws.isActive ? Fonts.ws11Medium : Fonts.ws11Regular
+        var w = (ws.name as NSString).size(withAttributes: [.font: font]).width + 20
         if ws.isPinned { w += 12 }
-        if !ws.isPinned { w += 16 }  // Space for close button on hover
+        _measureCache[index] = w
+        return w
+    }
+
+    /// Convenience overload for call sites that only have the item (scans for index).
+    func measureWorkspace(_ ws: WorkspaceItem) -> CGFloat {
+        if let i = workspaces.firstIndex(where: { $0.name == ws.name && $0.isActive == ws.isActive && $0.isPinned == ws.isPinned }) {
+            return measureWorkspace(at: i)
+        }
+        let font = ws.isActive ? Fonts.ws11Medium : Fonts.ws11Regular
+        var w = (ws.name as NSString).size(withAttributes: [.font: font]).width + 20
+        if ws.isPinned { w += 12 }
         return w
     }
 
@@ -315,8 +358,8 @@ class ToolbarView: NSView {
         guard let window = window, !hideWorkspaces else { return [] }
         var result: [(Int, NSRect)] = []
         var x = trafficLightWidth - workspaceScrollOffset
-        for (i, ws) in workspaces.enumerated() {
-            let w = measureWorkspace(ws)
+        for i in workspaces.indices {
+            let w = measureWorkspace(at: i)
             let pillH: CGFloat = 24
             let pillY = (barHeight - pillH) / 2
             let localRect = NSRect(x: x, y: pillY, width: w, height: pillH)
@@ -355,8 +398,8 @@ extension ToolbarView {
 
         var x = trafficLightWidth - workspaceScrollOffset
         var idx = workspaces.count
-        for (i, ws) in workspaces.enumerated() {
-            let w = measureWorkspace(ws)
+        for i in workspaces.indices {
+            let w = measureWorkspace(at: i)
             if point.x < x + (w + 6) / 2 {
                 idx = i
                 break

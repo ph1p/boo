@@ -5,10 +5,12 @@
 #
 # Requires bash 3.2+ (macOS default).
 
-# Guard against double-sourcing and non-interactive shells.
+# Guard against double-sourcing, non-interactive shells, and non-Boo terminals.
 [[ -z "$PS1" ]] && return
 [[ -n "$BOO_SHELL_INTEGRATION" ]] && return
+[[ -z "$BOO_TERM" ]] && return
 export BOO_SHELL_INTEGRATION=bash
+_BOO_INTEGRATION_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Command tracking via OSC 2 (SET_TITLE) with BOO_CMD: prefix.
 # Boo intercepts these before they reach the title bar.
@@ -18,13 +20,28 @@ __boo_osc() {
     printf '\033]2;BOO_CMD:%s\a' "$1"
 }
 
+_BOO_AGENT_CMDS="claude codex opencode aider"
+_BOO_LAST_WAS_AGENT=0
+
 __boo_preexec() {
+    local cmd
+    cmd="${1%% *}"
+    cmd="${cmd##*/}"  # basename
+    if [[ " $_BOO_AGENT_CMDS " == *" $cmd "* ]]; then
+        _BOO_LAST_WAS_AGENT=1
+    else
+        _BOO_LAST_WAS_AGENT=0
+    fi
     __boo_osc "cmd_start;$1"
 }
 
 __boo_precmd() {
     local code=$?
     __boo_osc "cmd_end;$code"
+    if [[ "$_BOO_LAST_WAS_AGENT" == "1" && -n "$BOO_SOCK" && -n "$BOO_PANE_ID" ]]; then
+        _BOO_LAST_WAS_AGENT=0
+        python3 -c "import socket,json,os;s=socket.socket(socket.AF_UNIX,socket.SOCK_STREAM);s.settimeout(2);s.connect('$BOO_SOCK');s.sendall(json.dumps({'cmd':'agent_idle','pane_id':'$BOO_PANE_ID'}).encode()+b'\n');s.recv(64);s.close()" 2>/dev/null &
+    fi
     return $code
 }
 

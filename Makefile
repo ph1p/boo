@@ -59,7 +59,7 @@ ghostty: $(XCRUN_WRAPPER_DIR)/xcrun
 		echo "==> Initializing Ghostty submodule..."; \
 		git submodule update --init --depth 1 Vendor/ghostty; \
 	fi
-	@if [ ! -f Vendor/ghostty/macos/GhosttyKit.xcframework/macos-arm64/libghostty-fat.a ]; then \
+	@if [ ! -f Vendor/ghostty/macos/GhosttyKit.xcframework/macos-arm64/libghostty-internal-fat.a ]; then \
 		echo "==> Building GhosttyKit..."; \
 		cd Vendor/ghostty && PATH="$(CURDIR)/$(XCRUN_WRAPPER_DIR):$$PATH" zig build -Demit-xcframework=true -Dxcframework-target=native -Demit-macos-app=false -Doptimize=ReleaseFast; \
 	else \
@@ -161,6 +161,8 @@ run: build
 		fi; \
 	done
 	@rsync -a .build/debug/ghostty-resources/ .build/debug/Boo.app/Contents/Resources/ 2>/dev/null || true
+	@rsync -a Resources/shell-integration .build/debug/Boo.app/Contents/Resources/
+	@codesign --force --deep --sign - --entitlements Boo/App/Boo.entitlements .build/debug/Boo.app 2>/dev/null || true
 	@pkill -x Boo 2>/dev/null || true; for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do pkill -0 -x Boo 2>/dev/null || break; sleep 0.02; done
 	open .build/debug/Boo.app
 

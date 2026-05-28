@@ -55,27 +55,18 @@ private func ghosttyAction(_ app: ghostty_app_t?, _ target: ghostty_target_s, _ 
             return true
         }
 
-        // Intercept OSC 9999 command tracking events emitted by shell integration scripts.
-        // Format (packed into SET_TITLE): "BOO_CMD:<action>;<data>"
-        // Actions: cmd_start (data = command string), cmd_end (data = exit code)
+        // Intercept BOO_CMD: prefixed SET_TITLE events from Boo's shell integration scripts.
+        // cmd_end is handled natively via GHOSTTY_ACTION_COMMAND_FINISHED (OSC 133) — only
+        // cmd_start remains here, used to set isCommandRunning on the tab.
         if title.hasPrefix("BOO_CMD:") {
             let payload = String(title.dropFirst("BOO_CMD:".count))
             if let semicolonIdx = payload.firstIndex(of: ";") {
                 let action = String(payload[..<semicolonIdx])
                 let data = String(payload[payload.index(after: semicolonIdx)...])
-                switch action {
-                case "cmd_start":
+                if action == "cmd_start" {
                     DispatchQueue.main.async { [weak view] in
                         view?.onCommandStart?(data)
                     }
-                case "cmd_end":
-                    if let code = Int32(data) {
-                        DispatchQueue.main.async { [weak view] in
-                            view?.onCommandEnd?(code)
-                        }
-                    }
-                default:
-                    break
                 }
             }
             return true
@@ -90,6 +81,14 @@ private func ghosttyAction(_ app: ghostty_app_t?, _ target: ghostty_target_s, _ 
         guard let view = viewFromTarget() else { return false }
         DispatchQueue.main.async { [weak view] in
             view?.onProcessExited?()
+        }
+        return true
+
+    case GHOSTTY_ACTION_COMMAND_FINISHED:
+        guard let view = viewFromTarget() else { return false }
+        let exitCode = Int32(action.action.command_finished.exit_code)
+        DispatchQueue.main.async { [weak view] in
+            view?.onCommandEnd?(exitCode)
         }
         return true
 
@@ -395,7 +394,9 @@ private func ghosttyCloseSurface(_ userdata: UnsafeMutableRawPointer?, _ process
             booLog(.warning, .app, "Could not find resources dir — shell integration disabled")
         }
 
-        // Expose the socket path so child processes can communicate with Boo
+        // Expose the socket path so child processes can communicate with Boo.
+        // BOO_TERM is set only via Ghostty env (below) so the shell integration guard
+        // works even when BOO_SOCK propagates to child processes outside Boo.
         setenv("BOO_SOCK", BooSocketServer.shared.socketPath, 1)
 
         let argc = CommandLine.argc
@@ -532,6 +533,7 @@ private func ghosttyCloseSurface(_ userdata: UnsafeMutableRawPointer?, _ process
         lines.append("confirm-close-surface = false")
         lines.append("quit-after-last-window-closed = false")
         lines.append("mouse-hide-while-typing = true")
+        lines.append("cursor-click-to-move = true")
         lines.append("scrollback-limit = 10000000")
         lines.append("clipboard-read = allow")
         lines.append("clipboard-write = allow")

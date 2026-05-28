@@ -48,11 +48,21 @@ extension ToolbarView {
         }
     }
 
+    // Cached pin icon — allocated once, shared across all draw calls.
+    private static let pinIcon: NSImage? = {
+        guard let img = NSImage(systemSymbolName: "pin.fill", accessibilityDescription: nil) else { return nil }
+        let cfg = NSImage.SymbolConfiguration(pointSize: 8, weight: .regular)
+        let sized = img.withSymbolConfiguration(cfg) ?? img
+        sized.isTemplate = true
+        return sized
+    }()
+
     internal func drawWorkspaces(_ ctx: CGContext) {
         let theme = AppSettings.shared.theme
         let zoneStart = trafficLightWidth
         let zoneEnd = workspaceZoneEnd
-        let isScrollable = totalWorkspaceContentWidth > workspaceZoneWidth
+        let totalW = totalWorkspaceContentWidth  // hits cache
+        let isScrollable = totalW > workspaceZoneWidth
 
         if isScrollable {
             ctx.saveGState()
@@ -62,7 +72,7 @@ extension ToolbarView {
         var x = zoneStart - workspaceScrollOffset
 
         for (wsIndex, ws) in workspaces.enumerated() {
-            let w = measureWorkspace(ws)
+            let w = measureWorkspace(at: wsIndex)  // cached
             let pillH: CGFloat = 24
             let pillY = (barHeight - pillH) / 2
             let isWSHovered = hoveredWorkspaceIndex == wsIndex
@@ -70,45 +80,35 @@ extension ToolbarView {
             let wsColor = ws.resolvedColor
 
             let rect = CGRect(x: x, y: pillY, width: w, height: pillH)
+            let pillPath = CGPath(roundedRect: rect, cornerWidth: 6, cornerHeight: 6, transform: nil)
             if let c = wsColor {
                 let alpha: CGFloat = ws.isActive ? 0.25 : (isWSHovered ? 0.18 : 0.12)
                 ctx.setFillColor(c.withAlphaComponent(alpha).cgColor)
-                ctx.addPath(CGPath(roundedRect: rect, cornerWidth: 6, cornerHeight: 6, transform: nil))
-                ctx.fillPath()
             } else if ws.isActive {
                 ctx.setFillColor(theme.chromeMuted.withAlphaComponent(0.25).cgColor)
-                ctx.addPath(CGPath(roundedRect: rect, cornerWidth: 6, cornerHeight: 6, transform: nil))
-                ctx.fillPath()
             } else if isWSHovered {
                 ctx.setFillColor(theme.chromeMuted.withAlphaComponent(0.12).cgColor)
-                ctx.addPath(CGPath(roundedRect: rect, cornerWidth: 6, cornerHeight: 6, transform: nil))
-                ctx.fillPath()
             } else {
                 ctx.setFillColor(theme.chromeMuted.withAlphaComponent(0.06).cgColor)
-                ctx.addPath(CGPath(roundedRect: rect, cornerWidth: 6, cornerHeight: 6, transform: nil))
-                ctx.fillPath()
             }
+            ctx.addPath(pillPath)
+            ctx.fillPath()
 
             var contentX = x + 10
 
-            if ws.isPinned {
+            if ws.isPinned, let pinImg = Self.pinIcon {
                 let pinColor =
                     ws.isActive ? theme.chromeText.withAlphaComponent(0.5) : theme.chromeMuted.withAlphaComponent(0.5)
                 let iconSize: CGFloat = 8
                 let iconY = (barHeight - iconSize) / 2
-                if let pinImage = NSImage(systemSymbolName: "pin.fill", accessibilityDescription: nil) {
-                    let sized =
-                        pinImage.withSymbolConfiguration(.init(pointSize: iconSize, weight: .regular)) ?? pinImage
-                    sized.isTemplate = true
-                    let iconRect = NSRect(x: contentX, y: iconY, width: iconSize, height: iconSize)
-                    let tinted = NSImage(size: iconRect.size, flipped: false) { drawRect in
-                        pinColor.set()
-                        sized.draw(in: drawRect, from: .zero, operation: .sourceOver, fraction: 1)
-                        NSRect(origin: .zero, size: drawRect.size).fill(using: .sourceAtop)
-                        return true
-                    }
-                    tinted.draw(in: iconRect)
+                let iconRect = NSRect(x: contentX, y: iconY, width: iconSize, height: iconSize)
+                let tinted = NSImage(size: iconRect.size, flipped: false) { drawRect in
+                    pinColor.set()
+                    pinImg.draw(in: drawRect, from: .zero, operation: .sourceOver, fraction: 1)
+                    NSRect(origin: .zero, size: drawRect.size).fill(using: .sourceAtop)
+                    return true
                 }
+                tinted.draw(in: iconRect)
                 contentX += 12
             }
 
@@ -127,36 +127,47 @@ extension ToolbarView {
                 textColor = theme.chromeMuted
             }
 
-            let nameAttrs: [NSAttributedString.Key: Any] = [
-                .font: NSFont.systemFont(ofSize: 11, weight: ws.isActive ? .medium : .regular),
-                .foregroundColor: textColor
-            ]
+            let nameColor = (!ws.isPinned && isWSHovered) ? textColor.withAlphaComponent(0.3) : textColor
+            let nameFont = ws.isActive ? Fonts.ws11Medium : Fonts.ws11Regular
+            let nameAttrs: [NSAttributedString.Key: Any] = [.font: nameFont, .foregroundColor: nameColor]
             let nameSize = (ws.name as NSString).size(withAttributes: nameAttrs)
             (ws.name as NSString).draw(
                 at: NSPoint(x: contentX, y: (barHeight - nameSize.height) / 2),
                 withAttributes: nameAttrs
             )
 
-            // Close button — on hover, not pinned
+            // Close button — overlays text on hover, no extra pill space reserved
             if !ws.isPinned && isWSHovered {
-                let closeColor: NSColor = wsColor?.withAlphaComponent(0.8) ?? theme.chromeMuted.withAlphaComponent(0.8)
-                let closeBgColor: NSColor =
-                    wsColor?.withAlphaComponent(0.15) ?? theme.chromeMuted.withAlphaComponent(0.15)
+                let circleSize: CGFloat = 16
+                let circleX = rect.maxX - circleSize - 6
+                let circleY = rect.midY - circleSize / 2
+                let circleRect = CGRect(x: circleX, y: circleY, width: circleSize, height: circleSize)
+                ctx.setFillColor(theme.chromeBg.cgColor)
+                ctx.fillEllipse(in: circleRect)
+                let closeTint: NSColor = wsColor ?? theme.chromeMuted
+                ctx.setFillColor(closeTint.withAlphaComponent(0.15).cgColor)
+                ctx.fillEllipse(in: circleRect)
+                let closeColor: NSColor = closeTint.withAlphaComponent(0.8)
                 let closeAttrs: [NSAttributedString.Key: Any] = [
-                    .font: NSFont.systemFont(ofSize: 8, weight: .bold),
+                    .font: Fonts.closeSmall,
                     .foregroundColor: closeColor
                 ]
                 let closeStr = "\u{2715}" as NSString
                 let closeSize = closeStr.size(withAttributes: closeAttrs)
-                let circleSize: CGFloat = 16
-                let circleX = rect.maxX - circleSize - 2
-                let circleY = rect.midY - circleSize / 2
-                ctx.setFillColor(closeBgColor.cgColor)
-                ctx.fillEllipse(in: CGRect(x: circleX, y: circleY, width: circleSize, height: circleSize))
                 closeStr.draw(
                     at: NSPoint(x: circleX + (circleSize - closeSize.width) / 2, y: rect.midY - closeSize.height / 2),
                     withAttributes: closeAttrs
                 )
+            }
+
+            // Activity dot — top-right corner inside the pill
+            if ws.hasActivity {
+                let dotSize: CGFloat = 5
+                ctx.setFillColor(theme.accentColor.cgColor)
+                ctx.fillEllipse(in: CGRect(
+                    x: rect.maxX - dotSize - 3,
+                    y: rect.minY + 3,
+                    width: dotSize, height: dotSize))
             }
 
             x += w + 6
@@ -166,7 +177,7 @@ extension ToolbarView {
         if let dropIdx = dropTargetIndex {
             var indicatorX = zoneStart - workspaceScrollOffset
             for i in 0..<min(dropIdx, workspaces.count) {
-                indicatorX += measureWorkspace(workspaces[i]) + 6
+                indicatorX += measureWorkspace(at: i) + 6
             }
             indicatorX -= 3
             ctx.setFillColor(theme.accentColor.cgColor)
@@ -192,7 +203,7 @@ extension ToolbarView {
         ctx.fillPath()
         let wsPlusAlpha: CGFloat = isWorkspacePlusButtonHovered ? 0.9 : 0.45
         let wsPlusAttrs: [NSAttributedString.Key: Any] = [
-            .font: NSFont.systemFont(ofSize: 15, weight: .light),
+            .font: Fonts.plus15Light,
             .foregroundColor: theme.chromeMuted.withAlphaComponent(wsPlusAlpha)
         ]
         let wsPlusStr = "+" as NSString
@@ -252,7 +263,7 @@ extension ToolbarView {
             }
             let showClose = tabs.count > 1 && (tab.isActive || isTabHovered)
             let attrs: [NSAttributedString.Key: Any] = [
-                .font: NSFont.systemFont(ofSize: 11.5, weight: tab.isActive ? .medium : .regular),
+                .font: tab.isActive ? Fonts.tab11Medium : Fonts.tab11Regular,
                 .foregroundColor: textColor
             ]
             let title = tab.title as NSString
@@ -278,7 +289,7 @@ extension ToolbarView {
                     ctx.fillEllipse(in: CGRect(x: circleX, y: circleY, width: circleSize, height: circleSize))
                 }
                 let closeAttrs: [NSAttributedString.Key: Any] = [
-                    .font: NSFont.systemFont(ofSize: 9, weight: .bold),
+                    .font: Fonts.plus9Bold,
                     .foregroundColor: NSColor(red: 90 / 255, green: 90 / 255, blue: 98 / 255, alpha: closeAlpha)
                 ]
                 let closeStr = "\u{2715}" as NSString
@@ -303,7 +314,7 @@ extension ToolbarView {
             ctx.fillPath()
         }
         let plusAttrs: [NSAttributedString.Key: Any] = [
-            .font: NSFont.systemFont(ofSize: 15, weight: .light),
+            .font: Fonts.plus15Light,
             .foregroundColor: NSColor(red: 90 / 255, green: 90 / 255, blue: 98 / 255, alpha: plusAlpha)
         ]
         let plusSize = ("+" as NSString).size(withAttributes: plusAttrs)
@@ -456,9 +467,9 @@ extension ToolbarView {
                 if !didStartDrag {
                     // Plain click — close or select
                     let ws = workspaces[idx]
-                    let w = measureWorkspace(ws)
+                    let w = measureWorkspace(at: idx)
                     var pillX = trafficLightWidth - workspaceScrollOffset
-                    for i in 0..<idx { pillX += measureWorkspace(workspaces[i]) + 6 }
+                    for i in 0..<idx { pillX += measureWorkspace(at: i) + 6 }
                     let pillH: CGFloat = 24
                     let circleSize: CGFloat = 16
                     let pillY = (barHeight - pillH) / 2
@@ -501,7 +512,7 @@ extension ToolbarView {
 
     private func createWorkspaceGhostWindow(for index: Int, event: NSEvent) {
         let ws = workspaces[index]
-        let ghostWidth = min(measureWorkspace(ws) + 8, 140)
+        let ghostWidth = min(measureWorkspace(at: index) + 8, 140)
         let ghostHeight: CGFloat = 24
 
         let ghostView = NSView(frame: NSRect(x: 0, y: 0, width: ghostWidth, height: ghostHeight))
@@ -565,8 +576,8 @@ extension ToolbarView {
         let point = convert(event.locationInWindow, from: nil)
         var x = trafficLightWidth - workspaceScrollOffset
         var rawIdx = workspaces.count
-        for (i, ws) in workspaces.enumerated() {
-            let w = measureWorkspace(ws)
+        for i in workspaces.indices {
+            let w = measureWorkspace(at: i)
             if point.x < x + (w + 6) / 2 {
                 rawIdx = i
                 break
@@ -614,8 +625,8 @@ extension ToolbarView {
     internal func hitTestWorkspaceIndex(at point: NSPoint) -> Int? {
         guard point.x >= trafficLightWidth && point.x < workspaceZoneEnd + zoneGap else { return nil }
         var x = trafficLightWidth - workspaceScrollOffset
-        for (i, ws) in workspaces.enumerated() {
-            let w = measureWorkspace(ws)
+        for i in workspaces.indices {
+            let w = measureWorkspace(at: i)
             if point.x >= x && point.x < x + w + 6 { return i }
             x += w + 6
         }
@@ -631,8 +642,8 @@ extension ToolbarView {
         guard !hideWorkspaces, point.x >= trafficLightWidth && point.x < workspaceZoneEnd + zoneGap else { return }
 
         var x = trafficLightWidth - workspaceScrollOffset
-        for (i, ws) in workspaces.enumerated() {
-            let w = measureWorkspace(ws)
+        for i in workspaces.indices {
+            let w = measureWorkspace(at: i)
             if point.x >= x && point.x < x + w + 6 {
                 showWorkspaceContextMenu(at: i, event: event)
                 return
