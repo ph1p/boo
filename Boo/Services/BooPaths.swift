@@ -105,6 +105,7 @@ enum BooPaths {
 
     /// Copy bundled shell-integration scripts to ~/.boo/shell-integration/.
     /// Called once at startup. Overwrites stale copies so scripts stay up-to-date.
+    /// Also injects a source line into the user's shell RC files if not already present.
     static func installShellIntegration() {
         guard let resourcesDir = Bundle.main.resourcePath else { return }
         let sourceDir = (resourcesDir as NSString).appendingPathComponent("shell-integration")
@@ -117,6 +118,62 @@ enum BooPaths {
             try? fm.copyItem(atPath: src, toPath: dst)
             try? fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: dst)
         }
+        injectShellRCLines()
+        installClaudeHook()
+    }
+
+    /// Append a source line to each shell RC file that doesn't already have it.
+    /// Uses a sentinel comment so it's never injected twice.
+    private static func injectShellRCLines() {
+        let home = NSHomeDirectory()
+        let sentinel = "# Boo shell integration"
+        let entries: [(rc: String, script: String)] = [
+            (".zshrc",               "boo.zsh"),
+            (".bashrc",              "boo.bash"),
+            (".bash_profile",        "boo.bash"),
+            (".config/fish/config.fish", "boo.fish"),
+        ]
+        for (rc, script) in entries {
+            let rcPath = home.appendingPathComponent(rc)
+            let scriptPath = shellIntegrationDir.appendingPathComponent(script)
+            guard FileManager.default.fileExists(atPath: rcPath) else { continue }
+            guard let existing = try? String(contentsOfFile: rcPath, encoding: .utf8),
+                  !existing.contains(sentinel) else { continue }
+            let line: String
+            if script.hasSuffix(".fish") {
+                line = "\n\(sentinel)\nif test -f \"\(scriptPath)\"; source \"\(scriptPath)\"; end\n"
+            } else {
+                line = "\n\(sentinel)\n[ -f \"\(scriptPath)\" ] && source \"\(scriptPath)\"\n"
+            }
+            try? (existing + line).write(toFile: rcPath, atomically: true, encoding: .utf8)
+        }
+    }
+
+    /// Inject a Stop hook into ~/.claude/settings.json so Boo detects when Claude finishes a response.
+    /// Merges safely with existing hooks — never overwrites user entries.
+    static func installClaudeHook() {
+        let hookScript = shellIntegrationDir.appendingPathComponent("boo-claude-hook")
+        let settingsPath = NSHomeDirectory().appendingPathComponent(".claude/settings.json")
+
+        guard let data = try? Data(contentsOf: URL(fileURLWithPath: settingsPath)),
+              var root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+        else { return }
+
+        var hooks = root["hooks"] as? [String: Any] ?? [:]
+        var stopHooks = hooks["Stop"] as? [[String: Any]] ?? []
+
+        let alreadyPresent = stopHooks.contains { entry in
+            guard let inner = entry["hooks"] as? [[String: Any]] else { return false }
+            return inner.contains { ($0["command"] as? String) == hookScript }
+        }
+        guard !alreadyPresent else { return }
+
+        stopHooks.append(["hooks": [["type": "command", "command": hookScript, "timeout": 5, "async": true]]])
+        hooks["Stop"] = stopHooks
+        root["hooks"] = hooks
+
+        guard let updated = try? JSONSerialization.data(withJSONObject: root, options: [.prettyPrinted, .sortedKeys]) else { return }
+        try? updated.write(to: URL(fileURLWithPath: settingsPath))
     }
 
     /// Verify that all critical directories exist and are writable.

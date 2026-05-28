@@ -108,6 +108,22 @@ extension MainWindowController: WorkspaceBarViewDelegate {
 // MARK: - Workspace Management
 
 extension MainWindowController {
+    /// Focus the workspace/pane/tab that triggered an activity notification.
+    func focusActivity(workspaceID: UUID, paneID: UUID, tabIndex: Int) {
+        guard let wsIndex = appState.workspaces.firstIndex(where: { $0.id == workspaceID }) else { return }
+        if wsIndex != appState.activeWorkspaceIndex {
+            activateWorkspace(wsIndex)
+        }
+        if let pv = workspacePaneViews[workspaceID]?[paneID] {
+            pv.activateTab(tabIndex)
+            if let gv = pv.ghosttyView {
+                window?.makeFirstResponder(gv)
+            } else if let cv = pv.activeContentView {
+                window?.makeFirstResponder(cv)
+            }
+        }
+    }
+
     func normalizeWorkspaceState() {
         appState.ensureUniquePaneIDsAcrossWorkspaces()
     }

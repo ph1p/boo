@@ -61,6 +61,12 @@ final class Workspace {
         customName ?? folderPath.lastPathComponent
     }
 
+    var hasActivity: Bool {
+        panes.values.contains { pane in
+            pane.tabs.contains { $0.state.hasActivity }
+        }
+    }
+
     var splitTree: SplitTree
     private(set) var panes: [UUID: Pane] = [:]
     var activePaneID: UUID {

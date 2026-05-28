@@ -8,13 +8,18 @@ extension MainWindowController {
     ]
 
     func refreshToolbar() {
+        NSObject.cancelPreviousPerformRequests(withTarget: self, selector: #selector(_doRefreshToolbar), object: nil)
+        perform(#selector(_doRefreshToolbar), with: nil, afterDelay: 0)
+    }
+
+    @objc private func _doRefreshToolbar() {
         let wsItems = appState.workspaces.enumerated().map { (i, ws) in
             ToolbarView.WorkspaceItem(
                 name: ws.displayName, isActive: i == appState.activeWorkspaceIndex, resolvedColor: ws.resolvedColor,
-                isPinned: ws.isPinned, color: ws.color, hasCustomColor: ws.customColor != nil)
+                isPinned: ws.isPinned, color: ws.color, hasCustomColor: ws.customColor != nil,
+                hasActivity: ws.hasActivity && i != appState.activeWorkspaceIndex)
         }
         toolbar.update(workspaces: wsItems, tabs: [], sidebarVisible: sidebarVisible)
-        // Sync side workspace bar if present
         if let sideBar = sideWorkspaceBar {
             let barItems = appState.workspaces.map { ws in
                 WorkspaceBarView.Item(

@@ -46,6 +46,10 @@ public enum BooMain {
         // Start the IPC socket server for child process communication
         BooSocketServer.shared.start()
 
+        // Request notification permission for command-end alerts, then cache the result.
+        ActivityNotifier.shared.requestPermission()
+        ActivityNotifier.shared.refreshCachedStatus()
+
         // WindowGroup creates the NSWindow; WindowBridgeView boots MainWindowController when ready.
 
         // Watch system appearance changes for auto-theme

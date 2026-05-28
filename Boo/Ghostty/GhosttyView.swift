@@ -60,19 +60,19 @@ import Cocoa
     override func accessibilityRole() -> NSAccessibility.Role? { .textArea }
     override func accessibilityLabel() -> String? { "Terminal" }
 
-    init(workingDirectory: String) {
+    init(workingDirectory: String, paneID: UUID? = nil, tabID: UUID? = nil) {
         super.init(frame: .zero)
         wantsLayer = true
         layer?.backgroundColor = NSColor.black.cgColor
         registerForDraggedTypes([.fileURL, .URL])
-        createSurface(workingDirectory: workingDirectory)
+        createSurface(workingDirectory: workingDirectory, paneID: paneID, tabID: tabID)
     }
 
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
     }
 
-    private func createSurface(workingDirectory: String) {
+    private func createSurface(workingDirectory: String, paneID: UUID? = nil, tabID: UUID? = nil) {
         guard let app = GhosttyRuntime.shared.app else { return }
 
         // Snapshot child PIDs before surface creation (which forks a shell)
@@ -87,9 +87,31 @@ import Cocoa
         config.font_size = 0
         config.context = GHOSTTY_SURFACE_CONTEXT_SPLIT
 
-        workingDirectory.withCString { cwd in
-            config.working_directory = cwd
-            surface = ghostty_surface_new(app, &config)
+        // Inject per-surface env vars so shell integration and agent hooks can identify
+        // which Boo pane/tab they belong to without a socket round-trip.
+        // Use [CChar] arrays to guarantee pointer stability across the surface_new call.
+        var envPairs: [(key: [CChar], value: [CChar])] = []
+        func addEnv(_ key: String, _ value: String) {
+            envPairs.append((key: Array(key.utf8CString), value: Array(value.utf8CString)))
+        }
+        addEnv("BOO_TERM", "1")
+        if let paneID { addEnv("BOO_PANE_ID", paneID.uuidString) }
+        if let tabID  { addEnv("BOO_TAB_ID",  tabID.uuidString)  }
+
+        var envVars = envPairs.map { pair in
+            ghostty_env_var_s(key: pair.key.withUnsafeBufferPointer { $0.baseAddress! },
+                              value: pair.value.withUnsafeBufferPointer { $0.baseAddress! })
+        }
+
+        withExtendedLifetime(envPairs) {
+            workingDirectory.withCString { cwd in
+                envVars.withUnsafeMutableBufferPointer { buf in
+                    config.working_directory = cwd
+                    config.env_vars = buf.baseAddress
+                    config.env_var_count = buf.count
+                    surface = ghostty_surface_new(app, &config)
+                }
+            }
         }
 
         if let s = surface {

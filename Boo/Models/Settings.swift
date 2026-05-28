@@ -212,6 +212,7 @@ enum SettingsTopic: String, CaseIterable {
     case layout  // sidebar position, workspace bar, density, sidebar width, tab overflow
     case plugins  // disabled plugins, default enabled plugins, plugin settings
     case editor  // editor font size, font family
+    case notifications  // activity notifications
 }
 
 final class AppSettings {
@@ -281,6 +282,8 @@ final class AppSettings {
         static let editorMinimap = "editorMinimap"
         static let editorFormatOnSave = "editorFormatOnSave"
         static let editorRulerColumn = "editorRulerColumn"
+
+        static let activityNotificationsEnabled = "activityNotificationsEnabled"
     }
 
     /// Bool from UserDefaults with a custom default (since .bool returns false for unset keys).
@@ -661,6 +664,13 @@ final class AppSettings {
     var editorRulerColumn: Int {
         get { UserDefaults.standard.integer(forKey: K.editorRulerColumn) }
         set { set(newValue, forKey: K.editorRulerColumn, topic: .editor) }
+    }
+
+    // MARK: - Notifications
+
+    var activityNotificationsEnabled: Bool {
+        get { bool(K.activityNotificationsEnabled, default: true) }
+        set { set(newValue, forKey: K.activityNotificationsEnabled, topic: .notifications) }
     }
 
     // MARK: - Plugins

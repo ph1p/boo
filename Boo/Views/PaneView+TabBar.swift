@@ -2,6 +2,15 @@ import Cocoa
 
 extension PaneView {
 
+    // MARK: - Font Cache
+
+    private enum TabFonts {
+        nonisolated(unsafe) static let title10Regular = NSFont.systemFont(ofSize: 10.5, weight: .regular)
+        nonisolated(unsafe) static let title10Medium  = NSFont.systemFont(ofSize: 10.5, weight: .medium)
+        nonisolated(unsafe) static let close8Bold     = NSFont.systemFont(ofSize: 8, weight: .bold)
+        nonisolated(unsafe) static let plus15Light    = NSFont.systemFont(ofSize: 15, weight: .light)
+    }
+
     // MARK: - Tab Bar Drawing
 
     func drawTabsScrollable(ctx: CGContext, theme: TerminalTheme, barH: CGFloat, termBgColor: CGColor) {
@@ -163,7 +172,7 @@ extension PaneView {
         let para = NSMutableParagraphStyle()
         para.lineBreakMode = .byTruncatingTail
         let attrs: [NSAttributedString.Key: Any] = [
-            .font: NSFont.systemFont(ofSize: 10.5, weight: isActive ? .medium : .regular),
+            .font: isActive ? TabFonts.title10Medium : TabFonts.title10Regular,
             .foregroundColor: isActive
                 ? theme.chromeText : (isHovered ? theme.chromeText.withAlphaComponent(0.8) : theme.chromeMuted),
             .paragraphStyle: para
@@ -176,6 +185,16 @@ extension PaneView {
                 x: textX, y: midY - titleSize.height / 2,
                 width: min(titleSize.width, maxTitleW), height: titleSize.height),
             withAttributes: attrs)
+
+        // Activity dot — shown on inactive tabs when a command finished in background
+        if tab.state.hasActivity && !isActive {
+            let dotSize: CGFloat = 5
+            ctx.setFillColor(theme.accentColor.withAlphaComponent(0.85).cgColor)
+            ctx.fillEllipse(in: CGRect(
+                x: x + width - closeZone - dotSize - 2,
+                y: midY - dotSize / 2,
+                width: dotSize, height: dotSize))
+        }
 
         // Close button — only show on active or hovered tab
         if showClose {
@@ -195,7 +214,7 @@ extension PaneView {
             }
 
             let ca: [NSAttributedString.Key: Any] = [
-                .font: NSFont.systemFont(ofSize: 8, weight: .bold),
+                .font: TabFonts.close8Bold,
                 .foregroundColor: theme.chromeMuted.withAlphaComponent(closeAlpha)
             ]
             let cs = "\u{2715}" as NSString
@@ -221,7 +240,7 @@ extension PaneView {
         ctx.fill(CGRect(x: x, y: y, width: 1, height: rowH))
 
         // "+" centered — adjust for descender so the visible glyph is vertically centered
-        let font = NSFont.systemFont(ofSize: 15, weight: .light)
+        let font = TabFonts.plus15Light
         let color = theme.chromeMuted.withAlphaComponent(isPlusButtonHovered ? 0.9 : 0.6)
         let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: color]
         let plusStr = "+" as NSString

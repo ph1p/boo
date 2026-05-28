@@ -71,13 +71,12 @@ class PaneView: NSView {
     /// Whether tabs should display a close button.
     var showTabClose: Bool { pane.tabs.count > 1 || showCloseOnSingleTab }
 
+    private static let tabMeasureFont = NSFont.systemFont(ofSize: 10.5, weight: .medium)
+
     /// Measure the natural width of a single tab based on its title content.
     func measuredTabWidth(for tab: Pane.Tab) -> CGFloat {
-        let attrs: [NSAttributedString.Key: Any] = [
-            .font: NSFont.systemFont(ofSize: 10.5, weight: .medium)
-        ]
         let title = Self.tabDisplayTitle(tab: tab) as NSString
-        let textW = title.size(withAttributes: attrs).width
+        let textW = title.size(withAttributes: [.font: Self.tabMeasureFont]).width
         let dotAndGap: CGFloat = 20  // env dot + gap
         let natural = dotAndGap + textW + tabHPadding
         return min(tabMaxWidth, max(tabMinWidth, natural))
@@ -276,7 +275,7 @@ class PaneView: NSView {
             // Always rewire callbacks — the view may have been transferred from another pane
             wireCallbacks(stored)
         } else if ghosttyView == nil {
-            let gv = GhosttyView(workingDirectory: tab.workingDirectory)
+            let gv = GhosttyView(workingDirectory: tab.workingDirectory, paneID: paneID, tabID: tab.id)
             wireCallbacks(gv)
             let wrapper = TerminalScrollView(ghosttyView: gv)
             addSubview(wrapper)
@@ -688,6 +687,7 @@ class PaneView: NSView {
         guard index != pane.activeTabIndex else { return }
         dismissFindBarIfNeeded(forTabAt: index)
         storeCurrentView()
+        pane.setActivity(false, at: index)
         pane.setActiveTab(index)
         startActiveSession()
         layoutTerminalView()

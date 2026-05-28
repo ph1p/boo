@@ -52,6 +52,8 @@
 	<string>A program running within Boo would like to access your Photo Library.</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+	<key>NSUserNotificationAlertStyle</key>
+	<string>alert</string>
 	<key>NSRemindersUsageDescription</key>
 	<string>A program running within Boo would like to access your reminders.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>

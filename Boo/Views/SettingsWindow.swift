@@ -54,12 +54,13 @@ struct SettingsView: View {
         case layout
         case editor
         case browser
+        case notifications
         case plugins
         case shortcuts
         case pluginSettings(pluginID: String)
 
         static var fixed: [Tab] {
-            [.general, .theme, .appearance, .statusBar, .layout, .editor, .browser, .plugins, .shortcuts]
+            [.general, .theme, .appearance, .statusBar, .layout, .editor, .browser, .notifications, .plugins, .shortcuts]
         }
 
         var label: String {
@@ -71,6 +72,7 @@ struct SettingsView: View {
             case .layout: return "Layout"
             case .editor: return "Editor"
             case .browser: return "Browser"
+            case .notifications: return "Notifications"
             case .plugins: return "Plugins"
             case .shortcuts: return "Shortcuts"
             case .pluginSettings(let id):
@@ -87,6 +89,7 @@ struct SettingsView: View {
             case .layout: return "rectangle.3.group"
             case .editor: return "chevron.left.forwardslash.chevron.right"
             case .browser: return "globe"
+            case .notifications: return "bell"
             case .plugins: return "puzzlepiece"
             case .shortcuts: return "keyboard"
             case .pluginSettings(let id):
@@ -161,6 +164,7 @@ struct SettingsView: View {
         case .layout: LayoutSettingsView()
         case .editor: EditorSettingsView()
         case .browser: BrowserSettingsView()
+        case .notifications: NotificationsSettingsView()
         case .plugins: PluginSettingsView()
         case .shortcuts: ShortcutsSettingsView()
         case .pluginSettings(let id):
