@@ -15,9 +15,9 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.18.0</string>
+	<string>1.19.0</string>
 	<key>CFBundleVersion</key>
-	<string>1.18.0</string>
+	<string>1.19.0</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>13.0</string>
 	<key>NSAppleEventsUsageDescription</key>
@@ -52,14 +52,14 @@
 	<string>A program running within Boo would like to access your Photo Library.</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
-	<key>NSUserNotificationAlertStyle</key>
-	<string>alert</string>
 	<key>NSRemindersUsageDescription</key>
 	<string>A program running within Boo would like to access your reminders.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>A program running within Boo would like to use speech recognition.</string>
 	<key>NSSystemAdministrationUsageDescription</key>
 	<string>A program running within Boo requires elevated privileges.</string>
+	<key>NSUserNotificationAlertStyle</key>
+	<string>alert</string>
 	<key>SUEnableInstallerLauncherService</key>
 	<true/>
 	<key>SUFeedURL</key>
