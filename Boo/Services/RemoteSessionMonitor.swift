@@ -16,8 +16,9 @@ final class RemoteSessionMonitor: @unchecked Sendable {
     private var timer: DispatchSourceTimer?
     private let queue = DispatchQueue(label: "com.boo.remote-monitor", qos: .utility)
 
-    /// Tracks which tabs have registered with a container CWD watcher.
-    private var containerWatcherTabs: Set<UUID> = []
+    /// Tracks which tabs have registered with a container CWD watcher, keyed by pane.
+    /// Per-pane so ending one pane's container session doesn't tear down another's.
+    private var containerWatcherTabs: [UUID: Set<UUID>] = [:]
 
     /// Called on the main thread when a pane's remote session state changes.
     var onSessionChanged: ((UUID, RemoteSessionType?) -> Void)?
@@ -89,7 +90,10 @@ final class RemoteSessionMonitor: @unchecked Sendable {
                 ContainerCwdWatcher.shared(for: session)?.unregisterTab(paneID: tabID)
                 ContainerCwdWatcher.releaseIfUnused(for: session)
             }
-            self.containerWatcherTabs.remove(tabID)
+            self.containerWatcherTabs[paneID]?.remove(tabID)
+            if self.containerWatcherTabs[paneID]?.isEmpty == true {
+                self.containerWatcherTabs.removeValue(forKey: paneID)
+            }
         }
     }
 
@@ -104,9 +108,9 @@ final class RemoteSessionMonitor: @unchecked Sendable {
                     remoteLog("[Monitor] startContainerCwdPolling: paneID=\(paneID) tabID=\(tabID) session=\(session)")
                 }
 
-                // Register this tab with the shared watcher — keyed by tabID
-                guard !self.containerWatcherTabs.contains(tabID) else { return }
-                self.containerWatcherTabs.insert(tabID)
+                // Register this tab with the shared watcher — keyed by tabID, tracked per pane
+                guard self.containerWatcherTabs[paneID]?.contains(tabID) != true else { return }
+                self.containerWatcherTabs[paneID, default: []].insert(tabID)
 
                 let callback = self.onContainerCwdChanged
                 ContainerCwdWatcher.shared(for: session)?.registerTab(paneID: tabID) { cwd in
@@ -178,12 +182,13 @@ final class RemoteSessionMonitor: @unchecked Sendable {
                 // Clean up container CWD state when session ends
                 // Note: we can't know the tabID here, but session ending clears the pane-level state.
                 if let previous, previous.isContainer, session == nil {
-                    // Unregister all tabs for this pane from the watcher
+                    // Unregister only this pane's tabs from the watcher — other panes
+                    // may still have active container sessions on the same watcher.
                     let watcher = ContainerCwdWatcher.shared(for: previous)
-                    for tabID in self.containerWatcherTabs {
+                    for tabID in self.containerWatcherTabs[paneID] ?? [] {
                         watcher?.unregisterTab(paneID: tabID)
                     }
-                    self.containerWatcherTabs.removeAll()
+                    self.containerWatcherTabs.removeValue(forKey: paneID)
                     ContainerCwdWatcher.releaseIfUnused(for: previous)
                 }
 
