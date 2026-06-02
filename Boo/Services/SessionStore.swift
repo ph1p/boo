@@ -244,6 +244,23 @@ enum SessionStore {
         return restored
     }
 
+    /// Resolve which restored workspace should be active.
+    ///
+    /// The snapshot stores the active workspace as an array index, but workspaces whose
+    /// folders no longer exist are dropped during restore, shifting indices. Match by the
+    /// saved active workspace's ID against the restored set; fall back to a clamped index
+    /// only when the active workspace itself was dropped.
+    static func resolvedActiveIndex(snapshot: SessionSnapshot, restoredIDs: [UUID]) -> Int {
+        guard !restoredIDs.isEmpty else { return 0 }
+        if snapshot.activeWorkspaceIndex >= 0,
+            snapshot.activeWorkspaceIndex < snapshot.workspaces.count
+        {
+            let activeID = snapshot.workspaces[snapshot.activeWorkspaceIndex].id
+            if let idx = restoredIDs.firstIndex(of: activeID) { return idx }
+        }
+        return min(max(snapshot.activeWorkspaceIndex, 0), restoredIDs.count - 1)
+    }
+
     private static func isContentStateRestorable(_ state: ContentState) -> Bool {
         switch state {
         case .editor(let s):

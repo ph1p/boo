@@ -161,6 +161,54 @@ final class SessionStoreTests: XCTestCase {
         XCTAssertEqual(restored.count, 0)
     }
 
+    // MARK: - Active workspace resolution
+
+    func testResolvedActiveIndexMatchesByID() {
+        let a = UUID()
+        let b = UUID()
+        let c = UUID()
+        let snapshot = SessionSnapshot(
+            activeWorkspaceIndex: 2,
+            workspaces: [a, b, c].map { makeSessionWorkspace(id: $0) })
+        // All restored, in order — index 2 stays index 2.
+        XCTAssertEqual(SessionStore.resolvedActiveIndex(snapshot: snapshot, restoredIDs: [a, b, c]), 2)
+    }
+
+    func testResolvedActiveIndexAdjustsWhenEarlierWorkspaceDropped() {
+        let a = UUID()
+        let b = UUID()
+        let c = UUID()
+        let snapshot = SessionSnapshot(
+            activeWorkspaceIndex: 2,
+            workspaces: [a, b, c].map { makeSessionWorkspace(id: $0) })
+        // Workspace `a` dropped (missing folder): active should follow `c` to its new index 1.
+        XCTAssertEqual(SessionStore.resolvedActiveIndex(snapshot: snapshot, restoredIDs: [b, c]), 1)
+    }
+
+    func testResolvedActiveIndexFallsBackWhenActiveWorkspaceDropped() {
+        let a = UUID()
+        let b = UUID()
+        let c = UUID()
+        let snapshot = SessionSnapshot(
+            activeWorkspaceIndex: 2,
+            workspaces: [a, b, c].map { makeSessionWorkspace(id: $0) })
+        // The active workspace `c` itself was dropped — clamp to the last remaining.
+        XCTAssertEqual(SessionStore.resolvedActiveIndex(snapshot: snapshot, restoredIDs: [a, b]), 1)
+    }
+
+    func testResolvedActiveIndexEmptyIsZero() {
+        let snapshot = SessionSnapshot(activeWorkspaceIndex: 0, workspaces: [])
+        XCTAssertEqual(SessionStore.resolvedActiveIndex(snapshot: snapshot, restoredIDs: []), 0)
+    }
+
+    private func makeSessionWorkspace(id: UUID) -> SessionWorkspace {
+        SessionWorkspace(
+            id: id, folderPath: "/tmp", customName: nil, color: "none",
+            customColorRed: nil, customColorGreen: nil, customColorBlue: nil,
+            isPinned: false, splitTree: .leaf(id: UUID()), panes: [],
+            activePaneID: UUID(), sidebarIsVisible: nil, sidebarWidth: nil)
+    }
+
     func testRestoreWorkspacesReconstructsSplitTree() {
         let state = AppState()
         let ws = Workspace(folderPath: "/tmp")

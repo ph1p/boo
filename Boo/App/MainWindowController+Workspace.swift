@@ -214,13 +214,15 @@ extension MainWindowController {
             if !restored.isEmpty {
                 for ws in restored {
                     appState.addWorkspace(ws)
+                    FolderBookmarkStore.shared.saveIfNeeded(URL(fileURLWithPath: ws.folderPath))
                 }
                 normalizeWorkspaceState()
-                let safeIndex = min(
-                    max(snapshot.activeWorkspaceIndex, 0),
-                    appState.workspaces.count - 1
-                )
-                activateWorkspace(safeIndex)
+                // Resolve the active workspace by ID, not the raw saved index: workspaces
+                // whose folders no longer exist are skipped during restore, which shifts
+                // indices. Falling back to a clamped index would focus the wrong workspace.
+                let activeIndex = SessionStore.resolvedActiveIndex(
+                    snapshot: snapshot, restoredIDs: appState.workspaces.map { $0.id })
+                activateWorkspace(activeIndex)
                 return
             }
         }
