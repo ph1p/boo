@@ -164,10 +164,11 @@ extension ToolbarView {
             if ws.hasActivity {
                 let dotSize: CGFloat = 5
                 ctx.setFillColor(theme.accentColor.cgColor)
-                ctx.fillEllipse(in: CGRect(
-                    x: rect.maxX - dotSize - 3,
-                    y: rect.minY + 3,
-                    width: dotSize, height: dotSize))
+                ctx.fillEllipse(
+                    in: CGRect(
+                        x: rect.maxX - dotSize - 3,
+                        y: rect.minY + 3,
+                        width: dotSize, height: dotSize))
             }
 
             x += w + 6

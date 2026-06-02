@@ -96,11 +96,12 @@ import Cocoa
         }
         addEnv("BOO_TERM", "1")
         if let paneID { addEnv("BOO_PANE_ID", paneID.uuidString) }
-        if let tabID  { addEnv("BOO_TAB_ID",  tabID.uuidString)  }
+        if let tabID { addEnv("BOO_TAB_ID", tabID.uuidString) }
 
         var envVars = envPairs.map { pair in
-            ghostty_env_var_s(key: pair.key.withUnsafeBufferPointer { $0.baseAddress! },
-                              value: pair.value.withUnsafeBufferPointer { $0.baseAddress! })
+            ghostty_env_var_s(
+                key: pair.key.withUnsafeBufferPointer { $0.baseAddress! },
+                value: pair.value.withUnsafeBufferPointer { $0.baseAddress! })
         }
 
         withExtendedLifetime(envPairs) {

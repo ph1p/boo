@@ -36,13 +36,13 @@ class ToolbarView: NSView {
     // MARK: - Font Cache (avoids NSFont alloc on every draw pass)
 
     enum Fonts {
-        nonisolated(unsafe) static let ws11Regular  = NSFont.systemFont(ofSize: 11, weight: .regular)
-        nonisolated(unsafe) static let ws11Medium   = NSFont.systemFont(ofSize: 11, weight: .medium)
+        nonisolated(unsafe) static let ws11Regular = NSFont.systemFont(ofSize: 11, weight: .regular)
+        nonisolated(unsafe) static let ws11Medium = NSFont.systemFont(ofSize: 11, weight: .medium)
         nonisolated(unsafe) static let tab11Regular = NSFont.systemFont(ofSize: 11.5, weight: .regular)
-        nonisolated(unsafe) static let tab11Medium  = NSFont.systemFont(ofSize: 11.5, weight: .medium)
-        nonisolated(unsafe) static let closeSmall   = NSFont.systemFont(ofSize: 8, weight: .bold)
-        nonisolated(unsafe) static let plus9Bold    = NSFont.systemFont(ofSize: 9, weight: .bold)
-        nonisolated(unsafe) static let plus15Light  = NSFont.systemFont(ofSize: 15, weight: .light)
+        nonisolated(unsafe) static let tab11Medium = NSFont.systemFont(ofSize: 11.5, weight: .medium)
+        nonisolated(unsafe) static let closeSmall = NSFont.systemFont(ofSize: 8, weight: .bold)
+        nonisolated(unsafe) static let plus9Bold = NSFont.systemFont(ofSize: 9, weight: .bold)
+        nonisolated(unsafe) static let plus15Light = NSFont.systemFont(ofSize: 15, weight: .light)
     }
 
     // MARK: - Measure Cache
@@ -339,7 +339,9 @@ class ToolbarView: NSView {
 
     /// Convenience overload for call sites that only have the item (scans for index).
     func measureWorkspace(_ ws: WorkspaceItem) -> CGFloat {
-        if let i = workspaces.firstIndex(where: { $0.name == ws.name && $0.isActive == ws.isActive && $0.isPinned == ws.isPinned }) {
+        if let i = workspaces.firstIndex(where: {
+            $0.name == ws.name && $0.isActive == ws.isActive && $0.isPinned == ws.isPinned
+        }) {
             return measureWorkspace(at: i)
         }
         let font = ws.isActive ? Fonts.ws11Medium : Fonts.ws11Regular

@@ -326,6 +326,7 @@ final class LocalFileTreePlugin: BooPluginProtocol {
                 panel.prompt = "Set as Root"
                 panel.begin { [weak self] response in
                     guard response == .OK, let url = panel.url else { return }
+                    FolderBookmarkStore.shared.save(url)
                     self?.cachedRoots.removeAll()
                     self?.hostActions?.setWorkspaceRoot?(url.path)
                 }

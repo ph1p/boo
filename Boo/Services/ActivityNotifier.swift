@@ -13,7 +13,8 @@ final class ActivityNotifier: NSObject, UNUserNotificationCenterDelegate {
     }
 
     func requestPermission() {
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { [weak self] granted, error in
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) {
+            [weak self] granted, error in
             if let error {
                 booLog(.warning, .app, "Notification permission error: \(error)")
             }
@@ -41,7 +42,8 @@ final class ActivityNotifier: NSObject, UNUserNotificationCenterDelegate {
     ) {
         guard AppSettings.shared.activityNotificationsEnabled else { return }
         guard cachedAuthStatus == .authorized else {
-            booLog(.debug, .app, "[Activity] notification skipped — not authorized (status=\(cachedAuthStatus.rawValue))")
+            booLog(
+                .debug, .app, "[Activity] notification skipped — not authorized (status=\(cachedAuthStatus.rawValue))")
             return
         }
         let content = UNMutableNotificationContent()
@@ -51,7 +53,7 @@ final class ActivityNotifier: NSObject, UNUserNotificationCenterDelegate {
         content.userInfo = [
             "workspaceID": workspaceID.uuidString,
             "paneID": paneID.uuidString,
-            "tabIndex": tabIndex,
+            "tabIndex": tabIndex
         ]
         let req = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
         UNUserNotificationCenter.current().add(req) { error in

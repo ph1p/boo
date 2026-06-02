@@ -5,7 +5,7 @@ import UserNotifications
 struct NotificationsSettingsView: View {
     @State private var activityNotificationsEnabled = AppSettings.shared.activityNotificationsEnabled
     @State private var authStatus: UNAuthorizationStatus = .notDetermined
-    @ObservedObject private var observer = SettingsObserver(topics: [.theme, .notifications])
+    @ObservedObject private var observer = SettingsObserver(topics: [.notifications])
 
     var body: some View {
         let _ = observer.revision

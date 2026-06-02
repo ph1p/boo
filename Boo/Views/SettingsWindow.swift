@@ -60,7 +60,10 @@ struct SettingsView: View {
         case pluginSettings(pluginID: String)
 
         static var fixed: [Tab] {
-            [.general, .theme, .appearance, .statusBar, .layout, .editor, .browser, .notifications, .plugins, .shortcuts]
+            [
+                .general, .theme, .appearance, .statusBar, .layout, .editor, .browser, .notifications, .plugins,
+                .shortcuts
+            ]
         }
 
         var label: String {
