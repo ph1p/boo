@@ -166,9 +166,9 @@ final class ActivityNotificationTests: XCTestCase {
         let ws = Workspace(folderPath: "/tmp")
         ws.splitPane(ws.activePaneID, direction: .horizontal)
         let panes = Array(ws.panes.values)
-        panes.forEach { $0.setActivity(true, at: 0) }
+        for pane in panes { pane.setActivity(true, at: 0) }
         XCTAssertTrue(ws.hasActivity)
-        panes.forEach { $0.setActivity(false, at: 0) }
+        for pane in panes { pane.setActivity(false, at: 0) }
         XCTAssertFalse(ws.hasActivity)
     }
 

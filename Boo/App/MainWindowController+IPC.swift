@@ -128,12 +128,13 @@ extension MainWindowController {
             return
         }
         guard let workspace = appState.workspaceContainingPane(paneID),
-              let pane = workspace.pane(for: paneID)
+            let pane = workspace.pane(for: paneID)
         else {
             reply(["ok": false, "error": "pane not found"])
             return
         }
-        signalActivity(workspace: workspace, pane: pane, tabIndex: pane.activeTabIndex, exitCode: 0, skipIfFocused: false)
+        signalActivity(
+            workspace: workspace, pane: pane, tabIndex: pane.activeTabIndex, exitCode: 0, skipIfFocused: false)
         reply(["ok": true])
     }
 

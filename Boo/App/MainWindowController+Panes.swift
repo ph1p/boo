@@ -41,7 +41,8 @@ extension MainWindowController: PaneViewDelegate {
         for (id, pv) in paneViews { pv.isFocused = id == paneID }
 
         if let pane = workspace.pane(for: paneID),
-           pane.setActivity(false, at: pane.activeTabIndex) {
+            pane.setActivity(false, at: pane.activeTabIndex)
+        {
             refreshToolbar()
         }
 
@@ -130,9 +131,13 @@ extension MainWindowController: PaneViewDelegate {
 
     func paneView(_ paneView: PaneView, commandStarted command: String, paneID: UUID) {
         if let workspace = appState.workspaceContainingPane(paneID),
-           let pane = workspace.pane(for: paneID) {
+            let pane = workspace.pane(for: paneID)
+        {
             pane.setCommandRunning(true, at: pane.activeTabIndex)
-            booLog(.debug, .terminal, "[Activity] cmd_start pane=\(paneID.uuidString.prefix(8)) tab=\(pane.activeTabIndex) cmd=\(command.prefix(40))")
+            booLog(
+                .debug, .terminal,
+                "[Activity] cmd_start pane=\(paneID.uuidString.prefix(8)) tab=\(pane.activeTabIndex) cmd=\(command.prefix(40))"
+            )
             if workspace.id == appState.activeWorkspace?.id {
                 bridge.handleCommandStart(command: command, paneID: paneID)
                 BooSocketServer.shared.emitCommandStarted(command: command, paneID: paneID)
@@ -144,7 +149,9 @@ extension MainWindowController: PaneViewDelegate {
 
     func paneView(_ paneView: PaneView, commandEnded exitCode: Int32, paneID: UUID) {
         guard let workspace = appState.workspaceContainingPane(paneID) else {
-            booLog(.debug, .terminal, "[Activity] cmd_end pane=\(paneID.uuidString.prefix(8)) exit=\(exitCode) — no workspace found, dropped")
+            booLog(
+                .debug, .terminal,
+                "[Activity] cmd_end pane=\(paneID.uuidString.prefix(8)) exit=\(exitCode) — no workspace found, dropped")
             return
         }
 
@@ -173,16 +180,18 @@ extension MainWindowController: PaneViewDelegate {
 
     func signalActivity(paneID: UUID, tabIndex: Int, exitCode: Int32, skipIfFocused: Bool = true) {
         guard let workspace = appState.workspaceContainingPane(paneID),
-              let pane = workspace.pane(for: paneID)
+            let pane = workspace.pane(for: paneID)
         else { return }
-        signalActivity(workspace: workspace, pane: pane, tabIndex: tabIndex, exitCode: exitCode, skipIfFocused: skipIfFocused)
+        signalActivity(
+            workspace: workspace, pane: pane, tabIndex: tabIndex, exitCode: exitCode, skipIfFocused: skipIfFocused)
     }
 
     func signalActivity(workspace: Workspace, pane: Pane, tabIndex: Int, exitCode: Int32, skipIfFocused: Bool = true) {
         guard tabIndex >= 0, tabIndex < pane.tabs.count else { return }
 
         if skipIfFocused {
-            let isFocused = workspace.id == appState.activeWorkspace?.id
+            let isFocused =
+                workspace.id == appState.activeWorkspace?.id
                 && workspace.activePaneID == pane.id
                 && pane.activeTabIndex == tabIndex
                 && NSApp.isActive && window?.isKeyWindow == true

@@ -34,6 +34,7 @@ struct GeneralSettingsView: View {
                         panel.directoryURL = URL(fileURLWithPath: defaultFolder)
                         panel.message = "Choose the default folder for new workspaces"
                         if panel.runModal() == .OK, let url = panel.url {
+                            FolderBookmarkStore.shared.save(url)
                             defaultFolder = url.path
                             AppSettings.shared.defaultFolder = url.path
                         }

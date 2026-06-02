@@ -128,17 +128,18 @@ enum BooPaths {
         let home = NSHomeDirectory()
         let sentinel = "# Boo shell integration"
         let entries: [(rc: String, script: String)] = [
-            (".zshrc",               "boo.zsh"),
-            (".bashrc",              "boo.bash"),
-            (".bash_profile",        "boo.bash"),
-            (".config/fish/config.fish", "boo.fish"),
+            (".zshrc", "boo.zsh"),
+            (".bashrc", "boo.bash"),
+            (".bash_profile", "boo.bash"),
+            (".config/fish/config.fish", "boo.fish")
         ]
         for (rc, script) in entries {
             let rcPath = home.appendingPathComponent(rc)
             let scriptPath = shellIntegrationDir.appendingPathComponent(script)
             guard FileManager.default.fileExists(atPath: rcPath) else { continue }
             guard let existing = try? String(contentsOfFile: rcPath, encoding: .utf8),
-                  !existing.contains(sentinel) else { continue }
+                !existing.contains(sentinel)
+            else { continue }
             let line: String
             if script.hasSuffix(".fish") {
                 line = "\n\(sentinel)\nif test -f \"\(scriptPath)\"; source \"\(scriptPath)\"; end\n"
@@ -156,7 +157,7 @@ enum BooPaths {
         let settingsPath = NSHomeDirectory().appendingPathComponent(".claude/settings.json")
 
         guard let data = try? Data(contentsOf: URL(fileURLWithPath: settingsPath)),
-              var root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+            var root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
         else { return }
 
         var hooks = root["hooks"] as? [String: Any] ?? [:]
@@ -172,7 +173,8 @@ enum BooPaths {
         hooks["Stop"] = stopHooks
         root["hooks"] = hooks
 
-        guard let updated = try? JSONSerialization.data(withJSONObject: root, options: [.prettyPrinted, .sortedKeys]) else { return }
+        guard let updated = try? JSONSerialization.data(withJSONObject: root, options: [.prettyPrinted, .sortedKeys])
+        else { return }
         try? updated.write(to: URL(fileURLWithPath: settingsPath))
     }
 
