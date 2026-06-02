@@ -1195,6 +1195,7 @@ class ThemedSplitView: NSSplitView {
         guard let window else { return }
         panel.beginSheetModal(for: window) { [weak self] response in
             guard response == .OK, let url = panel.url else { return }
+            FolderBookmarkStore.shared.save(url)
             self?.openWorkspace(path: url.path)
         }
     }
