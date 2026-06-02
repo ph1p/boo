@@ -6,9 +6,9 @@ extension PaneView {
 
     private enum TabFonts {
         nonisolated(unsafe) static let title10Regular = NSFont.systemFont(ofSize: 10.5, weight: .regular)
-        nonisolated(unsafe) static let title10Medium  = NSFont.systemFont(ofSize: 10.5, weight: .medium)
-        nonisolated(unsafe) static let close8Bold     = NSFont.systemFont(ofSize: 8, weight: .bold)
-        nonisolated(unsafe) static let plus15Light    = NSFont.systemFont(ofSize: 15, weight: .light)
+        nonisolated(unsafe) static let title10Medium = NSFont.systemFont(ofSize: 10.5, weight: .medium)
+        nonisolated(unsafe) static let close8Bold = NSFont.systemFont(ofSize: 8, weight: .bold)
+        nonisolated(unsafe) static let plus15Light = NSFont.systemFont(ofSize: 15, weight: .light)
     }
 
     // MARK: - Tab Bar Drawing
@@ -190,10 +190,11 @@ extension PaneView {
         if tab.state.hasActivity && !isActive {
             let dotSize: CGFloat = 5
             ctx.setFillColor(theme.accentColor.withAlphaComponent(0.85).cgColor)
-            ctx.fillEllipse(in: CGRect(
-                x: x + width - closeZone - dotSize - 2,
-                y: midY - dotSize / 2,
-                width: dotSize, height: dotSize))
+            ctx.fillEllipse(
+                in: CGRect(
+                    x: x + width - closeZone - dotSize - 2,
+                    y: midY - dotSize / 2,
+                    width: dotSize, height: dotSize))
         }
 
         // Close button — only show on active or hovered tab
@@ -303,30 +304,7 @@ extension PaneView {
     }
 
     static func tildeContractRemotePath(_ path: String, tab: Pane.Tab) -> String {
-        // Extract user from session host (e.g. "root@host" -> "root", alias "devbox" -> nil)
-        var user: String?
-        if let session = tab.remoteSession {
-            let host = session.displayName
-            if host.contains("@") {
-                user = host.split(separator: "@").first.map(String.init)
-            }
-        }
-        // Also try extracting user from the terminal title ("root@host:~")
-        if user == nil {
-            let title = tab.title.trimmingCharacters(in: .whitespaces)
-            if let atIdx = title.firstIndex(of: "@") {
-                user = String(title[..<atIdx])
-            }
-        }
-        // Contract known home directories
-        let homes = ["/root", user.map { "/home/\($0)" }].compactMap { $0 }
-        for home in homes {
-            if path == home { return "~" }
-            if path.hasPrefix(home + "/") {
-                return "~" + path.dropFirst(home.count)
-            }
-        }
-        return path
+        Boo.tildeContractRemotePath(path, session: tab.remoteSession, title: tab.title)
     }
 
     static func environmentIndicator(for session: RemoteSessionType?) -> (NSColor, String) {

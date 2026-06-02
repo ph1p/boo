@@ -310,3 +310,23 @@ extension RemoteSessionType: Equatable {
         }
     }
 }
+
+/// Contract an absolute remote path to tilde notation.
+/// Extracts the remote user from `session.displayName` ("user@host") or falls back to `title` ("user@host:path").
+func tildeContractRemotePath(_ path: String, session: RemoteSessionType?, title: String?) -> String {
+    var user: String?
+    if let session, session.displayName.contains("@") {
+        user = session.displayName.split(separator: "@").first.map(String.init)
+    }
+    if user == nil, let title = title?.trimmingCharacters(in: .whitespaces),
+        let atIdx = title.firstIndex(of: "@")
+    {
+        user = String(title[..<atIdx])
+    }
+    let homes = ["/root", user.map { "/home/\($0)" }].compactMap { $0 }
+    for home in homes {
+        if path == home { return "~" }
+        if path.hasPrefix(home + "/") { return "~" + path.dropFirst(home.count) }
+    }
+    return path
+}
