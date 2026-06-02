@@ -33,6 +33,11 @@ public enum BooMain {
         // Apply initial log level from settings
         BooLogger.shared.applyDebugSetting(AppSettings.shared.debugLogging)
 
+        // Restore security-scoped bookmarks so previously-opened folders are accessible without prompting.
+        FolderBookmarkStore.shared.restoreAll()
+        // Proactively bookmark the default folder — it may predate bookmark persistence.
+        FolderBookmarkStore.shared.saveIfNeeded(URL(fileURLWithPath: AppSettings.shared.defaultFolder))
+
         // Install/update shell integration scripts to ~/.boo/shell-integration/
         BooPaths.installShellIntegration()
 
@@ -67,6 +72,7 @@ public enum BooMain {
         windowController?.saveSession()
         SSHControlManager.shared.teardownAll()
         BooSocketServer.shared.stop()
+        FolderBookmarkStore.shared.stopAll()
     }
 
     public func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
