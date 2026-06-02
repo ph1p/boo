@@ -12,12 +12,22 @@ let booExclude: [String] = [
     "App/main.swift",
     "Resources/MonacoSource"
 ]
-let booLinkerSettings: [LinkerSetting] = [
-    .unsafeFlags([
-        "-L", "Vendor/ghostty/macos/GhosttyKit.xcframework/macos-arm64",
-        "-Xlinker", "-rpath",
-        "-Xlinker", "@executable_path/../Frameworks"
-    ])
+// Library search path — needed by every target that links against GhosttyKit.
+let booLibrarySearchFlags: [String] = [
+    "-L", "Vendor/ghostty/macos/GhosttyKit.xcframework/macos-arm64"
+]
+// The runtime search path (rpath) only belongs on the final executable. Adding it to
+// both the Boo library and BooApp made the linker emit a duplicate-rpath warning, since
+// BooApp inherits the flag from its Boo dependency and adds its own.
+let booLibLinkerSettings: [LinkerSetting] = [
+    .unsafeFlags(booLibrarySearchFlags)
+]
+let booExeLinkerSettings: [LinkerSetting] = [
+    .unsafeFlags(
+        booLibrarySearchFlags + [
+            "-Xlinker", "-rpath",
+            "-Xlinker", "@executable_path/../Frameworks"
+        ])
 ]
 
 let allTargets: [Target] = [
@@ -67,13 +77,13 @@ let allTargets: [Target] = [
             .copy("Resources/Images"),
             .copy("Resources/MonacoBundle")
         ],
-        linkerSettings: booLinkerSettings
+        linkerSettings: booLibLinkerSettings
     ),
     .executableTarget(
         name: "BooApp",
         dependencies: ["Boo"],
         path: "BooApp",
-        linkerSettings: booLinkerSettings
+        linkerSettings: booExeLinkerSettings
     ),
     .testTarget(
         name: "BooTests",

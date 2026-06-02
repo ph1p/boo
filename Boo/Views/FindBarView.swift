@@ -227,15 +227,19 @@ private final class FindBarTextField: NSTextField {
                 forName: NSApplication.didUpdateNotification,
                 object: nil, queue: .main
             ) { [weak self] _ in
-                guard let self else { return }
-                guard let win = self.window else { return }
-                let fr = win.firstResponder
-                let isActive = fr === self || (fr is NSTextView && (fr as? NSTextView)?.delegate === self)
-                if !isActive {
-                    self.onFocusLost?()
-                    if let obs = self.focusObserver {
-                        NotificationCenter.default.removeObserver(obs)
-                        self.focusObserver = nil
+                // The observer is delivered on the main queue, so the main actor's
+                // isolation holds even though the closure is typed @Sendable.
+                MainActor.assumeIsolated {
+                    guard let self else { return }
+                    guard let win = self.window else { return }
+                    let fr = win.firstResponder
+                    let isActive = fr === self || (fr is NSTextView && (fr as? NSTextView)?.delegate === self)
+                    if !isActive {
+                        self.onFocusLost?()
+                        if let obs = self.focusObserver {
+                            NotificationCenter.default.removeObserver(obs)
+                            self.focusObserver = nil
+                        }
                     }
                 }
             }
