@@ -52,7 +52,7 @@ extension MainWindowController {
         var cwd = (activeRemoteSession != nil ? ctx.remoteCwd : nil) ?? ctx.cwd
         if cwd.isEmpty { cwd = statusTab?.workingDirectory ?? ws.folderPath }
         if activeRemoteSession != nil {
-            cwd = Self.tildeContractRemotePath(cwd, session: activeRemoteSession, title: statusTab?.title)
+            cwd = tildeContractRemotePath(cwd, session: activeRemoteSession, title: statusTab?.title)
         }
         let paneCount = ctx == .empty ? ws.panes.count : ctx.paneCount
         let tabCount = ctx == .empty ? (ws.pane(for: ws.activePaneID)?.tabs.count ?? 0) : ctx.tabCount
@@ -85,28 +85,6 @@ extension MainWindowController {
         return process == cwdLast || process == cwd || process == abbreviatePath(cwd)
             || process.hasSuffix(cwdLast) || looksLikePath
             || isLocalPrompt || isRemotePrompt || isConnectionCommand
-    }
-
-    /// Contract an absolute remote path to tilde notation for display.
-    /// Mirrors the logic in PaneView.tildeContractRemotePath so tab and status bar match.
-    private static func tildeContractRemotePath(_ path: String, session: RemoteSessionType?, title: String?) -> String {
-        var user: String?
-        if let session, session.displayName.contains("@") {
-            user = session.displayName.split(separator: "@").first.map(String.init)
-        }
-        if user == nil, let title = title?.trimmingCharacters(in: .whitespaces),
-            let atIdx = title.firstIndex(of: "@")
-        {
-            user = String(title[..<atIdx])
-        }
-        let homes = ["/root", user.map { "/home/\($0)" }].compactMap { $0 }
-        for home in homes {
-            if path == home { return "~" }
-            if path.hasPrefix(home + "/") {
-                return "~" + path.dropFirst(home.count)
-            }
-        }
-        return path
     }
 
     func refreshWindowTitle() {
