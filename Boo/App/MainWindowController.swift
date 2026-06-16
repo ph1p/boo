@@ -30,12 +30,20 @@ class ThemedSplitView: NSSplitView {
         super.mouseMoved(with: event)
         guard subviews.count >= 2 else { return }
         let localPoint = convert(event.locationInWindow, from: nil)
-        let divX = subviews[0].frame.maxX
-        let highlighted = abs(localPoint.x - divX) <= 4
+        let highlighted: Bool
+        let dividerStrip: CGRect
+        if isVertical {
+            let divX = subviews[0].frame.maxX
+            highlighted = abs(localPoint.x - divX) <= 4
+            dividerStrip = CGRect(x: divX - 4, y: 0, width: 9, height: bounds.height)
+        } else {
+            let divY = subviews[0].frame.maxY
+            highlighted = abs(localPoint.y - divY) <= 4
+            dividerStrip = CGRect(x: 0, y: divY - 4, width: bounds.width, height: 9)
+        }
         if highlighted != dividerHoverHighlighted {
             dividerHoverHighlighted = highlighted
             // Invalidate only the divider strip, not the whole split view
-            let dividerStrip = CGRect(x: divX - 4, y: 0, width: 9, height: bounds.height)
             setNeedsDisplay(dividerStrip)
         }
     }
@@ -45,8 +53,13 @@ class ThemedSplitView: NSSplitView {
         if dividerHoverHighlighted {
             dividerHoverHighlighted = false
             if subviews.count >= 2 {
-                let divX = subviews[0].frame.maxX
-                setNeedsDisplay(CGRect(x: divX - 4, y: 0, width: 9, height: bounds.height))
+                if isVertical {
+                    let divX = subviews[0].frame.maxX
+                    setNeedsDisplay(CGRect(x: divX - 4, y: 0, width: 9, height: bounds.height))
+                } else {
+                    let divY = subviews[0].frame.maxY
+                    setNeedsDisplay(CGRect(x: 0, y: divY - 4, width: bounds.width, height: 9))
+                }
             }
         }
     }
@@ -54,10 +67,18 @@ class ThemedSplitView: NSSplitView {
     override func drawDivider(in rect: NSRect) {
         super.drawDivider(in: rect)
         guard dividerHoverHighlighted else { return }
-        let barW: CGFloat = 2
-        let bar = CGRect(x: rect.midX - barW / 2, y: rect.minY, width: barW, height: rect.height)
         AppSettings.shared.theme.accentColor.withAlphaComponent(0.85).setFill()
-        NSBezierPath(rect: bar).fill()
+        if isVertical {
+            let barW: CGFloat = 2
+            let bar = CGRect(
+                x: rect.midX - barW / 2, y: rect.minY, width: barW, height: rect.height)
+            NSBezierPath(rect: bar).fill()
+        } else {
+            let barH: CGFloat = 2
+            let bar = CGRect(
+                x: rect.minX, y: rect.midY - barH / 2, width: rect.width, height: barH)
+            NSBezierPath(rect: bar).fill()
+        }
     }
 
     override func mouseDown(with event: NSEvent) {
@@ -71,12 +92,22 @@ class ThemedSplitView: NSSplitView {
 
     private func isPointOnPrimaryDivider(_ point: CGPoint) -> Bool {
         guard subviews.count >= 2 else { return false }
-        let dividerRect = CGRect(
-            x: subviews[0].frame.maxX,
-            y: 0,
-            width: dividerThickness,
-            height: bounds.height)
-        return dividerRect.insetBy(dx: -2, dy: 0).contains(point)
+        let dividerRect: CGRect
+        if isVertical {
+            dividerRect = CGRect(
+                x: subviews[0].frame.maxX,
+                y: 0,
+                width: dividerThickness,
+                height: bounds.height)
+            return dividerRect.insetBy(dx: -2, dy: 0).contains(point)
+        } else {
+            dividerRect = CGRect(
+                x: 0,
+                y: subviews[0].frame.maxY,
+                width: bounds.width,
+                height: dividerThickness)
+            return dividerRect.insetBy(dx: 0, dy: -2).contains(point)
+        }
     }
 }
 
@@ -249,6 +280,10 @@ class ThemedSplitView: NSSplitView {
     }
 
     let tabDragCoordinator = TabDragCoordinator()
+
+    /// CWD for which a background git-detect walk is currently in flight.
+    /// Prevents duplicate concurrent walks for the same directory.
+    var gitDetectInFlightCWD: String?
 
     deinit {
         if let obs = settingsObserver { NotificationCenter.default.removeObserver(obs) }
@@ -1299,5 +1334,22 @@ class ThemedSplitView: NSSplitView {
 
     @objc func checkForUpdatesAction(_ sender: Any?) {
         SparkleUpdater.shared.checkForUpdates()
+    }
+
+    // MARK: - Termination save
+
+    /// Synchronous final save on window close (fires before `applicationWillTerminate` returns).
+    /// Because `saveSession()` now uses a background write queue, we flush a synchronous
+    /// snapshot here so the final state is guaranteed on disk before the process exits.
+    func windowWillClose(_ notification: Notification) {
+        coordinator?.saveSidebarStateToSettings()
+        // Persist all live state to the model synchronously, then write synchronously.
+        for paneView in paneViews.values {
+            paneView.persistContentStateToModel()
+        }
+        normalizeWorkspaceState()
+        persistActiveWorkspaceSidebarState()
+        savePluginStateForActiveTab()
+        SessionStore.save(appState: appState)
     }
 }

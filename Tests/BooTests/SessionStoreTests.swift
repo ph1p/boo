@@ -650,7 +650,7 @@ final class SessionStoreTests: XCTestCase {
         let state = AppState()
         let ws = Workspace(folderPath: "/tmp")
         let rootID = ws.activePaneID
-        let newPaneID = ws.splitPane(rootID, direction: .horizontal)
+        let newPaneID = ws.splitPane(rootID, direction: .horizontal)!
         ws.activePaneID = newPaneID
         state.addWorkspace(ws)
 
@@ -663,7 +663,7 @@ final class SessionStoreTests: XCTestCase {
         let state = AppState()
         let ws = Workspace(folderPath: "/tmp")
         let rootID = ws.activePaneID
-        let newPaneID = ws.splitPane(rootID, direction: .vertical)
+        let newPaneID = ws.splitPane(rootID, direction: .vertical)!
         ws.activePaneID = newPaneID
         state.addWorkspace(ws)
 
@@ -720,7 +720,7 @@ final class SessionStoreTests: XCTestCase {
         let state = AppState()
         let ws = Workspace(folderPath: "/tmp")
         let rootID = ws.activePaneID
-        let secondID = ws.splitPane(rootID, direction: .horizontal)
+        let secondID = ws.splitPane(rootID, direction: .horizontal)!
 
         ws.pane(for: rootID)!.addTab(workingDirectory: "/tmp/root-extra", title: "root-extra")
         ws.pane(for: secondID)!.addTab(workingDirectory: "/tmp/second-extra", title: "second-extra")
@@ -785,7 +785,7 @@ final class SessionStoreTests: XCTestCase {
     func testSaveNormalizesEmptyPaneBeforeSnapshot() {
         let state = AppState()
         let ws = Workspace(folderPath: "/tmp")
-        let secondID = ws.splitPane(ws.activePaneID, direction: .horizontal)
+        let secondID = ws.splitPane(ws.activePaneID, direction: .horizontal)!
         _ = ws.pane(for: secondID)?.extractTab(at: 0)
         XCTAssertTrue(ws.pane(for: secondID)?.tabs.isEmpty ?? false)
         state.addWorkspace(ws)

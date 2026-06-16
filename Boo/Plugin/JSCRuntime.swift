@@ -11,6 +11,14 @@ final class JSCRuntime: @unchecked Sendable {
         var description: String { message }
     }
 
+    /// Mutable holder shared across the JS thread boundary. JSC work is serialized
+    /// onto one thread and the caller only reads after `group.wait`, so access is
+    /// race-free in practice.
+    private final class Box<T>: @unchecked Sendable {
+        var value: T
+        init(_ value: T) { self.value = value }
+    }
+
     private let logger = Logger(subsystem: "com.boo", category: "JSCRuntime")
 
     /// Execute a JavaScript transform function against a terminal context.
@@ -27,39 +35,47 @@ final class JSCRuntime: @unchecked Sendable {
         settings: [String: Any] = [:],
         timeout: TimeInterval = 1.0
     ) throws -> String {
-        nonisolated(unsafe) var ctxDict = buildContextDict(from: context)
+        var dict = buildContextDict(from: context)
         if !settings.isEmpty {
-            ctxDict["settings"] = settings
+            dict["settings"] = settings
         }
+        // Box the dict so it crosses the thread boundary as an @unchecked Sendable
+        // holder (see Box doc) instead of a bare non-Sendable dictionary.
+        let ctxDict = Box(dict)
 
         // All JSC work runs on a dedicated thread (JSContext is thread-bound).
         // The calling thread waits with a deadline so infinite loops don't hang.
-        nonisolated(unsafe) var output: String?
-        nonisolated(unsafe) var thrownError: (any Error)?
+        let output = Box<String?>(nil)
+        let thrownError = Box<(any Error)?>(nil)
 
         let group = DispatchGroup()
         group.enter()
 
-        let jsThread = Thread {
+        // Run JSC on a dedicated serial queue rather than a raw detached Thread.
+        // A bare Thread's first JSContext use traps (SIGTRAP) on headless hosts
+        // (e.g. CI runners with no GUI session); a libdispatch-managed worker
+        // does not. A fresh queue per call keeps a timed-out block from blocking
+        // later calls. The autorelease pool is still required for JSC.
+        let queue = DispatchQueue(label: "com.boo.jsc.execute", qos: .userInitiated)
+        queue.async {
             defer { group.leave() }
-            do {
-                output = try self.runJS(
-                    source: source, functionName: functionName, ctxDict: ctxDict)
-            } catch {
-                thrownError = error
+            autoreleasepool {
+                do {
+                    output.value = try self.runJS(
+                        source: source, functionName: functionName, ctxDict: ctxDict.value)
+                } catch {
+                    thrownError.value = error
+                }
             }
         }
-        jsThread.qualityOfService = .userInitiated
-        jsThread.start()
 
         let waitResult = group.wait(timeout: .now() + timeout)
         if waitResult == .timedOut {
-            jsThread.cancel()
             throw JSError(message: "JS transform timed out after \(Int(timeout))s")
         }
 
-        if let err = thrownError { throw err }
-        guard let result = output else {
+        if let err = thrownError.value { throw err }
+        guard let result = output.value else {
             throw JSError(message: "Function '\(functionName)' returned null/undefined")
         }
         return result
@@ -74,51 +90,56 @@ final class JSCRuntime: @unchecked Sendable {
         settings: [String: Any] = [:],
         timeout: TimeInterval = 1.0
     ) -> DSLAction? {
-        nonisolated(unsafe) var ctxDict = buildContextDict(from: context)
+        var dict = buildContextDict(from: context)
         if !settings.isEmpty {
-            ctxDict["settings"] = settings
+            dict["settings"] = settings
         }
+        // Box the dict so it crosses the thread boundary as an @unchecked Sendable
+        // holder (see Box doc) instead of a bare non-Sendable dictionary.
+        let ctxDict = Box(dict)
 
-        nonisolated(unsafe) var output: DSLAction?
+        let output = Box<DSLAction?>(nil)
         let group = DispatchGroup()
         group.enter()
 
-        let jsThread = Thread { [self] in
+        // Serial queue instead of a raw Thread — see execute() for why a bare
+        // Thread traps (SIGTRAP) on headless hosts. The autorelease pool stays.
+        let queue = DispatchQueue(label: "com.boo.jsc.action", qos: .userInitiated)
+        queue.async { [self] in
             defer { group.leave() }
-            guard let jsContext = JSContext() else { return }
-            jsContext.exceptionHandler = { _, _ in }
-            jsContext.setObject(ctxDict, forKeyedSubscript: "ctx" as NSString)
-            injectHostFunctions(into: jsContext, cwd: ctxDict["cwd"] as? String ?? "/")
-            jsContext.evaluateScript(source)
+            autoreleasepool {
+                guard let jsContext = JSContext() else { return }
+                jsContext.exceptionHandler = { _, _ in }
+                jsContext.setObject(ctxDict.value, forKeyedSubscript: "ctx" as NSString)
+                injectHostFunctions(into: jsContext, cwd: ctxDict.value["cwd"] as? String ?? "/")
+                jsContext.evaluateScript(source)
 
-            guard let fn = jsContext.objectForKeyedSubscript("onAction"),
-                !fn.isUndefined
-            else { return }
+                guard let fn = jsContext.objectForKeyedSubscript("onAction"),
+                    !fn.isUndefined
+                else { return }
 
-            let result = fn.call(withArguments: [actionName, ctxDict as Any])
-            guard let value = result, !value.isUndefined, !value.isNull,
-                let dict = value.toObject() as? [String: Any],
-                let type = dict["type"] as? String
-            else { return }
+                let result = fn.call(withArguments: [actionName, ctxDict.value as Any])
+                guard let value = result, !value.isUndefined, !value.isNull,
+                    let dict = value.toObject() as? [String: Any],
+                    let type = dict["type"] as? String
+                else { return }
 
-            output = DSLAction(
-                type: type,
-                path: dict["path"] as? String,
-                command: dict["command"] as? String,
-                text: dict["text"] as? String,
-                url: dict["url"] as? String,
-                title: dict["title"] as? String
-            )
+                output.value = DSLAction(
+                    type: type,
+                    path: dict["path"] as? String,
+                    command: dict["command"] as? String,
+                    text: dict["text"] as? String,
+                    url: dict["url"] as? String,
+                    title: dict["title"] as? String
+                )
+            }
         }
-        jsThread.qualityOfService = .userInitiated
-        jsThread.start()
 
         let waitResult = group.wait(timeout: .now() + timeout)
         if waitResult == .timedOut {
-            jsThread.cancel()
             return nil
         }
-        return output
+        return output.value
     }
 
     /// Run all JSC work on the current thread (must be called from the JS thread).

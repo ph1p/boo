@@ -183,8 +183,14 @@ final class Workspace {
     }
 
     @discardableResult
-    func splitPane(_ paneID: UUID, direction: SplitTree.SplitDirection) -> UUID {
+    func splitPane(_ paneID: UUID, direction: SplitTree.SplitDirection) -> UUID? {
         let (newTree, newID) = splitTree.splitting(leafID: paneID, direction: direction)
+        guard let newID = newID else {
+            booLog(
+                .debug, .terminal,
+                "[Workspace] splitPane: leafID \(paneID.uuidString.prefix(8)) not found — no-op")
+            return nil
+        }
         splitTree = newTree
 
         // New pane starts with empty title to avoid briefly showing the old pane's process name.

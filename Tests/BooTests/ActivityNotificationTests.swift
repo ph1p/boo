@@ -172,6 +172,58 @@ final class ActivityNotificationTests: XCTestCase {
         XCTAssertFalse(ws.hasActivity)
     }
 
+    // MARK: - Bell / desktop notification setActivity
+
+    func testBellSetsActivityOnActiveTab() {
+        // Bell handler calls setActivity(true, at: activeTabIndex) — verify model update.
+        let pane = Pane()
+        _ = pane.addTab(workingDirectory: "/a")
+        _ = pane.addTab(workingDirectory: "/b")
+        // Active tab is index 1 after two adds.
+        pane.setActivity(true, at: pane.activeTabIndex)
+        XCTAssertTrue(pane.tabs[pane.activeTabIndex].state.hasActivity)
+    }
+
+    func testDesktopNotificationSetsActivityOnActiveTab() {
+        // Desktop notification handler also calls setActivity(true, at: activeTabIndex).
+        let pane = Pane()
+        _ = pane.addTab(workingDirectory: "/a")
+        pane.setActivity(true, at: pane.activeTabIndex)
+        XCTAssertTrue(pane.tabs[0].state.hasActivity)
+        // Clearing works the same as for command-end.
+        pane.setActivity(false, at: pane.activeTabIndex)
+        XCTAssertFalse(pane.tabs[0].state.hasActivity)
+    }
+
+    // MARK: - Tab attribution via tabID
+
+    /// Verify that activity is attributed to the correct (non-active) tab when the
+    /// event carries that tab's UUID — mirrors the tabID-resolution path added in the
+    /// commandEnded / bellRangIn / desktopNotification handlers.
+    func testActivityLandsOnTabMatchingTabID() {
+        let pane = Pane()
+        pane.addTab(workingDirectory: "/a")
+        pane.addTab(workingDirectory: "/b")
+        pane.addTab(workingDirectory: "/c")
+        XCTAssertEqual(pane.tabs.count, 3)
+
+        // Active tab after three adds is index 2 (last added).
+        XCTAssertEqual(pane.activeTabIndex, 2)
+
+        // Capture the UUID of tab 1 (a background tab).
+        let targetTabID = pane.tabs[1].id
+
+        // Simulate the tabID-resolution path used by commandEnded / bellRangIn / desktopNotification:
+        // resolve index from the carried UUID, fall back to activeTabIndex when nil/not found.
+        let resolvedIndex = pane.tabs.firstIndex { $0.id == targetTabID } ?? pane.activeTabIndex
+        pane.setActivity(true, at: resolvedIndex)
+
+        // Activity must land on tab 1 (the event source), not tab 2 (the currently active tab).
+        XCTAssertFalse(pane.tabs[0].state.hasActivity, "tab 0 must be untouched")
+        XCTAssertTrue(pane.tabs[1].state.hasActivity, "tab 1 (event source) must have activity")
+        XCTAssertFalse(pane.tabs[2].state.hasActivity, "tab 2 (active) must not receive a background tab's event")
+    }
+
     // MARK: - Helper
 
     /// Pure model of the suppress check — no app/window state needed.

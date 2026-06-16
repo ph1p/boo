@@ -475,14 +475,19 @@ final class TerminalBridge: @unchecked Sendable {
     }
 
     /// Called by GhosttyRuntime when OSC 9999 `cmd_end` fires.
-    func handleCommandEnd(exitCode: Int32, paneID: UUID) {
-        guard paneID == state.paneID, let running = state.currentCommand else { return }
+    /// Returns the `CommandResult` that was just recorded, or `nil` when the event is
+    /// ignored (wrong pane or no in-flight command). Callers should use the returned
+    /// value rather than reading `state.lastCommandResult` to avoid emitting a stale result.
+    @discardableResult
+    func handleCommandEnd(exitCode: Int32, paneID: UUID) -> CommandResult? {
+        guard paneID == state.paneID, let running = state.currentCommand else { return nil }
         let duration = Date().timeIntervalSince(running.startTime)
         let result = CommandResult(command: running.command, exitCode: exitCode, duration: duration)
         state.lastCommandResult = result
         state.currentCommand = nil
         booLog(.debug, .terminal, "cmd_end: exit=\(exitCode) duration=\(String(format: "%.2f", duration))s")
         events.send(.commandEnded(result: result))
+        return result
     }
 
     // MARK: - Process Tree Detection

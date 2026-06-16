@@ -90,7 +90,7 @@ final class SplitAndExplorerTests: XCTestCase {
     func testSplitInheritsCwd() {
         let ws = Workspace(folderPath: "/home/user")
         ws.pane(for: ws.activePaneID)?.updateWorkingDirectory(at: 0, "/home/user/code")
-        let newID = ws.splitPane(ws.activePaneID, direction: .horizontal)
+        let newID = ws.splitPane(ws.activePaneID, direction: .horizontal)!
         XCTAssertEqual(ws.pane(for: newID)?.activeTab?.workingDirectory, "/home/user/code")
     }
 
@@ -112,7 +112,7 @@ final class SplitAndExplorerTests: XCTestCase {
     func testSplitNewPaneStartsWithEmptyTitle() {
         let ws = Workspace(folderPath: "/tmp")
         ws.pane(for: ws.activePaneID)?.updateWorkingDirectory(at: 0, "/Users/test/Documents")
-        let newID = ws.splitPane(ws.activePaneID, direction: .horizontal)
+        let newID = ws.splitPane(ws.activePaneID, direction: .horizontal)!
         let newPane = ws.pane(for: newID)!
         XCTAssertEqual(newPane.activeTab?.title, "")
         XCTAssertEqual(newPane.activeTab?.workingDirectory, "/Users/test/Documents")
@@ -121,8 +121,8 @@ final class SplitAndExplorerTests: XCTestCase {
     func testDoubleSplit() {
         let ws = Workspace(folderPath: "/tmp")
         let id1 = ws.activePaneID
-        let id2 = ws.splitPane(id1, direction: .horizontal)
-        let id3 = ws.splitPane(id1, direction: .vertical)
+        let id2 = ws.splitPane(id1, direction: .horizontal)!
+        let id3 = ws.splitPane(id1, direction: .vertical)!
 
         XCTAssertEqual(ws.panes.count, 3)
         XCTAssertEqual(ws.splitTree.leafIDs.count, 3)
@@ -134,8 +134,8 @@ final class SplitAndExplorerTests: XCTestCase {
     func testCloseMiddlePaneOfThree() {
         let ws = Workspace(folderPath: "/tmp")
         let id1 = ws.activePaneID
-        let id2 = ws.splitPane(id1, direction: .horizontal)
-        let id3 = ws.splitPane(id2, direction: .vertical)
+        let id2 = ws.splitPane(id1, direction: .horizontal)!
+        let id3 = ws.splitPane(id2, direction: .vertical)!
 
         ws.activePaneID = id2
         XCTAssertTrue(ws.closePane(id2))
@@ -147,7 +147,7 @@ final class SplitAndExplorerTests: XCTestCase {
     func testCloseNonActivePaneKeepsFocus() {
         let ws = Workspace(folderPath: "/tmp")
         let id1 = ws.activePaneID
-        let id2 = ws.splitPane(id1, direction: .horizontal)
+        let id2 = ws.splitPane(id1, direction: .horizontal)!
         ws.activePaneID = id1
 
         XCTAssertTrue(ws.closePane(id2))
@@ -159,7 +159,7 @@ final class SplitAndExplorerTests: XCTestCase {
     func testDirectoryChangeUpdatesPane() {
         let ws = Workspace(folderPath: "/tmp")
         let id1 = ws.activePaneID
-        let id2 = ws.splitPane(id1, direction: .horizontal)
+        let id2 = ws.splitPane(id1, direction: .horizontal)!
         ws.activePaneID = id1
 
         // Simulate CWD change in non-active pane — pane updates locally
@@ -170,7 +170,7 @@ final class SplitAndExplorerTests: XCTestCase {
     func testFocusSwitchReadsActivePaneCwd() {
         let ws = Workspace(folderPath: "/tmp")
         let id1 = ws.activePaneID
-        let id2 = ws.splitPane(id1, direction: .horizontal)
+        let id2 = ws.splitPane(id1, direction: .horizontal)!
 
         // Set different directories in each pane
         ws.pane(for: id1)?.updateWorkingDirectory(at: 0, "/dir-a")
@@ -188,7 +188,7 @@ final class SplitAndExplorerTests: XCTestCase {
         let id1 = UUID()
         let tree = SplitTree.leaf(id: id1)
         let (splitTree, id2) = tree.splitting(leafID: id1, direction: .horizontal)
-        let (nestedTree, id3) = splitTree.splitting(leafID: id2, direction: .vertical)
+        let (nestedTree, id3) = splitTree.splitting(leafID: id2!, direction: .vertical)
 
         let encoder = JSONEncoder()
         let data = try encoder.encode(nestedTree)
@@ -196,8 +196,8 @@ final class SplitAndExplorerTests: XCTestCase {
 
         XCTAssertEqual(decoded.leafIDs.count, 3)
         XCTAssertTrue(decoded.leafIDs.contains(id1))
-        XCTAssertTrue(decoded.leafIDs.contains(id2))
-        XCTAssertTrue(decoded.leafIDs.contains(id3))
+        XCTAssertTrue(decoded.leafIDs.contains(id2!))
+        XCTAssertTrue(decoded.leafIDs.contains(id3!))
         XCTAssertEqual(decoded, nestedTree)
     }
 
@@ -207,18 +207,18 @@ final class SplitAndExplorerTests: XCTestCase {
         let (splitTree, id2) = tree.splitting(leafID: id1, direction: .horizontal)
 
         XCTAssertEqual(splitTree.siblingLeafID(of: id1), id2)
-        XCTAssertEqual(splitTree.siblingLeafID(of: id2), id1)
+        XCTAssertEqual(splitTree.siblingLeafID(of: id2!), id1)
     }
 
     func testSplitTreeSiblingLeafIDNested() {
         let id1 = UUID()
         let tree = SplitTree.leaf(id: id1)
         let (t1, id2) = tree.splitting(leafID: id1, direction: .horizontal)
-        let (t2, id3) = t1.splitting(leafID: id2, direction: .vertical)
+        let (t2, id3) = t1.splitting(leafID: id2!, direction: .vertical)
 
         // id2 and id3 are siblings in the inner split
-        XCTAssertEqual(t2.siblingLeafID(of: id2), id3)
-        XCTAssertEqual(t2.siblingLeafID(of: id3), id2)
+        XCTAssertEqual(t2.siblingLeafID(of: id2!), id3)
+        XCTAssertEqual(t2.siblingLeafID(of: id3!), id2)
         // id1's sibling should be the first leaf of the other subtree
         XCTAssertEqual(t2.siblingLeafID(of: id1), id2)
     }
@@ -227,12 +227,12 @@ final class SplitAndExplorerTests: XCTestCase {
         let id1 = UUID()
         let tree = SplitTree.leaf(id: id1)
         let (t1, id2) = tree.splitting(leafID: id1, direction: .horizontal)
-        let (t2, id3) = t1.splitting(leafID: id2, direction: .vertical)
+        let (t2, id3) = t1.splitting(leafID: id2!, direction: .vertical)
 
         // Remove id3 — should leave id1 | id2
-        let result = t2.removing(leafID: id3)
+        let result = t2.removing(leafID: id3!)
         XCTAssertNotNil(result)
-        XCTAssertEqual(result?.leafIDs, [id1, id2])
+        XCTAssertEqual(result?.leafIDs, [id1, id2!])
     }
 
     func testSplitTreeLeafIDsSingleLeaf() {
@@ -262,7 +262,7 @@ final class SplitAndExplorerTests: XCTestCase {
     func testAddTabInSplitPane() {
         let ws = Workspace(folderPath: "/tmp")
         let id1 = ws.activePaneID
-        let id2 = ws.splitPane(id1, direction: .horizontal)
+        let id2 = ws.splitPane(id1, direction: .horizontal)!
 
         // Add a tab to the second pane
         ws.pane(for: id2)?.addTab(workingDirectory: "/new-tab")
@@ -347,9 +347,9 @@ final class SplitAndExplorerTests: XCTestCase {
     func testFourWaySplit() {
         let ws = Workspace(folderPath: "/tmp")
         let id1 = ws.activePaneID
-        let id2 = ws.splitPane(id1, direction: .horizontal)
-        let id3 = ws.splitPane(id1, direction: .vertical)
-        let id4 = ws.splitPane(id2, direction: .vertical)
+        let id2 = ws.splitPane(id1, direction: .horizontal)!
+        let id3 = ws.splitPane(id1, direction: .vertical)!
+        let id4 = ws.splitPane(id2, direction: .vertical)!
 
         XCTAssertEqual(ws.panes.count, 4)
         XCTAssertEqual(ws.splitTree.leafIDs.count, 4)

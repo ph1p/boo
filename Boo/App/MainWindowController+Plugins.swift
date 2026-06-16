@@ -174,6 +174,11 @@ extension MainWindowController {
     }
 
     /// Build git context from the current CWD.
+    ///
+    /// Cache hit: returns immediately on the main thread (fast path).
+    /// Cache miss: returns nil immediately and kicks a background filesystem walk.
+    /// When the walk completes the result is stored and a plugin cycle is scheduled
+    /// so the sidebar updates with real git state on the next run-loop pass.
     func buildGitContext(cwd: String) -> TerminalContext.GitContext? {
         booLog(
             .debug, .git,
@@ -201,19 +206,49 @@ extension MainWindowController {
             statusBar.gitRepoRoot = nil
             statusBar.needsDisplay = true
         }
-        let (branch, repoRoot) = StatusBarView.detectGitInfo(in: cwd)
-        booLog(.debug, .git, "buildGitContext: fallback branch=\(branch ?? "nil") repoRoot=\(repoRoot ?? "nil")")
-        guard let branch = branch, let repoRoot = repoRoot else { return nil }
-        return TerminalContext.GitContext(
-            branch: branch,
-            repoRoot: repoRoot,
-            isDirty: false,
-            changedFileCount: 0,
-            stagedCount: 0,
-            aheadCount: 0,
-            behindCount: 0,
-            lastCommitShort: nil
-        )
+
+        // Cache miss — avoid blocking the main thread with a filesystem walk.
+        // Return nil now; the background walk will trigger a re-run when it completes.
+        guard gitDetectInFlightCWD != cwd else {
+            booLog(.debug, .git, "buildGitContext: walk already in flight for \(cwd), returning nil")
+            return nil
+        }
+        gitDetectInFlightCWD = cwd
+        booLog(.debug, .git, "buildGitContext: cache MISS, starting background walk for \(cwd)")
+
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            let (branch, repoRoot) = StatusBarView.detectGitInfo(in: cwd)
+            DispatchQueue.main.async {
+                guard let self else { return }
+                // Clear the in-flight marker regardless of result.
+                if self.gitDetectInFlightCWD == cwd {
+                    self.gitDetectInFlightCWD = nil
+                }
+                booLog(
+                    .debug, .git,
+                    "buildGitContext: background walk done cwd=\(cwd) branch=\(branch ?? "nil") repoRoot=\(repoRoot ?? "nil")"
+                )
+                guard let branch, let repoRoot else { return }
+                // Only update the cache if the current working directory is still inside
+                // the repo we just walked. This discards stale results when the user
+                // navigated to a completely different location before the walk finished.
+                let currentCWD =
+                    self.activeWorkspace.flatMap { ws in
+                        ws.pane(for: ws.activePaneID)?.activeTab?.workingDirectory
+                    } ?? ""
+                guard currentCWD == repoRoot || currentCWD.hasPrefix(repoRoot + "/") else {
+                    booLog(.debug, .git, "buildGitContext: CWD moved out of repo before walk returned, discarding")
+                    return
+                }
+                self.statusBar.gitBranch = branch
+                self.statusBar.gitRepoRoot = repoRoot
+                self.statusBar.needsDisplay = true
+                // Trigger a plugin cycle re-run so the sidebar refreshes with git context.
+                self.schedulePluginCycle(reason: .cwdChanged)
+            }
+        }
+
+        return nil
     }
 
     // MARK: - Tab-Per-Plugin Sidebar

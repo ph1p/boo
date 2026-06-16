@@ -28,7 +28,7 @@ final class CrossWorkspaceTabTests: XCTestCase {
     func testMultiPaneWorkspaceTabCount() {
         let ws = Workspace(folderPath: "/tmp")
         let id1 = ws.activePaneID
-        let id2 = ws.splitPane(id1, direction: .horizontal)
+        let id2 = ws.splitPane(id1, direction: .horizontal)!
 
         let pane2 = ws.pane(for: id2)!
         _ = pane2.addTab(workingDirectory: "/b")
@@ -40,7 +40,7 @@ final class CrossWorkspaceTabTests: XCTestCase {
 
     func testOnlyTabAcrossMultiPaneWorkspaceIsFalse() {
         let ws = Workspace(folderPath: "/tmp")
-        let id2 = ws.splitPane(ws.activePaneID, direction: .horizontal)
+        let id2 = ws.splitPane(ws.activePaneID, direction: .horizontal)!
         _ = id2  // keep both panes
 
         let totalTabs = ws.panes.values.reduce(0) { $0 + $1.tabs.count }

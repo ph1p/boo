@@ -70,7 +70,7 @@ final class TabContextMenuTests: XCTestCase {
     func testIsOnlyPaneRestoredAfterClose() {
         let ws = Workspace(folderPath: "/tmp")
         let id1 = ws.activePaneID
-        let id2 = ws.splitPane(id1, direction: .horizontal)
+        let id2 = ws.splitPane(id1, direction: .horizontal)!
         XCTAssertFalse(ws.panes.count == 1)
 
         _ = ws.closePane(id2)

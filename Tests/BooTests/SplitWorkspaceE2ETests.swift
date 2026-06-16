@@ -85,7 +85,7 @@ final class SplitWorkspaceE2ETests: XCTestCase {
     func testSplitPaneTriggersPluginCycle() {
         let ws = Workspace(folderPath: "/projects")
         let originalID = ws.activePaneID
-        let newID = ws.splitPane(originalID, direction: .horizontal)
+        let newID = ws.splitPane(originalID, direction: .horizontal)!
 
         // Simulate focus switch to new pane (as MainWindowController would)
         let ctx = makeContext(ws: ws, pane: ws.pane(for: newID))
@@ -104,7 +104,7 @@ final class SplitWorkspaceE2ETests: XCTestCase {
     func testSplitInheritsCwdInPluginContext() {
         let ws = Workspace(folderPath: "/tmp")
         ws.pane(for: ws.activePaneID)?.updateWorkingDirectory(at: 0, "/Users/dev/project")
-        let newID = ws.splitPane(ws.activePaneID, direction: .vertical)
+        let newID = ws.splitPane(ws.activePaneID, direction: .vertical)!
 
         let ctx = makeContext(ws: ws, pane: ws.pane(for: newID))
         registry.runCycle(baseContext: ctx, reason: .focusChanged)
@@ -117,7 +117,7 @@ final class SplitWorkspaceE2ETests: XCTestCase {
     func testClosePaneSwitchesFocusAndNotifies() {
         let ws = Workspace(folderPath: "/tmp")
         let id1 = ws.activePaneID
-        let id2 = ws.splitPane(id1, direction: .horizontal)
+        let id2 = ws.splitPane(id1, direction: .horizontal)!
         ws.activePaneID = id2
 
         XCTAssertTrue(ws.closePane(id2))
@@ -136,8 +136,8 @@ final class SplitWorkspaceE2ETests: XCTestCase {
     func testMultipleSplitsAllReportedToPlugin() {
         let ws = Workspace(folderPath: "/tmp")
         let id1 = ws.activePaneID
-        let id2 = ws.splitPane(id1, direction: .horizontal)
-        let id3 = ws.splitPane(id2, direction: .vertical)
+        let id2 = ws.splitPane(id1, direction: .horizontal)!
+        let id3 = ws.splitPane(id2, direction: .vertical)!
 
         // Focus each pane in sequence
         for paneID in [id1, id2, id3] {
@@ -303,7 +303,7 @@ final class SplitWorkspaceE2ETests: XCTestCase {
     func testFocusCycleForward() {
         let ws = Workspace(folderPath: "/tmp")
         let id1 = ws.activePaneID
-        let id2 = ws.splitPane(id1, direction: .horizontal)
+        let id2 = ws.splitPane(id1, direction: .horizontal)!
         _ = ws.splitPane(id2, direction: .vertical)  // id3 needed to make 3 leaves
         ws.activePaneID = id1
 
@@ -329,8 +329,8 @@ final class SplitWorkspaceE2ETests: XCTestCase {
     func testFocusCycleBackward() {
         let ws = Workspace(folderPath: "/tmp")
         let id1 = ws.activePaneID
-        let id2 = ws.splitPane(id1, direction: .horizontal)
-        let id3 = ws.splitPane(id2, direction: .vertical)
+        let id2 = ws.splitPane(id1, direction: .horizontal)!
+        let id3 = ws.splitPane(id2, direction: .vertical)!
         ws.activePaneID = id1
 
         let leafIDs = ws.splitTree.leafIDs
@@ -346,7 +346,7 @@ final class SplitWorkspaceE2ETests: XCTestCase {
     func testFocusCycleWrapsAround() {
         let ws = Workspace(folderPath: "/tmp")
         let id1 = ws.activePaneID
-        let id2 = ws.splitPane(id1, direction: .horizontal)
+        let id2 = ws.splitPane(id1, direction: .horizontal)!
         ws.activePaneID = id2
 
         let leafIDs = ws.splitTree.leafIDs
@@ -376,7 +376,7 @@ final class SplitWorkspaceE2ETests: XCTestCase {
     func testSmartCloseSingleTabMultiplePanes() {
         let ws = Workspace(folderPath: "/tmp")
         let id1 = ws.activePaneID
-        let id2 = ws.splitPane(id1, direction: .horizontal)
+        let id2 = ws.splitPane(id1, direction: .horizontal)!
         ws.activePaneID = id2
 
         // Smart close: single tab, multiple panes → close pane
@@ -422,7 +422,7 @@ final class SplitWorkspaceE2ETests: XCTestCase {
     func testEqualizeNestedSplits() {
         let ws = Workspace(folderPath: "/tmp")
         let id1 = ws.activePaneID
-        let id2 = ws.splitPane(id1, direction: .horizontal)
+        let id2 = ws.splitPane(id1, direction: .horizontal)!
         _ = ws.splitPane(id2, direction: .vertical)
 
         ws.equalizeSplits()
@@ -474,7 +474,7 @@ final class SplitWorkspaceE2ETests: XCTestCase {
     func testSplitHorizontal() {
         let ws = Workspace(folderPath: "/tmp")
         let id1 = ws.activePaneID
-        let id2 = ws.splitPane(id1, direction: .horizontal)
+        let id2 = ws.splitPane(id1, direction: .horizontal)!
 
         if case .split(let dir, _, _, _) = ws.splitTree {
             XCTAssertEqual(dir, .horizontal)
@@ -488,7 +488,7 @@ final class SplitWorkspaceE2ETests: XCTestCase {
     func testSplitVertical() {
         let ws = Workspace(folderPath: "/tmp")
         let id1 = ws.activePaneID
-        let newID = ws.splitPane(id1, direction: .vertical)
+        let newID = ws.splitPane(id1, direction: .vertical)!
 
         if case .split(let dir, _, _, _) = ws.splitTree {
             XCTAssertEqual(dir, .vertical)
@@ -528,11 +528,11 @@ final class SplitWorkspaceE2ETests: XCTestCase {
 
         // Cmd+D: Split right
         let id1 = ws.activePaneID
-        let id2 = ws.splitPane(id1, direction: .horizontal)
+        let id2 = ws.splitPane(id1, direction: .horizontal)!
         XCTAssertEqual(ws.panes.count, 2)
 
         // Cmd+Shift+D: Split down on the new pane
-        let id3 = ws.splitPane(id2, direction: .vertical)
+        let id3 = ws.splitPane(id2, direction: .vertical)!
         XCTAssertEqual(ws.panes.count, 3)
 
         // Cmd+]: Focus next (id2 → id3)
@@ -629,7 +629,7 @@ final class SplitWorkspaceE2ETests: XCTestCase {
     func testProcessChangeInSplitPaneIsolated() {
         let ws = Workspace(folderPath: "/tmp")
         let id1 = ws.activePaneID
-        let id2 = ws.splitPane(id1, direction: .horizontal)
+        let id2 = ws.splitPane(id1, direction: .horizontal)!
 
         // Update process in pane 1 only
         ws.pane(for: id1)?.updateForegroundProcess(at: 0, "vim")

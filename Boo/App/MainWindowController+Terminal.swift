@@ -280,7 +280,10 @@ extension MainWindowController {
         guard let workspace = activeWorkspace else { return }
         window?.makeFirstResponder(nil)
 
-        let newID = workspace.splitPane(workspace.activePaneID, direction: .horizontal)
+        guard let newID = workspace.splitPane(workspace.activePaneID, direction: .horizontal) else {
+            booLog(.debug, .terminal, "openFileInNewPane: splitPane returned nil — skipped")
+            return
+        }
         workspace.activePaneID = newID
         splitContainer.update(tree: workspace.splitTree)
         saveSession()
@@ -303,7 +306,10 @@ extension MainWindowController {
         guard let workspace = activeWorkspace else { return }
         window?.makeFirstResponder(nil)
 
-        let newID = workspace.splitPane(workspace.activePaneID, direction: .horizontal)
+        guard let newID = workspace.splitPane(workspace.activePaneID, direction: .horizontal) else {
+            booLog(.debug, .terminal, "openDirectoryInNewPane: splitPane returned nil — skipped")
+            return
+        }
         // Override the new pane's tab to use the selected directory
         if let pane = workspace.pane(for: newID) {
             pane.stopAll()

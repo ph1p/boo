@@ -52,9 +52,9 @@ final class BooSocketServer: @unchecked Sendable {
 
     /// Thread-safe accessor. Setter is internal for testing via `@testable import`.
     var processes: [pid_t: ProcessStatus] {
-        get { queue.sync { _processes } }
+        get { syncOnQueue { _processes } }
         set {
-            queue.sync {
+            syncOnQueue {
                 _processes = newValue
                 ancestorCache.removeAll()
             }
@@ -75,9 +75,26 @@ final class BooSocketServer: @unchecked Sendable {
     private var clientBuffers: [Int32: Data] = [:]
     let queue = DispatchQueue(label: "com.boo.socket", qos: .utility)
 
+    /// Key used to detect re-entrant calls already executing on `queue`.
+    private static let queueKey = DispatchSpecificKey<Bool>()
+
+    /// Run `body` on `queue` synchronously, or inline if already on `queue`.
+    /// Prevents deadlock when `stop()` (or the `processes` setter) is invoked
+    /// from a timer/event-handler that is itself executing on `queue`.
+    private func syncOnQueue<T>(_ body: () throws -> T) rethrows -> T {
+        if DispatchQueue.getSpecific(key: BooSocketServer.queueKey) == true {
+            return try body()
+        }
+        return try queue.sync(execute: body)
+    }
+
     /// Cached ancestor lookups — cleared on each sweep cycle.
     /// Key: (childPID, ancestorPID), Value: isDescendant.
     private var ancestorCache: [UInt64: Bool] = [:]
+
+    private init() {
+        queue.setSpecific(key: BooSocketServer.queueKey, value: true)
+    }
 
     /// Socket path: ~/.boo/boo.sock
     let socketPath: String = {
@@ -136,7 +153,7 @@ final class BooSocketServer: @unchecked Sendable {
     /// Returns the status of a registered process that is a descendant of `shellPID`.
     /// Thread-safe — synchronizes on `queue`.
     func activeProcess(shellPID: pid_t, category: String? = nil) -> ProcessStatus? {
-        queue.sync {
+        syncOnQueue {
             for (pid, status) in _processes {
                 if let cat = category, status.category != cat { continue }
                 if isDescendantCached(pid, of: shellPID) {
@@ -148,7 +165,7 @@ final class BooSocketServer: @unchecked Sendable {
     }
 
     /// Check if any process is registered (fast, thread-safe).
-    var hasActiveProcesses: Bool { queue.sync { !_processes.isEmpty } }
+    var hasActiveProcesses: Bool { syncOnQueue { !_processes.isEmpty } }
 
     // MARK: - Lifecycle
 
@@ -220,7 +237,7 @@ final class BooSocketServer: @unchecked Sendable {
     }
 
     func stop() {
-        queue.sync {
+        syncOnQueue {
             acceptSource?.cancel()
             acceptSource = nil
             sweepTimer?.cancel()

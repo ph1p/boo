@@ -92,6 +92,22 @@ private func ghosttyAction(_ app: ghostty_app_t?, _ target: ghostty_target_s, _ 
         }
         return true
 
+    case GHOSTTY_ACTION_RING_BELL:
+        guard let view = viewFromTarget() else { return false }
+        DispatchQueue.main.async { [weak view] in
+            view?.onBell?()
+        }
+        return true
+
+    case GHOSTTY_ACTION_DESKTOP_NOTIFICATION:
+        guard let view = viewFromTarget() else { return false }
+        let notifTitle = action.action.desktop_notification.title.map { String(cString: $0) } ?? ""
+        let notifBody = action.action.desktop_notification.body.map { String(cString: $0) } ?? ""
+        DispatchQueue.main.async { [weak view] in
+            view?.onDesktopNotification?(notifTitle, notifBody)
+        }
+        return true
+
     // Window management actions — forward to MainWindowController via notification
     case GHOSTTY_ACTION_NEW_SPLIT:
         let direction = action.action.new_split
