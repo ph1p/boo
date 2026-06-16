@@ -80,19 +80,14 @@ extension ToolbarView {
             let wsColor = ws.resolvedColor
 
             let rect = CGRect(x: x, y: pillY, width: w, height: pillH)
-            let pillPath = CGPath(roundedRect: rect, cornerWidth: 6, cornerHeight: 6, transform: nil)
-            if let c = wsColor {
-                let alpha: CGFloat = ws.isActive ? 0.25 : (isWSHovered ? 0.18 : 0.12)
-                ctx.setFillColor(c.withAlphaComponent(alpha).cgColor)
-            } else if ws.isActive {
-                ctx.setFillColor(theme.chromeMuted.withAlphaComponent(0.25).cgColor)
-            } else if isWSHovered {
-                ctx.setFillColor(theme.chromeMuted.withAlphaComponent(0.12).cgColor)
-            } else {
-                ctx.setFillColor(theme.chromeMuted.withAlphaComponent(0.06).cgColor)
+            WorkspacePillStyle.fill(
+                ctx, rect: rect, active: ws.isActive, hovered: isWSHovered,
+                wsColor: wsColor, neutral: theme.chromeMuted)
+
+            // Accent-color border on the active workspace pill
+            if ws.isActive {
+                WorkspacePillStyle.strokeBorder(ctx, rect: rect, accent: theme.accentColor)
             }
-            ctx.addPath(pillPath)
-            ctx.fillPath()
 
             var contentX = x + 10
 
@@ -127,9 +122,10 @@ extension ToolbarView {
                 textColor = theme.chromeMuted
             }
 
-            let nameColor = (!ws.isPinned && isWSHovered) ? textColor.withAlphaComponent(0.3) : textColor
+            // Keep the name fully readable on hover — the close button draws its
+            // own opaque circle over the right edge, so no global text fade is needed.
             let nameFont = ws.isActive ? Fonts.ws11Medium : Fonts.ws11Regular
-            let nameAttrs: [NSAttributedString.Key: Any] = [.font: nameFont, .foregroundColor: nameColor]
+            let nameAttrs: [NSAttributedString.Key: Any] = [.font: nameFont, .foregroundColor: textColor]
             let nameSize = (ws.name as NSString).size(withAttributes: nameAttrs)
             (ws.name as NSString).draw(
                 at: NSPoint(x: contentX, y: (barHeight - nameSize.height) / 2),
@@ -138,26 +134,9 @@ extension ToolbarView {
 
             // Close button — overlays text on hover, no extra pill space reserved
             if !ws.isPinned && isWSHovered {
-                let circleSize: CGFloat = 16
-                let circleX = rect.maxX - circleSize - 6
-                let circleY = rect.midY - circleSize / 2
-                let circleRect = CGRect(x: circleX, y: circleY, width: circleSize, height: circleSize)
-                ctx.setFillColor(theme.chromeBg.cgColor)
-                ctx.fillEllipse(in: circleRect)
-                let closeTint: NSColor = wsColor ?? theme.chromeMuted
-                ctx.setFillColor(closeTint.withAlphaComponent(0.15).cgColor)
-                ctx.fillEllipse(in: circleRect)
-                let closeColor: NSColor = closeTint.withAlphaComponent(0.8)
-                let closeAttrs: [NSAttributedString.Key: Any] = [
-                    .font: Fonts.closeSmall,
-                    .foregroundColor: closeColor
-                ]
-                let closeStr = "\u{2715}" as NSString
-                let closeSize = closeStr.size(withAttributes: closeAttrs)
-                closeStr.draw(
-                    at: NSPoint(x: circleX + (circleSize - closeSize.width) / 2, y: rect.midY - closeSize.height / 2),
-                    withAttributes: closeAttrs
-                )
+                WorkspacePillStyle.drawCloseButton(
+                    ctx, in: workspaceCloseButtonRect(in: rect),
+                    tint: wsColor ?? theme.chromeMuted, bg: theme.chromeBg)
             }
 
             // Activity dot — top-right corner inside the pill
@@ -472,11 +451,9 @@ extension ToolbarView {
                     var pillX = trafficLightWidth - workspaceScrollOffset
                     for i in 0..<idx { pillX += measureWorkspace(at: i) + 6 }
                     let pillH: CGFloat = 24
-                    let circleSize: CGFloat = 16
                     let pillY = (barHeight - pillH) / 2
-                    let circleY = pillY + (pillH - circleSize) / 2
-                    let closeRect = CGRect(
-                        x: pillX + w - circleSize - 2, y: circleY, width: circleSize, height: circleSize)
+                    let pillRect = CGRect(x: pillX, y: pillY, width: w, height: pillH)
+                    let closeRect = workspaceCloseButtonRect(in: pillRect)
                     if !ws.isPinned && hoveredWorkspaceIndex == idx && closeRect.contains(startPoint) {
                         delegate?.toolbar(self, didCloseWorkspaceAt: idx)
                     } else {

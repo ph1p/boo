@@ -305,6 +305,18 @@ class ToolbarView: NSView {
         return CGRect(x: x, y: y, width: btnSize, height: btnSize)
     }
 
+    /// Hover close-button rect for a top-bar pill, right-aligned and vertically
+    /// centred. Shared by draw and hit-test so the drawn circle and click target
+    /// can't diverge.
+    func workspaceCloseButtonRect(in pillRect: CGRect) -> CGRect {
+        let size = WorkspacePillStyle.closeButtonSize
+        let inset: CGFloat = 6
+        return CGRect(
+            x: pillRect.maxX - size - inset,
+            y: pillRect.midY - size / 2,
+            width: size, height: size)
+    }
+
     // Tab zone (unused when tabs are in PaneView, kept for compatibility)
     var tabZoneStart: CGFloat {
         workspaceZoneEnd + zoneGap + dividerWidth + zoneGap

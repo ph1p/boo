@@ -78,147 +78,11 @@ class WorkspaceBarView: NSView {
     }
 
     override func draw(_ dirtyRect: NSRect) {
-        guard let ctx = NSGraphicsContext.current?.cgContext else { return }
-
-        if isVertical {
-            drawVertical(ctx)
-        } else {
-            drawHorizontal(ctx)
-        }
-    }
-
-    // MARK: - Horizontal Drawing (top bar)
-
-    private func drawHorizontal(_ ctx: CGContext) {
-        let theme = AppSettings.shared.theme
-
-        // Background — deepest layer
-        ctx.setFillColor(CGColor(red: 13 / 255, green: 13 / 255, blue: 15 / 255, alpha: 1))
-        ctx.fill(bounds)
-
-        // Bottom separator
-        ctx.setFillColor(CGColor(red: 42 / 255, green: 42 / 255, blue: 47 / 255, alpha: 1))
-        ctx.fill(CGRect(x: 0, y: bounds.height - 1, width: bounds.width, height: 1))
-
-        var x: CGFloat = 72  // Clear traffic lights
-
-        for (i, item) in items.enumerated() {
-            let isSelected = i == selectedIndex
-            let isHovered = i == hoveredIndex
-            let title = item.name as NSString
-            let wsColor = item.resolvedColor
-
-            let textColor: NSColor
-            if let c = wsColor, isSelected {
-                textColor = NSColor(
-                    red: c.redComponent * 0.6 + 0.4, green: c.greenComponent * 0.6 + 0.4,
-                    blue: c.blueComponent * 0.6 + 0.4, alpha: 1)
-            } else if isSelected {
-                textColor = NSColor(red: 228 / 255, green: 228 / 255, blue: 232 / 255, alpha: 1)
-            } else if let c = wsColor, isHovered {
-                textColor = NSColor(
-                    red: c.redComponent * 0.5 + 0.3, green: c.greenComponent * 0.5 + 0.3,
-                    blue: c.blueComponent * 0.5 + 0.3, alpha: 1)
-            } else if isHovered {
-                textColor = NSColor(red: 160 / 255, green: 160 / 255, blue: 168 / 255, alpha: 1)
-            } else if let c = wsColor {
-                textColor = NSColor(
-                    red: c.redComponent * 0.5 + 0.2, green: c.greenComponent * 0.5 + 0.2,
-                    blue: c.blueComponent * 0.5 + 0.2, alpha: 1)
-            } else {
-                textColor = NSColor(red: 86 / 255, green: 86 / 255, blue: 94 / 255, alpha: 1)
-            }
-            let attrs: [NSAttributedString.Key: Any] = [
-                .font: NSFont.systemFont(ofSize: 11.5, weight: isSelected ? .medium : .regular),
-                .foregroundColor: textColor
-            ]
-            let titleSize = title.size(withAttributes: attrs)
-            let closeSpace: CGFloat = item.isPinned ? 0 : 16
-            let pillWidth = titleSize.width + 32 + closeSpace
-            let pillHeight: CGFloat = 20
-            let pillY = (barHeight - pillHeight) / 2
-
-            let pillRect = CGRect(x: x, y: pillY, width: pillWidth, height: pillHeight)
-
-            if let c = wsColor {
-                let alpha: CGFloat = isSelected ? 0.25 : (isHovered ? 0.18 : 0.12)
-                ctx.setFillColor(c.withAlphaComponent(alpha).cgColor)
-                ctx.addPath(CGPath(roundedRect: pillRect, cornerWidth: 6, cornerHeight: 6, transform: nil))
-                ctx.fillPath()
-            } else if isSelected {
-                ctx.setFillColor(CGColor(red: 35 / 255, green: 35 / 255, blue: 39 / 255, alpha: 1))
-                ctx.addPath(CGPath(roundedRect: pillRect, cornerWidth: 6, cornerHeight: 6, transform: nil))
-                ctx.fillPath()
-            } else if isHovered {
-                ctx.setFillColor(CGColor(red: 28 / 255, green: 28 / 255, blue: 32 / 255, alpha: 1))
-                ctx.addPath(CGPath(roundedRect: pillRect, cornerWidth: 6, cornerHeight: 6, transform: nil))
-                ctx.fillPath()
-            }
-
-            let textX = x + 14
-            let textY = (barHeight - titleSize.height) / 2
-            title.draw(at: NSPoint(x: textX, y: textY), withAttributes: attrs)
-
-            // Pin icon for pinned items
-            if item.isPinned {
-                drawPinIcon(ctx, at: NSPoint(x: pillRect.minX + 2, y: pillRect.minY + 1), color: textColor)
-            }
-
-            // Close button — on hover, not pinned
-            if !item.isPinned && isHovered {
-                let closeColor: NSColor =
-                    wsColor?.withAlphaComponent(0.8)
-                    ?? NSColor(red: 86 / 255, green: 86 / 255, blue: 94 / 255, alpha: 0.8)
-                let closeBgColor: CGColor =
-                    (wsColor?.withAlphaComponent(0.15)
-                    ?? NSColor(red: 60 / 255, green: 60 / 255, blue: 68 / 255, alpha: 0.15)).cgColor
-                let closeAttrs: [NSAttributedString.Key: Any] = [
-                    .font: NSFont.systemFont(ofSize: 8, weight: .bold),
-                    .foregroundColor: closeColor
-                ]
-                let closeStr = "\u{2715}" as NSString
-                let closeSize = closeStr.size(withAttributes: closeAttrs)
-                let circleSize: CGFloat = 16
-                let circleX = x + pillWidth - circleSize - 4
-                let circleY = (barHeight - circleSize) / 2
-                ctx.setFillColor(closeBgColor)
-                ctx.fillEllipse(in: CGRect(x: circleX, y: circleY, width: circleSize, height: circleSize))
-                closeStr.draw(
-                    at: NSPoint(x: circleX + (circleSize - closeSize.width) / 2, y: (barHeight - closeSize.height) / 2),
-                    withAttributes: closeAttrs
-                )
-            }
-
-            x += pillWidth + 6
-        }
-
-        // Plus button
-        let plusRect = horizontalPlusButtonRect(afterX: x)
-        drawPlusButton(ctx, in: plusRect, isVertical: false)
-
-        // Draw horizontal drop insertion indicator (vertical line between pills)
-        if let dropIdx = dropTargetIndex {
-            let indicatorX = horizontalDropIndicatorX(for: dropIdx)
-            let pillHeight: CGFloat = 20
-            let pillY = (barHeight - pillHeight) / 2
-            ctx.setFillColor(theme.accentColor.cgColor)
-            ctx.fill(CGRect(x: indicatorX - 1, y: pillY, width: 2, height: pillHeight))
-        }
-    }
-
-    private func horizontalDropIndicatorX(for dropIdx: Int) -> CGFloat {
-        var x: CGFloat = 72
-        for i in 0..<min(dropIdx, items.count) {
-            let isSelected = i == selectedIndex
-            let attrs: [NSAttributedString.Key: Any] = [
-                .font: NSFont.systemFont(ofSize: 11.5, weight: isSelected ? .medium : .regular)
-            ]
-            let titleWidth = (items[i].name as NSString).size(withAttributes: attrs).width
-            let closeSpace: CGFloat = items[i].isPinned ? 0 : 16
-            let pillWidth = titleWidth + 32 + closeSpace
-            x += pillWidth + 6
-        }
-        return x - 3  // Center in the 6px gap
+        // This view is only ever used as a vertical (left/right) bar; the top bar
+        // is drawn by ToolbarView. Click/hit-test still support the horizontal
+        // layout for tests, but there is no horizontal draw path.
+        guard isVertical, let ctx = NSGraphicsContext.current?.cgContext else { return }
+        drawVertical(ctx)
     }
 
     // MARK: - Vertical Drawing (left bar)
@@ -249,22 +113,16 @@ class WorkspaceBarView: NSView {
 
             let pillRect = CGRect(x: padding, y: y, width: bounds.width - padding * 2, height: itemSize)
 
-            if let c = wsColor {
-                let alpha: CGFloat = isSelected ? 0.25 : (isHovered ? 0.18 : 0.12)
-                ctx.setFillColor(c.withAlphaComponent(alpha).cgColor)
-                ctx.addPath(CGPath(roundedRect: pillRect, cornerWidth: 6, cornerHeight: 6, transform: nil))
-                ctx.fillPath()
-            } else if isSelected {
-                ctx.setFillColor(theme.chromeMuted.withAlphaComponent(0.25).cgColor)
-                ctx.addPath(CGPath(roundedRect: pillRect, cornerWidth: 6, cornerHeight: 6, transform: nil))
-                ctx.fillPath()
-            } else if isHovered {
-                ctx.setFillColor(theme.chromeMuted.withAlphaComponent(0.12).cgColor)
-                ctx.addPath(CGPath(roundedRect: pillRect, cornerWidth: 6, cornerHeight: 6, transform: nil))
-                ctx.fillPath()
+            // Identical fill + accent border as the top bar, via the shared
+            // WorkspacePillStyle. Only the square geometry differs here.
+            WorkspacePillStyle.fill(
+                ctx, rect: pillRect, active: isSelected, hovered: isHovered,
+                wsColor: wsColor, neutral: theme.chromeMuted)
+            if isSelected {
+                WorkspacePillStyle.strokeBorder(ctx, rect: pillRect, accent: theme.accentColor)
             }
 
-            // Draw first character(s) as label
+            // Draw first character(s) as label. Same text-color model as the top bar.
             let label = String(item.name.prefix(2)).uppercased()
             let textColor: NSColor
             if let c = wsColor, isSelected {
@@ -294,28 +152,12 @@ class WorkspaceBarView: NSView {
                 drawPinIcon(ctx, at: NSPoint(x: pillRect.minX + 2, y: pillRect.minY + 2), color: textColor)
             }
 
-            // Close button — on hover, not pinned
+            // Close button — on hover, not pinned. Top corner away from the bar's
+            // edge: upper-right on the left bar, upper-left on the right bar.
             if !item.isPinned && isHovered {
-                let closeColor: NSColor = wsColor?.withAlphaComponent(0.8) ?? theme.chromeMuted.withAlphaComponent(0.8)
-                let closeBgColor: NSColor =
-                    wsColor?.withAlphaComponent(0.15) ?? theme.chromeMuted.withAlphaComponent(0.15)
-                let closeAttrs: [NSAttributedString.Key: Any] = [
-                    .font: NSFont.systemFont(ofSize: 8, weight: .bold),
-                    .foregroundColor: closeColor
-                ]
-                let closeStr = "\u{2715}" as NSString
-                let closeSize = closeStr.size(withAttributes: closeAttrs)
-                let circleSize: CGFloat = 16
-                let circleX = pillRect.maxX - circleSize - 2
-                let circleY = pillRect.midY - circleSize / 2
-                ctx.setFillColor(closeBgColor.cgColor)
-                ctx.fillEllipse(in: CGRect(x: circleX, y: circleY, width: circleSize, height: circleSize))
-                closeStr.draw(
-                    at: NSPoint(
-                        x: circleX + (circleSize - closeSize.width) / 2,
-                        y: circleY + (circleSize - closeSize.height) / 2),
-                    withAttributes: closeAttrs
-                )
+                let circleRect = verticalCloseButtonRect(in: pillRect)
+                WorkspacePillStyle.drawCloseButton(
+                    ctx, in: circleRect, tint: wsColor ?? theme.chromeMuted, bg: theme.chromeBg)
             }
 
             y += itemSize + 4
@@ -368,6 +210,16 @@ class WorkspaceBarView: NSView {
         let padding: CGFloat = 4
         let size: CGFloat = 32
         return CGRect(x: padding, y: y, width: bounds.width - padding * 2, height: size)
+    }
+
+    /// Hover close-button rect for a vertical pill: top corner away from the bar's
+    /// edge — upper-right on the left bar, upper-left on the right bar. (Flipped view,
+    /// so the top is `minY`.)
+    private func verticalCloseButtonRect(in pillRect: CGRect) -> CGRect {
+        let circleSize = WorkspacePillStyle.closeButtonSize
+        let inset: CGFloat = 2
+        let circleX = isRightAligned ? pillRect.minX + inset : pillRect.maxX - circleSize - inset
+        return CGRect(x: circleX, y: pillRect.minY + inset, width: circleSize, height: circleSize)
     }
 
     private func drawPlusButton(_ ctx: CGContext, in rect: CGRect, isVertical: Bool) {
@@ -965,10 +817,7 @@ class WorkspaceBarView: NSView {
             let pillRect = CGRect(x: padding, y: y, width: bounds.width - padding * 2, height: itemSize)
             if pillRect.contains(point) {
                 // Close button hit area — only when hovered
-                let circleSize: CGFloat = 16
-                let closeRect = CGRect(
-                    x: pillRect.maxX - circleSize - 2, y: pillRect.midY - circleSize / 2, width: circleSize,
-                    height: circleSize)
+                let closeRect = verticalCloseButtonRect(in: pillRect)
                 if !item.isPinned && i == hoveredIndex && closeRect.contains(point) {
                     delegate?.workspaceBar(self, didCloseAt: i)
                 } else {
