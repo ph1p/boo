@@ -22,7 +22,7 @@ final class WorkspaceTests: XCTestCase {
     func testSplitPane() {
         let ws = Workspace(folderPath: "/tmp")
         let originalID = ws.activePaneID
-        let newID = ws.splitPane(originalID, direction: .horizontal)
+        let newID = ws.splitPane(originalID, direction: .horizontal)!
 
         XCTAssertEqual(ws.panes.count, 2)
         XCTAssertNotNil(ws.pane(for: originalID))
@@ -30,10 +30,22 @@ final class WorkspaceTests: XCTestCase {
         XCTAssertEqual(ws.splitTree.leafIDs.count, 2)
     }
 
+    func testSplitPaneNonExistentLeafIsNoOp() {
+        let ws = Workspace(folderPath: "/tmp")
+        let treeBeforeSplit = ws.splitTree
+        let panesCountBefore = ws.panes.count
+
+        let result = ws.splitPane(UUID(), direction: .horizontal)
+
+        XCTAssertNil(result, "splitPane with nonexistent leafID should return nil")
+        XCTAssertEqual(ws.splitTree, treeBeforeSplit, "tree should be unchanged")
+        XCTAssertEqual(ws.panes.count, panesCountBefore, "panes should be unchanged")
+    }
+
     func testClosePane() {
         let ws = Workspace(folderPath: "/tmp")
         let originalID = ws.activePaneID
-        let newID = ws.splitPane(originalID, direction: .horizontal)
+        let newID = ws.splitPane(originalID, direction: .horizontal)!
 
         XCTAssertTrue(ws.closePane(newID))
         XCTAssertEqual(ws.panes.count, 1)
@@ -95,7 +107,7 @@ final class WorkspaceTests: XCTestCase {
 
     func testNormalizePaneStateRestoresFallbackTabForEmptyLeafPane() {
         let ws = Workspace(folderPath: "/tmp")
-        let secondID = ws.splitPane(ws.activePaneID, direction: .horizontal)
+        let secondID = ws.splitPane(ws.activePaneID, direction: .horizontal)!
         let pane = ws.pane(for: secondID)!
 
         _ = pane.extractTab(at: 0)

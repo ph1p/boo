@@ -43,9 +43,20 @@ final class RemoteSessionMonitor: @unchecked Sendable {
 
     func untrack(paneID: UUID) {
         queue.async { [weak self] in
-            self?.tracked.removeValue(forKey: paneID)
-            if self?.tracked.isEmpty == true {
-                self?.stopTimer()
+            guard let self else { return }
+            // Tear down any active container CWD watcher registrations for this pane
+            // before removing the tracked entry (we need lastSession to locate the watcher).
+            if let session = self.tracked[paneID]?.lastSession, session.isContainer {
+                let watcher = ContainerCwdWatcher.shared(for: session)
+                for tabID in self.containerWatcherTabs[paneID] ?? [] {
+                    watcher?.unregisterTab(paneID: tabID)
+                }
+                self.containerWatcherTabs.removeValue(forKey: paneID)
+                ContainerCwdWatcher.releaseIfUnused(for: session)
+            }
+            self.tracked.removeValue(forKey: paneID)
+            if self.tracked.isEmpty {
+                self.stopTimer()
             }
         }
     }
@@ -80,16 +91,17 @@ final class RemoteSessionMonitor: @unchecked Sendable {
         }
     }
 
-    /// Manually start container CWD polling for a pane whose container session was
-    /// detected by title heuristics (the process tree may not find it due to docker
-    /// CLI reparenting on macOS).
+    /// Stop container CWD polling for a specific tab on a pane.
+    /// Safe to call even if the session has already been cleared from `tracked`.
     func stopContainerCwdWatcher(paneID: UUID, tabID: UUID) {
         queue.async { [weak self] in
             guard let self else { return }
+            // Unregister from the watcher when the session is still known.
             if let session = self.tracked[paneID]?.lastSession {
                 ContainerCwdWatcher.shared(for: session)?.unregisterTab(paneID: tabID)
                 ContainerCwdWatcher.releaseIfUnused(for: session)
             }
+            // Always clean up the local tracking set, even if session was already nil.
             self.containerWatcherTabs[paneID]?.remove(tabID)
             if self.containerWatcherTabs[paneID]?.isEmpty == true {
                 self.containerWatcherTabs.removeValue(forKey: paneID)

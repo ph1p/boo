@@ -29,10 +29,17 @@ import Cocoa
     var onProcessExited: (() -> Void)?
     var onShellPIDDiscovered: ((pid_t) -> Void)?
     var onScrollbarChanged: ((GhosttyScrollbar) -> Void)?
+    /// The tab UUID this view was created for. Set once in init and never changes.
+    private(set) var tabID: UUID?
     /// Called when OSC 9999 cmd_start fires. Argument is the command string.
     var onCommandStart: ((String) -> Void)?
     /// Called when OSC 9999 cmd_end fires. Argument is the exit code.
     var onCommandEnd: ((Int32) -> Void)?
+    /// Called when Ghostty fires a terminal bell (BEL / GHOSTTY_ACTION_RING_BELL).
+    var onBell: (() -> Void)?
+    /// Called when Ghostty requests a desktop notification (OSC 777 / 99).
+    /// Arguments are the notification title and body strings.
+    var onDesktopNotification: ((String, String) -> Void)?
     /// Called when Ghostty requests the search UI to open (needle may be empty).
     var onSearchRequested: ((String) -> Void)?
     /// Called when Ghostty reports the total number of search matches.
@@ -61,6 +68,7 @@ import Cocoa
     override func accessibilityLabel() -> String? { "Terminal" }
 
     init(workingDirectory: String, paneID: UUID? = nil, tabID: UUID? = nil) {
+        self.tabID = tabID
         super.init(frame: .zero)
         wantsLayer = true
         layer?.backgroundColor = NSColor.black.cgColor
@@ -146,40 +154,77 @@ import Cocoa
     }
 
     private func discoverShellPID(myPID: pid_t, pidsBefore: Set<pid_t>, attempt: Int = 0) {
-        let pidsAfter = Set(RemoteExplorer.childPIDs(of: myPID))
-        // Exclude PIDs that have already been claimed by another GhosttyView this session.
-        let newPIDs = pidsAfter.subtracting(pidsBefore)
+        // Enumerate child PIDs on a background queue to avoid blocking the main thread
+        // with proc_listchildpids / walkToLeafShell syscalls.
+        // ClaimedDirectChildren.claim must stay on main (@MainActor), so only the
+        // syscall work is moved off; the claim and all property mutations come back to main.
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self else { return }
+            let pidsAfter = Set(RemoteExplorer.childPIDs(of: myPID))
+            let newPIDs = pidsAfter.subtracting(pidsBefore)
+            let candidates = newPIDs.sorted()
 
-        // Find the first unclaimed direct child (atomically claim it so concurrent discovery skips it).
-        let directChild = newPIDs.sorted().first { ClaimedDirectChildren.claim($0) }
+            // Return to main to claim and finalize (ClaimedDirectChildren is @MainActor).
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
 
-        if let directChild {
-            // Walk down the single-child chain (login → shell).
-            // On early attempts the shell may not have spawned yet — retry if
-            // we're still at an intermediary like `login`.
-            let shell = RemoteExplorer.walkToLeafShell(from: directChild)
-            if shell != directChild || attempt >= 3 {
-                booLog(
-                    .debug, .terminal,
-                    "shellPID discovered: directChild=\(directChild) shell=\(shell) attempt=\(attempt)")
-                claimedDirectChild = directChild
-                shellPID = shell
-                onShellPIDDiscovered?(shell)
-                return
+                // Find the first unclaimed direct child.
+                let directChild = candidates.first { ClaimedDirectChildren.claim($0) }
+
+                if let directChild {
+                    // Walk down the single-child chain (login → shell) — do on background.
+                    DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                        guard let self else { return }
+                        let shell = RemoteExplorer.walkToLeafShell(from: directChild)
+                        DispatchQueue.main.async { [weak self] in
+                            guard let self else { return }
+                            if shell != directChild || attempt >= 3 {
+                                booLog(
+                                    .debug, .terminal,
+                                    "shellPID discovered: directChild=\(directChild) shell=\(shell) attempt=\(attempt)")
+                                self.claimedDirectChild = directChild
+                                self.shellPID = shell
+                                self.onShellPIDDiscovered?(shell)
+                                return
+                            }
+                            // Shell not yet visible — release claim and retry.
+                            ClaimedDirectChildren.release(directChild)
+                            self.scheduleDiscoveryRetry(myPID: myPID, pidsBefore: pidsBefore, attempt: attempt)
+                        }
+                    }
+                    return
+                }
+
+                // No unclaimed child found — schedule retry or give up.
+                self.scheduleDiscoveryRetry(myPID: myPID, pidsBefore: pidsBefore, attempt: attempt)
             }
-            // Shell not yet visible — release claim and retry so siblings can try
-            ClaimedDirectChildren.release(directChild)
         }
+    }
 
+    /// Schedule a retry or, on the final attempt, fall back to claiming whatever is available.
+    private func scheduleDiscoveryRetry(myPID: pid_t, pidsBefore: Set<pid_t>, attempt: Int) {
         guard attempt < 8 else {
-            // Last resort: claim whatever is available
-            let pidsNow = Set(RemoteExplorer.childPIDs(of: myPID))
-            if let dc = pidsNow.subtracting(pidsBefore).sorted().first(where: { ClaimedDirectChildren.claim($0) }) {
-                let shell = RemoteExplorer.walkToLeafShell(from: dc)
-                booLog(.debug, .terminal, "shellPID fallback: directChild=\(dc) shell=\(shell)")
-                claimedDirectChild = dc
-                shellPID = shell
-                onShellPIDDiscovered?(shell)
+            // Last resort: scan again on background then claim on main.
+            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                guard let self else { return }
+                let pidsNow = Set(RemoteExplorer.childPIDs(of: myPID))
+                let candidates = pidsNow.subtracting(pidsBefore).sorted()
+                DispatchQueue.main.async { [weak self] in
+                    guard let self else { return }
+                    if let dc = candidates.first(where: { ClaimedDirectChildren.claim($0) }) {
+                        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                            guard let self else { return }
+                            let shell = RemoteExplorer.walkToLeafShell(from: dc)
+                            DispatchQueue.main.async { [weak self] in
+                                guard let self else { return }
+                                booLog(.debug, .terminal, "shellPID fallback: directChild=\(dc) shell=\(shell)")
+                                self.claimedDirectChild = dc
+                                self.shellPID = shell
+                                self.onShellPIDDiscovered?(shell)
+                            }
+                        }
+                    }
+                }
             }
             return
         }

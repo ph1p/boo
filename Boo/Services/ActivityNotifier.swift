@@ -63,6 +63,66 @@ final class ActivityNotifier: NSObject, UNUserNotificationCenterDelegate {
         }
     }
 
+    /// Post a notification for a terminal bell, analogous to `notifyCommandEnded`.
+    /// Suppression mirrors the command-end path: skip when `activityNotificationsEnabled` is off.
+    func notifyBell(
+        tabTitle: String, workspaceName: String,
+        workspaceID: UUID, paneID: UUID, tabIndex: Int
+    ) {
+        guard AppSettings.shared.activityNotificationsEnabled else { return }
+        guard cachedAuthStatus == .authorized else {
+            booLog(
+                .debug, .app,
+                "[Activity] bell notification skipped — not authorized (status=\(cachedAuthStatus.rawValue))")
+            return
+        }
+        let content = UNMutableNotificationContent()
+        content.title = workspaceName
+        content.body = "\(tabTitle) — bell"
+        content.sound = nil  // Bell is already an audible event; skip extra sound.
+        content.userInfo = [
+            "workspaceID": workspaceID.uuidString,
+            "paneID": paneID.uuidString,
+            "tabIndex": tabIndex
+        ]
+        let req = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
+        UNUserNotificationCenter.current().add(req) { error in
+            if let error {
+                booLog(.warning, .app, "[Activity] bell notification delivery error: \(error)")
+            }
+        }
+    }
+
+    /// Post an explicit desktop notification (OSC 777 / 99) from the running process.
+    /// Suppression: skip when focused AND app is key, otherwise always deliver (regardless of
+    /// `activityNotificationsEnabled` — the process explicitly requested it).
+    func notifyDesktop(
+        title: String, body: String, workspaceName: String,
+        workspaceID: UUID, paneID: UUID, tabIndex: Int
+    ) {
+        guard cachedAuthStatus == .authorized else {
+            booLog(
+                .debug, .app,
+                "[Activity] desktop notification skipped — not authorized (status=\(cachedAuthStatus.rawValue))")
+            return
+        }
+        let content = UNMutableNotificationContent()
+        content.title = title.isEmpty ? workspaceName : title
+        content.body = body
+        content.sound = .default
+        content.userInfo = [
+            "workspaceID": workspaceID.uuidString,
+            "paneID": paneID.uuidString,
+            "tabIndex": tabIndex
+        ]
+        let req = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
+        UNUserNotificationCenter.current().add(req) { error in
+            if let error {
+                booLog(.warning, .app, "[Activity] desktop notification delivery error: \(error)")
+            }
+        }
+    }
+
     nonisolated func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         didReceive response: UNNotificationResponse,

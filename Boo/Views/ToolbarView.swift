@@ -345,6 +345,7 @@ class ToolbarView: NSView {
         let font = ws.isActive ? Fonts.ws11Medium : Fonts.ws11Regular
         var w = (ws.name as NSString).size(withAttributes: [.font: font]).width + 20
         if ws.isPinned { w += 12 }
+        w = max(w, 80)
         _measureCache[index] = w
         return w
     }
@@ -359,6 +360,7 @@ class ToolbarView: NSView {
         let font = ws.isActive ? Fonts.ws11Medium : Fonts.ws11Regular
         var w = (ws.name as NSString).size(withAttributes: [.font: font]).width + 20
         if ws.isPinned { w += 12 }
+        w = max(w, 80)
         return w
     }
 

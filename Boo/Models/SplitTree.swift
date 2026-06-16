@@ -11,8 +11,9 @@ indirect enum SplitTree {
         case vertical  // top and bottom
     }
 
-    /// Split the leaf with the given ID, returning a new tree.
-    func splitting(leafID: UUID, direction: SplitDirection) -> (SplitTree, UUID) {
+    /// Split the leaf with the given ID, returning a new tree and the new leaf's ID.
+    /// Returns `(self, nil)` when `leafID` is not found in the tree.
+    func splitting(leafID: UUID, direction: SplitDirection) -> (SplitTree, UUID?) {
         switch self {
         case .leaf(let id) where id == leafID:
             let newID = UUID()
@@ -26,14 +27,17 @@ indirect enum SplitTree {
 
         case .split(let dir, let first, let second, let ratio):
             let (newFirst, newID1) = first.splitting(leafID: leafID, direction: direction)
-            if newFirst != first {
+            if let newID1 = newID1 {
                 return (.split(direction: dir, first: newFirst, second: second, ratio: ratio), newID1)
             }
             let (newSecond, newID2) = second.splitting(leafID: leafID, direction: direction)
-            return (.split(direction: dir, first: first, second: newSecond, ratio: ratio), newID2)
+            if let newID2 = newID2 {
+                return (.split(direction: dir, first: first, second: newSecond, ratio: ratio), newID2)
+            }
+            return (self, nil)
 
         default:
-            return (self, UUID())  // no match
+            return (self, nil)  // no match
         }
     }
 

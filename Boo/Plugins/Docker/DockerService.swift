@@ -172,6 +172,12 @@ final class DockerService: ObservableObject, @unchecked Sendable {
             close(fd)
             return -1
         }
+
+        // Don't let writes to a half-open socket raise SIGPIPE and kill the process
+        // (e.g. a dangling docker.sock on a host with no running daemon).
+        var on: Int32 = 1
+        setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &on, socklen_t(MemoryLayout<Int32>.size))
+
         return fd
     }
 

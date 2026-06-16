@@ -14,8 +14,8 @@ final class FocusRoutingTests: XCTestCase {
     func testFocusCycleForwardUsesLeafOrder() {
         let ws = Workspace(folderPath: "/tmp")
         let id1 = ws.activePaneID
-        let id2 = ws.splitPane(id1, direction: .horizontal)
-        let id3 = ws.splitPane(id2, direction: .vertical)
+        let id2 = ws.splitPane(id1, direction: .horizontal)!
+        let id3 = ws.splitPane(id2, direction: .vertical)!
 
         let leafIDs = ws.splitTree.leafIDs
         XCTAssertEqual(leafIDs.count, 3)
@@ -39,7 +39,7 @@ final class FocusRoutingTests: XCTestCase {
     func testFocusCycleBackwardWraps() {
         let ws = Workspace(folderPath: "/tmp")
         let id1 = ws.activePaneID
-        let id2 = ws.splitPane(id1, direction: .horizontal)
+        let id2 = ws.splitPane(id1, direction: .horizontal)!
         ws.activePaneID = id1
 
         let leafIDs = ws.splitTree.leafIDs
@@ -63,7 +63,7 @@ final class FocusRoutingTests: XCTestCase {
         // Verify that after split the new pane is in ws.panes.
         let ws = Workspace(folderPath: "/tmp")
         let id1 = ws.activePaneID
-        let id2 = ws.splitPane(id1, direction: .horizontal)
+        let id2 = ws.splitPane(id1, direction: .horizontal)!
 
         // Both panes must exist in the workspace
         XCTAssertNotNil(ws.pane(for: id1))
@@ -75,8 +75,8 @@ final class FocusRoutingTests: XCTestCase {
     func testSplitTreeLeafIDsMatchWorkspacePanes() {
         let ws = Workspace(folderPath: "/tmp")
         let id1 = ws.activePaneID
-        let id2 = ws.splitPane(id1, direction: .horizontal)
-        let id3 = ws.splitPane(id2, direction: .vertical)
+        let id2 = ws.splitPane(id1, direction: .horizontal)!
+        let id3 = ws.splitPane(id2, direction: .vertical)!
 
         let leafIDs = Set(ws.splitTree.leafIDs)
         let paneIDs = Set(ws.panes.keys)
@@ -89,7 +89,7 @@ final class FocusRoutingTests: XCTestCase {
     func testClosePaneRemovesFromSplitTree() {
         let ws = Workspace(folderPath: "/tmp")
         let id1 = ws.activePaneID
-        let id2 = ws.splitPane(id1, direction: .horizontal)
+        let id2 = ws.splitPane(id1, direction: .horizontal)!
 
         XCTAssertTrue(ws.closePane(id2))
         XCTAssertFalse(ws.splitTree.leafIDs.contains(id2))
@@ -99,8 +99,8 @@ final class FocusRoutingTests: XCTestCase {
     func testSplitTreeLeafIDsAfterCloseMatchPanes() {
         let ws = Workspace(folderPath: "/tmp")
         let id1 = ws.activePaneID
-        let id2 = ws.splitPane(id1, direction: .horizontal)
-        let id3 = ws.splitPane(id2, direction: .vertical)
+        let id2 = ws.splitPane(id1, direction: .horizontal)!
+        let id3 = ws.splitPane(id2, direction: .vertical)!
 
         _ = ws.closePane(id3)
 
@@ -115,7 +115,7 @@ final class FocusRoutingTests: XCTestCase {
     func testWorkspacePanesNeverContainsRemovedPane() {
         let ws = Workspace(folderPath: "/tmp")
         let id1 = ws.activePaneID
-        let id2 = ws.splitPane(id1, direction: .horizontal)
+        let id2 = ws.splitPane(id1, direction: .horizontal)!
         ws.activePaneID = id2
         _ = ws.closePane(id2)
 
@@ -126,7 +126,7 @@ final class FocusRoutingTests: XCTestCase {
     func testEqualizeSplitsAfterNestedSplitKeepsAllPanes() {
         let ws = Workspace(folderPath: "/tmp")
         let id1 = ws.activePaneID
-        let id2 = ws.splitPane(id1, direction: .horizontal)
+        let id2 = ws.splitPane(id1, direction: .horizontal)!
         _ = ws.splitPane(id2, direction: .vertical)
 
         ws.equalizeSplits()

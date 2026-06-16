@@ -129,14 +129,15 @@ extension MainWindowController: PaneViewDelegate {
         bridge.monitor.track(paneID: paneID, shellPID: pid, tabID: tabID)
     }
 
-    func paneView(_ paneView: PaneView, commandStarted command: String, paneID: UUID) {
+    func paneView(_ paneView: PaneView, commandStarted command: String, paneID: UUID, tabID: UUID?) {
         if let workspace = appState.workspaceContainingPane(paneID),
             let pane = workspace.pane(for: paneID)
         {
-            pane.setCommandRunning(true, at: pane.activeTabIndex)
+            let tabIndex = tabID.flatMap { id in pane.tabs.firstIndex { $0.id == id } } ?? pane.activeTabIndex
+            pane.setCommandRunning(true, at: tabIndex)
             booLog(
                 .debug, .terminal,
-                "[Activity] cmd_start pane=\(paneID.uuidString.prefix(8)) tab=\(pane.activeTabIndex) cmd=\(command.prefix(40))"
+                "[Activity] cmd_start pane=\(paneID.uuidString.prefix(8)) tab=\(tabIndex) cmd=\(command.prefix(40))"
             )
             if workspace.id == appState.activeWorkspace?.id {
                 bridge.handleCommandStart(command: command, paneID: paneID)
@@ -147,7 +148,7 @@ extension MainWindowController: PaneViewDelegate {
         }
     }
 
-    func paneView(_ paneView: PaneView, commandEnded exitCode: Int32, paneID: UUID) {
+    func paneView(_ paneView: PaneView, commandEnded exitCode: Int32, paneID: UUID, tabID: UUID?) {
         guard let workspace = appState.workspaceContainingPane(paneID) else {
             booLog(
                 .debug, .terminal,
@@ -156,8 +157,7 @@ extension MainWindowController: PaneViewDelegate {
         }
 
         if workspace.id == appState.activeWorkspace?.id {
-            bridge.handleCommandEnd(exitCode: exitCode, paneID: paneID)
-            if let result = bridge.state.lastCommandResult {
+            if let result = bridge.handleCommandEnd(exitCode: exitCode, paneID: paneID) {
                 BooSocketServer.shared.emitCommandEnded(result: result, paneID: paneID)
                 pluginRegistry.notifyCommandEnded(result: result, context: AppStore.shared.context)
                 schedulePluginCycle(reason: .processChanged)
@@ -166,12 +166,20 @@ extension MainWindowController: PaneViewDelegate {
 
         guard let pane = workspace.pane(for: paneID) else { return }
 
-        // Find the tab that has isCommandRunning set — it may differ from activeTabIndex
-        // if the user switched tabs while the command was running.
-        // Falls back to activeTabIndex for native OSC 133 COMMAND_FINISHED events (e.g. Claude Code)
-        // which fire without a prior BOO_CMD:cmd_start.
-        let runningTabIndex = pane.runningCommandTabIndex()
-        let tabIndex = runningTabIndex ?? pane.activeTabIndex
+        // Resolution order:
+        // (a) tabID-resolved index (event carries the originating tab's UUID),
+        // (b) pane.runningCommandTabIndex() (tab that has isCommandRunning set — user may have
+        //     switched away from the originating tab between cmd_start and cmd_end),
+        // (c) pane.activeTabIndex fallback for native OSC 133 COMMAND_FINISHED events (e.g.
+        //     Claude Code) that fire without a prior BOO_CMD:cmd_start.
+        let tabIndex: Int
+        if let tabID, let idx = pane.tabs.firstIndex(where: { $0.id == tabID }) {
+            tabIndex = idx
+        } else if let runningIdx = pane.runningCommandTabIndex() {
+            tabIndex = runningIdx
+        } else {
+            tabIndex = pane.activeTabIndex
+        }
         guard tabIndex >= 0 else { return }
         pane.setCommandRunning(false, at: tabIndex)
 
@@ -205,6 +213,72 @@ extension MainWindowController: PaneViewDelegate {
         ActivityNotifier.shared.notifyCommandEnded(
             tabTitle: tabTitle, workspaceName: workspace.displayName, exitCode: exitCode,
             workspaceID: workspace.id, paneID: pane.id, tabIndex: tabIndex)
+    }
+
+    func paneView(_ paneView: PaneView, bellRangIn paneID: UUID, tabID: UUID?) {
+        guard let workspace = appState.workspaceContainingPane(paneID),
+            let pane = workspace.pane(for: paneID)
+        else { return }
+
+        let tabIndex: Int
+        if let tabID, let idx = pane.tabs.firstIndex(where: { $0.id == tabID }) {
+            tabIndex = idx
+        } else {
+            tabIndex = pane.activeTabIndex
+        }
+        guard tabIndex >= 0 else { return }
+
+        let isFocused =
+            workspace.id == appState.activeWorkspace?.id
+            && workspace.activePaneID == pane.id
+            && pane.activeTabIndex == tabIndex
+            && NSApp.isActive && window?.isKeyWindow == true
+
+        // Always mark the activity dot; skip notification if the exact pane+tab is focused.
+        pane.setActivity(true, at: tabIndex)
+        workspacePaneViews[workspace.id]?[pane.id]?.needsDisplay = true
+        refreshToolbar()
+
+        if !isFocused {
+            let tabTitle = pane.tabs[tabIndex].state.title.isEmpty ? "Terminal" : pane.tabs[tabIndex].state.title
+            ActivityNotifier.shared.notifyBell(
+                tabTitle: tabTitle, workspaceName: workspace.displayName,
+                workspaceID: workspace.id, paneID: pane.id, tabIndex: tabIndex)
+        }
+    }
+
+    func paneView(
+        _ paneView: PaneView, desktopNotificationTitle title: String, body: String, paneID: UUID, tabID: UUID?
+    ) {
+        guard let workspace = appState.workspaceContainingPane(paneID),
+            let pane = workspace.pane(for: paneID)
+        else { return }
+
+        let tabIndex: Int
+        if let tabID, let idx = pane.tabs.firstIndex(where: { $0.id == tabID }) {
+            tabIndex = idx
+        } else {
+            tabIndex = pane.activeTabIndex
+        }
+        guard tabIndex >= 0 else { return }
+
+        let isFocused =
+            workspace.id == appState.activeWorkspace?.id
+            && workspace.activePaneID == pane.id
+            && pane.activeTabIndex == tabIndex
+            && NSApp.isActive && window?.isKeyWindow == true
+
+        // Mark activity dot on the tab even for desktop notifications.
+        pane.setActivity(true, at: tabIndex)
+        workspacePaneViews[workspace.id]?[pane.id]?.needsDisplay = true
+        refreshToolbar()
+
+        // Deliver the process-requested notification unless the exact pane+tab is focused.
+        if !isFocused {
+            ActivityNotifier.shared.notifyDesktop(
+                title: title, body: body, workspaceName: workspace.displayName,
+                workspaceID: workspace.id, paneID: pane.id, tabIndex: tabIndex)
+        }
     }
 
     func paneViewIsOnlyPaneInWorkspace(_ paneView: PaneView) -> Bool {
@@ -309,14 +383,18 @@ extension MainWindowController: PaneViewDelegate {
 
         // Non-terminal tabs (browser, editor, image viewer, etc.) close immediately —
         // no "end terminal session" confirmation needed.
+        let tabID = tab.id
         guard tab.contentType == .terminal else {
-            closeTabAfterConfirmation(paneID: paneID, tabIndex: index) { [weak self] in
-                guard let self else { return }
+            closeTabAfterConfirmation(paneID: paneID, tabIndex: index) { [weak self, weak pv] in
+                guard let self, let pv else { return }
                 if pane.tabs.count == 1 {
                     workspace.activePaneID = paneID
                     self.smartCloseAction(nil)
                 } else {
-                    pv.closeTab(at: index)
+                    // Re-resolve index — tabs may have changed while sheet was open.
+                    guard let currentIndex = pane.tabs.firstIndex(where: { $0.id == tabID })
+                    else { return }
+                    pv.closeTab(at: currentIndex)
                     self.refreshStatusBar()
                     self.saveSession()
                 }
@@ -325,7 +403,6 @@ extension MainWindowController: PaneViewDelegate {
         }
 
         guard let window = window else { return }
-        let tabID = tab.id
         let isLastTab = pane.tabs.count == 1
         let alert = NSAlert()
         alert.messageText = isLastTab ? "Close this pane?" : "Close this tab?"
@@ -333,12 +410,13 @@ extension MainWindowController: PaneViewDelegate {
         alert.alertStyle = .warning
         alert.addButton(withTitle: "Close")
         alert.addButton(withTitle: "Cancel")
-        alert.beginSheetModal(for: window) { [weak self] response in
+        alert.beginSheetModal(for: window) { [weak self, weak pv] response in
             guard response == .alertFirstButtonReturn else { return }
             if isLastTab {
                 workspace.activePaneID = paneID
                 self?.smartCloseAction(nil)
             } else {
+                guard let pv else { return }
                 // Re-resolve index — tabs may have changed while alert was shown
                 guard let currentIndex = pane.tabs.firstIndex(where: { $0.id == tabID }) else { return }
                 let item = ClosedItem.tab(
@@ -504,7 +582,10 @@ extension MainWindowController {
         booLog(.debug, .sidebar, "splitting pane=\(oldPaneID.uuidString.prefix(8)) direction=\(direction)")
         window?.makeFirstResponder(nil)
 
-        let newID = workspace.splitPane(oldPaneID, direction: direction)
+        guard let newID = workspace.splitPane(oldPaneID, direction: direction) else {
+            booLog(.debug, .sidebar, "splitActivePane: pane \(oldPaneID.uuidString.prefix(8)) not found — no-op")
+            return
+        }
         booLog(.debug, .sidebar, "created pane=\(newID.uuidString.prefix(8)) from=\(oldPaneID.uuidString.prefix(8))")
         // Inherit parent tab's plugin state so sidebar stays consistent
         if let newPane = workspace.pane(for: newID),
@@ -633,7 +714,14 @@ extension MainWindowController {
             let targetID = workspace.pane(for: siblingID) != nil ? siblingID : workspace.activePaneID
             window?.makeFirstResponder(nil)
 
-            let newID = workspace.splitPane(targetID, direction: direction)
+            guard let newID = workspace.splitPane(targetID, direction: direction) else {
+                booLog(
+                    .debug,
+                    .terminal,
+                    "undoCloseItem: splitPane returned nil for targetID \(targetID.uuidString.prefix(8)) — skipped"
+                )
+                break
+            }
             // Override the new pane's tab to use the closed pane's cwd
             if let pane = workspace.pane(for: newID) {
                 pane.stopAll()
@@ -823,7 +911,10 @@ extension MainWindowController {
         case .left, .right, .top, .bottom:
             let direction: SplitTree.SplitDirection = (zone == .left || zone == .right) ? .horizontal : .vertical
             let insertBefore = (zone == .left || zone == .top)
-            let newPaneID = destWorkspace.splitPane(dest.paneID, direction: direction)
+            guard let newPaneID = destWorkspace.splitPane(dest.paneID, direction: direction) else {
+                booLog(.debug, .terminal, "executeCrossWorkspaceDrop: splitPane returned nil — skipped")
+                return
+            }
             if insertBefore {
                 destWorkspace.splitTree = destWorkspace.splitTree.swappingChildrenAtParent(of: newPaneID)
             }
@@ -869,14 +960,12 @@ extension MainWindowController {
                 }
                 appState.removeWorkspace(at: idx)
                 refreshToolbar()
-                saveSession()
             }
         } else if sourcePane.tabs.isEmpty {
             // Source pane is now empty — close just the pane in the source workspace
             workspacePaneViews[sourceWorkspace.id]?.removeValue(forKey: source.paneID)
             source.stopAll()
             _ = sourceWorkspace.closePane(source.paneID)
-            saveSession()
         }
 
         saveSession()
@@ -944,7 +1033,15 @@ extension MainWindowController {
 
         // 2. Split the target pane — creates new leaf in the tree
         window?.makeFirstResponder(nil)
-        let newPaneID = workspace.splitPane(target.paneID, direction: direction)
+        guard let newPaneID = workspace.splitPane(target.paneID, direction: direction) else {
+            booLog(
+                .debug,
+                .terminal,
+                "splitPaneWithTab: splitPane returned nil for target \(target.paneID.uuidString.prefix(8)) — restoring extracted tab"
+            )
+            sourcePane.insertTab(tab, at: tabIndex)
+            return
+        }
 
         // For left/top drops, swap children so new pane appears first
         if insertBefore {
@@ -1049,8 +1146,11 @@ extension MainWindowController {
         else { return }
 
         if pane.tabs.count > 1 {
-            closeTabAfterConfirmation(paneID: workspace.activePaneID, tabIndex: pane.activeTabIndex) { [weak self] in
-                guard let self else { return }
+            closeTabAfterConfirmation(
+                paneID: workspace.activePaneID,
+                tabIndex: pane.activeTabIndex
+            ) { [weak self, weak pv] in
+                guard let self, let pv else { return }
                 let item = ClosedItem.tab(
                     paneID: workspace.activePaneID,
                     workingDirectory: pane.activeTab?.workingDirectory ?? workspace.folderPath,

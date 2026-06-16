@@ -14,7 +14,7 @@ import XCTest
     func testWorkspaceSplitPreservesOriginal() {
         let ws = Workspace(folderPath: "/tmp")
         let originalID = ws.activePaneID
-        let newID = ws.splitPane(originalID, direction: .horizontal)
+        let newID = ws.splitPane(originalID, direction: .horizontal)!
 
         XCTAssertEqual(ws.panes.count, 2)
         XCTAssertNotNil(ws.pane(for: originalID), "Original pane should still exist")
@@ -25,7 +25,7 @@ import XCTest
     func testWorkspaceSplitVertical() {
         let ws = Workspace(folderPath: "/home")
         let originalID = ws.activePaneID
-        let newID = ws.splitPane(originalID, direction: .vertical)
+        let newID = ws.splitPane(originalID, direction: .vertical)!
 
         XCTAssertEqual(ws.panes.count, 2)
         XCTAssertEqual(ws.splitTree.leafIDs.count, 2)
@@ -36,7 +36,7 @@ import XCTest
     func testCloseOneOfTwoPanes() {
         let ws = Workspace(folderPath: "/tmp")
         let originalID = ws.activePaneID
-        let newID = ws.splitPane(originalID, direction: .horizontal)
+        let newID = ws.splitPane(originalID, direction: .horizontal)!
 
         XCTAssertTrue(ws.closePane(newID))
         XCTAssertEqual(ws.panes.count, 1)
@@ -54,7 +54,7 @@ import XCTest
     func testActivePaneSwitchesOnClose() {
         let ws = Workspace(folderPath: "/tmp")
         let firstID = ws.activePaneID
-        let secondID = ws.splitPane(firstID, direction: .horizontal)
+        let secondID = ws.splitPane(firstID, direction: .horizontal)!
         ws.activePaneID = secondID
 
         XCTAssertTrue(ws.closePane(secondID))
@@ -64,8 +64,8 @@ import XCTest
     func testMultipleSplits() {
         let ws = Workspace(folderPath: "/tmp")
         let id1 = ws.activePaneID
-        let id2 = ws.splitPane(id1, direction: .horizontal)
-        let id3 = ws.splitPane(id2, direction: .vertical)
+        let id2 = ws.splitPane(id1, direction: .horizontal)!
+        let id3 = ws.splitPane(id2, direction: .vertical)!
 
         XCTAssertEqual(ws.panes.count, 3)
         XCTAssertEqual(ws.splitTree.leafIDs.count, 3)
@@ -103,7 +103,7 @@ import XCTest
 
         // Split ws1
         let ws1_pane1 = ws1.activePaneID
-        let ws1_pane2 = ws1.splitPane(ws1_pane1, direction: .horizontal)
+        let ws1_pane2 = ws1.splitPane(ws1_pane1, direction: .horizontal)!
 
         state.addWorkspace(ws1)
         state.addWorkspace(ws2)
@@ -127,7 +127,7 @@ import XCTest
     func testSplitTreeAfterClosingPane() {
         let ws = Workspace(folderPath: "/tmp")
         let id1 = ws.activePaneID
-        let id2 = ws.splitPane(id1, direction: .horizontal)
+        let id2 = ws.splitPane(id1, direction: .horizontal)!
 
         // Tree should be split with two leaves
         XCTAssertEqual(ws.splitTree.leafIDs, [id1, id2])
@@ -177,8 +177,8 @@ import XCTest
         // Layout: id1 | (id2 / id3)  — closing id2 should focus id3 (sibling), not id1
         let ws = Workspace(folderPath: "/tmp")
         let id1 = ws.activePaneID
-        let id2 = ws.splitPane(id1, direction: .horizontal)
-        let id3 = ws.splitPane(id2, direction: .vertical)
+        let id2 = ws.splitPane(id1, direction: .horizontal)!
+        let id3 = ws.splitPane(id2, direction: .vertical)!
         ws.activePaneID = id2
 
         XCTAssertTrue(ws.closePane(id2))
@@ -189,7 +189,7 @@ import XCTest
         // Layout: id1 | id2 — closing id1 should focus id2
         let ws = Workspace(folderPath: "/tmp")
         let id1 = ws.activePaneID
-        let id2 = ws.splitPane(id1, direction: .horizontal)
+        let id2 = ws.splitPane(id1, direction: .horizontal)!
         ws.activePaneID = id1
 
         XCTAssertTrue(ws.closePane(id1))

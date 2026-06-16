@@ -229,6 +229,19 @@ extension MainWindowController {
         openWorkspace(path: AppSettings.shared.defaultFolder)
     }
 
+    /// Session save — used by `AppDelegate.applicationWillTerminate` and all general hot paths.
+    ///
+    /// Pre-work (content-state persistence, normalization, sidebar state) always runs
+    /// synchronously on the main thread — models are not thread-safe.
+    ///
+    /// The encode + atomic write is dispatched to a private serial background queue so the
+    /// main thread is never blocked by JSONEncoder or disk I/O on the hot path.
+    ///
+    /// Termination safety: macOS drains serial dispatch queues owned by the app before the
+    /// process exits after `applicationWillTerminate` returns, so the queued write will
+    /// complete. The `buildSnapshot` call here captures the full in-memory state
+    /// synchronously before returning to the caller, ensuring no state is missed even if
+    /// the caller (AppDelegate) returns immediately after this call.
     func saveSession(persistSidebarState: Bool = true) {
         cancelPendingSidebarStateSave()
         for paneView in paneViews.values {
@@ -244,7 +257,8 @@ extension MainWindowController {
                 "[Sidebar] saveSession ws[\(i)] id=\(ws.id.uuidString.prefix(8)) sidebarState=visible:\(String(describing: ws.sidebarState.isVisible)) width:\(ws.sidebarState.width ?? -1)"
             )
         }
-        SessionStore.save(appState: appState)
+        // Snapshot (main-thread model read) happens here; encode+write goes to background.
+        SessionStore.saveAsync(appState: appState)
     }
 
     func openWorkspace(path: String) {
@@ -267,7 +281,7 @@ extension MainWindowController {
         }
         activateWorkspace(appState.workspaces.count - 1)
         savePluginStateForActiveTab()
-        SessionStore.save(appState: appState)
+        SessionStore.saveAsync(appState: appState)
     }
 
     private func configureInitialTab(for workspace: Workspace) {

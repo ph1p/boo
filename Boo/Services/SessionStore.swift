@@ -66,6 +66,11 @@ struct SessionSnapshot: Codable {
 enum SessionStore {
     private nonisolated(unsafe) static var _testFilePath: String? = nil
 
+    /// Serial queue that serializes all background encode+write operations.
+    /// Last-write-wins: rapid saves enqueue in order; each one overwrites the previous.
+    private static let writeQueue = DispatchQueue(
+        label: "dev.boo.SessionStore.write", qos: .utility)
+
     /// Override the storage path. Pass `nil` to revert to the default. Tests only.
     static func overrideFilePathForTesting(_ path: String?) {
         _testFilePath = path
@@ -75,7 +80,9 @@ enum SessionStore {
         _testFilePath ?? BooPaths.configDir.appendingPathComponent("session.json")
     }
 
-    static func save(appState: AppState) {
+    /// Build a `SessionSnapshot` from `appState`.
+    /// Must be called on the main thread because AppState/Workspace/Pane are not thread-safe.
+    private static func buildSnapshot(appState: AppState) -> SessionSnapshot {
         let workspaces = appState.workspaces.map { ws -> SessionWorkspace in
             ws.normalizePaneState()
             let panes = ws.panes.values.map { pane -> SessionPane in
@@ -128,16 +135,45 @@ enum SessionStore {
             )
         }
 
-        let snapshot = SessionSnapshot(
+        return SessionSnapshot(
             activeWorkspaceIndex: appState.activeWorkspaceIndex,
             workspaces: workspaces
         )
+    }
 
+    /// Write a pre-built snapshot to disk (encode + atomic write).
+    /// Safe to call on any thread.
+    private static func writeSnapshot(_ snapshot: SessionSnapshot, to path: String) {
         do {
             let data = try JSONEncoder().encode(snapshot)
-            try data.write(to: URL(fileURLWithPath: sessionFile), options: .atomic)
+            try data.write(to: URL(fileURLWithPath: path), options: .atomic)
         } catch {
             booLog(.error, .app, "Failed to save session: \(error)")
+        }
+    }
+
+    /// Synchronous save — snapshot phase and write phase both happen on the caller's thread.
+    /// Used by `AppDelegate.applicationWillTerminate` so the final state is not lost.
+    /// Must be called on the main thread.
+    static func save(appState: AppState) {
+        let snapshot = buildSnapshot(appState: appState)
+        let path = sessionFile
+        // Route through the write queue so any pending async writes land first;
+        // this snapshot is guaranteed to be the final on-disk state.
+        writeQueue.sync {
+            writeSnapshot(snapshot, to: path)
+        }
+    }
+
+    /// Async save — snapshot is taken synchronously on the current (main) thread,
+    /// then the encode+write is dispatched to a private serial background queue.
+    /// Callers on hot paths (tab open, workspace switch) should prefer this variant.
+    /// Must be called on the main thread.
+    static func saveAsync(appState: AppState) {
+        let snapshot = buildSnapshot(appState: appState)
+        let path = sessionFile
+        writeQueue.async {
+            writeSnapshot(snapshot, to: path)
         }
     }
 

@@ -132,7 +132,7 @@ final class AppStateTests: XCTestCase {
         let state = AppState()
         let ws1 = Workspace(folderPath: "/a")
         let ws2 = Workspace(folderPath: "/b")
-        let ws2SecondPane = ws2.splitPane(ws2.activePaneID, direction: .horizontal)
+        let ws2SecondPane = ws2.splitPane(ws2.activePaneID, direction: .horizontal)!
         state.addWorkspace(ws1)
         state.addWorkspace(ws2)
 
@@ -145,7 +145,7 @@ final class AppStateTests: XCTestCase {
         let state = AppState()
         let ws1 = Workspace(folderPath: "/a")
         let ws2 = Workspace(folderPath: "/b")
-        let ws2SecondPane = ws2.splitPane(ws2.activePaneID, direction: .vertical)
+        let ws2SecondPane = ws2.splitPane(ws2.activePaneID, direction: .vertical)!
         state.addWorkspace(ws1)
         state.addWorkspace(ws2)
 
@@ -199,8 +199,8 @@ final class AppStateTests: XCTestCase {
         let state = AppState()
         let ws1 = Workspace(folderPath: "/a")
         let ws2 = Workspace(folderPath: "/b")
-        let ws1SecondPane = ws1.splitPane(ws1.activePaneID, direction: .horizontal)
-        let ws1ThirdPane = ws1.splitPane(ws1SecondPane, direction: .vertical)
+        let ws1SecondPane = ws1.splitPane(ws1.activePaneID, direction: .horizontal)!
+        let ws1ThirdPane = ws1.splitPane(ws1SecondPane, direction: .vertical)!
 
         state.addWorkspace(ws1)
         state.addWorkspace(ws2)

@@ -17,15 +17,16 @@ final class SplitTreeTests: XCTestCase {
 
         XCTAssertEqual(newTree.leafIDs.count, 2)
         XCTAssertTrue(newTree.leafIDs.contains(id))
-        XCTAssertTrue(newTree.leafIDs.contains(newID))
+        XCTAssertTrue(newTree.leafIDs.contains(newID!))
     }
 
     func testSplittingNonExistentLeaf() {
         let id = UUID()
         let tree = SplitTree.leaf(id: id)
-        let (newTree, _) = tree.splitting(leafID: UUID(), direction: .horizontal)
-        // Should return unchanged tree
+        let (newTree, newID) = tree.splitting(leafID: UUID(), direction: .horizontal)
+        // Should return unchanged tree and nil for the new ID
         XCTAssertEqual(newTree.leafIDs, [id])
+        XCTAssertNil(newID)
     }
 
     func testRemovingLeaf() {
@@ -33,7 +34,7 @@ final class SplitTreeTests: XCTestCase {
         let tree = SplitTree.leaf(id: id1)
         let (splitTree, id2) = tree.splitting(leafID: id1, direction: .horizontal)
 
-        let result = splitTree.removing(leafID: id2)
+        let result = splitTree.removing(leafID: id2!)
         XCTAssertNotNil(result)
         XCTAssertEqual(result?.leafIDs, [id1])
     }
@@ -52,19 +53,19 @@ final class SplitTreeTests: XCTestCase {
         let (t1, id2) = tree.splitting(leafID: id1, direction: .horizontal)
         tree = t1
 
-        let (t2, id3) = tree.splitting(leafID: id2, direction: .vertical)
+        let (t2, id3) = tree.splitting(leafID: id2!, direction: .vertical)
         tree = t2
 
         XCTAssertEqual(tree.leafIDs.count, 3)
         XCTAssertTrue(tree.leafIDs.contains(id1))
-        XCTAssertTrue(tree.leafIDs.contains(id2))
-        XCTAssertTrue(tree.leafIDs.contains(id3))
+        XCTAssertTrue(tree.leafIDs.contains(id2!))
+        XCTAssertTrue(tree.leafIDs.contains(id3!))
 
         // Remove middle leaf
-        if let reduced = tree.removing(leafID: id2) {
+        if let reduced = tree.removing(leafID: id2!) {
             XCTAssertEqual(reduced.leafIDs.count, 2)
             XCTAssertTrue(reduced.leafIDs.contains(id1))
-            XCTAssertTrue(reduced.leafIDs.contains(id3))
+            XCTAssertTrue(reduced.leafIDs.contains(id3!))
         }
     }
 

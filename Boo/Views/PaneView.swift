@@ -14,8 +14,18 @@ import SwiftUI
     func paneView(_ paneView: PaneView, directoryListing path: String, output: String, paneID: UUID)
     func paneView(_ paneView: PaneView, didRequestCloseTab index: Int, paneID: UUID)
     func paneView(_ paneView: PaneView, shellPIDDiscovered pid: pid_t, paneID: UUID, tabID: UUID?)
-    func paneView(_ paneView: PaneView, commandStarted command: String, paneID: UUID)
-    func paneView(_ paneView: PaneView, commandEnded exitCode: Int32, paneID: UUID)
+    func paneView(_ paneView: PaneView, commandStarted command: String, paneID: UUID, tabID: UUID?)
+    func paneView(_ paneView: PaneView, commandEnded exitCode: Int32, paneID: UUID, tabID: UUID?)
+    /// Terminal bell (BEL) fired in the given pane.
+    func paneView(_ paneView: PaneView, bellRangIn paneID: UUID, tabID: UUID?)
+    /// OSC 777/99 desktop notification request from the given pane.
+    func paneView(
+        _ paneView: PaneView,
+        desktopNotificationTitle title: String,
+        body: String,
+        paneID: UUID,
+        tabID: UUID?
+    )
     func paneView(_ paneView: PaneView, didRequestMoveTab index: Int, toWorkspaceAt workspaceIndex: Int, paneID: UUID)
     func paneViewWorkspaceNames(_ paneView: PaneView) -> [(index: Int, name: String)]
     /// Returns true if this pane is the only pane in its workspace (used for close-label wording).
@@ -431,22 +441,44 @@ class PaneView: NSView {
             self.paneDelegate?.paneView(self, sessionEnded: self.paneID)
         }
 
-        gv.onShellPIDDiscovered = { [weak self] pid in
+        gv.onShellPIDDiscovered = { [weak self, tabID = gv.tabID] pid in
             guard let self else { return }
-            let idx = self.pane.activeTabIndex
-            let tabID = idx >= 0 ? self.pane.tabs[idx].id : nil
+            // Resolve the tab index from the captured tabID; fall back to activeTabIndex.
+            let idx: Int
+            if let tabID, let found = self.pane.tabs.firstIndex(where: { $0.id == tabID }) {
+                idx = found
+            } else {
+                idx = self.pane.activeTabIndex
+            }
+            let resolvedTabID = idx >= 0 ? self.pane.tabs[idx].id : tabID
             if idx >= 0 { self.pane.updateShellPID(at: idx, pid) }
-            self.paneDelegate?.paneView(self, shellPIDDiscovered: pid, paneID: self.paneID, tabID: tabID)
+            self.paneDelegate?.paneView(self, shellPIDDiscovered: pid, paneID: self.paneID, tabID: resolvedTabID)
         }
 
-        gv.onCommandStart = { [weak self] command in
+        gv.onCommandStart = { [weak self, tabID = gv.tabID] command in
             guard let self else { return }
-            self.paneDelegate?.paneView(self, commandStarted: command, paneID: self.paneID)
+            self.paneDelegate?.paneView(self, commandStarted: command, paneID: self.paneID, tabID: tabID)
         }
 
-        gv.onCommandEnd = { [weak self] exitCode in
+        gv.onCommandEnd = { [weak self, tabID = gv.tabID] exitCode in
             guard let self else { return }
-            self.paneDelegate?.paneView(self, commandEnded: exitCode, paneID: self.paneID)
+            self.paneDelegate?.paneView(self, commandEnded: exitCode, paneID: self.paneID, tabID: tabID)
+        }
+
+        gv.onBell = { [weak self, tabID = gv.tabID] in
+            guard let self else { return }
+            self.paneDelegate?.paneView(self, bellRangIn: self.paneID, tabID: tabID)
+        }
+
+        gv.onDesktopNotification = { [weak self, tabID = gv.tabID] title, body in
+            guard let self else { return }
+            self.paneDelegate?.paneView(
+                self,
+                desktopNotificationTitle: title,
+                body: body,
+                paneID: self.paneID,
+                tabID: tabID
+            )
         }
 
         gv.onSearchRequested = { [weak self] needle in
@@ -615,14 +647,16 @@ class PaneView: NSView {
     private func debounceTitleUpdate(_ title: String) {
         pendingTitle = title
         titleDebounce?.cancel()
-        let capturedIndex = pane.activeTabIndex
+        let capturedTabID = pane.activeTab?.id
         let work = DispatchWorkItem { [weak self] in
             guard let self, let title = self.pendingTitle else { return }
             self.pendingTitle = nil
             self.titleDebounce = nil
             self.paneDelegate?.paneView(self, titleChanged: title, paneID: self.paneID)
-            if capturedIndex >= 0, capturedIndex < self.pane.tabs.count {
-                self.pane.updateTitle(at: capturedIndex, title)
+            if let capturedTabID = capturedTabID,
+                let resolvedIndex = self.pane.tabs.firstIndex(where: { $0.id == capturedTabID })
+            {
+                self.pane.updateTitle(at: resolvedIndex, title)
             }
             self.scheduleTabBarRedraw()
         }
@@ -635,13 +669,15 @@ class PaneView: NSView {
     private func debounceCwdUpdate(_ path: String) {
         pendingCwd = path
         cwdDebounce?.cancel()
-        let capturedIndex = pane.activeTabIndex
+        let capturedTabID = pane.activeTab?.id
         let work = DispatchWorkItem { [weak self] in
             guard let self, let cwd = self.pendingCwd else { return }
             self.pendingCwd = nil
             self.cwdDebounce = nil
-            if capturedIndex >= 0, capturedIndex < self.pane.tabs.count {
-                self.pane.updateWorkingDirectory(at: capturedIndex, cwd)
+            if let capturedTabID = capturedTabID,
+                let resolvedIndex = self.pane.tabs.firstIndex(where: { $0.id == capturedTabID })
+            {
+                self.pane.updateWorkingDirectory(at: resolvedIndex, cwd)
             }
             self.scheduleTabBarRedraw()
             self.paneDelegate?.paneView(self, didChangeDirectory: cwd, paneID: self.paneID)
@@ -947,6 +983,24 @@ class PaneView: NSView {
                     ctx.fill(CGRect(x: clampedLeft, y: barH - 1, width: breakW, height: 1))
                 }
             }
+        }
+
+        // Activity border — 2px accent-color inset on the pane boundary when the pane is
+        // unfocused AND at least one tab has pending activity (command finished or bell rang).
+        // Cleared automatically: setActivity(false) propagates needsDisplay via signalActivity /
+        // activateTab, so this redraws whenever the flag changes.
+        let paneHasActivity = !isFocused && pane.tabs.contains { $0.state.hasActivity }
+        if paneHasActivity {
+            let borderW: CGFloat = 2
+            ctx.setFillColor(theme.accentColor.withAlphaComponent(0.8).cgColor)
+            // Top edge (inside tab bar area, inset by 1px from very top)
+            ctx.fill(CGRect(x: 1, y: 1, width: bounds.width - 2, height: borderW))
+            // Bottom edge
+            ctx.fill(CGRect(x: 1, y: bounds.height - borderW - 1, width: bounds.width - 2, height: borderW))
+            // Left edge
+            ctx.fill(CGRect(x: 1, y: 1, width: borderW, height: bounds.height - 2))
+            // Right edge
+            ctx.fill(CGRect(x: bounds.width - borderW - 1, y: 1, width: borderW, height: bounds.height - 2))
         }
 
     }
