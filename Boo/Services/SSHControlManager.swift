@@ -39,6 +39,24 @@ final class SSHControlManager: @unchecked Sendable {
         queue.sync { connections[alias]?.state }
     }
 
+    /// Kill a managed master: ask it to exit, then remove its socket file.
+    /// Safe to call on an already-dead master (`-O exit` just fails silently).
+    private static func killMaster(alias: String) {
+        let socketPath = Self.socketFilePath(for: alias)
+        _ = Self.runSSHCommand(["-o", "ControlPath=\(socketPath)", "-O", "exit", alias])
+        try? FileManager.default.removeItem(atPath: socketPath)
+    }
+
+    /// Whether a managed master socket is still alive (`ssh -O check`).
+    /// Returns true for unmanaged connections (we can't probe the user's socket
+    /// cheaply, and `runSSH` falls back to finding it / opening a fresh connection).
+    private static func isMasterAlive(alias: String, isManaged: Bool) -> Bool {
+        guard isManaged else { return true }
+        let socketPath = Self.socketFilePath(for: alias)
+        guard FileManager.default.fileExists(atPath: socketPath) else { return false }
+        return Self.runSSHCommand(["-o", "ControlPath=\(socketPath)", "-O", "check", alias])
+    }
+
     /// Ensure a background SSH master connection exists for the given alias.
     /// Calls completion(true) on success, completion(false) on failure. Always on main thread.
     func ensureConnection(alias: String, completion: @escaping @Sendable (Bool) -> Void) {
@@ -48,8 +66,18 @@ final class SSHControlManager: @unchecked Sendable {
             if let existing = self.connections[alias] {
                 switch existing.state {
                 case .ready:
-                    DispatchQueue.main.async { completion(true) }
-                    return
+                    // Don't trust a stale `.ready` — the master may have died since
+                    // (network blip, server reboot, ControlPersist timeout). Verify
+                    // the socket is still alive before short-circuiting.
+                    if Self.isMasterAlive(alias: alias, isManaged: existing.isManaged) {
+                        DispatchQueue.main.async { completion(true) }
+                        return
+                    }
+                    debugLog("[SSHControl] \(alias) was .ready but master is dead — re-establishing")
+                    if existing.isManaged {
+                        Self.killMaster(alias: alias)
+                    }
+                // Fall through to re-establish.
                 case .connecting:
                     // Already in progress — caller should retry
                     DispatchQueue.main.async { completion(false) }
@@ -79,9 +107,16 @@ final class SSHControlManager: @unchecked Sendable {
             debugLog("[SSHControl] Spawning master for \(alias) at \(socketPath)")
 
             let spawnResult = Self.runSSHCommand([
-                "-o", "ControlMaster=yes",
+                "-o", "ControlMaster=auto",
                 "-o", "ControlPath=\(socketPath)",
-                "-o", "ControlPersist=yes",
+                // Finite persist so an idle/orphaned master gets reaped instead of
+                // lingering with a dead socket forever.
+                "-o", "ControlPersist=30m",
+                // Keepalives so a master whose TCP died (NAT/firewall idle timeout,
+                // server reboot) tears itself down rather than leaving a stale socket
+                // that future commands hang/fail against.
+                "-o", "ServerAliveInterval=15",
+                "-o", "ServerAliveCountMax=3",
                 "-o", "BatchMode=yes",
                 "-o", "ConnectTimeout=5",
                 "-o", "StrictHostKeyChecking=accept-new",
@@ -122,15 +157,7 @@ final class SSHControlManager: @unchecked Sendable {
             guard let conn = self.connections[alias] else { return }
 
             if conn.isManaged {
-                let socketPath = Self.socketFilePath(for: alias)
-                // Send exit command to master
-                _ = Self.runSSHCommand([
-                    "-o", "ControlPath=\(socketPath)",
-                    "-O", "exit",
-                    alias
-                ])
-                // Clean up socket file
-                try? FileManager.default.removeItem(atPath: socketPath)
+                Self.killMaster(alias: alias)
             }
 
             self.connections.removeValue(forKey: alias)
@@ -145,13 +172,7 @@ final class SSHControlManager: @unchecked Sendable {
             for alias in aliases {
                 guard let conn = connections[alias] else { continue }
                 if conn.isManaged {
-                    let socketPath = Self.socketFilePath(for: alias)
-                    _ = Self.runSSHCommand([
-                        "-o", "ControlPath=\(socketPath)",
-                        "-O", "exit",
-                        alias
-                    ])
-                    try? FileManager.default.removeItem(atPath: socketPath)
+                    Self.killMaster(alias: alias)
                 }
             }
             connections.removeAll()

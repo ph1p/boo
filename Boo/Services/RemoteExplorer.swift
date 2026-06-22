@@ -384,9 +384,14 @@ final class RemoteExplorer: @unchecked Sendable {
         guard cleaned.count == 12, cleaned.allSatisfy({ $0.isHexDigit }) else { return nil }
 
         // Check cache
-        if let cached = containerHostnameCache[cleaned], Date() < cached.expires {
+        let now = Date()
+        if let cached = containerHostnameCache[cleaned], now < cached.expires {
             return cached.name
         }
+
+        // Cache miss — drop any expired entries so this write-only TTL cache
+        // doesn't accumulate one dead entry per container ID ever queried.
+        containerHostnameCache = containerHostnameCache.filter { now < $0.value.expires }
 
         // Try docker, podman, nerdctl
         for toolName in ["docker", "podman", "nerdctl"] {

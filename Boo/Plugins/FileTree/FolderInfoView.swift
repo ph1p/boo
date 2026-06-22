@@ -69,22 +69,35 @@ final class FolderInfoCache: ObservableObject {
 
     @Published private(set) var generation: UInt = 0
     private var cache: [String: FolderStats] = [:]
+    /// Insertion order for FIFO eviction — keeps the cache from growing one entry
+    /// per unique folder ever inspected over a long session.
+    private var insertionOrder: [String] = []
+    private let maxEntries = 256
 
     func get(_ path: String) -> FolderStats? {
         cache[path]
     }
 
     func set(_ path: String, stats: FolderStats) {
+        if cache[path] == nil {
+            insertionOrder.append(path)
+            if cache.count >= maxEntries, let oldest = insertionOrder.first {
+                insertionOrder.removeFirst()
+                cache.removeValue(forKey: oldest)
+            }
+        }
         cache[path] = stats
     }
 
     func invalidate(_ path: String) {
         cache.removeValue(forKey: path)
+        insertionOrder.removeAll { $0 == path }
         generation &+= 1
     }
 
     func invalidateAll() {
         cache.removeAll()
+        insertionOrder.removeAll()
         generation &+= 1
     }
 }

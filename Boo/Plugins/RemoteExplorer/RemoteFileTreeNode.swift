@@ -27,6 +27,9 @@ final class RemoteFileTreeNode: Identifiable, ObservableObject, @unchecked Senda
     /// Number of automatic retries remaining (SSH master may still be connecting).
     private var retriesLeft = 15
     private var retryTimer: Timer?
+    /// Whether we've already kicked off a master rebuild for the current failure run,
+    /// so retries poll the rebuild instead of spawning a new one each tick.
+    private var requestedReconnect = false
 
     init(name: String, remotePath: String, isDirectory: Bool, session: RemoteSessionType) {
         self.id = UUID()
@@ -40,6 +43,7 @@ final class RemoteFileTreeNode: Identifiable, ObservableObject, @unchecked Senda
     func resetForRetry() {
         retriesLeft = 15
         loadFailed = false
+        requestedReconnect = false
     }
 
     func loadChildren() {
@@ -75,8 +79,17 @@ final class RemoteFileTreeNode: Identifiable, ObservableObject, @unchecked Senda
                             shouldRetry = false
                             retryInterval = 0
                         case .ready:
+                            // We thought the connection was live but the command failed —
+                            // the master likely died (network blip, reboot, idle timeout).
+                            // Kick off one rebuild; `ensureConnection` self-heals a dead
+                            // `.ready` socket. Subsequent retries poll it (the `.connecting`
+                            // arm) instead of spawning a fresh rebuild each tick.
                             shouldRetry = self.retriesLeft > 10
                             retryInterval = 1.0
+                            if shouldRetry && !self.requestedReconnect {
+                                self.requestedReconnect = true
+                                SSHControlManager.shared.ensureConnection(alias: target) { _ in }
+                            }
                         case nil:
                             shouldRetry = self.retriesLeft > 5
                             retryInterval = 2.0
@@ -122,6 +135,7 @@ final class RemoteFileTreeNode: Identifiable, ObservableObject, @unchecked Senda
         retryTimer = nil
         isLoading = false
         loadFailed = false
+        requestedReconnect = false
         let treeRoot = root ?? self
         let newChildren = entries.map { entry in
             if let existing = children?.first(where: { $0.name == entry.name && $0.isDirectory == entry.isDirectory }) {
@@ -152,6 +166,7 @@ final class RemoteFileTreeNode: Identifiable, ObservableObject, @unchecked Senda
         isLoading = false
         retriesLeft = 15
         loadFailed = false
+        requestedReconnect = false
     }
 
     /// Collect all expanded directory paths in this subtree.
