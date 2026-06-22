@@ -26,10 +26,20 @@ final class ImageViewerContentView: NSView, ContentViewProtocol {
         wantsLayer = true
         layer?.backgroundColor = AppSettings.shared.theme.background.nsColor.cgColor
         setupImageView()
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(settingsDidChange),
+            name: .settingsChanged,
+            object: nil
+        )
     }
 
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
     }
 
     private func setupImageView() {
@@ -83,16 +93,6 @@ final class ImageViewerContentView: NSView, ContentViewProtocol {
     }
 
     // MARK: - Theme
-
-    override func viewDidMoveToWindow() {
-        super.viewDidMoveToWindow()
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(settingsDidChange),
-            name: .settingsChanged,
-            object: nil
-        )
-    }
 
     @objc private func settingsDidChange(_ note: Notification) {
         guard let raw = note.userInfo?["topic"] as? String,

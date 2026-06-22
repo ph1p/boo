@@ -34,7 +34,15 @@ final class RemoteFileTreePlugin: BooPluginProtocol {
 
     var prefersOuterScrollView: Bool { true }
 
-    var subscribedEvents: Set<PluginEvent> { [.processChanged, .remoteDirectoryListed] }
+    var subscribedEvents: Set<PluginEvent> { [.processChanged, .remoteDirectoryListed, .terminalClosed] }
+
+    /// Drop per-terminal state when a terminal closes so these dicts don't grow
+    /// one entry per terminal ever opened. Mirrors LocalFileTreePlugin.
+    func terminalClosed(terminalID: UUID) {
+        expandedState.removeValue(forKey: terminalID)
+        terminalCacheKey.removeValue(forKey: terminalID)
+        if lastTerminalID == terminalID { lastTerminalID = nil }
+    }
 
     // MARK: - Section Title
 
