@@ -173,6 +173,7 @@ class ThemedSplitView: NSSplitView {
     }
     nonisolated(unsafe) private var settingsObserver: Any?
     nonisolated(unsafe) private var ghosttyActionObserver: Any?
+    nonisolated(unsafe) private var ghosttyOpenURLObserver: Any?
     var coordinator: WindowStateCoordinator!
     var bridge: TerminalBridge! { coordinator.bridge }
     nonisolated(unsafe) var bridgeCancellables = Set<AnyCancellable>()
@@ -288,6 +289,7 @@ class ThemedSplitView: NSSplitView {
     deinit {
         if let obs = settingsObserver { NotificationCenter.default.removeObserver(obs) }
         if let obs = ghosttyActionObserver { NotificationCenter.default.removeObserver(obs) }
+        if let obs = ghosttyOpenURLObserver { NotificationCenter.default.removeObserver(obs) }
         bridgeCancellables.removeAll()
     }
 
@@ -701,7 +703,7 @@ class ThemedSplitView: NSSplitView {
             Task { @MainActor [weak self] in self?.handleGhosttyAction(action, userInfo: safeInfo) }
         }
 
-        NotificationCenter.default.addObserver(
+        ghosttyOpenURLObserver = NotificationCenter.default.addObserver(
             forName: .ghosttyOpenURL, object: nil, queue: .main
         ) { [weak self] notification in
             guard let self,

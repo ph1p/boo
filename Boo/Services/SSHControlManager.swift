@@ -47,11 +47,20 @@ final class SSHControlManager: @unchecked Sendable {
         try? FileManager.default.removeItem(atPath: socketPath)
     }
 
-    /// Whether a managed master socket is still alive (`ssh -O check`).
-    /// Returns true for unmanaged connections (we can't probe the user's socket
-    /// cheaply, and `runSSH` falls back to finding it / opening a fresh connection).
+    /// Whether the master backing this alias is still alive.
+    /// Managed: probe Boo's own socket with `ssh -O check`.
+    /// Unmanaged: we don't own (or know) the user's socket path, but a stale
+    /// `.ready` user master still leaves the next command failing with a
+    /// `Broken pipe`. So probe with a cheap real command — if the user's
+    /// ControlMaster is dead, this returns false and the caller re-establishes.
     private static func isMasterAlive(alias: String, isManaged: Bool) -> Bool {
-        guard isManaged else { return true }
+        guard isManaged else {
+            return Self.runSSHCommand([
+                "-o", "BatchMode=yes",
+                "-o", "ConnectTimeout=2",
+                alias, "true"
+            ])
+        }
         let socketPath = Self.socketFilePath(for: alias)
         guard FileManager.default.fileExists(atPath: socketPath) else { return false }
         return Self.runSSHCommand(["-o", "ControlPath=\(socketPath)", "-O", "check", alias])

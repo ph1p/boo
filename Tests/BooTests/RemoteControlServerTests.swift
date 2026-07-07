@@ -78,6 +78,13 @@ final class RemoteControlServerTests: XCTestCase {
         XCTAssertTrue(html.contains("Boo Remote Control"))
     }
 
+    func testServesWasmModule() throws {
+        let (status, body) = try request(path: "/ghostty-vt.wasm")
+        XCTAssertEqual(status, 200)
+        // WebAssembly magic number: \0asm
+        XCTAssertTrue(body.starts(with: [0x00, 0x61, 0x73, 0x6D]))
+    }
+
     func testUnknownPathIs404() throws {
         let (status, _) = try request(path: "/nope")
         XCTAssertEqual(status, 404)

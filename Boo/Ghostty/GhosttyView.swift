@@ -261,13 +261,47 @@ import Cocoa
         updateSurfaceSize()
     }
 
+    /// Last pixel size sent to the surface. Used to detect resize bounces
+    /// (W → 0 → W) where the final `ghostty_surface_set_size` is a same-size
+    /// no-op in Ghostty core (embedded.zig updateSize early-returns) and the
+    /// surface would stay stale/blank without an explicit refresh.
+    private var lastSurfaceSize: (w: UInt32, h: UInt32) = (0, 0)
+
     private func updateSurfaceSize() {
         guard let surface = surface else { return }
         let scaledSize = convertToBacking(bounds.size)
         let w = UInt32(scaledSize.width)
         let h = UInt32(scaledSize.height)
         guard w > 0, h > 0 else { return }
+        if w == lastSurfaceSize.w, h == lastSurfaceSize.h {
+            ghostty_surface_refresh(surface)
+            return
+        }
+        lastSurfaceSize = (w, h)
         ghostty_surface_set_size(surface, w, h)
+    }
+
+    /// Live resize (window edge / split divider drag) can drop the final frame:
+    /// the renderer's drawable size updates asynchronously and the last redraw
+    /// may race the final layout pass. Force one repaint when the drag ends.
+    override func viewDidEndLiveResize() {
+        super.viewDidEndLiveResize()
+        refresh()
+    }
+
+    /// Force the Metal surface to repaint. Needed after the view is re-attached to
+    /// the hierarchy (e.g. tab switch restoring a cached view) where the size may not
+    /// change, so `ghostty_surface_set_size` alone does not dirty the surface.
+    func refresh() {
+        surface.map { ghostty_surface_refresh($0) }
+    }
+
+    /// Re-sync the surface pixel size from the current bounds and force a repaint.
+    /// Use instead of calling `ghostty_surface_set_size` directly so the internal
+    /// last-size tracking stays consistent.
+    func syncSizeAndRefresh() {
+        updateSurfaceSize()
+        refresh()
     }
 
     // MARK: - Focus
@@ -635,6 +669,28 @@ import Cocoa
             top_left: topLeft, bottom_right: bottomRight, rectangle: false)
         var text = ghostty_text_s()
         guard ghostty_surface_read_text(surface, selection, &text) else { return nil }
+        defer { ghostty_surface_free_text(surface, &text) }
+        guard let ptr = text.text else { return nil }
+        return String(
+            decoding: UnsafeBufferPointer(
+                start: UnsafeRawPointer(ptr).assumingMemoryBound(to: UInt8.self),
+                count: Int(text.text_len)),
+            as: UTF8.self)
+    }
+
+    /// Read the visible viewport as VT sequences (styles, colors, palette,
+    /// cursor) for replay into the Remote Control browser-side terminal.
+    /// Must be called on the main thread — surface access is not thread-safe.
+    func readViewportStyled() -> String? {
+        guard let surface = surface else { return nil }
+        let topLeft = ghostty_point_s(
+            tag: GHOSTTY_POINT_VIEWPORT, coord: GHOSTTY_POINT_COORD_TOP_LEFT, x: 0, y: 0)
+        let bottomRight = ghostty_point_s(
+            tag: GHOSTTY_POINT_VIEWPORT, coord: GHOSTTY_POINT_COORD_BOTTOM_RIGHT, x: 0, y: 0)
+        let selection = ghostty_selection_s(
+            top_left: topLeft, bottom_right: bottomRight, rectangle: false)
+        var text = ghostty_text_s()
+        guard ghostty_surface_read_text_styled(surface, selection, &text) else { return nil }
         defer { ghostty_surface_free_text(surface, &text) }
         guard let ptr = text.text else { return nil }
         return String(

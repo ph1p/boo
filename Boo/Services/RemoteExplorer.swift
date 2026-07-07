@@ -372,7 +372,10 @@ final class RemoteExplorer: @unchecked Sendable {
 
     /// Resolve a container hostname (truncated container ID) to a container name.
     /// Tries docker, podman, and nerdctl. Returns nil if not a container ID.
+    /// Guarded by `containerHostnameCacheLock` — callers may run on background
+    /// queues (session detection), so unsynchronized access would be a data race.
     private nonisolated(unsafe) static var containerHostnameCache: [String: (name: String?, expires: Date)] = [:]
+    private static let containerHostnameCacheLock = NSLock()
 
     static func resolveDockerHostname(_ hostname: String) -> String? {
         resolveContainerHostname(hostname)
@@ -385,13 +388,17 @@ final class RemoteExplorer: @unchecked Sendable {
 
         // Check cache
         let now = Date()
+        containerHostnameCacheLock.lock()
         if let cached = containerHostnameCache[cleaned], now < cached.expires {
-            return cached.name
+            let name = cached.name
+            containerHostnameCacheLock.unlock()
+            return name
         }
 
         // Cache miss — drop any expired entries so this write-only TTL cache
         // doesn't accumulate one dead entry per container ID ever queried.
         containerHostnameCache = containerHostnameCache.filter { now < $0.value.expires }
+        containerHostnameCacheLock.unlock()
 
         // Try docker, podman, nerdctl
         for toolName in ["docker", "podman", "nerdctl"] {
@@ -399,12 +406,16 @@ final class RemoteExplorer: @unchecked Sendable {
             let result = runLocalCommand(binary, args: ["ps", "--filter", "id=\(cleaned)", "--format", "{{.Names}}"])
             let name = result?.trimmingCharacters(in: .whitespacesAndNewlines)
             if let name, !name.isEmpty {
+                containerHostnameCacheLock.lock()
                 containerHostnameCache[cleaned] = (name: name, expires: Date().addingTimeInterval(30))
+                containerHostnameCacheLock.unlock()
                 return name
             }
         }
 
+        containerHostnameCacheLock.lock()
         containerHostnameCache[cleaned] = (name: nil, expires: Date().addingTimeInterval(30))
+        containerHostnameCacheLock.unlock()
         return nil
     }
 
@@ -464,8 +475,13 @@ final class RemoteExplorer: @unchecked Sendable {
             }
         }
 
+        // Keepalives so a master whose TCP died (NAT/firewall idle timeout, server
+        // reboot) tears itself down rather than leaving a stale socket that the next
+        // `ssh` (terminal or file tree) reuses and fails against with
+        // `mux_client_request_session: read from master failed: Broken pipe`.
+        // Mirrors the managed-master settings in SSHControlManager.
         let block =
-            "\n# Added by Boo — enables SSH connection sharing for file explorer\nHost *\n  ControlMaster auto\n  ControlPath ~/.ssh/cm-%r@%h:%p\n  ControlPersist 10m\n"
+            "\n# Added by Boo — enables SSH connection sharing for file explorer\nHost *\n  ControlMaster auto\n  ControlPath ~/.ssh/cm-%r@%h:%p\n  ControlPersist 10m\n  ServerAliveInterval 15\n  ServerAliveCountMax 3\n"
 
         if let handle = FileHandle(forWritingAtPath: configPath) {
             handle.seekToEndOfFile()

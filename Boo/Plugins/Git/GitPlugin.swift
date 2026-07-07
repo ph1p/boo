@@ -51,6 +51,14 @@ final class GitPlugin: BooPluginProtocol {
     var watchedRepoRoot: String?
     var debounceWork: DispatchWorkItem?
 
+    /// FileSystemWatcher self-retains while running (passRetained in start()), so its own
+    /// deinit never fires — the owner must stop() them or the FSEventStreams leak per window.
+    deinit {
+        gitDirWatcher?.stop()
+        workTreeWatcher?.stop()
+        cwdWatcher?.stop()
+    }
+
     var actions: PluginActions?
     var services: PluginServices?
     var hostActions: PluginHostActions?

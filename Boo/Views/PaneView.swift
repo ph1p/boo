@@ -267,6 +267,10 @@ class PaneView: NSView {
             startContentSession(for: tab)
         }
         layoutTerminalView()
+        // A restored cached surface may re-enter the hierarchy at its previous size, so
+        // `ghostty_surface_set_size` does not dirty it and the pane shows stale/blank
+        // content until a keystroke or resize. Force a repaint now that layout is done.
+        ghosttyView?.refresh()
     }
 
     /// Start a terminal session for the given tab.

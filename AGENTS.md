@@ -21,7 +21,14 @@ make app            # Create .app bundle (after make release)
 make dmg            # Create distributable DMG
 make dist           # Full release: build + bundle + sign + notarize + DMG
 make clean-ghostty  # Rebuild GhosttyKit after updating Vendor/ghostty
+make ghostty-wasm   # Rebuild ghostty-vt.wasm for the Remote Control web UI
 ```
+
+Ghostty carries local patches (`Vendor/patches/*.patch`), applied idempotently by
+`make ghostty` / `make ghostty-wasm`. After updating the submodule, re-apply via
+`make ghostty-patches` and re-sync `CGhostty/include/ghostty.h` from
+`Vendor/ghostty/include/ghostty.h`. Ghostty pins its own zig version
+(`build.zig.zon minimum_zig_version`) — keep a matching zig on PATH.
 
 ## Project Structure
 

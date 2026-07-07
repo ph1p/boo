@@ -62,6 +62,12 @@ final class LocalFileTreePlugin: BooPluginProtocol {
     private var cachedRoots: [String: FileTreeNode] = [:]
     private var fileWatcher: FileSystemWatcher?
 
+    /// FileSystemWatcher self-retains while running (passRetained in start()), so its own
+    /// deinit never fires — the owner must stop() it or the FSEventStream leaks per window.
+    deinit {
+        fileWatcher?.stop()
+    }
+
     /// Expanded directory paths per terminal (tab) ID.
     private var expandedState: [UUID: Set<String>] = [:]
     /// CWD per terminal so we can find the right root on save.

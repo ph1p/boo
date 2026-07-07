@@ -376,18 +376,12 @@ extension MainWindowController {
             pv.layoutTerminalView()
             let isActive = paneID == activeID
             pv.isFocused = isActive
-            guard let gv = pv.ghosttyView, let surface = gv.surface else { continue }
+            guard let gv = pv.ghosttyView else { continue }
             gv.setFocused(isActive)
-            let scaledSize = gv.convertToBacking(gv.bounds.size)
-            let w = UInt32(scaledSize.width)
-            let h = UInt32(scaledSize.height)
-            if w > 0 && h > 0 {
-                ghostty_surface_set_size(surface, w, h)
-            }
-            // Only force-refresh the active pane; inactive panes repaint via normal display cycle
-            if isActive {
-                ghostty_surface_refresh(surface)
-            }
+            // Re-sync size + force-refresh every surface. Inactive panes do not reliably
+            // repaint via the normal display cycle after being re-attached to the
+            // hierarchy (size may be unchanged), leaving them blank until interacted with.
+            gv.syncSizeAndRefresh()
         }
     }
 }

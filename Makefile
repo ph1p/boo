@@ -59,12 +59,37 @@ ghostty: $(XCRUN_WRAPPER_DIR)/xcrun
 		echo "==> Initializing Ghostty submodule..."; \
 		git submodule update --init --depth 1 Vendor/ghostty; \
 	fi
+	@$(MAKE) ghostty-patches
 	@if [ ! -f Vendor/ghostty/macos/GhosttyKit.xcframework/macos-arm64/libghostty-internal-fat.a ]; then \
 		echo "==> Building GhosttyKit..."; \
 		cd Vendor/ghostty && PATH="$(CURDIR)/$(XCRUN_WRAPPER_DIR):$$PATH" zig build -Demit-xcframework=true -Dxcframework-target=native -Demit-macos-app=false -Doptimize=ReleaseFast; \
 	else \
 		echo "==> GhosttyKit already built"; \
 	fi
+
+# Apply local Ghostty patches (Vendor/patches/*.patch). Idempotent: a patch
+# that no longer applies forward but applies in reverse is already in.
+ghostty-patches:
+	@for p in Vendor/patches/*.patch; do \
+		[ -f "$$p" ] || continue; \
+		if git -C Vendor/ghostty apply --check "../../$$p" 2>/dev/null; then \
+			echo "==> Applying $$p"; \
+			git -C Vendor/ghostty apply "../../$$p"; \
+		elif git -C Vendor/ghostty apply --check --reverse "../../$$p" 2>/dev/null; then \
+			echo "==> $$p already applied"; \
+		else \
+			echo "ERROR: $$p does not apply to Vendor/ghostty" >&2; \
+			exit 1; \
+		fi; \
+	done
+
+# Build the libghostty-vt WebAssembly module used by the Remote Control web
+# UI and copy it into the app resources. Run after updating Vendor/ghostty.
+ghostty-wasm: $(XCRUN_WRAPPER_DIR)/xcrun ghostty-patches
+	@echo "==> Building ghostty-vt.wasm..."
+	@cd Vendor/ghostty && PATH="$(CURDIR)/$(XCRUN_WRAPPER_DIR):$$PATH" zig build -Demit-lib-vt -Dtarget=wasm32-freestanding -Doptimize=ReleaseSmall
+	@cp Vendor/ghostty/zig-out/bin/ghostty-vt.wasm Boo/Resources/RemoteControl/ghostty-vt.wasm
+	@echo "==> Copied to Boo/Resources/RemoteControl/ghostty-vt.wasm"
 
 # ── Ghostty GTK (Linux) ─────────────────────────────────────────────────────
 

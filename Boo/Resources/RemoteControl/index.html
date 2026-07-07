@@ -300,9 +300,123 @@
     meta.content = mix(bg, fg, 0.05);
   }
 
-  // --- Highlighting ----------------------------------------------------
-  // ghostty exposes plain viewport text (no ANSI attributes), so the mirror
-  // recreates highlighting with pattern rules, colored by the app theme.
+  // --- ghostty-vt WebAssembly renderer ----------------------------------
+  // The app sends the viewport as VT sequences (styles, colors, palette).
+  // libghostty-vt compiled to wasm replays them into a real terminal and
+  // formats the screen as HTML — the same emulator that rendered it in Boo.
+
+  const GHOSTTY_SUCCESS = 0;
+  const GHOSTTY_FORMATTER_FORMAT_HTML = 2;
+
+  let wasm = null;       // { exports, layout } once loaded
+  const utf8encode = new TextEncoder();
+
+  async function loadWasm() {
+    try {
+      const res = await fetch("/ghostty-vt.wasm");
+      if (!res.ok) return;
+      const bytes = await res.arrayBuffer();
+      const module = await WebAssembly.instantiate(bytes, {
+        env: { log: () => {} }
+      });
+      const exports = module.instance.exports;
+      const jsonPtr = exports.ghostty_type_json();
+      const mem = new Uint8Array(exports.memory.buffer, jsonPtr);
+      const end = mem.indexOf(0);
+      const layout = JSON.parse(new TextDecoder().decode(mem.subarray(0, end)));
+      wasm = { exports, layout };
+    } catch (e) {
+      console.warn("ghostty-vt.wasm unavailable, falling back to plain text", e);
+    }
+  }
+
+  function setField(view, structName, fieldName, value) {
+    const field = wasm.layout[structName].fields[fieldName];
+    switch (field.type) {
+      case "u8": case "bool": view.setUint8(field.offset, value); break;
+      case "u16": view.setUint16(field.offset, value, true); break;
+      case "u32": case "enum": view.setUint32(field.offset, value, true); break;
+      case "u64": view.setBigUint64(field.offset, BigInt(value), true); break;
+      default: throw new Error("unsupported field type: " + field.type);
+    }
+  }
+
+  // Replay a VT snapshot into a wasm terminal and return the screen as HTML.
+  function vtToHTML(vtText, cols, rows) {
+    const ex = wasm.exports;
+    const buf = () => ex.memory.buffer;
+    let termPtr = 0, fmtPtr = 0;
+    try {
+      // Terminal
+      const termOptsSize = wasm.layout["GhosttyTerminalOptions"].size;
+      const termOptsPtr = ex.ghostty_wasm_alloc_u8_array(termOptsSize);
+      new Uint8Array(buf(), termOptsPtr, termOptsSize).fill(0);
+      const termOpts = new DataView(buf(), termOptsPtr, termOptsSize);
+      setField(termOpts, "GhosttyTerminalOptions", "cols", cols);
+      setField(termOpts, "GhosttyTerminalOptions", "rows", rows);
+      setField(termOpts, "GhosttyTerminalOptions", "max_scrollback", 0);
+      const termPtrPtr = ex.ghostty_wasm_alloc_opaque();
+      const newResult = ex.ghostty_terminal_new(0, termPtrPtr, termOptsPtr);
+      ex.ghostty_wasm_free_u8_array(termOptsPtr, termOptsSize);
+      if (newResult !== GHOSTTY_SUCCESS) throw new Error("terminal_new: " + newResult);
+      termPtr = new DataView(buf()).getUint32(termPtrPtr, true);
+      ex.ghostty_wasm_free_opaque(termPtrPtr);
+
+      // Replay the snapshot
+      const vtBytes = utf8encode.encode(vtText);
+      const dataPtr = ex.ghostty_wasm_alloc_u8_array(vtBytes.length);
+      new Uint8Array(buf()).set(vtBytes, dataPtr);
+      ex.ghostty_terminal_vt_write(termPtr, dataPtr, vtBytes.length);
+      ex.ghostty_wasm_free_u8_array(dataPtr, vtBytes.length);
+
+      // HTML formatter (palette emitted as a <style> block with CSS vars)
+      const fmtOptsSize = wasm.layout["GhosttyFormatterTerminalOptions"].size;
+      const fmtOptsPtr = ex.ghostty_wasm_alloc_u8_array(fmtOptsSize);
+      new Uint8Array(buf(), fmtOptsPtr, fmtOptsSize).fill(0);
+      const fmtOpts = new DataView(buf(), fmtOptsPtr, fmtOptsSize);
+      setField(fmtOpts, "GhosttyFormatterTerminalOptions", "size", fmtOptsSize);
+      setField(fmtOpts, "GhosttyFormatterTerminalOptions", "emit", GHOSTTY_FORMATTER_FORMAT_HTML);
+      setField(fmtOpts, "GhosttyFormatterTerminalOptions", "trim", 1);
+      const extraOffset = wasm.layout["GhosttyFormatterTerminalOptions"].fields["extra"].offset;
+      const extraLayout = wasm.layout["GhosttyFormatterTerminalExtra"];
+      fmtOpts.setUint32(extraOffset + extraLayout.fields["size"].offset, extraLayout.size, true);
+      fmtOpts.setUint8(extraOffset + extraLayout.fields["palette"].offset, 1);
+      const screenOffset = extraLayout.fields["screen"].offset;
+      const screenLayout = wasm.layout["GhosttyFormatterScreenExtra"];
+      fmtOpts.setUint32(
+        extraOffset + screenOffset + screenLayout.fields["size"].offset, screenLayout.size, true);
+
+      const fmtPtrPtr = ex.ghostty_wasm_alloc_opaque();
+      const fmtResult = ex.ghostty_formatter_terminal_new(0, fmtPtrPtr, termPtr, fmtOptsPtr);
+      ex.ghostty_wasm_free_u8_array(fmtOptsPtr, fmtOptsSize);
+      if (fmtResult !== GHOSTTY_SUCCESS) throw new Error("formatter_new: " + fmtResult);
+      fmtPtr = new DataView(buf()).getUint32(fmtPtrPtr, true);
+      ex.ghostty_wasm_free_opaque(fmtPtrPtr);
+
+      const outPtrPtr = ex.ghostty_wasm_alloc_opaque();
+      const outLenPtr = ex.ghostty_wasm_alloc_usize();
+      const formatResult = ex.ghostty_formatter_format_alloc(fmtPtr, 0, outPtrPtr, outLenPtr);
+      if (formatResult !== GHOSTTY_SUCCESS) {
+        ex.ghostty_wasm_free_opaque(outPtrPtr);
+        ex.ghostty_wasm_free_usize(outLenPtr);
+        throw new Error("format_alloc: " + formatResult);
+      }
+      const outPtr = new DataView(buf()).getUint32(outPtrPtr, true);
+      const outLen = new DataView(buf()).getUint32(outLenPtr, true);
+      const html = new TextDecoder().decode(new Uint8Array(buf(), outPtr, outLen));
+      ex.ghostty_free(0, outPtr, outLen);
+      ex.ghostty_wasm_free_opaque(outPtrPtr);
+      ex.ghostty_wasm_free_usize(outLenPtr);
+      return html;
+    } finally {
+      if (fmtPtr) wasm.exports.ghostty_formatter_free(fmtPtr);
+      if (termPtr) wasm.exports.ghostty_terminal_free(termPtr);
+    }
+  }
+
+  // --- Highlighting (fallback) ------------------------------------------
+  // Without the wasm renderer the app's plain viewport text (no ANSI
+  // attributes) is shown, with pattern-rule highlighting in theme colors.
 
   const escapeHTML = (s) => s.replace(/[&<>"]/g, (c) =>
     ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
@@ -358,7 +472,20 @@
   }
 
   let lastScreenText = null;
-  function renderScreen(text) {
+  function renderScreen(screen) {
+    if (wasm && screen.vt && screen.cols > 0 && screen.rows > 0) {
+      const key = "vt:" + screen.vt;
+      if (key === lastScreenText) return;
+      try {
+        $("screen").innerHTML = vtToHTML(screen.vt, screen.cols, screen.rows);
+        lastScreenText = key;
+        return;
+      } catch (e) {
+        console.warn("wasm render failed, falling back", e);
+        wasm = null; // don't retry every tick
+      }
+    }
+    const text = screen.text || "";
     if (text === lastScreenText) return;
     lastScreenText = text;
     $("screen").innerHTML = text.split("\n").map(highlightLine).join("\n");
@@ -470,7 +597,7 @@
     const scroller = $("scroller");
     const atBottom =
       Math.abs(scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight) < 40;
-    renderScreen(screen.text);
+    renderScreen(screen);
     $("cwd").textContent = screen.cwd;
     $("title").textContent = screen.title || "remote control";
     document.title = screen.title ? screen.title + " — Boo" : "Boo Remote Control";
@@ -530,6 +657,7 @@
     });
   });
 
+  loadWasm().then(() => { lastScreenText = null; });
   if (!token) {
     showAuth();
   } else {

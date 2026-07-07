@@ -73,12 +73,22 @@ extension MainWindowController {
             return
         }
         let pane = ws.pane(for: ws.activePaneID)
-        reply([
+        var response: [String: Any] = [
             "ok": true,
             "text": gv.readViewportText() ?? "",
             "title": pane?.activeTab?.title ?? "",
             "cwd": pane?.activeTab?.workingDirectory ?? ""
-        ])
+        ]
+        // Styled VT snapshot for the browser-side ghostty-vt.wasm renderer.
+        // The plain "text" stays as fallback for clients without wasm.
+        if let vt = gv.readViewportStyled(), let grid = gv.gridSize,
+            grid.columns > 0, grid.rows > 0
+        {
+            response["vt"] = vt
+            response["cols"] = Int(grid.columns)
+            response["rows"] = Int(grid.rows)
+        }
+        reply(response)
     }
 
     // MARK: - Input

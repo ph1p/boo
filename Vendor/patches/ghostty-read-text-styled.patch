@@ -1,0 +1,73 @@
+diff --git a/include/ghostty.h b/include/ghostty.h
+index 72bbb57a8..30d986825 100644
+--- a/include/ghostty.h
++++ b/include/ghostty.h
+@@ -1162,6 +1162,9 @@ GHOSTTY_API bool ghostty_surface_read_text(ghostty_surface_t,
+                                               ghostty_selection_s,
+                                               ghostty_text_s*);
+ GHOSTTY_API void ghostty_surface_free_text(ghostty_surface_t, ghostty_text_s*);
++GHOSTTY_API bool ghostty_surface_read_text_styled(ghostty_surface_t,
++                                                     ghostty_selection_s,
++                                                     ghostty_text_s*);
+ 
+ #ifdef __APPLE__
+ GHOSTTY_API void ghostty_surface_set_display_id(ghostty_surface_t, uint32_t);
+diff --git a/src/apprt/embedded.zig b/src/apprt/embedded.zig
+index 7310159cc..800a5cbd2 100644
+--- a/src/apprt/embedded.zig
++++ b/src/apprt/embedded.zig
+@@ -1681,6 +1681,54 @@ pub const CAPI = struct {
+         ptr.deinit();
+     }
+ 
++    /// Same as ghostty_surface_read_text but emits VT sequences that
++    /// preserve styles, colors (including the palette via OSC 4), and the
++    /// cursor position (CUP), so the content can be replayed into another
++    /// terminal emulator. Free the result with ghostty_surface_free_text.
++    export fn ghostty_surface_read_text_styled(
++        surface: *Surface,
++        sel: Selection,
++        result: *Text,
++    ) bool {
++        const core_surface = &surface.core_surface;
++        core_surface.renderer_state.mutex.lock();
++        defer core_surface.renderer_state.mutex.unlock();
++
++        const term = core_surface.renderer_state.terminal;
++        const core_sel = sel.core(term.screens.active) orelse return false;
++
++        var fmt: terminal.formatter.TerminalFormatter = .init(term, .{
++            .emit = .vt,
++            .trim = false,
++        });
++        fmt.content = .{ .selection = core_sel };
++        fmt.extra = .styles;
++        fmt.extra.screen.cursor = true;
++
++        var aw: std.Io.Writer.Allocating = .init(global.alloc);
++        defer aw.deinit();
++        fmt.format(&aw.writer) catch |err| {
++            log.warn("error formatting styled text err={}", .{err});
++            return false;
++        };
++
++        const text = global.alloc.dupeZ(u8, aw.written()) catch |err| {
++            log.warn("error allocating styled text err={}", .{err});
++            return false;
++        };
++
++        result.* = .{
++            .tl_px_x = -1,
++            .tl_px_y = -1,
++            .offset_start = 0,
++            .offset_len = 0,
++            .text = text.ptr,
++            .text_len = text.len,
++        };
++
++        return true;
++    }
++
+     /// Tell the surface that it needs to schedule a render
+     export fn ghostty_surface_refresh(surface: *Surface) void {
+         surface.refresh();

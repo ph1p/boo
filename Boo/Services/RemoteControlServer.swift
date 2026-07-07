@@ -228,6 +228,8 @@ final class RemoteControlServer: @unchecked Sendable {
         switch (method, path) {
         case ("GET", "/"), ("GET", "/index.html"):
             serveIndex(fd: fd)
+        case ("GET", "/ghostty-vt.wasm"):
+            serveWasm(fd: fd)
         case ("POST", "/api/cmd"):
             guard authorized(headerText: headerText, target: target) else {
                 sendJSON(fd: fd, status: "401 Unauthorized", dict: ["ok": false, "error": "unauthorized"])
@@ -309,6 +311,23 @@ final class RemoteControlServer: @unchecked Sendable {
             return
         }
         sendResponse(fd: fd, status: "200 OK", contentType: "text/html; charset=utf-8", body: html)
+    }
+
+    /// libghostty-vt WebAssembly module used by the web UI terminal renderer.
+    private static let wasmModule: Data? = {
+        guard
+            let url = BooResourceBundle.bundle.url(
+                forResource: "ghostty-vt", withExtension: "wasm", subdirectory: "RemoteControl")
+        else { return nil }
+        return try? Data(contentsOf: url)
+    }()
+
+    private func serveWasm(fd: Int32) {
+        guard let wasm = Self.wasmModule else {
+            sendError(fd: fd, status: "404 Not Found")
+            return
+        }
+        sendResponse(fd: fd, status: "200 OK", contentType: "application/wasm", body: wasm)
     }
 
     private func sendJSON(fd: Int32, status: String, dict: [String: Any]) {
