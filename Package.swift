@@ -75,7 +75,8 @@ let allTargets: [Target] = [
         exclude: booExclude,
         resources: [
             .copy("Resources/Images"),
-            .copy("Resources/MonacoBundle")
+            .copy("Resources/MonacoBundle"),
+            .copy("Resources/RemoteControl")
         ],
         linkerSettings: booLibLinkerSettings
     ),

@@ -120,6 +120,14 @@ extension MainWindowController {
             title: "Reset Font Size", action: #selector(resetFontSizeAction(_:)), keyEquivalent: "0")
         fontReset.keyEquivalentModifierMask = [.command]
         termMenu.addItem(fontReset)
+        termMenu.addItem(.separator())
+
+        termMenu.addItem(
+            withTitle: "Start Remote Control Server",
+            action: #selector(toggleRemoteControlAction(_:)), keyEquivalent: "")
+        termMenu.addItem(
+            withTitle: "Copy Remote Control URL",
+            action: #selector(copyRemoteControlURLAction(_:)), keyEquivalent: "")
 
         termMenuItem.submenu = termMenu
         mainMenu.addItem(termMenuItem)

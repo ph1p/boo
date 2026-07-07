@@ -575,6 +575,7 @@ class ThemedSplitView: NSSplitView {
         restoreWorkspaces()
         subscribeToBridge()
         setupIPCHandlers()
+        setupRemoteControlHandlers()
         setupPluginWatcher()
 
         // Run initial plugin cycle so lastContext is available for first click

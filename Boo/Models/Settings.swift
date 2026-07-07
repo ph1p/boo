@@ -284,6 +284,8 @@ final class AppSettings {
         static let editorRulerColumn = "editorRulerColumn"
 
         static let activityNotificationsEnabled = "activityNotificationsEnabled"
+
+        static let remoteControlPort = "remoteControlPort"
     }
 
     /// Bool from UserDefaults with a custom default (since .bool returns false for unset keys).
@@ -671,6 +673,16 @@ final class AppSettings {
     var activityNotificationsEnabled: Bool {
         get { bool(K.activityNotificationsEnabled, default: true) }
         set { set(newValue, forKey: K.activityNotificationsEnabled, topic: .notifications) }
+    }
+
+    // MARK: - Remote Control
+
+    var remoteControlPort: Int {
+        get {
+            let v = UserDefaults.standard.integer(forKey: K.remoteControlPort)
+            return (v >= 1024 && v <= 65535) ? v : 8899
+        }
+        set { set(newValue, forKey: K.remoteControlPort) }
     }
 
     // MARK: - Plugins

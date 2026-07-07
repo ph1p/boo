@@ -72,6 +72,7 @@ public enum BooMain {
         windowController?.saveSession()
         SSHControlManager.shared.teardownAll()
         BooSocketServer.shared.stop()
+        RemoteControlServer.shared.stop()
         FolderBookmarkStore.shared.stopAll()
     }
 

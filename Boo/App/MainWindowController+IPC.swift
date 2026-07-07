@@ -27,7 +27,9 @@ extension MainWindowController {
 
     // MARK: - Command Dispatch
 
-    private func handleIPCCommand(
+    /// Single command router shared by the unix socket (`BooSocketServer`) and
+    /// the Remote Control web server (`RemoteControlServer`).
+    func handleIPCCommand(
         cmd: String, json: [String: Any], reply: @escaping ([String: Any]) -> Void
     ) {
         switch cmd {
@@ -47,6 +49,16 @@ extension MainWindowController {
             ipcGetWorkspaces(reply: reply)
         case "agent_idle":
             ipcAgentIdle(json: json, reply: reply)
+        case "get_state":
+            remoteGetState(reply: reply)
+        case "get_screen":
+            remoteGetScreen(reply: reply)
+        case "send_key":
+            remoteSendKey(json: json, reply: reply)
+        case "select_pane":
+            remoteSelectPane(json: json, reply: reply)
+        case "select_tab":
+            remoteSelectTab(json: json, reply: reply)
         default:
             reply(["ok": false, "error": "unknown control command: \(cmd)"])
         }
