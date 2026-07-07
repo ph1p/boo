@@ -60,9 +60,13 @@ ghostty: $(XCRUN_WRAPPER_DIR)/xcrun
 		git submodule update --init --depth 1 Vendor/ghostty; \
 	fi
 	@$(MAKE) ghostty-patches
-	@if [ ! -f Vendor/ghostty/macos/GhosttyKit.xcframework/macos-arm64/libghostty-internal-fat.a ]; then \
+	@PATCH_HASH=$$(cat Vendor/patches/*.patch 2>/dev/null | shasum -a 256 | cut -d' ' -f1); \
+	STAMP=Vendor/ghostty/macos/.patches-stamp; \
+	if [ ! -f Vendor/ghostty/macos/GhosttyKit.xcframework/macos-arm64/libghostty-internal-fat.a ] \
+		|| [ "$$(cat $$STAMP 2>/dev/null)" != "$$PATCH_HASH" ]; then \
 		echo "==> Building GhosttyKit..."; \
 		cd Vendor/ghostty && PATH="$(CURDIR)/$(XCRUN_WRAPPER_DIR):$$PATH" zig build -Demit-xcframework=true -Dxcframework-target=native -Demit-macos-app=false -Doptimize=ReleaseFast; \
+		echo "$$PATCH_HASH" > "$(CURDIR)/$$STAMP"; \
 	else \
 		echo "==> GhosttyKit already built"; \
 	fi

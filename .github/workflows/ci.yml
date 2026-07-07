@@ -77,7 +77,7 @@ jobs:
             Vendor/ghostty/macos
             Vendor/ghostty/zig-out
             Vendor/ghostty/.zig-cache
-          key: ghosttykit-macos15-${{ hashFiles('Vendor/ghostty/build.zig.zon') }}-${{ hashFiles('Makefile') }}
+          key: ghosttykit-macos15-${{ hashFiles('Vendor/ghostty/build.zig.zon') }}-${{ hashFiles('Makefile') }}-${{ hashFiles('Vendor/patches/*.patch') }}
           restore-keys: |
             ghosttykit-macos15-
 
@@ -148,7 +148,7 @@ jobs:
             Vendor/ghostty/macos
             Vendor/ghostty/zig-out
             Vendor/ghostty/.zig-cache
-          key: ghosttykit-macos15-${{ hashFiles('Vendor/ghostty/build.zig.zon') }}-${{ hashFiles('Makefile') }}
+          key: ghosttykit-macos15-${{ hashFiles('Vendor/ghostty/build.zig.zon') }}-${{ hashFiles('Makefile') }}-${{ hashFiles('Vendor/patches/*.patch') }}
           restore-keys: |
             ghosttykit-macos15-
 
