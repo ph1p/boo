@@ -334,7 +334,6 @@ private func ghosttyCloseSurface(_ userdata: UnsafeMutableRawPointer?, _ process
     private(set) var app: ghostty_app_t?
     private(set) var config: ghostty_config_t?
     private var settingsObserver: Any?
-    private var tickTimer: Timer?
 
     /// All active surfaces that need config updates.
     private var surfaces: [ghostty_surface_t] = []
@@ -440,17 +439,12 @@ private func ghosttyCloseSurface(_ userdata: UnsafeMutableRawPointer?, _ process
             booLog(.error, .app, "Failed to create Ghostty app")
         } else {
             booLog(.info, .app, "Ghostty app initialized")
-            // Periodic tick drives cursor blink and other time-based rendering.
-            // Add to .common modes so the timer fires during event tracking
-            // (resize, scroll) and modal panels, not just the default mode.
-            let timer = Timer(timeInterval: 1.0 / 30.0, repeats: true) { [weak self] _ in
-                MainActor.assumeIsolated {
-                    guard let app = self?.app else { return }
-                    ghostty_app_tick(app)
-                }
-            }
-            RunLoop.main.add(timer, forMode: .common)
-            tickTimer = timer
+            // The event loop is pumped on demand via `wakeup_cb` (ghosttyWakeup),
+            // matching upstream Ghostty. `ghostty_app_tick` only drains the app
+            // mailbox — cursor blink and rendering run on each surface's own
+            // render thread — so a periodic tick is pure wasted wakeups. A
+            // previous 30fps repeating timer in .common mode kept the CPU busy
+            // and defeated App Nap while idle; it was the main battery drain.
         }
 
         // Listen for settings changes and push new config to all surfaces
