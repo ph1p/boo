@@ -430,9 +430,9 @@ class PaneView: NSView {
             self.debounceCwdUpdate(path)
         }
 
-        gv.onTitleChanged = { [weak self] title in
+        gv.onTitleChanged = { [weak self, tabID = gv.tabID] title in
             guard let self else { return }
-            self.debounceTitleUpdate(title)
+            self.debounceTitleUpdate(title, tabID: tabID)
         }
 
         gv.onDirectoryListing = { [weak self] path, output in
@@ -648,10 +648,13 @@ class PaneView: NSView {
 
     /// Debounce a title update: each new title resets the timer so only the
     /// final value after the burst is applied.
-    private func debounceTitleUpdate(_ title: String) {
+    private func debounceTitleUpdate(_ title: String, tabID: UUID? = nil) {
         pendingTitle = title
         titleDebounce?.cancel()
-        let capturedTabID = pane.activeTab?.id
+        // Bind the update to the tab that owns the emitting surface, NOT the
+        // active tab at fire time — a late burst from the previous tab must not
+        // clobber a freshly-created tab's title.
+        let capturedTabID = tabID ?? pane.activeTab?.id
         let work = DispatchWorkItem { [weak self] in
             guard let self, let title = self.pendingTitle else { return }
             self.pendingTitle = nil
