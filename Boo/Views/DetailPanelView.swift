@@ -797,11 +797,17 @@ class SidebarPanelView: NSView {
     }
 
     /// Returns the Y coordinate (in panel space) of the top of section at `index`.
-    private func indicatorYOffset(before index: Int) -> CGFloat {
+    ///
+    /// The separator is added at the top of each iteration — matching the walks in
+    /// `layoutAllSections` and `updateSectionDrag` — so that the separator preceding
+    /// section `index` is counted before the loop breaks. Testing `i == index` after
+    /// the increment (rather than before) dropped it, drawing the drop indicator one
+    /// separator too high for every index > 0.
+    func indicatorYOffset(before index: Int) -> CGFloat {
         var y: CGFloat = 0
         for (i, st) in sectionStates.enumerated() {
-            if i == index { break }
             if i > 0 { y += SidebarLayout.separatorHeight }
+            if i == index { break }
             y += SidebarLayout.headerHeight
             if st.isExpanded { y += st.contentHeight }
         }

@@ -71,6 +71,21 @@ class SidebarDragHandleView: NSView {
         addCursorRect(bounds, cursor: .resizeUpDown)
     }
 
+    /// The 8pt grab strip is centred on the content boundary, so its lower half
+    /// overlaps the next section's 26pt header. Handles are added to the panel after
+    /// the headers, so without this they win the hit-test in that band and swallow
+    /// both the collapse click and the reorder drag. Headers own their full rect;
+    /// the handle only claims points outside every header.
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        guard let hit = super.hitTest(point) else { return nil }
+        guard let panel = panelView else { return hit }
+        let inPanel = panel.convert(point, from: superview)
+        for state in panel.sectionStates where state.headerView.frame.contains(inPanel) {
+            return nil
+        }
+        return hit
+    }
+
     override func mouseDown(with event: NSEvent) {
         guard let panel = panelView else { return }
         let globalPoint = panel.convert(event.locationInWindow, from: nil)

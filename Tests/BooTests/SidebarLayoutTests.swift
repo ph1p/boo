@@ -1310,4 +1310,81 @@ private func makeNonGrowableSection(id: String, name: String = "Info") -> Sideba
             v.sectionStates[1].contentHeight, biggerIntrinsic, accuracy: 2,
             "Non-growable section should restore to updated intrinsic after collapse/expand")
     }
+
+    // MARK: - Drop indicator / handle hit-test regressions
+
+    /// `indicatorYOffset(before:)` must agree with the layout walk in
+    /// `layoutAllSections`, which adds the separator *before* each section i > 0.
+    /// Breaking out before that increment dropped one separator per index, drawing
+    /// the reorder drop indicator a separator too high for every index > 0.
+    @MainActor func testDropIndicatorMatchesSectionTop() {
+        let v = makePanelView(height: 600)
+        v.updateSections(
+            [makeSection(id: "a"), makeSection(id: "b"), makeSection(id: "c")],
+            expandedIDs: ["a", "b", "c"])
+        v.layoutSubtreeIfNeeded()
+        v.layoutAllSections()
+
+        // Independently recompute each section's top the way layoutAllSections does.
+        var expected: [CGFloat] = []
+        var y: CGFloat = 0
+        for (i, st) in v.sectionStates.enumerated() {
+            if i > 0 { y += SidebarLayout.separatorHeight }
+            expected.append(y)
+            y += SidebarLayout.headerHeight
+            if st.isExpanded { y += st.contentHeight }
+        }
+
+        for i in 0..<v.sectionStates.count {
+            XCTAssertEqual(
+                v.indicatorYOffset(before: i), expected[i], accuracy: 0.001,
+                "indicator for section \(i) must sit at that section's top edge")
+        }
+    }
+
+    /// The 8pt resize handle straddles the content boundary, so its lower half sits
+    /// inside the next header. Handles are added after headers, so they used to win
+    /// the hit-test there and swallow the header's collapse click / reorder drag.
+    @MainActor func testDragHandleDeclinesHitsInsideHeader() {
+        let v = makePanelView(height: 600)
+        v.updateSections(
+            [makeSection(id: "a"), makeSection(id: "b")], expandedIDs: ["a", "b"])
+        v.layoutSubtreeIfNeeded()
+        v.layoutAllSections()
+
+        let handles = v.subviews.compactMap { $0 as? SidebarDragHandleView }.filter { !$0.isHidden }
+        XCTAssertFalse(handles.isEmpty, "expected a handle between the two expanded sections")
+
+        for handle in handles {
+            let header = v.sectionStates[handle.belowIndex].headerView.frame
+            // A point inside the handle that also lies within the header below it.
+            let overlapY = handle.frame.intersection(header).midY
+            guard handle.frame.intersects(header) else { continue }
+            let pointInPanel = NSPoint(x: handle.frame.midX, y: overlapY)
+            XCTAssertNil(
+                handle.hitTest(v.convert(pointInPanel, to: handle.superview)),
+                "handle must not claim points that belong to the header")
+        }
+    }
+
+    /// The handle must still take hits on the part that does not overlap a header,
+    /// or resizing breaks entirely.
+    @MainActor func testDragHandleStillTakesHitsOutsideHeader() {
+        let v = makePanelView(height: 600)
+        v.updateSections(
+            [makeSection(id: "a"), makeSection(id: "b")], expandedIDs: ["a", "b"])
+        v.layoutSubtreeIfNeeded()
+        v.layoutAllSections()
+
+        let handles = v.subviews.compactMap { $0 as? SidebarDragHandleView }.filter { !$0.isHidden }
+        XCTAssertFalse(handles.isEmpty)
+
+        for handle in handles {
+            // Top edge of the handle sits above every header.
+            let pointInPanel = NSPoint(x: handle.frame.midX, y: handle.frame.minY + 0.5)
+            XCTAssertNotNil(
+                handle.hitTest(v.convert(pointInPanel, to: handle.superview)),
+                "handle must still be grabbable outside the header band")
+        }
+    }
 }
