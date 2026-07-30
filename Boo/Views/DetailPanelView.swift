@@ -565,8 +565,11 @@ class SidebarPanelView: NSView {
             }
             guard let below = nextExpanded else { continue }
 
-            // The drag handle sits at the bottom of section i's content
-            let handleY = sectionStates[i].headerView.frame.maxY + sectionStates[i].contentHeight - 3
+            // The handle must land on the boundary the drag actually moves: the top of
+            // `below`'s header. Deriving it from section `i`'s own content bottom put the
+            // handle above any collapsed sections sitting between the two, so the grab
+            // strip floated mid-stack and the visible boundary had no handle at all.
+            let handleY = indicatorYOffset(before: below) - 3
             let handle: SidebarDragHandleView
             if handleIndex < dragHandles.count {
                 handle = dragHandles[handleIndex]

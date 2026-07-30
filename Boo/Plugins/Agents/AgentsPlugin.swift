@@ -69,22 +69,24 @@ final class AgentsPlugin: BooPluginProtocol {
 
     private(set) var agentStartTime: Date?
     private(set) var activeAgent: AgentSession?
-    private(set) var currentCwd: String?
+    /// `internal(set)` so the scanning extensions can record the scanned cwd.
+    /// Setter is module-internal so the scanning extensions can record the scanned cwd.
+    var currentCwd: String?
     private(set) var diffStats: [DiffStatEntry] = []
-    private(set) var worktrees: [ClaudeWorktree] = []
-    private(set) var agentConfig: AgentConfig = AgentConfig()
+    var worktrees: [ClaudeWorktree] = []
+    var agentConfig: AgentConfig = AgentConfig()
     /// Session ID currently being written to (detected via file watching)
     private(set) var activeSessionID: String?
 
     private var lastDiffRepoRoot: String?
-    private var configScan = ScanStamp()
-    private var worktreeScan = ScanStamp()
+    var configScan = ScanStamp()
+    var worktreeScan = ScanStamp()
     /// Pre-gate keyed on the raw cwd, so an unchanged cwd skips the project-root walk.
-    private var worktreeCwdScan = ScanStamp()
-    private static let scanTTL: TimeInterval = 15
+    var worktreeCwdScan = ScanStamp()
+    static let scanTTL: TimeInterval = 15
 
     /// Root + completion time of the last scan, with the TTL gate both scans share.
-    private struct ScanStamp {
+    struct ScanStamp {
         private var root: String?
         private var at: TimeInterval = 0
 
@@ -471,26 +473,42 @@ final class AgentsPlugin: BooPluginProtocol {
     // MARK: - Lifecycle
 
     func processChanged(name: String, context: TerminalContext) {
+        // A new process is where a session ID first becomes visible, and a rerun is
+        // needed to surface the agent that just appeared.
+        adoptAgent(from: context, publishSessionID: true, requestRerunOnStart: true)
+    }
+
+    /// Shared handling for the process- and focus-change paths, which differ only in
+    /// whether they publish a session ID / request a rerun on first detection, and in
+    /// what they do when no agent is present.
+    @discardableResult
+    private func adoptAgent(
+        from context: TerminalContext, publishSessionID: Bool, requestRerunOnStart: Bool
+    ) -> Bool {
         let active = Self.agentSession(from: context, existingStart: agentStartTime)
-        if let active {
-            cancelTeardown()
-            if agentStartTime == nil {
-                agentStartTime = active.startedAt
-                currentCwd = context.cwd
-                onRequestCycleRerun?()
-                scanAgentConfig(cwd: context.cwd)
-                scanWorktrees(cwd: context.cwd)
+        guard let active else {
+            if agentStartTime != nil {
+                scheduleDeferredTeardown()
             }
-            activeAgent = active
-            if let sessionID = active.sessionID, activeSessionID != sessionID {
-                activeSessionID = sessionID
-                actions?.setAgentSessionID?(sessionID)
-            }
-            refreshDiffStats(repoRoot: context.gitContext?.repoRoot)
-            startRefreshTimer(repoRoot: context.gitContext?.repoRoot)
-        } else if agentStartTime != nil {
-            scheduleDeferredTeardown()
+            return false
         }
+
+        cancelTeardown()
+        if agentStartTime == nil {
+            agentStartTime = active.startedAt
+            currentCwd = context.cwd
+            if requestRerunOnStart { onRequestCycleRerun?() }
+            scanAgentConfig(cwd: context.cwd)
+            scanWorktrees(cwd: context.cwd)
+        }
+        activeAgent = active
+        if publishSessionID, let sessionID = active.sessionID, activeSessionID != sessionID {
+            activeSessionID = sessionID
+            actions?.setAgentSessionID?(sessionID)
+        }
+        refreshDiffStats(repoRoot: context.gitContext?.repoRoot)
+        startRefreshTimer(repoRoot: context.gitContext?.repoRoot)
+        return true
     }
 
     private func cancelTeardown() {
@@ -509,30 +527,15 @@ final class AgentsPlugin: BooPluginProtocol {
     func cwdChanged(newPath: String, context: TerminalContext) {}
 
     func terminalFocusChanged(terminalID: UUID, context: TerminalContext) {
-        let active = Self.agentSession(from: context, existingStart: agentStartTime)
-        if let active {
-            cancelTeardown()
-            if agentStartTime == nil {
-                agentStartTime = active.startedAt
-                activeAgent = active
-                currentCwd = context.cwd
-                scanAgentConfig(cwd: context.cwd)
-                scanWorktrees(cwd: context.cwd)
-            }
-            activeAgent = active
-            refreshDiffStats(repoRoot: context.gitContext?.repoRoot)
-            startRefreshTimer(repoRoot: context.gitContext?.repoRoot)
-        } else {
-            // Focusing a tab with no agent must drop the previous tab's agent, or
-            // the status bar and section title keep counting up a runtime for an
-            // agent that isn't in this tab. Deferred so a momentary category blip
-            // (agent spawning a subprocess) doesn't flicker the sidebar.
-            if agentStartTime != nil {
-                scheduleDeferredTeardown()
-            }
+        // Focusing a tab with no agent must drop the previous tab's agent (handled by
+        // the deferred teardown inside `adoptAgent`), or the status bar and section
+        // title keep counting up a runtime for an agent that isn't in this tab.
+        // Either way the newly focused tab's own config/worktrees still need scanning.
+        guard adoptAgent(from: context, publishSessionID: false, requestRerunOnStart: false) else {
             currentCwd = context.cwd
             scanAgentConfig(cwd: context.cwd)
             scanWorktrees(cwd: context.cwd)
+            return
         }
     }
 
@@ -618,394 +621,6 @@ final class AgentsPlugin: BooPluginProtocol {
     }
 
     // MARK: - Session Watching
-
-    // MARK: - Worktree Scanning
-
-    private func scanWorktrees(cwd: String?) {
-        guard let cwd = cwd else { return }
-
-        // Cheap pre-gate on the cwd itself. The authoritative TTL below is keyed on
-        // the *project root*, which isn't known until `findAgentProjectRoot` has
-        // walked up to 20 levels of `fileExists` — work this skips entirely when the
-        // same cwd cycles through focus repeatedly, which is the common case.
-        guard worktreeCwdScan.shouldScan(root: cwd, ttl: Self.scanTTL) else { return }
-
-        let markers = Self.projectMarkers
-        // `findAgentProjectRoot` walks up to 20 levels x 4 markers of `fileExists`;
-        // keep it off the main thread.
-        DispatchQueue.global(qos: .utility).async { [weak self] in
-            let projectRoot = findAgentProjectRoot(from: cwd, markers: markers) ?? cwd
-            DispatchQueue.main.async { [weak self] in
-                guard let self else { return }
-                guard self.worktreeScan.shouldScan(root: projectRoot, ttl: Self.scanTTL)
-                else { return }
-
-                DispatchQueue.global(qos: .utility).async { [weak self] in
-                    let worktrees = Self.detectWorktrees(projectRoot: projectRoot)
-                    DispatchQueue.main.async { [weak self] in
-                        guard let self else { return }
-                        // Skip the rerun when nothing actually changed — this runs on
-                        // every focus/cwd cycle. Compare the same key the section's
-                        // generation uses, so a branch/commit move still refreshes.
-                        let key = { (w: ClaudeWorktree) in
-                            "\(w.path)|\(w.branch)|\(w.headCommit ?? "")"
-                        }
-                        guard self.worktrees.map(key) != worktrees.map(key) else { return }
-                        self.worktrees = worktrees
-                        self.onRequestCycleRerun?()
-                    }
-                }
-            }
-        }
-    }
-
-    /// Enumerate the git worktrees belonging to `projectRoot`.
-    ///
-    /// Uses `git worktree list --porcelain`, which is authoritative: it finds worktrees
-    /// wherever they live, not only under the Claude-specific `.claude/worktrees`
-    /// convention, and it reports branch/HEAD correctly for detached heads, packed
-    /// refs and relative `gitdir:` pointers — all of which the previous hand-rolled
-    /// `.git` file parsing got wrong.
-    ///
-    /// The entry for the main working tree itself is skipped; only linked worktrees
-    /// are returned.
-    nonisolated static func detectWorktrees(projectRoot: String) -> [ClaudeWorktree] {
-        let task = Process()
-        task.launchPath = "/usr/bin/git"
-        task.arguments = ["-C", projectRoot, "--no-optional-locks", "worktree", "list", "--porcelain"]
-        task.standardError = FileHandle.nullDevice
-
-        let pipe = Pipe()
-        task.standardOutput = pipe
-
-        // Read on a separate thread before waiting to prevent deadlock when output > 64KB.
-        nonisolated(unsafe) var data = Data()
-        let readGroup = DispatchGroup()
-        readGroup.enter()
-        DispatchQueue.global(qos: .utility).async {
-            data = pipe.fileHandleForReading.readDataToEndOfFile()
-            readGroup.leave()
-        }
-        guard task.runAndWait(seconds: 15) else { return [] }
-        readGroup.wait()
-        guard let output = String(data: data, encoding: .utf8) else { return [] }
-
-        return parseWorktreePorcelain(output, projectRoot: projectRoot)
-    }
-
-    /// Parse `git worktree list --porcelain` output into worktree records.
-    ///
-    /// Records are separated by blank lines. Each starts with `worktree <path>`, then
-    /// carries either `branch refs/heads/<name>`, or `detached`, plus a `HEAD <sha>`.
-    /// A `bare` record has no working tree and is skipped.
-    nonisolated static func parseWorktreePorcelain(_ output: String, projectRoot: String) -> [ClaudeWorktree] {
-        let fm = FileManager.default
-        var worktrees: [ClaudeWorktree] = []
-
-        var path: String?
-        var branch: String?
-        var head: String?
-        var isBare = false
-
-        func flush() {
-            defer {
-                path = nil
-                branch = nil
-                head = nil
-                isBare = false
-            }
-            guard let path, !isBare else { return }
-            // The first record is the main working tree; only linked worktrees are listed.
-            guard path != projectRoot else { return }
-
-            let name = (path as NSString).lastPathComponent
-            let created = (try? fm.attributesOfItem(atPath: path))?[.creationDate] as? Date
-
-            worktrees.append(
-                ClaudeWorktree(
-                    id: path,
-                    path: path,
-                    // Detached worktrees have no branch; show the short SHA instead.
-                    branch: branch ?? head.map { "detached @ \($0)" } ?? name,
-                    headCommit: head,
-                    created: created
-                ))
-        }
-
-        for rawLine in output.split(separator: "\n", omittingEmptySubsequences: false) {
-            let line = String(rawLine)
-            if line.isEmpty {
-                flush()
-                continue
-            }
-            if line.hasPrefix("worktree ") {
-                // A new record begins; emit whatever preceded it.
-                flush()
-                path = String(line.dropFirst("worktree ".count))
-            } else if line.hasPrefix("branch refs/heads/") {
-                branch = String(line.dropFirst("branch refs/heads/".count))
-            } else if line.hasPrefix("HEAD ") {
-                head = String(line.dropFirst("HEAD ".count).prefix(7))
-            } else if line == "bare" {
-                isBare = true
-            }
-        }
-        flush()
-
-        // Sort by creation date, newest first
-        return worktrees.sorted { a, b in
-            let aDate = a.created ?? .distantPast
-            let bDate = b.created ?? .distantPast
-            return aDate > bDate
-        }
-    }
-
-    private func openWorktree(_ worktree: ClaudeWorktree) {
-        // Open the worktree directory in a new tab
-        actions?.openDirectoryInNewTab?(worktree.path)
-    }
-
-    // MARK: - Agent Config Scan
-
-    private func scanAgentConfig(cwd: String?) {
-        guard let cwd = cwd else { return }
-
-        let markers = Self.projectMarkers
-        DispatchQueue.global(qos: .utility).async { [weak self] in
-            let projectRoot = findAgentProjectRoot(from: cwd, markers: markers) ?? cwd
-            DispatchQueue.main.async { [weak self] in
-                guard let self else { return }
-                // Root equality alone made this permanently sticky — a CLAUDE.md or
-                // skill added to the same project never showed up. Re-scan once the
-                // TTL expires.
-                // Record the cwd before the TTL early-return: `makeSidebarTab` gates
-                // its scan dispatch on `currentCwd != context.terminal.cwd`, so leaving
-                // it unset would re-dispatch both scans on every call for the whole
-                // TTL window.
-                self.currentCwd = cwd
-                guard self.configScan.shouldScan(root: projectRoot, ttl: Self.scanTTL)
-                else { return }
-
-                DispatchQueue.global(qos: .utility).async { [weak self] in
-                    let config = Self.detectAgentConfig(cwd: cwd, projectRoot: projectRoot)
-                    DispatchQueue.main.async { [weak self] in
-                        guard let self else { return }
-                        // A TTL re-scan that finds nothing new must not trigger a
-                        // sidebar rebuild — that would restart the rebuild/focus churn
-                        // the debounce exists to prevent.
-                        let unchanged =
-                            self.agentConfig.configFiles.map(\.path) == config.configFiles.map(\.path)
-                            && self.agentConfig.skills.map(\.path) == config.skills.map(\.path)
-                        self.agentConfig = config
-                        if !unchanged { self.onRequestCycleRerun?() }
-                    }
-                }
-            }
-        }
-    }
-
-    /// Pass `projectRoot` when the caller already resolved it — `findAgentProjectRoot`
-    /// walks up to 20 levels x 4 markers of `fileExists`, and the scan path has it.
-    nonisolated static func detectAgentConfig(cwd: String, projectRoot: String? = nil) -> AgentConfig {
-        let fm = FileManager.default
-        var config = AgentConfig()
-        let home = fm.homeDirectoryForCurrentUser.path
-        let projectRoot = projectRoot ?? findAgentProjectRoot(from: cwd, markers: projectMarkers) ?? cwd
-
-        checkFile(
-            fm: fm, root: projectRoot, rel: ".claude/CLAUDE.md", name: "CLAUDE.md", icon: "doc.text",
-            scope: "project", into: &config)
-        checkFile(
-            fm: fm, root: projectRoot, rel: "CLAUDE.md", name: "CLAUDE.md", icon: "doc.text",
-            scope: "project", into: &config)
-        checkFile(
-            fm: fm, root: projectRoot, rel: ".claude/settings.json", name: "Settings", icon: "gearshape",
-            scope: "project", into: &config)
-        checkFile(
-            fm: fm, root: projectRoot, rel: ".claude/settings.local.json", name: "Local Settings",
-            icon: "gearshape", scope: "project", into: &config)
-        checkFile(
-            fm: fm, root: projectRoot, rel: ".claude/mcp.json", name: "MCP Servers", icon: "server.rack",
-            scope: "project", into: &config)
-        checkFile(
-            fm: fm, root: home, rel: ".claude/settings.json", name: "Global Settings", icon: "gearshape",
-            scope: "global", into: &config)
-        checkFile(
-            fm: fm, root: home, rel: ".claude.json", name: "Global MCP", icon: "server.rack", scope: "global",
-            into: &config)
-        checkFile(
-            fm: fm, root: home, rel: ".claude/CLAUDE.md", name: "Global CLAUDE.md", icon: "doc.text",
-            scope: "global", into: &config)
-        checkFile(
-            fm: fm, root: projectRoot, rel: "AGENTS.md", name: "AGENTS.md", icon: "person.2", scope: "project",
-            into: &config)
-
-        let skillsDir = (projectRoot as NSString).appendingPathComponent(".claude/skills")
-        if let entries = try? fm.contentsOfDirectory(atPath: skillsDir) {
-            for entry in entries.sorted() {
-                let skillMd = (skillsDir as NSString).appendingPathComponent("\(entry)/SKILL.md")
-                if fm.fileExists(atPath: skillMd) {
-                    let desc = parseAgentSkillDescription(at: skillMd)
-                    config.skills.append(
-                        AgentConfig.SkillEntry(name: entry, description: desc, path: skillMd))
-                }
-            }
-        }
-        let globalSkillsDir = (home as NSString).appendingPathComponent(".claude/skills")
-        if let entries = try? fm.contentsOfDirectory(atPath: globalSkillsDir) {
-            let projectSkillNames = Set(config.skills.map(\.name))
-            for entry in entries.sorted() {
-                guard !projectSkillNames.contains(entry) else { continue }
-                let skillMd = (globalSkillsDir as NSString).appendingPathComponent("\(entry)/SKILL.md")
-                if fm.fileExists(atPath: skillMd) {
-                    let desc = parseAgentSkillDescription(at: skillMd)
-                    config.skills.append(
-                        AgentConfig.SkillEntry(name: entry, description: desc, path: skillMd))
-                }
-            }
-        }
-
-        scanCodexConfig(fm: fm, root: projectRoot, home: home, into: &config)
-        scanOpenCodeConfig(fm: fm, root: projectRoot, home: home, into: &config)
-        populateAgentSetup(projectRoot: projectRoot, config: &config)
-
-        return config
-    }
-
-    nonisolated private static func checkFile(
-        fm: FileManager, root: String, rel: String, name: String,
-        icon: String, scope: String, into config: inout AgentConfig
-    ) {
-        checkFile(
-            fm: fm, root: root, rel: rel, name: name, icon: icon, scope: scope, provider: .claudeCode, into: &config)
-    }
-
-    nonisolated private static func checkFile(
-        fm: FileManager, root: String, rel: String, name: String,
-        icon: String, scope: String, provider: AgentKind, into config: inout AgentConfig
-    ) {
-        let fullPath = (root as NSString).appendingPathComponent(rel)
-        if fm.fileExists(atPath: fullPath) {
-            if !config.configFiles.contains(where: { $0.path == fullPath }) {
-                config.configFiles.append(
-                    AgentConfig.ConfigFile(name: name, path: fullPath, icon: icon, scope: scope, provider: provider))
-            }
-        }
-    }
-
-    nonisolated private static func scanCodexConfig(
-        fm: FileManager, root: String, home: String, into config: inout AgentConfig
-    ) {
-        checkFile(
-            fm: fm, root: root, rel: ".codex/config.toml", name: "Codex Config", icon: "gearshape",
-            scope: "project", provider: .codex, into: &config)
-        checkFile(
-            fm: fm, root: home, rel: ".codex/config.toml", name: "Global Codex Config", icon: "gearshape",
-            scope: "global", provider: .codex, into: &config)
-    }
-
-    nonisolated private static func scanOpenCodeConfig(
-        fm: FileManager, root: String, home: String, into config: inout AgentConfig
-    ) {
-        checkFile(
-            fm: fm, root: root, rel: "opencode.json", name: "OpenCode Config", icon: "gearshape",
-            scope: "project", provider: .openCode, into: &config)
-        checkFile(
-            fm: fm, root: root, rel: "opencode.jsonc", name: "OpenCode Config", icon: "gearshape",
-            scope: "project", provider: .openCode, into: &config)
-        checkFile(
-            fm: fm, root: root, rel: ".opencode", name: "OpenCode Plugins", icon: "puzzlepiece.extension",
-            scope: "project", provider: .openCode, into: &config)
-        checkFile(
-            fm: fm, root: home, rel: ".config/opencode/opencode.json", name: "Global OpenCode Config",
-            icon: "gearshape", scope: "global", provider: .openCode, into: &config)
-
-        for path in [
-            (root as NSString).appendingPathComponent("opencode.json"),
-            (root as NSString).appendingPathComponent("opencode.jsonc"),
-            (home as NSString).appendingPathComponent(".config/opencode/opencode.json")
-        ] {
-            guard let data = fm.contents(atPath: path),
-                let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-            else { continue }
-            if let agent = json["agent"] as? [String: Any] {
-                for name in agent.keys.sorted() {
-                    config.skills.append(
-                        AgentConfig.SkillEntry(
-                            name: "@\(name)", description: "OpenCode agent", path: path, provider: .openCode))
-                }
-            }
-        }
-    }
-
-    nonisolated private static func populateAgentSetup(projectRoot: String, config: inout AgentConfig) {
-        let claudeConfigCount = config.configFiles.filter { $0.provider == .claudeCode }.count
-        let codexConfigCount = config.configFiles.filter { $0.provider == .codex }.count
-        let openCodeConfigCount = config.configFiles.filter { $0.provider == .openCode }.count
-
-        config.toolSummaries = [
-            AgentToolSummary(
-                kind: .claudeCode,
-                status: claudeConfigCount > 0 ? .detected : .missing,
-                configCount: claudeConfigCount,
-                detail: claudeConfigCount > 0 ? "Claude project or user config found" : "No Claude Code config found"),
-            AgentToolSummary(
-                kind: .codex,
-                status: codexConfigCount > 0 ? .detected : .missing,
-                configCount: codexConfigCount,
-                detail: codexConfigCount > 0 ? "Codex config visible" : "No Codex config found"),
-            AgentToolSummary(
-                kind: .openCode,
-                status: openCodeConfigCount > 0 ? .detected : .missing,
-                configCount: openCodeConfigCount,
-                detail: openCodeConfigCount > 0 ? "OpenCode config/plugins visible" : "No OpenCode config found")
-        ]
-
-        config.setupRecommendations = [
-            AgentSetupRecommendation(
-                kind: .claudeCode,
-                status: claudeConfigCount > 0 ? .detected : .missing,
-                title: "Claude Code",
-                detail: claudeConfigCount > 0
-                    ? "Boo detects Claude by process."
-                    : "No Claude Code config found.",
-                primaryAction: claudeConfigCount > 0 ? "Open config" : nil),
-            AgentSetupRecommendation(
-                kind: .codex,
-                status: codexConfigCount > 0 ? .detected : .missing,
-                title: "Codex",
-                detail: codexConfigCount > 0
-                    ? "Boo detects Codex by process."
-                    : "No Codex config found.",
-                primaryAction: codexConfigCount > 0 ? "Open config" : nil),
-            AgentSetupRecommendation(
-                kind: .openCode,
-                status: openCodeConfigCount > 0 ? .detected : .missing,
-                title: "OpenCode",
-                detail: openCodeConfigCount > 0
-                    ? "Boo detects OpenCode by process."
-                    : "No OpenCode config found.",
-                primaryAction: openCodeConfigCount > 0 ? "Open config" : nil)
-        ]
-    }
-
-    private func handleSetupAction(_ recommendation: AgentSetupRecommendation) {
-        switch recommendation.kind {
-        case .claudeCode:
-            openFirstConfig(for: .claudeCode)
-        case .codex:
-            openFirstConfig(for: .codex)
-        case .openCode:
-            openFirstConfig(for: .openCode)
-        case .custom:
-            break
-        }
-    }
-
-    private func openFirstConfig(for kind: AgentKind) {
-        guard let path = agentConfig.configFiles.first(where: { $0.provider == kind })?.path else { return }
-        actions?.handle(DSLAction(type: "open", path: path, command: nil, text: nil))
-    }
 
     // MARK: - Git Diff Stats
 

@@ -1387,4 +1387,36 @@ private func makeNonGrowableSection(id: String, name: String = "Info") -> Sideba
                 "handle must still be grabbable outside the header band")
         }
     }
+
+    /// The handle between two expanded sections must sit on the boundary the drag
+    /// actually moves — the top of the *lower* section — even when collapsed sections
+    /// sit between them. Deriving it from the upper section's own content bottom left
+    /// the handle floating above the collapsed headers, with no handle on the visible
+    /// boundary at all.
+    @MainActor func testHandleSitsAtLowerSectionTopAcrossCollapsedSections() {
+        let v = makePanelView(height: 600)
+        let a = makeSection(id: "a")
+        let mid = makeSection(id: "mid")
+        let b = makeSection(id: "b")
+        // "mid" stays collapsed between the two expanded sections.
+        v.updateSections([a, mid, b], expandedIDs: ["a", "b"])
+        v.layoutSubtreeIfNeeded()
+        v.layoutAllSections()
+
+        let handles = v.subviews.compactMap { $0 as? SidebarDragHandleView }.filter { !$0.isHidden }
+        XCTAssertEqual(handles.count, 1, "one handle between the two expanded sections")
+        let handle = handles[0]
+        XCTAssertEqual(handle.aboveIndex, 0)
+        XCTAssertEqual(handle.belowIndex, 2)
+
+        // The handle is centred on section 2's top, offset by the 3pt half-height.
+        XCTAssertEqual(
+            handle.frame.minY, v.indicatorYOffset(before: 2) - 3, accuracy: 0.5,
+            "handle must straddle the top of the lower expanded section")
+
+        // And that boundary is below the collapsed section's header, not above it.
+        XCTAssertGreaterThan(
+            handle.frame.minY, v.sectionStates[1].headerView.frame.minY,
+            "handle must not float above the intervening collapsed header")
+    }
 }

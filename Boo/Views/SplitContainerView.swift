@@ -28,8 +28,16 @@ class SplitContainerView: NSView, NSSplitViewDelegate {
     func update(tree: SplitTree) {
         currentTree = tree
 
+        // Tearing down the old hierarchy resizes its subviews to nothing, and those
+        // split views still have us as their delegate — so they emit
+        // `splitViewDidResizeSubviews` while `currentTree` already points at the NEW
+        // tree. Measuring a dying view against the new tree writes a garbage ratio.
+        isRebuilding = true
+        defer { isRebuilding = false }
+
         // Remove any existing hierarchy so workspace switches cannot leave stale panes behind.
         for subview in subviews {
+            (subview as? NSSplitView)?.delegate = nil
             subview.removeFromSuperview()
         }
         currentView = nil
@@ -44,9 +52,18 @@ class SplitContainerView: NSView, NSSplitViewDelegate {
 
         // Defer split position setting until after layout
         DispatchQueue.main.async { [weak self] in
-            self?.applySplitPositions(view: view, tree: tree)
+            guard let self else { return }
+            // Setting divider positions itself emits resize notifications; those are
+            // us applying the stored ratios, not the user changing them.
+            self.isRebuilding = true
+            defer { self.isRebuilding = false }
+            self.applySplitPositions(view: view, tree: tree)
         }
     }
+
+    /// True while `update(tree:)` is tearing down or re-establishing the hierarchy.
+    /// Suppresses ratio write-back from resizes we caused ourselves.
+    private var isRebuilding = false
 
     private func buildView(from tree: SplitTree) -> NSView {
         switch tree {
@@ -98,6 +115,11 @@ class SplitContainerView: NSView, NSSplitViewDelegate {
         // each time ratchets the stored ratio away from what the user set. Only a
         // real divider drag (window not in live resize) counts as intent.
         guard !(splitView.window?.inLiveResize ?? false) else { return }
+
+        // Teardown in `update(tree:)` collapses the outgoing hierarchy; ignore the
+        // resize notifications that produces, and any that arrive before
+        // `applySplitPositions` has established the intended divider positions.
+        guard !isRebuilding, splitView.isDescendant(of: self) else { return }
 
         // Compute ratio from the actual divider position
         let firstSize =
