@@ -199,16 +199,33 @@ extension MainWindowController: PaneViewDelegate {
             workspace: workspace, pane: pane, tabIndex: tabIndex, exitCode: exitCode, skipIfFocused: skipIfFocused)
     }
 
+    /// True when this exact workspace + pane + tab is the one the user is looking at.
+    /// Notifications are suppressed for the focused tab — the user already sees it.
+    func isTabFocused(workspace: Workspace, pane: Pane, tabIndex: Int) -> Bool {
+        workspace.id == appState.activeWorkspace?.id
+            && workspace.activePaneID == pane.id
+            && pane.activeTabIndex == tabIndex
+            && NSApp.isActive && window?.isKeyWindow == true
+    }
+
+    /// Resolve a tab index from an optional tab ID, falling back to the pane's active tab.
+    private func tabIndex(in pane: Pane, for tabID: UUID?) -> Int? {
+        if let tabID, let idx = pane.tabs.firstIndex(where: { $0.id == tabID }) { return idx }
+        return pane.activeTabIndex >= 0 ? pane.activeTabIndex : nil
+    }
+
+    /// Light the tab's activity dot and repaint the affected chrome.
+    private func markActivity(workspace: Workspace, pane: Pane, tabIndex: Int) {
+        pane.setActivity(true, at: tabIndex)
+        workspacePaneViews[workspace.id]?[pane.id]?.needsDisplay = true
+        refreshToolbar()
+    }
+
     func signalActivity(workspace: Workspace, pane: Pane, tabIndex: Int, exitCode: Int32, skipIfFocused: Bool = true) {
         guard tabIndex >= 0, tabIndex < pane.tabs.count else { return }
 
         if skipIfFocused {
-            let isFocused =
-                workspace.id == appState.activeWorkspace?.id
-                && workspace.activePaneID == pane.id
-                && pane.activeTabIndex == tabIndex
-                && NSApp.isActive && window?.isKeyWindow == true
-            guard !isFocused else { return }
+            guard !isTabFocused(workspace: workspace, pane: pane, tabIndex: tabIndex) else { return }
         }
 
         pane.setActivity(true, at: tabIndex)
@@ -225,26 +242,12 @@ extension MainWindowController: PaneViewDelegate {
             let pane = workspace.pane(for: paneID)
         else { return }
 
-        let tabIndex: Int
-        if let tabID, let idx = pane.tabs.firstIndex(where: { $0.id == tabID }) {
-            tabIndex = idx
-        } else {
-            tabIndex = pane.activeTabIndex
-        }
-        guard tabIndex >= 0 else { return }
-
-        let isFocused =
-            workspace.id == appState.activeWorkspace?.id
-            && workspace.activePaneID == pane.id
-            && pane.activeTabIndex == tabIndex
-            && NSApp.isActive && window?.isKeyWindow == true
+        guard let tabIndex = tabIndex(in: pane, for: tabID) else { return }
 
         // Always mark the activity dot; skip notification if the exact pane+tab is focused.
-        pane.setActivity(true, at: tabIndex)
-        workspacePaneViews[workspace.id]?[pane.id]?.needsDisplay = true
-        refreshToolbar()
+        markActivity(workspace: workspace, pane: pane, tabIndex: tabIndex)
 
-        if !isFocused {
+        if !isTabFocused(workspace: workspace, pane: pane, tabIndex: tabIndex) {
             let tabTitle = pane.tabs[tabIndex].state.title.isEmpty ? "Terminal" : pane.tabs[tabIndex].state.title
             ActivityNotifier.shared.notifyBell(
                 tabTitle: tabTitle, workspaceName: workspace.displayName,
@@ -259,27 +262,13 @@ extension MainWindowController: PaneViewDelegate {
             let pane = workspace.pane(for: paneID)
         else { return }
 
-        let tabIndex: Int
-        if let tabID, let idx = pane.tabs.firstIndex(where: { $0.id == tabID }) {
-            tabIndex = idx
-        } else {
-            tabIndex = pane.activeTabIndex
-        }
-        guard tabIndex >= 0 else { return }
-
-        let isFocused =
-            workspace.id == appState.activeWorkspace?.id
-            && workspace.activePaneID == pane.id
-            && pane.activeTabIndex == tabIndex
-            && NSApp.isActive && window?.isKeyWindow == true
+        guard let tabIndex = tabIndex(in: pane, for: tabID) else { return }
 
         // Mark activity dot on the tab even for desktop notifications.
-        pane.setActivity(true, at: tabIndex)
-        workspacePaneViews[workspace.id]?[pane.id]?.needsDisplay = true
-        refreshToolbar()
+        markActivity(workspace: workspace, pane: pane, tabIndex: tabIndex)
 
         // Deliver the process-requested notification unless the exact pane+tab is focused.
-        if !isFocused {
+        if !isTabFocused(workspace: workspace, pane: pane, tabIndex: tabIndex) {
             ActivityNotifier.shared.notifyDesktop(
                 title: title, body: body, workspaceName: workspace.displayName,
                 workspaceID: workspace.id, paneID: pane.id, tabIndex: tabIndex)

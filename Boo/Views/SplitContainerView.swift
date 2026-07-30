@@ -92,6 +92,13 @@ class SplitContainerView: NSView, NSSplitViewDelegate {
             let tree = currentTree
         else { return }
 
+        // This fires for ANY subview resize, not just divider drags — including the
+        // window resizing and AppKit redistributing space proportionally. Those
+        // redistributions round to whole pixels, so writing the measured ratio back
+        // each time ratchets the stored ratio away from what the user set. Only a
+        // real divider drag (window not in live resize) counts as intent.
+        guard !(splitView.window?.inLiveResize ?? false) else { return }
+
         // Compute ratio from the actual divider position
         let firstSize =
             splitView.isVertical
