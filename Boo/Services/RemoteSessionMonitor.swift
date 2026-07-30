@@ -54,6 +54,11 @@ final class RemoteSessionMonitor: @unchecked Sendable {
                 self.containerWatcherTabs.removeValue(forKey: paneID)
                 ContainerCwdWatcher.releaseIfUnused(for: session)
             }
+            // Drop this pane's claim on any SSH master, or it would be kept alive
+            // forever by an owner that no longer exists.
+            if let session = self.tracked[paneID]?.lastSession, session.isSSHBased {
+                SSHControlManager.shared.release(alias: session.sshConnectionTarget, owner: paneID)
+            }
             self.tracked.removeValue(forKey: paneID)
             if self.tracked.isEmpty {
                 self.stopTimer()
@@ -192,12 +197,14 @@ final class RemoteSessionMonitor: @unchecked Sendable {
                 // leaving the new host with no connection.
                 let oldTarget = (previous?.isSSHBased ?? false) ? previous?.sshConnectionTarget : nil
                 let newTarget = (session?.isSSHBased ?? false) ? session?.sshConnectionTarget : nil
+                // Refcounted by pane: several panes may share one host's master, so
+                // this pane leaving must not tear the connection out from under them.
                 if oldTarget != newTarget {
                     if let oldTarget {
-                        SSHControlManager.shared.teardown(alias: oldTarget)
+                        SSHControlManager.shared.release(alias: oldTarget, owner: paneID)
                     }
                     if let newTarget {
-                        SSHControlManager.shared.ensureConnection(alias: newTarget) { _ in }
+                        SSHControlManager.shared.acquire(alias: newTarget, owner: paneID)
                     }
                 }
 

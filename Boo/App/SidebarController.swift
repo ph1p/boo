@@ -108,7 +108,6 @@ final class SidebarController {
         self.intendedVisibleWidth = AppSettings.shared.sidebarWidth
     }
 
-
     // MARK: - Tab Bar Position
 
     /// Apply constraints for tab bar position (top/bottom).
