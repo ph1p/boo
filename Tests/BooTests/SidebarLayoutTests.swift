@@ -1119,6 +1119,92 @@ private func makeNonGrowableSection(id: String, name: String = "Info") -> Sideba
         }
     }
 
+    // MARK: - Shrink/regrow ratchet regression
+
+    /// Shrinking the panel clamps rendered heights to fit, but must not overwrite
+    /// the user's intended heights — otherwise growing the window back leaves the
+    /// sections permanently smaller, and repeated shrink/grow cycles ratchet them
+    /// down to the minimum.
+    func testHeightsRestoredAfterShrinkAndRegrow() {
+        let v = makePanelView(height: 600)
+        let s = [makeSection(id: "a"), makeSection(id: "b")]
+        v.updateSections(s, expandedIDs: ["a", "b"])
+
+        // User drags to an explicit split.
+        v.handleDrag(
+            aboveIndex: 0, belowIndex: 1, delta: 60,
+            startHeights: (v.sectionStates[0].contentHeight, v.sectionStates[1].contentHeight))
+        let intendedA = v.sectionStates[0].contentHeight
+        let intendedB = v.sectionStates[1].contentHeight
+
+        // Shrink the panel so the intended heights no longer fit. A state capture
+        // while short (sidebar hide, tab switch, workspace save) must not write the
+        // clamped heights back over the intended ones.
+        //
+        // Assert on savedSectionHeights, not the live contentHeight: after regrow the
+        // live values are refilled by distributeRemainingSpace and look correct even
+        // when the saved values are already corrupt. The saved dictionary is what
+        // persists and what the next rebuild renders from.
+        for cycle in 0..<5 {
+            v.setFrameSize(NSSize(width: 240, height: 200))
+            v.layoutAllSections()
+            v.capturePersistentState()
+            v.setFrameSize(NSSize(width: 240, height: 600))
+            v.layoutAllSections()
+
+            XCTAssertEqual(
+                v.savedSectionHeights["a"] ?? 0, intendedA, accuracy: 2,
+                "A intended height should survive shrink/regrow cycle \(cycle + 1)")
+            XCTAssertEqual(
+                v.savedSectionHeights["b"] ?? 0, intendedB, accuracy: 2,
+                "B intended height should survive shrink/regrow cycle \(cycle + 1)")
+        }
+    }
+
+    /// A rebuild while the panel is too short must not persist the clamped heights.
+    func testClampedHeightsNotPersistedAcrossRebuild() {
+        let v = makePanelView(height: 600)
+        let s = [makeSection(id: "a"), makeSection(id: "b")]
+        v.updateSections(s, expandedIDs: ["a", "b"])
+
+        v.handleDrag(
+            aboveIndex: 0, belowIndex: 1, delta: 60,
+            startHeights: (v.sectionStates[0].contentHeight, v.sectionStates[1].contentHeight))
+        let intendedA = v.sectionStates[0].contentHeight
+
+        // Shrink, rebuild while clamped, then grow back.
+        v.setFrameSize(NSSize(width: 240, height: 200))
+        v.layoutAllSections()
+        v.updateSections([makeSection(id: "a"), makeSection(id: "b")], expandedIDs: ["a", "b"])
+        v.setFrameSize(NSSize(width: 240, height: 600))
+        v.layoutAllSections()
+
+        XCTAssertEqual(
+            v.savedSectionHeights["a"] ?? 0, intendedA, accuracy: 2,
+            "Rebuild while clamped must not overwrite the intended height")
+    }
+
+    /// Collapsing a section while the panel is clamped must not persist the
+    /// shrunk height — re-expanding later should restore the intended size.
+    func testCollapseWhileClampedKeepsIntendedHeight() {
+        let v = makePanelView(height: 600)
+        let s = [makeSection(id: "a"), makeSection(id: "b")]
+        v.updateSections(s, expandedIDs: ["a", "b"])
+
+        v.handleDrag(
+            aboveIndex: 0, belowIndex: 1, delta: 60,
+            startHeights: (v.sectionStates[0].contentHeight, v.sectionStates[1].contentHeight))
+        let intendedA = v.sectionStates[0].contentHeight
+
+        v.setFrameSize(NSSize(width: 240, height: 200))
+        v.layoutAllSections()
+        v.updateSections(s, expandedIDs: ["b"])  // collapse "a" while clamped
+
+        XCTAssertEqual(
+            v.savedSectionHeights["a"] ?? 0, intendedA, accuracy: 2,
+            "Collapse while clamped must not overwrite the intended height")
+    }
+
     func testResizeDistributesRemainingSpaceProportionally() {
         let v = makePanelView(height: 500)
         let s = [makeSection(id: "a"), makeSection(id: "b"), makeSection(id: "c")]

@@ -81,7 +81,18 @@ class SidebarPanelView: NSView {
 
     /// Section heights by plugin ID — shared with the window controller
     /// so heights survive panel view recreation (sidebar hide/show).
+    ///
+    /// This is the *user's intended* height, not the currently rendered one.
+    /// `clampHeightsToFit` may render a section smaller when the panel is short,
+    /// but that transient value must never be written back here — doing so
+    /// ratchets heights down permanently as the window shrinks and regrows.
     var savedSectionHeights: [String: CGFloat] = [:]
+
+    /// True when the live `contentHeight` values were shrunk by `clampHeightsToFit`
+    /// to fit a panel too short for the intended heights. While set, height
+    /// write-back to `savedSectionHeights` is suppressed so the user's intent
+    /// survives the window growing again.
+    private var heightsAreClamped = false
 
     /// Current terminal ID — used to save/restore scroll positions per terminal.
     private(set) var currentTerminalID: UUID?
@@ -161,6 +172,8 @@ class SidebarPanelView: NSView {
         if let terminalID = currentTerminalID {
             saveScrollOffsets(for: terminalID)
         }
+        // Skipped while clamped — see `heightsAreClamped`.
+        guard !heightsAreClamped else { return }
         for state in sectionStates where state.isExpanded && state.contentHeight > 0 {
             savedSectionHeights[state.id] = state.contentHeight
         }
@@ -208,8 +221,9 @@ class SidebarPanelView: NSView {
                     }
                 } else {
                     if wasExpanded {
-                        // Save height before collapsing so it restores on re-expand
-                        if sectionStates[i].contentHeight > 0 {
+                        // Save height before collapsing so it restores on re-expand.
+                        // Skipped while clamped — see `heightsAreClamped`.
+                        if sectionStates[i].contentHeight > 0, !heightsAreClamped {
                             savedSectionHeights[sectionStates[i].id] = sectionStates[i].contentHeight
                         }
                         sectionStates[i].contentHeight = 0
@@ -234,9 +248,12 @@ class SidebarPanelView: NSView {
             return
         }
 
-        // Save current heights before rebuild so user resizing persists
-        for state in sectionStates where state.isExpanded && state.contentHeight > 0 {
-            savedSectionHeights[state.id] = state.contentHeight
+        // Save current heights before rebuild so user resizing persists.
+        // Skipped while clamped — see `heightsAreClamped`.
+        if !heightsAreClamped {
+            for state in sectionStates where state.isExpanded && state.contentHeight > 0 {
+                savedSectionHeights[state.id] = state.contentHeight
+            }
         }
 
         // Full rebuild — reset generation tracking
@@ -440,6 +457,8 @@ class SidebarPanelView: NSView {
         // Non-growable sections skip saving here — their intrinsic height may
         // change (async loading) and resolvedHeight() uses intrinsicHeight as
         // fallback until the KVO observer or a user drag sets the real value.
+        // Skipped while clamped — see `heightsAreClamped`.
+        guard !heightsAreClamped else { return }
         for i in expandedIndices where sectionStates[i].canGrow {
             savedSectionHeights[sectionStates[i].id] = sectionStates[i].contentHeight
         }
@@ -584,7 +603,9 @@ class SidebarPanelView: NSView {
         sectionStates[aboveIndex].contentHeight = newAbove
         sectionStates[belowIndex].contentHeight = newBelow
 
-        // Persist resized heights
+        // Persist resized heights. An explicit drag *is* the user's intent, so it
+        // overrides any clamped state and re-enables normal height write-back.
+        heightsAreClamped = false
         savedSectionHeights[sectionStates[aboveIndex].id] = newAbove
         savedSectionHeights[sectionStates[belowIndex].id] = newBelow
 
@@ -617,7 +638,9 @@ class SidebarPanelView: NSView {
         let currentSum = expandedIndices.reduce(CGFloat(0)) { $0 + sectionStates[$1].contentHeight }
 
         if currentSum > available + 1 {
-            // Overflow — shrink to fit
+            // Overflow — shrink to fit. Mark the resulting heights as clamped so
+            // they don't get persisted over the user's intended heights.
+            heightsAreClamped = true
             let overflow = currentSum - available
 
             // First try to shrink growable sections (file tree etc.)
@@ -664,11 +687,15 @@ class SidebarPanelView: NSView {
                     SidebarLayout.minSectionHeight, sectionStates[last].contentHeight + correction)
             }
         } else if currentSum < available - 1 {
-            // Underflow — stretch growable sections to fill remaining space
+            // Underflow — stretch growable sections to fill remaining space.
+            // Everything fits, so live heights are honest again.
+            heightsAreClamped = false
             let remaining = available - currentSum
             let growable = expandedIndices.filter { sectionStates[$0].canGrow }
             let recipients = growable.isEmpty ? expandedIndices : growable
             distributeRemainingSpace(remaining, across: recipients)
+        } else {
+            heightsAreClamped = false
         }
     }
 
