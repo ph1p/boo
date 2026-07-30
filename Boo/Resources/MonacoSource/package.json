@@ -9,13 +9,13 @@
     "lint": "tsc --noEmit && oxlint && oxfmt --check ."
   },
   "dependencies": {
-    "monaco-editor": "0.55.1"
+    "monaco-editor": "0.56.0"
   },
   "devDependencies": {
-    "oxfmt": "^0.53.0",
-    "oxlint": "^1.68.0",
+    "oxfmt": "^0.61.0",
+    "oxlint": "^1.76.0",
     "typescript": "latest",
-    "vite": "8.0.16"
+    "vite": "8.1.5"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
