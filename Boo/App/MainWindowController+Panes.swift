@@ -228,9 +228,7 @@ extension MainWindowController: PaneViewDelegate {
             guard !isTabFocused(workspace: workspace, pane: pane, tabIndex: tabIndex) else { return }
         }
 
-        pane.setActivity(true, at: tabIndex)
-        workspacePaneViews[workspace.id]?[pane.id]?.needsDisplay = true
-        refreshToolbar()
+        markActivity(workspace: workspace, pane: pane, tabIndex: tabIndex)
         let tabTitle = pane.tabs[tabIndex].state.title.isEmpty ? "Terminal" : pane.tabs[tabIndex].state.title
         ActivityNotifier.shared.notifyCommandEnded(
             tabTitle: tabTitle, workspaceName: workspace.displayName, exitCode: exitCode,

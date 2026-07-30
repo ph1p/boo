@@ -1343,8 +1343,9 @@ private func makeNonGrowableSection(id: String, name: String = "Info") -> Sideba
     }
 
     /// The 8pt resize handle straddles the content boundary, so its lower half sits
-    /// inside the next header. Handles are added after headers, so they used to win
-    /// the hit-test there and swallow the header's collapse click / reorder drag.
+    /// inside the next header. Later subviews win AppKit's hit test, so a handle
+    /// stacked above the headers swallowed the collapse click and reorder drag in
+    /// that band. Asserted through the panel, since z-order is what decides this.
     @MainActor func testDragHandleDeclinesHitsInsideHeader() {
         let v = makePanelView(height: 600)
         v.updateSections(
@@ -1356,14 +1357,14 @@ private func makeNonGrowableSection(id: String, name: String = "Info") -> Sideba
         XCTAssertFalse(handles.isEmpty, "expected a handle between the two expanded sections")
 
         for handle in handles {
-            let header = v.sectionStates[handle.belowIndex].headerView.frame
+            let header = v.sectionStates[handle.belowIndex].headerView
+            guard handle.frame.intersects(header.frame) else { continue }
             // A point inside the handle that also lies within the header below it.
-            let overlapY = handle.frame.intersection(header).midY
-            guard handle.frame.intersects(header) else { continue }
-            let pointInPanel = NSPoint(x: handle.frame.midX, y: overlapY)
-            XCTAssertNil(
-                handle.hitTest(v.convert(pointInPanel, to: handle.superview)),
-                "handle must not claim points that belong to the header")
+            let pointInPanel = NSPoint(
+                x: handle.frame.midX, y: handle.frame.intersection(header.frame).midY)
+            XCTAssertTrue(
+                v.hitTest(v.convert(pointInPanel, to: v.superview)) === header,
+                "the header, not the handle, must receive clicks in the overlap band")
         }
     }
 
@@ -1382,8 +1383,8 @@ private func makeNonGrowableSection(id: String, name: String = "Info") -> Sideba
         for handle in handles {
             // Top edge of the handle sits above every header.
             let pointInPanel = NSPoint(x: handle.frame.midX, y: handle.frame.minY + 0.5)
-            XCTAssertNotNil(
-                handle.hitTest(v.convert(pointInPanel, to: handle.superview)),
+            XCTAssertTrue(
+                v.hitTest(v.convert(pointInPanel, to: v.superview)) === handle,
                 "handle must still be grabbable outside the header band")
         }
     }

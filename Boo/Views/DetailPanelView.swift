@@ -7,6 +7,14 @@ enum SidebarLayout {
     static let headerHeight: CGFloat = 26
     static let separatorHeight: CGFloat = 1
     static let minSectionHeight: CGFloat = 50
+    /// Narrowest the sidebar may be dragged or persisted at.
+    static let minSidebarWidth: CGFloat = 140
+    /// Narrowest the terminal area may be squeezed to by the sidebar divider.
+    ///
+    /// Both bounds are read by the split-view delegate (which constrains the *drag*)
+    /// and by `SidebarStateResolver` (which clamps the *persisted* width). Separate
+    /// copies would let the user drag to a width the resolver silently re-clamps.
+    static let minTerminalWidth: CGFloat = 300
 }
 
 // MARK: - Section Data
@@ -569,13 +577,20 @@ class SidebarPanelView: NSView {
             // `below`'s header. Deriving it from section `i`'s own content bottom put the
             // handle above any collapsed sections sitting between the two, so the grab
             // strip floated mid-stack and the visible boundary had no handle at all.
-            let handleY = indicatorYOffset(before: below) - 3
+            // The walk above already placed that header, so read it rather than
+            // recomputing the prefix sum per handle.
+            let handleY = sectionStates[below].headerView.frame.minY - 3
             let handle: SidebarDragHandleView
             if handleIndex < dragHandles.count {
                 handle = dragHandles[handleIndex]
             } else {
                 handle = SidebarDragHandleView(frame: .zero)
-                addSubview(handle)
+                // The 8pt grab strip is centred on the content boundary, so its lower
+                // half overlaps the next section's 26pt header. Later subviews win
+                // AppKit's hit test, so a handle added on top of the headers would
+                // swallow both the collapse click and the reorder drag in that band.
+                // Ordering is the fix; the handle needs no knowledge of its siblings.
+                addSubview(handle, positioned: .below, relativeTo: subviews.first)
                 dragHandles.append(handle)
             }
             handle.aboveIndex = i

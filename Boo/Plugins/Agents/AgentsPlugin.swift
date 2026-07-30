@@ -69,8 +69,6 @@ final class AgentsPlugin: BooPluginProtocol {
 
     private(set) var agentStartTime: Date?
     private(set) var activeAgent: AgentSession?
-    /// `internal(set)` so the scanning extensions can record the scanned cwd.
-    /// Setter is module-internal so the scanning extensions can record the scanned cwd.
     var currentCwd: String?
     private(set) var diffStats: [DiffStatEntry] = []
     var worktrees: [ClaudeWorktree] = []
@@ -81,9 +79,33 @@ final class AgentsPlugin: BooPluginProtocol {
     private var lastDiffRepoRoot: String?
     var configScan = ScanStamp()
     var worktreeScan = ScanStamp()
-    /// Pre-gate keyed on the raw cwd, so an unchanged cwd skips the project-root walk.
-    var worktreeCwdScan = ScanStamp()
     static let scanTTL: TimeInterval = 15
+
+    /// Memoized `findAgentProjectRoot` result, keyed on the cwd that produced it.
+    ///
+    /// The config and worktree scans run back-to-back from the same three call sites
+    /// and each used to dispatch its own 20-level x 4-marker `fileExists` walk for the
+    /// identical cwd. One resolution now feeds both, and a cwd cycling through focus
+    /// repeatedly — the common case — pays for none.
+    private var projectRootCache: (cwd: String, root: String)?
+
+    /// Resolve the project root for `cwd` and hand it to `body` on the main actor.
+    /// The walk runs off the main thread only when the cache misses.
+    func withProjectRoot(cwd: String, _ body: @escaping @MainActor (String) -> Void) {
+        if let cached = projectRootCache, cached.cwd == cwd {
+            body(cached.root)
+            return
+        }
+        let markers = Self.projectMarkers
+        DispatchQueue.global(qos: .utility).async {
+            let root = findAgentProjectRoot(from: cwd, markers: markers) ?? cwd
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                self.projectRootCache = (cwd, root)
+                body(root)
+            }
+        }
+    }
 
     /// Root + completion time of the last scan, with the TTL gate both scans share.
     struct ScanStamp {
@@ -473,18 +495,21 @@ final class AgentsPlugin: BooPluginProtocol {
     // MARK: - Lifecycle
 
     func processChanged(name: String, context: TerminalContext) {
-        // A new process is where a session ID first becomes visible, and a rerun is
-        // needed to surface the agent that just appeared.
-        adoptAgent(from: context, publishSessionID: true, requestRerunOnStart: true)
+        adoptAgent(from: context, trigger: .processChanged)
     }
 
     /// Shared handling for the process- and focus-change paths, which differ only in
-    /// whether they publish a session ID / request a rerun on first detection, and in
-    /// what they do when no agent is present.
+    /// what `trigger` selects and in what they do when no agent is present.
+    /// What brought us here. A new process is where a session ID first becomes
+    /// visible and where a rerun is needed to surface the agent that just appeared;
+    /// a focus change is neither.
+    enum AdoptTrigger {
+        case processChanged
+        case focusChanged
+    }
+
     @discardableResult
-    private func adoptAgent(
-        from context: TerminalContext, publishSessionID: Bool, requestRerunOnStart: Bool
-    ) -> Bool {
+    private func adoptAgent(from context: TerminalContext, trigger: AdoptTrigger) -> Bool {
         let active = Self.agentSession(from: context, existingStart: agentStartTime)
         guard let active else {
             if agentStartTime != nil {
@@ -497,12 +522,12 @@ final class AgentsPlugin: BooPluginProtocol {
         if agentStartTime == nil {
             agentStartTime = active.startedAt
             currentCwd = context.cwd
-            if requestRerunOnStart { onRequestCycleRerun?() }
+            if trigger == .processChanged { onRequestCycleRerun?() }
             scanAgentConfig(cwd: context.cwd)
             scanWorktrees(cwd: context.cwd)
         }
         activeAgent = active
-        if publishSessionID, let sessionID = active.sessionID, activeSessionID != sessionID {
+        if trigger == .processChanged, let sessionID = active.sessionID, activeSessionID != sessionID {
             activeSessionID = sessionID
             actions?.setAgentSessionID?(sessionID)
         }
@@ -531,11 +556,10 @@ final class AgentsPlugin: BooPluginProtocol {
         // the deferred teardown inside `adoptAgent`), or the status bar and section
         // title keep counting up a runtime for an agent that isn't in this tab.
         // Either way the newly focused tab's own config/worktrees still need scanning.
-        guard adoptAgent(from: context, publishSessionID: false, requestRerunOnStart: false) else {
+        if !adoptAgent(from: context, trigger: .focusChanged) {
             currentCwd = context.cwd
             scanAgentConfig(cwd: context.cwd)
             scanWorktrees(cwd: context.cwd)
-            return
         }
     }
 
@@ -570,9 +594,10 @@ final class AgentsPlugin: BooPluginProtocol {
         // the sections while the user is still in the same directory — but keeping
         // the *caches* would make the next focus event short-circuit and never
         // refresh them.
+        // `projectRootCache` is deliberately kept: it only memoizes a cwd -> root
+        // filesystem walk, whose answer cannot change while the cwd is unchanged.
         configScan.invalidate()
         worktreeScan.invalidate()
-        worktreeCwdScan.invalidate()
     }
 
     nonisolated static func agentSession(from context: TerminalContext, existingStart: Date?) -> AgentSession? {

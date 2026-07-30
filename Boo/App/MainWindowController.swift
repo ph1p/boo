@@ -1023,16 +1023,11 @@ class ThemedSplitView: NSSplitView {
 
     // MARK: - NSSplitViewDelegate
 
-    /// Narrowest the sidebar may be dragged.
-    static let minSidebarWidth: CGFloat = 140
-    /// Narrowest the terminal area may be squeezed to by dragging the sidebar divider.
-    static let minTerminalWidth: CGFloat = 300
-
     func splitView(_ splitView: NSSplitView, constrainMinCoordinate p: CGFloat, ofSubviewAt i: Int) -> CGFloat {
         if splitView == mainSplitView {
             // The divider's min coordinate bounds whichever view sits on its left:
             // the sidebar when it's leading, the terminal when it's trailing.
-            return currentSidebarPosition == .left ? Self.minSidebarWidth : Self.minTerminalWidth
+            return currentSidebarPosition == .left ? SidebarLayout.minSidebarWidth : SidebarLayout.minTerminalWidth
         }
         return p
     }
@@ -1040,7 +1035,8 @@ class ThemedSplitView: NSSplitView {
     func splitView(_ splitView: NSSplitView, constrainMaxCoordinate p: CGFloat, ofSubviewAt i: Int) -> CGFloat {
         if splitView == mainSplitView {
             // Mirror of the above: the max coordinate bounds the trailing view.
-            let trailingMin = currentSidebarPosition == .left ? Self.minTerminalWidth : Self.minSidebarWidth
+            let trailingMin =
+                currentSidebarPosition == .left ? SidebarLayout.minTerminalWidth : SidebarLayout.minSidebarWidth
             return splitView.bounds.width - trailingMin
         }
         return p

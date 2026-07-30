@@ -12,8 +12,8 @@ struct SidebarStateEnvironment {
     var splitViewWidth: CGFloat?
     var dividerThickness: CGFloat
     var backingScaleFactor: CGFloat
-    var minSidebarWidth: CGFloat = 140
-    var minContentWidth: CGFloat = 300
+    var minSidebarWidth: CGFloat = SidebarLayout.minSidebarWidth
+    var minContentWidth: CGFloat = SidebarLayout.minTerminalWidth
 }
 
 enum SidebarStateResolver {

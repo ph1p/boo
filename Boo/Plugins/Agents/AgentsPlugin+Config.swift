@@ -7,35 +7,28 @@ extension AgentsPlugin {
     func scanAgentConfig(cwd: String?) {
         guard let cwd = cwd else { return }
 
-        let markers = Self.projectMarkers
-        DispatchQueue.global(qos: .utility).async { [weak self] in
-            let projectRoot = findAgentProjectRoot(from: cwd, markers: markers) ?? cwd
-            DispatchQueue.main.async { [weak self] in
-                guard let self else { return }
-                // Root equality alone made this permanently sticky — a CLAUDE.md or
-                // skill added to the same project never showed up. Re-scan once the
-                // TTL expires.
-                // Record the cwd before the TTL early-return: `makeSidebarTab` gates
-                // its scan dispatch on `currentCwd != context.terminal.cwd`, so leaving
-                // it unset would re-dispatch both scans on every call for the whole
-                // TTL window.
-                self.currentCwd = cwd
-                guard self.configScan.shouldScan(root: projectRoot, ttl: Self.scanTTL)
-                else { return }
+        withProjectRoot(cwd: cwd) { [weak self] projectRoot in
+            guard let self else { return }
+            // Record the cwd before the TTL early-return: `makeSidebarTab` gates its
+            // scan dispatch on `currentCwd != context.terminal.cwd`, so leaving it
+            // unset would re-dispatch both scans on every call for the whole TTL window.
+            self.currentCwd = cwd
+            // Root equality alone made this permanently sticky — a CLAUDE.md or skill
+            // added to the same project never showed up. Re-scan once the TTL expires.
+            guard self.configScan.shouldScan(root: projectRoot, ttl: Self.scanTTL) else { return }
 
-                DispatchQueue.global(qos: .utility).async { [weak self] in
-                    let config = Self.detectAgentConfig(cwd: cwd, projectRoot: projectRoot)
-                    DispatchQueue.main.async { [weak self] in
-                        guard let self else { return }
-                        // A TTL re-scan that finds nothing new must not trigger a
-                        // sidebar rebuild — that would restart the rebuild/focus churn
-                        // the debounce exists to prevent.
-                        let unchanged =
-                            self.agentConfig.configFiles.map(\.path) == config.configFiles.map(\.path)
-                            && self.agentConfig.skills.map(\.path) == config.skills.map(\.path)
-                        self.agentConfig = config
-                        if !unchanged { self.onRequestCycleRerun?() }
-                    }
+            DispatchQueue.global(qos: .utility).async { [weak self] in
+                let config = Self.detectAgentConfig(cwd: cwd, projectRoot: projectRoot)
+                DispatchQueue.main.async { [weak self] in
+                    guard let self else { return }
+                    // A TTL re-scan that finds nothing new must not trigger a sidebar
+                    // rebuild — that would restart the rebuild/focus churn the debounce
+                    // exists to prevent.
+                    let unchanged =
+                        self.agentConfig.configFiles.map(\.path) == config.configFiles.map(\.path)
+                        && self.agentConfig.skills.map(\.path) == config.skills.map(\.path)
+                    self.agentConfig = config
+                    if !unchanged { self.onRequestCycleRerun?() }
                 }
             }
         }
@@ -226,21 +219,4 @@ extension AgentsPlugin {
         ]
     }
 
-    private func handleSetupAction(_ recommendation: AgentSetupRecommendation) {
-        switch recommendation.kind {
-        case .claudeCode:
-            openFirstConfig(for: .claudeCode)
-        case .codex:
-            openFirstConfig(for: .codex)
-        case .openCode:
-            openFirstConfig(for: .openCode)
-        case .custom:
-            break
-        }
-    }
-
-    private func openFirstConfig(for kind: AgentKind) {
-        guard let path = agentConfig.configFiles.first(where: { $0.provider == kind })?.path else { return }
-        actions?.handle(DSLAction(type: "open", path: path, command: nil, text: nil))
-    }
 }

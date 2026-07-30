@@ -7,36 +7,23 @@ extension AgentsPlugin {
     func scanWorktrees(cwd: String?) {
         guard let cwd = cwd else { return }
 
-        // Cheap pre-gate on the cwd itself. The authoritative TTL below is keyed on
-        // the *project root*, which isn't known until `findAgentProjectRoot` has
-        // walked up to 20 levels of `fileExists` — work this skips entirely when the
-        // same cwd cycles through focus repeatedly, which is the common case.
-        guard worktreeCwdScan.shouldScan(root: cwd, ttl: Self.scanTTL) else { return }
+        withProjectRoot(cwd: cwd) { [weak self] projectRoot in
+            guard let self else { return }
+            guard self.worktreeScan.shouldScan(root: projectRoot, ttl: Self.scanTTL) else { return }
 
-        let markers = Self.projectMarkers
-        // `findAgentProjectRoot` walks up to 20 levels x 4 markers of `fileExists`;
-        // keep it off the main thread.
-        DispatchQueue.global(qos: .utility).async { [weak self] in
-            let projectRoot = findAgentProjectRoot(from: cwd, markers: markers) ?? cwd
-            DispatchQueue.main.async { [weak self] in
-                guard let self else { return }
-                guard self.worktreeScan.shouldScan(root: projectRoot, ttl: Self.scanTTL)
-                else { return }
-
-                DispatchQueue.global(qos: .utility).async { [weak self] in
-                    let worktrees = Self.detectWorktrees(projectRoot: projectRoot)
-                    DispatchQueue.main.async { [weak self] in
-                        guard let self else { return }
-                        // Skip the rerun when nothing actually changed — this runs on
-                        // every focus/cwd cycle. Compare the same key the section's
-                        // generation uses, so a branch/commit move still refreshes.
-                        let key = { (w: ClaudeWorktree) in
-                            "\(w.path)|\(w.branch)|\(w.headCommit ?? "")"
-                        }
-                        guard self.worktrees.map(key) != worktrees.map(key) else { return }
-                        self.worktrees = worktrees
-                        self.onRequestCycleRerun?()
+            DispatchQueue.global(qos: .utility).async { [weak self] in
+                let worktrees = Self.detectWorktrees(projectRoot: projectRoot)
+                DispatchQueue.main.async { [weak self] in
+                    guard let self else { return }
+                    // Skip the rerun when nothing actually changed — this runs on every
+                    // focus/cwd cycle. Compare the same key the section's generation
+                    // uses, so a branch/commit move still refreshes.
+                    let key = { (w: ClaudeWorktree) in
+                        "\(w.path)|\(w.branch)|\(w.headCommit ?? "")"
                     }
+                    guard self.worktrees.map(key) != worktrees.map(key) else { return }
+                    self.worktrees = worktrees
+                    self.onRequestCycleRerun?()
                 }
             }
         }
@@ -56,24 +43,15 @@ extension AgentsPlugin {
         let task = Process()
         task.launchPath = "/usr/bin/git"
         task.arguments = ["-C", projectRoot, "--no-optional-locks", "worktree", "list", "--porcelain"]
-        task.standardError = FileHandle.nullDevice
 
-        let pipe = Pipe()
-        task.standardOutput = pipe
+        // `runProcessCapturing` owns the pipes and drains them incrementally, so a
+        // child that outruns the 64KB pipe buffer can't deadlock. A local
+        // `worktree list` that needs more than a few seconds is already pathological.
+        guard let result = RemoteExplorer.runProcessCapturing(task, timeout: 5),
+            result.status == 0
+        else { return [] }
 
-        // Read on a separate thread before waiting to prevent deadlock when output > 64KB.
-        nonisolated(unsafe) var data = Data()
-        let readGroup = DispatchGroup()
-        readGroup.enter()
-        DispatchQueue.global(qos: .utility).async {
-            data = pipe.fileHandleForReading.readDataToEndOfFile()
-            readGroup.leave()
-        }
-        guard task.runAndWait(seconds: 15) else { return [] }
-        readGroup.wait()
-        guard let output = String(data: data, encoding: .utf8) else { return [] }
-
-        return parseWorktreePorcelain(output, projectRoot: projectRoot)
+        return parseWorktreePorcelain(result.stdout, projectRoot: projectRoot)
     }
 
     /// Parse `git worktree list --porcelain` output into worktree records.
