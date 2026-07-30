@@ -205,7 +205,21 @@ final class RemoteExplorer: @unchecked Sendable {
     /// names in the terminal title that contain tool keywords like "opencode" or "claude".
     /// When the child is a runtime (node, bun, deno, python…), inspects its argv to
     /// remap shim-launched agents (e.g. `node codex.js` → "codex").
-    static func foregroundProcess(shellPID: pid_t) -> String? {
+    ///
+    /// Results are cached briefly because each resolution costs a `KERN_PROCARGS2`
+    /// sysctl per child PID. Pass `maxAge: 0` where the caller already knows the
+    /// process may have just changed (e.g. a terminal title change).
+    static func foregroundProcess(
+        shellPID: pid_t, maxAge: TimeInterval = ForegroundProcessCache.defaultMaxAge
+    ) -> String? {
+        let cached = ForegroundProcessCache.shared.value(for: shellPID, maxAge: maxAge)
+        if cached.hit { return cached.name }
+        let name = resolveForegroundProcess(shellPID: shellPID)
+        ForegroundProcessCache.shared.store(name, for: shellPID)
+        return name
+    }
+
+    private static func resolveForegroundProcess(shellPID: pid_t) -> String? {
         let children = childPIDs(of: shellPID)
         guard !children.isEmpty else { return nil }
         // With exactly one child, it's unambiguously the foreground process.
@@ -654,8 +668,6 @@ final class RemoteExplorer: @unchecked Sendable {
     private static func runSSH(host: String, command: String, extraArgs: [String] = []) -> String? {
         if disableRealSSH { return nil }
         let process = Process()
-        let pipe = Pipe()
-        let errPipe = Pipe()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/ssh")
         var args = [
             "-n",  // no stdin — prevents password prompts from blocking
@@ -679,25 +691,18 @@ final class RemoteExplorer: @unchecked Sendable {
         args += extraArgs
         args += [host, command]
         process.arguments = args
-        process.standardOutput = pipe
-        process.standardError = errPipe
-        process.standardInput = FileHandle.nullDevice
 
-        do {
-            try process.run()
-            process.waitUntilExit()
-            guard process.terminationStatus == 0 else {
-                let stderr = String(data: errPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-                debugLog(
-                    "[RemoteExplorer] SSH failed: host=\(host) exit=\(process.terminationStatus) stderr=\(stderr.prefix(200))"
-                )
-                return nil
-            }
-            return String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)
-        } catch {
-            debugLog("[RemoteExplorer] process.run() exception: \(error)")
+        guard let result = runProcessCapturing(process) else { return nil }
+        guard result.status == 0 else {
+            debugLog(
+                "[RemoteExplorer] SSH failed: host=\(host) exit=\(result.status) stderr=\(result.stderr.prefix(200))"
+            )
+            // Report the outcome; the manager owns what a failure means for the
+            // connection it established.
+            SSHControlManager.shared.reportFailure(alias: host, stderr: result.stderr)
             return nil
         }
+        return result.stdout
     }
 
     private static func runRemoteCommand(
@@ -740,8 +745,6 @@ final class RemoteExplorer: @unchecked Sendable {
         }
 
         let process = Process()
-        let pipe = Pipe()
-        let errPipe = Pipe()
         process.executableURL = URL(fileURLWithPath: binary)
 
         // Build arguments based on tool
@@ -769,27 +772,16 @@ final class RemoteExplorer: @unchecked Sendable {
 
         remoteLog("[RemoteExplorer] runContainerExec: \(binary) \(args.joined(separator: " "))")
         process.arguments = args
-        process.standardOutput = pipe
-        process.standardError = errPipe
-        process.standardInput = FileHandle.nullDevice
 
-        do {
-            try process.run()
-            process.waitUntilExit()
-            let stderr = String(data: errPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-            guard process.terminationStatus == 0 else {
-                remoteLog(
-                    "[RemoteExplorer] \(tool.rawValue) exec FAILED: target=\(target) exit=\(process.terminationStatus) stderr=\(stderr.prefix(300))"
-                )
-                return nil
-            }
-            let output = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)
-            remoteLog("[RemoteExplorer] \(tool.rawValue) exec OK: target=\(target) outputLen=\(output?.count ?? 0)")
-            return output
-        } catch {
-            debugLog("[RemoteExplorer] \(tool.rawValue) exec exception: \(error)")
+        guard let result = runProcessCapturing(process) else { return nil }
+        guard result.status == 0 else {
+            remoteLog(
+                "[RemoteExplorer] \(tool.rawValue) exec FAILED: target=\(target) exit=\(result.status) stderr=\(result.stderr.prefix(300))"
+            )
             return nil
         }
+        remoteLog("[RemoteExplorer] \(tool.rawValue) exec OK: target=\(target) outputLen=\(result.stdout.count)")
+        return result.stdout
     }
 
     /// Run a command on a VM via SSH-based tools (vagrant, colima).
@@ -800,30 +792,17 @@ final class RemoteExplorer: @unchecked Sendable {
         }
 
         let process = Process()
-        let pipe = Pipe()
-        let errPipe = Pipe()
         process.executableURL = URL(fileURLWithPath: binary)
         process.arguments = sshBasedToolArguments(target: target, tool: tool, command: command)
 
-        process.standardOutput = pipe
-        process.standardError = errPipe
-        process.standardInput = FileHandle.nullDevice
-
-        do {
-            try process.run()
-            process.waitUntilExit()
-            guard process.terminationStatus == 0 else {
-                let stderr = String(data: errPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-                debugLog(
-                    "[RemoteExplorer] \(tool.rawValue) ssh failed: exit=\(process.terminationStatus) stderr=\(stderr.prefix(200))"
-                )
-                return nil
-            }
-            return String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)
-        } catch {
-            debugLog("[RemoteExplorer] \(tool.rawValue) ssh exception: \(error)")
+        guard let result = runProcessCapturing(process) else { return nil }
+        guard result.status == 0 else {
+            debugLog(
+                "[RemoteExplorer] \(tool.rawValue) ssh failed: exit=\(result.status) stderr=\(result.stderr.prefix(200))"
+            )
             return nil
         }
+        return result.stdout
     }
 
     static func sshBasedToolArguments(target: String, tool: ContainerTool, command: String) -> [String] {
@@ -901,19 +880,103 @@ final class RemoteExplorer: @unchecked Sendable {
         return args
     }
 
+    /// Result of running an external command to completion.
+    struct CommandResult {
+        let status: Int32
+        let stdout: String
+        let stderr: String
+    }
+
+    /// Run `process` to completion, draining stdout/stderr as it writes and
+    /// enforcing a wall-clock timeout.
+    ///
+    /// Draining while the child runs is required for correctness, not just speed:
+    /// the `run(); waitUntilExit(); readDataToEndOfFile()` shape deadlocks as soon as
+    /// the child writes more than the ~64KB pipe buffer (e.g. `ls` on a directory
+    /// with thousands of entries) — the child blocks on write, so it never exits.
+    /// Returns nil if the process could not be launched or the timeout expired.
+    static func runProcessCapturing(
+        _ process: Process,
+        timeout: TimeInterval = 20
+    ) -> CommandResult? {
+        let outPipe = Pipe()
+        let errPipe = Pipe()
+        process.standardOutput = outPipe
+        process.standardError = errPipe
+        process.standardInput = FileHandle.nullDevice
+
+        let box = CaptureBox()
+        // EOF arrives as an empty read; that's what completes the box.
+        for (handle, isStdout) in [
+            (outPipe.fileHandleForReading, true), (errPipe.fileHandleForReading, false)
+        ] {
+            handle.readabilityHandler = { fh in
+                let data = fh.availableData
+                if data.isEmpty {
+                    fh.readabilityHandler = nil
+                    box.finish()
+                } else {
+                    box.append(data, isStdout: isStdout)
+                }
+            }
+        }
+
+        let ok = process.runAndWait(seconds: timeout, escalateAfter: 2)
+        // Both handlers must see EOF before the buffers are read, or a fast child's
+        // tail output is lost. The child is gone by now, so this resolves promptly.
+        let drained = box.waitForCompletion(timeout: ok ? 5 : 2)
+        for handle in [outPipe.fileHandleForReading, errPipe.fileHandleForReading] {
+            handle.readabilityHandler = nil
+        }
+        guard ok else {
+            debugLog("[RemoteExplorer] failed within \(timeout)s: \(process.executableURL?.path ?? "?")")
+            return nil
+        }
+        if !drained {
+            debugLog("[RemoteExplorer] drain incomplete: \(process.executableURL?.path ?? "?")")
+        }
+        let (out, err) = box.strings()
+        return CommandResult(status: process.terminationStatus, stdout: out, stderr: err)
+    }
+
+    /// Accumulator for stdout/stderr fed from the pipe readability handlers.
+    /// Handlers fire on a private queue; the result is read on the calling thread.
+    private final class CaptureBox: @unchecked Sendable {
+        private let lock = NSLock()
+        private var out = Data()
+        private var err = Data()
+        private let bothClosed = DispatchSemaphore(value: 0)
+
+        func append(_ data: Data, isStdout: Bool) {
+            lock.lock()
+            if isStdout { out.append(data) } else { err.append(data) }
+            lock.unlock()
+        }
+
+        /// Signals once per stream; `waitForCompletion` waits for both.
+        func finish() {
+            bothClosed.signal()
+        }
+
+        func waitForCompletion(timeout: TimeInterval) -> Bool {
+            let deadline = DispatchTime.now() + timeout
+            return bothClosed.wait(timeout: deadline) == .success
+                && bothClosed.wait(timeout: deadline) == .success
+        }
+
+        func strings() -> (String, String) {
+            lock.lock()
+            defer { lock.unlock() }
+            return (String(data: out, encoding: .utf8) ?? "", String(data: err, encoding: .utf8) ?? "")
+        }
+    }
+
     private static func runLocalCommand(_ path: String, args: [String]) -> String? {
-        let pipe = Pipe()
         let process = Process()
         process.executableURL = URL(fileURLWithPath: path)
         process.arguments = args
-        process.standardOutput = pipe
-        process.standardError = FileHandle.nullDevice
-        do {
-            try process.run()
-            process.waitUntilExit()
-            guard process.terminationStatus == 0 else { return nil }
-            return String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)
-        } catch { return nil }
+        guard let result = runProcessCapturing(process), result.status == 0 else { return nil }
+        return result.stdout
     }
 
     static func shellEscPath(_ path: String) -> String {
@@ -925,5 +988,45 @@ final class RemoteExplorer: @unchecked Sendable {
             return "~/" + components.map(shellEscape).joined(separator: "/")
         }
         return shellEscape(path)
+    }
+}
+
+/// Short-lived cache for `RemoteExplorer.foregroundProcess`.
+///
+/// Resolving a foreground process costs a `KERN_PROCARGS2` sysctl per child PID.
+/// The sidebar's workspace-agent-session enumeration calls it once per background
+/// tab on every rebuild cycle, on the main thread — with several tabs open that is
+/// a syscall storm for data that changes on human timescales.
+final class ForegroundProcessCache: @unchecked Sendable {
+    static let shared = ForegroundProcessCache()
+
+    /// Long enough to collapse a rebuild burst, short enough that starting an agent
+    /// shows up on the next sidebar cycle rather than feeling stuck.
+    static let defaultMaxAge: TimeInterval = 1.5
+
+    private let lock = NSLock()
+    private var entries: [pid_t: (name: String?, at: TimeInterval)] = [:]
+
+    /// `hit: true` with a nil name is a real answer — "we looked and there is no
+    /// foreground process" is cacheable, so it must not read as a miss.
+    /// `maxAge` is the caller's freshness bound; 0 always misses.
+    func value(for pid: pid_t, maxAge: TimeInterval) -> (hit: Bool, name: String?) {
+        lock.lock()
+        defer { lock.unlock() }
+        guard let entry = entries[pid], booUptime() - entry.at < maxAge else {
+            return (false, nil)
+        }
+        return (true, entry.name)
+    }
+
+    func store(_ name: String?, for pid: pid_t) {
+        let now = booUptime()
+        lock.lock()
+        defer { lock.unlock() }
+        entries[pid] = (name, now)
+        // Bound growth: tabs close and PIDs are recycled, so drop anything stale.
+        if entries.count > 64 {
+            entries = entries.filter { now - $0.value.at < Self.defaultMaxAge }
+        }
     }
 }

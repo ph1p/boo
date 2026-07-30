@@ -184,11 +184,21 @@ final class RemoteSessionMonitor: @unchecked Sendable {
                 entry.lastSession = session
                 tracked[paneID] = entry
 
-                // Manage background SSH connections for SSH-based sessions
-                if let session, session.isSSHBased, previous == nil {
-                    SSHControlManager.shared.ensureConnection(alias: session.sshConnectionTarget) { _ in }
-                } else if let previous, previous.isSSHBased, session == nil {
-                    SSHControlManager.shared.teardown(alias: previous.sshConnectionTarget)
+                // Manage background SSH connections for SSH-based sessions.
+                // Compare targets rather than branching on nil: an SSH→SSH change
+                // (hostA→hostB, ssh→mosh) must tear down the old master AND
+                // establish the new one — branching on `previous == nil` /
+                // `session == nil` matched neither, leaking the old master and
+                // leaving the new host with no connection.
+                let oldTarget = (previous?.isSSHBased ?? false) ? previous?.sshConnectionTarget : nil
+                let newTarget = (session?.isSSHBased ?? false) ? session?.sshConnectionTarget : nil
+                if oldTarget != newTarget {
+                    if let oldTarget {
+                        SSHControlManager.shared.teardown(alias: oldTarget)
+                    }
+                    if let newTarget {
+                        SSHControlManager.shared.ensureConnection(alias: newTarget) { _ in }
+                    }
                 }
 
                 // Clean up container CWD state when session ends

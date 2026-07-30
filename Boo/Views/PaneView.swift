@@ -212,10 +212,12 @@ class PaneView: NSView {
 
     // Debounce title/cwd updates during startup to avoid the tab title and
     // file explorer jumping through intermediate states as the shell settles.
-    private var titleDebounce: DispatchWorkItem?
-    private var cwdDebounce: DispatchWorkItem?
-    private var pendingTitle: String?
-    private var pendingCwd: String?
+    // Keyed per tab: background tabs emit titles/CWDs too, and a single shared slot
+    // let one tab's burst cancel and overwrite another tab's pending update.
+    private var titleDebounces: [UUID: DispatchWorkItem] = [:]
+    private var cwdDebounces: [UUID: DispatchWorkItem] = [:]
+    private var pendingTitles: [UUID: String] = [:]
+    private var pendingCwds: [UUID: String] = [:]
     private static let debounceInterval: TimeInterval = 0.12
 
     // MARK: - Find Bar
@@ -425,9 +427,9 @@ class PaneView: NSView {
             self.paneDelegate?.paneView(self, didFocus: self.paneID)
         }
 
-        gv.onPwdChanged = { [weak self] path in
+        gv.onPwdChanged = { [weak self, tabID = gv.tabID] path in
             guard let self else { return }
-            self.debounceCwdUpdate(path)
+            self.debounceCwdUpdate(path, tabID: tabID)
         }
 
         gv.onTitleChanged = { [weak self, tabID = gv.tabID] title in
@@ -649,47 +651,47 @@ class PaneView: NSView {
     /// Debounce a title update: each new title resets the timer so only the
     /// final value after the burst is applied.
     private func debounceTitleUpdate(_ title: String, tabID: UUID? = nil) {
-        pendingTitle = title
-        titleDebounce?.cancel()
         // Bind the update to the tab that owns the emitting surface, NOT the
         // active tab at fire time — a late burst from the previous tab must not
         // clobber a freshly-created tab's title.
-        let capturedTabID = tabID ?? pane.activeTab?.id
+        guard let capturedTabID = tabID ?? pane.activeTab?.id else { return }
+        pendingTitles[capturedTabID] = title
+        titleDebounces.removeValue(forKey: capturedTabID)?.cancel()
         let work = DispatchWorkItem { [weak self] in
-            guard let self, let title = self.pendingTitle else { return }
-            self.pendingTitle = nil
-            self.titleDebounce = nil
-            self.paneDelegate?.paneView(self, titleChanged: title, paneID: self.paneID)
-            if let capturedTabID = capturedTabID,
-                let resolvedIndex = self.pane.tabs.firstIndex(where: { $0.id == capturedTabID })
-            {
-                self.pane.updateTitle(at: resolvedIndex, title)
+            guard let self, let title = self.pendingTitles.removeValue(forKey: capturedTabID) else { return }
+            self.titleDebounces.removeValue(forKey: capturedTabID)
+            guard let resolvedIndex = self.pane.tabs.firstIndex(where: { $0.id == capturedTabID }) else { return }
+            self.pane.updateTitle(at: resolvedIndex, title)
+            // Only the active tab drives window/bridge title state.
+            if resolvedIndex == self.pane.activeTabIndex {
+                self.paneDelegate?.paneView(self, titleChanged: title, paneID: self.paneID)
             }
             self.scheduleTabBarRedraw()
         }
-        titleDebounce = work
+        titleDebounces[capturedTabID] = work
         DispatchQueue.main.asyncAfter(deadline: .now() + Self.debounceInterval, execute: work)
     }
 
     /// Debounce a CWD update: each new path resets the timer so only the
     /// final value after the burst is applied.
-    private func debounceCwdUpdate(_ path: String) {
-        pendingCwd = path
-        cwdDebounce?.cancel()
-        let capturedTabID = pane.activeTab?.id
+    private func debounceCwdUpdate(_ path: String, tabID: UUID? = nil) {
+        // Bind to the emitting surface's tab, not the active tab at fire time —
+        // same hazard the title path guards against.
+        guard let capturedTabID = tabID ?? pane.activeTab?.id else { return }
+        pendingCwds[capturedTabID] = path
+        cwdDebounces.removeValue(forKey: capturedTabID)?.cancel()
         let work = DispatchWorkItem { [weak self] in
-            guard let self, let cwd = self.pendingCwd else { return }
-            self.pendingCwd = nil
-            self.cwdDebounce = nil
-            if let capturedTabID = capturedTabID,
-                let resolvedIndex = self.pane.tabs.firstIndex(where: { $0.id == capturedTabID })
-            {
-                self.pane.updateWorkingDirectory(at: resolvedIndex, cwd)
-            }
+            guard let self, let cwd = self.pendingCwds.removeValue(forKey: capturedTabID) else { return }
+            self.cwdDebounces.removeValue(forKey: capturedTabID)
+            guard let resolvedIndex = self.pane.tabs.firstIndex(where: { $0.id == capturedTabID }) else { return }
+            self.pane.updateWorkingDirectory(at: resolvedIndex, cwd)
             self.scheduleTabBarRedraw()
-            self.paneDelegate?.paneView(self, didChangeDirectory: cwd, paneID: self.paneID)
+            // Only the active tab drives the bridge / file explorer CWD.
+            if resolvedIndex == self.pane.activeTabIndex {
+                self.paneDelegate?.paneView(self, didChangeDirectory: cwd, paneID: self.paneID)
+            }
         }
-        cwdDebounce = work
+        cwdDebounces[capturedTabID] = work
         DispatchQueue.main.asyncAfter(deadline: .now() + Self.debounceInterval, execute: work)
     }
 
@@ -830,6 +832,7 @@ class PaneView: NSView {
         guard index >= 0, index < pane.tabs.count else { return }
         let tabID = pane.tabs[index].id
         let tab = pane.tabs[index]
+        cancelPendingDebounces(for: tabID)
 
         // Clean up the appropriate view type
         if tab.contentType == .terminal {
@@ -874,19 +877,17 @@ class PaneView: NSView {
         needsDisplay = true
     }
 
-    /// Cancel any pending debounced title/CWD updates so they don't fire
-    /// after a tab switch and update the wrong tab.
-    private func cancelPendingDebounces() {
-        titleDebounce?.cancel()
-        titleDebounce = nil
-        pendingTitle = nil
-        cwdDebounce?.cancel()
-        cwdDebounce = nil
-        pendingCwd = nil
+    /// Drop pending debounced title/CWD updates for one tab (on close).
+    /// Updates are keyed per tab, so a tab *switch* needs no cancellation —
+    /// each pending item resolves against its own tab.
+    private func cancelPendingDebounces(for tabID: UUID) {
+        titleDebounces.removeValue(forKey: tabID)?.cancel()
+        pendingTitles.removeValue(forKey: tabID)
+        cwdDebounces.removeValue(forKey: tabID)?.cancel()
+        pendingCwds.removeValue(forKey: tabID)
     }
 
     private func storeCurrentView() {
-        cancelPendingDebounces()
         guard let tab = pane.activeTab else { return }
 
         if tab.contentType == .terminal {

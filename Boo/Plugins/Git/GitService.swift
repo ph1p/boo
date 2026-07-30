@@ -1,26 +1,5 @@
 import Foundation
 
-// MARK: - Process Timeout Helper
-
-extension Process {
-    /// Launch the process and wait for it to exit, terminating it if it exceeds the timeout.
-    /// `terminationHandler` is set before `run()` to eliminate the race where a fast-exiting
-    /// process finishes before the handler is registered, leaving the semaphore unsignalled.
-    /// Returns true if the process exited within the timeout with status 0.
-    @discardableResult
-    func runAndWait(seconds: TimeInterval) -> Bool {
-        let sem = DispatchSemaphore(value: 0)
-        terminationHandler = { _ in sem.signal() }
-        do { try run() } catch { return false }
-        let result = sem.wait(timeout: .now() + seconds)
-        if result == .timedOut {
-            terminate()
-            return false
-        }
-        return terminationStatus == 0
-    }
-}
-
 // MARK: - Git Command Execution & Detection
 
 extension GitPlugin {

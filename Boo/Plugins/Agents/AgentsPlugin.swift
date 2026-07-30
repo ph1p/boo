@@ -77,8 +77,34 @@ final class AgentsPlugin: BooPluginProtocol {
     private(set) var activeSessionID: String?
 
     private var lastDiffRepoRoot: String?
-    private var lastConfigScanRoot: String?
-    private var lastWorktreeScanRoot: String?
+    private var configScan = ScanStamp()
+    private var worktreeScan = ScanStamp()
+    private static let scanTTL: TimeInterval = 15
+
+    /// Root + completion time of the last scan, with the TTL gate both scans share.
+    private struct ScanStamp {
+        private var root: String?
+        private var at: TimeInterval = 0
+
+        /// True when a scan should run for `root`, claiming the slot if so.
+        /// Root equality alone made the results permanently sticky: a new CLAUDE.md,
+        /// skill, or worktree in the *same* root never appeared until the user cd'd
+        /// elsewhere and back — hence the TTL.
+        mutating func shouldScan(root: String, ttl: TimeInterval) -> Bool {
+            let now = booUptime()
+            if self.root == root, now - at < ttl { return false }
+            self.root = root
+            at = now
+            return true
+        }
+
+        /// Drop the claim so the next request re-scans, keeping the current rows.
+        mutating func invalidate() {
+            root = nil
+            at = 0
+        }
+    }
+
     private var refreshTimer: DispatchSourceTimer?
     private var debounceWork: DispatchWorkItem?
     private var teardownGeneration: UInt64 = 0
@@ -220,7 +246,10 @@ final class AgentsPlugin: BooPluginProtocol {
                             act?.focusAgentSession?(session.id)
                         },
                         onResume: { [weak self] session in
-                            self?.startAgent(kind: session.agent.kind, cwd: session.agent.cwd)
+                            self?.startAgent(
+                                kind: session.agent.kind,
+                                cwd: session.agent.cwd,
+                                resumeSessionID: session.agent.sessionID)
                         },
                         onCopySessionID: { session in
                             guard let id = session.agent.sessionID else { return }
@@ -232,9 +261,41 @@ final class AgentsPlugin: BooPluginProtocol {
                         }
                     )),
                 prefersOuterScrollView: true,
-                generation: UInt64(openSessions.count)
-                    &+ UInt64(bitPattern: Int64(openSessions.map(\.id.hashValue).reduce(0, &+))))
+                generation: SidebarSection.generation(
+                    for: openSessions.map {
+                        "\($0.id)|\($0.tabTitle)|\($0.isFocused)|\($0.agent.state.rawValue)"
+                    }))
             sections.append(openSessionsSection)
+        }
+
+        // Changes section — the diff-stat poll already runs while an agent is active
+        // and feeds the status bar's file count; surface the per-file rows too.
+        if !diffStats.isEmpty {
+            let changesSection = SidebarSection(
+                id: "agents.changes",
+                name: "Changes (\(diffStats.count))",
+                icon: "plusminus",
+                content: AnyView(
+                    ClaudeChangesView(
+                        diffStats: diffStats,
+                        fontScale: fontScale,
+                        textColor: textColor,
+                        mutedColor: mutedColor,
+                        onFileClicked: { path in
+                            act?.handle(DSLAction(type: "open", path: path, command: nil, text: nil))
+                        },
+                        onCopyPath: { path in
+                            act?.handle(DSLAction(type: "copy", path: nil, command: nil, text: path))
+                        },
+                        onReferenceInAI: { path in
+                            act?.sendToTerminal?("@\(path) ")
+                        }
+                    )),
+                prefersOuterScrollView: true,
+                generation: SidebarSection.generation(
+                    for:
+                        diffStats.map { "\($0.path)|\($0.insertions)|\($0.deletions)" }))
+            sections.append(changesSection)
         }
 
         // Worktrees section
@@ -258,7 +319,10 @@ final class AgentsPlugin: BooPluginProtocol {
                         }
                     )),
                 prefersOuterScrollView: true,
-                generation: UInt64(worktrees.count))
+                // Count alone is not enough: switching to a project with the same
+                // number of worktrees left the previous project's rows on screen.
+                generation: SidebarSection.generation(
+                    for: worktrees.map { "\($0.path)|\($0.branch)|\($0.headCommit ?? "")" }))
             sections.append(worktreesSection)
         }
 
@@ -286,7 +350,7 @@ final class AgentsPlugin: BooPluginProtocol {
                         }
                     )),
                 prefersOuterScrollView: true,
-                generation: UInt64(agentConfig.configFiles.count))
+                generation: SidebarSection.generation(for: agentConfig.configFiles.map { "\($0.path)|\($0.scope)" }))
             sections.append(configSection)
         }
 
@@ -314,7 +378,7 @@ final class AgentsPlugin: BooPluginProtocol {
                         }
                     )),
                 prefersOuterScrollView: true,
-                generation: UInt64(agentConfig.skills.count))
+                generation: SidebarSection.generation(for: agentConfig.skills.map { "\($0.path)|\($0.name)" }))
             sections.append(skillsSection)
         }
 
@@ -364,7 +428,8 @@ final class AgentsPlugin: BooPluginProtocol {
                 icon: "sparkles",
                 content: emptyContent,
                 prefersOuterScrollView: false,
-                generation: UInt64(installedAgents.count))
+                generation: SidebarSection.generation(
+                    for: installedAgents.map(\.rawValue).sorted()))
             sections.append(emptySection)
         }
 
@@ -377,16 +442,22 @@ final class AgentsPlugin: BooPluginProtocol {
 
     func makeDetailView(context: PluginContext) -> AnyView? { nil }
 
-    private func startAgent(kind: AgentKind, cwd: String? = nil) {
+    /// Launch an agent CLI in a new tab. When `resumeSessionID` is set, resume that
+    /// session instead of starting a fresh one — the "Resume" affordance in Open
+    /// Sessions was previously starting a brand-new session and losing the history.
+    private func startAgent(kind: AgentKind, cwd: String? = nil, resumeSessionID: String? = nil) {
         let cwd = cwd ?? currentCwd ?? activeAgent?.cwd ?? "~"
-        let command: String
+        var command: String
         switch kind {
         case .claudeCode:
             command = "claude"
+            if let id = resumeSessionID { command += " --resume \(shellEscape(id))" }
         case .codex:
             command = "codex"
+            if let id = resumeSessionID { command += " resume \(shellEscape(id))" }
         case .openCode:
             command = "opencode"
+            if let id = resumeSessionID { command += " --session \(shellEscape(id))" }
         case .custom:
             return
         }
@@ -448,6 +519,13 @@ final class AgentsPlugin: BooPluginProtocol {
             refreshDiffStats(repoRoot: context.gitContext?.repoRoot)
             startRefreshTimer(repoRoot: context.gitContext?.repoRoot)
         } else {
+            // Focusing a tab with no agent must drop the previous tab's agent, or
+            // the status bar and section title keep counting up a runtime for an
+            // agent that isn't in this tab. Deferred so a momentary category blip
+            // (agent spawning a subprocess) doesn't flicker the sidebar.
+            if agentStartTime != nil {
+                scheduleDeferredTeardown()
+            }
             currentCwd = context.cwd
             scanAgentConfig(cwd: context.cwd)
             scanWorktrees(cwd: context.cwd)
@@ -480,6 +558,13 @@ final class AgentsPlugin: BooPluginProtocol {
         actions?.setAgentSessionID?(nil)
         lastDiffRepoRoot = nil
         stopRefreshTimer()
+        // Invalidate the scan caches without dropping the rows. The config/worktree
+        // data is project-scoped, not agent-scoped, so blanking it here would empty
+        // the sections while the user is still in the same directory — but keeping
+        // the *caches* would make the next focus event short-circuit and never
+        // refresh them.
+        configScan.invalidate()
+        worktreeScan.invalidate()
     }
 
     nonisolated static func agentSession(from context: TerminalContext, existingStart: Date?) -> AgentSession? {
@@ -535,16 +620,30 @@ final class AgentsPlugin: BooPluginProtocol {
         guard let cwd = cwd else { return }
 
         let markers = Self.projectMarkers
-        let projectRoot = findAgentProjectRoot(from: cwd, markers: markers) ?? cwd
-        guard lastWorktreeScanRoot != projectRoot else { return }
-        lastWorktreeScanRoot = projectRoot
-
+        // `findAgentProjectRoot` walks up to 20 levels x 4 markers of `fileExists`;
+        // keep it off the main thread.
         DispatchQueue.global(qos: .utility).async { [weak self] in
-            let worktrees = Self.detectWorktrees(projectRoot: projectRoot)
+            let projectRoot = findAgentProjectRoot(from: cwd, markers: markers) ?? cwd
             DispatchQueue.main.async { [weak self] in
                 guard let self else { return }
-                self.worktrees = worktrees
-                self.onRequestCycleRerun?()
+                guard self.worktreeScan.shouldScan(root: projectRoot, ttl: Self.scanTTL)
+                else { return }
+
+                DispatchQueue.global(qos: .utility).async { [weak self] in
+                    let worktrees = Self.detectWorktrees(projectRoot: projectRoot)
+                    DispatchQueue.main.async { [weak self] in
+                        guard let self else { return }
+                        // Skip the rerun when nothing actually changed — this runs on
+                        // every focus/cwd cycle. Compare the same key the section's
+                        // generation uses, so a branch/commit move still refreshes.
+                        let key = { (w: ClaudeWorktree) in
+                            "\(w.path)|\(w.branch)|\(w.headCommit ?? "")"
+                        }
+                        guard self.worktrees.map(key) != worktrees.map(key) else { return }
+                        self.worktrees = worktrees
+                        self.onRequestCycleRerun?()
+                    }
+                }
             }
         }
     }
@@ -698,27 +797,42 @@ final class AgentsPlugin: BooPluginProtocol {
             let projectRoot = findAgentProjectRoot(from: cwd, markers: markers) ?? cwd
             DispatchQueue.main.async { [weak self] in
                 guard let self else { return }
-                if self.lastConfigScanRoot == projectRoot { return }
-                self.lastConfigScanRoot = projectRoot
+                // Root equality alone made this permanently sticky — a CLAUDE.md or
+                // skill added to the same project never showed up. Re-scan once the
+                // TTL expires.
+                // Record the cwd before the TTL early-return: `makeSidebarTab` gates
+                // its scan dispatch on `currentCwd != context.terminal.cwd`, so leaving
+                // it unset would re-dispatch both scans on every call for the whole
+                // TTL window.
                 self.currentCwd = cwd
+                guard self.configScan.shouldScan(root: projectRoot, ttl: Self.scanTTL)
+                else { return }
 
                 DispatchQueue.global(qos: .utility).async { [weak self] in
-                    let config = Self.detectAgentConfig(cwd: cwd)
+                    let config = Self.detectAgentConfig(cwd: cwd, projectRoot: projectRoot)
                     DispatchQueue.main.async { [weak self] in
                         guard let self else { return }
+                        // A TTL re-scan that finds nothing new must not trigger a
+                        // sidebar rebuild — that would restart the rebuild/focus churn
+                        // the debounce exists to prevent.
+                        let unchanged =
+                            self.agentConfig.configFiles.map(\.path) == config.configFiles.map(\.path)
+                            && self.agentConfig.skills.map(\.path) == config.skills.map(\.path)
                         self.agentConfig = config
-                        self.onRequestCycleRerun?()
+                        if !unchanged { self.onRequestCycleRerun?() }
                     }
                 }
             }
         }
     }
 
-    nonisolated static func detectAgentConfig(cwd: String) -> AgentConfig {
+    /// Pass `projectRoot` when the caller already resolved it — `findAgentProjectRoot`
+    /// walks up to 20 levels x 4 markers of `fileExists`, and the scan path has it.
+    nonisolated static func detectAgentConfig(cwd: String, projectRoot: String? = nil) -> AgentConfig {
         let fm = FileManager.default
         var config = AgentConfig()
         let home = fm.homeDirectoryForCurrentUser.path
-        let projectRoot = findAgentProjectRoot(from: cwd, markers: projectMarkers) ?? cwd
+        let projectRoot = projectRoot ?? findAgentProjectRoot(from: cwd, markers: projectMarkers) ?? cwd
 
         checkFile(
             fm: fm, root: projectRoot, rel: ".claude/CLAUDE.md", name: "CLAUDE.md", icon: "doc.text",
@@ -941,10 +1055,13 @@ final class AgentsPlugin: BooPluginProtocol {
             let stats = detectAgentDiffStats(repoRoot: repoRoot)
             DispatchQueue.main.async {
                 guard let self, self.agentStartTime != nil else { return }
-                let oldPaths = self.diffStats.map(\.path)
-                let newPaths = stats.map(\.path)
+                // Compare line counts too, not just paths: the status bar and the
+                // Changes section both render +/- numbers, so an edit to an
+                // already-listed file has to trigger a refresh.
+                let key = { (e: DiffStatEntry) in "\(e.path)|\(e.insertions)|\(e.deletions)" }
+                let changed = self.diffStats.map(key) != stats.map(key)
                 self.diffStats = stats
-                if oldPaths != newPaths {
+                if changed {
                     self.onRequestCycleRerun?()
                 }
             }

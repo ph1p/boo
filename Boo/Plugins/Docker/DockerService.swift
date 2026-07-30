@@ -652,25 +652,20 @@ final class DockerService: ObservableObject, @unchecked Sendable {
 
     // MARK: - CLI Process (for remote only)
 
+    /// Runs via the shared capture helper: it drains stdout while the child runs
+    /// (a `docker ps` on a busy host can exceed the ~64KB pipe buffer, which
+    /// deadlocks the `waitUntilExit()`-then-read shape) and bounds the wait, so a
+    /// wedged `ssh` can't pin this utility thread forever.
     private static func runProcess(
         _ executable: String, args: [String]
     ) -> String? {
-        let pipe = Pipe()
         let process = Process()
         process.executableURL = URL(fileURLWithPath: executable)
         process.arguments = args
-        process.standardOutput = pipe
-        process.standardError = FileHandle.nullDevice
-        do {
-            try process.run()
-            process.waitUntilExit()
-            guard process.terminationStatus == 0 else { return nil }
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            return String(data: data, encoding: .utf8)
-        } catch {
-            debugLog("[DockerService] process.run() exception: \(error)")
-            return nil
-        }
+        guard let result = RemoteExplorer.runProcessCapturing(process, timeout: 10),
+            result.status == 0
+        else { return nil }
+        return result.stdout
     }
 
     /// Parse CLI tab-separated output (used for remote containers via SSH).

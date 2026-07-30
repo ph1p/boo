@@ -19,6 +19,21 @@ struct SidebarSection: Identifiable {
     let prefersOuterScrollView: Bool
     /// Monotonic generation counter. `updateContentView` is skipped when generation matches.
     let generation: UInt64
+
+    /// Generation derived from a section's row identities.
+    ///
+    /// Plugins must not use a plain row count here: `updateContentView` is skipped
+    /// whenever the generation matches, so a count-only value leaves stale rows on
+    /// screen any time the count happens to be unchanged (switching between two
+    /// projects that each have 3 config files, a container list of the same length).
+    ///
+    /// Generations are only ever compared in memory against the previous cycle's
+    /// value, never persisted — so `Hasher`'s per-process random seed is fine.
+    static func generation(for keys: [String]) -> UInt64 {
+        var hasher = Hasher()
+        for key in keys { hasher.combine(key) }
+        return UInt64(bitPattern: Int64(hasher.finalize()))
+    }
 }
 
 // MARK: - Sidebar Panel View

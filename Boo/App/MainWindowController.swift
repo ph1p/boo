@@ -194,6 +194,10 @@ class ThemedSplitView: NSSplitView {
 
     /// Focus debounce — prevents sidebar rebuild from causing a focus feedback loop.
     var lastFocusedPaneID: UUID?
+    /// Active tab at the time of the last honoured focus event. The debounce must not
+    /// swallow a focus event for a *different* tab in the same pane (e.g. a brand-new
+    /// tab), or the bridge keeps the previous tab's remote session and title.
+    var lastFocusedTabID: UUID?
     var allowNextWindowClose = false
     /// Debounce timer for saving the session after split-pane divider drags.
     private var splitRatioSaveTimer: Timer?

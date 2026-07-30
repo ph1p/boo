@@ -193,7 +193,8 @@ final class DockerPluginNew: BooPluginProtocol {
                     }
                 )),
             prefersOuterScrollView: true,
-            generation: UInt64(DockerService.shared.containers.count))
+            generation: SidebarSection.generation(
+                for: DockerService.shared.containers.map { "\($0.id)|\($0.state.rawValue)|\($0.status)" }))
 
         // Images section
         let imagesSection = SidebarSection(
@@ -207,7 +208,8 @@ final class DockerPluginNew: BooPluginProtocol {
                     theme: theme, fontScale: fontScale, density: density,
                     onRemove: { i in DockerService.shared.removeImage(i.id) })),
             prefersOuterScrollView: true,
-            generation: UInt64(DockerService.shared.images.count))
+            generation: SidebarSection.generation(
+                for: DockerService.shared.images.map { "\($0.id)|\($0.repoTag)" }))
 
         // Networks section
         let networksSection = SidebarSection(
@@ -221,7 +223,8 @@ final class DockerPluginNew: BooPluginProtocol {
                     theme: theme, fontScale: fontScale, density: density,
                     onRemove: { n in DockerService.shared.removeNetwork(n.id) })),
             prefersOuterScrollView: true,
-            generation: UInt64(DockerService.shared.networks.count))
+            generation: SidebarSection.generation(
+                for: DockerService.shared.networks.map { "\($0.id)|\($0.name)" }))
 
         // Volumes section
         let volumesSection = SidebarSection(
@@ -235,7 +238,8 @@ final class DockerPluginNew: BooPluginProtocol {
                     theme: theme, fontScale: fontScale, density: density,
                     onRemove: { v in DockerService.shared.removeVolume(v.name) })),
             prefersOuterScrollView: true,
-            generation: UInt64(DockerService.shared.volumes.count))
+            generation: SidebarSection.generation(
+                for: DockerService.shared.volumes.map { "\($0.name)|\($0.driver)" }))
 
         return SidebarTab(
             id: SidebarTabID(manifest.id),

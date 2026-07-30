@@ -25,16 +25,21 @@ extension MainWindowController: PaneViewDelegate {
             savePluginStateForActiveTab()
         }
 
-        // Debounce: skip if the same pane re-focused within 250ms.
+        // Debounce: skip if the same pane *and* the same tab re-focused within 250ms.
         // Sidebar rebuilds can steal first responder from GhosttyView, causing
         // Ghostty to re-fire the focus callback and creating a feedback loop.
+        // The tab check is load-bearing: adding a tab re-focuses the same pane, and
+        // swallowing that event would leave the bridge on the old tab's remote session
+        // (a new tab in an SSH pane would render as "host:path").
+        let activeTabID = workspace.pane(for: paneID)?.activeTab?.id
         let now = DispatchTime.now().uptimeNanoseconds
-        if paneID == lastFocusedPaneID,
+        if paneID == lastFocusedPaneID, activeTabID == lastFocusedTabID,
             now - lastFocusTimestamp < 250_000_000
         {
             return
         }
         lastFocusedPaneID = paneID
+        lastFocusedTabID = activeTabID
         lastFocusTimestamp = now
 
         workspace.activePaneID = paneID

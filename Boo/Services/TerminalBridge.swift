@@ -145,7 +145,10 @@ final class TerminalBridge: @unchecked Sendable {
         // This avoids false positives from folder names in the terminal title
         // (e.g. ~/.config/opencode would otherwise match "opencode" via title parsing).
         if let pid = shellPID, pid > 0 {
-            if let procName = RemoteExplorer.foregroundProcess(shellPID: pid) {
+            // A title change is the signal that the foreground process may have
+            // changed, so this path must see live data — `maxAge: 0` skips the
+            // short-lived cache without evicting it for the sidebar.
+            if let procName = RemoteExplorer.foregroundProcess(shellPID: pid, maxAge: 0) {
                 return (procName, nil, ProcessIcon.category(for: procName), [:])
             }
             // Suppress AI title matches only when the shell is alive and idle.

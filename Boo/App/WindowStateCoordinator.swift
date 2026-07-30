@@ -123,6 +123,17 @@ final class WindowStateCoordinator {
     /// Sync bridge state back to the pane model after a bridge event
     /// (e.g. directory change, title change that triggers remote session detection).
     func syncBridgeToTab(pane: Pane, tabIndex: Int) {
+        // The bridge tracks which tab it is describing. Writing its state onto a
+        // different tab leaks one tab's remote session / process into another
+        // (a new tab in an SSH pane inheriting "host:path").
+        if let owner = pane.tabs.firstIndex(where: { $0.id == bridge.state.tabID }),
+            owner != tabIndex
+        {
+            remoteLog(
+                "[Coordinator] syncBridgeToTab: skip idx=\(tabIndex) — bridge owns idx=\(owner)"
+            )
+            return
+        }
         pane.updateRemoteSession(at: tabIndex, bridge.state.remoteSession)
         pane.updateRemoteWorkingDirectory(at: tabIndex, bridge.state.remoteCwd)
         pane.updateForegroundProcess(
