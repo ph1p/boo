@@ -3,7 +3,7 @@ import Foundation
 
 // MARK: - Codable session snapshot types
 
-struct SessionTab: Codable {
+struct SessionTab: Codable, Sendable {
     let contentState: ContentState?
     // Remote sessions are intentionally omitted — only local state is persisted.
     // Sidebar state — optional so old session.json files decode without error.
@@ -33,13 +33,13 @@ struct SessionTab: Codable {
     }
 }
 
-struct SessionPane: Codable {
+struct SessionPane: Codable, Sendable {
     let id: UUID
     let tabs: [SessionTab]
     let activeTabIndex: Int
 }
 
-struct SessionWorkspace: Codable {
+struct SessionWorkspace: Codable, Sendable {
     let id: UUID
     let folderPath: String
     let customName: String?
@@ -56,7 +56,7 @@ struct SessionWorkspace: Codable {
     let sidebarWidth: Double?
 }
 
-struct SessionSnapshot: Codable {
+struct SessionSnapshot: Codable, Sendable {
     let activeWorkspaceIndex: Int
     let workspaces: [SessionWorkspace]
 }

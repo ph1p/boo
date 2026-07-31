@@ -260,8 +260,11 @@ private struct PluginSettingControl: View {
     }
 
     private var stringControl: some View {
+        // Copied out of the main-actor `setting` so the `@Sendable` picker setters
+        // below capture a plain String instead of crossing the actor boundary.
+        let key = setting.key
         let value = AppSettings.shared.pluginString(
-            pluginID, setting.key, default: setting.defaultValue?.value as? String ?? "")
+            pluginID, key, default: setting.defaultValue?.value as? String ?? "")
         return Group {
             if setting.options == "markdownOpenMode" {
                 openModePicker(
@@ -274,17 +277,17 @@ private struct PluginSettingControl: View {
                 openModePicker(
                     cases: ImageOpenMode.visibleCases,
                     current: (ImageOpenMode(
-                        rawValue: AppSettings.shared.pluginString(pluginID, setting.key, default: "imageViewer"))
+                        rawValue: AppSettings.shared.pluginString(pluginID, key, default: "imageViewer"))
                         ?? .imageViewer).normalized,
-                    set: { AppSettings.shared.setPluginSetting(pluginID, setting.key, $0.rawValue) }
+                    set: { AppSettings.shared.setPluginSetting(pluginID, key, $0.rawValue) }
                 )
             } else if setting.options == "textOpenMode" {
                 openModePicker(
                     cases: TextOpenMode.visibleCases,
                     current: (TextOpenMode(
-                        rawValue: AppSettings.shared.pluginString(pluginID, setting.key, default: "editor")) ?? .editor)
+                        rawValue: AppSettings.shared.pluginString(pluginID, key, default: "editor")) ?? .editor)
                         .normalized,
-                    set: { AppSettings.shared.setPluginSetting(pluginID, setting.key, $0.rawValue) }
+                    set: { AppSettings.shared.setPluginSetting(pluginID, key, $0.rawValue) }
                 )
             } else if setting.options == "fontPicker:system" {
                 SettingRow(label: setting.label, help: setting.description) {

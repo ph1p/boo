@@ -792,24 +792,17 @@ func parseAgentSkillDescription(at path: String) -> String {
 /// Detect git diff stats for changed files in repo.
 func detectAgentDiffStats(repoRoot: String) -> [AgentsPlugin.DiffStatEntry] {
     let task = Process()
-    task.launchPath = "/usr/bin/git"
+    task.executableURL = URL(fileURLWithPath: "/usr/bin/git")
     task.arguments = ["-C", repoRoot, "diff", "--numstat", "HEAD"]
-    task.standardError = FileHandle.nullDevice
 
-    let pipe = Pipe()
-    task.standardOutput = pipe
-
-    do {
-        try task.run()
-    } catch {
-        debugLog("[Agents] git diff task failed: \(error)")
+    // Drain-while-running: `--numstat` on a large working tree easily exceeds the
+    // ~64KB pipe buffer, and the read-after-exit shape would deadlock the child.
+    guard let result = RemoteExplorer.runProcessCapturing(task, timeout: 10) else {
+        debugLog("[Agents] git diff task failed or timed out")
         return []
     }
-    task.waitUntilExit()
-    guard task.terminationStatus == 0 else { return [] }
-
-    let data = pipe.fileHandleForReading.readDataToEndOfFile()
-    guard let output = String(data: data, encoding: .utf8) else { return [] }
+    guard result.status == 0 else { return [] }
+    let output = result.stdout
 
     return output.split(separator: "\n").compactMap { line in
         let parts = line.split(separator: "\t", maxSplits: 2)

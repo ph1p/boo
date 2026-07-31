@@ -1,6 +1,26 @@
 import CryptoKit
 import Foundation
 
+/// Thread-safe accumulator for aliases whose master confirmed exit during teardown.
+/// A reference box, not a captured `var`, so the concurrent teardown closures mutate
+/// shared state without tripping Sendable capture diagnostics.
+private final class ExitedAliases: @unchecked Sendable {
+    private let lock = NSLock()
+    private var aliases: Set<String> = []
+
+    func insert(_ alias: String) {
+        lock.lock()
+        aliases.insert(alias)
+        lock.unlock()
+    }
+
+    func snapshot() -> Set<String> {
+        lock.lock()
+        defer { lock.unlock() }
+        return aliases
+    }
+}
+
 /// Manages per-session background SSH master connections with Boo-owned sockets.
 /// Enables the remote file tree to multiplex commands over a persistent connection
 /// without requiring ControlMaster in the user's ~/.ssh/config.
@@ -309,15 +329,12 @@ final class SSHControlManager: @unchecked Sendable {
         guard !managed.isEmpty else { return }
 
         let group = DispatchGroup()
-        let lock = NSLock()
-        var exited: Set<String> = []
+        let exitedBox = ExitedAliases()
         for alias in managed {
             group.enter()
             DispatchQueue.global(qos: .userInitiated).async {
                 if Self.killMaster(alias: alias, timeout: 2, unlink: false) {
-                    lock.lock()
-                    exited.insert(alias)
-                    lock.unlock()
+                    exitedBox.insert(alias)
                 }
                 group.leave()
             }
@@ -328,9 +345,7 @@ final class SSHControlManager: @unchecked Sendable {
         // when the deadline passes keeps its socket: removing it would strand a live
         // process with an unreachable socket, and the next launch's stale-socket
         // sweep cleans it up once it's genuinely dead.
-        lock.lock()
-        let confirmed = exited
-        lock.unlock()
+        let confirmed = exitedBox.snapshot()
         for alias in confirmed {
             try? FileManager.default.removeItem(atPath: Self.socketFilePath(for: alias))
         }
@@ -411,7 +426,7 @@ final class SSHControlManager: @unchecked Sendable {
 
         /// Register ownership without establishing a connection, for testing.
         func acquireWithoutConnecting(alias: String, owner: UUID) {
-            queue.sync { owners[alias, default: []].insert(owner) }
+            queue.sync { _ = owners[alias, default: []].insert(owner) }
         }
 
         /// Wait for the internal queue to drain, for testing.

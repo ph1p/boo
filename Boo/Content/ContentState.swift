@@ -9,7 +9,7 @@ protocol ContentStateProtocol: Codable {
 
 /// Type-erased wrapper for ContentStateProtocol to enable storage in TabState.
 /// Uses a discriminated union approach for Codable conformance.
-enum ContentState: Codable {
+enum ContentState: Codable, Sendable {
     case terminal(TerminalContentState)
     case browser(BrowserContentState)
     case editor(EditorContentState)
@@ -84,7 +84,7 @@ enum ContentState: Codable {
 /// Terminal-specific content state.
 /// Note: remoteSession is not included here because it's managed by TabState/TerminalBridge
 /// and RemoteSessionType is not Codable. Terminal state restoration uses TabState fields.
-struct TerminalContentState: ContentStateProtocol, Codable {
+struct TerminalContentState: ContentStateProtocol, Codable, Sendable {
     var contentType: ContentType { .terminal }
     var title: String = ""
     var workingDirectory: String
@@ -110,7 +110,7 @@ struct TerminalContentState: ContentStateProtocol, Codable {
 
 // MARK: - Browser State
 
-struct BrowserContentState: ContentStateProtocol, Codable {
+struct BrowserContentState: ContentStateProtocol, Codable, Sendable {
     var contentType: ContentType { .browser }
     var title: String = ""
     var url: URL
@@ -136,7 +136,7 @@ struct BrowserContentState: ContentStateProtocol, Codable {
 
 // MARK: - Editor State
 
-struct EditorContentState: ContentStateProtocol, Codable {
+struct EditorContentState: ContentStateProtocol, Codable, Sendable {
     var contentType: ContentType { .editor }
     var title: String = ""
     var filePath: String?
@@ -165,7 +165,7 @@ struct EditorContentState: ContentStateProtocol, Codable {
 
 // MARK: - Image Viewer State
 
-struct ImageViewerContentState: ContentStateProtocol, Codable {
+struct ImageViewerContentState: ContentStateProtocol, Codable, Sendable {
     var contentType: ContentType { .imageViewer }
     var title: String = ""
     var filePath: String
@@ -184,7 +184,7 @@ struct ImageViewerContentState: ContentStateProtocol, Codable {
 
 // MARK: - Markdown Preview State
 
-struct MarkdownPreviewContentState: ContentStateProtocol, Codable {
+struct MarkdownPreviewContentState: ContentStateProtocol, Codable, Sendable {
     var contentType: ContentType { .markdownPreview }
     var title: String = ""
     var filePath: String
@@ -205,7 +205,7 @@ struct MarkdownPreviewContentState: ContentStateProtocol, Codable {
 
 /// Minimal state for a plugin-owned view tab.
 /// The view itself is not persisted — only the display title and icon symbol.
-struct PluginViewContentState: ContentStateProtocol, Codable {
+struct PluginViewContentState: ContentStateProtocol, Codable, Sendable {
     var contentType: ContentType { .pluginView }
     var title: String = ""
     var iconSymbol: String

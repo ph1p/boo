@@ -12,25 +12,28 @@ final class HostPluginServices: PluginServices {
 final class HostShellService: ShellService {
     func run(executable: String, arguments: [String], cwd: String?) async throws -> String {
         try await withCheckedThrowingContinuation { continuation in
-            let task = Process()
-            task.executableURL = URL(fileURLWithPath: executable)
-            task.arguments = arguments
-            if let cwd = cwd {
-                task.currentDirectoryURL = URL(fileURLWithPath: cwd)
+            // Off the caller's thread: the capture below is synchronous and bounded
+            // by a wall-clock timeout, so running it inline would block the caller
+            // (often the main actor) for as long as the child takes.
+            DispatchQueue.global(qos: .utility).async {
+                let task = Process()
+                task.executableURL = URL(fileURLWithPath: executable)
+                task.arguments = arguments
+                if let cwd = cwd {
+                    task.currentDirectoryURL = URL(fileURLWithPath: cwd)
+                }
+                // Drain-while-running: a plugin command that writes more than the
+                // ~64KB pipe buffer would deadlock the read-after-exit shape,
+                // stranding the child and this continuation forever.
+                //
+                // A non-zero exit still yields its stdout, per the `ShellService`
+                // contract; nil means the command never ran to completion.
+                guard let result = RemoteExplorer.runProcessCapturing(task, timeout: 30) else {
+                    continuation.resume(throwing: ShellServiceError.commandFailed(executable))
+                    return
+                }
+                continuation.resume(returning: result.stdout)
             }
-            let pipe = Pipe()
-            task.standardOutput = pipe
-            task.standardError = FileHandle.nullDevice
-            do {
-                try task.run()
-            } catch {
-                continuation.resume(throwing: error)
-                return
-            }
-            task.waitUntilExit()
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            let output = String(data: data, encoding: .utf8) ?? ""
-            continuation.resume(returning: output)
         }
     }
 }

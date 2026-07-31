@@ -17,27 +17,23 @@ extension GitPlugin {
 
     // MARK: - Detection Helpers
 
-    nonisolated static func detectChangedFiles(repoRoot: String) -> [GitChangedFile] {
+    /// Run `git <args>` in `repoRoot` and return stdout, or nil unless it exited 0.
+    ///
+    /// Every detector here shells out the same way; the shared helper owns the
+    /// drain-while-running that keeps a >64KB `git status` from deadlocking.
+    private nonisolated static func gitOutput(_ arguments: [String]) -> String? {
         let task = Process()
-        task.launchPath = "/usr/bin/git"
-        task.arguments = ["-C", repoRoot, "--no-optional-locks", "status", "--porcelain=v1"]
-        task.standardError = FileHandle.nullDevice
+        task.executableURL = URL(fileURLWithPath: "/usr/bin/git")
+        task.arguments = arguments
+        guard let result = RemoteExplorer.runProcessCapturing(task, timeout: 15),
+            result.status == 0
+        else { return nil }
+        return result.stdout
+    }
 
-        let pipe = Pipe()
-        task.standardOutput = pipe
-
-        // Read on a separate thread before waiting to prevent deadlock when output > 64KB.
-        nonisolated(unsafe) var data = Data()
-        let readGroup = DispatchGroup()
-        readGroup.enter()
-        DispatchQueue.global(qos: .utility).async {
-            data = pipe.fileHandleForReading.readDataToEndOfFile()
-            readGroup.leave()
-        }
-        guard task.runAndWait(seconds: 15) else { return [] }
-        readGroup.wait()
-
-        guard let output = String(data: data, encoding: .utf8) else { return [] }
+    nonisolated static func detectChangedFiles(repoRoot: String) -> [GitChangedFile] {
+        guard let output = gitOutput(["-C", repoRoot, "--no-optional-locks", "status", "--porcelain=v1"])
+        else { return [] }
 
         return output.split(separator: "\n").compactMap { line in
             let str = String(line)
@@ -56,24 +52,11 @@ extension GitPlugin {
     }
 
     nonisolated static func detectAheadBehind(repoRoot: String) -> (ahead: Int, behind: Int) {
-        let task = Process()
-        task.launchPath = "/usr/bin/git"
-        task.arguments = ["-C", repoRoot, "rev-list", "--left-right", "--count", "HEAD...@{upstream}"]
-        task.standardError = FileHandle.nullDevice
-        let pipe = Pipe()
-        task.standardOutput = pipe
-        nonisolated(unsafe) var data = Data()
-        let readGroup = DispatchGroup()
-        readGroup.enter()
-        DispatchQueue.global(qos: .utility).async {
-            data = pipe.fileHandleForReading.readDataToEndOfFile()
-            readGroup.leave()
-        }
-        guard task.runAndWait(seconds: 15) else { return (0, 0) }
-        readGroup.wait()
-        guard let output = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) else {
-            return (0, 0)
-        }
+        guard
+            let output = gitOutput([
+                "-C", repoRoot, "rev-list", "--left-right", "--count", "HEAD...@{upstream}",
+            ])?.trimmingCharacters(in: .whitespacesAndNewlines)
+        else { return (0, 0) }
         let parts = output.split(separator: "\t")
         guard parts.count == 2, let ahead = Int(parts[0]), let behind = Int(parts[1]) else {
             return (0, 0)
@@ -82,26 +65,10 @@ extension GitPlugin {
     }
 
     nonisolated static func detectLastCommit(repoRoot: String) -> String? {
-        let task = Process()
-        task.launchPath = "/usr/bin/git"
-        task.arguments = ["-C", repoRoot, "log", "-1", "--format=%h %s"]
-        task.standardError = FileHandle.nullDevice
-        let pipe = Pipe()
-        task.standardOutput = pipe
-        nonisolated(unsafe) var data = Data()
-        let readGroup = DispatchGroup()
-        readGroup.enter()
-        DispatchQueue.global(qos: .utility).async {
-            data = pipe.fileHandleForReading.readDataToEndOfFile()
-            readGroup.leave()
-        }
-        guard task.runAndWait(seconds: 15) else { return nil }
-        readGroup.wait()
-        guard let output = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
+        guard let output = gitOutput(["-C", repoRoot, "log", "-1", "--format=%h %s"])?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
             !output.isEmpty
-        else {
-            return nil
-        }
+        else { return nil }
         return output
     }
 
@@ -142,22 +109,7 @@ extension GitPlugin {
     }
 
     nonisolated static func detectRemotes(repoRoot: String) -> [GitRemote] {
-        let task = Process()
-        task.launchPath = "/usr/bin/git"
-        task.arguments = ["-C", repoRoot, "remote", "-v"]
-        task.standardError = FileHandle.nullDevice
-        let pipe = Pipe()
-        task.standardOutput = pipe
-        nonisolated(unsafe) var data = Data()
-        let readGroup = DispatchGroup()
-        readGroup.enter()
-        DispatchQueue.global(qos: .utility).async {
-            data = pipe.fileHandleForReading.readDataToEndOfFile()
-            readGroup.leave()
-        }
-        guard task.runAndWait(seconds: 15) else { return [] }
-        readGroup.wait()
-        guard let output = String(data: data, encoding: .utf8) else { return [] }
+        guard let output = gitOutput(["-C", repoRoot, "remote", "-v"]) else { return [] }
 
         // git remote -v outputs: origin\thttps://... (fetch)\norigin\thttps://... (push)
         // Deduplicate by name, prefer fetch URL

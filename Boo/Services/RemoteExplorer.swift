@@ -894,7 +894,10 @@ final class RemoteExplorer: @unchecked Sendable {
     /// the `run(); waitUntilExit(); readDataToEndOfFile()` shape deadlocks as soon as
     /// the child writes more than the ~64KB pipe buffer (e.g. `ls` on a directory
     /// with thousands of entries) — the child blocks on write, so it never exits.
-    /// Returns nil if the process could not be launched or the timeout expired.
+    /// Returns nil only if the process could not be launched or the timeout expired.
+    /// A child that ran to completion is always reported, non-zero exit included —
+    /// callers that require success check `result.status` themselves, and ones that
+    /// want the output regardless (a plugin shelling out to `grep`) still get it.
     static func runProcessCapturing(
         _ process: Process,
         timeout: TimeInterval = 20
@@ -921,14 +924,14 @@ final class RemoteExplorer: @unchecked Sendable {
             }
         }
 
-        let ok = process.runAndWait(seconds: timeout, escalateAfter: 2)
+        let completed = process.runToCompletion(seconds: timeout, escalateAfter: 2) != .failed
         // Both handlers must see EOF before the buffers are read, or a fast child's
         // tail output is lost. The child is gone by now, so this resolves promptly.
-        let drained = box.waitForCompletion(timeout: ok ? 5 : 2)
+        let drained = box.waitForCompletion(timeout: completed ? 5 : 2)
         for handle in [outPipe.fileHandleForReading, errPipe.fileHandleForReading] {
             handle.readabilityHandler = nil
         }
-        guard ok else {
+        guard completed else {
             debugLog("[RemoteExplorer] failed within \(timeout)s: \(process.executableURL?.path ?? "?")")
             return nil
         }

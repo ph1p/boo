@@ -7,8 +7,19 @@ import Foundation
 }
 
 /// Runs shell commands on behalf of plugins.
+///
+/// A non-zero exit is not an error: plugins shell out to commands where failure is
+/// a normal answer (`grep` with no match, `git diff --exit-code`), and they want the
+/// output. Only a command that never ran to completion throws.
 protocol ShellService {
     func run(executable: String, arguments: [String], cwd: String?) async throws -> String
+}
+
+/// Thrown when a `ShellService` command cannot be run to completion.
+/// Declared alongside the protocol so every implementation throws the same type.
+enum ShellServiceError: Error {
+    /// The executable failed to launch, or exceeded the wall-clock timeout.
+    case commandFailed(String)
 }
 
 /// Provides system resource information.

@@ -2,7 +2,7 @@ import Foundation
 
 /// Binary tree for split pane layout.
 /// Each leaf holds a terminal session identifier.
-indirect enum SplitTree {
+indirect enum SplitTree: Sendable {
     case leaf(id: UUID)
     case split(direction: SplitDirection, first: SplitTree, second: SplitTree, ratio: CGFloat)
 
