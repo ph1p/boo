@@ -7,8 +7,11 @@ import Security
 /// routed to MainActor handlers via `onCommand` (wired by MainWindowController).
 ///
 /// Security: every API request must carry the session token (regenerated on
-/// each start) via `Authorization: Bearer <token>` or `?token=<token>`.
+/// each start) via `Authorization: Bearer <token>`. The UI receives it in the URL
+/// fragment, which browsers never put on the wire.
 /// Connections use `Connection: close` — the UI polls, no keep-alive needed.
+/// Idle connections are dropped after `requestTimeout` so a handful of silent
+/// sockets can't exhaust `maxClients`.
 ///
 /// Thread safety: all socket I/O happens on `queue`. Public accessors
 /// snapshot state synchronously via `queue.sync`.
@@ -23,10 +26,18 @@ final class RemoteControlServer: @unchecked Sendable {
     private var acceptSource: DispatchSourceRead?
     private var clientSources: [Int32: DispatchSourceRead] = [:]
     private var clientBuffers: [Int32: Data] = [:]
+    /// Per-connection deadline timers. Without them a client that connects and
+    /// never finishes its request holds a slot forever, so `maxClients` silent
+    /// connections lock every real request out until the app restarts.
+    private var clientTimers: [Int32: DispatchSourceTimer] = [:]
     private let queue = DispatchQueue(label: "com.boo.remotecontrol", qos: .utility)
 
     private static let maxClients = 32
     private static let maxRequestBytes = 65536
+    /// Wall clock a connection gets to deliver a complete request.
+    private static let requestTimeout: TimeInterval = 15
+    /// Total time a single response may block the shared queue waiting on a slow client.
+    private static let writeTimeout: TimeInterval = 5
 
     /// Commands accepted from the web API.
     private static let allowedCommands: Set<String> = [
@@ -113,6 +124,10 @@ final class RemoteControlServer: @unchecked Sendable {
         queue.sync {
             acceptSource?.cancel()
             acceptSource = nil
+            for timer in clientTimers.values {
+                timer.cancel()
+            }
+            clientTimers.removeAll()
             for source in clientSources.values {
                 source.cancel()
             }
@@ -152,9 +167,22 @@ final class RemoteControlServer: @unchecked Sendable {
             close(clientFD)
             self?.clientBuffers.removeValue(forKey: clientFD)
             self?.clientSources.removeValue(forKey: clientFD)
+            self?.clientTimers.removeValue(forKey: clientFD)?.cancel()
         }
         source.resume()
         clientSources[clientFD] = source
+
+        let timer = DispatchSource.makeTimerSource(queue: queue)
+        timer.schedule(deadline: .now() + Self.requestTimeout)
+        // Cancelling the read source runs its cancel handler, which is the single
+        // owner of per-connection teardown — including removing this timer.
+        timer.setEventHandler { [weak self] in
+            guard let self, let stalled = self.clientSources[clientFD] else { return }
+            booLog(.info, .socket, "RemoteControl: dropping idle client after \(Self.requestTimeout)s")
+            stalled.cancel()
+        }
+        timer.resume()
+        clientTimers[clientFD] = timer
     }
 
     private func readClient(fd: Int32) {
@@ -231,7 +259,7 @@ final class RemoteControlServer: @unchecked Sendable {
         case ("GET", "/ghostty-vt.wasm"):
             serveWasm(fd: fd)
         case ("POST", "/api/cmd"):
-            guard authorized(headerText: headerText, target: target) else {
+            guard authorized(headerText: headerText) else {
                 sendJSON(fd: fd, status: "401 Unauthorized", dict: ["ok": false, "error": "unauthorized"])
                 return
             }
@@ -241,23 +269,16 @@ final class RemoteControlServer: @unchecked Sendable {
         }
     }
 
-    private func authorized(headerText: String, target: String) -> Bool {
+    /// Authorize via `Authorization: Bearer <token>` only.
+    ///
+    /// The token deliberately isn't accepted as a query parameter: request targets
+    /// end up in browser history, proxy logs and `Referer` headers, and the web UI
+    /// carries the token in the URL *fragment* (never sent to the server) precisely
+    /// to avoid that. Header-only keeps the single intended path.
+    private func authorized(headerText: String) -> Bool {
         guard !token.isEmpty else { return false }
-        if let value = Self.headerValue("authorization", in: headerText),
-            constantTimeEquals(value, "Bearer \(token)")
-        {
-            return true
-        }
-        if let queryStart = target.firstIndex(of: "?") {
-            let query = target[target.index(after: queryStart)...]
-            for pair in query.split(separator: "&") {
-                let kv = pair.split(separator: "=", maxSplits: 1)
-                if kv.count == 2, kv[0] == "token", constantTimeEquals(String(kv[1]), token) {
-                    return true
-                }
-            }
-        }
-        return false
+        guard let value = Self.headerValue("authorization", in: headerText) else { return false }
+        return constantTimeEquals(value, "Bearer \(token)")
     }
 
     private func constantTimeEquals(_ a: String, _ b: String) -> Bool {
@@ -286,10 +307,13 @@ final class RemoteControlServer: @unchecked Sendable {
         }
         handler(cmd, json) { [weak self] response in
             guard let self else { return }
+            // Encode here rather than inside the queue hop: `[String: Any]` is not
+            // Sendable, and this keeps JSON serialization off the shared serial queue.
+            let body = Self.jsonBody(response)
             self.queue.async {
                 // Client may have disconnected while the command ran.
                 guard self.clientSources[fd] != nil else { return }
-                self.sendJSON(fd: fd, status: "200 OK", dict: response)
+                self.sendResponse(fd: fd, status: "200 OK", contentType: "application/json", body: body)
             }
         }
     }
@@ -330,9 +354,14 @@ final class RemoteControlServer: @unchecked Sendable {
         sendResponse(fd: fd, status: "200 OK", contentType: "application/wasm", body: wasm)
     }
 
+    /// Encode a response dict, falling back to an empty object so a non-encodable
+    /// value still produces a well-formed reply rather than a dropped connection.
+    private static func jsonBody(_ dict: [String: Any]) -> Data {
+        (try? JSONSerialization.data(withJSONObject: dict)) ?? Data("{}".utf8)
+    }
+
     private func sendJSON(fd: Int32, status: String, dict: [String: Any]) {
-        let data = (try? JSONSerialization.data(withJSONObject: dict)) ?? Data("{}".utf8)
-        sendResponse(fd: fd, status: status, contentType: "application/json", body: data)
+        sendResponse(fd: fd, status: status, contentType: "application/json", body: Self.jsonBody(dict))
     }
 
     private func sendError(fd: Int32, status: String) {
@@ -345,6 +374,12 @@ final class RemoteControlServer: @unchecked Sendable {
         response.append(Data("Content-Type: \(contentType)\r\n".utf8))
         response.append(Data("Content-Length: \(body.count)\r\n".utf8))
         response.append(Data("Cache-Control: no-store\r\n".utf8))
+        // The UI holds a live terminal, and the token travels in the URL fragment:
+        // deny framing so no page can clickjack it, and suppress Referer so the
+        // fragment can't leak to a third party via an outbound link.
+        response.append(Data("X-Content-Type-Options: nosniff\r\n".utf8))
+        response.append(Data("X-Frame-Options: DENY\r\n".utf8))
+        response.append(Data("Referrer-Policy: no-referrer\r\n".utf8))
         response.append(Data("Connection: close\r\n\r\n".utf8))
         response.append(body)
         writeAll(fd: fd, data: response)
@@ -352,6 +387,13 @@ final class RemoteControlServer: @unchecked Sendable {
     }
 
     private func writeAll(fd: Int32, data: Data) {
+        // Every send happens on the shared serial queue, so a client that stops
+        // reading would otherwise stall accepts and all other in-flight requests
+        // one poll() at a time. Bound the total blocking per response.
+        //
+        // Monotonic clock, not `Date()`: a wall-clock step (NTP, manual change)
+        // would make the remaining interval negative or effectively infinite.
+        let deadline = booUptime() + Self.writeTimeout
         data.withUnsafeBytes { rawBuffer in
             guard let base = rawBuffer.baseAddress else { return }
             var offset = 0
@@ -366,6 +408,12 @@ final class RemoteControlServer: @unchecked Sendable {
                 case EINTR:
                     continue
                 case EAGAIN, EWOULDBLOCK:
+                    // The only branch that blocks, so the only one that needs the
+                    // deadline — the success path stays free of clock reads.
+                    guard booUptime() < deadline else {
+                        booLog(.info, .socket, "RemoteControl: write timed out, dropping client")
+                        return
+                    }
                     var descriptor = pollfd(fd: fd, events: Int16(POLLOUT), revents: 0)
                     guard poll(&descriptor, 1, 1000) > 0,
                         descriptor.revents & Int16(POLLERR | POLLHUP | POLLNVAL) == 0
@@ -406,7 +454,10 @@ final class RemoteControlServer: @unchecked Sendable {
                     sa, socklen_t(sa.pointee.sa_len), &host, socklen_t(host.count),
                     nil, 0, NI_NUMERICHOST) == 0
             else { continue }
-            let address = String(cString: host)
+            // Bit-pattern, not `UInt8.init`: high-bit bytes are negative as `CChar` and
+            // the checked initialiser would trap on them.
+            let address = String(
+                decoding: host.prefix(while: { $0 != 0 }).map { UInt8(bitPattern: $0) }, as: UTF8.self)
             let name = String(cString: ifa.pointee.ifa_name)
             if name == "en0" { return address }
             if fallback == nil { fallback = address }
