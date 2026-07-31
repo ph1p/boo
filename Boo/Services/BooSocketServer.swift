@@ -68,12 +68,25 @@ final class BooSocketServer: @unchecked Sendable {
     /// Handler receives the full JSON dict and returns a response dict.
     private var commandHandlers: [String: @Sendable ([String: Any]) -> [String: Any]?] = [:]
 
-    private var serverFD: Int32 = -1
-    private var acceptSource: DispatchSourceRead?
     private var sweepTimer: DispatchSourceTimer?
-    var clientSources: [Int32: DispatchSourceRead] = [:]
-    private var clientBuffers: [Int32: Data] = [:]
     let queue = DispatchQueue(label: "com.boo.socket", qos: .utility)
+
+    /// Owns the sockets, client tables, accept limit and budgeted writes; this
+    /// class supplies only the framing and the peer-UID check via `Delegate`.
+    private lazy var core = SocketServerCore(
+        queue: queue,
+        config: SocketServerCore.Config(
+            maxClients: 128,
+            maxBufferBytes: 65536,
+            // No idle deadline: subscriber clients legitimately sit silent between
+            // events for the lifetime of the app.
+            idleTimeout: nil,
+            writeTimeout: 5,
+            readChunk: 4096,
+            logLabel: "Socket"
+        ),
+        delegate: self
+    )
 
     /// Key used to detect re-entrant calls already executing on `queue`.
     private static let queueKey = DispatchSpecificKey<Bool>()
@@ -100,8 +113,6 @@ final class BooSocketServer: @unchecked Sendable {
     let socketPath: String = {
         (BooPaths.configDir as NSString).appendingPathComponent("boo.sock")
     }()
-
-    private static let maxClients = 128
 
     // MARK: - Event Subscriptions
 
@@ -173,7 +184,7 @@ final class BooSocketServer: @unchecked Sendable {
         queue.async { [self] in
             unlink(socketPath)
 
-            serverFD = socket(AF_UNIX, SOCK_STREAM, 0)
+            let serverFD = socket(AF_UNIX, SOCK_STREAM, 0)
             guard serverFD >= 0 else {
                 booLog(.error, .socket, "Failed to create socket: \(errno)")
                 return
@@ -202,7 +213,6 @@ final class BooSocketServer: @unchecked Sendable {
             guard bindResult == 0 else {
                 booLog(.error, .socket, "bind failed: \(errno)")
                 close(serverFD)
-                serverFD = -1
                 return
             }
 
@@ -211,22 +221,12 @@ final class BooSocketServer: @unchecked Sendable {
             guard listen(serverFD, 8) == 0 else {
                 booLog(.error, .socket, "listen failed: \(errno)")
                 close(serverFD)
-                serverFD = -1
                 return
             }
 
             booLog(.info, .socket, "Listening on \(socketPath)")
 
-            let source = DispatchSource.makeReadSource(fileDescriptor: serverFD, queue: queue)
-            source.setEventHandler { [weak self] in self?.acceptClient() }
-            source.setCancelHandler { [weak self] in
-                if let fd = self?.serverFD, fd >= 0 {
-                    close(fd)
-                    self?.serverFD = -1
-                }
-            }
-            source.resume()
-            acceptSource = source
+            core.adoptListener(fd: serverFD)
 
             let timer = DispatchSource.makeTimerSource(queue: queue)
             timer.schedule(deadline: .now() + 5, repeating: 5)
@@ -238,96 +238,15 @@ final class BooSocketServer: @unchecked Sendable {
 
     func stop() {
         syncOnQueue {
-            acceptSource?.cancel()
-            acceptSource = nil
             sweepTimer?.cancel()
             sweepTimer = nil
-            for (fd, source) in clientSources {
-                source.cancel()
-                close(fd)
-            }
-            clientSources.removeAll()
-            clientBuffers.removeAll()
+            core.shutdown()
             subscriptions.removeAll()
             externalSegments.removeAll()
             commandHandlers.removeAll()
-            if serverFD >= 0 {
-                close(serverFD)
-                serverFD = -1
-            }
             unlink(socketPath)
             _processes.removeAll()
             ancestorCache.removeAll()
-        }
-    }
-
-    // MARK: - Client Handling
-
-    private func acceptClient() {
-        // Enforce client limit
-        guard clientSources.count < Self.maxClients else { return }
-
-        var clientAddr = sockaddr_un()
-        var addrLen = socklen_t(MemoryLayout<sockaddr_un>.size)
-        let clientFD = withUnsafeMutablePointer(to: &clientAddr) { ptr in
-            ptr.withMemoryRebound(to: sockaddr.self, capacity: 1) { sockPtr in
-                accept(serverFD, sockPtr, &addrLen)
-            }
-        }
-        guard clientFD >= 0 else { return }
-
-        // Verify peer is same user
-        guard peerHasSameUID(clientFD) else {
-            close(clientFD)
-            return
-        }
-
-        // Non-blocking so broadcast writes don't stall on slow clients
-        configureClientSocket(clientFD)
-
-        clientBuffers[clientFD] = Data()
-        let source = DispatchSource.makeReadSource(fileDescriptor: clientFD, queue: queue)
-        source.setEventHandler { [weak self] in self?.readClient(fd: clientFD) }
-        source.setCancelHandler { [weak self] in
-            close(clientFD)
-            self?.clientBuffers.removeValue(forKey: clientFD)
-            self?.clientSources.removeValue(forKey: clientFD)
-            self?.cleanupClient(fd: clientFD)
-        }
-        source.resume()
-        clientSources[clientFD] = source
-    }
-
-    /// Verify the connecting process belongs to the same user.
-    private func peerHasSameUID(_ fd: Int32) -> Bool {
-        var cred = xucred()
-        var credLen = socklen_t(MemoryLayout<xucred>.size)
-        let result = getsockopt(fd, SOL_LOCAL, LOCAL_PEERCRED, &cred, &credLen)
-        guard result == 0 else { return false }
-        return cred.cr_uid == getuid()
-    }
-
-    private func readClient(fd: Int32) {
-        var buf = [UInt8](repeating: 0, count: 4096)
-        let n = read(fd, &buf, buf.count)
-        if n <= 0 {
-            clientSources[fd]?.cancel()
-            return
-        }
-        clientBuffers[fd]?.append(contentsOf: buf[0..<n])
-
-        // Guard against oversized buffers
-        if let buffer = clientBuffers[fd], buffer.count > 65536 {
-            clientSources[fd]?.cancel()
-            return
-        }
-
-        while let buffer = clientBuffers[fd],
-            let newlineIdx = buffer.firstIndex(of: UInt8(ascii: "\n"))
-        {
-            let lineData = buffer[buffer.startIndex..<newlineIdx]
-            clientBuffers[fd] = Data(buffer[buffer.index(after: newlineIdx)...])
-            processCommand(data: lineData, clientFD: fd)
         }
     }
 
@@ -486,17 +405,24 @@ final class BooSocketServer: @unchecked Sendable {
         sendJSON(fd: fd, dict: resp)
     }
 
+    /// Returns false if the client is gone — the core has already dropped it.
     @discardableResult
     func sendJSON(fd: Int32, dict: [String: Any]) -> Bool {
         guard var data = try? JSONSerialization.data(withJSONObject: dict) else { return false }
         data.append(UInt8(ascii: "\n"))
-        let ok = writeAll(fd: fd, data: data)
-        if !ok {
-            queue.async { [weak self] in
-                self?.clientSources[fd]?.cancel()
-            }
-        }
-        return ok
+        return core.write(fd: fd, data)
+    }
+
+    /// Close a client connection.
+    func dropClient(fd: Int32) {
+        core.drop(fd: fd)
+    }
+
+    /// Whether `fd` is still one of ours. Deferred replies must check this before
+    /// writing: the descriptor may have been closed and reused for another client.
+    /// Must be called on `queue`.
+    func isConnected(fd: Int32) -> Bool {
+        core.connectedFDs.contains(fd)
     }
 
     // MARK: - Sweep
@@ -558,89 +484,30 @@ final class BooSocketServer: @unchecked Sendable {
         guard sysctl(&mib, 4, &info, &size, nil, 0) == 0 else { return -1 }
         return info.kp_eproc.e_ppid
     }
+}
 
-    private func configureClientSocket(_ fd: Int32) {
-        var flags = fcntl(fd, F_GETFL)
-        if flags >= 0 {
-            flags |= O_NONBLOCK
-            _ = fcntl(fd, F_SETFL, flags)
-        }
+// MARK: - Framing
 
-        var noSigPipe: Int32 = 1
-        _ = withUnsafePointer(to: &noSigPipe) {
-            setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, $0, socklen_t(MemoryLayout<Int32>.size))
-        }
+extension BooSocketServer: SocketServerCore.Delegate {
+
+    /// Only same-user processes may drive the terminal.
+    func socketServerShouldAccept(fd: Int32) -> Bool {
+        var cred = xucred()
+        var credLen = socklen_t(MemoryLayout<xucred>.size)
+        guard getsockopt(fd, SOL_LOCAL, LOCAL_PEERCRED, &cred, &credLen) == 0 else { return false }
+        return cred.cr_uid == getuid()
     }
 
-    /// Total time one response may block the shared queue waiting on a slow client.
-    ///
-    /// `waitUntilWritable` bounds a *single* stall, but a client that reads just
-    /// enough to keep `POLLOUT` flapping makes a byte of progress per poll and
-    /// never trips it — so without a total budget one such peer stalls accepts and
-    /// every other client's traffic indefinitely.
-    private static let writeTimeout: TimeInterval = 5
-
-    private func writeAll(fd: Int32, data: Data) -> Bool {
-        // Monotonic clock, not `Date()`: a wall-clock step (NTP, manual change)
-        // would make the remaining interval negative or effectively infinite.
-        let deadline = booUptime() + Self.writeTimeout
-        return data.withUnsafeBytes { rawBuffer in
-            guard let baseAddress = rawBuffer.baseAddress else { return true }
-            var offset = 0
-
-            while offset < data.count {
-                let remaining = data.count - offset
-                let pointer = baseAddress.advanced(by: offset)
-                let written = send(fd, pointer, remaining, Int32(MSG_NOSIGNAL))
-
-                if written > 0 {
-                    offset += written
-                    continue
-                }
-                if written == 0 {
-                    return false
-                }
-
-                switch errno {
-                case EINTR:
-                    continue
-                case EAGAIN, EWOULDBLOCK:
-                    // The only branch that blocks, so the only one that needs the
-                    // deadline — the success path stays free of clock reads.
-                    guard booUptime() < deadline else {
-                        booLog(.info, .socket, "Socket: write budget exhausted, dropping client fd=\(fd)")
-                        return false
-                    }
-                    guard waitUntilWritable(fd: fd) else { return false }
-                case EPIPE:
-                    return false
-                default:
-                    return false
-                }
-            }
-
-            return true
-        }
+    /// Newline-delimited JSON: consume one line per call. Bad JSON gets an error
+    /// reply rather than a disconnect — a client may recover on the next line.
+    func socketServerConsume(buffer: Data, fd: Int32) -> Int? {
+        guard let newlineIdx = buffer.firstIndex(of: UInt8(ascii: "\n")) else { return 0 }
+        let line = buffer[buffer.startIndex..<newlineIdx]
+        processCommand(data: line, clientFD: fd)
+        return buffer.distance(from: buffer.startIndex, to: newlineIdx) + 1
     }
 
-    private func waitUntilWritable(fd: Int32, timeoutMS: Int32 = 250) -> Bool {
-        var descriptor = pollfd(fd: fd, events: Int16(POLLOUT), revents: 0)
-
-        while true {
-            let result = poll(&descriptor, 1, timeoutMS)
-            if result > 0 {
-                let invalidMask = Int16(POLLERR | POLLHUP | POLLNVAL)
-                if descriptor.revents & invalidMask != 0 {
-                    return false
-                }
-                return descriptor.revents & Int16(POLLOUT) != 0
-            }
-            if result == 0 {
-                return false
-            }
-            if errno != EINTR {
-                return false
-            }
-        }
+    func socketServerDidCloseClient(fd: Int32) {
+        cleanupClient(fd: fd)
     }
 }

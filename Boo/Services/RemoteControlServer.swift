@@ -22,22 +22,26 @@ final class RemoteControlServer: @unchecked Sendable {
     /// any thread; the server serializes the response and closes the socket.
     var onCommand: ((_ cmd: String, _ json: [String: Any], _ reply: @escaping ([String: Any]) -> Void) -> Void)?
 
-    private var serverFD: Int32 = -1
-    private var acceptSource: DispatchSourceRead?
-    private var clientSources: [Int32: DispatchSourceRead] = [:]
-    private var clientBuffers: [Int32: Data] = [:]
-    /// Per-connection deadline timers. Without them a client that connects and
-    /// never finishes its request holds a slot forever, so `maxClients` silent
-    /// connections lock every real request out until the app restarts.
-    private var clientTimers: [Int32: DispatchSourceTimer] = [:]
     private let queue = DispatchQueue(label: "com.boo.remotecontrol", qos: .utility)
 
-    private static let maxClients = 32
     private static let maxRequestBytes = 65536
-    /// Wall clock a connection gets to deliver a complete request.
-    private static let requestTimeout: TimeInterval = 15
-    /// Total time a single response may block the shared queue waiting on a slow client.
-    private static let writeTimeout: TimeInterval = 5
+
+    /// Owns the sockets, client tables, accept limit, idle deadlines and budgeted
+    /// writes; this class supplies only the HTTP framing via `Delegate`.
+    private lazy var core = SocketServerCore(
+        queue: queue,
+        config: SocketServerCore.Config(
+            maxClients: 32,
+            maxBufferBytes: Self.maxRequestBytes,
+            // `Connection: close` — a connection that hasn't delivered a complete
+            // request in this long is a slot held for nothing.
+            idleTimeout: 15,
+            writeTimeout: 5,
+            readChunk: 8192,
+            logLabel: "RemoteControl"
+        ),
+        delegate: self
+    )
 
     /// Commands accepted from the web API.
     private static let allowedCommands: Set<String> = [
@@ -48,7 +52,7 @@ final class RemoteControlServer: @unchecked Sendable {
     private(set) var token: String = ""
     private(set) var port: UInt16 = 0
 
-    var isRunning: Bool { queue.sync { serverFD >= 0 } }
+    var isRunning: Bool { queue.sync { core.isListening } }
 
     /// URL reachable from other devices on the LAN (falls back to localhost).
     var accessURL: String {
@@ -64,7 +68,7 @@ final class RemoteControlServer: @unchecked Sendable {
     @discardableResult
     func start(port requestedPort: UInt16) -> Bool {
         queue.sync {
-            guard serverFD < 0 else { return true }
+            guard !core.isListening else { return true }
 
             let fd = socket(AF_INET, SOCK_STREAM, 0)
             guard fd >= 0 else {
@@ -100,20 +104,9 @@ final class RemoteControlServer: @unchecked Sendable {
                 return false
             }
 
-            serverFD = fd
             port = requestedPort
             token = Self.generateToken()
-
-            let source = DispatchSource.makeReadSource(fileDescriptor: fd, queue: queue)
-            source.setEventHandler { [weak self] in self?.acceptClient() }
-            source.setCancelHandler { [weak self] in
-                if let fd = self?.serverFD, fd >= 0 {
-                    close(fd)
-                    self?.serverFD = -1
-                }
-            }
-            source.resume()
-            acceptSource = source
+            core.adoptListener(fd: fd)
 
             booLog(.info, .socket, "RemoteControl: listening on :\(requestedPort)")
             return true
@@ -122,103 +115,10 @@ final class RemoteControlServer: @unchecked Sendable {
 
     func stop() {
         queue.sync {
-            acceptSource?.cancel()
-            acceptSource = nil
-            for timer in clientTimers.values {
-                timer.cancel()
-            }
-            clientTimers.removeAll()
-            for source in clientSources.values {
-                source.cancel()
-            }
-            clientSources.removeAll()
-            clientBuffers.removeAll()
-            if serverFD >= 0 {
-                close(serverFD)
-                serverFD = -1
-            }
+            core.shutdown()
             token = ""
             booLog(.info, .socket, "RemoteControl: stopped")
         }
-    }
-
-    // MARK: - Accept / Read
-
-    private func acceptClient() {
-        guard clientSources.count < Self.maxClients else {
-            // Drain and drop to avoid busy-looping the read source.
-            let fd = accept(serverFD, nil, nil)
-            if fd >= 0 { close(fd) }
-            return
-        }
-        let clientFD = accept(serverFD, nil, nil)
-        guard clientFD >= 0 else { return }
-
-        var flags = fcntl(clientFD, F_GETFL)
-        flags |= O_NONBLOCK
-        _ = fcntl(clientFD, F_SETFL, flags)
-        var noSigPipe: Int32 = 1
-        setsockopt(clientFD, SOL_SOCKET, SO_NOSIGPIPE, &noSigPipe, socklen_t(MemoryLayout<Int32>.size))
-
-        clientBuffers[clientFD] = Data()
-        let source = DispatchSource.makeReadSource(fileDescriptor: clientFD, queue: queue)
-        source.setEventHandler { [weak self] in self?.readClient(fd: clientFD) }
-        source.setCancelHandler { [weak self] in
-            close(clientFD)
-            self?.clientBuffers.removeValue(forKey: clientFD)
-            self?.clientSources.removeValue(forKey: clientFD)
-            self?.clientTimers.removeValue(forKey: clientFD)?.cancel()
-        }
-        source.resume()
-        clientSources[clientFD] = source
-
-        let timer = DispatchSource.makeTimerSource(queue: queue)
-        timer.schedule(deadline: .now() + Self.requestTimeout)
-        // Cancelling the read source runs its cancel handler, which is the single
-        // owner of per-connection teardown — including removing this timer.
-        timer.setEventHandler { [weak self] in
-            guard let self, let stalled = self.clientSources[clientFD] else { return }
-            booLog(.info, .socket, "RemoteControl: dropping idle client after \(Self.requestTimeout)s")
-            stalled.cancel()
-        }
-        timer.resume()
-        clientTimers[clientFD] = timer
-    }
-
-    private func readClient(fd: Int32) {
-        var buf = [UInt8](repeating: 0, count: 8192)
-        let n = read(fd, &buf, buf.count)
-        if n <= 0 {
-            clientSources[fd]?.cancel()
-            return
-        }
-        clientBuffers[fd]?.append(contentsOf: buf[0..<n])
-
-        guard let buffer = clientBuffers[fd] else { return }
-        if buffer.count > Self.maxRequestBytes {
-            clientSources[fd]?.cancel()
-            return
-        }
-
-        // Wait for full headers
-        guard let headerEnd = buffer.range(of: Data("\r\n\r\n".utf8)) else { return }
-        let headerData = buffer[buffer.startIndex..<headerEnd.lowerBound]
-        guard let headerText = String(data: headerData, encoding: .utf8) else {
-            clientSources[fd]?.cancel()
-            return
-        }
-
-        let contentLength = Self.contentLength(fromHeaders: headerText)
-        guard contentLength <= Self.maxRequestBytes else {
-            clientSources[fd]?.cancel()
-            return
-        }
-        let bodyStart = headerEnd.upperBound
-        let bodyAvailable = buffer.endIndex - bodyStart
-        guard bodyAvailable >= contentLength else { return }  // wait for body
-
-        let body = buffer[bodyStart..<(bodyStart + contentLength)]
-        handleRequest(fd: fd, headerText: headerText, body: Data(body))
     }
 
     /// Case-insensitive lookup of a header value in raw header text.
@@ -311,8 +211,9 @@ final class RemoteControlServer: @unchecked Sendable {
             // Sendable, and this keeps JSON serialization off the shared serial queue.
             let body = Self.jsonBody(response)
             self.queue.async {
-                // Client may have disconnected while the command ran.
-                guard self.clientSources[fd] != nil else { return }
+                // Client may have disconnected while the command ran; writing to a
+                // reused descriptor would answer the wrong request.
+                guard self.core.connectedFDs.contains(fd) else { return }
                 self.sendResponse(fd: fd, status: "200 OK", contentType: "application/json", body: body)
             }
         }
@@ -382,47 +283,9 @@ final class RemoteControlServer: @unchecked Sendable {
         response.append(Data("Referrer-Policy: no-referrer\r\n".utf8))
         response.append(Data("Connection: close\r\n\r\n".utf8))
         response.append(body)
-        writeAll(fd: fd, data: response)
-        clientSources[fd]?.cancel()
-    }
-
-    private func writeAll(fd: Int32, data: Data) {
-        // Every send happens on the shared serial queue, so a client that stops
-        // reading would otherwise stall accepts and all other in-flight requests
-        // one poll() at a time. Bound the total blocking per response.
-        //
-        // Monotonic clock, not `Date()`: a wall-clock step (NTP, manual change)
-        // would make the remaining interval negative or effectively infinite.
-        let deadline = booUptime() + Self.writeTimeout
-        data.withUnsafeBytes { rawBuffer in
-            guard let base = rawBuffer.baseAddress else { return }
-            var offset = 0
-            while offset < data.count {
-                let written = send(fd, base.advanced(by: offset), data.count - offset, Int32(MSG_NOSIGNAL))
-                if written > 0 {
-                    offset += written
-                    continue
-                }
-                if written == 0 { return }
-                switch errno {
-                case EINTR:
-                    continue
-                case EAGAIN, EWOULDBLOCK:
-                    // The only branch that blocks, so the only one that needs the
-                    // deadline — the success path stays free of clock reads.
-                    guard booUptime() < deadline else {
-                        booLog(.info, .socket, "RemoteControl: write timed out, dropping client")
-                        return
-                    }
-                    var descriptor = pollfd(fd: fd, events: Int16(POLLOUT), revents: 0)
-                    guard poll(&descriptor, 1, 1000) > 0,
-                        descriptor.revents & Int16(POLLERR | POLLHUP | POLLNVAL) == 0
-                    else { return }
-                default:
-                    return
-                }
-            }
-        }
+        core.write(fd: fd, response)
+        // `Connection: close`: the response is the whole conversation.
+        core.drop(fd: fd)
     }
 
     // MARK: - Helpers
@@ -464,4 +327,35 @@ final class RemoteControlServer: @unchecked Sendable {
         }
         return fallback
     }
+}
+
+// MARK: - Framing
+
+extension RemoteControlServer: SocketServerCore.Delegate {
+
+    /// No peer check: this listens on the LAN by design, and the bearer token is
+    /// what authorizes a request.
+    func socketServerShouldAccept(fd: Int32) -> Bool { true }
+
+    /// HTTP/1.1 with `Connection: close`, so at most one request per connection:
+    /// headers terminated by CRLFCRLF plus `Content-Length` bytes of body.
+    func socketServerConsume(buffer: Data, fd: Int32) -> Int? {
+        guard let headerEnd = buffer.range(of: Data("\r\n\r\n".utf8)) else { return 0 }
+        let headerData = buffer[buffer.startIndex..<headerEnd.lowerBound]
+        guard let headerText = String(data: headerData, encoding: .utf8) else { return nil }
+
+        let contentLength = Self.contentLength(fromHeaders: headerText)
+        guard contentLength >= 0, contentLength <= Self.maxRequestBytes else { return nil }
+        let bodyStart = headerEnd.upperBound
+        guard buffer.endIndex - bodyStart >= contentLength else { return 0 }  // await body
+
+        let body = Data(buffer[bodyStart..<(bodyStart + contentLength)])
+        let consumed = buffer.distance(from: buffer.startIndex, to: bodyStart) + contentLength
+        // Responds and closes, so anything pipelined behind this is discarded —
+        // consistent with the `Connection: close` we advertise.
+        handleRequest(fd: fd, headerText: headerText, body: body)
+        return consumed
+    }
+
+    func socketServerDidCloseClient(fd: Int32) {}
 }

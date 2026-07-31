@@ -54,7 +54,7 @@ extension GitPlugin {
     nonisolated static func detectAheadBehind(repoRoot: String) -> (ahead: Int, behind: Int) {
         guard
             let output = gitOutput([
-                "-C", repoRoot, "rev-list", "--left-right", "--count", "HEAD...@{upstream}",
+                "-C", repoRoot, "rev-list", "--left-right", "--count", "HEAD...@{upstream}"
             ])?.trimmingCharacters(in: .whitespacesAndNewlines)
         else { return (0, 0) }
         let parts = output.split(separator: "\t")
@@ -65,8 +65,9 @@ extension GitPlugin {
     }
 
     nonisolated static func detectLastCommit(repoRoot: String) -> String? {
-        guard let output = gitOutput(["-C", repoRoot, "log", "-1", "--format=%h %s"])?
-            .trimmingCharacters(in: .whitespacesAndNewlines),
+        guard
+            let output = gitOutput(["-C", repoRoot, "log", "-1", "--format=%h %s"])?
+                .trimmingCharacters(in: .whitespacesAndNewlines),
             !output.isEmpty
         else { return nil }
         return output

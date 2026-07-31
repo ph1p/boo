@@ -14,7 +14,7 @@ extension BooSocketServer {
             let dict = Self.serializeContext(ctx)
             nonisolated(unsafe) let sendableDict = dict
             self.queue.async {
-                guard self.clientSources[clientFD] != nil else { return }
+                guard self.isConnected(fd: clientFD) else { return }
                 self.sendJSON(fd: clientFD, dict: ["ok": true, "context": sendableDict])
             }
         }

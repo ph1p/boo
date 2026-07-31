@@ -38,7 +38,7 @@ extension BooSocketServer {
         // Clean up dead subscription clients
         for fd in deadFDs {
             subscriptions.removeValue(forKey: fd)
-            clientSources[fd]?.cancel()
+            dropClient(fd: fd)
         }
     }
 
