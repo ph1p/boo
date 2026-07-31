@@ -4,17 +4,35 @@ import Foundation
 
 extension BooSocketServer {
 
+    /// Total time one broadcast may spend on the shared queue.
+    ///
+    /// Each `sendJSON` is individually budgeted, but a fanout is serial: without an
+    /// overall bound, N slow subscribers cost N × the per-response budget before any
+    /// other queue work runs. Once this expires the remaining subscribers are skipped
+    /// for this event rather than disconnected — they are not at fault, and dictionary
+    /// order is unspecified, so dropping them would cull healthy clients at random.
+    private static let broadcastBudget: TimeInterval = 2
+
     /// Broadcast an event to all clients subscribed to the given event name.
     /// Must be called on the socket `queue`.
     func broadcastEvent(name: String, data: [String: Any]) {
         let event: [String: Any] = ["event": name, "data": data]
         var deadFDs: [Int32] = []
+        let deadline = booUptime() + Self.broadcastBudget
+        var skipped = 0
 
         for (fd, events) in subscriptions {
             guard events.contains(name) || events.contains("*") else { continue }
+            guard booUptime() < deadline else {
+                skipped += 1
+                continue
+            }
             if !sendJSON(fd: fd, dict: event) {
                 deadFDs.append(fd)
             }
+        }
+        if skipped > 0 {
+            booLog(.info, .socket, "Socket: broadcast budget exhausted for '\(name)', skipped \(skipped) subscriber(s)")
         }
 
         // Clean up dead subscription clients

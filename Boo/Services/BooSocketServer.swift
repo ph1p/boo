@@ -572,8 +572,19 @@ final class BooSocketServer: @unchecked Sendable {
         }
     }
 
+    /// Total time one response may block the shared queue waiting on a slow client.
+    ///
+    /// `waitUntilWritable` bounds a *single* stall, but a client that reads just
+    /// enough to keep `POLLOUT` flapping makes a byte of progress per poll and
+    /// never trips it — so without a total budget one such peer stalls accepts and
+    /// every other client's traffic indefinitely.
+    private static let writeTimeout: TimeInterval = 5
+
     private func writeAll(fd: Int32, data: Data) -> Bool {
-        data.withUnsafeBytes { rawBuffer in
+        // Monotonic clock, not `Date()`: a wall-clock step (NTP, manual change)
+        // would make the remaining interval negative or effectively infinite.
+        let deadline = booUptime() + Self.writeTimeout
+        return data.withUnsafeBytes { rawBuffer in
             guard let baseAddress = rawBuffer.baseAddress else { return true }
             var offset = 0
 
@@ -594,6 +605,12 @@ final class BooSocketServer: @unchecked Sendable {
                 case EINTR:
                     continue
                 case EAGAIN, EWOULDBLOCK:
+                    // The only branch that blocks, so the only one that needs the
+                    // deadline — the success path stays free of clock reads.
+                    guard booUptime() < deadline else {
+                        booLog(.info, .socket, "Socket: write budget exhausted, dropping client fd=\(fd)")
+                        return false
+                    }
                     guard waitUntilWritable(fd: fd) else { return false }
                 case EPIPE:
                     return false
