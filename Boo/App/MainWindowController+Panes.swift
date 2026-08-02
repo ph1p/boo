@@ -214,10 +214,13 @@ extension MainWindowController: PaneViewDelegate {
         return pane.activeTabIndex >= 0 ? pane.activeTabIndex : nil
     }
 
-    /// Light the tab's activity dot and repaint the affected chrome.
+    /// Light the tab's activity dot, raise the pane-wide activity frame, and repaint chrome.
     private func markActivity(workspace: Workspace, pane: Pane, tabIndex: Int) {
         pane.setActivity(true, at: tabIndex)
-        workspacePaneViews[workspace.id]?[pane.id]?.needsDisplay = true
+        if let pv = workspacePaneViews[workspace.id]?[pane.id] {
+            pv.updateActivityBorder()
+            pv.needsDisplay = true
+        }
         refreshToolbar()
     }
 

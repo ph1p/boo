@@ -616,7 +616,7 @@ class ThemedSplitView: NSSplitView {
                     self.statusBar.needsDisplay = true
                     for (_, pv) in self.paneViews {
                         pv.layer?.backgroundColor = theme.background.nsColor.cgColor
-                        pv.updateDimOverlayColor()
+                        pv.updateOverlayColors()
                         pv.updateFindBarTheme()
                         pv.needsLayout = true
                         pv.needsDisplay = true

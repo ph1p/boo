@@ -188,12 +188,41 @@ class PaneView: NSView {
         return v
     }()
 
+    static let activityBorderWidth: CGFloat = 2
+    private static let activityBorderAlpha: CGFloat = 0.8
+
+    /// Transparent, click-through frame drawn around the whole pane while it has
+    /// pending activity. `draw(_:)` can't do this: terminal/content subviews cover
+    /// everything below the tab bar, so a border painted by the pane itself is hidden.
+    /// Internal (not private) so tests can inspect it directly.
+    class ActivityBorderOverlay: NSView {
+        override func hitTest(_ point: NSPoint) -> NSView? { nil }
+    }
+
+    let activityBorder: ActivityBorderOverlay = {
+        let v = ActivityBorderOverlay()
+        v.wantsLayer = true
+        v.autoresizingMask = [.width, .height]
+        v.isHidden = true
+        v.layer?.borderWidth = PaneView.activityBorderWidth
+        return v
+    }()
+
     var isFocused: Bool = false {
         didSet {
             guard isFocused != oldValue else { return }
             dimOverlay.isHidden = isFocused
+            updateActivityBorder()
             needsDisplay = true
         }
+    }
+
+    /// Show/hide the pane-wide activity frame. Push-driven: called from the sites that
+    /// change focus or a tab's `hasActivity` flag (`isFocused`, `activateTab`,
+    /// `MainWindowController.markActivity`) — never from `draw(_:)`, which must stay
+    /// pure paint and would otherwise re-derive this on every tab-bar repaint.
+    func updateActivityBorder() {
+        activityBorder.isHidden = isFocused || !pane.tabs.contains { $0.state.hasActivity }
     }
 
     func updateFindBarTheme() {
@@ -201,10 +230,15 @@ class PaneView: NSView {
         findBar?.needsDisplay = true
     }
 
-    func updateDimOverlayColor() {
+    /// Restyle every overlay for the current theme. Wired into the theme-change loop in
+    /// `MainWindowController`; without the accent refresh here a visible activity frame
+    /// keeps the old theme's accent.
+    func updateOverlayColors() {
         let theme = AppSettings.shared.theme
         let color = theme.isDark ? NSColor.black : NSColor.white
         dimOverlay.layer?.backgroundColor = color.withAlphaComponent(theme.isDark ? 0.35 : 0.55).cgColor
+        activityBorder.layer?.borderColor =
+            theme.accentColor.withAlphaComponent(Self.activityBorderAlpha).cgColor
     }
 
     // Coalesce tab bar redraws to avoid flicker from rapid title updates
@@ -234,11 +268,12 @@ class PaneView: NSView {
         wantsLayer = true
         layer?.backgroundColor = AppSettings.shared.theme.background.nsColor.cgColor
         addSubview(dimOverlay)
+        addSubview(activityBorder)
         dimOverlay.onClicked = { [weak self] in
             guard let self else { return }
             self.paneDelegate?.paneView(self, didFocus: self.paneID)
         }
-        updateDimOverlayColor()
+        updateOverlayColors()
         updateTabBarTrackingArea()
     }
 
@@ -581,10 +616,15 @@ class PaneView: NSView {
             if bar.frame != barFrame { bar.frame = barFrame }
         }
 
-        // Keep dim overlay covering the full pane (terminal + tab bar) and on top of all content
+        // Keep both overlays covering the full pane (terminal + tab bar) and above content:
+        // dim overlay first (it swallows clicks to focus the pane), activity frame on top so
+        // it stays visible on unfocused panes. Adding a content subview buries them, so the
+        // order is re-asserted here — checking BOTH slots, since either can slip.
         if dimOverlay.frame != bounds { dimOverlay.frame = bounds }
-        if subviews.last !== dimOverlay {
+        if activityBorder.frame != bounds { activityBorder.frame = bounds }
+        if subviews.last !== activityBorder || subviews.dropLast().last !== dimOverlay {
             addSubview(dimOverlay, positioned: .above, relativeTo: nil)
+            addSubview(activityBorder, positioned: .above, relativeTo: dimOverlay)
         }
     }
 
@@ -733,6 +773,7 @@ class PaneView: NSView {
         dismissFindBarIfNeeded(forTabAt: index)
         storeCurrentView()
         pane.setActivity(false, at: index)
+        updateActivityBorder()
         pane.setActiveTab(index)
         startActiveSession()
         layoutTerminalView()
@@ -993,24 +1034,8 @@ class PaneView: NSView {
             }
         }
 
-        // Activity border — 2px accent-color inset on the pane boundary when the pane is
-        // unfocused AND at least one tab has pending activity (command finished or bell rang).
-        // Cleared automatically: setActivity(false) propagates needsDisplay via signalActivity /
-        // activateTab, so this redraws whenever the flag changes.
-        let paneHasActivity = !isFocused && pane.tabs.contains { $0.state.hasActivity }
-        if paneHasActivity {
-            let borderW: CGFloat = 2
-            ctx.setFillColor(theme.accentColor.withAlphaComponent(0.8).cgColor)
-            // Top edge (inside tab bar area, inset by 1px from very top)
-            ctx.fill(CGRect(x: 1, y: 1, width: bounds.width - 2, height: borderW))
-            // Bottom edge
-            ctx.fill(CGRect(x: 1, y: bounds.height - borderW - 1, width: bounds.width - 2, height: borderW))
-            // Left edge
-            ctx.fill(CGRect(x: 1, y: 1, width: borderW, height: bounds.height - 2))
-            // Right edge
-            ctx.fill(CGRect(x: bounds.width - borderW - 1, y: 1, width: borderW, height: bounds.height - 2))
-        }
-
+        // The pane-wide activity frame is NOT drawn here — content subviews cover
+        // everything below the tab bar. See `activityBorder` / `updateActivityBorder()`.
     }
 
     // MARK: - Tab Bar Accessibility
