@@ -25,6 +25,16 @@ enum IslandMetrics {
     /// inset plus this — a full `barGap` there reads as a taller header than it is.
     static let headerBottomGap: CGFloat = 2
 
+    /// Gap directly *above* the status bar, where the panes meet the footer — the
+    /// mirror of `headerBottomGap`, and tighter than `barGap` for the same reason:
+    /// the bar's own content is inset from its top edge.
+    static let footerTopGap: CGFloat = 1
+
+    /// Gap below the status bar, to the window's bottom edge. One point tighter
+    /// than `barGap`: the bar's text sits high of its box (descender room), so an
+    /// equal gap below reads as larger than the one above.
+    static let footerBottomGap: CGFloat = 3
+
     /// Height of the header strip. Read by the layout constraint *and* by
     /// `TrafficLightPositioner`, which has no view to measure and needs the same
     /// number to land the buttons on the header's midline.
@@ -44,6 +54,26 @@ enum IslandMetrics {
     /// Smaller than `gap`: the region already sits a `gap` from its neighbour, and
     /// stacking a second full gap inside it reads as too much air.
     static let contentInset: CGFloat = 6
+
+    /// Top `y` (flipped coords) that centres a title's *cap band* — not its line
+    /// box — on the midline of a bar `barHeight` tall. A font's ascender reaches
+    /// above its capitals, so centring the line box leaves the visible text riding
+    /// low; the eye lines caps up against neighbours (traffic lights, segments).
+    /// One copy for the toolbar title, the status-bar segments and the settings
+    /// header, which must all sit on the same midline.
+    static func capCenteredTitleY(font: NSFont, barHeight: CGFloat) -> CGFloat {
+        // `.rounded()`, not `round(...)`: inside this type the latter resolves to
+        // `IslandMetrics.round(_:radius:)` below.
+        ((barHeight - font.capHeight) / 2 - (font.ascender - font.capHeight)).rounded()
+    }
+
+    /// The same cap-band correction as `capCenteredTitleY`, expressed as the
+    /// downward offset from a *line-box-centred* layout (how SwiftUI places
+    /// `Text` in a frame) to the cap-band-centred position.
+    static func capCenterOffset(font: NSFont) -> CGFloat {
+        let lineHeight = font.ascender - font.descender
+        return (font.capHeight + lineHeight) / 2 - font.ascender
+    }
 
     /// Corner radius for top-level islands (toolbar, sidebar, status bar, panes).
     static let radius: CGFloat = 7

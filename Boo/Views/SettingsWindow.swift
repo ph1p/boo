@@ -14,6 +14,12 @@ struct Tokens {
     var bg: Color { Color(nsColor: theme.sidebarBg) }
     var chromeBg: Color { Color(nsColor: theme.chromeBg) }
     var border: Color { Color(nsColor: theme.sidebarBorder) }
+
+    /// The island backdrop and hairline, read from the same theme properties the
+    /// AppKit chrome uses so the settings window matches the main window rather
+    /// than approximating it.
+    var backdrop: Color { Color(nsColor: theme.windowBackdrop) }
+    var islandBorder: Color { Color(nsColor: theme.islandBorder) }
     var cardBg: Color {
         let alpha: CGFloat = 0.12
         let fg = theme.chromeMuted
@@ -123,36 +129,67 @@ struct SettingsView: View {
     var body: some View {
         let _ = observer.revision
         let t = Tokens.current
-        HStack(spacing: 0) {
-            // Sidebar
-            VStack(spacing: 0) {
-                List(selection: $selectedTab) {
-                    SwiftUI.Section("Settings") {
-                        ForEach(Tab.fixed, id: \.label) { tab in
-                            Label(tab.label, systemImage: tab.icon).tag(tab)
-                        }
-                    }
-                    if !pluginTabs.isEmpty {
-                        SwiftUI.Section("Plugins") {
-                            ForEach(pluginTabs, id: \.label) { tab in
+        VStack(spacing: 0) {
+            header(t)
+
+            HStack(spacing: IslandMetrics.gap) {
+                // Sidebar island
+                VStack(spacing: 0) {
+                    List(selection: $selectedTab) {
+                        // Unlabelled: the window header already says "Settings", and
+                        // repeating it as a section title stutters.
+                        SwiftUI.Section {
+                            ForEach(Tab.fixed, id: \.label) { tab in
                                 Label(tab.label, systemImage: tab.icon).tag(tab)
                             }
                         }
+                        if !pluginTabs.isEmpty {
+                            SwiftUI.Section("Plugins") {
+                                ForEach(pluginTabs, id: \.label) { tab in
+                                    Label(tab.label, systemImage: tab.icon).tag(tab)
+                                }
+                            }
+                        }
                     }
+                    .listStyle(.sidebar)
+                    .scrollContentBackground(.hidden)
                 }
-                .listStyle(.sidebar)
-                .safeAreaInset(edge: .top) { Color.clear.frame(height: 20) }
+                .frame(width: 190)
+                .island(t)
+
+                // Detail island
+                content
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                    .island(t)
             }
-            .frame(width: 190)
-
-            Divider()
-
-            // Detail
-            content
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
-        .background(t.bg)
+        // The gap around the islands is the window backdrop showing through, the
+        // same as in the main window — the islands float on it rather than tiling it.
+        // No top padding: the header above them carries its own vertical inset.
+        .padding(.horizontal, IslandMetrics.gap)
+        .padding(.bottom, IslandMetrics.gap)
+        .background(t.backdrop)
         .frame(width: 780, height: 560)
+    }
+
+    /// The window's header strip: traffic lights on the left, title centred on the
+    /// window. Mirrors the main window's toolbar — same height, same vertical inset,
+    /// same centred-title treatment — so the two windows read as one app. It paints
+    /// no fill and carries no border, exactly like the toolbar it echoes.
+    @ViewBuilder
+    private func header(_ t: Tokens) -> some View {
+        // Centred on the cap band, not the line box — the same correction the
+        // toolbar's `centeredWorkspaceTitleRect` applies, via the shared helper,
+        // so the two windows' titles sit on the same midline.
+        let capOffset = IslandMetrics.capCenterOffset(font: ToolbarView.Fonts.headerTitle)
+        Text("Settings")
+            .font(.system(size: 13, weight: .medium))
+            .foregroundStyle(t.text)
+            .frame(maxWidth: .infinity)
+            .offset(y: capOffset)
+            .frame(height: IslandMetrics.toolbarHeight)
+            .padding(.top, IslandMetrics.barGap)
+            .padding(.bottom, IslandMetrics.headerBottomGap)
     }
 
     // MARK: Content Router
@@ -181,6 +218,19 @@ struct SettingsView: View {
 }
 
 // MARK: - Settings Page Shell
+
+extension View {
+    /// Render this view as an island: the chrome fill, clipped to the shared corner
+    /// radius, with the same hairline every island in the main window carries.
+    func island(_ t: Tokens) -> some View {
+        self
+            .background(t.bg)
+            .clipShape(RoundedRectangle(cornerRadius: IslandMetrics.radius, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: IslandMetrics.radius, style: .continuous)
+                    .strokeBorder(t.islandBorder, lineWidth: IslandMetrics.borderWidth))
+    }
+}
 
 struct SettingsPage<Content: View>: View {
     let title: String
@@ -587,11 +637,18 @@ class SettingsWindowController: NSWindowController {
         window.center()
         window.autorecalculatesKeyViewLoop = false
         let theme = AppSettings.shared.theme
-        window.backgroundColor = theme.chromeBg
+        // Behind the islands, so it is the backdrop rather than the chrome fill —
+        // otherwise the margin flashes the wrong colour during a resize.
+        window.backgroundColor = theme.windowBackdrop
         window.appearance = NSAppearance(named: theme.isDark ? .darkAqua : .aqua)
         let hostingView = NoSafeAreaHostingView(rootView: SettingsView())
         window.contentView = hostingView
-        TrafficLightPositioner.attach(to: window)
+        // Deliberately NOT attached to `TrafficLightPositioner`: its offsets were
+        // tuned against the main window's 28pt titlebar, but this window gets a
+        // 32pt one (measured), which already lays the buttons out on the header
+        // midline (`barGap + toolbarHeight / 2` from the top). AppKit's native
+        // placement is exactly right here; the shared shift would drag the buttons
+        // below the title and off to the right.
 
         super.init(window: window)
 
@@ -600,7 +657,7 @@ class SettingsWindowController: NSWindowController {
         ) { [weak self] _ in
             MainActor.assumeIsolated {
                 let t = AppSettings.shared.theme
-                self?.window?.backgroundColor = t.chromeBg
+                self?.window?.backgroundColor = t.windowBackdrop
                 self?.window?.appearance = NSAppearance(named: t.isDark ? .darkAqua : .aqua)
             }
         }
@@ -613,10 +670,5 @@ class SettingsWindowController: NSWindowController {
     func showSettings() {
         showWindow(nil)
         window?.makeKeyAndOrderFront(nil)
-        if let w = window {
-            DispatchQueue.main.async {
-                TrafficLightPositioner.apply(to: w)
-            }
-        }
     }
 }

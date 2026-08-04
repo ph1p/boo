@@ -18,8 +18,7 @@ extension StatusBarView {
         // bare strip over the window backdrop, and the island gap above it does the
         // separating that the old rule used to.
 
-        let refFont = Self.referenceFont
-        let textY: CGFloat = round((barHeight - refFont.capHeight) / 2 - (refFont.ascender - refFont.capHeight))
+        let textY = IslandMetrics.capCenteredTitleY(font: Self.referenceFont, barHeight: barHeight)
 
         // Update all plugins
         for plugin in leftPlugins { plugin.update(state: state) }
@@ -55,11 +54,7 @@ extension StatusBarView {
                 if isClickable {
                     ctx.setFillColor(theme.chromeMuted.withAlphaComponent(0.08).cgColor)
                     let hoverRect = CGRect(x: segRect.minX, y: 1, width: segRect.width, height: barHeight - 2)
-                    ctx.addPath(
-                        CGPath(
-                            roundedRect: hoverRect, cornerWidth: IslandMetrics.controlRadius,
-                            cornerHeight: IslandMetrics.controlRadius, transform: nil))
-                    ctx.fillPath()
+                    WorkspacePillStyle.fillRoundedRect(ctx, rect: hoverRect)
                 }
             }
 
@@ -101,11 +96,7 @@ extension StatusBarView {
         if isSidebarToggleHovered {
             let hoverRect = CGRect(x: sepX + 2, y: 2, width: bounds.width - sepX - 4, height: barHeight - 4)
             ctx.setFillColor(theme.chromeMuted.withAlphaComponent(0.1).cgColor)
-            ctx.addPath(
-                CGPath(
-                    roundedRect: hoverRect, cornerWidth: IslandMetrics.controlRadius,
-                    cornerHeight: IslandMetrics.controlRadius, transform: nil))
-            ctx.fillPath()
+            WorkspacePillStyle.fillRoundedRect(ctx, rect: hoverRect)
         }
 
         // Sidebar icon — centered in the zone after the separator
@@ -170,6 +161,9 @@ extension StatusBarView {
         for plugin in leftPlugins where plugin.isVisible(settings: settings, state: state) {
             if plugin.handleClick(at: point, in: self) { return }
         }
+
+        // Empty space — drag the window, same as the toolbar.
+        window?.performDrag(with: event)
     }
 
     // MARK: - Accessibility

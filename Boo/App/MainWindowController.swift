@@ -948,11 +948,13 @@ class ThemedSplitView: NSSplitView {
                 equalTo: toolbar.bottomAnchor, constant: IslandMetrics.headerBottomGap),
             mainSplitLeading,
             mainSplitTrailing,
-            mainSplitView.bottomAnchor.constraint(equalTo: statusBar.topAnchor, constant: -barGap),
+            mainSplitView.bottomAnchor.constraint(
+                equalTo: statusBar.topAnchor, constant: -IslandMetrics.footerTopGap),
 
             statusBar.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: gap),
             statusBar.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -gap),
-            statusBar.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -barGap)
+            statusBar.bottomAnchor.constraint(
+                equalTo: contentView.bottomAnchor, constant: -IslandMetrics.footerBottomGap)
         ])
 
         if currentWorkspaceBarPosition == .left || currentWorkspaceBarPosition == .right {
@@ -993,7 +995,7 @@ class ThemedSplitView: NSSplitView {
             bar.topAnchor.constraint(
                 equalTo: toolbar.bottomAnchor, constant: IslandMetrics.headerBottomGap),
             bar.bottomAnchor.constraint(
-                equalTo: statusBar.topAnchor, constant: -IslandMetrics.barGap),
+                equalTo: statusBar.topAnchor, constant: -IslandMetrics.footerTopGap),
             widthConstraint
         ]
 
