@@ -24,7 +24,7 @@ import XCTest
         root.wantsLayer = true
         root.layer?.backgroundColor = AppSettings.shared.theme.windowBackdrop.cgColor
 
-        let toolbarHeight: CGFloat = 38
+        let toolbarHeight = IslandMetrics.toolbarHeight
         let statusHeight: CGFloat = 24
 
         // Toolbar and status bar paint no fill or border, but they take the same
@@ -343,7 +343,7 @@ import XCTest
 
         // Its first pill starts flush with the strip so it lines up with the top of
         // the pane beside it, rather than being pushed down by a second inset.
-        XCTAssertEqual(WorkspaceBarView.verticalTopInset, 0)
+        XCTAssertEqual(bar.verticalItemRect(at: 0).minY, 0)
 
         if let dir = ProcessInfo.processInfo.environment["BOO_SNAPSHOT_DIR"] {
             let host = NSView(
@@ -463,8 +463,8 @@ import XCTest
     /// and a coloured workspace stains its own edge instead of using generic chrome.
     func testPillIslandBorderPicksUpTheWorkspaceColour() {
         let ws = NSColor.systemGreen
-        let colored = WorkspacePillStyle.islandBorderAlpha(active: false, colored: true)
-        let neutral = WorkspacePillStyle.islandBorderAlpha(active: false, colored: false)
+        let colored = WorkspacePillStyle.islandBorderAlpha(colored: true)
+        let neutral = WorkspacePillStyle.islandBorderAlpha(colored: false)
         XCTAssertLessThan(colored, neutral, "a tinted edge carries less alpha than the neutral rule")
 
         // The stroke itself is drawn at the shared island weight, not the heavier

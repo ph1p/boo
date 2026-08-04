@@ -65,11 +65,6 @@ class WorkspaceBarView: NSView {
         MainActor.assumeIsolated { cleanupDrag() }
     }
 
-    /// Y of the first pill in the vertical bar. The strip is already inset from
-    /// the window by the island gap, so it starts flush with the content beside
-    /// it. Shared by draw, hit-test and drop-index so they can't drift apart.
-    static let verticalTopInset: CGFloat = 0
-
     /// Horizontal inset of a pill inside the vertical strip.
     static let verticalPadding: CGFloat = 4
 
@@ -128,8 +123,18 @@ class WorkspaceBarView: NSView {
         guard index >= 0, index < items.count else { return rest }
         let item = items[index]
 
-        let font = Self.verticalHoveredPillFont(selected: index == selectedIndex)
-        let textW = (item.name as NSString).size(withAttributes: [.font: font]).width
+        // Measured once per name, not per call: this runs from `hitTest`, which
+        // fires for every mouse event over the strip *and* its overhang band.
+        let selected = index == selectedIndex
+        let cacheKey = "\(selected)|\(item.name)"
+        let textW: CGFloat
+        if let cached = nameWidthCache[cacheKey] {
+            textW = cached
+        } else {
+            let font = Self.verticalHoveredPillFont(selected: selected)
+            textW = (item.name as NSString).size(withAttributes: [.font: font]).width
+            nameWidthCache[cacheKey] = textW
+        }
         // Padding either side, plus room for the close button (pinned items show a
         // pin inside the pill instead, which needs no reserved column).
         let trailing =
@@ -164,14 +169,6 @@ class WorkspaceBarView: NSView {
     nonisolated(unsafe) static let pillLabelRegular = NSFont.systemFont(
         ofSize: 11, weight: .regular)
 
-    /// `WorkspacePillStyle.fillRoundedRect` at this view's control radius, so the
-    /// per-pill draw sites read as one call rather than a three-line path recipe.
-    private func fillRoundedRect(
-        _ ctx: CGContext, rect: CGRect, radius: CGFloat = IslandMetrics.controlRadius
-    ) {
-        WorkspacePillStyle.fillRoundedRect(ctx, rect: rect, radius: radius)
-    }
-
     /// How far the vertical strip is scrolled, in points. The mirror of the top
     /// bar's `workspaceScrollOffset`, only along Y.
     var verticalScrollOffset: CGFloat = 0 {
@@ -185,7 +182,7 @@ class WorkspaceBarView: NSView {
     /// counted here.
     var verticalContentHeight: CGFloat {
         let step = Self.verticalItemSize + Self.verticalItemGap
-        return Self.verticalTopInset + CGFloat(items.count) * step
+        return CGFloat(items.count) * step
     }
 
     /// Height the scrolling pill stack gets: the strip minus the band reserved for
@@ -204,7 +201,7 @@ class WorkspaceBarView: NSView {
     /// pill and its click target can't drift apart.
     func verticalItemRect(at index: Int) -> CGRect {
         let step = Self.verticalItemSize + Self.verticalItemGap
-        let y = Self.verticalTopInset + CGFloat(index) * step - verticalScrollOffset
+        let y = CGFloat(index) * step - verticalScrollOffset
         return CGRect(
             x: verticalPillX, y: y, width: verticalPillWidth, height: Self.verticalItemSize)
     }
@@ -255,9 +252,14 @@ class WorkspaceBarView: NSView {
         return NSSize(width: NSView.noIntrinsicMetric, height: barHeight)
     }
 
+    /// Measured expanded-pill name widths, keyed by "selected|name". Cleared when
+    /// the items change; fonts are static so nothing else invalidates it.
+    private var nameWidthCache: [String: CGFloat] = [:]
+
     func setItems(_ items: [Item], selectedIndex: Int) {
         self.items = items
         self.selectedIndex = selectedIndex
+        nameWidthCache.removeAll(keepingCapacity: true)
         clampVerticalScroll()
         scrollToSelectedVertical()
         needsDisplay = true
@@ -294,7 +296,6 @@ class WorkspaceBarView: NSView {
             // The hovered workspace is painted separately, expanded, after this loop
             // so it floats above its neighbours instead of being overdrawn by them.
             if i == hoveredIndex { continue }
-            let isHovered = false
             let wsColor = item.resolvedColor
 
             let pillRect = verticalItemRect(at: i)
@@ -305,7 +306,7 @@ class WorkspaceBarView: NSView {
             // Identical fill + accent border as the top bar, via the shared
             // WorkspacePillStyle. Only the square geometry differs here.
             WorkspacePillStyle.fill(
-                ctx, rect: pillRect, active: isSelected, hovered: isHovered,
+                ctx, rect: pillRect, active: isSelected, hovered: false,
                 wsColor: wsColor, neutral: theme.chromeMuted)
             if isSelected {
                 WorkspacePillStyle.strokeBorder(ctx, rect: pillRect, accent: theme.accentColor)
@@ -353,7 +354,7 @@ class WorkspaceBarView: NSView {
         // The hovered workspace, expanded over the panes: full name plus the close
         // button, neither of which fits in the two-letter resting pill. Outside the
         // stack's clip — it deliberately floats past the strip.
-        drawExpandedHoverPill(ctx, theme: theme)
+        drawExpandedHoverPill(ctx, theme: theme, islandBorder: islandBorder)
 
         // Plus button — pinned to the bottom, painted last so a pill scrolled to the
         // very end passes behind it.
@@ -377,31 +378,19 @@ class WorkspaceBarView: NSView {
     private func drawVerticalFadeEdge(
         _ ctx: CGContext, at y: CGFloat, height: CGFloat, topDown: Bool
     ) {
-        let bgColor = AppSettings.shared.theme.windowBackdrop.cgColor
-        let components = bgColor.components ?? [0, 0, 0, 1]
-        let r = !components.isEmpty ? components[0] : 0
-        let g = components.count > 1 ? components[1] : 0
-        let b = components.count > 2 ? components[2] : 0
-        let colors: [CGFloat] =
-            topDown
-            ? [r, g, b, 1.0, r, g, b, 0.0]
-            : [r, g, b, 0.0, r, g, b, 1.0]
-        guard
-            let gradient = CGGradient(
-                colorSpace: CGColorSpaceCreateDeviceRGB(), colorComponents: colors,
-                locations: nil, count: 2)
-        else { return }
-        ctx.saveGState()
-        ctx.clip(to: CGRect(x: verticalStripX, y: y, width: Self.verticalWidth, height: height))
-        ctx.drawLinearGradient(
-            gradient, start: CGPoint(x: 0, y: y), end: CGPoint(x: 0, y: y + height), options: [])
-        ctx.restoreGState()
+        WorkspacePillStyle.drawBackdropFade(
+            ctx,
+            in: CGRect(x: verticalStripX, y: y, width: Self.verticalWidth, height: height),
+            from: CGPoint(x: 0, y: topDown ? y : y + height),
+            to: CGPoint(x: 0, y: topDown ? y + height : y))
     }
 
     /// Paint the hovered workspace as a wide pill floating over the panes. Drawn
     /// after the resting stack so it sits on top of its neighbours, with a shadow to
     /// read as a layer above the content rather than a hole punched in the strip.
-    private func drawExpandedHoverPill(_ ctx: CGContext, theme: TerminalTheme) {
+    private func drawExpandedHoverPill(
+        _ ctx: CGContext, theme: TerminalTheme, islandBorder: NSColor
+    ) {
         guard hoveredIndex >= 0, hoveredIndex < items.count else { return }
         let i = hoveredIndex
         let item = items[i]
@@ -416,11 +405,7 @@ class WorkspaceBarView: NSView {
         // Opaque backdrop under the pill fill: the fill itself is translucent, and
         // terminal text showing through a floating control reads as a glitch.
         ctx.setFillColor(theme.chromeBg.cgColor)
-        ctx.addPath(
-            CGPath(
-                roundedRect: rect, cornerWidth: WorkspacePillStyle.cornerRadius,
-                cornerHeight: WorkspacePillStyle.cornerRadius, transform: nil))
-        ctx.fillPath()
+        WorkspacePillStyle.fillRoundedRect(ctx, rect: rect)
 
         WorkspacePillStyle.fill(
             ctx, rect: rect, active: isSelected, hovered: true, wsColor: wsColor,
@@ -432,23 +417,14 @@ class WorkspaceBarView: NSView {
             WorkspacePillStyle.strokeBorder(ctx, rect: rect, accent: theme.accentColor)
         } else {
             WorkspacePillStyle.strokeIslandBorder(
-                ctx, rect: rect, wsColor: wsColor, neutral: IslandMetrics.borderColor)
+                ctx, rect: rect, wsColor: wsColor, neutral: islandBorder)
         }
 
-        let textColor: NSColor
-        if let c = wsColor, isSelected {
-            textColor = NSColor(
-                red: c.redComponent * 0.6 + 0.4, green: c.greenComponent * 0.6 + 0.4,
-                blue: c.blueComponent * 0.6 + 0.4, alpha: 1)
-        } else if isSelected {
-            textColor = theme.chromeText
-        } else if let c = wsColor {
-            textColor = NSColor(
-                red: c.redComponent * 0.5 + 0.2, green: c.greenComponent * 0.5 + 0.2,
-                blue: c.blueComponent * 0.5 + 0.2, alpha: 1)
-        } else {
-            textColor = theme.chromeText
-        }
+        // `chromeText` as `muted` too: the expanded pill's un-selected fallback is
+        // full-strength text, unlike the resting pills' muted two-letter label.
+        let textColor = WorkspacePillStyle.labelColor(
+            wsColor: wsColor, active: isSelected, text: theme.chromeText,
+            muted: theme.chromeText)
 
         let closeSize = WorkspacePillStyle.closeButtonSize
         let sidePad = Self.verticalHoveredPillPadding
@@ -524,7 +500,7 @@ class WorkspaceBarView: NSView {
     private func drawPlusButton(_ ctx: CGContext, in rect: CGRect, theme: TerminalTheme) {
         if isPlusButtonHovered {
             ctx.setFillColor(theme.chromeMuted.withAlphaComponent(0.12).cgColor)
-            fillRoundedRect(ctx, rect: rect)
+            WorkspacePillStyle.fillRoundedRect(ctx, rect: rect)
         }
 
         let plusColor =
@@ -683,7 +659,7 @@ class WorkspaceBarView: NSView {
 
         let step = Self.verticalItemSize + Self.verticalItemGap
         // Point is in view space, so undo the scroll before mapping to an index.
-        let contentY = point.y + verticalScrollOffset - Self.verticalTopInset
+        let contentY = point.y + verticalScrollOffset
         let rawIdx = max(0, min(Int((contentY + Self.verticalItemGap / 2) / step), items.count))
 
         let validIdx = validDropIndex(raw: rawIdx)
@@ -959,7 +935,7 @@ class WorkspaceBarView: NSView {
             return
         }
         let step = Self.verticalItemSize + Self.verticalItemGap
-        let top = Self.verticalTopInset + CGFloat(selectedIndex) * step
+        let top = CGFloat(selectedIndex) * step
         if top < verticalScrollOffset {
             verticalScrollOffset = top
         } else if top + Self.verticalItemSize > verticalScrollOffset + verticalScrollViewportHeight {

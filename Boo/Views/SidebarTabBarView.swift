@@ -329,11 +329,7 @@ class SidebarTabBarView: NSView {
 
             if isBeingDragged {
                 ctx.setFillColor(theme.chromeMuted.withAlphaComponent(0.04).cgColor)
-                ctx.addPath(
-                    CGPath(
-                        roundedRect: pillRect(in: tabRect), cornerWidth: IslandMetrics.controlRadius,
-                        cornerHeight: IslandMetrics.controlRadius, transform: nil))
-                ctx.fillPath()
+                WorkspacePillStyle.fillRoundedRect(ctx, rect: pillRect(in: tabRect))
 
                 if let img = NSImage(systemSymbolName: tab.icon, accessibilityDescription: nil) {
                     let config = NSImage.SymbolConfiguration(pointSize: iconSize * 0.75, weight: .regular)
@@ -351,25 +347,11 @@ class SidebarTabBarView: NSView {
 
             if isHovered {
                 ctx.setFillColor(theme.chromeMuted.withAlphaComponent(0.08).cgColor)
-                ctx.addPath(
-                    CGPath(
-                        roundedRect: pillRect(in: tabRect), cornerWidth: IslandMetrics.controlRadius,
-                        cornerHeight: IslandMetrics.controlRadius, transform: nil))
-                ctx.fillPath()
+                WorkspacePillStyle.fillRoundedRect(ctx, rect: pillRect(in: tabRect))
             }
 
             if isSelected {
-                // Fill plus the island hairline, so the active tab is edged like every
-                // other selected control in the chrome instead of being a bare tint.
-                let r = pillRect(in: tabRect)
-                ctx.setFillColor(theme.accentColor.withAlphaComponent(0.15).cgColor)
-                ctx.addPath(
-                    CGPath(
-                        roundedRect: r, cornerWidth: IslandMetrics.controlRadius,
-                        cornerHeight: IslandMetrics.controlRadius, transform: nil))
-                ctx.fillPath()
-                WorkspacePillStyle.strokeHairline(
-                    ctx, rect: r, color: theme.accentColor.withAlphaComponent(0.55))
+                drawSelectedPill(ctx, in: pillRect(in: tabRect), theme: theme)
             }
 
             let iconColor =
@@ -405,15 +387,7 @@ class SidebarTabBarView: NSView {
             // the glyph — it used to be drawn after, tinting the ellipsis it was
             // meant to sit behind.
             if hasSelectedOverflow {
-                let r = pillRect(in: overflowRect)
-                ctx.setFillColor(theme.accentColor.withAlphaComponent(0.15).cgColor)
-                ctx.addPath(
-                    CGPath(
-                        roundedRect: r, cornerWidth: IslandMetrics.controlRadius,
-                        cornerHeight: IslandMetrics.controlRadius, transform: nil))
-                ctx.fillPath()
-                WorkspacePillStyle.strokeHairline(
-                    ctx, rect: r, color: theme.accentColor.withAlphaComponent(0.55))
+                drawSelectedPill(ctx, in: pillRect(in: overflowRect), theme: theme)
             }
 
             if let img = NSImage(systemSymbolName: "ellipsis", accessibilityDescription: "More tabs") {
@@ -439,12 +413,7 @@ class SidebarTabBarView: NSView {
 
             ctx.setFillColor(theme.chromeBg.withAlphaComponent(0.88).cgColor)
             let ghostRect = CGRect(x: ghostX, y: ghostY, width: ghostSize, height: ghostSize)
-            ctx.addPath(
-                CGPath(
-                    roundedRect: ghostRect.insetBy(dx: -1, dy: -1),
-                    cornerWidth: IslandMetrics.controlRadius,
-                    cornerHeight: IslandMetrics.controlRadius, transform: nil))
-            ctx.fillPath()
+            WorkspacePillStyle.fillRoundedRect(ctx, rect: ghostRect.insetBy(dx: -1, dy: -1))
 
             if let img = NSImage(systemSymbolName: tab.icon, accessibilityDescription: nil) {
                 let config = NSImage.SymbolConfiguration(
@@ -462,6 +431,15 @@ class SidebarTabBarView: NSView {
                 }
             }
         }
+    }
+
+    /// Accent fill plus the island hairline — how the strip marks the active tab,
+    /// whether it sits in the visible row or behind the overflow "···" button.
+    private func drawSelectedPill(_ ctx: CGContext, in rect: CGRect, theme: TerminalTheme) {
+        ctx.setFillColor(theme.accentColor.withAlphaComponent(0.15).cgColor)
+        WorkspacePillStyle.fillRoundedRect(ctx, rect: rect)
+        WorkspacePillStyle.strokeHairline(
+            ctx, rect: rect, color: theme.accentColor.withAlphaComponent(0.55))
     }
 
     private func drawDropIndicator(at x: CGFloat, ctx: CGContext, theme: TerminalTheme) {

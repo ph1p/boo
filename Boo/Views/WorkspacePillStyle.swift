@@ -33,6 +33,31 @@ enum WorkspacePillStyle {
         ctx.fillPath()
     }
 
+    /// Dissolve a clipped scroll edge into the window backdrop: a two-stop
+    /// backdrop-coloured gradient, opaque at `start` and clear at `end`, clipped to
+    /// `clipRect`. One copy for the toolbar's horizontal fades and the side
+    /// workspace strip's vertical ones — the axis lives in the points.
+    @MainActor
+    static func drawBackdropFade(
+        _ ctx: CGContext, in clipRect: CGRect, from start: CGPoint, to end: CGPoint
+    ) {
+        // sRGB conversion, not raw `cgColor.components`: a catalog colour's
+        // component layout isn't guaranteed to be RGBA.
+        guard let c = AppSettings.shared.theme.windowBackdrop.usingColorSpace(.sRGB) else {
+            return
+        }
+        let (r, g, b) = (c.redComponent, c.greenComponent, c.blueComponent)
+        guard
+            let gradient = CGGradient(
+                colorSpace: CGColorSpaceCreateDeviceRGB(),
+                colorComponents: [r, g, b, 1.0, r, g, b, 0.0], locations: nil, count: 2)
+        else { return }
+        ctx.saveGState()
+        ctx.clip(to: clipRect)
+        ctx.drawLinearGradient(gradient, start: start, end: end, options: [])
+        ctx.restoreGState()
+    }
+
     /// Label colour for a pill, lightened out of the workspace's own tint so the
     /// text stays legible against the fill. Copied by hand at three draw sites
     /// before this, and the copies had already drifted apart.
@@ -98,12 +123,12 @@ enum WorkspacePillStyle {
         ctx.strokePath()
     }
 
-    /// Alpha the island hairline is drawn at. A workspace-coloured pill can carry a
-    /// stronger edge than a neutral one without shouting, since the tint already
-    /// belongs to it.
-    static func islandBorderAlpha(active: Bool, colored: Bool) -> CGFloat {
-        if colored { return active ? 0.9 : 0.55 }
-        return active ? 0.9 : 1.0
+    /// Alpha the island hairline is drawn at. Only inactive pills carry it — the
+    /// active pill takes the accent `strokeBorder` instead. A workspace-coloured
+    /// pill's tinted edge is drawn softer than the neutral chrome hairline, since
+    /// the tint already belongs to it.
+    static func islandBorderAlpha(colored: Bool) -> CGFloat {
+        colored ? 0.55 : 1.0
     }
 
     /// The island hairline every workspace pill carries, tinted by the workspace's
@@ -112,7 +137,7 @@ enum WorkspacePillStyle {
     /// The *active* pill is stroked in the accent instead (`strokeBorder`).
     static func strokeIslandBorder(_ ctx: CGContext, rect: CGRect, wsColor: NSColor?, neutral: NSColor) {
         let color = (wsColor ?? neutral).withAlphaComponent(
-            islandBorderAlpha(active: false, colored: wsColor != nil))
+            islandBorderAlpha(colored: wsColor != nil))
         strokeHairline(ctx, rect: rect, color: color)
     }
 

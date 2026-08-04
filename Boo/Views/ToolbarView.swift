@@ -71,7 +71,9 @@ class ToolbarView: NSView {
     var isWorkspacePlusButtonHovered: Bool = false
     private var toolbarTrackingArea: NSTrackingArea?
 
-    let barHeight: CGFloat = 38
+    /// The layout constrains the toolbar to `IslandMetrics.toolbarHeight`; drawing
+    /// and hit-testing must centre on the same number or the chrome misaligns.
+    let barHeight: CGFloat = IslandMetrics.toolbarHeight
 
     override init(frame: NSRect) {
         super.init(frame: frame)

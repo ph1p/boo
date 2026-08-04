@@ -86,14 +86,11 @@ extension ToolbarView {
         let halfW = min(windowMid - leftLimit, rightLimit - windowMid)
         guard halfW > 0 else { return nil }
 
-        // Centre on the glyphs, not on the line box. This view is flipped, so
-        // `draw(in:)` lays the text from the box's top and the font's leading sits
-        // above the caps — halving the full line height leaves the title riding high
-        // of the traffic lights. Offsetting by the ascender-to-cap gap puts the cap
-        // band on the bar's midline, which is what the eye lines up against.
+        // Centre on the glyphs, not on the line box: the shared cap-band correction
+        // puts the capitals on the bar's midline, level with the traffic lights.
         let font = (attrs[.font] as? NSFont) ?? ToolbarView.Fonts.headerTitle
         let h = title.size(withAttributes: attrs).height
-        let y = round((barHeight - font.capHeight) / 2 - (font.ascender - font.capHeight))
+        let y = IslandMetrics.capCenteredTitleY(font: font, barHeight: barHeight)
         return CGRect(x: windowMid - halfW, y: y, width: halfW * 2, height: h)
     }
 
@@ -232,11 +229,7 @@ extension ToolbarView {
         let plusRect = workspacePlusButtonRect
         let plusBgAlpha: CGFloat = isWorkspacePlusButtonHovered ? 0.12 : 0.06
         ctx.setFillColor(theme.chromeMuted.withAlphaComponent(plusBgAlpha).cgColor)
-        ctx.addPath(
-            CGPath(
-                roundedRect: plusRect, cornerWidth: IslandMetrics.controlRadius,
-                cornerHeight: IslandMetrics.controlRadius, transform: nil))
-        ctx.fillPath()
+        WorkspacePillStyle.fillRoundedRect(ctx, rect: plusRect)
         let wsPlusAlpha: CGFloat = isWorkspacePlusButtonHovered ? 0.9 : 0.45
         let wsPlusAttrs: [NSAttributedString.Key: Any] = [
             .font: Fonts.plus15Light,
@@ -253,28 +246,12 @@ extension ToolbarView {
         // The toolbar paints no fill of its own in the island style — it is a
         // transparent strip over the window backdrop, so the scroll fade must
         // dissolve into the backdrop, not into the (now unused) chrome fill.
-        let bgColor = AppSettings.shared.theme.windowBackdrop.cgColor
-        let components = bgColor.components ?? [0, 0, 0, 1]
-        let r = !components.isEmpty ? components[0] : 0
-        let g = components.count > 1 ? components[1] : 0
-        let b = components.count > 2 ? components[2] : 0
-        let colors: [CGFloat] =
-            leftToRight
-            ? [r, g, b, 1.0, r, g, b, 0.0]
-            : [r, g, b, 0.0, r, g, b, 1.0]
-        let colorSpace = CGColorSpaceCreateDeviceRGB()
-        guard let gradient = CGGradient(colorSpace: colorSpace, colorComponents: colors, locations: nil, count: 2)
-        else { return }
-        ctx.saveGState()
         // Full height: the -1 inset used to spare the old bottom separator, which
         // the island gap replaced.
-        ctx.clip(to: CGRect(x: x, y: 0, width: width, height: barHeight))
-        ctx.drawLinearGradient(
-            gradient,
-            start: CGPoint(x: x, y: 0),
-            end: CGPoint(x: x + width, y: 0),
-            options: [])
-        ctx.restoreGState()
+        WorkspacePillStyle.drawBackdropFade(
+            ctx, in: CGRect(x: x, y: 0, width: width, height: barHeight),
+            from: CGPoint(x: leftToRight ? x : x + width, y: 0),
+            to: CGPoint(x: leftToRight ? x + width : x, y: 0))
     }
 
     internal func drawSidebarButton(_ ctx: CGContext) {
@@ -289,11 +266,7 @@ extension ToolbarView {
         if isSidebarButtonHovered {
             let hoverRect = CGRect(x: btnX, y: btnY, width: btnSize, height: btnSize)
             ctx.setFillColor(theme.chromeMuted.withAlphaComponent(0.15).cgColor)
-            ctx.addPath(
-                CGPath(
-                    roundedRect: hoverRect, cornerWidth: IslandMetrics.controlRadius,
-                    cornerHeight: IslandMetrics.controlRadius, transform: nil))
-            ctx.fillPath()
+            WorkspacePillStyle.fillRoundedRect(ctx, rect: hoverRect)
         }
 
         let color =
