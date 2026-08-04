@@ -205,6 +205,9 @@ class PaneView: NSView {
         v.autoresizingMask = [.width, .height]
         v.isHidden = true
         v.layer?.borderWidth = PaneView.activityBorderWidth
+        // Follow the pane's island corner, else the frame squares off the rounding.
+        v.layer?.cornerRadius = IslandMetrics.innerRadius
+        v.layer?.cornerCurve = .continuous
         return v
     }()
 
@@ -223,6 +226,20 @@ class PaneView: NSView {
     /// pure paint and would otherwise re-derive this on every tab-bar repaint.
     func updateActivityBorder() {
         activityBorder.isHidden = isFocused || !pane.tabs.contains { $0.state.hasActivity }
+        syncIslandStroke()
+    }
+
+    /// The pane is an island, so its own layer carries a hairline stroke — and a
+    /// layer's border paints *above* its sublayers, which would hide the outermost
+    /// pixels of the activity overlay. Tint the island stroke with the same accent
+    /// while activity shows so the frame reads as one solid accent edge.
+    func syncIslandStroke() {
+        guard let layer else { return }
+        let theme = AppSettings.shared.theme
+        layer.borderColor =
+            activityBorder.isHidden
+            ? IslandMetrics.borderColor.cgColor
+            : theme.accentColor.withAlphaComponent(Self.activityBorderAlpha).cgColor
     }
 
     func updateFindBarTheme() {
@@ -239,6 +256,7 @@ class PaneView: NSView {
         dimOverlay.layer?.backgroundColor = color.withAlphaComponent(theme.isDark ? 0.35 : 0.55).cgColor
         activityBorder.layer?.borderColor =
             theme.accentColor.withAlphaComponent(Self.activityBorderAlpha).cgColor
+        syncIslandStroke()
     }
 
     // Coalesce tab bar redraws to avoid flicker from rapid title updates
@@ -267,6 +285,9 @@ class PaneView: NSView {
         super.init(frame: .zero)
         wantsLayer = true
         layer?.backgroundColor = AppSettings.shared.theme.background.nsColor.cgColor
+        // Each pane is an island: rounding here also clips the terminal's
+        // Metal sublayer, which libghostty owns and we can't round directly.
+        IslandMetrics.round(self, radius: IslandMetrics.innerRadius)
         addSubview(dimOverlay)
         addSubview(activityBorder)
         dimOverlay.onClicked = { [weak self] in

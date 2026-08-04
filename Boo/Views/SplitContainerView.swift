@@ -18,7 +18,9 @@ class SplitContainerView: NSView, NSSplitViewDelegate {
     override init(frame: NSRect) {
         super.init(frame: frame)
         wantsLayer = true
-        layer?.backgroundColor = AppSettings.shared.theme.background.nsColor.cgColor
+        // Transparent: each PaneView is its own rounded island and paints its own
+        // background, so the window backdrop shows through the gaps between them.
+        layer?.backgroundColor = NSColor.clear.cgColor
     }
 
     required init?(coder: NSCoder) {

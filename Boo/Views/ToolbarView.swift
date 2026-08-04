@@ -3,9 +3,6 @@ import Cocoa
 @MainActor protocol ToolbarViewDelegate: AnyObject {
     func toolbar(_ toolbar: ToolbarView, didSelectWorkspaceAt index: Int)
     func toolbar(_ toolbar: ToolbarView, didCloseWorkspaceAt index: Int)
-    func toolbar(_ toolbar: ToolbarView, didSelectTabAt index: Int)
-    func toolbar(_ toolbar: ToolbarView, didCloseTabAt index: Int)
-    func toolbarDidRequestNewTab(_ toolbar: ToolbarView)
     func toolbarDidToggleSidebar(_ toolbar: ToolbarView)
     func toolbar(_ toolbar: ToolbarView, renameWorkspaceAt index: Int, to name: String)
     func toolbar(_ toolbar: ToolbarView, setColorForWorkspaceAt index: Int, color: WorkspaceColor)
@@ -28,21 +25,17 @@ class ToolbarView: NSView {
         var hasActivity: Bool = false
     }
 
-    struct TabItem {
-        let title: String
-        let isActive: Bool
-    }
-
     // MARK: - Font Cache (avoids NSFont alloc on every draw pass)
 
     enum Fonts {
         nonisolated(unsafe) static let ws11Regular = NSFont.systemFont(ofSize: 11, weight: .regular)
         nonisolated(unsafe) static let ws11Medium = NSFont.systemFont(ofSize: 11, weight: .medium)
-        nonisolated(unsafe) static let tab11Regular = NSFont.systemFont(ofSize: 11.5, weight: .regular)
-        nonisolated(unsafe) static let tab11Medium = NSFont.systemFont(ofSize: 11.5, weight: .medium)
         nonisolated(unsafe) static let closeSmall = NSFont.systemFont(ofSize: 8, weight: .bold)
-        nonisolated(unsafe) static let plus9Bold = NSFont.systemFont(ofSize: 9, weight: .bold)
         nonisolated(unsafe) static let plus15Light = NSFont.systemFont(ofSize: 15, weight: .light)
+
+        /// The centred header title (active workspace name). Larger than the pill
+        /// labels beside it — it names the window, they are navigation.
+        nonisolated(unsafe) static let headerTitle = NSFont.systemFont(ofSize: 13, weight: .medium)
     }
 
     // MARK: - Measure Cache
@@ -56,13 +49,11 @@ class ToolbarView: NSView {
     private var _cachedTrafficLightWidth: CGFloat?
 
     private(set) var workspaces: [WorkspaceItem] = []
-    private(set) var tabs: [TabItem] = []
     var sidebarVisible = false
     /// Whether the sidebar button should be hidden (no active plugins).
     var sidebarButtonHidden = false
     /// When true, workspace pills are hidden (they're shown in a left workspace bar instead).
     var hideWorkspaces = false
-    var tabScrollOffset: CGFloat = 0
     var workspaceScrollOffset: CGFloat = 0
     var mouseDownLocation: NSPoint?
     var dragSourceIndex: Int?
@@ -76,14 +67,11 @@ class ToolbarView: NSView {
 
     // Hover state
     var hoveredWorkspaceIndex: Int = -1
-    var hoveredTabIndex: Int = -1
     var isSidebarButtonHovered: Bool = false
-    var isPlusButtonHovered: Bool = false
     var isWorkspacePlusButtonHovered: Bool = false
     private var toolbarTrackingArea: NSTrackingArea?
 
     let barHeight: CGFloat = 38
-    let tabFixedWidth: CGFloat = 140
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -138,11 +126,11 @@ class ToolbarView: NSView {
             var x = trafficLightWidth - workspaceScrollOffset
             for i in workspaces.indices {
                 let w = measureWorkspace(at: i)
-                if point.x >= x && point.x < x + w + 6 {
+                if point.x >= x && point.x < x + w + Self.workspaceGap {
                     newWSHover = i
                     break
                 }
-                x += w + 6
+                x += w + Self.workspaceGap
             }
         }
         if newWSHover != hoveredWorkspaceIndex {
@@ -157,42 +145,14 @@ class ToolbarView: NSView {
             changed = true
         }
 
-        // Tab zone
-        var newTabHover = -1
-        var newPlusHover = false
-        if point.x >= tabZoneStart && point.x <= tabZoneEnd && !sidebarHover {
-            var x = tabZoneStart - tabScrollOffset
-            for (i, _) in tabs.enumerated() {
-                if point.x >= x && point.x < x + tabFixedWidth {
-                    newTabHover = i
-                    break
-                }
-                x += tabFixedWidth
-            }
-            if newTabHover == -1 && point.x >= x && point.x < x + 28 {
-                newPlusHover = true
-            }
-        }
-        if newTabHover != hoveredTabIndex {
-            hoveredTabIndex = newTabHover
-            changed = true
-        }
-        if newPlusHover != isPlusButtonHovered {
-            isPlusButtonHovered = newPlusHover
-            changed = true
-        }
-
         if changed { needsDisplay = true }
     }
 
     override func mouseExited(with event: NSEvent) {
         let changed =
-            hoveredWorkspaceIndex != -1 || hoveredTabIndex != -1 || isSidebarButtonHovered || isPlusButtonHovered
-            || isWorkspacePlusButtonHovered
+            hoveredWorkspaceIndex != -1 || isSidebarButtonHovered || isWorkspacePlusButtonHovered
         hoveredWorkspaceIndex = -1
-        hoveredTabIndex = -1
         isSidebarButtonHovered = false
-        isPlusButtonHovered = false
         isWorkspacePlusButtonHovered = false
         if changed { needsDisplay = true }
     }
@@ -214,9 +174,8 @@ class ToolbarView: NSView {
         NSSize(width: NSView.noIntrinsicMetric, height: barHeight)
     }
 
-    func update(workspaces: [WorkspaceItem], tabs: [TabItem], sidebarVisible: Bool) {
+    func update(workspaces: [WorkspaceItem], sidebarVisible: Bool) {
         self.workspaces = workspaces
-        self.tabs = tabs
         self.sidebarVisible = sidebarVisible
         _measureCache.removeAll(keepingCapacity: true)
         _cachedTotalWorkspaceWidth = nil
@@ -231,9 +190,9 @@ class ToolbarView: NSView {
         guard let activeIndex = workspaces.firstIndex(where: { $0.isActive }) else { return }
         var x: CGFloat = 0
         for i in 0..<activeIndex {
-            x += measureWorkspace(at: i) + 6
+            x += measureWorkspace(at: i) + Self.workspaceGap
         }
-        let activeWidth = measureWorkspace(at: activeIndex) + 6
+        let activeWidth = measureWorkspace(at: activeIndex) + Self.workspaceGap
         let visibleStart = workspaceScrollOffset
         let visibleEnd = workspaceScrollOffset + workspaceZoneWidth
 
@@ -263,8 +222,14 @@ class ToolbarView: NSView {
         _cachedTrafficLightWidth = value
         return value
     }
-    var sidebarButtonWidth: CGFloat { sidebarButtonHidden ? 10 : 38 }
-    let dividerWidth: CGFloat = 1
+    /// Trailing zone. With the button hidden it collapses to the shared content
+    /// inset, so the strip still stops the same distance from the toolbar's edge
+    /// that every other chrome region keeps.
+    var sidebarButtonWidth: CGFloat { sidebarButtonHidden ? IslandMetrics.contentInset : 38 }
+
+    /// Gap *between* the toolbar's zones (traffic lights | workspaces | sidebar
+    /// button). Deliberately not `contentInset` — that one measures from an edge,
+    /// this one separates two runs of content and needs to read as a break.
     let zoneGap: CGFloat = 12
 
     /// Total content width of all workspace pills (cached until next `update()`).
@@ -272,15 +237,30 @@ class ToolbarView: NSView {
         if let cached = _cachedTotalWorkspaceWidth { return cached }
         var w: CGFloat = 0
         for (i, _) in workspaces.enumerated() {
-            w += measureWorkspace(at: i) + 6
+            w += measureWorkspace(at: i) + Self.workspaceGap
         }
         _cachedTotalWorkspaceWidth = w
         return w
     }
 
-    /// The workspace zone fills all space after the traffic lights.
+    /// Gap between adjacent workspace pills. Matches `plusLeadingGap` so the
+    /// spacing is even all the way across the strip, including up to the `+`.
+    static let workspaceGap: CGFloat = 6
+
+    /// Size of the pinned `+` button.
+    static let plusButtonSize: CGFloat = 24
+
+    /// Width reserved at the right of the workspace zone for the pinned `+` button.
+    /// The button never scrolls, so the scrollable pill strip stops short of it and
+    /// the right-hand scroll fade lands in the space between. Exactly the button's
+    /// width — the last pill's trailing `workspaceGap` supplies the space before
+    /// it, and `zoneGap` the margin after, so there is no dead slack either side.
+    static let plusZoneWidth: CGFloat = plusButtonSize
+
+    /// The workspace zone fills all space after the traffic lights, minus the strip
+    /// held back for the pinned `+`.
     var workspaceZoneMaxWidth: CGFloat {
-        max(60, bounds.width - trafficLightWidth - zoneGap)
+        max(60, bounds.width - trafficLightWidth - zoneGap - Self.plusZoneWidth)
     }
 
     /// Visible width of the workspace zone — shrinks to content if it fits, else fills available space.
@@ -299,7 +279,10 @@ class ToolbarView: NSView {
 
     /// The `+` button rect for adding a new workspace (top bar only).
     var workspacePlusButtonRect: CGRect {
-        let btnSize: CGFloat = 24
+        let btnSize = Self.plusButtonSize
+        // `workspaceZoneWidth` already carries the last pill's trailing
+        // `workspaceGap`, so the button sits flush at the zone end and the spacing
+        // before it matches the gap between pills.
         let x = workspaceZoneEnd
         let y = (barHeight - btnSize) / 2
         return CGRect(x: x, y: y, width: btnSize, height: btnSize)
@@ -315,27 +298,6 @@ class ToolbarView: NSView {
             x: pillRect.maxX - size - inset,
             y: pillRect.midY - size / 2,
             width: size, height: size)
-    }
-
-    // Tab zone (unused when tabs are in PaneView, kept for compatibility)
-    var tabZoneStart: CGFloat {
-        workspaceZoneEnd + zoneGap + dividerWidth + zoneGap
-    }
-
-    var tabZoneEnd: CGFloat {
-        bounds.width - 8
-    }
-
-    var tabZoneWidth: CGFloat {
-        max(0, tabZoneEnd - tabZoneStart)
-    }
-
-    var totalTabContentWidth: CGFloat {
-        CGFloat(tabs.count) * tabFixedWidth + 28  // +28 for plus button
-    }
-
-    var maxScrollOffset: CGFloat {
-        max(0, totalTabContentWidth - tabZoneWidth)
     }
 
     /// Measure workspace pill by index, using the measure cache.
@@ -365,7 +327,6 @@ class ToolbarView: NSView {
     }
 
     func clampScrollOffset() {
-        tabScrollOffset = min(max(0, tabScrollOffset), maxScrollOffset)
         workspaceScrollOffset = min(max(0, workspaceScrollOffset), maxWorkspaceScrollOffset)
     }
 
@@ -382,7 +343,7 @@ class ToolbarView: NSView {
             let windowRect = convert(localRect, to: nil)
             let screenRect = window.convertToScreen(windowRect)
             result.append((i, screenRect))
-            x += w + 6
+            x += w + Self.workspaceGap
         }
         return result
     }
@@ -416,11 +377,11 @@ extension ToolbarView {
         var idx = workspaces.count
         for i in workspaces.indices {
             let w = measureWorkspace(at: i)
-            if point.x < x + (w + 6) / 2 {
+            if point.x < x + (w + Self.workspaceGap) / 2 {
                 idx = i
                 break
             }
-            x += w + 6
+            x += w + Self.workspaceGap
         }
         if idx != dropTargetIndex {
             dropTargetIndex = idx

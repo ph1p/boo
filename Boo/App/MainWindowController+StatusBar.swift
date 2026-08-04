@@ -19,7 +19,7 @@ extension MainWindowController {
                 isPinned: ws.isPinned, color: ws.color, hasCustomColor: ws.customColor != nil,
                 hasActivity: ws.hasActivity && i != appState.activeWorkspaceIndex)
         }
-        toolbar.update(workspaces: wsItems, tabs: [], sidebarVisible: sidebarVisible)
+        toolbar.update(workspaces: wsItems, sidebarVisible: sidebarVisible)
         if let sideBar = sideWorkspaceBar {
             let barItems = appState.workspaces.map { ws in
                 WorkspaceBarView.Item(

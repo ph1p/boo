@@ -115,13 +115,17 @@ final class SidebarController {
         guard let tabBar = sidebarTabBarView, let container = sidebarContainer else { return }
         NSLayoutConstraint.deactivate(sidebarTabBarPositionConstraints)
 
+        // Nudged off the sidebar island's edge on whichever side it docks to, so the
+        // pills don't sit flush against the rounded corner. Only the outer side gets
+        // it — the inner side already has the panel content below/above it.
+        let edgePad = IslandMetrics.tabBarEdgePadding
         if AppSettings.shared.sidebarTabBarPosition == .bottom {
             sidebarTabBarPositionConstraints = [
-                tabBar.bottomAnchor.constraint(equalTo: container.bottomAnchor)
+                tabBar.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -edgePad)
             ]
         } else {
             sidebarTabBarPositionConstraints = [
-                tabBar.topAnchor.constraint(equalTo: container.topAnchor)
+                tabBar.topAnchor.constraint(equalTo: container.topAnchor, constant: edgePad)
             ]
         }
         NSLayoutConstraint.activate(sidebarTabBarPositionConstraints)

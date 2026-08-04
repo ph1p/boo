@@ -4,7 +4,11 @@ import ObjectiveC
 @MainActor
 enum TrafficLightPositioner {
     static let offsetX: CGFloat = 4
-    static let offsetY: CGFloat = -3
+    /// Negative is downward — window coordinates are unflipped. The base `-3` was
+    /// tuned when the toolbar sat flush against the window top; the header now sits
+    /// `barGap` lower, so the buttons follow it by the same amount or they ride
+    /// above the pills and title beside them.
+    static let offsetY: CGFloat = -3 - IslandMetrics.barGap
 
     private static let buttonTypes: [NSWindow.ButtonType] = [
         .closeButton, .miniaturizeButton, .zoomButton

@@ -9,8 +9,16 @@ import SwiftUI
 class ThemedSplitView: NSSplitView {
     var onDividerDoubleClick: (() -> Void)?
 
+    /// In the island style the divider *is* the gap between two islands, so it
+    /// matches the window backdrop rather than drawing a border line.
     override var dividerColor: NSColor {
-        AppSettings.shared.theme.sidebarBorder
+        AppSettings.shared.theme.windowBackdrop
+    }
+
+    /// Widen the divider to the island gap so panes (and the sidebar) are spaced
+    /// exactly like every other island.
+    override var dividerThickness: CGFloat {
+        IslandMetrics.gap
     }
 
     private var dividerHoverHighlighted = false
@@ -341,7 +349,7 @@ class ThemedSplitView: NSSplitView {
         window.title = "Boo"
         window.minSize = NSSize(width: 600, height: 400)
         window.setFrameAutosaveName("BooMainWindow")
-        window.backgroundColor = AppSettings.shared.theme.chromeBg
+        window.backgroundColor = AppSettings.shared.theme.windowBackdrop
         window.appearance = NSAppearance(named: AppSettings.shared.theme.isDark ? .darkAqua : .aqua)
         window.titlebarAppearsTransparent = true
         window.titleVisibility = .hidden
@@ -607,15 +615,25 @@ class ThemedSplitView: NSSplitView {
                     AppStore.shared.refreshTheme()
                     let theme = AppSettings.shared.theme
                     BooSocketServer.shared.emitThemeChanged(name: theme.name, isDark: theme.isDark)
-                    self.window?.backgroundColor = theme.chromeBg
+                    self.window?.backgroundColor = theme.windowBackdrop
                     self.window?.appearance = NSAppearance(named: theme.isDark ? .darkAqua : .aqua)
+                    self.window?.contentView?.layer?.backgroundColor = theme.windowBackdrop.cgColor
                     self.sidebarContainer.layer?.backgroundColor = theme.sidebarBg.cgColor
-                    self.splitContainer.layer?.backgroundColor = theme.background.nsColor.cgColor
+                    // splitContainer stays clear — panes are the islands (see SplitContainerView.init)
                     self.mainSplitView.needsDisplay = true
                     self.toolbar.needsDisplay = true
                     self.statusBar.needsDisplay = true
+                    // Island borders are layer strokes, not drawn in `draw(_:)`,
+                    // so they need an explicit refresh on theme change.
+                    // Toolbar, status bar and the side workspace bar carry no
+                    // border — they are bare strips.
+                    IslandMetrics.refreshBorder(self.sidebarContainer)
+                    self.sideWorkspaceBar?.needsDisplay = true
                     for (_, pv) in self.paneViews {
                         pv.layer?.backgroundColor = theme.background.nsColor.cgColor
+                        // Pane island stroke is restyled inside updateOverlayColors()
+                        // (via syncIslandStroke), which also honours the accent tint
+                        // while an activity frame is showing.
                         pv.updateOverlayColors()
                         pv.updateFindBarTheme()
                         pv.needsLayout = true
@@ -780,9 +798,12 @@ class ThemedSplitView: NSSplitView {
         guard let window = window, let contentView = window.contentView else { return }
         window.delegate = self
         contentView.wantsLayer = true
+        // Backdrop the islands float on — visible in every gap between them.
+        contentView.layer?.backgroundColor = AppSettings.shared.theme.windowBackdrop.cgColor
 
         toolbar.translatesAutoresizingMaskIntoConstraints = false
         toolbar.delegate = self
+        // Not an island: no fill, no border, no rounding — a bare strip over the backdrop.
         contentView.addSubview(toolbar)
 
         mainSplitView = ThemedSplitView()
@@ -819,6 +840,7 @@ class ThemedSplitView: NSSplitView {
         sidebarContainer = NSView()
         sidebarContainer.wantsLayer = true
         sidebarContainer.layer?.backgroundColor = AppSettings.shared.theme.sidebarBg.cgColor
+        IslandMetrics.round(sidebarContainer)
 
         // Sidebar tab bar
         let tabBar = SidebarTabBarView(frame: .zero)
@@ -886,35 +908,51 @@ class ThemedSplitView: NSSplitView {
             guard let self, let ctx = self.pluginRegistry.lastContext else { return }
             self.activatePluginTab(SidebarTabID(pluginID), context: ctx)
         }
+        // Not an island: no fill, no border, no rounding — a bare strip over the backdrop.
         contentView.addSubview(statusBar)
 
         currentWorkspaceBarPosition = AppSettings.shared.workspaceBarPosition
         currentTabOverflowMode = AppSettings.shared.tabOverflowMode
 
-        // Create leading/trailing constraints that can be adjusted for side workspace bar
-        let toolbarLeading = toolbar.leadingAnchor.constraint(equalTo: contentView.leadingAnchor)
-        let toolbarTrailing = toolbar.trailingAnchor.constraint(equalTo: contentView.trailingAnchor)
-        let mainSplitLeading = mainSplitView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor)
-        let mainSplitTrailing = mainSplitView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor)
+        // Create leading/trailing constraints that can be adjusted for side workspace bar.
+        //
+        // Every region — toolbar, panes, status bar — sits the same `gap` from the
+        // window's *side* edges. The toolbar and status bar draw no fill or border,
+        // but they share that inset so their content lines up with the panes between
+        // them instead of each bar hand-picking its own padding to fake the alignment.
+        //
+        // Vertically the two bars use the tighter `barGap`: they are thin strips, so
+        // a full gap above and below them is height spent on nothing.
+        let gap = IslandMetrics.gap
+        let barGap = IslandMetrics.barGap
+        let toolbarLeading = toolbar.leadingAnchor.constraint(
+            equalTo: contentView.leadingAnchor, constant: gap)
+        let toolbarTrailing = toolbar.trailingAnchor.constraint(
+            equalTo: contentView.trailingAnchor, constant: -gap)
+        let mainSplitLeading = mainSplitView.leadingAnchor.constraint(
+            equalTo: contentView.leadingAnchor, constant: gap)
+        let mainSplitTrailing = mainSplitView.trailingAnchor.constraint(
+            equalTo: contentView.trailingAnchor, constant: -gap)
         toolbarLeadingConstraint = toolbarLeading
         toolbarTrailingConstraint = toolbarTrailing
         mainSplitLeadingConstraint = mainSplitLeading
         mainSplitTrailingConstraint = mainSplitTrailing
 
         NSLayoutConstraint.activate([
-            toolbar.topAnchor.constraint(equalTo: contentView.topAnchor),
+            toolbar.topAnchor.constraint(equalTo: contentView.topAnchor, constant: barGap),
             toolbarLeading,
             toolbarTrailing,
-            toolbar.heightAnchor.constraint(equalToConstant: 38),
+            toolbar.heightAnchor.constraint(equalToConstant: IslandMetrics.toolbarHeight),
 
-            mainSplitView.topAnchor.constraint(equalTo: toolbar.bottomAnchor),
+            mainSplitView.topAnchor.constraint(
+                equalTo: toolbar.bottomAnchor, constant: IslandMetrics.headerBottomGap),
             mainSplitLeading,
             mainSplitTrailing,
-            mainSplitView.bottomAnchor.constraint(equalTo: statusBar.topAnchor),
+            mainSplitView.bottomAnchor.constraint(equalTo: statusBar.topAnchor, constant: -barGap),
 
-            statusBar.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
-            statusBar.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
-            statusBar.bottomAnchor.constraint(equalTo: contentView.bottomAnchor)
+            statusBar.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: gap),
+            statusBar.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -gap),
+            statusBar.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -barGap)
         ])
 
         if currentWorkspaceBarPosition == .left || currentWorkspaceBarPosition == .right {
@@ -936,25 +974,43 @@ class ThemedSplitView: NSSplitView {
         bar.isVertical = true
         bar.isRightAligned = position == .right
         bar.delegate = self
+        // Deliberately not an island: like the toolbar and status bar it is a bare
+        // strip over the backdrop, so no fill, no corner radius and no border.
         contentView.addSubview(bar)
 
-        let widthConstraint = bar.widthAnchor.constraint(equalToConstant: 40)
+        // The frame is wider than the strip the user sees: the extra band is scratch
+        // space the expanded hover pill floats into, over the panes. The bar is added
+        // after the split view so it draws on top, and its `hitTest` lets anything
+        // outside the strip and that pill fall through to the terminal underneath.
+        let widthConstraint = bar.widthAnchor.constraint(
+            equalToConstant: WorkspaceBarView.verticalFrameWidth)
         sideWorkspaceBarWidthConstraint = widthConstraint
 
+        let gap = IslandMetrics.gap
+        // Top and bottom line up with the panes beside it, which clear the bars by
+        // `barGap` — so the first pill starts level with the first pane's top edge.
         var constraints = [
-            bar.topAnchor.constraint(equalTo: toolbar.bottomAnchor),
-            bar.bottomAnchor.constraint(equalTo: statusBar.topAnchor),
+            bar.topAnchor.constraint(
+                equalTo: toolbar.bottomAnchor, constant: IslandMetrics.headerBottomGap),
+            bar.bottomAnchor.constraint(
+                equalTo: statusBar.topAnchor, constant: -IslandMetrics.barGap),
             widthConstraint
         ]
 
+        // Content clears only the *visible* strip plus one more gap — not the frame,
+        // whose overhang deliberately overlaps the panes. The toolbar and split view
+        // share one baseline now, so both take the same constant.
+        let claimed = gap + WorkspaceBarView.verticalWidth + gap
         if position == .left {
-            constraints.append(bar.leadingAnchor.constraint(equalTo: contentView.leadingAnchor))
-            toolbarLeadingConstraint?.constant = 40
-            mainSplitLeadingConstraint?.constant = 40
+            constraints.append(
+                bar.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: gap))
+            toolbarLeadingConstraint?.constant = claimed
+            mainSplitLeadingConstraint?.constant = claimed
         } else {
-            constraints.append(bar.trailingAnchor.constraint(equalTo: contentView.trailingAnchor))
-            toolbarTrailingConstraint?.constant = -40
-            mainSplitTrailingConstraint?.constant = -40
+            constraints.append(
+                bar.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -gap))
+            toolbarTrailingConstraint?.constant = -claimed
+            mainSplitTrailingConstraint?.constant = -claimed
         }
 
         NSLayoutConstraint.activate(constraints)
@@ -970,10 +1026,12 @@ class ThemedSplitView: NSSplitView {
         sideWorkspaceBar?.removeFromSuperview()
         sideWorkspaceBar = nil
         sideWorkspaceBarWidthConstraint = nil
-        toolbarLeadingConstraint?.constant = 0
-        mainSplitLeadingConstraint?.constant = 0
-        toolbarTrailingConstraint?.constant = 0
-        mainSplitTrailingConstraint?.constant = 0
+        // Back to the shared baseline — one inset for every region.
+        let gap = IslandMetrics.gap
+        toolbarLeadingConstraint?.constant = gap
+        toolbarTrailingConstraint?.constant = -gap
+        mainSplitLeadingConstraint?.constant = gap
+        mainSplitTrailingConstraint?.constant = -gap
         toolbar.hideWorkspaces = false
         toolbar.needsDisplay = true
     }

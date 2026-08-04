@@ -18,34 +18,83 @@ extension ToolbarView {
             needsDisplay = true
             return
         }
-
-        // Tab zone scroll
-        if point.x >= tabZoneStart && point.x <= tabZoneEnd {
-            tabScrollOffset -= event.scrollingDeltaX
-            if abs(event.scrollingDeltaY) > abs(event.scrollingDeltaX) {
-                tabScrollOffset += event.scrollingDeltaY
-            }
-            clampScrollOffset()
-            needsDisplay = true
-        }
     }
 
     // MARK: - Drawing
 
     override func draw(_ dirtyRect: NSRect) {
         guard let ctx = NSGraphicsContext.current?.cgContext else { return }
-        let theme = AppSettings.shared.theme
 
-        ctx.setFillColor(theme.chromeBg.cgColor)
-        ctx.fill(bounds)
-
-        // Subtle bottom separator
-        ctx.setFillColor(theme.chromeMuted.withAlphaComponent(0.3).cgColor)
-        ctx.fill(CGRect(x: 0, y: barHeight - 0.5, width: bounds.width, height: 0.5))
+        // No background fill: the toolbar island is an outlined frame over the
+        // window backdrop. Its border comes from the layer (see IslandMetrics).
+        // No bottom separator either — the island gap below does that job now.
 
         if !hideWorkspaces {
             drawWorkspaces(ctx)
+        } else {
+            // With the pills moved to a side bar the toolbar is otherwise empty, so
+            // the active workspace's name goes in the middle of the header — the one
+            // place it stays visible without reintroducing the strip.
+            drawCenteredWorkspaceTitle(ctx)
         }
+    }
+
+    /// The active workspace's name, centred in the header. Only drawn in the
+    /// left/right workspace layouts, where the pill strip has vacated the toolbar.
+    /// Test seam: the box `drawCenteredWorkspaceTitle` lays the title out in.
+    func centeredWorkspaceTitleRectForTesting() -> CGRect {
+        centeredWorkspaceTitleRect(for: "workspace" as NSString, attrs: [:]) ?? .zero
+    }
+
+    private func drawCenteredWorkspaceTitle(_ ctx: CGContext) {
+        guard let active = workspaces.first(where: { $0.isActive }) else { return }
+        let theme = AppSettings.shared.theme
+
+        let para = NSMutableParagraphStyle()
+        para.alignment = .center
+        para.lineBreakMode = .byTruncatingTail
+        let attrs: [NSAttributedString.Key: Any] = [
+            .font: ToolbarView.Fonts.headerTitle,
+            .foregroundColor: active.resolvedColor ?? theme.chromeText,
+            .paragraphStyle: para
+        ]
+
+        let title = active.name as NSString
+        guard let box = centeredWorkspaceTitleRect(for: title, attrs: attrs) else { return }
+        title.draw(in: box, withAttributes: attrs)
+    }
+
+    /// Box the header title is laid out in, or nil when there is no room for it.
+    private func centeredWorkspaceTitleRect(
+        for title: NSString, attrs: [NSAttributedString.Key: Any]
+    ) -> CGRect? {
+        // Centre on the *window*, not on this view: the toolbar island is inset by
+        // the side workspace bar, so centring in local bounds would push the title
+        // off-centre by half that inset.
+        let windowMid: CGFloat
+        if let container = superview {
+            windowMid = convert(NSPoint(x: container.bounds.midX, y: 0), from: container).x
+        } else {
+            windowMid = bounds.midX
+        }
+
+        // Kept clear of the traffic lights and the sidebar button. Each side is
+        // measured independently, then the box is sized by whichever side runs out
+        // of room first so the text stays centred on `windowMid`.
+        let leftLimit = trafficLightWidth + zoneGap
+        let rightLimit = bounds.width - sidebarButtonWidth - zoneGap
+        let halfW = min(windowMid - leftLimit, rightLimit - windowMid)
+        guard halfW > 0 else { return nil }
+
+        // Centre on the glyphs, not on the line box. This view is flipped, so
+        // `draw(in:)` lays the text from the box's top and the font's leading sits
+        // above the caps — halving the full line height leaves the title riding high
+        // of the traffic lights. Offsetting by the ascender-to-cap gap puts the cap
+        // band on the bar's midline, which is what the eye lines up against.
+        let font = (attrs[.font] as? NSFont) ?? ToolbarView.Fonts.headerTitle
+        let h = title.size(withAttributes: attrs).height
+        let y = round((barHeight - font.capHeight) / 2 - (font.ascender - font.capHeight))
+        return CGRect(x: windowMid - halfW, y: y, width: halfW * 2, height: h)
     }
 
     // Cached pin icon — allocated once, shared across all draw calls.
@@ -150,14 +199,14 @@ extension ToolbarView {
                         width: dotSize, height: dotSize))
             }
 
-            x += w + 6
+            x += w + Self.workspaceGap
         }
 
         // Draw drop insertion indicator (vertical line between workspace pills)
         if let dropIdx = dropTargetIndex {
             var indicatorX = zoneStart - workspaceScrollOffset
             for i in 0..<min(dropIdx, workspaces.count) {
-                indicatorX += measureWorkspace(at: i) + 6
+                indicatorX += measureWorkspace(at: i) + Self.workspaceGap
             }
             indicatorX -= 3
             ctx.setFillColor(theme.accentColor.cgColor)
@@ -171,7 +220,11 @@ extension ToolbarView {
                 drawFadeEdge(ctx, at: zoneStart, width: 20, leftToRight: true)
             }
             if workspaceScrollOffset < maxWorkspaceScrollOffset {
-                drawFadeEdge(ctx, at: zoneEnd - 20, width: 20, leftToRight: false)
+                // Wide enough that the clipped pill has fully dissolved into the
+                // backdrop by the time it reaches the pinned `+`, rather than a
+                // half-faded label butting up against the button.
+                let fadeW: CGFloat = 32
+                drawFadeEdge(ctx, at: zoneEnd - fadeW, width: fadeW, leftToRight: false)
             }
         }
 
@@ -179,7 +232,10 @@ extension ToolbarView {
         let plusRect = workspacePlusButtonRect
         let plusBgAlpha: CGFloat = isWorkspacePlusButtonHovered ? 0.12 : 0.06
         ctx.setFillColor(theme.chromeMuted.withAlphaComponent(plusBgAlpha).cgColor)
-        ctx.addPath(CGPath(roundedRect: plusRect, cornerWidth: 5, cornerHeight: 5, transform: nil))
+        ctx.addPath(
+            CGPath(
+                roundedRect: plusRect, cornerWidth: IslandMetrics.controlRadius,
+                cornerHeight: IslandMetrics.controlRadius, transform: nil))
         ctx.fillPath()
         let wsPlusAlpha: CGFloat = isWorkspacePlusButtonHovered ? 0.9 : 0.45
         let wsPlusAttrs: [NSAttributedString.Key: Any] = [
@@ -193,126 +249,11 @@ extension ToolbarView {
             withAttributes: wsPlusAttrs)
     }
 
-    internal func drawDivider(_ ctx: CGContext) {
-        let divX = workspaceZoneEnd + zoneGap
-        ctx.setFillColor(CGColor(red: 45 / 255, green: 45 / 255, blue: 50 / 255, alpha: 0.6))
-        ctx.fill(CGRect(x: divX, y: 10, width: dividerWidth, height: barHeight - 20))
-    }
-
-    internal func drawTabs(_ ctx: CGContext) {
-        guard !tabs.isEmpty else { return }
-
-        let zoneStart = tabZoneStart
-        let zoneEnd = tabZoneEnd
-
-        // Clip to tab zone
-        ctx.saveGState()
-        ctx.clip(to: CGRect(x: zoneStart, y: 0, width: zoneEnd - zoneStart, height: barHeight))
-
-        var x = zoneStart - tabScrollOffset
-
-        for (tabIndex, tab) in tabs.enumerated() {
-            let tabRect = CGRect(x: x + 2, y: 7, width: tabFixedWidth - 4, height: barHeight - 13)
-            let isTabHovered = hoveredTabIndex == tabIndex
-
-            if tab.isActive {
-                ctx.setFillColor(CGColor(red: 28 / 255, green: 28 / 255, blue: 31 / 255, alpha: 1))
-                ctx.addPath(CGPath(roundedRect: tabRect, cornerWidth: 7, cornerHeight: 7, transform: nil))
-                ctx.fillPath()
-
-                // Subtle bottom accent
-                let accentRect = CGRect(
-                    x: tabRect.minX + 12, y: tabRect.maxY - 2, width: tabRect.width - 24, height: 1.5)
-                ctx.setFillColor(CGColor(red: 77 / 255, green: 143 / 255, blue: 232 / 255, alpha: 0.5))
-                ctx.addPath(CGPath(roundedRect: accentRect, cornerWidth: 0.75, cornerHeight: 0.75, transform: nil))
-                ctx.fillPath()
-            } else if isTabHovered {
-                ctx.setFillColor(CGColor(red: 35 / 255, green: 35 / 255, blue: 40 / 255, alpha: 1))
-                ctx.addPath(CGPath(roundedRect: tabRect, cornerWidth: 7, cornerHeight: 7, transform: nil))
-                ctx.fillPath()
-            }
-
-            // Title
-            let textColor: NSColor
-            if tab.isActive {
-                textColor = NSColor(red: 228 / 255, green: 228 / 255, blue: 232 / 255, alpha: 1)
-            } else if isTabHovered {
-                textColor = NSColor(red: 170 / 255, green: 170 / 255, blue: 178 / 255, alpha: 1)
-            } else {
-                textColor = NSColor(red: 110 / 255, green: 110 / 255, blue: 118 / 255, alpha: 1)
-            }
-            let showClose = tabs.count > 1 && (tab.isActive || isTabHovered)
-            let attrs: [NSAttributedString.Key: Any] = [
-                .font: tab.isActive ? Fonts.tab11Medium : Fonts.tab11Regular,
-                .foregroundColor: textColor
-            ]
-            let title = tab.title as NSString
-            let titleSize = title.size(withAttributes: attrs)
-            let maxTitleW = tabFixedWidth - (showClose ? 34 : 20)
-            title.draw(
-                in: CGRect(
-                    x: x + 12,
-                    y: tabRect.midY - titleSize.height / 2,
-                    width: min(titleSize.width, maxTitleW),
-                    height: titleSize.height
-                ), withAttributes: attrs)
-
-            // Close button — only on active or hovered tab
-            if showClose {
-                let closeAlpha: CGFloat = isTabHovered ? 0.8 : 0.6
-                // Hover circle background
-                if isTabHovered {
-                    let circleSize: CGFloat = 18
-                    let circleX = x + tabFixedWidth - circleSize - 6
-                    let circleY = tabRect.midY - circleSize / 2
-                    ctx.setFillColor(CGColor(red: 60 / 255, green: 60 / 255, blue: 68 / 255, alpha: 0.5))
-                    ctx.fillEllipse(in: CGRect(x: circleX, y: circleY, width: circleSize, height: circleSize))
-                }
-                let closeAttrs: [NSAttributedString.Key: Any] = [
-                    .font: Fonts.plus9Bold,
-                    .foregroundColor: NSColor(red: 90 / 255, green: 90 / 255, blue: 98 / 255, alpha: closeAlpha)
-                ]
-                let closeStr = "\u{2715}" as NSString
-                let closeSize = closeStr.size(withAttributes: closeAttrs)
-                closeStr.draw(
-                    at: NSPoint(
-                        x: x + tabFixedWidth - closeSize.width - 12,
-                        y: tabRect.midY - closeSize.height / 2),
-                    withAttributes: closeAttrs
-                )
-            }
-
-            x += tabFixedWidth
-        }
-
-        // Plus button
-        let plusAlpha: CGFloat = isPlusButtonHovered ? 1.0 : 0.6
-        if isPlusButtonHovered {
-            let hoverRect = CGRect(x: x + 2, y: 10, width: 24, height: barHeight - 20)
-            ctx.setFillColor(CGColor(red: 35 / 255, green: 35 / 255, blue: 40 / 255, alpha: 1))
-            ctx.addPath(CGPath(roundedRect: hoverRect, cornerWidth: 5, cornerHeight: 5, transform: nil))
-            ctx.fillPath()
-        }
-        let plusAttrs: [NSAttributedString.Key: Any] = [
-            .font: Fonts.plus15Light,
-            .foregroundColor: NSColor(red: 90 / 255, green: 90 / 255, blue: 98 / 255, alpha: plusAlpha)
-        ]
-        let plusSize = ("+" as NSString).size(withAttributes: plusAttrs)
-        ("+" as NSString).draw(at: NSPoint(x: x + 6, y: (barHeight - plusSize.height) / 2), withAttributes: plusAttrs)
-
-        ctx.restoreGState()
-
-        // Fade edges if scrollable
-        if tabScrollOffset > 0 {
-            drawFadeEdge(ctx, at: zoneStart, width: 20, leftToRight: true)
-        }
-        if tabScrollOffset < maxScrollOffset {
-            drawFadeEdge(ctx, at: zoneEnd - 20, width: 20, leftToRight: false)
-        }
-    }
-
     internal func drawFadeEdge(_ ctx: CGContext, at x: CGFloat, width: CGFloat, leftToRight: Bool) {
-        let bgColor = AppSettings.shared.theme.chromeBg.cgColor
+        // The toolbar paints no fill of its own in the island style — it is a
+        // transparent strip over the window backdrop, so the scroll fade must
+        // dissolve into the backdrop, not into the (now unused) chrome fill.
+        let bgColor = AppSettings.shared.theme.windowBackdrop.cgColor
         let components = bgColor.components ?? [0, 0, 0, 1]
         let r = !components.isEmpty ? components[0] : 0
         let g = components.count > 1 ? components[1] : 0
@@ -325,7 +266,9 @@ extension ToolbarView {
         guard let gradient = CGGradient(colorSpace: colorSpace, colorComponents: colors, locations: nil, count: 2)
         else { return }
         ctx.saveGState()
-        ctx.clip(to: CGRect(x: x, y: 0, width: width, height: barHeight - 1))
+        // Full height: the -1 inset used to spare the old bottom separator, which
+        // the island gap replaced.
+        ctx.clip(to: CGRect(x: x, y: 0, width: width, height: barHeight))
         ctx.drawLinearGradient(
             gradient,
             start: CGPoint(x: x, y: 0),
@@ -346,7 +289,10 @@ extension ToolbarView {
         if isSidebarButtonHovered {
             let hoverRect = CGRect(x: btnX, y: btnY, width: btnSize, height: btnSize)
             ctx.setFillColor(theme.chromeMuted.withAlphaComponent(0.15).cgColor)
-            ctx.addPath(CGPath(roundedRect: hoverRect, cornerWidth: 6, cornerHeight: 6, transform: nil))
+            ctx.addPath(
+                CGPath(
+                    roundedRect: hoverRect, cornerWidth: IslandMetrics.controlRadius,
+                    cornerHeight: IslandMetrics.controlRadius, transform: nil))
             ctx.fillPath()
         }
 
@@ -408,31 +354,7 @@ extension ToolbarView {
             return
         }
 
-        // Tab zone
-        guard startPoint.x >= tabZoneStart && startPoint.x <= tabZoneEnd else {
-            window?.performDrag(with: event)
-            return
-        }
-
-        var x = tabZoneStart - tabScrollOffset
-        for (i, _) in tabs.enumerated() {
-            if startPoint.x >= max(tabZoneStart, x) && startPoint.x < min(tabZoneEnd, x + tabFixedWidth) {
-                if tabs.count > 1 && startPoint.x > x + tabFixedWidth - 22 {
-                    delegate?.toolbar(self, didCloseTabAt: i)
-                } else {
-                    delegate?.toolbar(self, didSelectTabAt: i)
-                }
-                return
-            }
-            x += tabFixedWidth
-        }
-
-        // Plus button
-        if startPoint.x >= x && startPoint.x < x + 28 {
-            delegate?.toolbarDidRequestNewTab(self)
-        } else {
-            window?.performDrag(with: event)
-        }
+        window?.performDrag(with: event)
     }
 
     /// Tracking loop for workspace pill click/drag — mirrors WorkspaceBarView approach.
@@ -449,7 +371,7 @@ extension ToolbarView {
                     let ws = workspaces[idx]
                     let w = measureWorkspace(at: idx)
                     var pillX = trafficLightWidth - workspaceScrollOffset
-                    for i in 0..<idx { pillX += measureWorkspace(at: i) + 6 }
+                    for i in 0..<idx { pillX += measureWorkspace(at: i) + Self.workspaceGap }
                     let pillH: CGFloat = 24
                     let pillY = (barHeight - pillH) / 2
                     let pillRect = CGRect(x: pillX, y: pillY, width: w, height: pillH)
@@ -556,11 +478,11 @@ extension ToolbarView {
         var rawIdx = workspaces.count
         for i in workspaces.indices {
             let w = measureWorkspace(at: i)
-            if point.x < x + (w + 6) / 2 {
+            if point.x < x + (w + Self.workspaceGap) / 2 {
                 rawIdx = i
                 break
             }
-            x += w + 6
+            x += w + Self.workspaceGap
         }
 
         let validIdx = validWorkspaceDropIndex(raw: rawIdx)
@@ -605,8 +527,8 @@ extension ToolbarView {
         var x = trafficLightWidth - workspaceScrollOffset
         for i in workspaces.indices {
             let w = measureWorkspace(at: i)
-            if point.x >= x && point.x < x + w + 6 { return i }
-            x += w + 6
+            if point.x >= x && point.x < x + w + Self.workspaceGap { return i }
+            x += w + Self.workspaceGap
         }
         return nil
     }
@@ -622,11 +544,11 @@ extension ToolbarView {
         var x = trafficLightWidth - workspaceScrollOffset
         for i in workspaces.indices {
             let w = measureWorkspace(at: i)
-            if point.x >= x && point.x < x + w + 6 {
+            if point.x >= x && point.x < x + w + Self.workspaceGap {
                 showWorkspaceContextMenu(at: i, event: event)
                 return
             }
-            x += w + 6
+            x += w + Self.workspaceGap
         }
     }
 

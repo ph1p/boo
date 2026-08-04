@@ -34,7 +34,12 @@ private class SpyDelegate: WorkspaceBarViewDelegate {
         try await super.setUp()
         await MainActor.run {
             spy = SpyDelegate()
-            bar = WorkspaceBarView(frame: NSRect(x: 0, y: 0, width: 400, height: 28))
+            // Vertical, matching the only form the app builds — the bar renders as a
+            // side strip, and workspaces in the top bar are drawn by `ToolbarView`.
+            bar = WorkspaceBarView(
+                frame: NSRect(
+                    x: 0, y: 0, width: WorkspaceBarView.verticalFrameWidth, height: 400))
+            bar.isVertical = true
             bar.delegate = spy
 
             let items = [
@@ -158,9 +163,6 @@ private class ToolbarSpyDelegate: ToolbarViewDelegate {
 
     func toolbar(_ toolbar: ToolbarView, didSelectWorkspaceAt index: Int) { selectedIndex = index }
     func toolbar(_ toolbar: ToolbarView, didCloseWorkspaceAt index: Int) {}
-    func toolbar(_ toolbar: ToolbarView, didSelectTabAt index: Int) {}
-    func toolbar(_ toolbar: ToolbarView, didCloseTabAt index: Int) {}
-    func toolbarDidRequestNewTab(_ toolbar: ToolbarView) {}
     func toolbarDidToggleSidebar(_ toolbar: ToolbarView) {}
     func toolbar(_ toolbar: ToolbarView, renameWorkspaceAt index: Int, to name: String) {
         renamedIndex = index
@@ -194,7 +196,6 @@ private class ToolbarSpyDelegate: ToolbarViewDelegate {
                     ToolbarView.WorkspaceItem(
                         name: "beta", isActive: false, resolvedColor: nil, isPinned: false)
                 ],
-                tabs: [],
                 sidebarVisible: false
             )
         }

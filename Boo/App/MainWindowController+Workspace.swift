@@ -12,9 +12,6 @@ extension MainWindowController: ToolbarViewDelegate {
         toolbarDidCloseWorkspace(at: index)
     }
 
-    func toolbar(_ toolbar: ToolbarView, didSelectTabAt index: Int) {}
-    func toolbar(_ toolbar: ToolbarView, didCloseTabAt index: Int) {}
-    func toolbarDidRequestNewTab(_ toolbar: ToolbarView) { newTabAction(nil) }
     func toolbarDidToggleSidebar(_ toolbar: ToolbarView) { toggleSidebar(userInitiated: true) }
 
     func toolbar(_ toolbar: ToolbarView, renameWorkspaceAt index: Int, to name: String) {

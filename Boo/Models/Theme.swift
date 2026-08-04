@@ -39,6 +39,35 @@ struct TerminalTheme {
         return NSColor(red: r, green: g, blue: b, alpha: 1)
     }
 
+    /// Backdrop behind the island chrome — the colour visible in the gaps between
+    /// toolbar, sidebar, panes and status bar. Derived from `chromeBg` so it works
+    /// for every theme: pushed away from the chrome (darker on dark themes, lighter
+    /// on light ones) so the islands read as raised cards.
+    var windowBackdrop: NSColor {
+        guard let c = chromeBg.usingColorSpace(.sRGB) else { return chromeBg }
+        // Dark themes darken, light themes lighten — but a near-black chromeBg has
+        // no room to go darker and would clamp to an identical colour, erasing the
+        // gaps. Flip direction when the shift would clip, so every theme keeps a
+        // visible separation between backdrop and islands.
+        let step: CGFloat = 0.06
+        let maxComponent = max(c.redComponent, max(c.greenComponent, c.blueComponent))
+        let minComponent = min(c.redComponent, min(c.greenComponent, c.blueComponent))
+        var amount: CGFloat = isDark ? -step : step
+        if amount < 0 && minComponent < step { amount = step }
+        if amount > 0 && maxComponent > 1 - step { amount = -step }
+        func shift(_ v: CGFloat) -> CGFloat { min(max(v + amount, 0), 1) }
+        return NSColor(
+            red: shift(c.redComponent),
+            green: shift(c.greenComponent),
+            blue: shift(c.blueComponent),
+            alpha: 1)
+    }
+
+    /// Edge stroke around every island. The same colour panes already use for their
+    /// internal rules (tab-bar underline, split seams) so the outer edge and the
+    /// lines inside it read as one system rather than two competing weights.
+    var islandBorder: NSColor { chromeBorder }
+
     /// Sidebar row hover fill: chromeMuted at 8% blended over sidebarBg.
     var sidebarRowHover: NSColor {
         let alpha: CGFloat = 0.08

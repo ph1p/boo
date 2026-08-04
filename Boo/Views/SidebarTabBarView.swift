@@ -3,14 +3,31 @@ import Cocoa
 /// Tab bar shown at the top (or bottom) of the sidebar — one tab per enabled plugin.
 /// Tabs are set by the controller after collecting plugin contributions.
 class SidebarTabBarView: NSView {
-    static let height: CGFloat = 26
+    static let height: CGFloat = 32
 
     /// Width of each tab icon button.
-    private let tabW: CGFloat = 30
-    /// Gap between each tab icon button.
-    private let tabGap: CGFloat = 3
+    private let tabW: CGFloat = 28
+    /// Gap between each tab icon button. Buttons are laid out `tabW + tabGap`
+    /// apart, so raising this genuinely separates them.
+    private let tabGap: CGFloat = 2
+    /// Inset from the sidebar island's rounded edge — the shared chrome content
+    /// inset, so the first tab pill starts where the toolbar's and status bar's
+    /// first controls do.
+    private let sideInset: CGFloat = IslandMetrics.contentInset
     /// Width reserved for the overflow "···" button when tabs don't fit.
-    private let overflowW: CGFloat = 30
+    private let overflowW: CGFloat = 28
+
+    /// Square hover/selected pill behind an icon. Sized from the tab footprint so
+    /// the gap left and right of a pill matches `tabGap` instead of being a second,
+    /// hardcoded number.
+    private var pillSize: CGFloat { tabW - tabGap * 2 }
+    /// Rect of the pill inside a tab (or the overflow button). Centred both ways,
+    /// so it lands identically whether the bar is pinned top or bottom.
+    private func pillRect(in tabRect: NSRect) -> CGRect {
+        CGRect(
+            x: tabRect.midX - pillSize / 2, y: tabRect.midY - pillSize / 2,
+            width: pillSize, height: pillSize)
+    }
 
     /// Ordered list of plugin sidebar tabs. Set by the controller after plugin collection.
     var sidebarTabs: [SidebarTab] = [] {
@@ -77,19 +94,24 @@ class SidebarTabBarView: NSView {
         visibleTabs = []
         overflowTabs = []
 
-        let needsOverflow = CGFloat(sidebarTabs.count) * (tabW - tabGap) > bounds.width
-        let available = needsOverflow ? bounds.width - overflowW : bounds.width
+        let step = tabW + tabGap
+        let contentW = bounds.width - sideInset * 2
+        let needsOverflow = CGFloat(sidebarTabs.count) * step - tabGap > contentW
+        let available = sideInset + (needsOverflow ? contentW - overflowW - tabGap : contentW)
 
-        let isBottom = AppSettings.shared.sidebarTabBarPosition == .bottom
-        let tabY: CGFloat = isBottom ? 1 : 0
-        let tabH = bounds.height - 1
+        // Full height, both positions. The old ±1 fudge reserved a row for a
+        // separator line that the island gap replaced, and because it flipped with
+        // the bar's position the icons sat a pixel lower at the top than at the
+        // bottom — the two looked subtly different for no reason.
+        let tabY: CGFloat = 0
+        let tabH = bounds.height
 
-        var x: CGFloat = 0
+        var x: CGFloat = sideInset
         for tab in sidebarTabs {
             if x + tabW <= available {
                 tabRects[tab.id] = NSRect(x: x, y: tabY, width: tabW, height: tabH)
                 visibleTabs.append(tab)
-                x += tabW - tabGap
+                x += step
             } else {
                 overflowTabs.append(tab)
             }
@@ -97,10 +119,16 @@ class SidebarTabBarView: NSView {
 
         if needsOverflow {
             overflowRect = NSRect(
-                x: bounds.width - overflowW, y: tabY, width: overflowW, height: tabH)
+                x: bounds.width - sideInset - overflowW, y: tabY, width: overflowW, height: tabH)
         } else {
             overflowRect = .zero
         }
+    }
+
+    /// Laid-out frames of the visible tab buttons, left to right. Exposed so the
+    /// spacing rules (edge inset, inter-tab gap) can be asserted.
+    func tabButtonFrames() -> [NSRect] {
+        visibleTabs.compactMap { tabRects[$0.id] }
     }
 
     private func rebuildTooltips() {
@@ -183,8 +211,8 @@ class SidebarTabBarView: NSView {
     }
 
     private func dropIndexFor(x: CGFloat) -> Int {
-        let step = tabW - tabGap
-        let index = Int((x + step / 2) / step)
+        let step = tabW + tabGap
+        let index = Int((x - sideInset + step / 2) / step)
         return max(0, min(index, visibleTabs.count))
     }
 
@@ -284,13 +312,11 @@ class SidebarTabBarView: NSView {
         let theme = AppSettings.shared.theme
         let iconSize: CGFloat = 18
 
-        ctx.setFillColor(theme.sidebarBg.cgColor)
-        ctx.fill(bounds)
-
-        // Separator line — bottom edge when bar is at top, top edge when bar is at bottom
-        let isBottom = AppSettings.shared.sidebarTabBarPosition == .bottom
-        ctx.setFillColor(theme.chromeMuted.withAlphaComponent(0.15).cgColor)
-        ctx.fill(CGRect(x: 0, y: isBottom ? 0 : bounds.height - 1, width: bounds.width, height: 1))
+        // No fill and no separator rule: the sidebar is an island and this strip
+        // sits inside it, so it paints nothing of its own — the same treatment the
+        // toolbar and status bar already get. The rule used to double up with the
+        // island edge and, being drawn on the side facing the content, made the
+        // top and bottom placements look unlike each other.
 
         // Compute drop index for indicator while dragging
         let dropIndex: Int? = isDragging ? dropIndexFor(x: dragCurrentX) : nil
@@ -303,10 +329,10 @@ class SidebarTabBarView: NSView {
 
             if isBeingDragged {
                 ctx.setFillColor(theme.chromeMuted.withAlphaComponent(0.04).cgColor)
-                let r = CGRect(
-                    x: tabRect.minX + 4, y: tabRect.minY + 3,
-                    width: tabRect.width - 8, height: tabRect.height - 6)
-                ctx.addPath(CGPath(roundedRect: r, cornerWidth: 4, cornerHeight: 4, transform: nil))
+                ctx.addPath(
+                    CGPath(
+                        roundedRect: pillRect(in: tabRect), cornerWidth: IslandMetrics.controlRadius,
+                        cornerHeight: IslandMetrics.controlRadius, transform: nil))
                 ctx.fillPath()
 
                 if let img = NSImage(systemSymbolName: tab.icon, accessibilityDescription: nil) {
@@ -325,20 +351,25 @@ class SidebarTabBarView: NSView {
 
             if isHovered {
                 ctx.setFillColor(theme.chromeMuted.withAlphaComponent(0.08).cgColor)
-                let r = CGRect(
-                    x: tabRect.minX + 4, y: tabRect.minY + 3,
-                    width: tabRect.width - 8, height: tabRect.height - 6)
-                ctx.addPath(CGPath(roundedRect: r, cornerWidth: 4, cornerHeight: 4, transform: nil))
+                ctx.addPath(
+                    CGPath(
+                        roundedRect: pillRect(in: tabRect), cornerWidth: IslandMetrics.controlRadius,
+                        cornerHeight: IslandMetrics.controlRadius, transform: nil))
                 ctx.fillPath()
             }
 
             if isSelected {
+                // Fill plus the island hairline, so the active tab is edged like every
+                // other selected control in the chrome instead of being a bare tint.
+                let r = pillRect(in: tabRect)
                 ctx.setFillColor(theme.accentColor.withAlphaComponent(0.15).cgColor)
-                let r = CGRect(
-                    x: tabRect.minX + 4, y: tabRect.minY + 3,
-                    width: tabRect.width - 8, height: tabRect.height - 6)
-                ctx.addPath(CGPath(roundedRect: r, cornerWidth: 4, cornerHeight: 4, transform: nil))
+                ctx.addPath(
+                    CGPath(
+                        roundedRect: r, cornerWidth: IslandMetrics.controlRadius,
+                        cornerHeight: IslandMetrics.controlRadius, transform: nil))
                 ctx.fillPath()
+                WorkspacePillStyle.strokeHairline(
+                    ctx, rect: r, color: theme.accentColor.withAlphaComponent(0.55))
             }
 
             let iconColor =
@@ -357,7 +388,10 @@ class SidebarTabBarView: NSView {
 
         // Drop indicator at the end of visible tabs
         if let di = dropIndex, di == visibleTabs.count {
-            let endX = CGFloat(visibleTabs.count) * (tabW - tabGap)
+            // One step past the last tab's leading edge. The old `tabW - tabGap`
+            // stride drifted further left with every tab, so the indicator landed
+            // inside the strip instead of after it.
+            let endX = sideInset + CGFloat(visibleTabs.count) * (tabW + tabGap)
             drawDropIndicator(at: endX, ctx: ctx, theme: theme)
         }
 
@@ -366,6 +400,21 @@ class SidebarTabBarView: NSView {
             let hasSelectedOverflow = overflowTabs.contains(where: { $0.id == selectedTab })
             let overflowColor: NSColor =
                 hasSelectedOverflow ? theme.accentColor : theme.chromeMuted.withAlphaComponent(0.6)
+
+            // Accent background when the active tab is in overflow. Painted *before*
+            // the glyph — it used to be drawn after, tinting the ellipsis it was
+            // meant to sit behind.
+            if hasSelectedOverflow {
+                let r = pillRect(in: overflowRect)
+                ctx.setFillColor(theme.accentColor.withAlphaComponent(0.15).cgColor)
+                ctx.addPath(
+                    CGPath(
+                        roundedRect: r, cornerWidth: IslandMetrics.controlRadius,
+                        cornerHeight: IslandMetrics.controlRadius, transform: nil))
+                ctx.fillPath()
+                WorkspacePillStyle.strokeHairline(
+                    ctx, rect: r, color: theme.accentColor.withAlphaComponent(0.55))
+            }
 
             if let img = NSImage(systemSymbolName: "ellipsis", accessibilityDescription: "More tabs") {
                 let config = NSImage.SymbolConfiguration(pointSize: iconSize * 0.75, weight: .regular)
@@ -377,16 +426,6 @@ class SidebarTabBarView: NSView {
                     tinted.draw(
                         in: NSRect(x: iconX, y: iconY, width: imgSize.width, height: imgSize.height))
                 }
-            }
-
-            // Accent background when active tab is in overflow
-            if hasSelectedOverflow {
-                ctx.setFillColor(theme.accentColor.withAlphaComponent(0.15).cgColor)
-                let r = CGRect(
-                    x: overflowRect.minX + 4, y: overflowRect.minY + 3,
-                    width: overflowRect.width - 8, height: overflowRect.height - 6)
-                ctx.addPath(CGPath(roundedRect: r, cornerWidth: 4, cornerHeight: 4, transform: nil))
-                ctx.fillPath()
             }
         }
 
@@ -403,7 +442,8 @@ class SidebarTabBarView: NSView {
             ctx.addPath(
                 CGPath(
                     roundedRect: ghostRect.insetBy(dx: -1, dy: -1),
-                    cornerWidth: 6, cornerHeight: 6, transform: nil))
+                    cornerWidth: IslandMetrics.controlRadius,
+                    cornerHeight: IslandMetrics.controlRadius, transform: nil))
             ctx.fillPath()
 
             if let img = NSImage(systemSymbolName: tab.icon, accessibilityDescription: nil) {

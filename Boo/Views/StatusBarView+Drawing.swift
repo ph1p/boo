@@ -3,19 +3,22 @@ import Cocoa
 // MARK: - Drawing
 
 extension StatusBarView {
+    /// Only read for its `capHeight`/`ascender` to centre text vertically, which
+    /// never varies — so it is built once rather than per draw pass. The status bar
+    /// repaints on hover, putting this on the mouse-move path.
+    nonisolated(unsafe) static let referenceFont = NSFont.systemFont(ofSize: 10, weight: .regular)
+
     override func draw(_ dirtyRect: NSRect) {
         guard let ctx = NSGraphicsContext.current?.cgContext else { return }
         let theme = AppSettings.shared.theme
         let settings = AppSettings.shared
         let state = currentState
 
-        ctx.setFillColor(theme.chromeBg.cgColor)
-        ctx.fill(bounds)
+        // Nothing of its own: no fill, no border, no top separator. The bar is a
+        // bare strip over the window backdrop, and the island gap above it does the
+        // separating that the old rule used to.
 
-        ctx.setFillColor(theme.chromeMuted.withAlphaComponent(0.3).cgColor)
-        ctx.fill(CGRect(x: 0, y: 0, width: bounds.width, height: 0.5))
-
-        let refFont = NSFont.systemFont(ofSize: 10, weight: .regular)
+        let refFont = Self.referenceFont
         let textY: CGFloat = round((barHeight - refFont.capHeight) / 2 - (refFont.ascender - refFont.capHeight))
 
         // Update all plugins
@@ -26,7 +29,7 @@ extension StatusBarView {
         segmentRects.removeAll()
 
         // Draw left plugins left-to-right
-        var x: CGFloat = 10
+        var x: CGFloat = IslandMetrics.contentInset
         var isFirst = true
         for plugin in leftPlugins where plugin.isVisible(settings: settings, state: state) {
             if !isFirst {
@@ -52,7 +55,10 @@ extension StatusBarView {
                 if isClickable {
                     ctx.setFillColor(theme.chromeMuted.withAlphaComponent(0.08).cgColor)
                     let hoverRect = CGRect(x: segRect.minX, y: 1, width: segRect.width, height: barHeight - 2)
-                    ctx.addPath(CGPath(roundedRect: hoverRect, cornerWidth: 3, cornerHeight: 3, transform: nil))
+                    ctx.addPath(
+                        CGPath(
+                            roundedRect: hoverRect, cornerWidth: IslandMetrics.controlRadius,
+                            cornerHeight: IslandMetrics.controlRadius, transform: nil))
                     ctx.fillPath()
                 }
             }
@@ -77,9 +83,9 @@ extension StatusBarView {
     internal func drawSidebarToggle(ctx: CGContext, theme: TerminalTheme) -> CGFloat {
         if sidebarToggleHidden {
             sidebarToggleRect = .zero
-            return 10
+            return IslandMetrics.contentInset
         }
-        let rightPadding: CGFloat = 10
+        let rightPadding: CGFloat = IslandMetrics.contentInset
         let sepGap: CGFloat = 8
         let iconDrawSize: CGFloat = 15
         let toggleZoneWidth = sepGap + iconDrawSize + rightPadding
@@ -95,7 +101,10 @@ extension StatusBarView {
         if isSidebarToggleHovered {
             let hoverRect = CGRect(x: sepX + 2, y: 2, width: bounds.width - sepX - 4, height: barHeight - 4)
             ctx.setFillColor(theme.chromeMuted.withAlphaComponent(0.1).cgColor)
-            ctx.addPath(CGPath(roundedRect: hoverRect, cornerWidth: 4, cornerHeight: 4, transform: nil))
+            ctx.addPath(
+                CGPath(
+                    roundedRect: hoverRect, cornerWidth: IslandMetrics.controlRadius,
+                    cornerHeight: IslandMetrics.controlRadius, transform: nil))
             ctx.fillPath()
         }
 
