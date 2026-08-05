@@ -247,7 +247,7 @@ final class PathSegment: StatusBarPlugin {
     ) -> CGFloat {
         let attrs: [NSAttributedString.Key: Any] = [
             .font: NSFont.monospacedSystemFont(ofSize: 10, weight: .regular),
-            .foregroundColor: theme.chromeMuted.withAlphaComponent(0.7)
+            .foregroundColor: theme.textSecondary
         ]
         let str = abbreviatePath(state.currentDirectory) as NSString
         str.draw(at: NSPoint(x: x, y: y), withAttributes: attrs)
@@ -344,7 +344,7 @@ final class PaneInfoSegment: StatusBarPlugin {
         if state.tabCount > 1 { info += " \u{2022} \(state.tabCount) tabs" }
         let attrs: [NSAttributedString.Key: Any] = [
             .font: NSFont.systemFont(ofSize: 10, weight: .regular),
-            .foregroundColor: theme.chromeMuted.withAlphaComponent(0.5)
+            .foregroundColor: theme.textTertiary
         ]
         let str = info as NSString
         let size = str.size(withAttributes: attrs)
@@ -403,7 +403,7 @@ final class SystemInfoSegment: StatusBarPlugin {
     func draw(
         at x: CGFloat, y: CGFloat, theme: TerminalTheme, settings: AppSettings, state: StatusBarState, ctx: CGContext
     ) -> CGFloat {
-        let mutedColor = theme.chromeMuted.withAlphaComponent(0.6)
+        let mutedColor = theme.textSecondary
         let font = NSFont.monospacedSystemFont(ofSize: 10, weight: .regular)
 
         var parts: [(String, NSColor)] = []
@@ -492,7 +492,7 @@ final class TimeSegment: StatusBarPlugin {
     ) -> CGFloat {
         let attrs: [NSAttributedString.Key: Any] = [
             .font: NSFont.systemFont(ofSize: 10, weight: .regular),
-            .foregroundColor: theme.chromeMuted.withAlphaComponent(0.6)
+            .foregroundColor: theme.textSecondary
         ]
         let str = formatter.string(from: Date()) as NSString
         let size = str.size(withAttributes: attrs)
@@ -586,9 +586,9 @@ final class PluginContentSegment: StatusBarPlugin {
     private func resolveTint(_ tint: DSLTint?, theme: TerminalTheme) -> NSColor? {
         guard let tint else { return nil }
         switch tint {
-        case .success: return .booLocal
-        case .error: return .systemRed
-        case .warning: return .booRemote
+        case .success: return theme.success
+        case .error: return theme.error
+        case .warning: return theme.warning
         case .accent: return theme.accentColor
         case .muted: return theme.chromeMuted
         }

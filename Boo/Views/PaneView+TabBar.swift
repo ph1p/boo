@@ -231,7 +231,7 @@ extension PaneView {
         // Activity dot — shown on inactive tabs when a command finished in background
         if tab.state.hasActivity && !isActive {
             let dotSize: CGFloat = 5
-            ctx.setFillColor(theme.accentColor.withAlphaComponent(0.85).cgColor)
+            ctx.setFillColor(theme.accentEmphasis.cgColor)
             ctx.fillEllipse(
                 in: CGRect(
                     x: pillRect.maxX - closeZone - dotSize - 2,
@@ -252,7 +252,7 @@ extension PaneView {
             if closeHovered {
                 let circleX = circleCenterX - circleSize / 2
                 let circleY = circleCenterY - circleSize / 2
-                ctx.setFillColor(theme.chromeMuted.withAlphaComponent(0.15).cgColor)
+                ctx.setFillColor(theme.controlFill.cgColor)
                 ctx.fillEllipse(in: CGRect(x: circleX, y: circleY, width: circleSize, height: circleSize))
             }
 

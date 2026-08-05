@@ -2,17 +2,99 @@
 
 ## Theme Structure
 
-`TerminalTheme` defines a complete color scheme:
+`TerminalTheme` (`Boo/Models/Theme.swift`) defines a complete color scheme from
+**21 base color fields**. Everything else in the UI is derived from them.
 
-- Foreground and background colors
-- 16 ANSI colors (8 normal + 8 bright)
-- Selection highlight color
-- Cursor color
-- UI chrome colors (sidebar, status bar, borders)
+### Terminal colors
+
+| Field | Role |
+| --- | --- |
+| `foreground` / `background` | Terminal text and surface |
+| `cursor` | Terminal cursor |
+| `selection` | Terminal selection highlight (carries its own alpha) |
+| `ansiColors[16]` | 8 normal + 8 bright ANSI colors; also feed Monaco syntax mapping and the status tokens below |
+
+### Chrome colors (the 5 UI base tokens)
+
+| Field | Role |
+| --- | --- |
+| `chromeBg` | Toolbar, status bar, settings surfaces |
+| `chromeText` | Primary text and icons in bars/panels |
+| `chromeMuted` | The *source* hue for secondary text, separators, and hover fills — consume it via the semantic tokens below, not raw |
+| `sidebarBg` | Sidebar and every floating panel (find bar, autocomplete, detail panel) |
+| `accentColor` | Selection, focus, activity — anything "active" |
+
+All 21 fields are user-editable in the custom theme editor
+(Settings → Theme → New Theme…).
+
+## Derived Semantic Tokens
+
+Derived tokens are computed from the base fields — built-in and custom themes
+get them for free. **Always reach for the token that names the role** instead
+of hand-rolling `chromeMuted.withAlphaComponent(…)`; the full table lives as a
+comment in `Theme.swift`.
+
+| Token | Derivation | Used for |
+| --- | --- | --- |
+| `textSecondary` | `chromeMuted` @ 0.7 | Secondary labels, close buttons, hovered glyphs |
+| `textTertiary` | `chromeMuted` @ 0.5 | Placeholders, idle glyphs, inactive icons |
+| `separator` | `chromeMuted` @ 0.2 (alpha) | Hairlines over varying backgrounds: status-bar dividers, unfocused field borders |
+| `chromeBorder` / `sidebarBorder` | muted @ 0.2 blended opaque | Borders that may overlap-draw (opaque → no double-darkening) |
+| `islandBorder` | = `chromeBorder` | Edge stroke around toolbar/pane/sidebar islands |
+| `hoverFill` | `chromeMuted` @ 0.10 | Row/segment/tab hover backgrounds |
+| `subtleFill` | `chromeMuted` @ 0.06 | Drag placeholder slots, idle button backgrounds |
+| `controlFill` | `chromeMuted` @ 0.15 | Small controls: close-button circle, toolbar button hover, field backgrounds |
+| `sidebarRowHover` | muted @ 0.08 over `sidebarBg` (opaque) | Sidebar list row hover |
+| `cardBg` | muted @ 0.12 over `sidebarBg` (opaque) | Card surfaces in sidebar/settings |
+| `windowBackdrop` | `chromeBg` shifted ±0.06 | The gaps between chrome islands |
+| `accentEmphasis` | `accentColor` @ 0.85 | Active/pressed accent fills, activity dots, drop insertion bars |
+| `focusRing` | `accentColor` @ 0.7 | Focused text-field borders (URL field, find bar) |
+| `focusBorder` | `accentColor` @ 0.45 | Focused pane island, active workspace pill |
+| `accentSelectionFill` | `accentColor` @ 0.15 | Selected item backgrounds (sidebar tab, list rows) |
+| `dragGhostBg` | `chromeBg` @ 0.88 | Drag ghost backdrops (tabs, workspaces, panels) |
+
+### Status colors
+
+Theme-adaptive status hues are derived from the ANSI palette, so they always
+match the terminal colors:
+
+| Token | Source | Used for |
+| --- | --- | --- |
+| `success` | ANSI green | Positive states, git added/staged |
+| `warning` | ANSI yellow | Warnings, git modified |
+| `error` | ANSI red | Errors, git deleted |
+| `info` | ANSI blue | Informational badges |
+
+Plugin DSL tints (`.success`/`.warning`/`.error`) resolve to these tokens.
+
+Theme-*independent* identity hues (a container is always "docker blue") live in
+`Boo/Services/BooPaths.swift` as `NSColor.booRemote` / `.booDocker` /
+`.booLocal` / `.booDeleted` / `.booNeutral`.
+
+### Alpha convention
+
+If you must use a raw alpha (state matrices, animations), stay inside the
+established bands so the UI reads as one system:
+
+- **0.04–0.09** — subtle fills
+- **0.10–0.18** — hover fills
+- **0.20–0.25** — separators / borders
+- **0.40–0.60** — tertiary text
+- **0.70–0.90** — secondary text / active emphasis
+
+## SwiftUI
+
+SwiftUI views read the same tokens through the `Tokens` environment value
+(`Boo/Views/SettingsWindow.swift`): `t.text`, `t.textSecondary`,
+`t.textTertiary`, `t.separator`, `t.hoverFill`, `t.controlFill`,
+`t.accentSelectionFill`, `t.focusRing`, `t.cardBg`, `t.success` … — mirrors of
+the `TerminalTheme` properties as `Color`. Any token without a named mirror is
+reachable generically: `t.color(\.subtleFill)`. Prefer these over
+`t.muted.opacity(…)`.
 
 ## Built-in Themes
 
-Boo ships with 32 themes:
+Boo ships with 32 themes (`Boo/Models/TerminalTheme+BuiltIn.swift`):
 
 - **Default** — Dark, Light
 - **Tokyo Night**
@@ -36,6 +118,10 @@ Boo ships with 32 themes:
 - **Synthwave '84**
 - **Moonlight**
 
+Because every semantic token is derived, a theme only ever defines the 21 base
+fields — new tokens never require touching the 32 built-ins or migrating
+persisted custom themes.
+
 ## How Theming Works
 
 Theme colors are read at draw time from `AppSettings.shared.theme`. When a theme changes:
@@ -44,6 +130,8 @@ Theme colors are read at draw time from `AppSettings.shared.theme`. When a theme
 2. `NotificationCenter` posts `.settingsChanged`
 3. `SettingsObserver` (ObservableObject) triggers SwiftUI re-renders
 4. AppKit views redraw with new theme colors
+
+`isDark` is not stored — it is computed from the background luminance.
 
 ## Color Utilities
 
@@ -57,3 +145,7 @@ let ns = myColor.nsColor
 // Avoid inline conversions like:
 // CGFloat(r) / 255.0
 ```
+
+For custom blends, use `TerminalTheme.blend(_:over:alpha:)` — it returns an
+opaque color, so overlapping draws don't double-darken the way
+`withAlphaComponent` fills do.

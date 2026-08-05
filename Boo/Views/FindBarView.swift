@@ -109,7 +109,7 @@ import Cocoa
     private func applyThemeToControls() {
         let theme = AppSettings.shared.theme
         textField.textColor = theme.chromeText
-        textField.customPlaceholderColor = theme.chromeMuted.withAlphaComponent(0.6)
+        textField.customPlaceholderColor = theme.textTertiary
         matchLabel.textColor = theme.chromeMuted
         let mutedTint = theme.chromeMuted
         prevButton.contentTintColor = mutedTint
@@ -188,10 +188,10 @@ private final class FindBarPillView: NSView {
         theme.sidebarBg.setFill()
         path.fill()
         if isFocused {
-            theme.accentColor.withAlphaComponent(0.7).setStroke()
+            theme.focusRing.setStroke()
             path.lineWidth = 1.5
         } else {
-            theme.chromeMuted.withAlphaComponent(0.2).setStroke()
+            theme.separator.setStroke()
             path.lineWidth = 0.5
         }
         path.stroke()

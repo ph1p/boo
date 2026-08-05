@@ -186,7 +186,7 @@ final class BrowserContentView: NSView, ContentViewProtocol, NSTextFieldDelegate
         btn.image = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil)?
             .withSymbolConfiguration(cfg)
         btn.contentTintColor = theme.chromeMuted
-        btn.hoverBackground = theme.chromeMuted.withAlphaComponent(0.15)
+        btn.hoverBackground = theme.controlFill
         btn.target = self
         btn.action = action
         NSLayoutConstraint.activate([
@@ -204,7 +204,7 @@ final class BrowserContentView: NSView, ContentViewProtocol, NSTextFieldDelegate
         urlBarPill?.theme = theme
         let activeColor = theme.chromeText
         let mutedColor = theme.chromeMuted
-        let hoverBg = theme.chromeMuted.withAlphaComponent(0.15)
+        let hoverBg = theme.controlFill
         backButton?.contentTintColor = (webView?.canGoBack ?? false) ? activeColor : mutedColor
         forwardButton?.contentTintColor = (webView?.canGoForward ?? false) ? activeColor : mutedColor
         reloadStopButton?.contentTintColor = mutedColor
@@ -537,7 +537,9 @@ final class BrowserContentView: NSView, ContentViewProtocol, NSTextFieldDelegate
 /// Square toolbar button with a rounded-rect hover background.
 /// Uses a layer-backed NSImageView for the icon so NSButton's cell never clips it.
 final class NavHoverButton: NSView {
-    var hoverBackground: NSColor = NSColor.labelColor.withAlphaComponent(0.12) {
+    /// Placeholder only — every creation path sets this from the theme
+    /// (`makeNavButton`) and `applyTheme` re-sets it on theme change.
+    var hoverBackground: NSColor = .clear {
         didSet { needsDisplay = true }
     }
 
@@ -765,10 +767,10 @@ final class URLBarPillView: NSView {
 
         // Border: subtle when idle, accent-colored when focused
         if isFocused {
-            theme.accentColor.withAlphaComponent(0.7).setStroke()
+            theme.focusRing.setStroke()
             path.lineWidth = 1.5
         } else {
-            theme.chromeMuted.withAlphaComponent(0.2).setStroke()
+            theme.separator.setStroke()
             path.lineWidth = 0.5
         }
         path.stroke()

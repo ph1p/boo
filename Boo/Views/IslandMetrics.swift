@@ -92,11 +92,6 @@ enum IslandMetrics {
     /// inside themselves, so nothing outranks the content.
     static let borderWidth: CGFloat = 1
 
-    /// Alpha of the accent-tinted stroke that marks the focused/active element —
-    /// shared by the focused pane's island border and the active workspace pill,
-    /// so "this one is current" reads the same everywhere.
-    static let focusBorderAlpha: CGFloat = 0.45
-
     /// Border colour: the shared chrome rule colour, matching the seams panes
     /// already draw internally.
     @MainActor static var borderColor: NSColor {

@@ -259,7 +259,7 @@ class PaneView: NSView {
         if !activityBorder.isHidden {
             layer.borderColor = theme.accentColor.withAlphaComponent(Self.activityBorderAlpha).cgColor
         } else if isFocused {
-            layer.borderColor = theme.accentColor.withAlphaComponent(IslandMetrics.focusBorderAlpha).cgColor
+            layer.borderColor = theme.focusBorder.cgColor
         } else {
             layer.borderColor = IslandMetrics.borderColor.cgColor
         }

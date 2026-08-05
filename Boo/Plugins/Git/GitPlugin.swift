@@ -120,11 +120,12 @@ final class GitPlugin: BooPluginProtocol {
         }
 
         var statusColor: NSColor {
+            let theme = AppSettings.shared.theme
             switch status {
-            case "M": return NSColor(calibratedRed: 0.9, green: 0.66, blue: 0.2, alpha: 1.0)
-            case "A": return NSColor(calibratedRed: 0.25, green: 0.72, blue: 0.31, alpha: 1.0)
-            case "D": return NSColor(calibratedRed: 0.97, green: 0.32, blue: 0.29, alpha: 1.0)
-            default: return NSColor(calibratedRed: 0.5, green: 0.5, blue: 0.5, alpha: 1.0)
+            case "M": return theme.warning
+            case "A": return theme.success
+            case "D": return theme.error
+            default: return theme.chromeMuted
             }
         }
 

@@ -302,13 +302,13 @@ private final class ThemedRowView: NSTableRowView {
     }
 
     override func drawSelection(in dirtyRect: NSRect) {
-        theme.chromeMuted.withAlphaComponent(0.18).setFill()
+        theme.controlFill.setFill()
         bounds.fill()
     }
 
     override func drawBackground(in dirtyRect: NSRect) {
         if isHovered && !isSelected {
-            theme.chromeMuted.withAlphaComponent(0.09).setFill()
+            theme.hoverFill.setFill()
         } else {
             theme.sidebarBg.setFill()
         }

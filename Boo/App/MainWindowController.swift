@@ -79,7 +79,7 @@ class ThemedSplitView: NSSplitView {
     override func drawDivider(in rect: NSRect) {
         super.drawDivider(in: rect)
         guard dividerHoverHighlighted else { return }
-        AppSettings.shared.theme.accentColor.withAlphaComponent(0.85).setFill()
+        AppSettings.shared.theme.accentEmphasis.setFill()
         if isVertical {
             let barW: CGFloat = 2
             let bar = CGRect(

@@ -5,7 +5,7 @@ class TabInsertionIndicatorView: NSView {
     override init(frame: NSRect) {
         super.init(frame: frame)
         wantsLayer = true
-        layer?.backgroundColor = NSColor.systemBlue.withAlphaComponent(0.8).cgColor
+        layer?.backgroundColor = AppSettings.shared.theme.accentEmphasis.cgColor
         layer?.cornerRadius = 1.5
     }
 

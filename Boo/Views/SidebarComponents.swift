@@ -63,7 +63,7 @@ class SidebarDragHandleView: NSView {
         guard isActive else { return }
         let barH: CGFloat = 2
         let r = CGRect(x: 0, y: (bounds.height - barH) / 2, width: bounds.width, height: barH)
-        AppSettings.shared.theme.accentColor.withAlphaComponent(0.85).setFill()
+        AppSettings.shared.theme.accentEmphasis.setFill()
         NSBezierPath(rect: r).fill()
     }
 

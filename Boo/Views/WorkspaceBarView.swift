@@ -309,7 +309,7 @@ class WorkspaceBarView: NSView {
                 ctx, rect: pillRect, active: isSelected, hovered: false,
                 wsColor: wsColor, neutral: theme.chromeMuted)
             if isSelected {
-                WorkspacePillStyle.strokeBorder(ctx, rect: pillRect, accent: theme.accentColor)
+                WorkspacePillStyle.strokeBorder(ctx, rect: pillRect, theme: theme)
             } else {
                 // Every pill is an island, so every pill carries the island hairline —
                 // tinted by the workspace's own colour when it has one.
@@ -414,7 +414,7 @@ class WorkspaceBarView: NSView {
         // the floating pill from the terminal content behind it. The active
         // workspace keeps its accent stroke instead.
         if isSelected {
-            WorkspacePillStyle.strokeBorder(ctx, rect: rect, accent: theme.accentColor)
+            WorkspacePillStyle.strokeBorder(ctx, rect: rect, theme: theme)
         } else {
             WorkspacePillStyle.strokeIslandBorder(
                 ctx, rect: rect, wsColor: wsColor, neutral: islandBorder)
@@ -499,14 +499,14 @@ class WorkspaceBarView: NSView {
 
     private func drawPlusButton(_ ctx: CGContext, in rect: CGRect, theme: TerminalTheme) {
         if isPlusButtonHovered {
-            ctx.setFillColor(theme.chromeMuted.withAlphaComponent(0.12).cgColor)
+            ctx.setFillColor(theme.hoverFill.cgColor)
             WorkspacePillStyle.fillRoundedRect(ctx, rect: rect)
         }
 
         let plusColor =
             isPlusButtonHovered
-            ? NSColor(red: 160 / 255, green: 160 / 255, blue: 168 / 255, alpha: 1)
-            : theme.chromeMuted.withAlphaComponent(0.4)
+            ? theme.textSecondary
+            : theme.textTertiary
         let attrs: [NSAttributedString.Key: Any] = [
             // The `+` sits in a full pill-sized footprint, so it carries a heavier
             // glyph than a plain toolbar button would.
@@ -593,8 +593,7 @@ class WorkspaceBarView: NSView {
         // Same rounding treatment as every other island, via the shared helper so the
         // ghost picks up `cornerCurve = .continuous` instead of a bare corner radius.
         IslandMetrics.round(ghostView, radius: IslandMetrics.innerRadius)
-        ghostView.layer?.backgroundColor =
-            NSColor.windowBackgroundColor.withAlphaComponent(0.85).cgColor
+        ghostView.layer?.backgroundColor = AppSettings.shared.theme.dragGhostBg.cgColor
 
         let label = NSTextField(labelWithString: String(item.name.prefix(2)).uppercased())
         label.font = NSFont.systemFont(ofSize: 11, weight: .semibold)

@@ -15,29 +15,83 @@ struct TerminalTheme {
     let sidebarBg: NSColor
     let accentColor: NSColor
 
-    /// Opaque border color: chromeMuted at 20% blended over chromeBg.
-    /// Use this instead of `chromeMuted.withAlphaComponent(0.2)` for borders
-    /// so overlapping draws don't produce darker artifacts.
-    var chromeBorder: NSColor {
-        let alpha: CGFloat = 0.2
-        let fg = chromeMuted
-        let bg = chromeBg
+    /// Blends `fg` at `alpha` over an opaque `bg`, returning an opaque color.
+    /// Prefer this over `withAlphaComponent` for fills/borders that may draw on
+    /// top of each other — overlapping translucent draws produce darker artifacts.
+    static func blend(_ fg: NSColor, over bg: NSColor, alpha: CGFloat) -> NSColor {
         let r = fg.redComponent * alpha + bg.redComponent * (1 - alpha)
         let g = fg.greenComponent * alpha + bg.greenComponent * (1 - alpha)
         let b = fg.blueComponent * alpha + bg.blueComponent * (1 - alpha)
         return NSColor(red: r, green: g, blue: b, alpha: 1)
     }
 
-    /// Sidebar border: chromeMuted at 20% blended over sidebarBg.
-    var sidebarBorder: NSColor {
-        let alpha: CGFloat = 0.2
-        let fg = chromeMuted
-        let bg = sidebarBg
-        let r = fg.redComponent * alpha + bg.redComponent * (1 - alpha)
-        let g = fg.greenComponent * alpha + bg.greenComponent * (1 - alpha)
-        let b = fg.blueComponent * alpha + bg.blueComponent * (1 - alpha)
-        return NSColor(red: r, green: g, blue: b, alpha: 1)
-    }
+    // MARK: - Derived semantic tokens
+    //
+    // Every color the UI needs is derived from the 5 chrome tokens (chromeBg,
+    // chromeText, chromeMuted, sidebarBg, accentColor) plus the terminal
+    // palette. Reach for the semantic token that names the ROLE instead of
+    // hand-rolling `chromeMuted.withAlphaComponent(…)` — the alpha vocabulary
+    // stays consistent and custom themes keep working everywhere.
+    // Full token table: documentation/docs/pages/theming.mdx
+
+    /// Opaque border for chrome surfaces whose strokes may overlap-draw.
+    var chromeBorder: NSColor { Self.blend(chromeMuted, over: chromeBg, alpha: 0.2) }
+
+    /// Opaque border for sidebar/panel surfaces whose strokes may overlap-draw.
+    var sidebarBorder: NSColor { Self.blend(chromeMuted, over: sidebarBg, alpha: 0.2) }
+
+    /// Translucent hairline for separators drawn once over varying backgrounds.
+    /// If the draw can overlap itself, use `chromeBorder`/`sidebarBorder` instead.
+    var separator: NSColor { chromeMuted.withAlphaComponent(0.2) }
+
+    /// Secondary text and glyphs.
+    var textSecondary: NSColor { chromeMuted.withAlphaComponent(0.7) }
+
+    /// Tertiary text: placeholders, idle glyphs, inactive icons.
+    var textTertiary: NSColor { chromeMuted.withAlphaComponent(0.5) }
+
+    /// Hover fill behind rows, segments and tabs.
+    var hoverFill: NSColor { chromeMuted.withAlphaComponent(0.10) }
+
+    /// Barely-there fill: drag placeholder slots, idle button backgrounds.
+    var subtleFill: NSColor { chromeMuted.withAlphaComponent(0.06) }
+
+    /// Fill for small controls: button hover circles, text-field backgrounds.
+    var controlFill: NSColor { chromeMuted.withAlphaComponent(0.15) }
+
+    /// Card surface inside the sidebar/settings: chromeMuted at 12% over sidebarBg.
+    var cardBg: NSColor { Self.blend(chromeMuted, over: sidebarBg, alpha: 0.12) }
+
+    /// Strong accent for active/pressed fills and activity indicators.
+    var accentEmphasis: NSColor { accentColor.withAlphaComponent(0.85) }
+
+    /// Focus ring around focused text fields.
+    var focusRing: NSColor { accentColor.withAlphaComponent(0.7) }
+
+    /// Border of the focused pane island / active workspace pill.
+    var focusBorder: NSColor { accentColor.withAlphaComponent(0.45) }
+
+    /// Fill behind the selected item.
+    var accentSelectionFill: NSColor { accentColor.withAlphaComponent(0.15) }
+
+    /// Backdrop of drag ghosts — themed stand-in for
+    /// `NSColor.windowBackgroundColor`.
+    var dragGhostBg: NSColor { chromeBg.withAlphaComponent(0.88) }
+
+    // MARK: Status colors
+    // Derived from the ANSI palette so every theme (incl. custom) gets matching
+    // status hues without extra fields. These are theme-ADAPTIVE status roles;
+    // theme-independent identity hues (docker blue, SSH amber) stay in
+    // BooPaths.swift.
+
+    /// Positive/success status (ANSI green).
+    var success: NSColor { ansiGreen.nsColor }
+    /// Warning status (ANSI yellow).
+    var warning: NSColor { ansiYellow.nsColor }
+    /// Error/destructive status (ANSI red).
+    var error: NSColor { ansiRed.nsColor }
+    /// Informational status (ANSI blue).
+    var info: NSColor { ansiBlue.nsColor }
 
     /// Backdrop behind the island chrome — the colour visible in the gaps between
     /// toolbar, sidebar, panes and status bar. Derived from `chromeBg` so it works
@@ -68,16 +122,8 @@ struct TerminalTheme {
     /// lines inside it read as one system rather than two competing weights.
     var islandBorder: NSColor { chromeBorder }
 
-    /// Sidebar row hover fill: chromeMuted at 8% blended over sidebarBg.
-    var sidebarRowHover: NSColor {
-        let alpha: CGFloat = 0.08
-        let fg = chromeMuted
-        let bg = sidebarBg
-        let r = fg.redComponent * alpha + bg.redComponent * (1 - alpha)
-        let g = fg.greenComponent * alpha + bg.greenComponent * (1 - alpha)
-        let b = fg.blueComponent * alpha + bg.blueComponent * (1 - alpha)
-        return NSColor(red: r, green: g, blue: b, alpha: 1)
-    }
+    /// Sidebar row hover fill: chromeMuted at 8% blended over sidebarBg (opaque).
+    var sidebarRowHover: NSColor { Self.blend(chromeMuted, over: sidebarBg, alpha: 0.08) }
 
     /// Whether this is a dark theme (background luminance < 0.5).
     var isDark: Bool {

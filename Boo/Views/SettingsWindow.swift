@@ -20,15 +20,29 @@ struct Tokens {
     /// than approximating it.
     var backdrop: Color { Color(nsColor: theme.windowBackdrop) }
     var islandBorder: Color { Color(nsColor: theme.islandBorder) }
-    var cardBg: Color {
-        let alpha: CGFloat = 0.12
-        let fg = theme.chromeMuted
-        let bg = theme.sidebarBg
-        let r = fg.redComponent * alpha + bg.redComponent * (1 - alpha)
-        let g = fg.greenComponent * alpha + bg.greenComponent * (1 - alpha)
-        let b = fg.blueComponent * alpha + bg.blueComponent * (1 - alpha)
-        return Color(red: Double(r), green: Double(g), blue: Double(b))
+    var cardBg: Color { Color(nsColor: theme.cardBg) }
+
+    /// Generic mirror: any TerminalTheme color as SwiftUI Color. Every current
+    /// and future token is reachable via `t.color(\.hoverFill)` — the named
+    /// mirrors below are just ergonomic shorthands for the common ones.
+    func color(_ keyPath: KeyPath<TerminalTheme, NSColor>) -> Color {
+        Color(nsColor: theme[keyPath: keyPath])
     }
+
+    // Semantic tokens — SwiftUI mirrors of the TerminalTheme derived tokens.
+    // Prefer these over `muted.opacity(…)` so alphas stay consistent app-wide.
+    var textSecondary: Color { Color(nsColor: theme.textSecondary) }
+    var textTertiary: Color { Color(nsColor: theme.textTertiary) }
+    var separator: Color { Color(nsColor: theme.separator) }
+    var hoverFill: Color { Color(nsColor: theme.hoverFill) }
+    var subtleFill: Color { Color(nsColor: theme.subtleFill) }
+    var controlFill: Color { Color(nsColor: theme.controlFill) }
+    var accentSelectionFill: Color { Color(nsColor: theme.accentSelectionFill) }
+    var focusRing: Color { Color(nsColor: theme.focusRing) }
+    var success: Color { Color(nsColor: theme.success) }
+    var warning: Color { Color(nsColor: theme.warning) }
+    var error: Color { Color(nsColor: theme.error) }
+    var info: Color { Color(nsColor: theme.info) }
     var fg: Color {
         Color(
             red: Double(theme.foreground.r) / 255,

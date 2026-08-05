@@ -5,6 +5,11 @@ import Foundation
 
 /// Named semantic colors used across status bar, tab bar, and other chrome.
 /// Avoids repeating hardcoded NSColor(calibratedRed:...) values.
+///
+/// These are theme-INDEPENDENT identity hues (a container is always "docker
+/// blue" regardless of theme). For theme-ADAPTIVE status colors use the
+/// `TerminalTheme` tokens instead: `theme.success` / `.warning` / `.error` /
+/// `.info` (derived from the theme's ANSI palette).
 extension NSColor {
     /// SSH / remote session indicator (warm orange).
     static let booRemote = NSColor(calibratedRed: 0.9, green: 0.66, blue: 0.2, alpha: 1.0)

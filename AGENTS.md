@@ -266,6 +266,7 @@ Fixed tabs are listed in `Tab.fixed`. The **PLUGINS** sidebar section is generat
 - Zero warnings policy
 - All AppKit UI on main thread (PTY reads are background GCD)
 - Use `TerminalColor.cgColor`/`.nsColor` extensions, not inline conversions
+- Colors: use the semantic tokens on `TerminalTheme` instead of `chromeMuted.withAlphaComponent(…)` or hardcoded `NSColor`s — token table in `documentation/docs/pages/theming.mdx`. SwiftUI mirrors live on `Tokens` (`SettingsWindow.swift`).
 - Settings via `AppSettings.shared` with auto-notification
 - Use `RemoteExplorer.shellEscPath()` (not `shellEscape()`) for remote paths
 

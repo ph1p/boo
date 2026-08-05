@@ -328,10 +328,11 @@ class SidebarTabBarView: NSView {
             let isBeingDragged = isDragging && tab.id == draggedTabID
 
             if isBeingDragged {
-                ctx.setFillColor(theme.chromeMuted.withAlphaComponent(0.04).cgColor)
+                ctx.setFillColor(theme.subtleFill.cgColor)
                 WorkspacePillStyle.fillRoundedRect(ctx, rect: pillRect(in: tabRect))
 
                 if let img = NSImage(systemSymbolName: tab.icon, accessibilityDescription: nil) {
+                    // Deliberate raw alpha: ghost glyph fainter than textTertiary.
                     let config = NSImage.SymbolConfiguration(pointSize: iconSize * 0.75, weight: .regular)
                         .applying(.init(paletteColors: [theme.chromeMuted.withAlphaComponent(0.2)]))
                     if let tinted = img.withSymbolConfiguration(config) {
@@ -346,7 +347,7 @@ class SidebarTabBarView: NSView {
             }
 
             if isHovered {
-                ctx.setFillColor(theme.chromeMuted.withAlphaComponent(0.08).cgColor)
+                ctx.setFillColor(theme.hoverFill.cgColor)
                 WorkspacePillStyle.fillRoundedRect(ctx, rect: pillRect(in: tabRect))
             }
 
@@ -355,7 +356,7 @@ class SidebarTabBarView: NSView {
             }
 
             let iconColor =
-                isSelected ? theme.accentColor : theme.chromeMuted.withAlphaComponent(0.6)
+                isSelected ? theme.accentColor : theme.textSecondary
             if let img = resolveIcon(tab.icon, size: iconSize * 0.75, color: iconColor, label: tab.label) {
                 let imgSize = img.size
                 let iconX = tabRect.midX - imgSize.width / 2
@@ -381,7 +382,7 @@ class SidebarTabBarView: NSView {
         if !overflowRect.isEmpty {
             let hasSelectedOverflow = overflowTabs.contains(where: { $0.id == selectedTab })
             let overflowColor: NSColor =
-                hasSelectedOverflow ? theme.accentColor : theme.chromeMuted.withAlphaComponent(0.6)
+                hasSelectedOverflow ? theme.accentColor : theme.textSecondary
 
             // Accent background when the active tab is in overflow. Painted *before*
             // the glyph — it used to be drawn after, tinting the ellipsis it was
@@ -411,7 +412,7 @@ class SidebarTabBarView: NSView {
             let ghostX = dragCurrentX - ghostSize / 2
             let ghostY = (bounds.height - ghostSize) / 2 - 2
 
-            ctx.setFillColor(theme.chromeBg.withAlphaComponent(0.88).cgColor)
+            ctx.setFillColor(theme.dragGhostBg.cgColor)
             let ghostRect = CGRect(x: ghostX, y: ghostY, width: ghostSize, height: ghostSize)
             WorkspacePillStyle.fillRoundedRect(ctx, rect: ghostRect.insetBy(dx: -1, dy: -1))
 
@@ -436,8 +437,9 @@ class SidebarTabBarView: NSView {
     /// Accent fill plus the island hairline — how the strip marks the active tab,
     /// whether it sits in the visible row or behind the overflow "···" button.
     private func drawSelectedPill(_ ctx: CGContext, in rect: CGRect, theme: TerminalTheme) {
-        ctx.setFillColor(theme.accentColor.withAlphaComponent(0.15).cgColor)
+        ctx.setFillColor(theme.accentSelectionFill.cgColor)
         WorkspacePillStyle.fillRoundedRect(ctx, rect: rect)
+        // Deliberate raw alpha: between focusRing (0.7) and focusBorder (0.45).
         WorkspacePillStyle.strokeHairline(
             ctx, rect: rect, color: theme.accentColor.withAlphaComponent(0.55))
     }

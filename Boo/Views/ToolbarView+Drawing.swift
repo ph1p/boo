@@ -132,7 +132,7 @@ extension ToolbarView {
 
             // Accent-color border on the active workspace pill
             if ws.isActive {
-                WorkspacePillStyle.strokeBorder(ctx, rect: rect, accent: theme.accentColor)
+                WorkspacePillStyle.strokeBorder(ctx, rect: rect, theme: theme)
             }
 
             var contentX = x + 10
@@ -345,7 +345,7 @@ extension ToolbarView {
 
         let ghostView = NSView(frame: NSRect(x: 0, y: 0, width: ghostWidth, height: ghostHeight))
         ghostView.wantsLayer = true
-        ghostView.layer?.backgroundColor = NSColor.windowBackgroundColor.withAlphaComponent(0.85).cgColor
+        ghostView.layer?.backgroundColor = AppSettings.shared.theme.dragGhostBg.cgColor
         ghostView.layer?.cornerRadius = 6
         ghostView.layer?.borderColor = NSColor.separatorColor.cgColor
         ghostView.layer?.borderWidth = 1

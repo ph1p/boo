@@ -731,7 +731,7 @@ class SidebarPanelView: NSView {
 
         let ghostView = NSView(frame: NSRect(x: 0, y: 0, width: ghostWidth, height: ghostHeight))
         ghostView.wantsLayer = true
-        ghostView.layer?.backgroundColor = NSColor.windowBackgroundColor.withAlphaComponent(0.9).cgColor
+        ghostView.layer?.backgroundColor = AppSettings.shared.theme.dragGhostBg.cgColor
         ghostView.layer?.cornerRadius = 6
         ghostView.layer?.borderColor = NSColor.separatorColor.cgColor
         ghostView.layer?.borderWidth = 1
@@ -860,7 +860,7 @@ class SidebarPanelView: NSView {
         var y: CGFloat = 0
         for (i, state) in sectionStates.enumerated() {
             if i > 0 {
-                ctx.setFillColor(theme.chromeMuted.withAlphaComponent(0.15).cgColor)
+                ctx.setFillColor(theme.separator.cgColor)
                 ctx.fill(CGRect(x: 0, y: y, width: w, height: SidebarLayout.separatorHeight))
                 y += SidebarLayout.separatorHeight
             }

@@ -35,7 +35,7 @@ extension StatusBarView {
                 // Thin vertical separator line
                 let sepInset = round(barHeight * 0.22)
                 x += 7
-                ctx.setFillColor(theme.chromeMuted.withAlphaComponent(0.25).cgColor)
+                ctx.setFillColor(theme.separator.cgColor)
                 ctx.fill(CGRect(x: x, y: sepInset, width: 0.5, height: barHeight - sepInset * 2))
                 x += 7
             }
@@ -52,7 +52,7 @@ extension StatusBarView {
             if hoveredSegmentID == plugin.id {
                 let isClickable = plugin is GitBranchSegment || plugin is PluginContentSegment
                 if isClickable {
-                    ctx.setFillColor(theme.chromeMuted.withAlphaComponent(0.08).cgColor)
+                    ctx.setFillColor(theme.hoverFill.cgColor)
                     let hoverRect = CGRect(x: segRect.minX, y: 1, width: segRect.width, height: barHeight - 2)
                     WorkspacePillStyle.fillRoundedRect(ctx, rect: hoverRect)
                 }
@@ -89,13 +89,13 @@ extension StatusBarView {
         // Separator line
         let sepInset = round(barHeight * 0.22)
         let sepX = bounds.width - totalWidth + sepGap
-        ctx.setFillColor(theme.chromeMuted.withAlphaComponent(0.25).cgColor)
+        ctx.setFillColor(theme.separator.cgColor)
         ctx.fill(CGRect(x: sepX, y: sepInset, width: 0.5, height: barHeight - sepInset * 2))
 
         // Hover highlight for sidebar toggle
         if isSidebarToggleHovered {
             let hoverRect = CGRect(x: sepX + 2, y: 2, width: bounds.width - sepX - 4, height: barHeight - 4)
-            ctx.setFillColor(theme.chromeMuted.withAlphaComponent(0.1).cgColor)
+            ctx.setFillColor(theme.hoverFill.cgColor)
             WorkspacePillStyle.fillRoundedRect(ctx, rect: hoverRect)
         }
 
@@ -103,7 +103,7 @@ extension StatusBarView {
         let color =
             sidebarVisible
             ? theme.accentColor
-            : theme.chromeMuted.withAlphaComponent(isSidebarToggleHovered ? 0.7 : 0.5)
+            : (isSidebarToggleHovered ? theme.textSecondary : theme.textTertiary)
 
         let zoneStart = sepX + 1
         let zoneWidth = bounds.width - zoneStart

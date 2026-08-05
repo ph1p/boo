@@ -91,7 +91,7 @@ struct GitDetailView: View {
                     sectionHeader(
                         title: "Staged Changes",
                         count: stagedFiles.count,
-                        color: NSColor(calibratedRed: 0.25, green: 0.72, blue: 0.31, alpha: 1.0),
+                        color: theme.success,
                         section: .staged,
                         expanded: $stagedExpanded,
                         density: density,
@@ -109,7 +109,7 @@ struct GitDetailView: View {
                     sectionHeader(
                         title: "Changes",
                         count: unstagedFiles.count,
-                        color: NSColor(calibratedRed: 0.9, green: 0.66, blue: 0.2, alpha: 1.0),
+                        color: theme.warning,
                         section: .unstaged,
                         expanded: $unstagedExpanded,
                         density: density,
@@ -127,7 +127,7 @@ struct GitDetailView: View {
                     sectionHeader(
                         title: "Untracked",
                         count: untrackedFiles.count,
-                        color: NSColor(calibratedRed: 0.5, green: 0.5, blue: 0.5, alpha: 1.0),
+                        color: theme.chromeMuted,
                         section: .untracked,
                         expanded: $untrackedExpanded,
                         density: density,

@@ -160,9 +160,9 @@ struct DSLRenderer: View {
 
     private func tintColor(_ tint: DSLTint) -> Color {
         switch tint {
-        case .success: return Color(nsColor: .booLocal)
-        case .error: return .red
-        case .warning: return Color(nsColor: .booRemote)
+        case .success: return Color(nsColor: theme.success)
+        case .error: return Color(nsColor: theme.error)
+        case .warning: return Color(nsColor: theme.warning)
         case .accent: return Color(nsColor: theme.accentColor)
         case .muted: return Color(nsColor: theme.chromeMuted)
         }
