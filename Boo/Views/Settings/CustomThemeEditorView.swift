@@ -300,9 +300,20 @@ struct ColorWell: NSViewRepresentable {
     }
 
     func updateNSView(_ well: NSColorWell, context: Context) {
-        if let c = NSColor(hex: hex), c.usingColorSpace(.sRGB) != well.color.usingColorSpace(.sRGB) {
+        // Compare in hex space: NSColor equality after a hex roundtrip is
+        // almost never exact, and writing back into an active well re-fires
+        // the action and drifts the color.
+        if let c = NSColor(hex: hex), Self.hexString(of: well.color) != hex.uppercased() {
             well.color = c
         }
+    }
+
+    static func hexString(of color: NSColor) -> String? {
+        guard let c = color.usingColorSpace(.sRGB) else { return nil }
+        return String(
+            format: "#%02X%02X%02X",
+            lround(c.redComponent * 255), lround(c.greenComponent * 255), lround(c.blueComponent * 255)
+        )
     }
 
     func makeCoordinator() -> Coordinator { Coordinator(hex: $hex) }
@@ -311,11 +322,8 @@ struct ColorWell: NSViewRepresentable {
         var hex: Binding<String>
         init(hex: Binding<String>) { self.hex = hex }
         @objc func colorChanged(_ sender: NSColorWell) {
-            guard let c = sender.color.usingColorSpace(.sRGB) else { return }
-            hex.wrappedValue = String(
-                format: "#%02X%02X%02X",
-                Int(c.redComponent * 255), Int(c.greenComponent * 255), Int(c.blueComponent * 255)
-            )
+            guard let value = ColorWell.hexString(of: sender.color) else { return }
+            hex.wrappedValue = value
         }
     }
 }
