@@ -13,12 +13,9 @@ class SidebarTabBarView: NSView {
     /// Inset from the sidebar island's rounded edge — the shared chrome content
     /// inset, so the first tab pill starts where the toolbar's and status bar's
     /// first controls do.
-    private let sideInset: CGFloat = IslandMetrics.contentInset
+    private let sideInset: CGFloat = IslandMetrics.contentInset - 2
     /// Width reserved for the overflow "···" button when tabs don't fit.
     private let overflowW: CGFloat = 28
-    /// Leading x of the (centred) tab row, set by `rebuildTabRects`. Drag/drop
-    /// index math is relative to this, not to `sideInset`.
-    private var rowStartX: CGFloat = 0
 
     /// Square hover/selected pill behind an icon. Sized from the tab footprint so
     /// the gap left and right of a pill matches `tabGap` instead of being a second,
@@ -100,9 +97,7 @@ class SidebarTabBarView: NSView {
         let step = tabW + tabGap
         let contentW = bounds.width - sideInset * 2
         let needsOverflow = CGFloat(sidebarTabs.count) * step - tabGap > contentW
-        // Room for tab buttons (the overflow "···" stays pinned to the right edge).
-        let roomW = needsOverflow ? contentW - overflowW - tabGap : contentW
-        let fitCount = min(sidebarTabs.count, max(0, Int((roomW + tabGap) / step)))
+        let available = sideInset + (needsOverflow ? contentW - overflowW - tabGap : contentW)
 
         // Full height, both positions. The old ±1 fudge reserved a row for a
         // separator line that the island gap replaced, and because it flipped with
@@ -111,15 +106,9 @@ class SidebarTabBarView: NSView {
         let tabY: CGFloat = 0
         let tabH = bounds.height
 
-        // Centre the row between the island's edges so the padding to the left
-        // and right border is even, instead of piling all leftover space on the
-        // right.
-        let usedW = fitCount > 0 ? CGFloat(fitCount) * step - tabGap : 0
-        rowStartX = sideInset + max(0, (roomW - usedW) / 2)
-
-        var x = rowStartX
-        for (i, tab) in sidebarTabs.enumerated() {
-            if i < fitCount {
+        var x: CGFloat = sideInset
+        for tab in sidebarTabs {
+            if x + tabW <= available {
                 tabRects[tab.id] = NSRect(x: x, y: tabY, width: tabW, height: tabH)
                 visibleTabs.append(tab)
                 x += step
@@ -223,7 +212,7 @@ class SidebarTabBarView: NSView {
 
     private func dropIndexFor(x: CGFloat) -> Int {
         let step = tabW + tabGap
-        let index = Int((x - rowStartX + step / 2) / step)
+        let index = Int((x - sideInset + step / 2) / step)
         return max(0, min(index, visibleTabs.count))
     }
 
@@ -385,7 +374,7 @@ class SidebarTabBarView: NSView {
             // One step past the last tab's leading edge. The old `tabW - tabGap`
             // stride drifted further left with every tab, so the indicator landed
             // inside the strip instead of after it.
-            let endX = rowStartX + CGFloat(visibleTabs.count) * (tabW + tabGap)
+            let endX = sideInset + CGFloat(visibleTabs.count) * (tabW + tabGap)
             drawDropIndicator(at: endX, ctx: ctx, theme: theme)
         }
 
