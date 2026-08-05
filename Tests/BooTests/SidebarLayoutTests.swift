@@ -1342,11 +1342,11 @@ private func makeNonGrowableSection(id: String, name: String = "Info") -> Sideba
         }
     }
 
-    /// The 8pt resize handle straddles the content boundary, so its lower half sits
-    /// inside the next header. Later subviews win AppKit's hit test, so a handle
-    /// stacked above the headers swallowed the collapse click and reorder drag in
-    /// that band. Asserted through the panel, since z-order is what decides this.
-    @MainActor func testDragHandleDeclinesHitsInsideHeader() {
+    /// The resize handle straddles the content boundary and sits ON TOP of the next
+    /// header: in the small overlap band resize must win, because grabbing right at
+    /// the border and getting the header's reorder drag instead was the exact bug.
+    /// Asserted through the panel, since z-order is what decides this.
+    @MainActor func testDragHandleWinsHitsInsideOverlapBand() {
         let v = makePanelView(height: 600)
         v.updateSections(
             [makeSection(id: "a"), makeSection(id: "b")], expandedIDs: ["a", "b"])
@@ -1363,8 +1363,14 @@ private func makeNonGrowableSection(id: String, name: String = "Info") -> Sideba
             let pointInPanel = NSPoint(
                 x: handle.frame.midX, y: handle.frame.intersection(header.frame).midY)
             XCTAssertTrue(
-                v.hitTest(v.convert(pointInPanel, to: v.superview)) === header,
-                "the header, not the handle, must receive clicks in the overlap band")
+                v.hitTest(v.convert(pointInPanel, to: v.superview)) === handle,
+                "the handle, not the header, must receive clicks in the overlap band")
+            // The overlap claims only the header's top sliver — the rest of the
+            // header keeps its collapse click and reorder drag.
+            let headerBody = NSPoint(x: header.frame.midX, y: header.frame.midY)
+            XCTAssertTrue(
+                v.hitTest(v.convert(headerBody, to: v.superview)) === header,
+                "the header body below the overlap band must stay clickable")
         }
     }
 
@@ -1410,9 +1416,10 @@ private func makeNonGrowableSection(id: String, name: String = "Info") -> Sideba
         XCTAssertEqual(handle.aboveIndex, 0)
         XCTAssertEqual(handle.belowIndex, 2)
 
-        // The handle is centred on section 2's top, offset by the 3pt half-height.
+        // The handle straddles section 2's top, reaching `reachAbove` over the border.
         XCTAssertEqual(
-            handle.frame.minY, v.indicatorYOffset(before: 2) - 3, accuracy: 0.5,
+            handle.frame.minY, v.indicatorYOffset(before: 2) - SidebarDragHandleView.reachAbove,
+            accuracy: 0.5,
             "handle must straddle the top of the lower expanded section")
 
         // And that boundary is below the collapsed section's header, not above it.

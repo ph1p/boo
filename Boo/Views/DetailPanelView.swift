@@ -579,24 +579,24 @@ class SidebarPanelView: NSView {
             // strip floated mid-stack and the visible boundary had no handle at all.
             // The walk above already placed that header, so read it rather than
             // recomputing the prefix sum per handle.
-            let handleY = sectionStates[below].headerView.frame.minY - 3
+            let handleY = sectionStates[below].headerView.frame.minY - SidebarDragHandleView.reachAbove
             let handle: SidebarDragHandleView
             if handleIndex < dragHandles.count {
                 handle = dragHandles[handleIndex]
             } else {
                 handle = SidebarDragHandleView(frame: .zero)
-                // The 8pt grab strip is centred on the content boundary, so its lower
-                // half overlaps the next section's 26pt header. Later subviews win
-                // AppKit's hit test, so a handle added on top of the headers would
-                // swallow both the collapse click and the reorder drag in that band.
-                // Ordering is the fix; the handle needs no knowledge of its siblings.
-                addSubview(handle, positioned: .below, relativeTo: subviews.first)
+                // The handle sits ON TOP of the headers: it reaches a few points into
+                // the header below so the grab strip is wide enough to hit, and in
+                // that band resize must win over the header's collapse click and
+                // reorder drag — grabbing right at the border and dragging the
+                // section instead of resizing was the exact bug.
+                addSubview(handle)
                 dragHandles.append(handle)
             }
             handle.aboveIndex = i
             handle.belowIndex = below
             handle.panelView = self
-            handle.frame = NSRect(x: 0, y: handleY, width: w, height: 8)
+            handle.frame = NSRect(x: 0, y: handleY, width: w, height: SidebarDragHandleView.thickness)
             handle.isHidden = false
             handleIndex += 1
         }

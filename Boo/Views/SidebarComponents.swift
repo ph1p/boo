@@ -28,6 +28,15 @@ class TopAlignedScrollView: NSScrollView {
 /// Handles mouse drag to resize the sections above and below.
 /// Shows an accent-colored bar on hover/drag, like VS Code section resize handles.
 class SidebarDragHandleView: NSView {
+    /// How far the grab strip reaches above the section border, and how far it
+    /// overlaps into the header below it. The overlap band claims the top of
+    /// the 26pt header for resizing (the view sits on top of the headers), so
+    /// keep it small enough that collapse clicks and reorder drags still have
+    /// most of the header to themselves.
+    static let reachAbove: CGFloat = 6
+    static let reachBelow: CGFloat = 4
+    static var thickness: CGFloat { reachAbove + reachBelow }
+
     var aboveIndex: Int = 0
     var belowIndex: Int = 0
     weak var panelView: SidebarPanelView?
@@ -61,8 +70,10 @@ class SidebarDragHandleView: NSView {
 
     override func draw(_ dirtyRect: NSRect) {
         guard isActive else { return }
+        // Centre the bar on the section border, not on this view's own centre —
+        // the grab strip reaches asymmetrically into the header below.
         let barH: CGFloat = 2
-        let r = CGRect(x: 0, y: (bounds.height - barH) / 2, width: bounds.width, height: barH)
+        let r = CGRect(x: 0, y: Self.reachAbove - barH / 2, width: bounds.width, height: barH)
         AppSettings.shared.theme.accentEmphasis.setFill()
         NSBezierPath(rect: r).fill()
     }
