@@ -103,9 +103,24 @@ class PaneView: NSView {
         return min(tabMaxWidth, max(tabMinWidth, natural))
     }
 
-    /// Compute all tab widths at once (cached per draw cycle via callers).
+    /// Cached measured widths — `measuredTabWidth` does text layout per title,
+    /// and hover/drag paths ask for all widths several times per pointer event.
+    /// Keyed by what the measurement depends on (title + icon presence), so it
+    /// self-invalidates on any tab change without explicit bookkeeping.
+    private var _tabWidthsCache: (key: [String], widths: [CGFloat])?
+
+    /// Compute all tab widths at once (memoized until tab content changes).
     func allTabWidths() -> [CGFloat] {
-        pane.tabs.map { measuredTabWidth(for: $0) }
+        let key = pane.tabs.map { "\(Self.tabDisplayTitle(tab: $0))|\(tabHasLeadingIcon($0))" }
+        if let cached = _tabWidthsCache, cached.key == key { return cached.widths }
+        let widths = pane.tabs.map { measuredTabWidth(for: $0) }
+        _tabWidthsCache = (key, widths)
+        return widths
+    }
+
+    /// Slot start x of tab `index` in scroll mode, before scroll offset.
+    func tabStartX(_ index: Int, widths: [CGFloat]) -> CGFloat {
+        Self.tabBarSideInset + widths.prefix(index).reduce(0, +)
     }
 
     /// Computed tab bar height — row stride per row plus the vertical bar
@@ -998,7 +1013,7 @@ class PaneView: NSView {
         ctx.fill(CGRect(x: 0, y: 0, width: bounds.width, height: barH))
 
         if overflowMode == .wrap {
-            drawTabsWrapped(ctx: ctx, theme: theme, barH: barH)
+            drawTabsWrapped(ctx: ctx, theme: theme)
         } else {
             drawTabsScrollable(ctx: ctx, theme: theme, barH: barH)
         }

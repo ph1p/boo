@@ -52,9 +52,7 @@ extension PaneView {
         } else {
             let widths = allTabWidths()
             guard idx < widths.count else { return false }
-            var cx: CGFloat = Self.tabBarSideInset
-            for i in 0..<idx { cx += widths[i] }
-            localX = (point.x + tabScrollOffset) - cx
+            localX = (point.x + tabScrollOffset) - tabStartX(idx, widths: widths)
             w = widths[idx]
         }
         return localX > w - Self.tabCloseHitZone
@@ -278,8 +276,7 @@ extension PaneView {
             return .zero
         } else {
             let widths = allTabWidths()
-            var x: CGFloat = Self.tabBarSideInset
-            for i in 0..<min(index, widths.count) { x += widths[i] }
+            let x = tabStartX(min(index, widths.count), widths: widths)
             return NSPoint(x: x - tabScrollOffset, y: 0)
         }
     }

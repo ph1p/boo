@@ -370,13 +370,18 @@ final class AppSettings {
         }
     }
 
-    /// First of `base`, "base 2", "base 3", … that no existing theme uses.
-    func uniqueThemeName(_ base: String) -> String {
-        let taken = Set(allThemes.map { $0.name })
+    /// First of `base`, "base 2", "base 3", … not present in `taken` — the one
+    /// copy of the theme naming policy.
+    private static func uniqueName(_ base: String, taken: Set<String>) -> String {
         if !taken.contains(base) { return base }
         var n = 2
         while taken.contains("\(base) \(n)") { n += 1 }
         return "\(base) \(n)"
+    }
+
+    /// First of `base`, "base 2", … that no existing theme uses.
+    func uniqueThemeName(_ base: String) -> String {
+        Self.uniqueName(base, taken: Set(allThemes.map { $0.name }))
     }
 
     /// Persist a custom theme and select it. The one owner of the naming policy:
@@ -395,12 +400,10 @@ final class AppSettings {
         } else {
             insertAt = customs.count
         }
-        let taken = Set(TerminalTheme.themes.map { $0.name } + customs.map { $0.name })
-        if taken.contains(saved.name) {
-            var n = 2
-            while taken.contains("\(saved.name) \(n)") { n += 1 }
-            saved.name = "\(saved.name) \(n)"
-        }
+        // Dedupe against builtins + remaining customs (the replaced entry is
+        // already removed, so re-saving under the same name stays suffix-free).
+        saved.name = Self.uniqueName(
+            saved.name, taken: Set(TerminalTheme.themes.map { $0.name } + customs.map { $0.name }))
         customs.insert(saved, at: min(insertAt, customs.count))
         customThemes = customs
         themeName = saved.name

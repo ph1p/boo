@@ -229,7 +229,7 @@ struct SwatchRow: View {
                 .padding(.vertical, 2)
                 .background(
                     RoundedRectangle(cornerRadius: 4)
-                        .fill(hexFieldBg(fieldState, isEditing: isEditing, tokens: t))
+                        .fill(hexFieldBg(isEditing: isEditing, tokens: t))
                         .overlay(
                             RoundedRectangle(cornerRadius: 4)
                                 .strokeBorder(
@@ -269,7 +269,7 @@ struct SwatchRow: View {
 
 /// Neutral field background — the swatch next to the field already shows the
 /// color, so painting the field with it just made the hex text illegible.
-private func hexFieldBg(_ state: HexFieldState, isEditing: Bool, tokens t: Tokens) -> Color {
+private func hexFieldBg(isEditing: Bool, tokens t: Tokens) -> Color {
     t.muted.opacity(isEditing ? 0.14 : 0.08)
 }
 

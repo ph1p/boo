@@ -26,10 +26,18 @@ extension PaneView {
     static let tabTextLeadIn: CGFloat = 10
     /// Width a leading icon advances the title by (12pt glyph + 3pt gap).
     static let tabIconAdvance: CGFloat = 15
-    /// Slot-relative width of the close-button hit zone at the tab's right edge.
-    /// Covers the drawn 16pt circle (centred `tabPillInsetX + 12` from the slot
-    /// edge) — shared by draw, hover, and click so they can't diverge.
-    static let tabCloseHitZone: CGFloat = 22
+    /// Trailing gap between the close circle and the pill's right edge.
+    static let tabCloseTrailingGap: CGFloat = 4
+    /// Slot-relative width of the close-button hit zone at the tab's right edge —
+    /// derived from the drawn circle so draw, hover, and click can't diverge.
+    static let tabCloseHitZone: CGFloat =
+        tabPillInsetX + tabCloseTrailingGap + WorkspacePillStyle.closeButtonSize
+
+    /// The pill drawn inside a tab or plus slot — the one place the pill inset
+    /// geometry lives.
+    static func tabPillRect(inSlot slot: CGRect) -> CGRect {
+        slot.insetBy(dx: tabPillInsetX, dy: (slot.height - tabPillHeight) / 2)
+    }
 
     // MARK: - Tab Bar Drawing
 
@@ -46,10 +54,7 @@ extension PaneView {
         tabScrollOffset = min(max(0, tabScrollOffset), maxScroll)
         if isOverflowing && pane.activeTabIndex != lastAutoScrolledTabIndex {
             lastAutoScrolledTabIndex = pane.activeTabIndex
-            // Compute active tab position
-            var activeStart: CGFloat = inset
-            for i in 0..<pane.activeTabIndex { activeStart += widths[i] }
-            activeStart -= tabScrollOffset
+            let activeStart = tabStartX(pane.activeTabIndex, widths: widths) - tabScrollOffset
             let activeEnd = activeStart + widths[pane.activeTabIndex]
             if activeStart < inset {
                 tabScrollOffset += activeStart - inset
@@ -77,10 +82,11 @@ extension PaneView {
         ctx.restoreGState()
 
         let plusSlot = plusButtonSlot(widths: widths)
-        drawPlusButton(ctx: ctx, theme: theme, x: plusSlot.minX, y: plusSlot.minY, width: plusSlot.width, rowH: plusSlot.height)
+        drawPlusButton(
+            ctx: ctx, theme: theme, x: plusSlot.minX, y: plusSlot.minY, width: plusSlot.width, rowH: plusSlot.height)
     }
 
-    func drawTabsWrapped(ctx: CGContext, theme: TerminalTheme, barH: CGFloat) {
+    func drawTabsWrapped(ctx: CGContext, theme: TerminalTheme) {
         tabScrollOffset = 0
         let widths = allTabWidths()
         let layouts = wrapLayout(widths: widths)
@@ -94,8 +100,9 @@ extension PaneView {
                 width: lay.width, rowH: singleRowTabHeight, isActive: isActive)
         }
 
-        let plusSlot = plusButtonSlot(widths: widths)
-        drawPlusButton(ctx: ctx, theme: theme, x: plusSlot.minX, y: plusSlot.minY, width: plusSlot.width, rowH: plusSlot.height)
+        let plusSlot = plusButtonSlot(layouts: layouts)
+        drawPlusButton(
+            ctx: ctx, theme: theme, x: plusSlot.minX, y: plusSlot.minY, width: plusSlot.width, rowH: plusSlot.height)
     }
 
     /// Slot rect of the `+` button in the current overflow mode — the ONE place
@@ -107,20 +114,25 @@ extension PaneView {
         let inset = Self.tabBarSideInset
         let w = widths ?? allTabWidths()
         if AppSettings.shared.tabOverflowMode == .wrap {
-            let layouts = wrapLayout(widths: w)
-            let lastLay = layouts.last
-            if plusFitsOnLastRow(layouts) {
-                return CGRect(
-                    x: (lastLay?.x ?? inset) + (lastLay?.width ?? 0), y: lastLay?.y ?? inset,
-                    width: plusButtonWidth, height: singleRowTabHeight)
-            }
-            return CGRect(
-                x: inset, y: (lastLay?.y ?? inset) + singleRowTabHeight,
-                width: plusButtonWidth, height: singleRowTabHeight)
+            return plusButtonSlot(layouts: wrapLayout(widths: w))
         }
         let isOverflowing = scrollMaxOffset(widths: w) > 0
         let x = isOverflowing ? bounds.width - plusButtonWidth - inset : inset + w.reduce(0, +)
         return CGRect(x: x, y: 0, width: plusButtonWidth, height: tabBarHeight)
+    }
+
+    /// Wrap-mode plus slot for callers that already computed the layouts.
+    func plusButtonSlot(layouts: [TabLayout]) -> CGRect {
+        let inset = Self.tabBarSideInset
+        let lastLay = layouts.last
+        if plusFitsOnLastRow(layouts) {
+            return CGRect(
+                x: (lastLay?.x ?? inset) + (lastLay?.width ?? 0), y: lastLay?.y ?? inset,
+                width: plusButtonWidth, height: singleRowTabHeight)
+        }
+        return CGRect(
+            x: inset, y: (lastLay?.y ?? inset) + singleRowTabHeight,
+            width: plusButtonWidth, height: singleRowTabHeight)
     }
 
     func drawSingleTab(
@@ -132,7 +144,7 @@ extension PaneView {
 
         // Pill inside the tab slot — the horizontal inset supplies the gap between
         // neighbouring pills, the vertical one keeps the pill off the bar edges.
-        let pillRect = tabRect.insetBy(dx: Self.tabPillInsetX, dy: (rowH - Self.tabPillHeight) / 2)
+        let pillRect = Self.tabPillRect(inSlot: tabRect)
         WorkspacePillStyle.fill(
             ctx, rect: pillRect, active: isActive, hovered: isHovered,
             wsColor: nil, neutral: theme.chromeMuted)
@@ -212,8 +224,8 @@ extension PaneView {
             let closeHovered = isHovered && isCloseButtonHovered
             let closeAlpha: CGFloat = closeHovered ? 0.9 : (isActive ? 0.7 : 0.5)
 
-            let circleSize: CGFloat = 16
-            let circleCenterX = pillRect.maxX - circleSize / 2 - 4
+            let circleSize = WorkspacePillStyle.closeButtonSize
+            let circleCenterX = pillRect.maxX - circleSize / 2 - Self.tabCloseTrailingGap
             let circleCenterY = midY
 
             // Subtle circular background on close-button hover
@@ -238,9 +250,7 @@ extension PaneView {
     func drawPlusButton(ctx: CGContext, theme: TerminalTheme, x: CGFloat, y: CGFloat, width: CGFloat, rowH: CGFloat) {
         // Pill button matching the workspace bar's `+` — inset inside its zone so
         // the gap to the last tab pill matches the gap between tab pills.
-        let pillRect = CGRect(
-            x: x + Self.tabPillInsetX, y: y + (rowH - Self.tabPillHeight) / 2,
-            width: width - Self.tabPillInsetX * 2, height: Self.tabPillHeight)
+        let pillRect = Self.tabPillRect(inSlot: CGRect(x: x, y: y, width: width, height: rowH))
         WorkspacePillStyle.fill(
             ctx, rect: pillRect, active: false, hovered: isPlusButtonHovered,
             wsColor: nil, neutral: theme.chromeMuted)
