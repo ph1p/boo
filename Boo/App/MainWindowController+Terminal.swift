@@ -285,7 +285,7 @@ extension MainWindowController {
             return
         }
         workspace.activePaneID = newID
-        splitContainer.update(tree: workspace.splitTree)
+        updateSplits(workspace.splitTree, fadingIn: newID)
         saveSession()
 
         DispatchQueue.main.async { [weak self] in
@@ -317,7 +317,7 @@ extension MainWindowController {
             _ = pane.addTab(workingDirectory: path)
         }
         workspace.activePaneID = newID
-        splitContainer.update(tree: workspace.splitTree)
+        updateSplits(workspace.splitTree, fadingIn: newID)
         saveSession()
 
         DispatchQueue.main.async { [weak self] in

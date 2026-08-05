@@ -571,6 +571,20 @@ extension MainWindowController {
         }
     }
 
+    /// Rebuild the split container and fade the freshly created pane in instead
+    /// of having it pop into existence. Every pane-creation path goes through
+    /// this so the update + fade pairing can't be forgotten at a new call site.
+    func updateSplits(_ tree: SplitTree, fadingIn newPaneID: UUID) {
+        splitContainer.update(tree: tree)
+        guard let pv = paneViews[newPaneID] else { return }
+        pv.alphaValue = 0
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.16
+            ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            pv.animator().alphaValue = 1
+        }
+    }
+
     func splitActivePane(direction: SplitTree.SplitDirection) {
         guard let workspace = activeWorkspace else { return }
         let oldPaneID = workspace.activePaneID
@@ -614,7 +628,7 @@ extension MainWindowController {
         }
         // Focus the newly created pane
         workspace.activePaneID = newID
-        splitContainer.update(tree: workspace.splitTree)
+        updateSplits(workspace.splitTree, fadingIn: newID)
         saveSession()
 
         DispatchQueue.main.async { [weak self] in
@@ -813,6 +827,11 @@ extension MainWindowController {
             if source.pane.tabs.isEmpty {
                 closeEmptyPane(source.paneID)
             }
+        case .center:
+            moveTabBetweenPanes(source: source, tabIndex: tabIndex, dest: dest, insertAt: dest.pane.tabs.count)
+            if source.pane.tabs.isEmpty {
+                closeEmptyPane(source.paneID)
+            }
         case .left:
             splitPaneWithTab(
                 source: source, tabIndex: tabIndex, target: dest,
@@ -888,7 +907,9 @@ extension MainWindowController {
 
         // Perform the drop into the destination workspace
         switch zone {
-        case .tabBarInsert(let insertIdx):
+        case .tabBarInsert, .center:
+            let insertIdx: Int
+            if case .tabBarInsert(let idx) = zone { insertIdx = idx } else { insertIdx = dest.pane.tabs.count }
             let insertIndex = min(insertIdx, dest.pane.tabs.count)
             dest.pane.insertTab(tab, at: insertIndex)
             if let gv = gv {
@@ -918,7 +939,7 @@ extension MainWindowController {
                 newPane.insertTab(tab, at: 0)
             }
             destWorkspace.activePaneID = newPaneID
-            splitContainer.update(tree: destWorkspace.splitTree)
+            updateSplits(destWorkspace.splitTree, fadingIn: newPaneID)
             DispatchQueue.main.async { [weak self, tab, gv, cv] in
                 guard let self else { return }
                 if let newPV = self.paneViews[newPaneID] {
@@ -1064,7 +1085,7 @@ extension MainWindowController {
         workspace.activePaneID = newPaneID
 
         // 4. Single tree rebuild with all changes applied
-        splitContainer.update(tree: workspace.splitTree)
+        updateSplits(workspace.splitTree, fadingIn: newPaneID)
         saveSession()
 
         DispatchQueue.main.async { [weak self, tab, gv, cv] in

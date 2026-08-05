@@ -28,6 +28,15 @@ class SplitContainerView: NSView, NSSplitViewDelegate {
     }
 
     func update(tree: SplitTree) {
+        // Fast path: same structure (directions + leaf IDs) — the existing hierarchy
+        // already matches, so a full teardown/rebuild would only detach and re-attach
+        // every live terminal surface for nothing. Just move the dividers.
+        if let old = currentTree, let view = currentView, old.hasSameStructure(as: tree) {
+            currentTree = tree
+            applyPositionsSuppressed(view: view, tree: tree)
+            return
+        }
+
         currentTree = tree
 
         // Tearing down the old hierarchy resizes its subviews to nothing, and those
@@ -52,15 +61,29 @@ class SplitContainerView: NSView, NSSplitViewDelegate {
         needsLayout = true
         layoutSubtreeIfNeeded()
 
-        // Defer split position setting until after layout
-        DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
-            // Setting divider positions itself emits resize notifications; those are
-            // us applying the stored ratios, not the user changing them.
-            self.isRebuilding = true
-            defer { self.isRebuilding = false }
-            self.applySplitPositions(view: view, tree: tree)
+        // Apply divider positions in the SAME pass — frames are valid after
+        // layoutSubtreeIfNeeded, and deferring a runloop turn painted one visible
+        // frame at AppKit's default (equal) distribution before snapping to the
+        // stored ratio.
+        applySplitPositions(view: view, tree: tree)
+
+        // If we were laid out with zero bounds (window still materializing), the
+        // sync apply above was a no-op; retry once real bounds exist.
+        if bounds.width <= 0 || bounds.height <= 0 {
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.currentView === view else { return }
+                self.applyPositionsSuppressed(view: view, tree: tree)
+            }
         }
+    }
+
+    /// Apply divider positions with ratio write-back suppressed — the resize
+    /// notifications `setPosition` emits are us applying stored ratios, not the
+    /// user changing them.
+    private func applyPositionsSuppressed(view: NSView, tree: SplitTree) {
+        isRebuilding = true
+        defer { isRebuilding = false }
+        applySplitPositions(view: view, tree: tree)
     }
 
     /// True while `update(tree:)` is tearing down or re-establishing the hierarchy.

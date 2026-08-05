@@ -71,7 +71,10 @@ import Cocoa
         self.tabID = tabID
         super.init(frame: .zero)
         wantsLayer = true
-        layer?.backgroundColor = NSColor.black.cgColor
+        // Seed with the theme background, not black: the Metal surface takes a
+        // couple of frames to paint after a split/tab creation, and a black
+        // placeholder flashes visibly on light themes.
+        layer?.backgroundColor = AppSettings.shared.theme.background.nsColor.cgColor
         registerForDraggedTypes([.fileURL, .URL])
         createSurface(workingDirectory: workingDirectory, paneID: paneID, tabID: tabID)
     }

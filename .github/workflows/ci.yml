@@ -209,7 +209,7 @@ jobs:
 
       - name: Upload generated appcast
         if: steps.release_outputs.outputs.has_appcast == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: sparkle-appcast
           path: .build/updates/appcast.xml
@@ -229,7 +229,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@v8
         with:
           name: sparkle-appcast
           path: /tmp/sparkle-appcast
@@ -257,7 +257,7 @@ jobs:
         run: pnpm build
         working-directory: documentation
 
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: documentation/docs/dist
 
@@ -277,4 +277,4 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5

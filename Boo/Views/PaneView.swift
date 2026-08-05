@@ -144,10 +144,20 @@ class PaneView: NSView {
         wrapLayout(widths: allTabWidths())
     }
 
+    /// Cached wrap layout — `tabBarHeight` (and through it `layout()`, `draw()`,
+    /// `mouseMoved`, `scrollWheel`, and drag hit-testing) recomputes the full
+    /// flow layout on every access, several times per pointer event during a
+    /// drag. Keyed by the inputs the layout depends on.
+    private var _wrapLayoutCache: (widths: [CGFloat], boundsWidth: CGFloat, layouts: [TabLayout])?
+
     func wrapLayout(widths: [CGFloat]) -> [TabLayout] {
         let inset = Self.tabBarSideInset
         let availW = bounds.width - inset * 2
         guard !widths.isEmpty, availW > 0 else { return [] }
+
+        if let c = _wrapLayoutCache, c.widths == widths, c.boundsWidth == bounds.width {
+            return c.layouts
+        }
 
         var layouts: [TabLayout] = []
         var cx: CGFloat = inset
@@ -160,6 +170,7 @@ class PaneView: NSView {
             layouts.append(TabLayout(x: cx, y: inset + CGFloat(row) * singleRowTabHeight, width: w))
             cx += w
         }
+        _wrapLayoutCache = (widths, bounds.width, layouts)
         return layouts
     }
 

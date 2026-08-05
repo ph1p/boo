@@ -214,4 +214,18 @@ extension SplitTree: Equatable {
             return false
         }
     }
+
+    /// Same shape: identical split directions and identical leaf IDs in the same
+    /// order. Ratios are intentionally ignored — a ratio-only change can be
+    /// applied to an existing view hierarchy without rebuilding it.
+    func hasSameStructure(as other: SplitTree) -> Bool {
+        switch (self, other) {
+        case (.leaf(let a), .leaf(let b)):
+            return a == b
+        case (.split(let d1, let f1, let s1, _), .split(let d2, let f2, let s2, _)):
+            return d1 == d2 && f1.hasSameStructure(as: f2) && s1.hasSameStructure(as: s2)
+        default:
+            return false
+        }
+    }
 }

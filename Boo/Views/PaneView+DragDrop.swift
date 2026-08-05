@@ -281,6 +281,18 @@ extension PaneView {
         }
     }
 
+    /// Flipped-coords vertical centre of the pill row at `index` — where the
+    /// insertion indicator should centre itself. Scroll mode centres pills in
+    /// the whole bar; wrap mode centres them within their row.
+    func tabInsertionRowCenterY(at index: Int) -> CGFloat {
+        if AppSettings.shared.tabOverflowMode == .wrap {
+            let layouts = wrapLayout()
+            let rowY = index < layouts.count ? layouts[index].y : (layouts.last?.y ?? Self.tabBarSideInset)
+            return rowY + singleRowTabHeight / 2
+        }
+        return tabBarHeight / 2
+    }
+
     /// Compute the insertion index for a tab bar drop at the given local point.
     func tabInsertionIndex(at point: NSPoint) -> Int {
         let count = pane.tabs.count

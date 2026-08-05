@@ -5,8 +5,9 @@ enum TabDropZone: Equatable {
     case tabBarInsert(index: Int)  // insert at position in tab bar
     case left  // left 20% — split horizontally, new pane on left
     case right  // right 20% — split horizontally, new pane on right
-    case top  // top 20% — split vertically, new pane on top
-    case bottom  // bottom 20% — split vertically, new pane on bottom
+    case top  // top 30% — split vertically, new pane on top
+    case bottom  // bottom 30% — split vertically, new pane on bottom
+    case center  // middle of the terminal — append to the pane's tab bar
 }
 
 /// Centralized drag state machine for cross-pane tab drag & drop.
@@ -47,6 +48,10 @@ enum TabDropZone: Equatable {
     private var cachedPillFrames: [(index: Int, screenFrame: NSRect)]?
 
     private let edgeFraction: CGFloat = 0.2
+    /// Top/bottom zones use a larger fraction: pane heights are much smaller
+    /// than widths, so 20% of the terminal height was a thin strip the drag
+    /// had to reach almost to the edge before a vertical split registered.
+    private let verticalEdgeFraction: CGFloat = 0.3
 
     deinit { MainActor.assumeIsolated { cleanup() } }
 
@@ -74,15 +79,23 @@ enum TabDropZone: Equatable {
             return
         }
 
-        // Same-pane tab bar drop: reorder in place
-        if source.paneID == dest.paneID, case .tabBarInsert(let insertIdx) = zone {
-            let targetIdx = insertIdx > tabIdx ? insertIdx - 1 : insertIdx
-            if targetIdx != tabIdx {
-                source.pane.moveTab(from: tabIdx, to: targetIdx)
-                source.needsDisplay = true
+        // Same-pane tab bar (or center-append) drop: reorder in place
+        if source.paneID == dest.paneID {
+            let insertIdx: Int?
+            switch zone {
+            case .tabBarInsert(let idx): insertIdx = idx
+            case .center: insertIdx = source.pane.tabs.count
+            default: insertIdx = nil
             }
-            cleanup()
-            return
+            if let insertIdx {
+                let targetIdx = insertIdx > tabIdx ? insertIdx - 1 : insertIdx
+                if targetIdx != tabIdx {
+                    source.pane.moveTab(from: tabIdx, to: targetIdx)
+                    source.needsDisplay = true
+                }
+                cleanup()
+                return
+            }
         }
 
         cleanup()
@@ -230,15 +243,17 @@ enum TabDropZone: Equatable {
         let termH = bounds.height - paneView.tabBarHeight
         let w = bounds.width
         let edgeW = w * edgeFraction
-        let edgeH = termH * edgeFraction
+        let edgeH = termH * verticalEdgeFraction
 
         if point.x < edgeW { return .left }
         if point.x > w - edgeW { return .right }
         if termY < edgeH { return .top }
         if termY > termH - edgeH { return .bottom }
 
-        // Center of terminal → append tab
-        return .tabBarInsert(index: paneView.tabCount)
+        // Center of terminal → append tab. A distinct zone so the indicator can
+        // highlight the whole pane — an insertion line up in the tab bar while
+        // the cursor is mid-pane reads as misplaced.
+        return .center
     }
 
     // MARK: - Drop indicator
@@ -271,17 +286,17 @@ enum TabDropZone: Equatable {
             // PaneView is flipped but contentView is not.
             let contentPt = paneView.convert(NSPoint(x: localPt.x, y: 0), to: contentView)
             // paneRect.maxY is the top of the pane in contentView (unflipped) coords.
-            // Subtract the row's y offset (in flipped coords, larger y = lower row).
-            let rowY = localPt.y
+            // Centre the line on the pill row it inserts into.
+            let rowCenterY = paneView.tabInsertionRowCenterY(at: index)
             let barTop = paneRect.maxY
             let lineHeight: CGFloat = 20
             let lineWidth: CGFloat = 3
             insertInd.frame = NSRect(
                 x: contentPt.x - lineWidth / 2,
-                y: barTop - rowY - lineHeight - 3,
+                y: barTop - rowCenterY - lineHeight / 2,
                 width: lineWidth, height: lineHeight)
 
-        case .left, .right, .top, .bottom:
+        case .left, .right, .top, .bottom, .center:
             // Hide tab insertion indicator
             tabInsertIndicator?.removeFromSuperview()
             tabInsertIndicator = nil
@@ -315,6 +330,10 @@ enum TabDropZone: Equatable {
                 indicatorRect = NSRect(
                     x: paneRect.minX + 2, y: paneRect.minY + 2,
                     width: paneRect.width - 4, height: paneRect.height * 0.5 - 4)
+            case .center:
+                // Append to this pane: highlight the whole pane, not a line in
+                // the tab bar the cursor is nowhere near.
+                indicatorRect = paneRect.insetBy(dx: 2, dy: 2)
             default:
                 return
             }
