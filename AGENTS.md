@@ -45,7 +45,7 @@ Boo/                  Library target (all app code)
 BooApp/               Executable entry point (just calls BooMain.run())
 CGhostty/             C module wrapping ghostty.h
 CIronmark/            C module wrapping ironmark (Rust markdown parser)
-Tests/BooTests/       1072 tests
+Tests/BooTests/       1100+ tests
 documentation/        Vocs documentation site
 ```
 
@@ -221,8 +221,8 @@ Settings window (`Boo/Views/SettingsWindow.swift`) uses a left sidebar + content
 ### Tab enum
 
 ```swift
-enum Tab: Equatable {
-    case general, theme, appearance, statusBar, layout, plugins, shortcuts
+enum Tab: Hashable {
+    case general, theme, appearance, statusBar, layout, editor, browser, notifications, plugins, shortcuts
     case pluginSettings(pluginID: String)  // per-plugin settings page
 }
 ```

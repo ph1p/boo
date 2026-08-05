@@ -16,13 +16,13 @@ Split your terminal in any direction:
 
 - **Cmd+D** — Split right
 - **Cmd+Shift+D** — Split down
-- **Cmd+]** / **Cmd+[** — Navigate between panes
+- **Cmd+]** / **Cmd+[** (or **Cmd+Opt+→** / **Cmd+Opt+←**) — Navigate between panes
 
 Each split pane is independent with its own tab bar and terminal sessions. Drag the divider between panes to resize; the ratio is saved and restored across launches.
 
 ## Per-Pane Tabs
 
-Each pane has its own tab bar. Create new tabs with **Cmd+T**, close with **Cmd+W**. Closed tabs can be reopened with **Cmd+Z**.
+Each pane has its own tab bar. Create new terminal tabs with **Cmd+T** (browser tabs with **Cmd+Shift+T**), close with **Cmd+W**, and switch with **Cmd+Opt+1-9** or **Cmd+Shift+1-9**. Closed tabs can be reopened with **Cmd+Opt+Z**. Tabs can also host a browser, text editor, image viewer, or markdown preview — see [Multi-Content Tabs](/multi-content-tabs).
 
 Smart close order: tab → pane → workspace.
 
@@ -79,6 +79,8 @@ The sidebar shows stacked, collapsible panels powered by the [plugin system](/pl
 
 - **Files** — Live file tree for the current directory. Supports local (FSEvents) and remote (SSH, Mosh, containers, VMs, and device shells) browsing. Click to open, right-click for context menu.
 - **Git** — Branch name, staged/unstaged/untracked files, ahead/behind. Inline stage/unstage buttons. Refresh on file system changes.
+- **Agents** — Agent Center for Claude Code, Codex, and OpenCode: open sessions, config, and diffs.
+- **Snippets** — Saved code snippets with syntax highlighting and quick insertion.
 - **Docker** — Running containers with exec, logs, start/stop/restart. Live updates via `docker events` stream. Local sessions only.
 - **Bookmarks** — Saved directory shortcuts with per-host namespacing for remote sessions.
 
@@ -106,11 +108,15 @@ Toggle individual segments in **Settings → Status Bar**, including path visibi
 
 Open with **Cmd+,**. Organized in tabs:
 
-| Tab            | Options                                                                                           |
-| -------------- | ------------------------------------------------------------------------------------------------- |
-| **Theme**      | 32 color themes with live preview                                                                 |
-| **Appearance** | Terminal font, font size, cursor style (block/beam/underline/outline); sidebar font and font size |
-| **Status Bar** | Toggle individual segments (connection, path, git branch, process, pane count, clock)             |
-| **Layout**     | Sidebar position (toggle with Cmd+B), workspace bar position, tab overflow mode                   |
-| **Plugins**    | Enable/disable plugins, per-plugin settings (file explorer icons/hidden files, git settings)      |
-| **Shortcuts**  | Keyboard shortcut reference                                                                       |
+| Tab               | Options                                                                                            |
+| ----------------- | -------------------------------------------------------------------------------------------------- |
+| **General**       | Core editor and file-opening preferences                                                           |
+| **Theme**         | 32 color themes with live preview, custom theme editor (whole UI restyles live while editing)      |
+| **Appearance**    | Terminal font, font size, cursor style (block/beam/underline/outline); sidebar font and font size |
+| **Status Bar**    | Toggle individual segments (connection, path, git branch, process, pane count, clock)              |
+| **Layout**        | Sidebar position (toggle with Cmd+B), workspace bar position, tab overflow mode                    |
+| **Editor**        | Built-in text editor preferences                                                                   |
+| **Browser**       | Browser tab history and behavior                                                                   |
+| **Notifications** | Notification preferences                                                                           |
+| **Plugins**       | Enable/disable plugins, per-plugin settings (file explorer icons/hidden files, git settings)       |
+| **Shortcuts**     | Searchable keyboard shortcut reference                                                             |

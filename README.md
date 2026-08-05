@@ -27,13 +27,15 @@ Download the latest release from [GitHub Releases](https://github.com/ph1p/boo/r
 - **File explorer** — Live-updating sidebar with file tree (Cmd+B to toggle)
 - **32 color themes** — Catppuccin (all 4), Tokyo Night, Dracula, Nord, Solarized (dark/light), Gruvbox (dark/light), One Dark/Light, Rosé Pine, Kanagawa, Everforest (dark/light), GitHub (dark/light), Ayu (dark/light), Cobalt2, Horizon Dark, Material (dark/light), Monokai, Moonlight, Night Owl, Palenight, Synthwave '84, Default (dark/light)
 - **Custom themes** — Create your own themes with a full color picker editor
-- **AI agent monitor** — Auto-detects Claude, Aider, Cursor, Copilot sessions with config/diff overview
-- **Remote explorer** — Auto-detects SSH sessions, shows remote file tree
+- **Multi-content tabs** — Tabs can host a terminal, browser (Cmd+Shift+T), text editor, image viewer, or markdown preview
+- **Agent Center** — Auto-detects Claude Code, Codex, OpenCode, and other AI CLI sessions with config/diff overview
+- **Remote explorer** — Auto-detects SSH/Mosh, container (docker, podman, kubectl, …), VM, and device shells; shows the remote file tree
+- **Remote control** — Optional token-protected web UI to control Boo from any device on your LAN (Terminal → Start Remote Control Server)
 - **Git integration** — Branch name in status bar, clickable branch switcher with local + remote branches
 - **Running process** — Status bar shows the foreground process (zsh, node, vim, etc.)
 - **Customizable** — Font, cursor style, status bar segments, explorer settings
 - **Workspace colors** — Preset or custom colors per workspace, pinning, renaming
-- **Undo** — Cmd+Z reopens closed tabs and panes
+- **Reopen closed tabs** — Cmd+Opt+Z reopens closed tabs and panes
 - **Mouse selection** — Click, double-click (word), triple-click (line)
 - **Signed auto-updater** — Sparkle-based updates with appcast metadata on GitHub Pages and release archives on GitHub Releases
 - **Focus memory** — Remembers last focused pane per workspace, restores on switch
@@ -87,16 +89,19 @@ make run      # Build and launch
 | **Cmd+N**       | New workspace (home directory)       |
 | **Cmd+1-9**     | Switch to workspace N                |
 | **Cmd+Shift+O** | Open folder as workspace             |
-| **Cmd+T**       | New tab in active pane               |
-| **Cmd+Opt+1-9** | Switch to tab N in active pane       |
+| **Cmd+T**       | New terminal tab in active pane      |
+| **Cmd+Shift+T** | New browser tab                      |
+| **Cmd+Opt+1-9** or **Cmd+Shift+1-9** | Switch to tab N in active pane |
 | **Cmd+W**       | Smart close (tab → pane → workspace) |
-| **Cmd+Z**       | Reopen closed tab/pane               |
+| **Cmd+Opt+Z**   | Reopen closed tab/pane               |
+| **Cmd+S**       | Save (editor tabs)                   |
 | **Cmd+Shift+W** | Close pane                           |
 | **Cmd+D**       | Split right                          |
 | **Cmd+Shift+D** | Split down                           |
-| **Cmd+]**       | Focus next pane                      |
-| **Cmd+[**       | Focus previous pane                  |
+| **Cmd+]** or **Cmd+Opt+→** | Focus next pane           |
+| **Cmd+[** or **Cmd+Opt+←** | Focus previous pane       |
 | **Cmd+B**       | Toggle file explorer                 |
+| **Cmd+F**       | Find                                 |
 | **Cmd+K**       | Clear screen                         |
 | **Cmd+Shift+K** | Clear scrollback                     |
 | **Cmd++**       | Increase font size                   |
@@ -105,7 +110,7 @@ make run      # Build and launch
 | **Cmd+C**       | Copy selection                       |
 | **Cmd+V**       | Paste                                |
 | **Cmd+A**       | Select all                           |
-| **Cmd+Return**  | Toggle full screen                   |
+| **Cmd+Return** or **Cmd+Ctrl+F** | Toggle full screen  |
 | **Cmd+Ctrl+=**  | Equalize split sizes                 |
 | **Cmd+Shift+B** | Bookmark current directory           |
 | **Ctrl+1-9**    | Jump to bookmark N                   |
@@ -121,7 +126,7 @@ Boo/
   Models/           Workspace, Pane (+ TabState), SplitTree, AppSettings, Theme
   Plugin/           Core plugin framework (protocol, registry, runtime, DSL, watcher)
     ViewDSL/        DSL parser, renderer, elements, action handler
-  Plugins/          One directory per plugin (FileTree/, RemoteExplorer/, Git/, ClaudeCode/, Docker/, Bookmarks/, Snippets/, SystemInfo/, Debug/)
+  Plugins/          One directory per plugin (FileTree/, RemoteExplorer/, Git/, Agents/, Docker/, Bookmarks/, Snippets/, SystemInfo/, Debug/)
   Views/            App-level views (PaneView, StatusBarView, ToolbarView, SettingsWindow, AboutWindow, etc.)
   Services/         Shared infrastructure (TerminalBridge, RemoteExplorer, BooSocketServer, SparkleUpdater, etc.)
 CGhostty/           C module wrapping ghostty.h
@@ -173,7 +178,7 @@ Three layers of state:
 │  ┌────────▼───────────┐              v                              │
 │  │ GhosttyRuntime     │   ┌──────────────────────────────────┐      │
 │  │ GhosttyView        │   │ Plugins                          │      │
-│  │ (Metal surface)    │   │ FileTree  Git      ClaudeCode    │      │
+│  │ (Metal surface)    │   │ FileTree  Git      Agents        │      │
 │  │                    │   │ Remote    Docker   Bookmarks     │      │
 │  │ OSC 7 (CWD)       │   │ System    Debug    [External]    │      │
 │  │ OSC 2 (title)      │   └──────────────────────────────────┘      │
@@ -351,7 +356,7 @@ Boo has an extensible plugin system. Plugins provide sidebar panels, status bar 
 | **Files (Local)**  | `Plugins/FileTree/`       | Local file explorer with FSEvents watching (visible in local sessions)   |
 | **Files (Remote)** | `Plugins/RemoteExplorer/` | Remote file explorer for SSH/MOSH sessions                               |
 | **Git**            | `Plugins/Git/`            | Branch, status, staged/unstaged/untracked files, stash, ahead/behind     |
-| **Claude Code**    | `Plugins/ClaudeCode/`     | Claude Code AI assistant with sessions, config, hooks, skills, diffs     |
+| **Agents**         | `Plugins/Agents/`         | Agent Center for Claude Code, Codex, OpenCode — sessions, config, diffs  |
 | **Snippets**       | `Plugins/Snippets/`       | Saved code snippets with syntax highlighting and quick insertion         |
 | **Docker**         | `Plugins/Docker/`         | Running container list with exec, logs, start/stop/restart actions       |
 | **Bookmarks**      | `Plugins/Bookmarks/`      | Saved directory bookmarks with per-host namespacing                      |
@@ -474,6 +479,16 @@ Available: `.cwdChanged`, `.processChanged`, `.remoteSessionChanged`, `.focusCha
 
 See [AGENTS.md](AGENTS.md) for detailed protocol reference and architecture.
 
+## Remote Control
+
+Boo can serve a small web UI to control the terminal from another device on your LAN (e.g. a phone or tablet). Start it via **Terminal → Start Remote Control Server** — Boo shows a URL containing a per-session token; open it on any device in your network.
+
+- Live screen view rendered in the browser, text/key input, workspace/tab/pane switching
+- Every API request requires the session token (`Authorization: Bearer`); the token is regenerated on each start and travels only in the URL fragment
+- Configurable port in settings; **Terminal → Copy Remote Control URL** to re-share
+
+> Anyone with the URL can control your terminal — treat the link like a password.
+
 ## Auto-Update
 
 Boo uses Sparkle for update checks and installation. You can trigger a manual check via **Boo → Check for Updates...**
@@ -487,13 +502,15 @@ Releases are automated via [semantic-release](https://github.com/semantic-releas
 Open with **Cmd+,**. Organized in tabs:
 
 - **General** — Core editor and file-opening preferences
-- **Theme** — 32 built-in color themes with live preview swatches, custom theme editor
-- **Terminal** — Font, font size, cursor style (block/beam/underline/outline)
-- **Explorer** — Font, font size, show header/icons/hidden files
+- **Theme** — 32 built-in color themes with live preview swatches, custom theme editor (whole UI restyles live while editing)
+- **Appearance** — Terminal and sidebar fonts, font sizes, cursor style (block/beam/underline/outline)
 - **Status Bar** — Toggle git branch, path, running process, pane count, clock
-- **Layout** — Sidebar width, pane divider style
+- **Layout** — Sidebar position, workspace bar position, tab overflow mode
+- **Editor** — Built-in text editor preferences
+- **Browser** — Browser tab history and behavior
+- **Notifications** — Notification preferences
 - **Plugins** — Enable/disable plugins, per-plugin settings
-- **Shortcuts** — Reference of all keyboard shortcuts
+- **Shortcuts** — Searchable reference of all keyboard shortcuts
 
 ## Tests
 

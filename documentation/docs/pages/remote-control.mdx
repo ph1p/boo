@@ -1,0 +1,40 @@
+# Remote Control
+
+Boo can serve a small web UI to control the terminal from another device on your LAN — a phone, tablet, or second computer.
+
+## Starting the Server
+
+**Terminal → Start Remote Control Server** starts an HTTP server (default port `8899`) and shows a URL like:
+
+```
+http://192.168.1.20:8899/#<session-token>
+```
+
+Open the URL on any device in your network. **Terminal → Copy Remote Control URL** copies it again later; selecting the menu item again stops the server.
+
+## What You Can Do
+
+The web UI polls the app over a JSON command API:
+
+| Command            | Effect                                  |
+| ------------------ | --------------------------------------- |
+| `get_state`        | Workspaces, panes, tabs, focus          |
+| `get_screen`       | Current terminal screen contents        |
+| `send_text`        | Type text into the active terminal      |
+| `send_key`         | Send special keys (arrows, Enter, etc.) |
+| `switch_workspace` | Switch workspace                        |
+| `select_pane`      | Focus a pane                            |
+| `select_tab`       | Switch tab                              |
+| `new_tab`          | Open a new tab                          |
+
+The screen is rendered in the browser by the same terminal core Boo uses — Ghostty's VT parser compiled to WebAssembly — so colors and layout match the app.
+
+## Security
+
+- Every API request must carry the session token via `Authorization: Bearer <token>`. Requests without it are rejected.
+- The token is **regenerated on every server start** and delivered in the URL *fragment* (`#...`), which browsers never send over the network.
+- Connections use `Connection: close`; idle connections are dropped, and client count and request sizes are bounded.
+
+:::warning
+Anyone with the URL can control your terminal. Treat the link like a password and stop the server when you're done.
+:::

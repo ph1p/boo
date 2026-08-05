@@ -26,6 +26,10 @@ export default defineConfig({
       link: '/keyboard-shortcuts',
     },
     {
+      text: 'Remote Control',
+      link: '/remote-control',
+    },
+    {
       text: 'Architecture',
       items: [
         {
