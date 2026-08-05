@@ -243,17 +243,23 @@ import XCTest
         XCTAssertLessThan(IslandMetrics.contentInset, IslandMetrics.gap)
         XCTAssertGreaterThan(IslandMetrics.contentInset, 0)
 
-        // The sidebar tab strip and the status bar start their content at the same
-        // distance from their own edge — they are the two surfaces that face each
-        // other across the window, so a mismatch here is immediately visible.
+        // The sidebar tab row is centred in the strip: the padding from the first
+        // icon to the island's left edge equals the padding from the last icon to
+        // the right edge, and never shrinks below the shared content inset.
         let bar = SidebarTabBarView(
             frame: NSRect(x: 0, y: 0, width: 240, height: SidebarTabBarView.height))
-        bar.sidebarTabs = [SidebarTab(id: SidebarTabID("folder"), icon: "folder", label: "f", sections: [])]
+        bar.sidebarTabs = ["folder", "bookmark", "clock"].map {
+            SidebarTab(id: SidebarTabID($0), icon: $0, label: $0, sections: [])
+        }
         bar.layoutSubtreeIfNeeded()
         let firstTab = try XCTUnwrap(bar.tabButtonFrames().first)
+        let lastTab = try XCTUnwrap(bar.tabButtonFrames().last)
         XCTAssertEqual(
-            firstTab.minX, IslandMetrics.contentInset, accuracy: 0.01,
-            "first tab pill must start at the shared content inset")
+            firstTab.minX, bar.bounds.width - lastTab.maxX, accuracy: 0.01,
+            "tab row must sit evenly between the island's edges")
+        XCTAssertGreaterThanOrEqual(
+            firstTab.minX, IslandMetrics.contentInset,
+            "edge padding never shrinks below the shared content inset")
     }
 
     /// The strip is the same strip whether it is pinned to the top or the bottom of
