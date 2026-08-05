@@ -3,6 +3,7 @@ import SwiftUI
 // MARK: - Plugins Management
 
 struct PluginSettingsView: View {
+    @Environment(\.tokens) private var tokens
     /// Set by MainWindowController before showing settings.
     nonisolated(unsafe) static var registeredManifests: [PluginManifest] = []
 
@@ -11,7 +12,7 @@ struct PluginSettingsView: View {
 
     var body: some View {
         let _ = observer.revision
-        let t = Tokens.current
+        let t = tokens
         let manifests = Self.registeredManifests
 
         SettingsPage(title: "Plugins") {
@@ -72,6 +73,7 @@ struct PluginSettingsView: View {
 // MARK: - Plugin Detail Settings
 
 struct PluginDetailSettingsView: View {
+    @Environment(\.tokens) private var tokens
     let manifest: PluginManifest
     @ObservedObject private var observer = SettingsObserver(topics: [.theme, .plugins])
 
@@ -95,7 +97,7 @@ struct PluginDetailSettingsView: View {
             } else if manifest.visibleSettings.isEmpty {
                 Text("No configurable settings for this plugin.")
                     .font(.system(size: 12))
-                    .foregroundStyle(Tokens.current.muted)
+                    .foregroundStyle(tokens.muted)
             } else {
                 ForEach(groupedSettings, id: \.title) { group in
                     Section(title: group.title.isEmpty ? "Settings" : group.title) {
@@ -112,6 +114,7 @@ struct PluginDetailSettingsView: View {
 // MARK: - Plugin Row
 
 private struct PluginRow: View {
+    @Environment(\.tokens) private var tokens
     let manifest: PluginManifest
 
     @State private var isEnabled: Bool
@@ -136,7 +139,7 @@ private struct PluginRow: View {
 
     var body: some View {
         let _ = observer.revision
-        let t = Tokens.current
+        let t = tokens
 
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 10) {
@@ -206,6 +209,7 @@ private struct PluginRow: View {
 // MARK: - Plugin Setting Control
 
 private struct PluginSettingControl: View {
+    @Environment(\.tokens) private var tokens
     let pluginID: String
     let setting: PluginManifest.SettingManifest
     @ObservedObject private var observer = SettingsObserver(topics: [.theme, .plugins])
@@ -252,7 +256,7 @@ private struct PluginSettingControl: View {
                 )
                 Text(step < 1 ? String(format: "%.1f", value) : "\(Int(value))")
                     .font(.system(size: 11, design: .monospaced))
-                    .foregroundStyle(Tokens.current.text)
+                    .foregroundStyle(tokens.text)
                     .frame(width: 32, alignment: .trailing)
             }
             .frame(maxWidth: 260)

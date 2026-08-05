@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct BrowserSettingsView: View {
+    @Environment(\.tokens) private var tokens
     @State private var homePage = AppSettings.shared.browserHomePage
     @State private var persistentWebsiteDataEnabled = AppSettings.shared.browserPersistentWebsiteDataEnabled
     @State private var historyEnabled = AppSettings.shared.browserHistoryEnabled
@@ -21,7 +22,7 @@ struct BrowserSettingsView: View {
 
     var body: some View {
         let _ = observer.revision
-        let t = Tokens.current
+        let t = tokens
 
         SettingsPage(title: "Browser") {
             Section(title: "General") {

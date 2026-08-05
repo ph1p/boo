@@ -83,6 +83,14 @@ enum TrafficLightPositioner {
         // Fast path: most NSButton instances in the app are not traffic lights.
         guard let entry = buttonToEntry[id] else { return nil }
         guard let window = entry.window, !window.styleMask.contains(.fullScreen) else { return nil }
+        // A set to the already-shifted origin is our own `shift()` (or AppKit
+        // echoing the current frame), not a fresh native layout — treating it as
+        // native would stack the offset once per pass.
+        if let native = entry.nativeOrigins[id],
+            proposed == NSPoint(x: native.x + offsetX, y: native.y + offsetY)
+        {
+            return nil
+        }
         entry.nativeOrigins[id] = proposed
         return NSPoint(x: proposed.x + offsetX, y: proposed.y + offsetY)
     }

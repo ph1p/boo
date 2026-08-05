@@ -4,6 +4,7 @@ import SwiftUI
 // MARK: - General
 
 struct GeneralSettingsView: View {
+    @Environment(\.tokens) private var tokens
     @State private var defaultFolder = AppSettings.shared.defaultFolder
     @State private var defaultMainPage = AppSettings.shared.defaultMainPage
     @State private var defaultTabType = AppSettings.shared.defaultTabType
@@ -14,7 +15,7 @@ struct GeneralSettingsView: View {
 
     var body: some View {
         let _ = observer.revision
-        let t = Tokens.current
+        let t = tokens
 
         SettingsPage(title: "General") {
             Section(title: "Default Folder") {

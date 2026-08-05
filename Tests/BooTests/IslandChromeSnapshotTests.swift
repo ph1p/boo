@@ -186,16 +186,24 @@ import XCTest
         // (drawn at zoneEnd - 20, width 20) sits entirely before the button.
         XCTAssertEqual(plus.minX, toolbar.workspaceZoneEnd)
 
-        // No dead slack past the button: what remains to its right is exactly the
-        // bar's own trailing margin, not the leftover of an oversized reserve.
+        // No dead slack past the button: what remains to its right is the shared
+        // island gap minus the 5pt optical nudge (the pill's rounded shape carries
+        // visual padding of its own).
         XCTAssertEqual(
-            toolbar.bounds.width - plus.maxX, toolbar.zoneGap, accuracy: 0.5,
+            toolbar.bounds.width - plus.maxX, IslandMetrics.gap - 5, accuracy: 0.5,
             "plus button has extra space to its right")
 
         // Scrolling must not move it.
         let pinned = plus.minX
         toolbar.workspaceScrollOffset = 120
         XCTAssertEqual(toolbar.workspacePlusButtonRect.minX, pinned, "plus moved with the scroll")
+
+        // Nor must the pill count: with a single workspace the button stays pinned
+        // at the bar's right end instead of trailing the last pill.
+        toolbar.update(
+            workspaces: [.init(name: "solo", isActive: true, resolvedColor: nil, isPinned: false)],
+            sidebarVisible: false)
+        XCTAssertEqual(toolbar.workspacePlusButtonRect.minX, pinned, "plus follows the pills")
 
         if let dir = ProcessInfo.processInfo.environment["BOO_SNAPSHOT_DIR"] {
             let host = NSView(frame: toolbar.bounds)

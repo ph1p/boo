@@ -13,11 +13,12 @@ enum LayoutSettingsBindings {
 }
 
 struct LayoutSettingsView: View {
+    @Environment(\.tokens) private var tokens
     @ObservedObject private var observer = SettingsObserver(topics: [.theme, .layout])
 
     var body: some View {
         let _ = observer.revision
-        let t = Tokens.current
+        let t = tokens
 
         SettingsPage(title: "Layout") {
             Section(title: "Sidebar") {

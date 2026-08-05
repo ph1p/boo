@@ -3,6 +3,7 @@ import SwiftUI
 import UserNotifications
 
 struct NotificationsSettingsView: View {
+    @Environment(\.tokens) private var tokens
     @State private var activityNotificationsEnabled = AppSettings.shared.activityNotificationsEnabled
     @State private var authStatus: UNAuthorizationStatus = .notDetermined
     @ObservedObject private var observer = SettingsObserver(topics: [.notifications])
@@ -40,7 +41,7 @@ struct NotificationsSettingsView: View {
 
     @ViewBuilder
     private var permissionRow: some View {
-        let t = Tokens.current
+        let t = tokens
         switch authStatus {
         case .authorized:
             HStack(spacing: 6) {

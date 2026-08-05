@@ -3,6 +3,7 @@ import SwiftUI
 // MARK: - Status Bar
 
 struct StatusBarSettingsView: View {
+    @Environment(\.tokens) private var tokens
     @State private var showTime = AppSettings.shared.statusBarShowTime
     @State private var showPaneInfo = AppSettings.shared.statusBarShowPaneInfo
     @State private var showConnection = AppSettings.shared.statusBarShowConnection
@@ -11,7 +12,7 @@ struct StatusBarSettingsView: View {
 
     var body: some View {
         let _ = observer.revision
-        let t = Tokens.current
+        let t = tokens
         SettingsPage(title: "Status Bar") {
             Section(title: "Preview") {
                 statusBarPreview(t)

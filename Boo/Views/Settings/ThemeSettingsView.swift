@@ -3,6 +3,7 @@ import SwiftUI
 // MARK: - Theme
 
 struct ThemeSettingsView: View {
+    @Environment(\.tokens) private var tokens
     @State private var selectedTheme = AppSettings.shared.themeName
     @State private var autoTheme = AppSettings.shared.autoTheme
     @State private var darkTheme = AppSettings.shared.darkThemeName
@@ -17,7 +18,7 @@ struct ThemeSettingsView: View {
 
     var body: some View {
         let _ = observer.revision
-        let t = Tokens.current
+        let t = tokens
 
         SettingsPage(title: "Theme") {
             Section(title: "Appearance Mode") {
@@ -81,7 +82,7 @@ struct ThemeSettingsView: View {
     private func variantPicker(
         _ label: String, icon: String, selection: Binding<String>, options: [TerminalTheme]
     ) -> some View {
-        let t = Tokens.current
+        let t = tokens
         return VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 4) {
                 Image(systemName: icon).font(.system(size: 9)).foregroundStyle(t.muted)
@@ -104,6 +105,7 @@ struct ThemeSettingsView: View {
 // MARK: - Theme Row
 
 struct ThemeRow: View {
+    @Environment(\.tokens) private var tokens
     let theme: TerminalTheme
     @Binding var selectedTheme: String
     @State private var hovered = false
@@ -118,7 +120,7 @@ struct ThemeRow: View {
     }
 
     var body: some View {
-        let t = Tokens.current
+        let t = tokens
 
         HStack(spacing: 8) {
             HStack(spacing: 0) {

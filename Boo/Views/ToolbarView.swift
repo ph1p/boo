@@ -50,8 +50,6 @@ class ToolbarView: NSView {
 
     private(set) var workspaces: [WorkspaceItem] = []
     var sidebarVisible = false
-    /// Whether the sidebar button should be hidden (no active plugins).
-    var sidebarButtonHidden = false
     /// When true, workspace pills are hidden (they're shown in a left workspace bar instead).
     var hideWorkspaces = false
     var workspaceScrollOffset: CGFloat = 0
@@ -67,7 +65,6 @@ class ToolbarView: NSView {
 
     // Hover state
     var hoveredWorkspaceIndex: Int = -1
-    var isSidebarButtonHovered: Bool = false
     var isWorkspacePlusButtonHovered: Bool = false
     private var toolbarTrackingArea: NSTrackingArea?
 
@@ -115,16 +112,9 @@ class ToolbarView: NSView {
         let point = convert(event.locationInWindow, from: nil)
         var changed = false
 
-        // Sidebar button
-        let sidebarHover = !sidebarButtonHidden && point.x >= bounds.width - sidebarButtonWidth
-        if sidebarHover != isSidebarButtonHovered {
-            isSidebarButtonHovered = sidebarHover
-            changed = true
-        }
-
         // Workspace zone — same pill-band hit test as clicks
         var newWSHover = -1
-        if !hideWorkspaces && !sidebarHover, let idx = hitTestWorkspaceIndex(at: point) {
+        if !hideWorkspaces, let idx = hitTestWorkspaceIndex(at: point) {
             newWSHover = idx
         }
         if newWSHover != hoveredWorkspaceIndex {
@@ -133,7 +123,7 @@ class ToolbarView: NSView {
         }
 
         // Workspace plus button
-        let newWSPlusHover = !hideWorkspaces && workspacePlusButtonRect.contains(point) && !sidebarHover
+        let newWSPlusHover = !hideWorkspaces && workspacePlusButtonRect.contains(point)
         if newWSPlusHover != isWorkspacePlusButtonHovered {
             isWorkspacePlusButtonHovered = newWSPlusHover
             changed = true
@@ -143,10 +133,8 @@ class ToolbarView: NSView {
     }
 
     override func mouseExited(with event: NSEvent) {
-        let changed =
-            hoveredWorkspaceIndex != -1 || isSidebarButtonHovered || isWorkspacePlusButtonHovered
+        let changed = hoveredWorkspaceIndex != -1 || isWorkspacePlusButtonHovered
         hoveredWorkspaceIndex = -1
-        isSidebarButtonHovered = false
         isWorkspacePlusButtonHovered = false
         if changed { needsDisplay = true }
     }
@@ -216,12 +204,7 @@ class ToolbarView: NSView {
         _cachedTrafficLightWidth = value
         return value
     }
-    /// Trailing zone. With the button hidden it collapses to the shared content
-    /// inset, so the strip still stops the same distance from the toolbar's edge
-    /// that every other chrome region keeps.
-    var sidebarButtonWidth: CGFloat { sidebarButtonHidden ? IslandMetrics.contentInset : 38 }
-
-    /// Gap *between* the toolbar's zones (traffic lights | workspaces | sidebar
+    /// Gap *between* the toolbar's zones (traffic lights | workspaces | plus
     /// button). Deliberately not `contentInset` — that one measures from an edge,
     /// this one separates two runs of content and needs to read as a break.
     let zoneGap: CGFloat = 12
@@ -248,17 +231,10 @@ class ToolbarView: NSView {
     /// zone, so the bar above and below the pills stays draggable window chrome.
     static let workspacePillHeight: CGFloat = 24
 
-    /// Width reserved at the right of the workspace zone for the pinned `+` button.
-    /// The button never scrolls, so the scrollable pill strip stops short of it and
-    /// the right-hand scroll fade lands in the space between. Exactly the button's
-    /// width — the last pill's trailing `workspaceGap` supplies the space before
-    /// it, and `zoneGap` the margin after, so there is no dead slack either side.
-    static let plusZoneWidth: CGFloat = plusButtonSize
-
-    /// The workspace zone fills all space after the traffic lights, minus the strip
-    /// held back for the pinned `+`.
+    /// The workspace zone fills all space after the traffic lights, up to the
+    /// pinned `+` button at the bar's right end.
     var workspaceZoneMaxWidth: CGFloat {
-        max(60, bounds.width - trafficLightWidth - zoneGap - Self.plusZoneWidth)
+        max(60, workspacePlusButtonRect.minX - trafficLightWidth)
     }
 
     /// Visible width of the workspace zone — shrinks to content if it fits, else fills available space.
@@ -275,13 +251,16 @@ class ToolbarView: NSView {
         max(0, totalWorkspaceContentWidth - workspaceZoneWidth)
     }
 
-    /// The `+` button rect for adding a new workspace (top bar only).
+    /// The `+` button rect for adding a new workspace (top bar only). Pinned at
+    /// the right end of the bar, inset by the shared island gap so it lines up
+    /// with the island edges below, regardless of how many pills there are. The
+    /// scrollable pill strip stops short of it, so the right-hand scroll fade
+    /// lands in the space between.
     var workspacePlusButtonRect: CGRect {
         let btnSize = Self.plusButtonSize
-        // `workspaceZoneWidth` already carries the last pill's trailing
-        // `workspaceGap`, so the button sits flush at the zone end and the spacing
-        // before it matches the gap between pills.
-        let x = workspaceZoneEnd
+        // 5pt closer to the edge than the island gap: the button's rounded pill
+        // carries visual padding of its own, so the full gap reads too wide.
+        let x = bounds.width - (IslandMetrics.gap - 5) - btnSize
         let y = (barHeight - btnSize) / 2
         return CGRect(x: x, y: y, width: btnSize, height: btnSize)
     }

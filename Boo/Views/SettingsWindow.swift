@@ -49,6 +49,15 @@ struct Tokens {
     static let sectionPadding: CGFloat = 12
 }
 
+// The settings tree reads its tokens from the environment, seeded once per
+// render by the root `SettingsView` (which observes theme changes). Reading
+// `Tokens.current` directly from a leaf view's `body` is a staleness bug:
+// SwiftUI skips re-rendering rows whose stored inputs didn't change, so a
+// theme switch leaves them painted with the previous theme's colors.
+extension EnvironmentValues {
+    @Entry var tokens: Tokens = Tokens(theme: .defaultDark)
+}
+
 // MARK: - Root
 
 struct SettingsView: View {
@@ -170,6 +179,9 @@ struct SettingsView: View {
         .padding(.bottom, IslandMetrics.gap)
         .background(t.backdrop)
         .frame(width: 780, height: 560)
+        // One tokens snapshot per render for the whole tree — and the environment
+        // change is what forces otherwise-unchanged rows to repaint on theme switch.
+        .environment(\.tokens, t)
     }
 
     /// The window's header strip: traffic lights on the left, title centred on the
@@ -255,13 +267,14 @@ struct SettingsPage<Content: View>: View {
 struct Section<Content: View>: View {
     let title: String
     @ViewBuilder let content: () -> Content
+    @Environment(\.tokens) private var tokens
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             if !title.isEmpty {
                 Text(title)
                     .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(Tokens.current.muted)
+                    .foregroundStyle(tokens.muted)
                     .textCase(.uppercase)
                     .tracking(0.4)
                     .padding(.leading, 2)
@@ -271,7 +284,7 @@ struct Section<Content: View>: View {
             }
             .padding(Tokens.sectionPadding)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Tokens.current.cardBg, in: RoundedRectangle(cornerRadius: 10))
+            .background(tokens.cardBg, in: RoundedRectangle(cornerRadius: 10))
             .clipShape(RoundedRectangle(cornerRadius: 10))
         }
     }
@@ -364,12 +377,13 @@ struct FontChooser: NSViewRepresentable {
 }
 
 struct ToggleRow: View {
+    @Environment(\.tokens) private var tokens
     let label: String
     var help: String? = nil
     @Binding var isOn: Bool
 
     var body: some View {
-        let t = Tokens.current
+        let t = tokens
         VStack(alignment: .leading, spacing: 4) {
             HStack {
                 Text(label)
@@ -396,13 +410,14 @@ struct ToggleRow: View {
 
 /// Label + control + optional help text. Primary building block for settings pages.
 struct SettingRow<Control: View>: View {
+    @Environment(\.tokens) private var tokens
     let label: String
     var help: String? = nil
     var alignment: VerticalAlignment = .firstTextBaseline
     @ViewBuilder let control: () -> Control
 
     var body: some View {
-        let t = Tokens.current
+        let t = tokens
         VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: alignment, spacing: 10) {
                 Text(label)
@@ -426,24 +441,26 @@ struct SettingRow<Control: View>: View {
 
 /// Standalone 11pt muted description line — use when a row is unlabeled (e.g. segmented pickers).
 struct DescriptionLabel: View {
+    @Environment(\.tokens) private var tokens
     let text: String
 
     var body: some View {
         Text(text)
             .font(.system(size: 11))
-            .foregroundStyle(Tokens.current.muted)
+            .foregroundStyle(tokens.muted)
             .fixedSize(horizontal: false, vertical: true)
     }
 }
 
 /// Label-above-control layout for full-width controls (segmented pickers, pickers with long options).
 struct SettingStack<Control: View>: View {
+    @Environment(\.tokens) private var tokens
     let label: String
     var help: String? = nil
     @ViewBuilder let control: () -> Control
 
     var body: some View {
-        let t = Tokens.current
+        let t = tokens
         VStack(alignment: .leading, spacing: 6) {
             Text(label)
                 .font(.system(size: 12))
@@ -464,6 +481,7 @@ struct SettingStack<Control: View>: View {
 
 /// Themed text field matching the settings visual language.
 struct SettingTextField: View {
+    @Environment(\.tokens) private var tokens
     let placeholder: String
     @Binding var text: String
     var monospaced: Bool = false
@@ -473,7 +491,7 @@ struct SettingTextField: View {
     var onCommit: (() -> Void)? = nil
 
     var body: some View {
-        let t = Tokens.current
+        let t = tokens
         HStack(spacing: 6) {
             if let icon {
                 Image(systemName: icon)
@@ -506,13 +524,14 @@ struct SettingTextField: View {
 }
 
 struct SettingNumberField: View {
+    @Environment(\.tokens) private var tokens
     @Binding var value: Int
     var width: CGFloat = 70
     var alignment: TextAlignment = .trailing
     var onCommit: ((Int) -> Void)? = nil
 
     var body: some View {
-        let t = Tokens.current
+        let t = tokens
         TextField("", value: $value, format: .number)
             .textFieldStyle(.plain)
             .font(.system(size: 12, design: .monospaced))
@@ -534,6 +553,7 @@ struct SettingNumberField: View {
 
 /// Small icon button used for inline row actions (delete, edit).
 struct IconButton: View {
+    @Environment(\.tokens) private var tokens
     let systemName: String
     var tint: Color? = nil
     var size: CGFloat = 11
@@ -545,7 +565,7 @@ struct IconButton: View {
     @State private var hovered = false
 
     var body: some View {
-        let t = Tokens.current
+        let t = tokens
         let color = tint ?? t.muted
         let button = Button(action: action) {
             Image(systemName: systemName)
@@ -570,10 +590,11 @@ struct IconButton: View {
 // MARK: - Shortcut Pill
 
 struct ShortcutPill: View {
+    @Environment(\.tokens) private var tokens
     let text: String
 
     var body: some View {
-        let t = Tokens.current
+        let t = tokens
         Text(text)
             .font(.system(size: 11, design: .monospaced))
             .foregroundStyle(t.accent)
@@ -590,12 +611,13 @@ struct ShortcutPill: View {
 
 /// Plugin header + indented toggle list used in Status Bar plugin segments and similar nested groups.
 struct PluginSegmentGroup<Content: View>: View {
+    @Environment(\.tokens) private var tokens
     let icon: String
     let name: String
     @ViewBuilder let content: () -> Content
 
     var body: some View {
-        let t = Tokens.current
+        let t = tokens
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
                 Image(systemName: icon)
@@ -646,14 +668,14 @@ class SettingsWindowController: NSWindowController {
         window.appearance = NSAppearance(named: theme.isDark ? .darkAqua : .aqua)
         let hostingView = NoSafeAreaHostingView(rootView: SettingsView())
         window.contentView = hostingView
-        // Deliberately NOT attached to `TrafficLightPositioner`: its offsets were
-        // tuned against the main window's 28pt titlebar, but this window gets a
-        // 32pt one (measured), which already lays the buttons out on the header
-        // midline (`barGap + toolbarHeight / 2` from the top). AppKit's native
-        // placement is exactly right here; the shared shift would drag the buttons
-        // below the title and off to the right.
-
         super.init(window: window)
+
+        // Attached like the main window: this window's 32pt `NSTitlebarView`
+        // centres the buttons natively at 16pt from the top (measured), while the
+        // header midline sits at `barGap + toolbarHeight / 2` = 23pt — exactly the
+        // shared `offsetY` (-3 - barGap) lower, so the one positioner serves both
+        // windows.
+        TrafficLightPositioner.attach(to: window)
 
         settingsObserver = NotificationCenter.default.addObserver(
             forName: .settingsChanged, object: nil, queue: .main

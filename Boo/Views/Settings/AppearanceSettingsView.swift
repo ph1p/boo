@@ -3,6 +3,7 @@ import SwiftUI
 // MARK: - Appearance
 
 struct AppearanceSettingsView: View {
+    @Environment(\.tokens) private var tokens
     @State private var cursorStyle = AppSettings.shared.cursorStyle
     @State private var termFontSize = Double(AppSettings.shared.fontSize)
     @State private var termSelectedFont = AppSettings.shared.fontName
@@ -16,7 +17,7 @@ struct AppearanceSettingsView: View {
 
     var body: some View {
         let _ = observer.revision
-        let t = Tokens.current
+        let t = tokens
 
         SettingsPage(title: "Appearance") {
             Section(title: "Cursor") {

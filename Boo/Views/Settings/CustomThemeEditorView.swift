@@ -3,6 +3,7 @@ import SwiftUI
 // MARK: - Custom Theme Editor
 
 struct CustomThemeEditorView: View {
+    @Environment(\.tokens) private var tokens
     @State var data: CustomThemeData
     let onSave: (CustomThemeData) -> Void
     let onCancel: () -> Void
@@ -15,7 +16,7 @@ struct CustomThemeEditorView: View {
     private let ansiLabels = ["Black", "Red", "Green", "Yellow", "Blue", "Magenta", "Cyan", "White"]
 
     var body: some View {
-        let t = Tokens.current
+        let t = tokens
         VStack(spacing: 0) {
 
             // ── Header ──────────────────────────────────────────────────────
@@ -158,10 +159,11 @@ struct CustomThemeEditorView: View {
 // MARK: - Editor building blocks
 
 struct EditorSection<Content: View>: View {
+    @Environment(\.tokens) private var tokens
     let title: String
     @ViewBuilder let content: () -> Content
     var body: some View {
-        let t = Tokens.current
+        let t = tokens
         VStack(alignment: .leading, spacing: 6) {
             Text(title)
                 .font(.system(size: 9, weight: .semibold))
@@ -199,6 +201,7 @@ func hexFieldState(for draft: String) -> HexFieldState {
 
 /// One row: color well + label + editable hex field.
 struct SwatchRow: View {
+    @Environment(\.tokens) private var tokens
     let label: String
     @Binding var hex: String
 
@@ -209,7 +212,7 @@ struct SwatchRow: View {
     private var isInvalid: Bool { fieldState == .invalid }
 
     var body: some View {
-        let t = Tokens.current
+        let t = tokens
         HStack(spacing: 8) {
             ColorWell(hex: $hex)
                 .frame(width: 26, height: 20)

@@ -82,7 +82,7 @@ extension ToolbarView {
         // measured independently, then the box is sized by whichever side runs out
         // of room first so the text stays centred on `windowMid`.
         let leftLimit = trafficLightWidth + zoneGap
-        let rightLimit = bounds.width - sidebarButtonWidth - zoneGap
+        let rightLimit = bounds.width - IslandMetrics.contentInset - zoneGap
         let halfW = min(windowMid - leftLimit, rightLimit - windowMid)
         guard halfW > 0 else { return nil }
 
@@ -252,51 +252,6 @@ extension ToolbarView {
             ctx, in: CGRect(x: x, y: 0, width: width, height: barHeight),
             from: CGPoint(x: leftToRight ? x : x + width, y: 0),
             to: CGPoint(x: leftToRight ? x + width : x, y: 0))
-    }
-
-    internal func drawSidebarButton(_ ctx: CGContext) {
-        if sidebarButtonHidden { return }
-        let btnSize: CGFloat = 26
-        let btnX = bounds.width - sidebarButtonWidth + (sidebarButtonWidth - btnSize) / 2 - 2
-        let btnY = (barHeight - btnSize) / 2
-
-        let theme = AppSettings.shared.theme
-
-        // Hover background
-        if isSidebarButtonHovered {
-            let hoverRect = CGRect(x: btnX, y: btnY, width: btnSize, height: btnSize)
-            ctx.setFillColor(theme.chromeMuted.withAlphaComponent(0.15).cgColor)
-            WorkspacePillStyle.fillRoundedRect(ctx, rect: hoverRect)
-        }
-
-        let color =
-            sidebarVisible
-            ? theme.accentColor.withAlphaComponent(isSidebarButtonHovered ? 1.0 : 0.8).cgColor
-            : (isSidebarButtonHovered ? theme.chromeMuted.withAlphaComponent(0.8).cgColor : theme.chromeMuted.cgColor)
-
-        let iconX = btnX + 5
-        let iconY = btnY + 5
-        let iconW: CGFloat = 16
-        let iconH: CGFloat = 12
-
-        // Outer rect
-        ctx.setStrokeColor(color)
-        ctx.setLineWidth(1.2)
-        let iconRect = CGRect(x: iconX, y: iconY, width: iconW, height: iconH)
-        ctx.addPath(CGPath(roundedRect: iconRect, cornerWidth: 2, cornerHeight: 2, transform: nil))
-        ctx.strokePath()
-
-        // Vertical divider line at 2/3
-        let divX = iconX + iconW * 0.65
-        ctx.move(to: CGPoint(x: divX, y: iconY + 1))
-        ctx.addLine(to: CGPoint(x: divX, y: iconY + iconH - 1))
-        ctx.strokePath()
-
-        // Fill right portion if sidebar visible
-        if sidebarVisible {
-            ctx.setFillColor(theme.accentColor.withAlphaComponent(0.2).cgColor)
-            ctx.fill(CGRect(x: divX, y: iconY + 1, width: iconX + iconW - divX - 1, height: iconH - 2))
-        }
     }
 
     // MARK: - Hit Testing
