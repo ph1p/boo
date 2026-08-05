@@ -3,6 +3,7 @@ import SwiftUI
 // MARK: - Shortcuts
 
 struct ShortcutsSettingsView: View {
+    @Environment(\.tokens) private var tokens
     @ObservedObject private var observer = SettingsObserver(topics: [.theme])
     @State private var searchText: String = ""
 
@@ -20,7 +21,8 @@ struct ShortcutsSettingsView: View {
                 ("Reopen Closed Tab", "\u{2325}\u{2318}Z"),
                 ("Close Pane", "\u{21E7}\u{2318}W"),
                 ("Switch Workspace 1-9", "\u{2318}1-9"),
-                ("Switch Tab 1-9", "\u{2325}\u{2318}1-9")
+                ("Switch Tab 1-9", "\u{2325}\u{2318}1-9"),
+                ("Switch Tab 1-9", "\u{21E7}\u{2318}1-9")
             ]
         ),
         (
@@ -31,7 +33,9 @@ struct ShortcutsSettingsView: View {
                 ("Split Right", "\u{2318}D"),
                 ("Split Down", "\u{21E7}\u{2318}D"),
                 ("Focus Next Pane", "\u{2318}]"),
+                ("Focus Next Pane", "\u{2325}\u{2318}\u{2192}"),
                 ("Focus Previous Pane", "\u{2318}["),
+                ("Focus Previous Pane", "\u{2325}\u{2318}\u{2190}"),
                 ("Equalize Splits", "\u{2303}\u{2318}="),
                 ("Increase Font Size", "\u{2318}+"),
                 ("Decrease Font Size", "\u{2318}-"),
@@ -80,7 +84,7 @@ struct ShortcutsSettingsView: View {
 
     var body: some View {
         let _ = observer.revision
-        let t = Tokens.current
+        let t = tokens
 
         SettingsPage(title: "Keyboard Shortcuts") {
             SettingTextField(

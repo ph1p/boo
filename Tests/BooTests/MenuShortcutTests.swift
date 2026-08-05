@@ -137,8 +137,14 @@ final class MenuShortcutTests: XCTestCase {
     }
 
     private func displayKey(_ key: String) -> String {
-        if key == "\r" { return "\u{23CE}" }
-        return key.uppercased()
+        switch key {
+        case "\r": return "\u{23CE}"
+        case String(UnicodeScalar(NSLeftArrowFunctionKey)!): return "\u{2190}"
+        case String(UnicodeScalar(NSRightArrowFunctionKey)!): return "\u{2192}"
+        case String(UnicodeScalar(NSUpArrowFunctionKey)!): return "\u{2191}"
+        case String(UnicodeScalar(NSDownArrowFunctionKey)!): return "\u{2193}"
+        default: return key.uppercased()
+        }
     }
 
     private func allMenuItems(in menu: NSMenu) -> [NSMenuItem] {

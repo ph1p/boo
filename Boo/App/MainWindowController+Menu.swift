@@ -97,10 +97,24 @@ extension MainWindowController {
             title: "Focus Next Pane", action: #selector(focusNextPaneAction(_:)), keyEquivalent: "]")
         focusNext.keyEquivalentModifierMask = [.command]
         termMenu.addItem(focusNext)
+        // Same cycling on ⌥⌘→ / ⌥⌘←. Alternate items so the menu lists each
+        // direction once, revealing the arrow binding while ⌥ is held.
+        let focusNextArrow = NSMenuItem(
+            title: "Focus Next Pane", action: #selector(focusNextPaneAction(_:)),
+            keyEquivalent: String(UnicodeScalar(NSRightArrowFunctionKey)!))
+        focusNextArrow.keyEquivalentModifierMask = [.command, .option]
+        focusNextArrow.isAlternate = true
+        termMenu.addItem(focusNextArrow)
         let focusPrev = NSMenuItem(
             title: "Focus Previous Pane", action: #selector(focusPrevPaneAction(_:)), keyEquivalent: "[")
         focusPrev.keyEquivalentModifierMask = [.command]
         termMenu.addItem(focusPrev)
+        let focusPrevArrow = NSMenuItem(
+            title: "Focus Previous Pane", action: #selector(focusPrevPaneAction(_:)),
+            keyEquivalent: String(UnicodeScalar(NSLeftArrowFunctionKey)!))
+        focusPrevArrow.keyEquivalentModifierMask = [.command, .option]
+        focusPrevArrow.isAlternate = true
+        termMenu.addItem(focusPrevArrow)
 
         let equalize = NSMenuItem(
             title: "Equalize Splits", action: #selector(equalizeSplitsAction(_:)), keyEquivalent: "=")
@@ -178,6 +192,15 @@ extension MainWindowController {
             item.keyEquivalentModifierMask = [.command, .option]
             item.tag = i - 1
             viewMenu.addItem(item)
+
+            // Same jump on ⇧⌘n. An alternate item so the menu lists each tab
+            // once, revealing this binding while ⇧ is held.
+            let shifted = NSMenuItem(
+                title: "Tab \(i)", action: #selector(switchToTabAction(_:)), keyEquivalent: "\(i)")
+            shifted.keyEquivalentModifierMask = [.command, .shift]
+            shifted.tag = i - 1
+            shifted.isAlternate = true
+            viewMenu.addItem(shifted)
         }
 
         NSApplication.shared.mainMenu = mainMenu
