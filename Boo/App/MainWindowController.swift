@@ -34,25 +34,35 @@ class ThemedSplitView: NSSplitView {
                 userInfo: nil))
     }
 
+    /// The primary divider's full strip (it is `dividerThickness` wide, starting
+    /// at the first subview's trailing edge), padded by the same 2pt slop the
+    /// double-click hit test uses. The old hover test centred a ±4 zone on the
+    /// strip's *leading edge*, so the trailing half of the 8pt divider resized
+    /// without ever showing the indicator.
+    private func primaryDividerStrip() -> CGRect? {
+        guard subviews.count >= 2 else { return nil }
+        if isVertical {
+            return CGRect(
+                x: subviews[0].frame.maxX, y: 0,
+                width: dividerThickness, height: bounds.height
+            ).insetBy(dx: -2, dy: 0)
+        } else {
+            return CGRect(
+                x: 0, y: subviews[0].frame.maxY,
+                width: bounds.width, height: dividerThickness
+            ).insetBy(dx: 0, dy: -2)
+        }
+    }
+
     override func mouseMoved(with event: NSEvent) {
         super.mouseMoved(with: event)
-        guard subviews.count >= 2 else { return }
+        guard let strip = primaryDividerStrip() else { return }
         let localPoint = convert(event.locationInWindow, from: nil)
-        let highlighted: Bool
-        let dividerStrip: CGRect
-        if isVertical {
-            let divX = subviews[0].frame.maxX
-            highlighted = abs(localPoint.x - divX) <= 4
-            dividerStrip = CGRect(x: divX - 4, y: 0, width: 9, height: bounds.height)
-        } else {
-            let divY = subviews[0].frame.maxY
-            highlighted = abs(localPoint.y - divY) <= 4
-            dividerStrip = CGRect(x: 0, y: divY - 4, width: bounds.width, height: 9)
-        }
+        let highlighted = strip.contains(localPoint)
         if highlighted != dividerHoverHighlighted {
             dividerHoverHighlighted = highlighted
             // Invalidate only the divider strip, not the whole split view
-            setNeedsDisplay(dividerStrip)
+            setNeedsDisplay(strip)
         }
     }
 
@@ -60,14 +70,8 @@ class ThemedSplitView: NSSplitView {
         super.mouseExited(with: event)
         if dividerHoverHighlighted {
             dividerHoverHighlighted = false
-            if subviews.count >= 2 {
-                if isVertical {
-                    let divX = subviews[0].frame.maxX
-                    setNeedsDisplay(CGRect(x: divX - 4, y: 0, width: 9, height: bounds.height))
-                } else {
-                    let divY = subviews[0].frame.maxY
-                    setNeedsDisplay(CGRect(x: 0, y: divY - 4, width: bounds.width, height: 9))
-                }
+            if let strip = primaryDividerStrip() {
+                setNeedsDisplay(strip)
             }
         }
     }
@@ -99,23 +103,7 @@ class ThemedSplitView: NSSplitView {
     }
 
     private func isPointOnPrimaryDivider(_ point: CGPoint) -> Bool {
-        guard subviews.count >= 2 else { return false }
-        let dividerRect: CGRect
-        if isVertical {
-            dividerRect = CGRect(
-                x: subviews[0].frame.maxX,
-                y: 0,
-                width: dividerThickness,
-                height: bounds.height)
-            return dividerRect.insetBy(dx: -2, dy: 0).contains(point)
-        } else {
-            dividerRect = CGRect(
-                x: 0,
-                y: subviews[0].frame.maxY,
-                width: bounds.width,
-                height: dividerThickness)
-            return dividerRect.insetBy(dx: 0, dy: -2).contains(point)
-        }
+        primaryDividerStrip()?.contains(point) ?? false
     }
 }
 
