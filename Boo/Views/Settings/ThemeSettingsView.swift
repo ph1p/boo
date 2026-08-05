@@ -49,7 +49,10 @@ struct ThemeSettingsView: View {
                         ThemeRow(theme: theme, selectedTheme: $selectedTheme)
                     }
                     Button(action: {
-                        editingTheme = CustomThemeData.from(.defaultDark).withName("My Theme")
+                        // Seed the editor with the colors currently in use, so a
+                        // new theme starts as a tweak of what's on screen.
+                        editingTheme = CustomThemeData.from(AppSettings.shared.theme)
+                            .withName(AppSettings.shared.uniqueThemeName("My Theme"))
                     }) {
                         HStack(spacing: 6) {
                             Image(systemName: "plus")
@@ -67,15 +70,7 @@ struct ThemeSettingsView: View {
         }
         .sheet(item: $editingTheme) { theme in
             CustomThemeEditorView(data: theme) { saved in
-                var customs = AppSettings.shared.customThemes
-                if let idx = customs.firstIndex(where: { $0.name == saved.name }) {
-                    customs[idx] = saved
-                } else {
-                    customs.append(saved)
-                }
-                AppSettings.shared.customThemes = customs
-                selectedTheme = saved.name
-                AppSettings.shared.themeName = saved.name
+                selectedTheme = AppSettings.shared.saveCustomTheme(saved)
                 editingTheme = nil
             } onCancel: {
                 editingTheme = nil
@@ -141,11 +136,11 @@ struct ThemeRow: View {
             Spacer()
 
             if theme.isCustom && (hovered || active) {
-                HStack(spacing: 2) {
-                    IconButton(systemName: "pencil", size: 10, frame: 20) {
+                HStack(spacing: 4) {
+                    IconButton(systemName: "pencil", size: 10, frame: 22, help: "Edit theme") {
                         editingTheme = AppSettings.shared.customThemes.first { $0.name == theme.name }
                     }
-                    IconButton(systemName: "trash", size: 10, frame: 20) {
+                    IconButton(systemName: "trash", size: 10, frame: 22, help: "Delete theme") {
                         var customs = AppSettings.shared.customThemes
                         customs.removeAll { $0.name == theme.name }
                         AppSettings.shared.customThemes = customs
@@ -179,17 +174,10 @@ struct ThemeRow: View {
             selectedTheme = theme.name
             AppSettings.shared.themeName = theme.name
         }
-        .sheet(item: $editingTheme) { theme in
-            CustomThemeEditorView(data: theme) { saved in
-                var customs = AppSettings.shared.customThemes
-                if let idx = customs.firstIndex(where: { $0.name == saved.name }) {
-                    customs[idx] = saved
-                } else {
-                    customs.append(saved)
-                }
-                AppSettings.shared.customThemes = customs
-                selectedTheme = saved.name
-                AppSettings.shared.themeName = saved.name
+        .sheet(item: $editingTheme) { edited in
+            // Editing an existing theme: `theme.name` is the pre-edit identity.
+            CustomThemeEditorView(data: edited) { saved in
+                selectedTheme = AppSettings.shared.saveCustomTheme(saved, replacing: theme.name)
                 editingTheme = nil
             } onCancel: {
                 editingTheme = nil

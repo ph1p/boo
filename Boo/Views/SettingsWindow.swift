@@ -542,6 +542,8 @@ struct IconButton: View {
     var help: String? = nil
     let action: () -> Void
 
+    @State private var hovered = false
+
     var body: some View {
         let t = Tokens.current
         let color = tint ?? t.muted
@@ -549,13 +551,14 @@ struct IconButton: View {
             Image(systemName: systemName)
                 .font(.system(size: size, weight: .medium))
                 .frame(width: frame, height: frame)
-                .foregroundStyle(color)
+                .foregroundStyle(hovered ? t.text : color)
                 .background(
                     RoundedRectangle(cornerRadius: 5)
-                        .fill(color.opacity(fillOpacity))
+                        .fill(color.opacity(hovered ? fillOpacity * 2 : fillOpacity))
                 )
         }
         .buttonStyle(.plain)
+        .onHover { hovered = $0 }
         if let help {
             button.help(help)
         } else {

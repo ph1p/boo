@@ -336,7 +336,15 @@ final class AppSettings {
         return map
     }()
 
+    /// Transient theme override shown while the custom-theme editor is open —
+    /// the whole UI restyles live as colors are picked. Never persisted;
+    /// cleared (nil) when the editor saves or cancels.
+    var previewTheme: TerminalTheme? {
+        didSet { notify(topic: .theme) }
+    }
+
     var theme: TerminalTheme {
+        if let preview = previewTheme { return preview }
         if let t = Self.builtInThemesByName[themeName] { return t }
         return customThemes.first(where: { $0.name == themeName })?.toTheme() ?? .defaultDark
     }
@@ -360,6 +368,43 @@ final class AppSettings {
             saveToFile()
             notify(topic: .theme)
         }
+    }
+
+    /// First of `base`, "base 2", "base 3", … that no existing theme uses.
+    func uniqueThemeName(_ base: String) -> String {
+        let taken = Set(allThemes.map { $0.name })
+        if !taken.contains(base) { return base }
+        var n = 2
+        while taken.contains("\(base) \(n)") { n += 1 }
+        return "\(base) \(n)"
+    }
+
+    /// Persist a custom theme and select it. The one owner of the naming policy:
+    /// creating never silently overwrites an existing theme (name gets a unique
+    /// suffix), editing replaces the entry named `originalName` in place
+    /// (rename-safe — the row is neither lost nor duplicated).
+    /// Returns the name the theme was saved under.
+    @discardableResult
+    func saveCustomTheme(_ theme: CustomThemeData, replacing originalName: String? = nil) -> String {
+        var saved = theme
+        var customs = customThemes
+        let insertAt: Int
+        if let originalName, let idx = customs.firstIndex(where: { $0.name == originalName }) {
+            customs.remove(at: idx)
+            insertAt = idx
+        } else {
+            insertAt = customs.count
+        }
+        let taken = Set(TerminalTheme.themes.map { $0.name } + customs.map { $0.name })
+        if taken.contains(saved.name) {
+            var n = 2
+            while taken.contains("\(saved.name) \(n)") { n += 1 }
+            saved.name = "\(saved.name) \(n)"
+        }
+        customs.insert(saved, at: min(insertAt, customs.count))
+        customThemes = customs
+        themeName = saved.name
+        return saved.name
     }
 
     /// Apply the correct theme based on system dark/light mode.

@@ -7,6 +7,10 @@ struct CustomThemeEditorView: View {
     let onSave: (CustomThemeData) -> Void
     let onCancel: () -> Void
 
+    /// Debounces live-preview pushes: color-panel drags fire per tick, and each
+    /// preview change restyles the whole app (chrome + every terminal surface).
+    @State private var previewWork: DispatchWorkItem?
+
     private var preview: TerminalTheme { data.toTheme() }
     private let ansiLabels = ["Black", "Red", "Green", "Yellow", "Blue", "Magenta", "Cyan", "White"]
 
@@ -104,6 +108,26 @@ struct CustomThemeEditorView: View {
         }
         .frame(width: 560, height: 540)
         .background(t.bg)
+        .onChange(of: data) { _, newData in schedulePreview(newData) }
+        .onDisappear {
+            // Save and cancel both land here: drop the transient preview and any
+            // pending push, and close the color panel so it doesn't keep a
+            // detached NSColorWell (and this whole view tree) alive.
+            previewWork?.cancel()
+            previewWork = nil
+            AppSettings.shared.previewTheme = nil
+            if NSColorPanel.sharedColorPanelExists {
+                NSColorPanel.shared.close()
+            }
+        }
+    }
+
+    /// Push the edited colors as the app-wide preview theme, debounced.
+    private func schedulePreview(_ newData: CustomThemeData) {
+        previewWork?.cancel()
+        let work = DispatchWorkItem { AppSettings.shared.previewTheme = newData.toTheme() }
+        previewWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.08, execute: work)
     }
 
     // MARK: Bindings
@@ -243,25 +267,20 @@ struct SwatchRow: View {
     }
 }
 
+/// Neutral field background — the swatch next to the field already shows the
+/// color, so painting the field with it just made the hex text illegible.
 private func hexFieldBg(_ state: HexFieldState, isEditing: Bool, tokens t: Tokens) -> Color {
-    switch state {
-    case .valid(let c):
-        return Color(red: Double(c.r) / 255, green: Double(c.g) / 255, blue: Double(c.b) / 255)
-    case .incomplete:
-        return isEditing ? t.muted.opacity(0.08) : Color.clear
-    case .invalid:
-        return Color.clear
-    }
+    t.muted.opacity(isEditing ? 0.14 : 0.08)
 }
 
 private func hexFieldTextColor(_ state: HexFieldState, tokens t: Tokens) -> Color {
     switch state {
-    case .valid(let c):
-        return c.luminance > 0.5 ? Color.black.opacity(0.75) : Color.white.opacity(0.9)
+    case .valid:
+        return t.text
     case .incomplete:
-        return t.muted.opacity(0.75)
+        return t.muted
     case .invalid:
-        return Color.red.opacity(0.8)
+        return Color.red.opacity(0.85)
     }
 }
 

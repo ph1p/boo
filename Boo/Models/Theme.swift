@@ -150,7 +150,7 @@ struct TerminalColor: Codable, Equatable, Hashable {
 // MARK: - Custom theme persistence
 
 /// Codable mirror of TerminalTheme used for persisting user-created themes.
-struct CustomThemeData: Codable, Identifiable {
+struct CustomThemeData: Codable, Identifiable, Equatable {
     var id: String { name }
     var name: String
     var foreground: TerminalColor
