@@ -79,6 +79,26 @@ extension PaneView {
             x += widths[i]
         }
 
+        // Scroll fades — same treatment as the workspace strip in the toolbar:
+        // dissolve clipped tabs into the bar background on whichever side has
+        // more tabs hidden. The bar shares the terminal background, so the fade
+        // uses that colour, not the window backdrop.
+        if isOverflowing {
+            if tabScrollOffset > 0 {
+                WorkspacePillStyle.drawFade(
+                    ctx, in: CGRect(x: 0, y: 0, width: 20, height: barH),
+                    from: CGPoint(x: 0, y: 0), to: CGPoint(x: 20, y: 0),
+                    color: theme.background.nsColor)
+            }
+            if tabScrollOffset < maxScroll {
+                let fadeW: CGFloat = 32
+                WorkspacePillStyle.drawFade(
+                    ctx, in: CGRect(x: pinnedPlusX - fadeW, y: 0, width: fadeW, height: barH),
+                    from: CGPoint(x: pinnedPlusX, y: 0), to: CGPoint(x: pinnedPlusX - fadeW, y: 0),
+                    color: theme.background.nsColor)
+            }
+        }
+
         ctx.restoreGState()
 
         let plusSlot = plusButtonSlot(widths: widths)

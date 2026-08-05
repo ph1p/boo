@@ -43,9 +43,20 @@ enum WorkspacePillStyle {
     static func drawBackdropFade(
         _ ctx: CGContext, in clipRect: CGRect, from start: CGPoint, to end: CGPoint
     ) {
+        drawFade(
+            ctx, in: clipRect, from: start, to: end,
+            color: AppSettings.shared.theme.windowBackdrop)
+    }
+
+    /// Same fade, but into an arbitrary surface colour — the pane tab bar shares
+    /// the terminal background rather than the window backdrop.
+    static func drawFade(
+        _ ctx: CGContext, in clipRect: CGRect, from start: CGPoint, to end: CGPoint,
+        color: NSColor
+    ) {
         // sRGB conversion, not raw `cgColor.components`: a catalog colour's
         // component layout isn't guaranteed to be RGBA.
-        guard let c = AppSettings.shared.theme.windowBackdrop.usingColorSpace(.sRGB) else {
+        guard let c = color.usingColorSpace(.sRGB) else {
             return
         }
         let (r, g, b) = (c.redComponent, c.greenComponent, c.blueComponent)
