@@ -615,7 +615,7 @@ class ThemedSplitView: NSSplitView {
                     // so they need an explicit refresh on theme change.
                     // Toolbar, status bar and the side workspace bar carry no
                     // border — they are bare strips.
-                    IslandMetrics.refreshBorder(self.sidebarContainer)
+                    IslandMetrics.refreshBorder(self.sidebarContainer, color: theme.sidebarBorder)
                     self.sideWorkspaceBar?.needsDisplay = true
                     for (_, pv) in self.paneViews {
                         pv.layer?.backgroundColor = theme.background.nsColor.cgColor
@@ -828,7 +828,7 @@ class ThemedSplitView: NSSplitView {
         sidebarContainer = NSView()
         sidebarContainer.wantsLayer = true
         sidebarContainer.layer?.backgroundColor = AppSettings.shared.theme.sidebarBg.cgColor
-        IslandMetrics.round(sidebarContainer)
+        IslandMetrics.round(sidebarContainer, borderColor: AppSettings.shared.theme.sidebarBorder)
 
         // Sidebar tab bar
         let tabBar = SidebarTabBarView(frame: .zero)

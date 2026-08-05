@@ -101,19 +101,26 @@ enum IslandMetrics {
     /// Round `view`'s backing layer as an island and stroke its edge. Layer-backs
     /// the view if needed and clips subviews so custom `draw(_:)` fills and Metal
     /// sublayers both respect the corner.
-    @MainActor static func round(_ view: NSView, radius: CGFloat = radius) {
+    ///
+    /// The edge colour must be blended over the island's own surface or it
+    /// disappears: chrome-coloured islands take the default (`islandBorder`,
+    /// blended over chromeBg); sidebar-coloured islands pass
+    /// `theme.sidebarBorder`.
+    @MainActor static func round(
+        _ view: NSView, radius: CGFloat = radius, borderColor: NSColor? = nil
+    ) {
         view.wantsLayer = true
         guard let layer = view.layer else { return }
         layer.cornerRadius = radius
         layer.cornerCurve = .continuous
         layer.masksToBounds = true
         layer.borderWidth = borderWidth
-        layer.borderColor = borderColor.cgColor
+        layer.borderColor = (borderColor ?? Self.borderColor).cgColor
     }
 
     /// Re-apply the border colour after a theme change. Corner geometry doesn't
     /// change with the theme, so only the stroke needs refreshing.
-    @MainActor static func refreshBorder(_ view: NSView?) {
-        view?.layer?.borderColor = borderColor.cgColor
+    @MainActor static func refreshBorder(_ view: NSView?, color: NSColor? = nil) {
+        view?.layer?.borderColor = (color ?? borderColor).cgColor
     }
 }
