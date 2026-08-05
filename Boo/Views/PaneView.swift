@@ -261,7 +261,7 @@ class PaneView: NSView {
         } else if isFocused {
             layer.borderColor = theme.focusBorder.cgColor
         } else {
-            layer.borderColor = IslandMetrics.borderColor.cgColor
+            layer.borderColor = theme.paneBorder.cgColor
         }
     }
 
@@ -308,7 +308,9 @@ class PaneView: NSView {
         layer?.backgroundColor = AppSettings.shared.theme.background.nsColor.cgColor
         // Each pane is an island: rounding here also clips the terminal's
         // Metal sublayer, which libghostty owns and we can't round directly.
-        IslandMetrics.round(self, radius: IslandMetrics.innerRadius)
+        IslandMetrics.round(
+            self, radius: IslandMetrics.innerRadius,
+            borderColor: AppSettings.shared.theme.paneBorder)
         addSubview(focusCatcher)
         addSubview(activityBorder)
         focusCatcher.onClicked = { [weak self] in

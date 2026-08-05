@@ -40,7 +40,8 @@ comment in `Theme.swift`.
 | `textTertiary` | `chromeMuted` @ 0.5 | Placeholders, idle glyphs, inactive icons |
 | `separator` | `chromeMuted` @ 0.2 (alpha) | Hairlines over varying backgrounds: status-bar dividers, unfocused field borders |
 | `chromeBorder` / `sidebarBorder` | muted @ 0.2 blended opaque | Borders that may overlap-draw (opaque → no double-darkening) |
-| `islandBorder` | = `chromeBorder` | Edge stroke around chrome/pane islands; the sidebar island uses `sidebarBorder` (blended over its own surface, or it vanishes) |
+| `paneBorder` | muted @ 0.2 over `background` | Edge stroke of pane islands |
+| `islandBorder` | = `chromeBorder` | Edge stroke of chrome-coloured islands. Every island border must blend over its own surface or it vanishes: panes use `paneBorder`, the sidebar uses `sidebarBorder` |
 | `hoverFill` | `chromeMuted` @ 0.10 | Row/segment/tab hover backgrounds |
 | `subtleFill` | `chromeMuted` @ 0.06 | Drag placeholder slots, idle button backgrounds |
 | `controlFill` | `chromeMuted` @ 0.15 | Small controls: close-button circle, toolbar button hover, field backgrounds |

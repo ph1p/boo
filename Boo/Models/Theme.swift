@@ -40,6 +40,10 @@ struct TerminalTheme {
     /// Opaque border for sidebar/panel surfaces whose strokes may overlap-draw.
     var sidebarBorder: NSColor { Self.blend(chromeMuted, over: sidebarBg, alpha: 0.2) }
 
+    /// Opaque border for pane islands — blended over the terminal background,
+    /// the pane's own surface (an edge blended over chromeBg vanishes there).
+    var paneBorder: NSColor { Self.blend(chromeMuted, over: background.nsColor, alpha: 0.2) }
+
     /// Translucent hairline for separators drawn once over varying backgrounds.
     /// If the draw can overlap itself, use `chromeBorder`/`sidebarBorder` instead.
     var separator: NSColor { chromeMuted.withAlphaComponent(0.2) }
