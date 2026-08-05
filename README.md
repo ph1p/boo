@@ -6,8 +6,10 @@ A macOS terminal emulator with integrated file explorer, workspace management, s
 
 ## Screenshots
 
-<img width="500" alt="Boo App" src="./documentation/docs/public/app.png" />
-<img width="300" alt="Boo Settings" src="./documentation/docs/public/settings.png" />
+<p align="center">
+  <img width="80%" alt="Boo App" src="./documentation/docs/public/app.png" />
+  <img width="60%" alt="Boo Settings" src="./documentation/docs/public/settings.png" />
+</p>
 
 ## Install
 
@@ -84,37 +86,37 @@ make run      # Build and launch
 
 ## Keyboard Shortcuts
 
-| Shortcut        | Action                               |
-| --------------- | ------------------------------------ |
-| **Cmd+N**       | New workspace (home directory)       |
-| **Cmd+1-9**     | Switch to workspace N                |
-| **Cmd+Shift+O** | Open folder as workspace             |
-| **Cmd+T**       | New terminal tab in active pane      |
-| **Cmd+Shift+T** | New browser tab                      |
-| **Cmd+Opt+1-9** or **Cmd+Shift+1-9** | Switch to tab N in active pane |
-| **Cmd+W**       | Smart close (tab → pane → workspace) |
-| **Cmd+Opt+Z**   | Reopen closed tab/pane               |
-| **Cmd+S**       | Save (editor tabs)                   |
-| **Cmd+Shift+W** | Close pane                           |
-| **Cmd+D**       | Split right                          |
-| **Cmd+Shift+D** | Split down                           |
-| **Cmd+]** or **Cmd+Opt+→** | Focus next pane           |
-| **Cmd+[** or **Cmd+Opt+←** | Focus previous pane       |
-| **Cmd+B**       | Toggle file explorer                 |
-| **Cmd+F**       | Find                                 |
-| **Cmd+K**       | Clear screen                         |
-| **Cmd+Shift+K** | Clear scrollback                     |
-| **Cmd++**       | Increase font size                   |
-| **Cmd+-**       | Decrease font size                   |
-| **Cmd+0**       | Reset font size                      |
-| **Cmd+C**       | Copy selection                       |
-| **Cmd+V**       | Paste                                |
-| **Cmd+A**       | Select all                           |
-| **Cmd+Return** or **Cmd+Ctrl+F** | Toggle full screen  |
-| **Cmd+Ctrl+=**  | Equalize split sizes                 |
-| **Cmd+Shift+B** | Bookmark current directory           |
-| **Ctrl+1-9**    | Jump to bookmark N                   |
-| **Cmd+,**       | Settings                             |
+| Shortcut                             | Action                               |
+| ------------------------------------ | ------------------------------------ |
+| **Cmd+N**                            | New workspace (home directory)       |
+| **Cmd+1-9**                          | Switch to workspace N                |
+| **Cmd+Shift+O**                      | Open folder as workspace             |
+| **Cmd+T**                            | New terminal tab in active pane      |
+| **Cmd+Shift+T**                      | New browser tab                      |
+| **Cmd+Opt+1-9** or **Cmd+Shift+1-9** | Switch to tab N in active pane       |
+| **Cmd+W**                            | Smart close (tab → pane → workspace) |
+| **Cmd+Opt+Z**                        | Reopen closed tab/pane               |
+| **Cmd+S**                            | Save (editor tabs)                   |
+| **Cmd+Shift+W**                      | Close pane                           |
+| **Cmd+D**                            | Split right                          |
+| **Cmd+Shift+D**                      | Split down                           |
+| **Cmd+]** or **Cmd+Opt+→**           | Focus next pane                      |
+| **Cmd+[** or **Cmd+Opt+←**           | Focus previous pane                  |
+| **Cmd+B**                            | Toggle file explorer                 |
+| **Cmd+F**                            | Find                                 |
+| **Cmd+K**                            | Clear screen                         |
+| **Cmd+Shift+K**                      | Clear scrollback                     |
+| **Cmd++**                            | Increase font size                   |
+| **Cmd+-**                            | Decrease font size                   |
+| **Cmd+0**                            | Reset font size                      |
+| **Cmd+C**                            | Copy selection                       |
+| **Cmd+V**                            | Paste                                |
+| **Cmd+A**                            | Select all                           |
+| **Cmd+Return** or **Cmd+Ctrl+F**     | Toggle full screen                   |
+| **Cmd+Ctrl+=**                       | Equalize split sizes                 |
+| **Cmd+Shift+B**                      | Bookmark current directory           |
+| **Ctrl+1-9**                         | Jump to bookmark N                   |
+| **Cmd+,**                            | Settings                             |
 
 ## Architecture
 
