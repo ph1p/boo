@@ -327,8 +327,13 @@ final class SidebarController {
         guard let wc = windowController else { return nil }
         let idx = position == .left ? 0 : 1
         guard idx < wc.mainSplitView.subviews.count else { return nil }
+        let frameWidth = wc.mainSplitView.subviews[idx].frame.width
+        // Before the first layout pass (app startup) the split view reports zero-sized
+        // frames; a visible sidebar can never legitimately be 0pt wide, so treat that
+        // as "no rendered width" instead of persisting garbage into workspace state.
+        guard wc.mainSplitView.bounds.width > 0, frameWidth > 0 else { return nil }
         return SidebarStateResolver.normalizedWidth(
-            wc.mainSplitView.subviews[idx].frame.width,
+            frameWidth,
             environment: stateEnvironment(splitViewWidth: wc.mainSplitView.bounds.width)
         )
     }

@@ -212,9 +212,12 @@ enum SessionStore {
                 ws.customColor = NSColor(srgbRed: r, green: g, blue: b, alpha: 1)
             }
             let defaultSidebarState = Workspace.defaultSidebarState()
+            // Older builds could persist a pre-layout width of 0 (captured before the
+            // first layout pass); a non-positive width is never valid, fall back to default.
+            let storedSidebarWidth = sw.sidebarWidth.flatMap { $0 > 0 ? CGFloat($0) : nil }
             ws.sidebarState = SidebarWorkspaceState(
                 isVisible: sw.sidebarIsVisible ?? defaultSidebarState.isVisible,
-                width: sw.sidebarWidth.map { CGFloat($0) } ?? defaultSidebarState.width
+                width: storedSidebarWidth ?? defaultSidebarState.width
             )
 
             // Build a lookup so we can match panes to split-tree leaf IDs

@@ -342,6 +342,51 @@ final class SessionStoreTests: XCTestCase {
             "Markdown tab with missing file should fall back to terminal")
     }
 
+    func testRestoreWorkspacesDropsNonPositiveSidebarWidth() {
+        let paneID = UUID()
+        let snapshot = SessionSnapshot(
+            activeWorkspaceIndex: 0,
+            workspaces: [
+                SessionWorkspace(
+                    id: UUID(),
+                    folderPath: "/tmp",
+                    customName: "Zero",
+                    color: WorkspaceColor.none.rawValue,
+                    customColorRed: nil,
+                    customColorGreen: nil,
+                    customColorBlue: nil,
+                    isPinned: false,
+                    splitTree: .leaf(id: paneID),
+                    panes: [
+                        SessionPane(
+                            id: paneID,
+                            tabs: [
+                                SessionTab(
+                                    contentState: .terminal(TerminalContentState(workingDirectory: "/tmp"))
+                                )
+                            ],
+                            activeTabIndex: 0
+                        )
+                    ],
+                    activePaneID: paneID,
+                    sidebarIsVisible: true,
+                    sidebarWidth: 0
+                )
+            ]
+        )
+
+        let restored = SessionStore.workspaces(from: snapshot)
+
+        XCTAssertEqual(restored.count, 1)
+        // A persisted width of 0 (captured before the first layout pass in older builds)
+        // must fall back to the default, never restore a zero-width sidebar.
+        XCTAssertEqual(
+            restored[0].sidebarState.width ?? -1,
+            Workspace.defaultSidebarState().width ?? -1,
+            accuracy: 0.1
+        )
+    }
+
     func testRestoreWorkspacesRemapsDuplicatePaneIDsAcrossWorkspaces() {
         let sharedPaneID = UUID()
 

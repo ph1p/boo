@@ -402,7 +402,10 @@ extension MainWindowController {
         guard let workspace = activeWorkspace else { return }
 
         // Skip self-activation (startup restore): isVisible is uninitialized and would overwrite the loaded state.
-        if let prev = previousWorkspace, prev.id != workspace.id {
+        // Also require that `prev` is the workspace actually rendered on screen — during
+        // startup restore no workspace has been rendered yet, and capturing the live
+        // sidebar there would overwrite the loaded state with pre-layout garbage.
+        if let prev = previousWorkspace, prev.id != workspace.id, renderedWorkspaceID == prev.id {
             persistActiveWorkspaceSidebarState(for: prev)
         }
 
