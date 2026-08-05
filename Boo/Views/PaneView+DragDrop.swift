@@ -19,10 +19,10 @@ extension PaneView {
             return nil
         } else {
             // Exclude the pinned plus button zone on the right
-            if point.x >= bounds.width - plusButtonWidth { return nil }
+            if point.x >= bounds.width - plusButtonWidth - Self.tabBarSideInset { return nil }
             let widths = allTabWidths()
             let adjusted = point.x + tabScrollOffset
-            var cx: CGFloat = 0
+            var cx: CGFloat = Self.tabBarSideInset
             for i in 0..<widths.count {
                 let w = widths[i]
                 if adjusted >= cx && adjusted < cx + w { return i }
@@ -34,22 +34,7 @@ extension PaneView {
 
     /// Check if a point is over the plus button.
     func isPlusButtonHit(at point: NSPoint) -> Bool {
-        let mode = AppSettings.shared.tabOverflowMode
-        if mode == .wrap {
-            let layouts = wrapLayout()
-            let lastLay = layouts.last
-            var plusX = (lastLay?.x ?? 0) + (lastLay?.width ?? 0)
-            var plusY = lastLay?.y ?? 0
-            if plusX + plusButtonWidth > bounds.width && plusX > 0 {
-                plusX = 0
-                plusY = (lastLay?.y ?? 0) + singleRowTabHeight
-            }
-            return point.x >= plusX && point.x < plusX + plusButtonWidth && point.y >= plusY
-                && point.y < plusY + singleRowTabHeight
-        } else {
-            let pinX = bounds.width - plusButtonWidth
-            return point.x >= pinX
-        }
+        plusButtonSlot().contains(point)
     }
 
     /// Check if a point is over the close button area of a given tab.
@@ -67,12 +52,12 @@ extension PaneView {
         } else {
             let widths = allTabWidths()
             guard idx < widths.count else { return false }
-            var cx: CGFloat = 0
+            var cx: CGFloat = Self.tabBarSideInset
             for i in 0..<idx { cx += widths[i] }
             localX = (point.x + tabScrollOffset) - cx
             w = widths[idx]
         }
-        return localX > w - 22
+        return localX > w - Self.tabCloseHitZone
     }
 
     // MARK: - Scroll Wheel
@@ -104,23 +89,7 @@ extension PaneView {
         guard !pane.tabs.isEmpty, point.y < tabBarHeight else { return }
 
         if let idx = tabIndex(at: point) {
-            // Compute close button hit zone using variable-width tabs
-            let mode = AppSettings.shared.tabOverflowMode
-            let localX: CGFloat
-            let w: CGFloat
-            if mode == .wrap {
-                let layouts = wrapLayout()
-                let lay = layouts[idx]
-                localX = point.x - lay.x
-                w = lay.width
-            } else {
-                let widths = allTabWidths()
-                var cx: CGFloat = 0
-                for i in 0..<idx { cx += widths[i] }
-                localX = (point.x + tabScrollOffset) - cx
-                w = widths[idx]
-            }
-            if showTabClose && localX > w - 18 {
+            if isOverCloseButton(point: point, tabIndex: idx) {
                 paneDelegate?.paneView(self, didRequestCloseTab: idx, paneID: paneID)
             } else {
                 dragTabIndex = idx
@@ -282,8 +251,13 @@ extension PaneView {
 
     /// Maximum scroll offset in scroll mode (variable-width tabs).
     func scrollMaxOffset() -> CGFloat {
-        let widths = allTabWidths()
-        let totalW = widths.reduce(0, +) + plusButtonWidth
+        scrollMaxOffset(widths: allTabWidths())
+    }
+
+    /// Overload for callers that already measured the tabs — `allTabWidths()`
+    /// does text layout per title, so don't repeat it within one pass.
+    func scrollMaxOffset(widths: [CGFloat]) -> CGFloat {
+        let totalW = Self.tabBarSideInset * 2 + widths.reduce(0, +) + plusButtonWidth
         return max(0, totalW - bounds.width)
     }
 
@@ -304,7 +278,7 @@ extension PaneView {
             return .zero
         } else {
             let widths = allTabWidths()
-            var x: CGFloat = 0
+            var x: CGFloat = Self.tabBarSideInset
             for i in 0..<min(index, widths.count) { x += widths[i] }
             return NSPoint(x: x - tabScrollOffset, y: 0)
         }
@@ -315,9 +289,9 @@ extension PaneView {
         let count = pane.tabs.count
         if AppSettings.shared.tabOverflowMode == .wrap {
             let layouts = wrapLayout()
-            // Determine which row the point is on
-            let row = max(0, Int(point.y / singleRowTabHeight))
-            let rowY = CGFloat(row) * singleRowTabHeight
+            // Determine which row the point is on (rows start below the bar's top inset)
+            let row = max(0, Int((point.y - Self.tabBarSideInset) / singleRowTabHeight))
+            let rowY = Self.tabBarSideInset + CGFloat(row) * singleRowTabHeight
             // Filter to tabs on this row, find insertion point by x
             for i in 0..<layouts.count {
                 let lay = layouts[i]
@@ -331,7 +305,7 @@ extension PaneView {
         } else {
             let widths = allTabWidths()
             let adjusted = point.x + tabScrollOffset
-            var cx: CGFloat = 0
+            var cx: CGFloat = Self.tabBarSideInset
             for i in 0..<count {
                 let w = widths[i]
                 if adjusted < cx + w / 2 { return i }

@@ -41,7 +41,9 @@ class PaneView: NSView {
     weak var tabDragCoordinator: TabDragCoordinator?
 
     let pane: Pane
-    let singleRowTabHeight: CGFloat = 26
+    /// Row stride in wrap mode: pill height plus a half-gap above and below, so
+    /// stacked rows sit one full gap apart (matching the horizontal pill gap).
+    let singleRowTabHeight: CGFloat = PaneView.tabPillHeight + PaneView.tabPillInsetX * 2
 
     private(set) var ghosttyView: GhosttyView?
     private var scrollWrapper: TerminalScrollView?
@@ -67,9 +69,8 @@ class PaneView: NSView {
     var tabScrollOffset: CGFloat = 0
 
     // MARK: - Tab Size Constants
-    private let tabMinWidth: CGFloat = 100
+    private let tabMinWidth: CGFloat = 60
     private let tabMaxWidth: CGFloat = 180
-    private let tabHPadding: CGFloat = 28  // left content margin + close button zone
     let plusButtonWidth: CGFloat = 32
 
     /// Tracks last active tab index that triggered auto-scroll, to avoid fighting manual scroll.
@@ -83,12 +84,22 @@ class PaneView: NSView {
 
     private static let tabMeasureFont = NSFont.systemFont(ofSize: 10.5, weight: .medium)
 
-    /// Measure the natural width of a single tab based on its title content.
+    /// Whether the tab draws a leading icon (content-type icon or process icon)
+    /// before its title — `drawSingleTab` gates on the same predicate, so the
+    /// measured slot and the drawn content can't disagree.
+    func tabHasLeadingIcon(_ tab: Pane.Tab) -> Bool {
+        if tab.contentType != .terminal { return true }
+        let process = tab.state.foregroundProcess
+        return !process.isEmpty && !ProcessIcon.isShell(process) && ProcessIcon.icon(for: process) != nil
+    }
+
+    /// Measure the natural width of a single tab slot based on its content:
+    /// lead-in + optional icon + title + close/dot zone + pill insets.
     func measuredTabWidth(for tab: Pane.Tab) -> CGFloat {
         let title = Self.tabDisplayTitle(tab: tab) as NSString
-        let textW = title.size(withAttributes: [.font: Self.tabMeasureFont]).width
-        let dotAndGap: CGFloat = 20  // env dot + gap
-        let natural = dotAndGap + textW + tabHPadding
+        let textW = ceil(title.size(withAttributes: [.font: Self.tabMeasureFont]).width)
+        var natural = textW + Self.tabTextLeadIn + Self.tabCloseHitZone + Self.tabPillInsetX * 2
+        if tabHasLeadingIcon(tab) { natural += Self.tabIconAdvance }
         return min(tabMaxWidth, max(tabMinWidth, natural))
     }
 
@@ -97,12 +108,13 @@ class PaneView: NSView {
         pane.tabs.map { measuredTabWidth(for: $0) }
     }
 
-    /// Computed tab bar height — single row normally, multiple rows in wrap mode.
+    /// Computed tab bar height — row stride per row plus the vertical bar
+    /// insets, so the outermost pills keep the same margin to the pane edge
+    /// as they keep between each other.
     var tabBarHeight: CGFloat {
         let mode = AppSettings.shared.tabOverflowMode
-        guard mode == .wrap else { return singleRowTabHeight }
-        let rows = wrapRowCount()
-        return singleRowTabHeight * CGFloat(rows)
+        let rows = mode == .wrap ? wrapRowCount() : 1
+        return singleRowTabHeight * CGFloat(rows) + Self.tabBarSideInset * 2
     }
 
     struct TabLayout {
@@ -111,69 +123,51 @@ class PaneView: NSView {
         let width: CGFloat
     }
 
-    /// Compute wrap-mode layout: tabs distributed across rows, stretched to fill width.
+    /// Compute wrap-mode layout: pills keep their natural width and flow onto
+    /// the next row when the current one is full — no stretching.
     func wrapLayout() -> [TabLayout] {
         wrapLayout(widths: allTabWidths())
     }
 
     func wrapLayout(widths: [CGFloat]) -> [TabLayout] {
-        let availW = bounds.width
+        let inset = Self.tabBarSideInset
+        let availW = bounds.width - inset * 2
         guard !widths.isEmpty, availW > 0 else { return [] }
 
-        // First pass: assign to rows by natural width
-        var rows: [[Int]] = [[]]
-        var rowW: CGFloat = 0
-        for (i, w) in widths.enumerated() {
-            if rowW + w > availW && rowW > 0 {
-                rows.append([i])
-                rowW = w
-            } else {
-                rows[rows.count - 1].append(i)
-                rowW += w
+        var layouts: [TabLayout] = []
+        var cx: CGFloat = inset
+        var row = 0
+        for w in widths {
+            if cx - inset + w > availW && cx > inset {
+                row += 1
+                cx = inset
             }
-        }
-
-        // Check if plus button fits on last row
-        let lastRowW = rows.last.map { $0.reduce(0.0) { $0 + widths[$1] } } ?? 0
-        let plusOnLastRow = lastRowW + plusButtonWidth <= availW
-
-        // Second pass: stretch each row to fill width
-        var layouts = [TabLayout](repeating: TabLayout(x: 0, y: 0, width: 0), count: widths.count)
-        for (rowIdx, row) in rows.enumerated() {
-            let isLastRow = rowIdx == rows.count - 1
-            let naturalSum = row.reduce(0.0) { $0 + widths[$1] }
-            let stretchTarget = isLastRow && plusOnLastRow ? availW - plusButtonWidth : availW
-            let scale = naturalSum > 0 ? stretchTarget / naturalSum : 1
-            var cx: CGFloat = 0
-            for idx in row {
-                let w = widths[idx] * scale
-                layouts[idx] = TabLayout(x: cx, y: CGFloat(rowIdx) * singleRowTabHeight, width: w)
-                cx += w
-            }
+            layouts.append(TabLayout(x: cx, y: inset + CGFloat(row) * singleRowTabHeight, width: w))
+            cx += w
         }
         return layouts
     }
 
-    /// Number of rows needed in wrap mode.
-    private func wrapRowCount() -> Int {
-        let widths = allTabWidths()
-        var rows = 1
-        var rowX: CGFloat = 0
-        let availW = bounds.width
-        for w in widths {
-            if rowX + w > availW && rowX > 0 {
-                rows += 1
-                rowX = w
-            } else {
-                rowX += w
-            }
-        }
-        // Plus button
-        if rowX + plusButtonWidth > availW && rowX > 0 { rows += 1 }
-        return max(1, rows)
+    /// Whether the `+` button fits after the last tab of the given layout, or
+    /// has to drop onto a row of its own. Shared by draw, hit-test, and row count.
+    func plusFitsOnLastRow(_ layouts: [TabLayout]) -> Bool {
+        guard let last = layouts.last else { return true }
+        return last.x + last.width + plusButtonWidth <= bounds.width - Self.tabBarSideInset
     }
 
-    private class DimOverlay: NSView {
+    /// Number of rows needed in wrap mode.
+    private func wrapRowCount() -> Int {
+        let layouts = wrapLayout()
+        guard let last = layouts.last else { return 1 }
+        var rows = Int((last.y - Self.tabBarSideInset) / singleRowTabHeight) + 1
+        if !plusFitsOnLastRow(layouts) { rows += 1 }
+        return rows
+    }
+
+    /// Invisible overlay covering an unfocused pane so the first click focuses it
+    /// (the click still passes through). Purely a click-catcher — the focused pane
+    /// is marked by its island stroke tint, not by dimming its siblings.
+    private class FocusCatcherOverlay: NSView {
         var onClicked: (() -> Void)?
         override func mouseDown(with event: NSEvent) {
             onClicked?()
@@ -181,9 +175,8 @@ class PaneView: NSView {
         }
     }
 
-    private let dimOverlay: DimOverlay = {
-        let v = DimOverlay()
-        v.wantsLayer = true
+    private let focusCatcher: FocusCatcherOverlay = {
+        let v = FocusCatcherOverlay()
         v.autoresizingMask = [.width, .height]
         return v
     }()
@@ -214,7 +207,7 @@ class PaneView: NSView {
     var isFocused: Bool = false {
         didSet {
             guard isFocused != oldValue else { return }
-            dimOverlay.isHidden = isFocused
+            focusCatcher.isHidden = isFocused
             updateActivityBorder()
             needsDisplay = true
         }
@@ -232,14 +225,18 @@ class PaneView: NSView {
     /// The pane is an island, so its own layer carries a hairline stroke — and a
     /// layer's border paints *above* its sublayers, which would hide the outermost
     /// pixels of the activity overlay. Tint the island stroke with the same accent
-    /// while activity shows so the frame reads as one solid accent edge.
+    /// while activity shows so the frame reads as one solid accent edge; the
+    /// focused pane gets a softer accent tint instead of dimming its siblings.
     func syncIslandStroke() {
         guard let layer else { return }
         let theme = AppSettings.shared.theme
-        layer.borderColor =
-            activityBorder.isHidden
-            ? IslandMetrics.borderColor.cgColor
-            : theme.accentColor.withAlphaComponent(Self.activityBorderAlpha).cgColor
+        if !activityBorder.isHidden {
+            layer.borderColor = theme.accentColor.withAlphaComponent(Self.activityBorderAlpha).cgColor
+        } else if isFocused {
+            layer.borderColor = theme.accentColor.withAlphaComponent(IslandMetrics.focusBorderAlpha).cgColor
+        } else {
+            layer.borderColor = IslandMetrics.borderColor.cgColor
+        }
     }
 
     func updateFindBarTheme() {
@@ -252,8 +249,6 @@ class PaneView: NSView {
     /// keeps the old theme's accent.
     func updateOverlayColors() {
         let theme = AppSettings.shared.theme
-        let color = theme.isDark ? NSColor.black : NSColor.white
-        dimOverlay.layer?.backgroundColor = color.withAlphaComponent(theme.isDark ? 0.35 : 0.55).cgColor
         activityBorder.layer?.borderColor =
             theme.accentColor.withAlphaComponent(Self.activityBorderAlpha).cgColor
         syncIslandStroke()
@@ -288,9 +283,9 @@ class PaneView: NSView {
         // Each pane is an island: rounding here also clips the terminal's
         // Metal sublayer, which libghostty owns and we can't round directly.
         IslandMetrics.round(self, radius: IslandMetrics.innerRadius)
-        addSubview(dimOverlay)
+        addSubview(focusCatcher)
         addSubview(activityBorder)
-        dimOverlay.onClicked = { [weak self] in
+        focusCatcher.onClicked = { [weak self] in
             guard let self else { return }
             self.paneDelegate?.paneView(self, didFocus: self.paneID)
         }
@@ -641,11 +636,11 @@ class PaneView: NSView {
         // dim overlay first (it swallows clicks to focus the pane), activity frame on top so
         // it stays visible on unfocused panes. Adding a content subview buries them, so the
         // order is re-asserted here — checking BOTH slots, since either can slip.
-        if dimOverlay.frame != bounds { dimOverlay.frame = bounds }
+        if focusCatcher.frame != bounds { focusCatcher.frame = bounds }
         if activityBorder.frame != bounds { activityBorder.frame = bounds }
-        if subviews.last !== activityBorder || subviews.dropLast().last !== dimOverlay {
-            addSubview(dimOverlay, positioned: .above, relativeTo: nil)
-            addSubview(activityBorder, positioned: .above, relativeTo: dimOverlay)
+        if subviews.last !== activityBorder || subviews.dropLast().last !== focusCatcher {
+            addSubview(focusCatcher, positioned: .above, relativeTo: nil)
+            addSubview(activityBorder, positioned: .above, relativeTo: focusCatcher)
         }
     }
 
@@ -996,64 +991,20 @@ class PaneView: NSView {
         let theme = AppSettings.shared.theme
         let overflowMode = AppSettings.shared.tabOverflowMode
         let barH = tabBarHeight
-        let termBgColor = theme.background.nsColor.cgColor
 
-        // Tab bar background
-        ctx.setFillColor(theme.chromeBg.cgColor)
+        // Tab bar background — same as the terminal below, so the pills read as
+        // sitting inside the pane rather than on a separate chrome strip.
+        ctx.setFillColor(theme.background.nsColor.cgColor)
         ctx.fill(CGRect(x: 0, y: 0, width: bounds.width, height: barH))
 
         if overflowMode == .wrap {
-            drawTabsWrapped(ctx: ctx, theme: theme, barH: barH, termBgColor: termBgColor)
+            drawTabsWrapped(ctx: ctx, theme: theme, barH: barH)
         } else {
-            drawTabsScrollable(ctx: ctx, theme: theme, barH: barH, termBgColor: termBgColor)
+            drawTabsScrollable(ctx: ctx, theme: theme, barH: barH)
         }
 
-        // Row separator borders in wrap mode (between rows)
-        if overflowMode == .wrap {
-            let rows = Int(barH / singleRowTabHeight)
-            ctx.setFillColor(theme.chromeBorder.cgColor)
-            for r in 1..<rows {
-                let borderY = CGFloat(r) * singleRowTabHeight - 1
-                ctx.fill(CGRect(x: 0, y: borderY, width: bounds.width, height: 1))
-            }
-        }
-
-        // Full-width bottom border (1px, same style as sidebar separator)
-        ctx.setFillColor(theme.chromeBorder.cgColor)
-        ctx.fill(CGRect(x: 0, y: barH - 1, width: bounds.width, height: 1))
-
-        // Active tab breaks the border to connect to the terminal below
-        let activeIdx = pane.activeTabIndex
-        if activeIdx >= 0 && activeIdx < pane.tabs.count {
-            var ax: CGFloat = 0
-            var aw: CGFloat = 0
-            var onBottomRow = true
-            if overflowMode == .wrap {
-                let layouts = wrapLayout()
-                if activeIdx < layouts.count {
-                    let lay = layouts[activeIdx]
-                    ax = lay.x
-                    aw = lay.width
-                    onBottomRow = lay.y == barH - singleRowTabHeight
-                }
-            } else {
-                let widths = allTabWidths()
-                for i in 0..<activeIdx { ax += widths[i] }
-                ax -= tabScrollOffset
-                aw = widths[activeIdx]
-            }
-            if onBottomRow {
-                // Clamp the break so it never erases the border under the plus button
-                let maxBreakRight = overflowMode == .scroll ? bounds.width - plusButtonWidth : bounds.width
-                let clampedRight = min(ax + aw, maxBreakRight)
-                let clampedLeft = min(ax, maxBreakRight)
-                let breakW = max(0, clampedRight - clampedLeft)
-                if breakW > 0 {
-                    ctx.setFillColor(termBgColor)
-                    ctx.fill(CGRect(x: clampedLeft, y: barH - 1, width: breakW, height: 1))
-                }
-            }
-        }
+        // No bottom border — the bar shares the terminal background, so the
+        // pills float directly inside the pane with nothing separating them.
 
         // The pane-wide activity frame is NOT drawn here — content subviews cover
         // everything below the tab bar. See `activityBorder` / `updateActivityBorder()`.
@@ -1090,7 +1041,7 @@ class PaneView: NSView {
             }
         } else {
             let widths = allTabWidths()
-            var tabX: CGFloat = -tabScrollOffset
+            var tabX: CGFloat = Self.tabBarSideInset - tabScrollOffset
             for (i, tab) in pane.tabs.enumerated() {
                 let w = widths[i]
                 let element = NSAccessibilityElement()

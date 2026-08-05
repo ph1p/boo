@@ -122,18 +122,10 @@ class ToolbarView: NSView {
             changed = true
         }
 
-        // Workspace zone
+        // Workspace zone — same pill-band hit test as clicks
         var newWSHover = -1
-        if !hideWorkspaces && point.x >= trafficLightWidth && point.x < workspaceZoneEnd + zoneGap && !sidebarHover {
-            var x = trafficLightWidth - workspaceScrollOffset
-            for i in workspaces.indices {
-                let w = measureWorkspace(at: i)
-                if point.x >= x && point.x < x + w + Self.workspaceGap {
-                    newWSHover = i
-                    break
-                }
-                x += w + Self.workspaceGap
-            }
+        if !hideWorkspaces && !sidebarHover, let idx = hitTestWorkspaceIndex(at: point) {
+            newWSHover = idx
         }
         if newWSHover != hoveredWorkspaceIndex {
             hoveredWorkspaceIndex = newWSHover
@@ -252,6 +244,10 @@ class ToolbarView: NSView {
     /// Size of the pinned `+` button.
     static let plusButtonSize: CGFloat = 24
 
+    /// Height of a workspace pill — also the vertical extent of its click/hover
+    /// zone, so the bar above and below the pills stays draggable window chrome.
+    static let workspacePillHeight: CGFloat = 24
+
     /// Width reserved at the right of the workspace zone for the pinned `+` button.
     /// The button never scrolls, so the scrollable pill strip stops short of it and
     /// the right-hand scroll fade lands in the space between. Exactly the button's
@@ -339,7 +335,7 @@ class ToolbarView: NSView {
         var x = trafficLightWidth - workspaceScrollOffset
         for i in workspaces.indices {
             let w = measureWorkspace(at: i)
-            let pillH: CGFloat = 24
+            let pillH = Self.workspacePillHeight
             let pillY = (barHeight - pillH) / 2
             let localRect = NSRect(x: x, y: pillY, width: w, height: pillH)
             let windowRect = convert(localRect, to: nil)

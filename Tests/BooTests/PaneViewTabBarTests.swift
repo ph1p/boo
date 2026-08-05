@@ -22,8 +22,9 @@ import XCTest
         let pv = PaneView(paneID: pane.id, pane: pane)
         pv.frame = NSRect(x: 0, y: 0, width: 600, height: 300)
         let w = pv.measuredTabWidth(for: pane.tabs[0])
-        // Short title should clamp to tabMinWidth (100)
-        XCTAssertEqual(w, 100, accuracy: 5)
+        // Short title stays near tabMinWidth (60) — no dead space padding
+        XCTAssertGreaterThanOrEqual(w, 60)
+        XCTAssertLessThanOrEqual(w, 70)
     }
 
     func testMeasuredTabWidth_longTitle() {
@@ -48,7 +49,7 @@ import XCTest
         let pv = PaneView(paneID: pane.id, pane: pane)
         pv.frame = NSRect(x: 0, y: 0, width: 600, height: 300)
         let w = pv.measuredTabWidth(for: pane.tabs[0])
-        XCTAssertGreaterThanOrEqual(w, 100)
+        XCTAssertGreaterThanOrEqual(w, 60)
         XCTAssertLessThanOrEqual(w, 180)
     }
 
@@ -81,10 +82,10 @@ import XCTest
         let layouts = pv.wrapLayout()
         XCTAssertEqual(layouts.count, 2)
         // Both on row 0
-        XCTAssertEqual(layouts[0].y, 0)
-        XCTAssertEqual(layouts[1].y, 0)
-        // First starts at 0
-        XCTAssertEqual(layouts[0].x, 0)
+        XCTAssertEqual(layouts[0].y, layouts[1].y)
+        // First starts at the side inset, first row below the top inset
+        XCTAssertEqual(layouts[0].x, PaneView.tabBarSideInset)
+        XCTAssertEqual(layouts[0].y, PaneView.tabBarSideInset)
     }
 
     func testWrapLayout_multipleRows() {
@@ -98,28 +99,20 @@ import XCTest
         XCTAssertGreaterThan(uniqueRows.count, 1)
     }
 
-    func testWrapLayout_stretchFillsWidth() {
-        // 4 tabs in 500px — first row should fill exactly 500 (minus plus button on last row)
+    func testWrapLayout_naturalWidthsNoStretch() {
+        // Pills keep their measured width — no row is stretched to fill the bar.
         let titles = Array(repeating: "/some/medium/path", count: 4)
         let pv = makePaneView(tabTitles: titles, width: 500)
         let layouts = pv.wrapLayout()
-        guard !layouts.isEmpty else {
-            XCTFail("No layouts")
-            return
+        let widths = pv.allTabWidths()
+        XCTAssertEqual(layouts.count, widths.count)
+        for (lay, w) in zip(layouts, widths) {
+            XCTAssertEqual(lay.width, w, accuracy: 0.01, "wrap must keep natural pill widths")
         }
-
-        // Group by row
-        var rows: [CGFloat: [PaneView.TabLayout]] = [:]
+        // Every row stays inside the side insets
         for lay in layouts {
-            rows[lay.y, default: []].append(lay)
-        }
-
-        // For non-last rows, sum of widths should equal bounds width
-        let sortedRowYs = rows.keys.sorted()
-        for rowY in sortedRowYs.dropLast() {
-            let rowLayouts = rows[rowY]!
-            let rowSum = rowLayouts.reduce(0) { $0 + $1.width }
-            XCTAssertEqual(rowSum, 500, accuracy: 1)
+            XCTAssertGreaterThanOrEqual(lay.x, PaneView.tabBarSideInset)
+            XCTAssertLessThanOrEqual(lay.x + lay.width, 500 - PaneView.tabBarSideInset + 0.01)
         }
     }
 
@@ -154,13 +147,14 @@ import XCTest
 
         let layouts = pv.wrapLayout()
         // Find a tab on row 1
-        let row1Tabs = layouts.enumerated().filter { $0.element.y == pv.singleRowTabHeight }
+        let row1Y = PaneView.tabBarSideInset + pv.singleRowTabHeight
+        let row1Tabs = layouts.enumerated().filter { $0.element.y == row1Y }
         guard let firstRow1 = row1Tabs.first else {
             XCTFail("No second row")
             return
         }
         // Inserting at x=0 on row 1 should give the first tab index of row 1
-        XCTAssertEqual(pv.tabInsertionIndex(at: NSPoint(x: 0, y: pv.singleRowTabHeight)), firstRow1.offset)
+        XCTAssertEqual(pv.tabInsertionIndex(at: NSPoint(x: 0, y: row1Y)), firstRow1.offset)
     }
 
     // MARK: - tabInsertionPosition
@@ -168,7 +162,7 @@ import XCTest
     func testTabInsertionPosition_scroll_firstTab() {
         let pv = makePaneView(tabTitles: ["~", "~", "~"], width: 600)
         let pt = pv.tabInsertionPosition(at: 0)
-        XCTAssertEqual(pt.x, 0)
+        XCTAssertEqual(pt.x, PaneView.tabBarSideInset)
         XCTAssertEqual(pt.y, 0)
     }
 
@@ -176,7 +170,7 @@ import XCTest
         let pv = makePaneView(tabTitles: ["~", "~", "~"], width: 600)
         let widths = pv.allTabWidths()
         let pt = pv.tabInsertionPosition(at: 1)
-        XCTAssertEqual(pt.x, widths[0], accuracy: 0.01)
+        XCTAssertEqual(pt.x, PaneView.tabBarSideInset + widths[0], accuracy: 0.01)
         XCTAssertEqual(pt.y, 0)
     }
 
@@ -185,7 +179,7 @@ import XCTest
         let widths = pv.allTabWidths()
         let totalW = widths.reduce(0, +)
         let pt = pv.tabInsertionPosition(at: 3)
-        XCTAssertEqual(pt.x, totalW, accuracy: 0.01)
+        XCTAssertEqual(pt.x, PaneView.tabBarSideInset + totalW, accuracy: 0.01)
         XCTAssertEqual(pt.y, 0)
     }
 
@@ -216,30 +210,25 @@ import XCTest
         let plusX = lastLay.x + lastLay.width
         let plusY = lastLay.y
 
-        // Plus button should fit on same row (y=0)
-        XCTAssertEqual(plusY, 0, "Plus should be on first row")
+        // Plus button should fit on same row (first row, below the top inset)
+        XCTAssertEqual(plusY, PaneView.tabBarSideInset, "Plus should be on first row")
         // plusX + plusButtonWidth should fit within bounds (with tolerance for floating point)
         XCTAssertLessThanOrEqual(plusX + pv.plusButtonWidth, 250 + 1, "Plus button must fit within bounds")
     }
 
     func testWrapLayout_plusButtonPosition_overflowsToNewRow() {
-        // 3 tabs at ~100px in 250px: rows [[0,1], [2]]
-        // Tab 2 at ~100px + 32px = 132px > leftover? Let's use tight width
-        // 2 tabs at 100px = 200px in 220px, leaves 20px. Plus needs 32px → new row
-        let pv = makePaneView(tabTitles: ["~", "~"], width: 220)
+        // 2 tabs at ~62px = 124px in 150px leaves 20px of row — the 32px plus
+        // can't fit and must drop to a new row.
+        let pv = makePaneView(tabTitles: ["~", "~"], width: 150)
         UserDefaults.standard.set(TabOverflowMode.wrap.rawValue, forKey: "tabOverflowMode")
         defer { UserDefaults.standard.removeObject(forKey: "tabOverflowMode") }
 
         let layouts = pv.wrapLayout()
-        _ = layouts.last!
 
-        // Both tabs on row 0, but tabs stretched to fill 220px
-        // Since 200 + 32 > 220, plus goes to new row
-        // wrapLayout should stretch tabs to full width when plus doesn't fit
-        let totalTabWidth = layouts.reduce(0) { $0 + $1.width }
-        XCTAssertEqual(totalTabWidth, 220, accuracy: 1, "Tabs should stretch to full width when plus overflows")
-
-        // Plus position should be at new row (validated via wrapRowCount)
+        // Both tabs on row 0 at natural width; 3 + 200 + 32 > 220 - 3, so the
+        // plus doesn't fit and drops to a row of its own.
+        XCTAssertTrue(layouts.allSatisfy { $0.y == PaneView.tabBarSideInset }, "Both tabs stay on row 0")
+        XCTAssertFalse(pv.plusFitsOnLastRow(layouts), "Plus must not fit after the tabs")
         let rows = Int(pv.tabBarHeight / pv.singleRowTabHeight)
         XCTAssertEqual(rows, 2, "Should have 2 rows: 1 for tabs, 1 for plus button")
     }
@@ -284,28 +273,16 @@ import XCTest
         for width in stride(from: 400, through: 100, by: -5) {
             pv.frame = NSRect(x: 0, y: 0, width: CGFloat(width), height: 300)
 
-            let widths = pv.allTabWidths()
             let layouts = pv.wrapLayout()
             guard !layouts.isEmpty else { continue }
 
             let lastLay = layouts.last!
             let plusY = lastLay.y
             let barHeight = pv.tabBarHeight
-            let availW = CGFloat(width)
 
-            // Mirror the FIXED draw logic: use natural widths like wrapLayout does
-            var lastRowW: CGFloat = 0
-            var rowW: CGFloat = 0
-            for w in widths {
-                if rowW + w > availW && rowW > 0 {
-                    lastRowW = w
-                    rowW = w
-                } else {
-                    lastRowW = rowW + w
-                    rowW += w
-                }
-            }
-            let plusOnLastRow = lastRowW + pv.plusButtonWidth <= availW
+            // Mirror the draw logic: plus follows the last tab when it fits,
+            // else drops onto a row of its own.
+            let plusOnLastRow = pv.plusFitsOnLastRow(layouts)
 
             let actualPlusY = plusOnLastRow ? plusY : plusY + pv.singleRowTabHeight
 

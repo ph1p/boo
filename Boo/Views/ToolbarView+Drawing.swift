@@ -119,7 +119,7 @@ extension ToolbarView {
 
         for (wsIndex, ws) in workspaces.enumerated() {
             let w = measureWorkspace(at: wsIndex)  // cached
-            let pillH: CGFloat = 24
+            let pillH = Self.workspacePillHeight
             let pillY = (barHeight - pillH) / 2
             let isWSHovered = hoveredWorkspaceIndex == wsIndex
 
@@ -345,7 +345,7 @@ extension ToolbarView {
                     let w = measureWorkspace(at: idx)
                     var pillX = trafficLightWidth - workspaceScrollOffset
                     for i in 0..<idx { pillX += measureWorkspace(at: i) + Self.workspaceGap }
-                    let pillH: CGFloat = 24
+                    let pillH = Self.workspacePillHeight
                     let pillY = (barHeight - pillH) / 2
                     let pillRect = CGRect(x: pillX, y: pillY, width: w, height: pillH)
                     let closeRect = workspaceCloseButtonRect(in: pillRect)
@@ -386,7 +386,7 @@ extension ToolbarView {
     private func createWorkspaceGhostWindow(for index: Int, event: NSEvent) {
         let ws = workspaces[index]
         let ghostWidth = min(measureWorkspace(at: index) + 8, 140)
-        let ghostHeight: CGFloat = 24
+        let ghostHeight = Self.workspacePillHeight
 
         let ghostView = NSView(frame: NSRect(x: 0, y: 0, width: ghostWidth, height: ghostHeight))
         ghostView.wantsLayer = true
@@ -497,6 +497,10 @@ extension ToolbarView {
     /// Hit-test which workspace pill contains the given point.
     internal func hitTestWorkspaceIndex(at point: NSPoint) -> Int? {
         guard point.x >= trafficLightWidth && point.x < workspaceZoneEnd + zoneGap else { return nil }
+        // Only the pill band itself is clickable — the strips above and below
+        // stay free so the window can be dragged from there.
+        let pillY = (barHeight - Self.workspacePillHeight) / 2
+        guard point.y >= pillY && point.y < pillY + Self.workspacePillHeight else { return nil }
         var x = trafficLightWidth - workspaceScrollOffset
         for i in workspaces.indices {
             let w = measureWorkspace(at: i)

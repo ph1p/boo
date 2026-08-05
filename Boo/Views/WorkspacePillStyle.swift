@@ -7,9 +7,11 @@ import Cocoa
 /// per surface; fill, accent border, and close button are identical and live here.
 enum WorkspacePillStyle {
     static let cornerRadius: CGFloat = IslandMetrics.controlRadius
-    static let borderWidth: CGFloat = 1.5
-    static let borderAlpha: CGFloat = 0.9
-    static let borderInset: CGFloat = 0.75  // half of borderWidth
+    // Active-pill stroke matches the focused pane's island border: same hairline
+    // weight, same soft accent alpha — one "this is current" marker everywhere.
+    static let borderWidth: CGFloat = IslandMetrics.borderWidth
+    static let borderAlpha: CGFloat = IslandMetrics.focusBorderAlpha
+    static let borderInset: CGFloat = borderWidth / 2
 
     /// Diameter of the hover close-button circle, shared by every surface so the
     /// drawn glyph and its click hit-test can never diverge in size.
