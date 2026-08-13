@@ -30,8 +30,8 @@ index 7310159cc..800a5cbd2 100644
 +        result: *Text,
 +    ) bool {
 +        const core_surface = &surface.core_surface;
-+        core_surface.renderer_state.mutex.lock();
-+        defer core_surface.renderer_state.mutex.unlock();
++        core_surface.renderer_state.mutex.lockUncancelable(global.io());
++        defer core_surface.renderer_state.mutex.unlock(global.io());
 +
 +        const term = core_surface.renderer_state.terminal;
 +        const core_sel = sel.core(term.screens.active) orelse return false;
@@ -44,14 +44,14 @@ index 7310159cc..800a5cbd2 100644
 +        fmt.extra = .styles;
 +        fmt.extra.screen.cursor = true;
 +
-+        var aw: std.Io.Writer.Allocating = .init(global.alloc);
++        var aw: std.Io.Writer.Allocating = .init(global.alloc());
 +        defer aw.deinit();
 +        fmt.format(&aw.writer) catch |err| {
 +            log.warn("error formatting styled text err={}", .{err});
 +            return false;
 +        };
 +
-+        const text = global.alloc.dupeZ(u8, aw.written()) catch |err| {
++        const text = global.alloc().dupeZ(u8, aw.written()) catch |err| {
 +            log.warn("error allocating styled text err={}", .{err});
 +            return false;
 +        };
