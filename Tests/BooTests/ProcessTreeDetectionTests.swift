@@ -110,6 +110,59 @@ final class ProcessTreeDetectionTests: XCTestCase {
         XCTAssertTrue(appeared, "Child must be visible in proc_listchildpids")
     }
 
+    // MARK: - Agent descendant walk
+
+    /// The bug this whole path exists for: agents fork helper shells, so a depth-1 scan of the
+    /// shell's children sees only a shell and reports "no foreground process". The walk must
+    /// find the agent *through* that intermediate shell.
+    ///
+    /// The fake agent is a real `python3` with "codex" in its argv — the one way to manufacture an
+    /// "ai"-category name here. Renaming a binary doesn't work: name resolution reads `proc_name`
+    /// (needs get-task-allow, absent in the runner) or the KERN_PROCARGS2 *exec path*, so `exec -a`
+    /// is invisible and a copied binary loses its signature and is SIGKILLed. A script-runtime
+    /// process resolves through `agentFromArgs` instead, which is exactly the shim path real
+    /// agents take (`npx codex`, `uv run aider`).
+    func testAgentIsFoundBeneathAnIntermediateShell() throws {
+        // bash (the tracked shell) -> sh (the intermediate helper shell) -> python3 (the agent).
+        // The trailing `:` matters: with a single simple command `sh -c` execs into it and
+        // collapses the middle level, which would let the single-child fast path answer and
+        // exercise no walk at all.
+        let script = """
+            #!/bin/bash
+            /bin/sh -c '/usr/bin/python3 -c "import time; time.sleep(60)  # codex"; :'
+            """
+        let scriptPath = NSTemporaryDirectory() + "boo_agent_walk_\(UUID().uuidString).sh"
+        try script.write(toFile: scriptPath, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: scriptPath)
+        defer { try? FileManager.default.removeItem(atPath: scriptPath) }
+
+        guard FileManager.default.isExecutableFile(atPath: "/usr/bin/python3") else {
+            throw XCTSkip("no /usr/bin/python3 to stand in for a script-shim agent")
+        }
+
+        let shell = makeProcess(scriptPath, args: [])
+        defer {
+            // terminate() only signals the outer bash; kill the descendants too or the
+            // 60s python3 outlives the test run.
+            killTree(shell.processIdentifier)
+            shell.terminate()
+            shell.waitUntilExit()
+        }
+
+        var resolved: String?
+        for _ in 0..<60 {
+            // maxAge: 0 defeats the cache — otherwise the first (pre-spawn) nil would be
+            // served back for the rest of the poll.
+            resolved = RemoteExplorer.foregroundProcess(shellPID: shell.processIdentifier, maxAge: 0)
+            if resolved == "codex" { break }
+            Thread.sleep(forTimeInterval: 0.05)
+        }
+
+        XCTAssertEqual(
+            resolved, "codex",
+            "the agent must be found through the intermediate shell, not reported as idle")
+    }
+
     // MARK: - Version-string heuristic
 
     func testVersionStringHeuristic() {
@@ -210,6 +263,12 @@ final class ProcessTreeDetectionTests: XCTestCase {
     }
 
     // MARK: - Helpers
+
+    /// SIGKILL a pid and everything beneath it, deepest first.
+    private func killTree(_ pid: pid_t) {
+        for child in RemoteExplorer.childPIDs(of: pid) { killTree(child) }
+        kill(pid, SIGKILL)
+    }
 
     private func makeProcess(_ path: String, args: [String]) -> Process {
         let process = Process()
