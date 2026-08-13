@@ -77,6 +77,10 @@ ghostty: $(XCRUN_WRAPPER_DIR)/xcrun
 	else \
 		echo "==> GhosttyKit already built"; \
 	fi
+	@if ! cmp -s Vendor/ghostty/include/ghostty.h CGhostty/include/ghostty.h; then \
+		echo "==> Syncing CGhostty/include/ghostty.h from Vendor/ghostty"; \
+		cp Vendor/ghostty/include/ghostty.h CGhostty/include/ghostty.h; \
+	fi
 	@if [ ! -f $(GHOSTTY_LIB) ]; then \
 		echo "ERROR: expected $(GHOSTTY_LIB) after building GhosttyKit."; \
 		echo "       Upstream may have renamed the archive. Emitted instead:"; \
