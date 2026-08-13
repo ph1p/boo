@@ -238,6 +238,37 @@ final class RemoteExplorer: @unchecked Sendable {
         return nil
     }
 
+    /// True when an AI agent process runs anywhere beneath `shellPID`.
+    ///
+    /// `foregroundProcess` only inspects direct children, which misses agents that fork
+    /// helper shells: Claude Code runs tool calls as `zsh -c …` children of the agent, so
+    /// a direct-child scan sees only shells and reports nothing. This walks a few levels
+    /// down so a title-based agent match can be trusted instead of suppressed.
+    ///
+    /// Bounded by `maxDepth` and `maxVisited` — this runs on every terminal title change
+    /// and each `resolvedProcessName` costs a `KERN_PROCARGS2` sysctl.
+    static func hasAIAgentDescendant(shellPID: pid_t, maxDepth: Int = 3) -> Bool {
+        let maxVisited = 32
+        var frontier = childPIDs(of: shellPID)
+        var visited = 0
+        for _ in 0..<maxDepth {
+            if frontier.isEmpty { return false }
+            var next: [pid_t] = []
+            for pid in frontier {
+                visited += 1
+                if visited > maxVisited { return false }
+                if let name = resolvedProcessName(pid: pid),
+                    ProcessIcon.category(for: name) == "ai"
+                {
+                    return true
+                }
+                next.append(contentsOf: childPIDs(of: pid))
+            }
+            frontier = next
+        }
+        return false
+    }
+
     /// Resolve a canonical process name for `pid`.
     /// Some processes (e.g. Claude Code) set their progname to a version string via
     /// setprogname(), so proc_name() returns "2.1.117" instead of "claude".

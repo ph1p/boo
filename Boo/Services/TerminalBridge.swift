@@ -151,10 +151,16 @@ final class TerminalBridge: @unchecked Sendable {
             if let procName = RemoteExplorer.foregroundProcess(shellPID: pid, maxAge: 0) {
                 return (procName, nil, ProcessIcon.category(for: procName), [:])
             }
-            // Suppress AI title matches only when the shell is alive and idle.
-            // If the shell is dead (stale PID), fall through to plain title heuristics.
+            // Suppress AI title matches only when the shell is alive and idle AND the
+            // process tree agrees there is no agent running. `foregroundProcess` returns
+            // nil both for a genuinely idle shell and for an agent it failed to identify
+            // (agents fork helper shells that mask them in the direct-child scan, and
+            // Claude Code setprogname()s to a version string). Treating nil as "idle"
+            // discarded a perfectly good "claude" title match, so only suppress when the
+            // tree has no agent anywhere beneath the shell.
             if kill(pid, 0) == 0 {
-                let name = TerminalBridge.extractProcessName(from: title, suppressAIAgents: true)
+                let suppress = !RemoteExplorer.hasAIAgentDescendant(shellPID: pid)
+                let name = TerminalBridge.extractProcessName(from: title, suppressAIAgents: suppress)
                 return (name, nil, ProcessIcon.category(for: name), [:])
             }
         }
