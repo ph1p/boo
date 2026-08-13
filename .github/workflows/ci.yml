@@ -64,11 +64,12 @@ jobs:
           cache-dependency-path: Boo/Resources/MonacoSource/pnpm-lock.yaml
 
       - name: Install Zig
-        # Pin to the version Ghostty's build.zig.zon requires. `brew install zig`
-        # is unpinned and pulls 0.16.0, which fails Ghostty's requireZig check.
+        # Keep in sync with `minimum_zig_version` in Vendor/ghostty/build.zig.zon:
+        # Ghostty's requireZig reads that field and hard-fails on a mismatch, so this
+        # needs bumping whenever the submodule moves to a revision wanting newer Zig.
         uses: mlugg/setup-zig@v2
         with:
-          version: 0.15.2
+          version: 0.16.0
 
       - name: Cache GhosttyKit build
         uses: actions/cache@v5
@@ -135,11 +136,12 @@ jobs:
           cache-dependency-path: Boo/Resources/MonacoSource/pnpm-lock.yaml
 
       - name: Install Zig
-        # Pin to the version Ghostty's build.zig.zon requires. `brew install zig`
-        # is unpinned and pulls 0.16.0, which fails Ghostty's requireZig check.
+        # Keep in sync with `minimum_zig_version` in Vendor/ghostty/build.zig.zon:
+        # Ghostty's requireZig reads that field and hard-fails on a mismatch, so this
+        # needs bumping whenever the submodule moves to a revision wanting newer Zig.
         uses: mlugg/setup-zig@v2
         with:
-          version: 0.15.2
+          version: 0.16.0
 
       - name: Cache GhosttyKit build
         uses: actions/cache@v5
