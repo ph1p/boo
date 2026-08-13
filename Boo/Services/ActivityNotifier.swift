@@ -1,6 +1,26 @@
 import Cocoa
 import UserNotifications
 
+extension UNUserNotificationCenter {
+    /// `UNUserNotificationCenter.current()` resolves a LaunchServices bundle proxy for the
+    /// running process and raises `NSInternalInconsistencyException` when there is none —
+    /// i.e. whenever this code runs outside a real `.app` bundle. Under `swift test` the
+    /// host is Xcode's test tool, so a single terminal bell reaching the notifier aborted
+    /// the whole test binary. Every notification path goes through here and treats
+    /// "no bundle" as "notifications unavailable" rather than a crash.
+    ///
+    /// The check is on the bundle URL, not `bundleIdentifier`: the test host reports a
+    /// perfectly good identifier (`com.apple.dt.xctest.tool`) while its bundle URL is a
+    /// bare `…/Developer/usr/bin/` directory with no `Info.plist`.
+    nonisolated(unsafe) static let currentIfBundled: UNUserNotificationCenter? = {
+        guard Bundle.main.bundleURL.pathExtension == "app" else {
+            booLog(.debug, .app, "Notifications unavailable — not running from an .app bundle")
+            return nil
+        }
+        return .current()
+    }()
+}
+
 @MainActor
 final class ActivityNotifier: NSObject, UNUserNotificationCenterDelegate {
     static let shared = ActivityNotifier()
@@ -12,9 +32,11 @@ final class ActivityNotifier: NSObject, UNUserNotificationCenterDelegate {
     /// `.notDetermined` — see `deliver(_:)`.
     private var hasResolvedAuthStatus = false
 
+    private static var center: UNUserNotificationCenter? { .currentIfBundled }
+
     private override init() {
         super.init()
-        UNUserNotificationCenter.current().delegate = self
+        Self.center?.delegate = self
         // Permission can be granted (or revoked) in System Settings while Boo runs.
         // Without this, the launch-time cache is the only value we ever see and
         // notifications stay dead until restart.
@@ -28,7 +50,8 @@ final class ActivityNotifier: NSObject, UNUserNotificationCenterDelegate {
     }
 
     func requestPermission() {
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) {
+        guard let center = Self.center else { return }
+        center.requestAuthorization(options: [.alert, .sound]) {
             [weak self] granted, error in
             if let error {
                 booLog(.warning, .app, "Notification permission error: \(error)")
@@ -39,7 +62,8 @@ final class ActivityNotifier: NSObject, UNUserNotificationCenterDelegate {
     }
 
     func refreshCachedStatus() {
-        UNUserNotificationCenter.current().getNotificationSettings { [weak self] settings in
+        guard let center = Self.center else { return }
+        center.getNotificationSettings { [weak self] settings in
             let status = settings.authorizationStatus
             Task { @MainActor [weak self] in
                 self?.cachedAuthStatus = status
@@ -59,6 +83,7 @@ final class ActivityNotifier: NSObject, UNUserNotificationCenterDelegate {
         kind: String, title: String, body: String, sound: UNNotificationSound?,
         workspaceID: UUID, paneID: UUID, tabIndex: Int
     ) {
+        guard let center = Self.center else { return }
         guard cachedAuthStatus == .authorized || !hasResolvedAuthStatus else {
             booLog(
                 .debug, .app,
@@ -76,7 +101,7 @@ final class ActivityNotifier: NSObject, UNUserNotificationCenterDelegate {
             "tabIndex": tabIndex
         ]
         let req = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
-        UNUserNotificationCenter.current().add(req) { error in
+        center.add(req) { error in
             if let error {
                 booLog(.warning, .app, "[Activity] \(kind) notification delivery error: \(error)")
             }
@@ -84,7 +109,8 @@ final class ActivityNotifier: NSObject, UNUserNotificationCenterDelegate {
     }
 
     func authorizationStatus() async -> UNAuthorizationStatus {
-        await UNUserNotificationCenter.current().notificationSettings().authorizationStatus
+        guard let center = Self.center else { return .denied }
+        return await center.notificationSettings().authorizationStatus
     }
 
     func notifyCommandEnded(

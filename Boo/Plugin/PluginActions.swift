@@ -134,7 +134,7 @@ final class PluginActions {
     }
 
     private func sendNotification(title: String, body: String) {
-        let center = UNUserNotificationCenter.current()
+        guard let center = UNUserNotificationCenter.currentIfBundled else { return }
         center.requestAuthorization(options: [.alert]) { granted, _ in
             guard granted else { return }
             let content = UNMutableNotificationContent()
