@@ -53,15 +53,6 @@ class PaneView: NSView {
     private(set) var activeContentView: ContentViewProtocol?
     private var contentViews: [UUID: ContentViewProtocol] = [:]
 
-    /// The tab that `ghosttyView` / `activeContentView` actually belong to.
-    ///
-    /// `pane.activeTab` is NOT a safe key for caching the displayed view: a cross-pane drop
-    /// inserts the incoming tab (shifting activeTabIndex) *before* `forceActivateTab` runs
-    /// `storeCurrentView`, so the still-displayed view belongs to the previous tab while
-    /// `pane.activeTab` already names the incoming one. Caching under that id overwrites the
-    /// just-transferred view and the dragged tab's content is lost.
-    private var displayedTabID: UUID?
-
     // Drag state for tab reordering
     var dragTabIndex: Int?
     var dragStartPoint: NSPoint?
@@ -374,12 +365,11 @@ class PaneView: NSView {
         }
     }
 
-    /// Content-view counterpart to `retire(_: GhosttyView)`. The owner is passed in because,
-    /// unlike `GhosttyView.tabID`, content views carry no tab identity of their own.
-    private func retire(_ cv: ContentViewProtocol, owner: UUID?) {
+    /// Content-view counterpart to `retire(_: GhosttyView)`.
+    private func retire(_ cv: ContentViewProtocol) {
         cv.deactivate()
         cv.removeFromSuperview()
-        if let owner, pane.tabs.contains(where: { $0.id == owner }) {
+        if let owner = cv.tabID, pane.tabs.contains(where: { $0.id == owner }) {
             contentViews[owner] = cv
         } else {
             cv.cleanup()
@@ -392,10 +382,9 @@ class PaneView: NSView {
         // matching note in startContentSession.
         // A content view can never belong to this terminal tab, so it is always displaced.
         if let cv = activeContentView {
-            retire(cv, owner: displayedTabID)
+            retire(cv)
         }
         activeContentView = nil
-        displayedTabID = tab.id
 
         if let stored = tabViews.removeValue(forKey: tab.id) {
             scrollWrapper?.removeFromSuperview()
@@ -434,13 +423,11 @@ class PaneView: NSView {
         // Match on the displayed tab id, not just the content type — two tabs of the same
         // kind (e.g. two editors) would otherwise be treated as interchangeable and the
         // incoming tab would keep showing the previous tab's view.
-        if let active = activeContentView, active.superview == self, displayedTabID == tab.id,
+        if let active = activeContentView, active.superview == self, active.tabID == tab.id,
             active.contentType == tab.contentType
         {
             return
         }
-
-        displayedTabID = tab.id
 
         // Check cache first
         if let stored = contentViews.removeValue(forKey: tab.id) {
@@ -467,8 +454,13 @@ class PaneView: NSView {
         return ContentViewFactory.createView(for: tab.state.contentState)
     }
 
-    /// Wire callbacks for non-terminal content views.
+    /// Wire callbacks for non-terminal content views, and stamp the view with its owning tab.
+    ///
+    /// Every path that adopts a content view goes through here, so this is also where the
+    /// view learns its identity — a transferred view gets re-stamped for its new pane.
     private func wireContentCallbacks(_ contentView: ContentViewProtocol, tabID: UUID) {
+        contentView.tabID = tabID
+
         contentView.onFocused = { [weak self] in
             guard let self else { return }
             self.paneDelegate?.paneView(self, didFocus: self.paneID)
@@ -509,9 +501,6 @@ class PaneView: NSView {
             scrollWrapper?.removeFromSuperview()
             scrollWrapper = nil
             ghosttyView = nil
-            // The displayed view is leaving this pane — stop claiming it, or a later
-            // storeCurrentView would re-cache a view this pane no longer owns.
-            displayedTabID = nil
             return gv
         }
         return nil
@@ -533,12 +522,12 @@ class PaneView: NSView {
         }
         // The dragged tab was likely the active/displayed one — extractTab already
         // shifted activeTabIndex, so pane.activeTab no longer matches this tabID.
-        // Just hand over the currently displayed view.
-        if let cv = activeContentView {
+        // Hand over the displayed view only if it really belongs to this tab; see the
+        // matching guard in extractGhosttyView.
+        if let cv = activeContentView, cv.tabID == tabID {
             cv.deactivate()
             cv.removeFromSuperview()
             activeContentView = nil
-            displayedTabID = nil
             return cv
         }
         return nil
@@ -550,10 +539,10 @@ class PaneView: NSView {
     }
 
     func editorView(for tabID: UUID) -> EditorContentView? {
-        // Key on the displayed tab, not `pane.activeTab` — after a cross-pane drop those
+        // Key on the view's own tab, not `pane.activeTab` — after a cross-pane drop those
         // disagree, and this feeds editor lookup/save.
-        if displayedTabID == tabID, let activeContentView = activeContentView as? EditorContentView {
-            return activeContentView
+        if let editor = activeContentView as? EditorContentView, editor.tabID == tabID {
+            return editor
         }
         return contentViews[tabID] as? EditorContentView
     }
@@ -961,6 +950,10 @@ class PaneView: NSView {
         activeContentView?.cleanup()
         activeContentView?.removeFromSuperview()
         let pluginView = PluginTabContentView(view: view, title: title, icon: icon)
+        // This path assigns activeContentView directly rather than going through
+        // startContentSession, so stamp the owning tab here or the view would be
+        // unidentifiable when the pane later caches or retires it.
+        pluginView.tabID = pane.tabs.last?.id
         activeContentView = pluginView
         addSubview(pluginView)
         needsLayout = true
@@ -1031,8 +1024,8 @@ class PaneView: NSView {
     }
 
     private func storeCurrentView() {
-        // Cache under the id of the tab each view actually belongs to, never
-        // `pane.activeTab` — see `displayedTabID`.
+        // Each view is cached under the tab it belongs to (`tabID`), never `pane.activeTab` —
+        // mid-drop those disagree and the just-transferred view would be overwritten.
         if let gv = ghosttyView {
             scrollWrapper?.removeFromSuperview()
             scrollWrapper = nil
@@ -1042,18 +1035,16 @@ class PaneView: NSView {
 
         if let cv = activeContentView {
             activeContentView = nil
-            retire(cv, owner: displayedTabID)
+            retire(cv)
         }
-
-        displayedTabID = nil
     }
 
     func persistContentStateToModel() {
         for (index, tab) in pane.tabs.enumerated() where tab.contentType != .terminal {
-            // `displayedTabID`, not `pane.activeTab` — a session save right after a
+            // The view's own tab, not `pane.activeTab` — a session save right after a
             // cross-pane drop would otherwise persist the displayed view's state under
             // the incoming tab's index.
-            if displayedTabID == tab.id, let activeContentView {
+            if let activeContentView, activeContentView.tabID == tab.id {
                 pane.updateContentState(at: index, activeContentView.saveState())
             } else if let contentView = contentViews[tab.id] {
                 pane.updateContentState(at: index, contentView.saveState())

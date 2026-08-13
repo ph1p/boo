@@ -43,6 +43,31 @@ extension ContentViewProtocol {
     }
 }
 
+/// Key for `ContentViewProtocol.tabID`'s associated-object storage.
+private nonisolated(unsafe) var contentViewTabIDKey: UInt8 = 0
+
+extension ContentViewProtocol {
+    /// The tab this view belongs to, stamped when the view is adopted by a pane.
+    ///
+    /// Mirrors `GhosttyView.tabID` so both view kinds are self-identifying: a pane can cache
+    /// or retire a displayed view without a side table saying which tab owns it.
+    ///
+    /// `pane.activeTab` is NOT a safe substitute. A cross-pane drop inserts the incoming tab
+    /// (shifting activeTabIndex) *before* `forceActivateTab` re-displays, so in that window
+    /// the displayed view belongs to the previous tab while `pane.activeTab` already names the
+    /// incoming one — caching under that id overwrote the just-transferred view and the
+    /// dragged tab's content was lost.
+    ///
+    /// Backed by an associated object rather than a protocol requirement so conformers need
+    /// no stored property (and no initializer changes).
+    var tabID: UUID? {
+        get { objc_getAssociatedObject(self, &contentViewTabIDKey) as? UUID }
+        set {
+            objc_setAssociatedObject(self, &contentViewTabIDKey, newValue, .OBJC_ASSOCIATION_RETAIN)
+        }
+    }
+}
+
 /// Factory for creating content views based on content type.
 @MainActor
 enum ContentViewFactory {
