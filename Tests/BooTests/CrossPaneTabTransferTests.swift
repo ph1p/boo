@@ -107,6 +107,44 @@ private final class StubContentView: NSView, ContentViewProtocol {
             "switching back must restore the original tab's own view")
     }
 
+    /// A session save right after a drop must attribute each view's state to the tab that
+    /// owns it. Keying on `pane.activeTab` persisted the displaced view's state under the
+    /// incoming tab's index, silently corrupting the restored session.
+    func testPersistAfterDropAttributesStateToOwningTab() {
+        let destPane = Pane()
+        let dest = PaneView(paneID: UUID(), pane: destPane)
+
+        let existingTab = makeEditorTab(title: "existing")
+        destPane.insertTab(existingTab, at: 0)
+        let existingView = StubContentView(contentType: .editor, marker: "existing")
+        existingView.stateToSave = .editor(EditorContentState(filePath: "/tmp/existing.txt"))
+        dest.insertContentView(existingView, for: existingTab.id)
+        dest.forceActivateTab(0)
+
+        // The drop's staleness window: insertTab has shifted activeTabIndex to the incoming
+        // tab, but the displayed view still belongs to `existingTab`. A save landing here
+        // (window close races a drop) must still attribute state correctly.
+        let incomingTab = makeEditorTab(title: "incoming")
+        let incomingView = StubContentView(contentType: .editor, marker: "incoming")
+        incomingView.stateToSave = .editor(EditorContentState(filePath: "/tmp/incoming.txt"))
+        destPane.insertTab(incomingTab, at: 1)
+        dest.insertContentView(incomingView, for: incomingTab.id)
+
+        dest.persistContentStateToModel()
+
+        // Each tab must carry the path from the view it actually owns. Keying on
+        // `pane.activeTab` wrote the displaced (existing) view's state to both rows.
+        for (tab, expected) in [(existingTab, "/tmp/existing.txt"), (incomingTab, "/tmp/incoming.txt")] {
+            let stored = destPane.tabs.first(where: { $0.id == tab.id })
+            guard case .editor(let state)? = stored?.state.contentState else {
+                return XCTFail("expected editor state for the \(expected) tab")
+            }
+            XCTAssertEqual(
+                state.filePath, expected,
+                "each tab must persist its OWN view's state, not the displayed view's")
+        }
+    }
+
     /// Extracting the displayed view for a drag must not leave the source pane still claiming
     /// it; a later view store in the source must not re-cache a view it handed away.
     func testExtractedViewIsNotReCachedBySource() {

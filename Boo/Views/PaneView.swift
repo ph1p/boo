@@ -501,8 +501,9 @@ class PaneView: NSView {
         }
         // The dragged tab was likely the active/displayed one — extractTab already
         // shifted activeTabIndex, so pane.activeTab no longer matches this tabID.
-        // Just hand over the currently displayed view.
-        if let gv = ghosttyView {
+        // Hand over the displayed view only if it really belongs to this tab: dragging a
+        // tab that was never displayed must return nil rather than the active tab's view.
+        if let gv = ghosttyView, gv.tabID == tabID {
             // Remove from scroll wrapper without destroying
             gv.removeFromSuperview()
             scrollWrapper?.removeFromSuperview()
@@ -549,7 +550,9 @@ class PaneView: NSView {
     }
 
     func editorView(for tabID: UUID) -> EditorContentView? {
-        if pane.activeTab?.id == tabID, let activeContentView = activeContentView as? EditorContentView {
+        // Key on the displayed tab, not `pane.activeTab` — after a cross-pane drop those
+        // disagree, and this feeds editor lookup/save.
+        if displayedTabID == tabID, let activeContentView = activeContentView as? EditorContentView {
             return activeContentView
         }
         return contentViews[tabID] as? EditorContentView
@@ -1047,7 +1050,10 @@ class PaneView: NSView {
 
     func persistContentStateToModel() {
         for (index, tab) in pane.tabs.enumerated() where tab.contentType != .terminal {
-            if pane.activeTab?.id == tab.id, let activeContentView {
+            // `displayedTabID`, not `pane.activeTab` — a session save right after a
+            // cross-pane drop would otherwise persist the displayed view's state under
+            // the incoming tab's index.
+            if displayedTabID == tab.id, let activeContentView {
                 pane.updateContentState(at: index, activeContentView.saveState())
             } else if let contentView = contentViews[tab.id] {
                 pane.updateContentState(at: index, contentView.saveState())
