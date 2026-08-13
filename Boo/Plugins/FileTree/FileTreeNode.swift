@@ -36,9 +36,16 @@ final class FileTreeNode: Identifiable, ObservableObject {
                 options: []
             )
 
+            // Build each child path from this node's own path rather than taking the
+            // enumerator's `u.path`: FileManager hands back *resolved* paths (a cwd of
+            // `/var/folders/…` lists as `/private/var/folders/…`), which would leave a
+            // child in a different path form from its parent. Anything that compares node
+            // paths across levels then silently misses — `refresh(changedDirs:)` skips
+            // descendants, and `restoreExpanded` fails to match saved keys.
             let entries: [(name: String, path: String, isDir: Bool)] = urls.compactMap { u in
                 let isDir = (try? u.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) ?? false
-                return (name: u.lastPathComponent, path: u.path, isDir: isDir)
+                let name = u.lastPathComponent
+                return (name: name, path: (path as NSString).appendingPathComponent(name), isDir: isDir)
             }
 
             let sorted = entries.sorted { lhs, rhs in
@@ -46,33 +53,51 @@ final class FileTreeNode: Identifiable, ObservableObject {
                 return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
             }
 
+            // Index existing children by path so reuse is O(n) rather than O(n²) —
+            // this runs for every expanded directory on every FS event, and a
+            // node_modules-sized listing makes the linear scan bite.
+            var existingByPath: [String: FileTreeNode] = [:]
+            for child in children ?? [] { existingByPath[child.path] = child }
+
+            var reusedAll = true
             let newChildren = sorted.map { entry -> FileTreeNode in
-                if let existing = children?.first(where: { $0.path == entry.path && $0.isDirectory == entry.isDir }) {
+                if let existing = existingByPath[entry.path], existing.isDirectory == entry.isDir {
                     return existing
                 }
+                reusedAll = false
                 let child = FileTreeNode(name: entry.name, path: entry.path, isDirectory: entry.isDir)
                 child.root = treeRoot
                 return child
             }
 
+            // Skip the revision bump when nothing changed. A watched directory that
+            // churns (build output, node_modules) otherwise re-flattens the whole
+            // tree on every FS event, which shows up as visible reload flicker.
+            let unchanged = reusedAll && children?.count == newChildren.count
             children = newChildren
-            treeRoot.treeRevision &+= 1
+            if !unchanged { treeRoot.treeRevision &+= 1 }
         } catch {
+            let wasEmpty = children?.isEmpty ?? false
             children = []
-            treeRoot.treeRevision &+= 1
+            if !wasEmpty { treeRoot.treeRevision &+= 1 }
         }
     }
 
     /// Collect all expanded directory paths in this subtree.
     func expandedPaths() -> Set<String> {
         var result = Set<String>()
-        if isDirectory && isExpanded {
-            result.insert(path)
-            for child in children ?? [] {
-                result.formUnion(child.expandedPaths())
-            }
-        }
+        collectExpandedPaths(into: &result)
         return result
+    }
+
+    /// One accumulator threaded through the recursion — a `Set` per node plus a
+    /// `formUnion` at every level is a lot of allocation for a deep tree.
+    private func collectExpandedPaths(into result: inout Set<String>) {
+        guard isDirectory, isExpanded else { return }
+        result.insert(path)
+        for child in children ?? [] {
+            child.collectExpandedPaths(into: &result)
+        }
     }
 
     /// Restore expanded state from a set of previously expanded paths.
@@ -90,11 +115,43 @@ final class FileTreeNode: Identifiable, ObservableObject {
         }
     }
 
+    /// Refresh only the directories that an FS-event batch actually touched.
+    ///
+    /// A full `refreshAll` re-reads every expanded directory in the tree; with a deep
+    /// tree open that is a lot of `contentsOfDirectory` calls per event burst, when the
+    /// events usually name one or two directories. A node is re-read when it *is* a
+    /// changed directory; it is descended into when a changed directory lies below it.
+    func refresh(changedDirs: Set<String>) {
+        guard isDirectory else { return }
+        let treeRoot = root ?? self
+        let before = treeRoot.treeRevision
+        refreshMatching(changedDirs)
+        if treeRoot.treeRevision != before {
+            objectWillChange.send()
+        }
+    }
+
+    private func refreshMatching(_ changedDirs: Set<String>) {
+        // Anything below this node lives under "path/" — no descendant can be affected
+        // unless a changed directory is this one or sits inside it.
+        let prefix = path.hasSuffix("/") ? path : path + "/"
+        let touchesSubtree = changedDirs.contains { $0 == path || $0.hasPrefix(prefix) }
+        guard touchesSubtree else { return }
+        if children != nil, changedDirs.contains(path) {
+            loadChildren()
+        }
+        for child in children ?? [] where child.isDirectory && child.isExpanded {
+            child.refreshMatching(changedDirs)
+        }
+    }
+
     /// Recursively refresh this node and all expanded children.
     /// When called on the root, triggers `objectWillChange` so SwiftUI
     /// picks up deep child-list mutations that would otherwise be invisible.
     func refreshAll(isRoot: Bool = true) {
         guard isDirectory else { return }
+        let treeRoot = root ?? self
+        let before = treeRoot.treeRevision
         if children != nil {
             loadChildren()
         }
@@ -104,8 +161,9 @@ final class FileTreeNode: Identifiable, ObservableObject {
                 child.refreshAll(isRoot: false)
             }
         }
-        // Force SwiftUI to re-render the tree from the root.
-        if isRoot {
+        // Force SwiftUI to re-render the tree from the root — but only when a child
+        // list actually changed, so FS-event storms don't repaint the whole tree.
+        if isRoot && treeRoot.treeRevision != before {
             objectWillChange.send()
         }
     }

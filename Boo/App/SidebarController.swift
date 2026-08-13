@@ -37,8 +37,10 @@ final class SidebarController {
     /// Currently active plugin tab ID.
     var activePluginTabID: String?
 
-    /// Cached detail views per plugin, reused when context and generations match.
-    var cachedDetailViews: [String: (context: TerminalContext, generations: [UInt64], view: AnyView)] = [:]
+    /// Last context + section generations rendered per plugin. When both match, the
+    /// on-screen panel is already current and the cycle is a no-op. Deliberately does
+    /// not retain the view: an `AnyView` keeps the whole plugin closure set alive.
+    var cachedDetailViews: [String: (context: TerminalContext, generations: [UInt64])] = [:]
 
     /// Generation counter per plugin — incremented only when the view is recreated.
     var pluginViewGeneration: [String: UInt64] = [:]

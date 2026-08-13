@@ -20,6 +20,23 @@ final class PluginScrollView: NSScrollView {
     private final class FlippedClipView: NSClipView {
         override var isFlipped: Bool { true }
     }
+
+    /// maxWidth: .infinity fills the hosting view width.
+    /// maxHeight: .infinity + topLeading pins content to the top when the hosting
+    /// view is stretched taller than the content by the greaterThanOrEqualTo constraint.
+    static func documentContent(_ content: AnyView) -> AnyView {
+        AnyView(content.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading))
+    }
+
+    /// Swap the hosted content without rebuilding the scroll view, preserving the
+    /// user's scroll position (a rootView swap can re-lay out the document view).
+    func setContent(_ content: AnyView) {
+        guard let hosting = documentView as? NSHostingView<AnyView> else { return }
+        let offset = contentView.bounds.origin
+        hosting.rootView = Self.documentContent(content)
+        contentView.scroll(to: offset)
+        reflectScrolledClipView(contentView)
+    }
 }
 
 extension MainWindowController {
@@ -39,9 +56,12 @@ extension MainWindowController {
         return remapped
     }
 
-    func syncSidebarPanelStateFromView() {
-        guard let activeTabID = activePluginTabID,
-            let panel = pluginPanelViews[activeTabID] as? SidebarPanelView
+    /// Persist a panel's heights + scroll offsets into the controller.
+    /// Defaults to the active plugin tab; pass `pluginTabID` for a panel that is
+    /// about to be discarded before it becomes active.
+    func syncSidebarPanelStateFromView(pluginTabID: String? = nil) {
+        guard let tabID = pluginTabID ?? activePluginTabID,
+            let panel = pluginPanelViews[tabID] as? SidebarPanelView
         else { return }
         panel.capturePersistentState()
         savedSidebarHeights = panel.savedSectionHeights
@@ -384,20 +404,14 @@ extension MainWindowController {
 
         // Cache with generations so we detect data changes
         viewGenerationCounter += 1
-        cachedDetailViews[id] = (context: context, generations: newGenerations, view: sections[0].content)
-
-        // Remove old panel for this plugin
-        pluginPanelViews[id]?.removeFromSuperview()
-        pluginPanelViews.removeValue(forKey: id)
+        cachedDetailViews[id] = (context: context, generations: newGenerations)
 
         // Hide all other plugin panels
         for (otherID, view) in pluginPanelViews where otherID != id {
             view.isHidden = true
         }
 
-        if sections.count == 1 {
-            installSingleSection(sections[0], pluginID: id)
-        } else {
+        if sections.count > 1 {
             // Auto-expand the first section unless the user has explicitly collapsed it.
             if let firstID = sections.first?.id,
                 !expandedPluginIDs.contains(firstID),
@@ -405,6 +419,39 @@ extension MainWindowController {
             {
                 expandedPluginIDs.insert(firstID)
             }
+        }
+
+        // In-place update path: the panel already on screen has the layout this plugin
+        // wants (single scroll view vs. stacked sections), so swap content into it
+        // instead of tearing it down. A rebuild throws away scroll position and every
+        // SwiftUI @StateObject in the section (file-tree expansion, rename/drag state),
+        // which is why the explorer used to jump to the top whenever an unrelated
+        // context field (foreground process, git status) changed.
+        switch (pluginPanelViews[id], sections.count) {
+        case (let scrollView as PluginScrollView, 1):
+            scrollView.setContent(sections[0].content)
+            scrollView.isHidden = false
+            return
+        case (let panel as SidebarPanelView, let count) where count > 1:
+            // `updateSections` owns the in-place-vs-rebuild decision internally.
+            panel.setTerminalID(context.terminalID)
+            panel.updateSections(sections, expandedIDs: expandedPluginIDs)
+            panel.isHidden = false
+            return
+        default:
+            break
+        }
+
+        // Layout kind changed — remove old panel for this plugin and build a fresh one.
+        if let old = pluginPanelViews[id] {
+            syncSidebarPanelStateFromView(pluginTabID: id)
+            old.removeFromSuperview()
+            pluginPanelViews.removeValue(forKey: id)
+        }
+
+        if sections.count == 1 {
+            installSingleSection(sections[0], pluginID: id)
+        } else {
             installMultiSection(sections, pluginID: id, context: context)
         }
     }
@@ -414,12 +461,7 @@ extension MainWindowController {
         _ section: SidebarSection, pluginID: String
     ) {
         let container: NSView
-        // maxWidth: .infinity fills the hosting view width.
-        // maxHeight: .infinity + topLeading pins content to the top when the hosting
-        // view is stretched taller than the content by the greaterThanOrEqualTo constraint.
-        let contentView = AnyView(
-            section.content.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        )
+        let contentView = PluginScrollView.documentContent(section.content)
 
         // sizingOptions = [.intrinsicContentSize] lets Auto Layout see the SwiftUI
         // content's natural height so the document view grows to fit tall content

@@ -135,7 +135,8 @@ final class DockerPluginNew: BooPluginProtocol {
                         theme: AppSettings.shared.theme,
                         fontScale: context.fontScale)),
                 prefersOuterScrollView: false,
-                generation: 0)
+                // The view renders the error text, so that text is the content identity.
+                generation: SidebarSection.generation(for: ["error", error]))
             return SidebarTab(
                 id: SidebarTabID(manifest.id),
                 icon: manifest.icon, label: manifest.name,

@@ -25,7 +25,12 @@ private struct MockPluginContent: View {
 }
 
 nonisolated(unsafe) private var sectionGenCounter: UInt64 = 0
-private func makeSection(id: String, name: String = "Test") -> SidebarSection {
+/// `generation: nil` bumps the shared counter, so each section looks like fresh
+/// content; pass an explicit generation to re-send the same content (or simulate a
+/// data change) across `updateSections` calls.
+private func makeSection(
+    id: String, name: String = "Test", generation: UInt64? = nil
+) -> SidebarSection {
     sectionGenCounter += 1
     return SidebarSection(
         id: id,
@@ -33,7 +38,7 @@ private func makeSection(id: String, name: String = "Test") -> SidebarSection {
         icon: "star",
         content: AnyView(MockPluginContent(label: name)),
         prefersOuterScrollView: true,
-        generation: sectionGenCounter
+        generation: generation ?? sectionGenCounter
     )
 }
 
@@ -1426,5 +1431,73 @@ private func makeNonGrowableSection(id: String, name: String = "Info") -> Sideba
         XCTAssertGreaterThan(
             handle.frame.minY, v.sectionStates[1].headerView.frame.minY,
             "handle must not float above the intervening collapsed header")
+    }
+
+    // MARK: - In-place content reuse
+
+    /// Re-sending the same sections must reuse the existing content views. A rebuild
+    /// throws away the SwiftUI state inside them (file-tree expansion, rename/drag
+    /// state) and resets scroll — the "explorer jumps to top" bug.
+    func testUpdateSectionsReusesContentContainers() {
+        let v = makePanelView()
+        let sections = [makeSection(id: "a", generation: 1), makeSection(id: "b", generation: 1)]
+        v.setTerminalID(UUID())
+        v.updateSections(sections, expandedIDs: ["a", "b"])
+
+        let containerA = v.sectionStates[0].contentContainer
+        let containerB = v.sectionStates[1].contentContainer
+        XCTAssertNotNil(containerA)
+        XCTAssertNotNil(containerB)
+
+        v.updateSections(sections, expandedIDs: ["a", "b"])
+
+        XCTAssertTrue(
+            v.sectionStates[0].contentContainer === containerA,
+            "Unchanged section must keep its content container")
+        XCTAssertTrue(
+            v.sectionStates[1].contentContainer === containerB,
+            "Unchanged section must keep its content container")
+    }
+
+    /// Even when the data generation bumps, only the hosted rootView is swapped —
+    /// the scroll view itself must survive so the scroll position does.
+    func testContentGenerationBumpKeepsScrollViewAndOffset() {
+        let v = makePanelView()
+        let tid = UUID()
+        v.setTerminalID(tid)
+        v.updateSections([makeSection(id: "a", generation: 1)], expandedIDs: ["a"])
+
+        let container = v.sectionStates[0].contentContainer
+        guard let scrollView = container as? NSScrollView else {
+            return XCTFail("expected an outer scroll view for a growable section")
+        }
+        scrollView.contentView.scroll(to: NSPoint(x: 0, y: 37))
+        scrollView.reflectScrolledClipView(scrollView.contentView)
+
+        v.updateSections([makeSection(id: "a", generation: 2)], expandedIDs: ["a"])
+
+        XCTAssertTrue(
+            v.sectionStates[0].contentContainer === container,
+            "A generation bump must swap rootView in place, not rebuild the scroll view")
+        XCTAssertEqual(
+            scrollView.contentView.bounds.origin.y, 37, accuracy: 1,
+            "Scroll position must survive a content refresh")
+    }
+
+    /// A changed section list is the one case that legitimately rebuilds.
+    func testSectionListChangeRebuildsContainers() {
+        let v = makePanelView()
+        v.setTerminalID(UUID())
+        v.updateSections([makeSection(id: "a", generation: 1)], expandedIDs: ["a"])
+        let containerA = v.sectionStates[0].contentContainer
+
+        v.updateSections(
+            [makeSection(id: "a", generation: 1), makeSection(id: "b", generation: 1)],
+            expandedIDs: ["a", "b"])
+
+        XCTAssertEqual(v.sectionStates.map(\.id), ["a", "b"])
+        XCTAssertFalse(
+            v.sectionStates[0].contentContainer === containerA,
+            "A different section list must rebuild")
     }
 }

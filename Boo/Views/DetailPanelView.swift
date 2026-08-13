@@ -106,6 +106,11 @@ class SidebarPanelView: NSView {
     private(set) var currentTerminalID: UUID?
     /// Saved scroll offsets keyed by "terminalID:sectionID".
     private var savedScrollOffsets: [String: NSPoint] = [:]
+    /// The terminal whose content is currently on screen. Lags `currentTerminalID`
+    /// between `setTerminalID` and the `updateSections` that applies the new content,
+    /// which is how `updateSections` knows the visible scroll positions still belong
+    /// to the outgoing terminal and must not be snapshotted under the new key.
+    private var displayedTerminalID: UUID?
 
     /// Drag handle views placed between two expanded sections.
     private var dragHandles: [SidebarDragHandleView] = []
@@ -200,6 +205,24 @@ class SidebarPanelView: NSView {
 
         if newIDs == oldIDs {
             var hadCollapseOrExpand = false
+            // Nothing below can disturb the clip view unless a content view is swapped,
+            // created, or torn down — so skip the save/restore round trip entirely on a
+            // steady-state cycle (focus/title/process change with identical content).
+            let contentWillChange = sections.contains { section in
+                sectionGenerations[section.id] != section.generation
+                    || expandedIDs.contains(section.id)
+                        != sectionStates.first(where: { $0.id == section.id })?.isExpanded
+            }
+            // Snapshot live scroll positions first: swapping a hosting view's rootView
+            // can reset the clip view's origin, and the persisted offsets may be older
+            // than what's on screen right now. Skipped right after a terminal switch —
+            // the visible positions still belong to the outgoing terminal, which
+            // `setTerminalID` already saved under its own key.
+            let terminalSwitched = displayedTerminalID != currentTerminalID
+            if contentWillChange, !terminalSwitched, let tid = currentTerminalID {
+                saveScrollOffsets(for: tid)
+            }
+            displayedTerminalID = currentTerminalID
             for (i, section) in sections.enumerated() {
                 let wasExpanded = sectionStates[i].isExpanded
                 let isNowExpanded = expandedIDs.contains(section.id)
@@ -250,7 +273,8 @@ class SidebarPanelView: NSView {
                 }
             }
             layoutAllSections()
-            if let tid = currentTerminalID {
+            // Only re-apply offsets when something could have moved the clip view.
+            if contentWillChange || terminalSwitched, let tid = currentTerminalID {
                 restoreScrollOffsets(for: tid)
             }
             return
@@ -265,6 +289,7 @@ class SidebarPanelView: NSView {
         }
 
         // Full rebuild — reset generation tracking
+        displayedTerminalID = currentTerminalID
         sectionGenerations.removeAll()
         intrinsicSizeObservations.removeAll()
         for handle in dragHandles { handle.removeFromSuperview() }

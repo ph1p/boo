@@ -237,7 +237,7 @@ class ThemedSplitView: NSSplitView {
     var isIgnoringSidebarLayoutSettingsRefresh: Bool {
         sidebarSettingsRefreshSuppressionDepth > 0
     }
-    var cachedDetailViews: [String: (context: TerminalContext, generations: [UInt64], view: AnyView)] {
+    var cachedDetailViews: [String: (context: TerminalContext, generations: [UInt64])] {
         get { sidebarController?.cachedDetailViews ?? [:] }
         set { sidebarController?.cachedDetailViews = newValue }
     }

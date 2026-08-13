@@ -234,7 +234,7 @@ extension GitPlugin {
     /// Watch CWD for `.git` appearing (e.g. after `git init`).
     private func setupCwdWatcher(cwd: String) {
         cwdWatcher?.stop()
-        cwdWatcher = FileSystemWatcher(path: cwd) { [weak self] in
+        cwdWatcher = FileSystemWatcher(path: cwd) { [weak self] _ in
             guard let self else { return }
             let gitDir = (cwd as NSString).appendingPathComponent(".git")
             guard FileManager.default.fileExists(atPath: gitDir) else { return }
@@ -252,15 +252,12 @@ extension GitPlugin {
         gitDirWatcher?.stop()
         workTreeWatcher?.stop()
 
-        let debouncedRefresh: (TimeInterval) -> Void = { [weak self] delay in
+        let debouncedRefresh: @MainActor (TimeInterval) -> Void = { [weak self] delay in
             guard let self else { return }
-            self.debounceWork?.cancel()
-            let work = DispatchWorkItem { [weak self] in
+            self.statusDebouncer.schedule(delay: delay) { [weak self] in
                 guard let self else { return }
                 self.refreshGitStatus(cwd: self.lastRefreshedPath ?? repoRoot, repoRoot: repoRoot)
             }
-            self.debounceWork = work
-            DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
         }
 
         // Watch .git/ but filter to only the files that indicate meaningful state changes:
@@ -275,7 +272,7 @@ extension GitPlugin {
                     return name == "HEAD" || name == "index" || name == "packed-refs"
                         || name == "MERGE_HEAD" || name == "CHERRY_PICK_HEAD"
                 },
-                onChange: { debouncedRefresh(0.15) }
+                onChange: { _ in debouncedRefresh(0.15) }
             )
             gitDirWatcher?.start()
         }
@@ -290,7 +287,7 @@ extension GitPlugin {
                 // Ignore anything inside .git/
                 !path.contains("/.git/") && !path.hasSuffix("/.git")
             },
-            onChange: { debouncedRefresh(0.5) }
+            onChange: { _ in debouncedRefresh(0.5) }
         )
         workTreeWatcher?.start()
     }

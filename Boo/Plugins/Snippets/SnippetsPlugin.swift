@@ -24,6 +24,13 @@ final class SnippetsPlugin: BooPluginProtocol {
 
     var subscribedEvents: Set<PluginEvent> { [] }
 
+    /// `SnippetsPanelView` observes the snippet store itself, so the list stays live without
+    /// a rootView swap — and a swap would reset its editing state and scroll offset. Only
+    /// `fontScale`, the one value baked in below, needs to force a rebuild.
+    func sectionGeneration(context: PluginContext) -> UInt64 {
+        SidebarSection.generation(for: ["fontScale", context.fontScale.generationKey])
+    }
+
     func makeDetailView(context: PluginContext) -> AnyView? {
         let act = actions
         return AnyView(

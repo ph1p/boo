@@ -140,7 +140,7 @@ final class DockerService: ObservableObject, @unchecked Sendable {
     /// File descriptor for the event stream connection. -1 when not streaming.
     private var eventFD: Int32 = -1
     private var eventSource: DispatchSourceRead?
-    private var refreshDebounce: DispatchWorkItem?
+    private let refreshDebounce = Debouncer(delay: 0.3)
 
     /// Connect a Unix domain socket to the given path.
     /// Returns the fd on success, -1 on failure. Caller owns the fd.
@@ -277,8 +277,7 @@ final class DockerService: ObservableObject, @unchecked Sendable {
     }
 
     private func stopEventStream() {
-        refreshDebounce?.cancel()
-        refreshDebounce = nil
+        refreshDebounce.cancel()
         eventSource?.cancel()
         eventSource = nil
         if eventFD >= 0 {
@@ -337,12 +336,9 @@ final class DockerService: ObservableObject, @unchecked Sendable {
     }
 
     private func debouncedRefreshAll() {
-        refreshDebounce?.cancel()
-        let work = DispatchWorkItem { [weak self] in
+        refreshDebounce.schedule { [weak self] in
             self?.refreshAll()
         }
-        refreshDebounce = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: work)
     }
 
     // MARK: - Refresh All

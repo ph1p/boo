@@ -20,9 +20,12 @@ final class RemoteFileTreePlugin: BooPluginProtocol {
     /// Cached remote tree roots keyed by "session:path".
     private var cachedRemoteRoots: [String: RemoteFileTreeNode] = [:]
 
-    /// Expanded directory paths per terminal (tab) ID.
-    private var expandedState: [UUID: Set<String>] = [:]
-    /// Cache key per terminal so we can find the right root on save.
+    /// Open folders per `"host:path"` cache key — see `ExpandedStateStore` for why the
+    /// key is the root and not the terminal.
+    private var expandedState = ExpandedStateStore()
+    /// Row actions, built once and reused — only `isAIAgentRunning` varies per cycle.
+    private var treeActions: FileTreeActions?
+    /// Cache key per terminal, so a re-render in the same context is recognisable.
     private var terminalCacheKey: [UUID: String] = [:]
     /// The last terminal ID we rendered for.
     private var lastTerminalID: UUID?
@@ -36,10 +39,10 @@ final class RemoteFileTreePlugin: BooPluginProtocol {
 
     var subscribedEvents: Set<PluginEvent> { [.processChanged, .remoteDirectoryListed, .terminalClosed] }
 
-    /// Drop per-terminal state when a terminal closes so these dicts don't grow
-    /// one entry per terminal ever opened. Mirrors LocalFileTreePlugin.
+    /// Drop the per-terminal cwd mapping when a terminal closes so the dict doesn't grow
+    /// one entry per terminal ever opened. Mirrors LocalFileTreePlugin — the expanded
+    /// state itself is keyed by root and outlives the terminal on purpose.
     func terminalClosed(terminalID: UUID) {
-        expandedState.removeValue(forKey: terminalID)
         terminalCacheKey.removeValue(forKey: terminalID)
         if lastTerminalID == terminalID { lastTerminalID = nil }
     }
@@ -51,57 +54,81 @@ final class RemoteFileTreePlugin: BooPluginProtocol {
         return dirName.isEmpty ? nil : dirName
     }
 
+    /// `RemoteFileTreeView` observes its root node, so a directory listing arriving does not
+    /// need a rootView swap — and a swap would collapse the tree and reset its scroll offset.
+    /// Only the identity of the node itself (host + resolved root path) and the AI flag baked
+    /// into the row actions change what the section renders. Mirrors `LocalFileTreePlugin`.
+    func sectionGeneration(context: PluginContext) -> UInt64 {
+        guard let session = context.terminal.remoteSession else { return 0 }
+        let key = Self.cacheKey(for: Self.remoteRootPath(for: context.terminal), session: session)
+        let isAIAgent = FileTreeActions.isAIAgentContext(context)
+        return SidebarSection.generation(for: [key, isAIAgent ? "ai" : "plain"])
+    }
+
     // MARK: - Detail View
 
     func makeDetailView(context: PluginContext) -> AnyView? {
         guard let session = context.terminal.remoteSession else { return nil }
 
-        let act = self.actions
-        let isAI = ProcessIcon.category(for: context.terminal.processName) == "ai"
-        let treeActions = FileTreeActions(
-            onFileClicked: { path in
-                act?.pastePath(path)
-            },
-            onOpenInTab: { path in
-                act?.openDirectoryInNewTab?(path)
-            },
-            onOpenInPane: { path in
-                act?.openDirectoryInNewPane?(path)
-            },
-            onCopyPath: { path in
-                act?.handle(DSLAction(type: "copy", path: path, command: nil, text: nil))
-            },
-            onRevealInFinder: { path in
-                act?.handle(DSLAction(type: "reveal", path: path, command: nil, text: nil))
-            },
-            onRunCommand: { cmd in
-                act?.sendToTerminal?(cmd)
-            },
-            onNavigate: { path in
-                act?.sendToTerminal?("cd \(RemoteExplorer.shellEscPath(path))\r")
-            },
-            onReferenceInAI: { path in
-                act?.sendToTerminal?("@\(path) ")
-            },
-            isAIAgentRunning: isAI
-        )
+        // Built once and reused — only `isAIAgentRunning` varies per cycle.
+        if treeActions == nil { treeActions = buildTreeActions() }
+        treeActions?.isAIAgentRunning = FileTreeActions.isAIAgentContext(context)
+        guard let treeActions else { return nil }
 
         let tid = context.terminal.terminalID
-        saveExpandedState()
         let rootPath = Self.remoteRootPath(for: context.terminal)
+        let cacheKey = Self.cacheKey(for: rootPath, session: session)
+        let isSameContext = (tid == lastTerminalID && terminalCacheKey[tid] == cacheKey)
+
+        if !isSameContext {
+            // The root we're leaving keeps its open folders under its own key.
+            snapshotExpandedState(except: cacheKey)
+        }
         let root = getOrCreateRemoteRoot(for: rootPath, session: session)
         let host = session.displayName
 
-        // Restore expanded folders for this terminal
-        if let saved = expandedState[tid] {
+        // Only restore on terminal/path switch — re-running it on a same-context cycle
+        // (a foreground-process change, say) would collapse a folder the user just opened.
+        if !isSameContext, let saved = expandedState.paths(for: cacheKey) {
             root.restoreExpanded(saved)
         }
-        let cacheHost = Self.cacheHost(for: session)
-        let resolved = RemoteExplorer.resolveTilde(rootPath, session: session) ?? rootPath
-        terminalCacheKey[tid] = "\(cacheHost):\(resolved)"
+        terminalCacheKey[tid] = cacheKey
         lastTerminalID = tid
 
         return AnyView(RemoteFileTreeView(root: root, actions: treeActions, host: host))
+    }
+
+    private func buildTreeActions() -> FileTreeActions {
+        // Resolved on each invocation rather than captured: `PluginRegistry.actions` is
+        // reassigned after registration, and these closures outlive that assignment.
+        let act: @MainActor () -> PluginActions? = { [weak self] in self?.actions }
+        return FileTreeActions(
+            onFileClicked: { path in
+                act()?.pastePath(path)
+            },
+            onOpenInTab: { path in
+                act()?.openDirectoryInNewTab?(path)
+            },
+            onOpenInPane: { path in
+                act()?.openDirectoryInNewPane?(path)
+            },
+            onCopyPath: { path in
+                act()?.handle(DSLAction(type: "copy", path: path, command: nil, text: nil))
+            },
+            onRevealInFinder: { path in
+                act()?.handle(DSLAction(type: "reveal", path: path, command: nil, text: nil))
+            },
+            onRunCommand: { cmd in
+                act()?.sendToTerminal?(cmd)
+            },
+            onNavigate: { path in
+                act()?.sendToTerminal?("cd \(RemoteExplorer.shellEscPath(path))\r")
+            },
+            onReferenceInAI: { path in
+                act()?.sendToTerminal?("@\(path) ")
+            },
+            isAIAgentRunning: false
+        )
     }
 
     // MARK: - Lifecycle
@@ -135,13 +162,11 @@ final class RemoteFileTreePlugin: BooPluginProtocol {
 
     // MARK: - Expanded State
 
-    /// Save the expanded folder state for the last active terminal.
-    private func saveExpandedState() {
-        guard let prevID = lastTerminalID,
-            let key = terminalCacheKey[prevID],
-            let root = cachedRemoteRoots[key]
-        else { return }
-        expandedState[prevID] = root.expandedPaths()
+    /// Save expanded state for the cached roots, so an eviction or a later revisit of
+    /// any of those directories restores the same open folders.
+    /// `except` skips the root that is staying put, whose live state is authoritative.
+    private func snapshotExpandedState(except keptKey: String? = nil) {
+        expandedState.snapshot(roots: cachedRemoteRoots, except: keptKey) { $0.expandedPaths() }
     }
 
     // MARK: - Internal
@@ -161,6 +186,30 @@ final class RemoteFileTreePlugin: BooPluginProtocol {
         session.sshConnectionTarget
     }
 
+    /// The `cachedRemoteRoots` key for a path — also the expanded-state key, so both
+    /// caches agree on what "the same root" means.
+    private static func cacheKey(for path: String, session: RemoteSessionType) -> String {
+        let resolved = RemoteExplorer.resolveTilde(path, session: session) ?? path
+        return "\(cacheHost(for: session)):\(resolved)"
+    }
+
+    /// Test hook: the cached root node for a cache key, if one exists.
+    func cachedRoot(forKey key: String) -> RemoteFileTreeNode? { cachedRemoteRoots[key] }
+
+    /// Test hook: the cached root a context resolves to, so a test does not have to
+    /// reproduce the key format.
+    func cachedRoot(for context: TerminalContext) -> RemoteFileTreeNode? {
+        guard let session = context.remoteSession else { return nil }
+        return cachedRemoteRoots[Self.cacheKey(for: Self.remoteRootPath(for: context), session: session)]
+    }
+
+    /// Test hook: the open folders recorded for a context's root, if any.
+    func savedExpandedPaths(for context: TerminalContext) -> Set<String>? {
+        guard let session = context.remoteSession else { return nil }
+        return expandedState.paths(
+            for: Self.cacheKey(for: Self.remoteRootPath(for: context), session: session))
+    }
+
     func getOrCreateRemoteRoot(for path: String, session: RemoteSessionType) -> RemoteFileTreeNode {
         let resolved = RemoteExplorer.resolveTilde(path, session: session) ?? path
         let host = Self.cacheHost(for: session)
@@ -174,6 +223,9 @@ final class RemoteFileTreePlugin: BooPluginProtocol {
 
         let hostPrefix = "\(host):"
         if let (existingKey, existingRoot) = cachedRemoteRoots.first(where: { $0.key.hasPrefix(hostPrefix) }) {
+            // This host's single root is being re-pointed at `resolved` — record what was
+            // open at the old path first, so cd-ing back there restores those folders.
+            snapshotExpandedState(except: key)
             cachedRemoteRoots.removeValue(forKey: existingKey)
             existingRoot.updatePath(resolved)
             cachedRemoteRoots[key] = existingRoot
@@ -215,6 +267,8 @@ final class RemoteFileTreePlugin: BooPluginProtocol {
         }
 
         if cachedRemoteRoots.count > 5 {
+            // Persist what we're about to drop so revisiting that host restores its folders.
+            snapshotExpandedState(except: key)
             let oldest = cachedRemoteRoots.keys.first { $0 != key }
             if let k = oldest { cachedRemoteRoots.removeValue(forKey: k) }
         }

@@ -49,7 +49,11 @@ final class GitPlugin: BooPluginProtocol {
     /// Watches CWD when no repo is active, to detect `git init`.
     var cwdWatcher: FileSystemWatcher?
     var watchedRepoRoot: String?
-    var debounceWork: DispatchWorkItem?
+    /// One debouncer for both watchers, so a `.git/` event and a working-tree event in the
+    /// same burst collapse into a single status refresh. Each call site picks its own delay:
+    /// `.git/` changes are user-visible (branch switch, stage) and refresh fast, while
+    /// working-tree edits arrive in bursts while typing/building and wait longer.
+    let statusDebouncer = Debouncer(delay: 0.5)
 
     /// FileSystemWatcher self-retains while running (passRetained in start()), so its own
     /// deinit never fires — the owner must stop() them or the FSEventStreams leak per window.

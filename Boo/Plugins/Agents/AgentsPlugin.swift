@@ -132,7 +132,7 @@ final class AgentsPlugin: BooPluginProtocol {
     }
 
     private var refreshTimer: DispatchSourceTimer?
-    private var debounceWork: DispatchWorkItem?
+    private let diffDebouncer = Debouncer(delay: AgentsConstants.diffDebounceDelay)
     private var teardownGeneration: UInt64 = 0
     var teardownGracePeriod: TimeInterval = 0.3
 
@@ -660,12 +660,9 @@ final class AgentsPlugin: BooPluginProtocol {
         }
         lastDiffRepoRoot = root
 
-        debounceWork?.cancel()
-        let work = DispatchWorkItem { [weak self] in
+        diffDebouncer.schedule { [weak self] in
             self?.runDiffDetection(repoRoot: root)
         }
-        debounceWork = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + AgentsConstants.diffDebounceDelay, execute: work)
     }
 
     private func runDiffDetection(repoRoot: String) {

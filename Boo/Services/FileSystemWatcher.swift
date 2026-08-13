@@ -5,11 +5,13 @@ import Foundation
 final class FileSystemWatcher: @unchecked Sendable {
     private var stream: FSEventStreamRef?
     private let path: String
-    private let onChange: () -> Void
+    /// Receives the changed paths of the batch (already filtered when a `filter` is set),
+    /// so a consumer can refresh only what actually moved instead of everything it watches.
+    private let onChange: ([String]) -> Void
     /// When set, only fire onChange if at least one changed path passes the filter.
     private let filter: ((String) -> Bool)?
 
-    init(path: String, filter: ((String) -> Bool)? = nil, onChange: @escaping () -> Void) {
+    init(path: String, filter: ((String) -> Bool)? = nil, onChange: @escaping ([String]) -> Void) {
         self.path = path
         self.filter = filter
         self.onChange = onChange
@@ -25,22 +27,16 @@ final class FileSystemWatcher: @unchecked Sendable {
         let callback: FSEventStreamCallback = { _, info, numEvents, eventPaths, _, _ in
             guard let info = info else { return }
             let watcher = Unmanaged<FileSystemWatcher>.fromOpaque(info).takeUnretainedValue()
-            guard let filter = watcher.filter else {
-                DispatchQueue.main.async { watcher.onChange() }
-                return
-            }
-            // Extract changed paths and apply filter before dispatching.
-            let paths = unsafeBitCast(eventPaths, to: NSArray.self)
-            var matched = false
+            let raw = unsafeBitCast(eventPaths, to: NSArray.self)
+            var changed: [String] = []
+            changed.reserveCapacity(numEvents)
             for i in 0..<numEvents {
-                if let p = paths[i] as? String, filter(p) {
-                    matched = true
-                    break
-                }
+                guard let p = raw[i] as? String else { continue }
+                if let filter = watcher.filter, !filter(p) { continue }
+                changed.append(p)
             }
-            if matched {
-                DispatchQueue.main.async { watcher.onChange() }
-            }
+            guard !changed.isEmpty else { return }
+            DispatchQueue.main.async { watcher.onChange(changed) }
         }
 
         stream = FSEventStreamCreate(

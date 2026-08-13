@@ -30,6 +30,13 @@ struct FileTreeActions: @unchecked Sendable {
     var onReferenceInAI: (@MainActor (String) -> Void)?
     var onSetFileRoot: (@MainActor (String) -> Void)?
     var isAIAgentRunning: Bool = false
+
+    /// Whether an AI agent holds the foreground — row actions differ, so both file-tree
+    /// plugins bake it into their section generation as well as into the actions.
+    @MainActor
+    static func isAIAgentContext(_ context: PluginContext) -> Bool {
+        ProcessIcon.category(for: context.terminal.processName) == "ai"
+    }
 }
 
 // MARK: - Shared State
@@ -171,7 +178,10 @@ struct FileTreeView: View {
                 dragState: dragState, actions: actions, rootPath: root.path
             )
         )
-        .onAppear { root.loadChildren() }
+        // The plugin loads the root before handing it over; only load here when this
+        // view was handed a root that has never been read (nil children), so a real
+        // install doesn't re-walk the directory a second time.
+        .onAppear { if root.children == nil { root.loadChildren() } }
     }
 
     private var explorerFont: Font {

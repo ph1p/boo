@@ -24,6 +24,18 @@ final class BookmarksPluginNew: BooPluginProtocol {
 
     var subscribedEvents: Set<PluginEvent> { [] }
 
+    /// `BookmarksPanelView` reads the bookmark store itself, so only the values baked in
+    /// below can go stale. Keeping the generation stable across an unrelated cycle preserves
+    /// the panel's scroll offset.
+    func sectionGeneration(context: PluginContext) -> UInt64 {
+        let tc = context.terminal
+        return SidebarSection.generation(for: [
+            Self.namespace(for: tc),
+            tc.isRemote ? (tc.remoteCwd ?? tc.cwd) : tc.cwd,
+            context.fontScale.generationKey
+        ])
+    }
+
     // MARK: - Detail View
 
     func makeDetailView(context: PluginContext) -> AnyView? {

@@ -33,6 +33,10 @@ struct SidebarFontScale {
         self.fontName = fontName
     }
 
+    /// Stable key for `SidebarSection.generation(for:)` — a plugin that bakes the scale into
+    /// its view must rebuild when either field moves.
+    var generationKey: String { "\(base)/\(fontName)" }
+
     /// Named scale steps, matching Tailwind's type-scale ratios.
     enum Step {
         case xs  // × 0.75

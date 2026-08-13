@@ -60,6 +60,18 @@ enum PluginMenuEntry {
 
 /// Unified plugin protocol for both built-in and external plugins.
 /// Combines sidebar, status bar, and lifecycle into one protocol.
+/// Backs the default `sectionGeneration(context:)` — see there for why the default is a
+/// value that never repeats. Main-actor-only, so a plain counter needs no locking.
+@MainActor
+enum SidebarSectionGenerationCounter {
+    private static var counter: UInt64 = 0
+
+    static func next() -> UInt64 {
+        counter &+= 1
+        return counter
+    }
+}
+
 @MainActor
 protocol BooPluginProtocol: BooPlugin {
     /// Plugin manifest (inline for built-in plugins, parsed from JSON for external).
@@ -110,6 +122,15 @@ protocol BooPluginProtocol: BooPlugin {
     /// Whether the sidebar should add an outer NSScrollView around the detail view.
     /// Plugins that already contain their own scroll view should return false.
     var prefersOuterScrollView: Bool { get }
+
+    /// Content identity for the section built by the default `makeSidebarTab`.
+    ///
+    /// The host reuses the hosted view — and so skips the `rootView` swap — whenever the
+    /// terminal context *and* this value both match the previous cycle. A plugin whose
+    /// content changes from its own state (a background refresh followed by
+    /// `onRequestCycleRerun`) must fold that state in here via
+    /// `SidebarSection.generation(for:)`, or its rows go stale on screen.
+    func sectionGeneration(context: PluginContext) -> UInt64
 
     /// Unified action dispatch for terminal and system operations.
     var actions: PluginActions? { get set }
@@ -191,7 +212,7 @@ extension BooPluginProtocol {
             icon: manifest.icon,
             content: view,
             prefersOuterScrollView: prefersOuterScrollView,
-            generation: 0
+            generation: sectionGeneration(context: context)
         )
         return SidebarTab(
             id: SidebarTabID(manifest.id),
@@ -224,6 +245,18 @@ extension BooPluginProtocol {
     func makeStatusBarContent(context: TerminalContext) -> StatusBarContent? { nil }
     func sectionTitle(context: TerminalContext) -> String? { nil }
     var prefersOuterScrollView: Bool { true }
+
+    /// Default: a fresh value every cycle, i.e. "assume the content changed".
+    ///
+    /// A constant here would be a lie for any plugin that refreshes from its own state,
+    /// and the failure is invisible (stale rows, no error). Rebuilding a view that in fact
+    /// did not change is the cheap mistake, so the unopted-in default takes that side; the
+    /// host still skips the whole cycle when the terminal context is unchanged. A plugin
+    /// that wants view reuse overrides this with `SidebarSection.generation(for:)` over the
+    /// keys its content actually depends on.
+    func sectionGeneration(context: PluginContext) -> UInt64 {
+        SidebarSectionGenerationCounter.next()
+    }
 
     // Note: actions, services, hostActions, onRequestCycleRerun, and subscribedEvents
     // have NO default implementation. Every plugin must declare them explicitly.
