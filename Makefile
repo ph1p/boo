@@ -53,6 +53,13 @@ exec /usr/bin/xcrun "$$@"\n' "$$CLT_SDK" > $(XCRUN_WRAPPER_DIR)/xcrun; \
 	fi
 	@chmod +x $(XCRUN_WRAPPER_DIR)/xcrun
 
+# The static archive GhosttyKit emits and Package.swift links against. Upstream has
+# renamed this before (it used to carry a `-fat` suffix), and the failure mode is a
+# bare `ld: library not found` from a clean checkout while a stale local copy keeps
+# working — so keep this the single source of truth and assert it after building.
+GHOSTTY_LIB_NAME = ghostty-internal
+GHOSTTY_LIB = Vendor/ghostty/macos/GhosttyKit.xcframework/macos-arm64/lib$(GHOSTTY_LIB_NAME).a
+
 # Initialize Ghostty submodule and build GhosttyKit xcframework (macOS)
 ghostty: $(XCRUN_WRAPPER_DIR)/xcrun
 	@if [ ! -f Vendor/ghostty/build.zig ]; then \
@@ -62,13 +69,21 @@ ghostty: $(XCRUN_WRAPPER_DIR)/xcrun
 	@$(MAKE) ghostty-patches
 	@PATCH_HASH=$$(cat Vendor/patches/*.patch 2>/dev/null | shasum -a 256 | cut -d' ' -f1); \
 	STAMP=Vendor/ghostty/macos/.patches-stamp; \
-	if [ ! -f Vendor/ghostty/macos/GhosttyKit.xcframework/macos-arm64/libghostty-internal-fat.a ] \
+	if [ ! -f $(GHOSTTY_LIB) ] \
 		|| [ "$$(cat $$STAMP 2>/dev/null)" != "$$PATCH_HASH" ]; then \
 		echo "==> Building GhosttyKit..."; \
 		cd Vendor/ghostty && PATH="$(CURDIR)/$(XCRUN_WRAPPER_DIR):$$PATH" zig build -Demit-xcframework=true -Dxcframework-target=native -Demit-macos-app=false -Doptimize=ReleaseFast; \
 		echo "$$PATCH_HASH" > "$(CURDIR)/$$STAMP"; \
 	else \
 		echo "==> GhosttyKit already built"; \
+	fi
+	@if [ ! -f $(GHOSTTY_LIB) ]; then \
+		echo "ERROR: expected $(GHOSTTY_LIB) after building GhosttyKit."; \
+		echo "       Upstream may have renamed the archive. Emitted instead:"; \
+		ls Vendor/ghostty/macos/GhosttyKit.xcframework/macos-arm64/*.a 2>/dev/null || echo "       (none)"; \
+		echo "       Update GHOSTTY_LIB_NAME in the Makefile and the matching"; \
+		echo "       .linkedLibrary(...) in Package.swift."; \
+		exit 1; \
 	fi
 
 # Apply local Ghostty patches (Vendor/patches/*.patch). Idempotent: a patch

@@ -39,8 +39,11 @@ let allTargets: [Target] = [
             .headerSearchPath("include")
         ],
         linkerSettings: [
-            .unsafeFlags(["-L", "Vendor/ghostty/macos/GhosttyKit.xcframework/macos-arm64"]),
-            .linkedLibrary("ghostty-internal-fat"),
+            .unsafeFlags(booLibrarySearchFlags),
+            // Keep in sync with GHOSTTY_LIB_NAME in the Makefile: upstream renamed this
+            // archive (it used to end in `-fat`), and the only symptom on a clean
+            // checkout is `ld: library 'ghostty-internal-fat' not found`.
+            .linkedLibrary("ghostty-internal"),
             .linkedLibrary("c++"),
             .linkedLibrary("z"),
             .linkedFramework("Metal"),
