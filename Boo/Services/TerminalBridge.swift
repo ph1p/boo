@@ -148,7 +148,7 @@ final class TerminalBridge: @unchecked Sendable {
             // A title change is the signal that the foreground process may have
             // changed, so this path must see live data — `maxAge: 0` skips the
             // short-lived cache without evicting it for the sidebar.
-            if let procName = RemoteExplorer.foregroundProcess(shellPID: pid, maxAge: 0) {
+            if let procName = ProcessTree.foregroundProcess(shellPID: pid, maxAge: 0) {
                 return (procName, nil, ProcessIcon.category(for: procName), [:])
             }
             // Nil from a live shell means the tree really is idle: `foregroundProcess` walks

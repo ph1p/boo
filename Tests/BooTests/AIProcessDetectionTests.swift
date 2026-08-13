@@ -267,7 +267,7 @@ final class AIProcessDetectionTests: XCTestCase {
     // MARK: - Socket-based: process set via reevaluateSocketProcess
 
     // Use getpid() as shellPID so isDescendant(getpid(), of: getpid()) = true (direct match)
-    // and RemoteExplorer.foregroundProcess(shellPID: getpid()) finds no child processes,
+    // and ProcessTree.foregroundProcess(shellPID: getpid()) finds no child processes,
     // falling through to title heuristics when the socket is cleared.
     private var selfPID: pid_t { getpid() }
 

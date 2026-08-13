@@ -88,7 +88,7 @@ import Cocoa
 
         // Snapshot child PIDs before surface creation (which forks a shell)
         let myPID = getpid()
-        let pidsBefore = Set(RemoteExplorer.childPIDs(of: myPID))
+        let pidsBefore = Set(ProcessTree.childPIDs(of: myPID))
 
         var config = ghostty_surface_config_new()
         config.platform_tag = GHOSTTY_PLATFORM_MACOS
@@ -149,7 +149,7 @@ import Cocoa
     /// Fires onShellPIDDiscovered if a new shell is found.
     func refreshShellPIDIfNeeded(currentPID: pid_t) {
         guard claimedDirectChild != 0, shellPID == currentPID else { return }
-        let fresh = RemoteExplorer.walkToLeafShell(from: claimedDirectChild)
+        let fresh = ProcessTree.walkToLeafShell(from: claimedDirectChild)
         guard fresh != currentPID, KittyImageProtocol.ttyPath(for: fresh) != nil else { return }
         booLog(.debug, .terminal, "refreshShellPID: \(currentPID) → \(fresh) via directChild=\(claimedDirectChild)")
         shellPID = fresh
@@ -163,7 +163,7 @@ import Cocoa
         // syscall work is moved off; the claim and all property mutations come back to main.
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self else { return }
-            let pidsAfter = Set(RemoteExplorer.childPIDs(of: myPID))
+            let pidsAfter = Set(ProcessTree.childPIDs(of: myPID))
             let newPIDs = pidsAfter.subtracting(pidsBefore)
             let candidates = newPIDs.sorted()
 
@@ -178,7 +178,7 @@ import Cocoa
                     // Walk down the single-child chain (login → shell) — do on background.
                     DispatchQueue.global(qos: .userInitiated).async { [weak self] in
                         guard let self else { return }
-                        let shell = RemoteExplorer.walkToLeafShell(from: directChild)
+                        let shell = ProcessTree.walkToLeafShell(from: directChild)
                         DispatchQueue.main.async { [weak self] in
                             guard let self else { return }
                             if shell != directChild || attempt >= 3 {
@@ -210,14 +210,14 @@ import Cocoa
             // Last resort: scan again on background then claim on main.
             DispatchQueue.global(qos: .userInitiated).async { [weak self] in
                 guard let self else { return }
-                let pidsNow = Set(RemoteExplorer.childPIDs(of: myPID))
+                let pidsNow = Set(ProcessTree.childPIDs(of: myPID))
                 let candidates = pidsNow.subtracting(pidsBefore).sorted()
                 DispatchQueue.main.async { [weak self] in
                     guard let self else { return }
                     if let dc = candidates.first(where: { ClaimedDirectChildren.claim($0) }) {
                         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
                             guard let self else { return }
-                            let shell = RemoteExplorer.walkToLeafShell(from: dc)
+                            let shell = ProcessTree.walkToLeafShell(from: dc)
                             DispatchQueue.main.async { [weak self] in
                                 guard let self else { return }
                                 booLog(.debug, .terminal, "shellPID fallback: directChild=\(dc) shell=\(shell)")

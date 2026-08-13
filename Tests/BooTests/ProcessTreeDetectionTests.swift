@@ -22,7 +22,7 @@ final class ProcessTreeDetectionTests: XCTestCase {
 
         var found = false
         for _ in 0..<20 {
-            if RemoteExplorer.childPIDs(of: getpid()).contains(childPID) {
+            if ProcessTree.childPIDs(of: getpid()).contains(childPID) {
                 found = true
                 break
             }
@@ -32,7 +32,7 @@ final class ProcessTreeDetectionTests: XCTestCase {
     }
 
     func testChildPIDsEmptyForNonexistentPID() {
-        XCTAssertEqual(RemoteExplorer.childPIDs(of: 999_999_999), [])
+        XCTAssertEqual(ProcessTree.childPIDs(of: 999_999_999), [])
     }
 
     func testChildPIDsReturnsAllDirectChildren() {
@@ -48,7 +48,7 @@ final class ProcessTreeDetectionTests: XCTestCase {
 
         var children: [pid_t] = []
         for _ in 0..<20 {
-            children = RemoteExplorer.childPIDs(of: getpid())
+            children = ProcessTree.childPIDs(of: getpid())
             if children.contains(p1.processIdentifier) && children.contains(p2.processIdentifier) { break }
             Thread.sleep(forTimeInterval: 0.05)
         }
@@ -65,7 +65,7 @@ final class ProcessTreeDetectionTests: XCTestCase {
         // processName must strip the "-" login-shell prefix.
         // proc_name may return "" in the test runner (no entitlement), so only
         // verify the result has no leading dash — not that it's non-empty.
-        let name = RemoteExplorer.processName(pid: getpid())
+        let name = ProcessTree.processName(pid: getpid())
         XCTAssertFalse(name.hasPrefix("-"), "processName must strip the leading-dash login-shell prefix")
     }
 
@@ -91,7 +91,7 @@ final class ProcessTreeDetectionTests: XCTestCase {
         // Wait for child to be visible.
         var appeared = false
         for _ in 0..<20 {
-            if RemoteExplorer.childPIDs(of: getpid()).contains(childPID) {
+            if ProcessTree.childPIDs(of: getpid()).contains(childPID) {
                 appeared = true
                 break
             }
@@ -153,7 +153,7 @@ final class ProcessTreeDetectionTests: XCTestCase {
         for _ in 0..<60 {
             // maxAge: 0 defeats the cache — otherwise the first (pre-spawn) nil would be
             // served back for the rest of the poll.
-            resolved = RemoteExplorer.foregroundProcess(shellPID: shell.processIdentifier, maxAge: 0)
+            resolved = ProcessTree.foregroundProcess(shellPID: shell.processIdentifier, maxAge: 0)
             if resolved == "codex" { break }
             Thread.sleep(forTimeInterval: 0.05)
         }
@@ -266,7 +266,7 @@ final class ProcessTreeDetectionTests: XCTestCase {
 
     /// SIGKILL a pid and everything beneath it, deepest first.
     private func killTree(_ pid: pid_t) {
-        for child in RemoteExplorer.childPIDs(of: pid) { killTree(child) }
+        for child in ProcessTree.childPIDs(of: pid) { killTree(child) }
         kill(pid, SIGKILL)
     }
 

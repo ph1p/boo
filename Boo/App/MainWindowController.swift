@@ -454,7 +454,7 @@ class ThemedSplitView: NSSplitView {
                     // remapped to their canonical agent name.
                     if !isFocused && processCategory == nil {
                         let shellPID = tab.state.shellPID
-                        if shellPID > 0, let resolved = RemoteExplorer.foregroundProcess(shellPID: shellPID) {
+                        if shellPID > 0, let resolved = ProcessTree.foregroundProcess(shellPID: shellPID) {
                             processName = resolved
                             processCategory = ProcessIcon.category(for: resolved)
                         }
