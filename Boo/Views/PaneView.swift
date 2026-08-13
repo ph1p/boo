@@ -53,6 +53,15 @@ class PaneView: NSView {
     private(set) var activeContentView: ContentViewProtocol?
     private var contentViews: [UUID: ContentViewProtocol] = [:]
 
+    /// The tab that `ghosttyView` / `activeContentView` actually belong to.
+    ///
+    /// `pane.activeTab` is NOT a safe key for caching the displayed view: a cross-pane drop
+    /// inserts the incoming tab (shifting activeTabIndex) *before* `forceActivateTab` runs
+    /// `storeCurrentView`, so the still-displayed view belongs to the previous tab while
+    /// `pane.activeTab` already names the incoming one. Caching under that id overwrites the
+    /// just-transferred view and the dragged tab's content is lost.
+    private var displayedTabID: UUID?
+
     // Drag state for tab reordering
     var dragTabIndex: Int?
     var dragStartPoint: NSPoint?
@@ -356,9 +365,17 @@ class PaneView: NSView {
 
     /// Start a terminal session for the given tab.
     private func startTerminalSession(for tab: Pane.Tab) {
-        // Hide any non-terminal content view
-        activeContentView?.removeFromSuperview()
+        // Hide any non-terminal content view, caching it for the tab that owns it — see the
+        // matching note in startContentSession.
+        if let cv = activeContentView {
+            cv.deactivate()
+            cv.removeFromSuperview()
+            if let owner = displayedTabID, owner != tab.id, pane.tabs.contains(where: { $0.id == owner }) {
+                contentViews[owner] = cv
+            }
+        }
         activeContentView = nil
+        displayedTabID = tab.id
 
         if let stored = tabViews.removeValue(forKey: tab.id) {
             scrollWrapper?.removeFromSuperview()
@@ -381,15 +398,31 @@ class PaneView: NSView {
 
     /// Start a non-terminal content session for the given tab.
     private func startContentSession(for tab: Pane.Tab) {
-        // Hide terminal view
+        // Hide the terminal view. Not every caller runs storeCurrentView first (a cross-pane
+        // drop calls startActiveSession directly), so cache it here instead of dropping the
+        // reference — otherwise switching from a terminal tab to a content tab loses the
+        // terminal's surface and it comes back blank.
         scrollWrapper?.removeFromSuperview()
         scrollWrapper = nil
+        if let gv = ghosttyView {
+            gv.removeFromSuperview()
+            if let owner = gv.tabID, owner != tab.id, pane.tabs.contains(where: { $0.id == owner }) {
+                tabViews[owner] = gv
+            }
+        }
         ghosttyView = nil
 
-        // Check if the active content view is already for this tab (avoid double-init)
-        if let active = activeContentView, active.superview == self, active.contentType == tab.contentType {
+        // Check if the active content view is already for this tab (avoid double-init).
+        // Match on the displayed tab id, not just the content type — two tabs of the same
+        // kind (e.g. two editors) would otherwise be treated as interchangeable and the
+        // incoming tab would keep showing the previous tab's view.
+        if let active = activeContentView, active.superview == self, displayedTabID == tab.id,
+            active.contentType == tab.contentType
+        {
             return
         }
+
+        displayedTabID = tab.id
 
         // Check cache first
         if let stored = contentViews.removeValue(forKey: tab.id) {
@@ -457,6 +490,9 @@ class PaneView: NSView {
             scrollWrapper?.removeFromSuperview()
             scrollWrapper = nil
             ghosttyView = nil
+            // The displayed view is leaving this pane — stop claiming it, or a later
+            // storeCurrentView would re-cache a view this pane no longer owns.
+            if displayedTabID == tabID { displayedTabID = nil }
             return gv
         }
         return nil
@@ -483,6 +519,7 @@ class PaneView: NSView {
             cv.deactivate()
             cv.removeFromSuperview()
             activeContentView = nil
+            if displayedTabID == tabID { displayedTabID = nil }
             return cv
         }
         return nil
@@ -973,29 +1010,36 @@ class PaneView: NSView {
     }
 
     private func storeCurrentView() {
-        guard let tab = pane.activeTab else { return }
-
-        if tab.contentType == .terminal {
-            guard let gv = ghosttyView else { return }
+        // Cache under the id of the tab the view actually belongs to, never
+        // `pane.activeTab` — see `displayedTabID`.
+        if let gv = ghosttyView {
             gv.removeFromSuperview()
             scrollWrapper?.removeFromSuperview()
             scrollWrapper = nil
-            tabViews[tab.id] = gv
             ghosttyView = nil
-        } else {
-            guard let cv = activeContentView else { return }
+            // Prefer the view's own tabID; it is authoritative for a transferred view.
+            if let owner = gv.tabID ?? displayedTabID, pane.tabs.contains(where: { $0.id == owner }) {
+                tabViews[owner] = gv
+            } else {
+                // The owning tab is no longer in this pane (closed, or moved away and already
+                // re-homed), so nothing will ever restore this view — free the surface now
+                // rather than waiting on deinit.
+                gv.destroy()
+            }
+        }
+
+        if let cv = activeContentView {
             cv.deactivate()
             cv.removeFromSuperview()
             activeContentView = nil
-            // After a cross-pane drop, activeTabIndex has already shifted to the
-            // just-inserted tab while cv still belongs to the previous tab.
-            // Caching under the new tab.id would clobber the transferred view.
-            if cv.contentType == tab.contentType {
-                contentViews[tab.id] = cv
+            if let owner = displayedTabID, pane.tabs.contains(where: { $0.id == owner }) {
+                contentViews[owner] = cv
             } else {
                 cv.cleanup()
             }
         }
+
+        displayedTabID = nil
     }
 
     func persistContentStateToModel() {
