@@ -363,16 +363,36 @@ class PaneView: NSView {
         ghosttyView?.refresh()
     }
 
+    /// Cache `gv` for the tab that owns it, or tear it down when that tab has left this pane
+    /// (closed, or moved away and already re-homed) — nothing would ever restore it.
+    private func retire(_ gv: GhosttyView) {
+        gv.removeFromSuperview()
+        if let owner = gv.tabID, pane.tabs.contains(where: { $0.id == owner }) {
+            tabViews[owner] = gv
+        } else {
+            gv.destroy()
+        }
+    }
+
+    /// Content-view counterpart to `retire(_: GhosttyView)`. The owner is passed in because,
+    /// unlike `GhosttyView.tabID`, content views carry no tab identity of their own.
+    private func retire(_ cv: ContentViewProtocol, owner: UUID?) {
+        cv.deactivate()
+        cv.removeFromSuperview()
+        if let owner, pane.tabs.contains(where: { $0.id == owner }) {
+            contentViews[owner] = cv
+        } else {
+            cv.cleanup()
+        }
+    }
+
     /// Start a terminal session for the given tab.
     private func startTerminalSession(for tab: Pane.Tab) {
         // Hide any non-terminal content view, caching it for the tab that owns it — see the
         // matching note in startContentSession.
+        // A content view can never belong to this terminal tab, so it is always displaced.
         if let cv = activeContentView {
-            cv.deactivate()
-            cv.removeFromSuperview()
-            if let owner = displayedTabID, owner != tab.id, pane.tabs.contains(where: { $0.id == owner }) {
-                contentViews[owner] = cv
-            }
+            retire(cv, owner: displayedTabID)
         }
         activeContentView = nil
         displayedTabID = tab.id
@@ -404,11 +424,9 @@ class PaneView: NSView {
         // terminal's surface and it comes back blank.
         scrollWrapper?.removeFromSuperview()
         scrollWrapper = nil
+        // A terminal view can never belong to this non-terminal tab, so it is always displaced.
         if let gv = ghosttyView {
-            gv.removeFromSuperview()
-            if let owner = gv.tabID, owner != tab.id, pane.tabs.contains(where: { $0.id == owner }) {
-                tabViews[owner] = gv
-            }
+            retire(gv)
         }
         ghosttyView = nil
 
@@ -492,7 +510,7 @@ class PaneView: NSView {
             ghosttyView = nil
             // The displayed view is leaving this pane — stop claiming it, or a later
             // storeCurrentView would re-cache a view this pane no longer owns.
-            if displayedTabID == tabID { displayedTabID = nil }
+            displayedTabID = nil
             return gv
         }
         return nil
@@ -519,7 +537,7 @@ class PaneView: NSView {
             cv.deactivate()
             cv.removeFromSuperview()
             activeContentView = nil
-            if displayedTabID == tabID { displayedTabID = nil }
+            displayedTabID = nil
             return cv
         }
         return nil
@@ -1010,33 +1028,18 @@ class PaneView: NSView {
     }
 
     private func storeCurrentView() {
-        // Cache under the id of the tab the view actually belongs to, never
+        // Cache under the id of the tab each view actually belongs to, never
         // `pane.activeTab` — see `displayedTabID`.
         if let gv = ghosttyView {
-            gv.removeFromSuperview()
             scrollWrapper?.removeFromSuperview()
             scrollWrapper = nil
             ghosttyView = nil
-            // Prefer the view's own tabID; it is authoritative for a transferred view.
-            if let owner = gv.tabID ?? displayedTabID, pane.tabs.contains(where: { $0.id == owner }) {
-                tabViews[owner] = gv
-            } else {
-                // The owning tab is no longer in this pane (closed, or moved away and already
-                // re-homed), so nothing will ever restore this view — free the surface now
-                // rather than waiting on deinit.
-                gv.destroy()
-            }
+            retire(gv)
         }
 
         if let cv = activeContentView {
-            cv.deactivate()
-            cv.removeFromSuperview()
             activeContentView = nil
-            if let owner = displayedTabID, pane.tabs.contains(where: { $0.id == owner }) {
-                contentViews[owner] = cv
-            } else {
-                cv.cleanup()
-            }
+            retire(cv, owner: displayedTabID)
         }
 
         displayedTabID = nil

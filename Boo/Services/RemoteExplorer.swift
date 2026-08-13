@@ -201,8 +201,9 @@ final class RemoteExplorer: @unchecked Sendable {
 
     /// Returns the foreground non-shell process running under a known shell PID, or nil
     /// when the shell itself is the foreground process (idle prompt).
-    /// Looks one level deep into direct children — avoids false positives from folder
-    /// names in the terminal title that contain tool keywords like "opencode" or "claude".
+    /// Prefers the single direct child; otherwise searches a few levels down for an AI agent.
+    /// Reading the real process tree avoids false positives from folder names in the terminal
+    /// title that contain tool keywords like "opencode" or "claude".
     /// When the child is a runtime (node, bun, deno, python…), inspects its argv to
     /// remap shim-launched agents (e.g. `node codex.js` → "codex").
     ///
@@ -223,50 +224,38 @@ final class RemoteExplorer: @unchecked Sendable {
         let children = childPIDs(of: shellPID)
         guard !children.isEmpty else { return nil }
         // With exactly one child, it's unambiguously the foreground process.
-        // With multiple children (e.g. agent + spawned subprocesses during tool calls),
-        // scan all direct children for a known AI agent before giving up.
-        if children.count == 1 {
-            return resolvedProcessName(pid: children[0])
+        if children.count == 1, let name = resolvedProcessName(pid: children[0]) {
+            return name
         }
-        for childPID in children {
-            if let name = resolvedProcessName(pid: childPID),
-                ProcessIcon.category(for: name) == "ai"
-            {
-                return name
-            }
-        }
-        return nil
+        // Otherwise look for an AI agent. Agents fork helper shells (Claude Code runs tool
+        // calls as `zsh -c …` children), so a direct-child scan sees only shells and reports
+        // nothing — walk a few levels down instead of giving up at depth 1.
+        return agentDescendant(of: children)
     }
 
-    /// True when an AI agent process runs anywhere beneath `shellPID`.
+    /// Breadth-first search for an AI agent beneath `frontier`, returning its process name.
     ///
-    /// `foregroundProcess` only inspects direct children, which misses agents that fork
-    /// helper shells: Claude Code runs tool calls as `zsh -c …` children of the agent, so
-    /// a direct-child scan sees only shells and reports nothing. This walks a few levels
-    /// down so a title-based agent match can be trusted instead of suppressed.
-    ///
-    /// Bounded by `maxDepth` and `maxVisited` — this runs on every terminal title change
-    /// and each `resolvedProcessName` costs a `KERN_PROCARGS2` sysctl.
-    static func hasAIAgentDescendant(shellPID: pid_t, maxDepth: Int = 3) -> Bool {
-        let maxVisited = 32
-        var frontier = childPIDs(of: shellPID)
-        var visited = 0
-        for _ in 0..<maxDepth {
-            if frontier.isEmpty { return false }
+    /// Bounded because each `resolvedProcessName` costs a `KERN_PROCARGS2` sysctl and this
+    /// runs whenever a terminal title changes. Shells resolve to nil and are walked through,
+    /// so a helper shell between the prompt and the agent does not hide it.
+    private static func agentDescendant(of frontier: [pid_t], maxDepth: Int = 3) -> String? {
+        var frontier = frontier
+        var budget = 32
+        for depth in 0..<maxDepth {
+            if frontier.isEmpty { return nil }
             var next: [pid_t] = []
             for pid in frontier {
-                visited += 1
-                if visited > maxVisited { return false }
-                if let name = resolvedProcessName(pid: pid),
-                    ProcessIcon.category(for: name) == "ai"
-                {
-                    return true
+                if budget == 0 { return nil }
+                budget -= 1
+                if let name = resolvedProcessName(pid: pid), ProcessIcon.category(for: name) == "ai" {
+                    return name
                 }
-                next.append(contentsOf: childPIDs(of: pid))
+                // The last level's children are never examined, so don't pay to list them.
+                if depth < maxDepth - 1 { next.append(contentsOf: childPIDs(of: pid)) }
             }
             frontier = next
         }
-        return false
+        return nil
     }
 
     /// Resolve a canonical process name for `pid`.
