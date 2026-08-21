@@ -91,6 +91,63 @@ final class JSCRuntimeTests: XCTestCase {
         }
     }
 
+    func testReadFileCannotEscapeCwdViaDotDot() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("jsc-sandbox-\(UUID().uuidString)")
+        let inner = dir.appendingPathComponent("inner")
+        try FileManager.default.createDirectory(at: inner, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let secret = dir.appendingPathComponent("secret.txt")
+        try "top-secret".write(to: secret, atomically: true, encoding: .utf8)
+
+        let source = """
+            function transform(ctx) {
+                var leaked = readFile("../secret.txt");
+                return JSON.stringify({ type: "label", text: String(leaked) });
+            }
+            """
+        let result = try runtime.execute(source: source, context: makeContext(cwd: inner.path))
+        XCTAssertFalse(result.contains("top-secret"), "Traversal escaped cwd: \(result)")
+    }
+
+    func testReadFileCannotEscapeCwdViaSymlink() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("jsc-symlink-\(UUID().uuidString)")
+        let inner = dir.appendingPathComponent("inner")
+        try FileManager.default.createDirectory(at: inner, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let secret = dir.appendingPathComponent("secret.txt")
+        try "top-secret".write(to: secret, atomically: true, encoding: .utf8)
+        try FileManager.default.createSymbolicLink(
+            at: inner.appendingPathComponent("link.txt"), withDestinationURL: secret)
+
+        let source = """
+            function transform(ctx) {
+                var leaked = readFile("link.txt");
+                return JSON.stringify({ type: "label", text: String(leaked) });
+            }
+            """
+        let result = try runtime.execute(source: source, context: makeContext(cwd: inner.path))
+        XCTAssertFalse(result.contains("top-secret"), "Symlink escaped cwd: \(result)")
+    }
+
+    func testReadFileInsideCwdStillWorks() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("jsc-inside-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try "hello-inside".write(
+            to: dir.appendingPathComponent("ok.txt"), atomically: true, encoding: .utf8)
+
+        let source = """
+            function transform(ctx) {
+                return JSON.stringify({ type: "label", text: String(readFile("ok.txt")) });
+            }
+            """
+        let result = try runtime.execute(source: source, context: makeContext(cwd: dir.path))
+        XCTAssertTrue(result.contains("hello-inside"), "Got: \(result)")
+    }
+
     func testArrayReturn() throws {
         let source = """
             function transform(ctx) {

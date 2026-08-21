@@ -248,13 +248,18 @@ final class JSCRuntime: @unchecked Sendable {
 
     /// Resolve a path relative to cwd. Absolute paths must be under cwd (security boundary).
     private static func resolvePath(_ path: String, under cwd: String) -> String? {
-        if (path as NSString).isAbsolutePath {
-            let resolved = (path as NSString).standardizingPath
-            let cwdPrefix = (cwd as NSString).standardizingPath
-            guard resolved.hasPrefix(cwdPrefix + "/") || resolved == cwdPrefix else { return nil }
-            return resolved
-        }
-        return ((cwd as NSString).appendingPathComponent(path) as NSString).standardizingPath
+        let joined =
+            (path as NSString).isAbsolutePath
+            ? path
+            : (cwd as NSString).appendingPathComponent(path)
+        // Resolve symlinks so a link inside cwd can't point outside it, then
+        // require the result to stay under cwd (also symlink-resolved).
+        let resolved = URL(fileURLWithPath: joined)
+            .standardizedFileURL.resolvingSymlinksInPath().path
+        let cwdPrefix = URL(fileURLWithPath: cwd)
+            .standardizedFileURL.resolvingSymlinksInPath().path
+        guard resolved.hasPrefix(cwdPrefix + "/") || resolved == cwdPrefix else { return nil }
+        return resolved
     }
 
     /// Build a JavaScript-compatible dictionary from TerminalContext.
