@@ -45,7 +45,7 @@ final class PaneExtractInsertTests: XCTestCase {
         let extracted = pane.extractTab(at: 0)
         XCTAssertNotNil(extracted)
         XCTAssertTrue(pane.tabs.isEmpty)
-        XCTAssertEqual(pane.activeTabIndex, 0)  // clamped to 0 even when empty
+        XCTAssertEqual(pane.activeTabIndex, -1)  // -1 = no active tab, matches init default
     }
 
     func testExtractActiveTabAdjustsActiveIndex() {

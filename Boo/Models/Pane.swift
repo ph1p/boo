@@ -166,11 +166,7 @@ final class Pane {
     }
 
     func removeTab(at index: Int) {
-        guard index >= 0, index < tabs.count else { return }
-        tabs.remove(at: index)
-        if activeTabIndex >= tabs.count {
-            activeTabIndex = tabs.count - 1
-        }
+        extractTab(at: index)
     }
 
     func setActiveTab(_ index: Int) {
@@ -324,7 +320,7 @@ final class Pane {
         guard index >= 0, index < tabs.count else { return nil }
         let tab = tabs.remove(at: index)
         if activeTabIndex >= tabs.count {
-            activeTabIndex = max(tabs.count - 1, 0)
+            activeTabIndex = tabs.count - 1
         } else if index < activeTabIndex {
             activeTabIndex -= 1
         }

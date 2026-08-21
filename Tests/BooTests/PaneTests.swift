@@ -56,6 +56,17 @@ final class PaneTests: XCTestCase {
         XCTAssertEqual(pane.activeTabIndex, 0)
     }
 
+    func testRemoveTabBeforeActiveKeepsActiveTab() {
+        let pane = Pane()
+        _ = pane.addTab(workingDirectory: "/a")
+        _ = pane.addTab(workingDirectory: "/b")
+        _ = pane.addTab(workingDirectory: "/c")
+        pane.setActiveTab(1)  // "/b" active
+        pane.removeTab(at: 0)
+        XCTAssertEqual(pane.activeTabIndex, 0)
+        XCTAssertEqual(pane.activeTab?.workingDirectory, "/b")
+    }
+
     func testRemoveAllTabs() {
         let pane = Pane()
         _ = pane.addTab(workingDirectory: "/a")
