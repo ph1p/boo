@@ -47,7 +47,24 @@ final class SSHControlManager: @unchecked Sendable {
     /// network round-trip, so both benefit from not probing on every retry tick.
     private static let livenessTTL: TimeInterval = 5
 
+    /// Guarded by `connLock`. Mutations happen only on `queue` (which serializes
+    /// the connect logic); the lock exists so `socketPath(for:)` /
+    /// `connectionState(for:)` can read from the main thread without queueing
+    /// behind an in-flight multi-second `ssh` spawn on `queue`.
     private var connections: [String: ManagedConnection] = [:]
+    private let connLock = NSLock()
+
+    private func connection(for alias: String) -> ManagedConnection? {
+        connLock.lock()
+        defer { connLock.unlock() }
+        return connections[alias]
+    }
+
+    private func setConnection(_ conn: ManagedConnection?, for alias: String) {
+        connLock.lock()
+        defer { connLock.unlock() }
+        connections[alias] = conn
+    }
 
     /// Panes currently relying on each alias's master, keyed by alias.
     ///
@@ -82,14 +99,15 @@ final class SSHControlManager: @unchecked Sendable {
     /// Returns nil for unmanaged connections (user's own ControlMaster) — SSH will
     /// find the user's socket automatically via their ~/.ssh/config.
     func socketPath(for alias: String) -> String? {
-        let conn = queue.sync { connections[alias] }
-        guard let conn, conn.state == .ready, conn.isManaged else { return nil }
+        guard let conn = connection(for: alias), conn.state == .ready, conn.isManaged else {
+            return nil
+        }
         return Self.socketFilePath(for: alias)
     }
 
     /// Current connection state for an alias.
     func connectionState(for alias: String) -> ConnectionState? {
-        queue.sync { connections[alias]?.state }
+        connection(for: alias)?.state
     }
 
     /// Stderr fragments that mean the transport is gone, not that the remote command
@@ -114,11 +132,11 @@ final class SSHControlManager: @unchecked Sendable {
     /// `.ready` forever and callers burn their retry budget against a dead link.
     func markFailed(alias: String) {
         queue.async { [weak self] in
-            guard let self, let conn = self.connections[alias] else { return }
+            guard let self, let conn = self.connection(for: alias) else { return }
             if conn.isManaged {
                 Self.killMaster(alias: alias)
             }
-            self.connections[alias] = ManagedConnection(state: .failed, isManaged: conn.isManaged)
+            self.setConnection(ManagedConnection(state: .failed, isManaged: conn.isManaged), for: alias)
             debugLog("[SSHControl] \(alias) marked failed — will re-establish on next request")
         }
     }
@@ -162,7 +180,7 @@ final class SSHControlManager: @unchecked Sendable {
         queue.async { [weak self] in
             guard let self else { return }
 
-            if let existing = self.connections[alias] {
+            if let existing = self.connection(for: alias) {
                 switch existing.state {
                 case .ready:
                     // Don't trust a stale `.ready` — the master may have died since
@@ -176,7 +194,9 @@ final class SSHControlManager: @unchecked Sendable {
                         return
                     }
                     if Self.isMasterAlive(alias: alias, isManaged: existing.isManaged) {
-                        self.connections[alias]?.lastVerified = now
+                        var refreshed = existing
+                        refreshed.lastVerified = now
+                        self.setConnection(refreshed, for: alias)
                         self.finish(alias: alias, success: true, completion: completion)
                         return
                     }
@@ -197,7 +217,7 @@ final class SSHControlManager: @unchecked Sendable {
                 }
             }
 
-            self.connections[alias] = ManagedConnection(state: .connecting, isManaged: false)
+            self.setConnection(ManagedConnection(state: .connecting, isManaged: false), for: alias)
 
             // Step 1: Quick probe — does the user's own ControlMaster work?
             let probeResult = Self.runSSHCommand([
@@ -207,8 +227,9 @@ final class SSHControlManager: @unchecked Sendable {
             ])
             if probeResult {
                 debugLog("[SSHControl] Probe succeeded for \(alias) — user's ControlMaster works")
-                self.connections[alias] = ManagedConnection(
-                    state: .ready, isManaged: false, lastVerified: booUptime())
+                self.setConnection(
+                    ManagedConnection(state: .ready, isManaged: false, lastVerified: booUptime()),
+                    for: alias)
                 self.finish(alias: alias, success: true, completion: completion)
                 return
             }
@@ -239,7 +260,7 @@ final class SSHControlManager: @unchecked Sendable {
                 debugLog("[SSHControl] Master spawn failed for \(alias)")
                 // No master exists — recording it as managed would make a later
                 // teardown try to kill and unlink a socket Boo never created.
-                self.connections[alias] = ManagedConnection(state: .failed, isManaged: false)
+                self.setConnection(ManagedConnection(state: .failed, isManaged: false), for: alias)
                 self.finish(alias: alias, success: false, completion: completion)
                 return
             }
@@ -253,12 +274,13 @@ final class SSHControlManager: @unchecked Sendable {
 
             if checkResult {
                 debugLog("[SSHControl] Master verified for \(alias)")
-                self.connections[alias] = ManagedConnection(
-                    state: .ready, isManaged: true, lastVerified: booUptime())
+                self.setConnection(
+                    ManagedConnection(state: .ready, isManaged: true, lastVerified: booUptime()),
+                    for: alias)
                 self.finish(alias: alias, success: true, completion: completion)
             } else {
                 debugLog("[SSHControl] Master check failed for \(alias)")
-                self.connections[alias] = ManagedConnection(state: .failed, isManaged: true)
+                self.setConnection(ManagedConnection(state: .failed, isManaged: true), for: alias)
                 self.finish(alias: alias, success: false, completion: completion)
             }
         }
@@ -303,13 +325,23 @@ final class SSHControlManager: @unchecked Sendable {
 
     /// Teardown body. Must be called on `queue`.
     private func teardownLocked(alias: String) {
-        guard let conn = connections[alias] else { return }
+        // Callers parked while this alias was `.connecting` would otherwise wait
+        // forever — their completion lives only in `waiters` and nothing else
+        // flushes it once the connection entry is gone.
+        let parked = waiters.removeValue(forKey: alias) ?? []
+        if !parked.isEmpty {
+            DispatchQueue.main.async {
+                for waiter in parked { waiter(false) }
+            }
+        }
+
+        guard let conn = connection(for: alias) else { return }
 
         if conn.isManaged {
             Self.killMaster(alias: alias)
         }
 
-        connections.removeValue(forKey: alias)
+        setConnection(nil, for: alias)
         debugLog("[SSHControl] Torn down \(alias)")
     }
 
@@ -321,8 +353,10 @@ final class SSHControlManager: @unchecked Sendable {
     /// can't leave a stale socket behind for the next launch.
     func teardownAll() {
         let managed: [String] = queue.sync {
+            connLock.lock()
             let aliases = connections.filter { $0.value.isManaged }.map(\.key)
             connections.removeAll()
+            connLock.unlock()
             owners.removeAll()
             return aliases
         }
@@ -407,13 +441,17 @@ final class SSHControlManager: @unchecked Sendable {
     #if DEBUG
         /// Set connection state directly for testing.
         func setTestState(alias: String, state: ConnectionState, isManaged: Bool = true) {
-            queue.sync { connections[alias] = ManagedConnection(state: state, isManaged: isManaged) }
+            queue.sync {
+                setConnection(ManagedConnection(state: state, isManaged: isManaged), for: alias)
+            }
         }
 
         /// Clear all connection state for testing.
         func clearTestState() {
             queue.sync {
+                connLock.lock()
                 connections.removeAll()
+                connLock.unlock()
                 owners.removeAll()
                 waiters.removeAll()
             }

@@ -38,7 +38,12 @@ final class ContainerCwdWatcher: @unchecked Sendable {
     }
 
     let session: RemoteSessionType
+    /// Guards `process` and `stopped` — start() writes them from the caller's
+    /// thread, the reader launches on readerQueue, stop() may run from
+    /// releaseIfUnused or deinit.
+    private let processLock = NSLock()
     private var process: Process?
+    private var stopped = false
     private let watcherQueue = DispatchQueue(label: "com.boo.cwd-watcher", qos: .utility)
     private let readerQueue = DispatchQueue(label: "com.boo.cwd-reader", qos: .utility)
 
@@ -131,15 +136,32 @@ final class ContainerCwdWatcher: @unchecked Sendable {
         proc.standardOutput = stdout
         proc.standardError = FileHandle.nullDevice
         proc.standardInput = FileHandle.nullDevice
+        processLock.lock()
         self.process = proc
+        processLock.unlock()
 
         let fileHandle = stdout.fileHandleForReading
 
         readerQueue.async { [weak self] in
-            do {
-                try proc.run()
-            } catch {
-                remoteLog("[CwdWatcher] failed to start: \(error)")
+            // Launch under the lock so stop() either sees a not-yet-launched
+            // watcher (and skips terminate) or a running process — never a
+            // Process that terminate() would throw on.
+            if let self {
+                self.processLock.lock()
+                if self.stopped {
+                    self.processLock.unlock()
+                    return
+                }
+                do {
+                    try proc.run()
+                } catch {
+                    self.process = nil
+                    self.processLock.unlock()
+                    remoteLog("[CwdWatcher] failed to start: \(error)")
+                    return
+                }
+                self.processLock.unlock()
+            } else {
                 return
             }
 
@@ -186,6 +208,10 @@ final class ContainerCwdWatcher: @unchecked Sendable {
         let oldMap = pidCwdMap
         pidCwdMap = newMap
 
+        // Re-derive from tabCallbacks — the source of truth — so a PID can
+        // never stay reserved after its tab is gone.
+        assignedPIDs = Set(tabCallbacks.compactMap { $0.value.pid })
+
         // Find new PIDs (just appeared) and assign them to tabs that need a PID
         let newPIDs = Set(newMap.keys).subtracting(Set(oldMap.keys))
         for newPID in newPIDs.sorted(by: { Int($0) ?? 0 > Int($1) ?? 0 }) {
@@ -224,10 +250,14 @@ final class ContainerCwdWatcher: @unchecked Sendable {
 
     func stop() {
         remoteLog("[CwdWatcher] stopping shared watcher")
-        // Synchronize with readerQueue which sets `process` in start()
+        processLock.lock()
+        stopped = true
         let proc = process
         process = nil
-        proc?.terminate()
+        processLock.unlock()
+        // Safe: the reader launches under processLock and checks `stopped`
+        // first, so a non-nil proc here is either launched or never will be.
+        if let proc, proc.isRunning { proc.terminate() }
     }
 
     deinit {

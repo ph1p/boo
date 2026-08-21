@@ -18,11 +18,16 @@ final class FileSystemWatcher: @unchecked Sendable {
     }
 
     func start() {
+        guard stream == nil else { return }
         let pathsToWatch = [path] as CFArray
 
         var context = FSEventStreamContext()
-        // Use passRetained so the callback pointer stays valid until stop().
-        context.info = Unmanaged.passRetained(self).toOpaque()
+        // Unretained: the stream runs on the main queue and stop()/deinit
+        // invalidate it there before self can go away, so the pointer never
+        // outlives the watcher. A retained reference would keep the watcher
+        // (and its onChange closure graph) alive forever unless stop() was
+        // called explicitly — deinit could never run.
+        context.info = Unmanaged.passUnretained(self).toOpaque()
 
         let callback: FSEventStreamCallback = { _, info, numEvents, eventPaths, _, _ in
             guard let info = info else { return }
@@ -63,8 +68,6 @@ final class FileSystemWatcher: @unchecked Sendable {
         FSEventStreamStop(stream)
         FSEventStreamInvalidate(stream)
         FSEventStreamRelease(stream)
-        // Balance the passRetained() from start().
-        Unmanaged.passUnretained(self).release()
     }
 
     deinit {
