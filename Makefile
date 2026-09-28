@@ -69,7 +69,9 @@ ghostty: $(XCRUN_WRAPPER_DIR)/xcrun
 		git submodule update --init --depth 1 Vendor/ghostty; \
 	fi
 	@$(MAKE) ghostty-patches
-	@PATCH_HASH=$$(cat Vendor/patches/*.patch 2>/dev/null | shasum -a 256 | cut -d' ' -f1); \
+	@# Stamp = submodule commit + patches: a restored CI cache from an older Ghostty
+	@# revision must rebuild too, not just a patch change.
+	@PATCH_HASH=$$( (git -C Vendor/ghostty rev-parse HEAD; cat Vendor/patches/*.patch 2>/dev/null) | shasum -a 256 | cut -d' ' -f1); \
 	STAMP=Vendor/ghostty/macos/.patches-stamp; \
 	if [ ! -f $(GHOSTTY_LIB) ] \
 		|| [ "$$(cat $$STAMP 2>/dev/null)" != "$$PATCH_HASH" ]; then \
