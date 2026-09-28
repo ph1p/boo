@@ -11,10 +11,10 @@
   "dependencies": {
     "react": "latest",
     "react-dom": "latest",
-    "vocs": "latest"
+    "vocs": "^1.4.1"
   },
   "devDependencies": {
     "@types/react": "latest",
-    "typescript": "latest"
+    "typescript": "^6.0.3"
   }
 }

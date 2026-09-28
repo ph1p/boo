@@ -9,17 +9,12 @@
     "lint": "tsc --noEmit && oxlint && oxfmt --check ."
   },
   "dependencies": {
-    "monaco-editor": "0.56.0"
+    "monaco-editor": "0.57.0"
   },
   "devDependencies": {
-    "oxfmt": "^0.61.0",
-    "oxlint": "^1.76.0",
+    "oxfmt": "^0.70.0",
+    "oxlint": "^1.85.0",
     "typescript": "latest",
-    "vite": "8.1.5"
-  },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "esbuild"
-    ]
+    "vite": "8.3.1"
   }
 }
