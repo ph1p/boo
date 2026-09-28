@@ -3,6 +3,7 @@ import PackageDescription
 
 let booDeps: [Target.Dependency] = [
     "CGhostty",
+    "CObjCSafe",
     "CIronmark",
     .product(name: "Sparkle", package: "Sparkle")
 ]
@@ -69,6 +70,14 @@ let allTargets: [Target] = [
         linkerSettings: [
             .unsafeFlags(["-L", "Vendor/ironmark/macos-arm64"]),
             .linkedLibrary("ironmark")
+        ]
+    ),
+    .target(
+        name: "CObjCSafe",
+        path: "CObjCSafe",
+        publicHeadersPath: "include",
+        linkerSettings: [
+            .linkedFramework("AppKit")
         ]
     ),
     .target(

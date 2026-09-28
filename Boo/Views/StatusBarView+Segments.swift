@@ -57,8 +57,8 @@ final class EnvironmentSegment: StatusBarPlugin {
             .foregroundColor: dotColor
         ]
         let str = label as NSString
-        str.draw(at: NSPoint(x: cx, y: y), withAttributes: attrs)
-        cx += str.size(withAttributes: attrs).width
+        str.safeDraw(at: NSPoint(x: cx, y: y), withAttributes: attrs)
+        cx += str.safeSize(withAttributes: attrs).width
 
         return cx - x
     }
@@ -119,8 +119,8 @@ final class GitBranchSegment: StatusBarPlugin {
             .foregroundColor: theme.accentColor
         ]
         let iconStr = "\u{2387}" as NSString
-        iconStr.draw(at: NSPoint(x: cx, y: y), withAttributes: iconAttrs)
-        cx += iconStr.size(withAttributes: iconAttrs).width + 3
+        iconStr.safeDraw(at: NSPoint(x: cx, y: y), withAttributes: iconAttrs)
+        cx += iconStr.safeSize(withAttributes: iconAttrs).width + 3
 
         let attrs: [NSAttributedString.Key: Any] = [
             .font: NSFont.monospacedSystemFont(ofSize: 10, weight: .regular),
@@ -132,8 +132,8 @@ final class GitBranchSegment: StatusBarPlugin {
             ? String(branch.prefix(maxBranchChars)) + "\u{2026}"
             : branch
         let str = displayBranch as NSString
-        str.draw(at: NSPoint(x: cx, y: y), withAttributes: attrs)
-        cx += str.size(withAttributes: attrs).width
+        str.safeDraw(at: NSPoint(x: cx, y: y), withAttributes: attrs)
+        cx += str.safeSize(withAttributes: attrs).width
 
         // Show changed file count
         if state.gitChangedCount > 0 {
@@ -142,8 +142,8 @@ final class GitBranchSegment: StatusBarPlugin {
                 .foregroundColor: NSColor.booRemote
             ]
             let countStr = " \(state.gitChangedCount)\u{25CF}" as NSString
-            countStr.draw(at: NSPoint(x: cx, y: y + 0.5), withAttributes: countAttrs)
-            cx += countStr.size(withAttributes: countAttrs).width
+            countStr.safeDraw(at: NSPoint(x: cx, y: y + 0.5), withAttributes: countAttrs)
+            cx += countStr.safeSize(withAttributes: countAttrs).width
         }
 
         if state.gitRepoRoot != nil {
@@ -152,8 +152,8 @@ final class GitBranchSegment: StatusBarPlugin {
                 .foregroundColor: theme.accentColor.withAlphaComponent(0.6)
             ]
             let chevron = " \u{25BE}" as NSString
-            chevron.draw(at: NSPoint(x: cx, y: y + 1), withAttributes: chevronAttrs)
-            cx += chevron.size(withAttributes: chevronAttrs).width
+            chevron.safeDraw(at: NSPoint(x: cx, y: y + 1), withAttributes: chevronAttrs)
+            cx += chevron.safeSize(withAttributes: chevronAttrs).width
         }
 
         let width = cx - x
@@ -250,8 +250,8 @@ final class PathSegment: StatusBarPlugin {
             .foregroundColor: theme.textSecondary
         ]
         let str = abbreviatePath(state.currentDirectory) as NSString
-        str.draw(at: NSPoint(x: x, y: y), withAttributes: attrs)
-        return str.size(withAttributes: attrs).width
+        str.safeDraw(at: NSPoint(x: x, y: y), withAttributes: attrs)
+        return str.safeSize(withAttributes: attrs).width
     }
 
     func handleClick(at point: NSPoint, in barView: StatusBarView) -> Bool { false }
@@ -309,8 +309,8 @@ final class ProcessSegment: StatusBarPlugin {
             .foregroundColor: color.withAlphaComponent(0.7)
         ]
         let str = label as NSString
-        str.draw(at: NSPoint(x: cx, y: y), withAttributes: attrs)
-        cx += str.size(withAttributes: attrs).width
+        str.safeDraw(at: NSPoint(x: cx, y: y), withAttributes: attrs)
+        cx += str.safeSize(withAttributes: attrs).width
 
         return cx - x
     }
@@ -347,8 +347,8 @@ final class PaneInfoSegment: StatusBarPlugin {
             .foregroundColor: theme.textTertiary
         ]
         let str = info as NSString
-        let size = str.size(withAttributes: attrs)
-        str.draw(at: NSPoint(x: rx - size.width - 4, y: y), withAttributes: attrs)
+        let size = str.safeSize(withAttributes: attrs)
+        str.safeDraw(at: NSPoint(x: rx - size.width - 4, y: y), withAttributes: attrs)
         return size.width + 8
     }
 
@@ -428,7 +428,7 @@ final class SystemInfoSegment: StatusBarPlugin {
             .font: font,
             .foregroundColor: mutedColor
         ]
-        let middotWidth = middot.size(withAttributes: middotAttrs).width
+        let middotWidth = middot.safeSize(withAttributes: middotAttrs).width
 
         var cx = x
         for (i, part) in parts.enumerated() {
@@ -437,10 +437,10 @@ final class SystemInfoSegment: StatusBarPlugin {
                 .foregroundColor: part.1
             ]
             let str = part.0 as NSString
-            str.draw(at: NSPoint(x: cx, y: y), withAttributes: attrs)
-            cx += str.size(withAttributes: attrs).width
+            str.safeDraw(at: NSPoint(x: cx, y: y), withAttributes: attrs)
+            cx += str.safeSize(withAttributes: attrs).width
             if i < parts.count - 1 {
-                middot.draw(at: NSPoint(x: cx, y: y), withAttributes: middotAttrs)
+                middot.safeDraw(at: NSPoint(x: cx, y: y), withAttributes: middotAttrs)
                 cx += middotWidth
             }
         }
@@ -495,8 +495,8 @@ final class TimeSegment: StatusBarPlugin {
             .foregroundColor: theme.textSecondary
         ]
         let str = formatter.string(from: Date()) as NSString
-        let size = str.size(withAttributes: attrs)
-        str.draw(at: NSPoint(x: rx - size.width - 4, y: y), withAttributes: attrs)
+        let size = str.safeSize(withAttributes: attrs)
+        str.safeDraw(at: NSPoint(x: rx - size.width - 4, y: y), withAttributes: attrs)
         return size.width + 8
     }
 
@@ -563,8 +563,8 @@ final class PluginContentSegment: StatusBarPlugin {
             .foregroundColor: textColor
         ]
         let str = content.text as NSString
-        str.draw(at: NSPoint(x: cx, y: y), withAttributes: attrs)
-        cx += str.size(withAttributes: attrs).width
+        str.safeDraw(at: NSPoint(x: cx, y: y), withAttributes: attrs)
+        cx += str.safeSize(withAttributes: attrs).width
 
         return cx - x
     }

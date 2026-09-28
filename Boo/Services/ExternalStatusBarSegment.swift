@@ -64,8 +64,8 @@ final class ExternalStatusBarSegment: StatusBarPlugin {
             .foregroundColor: textColor
         ]
         let str = text as NSString
-        str.draw(at: NSPoint(x: cx, y: y), withAttributes: attrs)
-        cx += str.size(withAttributes: attrs).width
+        str.safeDraw(at: NSPoint(x: cx, y: y), withAttributes: attrs)
+        cx += str.safeSize(withAttributes: attrs).width
 
         return cx - x
     }
