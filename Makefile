@@ -11,6 +11,8 @@ BUILD_DIR    := .build
 APP_BUNDLE   := $(BUILD_DIR)/$(APP_NAME).app
 ZIP_NAME     := $(APP_NAME)-$(VERSION).zip
 DMG_NAME     := $(APP_NAME)-$(VERSION).dmg
+DSYM_BUNDLE  := $(BUILD_DIR)/$(APP_NAME).app.dSYM
+DSYM_ZIP     := $(APP_NAME)-$(VERSION).dSYM.zip
 
 # Signing (set via environment or CI secrets)
 SIGNING_IDENTITY ?=
@@ -252,6 +254,10 @@ app: release
 	@mkdir -p "$(APP_BUNDLE)/Contents/Resources"
 	@mkdir -p "$(APP_BUNDLE)/Contents/Frameworks"
 	@cp "$(RELEASE_BIN)" "$(APP_BUNDLE)/Contents/MacOS/$(APP_NAME)"
+	@# dSYM must come from the unstripped binary (its debug map points at the .o files);
+	@# same build → same UUID, so release crash logs symbolicate against it.
+	@rm -rf "$(DSYM_BUNDLE)"
+	@dsymutil "$(APP_BUNDLE)/Contents/MacOS/$(APP_NAME)" -o "$(DSYM_BUNDLE)"
 	@strip "$(APP_BUNDLE)/Contents/MacOS/$(APP_NAME)"
 	@cp Boo/App/Info.plist "$(APP_BUNDLE)/Contents/"
 	@RESOURCE_BUILD_DIR="$$(dirname "$(RELEASE_BIN)")"; \
@@ -330,6 +336,11 @@ zip-from-app:
 	@rm -f "$(BUILD_DIR)/$(ZIP_NAME)"
 	@ditto -c -k --keepParent "$(APP_BUNDLE)" "$(BUILD_DIR)/$(ZIP_NAME)"
 	@echo "==> $(BUILD_DIR)/$(ZIP_NAME) created"
+	@if [ -d "$(DSYM_BUNDLE)" ]; then \
+		rm -f "$(BUILD_DIR)/$(DSYM_ZIP)"; \
+		ditto -c -k --keepParent "$(DSYM_BUNDLE)" "$(BUILD_DIR)/$(DSYM_ZIP)"; \
+		echo "==> $(BUILD_DIR)/$(DSYM_ZIP) created"; \
+	fi
 
 dmg: app dmg-from-app
 

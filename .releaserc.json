@@ -21,8 +21,12 @@
       {
         "assets": [
           {
-            "path": ".build/Boo-*.zip",
+            "path": ".build/Boo-*[0-9].zip",
             "label": "Boo-${nextRelease.version}.zip"
+          },
+          {
+            "path": ".build/Boo-*.dSYM.zip",
+            "label": "Boo-${nextRelease.version}.dSYM.zip"
           }
         ]
       }
