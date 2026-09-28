@@ -265,23 +265,61 @@ private func ghosttyAction(_ app: ghostty_app_t?, _ target: ghostty_target_s, _ 
 }
 
 private func ghosttyReadClipboard(
-    _ userdata: UnsafeMutableRawPointer?, _ clipboard: ghostty_clipboard_e, _ state: UnsafeMutableRawPointer?
-) -> Bool {
-    guard clipboard == GHOSTTY_CLIPBOARD_STANDARD else { return false }
+    _ userdata: UnsafeMutableRawPointer?, _ clipboard: ghostty_clipboard_e, _ state: UnsafeMutableRawPointer?,
+    _ mimes: UnsafePointer<UnsafePointer<CChar>?>?, _ mimesLen: Int, _ list: Bool
+) -> ghostty_clipboard_read_result_e {
+    guard clipboard == GHOSTTY_CLIPBOARD_STANDARD else { return GHOSTTY_CLIPBOARD_READ_UNSUPPORTED }
     guard let surface = userdata.flatMap({ Unmanaged<GhosttyView>.fromOpaque($0).takeUnretainedValue().surface })
-    else { return false }
-    guard let str = NSPasteboard.general.ghosttyStringContents else { return false }
+    else { return GHOSTTY_CLIPBOARD_READ_UNSUPPORTED }
 
-    str.withCString { cstr in
-        ghostty_surface_complete_clipboard_request(surface, cstr, state, false)
+    // Boo only serves text. Ghostty normalizes text-like MIME requests to
+    // "text/plain", so anything else (e.g. Kitty image reads) is unavailable.
+    let wantsText = (0..<mimesLen).contains { i in
+        mimes?[i].map { String(cString: $0) == "text/plain" } ?? false
     }
-    return true
+    let str = NSPasteboard.general.ghosttyStringContents
+    let text = wantsText ? str : nil
+    guard text != nil || list else { return GHOSTTY_CLIPBOARD_READ_UNAVAILABLE }
+
+    // Ghostty slices `data[0..<len]` without a nil check, so even an empty
+    // string needs a real (NUL-terminated) buffer.
+    let data = strdup(text ?? "")
+    defer { free(data) }
+    let available: [String] = list && str != nil ? ["text/plain"] : []
+    "text/plain".withCString { mime in
+        let contents =
+            text == nil ? [] : [ghostty_clipboard_content_s(mime: mime, data: data, len: strlen(data!))]
+        withCStringArray(available) { avail in
+            contents.withUnsafeBufferPointer { contentsBuf in
+                var complete = ghostty_clipboard_complete_s(
+                    contents: contentsBuf.baseAddress, contents_len: contentsBuf.count,
+                    available: avail.baseAddress, available_len: avail.count,
+                    confirmed: false, remember: false)
+                ghostty_surface_complete_clipboard_request(surface, &complete, state)
+            }
+        }
+    }
+    return GHOSTTY_CLIPBOARD_READ_STARTED
+}
+
+/// Calls `body` with a temporary C array of NUL-terminated copies of `strings`.
+private func withCStringArray<R>(
+    _ strings: [String], _ body: (UnsafeBufferPointer<UnsafePointer<CChar>?>) -> R
+) -> R {
+    let copies = strings.compactMap { strdup($0) }
+    defer { copies.forEach { free($0) } }
+    return copies.map { UnsafePointer($0) }.withUnsafeBufferPointer(body)
 }
 
 private func ghosttyConfirmReadClipboard(
-    _ userdata: UnsafeMutableRawPointer?, _ prompt: UnsafePointer<CChar>?, _ state: UnsafeMutableRawPointer?,
-    _ request: ghostty_clipboard_request_e
+    _ userdata: UnsafeMutableRawPointer?, _ confirm: UnsafePointer<ghostty_clipboard_confirm_s>?,
+    _ state: UnsafeMutableRawPointer?, _ request: ghostty_clipboard_request_e
 ) {
+    // Boo sets clipboard-read = allow and has no confirmation UI. Deny anything
+    // that still asks, so the pending request is released instead of leaking.
+    guard let surface = userdata.flatMap({ Unmanaged<GhosttyView>.fromOpaque($0).takeUnretainedValue().surface })
+    else { return }
+    ghostty_surface_deny_clipboard_request(surface, state)
 }
 
 private func ghosttyWriteClipboard(
@@ -290,20 +328,17 @@ private func ghosttyWriteClipboard(
 ) {
     guard clipboard == GHOSTTY_CLIPBOARD_STANDARD else { return }
     guard let content = content, count > 0 else { return }
+    // Contents are length-delimited and not necessarily NUL-terminated.
+    func text(_ c: ghostty_clipboard_content_s) -> String? {
+        guard let data = c.data else { return nil }
+        return String(decoding: UnsafeRawBufferPointer(start: data, count: c.len), as: UTF8.self)
+    }
+    let entries = (0..<count).map { content[$0] }
+    let plain = entries.first { $0.mime.map { String(cString: $0) == "text/plain" } ?? false }
+    guard let str = text(plain ?? entries[0]) else { return }
     let pb = NSPasteboard.general
     pb.clearContents()
-    for i in 0..<count {
-        guard let mime = content[i].mime, let data = content[i].data else { continue }
-        let mimeString = String(cString: mime)
-        let text = String(cString: data)
-        if mimeString == "text/plain" {
-            pb.setString(text, forType: .string)
-            return
-        }
-    }
-    if let data = content[0].data {
-        pb.setString(String(cString: data), forType: .string)
-    }
+    pb.setString(str, forType: .string)
 }
 
 extension NSPasteboard {
