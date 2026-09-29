@@ -307,7 +307,7 @@ private func withCStringArray<R>(
     _ strings: [String], _ body: (UnsafeBufferPointer<UnsafePointer<CChar>?>) -> R
 ) -> R {
     let copies = strings.compactMap { strdup($0) }
-    defer { copies.forEach { free($0) } }
+    defer { for copy in copies { free(copy) } }
     return copies.map { UnsafePointer($0) }.withUnsafeBufferPointer(body)
 }
 
