@@ -256,6 +256,17 @@ final class AIProcessDetectionTests: XCTestCase {
         XCTAssertEqual(bridge.state.foregroundProcess, "claude")
     }
 
+    func testHalfCircleSpinnerTitleKeepsClaude() {
+        bridge.handleTitleChange(title: "✳ Claude Code", paneID: paneID)
+        XCTAssertEqual(bridge.state.foregroundProcess, "claude")
+
+        // Each spinner frame must not flip the process to the glyph itself.
+        for glyph in ["◐", "◑", "◒", "◓", "✶", "✻"] {
+            bridge.handleTitleChange(title: "\(glyph) Refactor parser", paneID: paneID)
+            XCTAssertEqual(bridge.state.foregroundProcess, "claude", "glyph \(glyph)")
+        }
+    }
+
     func testShellTitleClears() {
         bridge.handleTitleChange(title: "vim", paneID: paneID)
         XCTAssertEqual(bridge.state.foregroundProcess, "vim")

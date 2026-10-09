@@ -173,9 +173,17 @@ enum ProcessIcon {
         "cursor": "cursor"
     ]
 
-    /// Braille pattern dots (U+2800..U+28FF) or ✳ (U+2733) — used by AI CLI spinners.
+    /// Glyphs AI CLIs put at the start of the window title while working:
+    /// Braille dots (U+2800..U+28FF), Claude's star frames (✢ ✳ ✶ ✻ ✽) and
+    /// its half-circle spinner (◐ ◑ ◒ ◓, U+25D0..U+25D3).
     private static func isAISpinnerScalar(_ s: Unicode.Scalar) -> Bool {
-        (0x2800...0x28FF).contains(s.value) || s.value == 0x2733
+        switch s.value {
+        case 0x2800...0x28FF, 0x25D0...0x25D3,
+            0x2722, 0x2733, 0x2736, 0x273B, 0x273D:
+            return true
+        default:
+            return false
+        }
     }
 
     // MARK: - Mappings
