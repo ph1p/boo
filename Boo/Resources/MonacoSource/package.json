@@ -12,9 +12,9 @@
     "monaco-editor": "0.57.0"
   },
   "devDependencies": {
-    "oxfmt": "^0.70.0",
-    "oxlint": "^1.85.0",
+    "oxfmt": "^0.72.0",
+    "oxlint": "^1.87.0",
     "typescript": "latest",
-    "vite": "8.3.1"
+    "vite": "8.3.4"
   }
 }

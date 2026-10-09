@@ -115,7 +115,7 @@ let package = Package(
         .executable(name: "BooApp", targets: ["BooApp"])
     ],
     dependencies: [
-        .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.9.1")
+        .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.10.0")
     ],
     targets: allTargets
 )
