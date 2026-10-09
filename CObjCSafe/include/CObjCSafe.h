@@ -9,7 +9,9 @@ NS_ASSUME_NONNULL_BEGIN
 /// is undefined behavior, so the `@try` has to sit directly around the AppKit call.
 /// These wrap the NSString drawing calls whose CoreText internals have been seen to
 /// throw (`attempt to insert nil object` from TAttributes::ApplyFont during font
-/// fallback): the text is skipped for that frame instead of terminating the app.
+/// fallback). An exception raised deep inside CoreText unwinds through noexcept C++
+/// frames and still aborts the app, so attributes are also pre-copied before the call
+/// (see CObjCSafe.m) to keep that failure on the catchable side.
 
 /// `-[NSString drawAtPoint:withAttributes:]`; returns NO if AppKit threw.
 BOOL BooSafeDrawString(NSString *string, NSPoint point, NSDictionary<NSAttributedStringKey, id> *attributes);
