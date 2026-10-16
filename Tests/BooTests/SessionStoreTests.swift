@@ -843,4 +843,82 @@ final class SessionStoreTests: XCTestCase {
         XCTAssertEqual(savedPane?.tabs.count, 1)
         XCTAssertEqual(savedPane?.tabs.first?.contentState?.asTerminal?.workingDirectory, "/tmp")
     }
+
+    // MARK: - Multi-window (version 2)
+
+    func testVersion1FileDecodesAsSingleWindow() throws {
+        let a = UUID()
+        let legacy = SessionSnapshot(activeWorkspaceIndex: 0, workspaces: [makeSessionWorkspace(id: a)])
+        let data = try JSONEncoder().encode(legacy)
+        let json = String(decoding: data, as: UTF8.self)
+        XCTAssertFalse(json.contains("\"windows\""))
+        try data.write(to: URL(fileURLWithPath: tempFile))
+
+        let snapshot = try XCTUnwrap(SessionStore.load())
+        XCTAssertNil(snapshot.windows)
+        XCTAssertEqual(snapshot.allWindows.count, 1)
+        XCTAssertEqual(snapshot.allWindows[0].workspaces.map(\.id), [a])
+        XCTAssertEqual(snapshot.resolvedKeyWindowIndex, 0)
+        XCTAssertNil(snapshot.allWindows[0].frameRect)
+    }
+
+    func testMultiWindowRoundTripKeepsWindowsAndMirrorsKeyWindow() throws {
+        let a = UUID()
+        let b = UUID()
+        let c = UUID()
+        var first = SessionWindow(
+            activeWorkspaceIndex: 0, workspaces: [makeSessionWorkspace(id: a)])
+        first.frame = [10, 20, 800, 600]
+        first.sidebarIsVisible = false
+        first.sidebarWidth = 300
+        var second = SessionWindow(
+            activeWorkspaceIndex: 1, workspaces: [b, c].map { makeSessionWorkspace(id: $0) })
+        second.isFullScreen = true
+
+        SessionStore.save(SessionSnapshot(windows: [first, second], keyWindowIndex: 1))
+        let snapshot = try XCTUnwrap(SessionStore.load())
+
+        XCTAssertEqual(snapshot.version, 2)
+        XCTAssertEqual(snapshot.allWindows.count, 2)
+        XCTAssertEqual(snapshot.resolvedKeyWindowIndex, 1)
+        XCTAssertEqual(snapshot.allWindows[0].frameRect, NSRect(x: 10, y: 20, width: 800, height: 600))
+        XCTAssertEqual(snapshot.allWindows[0].sidebarState?.isVisible, false)
+        XCTAssertEqual(snapshot.allWindows[0].sidebarState?.width, 300)
+        XCTAssertNil(snapshot.allWindows[1].sidebarState)
+        XCTAssertEqual(snapshot.allWindows[1].isFullScreen, true)
+        // Legacy mirror (older builds) is the key window.
+        XCTAssertEqual(snapshot.workspaces.map(\.id), [b, c])
+        XCTAssertEqual(snapshot.activeWorkspaceIndex, 1)
+    }
+
+    func testEmptyWindowsDroppedUnlessNothingElseRemains() {
+        let a = UUID()
+        let empty = SessionWindow(activeWorkspaceIndex: -1, workspaces: [])
+        let full = SessionWindow(activeWorkspaceIndex: 0, workspaces: [makeSessionWorkspace(id: a)])
+
+        let mixed = SessionSnapshot(windows: [empty, full], keyWindowIndex: 1)
+        XCTAssertEqual(mixed.allWindows.count, 1)
+        XCTAssertEqual(mixed.resolvedKeyWindowIndex, 0)
+        XCTAssertEqual(mixed.workspaces.map(\.id), [a])
+
+        let onlyEmpty = SessionSnapshot(windows: [empty], keyWindowIndex: 0)
+        XCTAssertEqual(onlyEmpty.allWindows.count, 1)
+        XCTAssertTrue(onlyEmpty.workspaces.isEmpty)
+    }
+
+    func testResolvedActiveIndexPerWindow() {
+        let a = UUID()
+        let b = UUID()
+        let window = SessionWindow(
+            activeWorkspaceIndex: 1, workspaces: [a, b].map { makeSessionWorkspace(id: $0) })
+        XCTAssertEqual(SessionStore.resolvedActiveIndex(window: window, restoredIDs: [b]), 0)
+    }
+
+    func testRejectsInvalidFrame() {
+        var window = SessionWindow(activeWorkspaceIndex: 0, workspaces: [])
+        window.frame = [0, 0, 0, 600]
+        XCTAssertNil(window.frameRect)
+        window.frame = [1, 2]
+        XCTAssertNil(window.frameRect)
+    }
 }

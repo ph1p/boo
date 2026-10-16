@@ -116,6 +116,19 @@ final class SidebarController {
         self.intendedVisibleWidth = AppSettings.shared.sidebarWidth
     }
 
+    /// Restore a saved window's sidebar state (multi-window session restore).
+    func seedWindowState(_ state: SidebarWorkspaceState) {
+        windowState = SidebarWorkspaceState(
+            isVisible: state.isVisible ?? windowState.isVisible,
+            width: state.width ?? windowState.width
+        )
+        if let visible = state.isVisible {
+            isVisible = visible
+            isUserHidden = !visible
+        }
+        if let width = state.width { intendedVisibleWidth = width }
+    }
+
     // MARK: - Tab Bar Position
 
     /// Apply constraints for tab bar position (top/bottom).

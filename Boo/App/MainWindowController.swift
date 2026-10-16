@@ -196,13 +196,17 @@ class ThemedSplitView: NSSplitView {
     /// tab), or the bridge keeps the previous tab's remote session and title.
     var lastFocusedTabID: UUID?
     var allowNextWindowClose = false
-    /// Whether this window writes the session file. Only one window persists
-    /// until sessions store multiple windows; `WindowManager` hands it over.
-    /// A fresh window starts without it: its init would otherwise overwrite the
-    /// session file before `WindowManager.register` runs.
+    /// Whether this window writes the session file. Fresh and restored windows
+    /// start without it (their init would otherwise overwrite the session file
+    /// before every window exists); `WindowManager.register` turns it on.
     var persistsSession: Bool
     /// Launch window restores the saved session; extra windows start fresh.
     private let restoresSession: Bool
+    /// Saved window to restore (multi-window launch). nil with `restoresSession`
+    /// loads the first window of the session file.
+    let restoredWindow: SessionWindow?
+    /// Frame before entering fullscreen, saved instead of the fullscreen frame.
+    private var windowedFrame: NSRect?
     /// Debounce timer for saving the session after split-pane divider drags.
     private var splitRatioSaveTimer: Timer?
     /// Debounce timer for saving workspace sidebar state after sidebar divider drags.
@@ -345,11 +349,14 @@ class ThemedSplitView: NSSplitView {
         window.isMovable = false
     }
 
-    /// - Parameter restoreSession: load the saved session (launch window) or
-    ///   start with a single default workspace (additional windows).
-    init(restoreSession: Bool = true) {
-        restoresSession = restoreSession
-        persistsSession = restoreSession
+    /// - Parameters:
+    ///   - restoreSession: launch window: load the saved session and remember the
+    ///     frame; otherwise start with a single default workspace.
+    ///   - sessionWindow: restore this saved window instead of loading the file.
+    init(restoreSession: Bool = true, restoring sessionWindow: SessionWindow? = nil) {
+        restoresSession = restoreSession || sessionWindow != nil
+        restoredWindow = sessionWindow
+        persistsSession = restoreSession && sessionWindow == nil
         let window = BooWindow(
             contentRect: NSRect(x: 0, y: 0, width: 1000, height: 700),
             styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
@@ -358,6 +365,9 @@ class ThemedSplitView: NSSplitView {
         )
         window.center()
         Self.applyWindowChrome(window, autosaveFrame: restoreSession)
+        if let frame = sessionWindow?.frameRect, Self.isOnScreen(frame) {
+            window.setFrame(frame, display: false)
+        }
         super.init(window: window)
         performSetup()
     }
@@ -368,6 +378,9 @@ class ThemedSplitView: NSSplitView {
         let theRegistry = PluginRegistry()
         coordinator = WindowStateCoordinator(bridge: theBridge, pluginRegistry: theRegistry)
         sidebarController = SidebarController(windowController: self)
+        if let state = restoredWindow?.sidebarState {
+            sidebarController.seedWindowState(state)
+        }
 
         setupUI()
         statusBar.sidebarVisible = sidebarVisible
@@ -1424,17 +1437,52 @@ class ThemedSplitView: NSSplitView {
         normalizeWorkspaceState()
         persistActiveWorkspaceSidebarState()
         savePluginStateForActiveTab()
-        if persistsSession {
-            SessionStore.save(appState: appState)
-        }
         let manager = WindowManager.shared
-        guard manager.isManaged(self) else { return }
-        // The app keeps running when other windows remain: stop this window's
-        // terminals so they don't outlive it, then let it deallocate.
-        if manager.controllers.count > 1 {
-            tearDownAllWorkspaces()
+        guard manager.isManaged(self) else {
+            if persistsSession { SessionStore.save(appState: appState) }
+            return
         }
+        // Quitting or closing the last window: the session keeps this window.
+        if manager.isTerminating || manager.controllers.count == 1 {
+            manager.writeSession(from: self, sync: true)
+            if !manager.isTerminating { manager.remove(self) }
+            return
+        }
+        // The app keeps running when other windows remain: stop this window's
+        // terminals so they don't outlive it, drop it from the session, then let
+        // it deallocate.
+        tearDownAllWorkspaces()
         manager.remove(self)
+        if let next = manager.controllers.first {
+            manager.writeSession(from: next, sync: true)
+        }
+    }
+
+    func windowWillEnterFullScreen(_ notification: Notification) {
+        windowedFrame = window?.frame
+    }
+
+    func windowDidExitFullScreen(_ notification: Notification) {
+        windowedFrame = nil
+    }
+
+    /// This window's session entry. Main thread only.
+    func sessionWindow() -> SessionWindow {
+        var entry = SessionStore.buildWindow(appState: appState)
+        let isFullScreen = window?.styleMask.contains(.fullScreen) ?? false
+        if let frame = isFullScreen ? (windowedFrame ?? window?.frame) : window?.frame {
+            entry.frame = [frame.origin.x, frame.origin.y, frame.width, frame.height].map { Double($0) }
+        }
+        entry.isFullScreen = isFullScreen
+        let sidebar = sidebarController.windowState
+        entry.sidebarIsVisible = sidebar.isVisible
+        entry.sidebarWidth = sidebar.width.map { Double($0) }
+        return entry
+    }
+
+    /// Whether a saved frame still lands on a connected screen.
+    static func isOnScreen(_ frame: NSRect) -> Bool {
+        NSScreen.screens.contains { $0.visibleFrame.intersects(frame) }
     }
 
     private func tearDownAllWorkspaces() {

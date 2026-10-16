@@ -56,9 +56,72 @@ struct SessionWorkspace: Codable, Sendable {
     let sidebarWidth: Double?
 }
 
+/// One main window: its workspaces plus window chrome.
+struct SessionWindow: Codable, Sendable {
+    var activeWorkspaceIndex: Int
+    var workspaces: [SessionWorkspace]
+    /// Non-fullscreen frame in screen coordinates: [x, y, width, height].
+    var frame: [Double]? = nil
+    var isFullScreen: Bool? = nil
+    /// Window-level sidebar state (fallback when per-workspace state is off).
+    var sidebarIsVisible: Bool? = nil
+    var sidebarWidth: Double? = nil
+
+    var frameRect: NSRect? {
+        guard let frame, frame.count == 4, frame[2] > 0, frame[3] > 0 else { return nil }
+        return NSRect(x: frame[0], y: frame[1], width: frame[2], height: frame[3])
+    }
+
+    var sidebarState: SidebarWorkspaceState? {
+        guard sidebarIsVisible != nil || sidebarWidth != nil else { return nil }
+        return SidebarWorkspaceState(
+            isVisible: sidebarIsVisible,
+            width: sidebarWidth.flatMap { $0 > 0 ? CGFloat($0) : nil }
+        )
+    }
+}
+
+/// Session file. Version 2 stores every window in `windows`; the top-level
+/// `activeWorkspaceIndex`/`workspaces` mirror the key window so older builds
+/// (version 1, no `windows`) still restore something.
 struct SessionSnapshot: Codable, Sendable {
     let activeWorkspaceIndex: Int
     let workspaces: [SessionWorkspace]
+    var version: Int? = nil
+    var windows: [SessionWindow]? = nil
+    var keyWindowIndex: Int? = nil
+
+    /// Every saved window; a version 1 file is a single window.
+    var allWindows: [SessionWindow] {
+        if let windows, !windows.isEmpty { return windows }
+        return [SessionWindow(activeWorkspaceIndex: activeWorkspaceIndex, workspaces: workspaces)]
+    }
+
+    /// Index into `allWindows` of the window to make key.
+    var resolvedKeyWindowIndex: Int {
+        let count = allWindows.count
+        return min(max(keyWindowIndex ?? 0, 0), count - 1)
+    }
+
+    init(activeWorkspaceIndex: Int, workspaces: [SessionWorkspace]) {
+        self.activeWorkspaceIndex = activeWorkspaceIndex
+        self.workspaces = workspaces
+    }
+
+    /// Version 2 snapshot of `windows` with the legacy mirror of the key window.
+    init(windows: [SessionWindow], keyWindowIndex: Int) {
+        // Windows that lost every workspace (closing) only survive when nothing else does.
+        let nonEmpty = windows.enumerated().filter { !$0.element.workspaces.isEmpty }
+        let kept = nonEmpty.isEmpty ? Array(windows.enumerated().prefix(1)) : nonEmpty
+        let all = kept.map(\.element)
+        let keyIndex = kept.firstIndex { $0.offset == keyWindowIndex } ?? 0
+        let mirror = all.isEmpty ? nil : all[keyIndex]
+        self.activeWorkspaceIndex = mirror?.activeWorkspaceIndex ?? 0
+        self.workspaces = mirror?.workspaces ?? []
+        self.version = 2
+        self.windows = all
+        self.keyWindowIndex = keyIndex
+    }
 }
 
 // MARK: - SessionStore
@@ -80,9 +143,14 @@ enum SessionStore {
         _testFilePath ?? BooPaths.configDir.appendingPathComponent("session.json")
     }
 
-    /// Build a `SessionSnapshot` from `appState`.
+    /// Build a single-window `SessionSnapshot` from `appState`.
     /// Must be called on the main thread because AppState/Workspace/Pane are not thread-safe.
     private static func buildSnapshot(appState: AppState) -> SessionSnapshot {
+        SessionSnapshot(windows: [buildWindow(appState: appState)], keyWindowIndex: 0)
+    }
+
+    /// Build one window's session state from `appState`. Main thread only.
+    static func buildWindow(appState: AppState) -> SessionWindow {
         let workspaces = appState.workspaces.map { ws -> SessionWorkspace in
             ws.normalizePaneState()
             let panes = ws.panes.values.map { pane -> SessionPane in
@@ -135,7 +203,7 @@ enum SessionStore {
             )
         }
 
-        return SessionSnapshot(
+        return SessionWindow(
             activeWorkspaceIndex: appState.activeWorkspaceIndex,
             workspaces: workspaces
         )
@@ -156,7 +224,11 @@ enum SessionStore {
     /// Used by `AppDelegate.applicationWillTerminate` so the final state is not lost.
     /// Must be called on the main thread.
     static func save(appState: AppState) {
-        let snapshot = buildSnapshot(appState: appState)
+        save(buildSnapshot(appState: appState))
+    }
+
+    /// Synchronous write of a pre-built snapshot (multi-window saves).
+    static func save(_ snapshot: SessionSnapshot) {
         let path = sessionFile
         // Route through the write queue so any pending async writes land first;
         // this snapshot is guaranteed to be the final on-disk state.
@@ -170,7 +242,11 @@ enum SessionStore {
     /// Callers on hot paths (tab open, workspace switch) should prefer this variant.
     /// Must be called on the main thread.
     static func saveAsync(appState: AppState) {
-        let snapshot = buildSnapshot(appState: appState)
+        saveAsync(buildSnapshot(appState: appState))
+    }
+
+    /// Async write of a pre-built snapshot (multi-window saves).
+    static func saveAsync(_ snapshot: SessionSnapshot) {
         let path = sessionFile
         writeQueue.async {
             writeSnapshot(snapshot, to: path)
@@ -192,7 +268,12 @@ enum SessionStore {
     /// Reconstruct Workspace objects from a snapshot, skipping any workspaces
     /// whose folderPath no longer exists on disk.
     static func workspaces(from snapshot: SessionSnapshot) -> [Workspace] {
-        let restored: [Workspace] = snapshot.workspaces.compactMap { sw -> Workspace? in
+        workspaces(from: snapshot.allWindows[0])
+    }
+
+    /// Reconstruct one window's Workspace objects (missing folders skipped).
+    static func workspaces(from window: SessionWindow) -> [Workspace] {
+        let restored: [Workspace] = window.workspaces.compactMap { sw -> Workspace? in
             // Only restore workspaces whose root folder still exists.
             guard FileManager.default.fileExists(atPath: sw.folderPath) else {
                 debugLog("[SessionStore] Skipping workspace at \(sw.folderPath) — path not found")
@@ -290,14 +371,23 @@ enum SessionStore {
     /// saved active workspace's ID against the restored set; fall back to a clamped index
     /// only when the active workspace itself was dropped.
     static func resolvedActiveIndex(snapshot: SessionSnapshot, restoredIDs: [UUID]) -> Int {
+        resolvedActiveIndex(window: snapshot.allWindows[0], restoredIDs: restoredIDs)
+    }
+
+    static func resolvedActiveIndex(window: SessionWindow, restoredIDs: [UUID]) -> Int {
         guard !restoredIDs.isEmpty else { return 0 }
-        if snapshot.activeWorkspaceIndex >= 0,
-            snapshot.activeWorkspaceIndex < snapshot.workspaces.count
+        if window.activeWorkspaceIndex >= 0,
+            window.activeWorkspaceIndex < window.workspaces.count
         {
-            let activeID = snapshot.workspaces[snapshot.activeWorkspaceIndex].id
+            let activeID = window.workspaces[window.activeWorkspaceIndex].id
             if let idx = restoredIDs.firstIndex(of: activeID) { return idx }
         }
-        return min(max(snapshot.activeWorkspaceIndex, 0), restoredIDs.count - 1)
+        return min(max(window.activeWorkspaceIndex, 0), restoredIDs.count - 1)
+    }
+
+    /// Whether any of the window's workspace folders still exists.
+    static func hasRestorableWorkspace(_ window: SessionWindow) -> Bool {
+        window.workspaces.contains { FileManager.default.fileExists(atPath: $0.folderPath) }
     }
 
     private static func isContentStateRestorable(_ state: ContentState) -> Bool {

@@ -19,6 +19,8 @@ final class WindowManager {
     weak var menuOwner: MainWindowController?
     private var sharedHandlersInstalled = false
     private var settingsObserver: NSObjectProtocol?
+    /// Set once the app is quitting: closing windows then stay in the session.
+    private(set) var isTerminating = false
 
     private init() {}
 
@@ -35,9 +37,8 @@ final class WindowManager {
         return controllers.first
     }
 
-    /// The window whose state is written to the session file. Interim until
-    /// multi-window sessions: only one window persists, the oldest open one.
-    var sessionOwner: MainWindowController? { controllers.first }
+    /// Oldest open window; runs app-wide side effects once (see `isPrimary`).
+    var primaryController: MainWindowController? { controllers.first }
 
     /// Whether `controller` is the window that feeds app-wide projections
     /// (`AppStore.shared`). True when nothing is managed (tests).
@@ -52,7 +53,7 @@ final class WindowManager {
     /// Whether `controller` should run app-wide side effects that every window
     /// would otherwise repeat. Unmanaged controllers (tests) count as primary.
     func isPrimary(_ controller: MainWindowController) -> Bool {
-        sessionOwner.map { $0 === controller } ?? true
+        primaryController.map { $0 === controller } ?? true
     }
 
     func isManaged(_ controller: MainWindowController) -> Bool {
@@ -61,15 +62,48 @@ final class WindowManager {
 
     // MARK: - Lifecycle
 
-    /// First window at launch: restores the saved session.
+    /// Windows at launch: restores every saved window (or one fresh window).
+    /// The first keeps the frame autosave; the saved key window ends up key.
     @discardableResult
     func openInitialWindow() -> MainWindowController {
         installSharedHandlers()
-        let controller = MainWindowController(restoreSession: true)
-        register(controller)
+        let snapshot = SessionStore.load()
+        var saved = snapshot?.allWindows ?? []
+        var keyIndex = snapshot?.resolvedKeyWindowIndex ?? 0
+        // Extra windows whose folders all vanished would restore as default windows.
+        if saved.count > 1 {
+            let keep = saved.indices.filter { SessionStore.hasRestorableWorkspace(saved[$0]) }
+            if !keep.isEmpty {
+                keyIndex = keep.firstIndex(of: keyIndex) ?? 0
+                saved = keep.map { saved[$0] }
+            }
+        }
+        guard !saved.isEmpty else {
+            let controller = MainWindowController(restoreSession: true)
+            register(controller)
+            show(controller, fullScreen: false)
+            return controller
+        }
+
+        let restored = saved.enumerated().map { index, window in
+            MainWindowController(restoreSession: index == 0, restoring: window)
+        }
+        for controller in restored { register(controller) }
+        for (index, controller) in restored.enumerated() where index != keyIndex {
+            show(controller, fullScreen: saved[index].isFullScreen == true)
+        }
+        let key = restored[keyIndex]
+        show(key, fullScreen: saved[keyIndex].isFullScreen == true)
+        writeSession(from: key, sync: false)
+        return key
+    }
+
+    private func show(_ controller: MainWindowController, fullScreen: Bool) {
         controller.showWindow(nil)
         controller.window?.makeKeyAndOrderFront(nil)
-        return controller
+        if fullScreen, controller.window?.styleMask.contains(.fullScreen) == false {
+            controller.window?.toggleFullScreen(nil)
+        }
     }
 
     /// Additional window starting with a fresh default workspace, cascaded
@@ -87,12 +121,14 @@ final class WindowManager {
         register(controller)
         controller.showWindow(nil)
         controller.window?.makeKeyAndOrderFront(nil)
+        writeSession(from: controller, sync: false)
         return controller
     }
 
+    /// Every registered window is part of the session.
     func register(_ controller: MainWindowController) {
         guard !isManaged(controller) else { return }
-        controller.persistsSession = controllers.isEmpty
+        controller.persistsSession = true
         controllers.append(controller)
         lastActive = controller
     }
@@ -102,17 +138,42 @@ final class WindowManager {
         lastActive = controller
     }
 
-    /// Called from `windowWillClose`. Hands session ownership to the next
-    /// window so the session file keeps tracking an open window.
+    /// Called from `windowWillClose`, which then saves the remaining windows.
     func remove(_ controller: MainWindowController) {
         guard let index = controllers.firstIndex(where: { $0 === controller }) else { return }
-        let wasOwner = index == 0
         controllers.remove(at: index)
         if lastActive === controller { lastActive = nil }
-        if wasOwner, let next = controllers.first {
-            next.persistsSession = true
-            next.saveSession()
+    }
+
+    // MARK: - Session
+
+    /// Write the session file: every persisting window when `controller` is
+    /// managed, only `controller` otherwise (tests, unregistered windows).
+    /// Snapshots are built here on the main thread; `sync: false` encodes and
+    /// writes in the background.
+    func writeSession(from controller: MainWindowController, sync: Bool) {
+        guard controller.persistsSession else { return }
+        let windows = isManaged(controller) ? controllers.filter(\.persistsSession) : [controller]
+        let keyIndex = windows.firstIndex { $0 === activeController } ?? 0
+        let snapshot = SessionSnapshot(
+            windows: windows.map { $0.sessionWindow() }, keyWindowIndex: keyIndex)
+        if sync {
+            SessionStore.save(snapshot)
+        } else {
+            SessionStore.saveAsync(snapshot)
         }
+    }
+
+    /// Final save on quit: flush every window's live state, then write all
+    /// windows synchronously. Windows closing afterwards stay in the session.
+    func saveSessionForTermination() {
+        isTerminating = true
+        guard let first = controllers.first else { return }
+        for controller in controllers {
+            controller.coordinator?.saveSidebarStateToSettings()
+            controller.prepareSessionSave()
+        }
+        writeSession(from: first, sync: true)
     }
 
     /// Controller holding the workspace with `id`, if any window does.

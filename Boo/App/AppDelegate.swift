@@ -14,10 +14,6 @@ public enum BooMain {
 @MainActor public class AppDelegate: NSObject, NSApplicationDelegate {
     private var appearanceObserver: NSKeyValueObservation?
 
-    private var windowController: MainWindowController? {
-        WindowManager.shared.sessionOwner
-    }
-
     public func applicationDidFinishLaunching(_ notification: Notification) {
         // Verify ~/.boo directories are usable; warn once if not.
         do {
@@ -68,8 +64,7 @@ public enum BooMain {
     }
 
     public func applicationWillTerminate(_ notification: Notification) {
-        windowController?.coordinator?.saveSidebarStateToSettings()
-        windowController?.saveSession()
+        WindowManager.shared.saveSessionForTermination()
         SSHControlManager.shared.teardownAll()
         BooSocketServer.shared.stop()
         RemoteControlServer.shared.stop()

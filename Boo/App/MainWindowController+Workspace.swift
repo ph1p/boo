@@ -206,8 +206,8 @@ extension MainWindowController {
     }
 
     func restoreWorkspaces() {
-        if let snapshot = SessionStore.load() {
-            let restored = SessionStore.workspaces(from: snapshot)
+        if let saved = restoredWindow ?? SessionStore.load()?.allWindows.first {
+            let restored = SessionStore.workspaces(from: saved)
             if !restored.isEmpty {
                 for ws in restored {
                     appState.addWorkspace(ws)
@@ -218,7 +218,7 @@ extension MainWindowController {
                 // whose folders no longer exist are skipped during restore, which shifts
                 // indices. Falling back to a clamped index would focus the wrong workspace.
                 let activeIndex = SessionStore.resolvedActiveIndex(
-                    snapshot: snapshot, restoredIDs: appState.workspaces.map { $0.id })
+                    window: saved, restoredIDs: appState.workspaces.map { $0.id })
                 activateWorkspace(activeIndex)
                 return
             }
@@ -240,6 +240,19 @@ extension MainWindowController {
     /// synchronously before returning to the caller, ensuring no state is missed even if
     /// the caller (AppDelegate) returns immediately after this call.
     func saveSession(persistSidebarState: Bool = true) {
+        prepareSessionSave(persistSidebarState: persistSidebarState)
+        for (i, ws) in appState.workspaces.enumerated() {
+            debugLog(
+                "[Sidebar] saveSession ws[\(i)] id=\(ws.id.uuidString.prefix(8)) sidebarState=visible:\(String(describing: ws.sidebarState.isVisible)) width:\(ws.sidebarState.width ?? -1)"
+            )
+        }
+        // Snapshot (main-thread model read) happens here; encode+write goes to background.
+        WindowManager.shared.writeSession(from: self, sync: false)
+    }
+
+    /// Flush live view state (content, sidebar, plugin state) into the models
+    /// the session snapshot reads. Main thread only.
+    func prepareSessionSave(persistSidebarState: Bool = true) {
         cancelPendingSidebarStateSave()
         for paneView in paneViews.values {
             paneView.persistContentStateToModel()
@@ -249,13 +262,6 @@ extension MainWindowController {
             persistActiveWorkspaceSidebarState()
         }
         savePluginStateForActiveTab()
-        for (i, ws) in appState.workspaces.enumerated() {
-            debugLog(
-                "[Sidebar] saveSession ws[\(i)] id=\(ws.id.uuidString.prefix(8)) sidebarState=visible:\(String(describing: ws.sidebarState.isVisible)) width:\(ws.sidebarState.width ?? -1)"
-            )
-        }
-        // Snapshot (main-thread model read) happens here; encode+write goes to background.
-        if persistsSession { SessionStore.saveAsync(appState: appState) }
     }
 
     func openWorkspace(path: String) {
@@ -278,7 +284,7 @@ extension MainWindowController {
         }
         activateWorkspace(appState.workspaces.count - 1)
         savePluginStateForActiveTab()
-        if persistsSession { SessionStore.saveAsync(appState: appState) }
+        WindowManager.shared.writeSession(from: self, sync: false)
     }
 
     private func configureInitialTab(for workspace: Workspace) {
