@@ -8,6 +8,8 @@ import Cocoa
     func workspaceBar(_ bar: WorkspaceBarView, setCustomColorForWorkspaceAt index: Int, color: NSColor)
     func workspaceBar(_ bar: WorkspaceBarView, togglePinForWorkspaceAt index: Int)
     func workspaceBar(_ bar: WorkspaceBarView, moveWorkspaceFrom source: Int, to destination: Int)
+    /// A workspace was dragged out and released outside this window.
+    func workspaceBar(_ bar: WorkspaceBarView, dropWorkspaceAt index: Int, atScreenPoint point: NSPoint)
     func workspaceBarDidRequestNewWorkspace(_ bar: WorkspaceBarView)
 }
 
@@ -554,6 +556,8 @@ class WorkspaceBarView: NSView {
                 if !didStartDrag {
                     // Plain click — select or close
                     handleVerticalClick(startPoint)
+                } else if let point = Self.screenPointOutsideWindow(nextEvent), let src = dragSourceIndex {
+                    delegate?.workspaceBar(self, dropWorkspaceAt: src, atScreenPoint: point)
                 } else {
                     executeDrop()
                 }
@@ -565,8 +569,8 @@ class WorkspaceBarView: NSView {
                 let dragPoint = convert(nextEvent.locationInWindow, from: nil)
                 let distance = hypot(dragPoint.x - startPoint.x, dragPoint.y - startPoint.y)
                 guard distance > 3 else { continue }
+                // A lone workspace still drags: it can move into another window.
                 guard !items[idx].isPinned else { break }
-                guard items.filter({ !$0.isPinned }).count > 1 else { break }
 
                 dragSourceIndex = idx
                 isDragging = true
@@ -649,7 +653,21 @@ class WorkspaceBarView: NSView {
         updateDropTarget(event)
     }
 
+    /// Screen location of `event` when it lies outside the event's window.
+    static func screenPointOutsideWindow(_ event: NSEvent) -> NSPoint? {
+        guard let window = event.window else { return nil }
+        let point = window.convertPoint(toScreen: event.locationInWindow)
+        return window.frame.contains(point) ? nil : point
+    }
+
     private func updateDropTarget(_ event: NSEvent) {
+        if Self.screenPointOutsideWindow(event) != nil {
+            if dropTargetIndex != nil {
+                dropTargetIndex = nil
+                needsDisplay = true
+            }
+            return
+        }
         guard let eventWindow = event.window ?? self.window else { return }
         let screenPoint = eventWindow.convertPoint(toScreen: event.locationInWindow)
         guard let myWindow = self.window else { return }

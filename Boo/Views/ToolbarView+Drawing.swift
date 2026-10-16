@@ -309,6 +309,10 @@ extension ToolbarView {
                     } else {
                         delegate?.toolbar(self, didSelectWorkspaceAt: idx)
                     }
+                } else if let point = WorkspaceBarView.screenPointOutsideWindow(nextEvent),
+                    let src = dragSourceIndex
+                {
+                    delegate?.toolbar(self, dropWorkspaceAt: src, atScreenPoint: point)
                 } else {
                     executeWorkspaceDrop()
                 }
@@ -320,8 +324,8 @@ extension ToolbarView {
                 let dragPoint = convert(nextEvent.locationInWindow, from: nil)
                 let distance = hypot(dragPoint.x - startPoint.x, dragPoint.y - startPoint.y)
                 guard distance > 3 else { continue }
+                // A lone workspace still drags: it can move into another window.
                 guard !workspaces[idx].isPinned else { break }
-                guard workspaces.filter({ !$0.isPinned }).count > 1 else { break }
 
                 dragSourceIndex = idx
                 isDragging = true
@@ -400,7 +404,14 @@ extension ToolbarView {
                     y: screenPoint.y - frame.height / 2))
         }
 
-        // Update drop target
+        // Update drop target (none while outside the window: that drop moves windows)
+        if WorkspaceBarView.screenPointOutsideWindow(event) != nil {
+            if dropTargetIndex != nil {
+                dropTargetIndex = nil
+                needsDisplay = true
+            }
+            return
+        }
         let point = convert(event.locationInWindow, from: nil)
         var x = trafficLightWidth - workspaceScrollOffset
         var rawIdx = workspaces.count

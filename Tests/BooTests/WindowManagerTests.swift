@@ -8,6 +8,14 @@ final class WindowManagerTests: XCTestCase {
     /// Never deallocated: freeing their ghostty surfaces at teardown can hang the
     /// suite (ghostty_surface_free joins the io thread) in some test orders.
     private static var keptAlive: [MainWindowController] = []
+    private static var keptDetached: [DetachedWorkspace] = []
+
+    /// Fresh empty folder: the explorer would otherwise list all of $TMPDIR.
+    private static func emptyFolder() -> String {
+        let path = (NSTemporaryDirectory() as NSString).appendingPathComponent("boo-ws-\(UUID().uuidString)")
+        try? FileManager.default.createDirectory(atPath: path, withIntermediateDirectories: true)
+        return path
+    }
 
     func testRegisteredWindowsAllPersistSession() {
         let manager = WindowManager.shared
@@ -77,6 +85,83 @@ final class WindowManagerTests: XCTestCase {
         XCTAssertEqual(controller.window?.frame, frame)
         XCTAssertEqual(controller.sidebarController.windowState.isVisible, false)
         XCTAssertEqual(controller.sidebarController.windowState.width ?? -1, 333, accuracy: 0.001)
+    }
+
+    func testDetachAndAdoptMovesLivePaneViews() throws {
+        let source = MainWindowController(restoreSession: false)
+        let target = MainWindowController(restoreSession: false)
+        Self.keptAlive += [source, target]
+        source.openWorkspace(path: Self.emptyFolder())
+        XCTAssertEqual(source.appState.workspaces.count, 2)
+        let moving = source.appState.workspaces[1]
+        let views = try XCTUnwrap(source.workspacePaneViews[moving.id])
+        XCTAssertFalse(views.isEmpty)
+
+        let detached = try XCTUnwrap(source.detachWorkspace(at: 1))
+        Self.keptDetached.append(detached)
+        XCTAssertNil(source.workspacePaneViews[moving.id])
+        XCTAssertEqual(source.appState.workspaces.count, 1)
+        XCTAssertNotNil(source.activeWorkspace)
+
+        target.adoptWorkspace(detached, at: 0)
+        XCTAssertTrue(target.appState.workspaces[0] === moving)
+        XCTAssertTrue(target.activeWorkspace === moving)
+        let adopted = try XCTUnwrap(target.workspacePaneViews[moving.id])
+        for (id, pv) in views {
+            XCTAssertTrue(adopted[id] === pv, "pane view must move, not be recreated")
+            XCTAssertTrue(pv.paneDelegate === target)
+            XCTAssertTrue(pv.tabDragCoordinator === target.tabDragCoordinator)
+        }
+        // Moving keeps the tabs alive.
+        XCTAssertFalse(moving.panes.values.flatMap(\.tabs).isEmpty)
+    }
+
+    func testMovedWorkspaceIsSavedWithTargetWindow() throws {
+        let tempFile = (NSTemporaryDirectory() as NSString).appendingPathComponent(
+            "boo-session-move-\(UUID().uuidString).json"
+        )
+        SessionStore.overrideFilePathForTesting(tempFile)
+        defer {
+            try? FileManager.default.removeItem(atPath: tempFile)
+            SessionStore.overrideFilePathForTesting(nil)
+        }
+        let manager = WindowManager.shared
+        let source = MainWindowController(restoreSession: false)
+        let target = MainWindowController(restoreSession: false)
+        Self.keptAlive += [source, target]
+        manager.register(source)
+        manager.register(target)
+        defer {
+            manager.remove(target)
+            manager.remove(source)
+        }
+        source.openWorkspace(path: Self.emptyFolder())
+        let movingID = source.appState.workspaces[1].id
+
+        let detached = try XCTUnwrap(source.detachWorkspace(at: 1))
+        Self.keptDetached.append(detached)
+        target.adoptWorkspace(detached)
+        manager.writeSession(from: target, sync: true)
+
+        let windows = try XCTUnwrap(SessionStore.load()).allWindows
+        XCTAssertEqual(windows.count, 2)
+        XCTAssertFalse(windows[0].workspaces.map(\.id).contains(movingID))
+        XCTAssertEqual(windows[1].workspaces.last?.id, movingID)
+    }
+
+    func testNewWindowAdoptingStartsWithOnlyThatWorkspace() throws {
+        let source = MainWindowController(restoreSession: false)
+        Self.keptAlive.append(source)
+        source.openWorkspace(path: Self.emptyFolder())
+        let moving = source.appState.workspaces[1]
+        let detached = try XCTUnwrap(source.detachWorkspace(at: 1))
+        Self.keptDetached.append(detached)
+
+        let adopter = MainWindowController(restoreSession: false, adopting: detached)
+        Self.keptAlive.append(adopter)
+        XCTAssertEqual(adopter.appState.workspaces.count, 1)
+        XCTAssertTrue(adopter.activeWorkspace === moving)
+        XCTAssertFalse(adopter.persistsSession)
     }
 
     func testRegisterIsIdempotent() {

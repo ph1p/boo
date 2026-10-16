@@ -205,6 +205,9 @@ class ThemedSplitView: NSSplitView {
     /// Saved window to restore (multi-window launch). nil with `restoresSession`
     /// loads the first window of the session file.
     let restoredWindow: SessionWindow?
+    /// Live workspace dragged in from another window; opened instead of a
+    /// default workspace during setup.
+    private var pendingAdoption: DetachedWorkspace?
     /// Frame before entering fullscreen, saved instead of the fullscreen frame.
     private var windowedFrame: NSRect?
     /// Debounce timer for saving the session after split-pane divider drags.
@@ -353,9 +356,14 @@ class ThemedSplitView: NSSplitView {
     ///   - restoreSession: launch window: load the saved session and remember the
     ///     frame; otherwise start with a single default workspace.
     ///   - sessionWindow: restore this saved window instead of loading the file.
-    init(restoreSession: Bool = true, restoring sessionWindow: SessionWindow? = nil) {
-        restoresSession = restoreSession || sessionWindow != nil
+    ///   - adopting: workspace moved in from another window (live panes).
+    init(
+        restoreSession: Bool = true, restoring sessionWindow: SessionWindow? = nil,
+        adopting detached: DetachedWorkspace? = nil
+    ) {
+        restoresSession = detached == nil && (restoreSession || sessionWindow != nil)
         restoredWindow = sessionWindow
+        pendingAdoption = detached
         persistsSession = restoreSession && sessionWindow == nil
         let window = BooWindow(
             contentRect: NSRect(x: 0, y: 0, width: 1000, height: 700),
@@ -588,7 +596,10 @@ class ThemedSplitView: NSSplitView {
         tabDragCoordinator.workspacePillFrames = { [weak self] in
             self?.workspacePillScreenFrames() ?? []
         }
-        if restoresSession {
+        if let detached = pendingAdoption {
+            pendingAdoption = nil
+            adoptWorkspace(detached)
+        } else if restoresSession {
             restoreWorkspaces()
         } else {
             openWorkspace(path: AppSettings.shared.defaultFolder)

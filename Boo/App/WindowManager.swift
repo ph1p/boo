@@ -125,6 +125,45 @@ final class WindowManager {
         return controller
     }
 
+    /// New window holding a workspace dragged out of another window, its
+    /// top-left corner near the drop point.
+    @discardableResult
+    func newWindow(
+        adopting detached: DetachedWorkspace, at screenPoint: NSPoint, size: NSSize?
+    ) -> MainWindowController {
+        installSharedHandlers()
+        let controller = MainWindowController(restoreSession: false, adopting: detached)
+        if let window = controller.window {
+            var frame = window.frame
+            if let size { frame.size = size }
+            frame.origin = NSPoint(x: screenPoint.x - 60, y: screenPoint.y + 12 - frame.height)
+            let screen = NSScreen.screens.first { $0.frame.contains(screenPoint) } ?? window.screen
+            if let screen { frame = window.constrainFrameRect(frame, to: screen) }
+            window.setFrame(frame, display: false)
+        }
+        register(controller)
+        controller.showWindow(nil)
+        controller.window?.makeKeyAndOrderFront(nil)
+        writeSession(from: controller, sync: false)
+        return controller
+    }
+
+    /// Frontmost managed window containing `point` (screen coordinates).
+    func controller(atScreenPoint point: NSPoint, excluding excluded: MainWindowController?) -> MainWindowController? {
+        // Front-to-back order of this app's windows on the active space.
+        let numbers = NSWindow.windowNumbers(options: []) ?? []
+        for number in numbers {
+            guard
+                let controller = controllers.first(where: { $0.window?.windowNumber == number.intValue }),
+                controller !== excluded,
+                let window = controller.window, window.isVisible, !window.isMiniaturized,
+                window.frame.contains(point)
+            else { continue }
+            return controller
+        }
+        return nil
+    }
+
     /// Every registered window is part of the session.
     func register(_ controller: MainWindowController) {
         guard !isManaged(controller) else { return }

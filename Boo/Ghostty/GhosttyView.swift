@@ -244,6 +244,7 @@ import Cocoa
         if let old = window {
             center.removeObserver(self, name: NSWindow.didBecomeKeyNotification, object: old)
             center.removeObserver(self, name: NSWindow.didResignKeyNotification, object: old)
+            center.removeObserver(self, name: NSWindow.didChangeScreenNotification, object: old)
         }
         if let newWindow {
             center.addObserver(
@@ -252,12 +253,29 @@ import Cocoa
             center.addObserver(
                 self, selector: #selector(windowKeyStateChanged),
                 name: NSWindow.didResignKeyNotification, object: newWindow)
+            center.addObserver(
+                self, selector: #selector(windowScreenChanged),
+                name: NSWindow.didChangeScreenNotification, object: newWindow)
         }
+    }
+
+    @objc private func windowScreenChanged(_ notification: Notification) {
+        applyDisplayID()
+    }
+
+    /// Tell the renderer which display it is on (vsync source). Matters once
+    /// surfaces move between windows on different screens.
+    private func applyDisplayID() {
+        guard let surface = surface,
+            let number = window?.screen?.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber
+        else { return }
+        ghostty_surface_set_display_id(surface, number.uint32Value)
     }
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         applyContentScale()
+        applyDisplayID()
         applySurfaceFocus()
     }
 

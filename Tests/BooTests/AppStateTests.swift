@@ -4,6 +4,45 @@ import XCTest
 
 final class AppStateTests: XCTestCase {
 
+    func testDetachWorkspaceKeepsActiveWorkspace() {
+        let state = AppState()
+        let a = Workspace(folderPath: "/a")
+        let b = Workspace(folderPath: "/b")
+        let c = Workspace(folderPath: "/c")
+        [a, b, c].forEach(state.addWorkspace)
+        state.setActiveWorkspace(2)
+
+        XCTAssertTrue(state.detachWorkspace(at: 0) === a)
+        XCTAssertTrue(state.activeWorkspace === c)
+        // Panes survive: the workspace moves, it isn't closed.
+        XCTAssertFalse(a.panes.isEmpty)
+
+        XCTAssertTrue(state.detachWorkspace(at: 1) === c)
+        XCTAssertTrue(state.activeWorkspace === b)
+        state.detachWorkspace(at: 0)
+        XCTAssertNil(state.activeWorkspace)
+        XCTAssertEqual(state.activeWorkspaceIndex, -1)
+    }
+
+    func testInsertWorkspaceShiftsActiveAndRespectsPins() {
+        let state = AppState()
+        let pinned = Workspace(folderPath: "/p")
+        pinned.isPinned = true
+        let a = Workspace(folderPath: "/a")
+        state.addWorkspace(pinned)
+        state.addWorkspace(a)
+        state.setActiveWorkspace(1)
+
+        let moved = Workspace(folderPath: "/m")
+        // Unpinned workspaces never land inside the pinned group.
+        XCTAssertEqual(state.insertWorkspace(moved, at: 0), 1)
+        XCTAssertTrue(state.activeWorkspace === a)
+        XCTAssertEqual(state.insertWorkspace(Workspace(folderPath: "/z"), at: 99), 3)
+
+        let empty = AppState()
+        XCTAssertEqual(empty.insertWorkspace(moved, at: 5), 0)
+    }
+
     func testAddWorkspace() {
         let state = AppState()
         let ws = Workspace(folderPath: "/tmp")

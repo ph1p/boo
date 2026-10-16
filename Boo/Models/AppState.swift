@@ -80,6 +80,33 @@ final class AppState {
         }
     }
 
+    /// Remove a workspace without stopping its panes (it moves to another
+    /// window). The active workspace stays the same one when it isn't removed.
+    @discardableResult
+    func detachWorkspace(at index: Int) -> Workspace? {
+        guard index >= 0, index < workspaces.count else { return nil }
+        let ws = workspaces.remove(at: index)
+        if index < activeWorkspaceIndex || activeWorkspaceIndex >= workspaces.count {
+            activeWorkspaceIndex = workspaces.isEmpty ? -1 : max(0, activeWorkspaceIndex - 1)
+        }
+        return ws
+    }
+
+    /// Insert a workspace after the pinned group at the earliest, keeping the
+    /// active workspace. Returns the index it landed at.
+    @discardableResult
+    func insertWorkspace(_ workspace: Workspace, at index: Int) -> Int {
+        let pinned = workspaces.filter(\.isPinned).count
+        let lower = workspace.isPinned ? 0 : pinned
+        let upper = workspace.isPinned ? pinned : workspaces.count
+        let dest = min(max(index, lower), upper)
+        workspaces.insert(workspace, at: dest)
+        if workspaces.count > 1, dest <= activeWorkspaceIndex {
+            activeWorkspaceIndex += 1
+        }
+        return dest
+    }
+
     func setActiveWorkspace(_ index: Int) {
         guard index >= 0, index < workspaces.count else { return }
         activeWorkspaceIndex = index

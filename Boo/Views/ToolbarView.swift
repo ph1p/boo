@@ -9,6 +9,8 @@ import Cocoa
     func toolbar(_ toolbar: ToolbarView, setCustomColorForWorkspaceAt index: Int, color: NSColor)
     func toolbar(_ toolbar: ToolbarView, togglePinForWorkspaceAt index: Int)
     func toolbar(_ toolbar: ToolbarView, moveWorkspaceFrom source: Int, to destination: Int)
+    /// A workspace was dragged out and released outside this window.
+    func toolbar(_ toolbar: ToolbarView, dropWorkspaceAt index: Int, atScreenPoint point: NSPoint)
     func toolbarDidRequestNewWorkspace(_ toolbar: ToolbarView)
 }
 
