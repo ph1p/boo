@@ -10,6 +10,8 @@ final class WindowManagerTests: XCTestCase {
         let first = MainWindowController()
         // Fresh window: own workspace IDs (a restoring one would duplicate the session's).
         let second = MainWindowController(restoreSession: false)
+        // Its init saves the session; it must not overwrite the launch window's file.
+        XCTAssertFalse(second.persistsSession)
         manager.register(first)
         manager.register(second)
         defer {

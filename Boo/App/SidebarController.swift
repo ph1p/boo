@@ -62,6 +62,12 @@ final class SidebarController {
     /// Last intended visible width. This is the canonical width while hidden or restoring.
     private var intendedVisibleWidth: CGFloat?
 
+    /// This window's sidebar visibility and width. Source of truth when
+    /// per-workspace state is off; otherwise the fallback for workspaces without
+    /// their own. Seeded from the app defaults, so a new window starts from the
+    /// last state any window remembered.
+    private(set) var windowState: SidebarWorkspaceState = Workspace.defaultSidebarState()
+
     /// When > 0, splitViewDidResizeSubviews should not overwrite workspace sidebar state.
     var suppressSidebarStateSync: Int = 0
 
@@ -254,15 +260,21 @@ final class SidebarController {
         )
     }
 
+    /// - Parameter rememberAsDefault: also store the state as the app default for
+    ///   new windows. False when re-syncing after a settings change rather than a
+    ///   change made in this window.
     @discardableResult
-    func persistLiveState(for workspace: Workspace? = nil) -> SidebarWorkspaceState {
+    func persistLiveState(for workspace: Workspace? = nil, rememberAsDefault: Bool = true) -> SidebarWorkspaceState {
         let capturedState = captureLiveState(for: workspace)
-        return persistResolvedState(capturedState, for: workspace)
+        return persistResolvedState(capturedState, for: workspace, rememberAsDefault: rememberAsDefault)
     }
 
     @discardableResult
-    func persistResolvedState(_ state: SidebarWorkspaceState, for workspace: Workspace? = nil) -> SidebarWorkspaceState
-    {
+    func persistResolvedState(
+        _ state: SidebarWorkspaceState,
+        for workspace: Workspace? = nil,
+        rememberAsDefault: Bool = true
+    ) -> SidebarWorkspaceState {
         let target = SidebarStateResolver.persistenceTarget(
             usesPerWorkspaceState: AppSettings.shared.sidebarPerWorkspaceState
         )
@@ -275,25 +287,18 @@ final class SidebarController {
             )
             targetWS?.sidebarState = state
         case .appSettings:
-            let persistToSettings = { [state] in
-                if let isVisible = state.isVisible {
-                    let hidden = !isVisible
-                    if AppSettings.shared.sidebarDefaultHidden != hidden {
-                        AppSettings.shared.sidebarDefaultHidden = hidden
-                    }
-                }
-                if let width = state.width,
-                    abs(AppSettings.shared.sidebarWidth - width) > 0.001
-                {
-                    AppSettings.shared.sidebarWidth = width
-                }
-            }
-            if let windowController {
-                windowController.performWhileIgnoringSidebarLayoutSettingsRefresh {
-                    persistToSettings()
-                }
-            } else {
-                persistToSettings()
+            debugLog(
+                "[Sidebar] persistResolvedState → target=window visible=\(String(describing: state.isVisible)), width=\(state.width ?? -1)"
+            )
+            windowState = SidebarWorkspaceState(
+                isVisible: state.isVisible ?? windowState.isVisible,
+                width: state.width ?? windowState.width
+            )
+            if rememberAsDefault {
+                AppSettings.shared.rememberSidebarDefaults(
+                    hidden: state.isVisible.map { !$0 },
+                    width: state.width
+                )
             }
         }
 
@@ -313,7 +318,7 @@ final class SidebarController {
 
     private func stateEnvironment(splitViewWidth: CGFloat? = nil) -> SidebarStateEnvironment {
         SidebarStateEnvironment(
-            defaultState: Workspace.defaultSidebarState(),
+            defaultState: windowState,
             usesPerWorkspaceState: AppSettings.shared.sidebarPerWorkspaceState,
             position: position,
             splitViewWidth: splitViewWidth ?? windowController?.mainSplitView.bounds.width,
@@ -375,7 +380,9 @@ final class SidebarController {
         }
 
         wc.statusBar.sidebarVisible = isVisible
-        AppStore.shared.sidebarVisible = isVisible
+        if WindowManager.shared.isActive(wc) {
+            AppStore.shared.sidebarVisible = isVisible
+        }
         wc.statusBar.needsDisplay = true
         wc.refreshToolbar()
 

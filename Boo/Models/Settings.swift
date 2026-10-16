@@ -583,6 +583,21 @@ final class AppSettings {
         set { set(newValue, forKey: K.sidebarDefaultHidden, topic: .layout) }
     }
 
+    /// Stores the sidebar state a new window starts with. Silent: each open
+    /// window keeps its own sidebar state, so no window should react to this.
+    func rememberSidebarDefaults(hidden: Bool?, width: CGFloat?) {
+        var changed = false
+        if let hidden, sidebarDefaultHidden != hidden {
+            UserDefaults.standard.set(hidden, forKey: K.sidebarDefaultHidden)
+            changed = true
+        }
+        if let width, width > 0, abs(sidebarWidth - width) > 0.001 {
+            UserDefaults.standard.set(Double(width), forKey: K.sidebarWidth)
+            changed = true
+        }
+        if changed { saveToFile() }
+    }
+
     var tabOverflowMode: TabOverflowMode {
         get {
             guard UserDefaults.standard.object(forKey: K.tabOverflowMode) != nil else { return .scroll }

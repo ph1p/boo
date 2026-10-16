@@ -587,12 +587,11 @@ final class MainWindowControllerTerminalLifecycleTests: XCTestCase {
         windowController.sidebarController.syncWorkspaceSidebarState()
 
         let expectedWidth = AppSettings.shared.sidebarWidth
-        XCTAssertFalse(windowController.isIgnoringSidebarLayoutSettingsRefresh)
+        XCTAssertEqual(windowController.sidebarController.windowState.width ?? -1, expectedWidth, accuracy: 0.001)
         XCTAssertEqual(sidebarWidth(for: windowController), expectedWidth, accuracy: 1)
 
         RunLoop.main.run(until: Date().addingTimeInterval(0.05))
 
-        XCTAssertFalse(windowController.isIgnoringSidebarLayoutSettingsRefresh)
         XCTAssertEqual(sidebarWidth(for: windowController), expectedWidth, accuracy: 1)
     }
 

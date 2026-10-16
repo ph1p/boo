@@ -198,16 +198,15 @@ class ThemedSplitView: NSSplitView {
     var allowNextWindowClose = false
     /// Whether this window writes the session file. Only one window persists
     /// until sessions store multiple windows; `WindowManager` hands it over.
-    var persistsSession = true
+    /// A fresh window starts without it: its init would otherwise overwrite the
+    /// session file before `WindowManager.register` runs.
+    var persistsSession: Bool
     /// Launch window restores the saved session; extra windows start fresh.
     private let restoresSession: Bool
     /// Debounce timer for saving the session after split-pane divider drags.
     private var splitRatioSaveTimer: Timer?
     /// Debounce timer for saving workspace sidebar state after sidebar divider drags.
     private var sidebarStateSaveTimer: Timer?
-    /// Suppresses layout refresh work triggered by sidebar width/visibility writes that
-    /// originate from live split-view persistence rather than an explicit settings edit.
-    private var sidebarSettingsRefreshSuppressionDepth = 0
     var lastFocusTimestamp: UInt64 = 0
     /// Last pane ID for which plugins received a focusChanged notification.
     /// Prevents redundant notifications when the same pane re-focuses.
@@ -234,15 +233,6 @@ class ThemedSplitView: NSSplitView {
         sidebarStateSaveTimer = nil
     }
 
-    func performWhileIgnoringSidebarLayoutSettingsRefresh<T>(_ body: () -> T) -> T {
-        sidebarSettingsRefreshSuppressionDepth += 1
-        defer { sidebarSettingsRefreshSuppressionDepth -= 1 }
-        return body()
-    }
-
-    var isIgnoringSidebarLayoutSettingsRefresh: Bool {
-        sidebarSettingsRefreshSuppressionDepth > 0
-    }
     var cachedDetailViews: [String: (context: TerminalContext, generations: [UInt64])] {
         get { sidebarController?.cachedDetailViews ?? [:] }
         set { sidebarController?.cachedDetailViews = newValue }
@@ -359,6 +349,7 @@ class ThemedSplitView: NSSplitView {
     ///   start with a single default workspace (additional windows).
     init(restoreSession: Bool = true) {
         restoresSession = restoreSession
+        persistsSession = restoreSession
         let window = BooWindow(
             contentRect: NSRect(x: 0, y: 0, width: 1000, height: 700),
             styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
@@ -649,9 +640,6 @@ class ThemedSplitView: NSSplitView {
 
                 // Layout changes: sidebar/workspace bar position, density
                 if topic == nil || topic == .layout {
-                    if self.isIgnoringSidebarLayoutSettingsRefresh {
-                        return
-                    }
                     self.statusBarHeightConstraint?.constant = DensityMetrics.current.statusBarHeight
                     self.statusBar.needsDisplay = true
                     let newSidebarPos = AppSettings.shared.sidebarPosition
@@ -680,7 +668,7 @@ class ThemedSplitView: NSSplitView {
                         self.removeAllPluginContent()
                         self.rebuildSidebarTabs(context: ctx)
                     }
-                    self.sidebarController.persistLiveState()
+                    self.sidebarController.persistLiveState(rememberAsDefault: false)
                     self.sidebarController.applyRestoredState(self.sidebarController.resolveEffectiveSidebarState())
                 }
 
