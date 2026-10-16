@@ -73,4 +73,40 @@ final class WindowManagerTests: XCTestCase {
         XCTAssertTrue(second.handlesWindowScoped(nil))
         XCTAssertFalse(first.handlesWindowScoped(nil))
     }
+
+    func testOnlyActiveWindowFeedsSharedProjections() throws {
+        let manager = WindowManager.shared
+        let first = MainWindowController()
+        let second = MainWindowController(restoreSession: false)
+        manager.register(first)
+        manager.register(second)
+        defer {
+            manager.remove(second)
+            manager.remove(first)
+        }
+        manager.windowDidBecomeMain(first)
+
+        guard NSApp.keyWindow == nil, NSApp.mainWindow == nil else {
+            throw XCTSkip("a key window is present in this test host")
+        }
+        XCTAssertTrue(manager.isActive(first))
+        XCTAssertFalse(manager.isActive(second))
+        // App-wide broadcasts come from the session owner regardless of focus.
+        XCTAssertTrue(manager.isPrimary(first))
+        XCTAssertFalse(manager.isPrimary(second))
+    }
+
+    func testSetupMenuItemsTakesMenuOwnership() {
+        let manager = WindowManager.shared
+        let first = MainWindowController()
+        let second = MainWindowController(restoreSession: false)
+        let previousMenu = NSApp.mainMenu
+        defer { NSApp.mainMenu = previousMenu }
+
+        first.setupMenuItems()
+        XCTAssertTrue(manager.ownsMenu(first))
+        second.setupMenuItems()
+        XCTAssertTrue(manager.ownsMenu(second))
+        XCTAssertFalse(manager.ownsMenu(first))
+    }
 }

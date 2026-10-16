@@ -4,6 +4,28 @@ import XCTest
 
 final class DockerServiceTests: XCTestCase {
 
+    func testWatchingIsRefCountedPerOwner() {
+        // Unavailable socket: refcount bookkeeping without a live event stream.
+        let docker = DockerService.shared
+        docker.detectDocker(explicitPath: "/nonexistent/docker.sock")
+        defer { docker.detectDocker() }
+        let a = NSObject()
+        let b = NSObject()
+        let before = docker.watcherCount
+
+        docker.startWatching(a)
+        docker.startWatching(a)
+        docker.startWatching(b)
+        XCTAssertEqual(docker.watcherCount, before + 2)
+
+        docker.stopWatching(a)
+        docker.stopWatching(a)
+        XCTAssertEqual(docker.watcherCount, before + 1)
+
+        docker.stopWatching(b)
+        XCTAssertEqual(docker.watcherCount, before)
+    }
+
     func testDockerDetection() {
         let docker = DockerService.shared
         // isAvailable depends on whether Docker socket exists on the test machine
@@ -78,8 +100,9 @@ final class DockerServiceTests: XCTestCase {
     func testStartStopWatching() {
         let docker = DockerService.shared
         // Should not crash even if Docker is not available
-        docker.startWatching()
-        docker.stopWatching()
+        let owner = NSObject()
+        docker.startWatching(owner)
+        docker.stopWatching(owner)
     }
 
     func testContainerStateValues() {

@@ -18,10 +18,9 @@ final class DockerPluginNew: BooPluginProtocol {
     var onRequestCycleRerun: (() -> Void)?
 
     nonisolated(unsafe) private var settingsObserver: NSObjectProtocol?
-    private var isActivated = false
 
     init() {
-        DockerService.shared.onContainersChanged = { [weak self] _ in
+        DockerService.shared.addContainersObserver(self) { [weak self] _ in
             DispatchQueue.main.async {
                 self?.onRequestCycleRerun?()
             }
@@ -36,10 +35,7 @@ final class DockerPluginNew: BooPluginProtocol {
                 let oldSocket = DockerService.shared.socketPath
                 self?.applySocketPathSetting()
                 guard DockerService.shared.socketPath != oldSocket else { return }
-                if self?.isActivated == true {
-                    DockerService.shared.stopWatching()
-                    DockerService.shared.startWatching()
-                }
+                DockerService.shared.restartWatching()
                 self?.onRequestCycleRerun?()
             }
         }
@@ -49,20 +45,19 @@ final class DockerPluginNew: BooPluginProtocol {
         if let observer = settingsObserver {
             NotificationCenter.default.removeObserver(observer)
         }
-        DockerService.shared.stopWatching()
+        DockerService.shared.removeContainersObserver(self)
+        DockerService.shared.stopWatching(self)
     }
 
     // MARK: - Activation Lifecycle
 
     func pluginDidActivate() {
-        isActivated = true
         applySocketPathSetting()
-        DockerService.shared.startWatching()
+        DockerService.shared.startWatching(self)
     }
 
     func pluginDidDeactivate() {
-        isActivated = false
-        DockerService.shared.stopWatching()
+        DockerService.shared.stopWatching(self)
     }
 
     let manifest = PluginManifest(

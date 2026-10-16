@@ -15,7 +15,10 @@ final class WindowManager {
     /// Most recently main window. Fallback when no Boo window is key
     /// (settings window focused, app inactive).
     private weak var lastActive: MainWindowController?
+    /// Controller whose actions the app-wide main menu currently targets.
+    weak var menuOwner: MainWindowController?
     private var sharedHandlersInstalled = false
+    private var settingsObserver: NSObjectProtocol?
 
     private init() {}
 
@@ -35,6 +38,22 @@ final class WindowManager {
     /// The window whose state is written to the session file. Interim until
     /// multi-window sessions: only one window persists, the oldest open one.
     var sessionOwner: MainWindowController? { controllers.first }
+
+    /// Whether `controller` is the window that feeds app-wide projections
+    /// (`AppStore.shared`). True when nothing is managed (tests).
+    func isActive(_ controller: MainWindowController) -> Bool {
+        activeController.map { $0 === controller } ?? true
+    }
+
+    func ownsMenu(_ controller: MainWindowController) -> Bool {
+        menuOwner.map { $0 === controller } ?? true
+    }
+
+    /// Whether `controller` should run app-wide side effects that every window
+    /// would otherwise repeat. Unmanaged controllers (tests) count as primary.
+    func isPrimary(_ controller: MainWindowController) -> Bool {
+        sessionOwner.map { $0 === controller } ?? true
+    }
 
     func isManaged(_ controller: MainWindowController) -> Bool {
         controllers.contains { $0 === controller }
@@ -123,6 +142,24 @@ final class WindowManager {
             MainActor.assumeIsolated {
                 for c in WindowManager.shared.controllers {
                     c.updateExternalStatusBarSegments(segments)
+                }
+            }
+        }
+        // App-wide reactions to settings changes; per-window chrome updates stay
+        // in each controller's own observer.
+        settingsObserver = NotificationCenter.default.addObserver(
+            forName: .settingsChanged, object: nil, queue: .main
+        ) { notification in
+            let topicString = notification.userInfo?["topic"] as? String
+            MainActor.assumeIsolated {
+                let topic = topicString.flatMap(SettingsTopic.init(rawValue:))
+                if let topic {
+                    BooSocketServer.shared.emitSettingsChanged(topic: topic.rawValue)
+                }
+                if topic == nil || topic == .theme {
+                    AppStore.shared.refreshTheme()
+                    let theme = AppSettings.shared.theme
+                    BooSocketServer.shared.emitThemeChanged(name: theme.name, isDark: theme.isDark)
                 }
             }
         }

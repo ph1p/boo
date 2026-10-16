@@ -2,6 +2,7 @@ import Cocoa
 
 extension MainWindowController {
     func setupMenuItems() {
+        WindowManager.shared.menuOwner = self
         let mainMenu = NSMenu()
 
         let appMenuItem = NSMenuItem()
@@ -262,6 +263,8 @@ extension MainWindowController {
 
     /// Rebuild the Plugins top-level menu from current plugin contributions.
     func rebuildPluginsMenu() {
+        // Background windows must not retarget the shared menu.
+        guard WindowManager.shared.ownsMenu(self) else { return }
         guard let mainMenu = NSApplication.shared.mainMenu,
             let pluginsMenuItem = mainMenu.items.first(where: { $0.submenu?.title == "Plugins" }),
             let pluginsMenu = pluginsMenuItem.submenu

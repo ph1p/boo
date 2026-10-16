@@ -605,17 +605,12 @@ class ThemedSplitView: NSSplitView {
             MainActor.assumeIsolated {
                 guard let self, self.window?.isVisible == true else { return }
                 let topic = topicString.flatMap(SettingsTopic.init(rawValue:))
-
-                // Broadcast settings/theme changes to socket subscribers
-                if let t = topic {
-                    BooSocketServer.shared.emitSettingsChanged(topic: t.rawValue)
-                }
+                // Socket broadcasts and AppStore theme are app-wide: WindowManager
+                // handles them once, not per window.
 
                 // Theme changes: refresh chrome colors, pane backgrounds, sidebar, status bar
                 if topic == nil || topic == .theme {
-                    AppStore.shared.refreshTheme()
                     let theme = AppSettings.shared.theme
-                    BooSocketServer.shared.emitThemeChanged(name: theme.name, isDark: theme.isDark)
                     self.window?.backgroundColor = theme.windowBackdrop
                     self.window?.appearance = NSAppearance(named: theme.isDark ? .darkAqua : .aqua)
                     self.window?.contentView?.layer?.backgroundColor = theme.windowBackdrop.cgColor

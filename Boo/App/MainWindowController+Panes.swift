@@ -147,7 +147,7 @@ extension MainWindowController: PaneViewDelegate {
             if workspace.id == appState.activeWorkspace?.id {
                 bridge.handleCommandStart(command: command, paneID: paneID)
                 BooSocketServer.shared.emitCommandStarted(command: command, paneID: paneID)
-                pluginRegistry.notifyCommandStarted(command: command, context: AppStore.shared.context)
+                pluginRegistry.notifyCommandStarted(command: command, context: pluginRegistry.lastContext ?? .empty)
                 schedulePluginCycle(reason: .processChanged)
             }
         }
@@ -164,7 +164,7 @@ extension MainWindowController: PaneViewDelegate {
         if workspace.id == appState.activeWorkspace?.id {
             if let result = bridge.handleCommandEnd(exitCode: exitCode, paneID: paneID) {
                 BooSocketServer.shared.emitCommandEnded(result: result, paneID: paneID)
-                pluginRegistry.notifyCommandEnded(result: result, context: AppStore.shared.context)
+                pluginRegistry.notifyCommandEnded(result: result, context: pluginRegistry.lastContext ?? .empty)
                 schedulePluginCycle(reason: .processChanged)
             }
         }
@@ -1220,7 +1220,7 @@ extension MainWindowController {
         // The main menu is app-wide but plugin items target one controller, so the
         // window becoming main takes the menu over and refreshes the shared plugin
         // context (AppStore.shared) with its own state.
-        guard WindowManager.shared.controllers.count > 1 else { return }
+        guard WindowManager.shared.menuOwner !== self else { return }
         setupMenuItems()
         rebuildPluginsMenu()
         runPluginCycle(reason: .focusChanged)

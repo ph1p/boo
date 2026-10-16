@@ -85,6 +85,8 @@ extension MainWindowController {
             guard let self else { return }
             self.runPluginCycle(reason: .focusChanged)
             self.rebuildPluginsMenu()
+            // Every window's watcher sees the same change; one settings broadcast is enough.
+            guard WindowManager.shared.isPrimary(self) else { return }
             PluginSettingsView.registeredManifests = self.pluginRegistry.plugins.map(\.manifest)
             NotificationCenter.default.post(
                 name: .settingsChanged,
@@ -137,9 +139,12 @@ extension MainWindowController {
         }
         let result = pluginRegistry.runCycle(baseContext: baseContext, reason: reason)
 
-        // Update global store
-        AppStore.shared.updateContext(result.context)
-        AppStore.shared.updateVisiblePlugins(result.visiblePluginIDs)
+        // Global store mirrors the active window only; background windows keep
+        // their context in pluginRegistry.lastContext.
+        if WindowManager.shared.isActive(self) {
+            AppStore.shared.updateContext(result.context)
+            AppStore.shared.updateVisiblePlugins(result.visiblePluginIDs)
+        }
 
         // Feed plugin status bar contents to status bar (only external plugins get segments)
         statusBar.externalPluginIDs = Set(

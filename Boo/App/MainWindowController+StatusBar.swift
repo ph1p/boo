@@ -44,7 +44,7 @@ extension MainWindowController {
             statusBar.update(directory: "", paneCount: 0, tabCount: 0, runningProcess: "")
             return
         }
-        let ctx = AppStore.shared.context
+        let ctx = pluginRegistry.lastContext ?? .empty
         let contextTab = findTab(ctx.terminalID)
         let fallbackTab = ctx == .empty ? ws.pane(for: ws.activePaneID)?.activeTab : nil
         let statusTab = contextTab ?? fallbackTab

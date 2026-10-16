@@ -238,9 +238,27 @@ import Cocoa
 
     // MARK: - Sizing
 
+    override func viewWillMove(toWindow newWindow: NSWindow?) {
+        super.viewWillMove(toWindow: newWindow)
+        let center = NotificationCenter.default
+        if let old = window {
+            center.removeObserver(self, name: NSWindow.didBecomeKeyNotification, object: old)
+            center.removeObserver(self, name: NSWindow.didResignKeyNotification, object: old)
+        }
+        if let newWindow {
+            center.addObserver(
+                self, selector: #selector(windowKeyStateChanged),
+                name: NSWindow.didBecomeKeyNotification, object: newWindow)
+            center.addObserver(
+                self, selector: #selector(windowKeyStateChanged),
+                name: NSWindow.didResignKeyNotification, object: newWindow)
+        }
+    }
+
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         applyContentScale()
+        applySurfaceFocus()
     }
 
     override func setFrameSize(_ newSize: NSSize) {
@@ -324,7 +342,17 @@ import Cocoa
     /// Use instead of direct `ghostty_surface_set_focus` to keep the two in sync.
     func setFocused(_ focused: Bool) {
         isFocused = focused
-        surface.map { ghostty_surface_set_focus($0, focused) }
+        applySurfaceFocus()
+    }
+
+    /// The surface counts as focused only while its window is key, so a
+    /// background window shows an unfocused cursor and apps get focus-out.
+    private func applySurfaceFocus() {
+        surface.map { ghostty_surface_set_focus($0, isFocused && window?.isKeyWindow == true) }
+    }
+
+    @objc private func windowKeyStateChanged() {
+        applySurfaceFocus()
     }
 
     // MARK: - Keyboard (via NSTextInputClient)

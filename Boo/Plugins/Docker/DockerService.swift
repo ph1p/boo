@@ -57,7 +57,11 @@ final class DockerService: ObservableObject, @unchecked Sendable {
     /// Human-readable connection error when the socket can't be found.
     @Published private(set) var connectionError: String?
 
-    var onContainersChanged: (([Container]) -> Void)?
+    /// Container-change callbacks keyed by owner; one Docker plugin per window.
+    private var containerObservers: [ObjectIdentifier: ([Container]) -> Void] = [:]
+    /// Owners that asked for the event stream; it runs while any remain.
+    private var watchers: Set<ObjectIdentifier> = []
+    var watcherCount: Int { watchers.count }
     @Published private(set) var containers: [Container] = []
     @Published private(set) var images: [DockerImage] = []
     @Published private(set) var networks: [DockerNetwork] = []
@@ -266,14 +270,35 @@ final class DockerService: ObservableObject, @unchecked Sendable {
     // MARK: - Event Stream
 
     /// Start watching Docker events via the socket event stream + initial refresh.
-    func startWatching() {
-        guard isAvailable else { return }
+    func addContainersObserver(_ owner: AnyObject, _ observer: @escaping ([Container]) -> Void) {
+        containerObservers[ObjectIdentifier(owner)] = observer
+    }
+
+    func removeContainersObserver(_ owner: AnyObject) {
+        containerObservers.removeValue(forKey: ObjectIdentifier(owner))
+    }
+
+    /// Ref-counted per owner: the event stream starts with the first watcher
+    /// and stops when the last one leaves.
+    func startWatching(_ owner: AnyObject) {
+        let isFirst = watchers.isEmpty
+        watchers.insert(ObjectIdentifier(owner))
+        guard isFirst, isAvailable else { return }
         refreshAll()
         startEventStream()
     }
 
-    func stopWatching() {
+    func stopWatching(_ owner: AnyObject) {
+        guard watchers.remove(ObjectIdentifier(owner)) != nil, watchers.isEmpty else { return }
         stopEventStream()
+    }
+
+    /// Reconnects the event stream after the socket path changed.
+    func restartWatching() {
+        stopEventStream()
+        guard !watchers.isEmpty, isAvailable else { return }
+        refreshAll()
+        startEventStream()
     }
 
     private func stopEventStream() {
@@ -365,7 +390,7 @@ final class DockerService: ObservableObject, @unchecked Sendable {
                 guard let self else { return }
                 if newContainers != self.containers {
                     self.containers = newContainers
-                    self.onContainersChanged?(newContainers)
+                    for observer in self.containerObservers.values { observer(newContainers) }
                 }
             }
         }
