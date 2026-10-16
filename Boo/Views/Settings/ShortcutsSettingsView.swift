@@ -12,7 +12,9 @@ struct ShortcutsSettingsView: View {
             "General",
             [
                 ("Settings", "\u{2318},"),
-                ("New Workspace", "\u{2318}N"),
+                ("New Window", "\u{2318}N"),
+                ("New Workspace", "\u{21E7}\u{2318}N"),
+                ("Minimize", "\u{2318}M"),
                 ("Open Folder", "\u{21E7}\u{2318}O"),
                 ("New Terminal Tab", "\u{2318}T"),
                 ("New Browser Tab", "\u{21E7}\u{2318}T"),

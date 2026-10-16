@@ -1216,14 +1216,14 @@ extension MainWindowController {
     }
 
     func windowDidBecomeMain(_ notification: Notification) {
-        // SwiftUI's WindowGroup can overwrite NSApplication.shared.mainMenu after our
-        // setupMenuItems() runs (on activation, scene-phase transitions, etc.).
-        // Reinstall our menu whenever this window regains main status.
-        let menu = NSApplication.shared.mainMenu
-        let hasOurMenu = menu?.items.contains(where: { $0.submenu?.title == "Terminal" }) ?? false
-        if !hasOurMenu {
-            setupMenuItems()
-        }
+        WindowManager.shared.windowDidBecomeMain(self)
+        // The main menu is app-wide but plugin items target one controller, so the
+        // window becoming main takes the menu over and refreshes the shared plugin
+        // context (AppStore.shared) with its own state.
+        guard WindowManager.shared.controllers.count > 1 else { return }
+        setupMenuItems()
+        rebuildPluginsMenu()
+        runPluginCycle(reason: .focusChanged)
     }
 
     func windowShouldClose(_ sender: NSWindow) -> Bool {

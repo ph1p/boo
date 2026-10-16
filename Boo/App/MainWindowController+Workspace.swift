@@ -255,7 +255,7 @@ extension MainWindowController {
             )
         }
         // Snapshot (main-thread model read) happens here; encode+write goes to background.
-        SessionStore.saveAsync(appState: appState)
+        if persistsSession { SessionStore.saveAsync(appState: appState) }
     }
 
     func openWorkspace(path: String) {
@@ -278,7 +278,7 @@ extension MainWindowController {
         }
         activateWorkspace(appState.workspaces.count - 1)
         savePluginStateForActiveTab()
-        SessionStore.saveAsync(appState: appState)
+        if persistsSession { SessionStore.saveAsync(appState: appState) }
     }
 
     private func configureInitialTab(for workspace: Workspace) {

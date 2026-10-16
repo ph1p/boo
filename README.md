@@ -23,7 +23,7 @@ Download the latest release from [GitHub Releases](https://github.com/ph1p/boo/r
 
 ## Features
 
-- **Workspaces** — Open folders as workspaces with their own file tree (Cmd+N)
+- **Workspaces** — Open folders as workspaces with their own file tree (Cmd+Shift+N); multiple windows (Cmd+N), each with its own workspaces
 - **Per-pane tabs** — Each split pane has its own tab bar (Cmd+T)
 - **Split panes** — Split right (Cmd+D) or down (Cmd+Shift+D)
 - **File explorer** — Live-updating sidebar with file tree (Cmd+B to toggle)
@@ -88,7 +88,8 @@ make run      # Build and launch
 
 | Shortcut                             | Action                               |
 | ------------------------------------ | ------------------------------------ |
-| **Cmd+N**                            | New workspace (home directory)       |
+| **Cmd+N**                            | New window                           |
+| **Cmd+Shift+N**                      | New workspace (home directory)       |
 | **Cmd+1-9**                          | Switch to workspace N                |
 | **Cmd+Shift+O**                      | Open folder as workspace             |
 | **Cmd+T**                            | New terminal tab in active pane      |
@@ -249,6 +250,7 @@ Boo exposes a Unix domain socket (`~/.boo/boo.sock`) as the primary communicatio
 |                | `switch_workspace`     | Switch workspace by `index` or `id`                           |
 |                | `new_tab`              | Open new tab (optional `cwd`)                                 |
 |                | `new_workspace`        | Open new workspace (optional `path`)                          |
+|                | `new_window`           | Open new window with a fresh workspace                        |
 |                | `send_text`            | Write text to the active terminal                             |
 | **Events**     | `subscribe`            | Subscribe to push events (`events` array)                     |
 |                | `unsubscribe`          | Remove event subscriptions                                    |

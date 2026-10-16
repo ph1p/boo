@@ -15,7 +15,7 @@ public enum BooMain {
     private var appearanceObserver: NSKeyValueObservation?
 
     private var windowController: MainWindowController? {
-        WindowBridgeModel.shared.windowController
+        WindowManager.shared.sessionOwner
     }
 
     public func applicationDidFinishLaunching(_ notification: Notification) {
@@ -55,7 +55,7 @@ public enum BooMain {
         ActivityNotifier.shared.requestPermission()
         ActivityNotifier.shared.refreshCachedStatus()
 
-        // WindowGroup creates the NSWindow; WindowBridgeView boots MainWindowController when ready.
+        WindowManager.shared.openInitialWindow()
 
         // Watch system appearance changes for auto-theme
         appearanceObserver = NSApp.observe(\.effectiveAppearance) { _, _ in

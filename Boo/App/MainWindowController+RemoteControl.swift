@@ -5,20 +5,6 @@ import Cocoa
 
 extension MainWindowController {
 
-    /// Wire the remote control server into the shared IPC command router.
-    /// Called once during init, next to `setupIPCHandlers()`.
-    func setupRemoteControlHandlers() {
-        RemoteControlServer.shared.onCommand = { [weak self] cmd, json, reply in
-            DispatchQueue.main.async {
-                guard let self else {
-                    reply(["ok": false, "error": "window closed"])
-                    return
-                }
-                self.handleIPCCommand(cmd: cmd, json: json, reply: reply)
-            }
-        }
-    }
-
     // MARK: - State / Screen
 
     func remoteGetState(reply: @escaping ([String: Any]) -> Void) {

@@ -572,7 +572,7 @@ final class SplitWorkspaceE2ETests: XCTestCase {
         XCTAssertFalse(events(named: "enrich").isEmpty)
     }
 
-    // MARK: - New Workspace (Cmd+N)
+    // MARK: - New Workspace (Cmd+Shift+N)
 
     func testNewWorkspaceActivated() {
         let state = AppState()

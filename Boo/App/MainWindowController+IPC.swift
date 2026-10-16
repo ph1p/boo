@@ -4,27 +4,6 @@ import Foundation
 
 extension MainWindowController {
 
-    /// Wire up the socket server's control command handler and event broadcasting.
-    /// Called once during init, after bridge subscription.
-    func setupIPCHandlers() {
-        // Control commands from socket → MainActor handlers
-        BooSocketServer.shared.onControlCommand = { [weak self] cmd, json, reply in
-            DispatchQueue.main.async {
-                guard let self else {
-                    reply(["ok": false, "error": "window closed"])
-                    return
-                }
-                self.handleIPCCommand(cmd: cmd, json: json, reply: reply)
-            }
-        }
-
-        // External status bar segment changes
-        BooSocketServer.shared.onExternalSegmentsChanged = { [weak self] segments in
-            guard let self else { return }
-            self.updateExternalStatusBarSegments(segments)
-        }
-    }
-
     // MARK: - Command Dispatch
 
     /// Single command router shared by the unix socket (`BooSocketServer`) and
@@ -43,6 +22,9 @@ extension MainWindowController {
             ipcNewTab(json: json, reply: reply)
         case "new_workspace":
             ipcNewWorkspace(json: json, reply: reply)
+        case "new_window":
+            WindowManager.shared.newWindow()
+            reply(["ok": true, "windows": WindowManager.shared.controllers.count])
         case "send_text":
             ipcSendText(json: json, reply: reply)
         case "get_workspaces":
@@ -167,7 +149,7 @@ extension MainWindowController {
 
     // MARK: - External Status Bar Segments
 
-    private func updateExternalStatusBarSegments(
+    func updateExternalStatusBarSegments(
         _ segments: [BooSocketServer.ExternalSegmentInfo]
     ) {
         statusBar.unregisterExternalSegments()

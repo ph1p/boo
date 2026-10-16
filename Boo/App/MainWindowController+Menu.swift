@@ -20,7 +20,11 @@ extension MainWindowController {
         let fileMenuItem = NSMenuItem()
         fileMenuItem.title = "File"
         let fileMenu = NSMenu(title: "File")
-        fileMenu.addItem(withTitle: "New Workspace", action: #selector(newWorkspaceAction(_:)), keyEquivalent: "n")
+        fileMenu.addItem(withTitle: "New Window", action: #selector(newWindowAction(_:)), keyEquivalent: "n")
+        let newWorkspace = NSMenuItem(
+            title: "New Workspace", action: #selector(newWorkspaceAction(_:)), keyEquivalent: "N")
+        newWorkspace.keyEquivalentModifierMask = [.command, .shift]
+        fileMenu.addItem(newWorkspace)
         let openFolder = NSMenuItem(
             title: "Open Folder...", action: #selector(openFolderAction(_:)), keyEquivalent: "O")
         openFolder.keyEquivalentModifierMask = [.command, .shift]
@@ -174,6 +178,20 @@ extension MainWindowController {
             withTitle: "No Plugin Commands", action: nil, keyEquivalent: "")
         pluginsMenuItem.submenu = pluginsMenu
         mainMenu.addItem(pluginsMenuItem)
+
+        // Window menu — AppKit appends the open-window list to `windowsMenu`.
+        let windowMenuItem = NSMenuItem()
+        windowMenuItem.title = "Window"
+        let windowMenu = NSMenu(title: "Window")
+        windowMenu.addItem(
+            withTitle: "Minimize", action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m")
+        windowMenu.addItem(withTitle: "Zoom", action: #selector(NSWindow.performZoom(_:)), keyEquivalent: "")
+        windowMenu.addItem(.separator())
+        windowMenu.addItem(
+            withTitle: "Bring All to Front", action: #selector(NSApplication.arrangeInFront(_:)), keyEquivalent: "")
+        windowMenuItem.submenu = windowMenu
+        mainMenu.addItem(windowMenuItem)
+        NSApplication.shared.windowsMenu = windowMenu
 
         // Cmd+1 through Cmd+9 for workspace switching
         viewMenu.addItem(.separator())

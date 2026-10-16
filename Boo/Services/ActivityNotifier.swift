@@ -167,8 +167,9 @@ final class ActivityNotifier: NSObject, UNUserNotificationCenterDelegate {
         }
         Task { @MainActor in
             NSApp.activate(ignoringOtherApps: true)
-            WindowBridgeModel.shared.windowController?.focusActivity(
-                workspaceID: workspaceID, paneID: paneID, tabIndex: tabIndex)
+            guard let controller = WindowManager.shared.controller(owningWorkspace: workspaceID) else { return }
+            controller.window?.makeKeyAndOrderFront(nil)
+            controller.focusActivity(workspaceID: workspaceID, paneID: paneID, tabIndex: tabIndex)
         }
         completionHandler()
     }

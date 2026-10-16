@@ -18,6 +18,13 @@ private func ghosttyWakeup(_ userdata: UnsafeMutableRawPointer?) {
     }
 }
 
+/// Post a `.ghosttyAction` scoped to the window hosting `view` (nil → active window).
+private func postWindowAction(from view: GhosttyView?, _ userInfo: [String: String]) {
+    DispatchQueue.main.async { [weak view] in
+        NotificationCenter.default.post(name: .ghosttyAction, object: view?.window, userInfo: userInfo)
+    }
+}
+
 private func ghosttyAction(_ app: ghostty_app_t?, _ target: ghostty_target_s, _ action: ghostty_action_s) -> Bool {
     // Get the GhosttyView from the surface's userdata
     func viewFromTarget() -> GhosttyView? {
@@ -108,20 +115,14 @@ private func ghosttyAction(_ app: ghostty_app_t?, _ target: ghostty_target_s, _ 
         }
         return true
 
-    // Window management actions — forward to MainWindowController via notification
+    // Window management actions — forward to MainWindowController via notification.
+    // `object` is the surface's window so only that window reacts; nil (app-level
+    // action, no surface) goes to the active window.
     case GHOSTTY_ACTION_NEW_SPLIT:
         let direction = action.action.new_split
-        let surface = target.tag == GHOSTTY_TARGET_SURFACE ? target.target.surface : nil
-        DispatchQueue.main.async {
-            NotificationCenter.default.post(
-                name: .ghosttyAction, object: nil,
-                userInfo: [
-                    "action": "new_split",
-                    "direction": direction == GHOSTTY_SPLIT_DIRECTION_RIGHT || direction == GHOSTTY_SPLIT_DIRECTION_LEFT
-                        ? "vertical" : "horizontal",
-                    "surface": surface as Any
-                ])
-        }
+        let vertical = direction == GHOSTTY_SPLIT_DIRECTION_RIGHT || direction == GHOSTTY_SPLIT_DIRECTION_LEFT
+        postWindowAction(
+            from: viewFromTarget(), ["action": "new_split", "direction": vertical ? "vertical" : "horizontal"])
         return true
 
     case GHOSTTY_ACTION_GOTO_SPLIT:
@@ -132,50 +133,31 @@ private func ghosttyAction(_ app: ghostty_app_t?, _ target: ghostty_target_s, _ 
         case GHOSTTY_GOTO_SPLIT_NEXT: dirStr = "next"
         default: return false
         }
-        DispatchQueue.main.async {
-            NotificationCenter.default.post(
-                name: .ghosttyAction, object: nil,
-                userInfo: [
-                    "action": "goto_split", "direction": dirStr
-                ])
-        }
+        postWindowAction(from: viewFromTarget(), ["action": "goto_split", "direction": dirStr])
         return true
 
     case GHOSTTY_ACTION_EQUALIZE_SPLITS:
-        DispatchQueue.main.async {
-            NotificationCenter.default.post(name: .ghosttyAction, object: nil, userInfo: ["action": "equalize_splits"])
-        }
+        postWindowAction(from: viewFromTarget(), ["action": "equalize_splits"])
         return true
 
     case GHOSTTY_ACTION_CLOSE_TAB:
-        DispatchQueue.main.async {
-            NotificationCenter.default.post(name: .ghosttyAction, object: nil, userInfo: ["action": "close_surface"])
-        }
+        postWindowAction(from: viewFromTarget(), ["action": "close_surface"])
         return true
 
     case GHOSTTY_ACTION_NEW_TAB:
-        DispatchQueue.main.async {
-            NotificationCenter.default.post(name: .ghosttyAction, object: nil, userInfo: ["action": "new_tab"])
-        }
+        postWindowAction(from: viewFromTarget(), ["action": "new_tab"])
         return true
 
     case GHOSTTY_ACTION_NEW_WINDOW:
-        DispatchQueue.main.async {
-            NotificationCenter.default.post(name: .ghosttyAction, object: nil, userInfo: ["action": "new_workspace"])
-        }
+        postWindowAction(from: viewFromTarget(), ["action": "new_window"])
         return true
 
     case GHOSTTY_ACTION_TOGGLE_FULLSCREEN:
-        DispatchQueue.main.async {
-            NotificationCenter.default.post(
-                name: .ghosttyAction, object: nil, userInfo: ["action": "toggle_fullscreen"])
-        }
+        postWindowAction(from: viewFromTarget(), ["action": "toggle_fullscreen"])
         return true
 
     case GHOSTTY_ACTION_CLOSE_WINDOW:
-        DispatchQueue.main.async {
-            NotificationCenter.default.post(name: .ghosttyAction, object: nil, userInfo: ["action": "close_window"])
-        }
+        postWindowAction(from: viewFromTarget(), ["action": "close_window"])
         return true
 
     case GHOSTTY_ACTION_QUIT:
@@ -185,9 +167,7 @@ private func ghosttyAction(_ app: ghostty_app_t?, _ target: ghostty_target_s, _ 
         return true
 
     case GHOSTTY_ACTION_OPEN_CONFIG:
-        DispatchQueue.main.async {
-            NotificationCenter.default.post(name: .ghosttyAction, object: nil, userInfo: ["action": "open_settings"])
-        }
+        postWindowAction(from: viewFromTarget(), ["action": "open_settings"])
         return true
 
     case GHOSTTY_ACTION_RELOAD_CONFIG:
@@ -209,10 +189,11 @@ private func ghosttyAction(_ app: ghostty_app_t?, _ target: ghostty_target_s, _ 
         }
         guard urlString.hasPrefix("http://") || urlString.hasPrefix("https://") else { return false }
         guard let url = URL(string: urlString) else { return false }
-        DispatchQueue.main.async {
+        let view = viewFromTarget()
+        DispatchQueue.main.async { [weak view] in
             NotificationCenter.default.post(
                 name: .ghosttyOpenURL,
-                object: nil,
+                object: view?.window,
                 userInfo: ["url": url]
             )
         }

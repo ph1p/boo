@@ -196,6 +196,11 @@ class ThemedSplitView: NSSplitView {
     /// tab), or the bridge keeps the previous tab's remote session and title.
     var lastFocusedTabID: UUID?
     var allowNextWindowClose = false
+    /// Whether this window writes the session file. Only one window persists
+    /// until sessions store multiple windows; `WindowManager` hands it over.
+    var persistsSession = true
+    /// Launch window restores the saved session; extra windows start fresh.
+    private let restoresSession: Bool
     /// Debounce timer for saving the session after split-pane divider drags.
     private var splitRatioSaveTimer: Timer?
     /// Debounce timer for saving workspace sidebar state after sidebar divider drags.
@@ -334,10 +339,15 @@ class ThemedSplitView: NSSplitView {
     var activeWorkspace: Workspace? { appState.activeWorkspace }
 
     /// Apply Boo chrome settings to an NSWindow.
-    static func applyWindowChrome(_ window: NSWindow) {
+    static func applyWindowChrome(_ window: NSWindow, autosaveFrame: Bool) {
         window.title = "Boo"
         window.minSize = NSSize(width: 600, height: 400)
-        window.setFrameAutosaveName("BooMainWindow")
+        // Only the launch window remembers its frame; extra windows cascade
+        // from the key window instead of stacking on the saved frame.
+        if autosaveFrame { window.setFrameAutosaveName("BooMainWindow") }
+        // Boo has its own workspace bar; native window tabs would nest a second one.
+        window.tabbingMode = .disallowed
+        window.isReleasedWhenClosed = false
         window.backgroundColor = AppSettings.shared.theme.windowBackdrop
         window.appearance = NSAppearance(named: AppSettings.shared.theme.isDark ? .darkAqua : .aqua)
         window.titlebarAppearsTransparent = true
@@ -345,18 +355,10 @@ class ThemedSplitView: NSSplitView {
         window.isMovable = false
     }
 
-    /// Init used when SwiftUI WindowGroup creates and owns the NSWindow.
-    /// Replaces the SwiftUI hosting contentView with a plain NSView so setupUI
-    /// can build the AppKit hierarchy on top of it.
-    init(swiftUIWindow window: NSWindow) {
-        Self.applyWindowChrome(window)
-        // Replace SwiftUI's hosting view with a plain container so setupUI works normally.
-        window.contentView = NSView()
-        super.init(window: window)
-        performSetup()
-    }
-
-    init() {
+    /// - Parameter restoreSession: load the saved session (launch window) or
+    ///   start with a single default workspace (additional windows).
+    init(restoreSession: Bool = true) {
+        restoresSession = restoreSession
         let window = BooWindow(
             contentRect: NSRect(x: 0, y: 0, width: 1000, height: 700),
             styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
@@ -364,7 +366,7 @@ class ThemedSplitView: NSSplitView {
             defer: false
         )
         window.center()
-        Self.applyWindowChrome(window)
+        Self.applyWindowChrome(window, autosaveFrame: restoreSession)
         super.init(window: window)
         performSetup()
     }
@@ -582,10 +584,13 @@ class ThemedSplitView: NSSplitView {
         tabDragCoordinator.workspacePillFrames = { [weak self] in
             self?.workspacePillScreenFrames() ?? []
         }
-        restoreWorkspaces()
+        if restoresSession {
+            restoreWorkspaces()
+        } else {
+            openWorkspace(path: AppSettings.shared.defaultFolder)
+        }
         subscribeToBridge()
-        setupIPCHandlers()
-        setupRemoteControlHandlers()
+        // Socket / remote-control handlers are app-wide: WindowManager installs them once.
         setupPluginWatcher()
 
         // Run initial plugin cycle so lastContext is available for first click
@@ -716,6 +721,8 @@ class ThemedSplitView: NSSplitView {
             guard let info = notification.userInfo,
                 let action = info["action"] as? String
             else { return }
+            let targetWindow = Self.windowID(of: notification)
+            guard MainActor.assumeIsolated({ self.handlesWindowScoped(targetWindow) }) else { return }
             let direction = info["direction"] as? String
             let safeInfo: [String: String] = direction.map { ["direction": $0] } ?? [:]
             Task { @MainActor [weak self] in self?.handleGhosttyAction(action, userInfo: safeInfo) }
@@ -727,7 +734,9 @@ class ThemedSplitView: NSSplitView {
             guard let self,
                 let url = notification.userInfo?["url"] as? URL
             else { return }
+            let targetWindow = Self.windowID(of: notification)
             MainActor.assumeIsolated {
+                guard self.handlesWindowScoped(targetWindow) else { return }
                 switch AppSettings.shared.linkOpenMode {
                 case .browserTab:
                     self.handleOpenTab(.browser(url: url))
@@ -736,6 +745,17 @@ class ThemedSplitView: NSSplitView {
                 }
             }
         }
+    }
+
+    /// Ghostty posts surface actions with the surface's window as `object`;
+    /// app-level actions (no surface) carry nil and go to the active window only.
+    func handlesWindowScoped(_ targetWindow: ObjectIdentifier?) -> Bool {
+        if let targetWindow { return window.map(ObjectIdentifier.init) == targetWindow }
+        return WindowManager.shared.activeController.map { $0 === self } ?? true
+    }
+
+    nonisolated private static func windowID(of notification: Notification) -> ObjectIdentifier? {
+        (notification.object as? NSWindow).map(ObjectIdentifier.init)
     }
 
     private func handleGhosttyAction(_ action: String, userInfo: [String: String]) {
@@ -769,6 +789,9 @@ class ThemedSplitView: NSSplitView {
 
         case "new_workspace":
             newWorkspaceAction(nil)
+
+        case "new_window":
+            newWindowAction(nil)
 
         case "toggle_fullscreen":
             window?.toggleFullScreen(nil)
@@ -1175,11 +1198,7 @@ class ThemedSplitView: NSSplitView {
             }
             .store(in: &bridgeCancellables)
 
-        // When a process registers/unregisters via the socket, re-evaluate.
-        BooSocketServer.shared.onStatusChanged = { [weak self] in
-            guard let self else { return }
-            self.bridge.reevaluateSocketProcess()
-        }
+        // Socket register/unregister → reevaluateSocketProcess is fanned out by WindowManager.
 
         bridge.events
             .receive(on: DispatchQueue.main)
@@ -1287,6 +1306,10 @@ class ThemedSplitView: NSSplitView {
 
     @objc func newWorkspaceAction(_ sender: Any?) {
         openWorkspace(path: AppSettings.shared.defaultFolder)
+    }
+
+    @objc func newWindowAction(_ sender: Any?) {
+        WindowManager.shared.newWindow()
     }
 
     @objc func openFolderAction(_ sender: Any?) {
@@ -1418,6 +1441,30 @@ class ThemedSplitView: NSSplitView {
         normalizeWorkspaceState()
         persistActiveWorkspaceSidebarState()
         savePluginStateForActiveTab()
-        SessionStore.save(appState: appState)
+        if persistsSession {
+            SessionStore.save(appState: appState)
+        }
+        let manager = WindowManager.shared
+        guard manager.isManaged(self) else { return }
+        // The app keeps running when other windows remain: stop this window's
+        // terminals so they don't outlive it, then let it deallocate.
+        if manager.controllers.count > 1 {
+            tearDownAllWorkspaces()
+        }
+        manager.remove(self)
+    }
+
+    private func tearDownAllWorkspaces() {
+        for ws in appState.workspaces {
+            for pane in ws.panes.values {
+                notifyTerminalClosed(for: pane.tabs)
+            }
+        }
+        for views in workspacePaneViews.values {
+            for pv in views.values {
+                pv.stopAll()
+            }
+        }
+        workspacePaneViews.removeAll()
     }
 }
