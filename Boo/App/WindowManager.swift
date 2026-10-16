@@ -164,6 +164,11 @@ final class WindowManager {
         return nil
     }
 
+    /// Controller whose active workspace shows `paneView`.
+    func controller(showing paneView: PaneView) -> MainWindowController? {
+        controllers.first { $0.paneViews[paneView.paneID] === paneView }
+    }
+
     /// Every registered window is part of the session.
     func register(_ controller: MainWindowController) {
         guard !isManaged(controller) else { return }

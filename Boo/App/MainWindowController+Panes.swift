@@ -802,6 +802,12 @@ extension MainWindowController {
     func handleTabDrop(source: PaneView, tabIndex: Int, dest: PaneView, zone: TabDropZone) {
         guard activeWorkspace != nil else { return }
 
+        // Dropped on a pane of another window: the tab moves there.
+        if let target = WindowManager.shared.controller(showing: dest), target !== self {
+            moveTab(source: source, tabIndex: tabIndex, toWindow: target, dest: dest, zone: zone)
+            return
+        }
+
         // Detect cross-workspace drop: source pane is not in the current workspace's pane views.
         // This happens when the user hovered over a workspace pill mid-drag to switch workspaces.
         let isCrossWorkspace = paneViews[source.paneID] == nil
@@ -906,32 +912,44 @@ extension MainWindowController {
         }
 
         // Perform the drop into the destination workspace
-        switch zone {
-        case .tabBarInsert, .center:
-            let insertIdx: Int
-            if case .tabBarInsert(let idx) = zone { insertIdx = idx } else { insertIdx = dest.pane.tabs.count }
-            let insertIndex = min(insertIdx, dest.pane.tabs.count)
-            dest.pane.insertTab(tab, at: insertIndex)
-            if let gv = gv {
-                dest.insertGhosttyView(gv, for: tab.id)
-            } else if let cv = cv {
-                dest.insertContentView(cv, for: tab.id)
+        insertDroppedTab(tab, ghosttyView: gv, contentView: cv, into: dest, zone: zone, workspace: destWorkspace)
+
+        // Close source pane / workspace
+        if closeSourceWorkspace {
+            if let idx = appState.workspaces.firstIndex(where: { $0.id == sourceWorkspace.id }) {
+                // Notify terminals then destroy views — but don't switch workspace (we're already on dest)
+                for pane in sourceWorkspace.panes.values {
+                    notifyTerminalClosed(for: pane.tabs)
+                }
+                if let views = workspacePaneViews.removeValue(forKey: sourceWorkspace.id) {
+                    for (_, pv) in views { pv.stopAll() }
+                }
+                appState.removeWorkspace(at: idx)
+                refreshToolbar()
             }
-            dest.forceActivateTab(insertIndex)
-            destWorkspace.activePaneID = dest.paneID
-            if tab.contentType == .terminal {
-                window?.makeFirstResponder(dest.ghosttyView)
-            } else {
-                window?.makeFirstResponder(dest.activeContentView)
-            }
-        case .left, .right, .top, .bottom:
-            let direction: SplitTree.SplitDirection = (zone == .left || zone == .right) ? .horizontal : .vertical
-            let insertBefore = (zone == .left || zone == .top)
-            guard let newPaneID = destWorkspace.splitPane(dest.paneID, direction: direction) else {
-                booLog(.debug, .terminal, "executeCrossWorkspaceDrop: splitPane returned nil — skipped")
-                return
-            }
-            if insertBefore {
+        } else if sourcePane.tabs.isEmpty {
+            // Source pane is now empty — close just the pane in the source workspace
+            workspacePaneViews[sourceWorkspace.id]?.removeValue(forKey: source.paneID)
+            source.stopAll()
+            _ = sourceWorkspace.closePane(source.paneID)
+        }
+
+        saveSession()
+    }
+
+    /// Put a tab extracted from another pane (this window or another one) into
+    /// `dest`: its tab bar, or a new split next to it. The transferred view is
+    /// inserted before the session starts, so the live terminal is reused.
+    /// Returns the pane that received the tab.
+    @discardableResult
+    func insertDroppedTab(
+        _ tab: Pane.Tab, ghosttyView gv: GhosttyView?, contentView cv: ContentViewProtocol?,
+        into dest: PaneView, zone: TabDropZone, workspace destWorkspace: Workspace
+    ) -> UUID {
+        let isSplit = zone == .left || zone == .right || zone == .top || zone == .bottom
+        let direction: SplitTree.SplitDirection = (zone == .left || zone == .right) ? .horizontal : .vertical
+        if isSplit, let newPaneID = destWorkspace.splitPane(dest.paneID, direction: direction) {
+            if zone == .left || zone == .top {
                 destWorkspace.splitTree = destWorkspace.splitTree.swappingChildrenAtParent(of: newPaneID)
             }
             if let newPane = destWorkspace.pane(for: newPaneID) {
@@ -962,29 +980,30 @@ extension MainWindowController {
                     newPV.focusActiveView()
                 }
             }
+            return newPaneID
+        }
+        if isSplit {
+            booLog(.debug, .terminal, "insertDroppedTab: splitPane returned nil — appending to tab bar")
         }
 
-        // Close source pane / workspace
-        if closeSourceWorkspace {
-            if let idx = appState.workspaces.firstIndex(where: { $0.id == sourceWorkspace.id }) {
-                // Notify terminals then destroy views — but don't switch workspace (we're already on dest)
-                for pane in sourceWorkspace.panes.values {
-                    notifyTerminalClosed(for: pane.tabs)
-                }
-                if let views = workspacePaneViews.removeValue(forKey: sourceWorkspace.id) {
-                    for (_, pv) in views { pv.stopAll() }
-                }
-                appState.removeWorkspace(at: idx)
-                refreshToolbar()
-            }
-        } else if sourcePane.tabs.isEmpty {
-            // Source pane is now empty — close just the pane in the source workspace
-            workspacePaneViews[sourceWorkspace.id]?.removeValue(forKey: source.paneID)
-            source.stopAll()
-            _ = sourceWorkspace.closePane(source.paneID)
+        // Tab bar or center drop (or a split that could not be made): the tab
+        // must not get lost, so it always lands in `dest`.
+        var insertIdx = dest.pane.tabs.count
+        if case .tabBarInsert(let idx) = zone { insertIdx = min(idx, insertIdx) }
+        dest.pane.insertTab(tab, at: insertIdx)
+        if let gv = gv {
+            dest.insertGhosttyView(gv, for: tab.id)
+        } else if let cv = cv {
+            dest.insertContentView(cv, for: tab.id)
         }
-
-        saveSession()
+        dest.forceActivateTab(insertIdx)
+        destWorkspace.activePaneID = dest.paneID
+        if tab.contentType == .terminal {
+            window?.makeFirstResponder(dest.ghosttyView)
+        } else {
+            window?.makeFirstResponder(dest.activeContentView)
+        }
+        return dest.paneID
     }
 
     private func moveTabBetweenPanes(source: PaneView, tabIndex: Int, dest: PaneView, insertAt: Int) {
@@ -1121,7 +1140,7 @@ extension MainWindowController {
     }
 
     /// Close an empty pane after its last tab was dragged out.
-    private func closeEmptyPane(_ paneID: UUID) {
+    func closeEmptyPane(_ paneID: UUID) {
         guard let workspace = activeWorkspace else { return }
 
         previousFocusedTabID = nil

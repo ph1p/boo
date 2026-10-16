@@ -20,8 +20,10 @@ final class WindowManagerTests: XCTestCase {
     func testRegisteredWindowsAllPersistSession() {
         let manager = WindowManager.shared
         let first = MainWindowController()
+        Self.keptAlive.append(first)
         // Fresh window: own workspace IDs (a restoring one would duplicate the session's).
         let second = MainWindowController(restoreSession: false)
+        Self.keptAlive.append(second)
         // Its init saves the session; it must not overwrite the file before it is registered.
         XCTAssertFalse(second.persistsSession)
         manager.register(first)
@@ -164,9 +166,69 @@ final class WindowManagerTests: XCTestCase {
         XCTAssertFalse(adopter.persistsSession)
     }
 
+    /// Source window whose active workspace has one pane with two tabs.
+    private func twoTabSource() throws -> (MainWindowController, PaneView) {
+        let source = MainWindowController(restoreSession: false)
+        Self.keptAlive.append(source)
+        source.openWorkspace(path: Self.emptyFolder())
+        let ws = try XCTUnwrap(source.activeWorkspace)
+        let pv = try XCTUnwrap(source.paneViews[ws.activePaneID])
+        _ = pv.pane.addTab(workingDirectory: ws.folderPath)
+        XCTAssertEqual(pv.pane.tabs.count, 2)
+        return (source, pv)
+    }
+
+    func testMoveTabToOtherWindowKeepsLiveView() throws {
+        let (source, sourcePV) = try twoTabSource()
+        let target = MainWindowController(restoreSession: false)
+        Self.keptAlive.append(target)
+        let destWS = try XCTUnwrap(target.activeWorkspace)
+        let destPV = try XCTUnwrap(target.paneViews[destWS.activePaneID])
+        sourcePV.forceActivateTab(0)
+        let moving = sourcePV.pane.tabs[0]
+        let liveView = sourcePV.ghosttyView.flatMap { $0.tabID == moving.id ? $0 : nil }
+        let destTabsBefore = destPV.pane.tabs.count
+
+        source.moveTab(source: sourcePV, tabIndex: 0, toWindow: target, dest: destPV, zone: .center)
+
+        XCTAssertFalse(sourcePV.pane.tabs.contains { $0.id == moving.id })
+        XCTAssertEqual(sourcePV.pane.tabs.count, 1)
+        XCTAssertEqual(destPV.pane.tabs.count, destTabsBefore + 1)
+        XCTAssertEqual(destPV.pane.activeTab?.id, moving.id)
+        if let liveView {
+            XCTAssertTrue(destPV.ghosttyView === liveView, "terminal must move, not be recreated")
+        }
+        XCTAssertEqual(source.appState.workspaces.count, 2, "source workspace keeps its other tab")
+    }
+
+    func testTabTornOffBecomesOwnWorkspace() throws {
+        let (source, sourcePV) = try twoTabSource()
+        let sourceWS = try XCTUnwrap(source.activeWorkspace)
+        let moving = sourcePV.pane.tabs[1]
+
+        let detached = try XCTUnwrap(source.detachTabIntoWorkspace(source: sourcePV, tabIndex: 1))
+        Self.keptDetached.append(detached)
+        XCTAssertEqual(sourceWS.totalTabCount, 1)
+        XCTAssertEqual(detached.workspace.folderPath, sourceWS.folderPath)
+        XCTAssertEqual(detached.workspace.panes.values.flatMap(\.tabs).map(\.id), [moving.id])
+
+        let adopter = MainWindowController(restoreSession: false, adopting: detached)
+        Self.keptAlive.append(adopter)
+        XCTAssertTrue(adopter.activeWorkspace === detached.workspace)
+        // A workspace's only tab cannot be torn off as a tab (the workspace moves instead).
+        XCTAssertNil(source.detachTabIntoWorkspace(source: sourcePV, tabIndex: 0))
+    }
+
+    func testUnmanagedWindowHitTestsOwnPanes() {
+        let controller = MainWindowController(restoreSession: false)
+        Self.keptAlive.append(controller)
+        XCTAssertNil(controller.dropTargetPaneViews(atScreenPoint: .zero))
+    }
+
     func testRegisterIsIdempotent() {
         let manager = WindowManager.shared
         let controller = MainWindowController()
+        Self.keptAlive.append(controller)
         manager.register(controller)
         manager.register(controller)
         defer { manager.remove(controller) }
@@ -177,12 +239,15 @@ final class WindowManagerTests: XCTestCase {
     func testRemoveUnmanagedControllerIsNoop() {
         let manager = WindowManager.shared
         let before = manager.controllers.count
-        manager.remove(MainWindowController())
+        let unmanaged = MainWindowController()
+        Self.keptAlive.append(unmanaged)
+        manager.remove(unmanaged)
         XCTAssertEqual(manager.controllers.count, before)
     }
 
     func testWindowScopedNotificationsTargetOwningWindow() {
         let controller = MainWindowController()
+        Self.keptAlive.append(controller)
         let other = NSWindow()
         let own = controller.window.map(ObjectIdentifier.init)
 
@@ -195,7 +260,9 @@ final class WindowManagerTests: XCTestCase {
     func testUntargetedNotificationsGoToActiveWindowOnly() throws {
         let manager = WindowManager.shared
         let first = MainWindowController()
+        Self.keptAlive.append(first)
         let second = MainWindowController()
+        Self.keptAlive.append(second)
         manager.register(first)
         manager.register(second)
         defer {
@@ -216,7 +283,9 @@ final class WindowManagerTests: XCTestCase {
     func testOnlyActiveWindowFeedsSharedProjections() throws {
         let manager = WindowManager.shared
         let first = MainWindowController()
+        Self.keptAlive.append(first)
         let second = MainWindowController(restoreSession: false)
+        Self.keptAlive.append(second)
         manager.register(first)
         manager.register(second)
         defer {
@@ -238,7 +307,9 @@ final class WindowManagerTests: XCTestCase {
     func testSetupMenuItemsTakesMenuOwnership() {
         let manager = WindowManager.shared
         let first = MainWindowController()
+        Self.keptAlive.append(first)
         let second = MainWindowController(restoreSession: false)
+        Self.keptAlive.append(second)
         let previousMenu = NSApp.mainMenu
         defer { NSApp.mainMenu = previousMenu }
 

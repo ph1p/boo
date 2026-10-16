@@ -28,6 +28,13 @@ enum TabDropZone: Equatable {
     /// Returns (index, screenFrame) pairs for all workspace pills.
     var workspacePillFrames: (() -> [(index: Int, screenFrame: NSRect)])?
 
+    /// Called when a drag ends over no pane, with the screen point.
+    var onDropOutside: ((_ sourcePaneView: PaneView, _ tabIndex: Int, _ screenPoint: NSPoint) -> Void)?
+
+    /// Drop candidates at a screen point: the panes of the window in front
+    /// there, which may be another window. Nil falls back to `paneViews`.
+    var paneViewsAtScreenPoint: ((NSPoint) -> [UUID: PaneView]?)?
+
     /// All pane views in the current workspace, set by the window controller.
     var paneViews: [UUID: PaneView] = [:]
 
@@ -71,11 +78,13 @@ enum TabDropZone: Equatable {
     }
 
     private func executeDrop() {
-        guard let source = sourcePaneView,
-            let tabIdx = sourceTabIndex,
-            let (dest, zone) = currentDropTarget
-        else {
+        guard let source = sourcePaneView, let tabIdx = sourceTabIndex else {
             cleanup()
+            return
+        }
+        guard let (dest, zone) = currentDropTarget else {
+            cleanup()
+            onDropOutside?(source, tabIdx, NSEvent.mouseLocation)
             return
         }
 
@@ -198,7 +207,7 @@ enum TabDropZone: Equatable {
 
         var foundTarget: (PaneView, TabDropZone)?
 
-        for (_, pv) in paneViews {
+        for (_, pv) in paneViewsAtScreenPoint?(screenLoc) ?? paneViews {
             guard let pvWindow = pv.window else { continue }
             let windowPoint = pvWindow.convertPoint(fromScreen: screenLoc)
             let localPoint = pv.convert(windowPoint, from: nil)

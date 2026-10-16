@@ -596,6 +596,12 @@ class ThemedSplitView: NSSplitView {
         tabDragCoordinator.workspacePillFrames = { [weak self] in
             self?.workspacePillScreenFrames() ?? []
         }
+        tabDragCoordinator.paneViewsAtScreenPoint = { [weak self] point in
+            self?.dropTargetPaneViews(atScreenPoint: point)
+        }
+        tabDragCoordinator.onDropOutside = { [weak self] source, tabIndex, point in
+            self?.tearOffTab(source: source, tabIndex: tabIndex, atScreenPoint: point)
+        }
         if let detached = pendingAdoption {
             pendingAdoption = nil
             adoptWorkspace(detached)
