@@ -204,8 +204,10 @@ final class AgentsPlugin: BooPluginProtocol {
         guard let start = agentStartTime else { return }
         context.setData(AnyHashable(activeAgent?.kind.rawValue ?? "ai"), forKey: "ai-agent.kind")
         context.setData(AnyHashable(activeAgent?.displayName ?? "Agent"), forKey: "ai-agent.name")
-        let runtime = Int(Date().timeIntervalSince(start))
-        context.setData(AnyHashable(runtime), forKey: "ai-agent.runtime")
+        // Publish the start time, not elapsed seconds: enriched data is part of
+        // TerminalContext equality, so a ticking value forced a full sidebar
+        // rebuild on every cycle. Consumers derive the runtime from this.
+        context.setData(AnyHashable(Int(start.timeIntervalSince1970)), forKey: "ai-agent.startedAt")
     }
 
     // MARK: - Status Bar
@@ -698,6 +700,9 @@ final class AgentsPlugin: BooPluginProtocol {
                 self?.stopRefreshTimer()
                 return
             }
+            // Nobody can see the stats while every Boo window is hidden or
+            // occluded; skip the git spawn and catch up on the next visible tick.
+            guard NSApp.windows.contains(where: { $0.occlusionState.contains(.visible) }) else { return }
             self.runDiffDetection(repoRoot: root)
         }
         timer.resume()
@@ -790,7 +795,9 @@ func parseAgentSkillDescription(at path: String) -> String {
 func detectAgentDiffStats(repoRoot: String) -> [AgentsPlugin.DiffStatEntry] {
     let task = Process()
     task.executableURL = URL(fileURLWithPath: "/usr/bin/git")
-    task.arguments = ["-C", repoRoot, "diff", "--numstat", "HEAD"]
+    // --no-optional-locks: a plain `git diff` refreshes .git/index, which fires
+    // GitService's index watcher and a full git status refresh every poll.
+    task.arguments = ["-C", repoRoot, "--no-optional-locks", "diff", "--numstat", "HEAD"]
 
     // Drain-while-running: `--numstat` on a large working tree easily exceeds the
     // ~64KB pipe buffer, and the read-after-exit shape would deadlock the child.

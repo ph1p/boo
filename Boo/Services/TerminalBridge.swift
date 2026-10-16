@@ -170,6 +170,16 @@ final class TerminalBridge: @unchecked Sendable {
     private func applyResolvedProcess(
         _ resolved: (name: String, pid: pid_t?, category: String?, metadata: [String: String])
     ) -> Bool {
+        var next = state
+        let changed = Self.applyResolvedProcess(resolved, to: &next)
+        if changed { state = next }
+        return changed
+    }
+
+    private static func applyResolvedProcess(
+        _ resolved: (name: String, pid: pid_t?, category: String?, metadata: [String: String]),
+        to state: inout BridgeState
+    ) -> Bool {
         let changed =
             state.foregroundProcess != resolved.name
             || state.foregroundProcessPID != resolved.pid
@@ -349,21 +359,24 @@ final class TerminalBridge: @unchecked Sendable {
         guard paneID == state.paneID else { return }
         guard title != state.terminalTitle else { return }
         booLog(.debug, .terminal, "titleChanged: \(title) pane=\(paneID.uuidString.prefix(8))")
-        state.terminalTitle = title
+        // Mutate a copy and publish once: every `state` write emits through
+        // `$state`, and each emission syncs the tab and redraws the status bar.
+        var next = state
+        next.terminalTitle = title
 
         let resolvedProcess = resolveProcess(paneID: paneID, title: title)
-        let processChanged = applyResolvedProcess(resolvedProcess)
+        let processChanged = Self.applyResolvedProcess(resolvedProcess, to: &next)
         if processChanged {
             booLog(
                 .debug, .terminal,
-                "processChanged: \(state.foregroundProcess.isEmpty ? "(empty)" : state.foregroundProcess) pane=\(paneID.uuidString.prefix(8))"
+                "processChanged: \(next.foregroundProcess.isEmpty ? "(empty)" : next.foregroundProcess) pane=\(paneID.uuidString.prefix(8))"
             )
         }
 
-        let previousRemote = state.remoteSession
+        let previousRemote = next.remoteSession
         var resolved = TerminalBridge.resolveRemoteSession(
             title: title,
-            cwd: state.workingDirectory,
+            cwd: next.workingDirectory,
             previous: previousRemote
         )
 
@@ -395,21 +408,23 @@ final class TerminalBridge: @unchecked Sendable {
             }
         }
 
-        state.remoteSession = resolved
+        next.remoteSession = resolved
 
         // Extract remoteCwd from title and handle session switches
-        if state.remoteSession != nil {
+        if next.remoteSession != nil {
             // Session host changed → reset remoteCwd before re-extracting
-            if state.remoteSession != previousRemote {
-                state.remoteCwd = nil
+            if next.remoteSession != previousRemote {
+                next.remoteCwd = nil
             }
-            if let remotePath = TerminalBridge.extractRemoteCwd(from: title, session: state.remoteSession) {
+            if let remotePath = TerminalBridge.extractRemoteCwd(from: title, session: next.remoteSession) {
                 remoteLog("[Bridge] extractRemoteCwd: title=\(title) → remoteCwd=\(remotePath)")
-                state.remoteCwd = remotePath
+                next.remoteCwd = remotePath
             }
         } else {
-            state.remoteCwd = nil
+            next.remoteCwd = nil
         }
+
+        state = next
 
         events.send(.titleChanged(title: title))
         if processChanged {

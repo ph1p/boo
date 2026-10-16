@@ -178,6 +178,7 @@ class ThemedSplitView: NSSplitView {
     /// Coalesced plugin cycle scheduling — batches rapid-fire events within one run loop tick.
     private var pendingCycleReason: PluginCycleReason?
     private var cycleScheduled = false
+    private var cycleRerunScheduled = false
 
     /// Pending image sends keyed by tab ID, waiting for a live shell PID.
     /// `failedPID` is the PID that last failed — only retry with a different PID.
@@ -380,11 +381,18 @@ class ThemedSplitView: NSSplitView {
         AppStore.shared.sidebarVisible = sidebarVisible
         setupMenuItems()
         pluginRegistry.onRequestCycleRerun = { [weak self] in
-            guard let self else { return }
+            guard let self, !self.cycleRerunScheduled else { return }
             // A plugin's internal state changed — clear view cache and force sidebar rebuild.
-            self.cachedDetailViews.removeAll()
-            self.pluginRegistry.clearChangeDetection()
-            self.runPluginCycle(reason: .focusChanged)
+            // Coalesced to one forced cycle per runloop turn: a git refresh fans out to
+            // several plugins, each requesting its own rerun.
+            self.cycleRerunScheduled = true
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                self.cycleRerunScheduled = false
+                self.cachedDetailViews.removeAll()
+                self.pluginRegistry.clearChangeDetection()
+                self.runPluginCycle(reason: .focusChanged)
+            }
         }
         pluginRegistry.registerBuiltins()
         // Keep status bar branch cache in sync with GitPlugin's .git/HEAD watcher.

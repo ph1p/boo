@@ -345,8 +345,29 @@ final class AppSettings {
 
     var theme: TerminalTheme {
         if let preview = previewTheme { return preview }
-        if let t = Self.builtInThemesByName[themeName] { return t }
-        return customThemes.first(where: { $0.name == themeName })?.toTheme() ?? .defaultDark
+        let name = themeName
+        if let t = Self.builtInThemesByName[name] { return t }
+        return resolvedCustomTheme(named: name)
+    }
+
+    /// Last resolved custom theme, keyed by name and the raw stored bytes.
+    /// `theme` is read from every draw(); decoding all custom themes from JSON
+    /// each time was measurable. Keying on the stored Data (not a notification)
+    /// keeps the cache correct for any writer of the defaults key.
+    private var customThemeCache: (name: String, data: Data?, theme: TerminalTheme)?
+    private let customThemeCacheLock = NSLock()
+
+    private func resolvedCustomTheme(named name: String) -> TerminalTheme {
+        let data = UserDefaults.standard.data(forKey: K.customThemes)
+        customThemeCacheLock.lock()
+        defer { customThemeCacheLock.unlock() }
+        if let cached = customThemeCache, cached.name == name, cached.data == data {
+            return cached.theme
+        }
+        let decoded = data.flatMap { try? JSONDecoder().decode([CustomThemeData].self, from: $0) } ?? []
+        let theme = decoded.first(where: { $0.name == name })?.toTheme() ?? .defaultDark
+        customThemeCache = (name, data, theme)
+        return theme
     }
 
     /// All themes: built-ins followed by user-created custom themes.
