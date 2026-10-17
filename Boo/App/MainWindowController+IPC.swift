@@ -23,6 +23,8 @@ extension MainWindowController {
             ipcNewTab(json: json, reply: reply)
         case "new_workspace":
             ipcNewWorkspace(json: json, reply: reply)
+        case "new_agent_task":
+            ipcNewAgentTask(json: json, reply: reply)
         case "new_window":
             WindowManager.shared.newWindow()
             reply(["ok": true, "windows": WindowManager.shared.controllers.count])

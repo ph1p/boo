@@ -219,6 +219,8 @@ extension MainWindowController: NSMenuItemValidation {
             return appState.workspaces.count > 1 && activeWorkspace?.isPinned == false
         case #selector(mergeAllWindowsAction(_:)):
             return WindowManager.shared.controllers.count > 1
+        case #selector(jumpToNextWaitingAgentAction(_:)):
+            return AgentInbox.shared.attentionCount > 0
         default:
             return true
         }

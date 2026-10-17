@@ -552,6 +552,11 @@ extension ToolbarView {
             moveItem.tag = index
             menu.addItem(moveItem)
         }
+        let extra = delegate?.toolbar(self, contextMenuItemsForWorkspaceAt: index) ?? []
+        if !extra.isEmpty {
+            extra.forEach(menu.addItem)
+            menu.addItem(.separator())
+        }
 
         // Close
         if !ws.isPinned {

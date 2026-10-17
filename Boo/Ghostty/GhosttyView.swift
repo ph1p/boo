@@ -67,6 +67,10 @@ import Cocoa
     override func accessibilityRole() -> NSAccessibility.Role? { .textArea }
     override func accessibilityLabel() -> String? { "Terminal" }
 
+    /// Text typed into a tab's shell as soon as its surface starts, keyed by tab
+    /// ID (Ghostty's `initial_input`: no race with shell startup). Consumed once.
+    static var pendingInitialInput: [UUID: String] = [:]
+
     init(workingDirectory: String, paneID: UUID? = nil, tabID: UUID? = nil) {
         self.tabID = tabID
         super.init(frame: .zero)
@@ -115,13 +119,21 @@ import Cocoa
                 value: pair.value.withUnsafeBufferPointer { $0.baseAddress! })
         }
 
+        let initialInput = tabID.flatMap { Self.pendingInitialInput.removeValue(forKey: $0) }
         withExtendedLifetime(envPairs) {
             workingDirectory.withCString { cwd in
                 envVars.withUnsafeMutableBufferPointer { buf in
                     config.working_directory = cwd
                     config.env_vars = buf.baseAddress
                     config.env_var_count = buf.count
-                    surface = ghostty_surface_new(app, &config)
+                    if let initialInput {
+                        initialInput.withCString { input in
+                            config.initial_input = input
+                            surface = ghostty_surface_new(app, &config)
+                        }
+                    } else {
+                        surface = ghostty_surface_new(app, &config)
+                    }
                 }
             }
         }

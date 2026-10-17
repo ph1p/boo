@@ -15,6 +15,12 @@ import Cocoa
     func toolbar(_ toolbar: ToolbarView, workspaceDragMovedOutsideTo point: NSPoint?)
     func toolbar(_ toolbar: ToolbarView, moveWorkspaceToNewWindowAt index: Int)
     func toolbarDidRequestNewWorkspace(_ toolbar: ToolbarView)
+    /// Extra items for a workspace's context menu, shown above Close.
+    func toolbar(_ toolbar: ToolbarView, contextMenuItemsForWorkspaceAt index: Int) -> [NSMenuItem]
+}
+
+extension ToolbarViewDelegate {
+    func toolbar(_ toolbar: ToolbarView, contextMenuItemsForWorkspaceAt index: Int) -> [NSMenuItem] { [] }
 }
 
 class ToolbarView: NSView {

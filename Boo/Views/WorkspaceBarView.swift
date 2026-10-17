@@ -14,6 +14,12 @@ import Cocoa
     func workspaceBar(_ bar: WorkspaceBarView, workspaceDragMovedOutsideTo point: NSPoint?)
     func workspaceBar(_ bar: WorkspaceBarView, moveWorkspaceToNewWindowAt index: Int)
     func workspaceBarDidRequestNewWorkspace(_ bar: WorkspaceBarView)
+    /// Extra items for a workspace's context menu, shown above Close.
+    func workspaceBar(_ bar: WorkspaceBarView, contextMenuItemsForWorkspaceAt index: Int) -> [NSMenuItem]
+}
+
+extension WorkspaceBarViewDelegate {
+    func workspaceBar(_ bar: WorkspaceBarView, contextMenuItemsForWorkspaceAt index: Int) -> [NSMenuItem] { [] }
 }
 
 class WorkspaceBarView: NSView {
@@ -790,6 +796,11 @@ class WorkspaceBarView: NSView {
             moveItem.target = self
             moveItem.tag = index
             menu.addItem(moveItem)
+        }
+        let extra = delegate?.workspaceBar(self, contextMenuItemsForWorkspaceAt: index) ?? []
+        if !extra.isEmpty {
+            extra.forEach(menu.addItem)
+            menu.addItem(.separator())
         }
 
         // Close

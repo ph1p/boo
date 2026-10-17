@@ -59,6 +59,10 @@ extension MainWindowController: ToolbarViewDelegate {
         moveWorkspaceToNewWindow(at: index)
     }
 
+    func toolbar(_ toolbar: ToolbarView, contextMenuItemsForWorkspaceAt index: Int) -> [NSMenuItem] {
+        agentTaskMenuItems(forWorkspaceAt: index)
+    }
+
     func toolbarDidRequestNewWorkspace(_ toolbar: ToolbarView) {
         newWorkspaceAction(nil)
     }
@@ -119,6 +123,10 @@ extension MainWindowController: WorkspaceBarViewDelegate {
 
     func workspaceBar(_ bar: WorkspaceBarView, moveWorkspaceToNewWindowAt index: Int) {
         moveWorkspaceToNewWindow(at: index)
+    }
+
+    func workspaceBar(_ bar: WorkspaceBarView, contextMenuItemsForWorkspaceAt index: Int) -> [NSMenuItem] {
+        agentTaskMenuItems(forWorkspaceAt: index)
     }
 
     func workspaceBarDidRequestNewWorkspace(_ bar: WorkspaceBarView) {
@@ -288,7 +296,9 @@ extension MainWindowController {
         savePluginStateForActiveTab()
     }
 
-    func openWorkspace(path: String) {
+    /// Opens `path` as a new workspace. With `initialCommand`, its first tab is
+    /// a terminal that runs the command as soon as the shell starts.
+    func openWorkspace(path: String, name: String? = nil, initialCommand: String? = nil) {
         let previousIndex = appState.activeWorkspaceIndex
         let workspace = Workspace(folderPath: path)
         if AppSettings.shared.sidebarPerWorkspaceState {
@@ -300,8 +310,14 @@ extension MainWindowController {
         } else {
             workspace.sidebarState = sidebarController.resolveEffectiveSidebarState()
         }
-        workspace.customName = appState.nextGeneratedWorkspaceName()
-        configureInitialTab(for: workspace)
+        workspace.customName = name ?? appState.nextGeneratedWorkspaceName()
+        if let initialCommand, let pane = workspace.pane(for: workspace.activePaneID) {
+            pane.stopAll()
+            pane.addTab(workingDirectory: path)
+            if let tab = pane.tabs.last { GhosttyView.pendingInitialInput[tab.id] = initialCommand + "\n" }
+        } else {
+            configureInitialTab(for: workspace)
+        }
         appState.addWorkspace(workspace)
         if previousIndex >= 0 {
             appState.setActiveWorkspace(previousIndex)

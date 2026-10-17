@@ -30,6 +30,8 @@ extension MainWindowController {
             title: "Open Folder...", action: #selector(openFolderAction(_:)), keyEquivalent: "O")
         openFolder.keyEquivalentModifierMask = [.command, .shift]
         fileMenu.addItem(openFolder)
+        fileMenu.addItem(
+            withTitle: "New Agent Task...", action: #selector(newAgentTaskAction(_:)), keyEquivalent: "")
         fileMenu.addItem(withTitle: "New Terminal Tab", action: #selector(newTabAction(_:)), keyEquivalent: "t")
         let browserTab = NSMenuItem(
             title: "New Browser Tab", action: #selector(newBrowserTabAction(_:)), keyEquivalent: "T")
@@ -205,6 +207,12 @@ extension MainWindowController {
             keyEquivalent: "")
         windowMenu.addItem(
             withTitle: "Merge All Windows", action: #selector(mergeAllWindowsAction(_:)), keyEquivalent: "")
+        windowMenu.addItem(.separator())
+        let jumpAgent = NSMenuItem(
+            title: "Jump to Next Waiting Agent", action: #selector(jumpToNextWaitingAgentAction(_:)),
+            keyEquivalent: "J")
+        jumpAgent.keyEquivalentModifierMask = [.command, .shift]
+        windowMenu.addItem(jumpAgent)
         windowMenu.addItem(.separator())
         windowMenu.addItem(
             withTitle: "Bring All to Front", action: #selector(NSApplication.arrangeInFront(_:)), keyEquivalent: "")
