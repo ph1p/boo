@@ -225,6 +225,21 @@ final class WindowManagerTests: XCTestCase {
         XCTAssertNil(controller.dropTargetPaneViews(atScreenPoint: .zero))
     }
 
+    func testWorkspaceDropHighlightTogglesOverlay() throws {
+        let controller = MainWindowController(restoreSession: false)
+        Self.keptAlive.append(controller)
+        let contentView = try XCTUnwrap(controller.window?.contentView)
+        controller.setWorkspaceDropHighlighted(true)
+        let overlay = try XCTUnwrap(controller.workspaceDropHighlight)
+        XCTAssertTrue(overlay.superview === contentView)
+        controller.setWorkspaceDropHighlighted(false)
+        XCTAssertNil(controller.workspaceDropHighlight)
+        XCTAssertNil(overlay.superview)
+        // Off-screen drags highlight nothing.
+        controller.updateWorkspaceDragTarget(atScreenPoint: nil)
+        XCTAssertNil(controller.workspaceDragTarget)
+    }
+
     func testRegisterIsIdempotent() {
         let manager = WindowManager.shared
         let controller = MainWindowController()

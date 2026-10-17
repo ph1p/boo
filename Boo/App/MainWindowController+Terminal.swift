@@ -355,8 +355,7 @@ extension MainWindowController {
             let isActive = paneID == activeID
             pv.isFocused = isActive
             pv.ghosttyView?.setFocused(isActive)
-            // paneViews caches every workspace's panes; only on-screen ones need
-            // layout and a repaint (hidden ones repaint when they are re-attached).
+            // Panes hidden by zoom are detached; they repaint when re-attached.
             guard window != nil, pv.window === window, let gv = pv.ghosttyView else { continue }
             pv.layoutTerminalView()
             // Re-sync size + force-refresh every surface. Inactive panes do not reliably

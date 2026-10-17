@@ -51,6 +51,10 @@ extension MainWindowController: ToolbarViewDelegate {
         dropWorkspace(at: index, atScreenPoint: point)
     }
 
+    func toolbar(_ toolbar: ToolbarView, workspaceDragMovedOutsideTo point: NSPoint?) {
+        updateWorkspaceDragTarget(atScreenPoint: point)
+    }
+
     func toolbarDidRequestNewWorkspace(_ toolbar: ToolbarView) {
         newWorkspaceAction(nil)
     }
@@ -103,6 +107,10 @@ extension MainWindowController: WorkspaceBarViewDelegate {
 
     func workspaceBar(_ bar: WorkspaceBarView, dropWorkspaceAt index: Int, atScreenPoint point: NSPoint) {
         dropWorkspace(at: index, atScreenPoint: point)
+    }
+
+    func workspaceBar(_ bar: WorkspaceBarView, workspaceDragMovedOutsideTo point: NSPoint?) {
+        updateWorkspaceDragTarget(atScreenPoint: point)
     }
 
     func workspaceBarDidRequestNewWorkspace(_ bar: WorkspaceBarView) {

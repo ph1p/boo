@@ -10,6 +10,8 @@ import Cocoa
     func workspaceBar(_ bar: WorkspaceBarView, moveWorkspaceFrom source: Int, to destination: Int)
     /// A workspace was dragged out and released outside this window.
     func workspaceBar(_ bar: WorkspaceBarView, dropWorkspaceAt index: Int, atScreenPoint point: NSPoint)
+    /// A dragged workspace moved; `point` is the screen point when outside this window, nil otherwise or when the drag ends.
+    func workspaceBar(_ bar: WorkspaceBarView, workspaceDragMovedOutsideTo point: NSPoint?)
     func workspaceBarDidRequestNewWorkspace(_ bar: WorkspaceBarView)
 }
 
@@ -579,9 +581,11 @@ class WorkspaceBarView: NSView {
             }
 
             handleDragMove(nextEvent)
+            delegate?.workspaceBar(self, workspaceDragMovedOutsideTo: Self.screenPointOutsideWindow(nextEvent))
         }
 
         if didStartDrag {
+            delegate?.workspaceBar(self, workspaceDragMovedOutsideTo: nil)
             cleanupDrag()
         }
     }

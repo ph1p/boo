@@ -11,6 +11,8 @@ import Cocoa
     func toolbar(_ toolbar: ToolbarView, moveWorkspaceFrom source: Int, to destination: Int)
     /// A workspace was dragged out and released outside this window.
     func toolbar(_ toolbar: ToolbarView, dropWorkspaceAt index: Int, atScreenPoint point: NSPoint)
+    /// A dragged workspace moved; `point` is the screen point when outside this window, nil otherwise or when the drag ends.
+    func toolbar(_ toolbar: ToolbarView, workspaceDragMovedOutsideTo point: NSPoint?)
     func toolbarDidRequestNewWorkspace(_ toolbar: ToolbarView)
 }
 

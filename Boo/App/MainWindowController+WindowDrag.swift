@@ -102,6 +102,27 @@ extension MainWindowController {
     /// Panes a dragged tab can drop on at `point`: those of the frontmost Boo
     /// window there (none over the desktop). Nil for an unmanaged window
     /// (tests), which then hit-tests its own panes.
+    /// Highlight the window a dragged workspace would move into (none while
+    /// over this window or empty screen, where release opens a new window).
+    func updateWorkspaceDragTarget(atScreenPoint point: NSPoint?) {
+        let manager = WindowManager.shared
+        let target = point.flatMap { manager.controller(atScreenPoint: $0, excluding: self) }
+        guard target !== workspaceDragTarget else { return }
+        workspaceDragTarget?.setWorkspaceDropHighlighted(false)
+        target?.setWorkspaceDropHighlighted(true)
+        workspaceDragTarget = target
+    }
+
+    func setWorkspaceDropHighlighted(_ highlighted: Bool) {
+        workspaceDropHighlight?.removeFromSuperview()
+        workspaceDropHighlight = nil
+        guard highlighted, let contentView = window?.contentView else { return }
+        let overlay = TabDropIndicatorView(frame: contentView.bounds.insetBy(dx: 4, dy: 4))
+        overlay.autoresizingMask = [.width, .height]
+        contentView.addSubview(overlay)
+        workspaceDropHighlight = overlay
+    }
+
     func dropTargetPaneViews(atScreenPoint point: NSPoint) -> [UUID: PaneView]? {
         let manager = WindowManager.shared
         guard manager.isManaged(self) else { return nil }

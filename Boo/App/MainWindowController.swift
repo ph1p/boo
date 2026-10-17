@@ -175,6 +175,10 @@ class ThemedSplitView: NSSplitView {
     var workspacePaneViews: [UUID: [UUID: PaneView]] = [:]
     /// Workspace whose split tree is currently rendered in the split container.
     var renderedWorkspaceID: UUID?
+    /// Other window highlighted as the drop target while a workspace is dragged out of this one.
+    weak var workspaceDragTarget: MainWindowController?
+    /// Overlay shown on this window while another window drags a workspace over it.
+    var workspaceDropHighlight: NSView?
 
     /// Convenience accessor for current workspace's pane views.
     var paneViews: [UUID: PaneView] {

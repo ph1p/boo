@@ -334,9 +334,11 @@ extension ToolbarView {
             }
 
             handleWorkspaceDragMove(nextEvent)
+            delegate?.toolbar(self, workspaceDragMovedOutsideTo: WorkspaceBarView.screenPointOutsideWindow(nextEvent))
         }
 
         if didStartDrag {
+            delegate?.toolbar(self, workspaceDragMovedOutsideTo: nil)
             cleanupWorkspaceDrag()
         }
         mouseDownLocation = nil
