@@ -42,6 +42,7 @@ Download the latest release from [GitHub Releases](https://github.com/ph1p/boo/r
 - **Signed auto-updater** — Sparkle-based updates with appcast metadata on GitHub Pages and release archives on GitHub Releases
 - **Focus memory** — Remembers last focused pane per workspace, restores on switch
 - **IPC socket** — Unix socket at `~/.boo/boo.sock` for reliable process detection and plugin commands
+- **Agent timeline** — Per-session replay of prompts, tool calls, tokens, cost and files touched, with repeated calls flagged as loops (File → Agent Timeline)
 - **Context handoff** — Send a selection or the last command's output to an agent pane (Cmd+Opt+Return or right-click), or drop text and files onto it
 - **MCP server** — `~/.boo/shell-integration/boo-mcp` lets coding agents split panes, run commands beside themselves, read other panes and start agent tasks
 - **Debug plugin** — Live event log and terminal state inspector for diagnostics
@@ -258,6 +259,7 @@ Boo exposes a Unix domain socket (`~/.boo/boo.sock`) as the primary communicatio
 |                | `agent_inbox`          | List agents across all windows, waiting ones first            |
 |                | `agent_jump`           | Focus an agent's tab (`tab_id`, or next waiting)              |
 |                | `agent_respond`        | Approve (Return) or deny (Escape) a waiting agent (`tab_id`, `response`) |
+|                | `agent_timeline`       | Prompts, tool calls, tokens and cost of a Claude Code session (`tab_id` or `session_id`) |
 |                | `new_agent_task`       | Worktree + branch + workspace running an agent (`name`, `prompt`) |
 |                | `review_changes`       | Open the diff review tab for a workspace (`workspace_id`/`pane_id`) |
 | **Events**     | `subscribe`            | Subscribe to push events (`events` array)                     |

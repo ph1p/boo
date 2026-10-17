@@ -22,6 +22,7 @@ struct AgentOpenSessionsView: View {
     let onResume: (WorkspaceAgentSession) -> Void
     let onCopySessionID: (WorkspaceAgentSession) -> Void
     let onOpenTranscript: (WorkspaceAgentSession) -> Void
+    let onShowTimeline: (WorkspaceAgentSession) -> Void
 
     @State private var hoveredSessionID: UUID?
 
@@ -67,6 +68,8 @@ struct AgentOpenSessionsView: View {
                 .disabled(session.agent.sessionID == nil)
             Button("Open Transcript") { onOpenTranscript(session) }
                 .disabled(session.agent.transcriptPath == nil)
+            Button("Show Timeline") { onShowTimeline(session) }
+                .disabled(session.agent.sessionID == nil || session.agent.kind != .claudeCode)
         }
     }
 }

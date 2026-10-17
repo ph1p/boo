@@ -34,6 +34,8 @@ extension MainWindowController {
             withTitle: "New Agent Task...", action: #selector(newAgentTaskAction(_:)), keyEquivalent: "")
         fileMenu.addItem(
             withTitle: "Review Changes...", action: #selector(reviewChangesAction(_:)), keyEquivalent: "")
+        fileMenu.addItem(
+            withTitle: "Agent Timeline", action: #selector(agentTimelineAction(_:)), keyEquivalent: "")
         fileMenu.addItem(withTitle: "New Terminal Tab", action: #selector(newTabAction(_:)), keyEquivalent: "t")
         let browserTab = NSMenuItem(
             title: "New Browser Tab", action: #selector(newBrowserTabAction(_:)), keyEquivalent: "T")

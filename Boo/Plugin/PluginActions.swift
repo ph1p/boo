@@ -39,6 +39,8 @@ final class PluginActions {
     var workspaceAgentSessions: (() -> [WorkspaceAgentSession])?
     /// Focus a terminal tab that owns a workspace-scoped agent session.
     var focusAgentSession: ((WorkspaceAgentSession.ID) -> Void)?
+    /// Open the timeline of a Claude Code session (session ID, label).
+    var openAgentTimeline: ((String, String) -> Void)?
 
     func pastePath(_ path: String) {
         pastePathToActivePane?(path)

@@ -14,7 +14,7 @@ Newline-delimited JSON. One request per line, one response per request. Long-liv
 | **Control**    | `set_theme`, `toggle_sidebar`, `switch_workspace`, `new_tab`, `new_workspace`, `send_text` |
 | **Panes**      | `split_pane`, `close_pane`, `focus_pane`, `resize_pane`, `swap_pane`, `zoom_pane`, `equalize_splits`, `get_layout` |
 | **Windows**    | `new_window`, `move_workspace_to_new_window`, `merge_all_windows`                          |
-| **Agents**     | `agent_event`, `agent_inbox`, `agent_jump`, `agent_respond`, `new_agent_task`, `review_changes` |
+| **Agents**     | `agent_event`, `agent_inbox`, `agent_jump`, `agent_respond`, `agent_timeline`, `new_agent_task`, `review_changes` |
 | **Process**    | `set_status`, `clear_status`, `list_status`                                                |
 | **Events**     | `subscribe`, `unsubscribe`                                                                 |
 | **Status Bar** | `statusbar.set`, `statusbar.clear`, `statusbar.list`                                       |
@@ -114,6 +114,16 @@ Other agents can report directly:
 ```bash
 echo '{"cmd":"agent_event","pane_id":"'"$BOO_PANE_ID"'","event":"needs-input","agent":"aider","message":"Apply edits?"}' | nc -U "$BOO_SOCK"
 ```
+
+## Agent Timeline
+
+**File → Agent Timeline** (or **Show Timeline** in the Agents sidebar and the status bar's agent menu) opens a tab with what a Claude Code session did, read from its transcript in `~/.claude/projects` (`$CLAUDE_CONFIG_DIR` if set): each prompt with its tool calls, duration, tokens and cost, the reply, and the files edited. Calls repeated three or more times in a row fold into one row marked in the warning color, so runaway loops stand out; **Loops & failures only** hides the rest. The tab refreshes every few seconds while the session runs.
+
+Cost is exact (Claude Code's own figure) once a session has ended; while it runs, Boo estimates it from token counts and public prices, shown with ≈. Subagent tokens count toward the total.
+
+| Command          | Arguments                                                    | Reply                                                                                   |
+| ---------------- | ------------------------------------------------------------ | --------------------------------------------------------------------------------------- |
+| `agent_timeline` | `tab_id` (an inbox agent) or `session_id`; optional `turns` (default 10), `open: true` to show the tab | `cost`, `cost_exact`, `tokens`, `prompts`, `tool_calls`, `loops`, `files`, last `turns` |
 
 ## Agent Tasks
 

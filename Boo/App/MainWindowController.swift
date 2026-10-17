@@ -552,6 +552,9 @@ class ThemedSplitView: NSSplitView {
                 return
             }
         }
+        pluginActions.openAgentTimeline = { [weak self] sessionID, label in
+            self?.openTimeline(sessionID: sessionID, label: label)
+        }
         pluginActions.displayImageInTerminal = { [weak self] path, newTab in
             guard let self, let workspace = self.activeWorkspace else { return }
             let paneID = workspace.activePaneID

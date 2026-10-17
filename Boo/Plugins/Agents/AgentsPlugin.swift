@@ -288,6 +288,11 @@ final class AgentsPlugin: BooPluginProtocol {
                         onOpenTranscript: { session in
                             guard let path = session.agent.transcriptPath else { return }
                             act?.handle(DSLAction(type: "open", path: path, command: nil, text: nil))
+                        },
+                        onShowTimeline: { session in
+                            guard let id = session.agent.sessionID else { return }
+                            let folder = (session.agent.cwd as NSString).lastPathComponent
+                            act?.openAgentTimeline?(id, "\(session.agent.kind.shortName) — \(folder)")
                         }
                     )),
                 prefersOuterScrollView: true,

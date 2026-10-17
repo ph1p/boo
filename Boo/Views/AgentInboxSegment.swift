@@ -91,6 +91,21 @@ final class AgentInboxMenuTarget: NSObject {
             menuItem.image = Self.dot(AgentInboxSegment.color(for: item, theme: theme))
             menu.addItem(menuItem)
         }
+        let timelines = inbox.sortedItems.filter { $0.sessionID != nil }
+        if !timelines.isEmpty {
+            menu.addItem(.separator())
+            let parent = NSMenuItem(title: "Show Timeline", action: nil, keyEquivalent: "")
+            let submenu = NSMenu()
+            for item in timelines {
+                let entry = NSMenuItem(
+                    title: AgentHandoff.label(for: item), action: #selector(showTimeline(_:)), keyEquivalent: "")
+                entry.target = self
+                entry.representedObject = item.tabID
+                submenu.addItem(entry)
+            }
+            parent.submenu = submenu
+            menu.addItem(parent)
+        }
         if inbox.attentionCount > 0 {
             menu.addItem(.separator())
             let next = NSMenuItem(
@@ -104,6 +119,11 @@ final class AgentInboxMenuTarget: NSObject {
     @objc func jump(_ sender: NSMenuItem) {
         guard let id = sender.representedObject as? UUID else { return }
         AgentInbox.shared.jump(to: id)
+    }
+
+    @objc func showTimeline(_ sender: NSMenuItem) {
+        guard let id = sender.representedObject as? UUID else { return }
+        WindowManager.shared.activeController?.openTimeline(agentTab: id)
     }
 
     @objc func jumpNext(_ sender: Any?) { AgentInbox.shared.jumpToNextAttention() }
