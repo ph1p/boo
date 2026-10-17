@@ -207,6 +207,7 @@ run: build
 		if [ -d "$$dir" ]; then \
 			for framework in "$$dir"/*.framework; do \
 				if [ -d "$$framework" ]; then \
+					rm -rf ".build/debug/Boo.app/Contents/Frameworks/$$(basename "$$framework")"; \
 					rsync -a "$$framework" .build/debug/Boo.app/Contents/Frameworks/; \
 				fi; \
 			done; \
@@ -272,6 +273,7 @@ app: release
 		if [ -d "$$dir" ]; then \
 			for framework in "$$dir"/*.framework; do \
 				if [ -d "$$framework" ]; then \
+					rm -rf "$(APP_BUNDLE)/Contents/Frameworks/$$(basename "$$framework")"; \
 					rsync -a "$$framework" "$(APP_BUNDLE)/Contents/Frameworks/"; \
 				fi; \
 			done; \
