@@ -55,27 +55,11 @@ extension MainWindowController {
     }
 
     @objc func focusNextPaneAction(_ sender: Any?) {
-        guard let workspace = activeWorkspace else { return }
-        let ids = workspace.splitTree.leafIDs
-        guard ids.count > 1 else { return }
-        if let idx = ids.firstIndex(of: workspace.activePaneID) {
-            let next = ids[(idx + 1) % ids.count]
-            workspace.activePaneID = next
-            paneViews[next]?.focusActiveView()
-            runPluginCycle(reason: .focusChanged)
-        }
+        cyclePaneFocus(by: 1)
     }
 
     @objc func focusPrevPaneAction(_ sender: Any?) {
-        guard let workspace = activeWorkspace else { return }
-        let ids = workspace.splitTree.leafIDs
-        guard ids.count > 1 else { return }
-        if let idx = ids.firstIndex(of: workspace.activePaneID) {
-            let prev = ids[(idx - 1 + ids.count) % ids.count]
-            workspace.activePaneID = prev
-            paneViews[prev]?.focusActiveView()
-            runPluginCycle(reason: .focusChanged)
-        }
+        cyclePaneFocus(by: -1)
     }
 
     @objc func increaseFontSizeAction(_ sender: Any?) {
@@ -94,12 +78,6 @@ extension MainWindowController {
 
     @objc func toggleFullScreenAction(_ sender: Any?) {
         window?.toggleFullScreen(nil)
-    }
-
-    @objc func equalizeSplitsAction(_ sender: Any?) {
-        guard let workspace = activeWorkspace else { return }
-        workspace.equalizeSplits()
-        splitContainer.update(tree: workspace.splitTree)
     }
 
     func pastePathToActivePane(_ path: String) {
@@ -255,6 +233,7 @@ extension MainWindowController {
                 let idx = pane.tabs.firstIndex(where: { registeredTabKey(for: $0.id) == dedupeKey })
             {
                 // Focus existing tab
+                revealPane(paneID, in: workspace)
                 workspace.activePaneID = paneID
                 pv.forceActivateTab(idx)
                 return

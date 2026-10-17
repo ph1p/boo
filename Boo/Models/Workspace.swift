@@ -67,7 +67,23 @@ final class Workspace {
         }
     }
 
-    var splitTree: SplitTree
+    var splitTree: SplitTree {
+        didSet {
+            // Zoom survives ratio changes only; a pane added, closed or moved shows the layout again.
+            if zoomedPaneID != nil, !oldValue.hasSameStructure(as: splitTree) { zoomedPaneID = nil }
+        }
+    }
+    /// Pane filling the whole workspace while the others stay hidden.
+    /// Per workspace and never persisted.
+    var zoomedPaneID: UUID? {
+        didSet {
+            if let id = zoomedPaneID, !splitTree.containsLeafID(id) || splitTree.leafCount < 2 { zoomedPaneID = nil }
+        }
+    }
+    /// Tree the split container renders: just the zoomed pane while zoomed.
+    var displayedTree: SplitTree {
+        zoomedPaneID.map { .leaf(id: $0) } ?? splitTree
+    }
     private(set) var panes: [UUID: Pane] = [:]
     var activePaneID: UUID {
         didSet {
@@ -208,6 +224,25 @@ final class Workspace {
         return newID
     }
 
+    /// Add a pane on `edge` of `paneID`, or along that whole side of the
+    /// workspace. A whole-side pane gets the same share as each pane already
+    /// lined up on that axis.
+    @discardableResult
+    func splitPane(_ paneID: UUID, toward edge: PaneDirection, wholeWorkspace: Bool = false) -> UUID? {
+        let previous = splitTree
+        guard let newID = splitPane(paneID, direction: edge.axis) else { return nil }
+        if wholeWorkspace {
+            let weight = CGFloat(previous.weight(along: edge.axis))
+            splitTree =
+                edge.isForward
+                ? .split(direction: edge.axis, first: previous, second: .leaf(id: newID), ratio: weight / (weight + 1))
+                : .split(direction: edge.axis, first: .leaf(id: newID), second: previous, ratio: 1 / (weight + 1))
+        } else if !edge.isForward {
+            splitTree = splitTree.swappingChildrenAtParent(of: newID)
+        }
+        return newID
+    }
+
     func closePane(_ paneID: UUID) -> Bool {
         // Find the closest sibling before removing
         let sibling = splitTree.siblingLeafID(of: paneID)
@@ -229,21 +264,7 @@ final class Workspace {
     }
 
     func equalizeSplits() {
-        splitTree = equalizeSplitRatios(splitTree)
-    }
-
-    private func equalizeSplitRatios(_ tree: SplitTree) -> SplitTree {
-        switch tree {
-        case .leaf:
-            return tree
-        case .split(let direction, let first, let second, _):
-            return .split(
-                direction: direction,
-                first: equalizeSplitRatios(first),
-                second: equalizeSplitRatios(second),
-                ratio: 0.5
-            )
-        }
+        splitTree = splitTree.equalized()
     }
 
     func stopAll() {

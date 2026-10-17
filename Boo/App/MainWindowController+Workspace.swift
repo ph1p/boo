@@ -460,7 +460,7 @@ extension MainWindowController {
 
         // Rebuild split container with the workspace's tree
         renderedWorkspaceID = workspace.id
-        splitContainer.update(tree: workspace.splitTree)
+        splitContainer.update(tree: workspace.displayedTree)
         // suppressSidebarStateSync stays elevated until after layout settles in the async block below,
         // preventing splitViewDidResizeSubviews from capturing a transient collapsed width.
 

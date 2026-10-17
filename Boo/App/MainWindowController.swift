@@ -8,6 +8,15 @@ import SwiftUI
 /// NSSplitView with themed divider color and a VS Code-style accent hover highlight.
 class ThemedSplitView: NSSplitView {
     var onDividerDoubleClick: (() -> Void)?
+    /// Called after the user releases a divider they dragged.
+    var onDividerDragEnded: (() -> Void)?
+
+    /// Share of the space (minus the divider) given to the first subview.
+    /// Owned by `SplitContainerView`, which lays out from it.
+    var ratio: CGFloat = 0.5
+
+    /// True while AppKit tracks a divider drag inside `mouseDown`.
+    private(set) var isDraggingDivider = false
 
     /// In the island style the divider *is* the gap between two islands, so it
     /// matches the window backdrop rather than drawing a border line.
@@ -78,7 +87,7 @@ class ThemedSplitView: NSSplitView {
 
     override func drawDivider(in rect: NSRect) {
         super.drawDivider(in: rect)
-        guard dividerHoverHighlighted else { return }
+        guard dividerHoverHighlighted || isDraggingDivider else { return }
         AppSettings.shared.theme.accentEmphasis.setFill()
         if isVertical {
             let barW: CGFloat = 2
@@ -99,7 +108,16 @@ class ThemedSplitView: NSSplitView {
             onDividerDoubleClick?()
             return
         }
+        // Mouse-downs reaching the split view itself are on a divider; AppKit
+        // runs the whole drag inside `super.mouseDown`.
+        isDraggingDivider = true
+        if let strip = primaryDividerStrip() { setNeedsDisplay(strip) }
         super.mouseDown(with: event)
+        isDraggingDivider = false
+        let localUp = convert(window?.mouseLocationOutsideOfEventStream ?? event.locationInWindow, from: nil)
+        dividerHoverHighlighted = primaryDividerStrip()?.contains(localUp) ?? false
+        if let strip = primaryDividerStrip() { setNeedsDisplay(strip) }
+        onDividerDragEnded?()
     }
 
     private func isPointOnPrimaryDivider(_ point: CGPoint) -> Bool {
@@ -211,7 +229,7 @@ class ThemedSplitView: NSSplitView {
     /// Frame before entering fullscreen, saved instead of the fullscreen frame.
     private var windowedFrame: NSRect?
     /// Debounce timer for saving the session after split-pane divider drags.
-    private var splitRatioSaveTimer: Timer?
+    var splitRatioSaveTimer: Timer?
     /// Debounce timer for saving workspace sidebar state after sidebar divider drags.
     private var sidebarStateSaveTimer: Timer?
     var lastFocusTimestamp: UInt64 = 0
@@ -782,17 +800,22 @@ class ThemedSplitView: NSSplitView {
             }
 
         case "goto_split":
-            let dir = userInfo["direction"] ?? "next"
-            if dir == "next" {
-                focusNextPaneAction(nil)
-            } else {
-                focusPrevPaneAction(nil)
+            switch userInfo["direction"] ?? "next" {
+            case "next": focusNextPaneAction(nil)
+            case "previous": focusPrevPaneAction(nil)
+            case let name:
+                if let dir = PaneDirection(name: name) { focusPane(dir) }
             }
 
+        case "resize_split":
+            guard let dir = PaneDirection(name: userInfo["direction"] ?? "") else { return }
+            resizeActivePane(toward: dir, by: CGFloat(Double(userInfo["amount"] ?? "") ?? 10))
+
+        case "toggle_split_zoom":
+            toggleZoomPaneAction(nil)
+
         case "equalize_splits":
-            guard let workspace = activeWorkspace else { return }
-            workspace.equalizeSplits()
-            splitContainer.update(tree: workspace.splitTree)
+            equalizeSplitsAction(nil)
 
         case "close_surface":
             smartCloseAction(nil)
@@ -863,10 +886,7 @@ class ThemedSplitView: NSSplitView {
                     "[WorkspaceSwitch] applySplitRatio renderedWorkspace=\(workspaceID.uuidString) activeWorkspace=\(self.activeWorkspace?.id.uuidString ?? "none")"
                 )
             }
-            self.splitRatioSaveTimer?.invalidate()
-            self.splitRatioSaveTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: false) { [weak self] _ in
-                MainActor.assumeIsolated { self?.saveSession() }
-            }
+            self.scheduleSplitRatioSave()
         }
 
         sidebarContainer = NSView()

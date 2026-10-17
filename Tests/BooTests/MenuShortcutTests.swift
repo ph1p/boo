@@ -84,8 +84,10 @@ final class MenuShortcutTests: XCTestCase {
                 item.title != "No Plugin Commands"
             else { return nil }
 
+            // Items in nested submenus ("Select Pane > Left") read as "Select Pane Left".
+            let title = item.parent?.parent != nil ? "\(item.parent!.title) \(item.title)" : item.title
             return MenuShortcutItem(
-                title: item.title,
+                title: title,
                 keyEquivalent: item.keyEquivalent,
                 modifiers: item.normalizedModifierFlags)
         }

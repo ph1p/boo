@@ -3,11 +3,27 @@ import Cocoa
 /// Where a tab can be dropped relative to a pane.
 enum TabDropZone: Equatable {
     case tabBarInsert(index: Int)  // insert at position in tab bar
-    case left  // left 20% — split horizontally, new pane on left
-    case right  // right 20% — split horizontally, new pane on right
-    case top  // top 30% — split vertically, new pane on top
-    case bottom  // bottom 30% — split vertically, new pane on bottom
+    case left  // near the left edge — new pane on the left of this one
+    case right  // near the right edge — new pane on the right of this one
+    case top  // near the top edge — new pane above this one
+    case bottom  // near the bottom edge — new pane below this one
     case center  // middle of the terminal — append to the pane's tab bar
+    /// Thin band along an outer edge of the workspace: the new pane spans
+    /// that whole side instead of splitting only the pane under the cursor.
+    case workspaceEdge(PaneDirection)
+
+    /// Side the new pane goes on, and whether it spans the workspace; nil for
+    /// drops that keep the tab in an existing pane.
+    var splitPlacement: (edge: PaneDirection, wholeWorkspace: Bool)? {
+        switch self {
+        case .left: return (.left, false)
+        case .right: return (.right, false)
+        case .top: return (.up, false)
+        case .bottom: return (.down, false)
+        case .workspaceEdge(let edge): return (edge, true)
+        case .tabBarInsert, .center: return nil
+        }
+    }
 }
 
 /// Centralized drag state machine for cross-pane tab drag & drop.
@@ -85,6 +101,11 @@ enum TabDropZone: Equatable {
         guard let (dest, zone) = currentDropTarget else {
             cleanup()
             onDropOutside?(source, tabIdx, NSEvent.mouseLocation)
+            return
+        }
+
+        if isNoOpDrop(on: dest, zone: zone) {
+            cleanup()
             return
         }
 
@@ -227,17 +248,29 @@ enum TabDropZone: Equatable {
                 let localPoint = pv.convert(windowPoint, from: nil)
                 pv.autoscrollTabBar(localX: localPoint.x)
             }
-            showIndicator(on: pv, zone: zone)
+            if isNoOpDrop(on: pv, zone: zone) {
+                hideIndicators()
+            } else {
+                showIndicator(on: pv, zone: zone)
+            }
         } else {
             currentDropTarget = nil
-            indicator?.removeFromSuperview()
-            indicator = nil
-            tabInsertIndicator?.removeFromSuperview()
-            tabInsertIndicator = nil
+            hideIndicators()
         }
     }
 
-    private func dropZone(in paneView: PaneView, at point: NSPoint) -> TabDropZone {
+    private func hideIndicators() {
+        indicator?.removeFromSuperview()
+        indicator = nil
+        tabInsertIndicator?.removeFromSuperview()
+        tabInsertIndicator = nil
+    }
+
+    /// Width of the band along the workspace's outer edges that targets the
+    /// whole side rather than the pane under the cursor.
+    let workspaceEdgeBand: CGFloat = 16
+
+    func dropZone(in paneView: PaneView, at point: NSPoint) -> TabDropZone {
         let bounds = paneView.bounds
 
         // PaneView is flipped (isFlipped = true), so y=0 is top.
@@ -247,22 +280,64 @@ enum TabDropZone: Equatable {
             return .tabBarInsert(index: idx)
         }
 
-        // Terminal area: edges → split, center → append to tab bar
-        let termY = point.y - paneView.tabBarHeight
-        let termH = bounds.height - paneView.tabBarHeight
-        let w = bounds.width
-        let edgeW = w * edgeFraction
-        let edgeH = termH * verticalEdgeFraction
+        if let edge = workspaceEdge(of: paneView, at: point) {
+            return .workspaceEdge(edge)
+        }
 
-        if point.x < edgeW { return .left }
-        if point.x > w - edgeW { return .right }
-        if termY < edgeH { return .top }
-        if termY > termH - edgeH { return .bottom }
+        // Terminal area: the nearest edge within its band splits, the middle
+        // appends. Scoring by distance relative to each band (instead of
+        // checking left/right first) splits corners along the closer edge.
+        let termY = point.y - paneView.tabBarHeight
+        let termH = max(bounds.height - paneView.tabBarHeight, 1)
+        let edgeW = max(bounds.width * edgeFraction, 1)
+        let edgeH = max(termH * verticalEdgeFraction, 1)
+        let scores: [(TabDropZone, CGFloat)] = [
+            (.left, point.x / edgeW),
+            (.right, (bounds.width - point.x) / edgeW),
+            (.top, termY / edgeH),
+            (.bottom, (termH - termY) / edgeH)
+        ]
+        if let nearest = scores.min(by: { $0.1 < $1.1 }), nearest.1 < 1 {
+            return nearest.0
+        }
 
         // Center of terminal → append tab. A distinct zone so the indicator can
         // highlight the whole pane — an insertion line up in the tab bar while
         // the cursor is mid-pane reads as misplaced.
         return .center
+    }
+
+    /// Outer workspace edge `point` lies on, when `paneView` touches that edge
+    /// and the workspace has more than one pane. The top band sits just below
+    /// the tab bar, which owns the pane's very top.
+    private func workspaceEdge(of paneView: PaneView, at point: NSPoint) -> PaneDirection? {
+        guard let container = splitContainer(of: paneView),
+            (container.renderedTree?.leafCount ?? 0) > 1
+        else { return nil }
+        let pane = paneView.convert(paneView.bounds, to: container)
+        let local = paneView.convert(point, to: container)
+        let outer = container.bounds
+        let band = workspaceEdgeBand
+        let tolerance: CGFloat = 1
+        // Container coordinates are not flipped: maxY is the top.
+        if pane.minX - outer.minX < tolerance, local.x - pane.minX < band { return .left }
+        if outer.maxX - pane.maxX < tolerance, pane.maxX - local.x < band { return .right }
+        if pane.minY - outer.minY < tolerance, local.y - pane.minY < band { return .down }
+        if outer.maxY - pane.maxY < tolerance, point.y - paneView.tabBarHeight < band { return .up }
+        return nil
+    }
+
+    private func splitContainer(of paneView: PaneView) -> SplitContainerView? {
+        sequence(first: paneView as NSView, next: { $0.superview }).lazy
+            .compactMap { $0 as? SplitContainerView }.first
+    }
+
+    /// Whether dropping the dragged tab on `zone` of `paneView` changes nothing
+    /// (a pane's only tab dropped back onto that pane).
+    private func isNoOpDrop(on paneView: PaneView, zone: TabDropZone) -> Bool {
+        guard paneView === sourcePaneView, paneView.pane.tabs.count == 1 else { return false }
+        if case .workspaceEdge = zone { return false }
+        return true
     }
 
     // MARK: - Drop indicator
@@ -305,21 +380,10 @@ enum TabDropZone: Equatable {
                 y: barTop - rowCenterY - lineHeight / 2,
                 width: lineWidth, height: lineHeight)
 
-        case .left, .right, .top, .bottom, .center:
+        case .left, .right, .top, .bottom, .center, .workspaceEdge:
             // Hide tab insertion indicator
             tabInsertIndicator?.removeFromSuperview()
             tabInsertIndicator = nil
-
-            // Show blue split overlay
-            if indicator == nil {
-                indicator = TabDropIndicatorView(frame: .zero)
-            }
-            guard let indicator = indicator else { return }
-
-            if indicator.superview !== contentView {
-                indicator.removeFromSuperview()
-                contentView.addSubview(indicator)
-            }
 
             let indicatorRect: NSRect
             switch zone {
@@ -343,11 +407,55 @@ enum TabDropZone: Equatable {
                 // Append to this pane: highlight the whole pane, not a line in
                 // the tab bar the cursor is nowhere near.
                 indicatorRect = paneRect.insetBy(dx: 2, dy: 2)
+            case .workspaceEdge(let edge):
+                guard let rect = workspaceEdgeRect(for: paneView, edge: edge, in: contentView) else { return }
+                indicatorRect = rect
             default:
                 return
             }
-            indicator.frame = indicatorRect
+
+            // Show blue split overlay: fade in on first show, then glide
+            // between zones so the target reads as one moving preview.
+            if let indicator, indicator.superview === contentView {
+                NSAnimationContext.runAnimationGroup { context in
+                    context.duration = 0.12
+                    context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                    indicator.animator().frame = indicatorRect
+                }
+            } else {
+                indicator?.removeFromSuperview()
+                let newIndicator = TabDropIndicatorView(frame: indicatorRect)
+                newIndicator.alphaValue = 0
+                contentView.addSubview(newIndicator)
+                indicator = newIndicator
+                NSAnimationContext.runAnimationGroup { context in
+                    context.duration = 0.1
+                    newIndicator.animator().alphaValue = 1
+                }
+            }
         }
+    }
+
+    /// Preview of a whole-workspace drop: the strip along `edge` the new pane
+    /// will take, sized like the equal share it gets.
+    private func workspaceEdgeRect(for paneView: PaneView, edge: PaneDirection, in contentView: NSView) -> NSRect? {
+        guard let container = splitContainer(of: paneView), let tree = container.renderedTree else { return nil }
+        let outer = container.convert(container.bounds, to: contentView)
+        let share = 1 / CGFloat(tree.weight(along: edge.axis) + 1)
+        let rect: NSRect
+        switch edge {
+        case .left:
+            rect = NSRect(x: outer.minX, y: outer.minY, width: outer.width * share, height: outer.height)
+        case .right:
+            rect = NSRect(
+                x: outer.maxX - outer.width * share, y: outer.minY, width: outer.width * share, height: outer.height)
+        case .up:
+            rect = NSRect(
+                x: outer.minX, y: outer.maxY - outer.height * share, width: outer.width, height: outer.height * share)
+        case .down:
+            rect = NSRect(x: outer.minX, y: outer.minY, width: outer.width, height: outer.height * share)
+        }
+        return rect.insetBy(dx: 2, dy: 2)
     }
 
     // MARK: - Ghost window

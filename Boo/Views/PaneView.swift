@@ -266,6 +266,7 @@ class PaneView: NSView {
     }
 
     func updateFindBarTheme() {
+        zoomBadge?.applyTheme()
         findBar?.applyTheme()
         findBar?.needsDisplay = true
     }
@@ -292,6 +293,29 @@ class PaneView: NSView {
     private var pendingTitles: [UUID: String] = [:]
     private var pendingCwds: [UUID: String] = [:]
     private static let debounceInterval: TimeInterval = 0.12
+
+    // MARK: - Zoom badge
+
+    /// True while this pane is zoomed (its workspace's other panes are hidden).
+    var isZoomed = false {
+        didSet {
+            guard isZoomed != oldValue else { return }
+            if isZoomed {
+                let badge = ZoomBadgeView()
+                badge.onClick = { [weak self] in self?.onUnzoomRequested?() }
+                zoomBadge = badge
+                addSubview(badge)
+            } else {
+                zoomBadge?.removeFromSuperview()
+                zoomBadge = nil
+            }
+            needsLayout = true
+        }
+    }
+
+    /// Called when the zoom badge is clicked.
+    var onUnzoomRequested: (() -> Void)?
+    private var zoomBadge: ZoomBadgeView?
 
     // MARK: - Find Bar
 
@@ -711,11 +735,18 @@ class PaneView: NSView {
         // dim overlay first (it swallows clicks to focus the pane), activity frame on top so
         // it stays visible on unfocused panes. Adding a content subview buries them, so the
         // order is re-asserted here — checking BOTH slots, since either can slip.
+        // The zoom badge sits above both, in the content's top-right corner.
         if focusCatcher.frame != bounds { focusCatcher.frame = bounds }
         if activityBorder.frame != bounds { activityBorder.frame = bounds }
-        if subviews.last !== activityBorder || subviews.dropLast().last !== focusCatcher {
-            addSubview(focusCatcher, positioned: .above, relativeTo: nil)
-            addSubview(activityBorder, positioned: .above, relativeTo: focusCatcher)
+        if let badge = zoomBadge {
+            let size = badge.fittingSize
+            let badgeFrame = NSRect(
+                x: bounds.width - size.width - 8, y: barH + findH + 8, width: size.width, height: size.height)
+            if badge.frame != badgeFrame { badge.frame = badgeFrame }
+        }
+        let overlays: [NSView] = [focusCatcher, activityBorder] + (zoomBadge.map { [$0] } ?? [])
+        if !zip(subviews.suffix(overlays.count), overlays).allSatisfy({ $0 === $1 }) {
+            for overlay in overlays { addSubview(overlay, positioned: .above, relativeTo: nil) }
         }
     }
 

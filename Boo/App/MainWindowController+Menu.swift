@@ -102,25 +102,37 @@ extension MainWindowController {
             title: "Focus Next Pane", action: #selector(focusNextPaneAction(_:)), keyEquivalent: "]")
         focusNext.keyEquivalentModifierMask = [.command]
         termMenu.addItem(focusNext)
-        // Same cycling on ⌥⌘→ / ⌥⌘←. Alternate items so the menu lists each
-        // direction once, revealing the arrow binding while ⌥ is held.
-        let focusNextArrow = NSMenuItem(
-            title: "Focus Next Pane", action: #selector(focusNextPaneAction(_:)),
-            keyEquivalent: String(UnicodeScalar(NSRightArrowFunctionKey)!))
-        focusNextArrow.keyEquivalentModifierMask = [.command, .option]
-        focusNextArrow.isAlternate = true
-        termMenu.addItem(focusNextArrow)
         let focusPrev = NSMenuItem(
             title: "Focus Previous Pane", action: #selector(focusPrevPaneAction(_:)), keyEquivalent: "[")
         focusPrev.keyEquivalentModifierMask = [.command]
         termMenu.addItem(focusPrev)
-        let focusPrevArrow = NSMenuItem(
-            title: "Focus Previous Pane", action: #selector(focusPrevPaneAction(_:)),
-            keyEquivalent: String(UnicodeScalar(NSLeftArrowFunctionKey)!))
-        focusPrevArrow.keyEquivalentModifierMask = [.command, .option]
-        focusPrevArrow.isAlternate = true
-        termMenu.addItem(focusPrevArrow)
+        // Arrow bindings match Ghostty's defaults: ⌥⌘ select, ⌃⌘ resize, ⌃⇧⌘ move.
+        termMenu.addItem(
+            paneDirectionMenu(
+                title: "Select Pane", modifiers: [.command, .option],
+                actions: [
+                    #selector(focusPaneLeftAction(_:)), #selector(focusPaneRightAction(_:)),
+                    #selector(focusPaneUpAction(_:)), #selector(focusPaneDownAction(_:))
+                ]))
+        termMenu.addItem(
+            paneDirectionMenu(
+                title: "Resize Pane", modifiers: [.command, .control],
+                actions: [
+                    #selector(resizePaneLeftAction(_:)), #selector(resizePaneRightAction(_:)),
+                    #selector(resizePaneUpAction(_:)), #selector(resizePaneDownAction(_:))
+                ]))
+        termMenu.addItem(
+            paneDirectionMenu(
+                title: "Move Pane", modifiers: [.command, .control, .shift],
+                actions: [
+                    #selector(swapPaneLeftAction(_:)), #selector(swapPaneRightAction(_:)),
+                    #selector(swapPaneUpAction(_:)), #selector(swapPaneDownAction(_:))
+                ]))
 
+        let zoom = NSMenuItem(
+            title: "Zoom Pane", action: #selector(toggleZoomPaneAction(_:)), keyEquivalent: "\r")
+        zoom.keyEquivalentModifierMask = [.command, .shift]
+        termMenu.addItem(zoom)
         let equalize = NSMenuItem(
             title: "Equalize Splits", action: #selector(equalizeSplitsAction(_:)), keyEquivalent: "=")
         equalize.keyEquivalentModifierMask = [.command, .control]
@@ -368,13 +380,36 @@ extension MainWindowController {
     private func collectBuiltinShortcuts() -> Set<String> {
         var shortcuts = Set<String>()
         guard let mainMenu = NSApplication.shared.mainMenu else { return shortcuts }
-        for menuItem in mainMenu.items {
-            guard let submenu = menuItem.submenu, submenu.title != "Plugins" else { continue }
-            for item in submenu.items where !item.keyEquivalent.isEmpty {
-                let combo = "\(item.keyEquivalentModifierMask.rawValue):\(item.keyEquivalent)"
-                shortcuts.insert(combo)
+        func collect(_ menu: NSMenu) {
+            for item in menu.items {
+                if let submenu = item.submenu { collect(submenu) }
+                guard !item.keyEquivalent.isEmpty else { continue }
+                shortcuts.insert("\(item.keyEquivalentModifierMask.rawValue):\(item.keyEquivalent)")
             }
         }
+        for menuItem in mainMenu.items {
+            guard let submenu = menuItem.submenu, submenu.title != "Plugins" else { continue }
+            collect(submenu)
+        }
         return shortcuts
+    }
+
+    /// Submenu with one item per direction (left, right, up, down) bound to
+    /// the arrow keys with `modifiers`.
+    private func paneDirectionMenu(
+        title: String, modifiers: NSEvent.ModifierFlags, actions: [Selector]
+    ) -> NSMenuItem {
+        let keys = [NSLeftArrowFunctionKey, NSRightArrowFunctionKey, NSUpArrowFunctionKey, NSDownArrowFunctionKey]
+        let names = ["Left", "Right", "Up", "Down"]
+        let menu = NSMenu(title: title)
+        for i in 0..<4 {
+            let item = NSMenuItem(
+                title: names[i], action: actions[i], keyEquivalent: String(UnicodeScalar(keys[i])!))
+            item.keyEquivalentModifierMask = modifiers
+            menu.addItem(item)
+        }
+        let parent = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+        parent.submenu = menu
+        return parent
     }
 }

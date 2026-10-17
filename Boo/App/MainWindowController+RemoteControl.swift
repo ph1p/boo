@@ -119,6 +119,7 @@ extension MainWindowController {
             reply(["ok": false, "error": "pane not found"])
             return
         }
+        revealPane(paneID, in: ws)
         ws.activePaneID = paneID
         paneViews[paneID]?.focusActiveView()
         runPluginCycle(reason: .focusChanged)
@@ -211,6 +212,9 @@ extension MainWindowController: NSMenuItemValidation {
             return true
         case #selector(copyRemoteControlURLAction(_:)):
             return RemoteControlServer.shared.isRunning
+        case #selector(toggleZoomPaneAction(_:)):
+            menuItem.state = activeWorkspace?.zoomedPaneID != nil ? .on : .off
+            return (activeWorkspace?.splitTree.leafCount ?? 0) > 1
         default:
             return true
         }

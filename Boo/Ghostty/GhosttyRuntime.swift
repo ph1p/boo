@@ -131,9 +131,32 @@ private func ghosttyAction(_ app: ghostty_app_t?, _ target: ghostty_target_s, _ 
         switch dir {
         case GHOSTTY_GOTO_SPLIT_PREVIOUS: dirStr = "previous"
         case GHOSTTY_GOTO_SPLIT_NEXT: dirStr = "next"
+        case GHOSTTY_GOTO_SPLIT_LEFT: dirStr = "left"
+        case GHOSTTY_GOTO_SPLIT_RIGHT: dirStr = "right"
+        case GHOSTTY_GOTO_SPLIT_UP: dirStr = "up"
+        case GHOSTTY_GOTO_SPLIT_DOWN: dirStr = "down"
         default: return false
         }
         postWindowAction(from: viewFromTarget(), ["action": "goto_split", "direction": dirStr])
+        return true
+
+    case GHOSTTY_ACTION_RESIZE_SPLIT:
+        let resize = action.action.resize_split
+        let dirStr: String
+        switch resize.direction {
+        case GHOSTTY_RESIZE_SPLIT_LEFT: dirStr = "left"
+        case GHOSTTY_RESIZE_SPLIT_RIGHT: dirStr = "right"
+        case GHOSTTY_RESIZE_SPLIT_UP: dirStr = "up"
+        case GHOSTTY_RESIZE_SPLIT_DOWN: dirStr = "down"
+        default: return false
+        }
+        postWindowAction(
+            from: viewFromTarget(),
+            ["action": "resize_split", "direction": dirStr, "amount": String(resize.amount)])
+        return true
+
+    case GHOSTTY_ACTION_TOGGLE_SPLIT_ZOOM:
+        postWindowAction(from: viewFromTarget(), ["action": "toggle_split_zoom"])
         return true
 
     case GHOSTTY_ACTION_EQUALIZE_SPLITS:

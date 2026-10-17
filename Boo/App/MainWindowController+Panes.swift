@@ -565,9 +565,16 @@ extension MainWindowController {
     func updatePaneCloseButtons() {
         let multiPane = activeWorkspace.map { $0.panes.count > 1 } ?? false
         let activePaneID = activeWorkspace?.activePaneID
+        let zoomedPaneID = activeWorkspace?.zoomedPaneID
         for (paneID, pv) in paneViews {
             pv.showCloseOnSingleTab = multiPane
             pv.isFocused = paneID == activePaneID
+            pv.isZoomed = paneID == zoomedPaneID
+            // Re-bound every pass: pane views can move to another window.
+            pv.onUnzoomRequested = { [weak self] in
+                guard let self, let workspace = self.activeWorkspace else { return }
+                self.setZoomedPane(nil, in: workspace)
+            }
         }
     }
 
@@ -682,7 +689,7 @@ extension MainWindowController {
                 paneViews.removeValue(forKey: id)
             }
 
-            splitContainer.update(tree: workspace.splitTree)
+            splitContainer.update(tree: workspace.displayedTree)
             saveSession()
 
             DispatchQueue.main.async { [weak self] in
@@ -737,7 +744,7 @@ extension MainWindowController {
                 _ = pane.addTab(workingDirectory: cwd)
             }
             workspace.activePaneID = newID
-            splitContainer.update(tree: workspace.splitTree)
+            splitContainer.update(tree: workspace.displayedTree)
             saveSession()
 
             DispatchQueue.main.async { [weak self] in
@@ -838,22 +845,11 @@ extension MainWindowController {
             if source.pane.tabs.isEmpty {
                 closeEmptyPane(source.paneID)
             }
-        case .left:
+        case .left, .right, .top, .bottom, .workspaceEdge:
+            guard let placement = zone.splitPlacement else { break }
             splitPaneWithTab(
                 source: source, tabIndex: tabIndex, target: dest,
-                direction: .horizontal, insertBefore: true)
-        case .right:
-            splitPaneWithTab(
-                source: source, tabIndex: tabIndex, target: dest,
-                direction: .horizontal, insertBefore: false)
-        case .top:
-            splitPaneWithTab(
-                source: source, tabIndex: tabIndex, target: dest,
-                direction: .vertical, insertBefore: true)
-        case .bottom:
-            splitPaneWithTab(
-                source: source, tabIndex: tabIndex, target: dest,
-                direction: .vertical, insertBefore: false)
+                edge: placement.edge, wholeWorkspace: placement.wholeWorkspace)
         }
 
         syncCoordinatorPaneViews()
@@ -946,12 +942,11 @@ extension MainWindowController {
         _ tab: Pane.Tab, ghosttyView gv: GhosttyView?, contentView cv: ContentViewProtocol?,
         into dest: PaneView, zone: TabDropZone, workspace destWorkspace: Workspace
     ) -> UUID {
-        let isSplit = zone == .left || zone == .right || zone == .top || zone == .bottom
-        let direction: SplitTree.SplitDirection = (zone == .left || zone == .right) ? .horizontal : .vertical
-        if isSplit, let newPaneID = destWorkspace.splitPane(dest.paneID, direction: direction) {
-            if zone == .left || zone == .top {
-                destWorkspace.splitTree = destWorkspace.splitTree.swappingChildrenAtParent(of: newPaneID)
-            }
+        let placement = zone.splitPlacement
+        if let placement,
+            let newPaneID = destWorkspace.splitPane(
+                dest.paneID, toward: placement.edge, wholeWorkspace: placement.wholeWorkspace)
+        {
             if let newPane = destWorkspace.pane(for: newPaneID) {
                 newPane.stopAll()
                 newPane.insertTab(tab, at: 0)
@@ -982,7 +977,7 @@ extension MainWindowController {
             }
             return newPaneID
         }
-        if isSplit {
+        if placement != nil {
             booLog(.debug, .terminal, "insertDroppedTab: splitPane returned nil — appending to tab bar")
         }
 
@@ -1050,7 +1045,7 @@ extension MainWindowController {
 
     private func splitPaneWithTab(
         source: PaneView, tabIndex: Int, target: PaneView,
-        direction: SplitTree.SplitDirection, insertBefore: Bool
+        edge: PaneDirection, wholeWorkspace: Bool
     ) {
         guard let workspace = activeWorkspace else { return }
         let sourcePane = source.pane
@@ -1068,7 +1063,7 @@ extension MainWindowController {
 
         // 2. Split the target pane — creates new leaf in the tree
         window?.makeFirstResponder(nil)
-        guard let newPaneID = workspace.splitPane(target.paneID, direction: direction) else {
+        guard let newPaneID = workspace.splitPane(target.paneID, toward: edge, wholeWorkspace: wholeWorkspace) else {
             booLog(
                 .debug,
                 .terminal,
@@ -1076,11 +1071,6 @@ extension MainWindowController {
             )
             sourcePane.insertTab(tab, at: tabIndex)
             return
-        }
-
-        // For left/top drops, swap children so new pane appears first
-        if insertBefore {
-            workspace.splitTree = workspace.splitTree.swappingChildrenAtParent(of: newPaneID)
         }
 
         // Replace the new pane's default tab with the dragged tab
@@ -1155,7 +1145,7 @@ extension MainWindowController {
             paneViews.removeValue(forKey: id)
         }
 
-        splitContainer.update(tree: workspace.splitTree)
+        splitContainer.update(tree: workspace.displayedTree)
 
         DispatchQueue.main.async { [weak self] in
             guard let self, let ws = self.activeWorkspace else { return }
