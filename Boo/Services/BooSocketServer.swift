@@ -308,7 +308,7 @@ final class BooSocketServer: @unchecked Sendable {
             handleControlCommand(cmd: cmd, json: json, clientFD: clientFD)
             return
         case "split_pane", "close_pane", "focus_pane", "resize_pane", "swap_pane", "zoom_pane",
-            "equalize_splits", "get_layout", "move_workspace_to_new_window":
+            "equalize_splits", "get_layout", "move_workspace_to_new_window", "merge_all_windows":
             handleControlCommand(cmd: cmd, json: json, clientFD: clientFD)
             return
 

@@ -203,6 +203,8 @@ extension MainWindowController {
         windowMenu.addItem(
             withTitle: "Move Workspace to New Window", action: #selector(moveWorkspaceToNewWindowAction(_:)),
             keyEquivalent: "")
+        windowMenu.addItem(
+            withTitle: "Merge All Windows", action: #selector(mergeAllWindowsAction(_:)), keyEquivalent: "")
         windowMenu.addItem(.separator())
         windowMenu.addItem(
             withTitle: "Bring All to Front", action: #selector(NSApplication.arrangeInFront(_:)), keyEquivalent: "")

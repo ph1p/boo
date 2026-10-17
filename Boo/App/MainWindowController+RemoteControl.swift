@@ -217,6 +217,8 @@ extension MainWindowController: NSMenuItemValidation {
             return (activeWorkspace?.splitTree.leafCount ?? 0) > 1
         case #selector(moveWorkspaceToNewWindowAction(_:)):
             return appState.workspaces.count > 1 && activeWorkspace?.isPinned == false
+        case #selector(mergeAllWindowsAction(_:)):
+            return WindowManager.shared.controllers.count > 1
         default:
             return true
         }

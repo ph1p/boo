@@ -24,8 +24,6 @@ struct DetachedTab {
 // MARK: - Moving workspaces between windows
 
 extension MainWindowController {
-    /// A workspace pill was dropped outside this window: move the workspace
-    /// into the window under the cursor, or into a new window there.
     /// Move a workspace into a new window cascaded from this one.
     func moveWorkspaceToNewWindow(at index: Int) {
         guard index >= 0, index < appState.workspaces.count, !appState.workspaces[index].isPinned,
@@ -42,6 +40,27 @@ extension MainWindowController {
         moveWorkspaceToNewWindow(at: appState.activeWorkspaceIndex)
     }
 
+    /// Move every workspace of the other windows into this one, in window
+    /// order, and close the emptied windows. The active workspace stays.
+    func mergeAllWindows() {
+        let others = WindowManager.shared.controllers.filter { $0 !== self }
+        guard !others.isEmpty else { return }
+        for source in others {
+            while let detached = source.detachWorkspace(at: 0) {
+                adoptWorkspace(detached, activate: false)
+            }
+            source.window?.close()
+        }
+        window?.makeKeyAndOrderFront(nil)
+        saveSession()
+    }
+
+    @objc func mergeAllWindowsAction(_ sender: Any?) {
+        mergeAllWindows()
+    }
+
+    /// A workspace pill was dropped outside this window: move the workspace
+    /// into the window under the cursor, or into a new window there.
     func dropWorkspace(at index: Int, atScreenPoint point: NSPoint) {
         guard index >= 0, index < appState.workspaces.count, !appState.workspaces[index].isPinned else { return }
         let manager = WindowManager.shared
@@ -103,8 +122,9 @@ extension MainWindowController {
     }
 
     /// Take over a workspace detached from another window and show it.
-    /// `index` nil appends after the last workspace.
-    func adoptWorkspace(_ detached: DetachedWorkspace, at index: Int? = nil) {
+    /// `index` nil appends after the last workspace. With `activate` false the
+    /// workspace joins in the background, its panes off screen until shown.
+    func adoptWorkspace(_ detached: DetachedWorkspace, at index: Int? = nil, activate: Bool = true) {
         let ws = detached.workspace
         for (paneID, pv) in detached.paneViews {
             pv.paneDelegate = self
@@ -116,6 +136,11 @@ extension MainWindowController {
         detached.undoItems.forEach(pushUndo)
         let activePaneID = ws.activePaneID
         let dest = appState.insertWorkspace(ws, at: index ?? appState.workspaces.count)
+        guard activate else {
+            for pv in detached.paneViews.values { pv.removeFromSuperview() }
+            refreshToolbar()
+            return
+        }
         activateWorkspace(dest)
         // Claim the responder now: a new window shown without one picks its
         // first key view, and that focus would overwrite the active pane.
@@ -135,9 +160,6 @@ extension MainWindowController {
         return appState.workspaces.count
     }
 
-    /// Panes a dragged tab can drop on at `point`: those of the frontmost Boo
-    /// window there (none over the desktop). Nil for an unmanaged window
-    /// (tests), which then hit-tests its own panes.
     /// Highlight the window a dragged workspace would move into (none while
     /// over this window or empty screen, where release opens a new window).
     func updateWorkspaceDragTarget(atScreenPoint point: NSPoint?) {
@@ -159,6 +181,9 @@ extension MainWindowController {
         workspaceDropHighlight = overlay
     }
 
+    /// Panes a dragged tab can drop on at `point`: those of the frontmost Boo
+    /// window there (none over the desktop). Nil for an unmanaged window
+    /// (tests), which then hit-tests its own panes.
     func dropTargetPaneViews(atScreenPoint point: NSPoint) -> [UUID: PaneView]? {
         let manager = WindowManager.shared
         guard manager.isManaged(self) else { return nil }

@@ -13,7 +13,7 @@ Newline-delimited JSON. One request per line, one response per request. Long-liv
 | **Query**      | `get_context`, `get_theme`, `get_settings`, `get_workspaces`                               |
 | **Control**    | `set_theme`, `toggle_sidebar`, `switch_workspace`, `new_tab`, `new_workspace`, `send_text` |
 | **Panes**      | `split_pane`, `close_pane`, `focus_pane`, `resize_pane`, `swap_pane`, `zoom_pane`, `equalize_splits`, `get_layout` |
-| **Windows**    | `new_window`, `move_workspace_to_new_window`                                               |
+| **Windows**    | `new_window`, `move_workspace_to_new_window`, `merge_all_windows`                          |
 | **Process**    | `set_status`, `clear_status`, `list_status`                                                |
 | **Events**     | `subscribe`, `unsubscribe`                                                                 |
 | **Status Bar** | `statusbar.set`, `statusbar.clear`, `statusbar.list`                                       |
@@ -76,8 +76,9 @@ Commands act on the active workspace of the frontmost Boo window. `direction` is
 | `equalize_splits`              |                                                   |                              |
 | `get_layout`                   |                                                   | `tree`, `panes`, `windows`   |
 | `move_workspace_to_new_window` | `index` (default active)                          | `windows`                    |
+| `merge_all_windows`            | moves every window's workspaces into the active one | `workspaces`               |
 
-`get_layout` returns the split tree with ratios, each pane's on-screen `frame` (top-left origin, points) and whether it is `visible` (hidden while another pane is zoomed).
+`get_layout` returns the split tree with ratios, each pane's on-screen `frame` (top-left origin, points) whether it is `visible` (hidden while another pane is zoomed) and its terminal `grid` (columns, rows).
 
 ```bash
 echo '{"cmd":"split_pane","direction":"down"}' | nc -U "$BOO_SOCK"

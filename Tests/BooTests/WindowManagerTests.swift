@@ -229,6 +229,46 @@ final class WindowManagerTests: XCTestCase {
         XCTAssertEqual(source.appState.workspaces.count, 1)
     }
 
+    func testMergeAllWindowsMovesEveryWorkspaceIntoActiveWindow() throws {
+        let tempFile = (NSTemporaryDirectory() as NSString).appendingPathComponent(
+            "boo-session-merge-\(UUID().uuidString).json"
+        )
+        SessionStore.overrideFilePathForTesting(tempFile)
+        defer {
+            try? FileManager.default.removeItem(atPath: tempFile)
+            SessionStore.overrideFilePathForTesting(nil)
+        }
+        let manager = WindowManager.shared
+        let target = MainWindowController(restoreSession: false)
+        let source = MainWindowController(restoreSession: false)
+        Self.keptAlive += [target, source]
+        manager.register(target)
+        manager.register(source)
+        defer {
+            for controller in [target, source] {
+                manager.remove(controller)
+                controller.persistsSession = false
+                controller.window?.orderOut(nil)
+            }
+        }
+        source.openWorkspace(path: Self.emptyFolder())
+        let active = try XCTUnwrap(target.activeWorkspace)
+        let moving = source.appState.workspaces.map(\.id)
+        let movingViews = try XCTUnwrap(source.workspacePaneViews[moving[1]])
+
+        target.mergeAllWindows()
+
+        XCTAssertEqual(target.appState.workspaces.map(\.id), [active.id] + moving)
+        XCTAssertTrue(target.activeWorkspace === active)
+        XCTAssertTrue(source.appState.workspaces.isEmpty)
+        XCTAssertFalse(manager.isManaged(source), "emptied window closes")
+        let adopted = try XCTUnwrap(target.workspacePaneViews[moving[1]])
+        for (id, pv) in movingViews {
+            XCTAssertTrue(adopted[id] === pv, "pane views move live")
+            XCTAssertNil(pv.superview, "background workspace stays off screen")
+        }
+    }
+
     /// Source window whose active workspace has one pane with two tabs.
     private func twoTabSource() throws -> (MainWindowController, PaneView) {
         let source = MainWindowController(restoreSession: false)

@@ -4,7 +4,8 @@ import Cocoa
 
 extension MainWindowController {
     /// Layout commands: split, close, focus, resize, swap, zoom, equalize,
-    /// inspect, and moving the active workspace to a new window. False when
+    /// inspect, moving the active workspace to a new window and merging all
+    /// windows into the active one. False when
     /// `cmd` is not one of them.
     func handleIPCLayoutCommand(
         cmd: String, json: [String: Any], reply: @escaping ([String: Any]) -> Void
@@ -21,6 +22,9 @@ extension MainWindowController {
             reply(["ok": true])
         case "get_layout": reply(ipcLayout())
         case "move_workspace_to_new_window": ipcMoveWorkspaceToNewWindow(json: json, reply: reply)
+        case "merge_all_windows":
+            mergeAllWindows()
+            reply(["ok": true, "workspaces": appState.workspaces.count])
         default: return false
         }
         return true
