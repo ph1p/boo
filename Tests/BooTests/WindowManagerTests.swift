@@ -204,6 +204,8 @@ final class WindowManagerTests: XCTestCase {
         Self.keptAlive.append(source)
         source.openWorkspace(path: Self.emptyFolder())
         let moving = source.appState.workspaces[1]
+        // The pane split last stays active in the new window.
+        let splitID = try XCTUnwrap(source.splitActivePane(toward: .down))
         let before = Set(manager.controllers.map(ObjectIdentifier.init))
 
         source.moveWorkspaceToNewWindow(at: 1)
@@ -220,6 +222,7 @@ final class WindowManagerTests: XCTestCase {
         }
         XCTAssertEqual(created.count, 1)
         XCTAssertTrue(created.first?.activeWorkspace === moving)
+        XCTAssertEqual(moving.activePaneID, splitID)
         XCTAssertEqual(source.appState.workspaces.count, 1)
         // The last workspace stays put.
         source.moveWorkspaceToNewWindow(at: 0)

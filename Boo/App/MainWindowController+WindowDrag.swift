@@ -114,8 +114,13 @@ extension MainWindowController {
         workspacePaneViews[ws.id] = detached.paneViews
         registeredTabKeys.merge(detached.tabKeys) { _, moved in moved }
         detached.undoItems.forEach(pushUndo)
+        let activePaneID = ws.activePaneID
         let dest = appState.insertWorkspace(ws, at: index ?? appState.workspaces.count)
         activateWorkspace(dest)
+        // Claim the responder now: a new window shown without one picks its
+        // first key view, and that focus would overwrite the active pane.
+        ws.activePaneID = activePaneID
+        paneViews[activePaneID]?.focusActiveView()
         saveSession()
     }
 
