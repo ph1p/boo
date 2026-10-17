@@ -112,6 +112,7 @@ enum BooPaths {
     /// Called once at startup. Overwrites stale copies so scripts stay up-to-date.
     /// Also injects a source line into the user's shell RC files if not already present.
     static func installShellIntegration() {
+        installMCPLauncher()
         guard let resourcesDir = Bundle.main.resourcePath else { return }
         let sourceDir = (resourcesDir as NSString).appendingPathComponent("shell-integration")
         let fm = FileManager.default
@@ -125,6 +126,21 @@ enum BooPaths {
         }
         injectShellRCLines()
         installClaudeHook()
+    }
+
+    /// `boo-mcp`: stable path for agents' MCP config that starts this app's
+    /// binary as an MCP server (`Boo --mcp`), wherever the app lives.
+    static var mcpLauncherPath: String {
+        (shellIntegrationDir as NSString).appendingPathComponent("boo-mcp")
+    }
+
+    private static func installMCPLauncher() {
+        // Only from a bundled app: a `swift run` binary moves with every build.
+        guard Bundle.main.bundlePath.hasSuffix(".app"), let binary = Bundle.main.executablePath else { return }
+        let quoted = "'" + binary.replacingOccurrences(of: "'", with: "'\\''") + "'"
+        let script = "#!/bin/sh\n# Written by Boo on every launch.\nexec \(quoted) --mcp \"$@\"\n"
+        try? script.write(toFile: mcpLauncherPath, atomically: true, encoding: .utf8)
+        try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: mcpLauncherPath)
     }
 
     /// Append a source line to each shell RC file that doesn't already have it.

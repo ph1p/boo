@@ -20,7 +20,7 @@ extension MainWindowController {
         case "equalize_splits":
             equalizeSplitsAction(nil)
             reply(["ok": true])
-        case "get_layout": reply(ipcLayout())
+        case "get_layout": ipcGetLayout(json: json, reply: reply)
         case "move_workspace_to_new_window": ipcMoveWorkspaceToNewWindow(json: json, reply: reply)
         case "merge_all_windows":
             mergeAllWindows()
@@ -41,33 +41,60 @@ extension MainWindowController {
         return direction
     }
 
+    /// The pane named by `pane_id` (in any workspace of this window), else the
+    /// active pane. Replies with an error and returns nil when there is none.
+    func ipcTargetPane(_ json: [String: Any], reply: ([String: Any]) -> Void) -> (workspace: Workspace, paneID: UUID)? {
+        if let idString = json["pane_id"] as? String {
+            guard let id = UUID(uuidString: idString), let workspace = appState.workspaceContainingPane(id) else {
+                reply(["ok": false, "error": "pane not found"])
+                return nil
+            }
+            return (workspace, id)
+        }
+        guard let workspace = activeWorkspace else {
+            reply(["ok": false, "error": "no active workspace"])
+            return nil
+        }
+        return (workspace, workspace.activePaneID)
+    }
+
     private func ipcSplitPane(json: [String: Any], reply: @escaping ([String: Any]) -> Void) {
         var args = json
         if args["direction"] == nil { args["direction"] = "right" }
-        guard let edge = ipcDirection(args, reply: reply) else { return }
-        guard let newID = splitActivePane(toward: edge) else {
-            reply(["ok": false, "error": "no active pane"])
+        guard let edge = ipcDirection(args, reply: reply), let target = ipcTargetPane(json, reply: reply) else {
             return
         }
-        reply(["ok": true, "pane_id": newID.uuidString])
+        let command = (json["command"] as? String).flatMap {
+            $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : $0
+        }
+        let cwd = (json["cwd"] as? String).map { ($0 as NSString).expandingTildeInPath }
+        guard
+            let newID = splitPane(
+                target.paneID, in: target.workspace, toward: edge,
+                focus: json["focus"] as? Bool ?? true, cwd: cwd, command: command)
+        else {
+            reply(["ok": false, "error": "pane not found"])
+            return
+        }
+        // Background workspaces get their terminals when they are next shown.
+        reply(["ok": true, "pane_id": newID.uuidString, "started": target.workspace === activeWorkspace])
     }
 
     private func ipcClosePane(json: [String: Any], reply: @escaping ([String: Any]) -> Void) {
-        guard let workspace = activeWorkspace else {
-            reply(["ok": false, "error": "no active workspace"])
-            return
-        }
-        var paneID = workspace.activePaneID
-        if let idString = json["pane_id"] as? String {
-            guard let id = UUID(uuidString: idString), workspace.pane(for: id) != nil else {
-                reply(["ok": false, "error": "pane not found"])
-                return
-            }
-            paneID = id
-        }
+        guard let (workspace, paneID) = ipcTargetPane(json, reply: reply) else { return }
         // Closing the last pane would close the workspace; that is not a layout change.
         guard workspace.splitTree.leafCount > 1 else {
             reply(["ok": false, "error": "cannot close the only pane"])
+            return
+        }
+        guard workspace === activeWorkspace else {
+            // Background workspace: nothing on screen to re-layout.
+            if let pane = workspace.pane(for: paneID) { notifyTerminalClosed(for: pane.tabs) }
+            bridge.monitor.untrack(paneID: paneID)
+            workspacePaneViews[workspace.id]?.removeValue(forKey: paneID)?.stopAll()
+            _ = workspace.closePane(paneID)
+            saveSession()
+            reply(["ok": true, "active_pane": workspace.activePaneID.uuidString])
             return
         }
         workspace.activePaneID = paneID
@@ -123,13 +150,32 @@ extension MainWindowController {
 
     // MARK: Layout snapshot
 
+    private func ipcGetLayout(json: [String: Any], reply: @escaping ([String: Any]) -> Void) {
+        guard let target = ipcTargetPane(json, reply: reply) else { return }
+        reply(ipcLayout(of: target.workspace))
+    }
+
     /// Tree, on-screen pane frames (split container coordinates, top-left
-    /// origin) and windows, for scripts and live checks.
-    func ipcLayout() -> [String: Any] {
-        guard let workspace = activeWorkspace else { return ["ok": false, "error": "no active workspace"] }
+    /// origin), each pane's tabs and windows, for scripts, agents and live checks.
+    /// Panes of a background workspace have no frames.
+    func ipcLayout(of workspace: Workspace) -> [String: Any] {
+        let isVisible = workspace === activeWorkspace
         let panes: [[String: Any]] = workspace.splitTree.leafIDs.map { id in
             var info: [String: Any] = ["id": id.uuidString, "active": id == workspace.activePaneID]
-            guard let pv = paneViews[id], pv.window != nil, pv.window === window else {
+            if let pane = workspace.pane(for: id) {
+                info["tabs"] = pane.tabs.enumerated().map { index, tab in
+                    var tabInfo: [String: Any] = [
+                        "id": tab.id.uuidString, "title": tab.title, "type": tab.contentType.rawValue,
+                        "active": index == pane.activeTabIndex
+                    ]
+                    if tab.contentType == .terminal {
+                        tabInfo["cwd"] = tab.workingDirectory
+                        if !tab.state.foregroundProcess.isEmpty { tabInfo["process"] = tab.state.foregroundProcess }
+                    }
+                    return tabInfo
+                }
+            }
+            guard isVisible, let pv = paneViews[id], pv.window != nil, pv.window === window else {
                 info["visible"] = false
                 return info
             }
@@ -152,6 +198,7 @@ extension MainWindowController {
         return [
             "ok": true,
             "workspace_id": workspace.id.uuidString,
+            "workspace_visible": isVisible,
             "active_pane": workspace.activePaneID.uuidString,
             "zoomed_pane": workspace.zoomedPaneID?.uuidString ?? NSNull(),
             "container": ["width": splitContainer.bounds.width, "height": splitContainer.bounds.height],

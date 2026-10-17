@@ -199,7 +199,7 @@ final class Workspace {
     }
 
     @discardableResult
-    func splitPane(_ paneID: UUID, direction: SplitTree.SplitDirection) -> UUID? {
+    func splitPane(_ paneID: UUID, direction: SplitTree.SplitDirection, cwd: String? = nil) -> UUID? {
         let (newTree, newID) = splitTree.splitting(leafID: paneID, direction: direction)
         guard let newID = newID else {
             booLog(
@@ -211,14 +211,16 @@ final class Workspace {
 
         // New pane starts with empty title to avoid briefly showing the old pane's process name.
         // CWD follows the user's setting: inherit from source pane or use workspace default folder.
-        let cwd: String
-        if AppSettings.shared.newTabCwdMode == .samePath {
-            cwd = panes[paneID]?.activeTab?.workingDirectory ?? folderPath
+        let directory: String
+        if let cwd {
+            directory = cwd
+        } else if AppSettings.shared.newTabCwdMode == .samePath {
+            directory = panes[paneID]?.activeTab?.workingDirectory ?? folderPath
         } else {
-            cwd = folderPath
+            directory = folderPath
         }
         let newPane = Pane(id: newID)
-        _ = newPane.addTab(workingDirectory: cwd, title: "")
+        _ = newPane.addTab(workingDirectory: directory, title: "")
         panes[newID] = newPane
 
         return newID
@@ -228,9 +230,11 @@ final class Workspace {
     /// workspace. A whole-side pane gets the same share as each pane already
     /// lined up on that axis.
     @discardableResult
-    func splitPane(_ paneID: UUID, toward edge: PaneDirection, wholeWorkspace: Bool = false) -> UUID? {
+    func splitPane(
+        _ paneID: UUID, toward edge: PaneDirection, wholeWorkspace: Bool = false, cwd: String? = nil
+    ) -> UUID? {
         let previous = splitTree
-        guard let newID = splitPane(paneID, direction: edge.axis) else { return nil }
+        guard let newID = splitPane(paneID, direction: edge.axis, cwd: cwd) else { return nil }
         if wholeWorkspace {
             let weight = CGFloat(previous.weight(along: edge.axis))
             splitTree =

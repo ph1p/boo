@@ -26,9 +26,7 @@ extension MainWindowController {
         case "new_agent_task":
             ipcNewAgentTask(json: json, reply: reply)
         case "review_changes":
-            let id = (json["workspace_id"] as? String).flatMap(UUID.init(uuidString:)) ?? activeWorkspace?.id
-            let opened = id.map { openReview(workspaceID: $0) } ?? false
-            reply(opened ? ["ok": true] : ["ok": false, "error": "no workspace"])
+            ipcReviewChanges(json: json, reply: reply)
         case "new_window":
             WindowManager.shared.newWindow()
             reply(["ok": true, "windows": WindowManager.shared.controllers.count])
@@ -41,7 +39,11 @@ extension MainWindowController {
         case "get_state":
             remoteGetState(reply: reply)
         case "get_screen":
-            remoteGetScreen(reply: reply)
+            if json["pane_id"] != nil || json["lines"] != nil {
+                ipcReadPane(json: json, reply: reply)
+            } else {
+                remoteGetScreen(reply: reply)
+            }
         case "send_key":
             remoteSendKey(json: json, reply: reply)
         case "select_pane":
@@ -114,13 +116,62 @@ extension MainWindowController {
         reply(["ok": true])
     }
 
+    /// Types `text` into the active pane, or the pane named by `pane_id`.
+    /// `submit` pastes it (bracketed, one input for TUIs) and presses Return.
     private func ipcSendText(json: [String: Any], reply: @escaping ([String: Any]) -> Void) {
         guard let text = json["text"] as? String else {
             reply(["ok": false, "error": "missing text"])
             return
         }
-        sendRawToActivePane(text)
+        let submit = json["submit"] as? Bool ?? false
+        if json["pane_id"] == nil && !submit {
+            sendRawToActivePane(text)
+            reply(["ok": true])
+            return
+        }
+        guard let target = ipcTargetPane(json, reply: reply) else { return }
+        guard let gv = terminalView(workspace: target.workspace, paneID: target.paneID) else {
+            reply(["ok": false, "error": "pane has no running terminal"])
+            return
+        }
+        if submit { gv.paste(text, submit: true) } else { gv.sendRaw(text) }
         reply(["ok": true])
+    }
+
+    /// Text of a pane in any workspace: the visible screen, or with `lines`
+    /// the last lines of scrollback.
+    private func ipcReadPane(json: [String: Any], reply: @escaping ([String: Any]) -> Void) {
+        guard let target = ipcTargetPane(json, reply: reply) else { return }
+        let tab = target.workspace.pane(for: target.paneID)?.activeTab
+        guard let gv = terminalView(workspace: target.workspace, paneID: target.paneID) else {
+            reply(["ok": false, "error": "pane has no running terminal"])
+            return
+        }
+        let text = (json["lines"] as? Int).flatMap { gv.readRecentText(lines: min($0, 5000)) } ?? gv.readViewportText()
+        reply([
+            "ok": true, "pane_id": target.paneID.uuidString, "text": text ?? "",
+            "title": tab?.title ?? "", "cwd": tab?.workingDirectory ?? ""
+        ])
+    }
+
+    /// The terminal showing in a pane, background workspaces included.
+    func terminalView(workspace: Workspace, paneID: UUID) -> GhosttyView? {
+        guard let pv = workspacePaneViews[workspace.id]?[paneID] else { return nil }
+        // currentTerminalView may be a TerminalScrollView wrapping the GhosttyView
+        if let gv = pv.currentTerminalView as? GhosttyView { return gv }
+        return (pv.currentTerminalView as? TerminalScrollView)?.ghosttyView
+    }
+
+    private func ipcReviewChanges(json: [String: Any], reply: @escaping ([String: Any]) -> Void) {
+        let workspaceID: UUID?
+        if json["pane_id"] != nil {
+            guard let target = ipcTargetPane(json, reply: reply) else { return }
+            workspaceID = target.workspace.id
+        } else {
+            workspaceID = (json["workspace_id"] as? String).flatMap(UUID.init(uuidString:)) ?? activeWorkspace?.id
+        }
+        let opened = workspaceID.map { openReview(workspaceID: $0) } ?? false
+        reply(opened ? ["ok": true] : ["ok": false, "error": "no workspace"])
     }
 
     private func ipcAgentIdle(json: [String: Any], reply: @escaping ([String: Any]) -> Void) {

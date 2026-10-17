@@ -289,8 +289,8 @@ final class WindowManager {
             reply(response)
             return
         }
-        // agent_idle names the pane it came from; that pane may sit in a background window.
-        let paneID = cmd == "agent_idle" ? (json["pane_id"] as? String).flatMap(UUID.init(uuidString:)) : nil
+        // A command naming a pane goes to the window holding it, which may be in the background.
+        let paneID = (json["pane_id"] as? String).flatMap(UUID.init(uuidString:))
         guard let target = paneID.flatMap(controller(owningPane:)) ?? activeController else {
             reply(["ok": false, "error": "no window"])
             return

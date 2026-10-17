@@ -2,6 +2,7 @@ import Cocoa
 
 public enum BooMain {
     @MainActor public static func run() {
+        if CommandLine.arguments.dropFirst().first == "--mcp" { BooMCPServer.runStdio() }
         let app = NSApplication.shared
         app.setActivationPolicy(.regular)
         let delegate = AppDelegate()

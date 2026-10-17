@@ -42,6 +42,7 @@ Download the latest release from [GitHub Releases](https://github.com/ph1p/boo/r
 - **Signed auto-updater** — Sparkle-based updates with appcast metadata on GitHub Pages and release archives on GitHub Releases
 - **Focus memory** — Remembers last focused pane per workspace, restores on switch
 - **IPC socket** — Unix socket at `~/.boo/boo.sock` for reliable process detection and plugin commands
+- **MCP server** — `~/.boo/shell-integration/boo-mcp` lets coding agents split panes, run commands beside themselves, read other panes and start agent tasks
 - **Debug plugin** — Live event log and terminal state inspector for diagnostics
 
 ## Build from Source
@@ -251,12 +252,12 @@ Boo exposes a Unix domain socket (`~/.boo/boo.sock`) as the primary communicatio
 |                | `new_tab`              | Open new tab (optional `cwd`)                                 |
 |                | `new_workspace`        | Open new workspace (optional `path`)                          |
 |                | `new_window`           | Open new window with a fresh workspace                        |
-|                | `send_text`            | Write text to the active terminal                             |
+|                | `send_text`            | Write text to the active terminal, or `pane_id` (`submit`)    |
 | **Agents**     | `agent_event`          | Report agent state (`working`/`needs-input`/`done`/`error`/`end`) |
 |                | `agent_inbox`          | List agents across all windows, waiting ones first            |
 |                | `agent_jump`           | Focus an agent's tab (`tab_id`, or next waiting)              |
 |                | `new_agent_task`       | Worktree + branch + workspace running an agent (`name`, `prompt`) |
-|                | `review_changes`       | Open the diff review tab for a workspace (`workspace_id`) |
+|                | `review_changes`       | Open the diff review tab for a workspace (`workspace_id`/`pane_id`) |
 | **Events**     | `subscribe`            | Subscribe to push events (`events` array)                     |
 |                | `unsubscribe`          | Remove event subscriptions                                    |
 | **Status Bar** | `statusbar.set`        | Push an external status bar segment                           |

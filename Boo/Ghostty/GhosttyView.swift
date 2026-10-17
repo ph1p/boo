@@ -732,11 +732,21 @@ import Cocoa
     /// Read the visible viewport text (used by the Remote Control web mirror).
     /// Must be called on the main thread — surface access is not thread-safe.
     func readViewportText() -> String? {
+        readText(GHOSTTY_POINT_VIEWPORT)
+    }
+
+    /// The last `lines` lines of scrollback plus screen, trailing blank lines dropped.
+    func readRecentText(lines: Int) -> String? {
+        guard let text = readText(GHOSTTY_POINT_SCREEN) else { return nil }
+        var all = text.components(separatedBy: "\n")
+        while let last = all.last, last.trimmingCharacters(in: .whitespaces).isEmpty { all.removeLast() }
+        return all.suffix(max(lines, 1)).joined(separator: "\n")
+    }
+
+    private func readText(_ tag: ghostty_point_tag_e) -> String? {
         guard let surface = surface else { return nil }
-        let topLeft = ghostty_point_s(
-            tag: GHOSTTY_POINT_VIEWPORT, coord: GHOSTTY_POINT_COORD_TOP_LEFT, x: 0, y: 0)
-        let bottomRight = ghostty_point_s(
-            tag: GHOSTTY_POINT_VIEWPORT, coord: GHOSTTY_POINT_COORD_BOTTOM_RIGHT, x: 0, y: 0)
+        let topLeft = ghostty_point_s(tag: tag, coord: GHOSTTY_POINT_COORD_TOP_LEFT, x: 0, y: 0)
+        let bottomRight = ghostty_point_s(tag: tag, coord: GHOSTTY_POINT_COORD_BOTTOM_RIGHT, x: 0, y: 0)
         let selection = ghostty_selection_s(
             top_left: topLeft, bottom_right: bottomRight, rectangle: false)
         var text = ghostty_text_s()

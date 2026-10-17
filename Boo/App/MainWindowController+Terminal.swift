@@ -8,11 +8,7 @@ extension MainWindowController {
     }
 
     func ghosttyView(for paneID: UUID) -> GhosttyView? {
-        guard let pv = paneViews[paneID] else { return nil }
-        // currentTerminalView may be a TerminalScrollView wrapping the GhosttyView
-        if let gv = pv.currentTerminalView as? GhosttyView { return gv }
-        if let wrapper = pv.currentTerminalView as? TerminalScrollView { return wrapper.ghosttyView }
-        return nil
+        activeWorkspace.flatMap { terminalView(workspace: $0, paneID: paneID) }
     }
 
     @objc func findAction(_ sender: Any?) {

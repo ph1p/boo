@@ -616,11 +616,22 @@ extension MainWindowController {
     @discardableResult
     func splitActivePane(toward edge: PaneDirection) -> UUID? {
         guard let workspace = activeWorkspace else { return nil }
-        let oldPaneID = workspace.activePaneID
-        booLog(.debug, .sidebar, "splitting pane=\(oldPaneID.uuidString.prefix(8)) edge=\(edge)")
-        window?.makeFirstResponder(nil)
+        return splitPane(workspace.activePaneID, in: workspace, toward: edge)
+    }
 
-        guard let newID = workspace.splitPane(oldPaneID, toward: edge) else {
+    /// Splits any pane of this window. `focus: false` leaves focus where it is;
+    /// `command` is typed into the new pane's shell as it starts. In a background
+    /// workspace only the model changes; its views are built on activation.
+    @discardableResult
+    func splitPane(
+        _ oldPaneID: UUID, in workspace: Workspace, toward edge: PaneDirection,
+        focus: Bool = true, cwd: String? = nil, command: String? = nil
+    ) -> UUID? {
+        let isVisible = workspace === activeWorkspace
+        booLog(.debug, .sidebar, "splitting pane=\(oldPaneID.uuidString.prefix(8)) edge=\(edge)")
+        if isVisible { window?.makeFirstResponder(nil) }
+
+        guard let newID = workspace.splitPane(oldPaneID, toward: edge, cwd: cwd) else {
             booLog(.debug, .sidebar, "splitActivePane: pane \(oldPaneID.uuidString.prefix(8)) not found — no-op")
             return nil
         }
@@ -655,8 +666,14 @@ extension MainWindowController {
                     selectedPluginTabID: activePluginTabID)
             }
         }
-        // Focus the newly created pane
-        workspace.activePaneID = newID
+        if let command, let newTab = workspace.pane(for: newID)?.activeTab {
+            GhosttyView.pendingInitialInput[newTab.id] = command + "\n"
+        }
+        if focus { workspace.activePaneID = newID }
+        guard isVisible else {
+            saveSession()
+            return newID
+        }
         updateSplits(workspace.splitTree, fadingIn: newID)
         saveSession()
 
@@ -677,8 +694,8 @@ extension MainWindowController {
             self.runPluginCycle(reason: .focusChanged)
             // Focus after layout and plugin cycle complete so nothing steals the responder
             DispatchQueue.main.async { [weak self] in
-                guard let self, let newPV = self.paneViews[newID] else { return }
-                newPV.focusActiveView()
+                guard let self, let pv = self.paneViews[workspace.activePaneID] else { return }
+                pv.focusActiveView()
             }
         }
         refreshStatusBar()
