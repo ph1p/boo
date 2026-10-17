@@ -139,8 +139,16 @@ enum SessionStore {
         _testFilePath = path
     }
 
+    /// Under XCTest every save goes to a per-process temp file, so test
+    /// controllers (most persist by default) never touch ~/.boo/session.json.
+    private static let xctestFile: String? =
+        NSClassFromString("XCTestCase") == nil
+        ? nil
+        : (NSTemporaryDirectory() as NSString).appendingPathComponent(
+            "boo-test-session-\(ProcessInfo.processInfo.processIdentifier).json")
+
     private static var sessionFile: String {
-        _testFilePath ?? BooPaths.configDir.appendingPathComponent("session.json")
+        _testFilePath ?? xctestFile ?? BooPaths.configDir.appendingPathComponent("session.json")
     }
 
     /// Build a single-window `SessionSnapshot` from `appState`.
