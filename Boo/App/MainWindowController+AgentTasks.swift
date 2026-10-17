@@ -1,4 +1,5 @@
 import Cocoa
+import SwiftUI
 
 /// Agent tasks: a git worktree + branch per task, opened as its own workspace
 /// with the agent already running. Merge or discard from the workspace's
@@ -140,27 +141,42 @@ extension MainWindowController {
         guard index >= 0, index < appState.workspaces.count else { return [] }
         let workspace = appState.workspaces[index]
         guard AgentWorktree.looksLikeWorktree(workspace.folderPath) else { return [] }
+        let review = NSMenuItem(
+            title: "Review Changes...", action: #selector(reviewAgentTaskAction(_:)), keyEquivalent: "")
         let merge = NSMenuItem(
             title: "Merge Worktree...", action: #selector(mergeAgentTaskAction(_:)), keyEquivalent: "")
         let discard = NSMenuItem(
             title: "Discard Worktree...", action: #selector(discardAgentTaskAction(_:)), keyEquivalent: "")
-        for item in [merge, discard] {
+        for item in [review, merge, discard] {
             item.target = self
             item.representedObject = workspace.id
         }
-        return [merge, discard]
+        return [review, merge, discard]
     }
 
     @objc func mergeAgentTaskAction(_ sender: NSMenuItem) {
         guard let id = sender.representedObject as? UUID else { return }
-        withAgentTask(workspaceID: id) { [weak self] workspace, info, status in
-            self?.confirmMerge(workspace: workspace, info: info, status: status)
-        }
+        mergeAgentTask(workspaceID: id)
     }
 
     @objc func discardAgentTaskAction(_ sender: NSMenuItem) {
         guard let id = sender.representedObject as? UUID else { return }
-        withAgentTask(workspaceID: id) { [weak self] workspace, info, status in
+        discardAgentTask(workspaceID: id)
+    }
+
+    @objc func reviewAgentTaskAction(_ sender: NSMenuItem) {
+        guard let id = sender.representedObject as? UUID else { return }
+        openReview(workspaceID: id)
+    }
+
+    func mergeAgentTask(workspaceID: UUID) {
+        withAgentTask(workspaceID: workspaceID) { [weak self] workspace, info, status in
+            self?.confirmMerge(workspace: workspace, info: info, status: status)
+        }
+    }
+
+    func discardAgentTask(workspaceID: UUID) {
+        withAgentTask(workspaceID: workspaceID) { [weak self] workspace, info, status in
             self?.confirmDiscard(workspace: workspace, info: info, status: status)
         }
     }
@@ -275,6 +291,63 @@ extension MainWindowController {
         alert.informativeText = message
         alert.alertStyle = .warning
         if let window { alert.beginSheetModal(for: window) } else { alert.runModal() }
+    }
+
+    // MARK: - Review
+
+    @objc func reviewChangesAction(_ sender: Any?) {
+        guard let id = activeWorkspace?.id else { return }
+        openReview(workspaceID: id)
+    }
+
+    /// Opens (or focuses) the review tab for a workspace, in its active pane.
+    @discardableResult
+    func openReview(workspaceID: UUID) -> Bool {
+        guard let index = appState.workspaces.firstIndex(where: { $0.id == workspaceID }) else { return false }
+        if index != appState.activeWorkspaceIndex { activateWorkspace(index) }
+        let workspace = appState.workspaces[index]
+        let title = "Review: \(workspace.displayName)"
+        if let pane = workspace.pane(for: workspace.activePaneID),
+            let tabIndex = pane.tabs.firstIndex(where: { $0.contentType == .pluginView && $0.title == title })
+        {
+            focusActivity(workspaceID: workspaceID, paneID: pane.id, tabIndex: tabIndex)
+            return true
+        }
+        guard let paneView = paneViews[workspace.activePaneID] else { return false }
+        let model = AgentReviewModel(workspaceID: workspaceID, folder: workspace.folderPath, controller: self)
+        paneView.addPluginViewTab(view: AnyView(AgentReviewView(model: model)), title: title, icon: "checklist")
+        model.reload()
+        return true
+    }
+
+    /// The tab the workspace's agent runs in: one the inbox knows about, else
+    /// the first terminal tab (agent tasks start the agent there).
+    func agentTab(inWorkspace workspaceID: UUID) -> (paneID: UUID, tabIndex: Int)? {
+        guard let workspace = appState.workspaces.first(where: { $0.id == workspaceID }) else { return nil }
+        for item in AgentInbox.shared.sortedItems {
+            if let location = AgentInbox.shared.locate(item.tabID), location.workspace.id == workspaceID {
+                return (location.pane.id, location.tabIndex)
+            }
+        }
+        let panes = [workspace.activePaneID] + workspace.panes.keys.filter { $0 != workspace.activePaneID }
+        for paneID in panes {
+            if let pane = workspace.pane(for: paneID),
+                let tabIndex = pane.tabs.firstIndex(where: { $0.contentType == .terminal })
+            {
+                return (paneID, tabIndex)
+            }
+        }
+        return nil
+    }
+
+    /// Switches to the agent's tab and submits `text` as its next prompt.
+    @discardableResult
+    func sendToAgent(workspaceID: UUID, text: String) -> Bool {
+        guard let target = agentTab(inWorkspace: workspaceID) else { return false }
+        focusActivity(workspaceID: workspaceID, paneID: target.paneID, tabIndex: target.tabIndex)
+        guard let view = ghosttyView(for: target.paneID) else { return false }
+        view.paste(text, submit: true)
+        return true
     }
 
     @objc func jumpToNextWaitingAgentAction(_ sender: Any?) {

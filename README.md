@@ -256,6 +256,7 @@ Boo exposes a Unix domain socket (`~/.boo/boo.sock`) as the primary communicatio
 |                | `agent_inbox`          | List agents across all windows, waiting ones first            |
 |                | `agent_jump`           | Focus an agent's tab (`tab_id`, or next waiting)              |
 |                | `new_agent_task`       | Worktree + branch + workspace running an agent (`name`, `prompt`) |
+|                | `review_changes`       | Open the diff review tab for a workspace (`workspace_id`) |
 | **Events**     | `subscribe`            | Subscribe to push events (`events` array)                     |
 |                | `unsubscribe`          | Remove event subscriptions                                    |
 | **Status Bar** | `statusbar.set`        | Push an external status bar segment                           |

@@ -25,6 +25,10 @@ extension MainWindowController {
             ipcNewWorkspace(json: json, reply: reply)
         case "new_agent_task":
             ipcNewAgentTask(json: json, reply: reply)
+        case "review_changes":
+            let id = (json["workspace_id"] as? String).flatMap(UUID.init(uuidString:)) ?? activeWorkspace?.id
+            let opened = id.map { openReview(workspaceID: $0) } ?? false
+            reply(opened ? ["ok": true] : ["ok": false, "error": "no workspace"])
         case "new_window":
             WindowManager.shared.newWindow()
             reply(["ok": true, "windows": WindowManager.shared.controllers.count])

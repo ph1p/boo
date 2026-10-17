@@ -713,6 +713,17 @@ import Cocoa
         }
     }
 
+    /// Pastes `text` like ⌘V (bracketed when the program asked for it), so a
+    /// multi-line message reaches a TUI as one input; `submit` presses Return after.
+    func paste(_ text: String, submit: Bool) {
+        sendText(text)
+        guard submit else { return }
+        // Let the program finish handling the paste before Return arrives.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+            self?.sendKey(keyCode: 0x24, mods: GHOSTTY_MODS_NONE, text: "\r")
+        }
+    }
+
     private func sendText(_ text: String) {
         guard let surface = surface else { return }
         text.withCString { ghostty_surface_text(surface, $0, UInt(strlen($0))) }
