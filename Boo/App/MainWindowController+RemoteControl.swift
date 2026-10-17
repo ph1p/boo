@@ -215,6 +215,8 @@ extension MainWindowController: NSMenuItemValidation {
         case #selector(toggleZoomPaneAction(_:)):
             menuItem.state = activeWorkspace?.zoomedPaneID != nil ? .on : .off
             return (activeWorkspace?.splitTree.leafCount ?? 0) > 1
+        case #selector(moveWorkspaceToNewWindowAction(_:)):
+            return appState.workspaces.count > 1 && activeWorkspace?.isPinned == false
         default:
             return true
         }

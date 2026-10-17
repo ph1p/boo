@@ -545,6 +545,14 @@ extension ToolbarView {
 
         menu.addItem(.separator())
 
+        if !ws.isPinned && workspaces.count > 1 {
+            let moveItem = NSMenuItem(
+                title: "Move to New Window", action: #selector(contextMoveToNewWindow(_:)), keyEquivalent: "")
+            moveItem.target = self
+            moveItem.tag = index
+            menu.addItem(moveItem)
+        }
+
         // Close
         if !ws.isPinned {
             let closeItem = NSMenuItem(title: "Close", action: #selector(contextClose(_:)), keyEquivalent: "")
@@ -608,6 +616,10 @@ extension ToolbarView {
 
     @objc internal func colorPickerChanged(_ sender: NSColorPanel) {
         delegate?.toolbar(self, setCustomColorForWorkspaceAt: colorPickerIndex, color: sender.color)
+    }
+
+    @objc internal func contextMoveToNewWindow(_ sender: NSMenuItem) {
+        delegate?.toolbar(self, moveWorkspaceToNewWindowAt: sender.tag)
     }
 
     @objc internal func contextClose(_ sender: NSMenuItem) {

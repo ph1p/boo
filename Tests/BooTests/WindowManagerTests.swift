@@ -189,6 +189,43 @@ final class WindowManagerTests: XCTestCase {
         XCTAssertFalse(adopter.persistsSession)
     }
 
+    func testMoveWorkspaceToNewWindowOpensCascadedWindow() throws {
+        // The new window registers and saves the session.
+        let tempFile = (NSTemporaryDirectory() as NSString).appendingPathComponent(
+            "boo-session-newwindow-\(UUID().uuidString).json"
+        )
+        SessionStore.overrideFilePathForTesting(tempFile)
+        defer {
+            try? FileManager.default.removeItem(atPath: tempFile)
+            SessionStore.overrideFilePathForTesting(nil)
+        }
+        let manager = WindowManager.shared
+        let source = MainWindowController(restoreSession: false)
+        Self.keptAlive.append(source)
+        source.openWorkspace(path: Self.emptyFolder())
+        let moving = source.appState.workspaces[1]
+        let before = Set(manager.controllers.map(ObjectIdentifier.init))
+
+        source.moveWorkspaceToNewWindow(at: 1)
+
+        let created = manager.controllers.filter { !before.contains(ObjectIdentifier($0)) }
+        Self.keptAlive += created
+        defer {
+            for controller in created {
+                manager.remove(controller)
+                // Kept alive forever: later saves must not reach the real session file.
+                controller.persistsSession = false
+                controller.window?.orderOut(nil)
+            }
+        }
+        XCTAssertEqual(created.count, 1)
+        XCTAssertTrue(created.first?.activeWorkspace === moving)
+        XCTAssertEqual(source.appState.workspaces.count, 1)
+        // The last workspace stays put.
+        source.moveWorkspaceToNewWindow(at: 0)
+        XCTAssertEqual(source.appState.workspaces.count, 1)
+    }
+
     /// Source window whose active workspace has one pane with two tabs.
     private func twoTabSource() throws -> (MainWindowController, PaneView) {
         let source = MainWindowController(restoreSession: false)

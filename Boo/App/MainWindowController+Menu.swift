@@ -201,6 +201,10 @@ extension MainWindowController {
         windowMenu.addItem(withTitle: "Zoom", action: #selector(NSWindow.performZoom(_:)), keyEquivalent: "")
         windowMenu.addItem(.separator())
         windowMenu.addItem(
+            withTitle: "Move Workspace to New Window", action: #selector(moveWorkspaceToNewWindowAction(_:)),
+            keyEquivalent: "")
+        windowMenu.addItem(.separator())
+        windowMenu.addItem(
             withTitle: "Bring All to Front", action: #selector(NSApplication.arrangeInFront(_:)), keyEquivalent: "")
         windowMenuItem.submenu = windowMenu
         mainMenu.addItem(windowMenuItem)

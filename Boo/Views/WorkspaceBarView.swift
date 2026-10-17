@@ -12,6 +12,7 @@ import Cocoa
     func workspaceBar(_ bar: WorkspaceBarView, dropWorkspaceAt index: Int, atScreenPoint point: NSPoint)
     /// A dragged workspace moved; `point` is the screen point when outside this window, nil otherwise or when the drag ends.
     func workspaceBar(_ bar: WorkspaceBarView, workspaceDragMovedOutsideTo point: NSPoint?)
+    func workspaceBar(_ bar: WorkspaceBarView, moveWorkspaceToNewWindowAt index: Int)
     func workspaceBarDidRequestNewWorkspace(_ bar: WorkspaceBarView)
 }
 
@@ -783,6 +784,14 @@ class WorkspaceBarView: NSView {
 
         menu.addItem(.separator())
 
+        if !item.isPinned && items.count > 1 {
+            let moveItem = NSMenuItem(
+                title: "Move to New Window", action: #selector(contextMoveToNewWindow(_:)), keyEquivalent: "")
+            moveItem.target = self
+            moveItem.tag = index
+            menu.addItem(moveItem)
+        }
+
         // Close
         if !item.isPinned {
             let closeItem = NSMenuItem(title: "Close", action: #selector(contextClose(_:)), keyEquivalent: "")
@@ -822,6 +831,10 @@ class WorkspaceBarView: NSView {
             }
         }
         alert.window.makeFirstResponder(input)
+    }
+
+    @objc private func contextMoveToNewWindow(_ sender: NSMenuItem) {
+        delegate?.workspaceBar(self, moveWorkspaceToNewWindowAt: sender.tag)
     }
 
     @objc private func contextTogglePin(_ sender: NSMenuItem) {

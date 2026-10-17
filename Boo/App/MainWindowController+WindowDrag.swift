@@ -26,6 +26,22 @@ struct DetachedTab {
 extension MainWindowController {
     /// A workspace pill was dropped outside this window: move the workspace
     /// into the window under the cursor, or into a new window there.
+    /// Move a workspace into a new window cascaded from this one.
+    func moveWorkspaceToNewWindow(at index: Int) {
+        guard index >= 0, index < appState.workspaces.count, !appState.workspaces[index].isPinned,
+            appState.workspaces.count > 1, let frame = window?.frame
+        else { return }
+        guard let detached = detachWorkspace(at: index) else { return }
+        // `newWindow` puts the top-left corner 60pt left of and 12pt above the point.
+        let cascade: CGFloat = 24
+        let point = NSPoint(x: frame.minX + 60 + cascade, y: frame.maxY - 12 - cascade)
+        WindowManager.shared.newWindow(adopting: detached, at: point, size: frame.size)
+    }
+
+    @objc func moveWorkspaceToNewWindowAction(_ sender: Any?) {
+        moveWorkspaceToNewWindow(at: appState.activeWorkspaceIndex)
+    }
+
     func dropWorkspace(at index: Int, atScreenPoint point: NSPoint) {
         guard index >= 0, index < appState.workspaces.count, !appState.workspaces[index].isPinned else { return }
         let manager = WindowManager.shared
