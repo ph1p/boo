@@ -124,6 +124,16 @@ final class ActivityNotifier: NSObject, UNUserNotificationCenterDelegate {
             sound: .default, workspaceID: workspaceID, paneID: paneID, tabIndex: tabIndex)
     }
 
+    /// An agent finished or waits for an answer (from agent hooks).
+    func notifyAgent(
+        workspaceName: String, body: String, workspaceID: UUID, paneID: UUID, tabIndex: Int
+    ) {
+        guard AppSettings.shared.activityNotificationsEnabled else { return }
+        deliver(
+            kind: "agent", title: workspaceName, body: body, sound: .default,
+            workspaceID: workspaceID, paneID: paneID, tabIndex: tabIndex)
+    }
+
     /// Post a notification for a terminal bell, analogous to `notifyCommandEnded`.
     /// Suppression mirrors the command-end path: skip when `activityNotificationsEnabled` is off.
     func notifyBell(

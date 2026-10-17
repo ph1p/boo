@@ -1,21 +1,79 @@
 #!/usr/bin/env bash
-# Boo Claude Stop hook — called by Claude Code when it finishes a response.
-# Signals Boo to show an activity dot + notification on the tab.
-# BOO_PANE_ID is set per-surface by Boo when the terminal starts.
+# Boo agent hook: reports what a coding agent is doing to Boo's agent inbox.
+#
+# Claude Code: registered for UserPromptSubmit, PostToolUse, Notification,
+# Stop and SessionEnd; the event comes from the JSON payload on stdin.
+# Codex: notify = ["~/.boo/shell-integration/boo-claude-hook", "codex"]
+# (Codex appends its JSON payload as the last argument).
+#
+# BOO_PANE_ID / BOO_TAB_ID are set per surface by Boo. Never blocks the agent:
+# no output, always exits 0.
 
 [[ -z "$BOO_SOCK" || -z "$BOO_PANE_ID" ]] && exit 0
 
-python3 - "$BOO_SOCK" "$BOO_PANE_ID" <<'PYEOF'
-import sys, socket, json
+# Script via -c: stdin carries Claude's JSON payload.
+read -r -d '' BOO_HOOK_PY <<'PYEOF'
+import json, socket, sys
 
-sock_path, pane_id = sys.argv[1], sys.argv[2]
+sock_path, pane_id, tab_id = sys.argv[1:4]
+args = sys.argv[4:]
+
+def event_for_claude(p):
+    name = p.get("hook_event_name", "")
+    tool = p.get("tool_name")
+    if name == "UserPromptSubmit":
+        return "prompt", None, None
+    if name in ("PreToolUse", "PostToolUse"):
+        return "tool", None, tool
+    if name == "Notification":
+        kind = p.get("notification_type", "")
+        message = p.get("message", "")
+        if kind in ("permission_prompt", "elicitation_dialog") or (not kind and "permission" in message):
+            return "permission", message, None
+        return None, None, None  # idle reminders, auth notices
+    if name == "Stop":
+        return "stop", None, None
+    if name == "SessionEnd":
+        return "end", None, None
+    return None, None, None
+
+agent = "claude"
+if args and args[0] == "codex":
+    agent = "codex"
+    try:
+        payload = json.loads(args[-1]) if len(args) > 1 else {}
+    except Exception:
+        payload = {}
+    if payload.get("type") != "agent-turn-complete":
+        sys.exit(0)
+    event, message, tool = "stop", None, None
+else:
+    try:
+        payload = json.load(sys.stdin)
+    except Exception:
+        payload = {}
+    event, message, tool = event_for_claude(payload)
+    if event is None and not payload:
+        event = "stop"  # old registrations without a payload were Stop hooks
+    if event is None:
+        sys.exit(0)
+
+msg = {"cmd": "agent_event", "pane_id": pane_id, "event": event, "agent": agent}
+if tab_id:
+    msg["tab_id"] = tab_id
+for key, value in (("message", message), ("tool", tool),
+                   ("session_id", payload.get("session_id")), ("cwd", payload.get("cwd"))):
+    if value:
+        msg[key] = value
 try:
     s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     s.settimeout(2)
     s.connect(sock_path)
-    s.sendall(json.dumps({"cmd": "agent_idle", "pane_id": pane_id}).encode() + b"\n")
+    s.sendall(json.dumps(msg).encode() + b"\n")
     s.recv(256)
     s.close()
 except Exception:
     pass
 PYEOF
+python3 -I -c "$BOO_HOOK_PY" "$BOO_SOCK" "$BOO_PANE_ID" "${BOO_TAB_ID:-}" "$@" 2>/dev/null
+exit 0

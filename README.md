@@ -252,6 +252,9 @@ Boo exposes a Unix domain socket (`~/.boo/boo.sock`) as the primary communicatio
 |                | `new_workspace`        | Open new workspace (optional `path`)                          |
 |                | `new_window`           | Open new window with a fresh workspace                        |
 |                | `send_text`            | Write text to the active terminal                             |
+| **Agents**     | `agent_event`          | Report agent state (`working`/`needs-input`/`done`/`error`/`end`) |
+|                | `agent_inbox`          | List agents across all windows, waiting ones first            |
+|                | `agent_jump`           | Focus an agent's tab (`tab_id`, or next waiting)              |
 | **Events**     | `subscribe`            | Subscribe to push events (`events` array)                     |
 |                | `unsubscribe`          | Remove event subscriptions                                    |
 | **Status Bar** | `statusbar.set`        | Push an external status bar segment                           |

@@ -21,6 +21,7 @@ import Cocoa
 
     var barHeight: CGFloat { DensityMetrics.current.statusBarHeight }
     nonisolated(unsafe) private var settingsObserver: Any?
+    nonisolated(unsafe) private var agentInboxObserver: Any?
 
     // Git state (shared with GitBranchSegment)
     var gitBranch: String?
@@ -74,6 +75,11 @@ import Cocoa
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.needsDisplay = true }
         }
+        agentInboxObserver = NotificationCenter.default.addObserver(
+            forName: .agentInboxChanged, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.needsDisplay = true }
+        }
     }
 
     required init?(coder: NSCoder) {
@@ -98,6 +104,7 @@ import Cocoa
         registerPlugin(systemInfoSegment)
         registerPlugin(PaneInfoSegment())
         registerPlugin(TimeSegment())
+        registerPlugin(AgentInboxSegment())
     }
 
     func registerPlugin(_ plugin: StatusBarPlugin) {
@@ -360,7 +367,7 @@ import Cocoa
     }
 
     deinit {
-        if let observer = settingsObserver {
+        for observer in [settingsObserver, agentInboxObserver].compactMap({ $0 }) {
             NotificationCenter.default.removeObserver(observer)
         }
     }

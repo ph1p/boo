@@ -50,6 +50,9 @@ extension MainWindowController: PaneViewDelegate {
         {
             refreshToolbar()
         }
+        if let tabID = workspace.pane(for: paneID)?.activeTab?.id {
+            AgentInbox.shared.markSeen(tabID: tabID)
+        }
 
         let tab = workspace.pane(for: paneID)?.activeTab
         let cwd = tab?.workingDirectory ?? workspace.folderPath
@@ -215,6 +218,15 @@ extension MainWindowController: PaneViewDelegate {
     }
 
     /// Light the tab's activity dot, raise the pane-wide activity frame, and repaint chrome.
+    /// Agent hook asked for attention: tab dot plus a notification saying why.
+    func signalAgentAttention(workspace: Workspace, pane: Pane, tabIndex: Int, body: String) {
+        guard tabIndex >= 0, tabIndex < pane.tabs.count else { return }
+        markActivity(workspace: workspace, pane: pane, tabIndex: tabIndex)
+        ActivityNotifier.shared.notifyAgent(
+            workspaceName: workspace.displayName, body: body, workspaceID: workspace.id, paneID: pane.id,
+            tabIndex: tabIndex)
+    }
+
     private func markActivity(workspace: Workspace, pane: Pane, tabIndex: Int) {
         pane.setActivity(true, at: tabIndex)
         if let pv = workspacePaneViews[workspace.id]?[pane.id] {
@@ -369,6 +381,8 @@ extension MainWindowController: PaneViewDelegate {
     }
 
     func paneView(_ paneView: PaneView, didRequestCloseTab index: Int, paneID: UUID) {
+        // Closed tabs leave the agent inbox once the close has run.
+        DispatchQueue.main.async { AgentInbox.shared.prune() }
         guard let workspace = activeWorkspace,
             let pane = workspace.pane(for: paneID),
             let pv = paneViews[paneID]
@@ -429,6 +443,8 @@ extension MainWindowController: PaneViewDelegate {
     }
 
     func paneView(_ paneView: PaneView, sessionEnded paneID: UUID) {
+        // Closed tabs leave the agent inbox once the close has run.
+        DispatchQueue.main.async { AgentInbox.shared.prune() }
         guard let workspace = activeWorkspaceForPaneEvent(paneID, event: "sessionEnded") else { return }
 
         if let pane = workspace.pane(for: paneID) {

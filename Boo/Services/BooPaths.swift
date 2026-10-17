@@ -155,32 +155,43 @@ enum BooPaths {
         }
     }
 
-    /// Inject a Stop hook into ~/.claude/settings.json so Boo detects when Claude finishes a response.
-    /// Merges safely with existing hooks — never overwrites user entries.
+    /// Claude Code events the agent hook reports to Boo's agent inbox.
+    static let claudeHookEvents = ["UserPromptSubmit", "PostToolUse", "Notification", "Stop", "SessionEnd"]
+
+    /// Register the agent hook in ~/.claude/settings.json so Boo sees when Claude
+    /// works, waits for permission and finishes. Merges safely with existing
+    /// hooks — never overwrites user entries.
     static func installClaudeHook() {
         let hookScript = shellIntegrationDir.appendingPathComponent("boo-claude-hook")
         let settingsPath = NSHomeDirectory().appendingPathComponent(".claude/settings.json")
 
         guard let data = try? Data(contentsOf: URL(fileURLWithPath: settingsPath)),
-            var root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
-        else { return }
-
-        var hooks = root["hooks"] as? [String: Any] ?? [:]
-        var stopHooks = hooks["Stop"] as? [[String: Any]] ?? []
-
-        let alreadyPresent = stopHooks.contains { entry in
-            guard let inner = entry["hooks"] as? [[String: Any]] else { return false }
-            return inner.contains { ($0["command"] as? String) == hookScript }
-        }
-        guard !alreadyPresent else { return }
-
-        stopHooks.append(["hooks": [["type": "command", "command": hookScript, "timeout": 5, "async": true]]])
-        hooks["Stop"] = stopHooks
-        root["hooks"] = hooks
-
-        guard let updated = try? JSONSerialization.data(withJSONObject: root, options: [.prettyPrinted, .sortedKeys])
+            let root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+            let merged = mergingClaudeHook(command: hookScript, into: root),
+            let updated = try? JSONSerialization.data(withJSONObject: merged, options: [.prettyPrinted, .sortedKeys])
         else { return }
         try? updated.write(to: URL(fileURLWithPath: settingsPath))
+    }
+
+    /// `root` with the hook added for every event in `claudeHookEvents` that
+    /// lacks it; nil when nothing changes.
+    static func mergingClaudeHook(command: String, into root: [String: Any]) -> [String: Any]? {
+        var hooks = root["hooks"] as? [String: Any] ?? [:]
+        var changed = false
+        for event in claudeHookEvents {
+            var entries = hooks[event] as? [[String: Any]] ?? []
+            let present = entries.contains { entry in
+                (entry["hooks"] as? [[String: Any]])?.contains { ($0["command"] as? String) == command } ?? false
+            }
+            guard !present else { continue }
+            entries.append(["hooks": [["type": "command", "command": command, "timeout": 5, "async": true]]])
+            hooks[event] = entries
+            changed = true
+        }
+        guard changed else { return nil }
+        var root = root
+        root["hooks"] = hooks
+        return root
     }
 
     /// Verify that all critical directories exist and are writable.

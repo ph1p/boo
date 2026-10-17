@@ -225,6 +225,11 @@ final class WindowManager {
         controllers.first { c in c.appState.workspaces.contains { $0.id == id } }
     }
 
+    /// Controller holding the pane with `id`, if any window does.
+    func controller(owningPane id: UUID) -> MainWindowController? {
+        controllers.first { $0.appState.workspaceContainingPane(id) != nil }
+    }
+
     // MARK: - Shared handlers
 
     /// Socket and remote-control servers hold a single closure each; install
@@ -280,7 +285,13 @@ final class WindowManager {
     private func dispatchCommand(
         cmd: String, json: [String: Any], reply: @escaping ([String: Any]) -> Void
     ) {
-        guard let target = activeController else {
+        if let response = AgentInbox.shared.handleSocketCommand(cmd: cmd, json: json) {
+            reply(response)
+            return
+        }
+        // agent_idle names the pane it came from; that pane may sit in a background window.
+        let paneID = cmd == "agent_idle" ? (json["pane_id"] as? String).flatMap(UUID.init(uuidString:)) : nil
+        guard let target = paneID.flatMap(controller(owningPane:)) ?? activeController else {
             reply(["ok": false, "error": "no window"])
             return
         }
