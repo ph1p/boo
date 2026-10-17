@@ -88,18 +88,20 @@ class ThemedSplitView: NSSplitView {
     override func drawDivider(in rect: NSRect) {
         super.drawDivider(in: rect)
         guard dividerHoverHighlighted || isDraggingDivider else { return }
-        AppSettings.shared.theme.accentEmphasis.setFill()
-        if isVertical {
-            let barW: CGFloat = 2
-            let bar = CGRect(
-                x: rect.midX - barW / 2, y: rect.minY, width: barW, height: rect.height)
-            NSBezierPath(rect: bar).fill()
-        } else {
-            let barH: CGFloat = 2
-            let bar = CGRect(
-                x: rect.minX, y: rect.midY - barH / 2, width: rect.width, height: barH)
-            NSBezierPath(rect: bar).fill()
-        }
+        // A rounded grip inset from the ends: softer while hovering, solid while dragging.
+        let accent = AppSettings.shared.theme.accentEmphasis
+        (isDraggingDivider ? accent : accent.withAlphaComponent(0.6)).setFill()
+        let barThickness: CGFloat = isDraggingDivider ? 3 : 2
+        let inset: CGFloat = 6
+        let bar =
+            isVertical
+            ? CGRect(
+                x: rect.midX - barThickness / 2, y: rect.minY + inset,
+                width: barThickness, height: max(0, rect.height - inset * 2))
+            : CGRect(
+                x: rect.minX + inset, y: rect.midY - barThickness / 2,
+                width: max(0, rect.width - inset * 2), height: barThickness)
+        NSBezierPath(roundedRect: bar, xRadius: barThickness / 2, yRadius: barThickness / 2).fill()
     }
 
     override func mouseDown(with event: NSEvent) {

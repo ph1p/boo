@@ -352,11 +352,13 @@ extension MainWindowController {
         guard let ws = activeWorkspace else { return }
         let activeID = ws.activePaneID
         for (paneID, pv) in paneViews {
-            pv.layoutTerminalView()
             let isActive = paneID == activeID
             pv.isFocused = isActive
-            guard let gv = pv.ghosttyView else { continue }
-            gv.setFocused(isActive)
+            pv.ghosttyView?.setFocused(isActive)
+            // paneViews caches every workspace's panes; only on-screen ones need
+            // layout and a repaint (hidden ones repaint when they are re-attached).
+            guard window != nil, pv.window === window, let gv = pv.ghosttyView else { continue }
+            pv.layoutTerminalView()
             // Re-sync size + force-refresh every surface. Inactive panes do not reliably
             // repaint via the normal display cycle after being re-attached to the
             // hierarchy (size may be unchanged), leaving them blank until interacted with.
