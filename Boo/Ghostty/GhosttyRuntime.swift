@@ -72,6 +72,7 @@ private func ghosttyAction(_ app: ghostty_app_t?, _ target: ghostty_target_s, _ 
                 let data = String(payload[payload.index(after: semicolonIdx)...])
                 if action == "cmd_start" {
                     DispatchQueue.main.async { [weak view] in
+                        view?.lastCommand = (data, nil)
                         view?.onCommandStart?(data)
                     }
                 }
@@ -95,6 +96,7 @@ private func ghosttyAction(_ app: ghostty_app_t?, _ target: ghostty_target_s, _ 
         guard let view = viewFromTarget() else { return false }
         let exitCode = Int32(action.action.command_finished.exit_code)
         DispatchQueue.main.async { [weak view] in
+            view?.lastCommand?.exitCode = exitCode
             view?.onCommandEnd?(exitCode)
         }
         return true

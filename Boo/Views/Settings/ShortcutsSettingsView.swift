@@ -50,6 +50,7 @@ struct ShortcutsSettingsView: View {
                 ("Move Pane Up", "\u{2303}\u{21E7}\u{2318}\u{2191}"),
                 ("Move Pane Down", "\u{2303}\u{21E7}\u{2318}\u{2193}"),
                 ("Zoom Pane", "\u{21E7}\u{2318}\u{23CE}"),
+                ("Send to Agent", "\u{2325}\u{2318}\u{23CE}"),
                 ("Equalize Splits", "\u{2303}\u{2318}="),
                 ("Increase Font Size", "\u{2318}+"),
                 ("Decrease Font Size", "\u{2318}-"),

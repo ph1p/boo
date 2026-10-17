@@ -35,6 +35,9 @@ import Cocoa
     var onCommandStart: ((String) -> Void)?
     /// Called when OSC 9999 cmd_end fires. Argument is the exit code.
     var onCommandEnd: ((Int32) -> Void)?
+    /// The last command the shell ran here and its exit code (nil while it runs).
+    /// Set by the runtime before `onCommandStart` / `onCommandEnd`.
+    var lastCommand: (command: String, exitCode: Int32?)?
     /// Called when Ghostty fires a terminal bell (BEL / GHOSTTY_ACTION_RING_BELL).
     var onBell: (() -> Void)?
     /// Called when Ghostty requests a desktop notification (OSC 777 / 99).
@@ -79,7 +82,7 @@ import Cocoa
         // couple of frames to paint after a split/tab creation, and a black
         // placeholder flashes visibly on light themes.
         layer?.backgroundColor = AppSettings.shared.theme.background.nsColor.cgColor
-        registerForDraggedTypes([.fileURL, .URL])
+        registerForDraggedTypes([.fileURL, .URL, .string])
         createSurface(workingDirectory: workingDirectory, paneID: paneID, tabID: tabID)
     }
 
@@ -622,6 +625,12 @@ import Cocoa
 
         menu.addItem(.separator())
 
+        let handoff = AgentHandoffMenuTarget.shared.menuItems(for: self)
+        if !handoff.isEmpty {
+            handoff.forEach(menu.addItem)
+            menu.addItem(.separator())
+        }
+
         let flashItem = NSMenuItem(title: "Flash", action: #selector(flashTerminal(_:)), keyEquivalent: "")
         flashItem.target = self
         menu.addItem(flashItem)
@@ -743,6 +752,23 @@ import Cocoa
         return all.suffix(max(lines, 1)).joined(separator: "\n")
     }
 
+    /// The selected text, if any.
+    func readSelectionText() -> String? {
+        guard let surface, ghostty_surface_has_selection(surface) else { return nil }
+        var text = ghostty_text_s()
+        guard ghostty_surface_read_selection(surface, &text) else { return nil }
+        defer { ghostty_surface_free_text(surface, &text) }
+        return string(from: text)
+    }
+
+    /// Output of the last command run here, from the scrollback.
+    func lastCommandOutput() -> (AgentHandoff.Source, String)? {
+        guard let last = lastCommand, let screen = readRecentText(lines: 5000),
+            let output = AgentHandoff.output(of: last.command, in: screen, finished: last.exitCode != nil)
+        else { return nil }
+        return (.output(command: last.command, exitCode: last.exitCode), output)
+    }
+
     private func readText(_ tag: ghostty_point_tag_e) -> String? {
         guard let surface = surface else { return nil }
         let topLeft = ghostty_point_s(tag: tag, coord: GHOSTTY_POINT_COORD_TOP_LEFT, x: 0, y: 0)
@@ -752,6 +778,10 @@ import Cocoa
         var text = ghostty_text_s()
         guard ghostty_surface_read_text(surface, selection, &text) else { return nil }
         defer { ghostty_surface_free_text(surface, &text) }
+        return string(from: text)
+    }
+
+    private func string(from text: ghostty_text_s) -> String? {
         guard let ptr = text.text else { return nil }
         return String(
             decoding: UnsafeBufferPointer(
@@ -916,7 +946,7 @@ import Cocoa
 
     override func draggingEntered(_ sender: any NSDraggingInfo) -> NSDragOperation {
         let types = sender.draggingPasteboard.types ?? []
-        guard types.contains(.fileURL) || types.contains(.URL) else { return [] }
+        guard types.contains(.fileURL) || types.contains(.URL) || types.contains(.string) else { return [] }
         return .copy
     }
 
@@ -935,6 +965,12 @@ import Cocoa
         // Browser URL drops — paste the full URL raw
         if let urlString = pb.string(forType: .URL), !urlString.isEmpty {
             sendText(urlString)
+            return true
+        }
+
+        // Text dragged from another app: paste it like ⌘V would.
+        if let text = pb.string(forType: .string), !text.isEmpty {
+            sendText(text)
             return true
         }
 

@@ -131,6 +131,14 @@ Right-click a task's workspace for **Merge Worktree…** (`git merge --no-ff` in
 echo '{"cmd":"new_agent_task","name":"fix login","prompt":"The login redirect loops, fix it"}' | nc -U "$BOO_SOCK"
 ```
 
+### Handing context to an agent
+
+**Terminal → Send to Agent** (⌥⌘↩) pastes the selection, or else the output of the last command, into the prompt of the nearest agent, without pressing Return, and brings its tab to the front. The agent in the same workspace wins, then the most recently active one. The text arrives fenced, with a header naming the command, its exit code and the directory. Long output keeps its last 60,000 characters, where errors usually are.
+
+Right-click a terminal for **Send Selection to …** and **Send Output of “…” to …**, with a submenu when several agents run. Dropping text or files onto an agent pane pastes them too (files as shell-escaped paths).
+
+Last-command output needs shell integration: Boo cuts it out of the scrollback between the command line and the next prompt.
+
 ## MCP Server
 
 Boo is also an [MCP](https://modelcontextprotocol.io) server, so an agent running in a Boo terminal can arrange its own workspace: start a dev server or test watcher in a pane beside it and read the output later, type into other panes, start parallel agent tasks, or open the review for you. Boo writes a launcher to `~/.boo/shell-integration/boo-mcp` on every start; register it once:

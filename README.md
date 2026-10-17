@@ -42,6 +42,7 @@ Download the latest release from [GitHub Releases](https://github.com/ph1p/boo/r
 - **Signed auto-updater** — Sparkle-based updates with appcast metadata on GitHub Pages and release archives on GitHub Releases
 - **Focus memory** — Remembers last focused pane per workspace, restores on switch
 - **IPC socket** — Unix socket at `~/.boo/boo.sock` for reliable process detection and plugin commands
+- **Context handoff** — Send a selection or the last command's output to an agent pane (Cmd+Opt+Return or right-click), or drop text and files onto it
 - **MCP server** — `~/.boo/shell-integration/boo-mcp` lets coding agents split panes, run commands beside themselves, read other panes and start agent tasks
 - **Debug plugin** — Live event log and terminal state inspector for diagnostics
 

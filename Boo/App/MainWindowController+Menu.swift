@@ -137,6 +137,11 @@ extension MainWindowController {
             title: "Zoom Pane", action: #selector(toggleZoomPaneAction(_:)), keyEquivalent: "\r")
         zoom.keyEquivalentModifierMask = [.command, .shift]
         termMenu.addItem(zoom)
+        let handoff = NSMenuItem(
+            title: "Send to Agent", action: #selector(sendContextToAgentAction(_:)), keyEquivalent: "\r")
+        handoff.keyEquivalentModifierMask = [.command, .option]
+        handoff.toolTip = "Paste the selection, or the last command's output, into the nearest coding agent's prompt"
+        termMenu.addItem(handoff)
         let equalize = NSMenuItem(
             title: "Equalize Splits", action: #selector(equalizeSplitsAction(_:)), keyEquivalent: "=")
         equalize.keyEquivalentModifierMask = [.command, .control]

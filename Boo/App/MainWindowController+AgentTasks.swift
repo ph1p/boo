@@ -354,3 +354,32 @@ extension MainWindowController {
         AgentInbox.shared.jumpToNextAttention()
     }
 }
+
+// MARK: - Context handoff
+
+extension MainWindowController {
+    /// Hands the active terminal's selection, or else its last command's output,
+    /// to the nearest agent: one in this workspace, else the most recently active.
+    @objc func sendContextToAgentAction(_ sender: Any?) {
+        guard let view = activeGhosttyView else {
+            NSSound.beep()
+            return
+        }
+        let cwd = view.tabID.flatMap(AgentHandoff.workingDirectory(ofTab:))
+        let text: String
+        if let selection = view.readSelectionText(), !selection.isEmpty {
+            text = AgentHandoff.compose(selection, source: .selection, cwd: cwd)
+        } else if let (source, output) = view.lastCommandOutput(), !output.isEmpty {
+            text = AgentHandoff.compose(output, source: source, cwd: cwd)
+        } else {
+            NSSound.beep()
+            return
+        }
+        guard let target = AgentHandoff.targets(excluding: view.tabID).first,
+            AgentHandoff.send(text, to: target.tabID)
+        else {
+            NSSound.beep()
+            return
+        }
+    }
+}
