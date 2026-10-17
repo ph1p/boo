@@ -309,7 +309,7 @@ final class BooSocketServer: @unchecked Sendable {
             return
         case "split_pane", "close_pane", "focus_pane", "resize_pane", "swap_pane", "zoom_pane",
             "equalize_splits", "get_layout", "move_workspace_to_new_window", "merge_all_windows",
-            "agent_event", "agent_inbox", "agent_jump", "new_agent_task",
+            "agent_event", "agent_inbox", "agent_jump", "agent_respond", "new_agent_task",
             "review_changes":
             handleControlCommand(cmd: cmd, json: json, clientFD: clientFD)
             return

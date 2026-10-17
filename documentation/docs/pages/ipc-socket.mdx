@@ -14,7 +14,7 @@ Newline-delimited JSON. One request per line, one response per request. Long-liv
 | **Control**    | `set_theme`, `toggle_sidebar`, `switch_workspace`, `new_tab`, `new_workspace`, `send_text` |
 | **Panes**      | `split_pane`, `close_pane`, `focus_pane`, `resize_pane`, `swap_pane`, `zoom_pane`, `equalize_splits`, `get_layout` |
 | **Windows**    | `new_window`, `move_workspace_to_new_window`, `merge_all_windows`                          |
-| **Agents**     | `agent_event`, `agent_inbox`, `agent_jump`, `new_agent_task`, `review_changes`             |
+| **Agents**     | `agent_event`, `agent_inbox`, `agent_jump`, `agent_respond`, `new_agent_task`, `review_changes` |
 | **Process**    | `set_status`, `clear_status`, `list_status`                                                |
 | **Events**     | `subscribe`, `unsubscribe`                                                                 |
 | **Status Bar** | `statusbar.set`, `statusbar.clear`, `statusbar.list`                                       |
@@ -107,6 +107,7 @@ Other agents can report directly:
 | `agent_event` | `event`: `working`, `needs-input`, `done`, `error` or `end`; `tab_id` or `pane_id` (`$BOO_TAB_ID` / `$BOO_PANE_ID`); optional `agent`, `message`, `tool`, `session_id`, `cwd` | `state` |
 | `agent_inbox` |                                                                                                 | `attention`, `items`  |
 | `agent_jump`  | `tab_id`, or omit for the next agent waiting                                                    |                       |
+| `agent_respond` | `tab_id`, `response`: `approve` (types Return) or `deny` (types Escape); optional `updated_at` from `agent_inbox` to refuse if the agent asked something newer | |
 
 `needs-input` waits until the agent works again; `done` and `error` wait until you look at the tab. Entering either state sends a notification unless the tab is in front.
 

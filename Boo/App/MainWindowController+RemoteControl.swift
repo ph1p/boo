@@ -41,6 +41,7 @@ extension MainWindowController {
             "ok": true,
             "workspaces": workspaces,
             "panes": panes,
+            "agents": AgentInbox.shared.remoteItems(),
             "theme": [
                 "name": theme.name,
                 "is_dark": theme.isDark,

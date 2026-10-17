@@ -32,7 +32,7 @@ Download the latest release from [GitHub Releases](https://github.com/ph1p/boo/r
 - **Multi-content tabs** — Tabs can host a terminal, browser (Cmd+Shift+T), text editor, image viewer, or markdown preview
 - **Agent Center** — Auto-detects Claude Code, Codex, OpenCode, and other AI CLI sessions with config/diff overview
 - **Remote explorer** — Auto-detects SSH/Mosh, container (docker, podman, kubectl, …), VM, and device shells; shows the remote file tree
-- **Remote control** — Optional token-protected web UI to control Boo from any device on your LAN (Terminal → Start Remote Control Server)
+- **Remote control** — Optional token-protected web UI to control Boo from any device on your LAN, including approving or denying waiting agents (Terminal → Start Remote Control Server)
 - **Git integration** — Branch name in status bar, clickable branch switcher with local + remote branches
 - **Running process** — Status bar shows the foreground process (zsh, node, vim, etc.)
 - **Customizable** — Font, cursor style, status bar segments, explorer settings
@@ -257,6 +257,7 @@ Boo exposes a Unix domain socket (`~/.boo/boo.sock`) as the primary communicatio
 | **Agents**     | `agent_event`          | Report agent state (`working`/`needs-input`/`done`/`error`/`end`) |
 |                | `agent_inbox`          | List agents across all windows, waiting ones first            |
 |                | `agent_jump`           | Focus an agent's tab (`tab_id`, or next waiting)              |
+|                | `agent_respond`        | Approve (Return) or deny (Escape) a waiting agent (`tab_id`, `response`) |
 |                | `new_agent_task`       | Worktree + branch + workspace running an agent (`name`, `prompt`) |
 |                | `review_changes`       | Open the diff review tab for a workspace (`workspace_id`/`pane_id`) |
 | **Events**     | `subscribe`            | Subscribe to push events (`events` array)                     |

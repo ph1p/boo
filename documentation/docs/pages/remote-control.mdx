@@ -26,8 +26,20 @@ The web UI polls the app over a JSON command API:
 | `select_pane`      | Focus a pane                            |
 | `select_tab`       | Switch tab                              |
 | `new_tab`          | Open a new tab                          |
+| `agent_respond`    | Approve or deny a waiting agent         |
+| `agent_jump`       | Bring an agent's tab to the front      |
 
 The screen is rendered in the browser by the same terminal core Boo uses — Ghostty's VT parser compiled to WebAssembly — so colors and layout match the app.
+
+## Answering Agents
+
+When a coding agent waits for you (a permission prompt, see [Agent Inbox](/ipc-socket#agent-inbox)), a card appears above the screen with the agent, its workspace and the end of its screen, where the agent shows what it wants to run. The page title counts waiting agents and the phone vibrates on each new request.
+
+- **Approve** types Return into the agent's terminal, picking the dialog's default "Yes".
+- **Deny** types Escape, which cancels the request; Claude then waits for new instructions.
+- **Open** brings the agent's tab to the front, so the screen below shows it.
+
+The agent's tab does not have to be in front on the Mac. If the agent has asked something new since the card was drawn, the answer is refused instead of landing on the new question.
 
 ## Security
 

@@ -56,6 +56,14 @@ final class AgentInbox {
     private(set) var items: [UUID: Item] = [:]
     /// Resolves a tab to its window, workspace and pane; nil once the tab is gone.
     var locate: (UUID) -> Location? = { AgentInbox.locateInWindows($0) }
+    /// Reads the screen of a tab's terminal; for the remote page's previews.
+    var readScreen: (UUID) -> String? = { AgentInbox.terminalView(ofTab: $0)?.readViewportText() }
+    /// Types an answer into a tab's terminal; false when it is not open.
+    var sendResponse: (UUID, Response) -> Bool = { tabID, response in
+        guard let view = AgentInbox.terminalView(ofTab: tabID) else { return false }
+        AgentInbox.sendResponse(response, to: view)
+        return true
+    }
 
     init() {}
 
@@ -258,6 +266,8 @@ extension AgentInbox {
         case "agent_inbox":
             prune()
             return ["ok": true, "attention": attentionCount, "items": sortedItems.map(Self.serialize)]
+        case "agent_respond":
+            return respond(json)
         case "agent_jump":
             if let id = (json["tab_id"] as? String).flatMap(UUID.init(uuidString:)) {
                 return ["ok": jump(to: id)]

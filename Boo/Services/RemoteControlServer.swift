@@ -46,7 +46,8 @@ final class RemoteControlServer: @unchecked Sendable {
     /// Commands accepted from the web API.
     private static let allowedCommands: Set<String> = [
         "get_state", "get_screen", "send_text", "send_key",
-        "switch_workspace", "select_tab", "new_tab", "select_pane"
+        "switch_workspace", "select_tab", "new_tab", "select_pane",
+        "agent_respond", "agent_jump"
     ]
 
     private(set) var token: String = ""

@@ -509,6 +509,12 @@ class PaneView: NSView {
     /// Remove and return a GhosttyView for cross-pane transfer. Does not destroy it.
     /// Call AFTER extractTab — the active tab will have shifted, so we check the
     /// cache first, then fall back to the currently displayed ghosttyView.
+    /// The terminal of `tabID`, displayed or cached off-screen, without moving it.
+    func terminalView(forTab tabID: UUID) -> GhosttyView? {
+        if let gv = ghosttyView, gv.tabID == tabID { return gv }
+        return tabViews[tabID]
+    }
+
     func extractGhosttyView(for tabID: UUID) -> GhosttyView? {
         // Check the off-screen cache
         if let gv = tabViews.removeValue(forKey: tabID) {

@@ -330,6 +330,9 @@ Check your Browserslist config to be sure that your targets are set up correctly
                               bg-panel/70 px-3 py-2 empty:hidden"></nav>
   <nav id="tabs" class="no-bar flex gap-2 overflow-x-auto border-b border-edge
                         bg-panel/40 px-3 py-2 empty:hidden"></nav>
+  <!-- Agents waiting for the user: permission prompts to approve or deny. -->
+  <section id="agents" class="flex max-h-[45vh] flex-col gap-2 overflow-y-auto border-b border-edge
+                              bg-panel px-3 py-2 empty:hidden"></section>
 
   <main id="scroller" class="relative flex-1 overflow-auto bg-screen-bg [-webkit-overflow-scrolling:touch]">
     <div id="screen" class="min-h-full whitespace-pre px-3 py-2.5 text-screen-fg
@@ -749,10 +752,97 @@ Check your Browserslist config to be sure that your targets are set up correctly
     }));
   }
 
+  // --- Agents ----------------------------------------------------------
+
+  let attention = 0;
+  let lastAgents = null;
+  let seenRequests = new Set();
+
+  function agentButton(label, color, onClick) {
+    const btn = document.createElement("button");
+    btn.className = "key flex-1 font-semibold";
+    if (color) {
+      btn.style.background = color;
+      btn.style.borderColor = "transparent";
+      btn.style.color = "var(--screen-bg)";
+    }
+    btn.textContent = label;
+    btn.addEventListener("click", async () => {
+      btn.disabled = true;
+      try { await onClick(); } catch (_) { /* handled by status */ }
+      lastAgents = null;
+      refreshAll();
+    });
+    return btn;
+  }
+
+  async function respond(agent, response) {
+    const res = await api("agent_respond", {
+      tab_id: agent.tab_id, response, updated_at: agent.updated_at
+    });
+    if (!res.ok) alert(res.error || "Could not answer the agent");
+  }
+
+  function renderAgents(agents) {
+    attention = agents.length;
+    const key = JSON.stringify(agents);
+    if (key === lastAgents) return;
+    lastAgents = key;
+
+    // Buzz once per new request, not on every redraw.
+    const requests = new Set(agents.filter((a) => a.state === "needs-input")
+      .map((a) => a.tab_id + "@" + a.updated_at));
+    if ([...requests].some((r) => !seenRequests.has(r)) && navigator.vibrate) {
+      navigator.vibrate([120, 60, 120]);
+    }
+    seenRequests = requests;
+
+    $("agents").replaceChildren(...agents.map((agent) => {
+      const waiting = agent.state === "needs-input";
+      const card = document.createElement("div");
+      card.className = "flex min-w-0 flex-col gap-2 rounded-lg border border-edge bg-raised p-2.5";
+      if (waiting) card.style.borderColor = "var(--yellow)";
+
+      const head = document.createElement("div");
+      head.className = "flex items-baseline justify-between gap-2 text-xs";
+      const label = document.createElement("span");
+      label.className = "truncate font-semibold text-fg";
+      label.textContent = agent.label;
+      const summary = document.createElement("span");
+      summary.className = "truncate text-dim";
+      summary.textContent = agent.summary;
+      head.append(label, summary);
+      card.appendChild(head);
+
+      if (agent.preview) {
+        const pre = document.createElement("pre");
+        pre.className = "max-h-48 min-w-0 overflow-auto rounded bg-screen-bg p-2 font-mono text-[11px] "
+          + "leading-snug text-screen-fg";
+        pre.textContent = agent.preview;
+        card.appendChild(pre);
+        // The question sits at the end of the screen.
+        requestAnimationFrame(() => { pre.scrollTop = pre.scrollHeight; });
+      }
+
+      const actions = document.createElement("div");
+      actions.className = "flex gap-2";
+      if (waiting) {
+        actions.append(
+          agentButton("Approve", "var(--green)", () => respond(agent, "approve")),
+          agentButton("Deny", "var(--red)", () => respond(agent, "deny")));
+      }
+      actions.appendChild(agentButton("Open", null,
+        () => api("agent_jump", { tab_id: agent.tab_id })));
+      card.appendChild(actions);
+      return card;
+    }));
+  }
+
   async function refreshState() {
     const state = await api("get_state");
     if (!state.ok) return;
     applyTheme(state.theme);
+    renderAgents(state.agents || []);
     const key = JSON.stringify([state.workspaces, state.panes]);
     if (key === lastState) return;
     lastState = key;
@@ -813,7 +903,8 @@ Check your Browserslist config to be sure that your targets are set up correctly
     renderScreen(screen);
     $("cwd").textContent = screen.cwd;
     $("title").textContent = screen.title || "remote control";
-    document.title = screen.title ? screen.title + " — Boo" : "Boo Remote Control";
+    document.title = (attention ? "(" + attention + ") " : "")
+      + (screen.title ? screen.title + " — Boo" : "Boo Remote Control");
     if (atBottom) scroller.scrollTop = scroller.scrollHeight;
     updateToBottom();
   }
@@ -829,11 +920,12 @@ Check your Browserslist config to be sure that your targets are set up correctly
 
   // Screen changes every second; workspace/tab structure rarely does.
   // Poll the screen fast, the state on every 5th tick (actions call
-  // refreshAll directly, so switches still update immediately).
+  // refreshAll directly, so switches still update immediately). While an
+  // agent waits, every other tick, so a new question shows up quickly.
   let tick = 0;
   async function poll() {
     try {
-      if (tick % 5 === 0) await refreshState();
+      if (tick % (attention ? 2 : 5) === 0) await refreshState();
       tick += 1;
       await refreshScreen();
       setStatus("live");
