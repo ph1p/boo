@@ -593,14 +593,20 @@ extension MainWindowController {
     }
 
     func splitActivePane(direction: SplitTree.SplitDirection) {
-        guard let workspace = activeWorkspace else { return }
+        splitActivePane(toward: direction == .horizontal ? .right : .down)
+    }
+
+    /// Split the active pane, placing the new pane on `edge`; returns its ID.
+    @discardableResult
+    func splitActivePane(toward edge: PaneDirection) -> UUID? {
+        guard let workspace = activeWorkspace else { return nil }
         let oldPaneID = workspace.activePaneID
-        booLog(.debug, .sidebar, "splitting pane=\(oldPaneID.uuidString.prefix(8)) direction=\(direction)")
+        booLog(.debug, .sidebar, "splitting pane=\(oldPaneID.uuidString.prefix(8)) edge=\(edge)")
         window?.makeFirstResponder(nil)
 
-        guard let newID = workspace.splitPane(oldPaneID, direction: direction) else {
+        guard let newID = workspace.splitPane(oldPaneID, toward: edge) else {
             booLog(.debug, .sidebar, "splitActivePane: pane \(oldPaneID.uuidString.prefix(8)) not found — no-op")
-            return
+            return nil
         }
         booLog(.debug, .sidebar, "created pane=\(newID.uuidString.prefix(8)) from=\(oldPaneID.uuidString.prefix(8))")
         // Inherit parent tab's plugin state so sidebar stays consistent
@@ -660,6 +666,7 @@ extension MainWindowController {
             }
         }
         refreshStatusBar()
+        return newID
     }
 
     @objc func closePaneAction(_ sender: Any?) {

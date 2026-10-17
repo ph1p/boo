@@ -307,6 +307,10 @@ final class BooSocketServer: @unchecked Sendable {
             "select_tab":
             handleControlCommand(cmd: cmd, json: json, clientFD: clientFD)
             return
+        case "split_pane", "close_pane", "focus_pane", "resize_pane", "swap_pane", "zoom_pane",
+            "equalize_splits", "get_layout", "move_workspace_to_new_window":
+            handleControlCommand(cmd: cmd, json: json, clientFD: clientFD)
+            return
 
         // Subscriptions
         case "subscribe":

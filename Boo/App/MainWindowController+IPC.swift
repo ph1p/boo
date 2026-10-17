@@ -11,6 +11,7 @@ extension MainWindowController {
     func handleIPCCommand(
         cmd: String, json: [String: Any], reply: @escaping ([String: Any]) -> Void
     ) {
+        if handleIPCLayoutCommand(cmd: cmd, json: json, reply: reply) { return }
         switch cmd {
         case "set_theme":
             ipcSetTheme(json: json, reply: reply)

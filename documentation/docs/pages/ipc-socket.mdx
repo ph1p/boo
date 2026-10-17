@@ -12,6 +12,8 @@ Newline-delimited JSON. One request per line, one response per request. Long-liv
 | -------------- | ------------------------------------------------------------------------------------------ |
 | **Query**      | `get_context`, `get_theme`, `get_settings`, `get_workspaces`                               |
 | **Control**    | `set_theme`, `toggle_sidebar`, `switch_workspace`, `new_tab`, `new_workspace`, `send_text` |
+| **Panes**      | `split_pane`, `close_pane`, `focus_pane`, `resize_pane`, `swap_pane`, `zoom_pane`, `equalize_splits`, `get_layout` |
+| **Windows**    | `new_window`, `move_workspace_to_new_window`                                               |
 | **Process**    | `set_status`, `clear_status`, `list_status`                                                |
 | **Events**     | `subscribe`, `unsubscribe`                                                                 |
 | **Status Bar** | `statusbar.set`, `statusbar.clear`, `statusbar.list`                                       |
@@ -57,6 +59,29 @@ Write text directly to the active terminal's PTY — identical to typing it.
 
 ```bash
 echo '{"cmd":"send_text","text":"cd ~/projects/myapp\n"}' | nc -U "$BOO_SOCK"
+```
+
+## Pane Layout
+
+Commands act on the active workspace of the frontmost Boo window. `direction` is `left`, `right`, `up` or `down`.
+
+| Command                        | Arguments                                         | Reply                        |
+| ------------------------------ | ------------------------------------------------- | ---------------------------- |
+| `split_pane`                   | `direction` (default `right`): side of the new pane | `pane_id`                  |
+| `close_pane`                   | `pane_id` (default active); never the only pane   | `active_pane`                |
+| `focus_pane`                   | `direction`, or `next` / `previous`               | `active_pane`                |
+| `resize_pane`                  | `direction`, `amount` in points (default 10)      |                              |
+| `swap_pane`                    | `direction`                                       |                              |
+| `zoom_pane`                    | `zoomed` (`true`/`false`; omit to toggle)         | `zoomed`                     |
+| `equalize_splits`              |                                                   |                              |
+| `get_layout`                   |                                                   | `tree`, `panes`, `windows`   |
+| `move_workspace_to_new_window` | `index` (default active)                          | `windows`                    |
+
+`get_layout` returns the split tree with ratios, each pane's on-screen `frame` (top-left origin, points) and whether it is `visible` (hidden while another pane is zoomed).
+
+```bash
+echo '{"cmd":"split_pane","direction":"down"}' | nc -U "$BOO_SOCK"
+echo '{"cmd":"get_layout"}' | nc -U "$BOO_SOCK"
 ```
 
 ## Status Bar Segments
