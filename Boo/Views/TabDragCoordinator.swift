@@ -11,6 +11,9 @@ enum TabDropZone: Equatable {
     /// Thin band along an outer edge of the workspace: the new pane spans
     /// that whole side instead of splitting only the pane under the cursor.
     case workspaceEdge(PaneDirection)
+    /// ⌥ held over the middle of another pane in the same workspace: the two
+    /// panes trade places instead of the tab moving.
+    case swapPanes
 
     /// Side the new pane goes on, and whether it spans the workspace; nil for
     /// drops that keep the tab in an existing pane.
@@ -21,7 +24,7 @@ enum TabDropZone: Equatable {
         case .top: return (.up, false)
         case .bottom: return (.down, false)
         case .workspaceEdge(let edge): return (edge, true)
-        case .tabBarInsert, .center: return nil
+        case .tabBarInsert, .center, .swapPanes: return nil
         }
     }
 }
@@ -55,11 +58,13 @@ enum TabDropZone: Equatable {
     var paneViews: [UUID: PaneView] = [:]
 
     // Drag state
-    private var sourcePaneView: PaneView?
+    /// Pane the dragged tab came from (internal for tests).
+    var sourcePaneView: PaneView?
     private var sourceTabIndex: Int?
     private var ghostWindow: NSWindow?
     private var indicator: TabDropIndicatorView?
     private var tabInsertIndicator: TabInsertionIndicatorView?
+    private var swapSourceIndicator: TabDropIndicatorView?
     private var eventMonitor: Any?
     private var currentDropTarget: (PaneView, TabDropZone)?
 
@@ -143,6 +148,8 @@ enum TabDropZone: Equatable {
         indicator = nil
         tabInsertIndicator?.removeFromSuperview()
         tabInsertIndicator = nil
+        hideSwapSourceIndicator()
+        swapModifierHeld = false
         sourcePaneView = nil
         sourceTabIndex = nil
         currentDropTarget = nil
@@ -155,13 +162,23 @@ enum TabDropZone: Equatable {
     // MARK: - Event monitor
 
     private func installEventMonitor() {
-        eventMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDragged, .leftMouseUp, .keyDown]) {
+        eventMonitor = NSEvent.addLocalMonitorForEvents(matching: [
+            .leftMouseDragged, .leftMouseUp, .keyDown, .flagsChanged
+        ]) {
             [weak self] event in
             guard let self else { return event }
 
             switch event.type {
             case .leftMouseDragged:
                 self.handleDrag(event)
+                return event
+            case .flagsChanged:
+                // Toggling ⌥ without moving the mouse flips swap ↔ append.
+                let held = event.modifierFlags.contains(.option)
+                if held != self.swapModifierHeld {
+                    self.swapModifierHeld = held
+                    self.hitTest(screenPoint: NSEvent.mouseLocation)
+                }
                 return event
             case .leftMouseUp:
                 self.executeDrop()
@@ -222,10 +239,13 @@ enum TabDropZone: Equatable {
 
     private func hitTestPaneViews(event: NSEvent) {
         guard let sourceView = sourcePaneView else { return }
-        let screenPoint = event.locationInWindow
         guard let eventWindow = event.window ?? sourceView.window else { return }
-        let screenLoc = eventWindow.convertPoint(toScreen: screenPoint)
+        swapModifierHeld = event.modifierFlags.contains(.option)
+        hitTest(screenPoint: eventWindow.convertPoint(toScreen: event.locationInWindow))
+    }
 
+    private func hitTest(screenPoint screenLoc: NSPoint) {
+        guard sourcePaneView != nil else { return }
         var foundTarget: (PaneView, TabDropZone)?
 
         for (_, pv) in paneViewsAtScreenPoint?(screenLoc) ?? paneViews {
@@ -262,6 +282,7 @@ enum TabDropZone: Equatable {
     private func hideIndicators() {
         indicator?.removeFromSuperview()
         indicator = nil
+        hideSwapSourceIndicator()
         tabInsertIndicator?.removeFromSuperview()
         tabInsertIndicator = nil
     }
@@ -301,6 +322,10 @@ enum TabDropZone: Equatable {
             return nearest.0
         }
 
+        if swapModifierHeld, canSwap(with: paneView) {
+            return .swapPanes
+        }
+
         // Center of terminal → append tab. A distinct zone so the indicator can
         // highlight the whole pane — an insertion line up in the tab bar while
         // the cursor is mid-pane reads as misplaced.
@@ -334,6 +359,18 @@ enum TabDropZone: Equatable {
 
     /// Whether dropping the dragged tab on `zone` of `paneView` changes nothing
     /// (a pane's only tab dropped back onto that pane).
+    /// True while ⌥ is held during a drag (swap panes instead of moving the tab).
+    var swapModifierHeld = false
+
+    /// Panes can swap only with another pane rendered in the source's split container.
+    private func canSwap(with paneView: PaneView) -> Bool {
+        // A source pane moved out of the container (cross-workspace hover) has none.
+        guard let source = sourcePaneView, source !== paneView,
+            let container = splitContainer(of: source)
+        else { return false }
+        return splitContainer(of: paneView) === container
+    }
+
     private func isNoOpDrop(on paneView: PaneView, zone: TabDropZone) -> Bool {
         guard paneView === sourcePaneView, paneView.pane.tabs.count == 1 else { return false }
         if case .workspaceEdge = zone { return false }
@@ -346,6 +383,7 @@ enum TabDropZone: Equatable {
         guard let contentView = paneView.window?.contentView else { return }
 
         let paneRect = paneView.convert(paneView.bounds, to: contentView)
+        updateSwapSourceIndicator(visible: zone == .swapPanes, in: contentView)
 
         switch zone {
         case .tabBarInsert(let index):
@@ -380,7 +418,7 @@ enum TabDropZone: Equatable {
                 y: barTop - rowCenterY - lineHeight / 2,
                 width: lineWidth, height: lineHeight)
 
-        case .left, .right, .top, .bottom, .center, .workspaceEdge:
+        case .left, .right, .top, .bottom, .center, .workspaceEdge, .swapPanes:
             // Hide tab insertion indicator
             tabInsertIndicator?.removeFromSuperview()
             tabInsertIndicator = nil
@@ -403,9 +441,9 @@ enum TabDropZone: Equatable {
                 indicatorRect = NSRect(
                     x: paneRect.minX + 2, y: paneRect.minY + 2,
                     width: paneRect.width - 4, height: paneRect.height * 0.5 - 4)
-            case .center:
-                // Append to this pane: highlight the whole pane, not a line in
-                // the tab bar the cursor is nowhere near.
+            case .center, .swapPanes:
+                // Append to (or swap with) this pane: highlight the whole pane,
+                // not a line in the tab bar the cursor is nowhere near.
                 indicatorRect = paneRect.insetBy(dx: 2, dy: 2)
             case .workspaceEdge(let edge):
                 guard let rect = workspaceEdgeRect(for: paneView, edge: edge, in: contentView) else { return }
@@ -434,6 +472,29 @@ enum TabDropZone: Equatable {
                 }
             }
         }
+    }
+
+    /// Second highlight on the dragged tab's own pane while swapping, so both
+    /// panes that trade places light up.
+    private func updateSwapSourceIndicator(visible: Bool, in contentView: NSView) {
+        guard visible, let source = sourcePaneView else {
+            hideSwapSourceIndicator()
+            return
+        }
+        let rect = source.convert(source.bounds, to: contentView).insetBy(dx: 2, dy: 2)
+        if let swapSourceIndicator, swapSourceIndicator.superview === contentView {
+            swapSourceIndicator.frame = rect
+            return
+        }
+        hideSwapSourceIndicator()
+        let view = TabDropIndicatorView(frame: rect)
+        contentView.addSubview(view)
+        swapSourceIndicator = view
+    }
+
+    private func hideSwapSourceIndicator() {
+        swapSourceIndicator?.removeFromSuperview()
+        swapSourceIndicator = nil
     }
 
     /// Preview of a whole-workspace drop: the strip along `edge` the new pane

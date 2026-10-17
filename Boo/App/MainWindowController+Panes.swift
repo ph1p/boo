@@ -845,6 +845,9 @@ extension MainWindowController {
             if source.pane.tabs.isEmpty {
                 closeEmptyPane(source.paneID)
             }
+        case .swapPanes:
+            guard let workspace = activeWorkspace else { break }
+            swapPanes(source.paneID, dest.paneID, in: workspace)
         case .left, .right, .top, .bottom, .workspaceEdge:
             guard let placement = zone.splitPlacement else { break }
             splitPaneWithTab(

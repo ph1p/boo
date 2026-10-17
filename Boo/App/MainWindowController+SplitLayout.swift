@@ -72,7 +72,15 @@ extension MainWindowController {
         let active = workspace.activePaneID
         guard let target = workspace.splitTree.neighbor(of: active, toward: direction, in: splitLayoutSize)
         else { return }
-        workspace.splitTree = workspace.splitTree.swappingLeaves(active, target)
+        swapPanes(active, target, in: workspace)
+    }
+
+    /// Trade the positions of two panes; `moved` becomes the active pane.
+    func swapPanes(_ moved: UUID, _ other: UUID, in workspace: Workspace) {
+        let swapped = workspace.splitTree.swappingLeaves(moved, other)
+        guard swapped != workspace.splitTree else { return }
+        workspace.splitTree = swapped
+        workspace.activePaneID = moved
         applyStructuralLayoutChange(in: workspace)
         saveSession()
     }

@@ -71,7 +71,28 @@ import XCTest
         XCTAssertEqual(coordinator.dropZone(in: left, at: NSPoint(x: 30, y: 300)), .left)
     }
 
+    func testOptionOverOtherPaneCenterSwaps() throws {
+        let a = UUID()
+        let b = UUID()
+        let delegate = layout(.split(direction: .horizontal, first: .leaf(id: a), second: .leaf(id: b), ratio: 0.5))
+        let left = try XCTUnwrap(delegate.panes[a])
+        let right = try XCTUnwrap(delegate.panes[b])
+        let middle = NSPoint(x: right.bounds.midX, y: right.bounds.midY)
+        coordinator.sourcePaneView = left
+
+        XCTAssertEqual(coordinator.dropZone(in: right, at: middle), .center)
+        coordinator.swapModifierHeld = true
+        XCTAssertEqual(coordinator.dropZone(in: right, at: middle), .swapPanes)
+        // Never with itself, and edges still split.
+        XCTAssertEqual(coordinator.dropZone(in: left, at: NSPoint(x: left.bounds.midX, y: left.bounds.midY)), .center)
+        XCTAssertEqual(coordinator.dropZone(in: right, at: NSPoint(x: 30, y: middle.y)), .left)
+        // A source outside this container (another workspace or window) can't swap.
+        coordinator.sourcePaneView = layout(.leaf(id: UUID())).panes.values.first
+        XCTAssertEqual(coordinator.dropZone(in: right, at: middle), .center)
+    }
+
     func testSplitPlacement() {
+        XCTAssertNil(TabDropZone.swapPanes.splitPlacement)
         XCTAssertNil(TabDropZone.center.splitPlacement)
         XCTAssertNil(TabDropZone.tabBarInsert(index: 0).splitPlacement)
         XCTAssertEqual(TabDropZone.top.splitPlacement?.edge, .up)
