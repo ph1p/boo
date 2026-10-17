@@ -324,6 +324,14 @@ class ThemedSplitView: NSSplitView {
     enum ClosedItem {
         case tab(paneID: UUID, workingDirectory: String, index: Int)
         case pane(siblingPaneID: UUID, workingDirectory: String, direction: SplitTree.SplitDirection)
+
+        /// Pane the entry reopens into.
+        var paneID: UUID {
+            switch self {
+            case .tab(let paneID, _, _): return paneID
+            case .pane(let siblingPaneID, _, _): return siblingPaneID
+            }
+        }
     }
     var undoStack: [ClosedItem] = []
 

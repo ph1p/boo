@@ -5,6 +5,10 @@ import Cocoa
 struct DetachedWorkspace {
     let workspace: Workspace
     let paneViews: [UUID: PaneView]
+    /// Plugin tab dedupe keys of the workspace's tabs (tab ID → "typeID:key").
+    var tabKeys: [UUID: String] = [:]
+    /// Reopen-closed entries that point into this workspace, oldest first.
+    var undoItems: [MainWindowController.ClosedItem] = []
 }
 
 /// A tab taken out of its pane together with its live view (nil when the tab
@@ -13,6 +17,8 @@ struct DetachedTab {
     let tab: Pane.Tab
     let ghosttyView: GhosttyView?
     let contentView: ContentViewProtocol?
+    /// Plugin tab dedupe key ("typeID:key"), when the tab was opened as one.
+    var tabKey: String?
 }
 
 // MARK: - Moving workspaces between windows
@@ -61,16 +67,23 @@ extension MainWindowController {
             notifyTerminalClosed(for: pane.tabs)
             bridge.monitor.untrack(paneID: pane.id)
         }
+        var detached = DetachedWorkspace(workspace: ws, paneViews: views)
+        let paneIDs = Set(ws.panes.keys)
+        for tabID in ws.panes.values.flatMap({ $0.tabs.map(\.id) }) {
+            detached.tabKeys[tabID] = registeredTabKeys.removeValue(forKey: tabID)
+        }
+        detached.undoItems = undoStack.filter { paneIDs.contains($0.paneID) }
+        undoStack.removeAll { paneIDs.contains($0.paneID) }
         appState.detachWorkspace(at: index)
         if renderedWorkspaceID == ws.id { renderedWorkspaceID = nil }
-        guard !appState.workspaces.isEmpty else { return DetachedWorkspace(workspace: ws, paneViews: views) }
+        guard !appState.workspaces.isEmpty else { return detached }
         if wasActive {
             activateWorkspace(appState.activeWorkspaceIndex)
         } else {
             refreshToolbar()
         }
         saveSession(persistSidebarState: false)
-        return DetachedWorkspace(workspace: ws, paneViews: views)
+        return detached
     }
 
     /// Take over a workspace detached from another window and show it.
@@ -83,6 +96,8 @@ extension MainWindowController {
             trackShell(of: pv.ghosttyView, paneID: paneID, tabID: ws.pane(for: paneID)?.activeTab?.id)
         }
         workspacePaneViews[ws.id] = detached.paneViews
+        registeredTabKeys.merge(detached.tabKeys) { _, moved in moved }
+        detached.undoItems.forEach(pushUndo)
         let dest = appState.insertWorkspace(ws, at: index ?? appState.workspaces.count)
         activateWorkspace(dest)
         saveSession()
@@ -159,6 +174,7 @@ extension MainWindowController {
                 moved.tab, ghosttyView: moved.ghosttyView, contentView: moved.contentView,
                 into: dest, zone: zone, workspace: destWorkspace)
             target.trackShell(of: moved.ghosttyView, paneID: paneID, tabID: moved.tab.id)
+            target.registeredTabKeys[moved.tab.id] = moved.tabKey
             target.saveSession()
             target.window?.makeKeyAndOrderFront(nil)
             self.finishTabMoveOut(source: source, workspace: sourceWorkspace)
@@ -217,7 +233,9 @@ extension MainWindowController {
         } else if let cv = moved.contentView {
             pv.insertContentView(cv, for: moved.tab.id)
         }
-        return DetachedWorkspace(workspace: ws, paneViews: [paneID: pv])
+        var detached = DetachedWorkspace(workspace: ws, paneViews: [paneID: pv])
+        detached.tabKeys[moved.tab.id] = moved.tabKey
+        return detached
     }
 
     /// Take a tab and its view out of `source` for another window.
@@ -226,7 +244,9 @@ extension MainWindowController {
         let gv = tab.contentType == .terminal ? source.extractGhosttyView(for: tab.id) : nil
         let cv = tab.contentType != .terminal ? source.extractContentView(for: tab.id) : nil
         notifyTerminalClosed(for: tab.id)
-        return DetachedTab(tab: tab, ghosttyView: gv, contentView: cv)
+        var detached = DetachedTab(tab: tab, ghosttyView: gv, contentView: cv)
+        detached.tabKey = registeredTabKeys.removeValue(forKey: tab.id)
+        return detached
     }
 
     /// Tidy `source` after one of its tabs left for another window: show the

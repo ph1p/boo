@@ -118,6 +118,29 @@ final class WindowManagerTests: XCTestCase {
         XCTAssertFalse(moving.panes.values.flatMap(\.tabs).isEmpty)
     }
 
+    func testDetachAndAdoptCarriesTabKeysAndUndoHistory() throws {
+        let source = MainWindowController(restoreSession: false)
+        let target = MainWindowController(restoreSession: false)
+        Self.keptAlive += [source, target]
+        let staying = try XCTUnwrap(source.activeWorkspace)
+        source.openWorkspace(path: Self.emptyFolder())
+        let moving = source.appState.workspaces[1]
+        let movingPaneID = moving.activePaneID
+        let movingTabID = try XCTUnwrap(moving.panes[movingPaneID]?.tabs.first?.id)
+        source.registeredTabKeys[movingTabID] = "plugin:key"
+        source.pushUndo(.tab(paneID: movingPaneID, workingDirectory: "/m", index: 0))
+        source.pushUndo(.tab(paneID: staying.activePaneID, workingDirectory: "/s", index: 0))
+
+        let detached = try XCTUnwrap(source.detachWorkspace(at: 1))
+        Self.keptDetached.append(detached)
+        XCTAssertNil(source.registeredTabKeys[movingTabID])
+        XCTAssertEqual(source.undoStack.map(\.paneID), [staying.activePaneID])
+
+        target.adoptWorkspace(detached)
+        XCTAssertEqual(target.registeredTabKeys[movingTabID], "plugin:key")
+        XCTAssertEqual(target.undoStack.map(\.paneID), [movingPaneID])
+    }
+
     func testMovedWorkspaceIsSavedWithTargetWindow() throws {
         let tempFile = (NSTemporaryDirectory() as NSString).appendingPathComponent(
             "boo-session-move-\(UUID().uuidString).json"
