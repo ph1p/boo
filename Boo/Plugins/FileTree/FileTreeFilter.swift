@@ -209,15 +209,18 @@ final class FileTreeFilterModel: ObservableObject {
             buildIndex()
             return
         }
-        // Detached (not a child of a main-actor task) so `cancel()` reaches the scan
-        // inside `rank` and a superseded keystroke stops early.
-        searchTask = Task.detached(priority: .userInitiated) { [weak self] in
-            let ranked = FileTreeFuzzy.rank(q, in: index)
-            guard !Task.isCancelled else { return }
-            await MainActor.run {
-                guard let self, self.trimmedQuery == q else { return }
-                self.matches = ranked
+        // Scan off-main; cancelling the search forwards to the scan inside `rank`, so
+        // a superseded keystroke stops early. `self` stays on the main actor: the
+        // detached closure must not capture it (Swift 6.2 flags that as a data race).
+        searchTask = Task { [weak self] in
+            let scan = Task.detached(priority: .userInitiated) { FileTreeFuzzy.rank(q, in: index) }
+            let ranked = await withTaskCancellationHandler {
+                await scan.value
+            } onCancel: {
+                scan.cancel()
             }
+            guard !Task.isCancelled, let self, self.trimmedQuery == q else { return }
+            self.matches = ranked
         }
     }
 
