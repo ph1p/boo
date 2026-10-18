@@ -167,8 +167,13 @@ final class AgentTimelineTests: XCTestCase {
         parser.consume(Data((transcript + "\n").utf8))
         XCTAssertEqual(parser.timeline.turns.count, 1)
         let sub = assistant("s1", [], at: "00:03", usage: ["input_tokens": 0, "output_tokens": 1_000_000])
-        parser.setSubagent("a.jsonl", Data(sub.utf8))
-        parser.setSubagent("a.jsonl", Data(sub.utf8))
+        let line = Data((sub + "\n").utf8)
+        parser.consumeSubagent("a.jsonl", line.prefix(10))
+        XCTAssertEqual(parser.timeline.subagentUsage.output, 0, "a partial line waits for the rest")
+        parser.consumeSubagent("a.jsonl", line.dropFirst(10))
+        XCTAssertEqual(parser.timeline.subagentUsage.output, 1_000_000)
+        parser.resetSubagent("a.jsonl")
+        parser.consumeSubagent("a.jsonl", line)
         XCTAssertEqual(parser.timeline.subagentUsage.output, 1_000_000, "reading a file again replaces it")
         XCTAssertEqual(
             parser.timeline.cost,
@@ -221,7 +226,7 @@ final class AgentTimelineTests: XCTestCase {
         handle.seekToEndOfFile()
         handle.write(Data((user("again", at: "00:01") + "\n").utf8))
         try handle.close()
-        try Data(assistant("s", [], at: "00:02").utf8).write(
+        try Data((assistant("s", [], at: "00:02") + "\n").utf8).write(
             to: project.appendingPathComponent("abc/subagents/agent-1.jsonl"))
         let grown = store.load(url)
         XCTAssertEqual(grown?.turns.map(\.prompt), ["hello", "again"])
@@ -247,6 +252,8 @@ final class AgentTimelineTests: XCTestCase {
         XCTAssertEqual((turns[0]["loops"] as? [[String: Any]])?.first?["count"] as? Int, 3)
         XCTAssertNotNil(try? JSONSerialization.data(withJSONObject: summary))
 
-        XCTAssertEqual(AgentInbox.shared.handleSocketCommand(cmd: "agent_timeline", json: [:])?["ok"] as? Bool, false)
+        var reply: [String: Any]?
+        AgentInbox.shared.timeline([:]) { reply = $0 }
+        XCTAssertEqual(reply?["ok"] as? Bool, false, "missing ids are refused without a transcript read")
     }
 }

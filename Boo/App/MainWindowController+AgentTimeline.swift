@@ -11,6 +11,8 @@ extension MainWindowController {
     @discardableResult
     func openTimeline(sessionID: String, label: String) -> Bool {
         guard let workspace = activeWorkspace else { return false }
+        // Drop tabs closed since: the map is shared by every window.
+        timelineTabs = timelineTabs.filter { AgentInbox.locateInWindows($0.value) != nil }
         if let tabID = timelineTabs[sessionID] {
             for pane in workspace.panes.values {
                 if let tabIndex = pane.tabs.firstIndex(where: { $0.id == tabID }) {
@@ -20,9 +22,10 @@ extension MainWindowController {
             }
         }
         guard let paneView = paneViews[workspace.activePaneID] else { return false }
-        let model = AgentTimelineModel(sessionID: sessionID, label: label, controller: self)
+        let model = AgentTimelineModel(sessionID: sessionID, label: label)
         let tabID = paneView.addPluginViewTab(
             view: AnyView(AgentTimelineView(model: model)), title: "Timeline: \(label)", icon: "clock.arrow.circlepath")
+        model.tabID = tabID
         timelineTabs[sessionID] = tabID
         return tabID != nil
     }

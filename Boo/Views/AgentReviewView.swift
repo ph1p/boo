@@ -6,18 +6,28 @@ import SwiftUI
 final class AgentReviewModel: ObservableObject {
     let workspaceID: UUID
     let folder: String
-    private weak var controller: MainWindowController?
 
     @Published private(set) var changes: AgentReview.Changes?
     @Published private(set) var error: String?
     @Published private(set) var isLoading = false
+    @Published private(set) var isWorktree = false
     @Published var selectedPath: String?
-    @Published var comments: [AgentReview.Comment] = []
-    @Published var note = ""
-    /// Line being commented on: file + line number, plus the draft text.
+    @Published private(set) var comments: [AgentReview.Comment] = [] {
+        didSet { indexComments() }
+    }
+    /// Line being commented on: file + line number.
     @Published var draftAnchor: Anchor?
-    @Published var draftText = ""
     @Published private(set) var status: String?
+    /// Typed text lives in its own objects so a keystroke re-renders only the
+    /// field, not the whole diff observing this model.
+    let note = TextBox()
+    let draft = TextBox()
+    /// Comments by file, then line, so diff rows don't filter every comment.
+    private var commentIndex: [String: [Int: [AgentReview.Comment]]] = [:]
+
+    final class TextBox: ObservableObject {
+        @Published var text = ""
+    }
 
     struct Anchor: Equatable {
         let file: String
@@ -25,13 +35,15 @@ final class AgentReviewModel: ObservableObject {
         let snippet: String
     }
 
-    init(workspaceID: UUID, folder: String, controller: MainWindowController?) {
+    init(workspaceID: UUID, folder: String) {
         self.workspaceID = workspaceID
         self.folder = folder
-        self.controller = controller
     }
 
-    var isWorktree: Bool { changes?.branch != nil && AgentWorktree.looksLikeWorktree(folder) }
+    /// Looked up per action: the workspace may have moved to another window.
+    private var controller: MainWindowController? {
+        WindowManager.shared.controller(owningWorkspace: workspaceID)
+    }
 
     var selectedFile: AgentReview.FileDiff? {
         changes?.files.first { $0.path == selectedPath } ?? changes?.files.first
@@ -42,6 +54,7 @@ final class AgentReviewModel: ObservableObject {
         let folder = folder
         DispatchQueue.global(qos: .userInitiated).async {
             let result = Result { try AgentReview.changes(in: folder) }
+            let isWorktree = (try? result.get())?.branch != nil && AgentWorktree.looksLikeWorktree(folder)
             DispatchQueue.main.async { [weak self] in
                 guard let self else { return }
                 self.isLoading = false
@@ -49,6 +62,7 @@ final class AgentReviewModel: ObservableObject {
                 case .success(let changes):
                     self.changes = changes
                     self.error = nil
+                    self.isWorktree = isWorktree
                     if !changes.files.contains(where: { $0.path == self.selectedPath }) {
                         self.selectedPath = changes.files.first?.path
                     }
@@ -62,34 +76,48 @@ final class AgentReviewModel: ObservableObject {
     func beginComment(file: String, line: AgentReview.DiffLine) {
         guard let number = line.newLine ?? line.oldLine else { return }
         draftAnchor = Anchor(file: file, line: number, snippet: line.text)
-        draftText = ""
+        draft.text = ""
     }
 
     func commitDraft() {
         guard let anchor = draftAnchor else { return }
-        let text = draftText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let text = draft.text.trimmingCharacters(in: .whitespacesAndNewlines)
         if !text.isEmpty {
             comments.append(.init(file: anchor.file, line: anchor.line, snippet: anchor.snippet, text: text))
         }
         draftAnchor = nil
-        draftText = ""
+        draft.text = ""
+    }
+
+    func removeComment(_ id: AgentReview.Comment.ID) {
+        comments.removeAll { $0.id == id }
     }
 
     func comments(file: String, line: Int) -> [AgentReview.Comment] {
-        comments.filter { $0.file == file && $0.line == line }
+        commentIndex[file]?[line] ?? []
+    }
+
+    func commentCount(file: String) -> Int {
+        commentIndex[file]?.values.reduce(0) { $0 + $1.count } ?? 0
+    }
+
+    private func indexComments() {
+        var index: [String: [Int: [AgentReview.Comment]]] = [:]
+        for comment in comments { index[comment.file, default: [:]][comment.line, default: []].append(comment) }
+        commentIndex = index
     }
 
     var canSend: Bool {
-        !comments.isEmpty || !note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        !comments.isEmpty || !note.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     func send() {
         commitDraft()
         guard canSend, let controller else { return }
-        let text = AgentReview.compose(comments, note: note)
+        let text = AgentReview.compose(comments, note: note.text)
         if controller.sendToAgent(workspaceID: workspaceID, text: text) {
             comments = []
-            note = ""
+            note.text = ""
             status = nil
         } else {
             status = "No terminal tab in this workspace to send to."
@@ -170,7 +198,20 @@ struct AgentReviewView: View {
         HStack(spacing: 8) {
             Text(commentSummary)
                 .font(.system(size: 11)).foregroundStyle(t.textSecondary)
-            TextField("Overall note for the agent (optional)", text: $model.note)
+            NoteField(model: model, note: model.note)
+        }
+        .padding(.horizontal, 14).padding(.vertical, 8)
+    }
+
+    /// Note field and Send button: the only views observing the note text.
+    private struct NoteField: View {
+        @ObservedObject var model: AgentReviewModel
+        @ObservedObject var note: AgentReviewModel.TextBox
+
+        private var t: Tokens { Tokens(theme: AppSettings.shared.theme) }
+
+        var body: some View {
+            TextField("Overall note for the agent (optional)", text: $note.text)
                 .textFieldStyle(.roundedBorder)
                 .onSubmit { model.send() }
             if let status = model.status {
@@ -180,7 +221,6 @@ struct AgentReviewView: View {
                 .keyboardShortcut(.return, modifiers: .command)
                 .disabled(!model.canSend && model.draftAnchor == nil)
         }
-        .padding(.horizontal, 14).padding(.vertical, 8)
     }
 
     private func placeholder(_ text: String) -> some View {
@@ -203,7 +243,7 @@ struct AgentReviewView: View {
 
     private func fileRow(_ file: AgentReview.FileDiff) -> some View {
         let selected = model.selectedFile?.path == file.path
-        let commentCount = model.comments.filter { $0.file == file.path }.count
+        let commentCount = model.commentCount(file: file.path)
         return Button {
             model.selectedPath = file.path
         } label: {
@@ -270,14 +310,15 @@ struct AgentReviewView: View {
                         if file.isBinary {
                             Text("Binary file").font(.system(size: 11)).foregroundStyle(t.textSecondary).padding(8)
                         }
-                        ForEach(Array(file.hunks.enumerated()), id: \.offset) { _, hunk in
+                        ForEach(file.hunks.indices, id: \.self) { h in
+                            let hunk = file.hunks[h]
                             Text(hunk.header)
                                 .font(mono).foregroundStyle(t.textTertiary)
                                 .padding(.horizontal, 8).padding(.vertical, 3)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .background(t.subtleFill)
-                            ForEach(Array(hunk.lines.enumerated()), id: \.offset) { _, line in
-                                lineRow(line, file: file.path)
+                            ForEach(hunk.lines.indices, id: \.self) { i in
+                                lineRow(hunk.lines[i], file: file.path)
                             }
                         }
                     }
@@ -344,7 +385,7 @@ struct AgentReviewView: View {
                 .fixedSize(horizontal: false, vertical: true)
             Spacer()
             Button {
-                model.comments.removeAll { $0.id == comment.id }
+                model.removeComment(comment.id)
             } label: {
                 Image(systemName: "xmark").font(.system(size: 9))
             }
@@ -358,10 +399,7 @@ struct AgentReviewView: View {
 
     private var draftEditor: some View {
         VStack(alignment: .trailing, spacing: 6) {
-            TextField("Comment for the agent", text: $model.draftText, axis: .vertical)
-                .textFieldStyle(.roundedBorder)
-                .lineLimit(2...6)
-                .onSubmit { model.commitDraft() }
+            DraftField(draft: model.draft) { model.commitDraft() }
             HStack {
                 Button("Cancel") { model.draftAnchor = nil }
                     .keyboardShortcut(.cancelAction)
@@ -372,5 +410,18 @@ struct AgentReviewView: View {
         .frame(maxWidth: 560)
         .background(RoundedRectangle(cornerRadius: 6).fill(t.cardBg))
         .padding(.leading, 98).padding(.vertical, 3)
+    }
+
+    /// Only this field observes the draft text.
+    private struct DraftField: View {
+        @ObservedObject var draft: AgentReviewModel.TextBox
+        let submit: () -> Void
+
+        var body: some View {
+            TextField("Comment for the agent", text: $draft.text, axis: .vertical)
+                .textFieldStyle(.roundedBorder)
+                .lineLimit(2...6)
+                .onSubmit(submit)
+        }
     }
 }

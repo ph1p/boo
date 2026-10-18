@@ -6,33 +6,55 @@ import SwiftUI
 final class AgentTimelineModel: ObservableObject {
     let sessionID: String
     let label: String
-    private weak var controller: MainWindowController?
+    /// The tab showing this timeline; its window is looked up per use since
+    /// the tab can move between windows.
+    var tabID: UUID?
 
     @Published private(set) var timeline: AgentTimeline?
     @Published private(set) var transcript: URL?
     @Published private(set) var isMissing = false
     private var timer: Timer?
     private var isLoading = false
+    /// Ticks skipped since the last transcript search while it is missing.
+    private var missingTicks = 0
 
     static let refreshInterval: TimeInterval = 3
 
-    init(sessionID: String, label: String, controller: MainWindowController?) {
+    /// Re-search for a missing transcript every this many ticks only.
+    static let missingBackoff = 5
+
+    init(sessionID: String, label: String) {
         self.sessionID = sessionID
         self.label = label
-        self.controller = controller
+    }
+
+    private var controller: MainWindowController? {
+        tabID.flatMap { AgentInbox.locateInWindows($0)?.controller } ?? WindowManager.shared.activeController
     }
 
     func startRefreshing() {
         reload()
         timer?.invalidate()
         timer = Timer.scheduledTimer(withTimeInterval: Self.refreshInterval, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { self?.reload() }
+            MainActor.assumeIsolated { self?.tick() }
         }
     }
 
     func stopRefreshing() {
         timer?.invalidate()
         timer = nil
+    }
+
+    /// Timer reload: skipped while the tab's window can't be seen, and backed
+    /// off while the transcript can't be found (each search scans every project).
+    private func tick() {
+        guard controller?.window?.occlusionState.contains(.visible) ?? false else { return }
+        if transcript == nil {
+            missingTicks += 1
+            guard missingTicks >= Self.missingBackoff else { return }
+            missingTicks = 0
+        }
+        reload()
     }
 
     func reload() {

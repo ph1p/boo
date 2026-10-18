@@ -314,7 +314,7 @@ extension MainWindowController {
             return true
         }
         guard let paneView = paneViews[workspace.activePaneID] else { return false }
-        let model = AgentReviewModel(workspaceID: workspaceID, folder: workspace.folderPath, controller: self)
+        let model = AgentReviewModel(workspaceID: workspaceID, folder: workspace.folderPath)
         paneView.addPluginViewTab(view: AnyView(AgentReviewView(model: model)), title: title, icon: "checklist")
         model.reload()
         return true

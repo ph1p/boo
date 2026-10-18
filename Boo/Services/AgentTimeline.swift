@@ -398,25 +398,43 @@ extension AgentTimeline {
         }
 
         private var subagents: [String: (usage: Usage, cost: Double)] = [:]
+        /// Per subagent transcript: usage by API message id, and an unfinished last line.
+        private var subagentMessages: [String: [String: (usage: Usage, model: String?)]] = [:]
+        private var subagentPending: [String: Data] = [:]
 
-        /// Counts a subagent transcript's tokens in the session, replacing what
-        /// was read from `key` before.
-        func setSubagent(_ key: String, _ data: Data) {
-            var usage: [String: (Usage, String?)] = [:]
-            for line in data.split(separator: UInt8(ascii: "\n")) {
+        /// Counts a subagent transcript's tokens in the session. Feed it the
+        /// file as it grows, like `consume`; `resetSubagent` before re-reading it.
+        func consumeSubagent(_ key: String, _ data: Data) {
+            var pending = subagentPending[key, default: Data()]
+            pending.append(data)
+            guard let lastNewline = pending.lastIndex(of: UInt8(ascii: "\n")) else {
+                subagentPending[key] = pending
+                return
+            }
+            var messages = subagentMessages[key, default: [:]]
+            for line in pending[pending.startIndex..<lastNewline].split(separator: UInt8(ascii: "\n")) {
                 guard line.range(of: Data("\"type\":\"assistant\"".utf8)) != nil,
                     let object = try? JSONSerialization.jsonObject(with: line) as? [String: Any],
                     let message = object["message"] as? [String: Any], let id = message["id"] as? String,
                     let values = message["usage"] as? [String: Any]
                 else { continue }
-                usage[id] = (Self.usage(values), message["model"] as? String)
+                messages[id] = (Self.usage(values), message["model"] as? String)
             }
-            subagents[key] = usage.values.reduce((Usage(), 0.0)) { sum, entry in
-                (sum.0 + entry.0, sum.1 + AgentTimeline.estimatedCost(of: entry.0, model: entry.1))
+            subagentPending[key] = Data(pending[(lastNewline + 1)...])
+            subagentMessages[key] = messages
+            subagents[key] = messages.values.reduce((Usage(), 0.0)) { sum, entry in
+                (sum.0 + entry.usage, sum.1 + AgentTimeline.estimatedCost(of: entry.usage, model: entry.model))
             }
             timeline.subagentUsage = subagents.values.reduce(Usage()) { $0 + $1.usage }
             timeline.subagentCost = subagents.values.reduce(0) { $0 + $1.cost }
             summarize()
+        }
+
+        /// Forgets what was read from subagent transcript `key` (it was rewritten).
+        func resetSubagent(_ key: String) {
+            subagents[key] = nil
+            subagentMessages[key] = nil
+            subagentPending[key] = nil
         }
 
         // MARK: Helpers
@@ -534,21 +552,36 @@ extension AgentTimeline {
 
 extension AgentInbox {
     /// `agent_timeline {tab_id | session_id, turns?, open?}`: what the session did;
-    /// `open` also shows it in a tab.
-    func timeline(_ json: [String: Any]) -> [String: Any] {
+    /// `open` also shows it in a tab. A first read parses the whole transcript
+    /// (often tens of MB), so it runs off the main thread; `reply` runs there too.
+    func timeline(_ json: [String: Any], reply: @escaping ([String: Any]) -> Void) {
         let tabID = (json["tab_id"] as? String).flatMap(UUID.init(uuidString:))
         guard let sessionID = json["session_id"] as? String ?? tabID.flatMap({ items[$0]?.sessionID }) else {
-            return ["ok": false, "error": tabID == nil ? "missing tab_id or session_id" : "no session for this tab"]
+            reply(["ok": false, "error": tabID == nil ? "missing tab_id or session_id" : "no session for this tab"])
+            return
         }
-        guard let url = AgentTimeline.transcriptURL(sessionID: sessionID),
-            let timeline = AgentTimelineStore.shared.load(url)
-        else { return ["ok": false, "error": "no transcript for session \(sessionID)"] }
-        if json["open"] as? Bool == true {
-            let label =
-                tabID.flatMap { items[$0] }.map { AgentHandoff.label(for: $0) } ?? timeline.title ?? "Claude Code"
-            WindowManager.shared.activeController?.openTimeline(sessionID: sessionID, label: label)
+        let label = tabID.flatMap { items[$0] }.map { AgentHandoff.label(for: $0) }
+        let open = json["open"] as? Bool == true
+        let turns = (json["turns"] as? Int) ?? 10
+        // Both servers' replies hop to their own queue, so any thread may call them.
+        nonisolated(unsafe) let reply = reply
+        DispatchQueue.global(qos: .userInitiated).async {
+            guard let url = AgentTimeline.transcriptURL(sessionID: sessionID),
+                let timeline = AgentTimelineStore.shared.load(url)
+            else {
+                reply(["ok": false, "error": "no transcript for session \(sessionID)"])
+                return
+            }
+            if open {
+                let label = label ?? timeline.title ?? "Claude Code"
+                DispatchQueue.main.async {
+                    MainActor.assumeIsolated {
+                        _ = WindowManager.shared.activeController?.openTimeline(sessionID: sessionID, label: label)
+                    }
+                }
+            }
+            reply(timeline.serialize(turns: turns))
         }
-        return timeline.serialize(turns: (json["turns"] as? Int) ?? 10)
     }
 }
 
@@ -562,7 +595,7 @@ final class AgentTimelineStore: @unchecked Sendable {
     private struct Entry {
         let parser = AgentTimeline.Parser()
         var offset: UInt64 = 0
-        var subagentSizes: [String: UInt64] = [:]
+        var subagentOffsets: [String: UInt64] = [:]
         var used = Date()
     }
 
@@ -583,21 +616,18 @@ final class AgentTimelineStore: @unchecked Sendable {
         }
         var entry = entries[path] ?? Entry()
         if size < entry.offset { entry = Entry() }  // rewritten
-        if size > entry.offset, let handle = FileHandle(forReadingAtPath: path) {
-            defer { try? handle.close() }
-            try? handle.seek(toOffset: entry.offset)
-            if let data = try? handle.read(upToCount: Int(size - entry.offset)) {
-                entry.parser.consume(data)
-                entry.offset += UInt64(data.count)
-            }
-        }
+        entry.offset = Self.read(path, from: entry.offset, to: size) { entry.parser.consume($0) }
         for subagent in AgentTimeline.subagentURLs(of: url) {
             let key = subagent.lastPathComponent
-            guard let size = Self.size(of: subagent.path), size != entry.subagentSizes[key],
-                let data = FileManager.default.contents(atPath: subagent.path)
-            else { continue }
-            entry.parser.setSubagent(key, data)
-            entry.subagentSizes[key] = size
+            guard let size = Self.size(of: subagent.path) else { continue }
+            var offset = entry.subagentOffsets[key] ?? 0
+            if size < offset {
+                entry.parser.resetSubagent(key)
+                offset = 0
+            }
+            entry.subagentOffsets[key] = Self.read(subagent.path, from: offset, to: size) {
+                entry.parser.consumeSubagent(key, $0)
+            }
         }
         entry.used = Date()
         entries[path] = entry
@@ -605,6 +635,21 @@ final class AgentTimelineStore: @unchecked Sendable {
             entries[oldest] = nil
         }
         return entry.parser.timeline
+    }
+
+    /// Feeds `path` from `offset` up to `size` to `consume` in chunks, so a
+    /// first read of a large transcript never holds it in memory whole.
+    /// Returns the offset read up to.
+    private static func read(_ path: String, from offset: UInt64, to size: UInt64, consume: (Data) -> Void) -> UInt64 {
+        guard size > offset, let handle = FileHandle(forReadingAtPath: path) else { return offset }
+        defer { try? handle.close() }
+        var offset = offset
+        guard (try? handle.seek(toOffset: offset)) != nil else { return offset }
+        while offset < size, let data = try? handle.read(upToCount: Int(min(size - offset, 4 << 20))), !data.isEmpty {
+            consume(data)
+            offset += UInt64(data.count)
+        }
+        return offset
     }
 
     private static func size(of path: String) -> UInt64? {

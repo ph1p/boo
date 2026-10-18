@@ -145,9 +145,11 @@ enum AgentHandoff {
     static let shared = AgentHandoffMenuTarget()
 
     final class Payload: NSObject {
-        let text: String
+        /// Built on click: reading the last output scans up to 5000 lines of
+        /// scrollback, too slow to do for every right-click.
+        let text: @MainActor () -> String?
         let tabID: UUID
-        init(text: String, tabID: UUID) {
+        init(text: @escaping @MainActor () -> String?, tabID: UUID) {
             self.text = text
             self.tabID = tabID
         }
@@ -155,7 +157,10 @@ enum AgentHandoff {
 
     @objc func send(_ sender: NSMenuItem) {
         guard let payload = sender.representedObject as? Payload else { return }
-        if !AgentHandoff.send(payload.text, to: payload.tabID) { NSSound.beep() }
+        guard let text = payload.text(), AgentHandoff.send(text, to: payload.tabID) else {
+            NSSound.beep()
+            return
+        }
     }
 
     /// "Send … to Agent" items for a terminal's context menu: one per kind of
@@ -164,15 +169,22 @@ enum AgentHandoff {
         let targets = AgentHandoff.targets(excluding: view.tabID)
         guard !targets.isEmpty else { return [] }
         let cwd = view.tabID.flatMap(AgentHandoff.workingDirectory(ofTab:))
-        var contexts: [(title: String, text: String)] = []
+        var contexts: [(title: String, text: @MainActor () -> String?)] = []
         if let selection = view.readSelectionText(), !selection.isEmpty {
-            contexts.append(("Send Selection", AgentHandoff.compose(selection, source: .selection, cwd: cwd)))
+            let text = AgentHandoff.compose(selection, source: .selection, cwd: cwd)
+            contexts.append(("Send Selection", { text }))
         }
-        if let (source, output) = view.lastCommandOutput(), !output.isEmpty,
-            case .output(let command, _) = source
-        {
+        // Offered whenever a command ran; its output is read only if picked.
+        if let command = view.lastCommand?.command {
             let short = command.count > 30 ? String(command.prefix(29)) + "…" : command
-            contexts.append(("Send Output of “\(short)”", AgentHandoff.compose(output, source: source, cwd: cwd)))
+            contexts.append(
+                (
+                    "Send Output of “\(short)”",
+                    { [weak view] in
+                        guard let (source, output) = view?.lastCommandOutput(), !output.isEmpty else { return nil }
+                        return AgentHandoff.compose(output, source: source, cwd: cwd)
+                    }
+                ))
         }
         return contexts.map { context in
             if targets.count == 1, let target = targets.first {
@@ -188,7 +200,7 @@ enum AgentHandoff {
         }
     }
 
-    private func item(_ title: String, _ text: String, _ tabID: UUID) -> NSMenuItem {
+    private func item(_ title: String, _ text: @escaping @MainActor () -> String?, _ tabID: UUID) -> NSMenuItem {
         let item = NSMenuItem(title: title, action: #selector(send(_:)), keyEquivalent: "")
         item.target = self
         item.representedObject = Payload(text: text, tabID: tabID)

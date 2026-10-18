@@ -285,6 +285,10 @@ final class WindowManager {
     private func dispatchCommand(
         cmd: String, json: [String: Any], reply: @escaping ([String: Any]) -> Void
     ) {
+        if cmd == "agent_timeline" {
+            AgentInbox.shared.timeline(json, reply: reply)
+            return
+        }
         if let response = AgentInbox.shared.handleSocketCommand(cmd: cmd, json: json) {
             reply(response)
             return

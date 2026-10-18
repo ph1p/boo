@@ -258,8 +258,8 @@ extension AgentInbox {
 
 extension AgentInbox {
     /// App-wide agent commands; nil when `cmd` is not one of them.
-    /// `agent_inbox` lists items, `agent_jump` focuses `tab_id` (or the next one waiting),
-    /// `agent_timeline` summarizes a session's transcript.
+    /// `agent_inbox` lists items, `agent_jump` focuses `tab_id` (or the next one waiting).
+    /// `agent_timeline` replies asynchronously: see `timeline(_:reply:)`.
     func handleSocketCommand(cmd: String, json: [String: Any]) -> [String: Any]? {
         switch cmd {
         case "agent_event":
@@ -269,8 +269,6 @@ extension AgentInbox {
             return ["ok": true, "attention": attentionCount, "items": sortedItems.map(Self.serialize)]
         case "agent_respond":
             return respond(json)
-        case "agent_timeline":
-            return timeline(json)
         case "agent_jump":
             if let id = (json["tab_id"] as? String).flatMap(UUID.init(uuidString:)) {
                 return ["ok": jump(to: id)]
