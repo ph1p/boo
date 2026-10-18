@@ -227,7 +227,7 @@ struct FileTreeView: View {
             filter.configure(rootPath: path, showHidden: AppSettings.shared.showHiddenFiles)
         }
         .onChange(of: showHidden) { _, hidden in filter.configure(rootPath: root.path, showHidden: hidden) }
-        .onChange(of: root.treeRevision) { _, _ in filter.invalidate() }
+        .onChange(of: root.contentRevision) { _, _ in filter.invalidate() }
         .onChange(of: order) { _, newOrder in selection.prune(visible: newOrder) }
     }
 
@@ -242,6 +242,8 @@ struct FileTreeView: View {
                 }
             }
 
+            // Multi-selection in row order, computed once for every row's context menu.
+            let selectedInOrder = selection.selected.count > 1 ? selection.ordered(in: order) : []
             LazyVStack(alignment: .leading, spacing: 0) {
                 ForEach(rows, id: \.node.id) { row in
                     let path = row.node.path
@@ -254,7 +256,7 @@ struct FileTreeView: View {
                         treeFocused: treeFocused,
                         gitStatus: git?.status(for: path, isDirectory: row.node.isDirectory),
                         dimIgnored: AppSettings.shared.explorerDimIgnored,
-                        menuPaths: menuPaths(for: path, order: order),
+                        menuPaths: !selectedInOrder.isEmpty && selection.contains(path) ? selectedInOrder : [path],
                         onClick: { kind in click(row.node, kind: kind, order: order) },
                         onTrash: { pendingTrash = $0 }
                     )
@@ -285,7 +287,7 @@ struct FileTreeView: View {
                     treeFocused: treeFocused,
                     gitStatus: git?.status(for: path, isDirectory: match.entry.isDirectory),
                     onClick: { kind in
-                        if kind != .plain || match.entry.isDirectory { treeFocused = true }
+                        focusTreeUnlessOpening(kind, isDirectory: match.entry.isDirectory)
                         selection.click(path, kind: kind, order: order)
                         if kind == .plain { activate(match.entry) }
                     },
@@ -320,17 +322,14 @@ struct FileTreeView: View {
         (root.path as NSString).appendingPathComponent(entry.relativePath)
     }
 
-    /// Paths a row's context menu acts on: the whole selection when the row is part of
-    /// a multi-selection, else just the row.
-    private func menuPaths(for path: String, order: [String]) -> [String] {
-        guard selection.selected.count > 1, selection.contains(path) else { return [path] }
-        return selection.ordered(in: order)
+    /// Opening a file hands focus to its tab; grabbing it here would steal it back.
+    private func focusTreeUnlessOpening(_ kind: FileTreeSelection.ClickKind, isDirectory: Bool) {
+        if kind != .plain || isDirectory { treeFocused = true }
     }
 
     private func click(_ node: FileTreeNode, kind: FileTreeSelection.ClickKind, order: [String]) {
         guard renameState.renamingPath != node.path else { return }
-        // Opening a file hands focus to its tab; grabbing it here would steal it back.
-        if kind != .plain || node.isDirectory { treeFocused = true }
+        focusTreeUnlessOpening(kind, isDirectory: node.isDirectory)
         selection.click(node.path, kind: kind, order: order)
         guard kind == .plain else { return }
         if node.isDirectory {
@@ -504,12 +503,12 @@ struct RowStyle {
     let mutedColor: Color
     let accentColor: Color
     let hoverColor: Color
-    var selectionColor: Color = .clear
-    var inactiveSelectionColor: Color = .clear
-    var controlFill: Color = .clear
-    var successColor: Color = .green
-    var warningColor: Color = .yellow
-    var errorColor: Color = .red
+    let selectionColor: Color
+    let inactiveSelectionColor: Color
+    let controlFill: Color
+    let successColor: Color
+    let warningColor: Color
+    let errorColor: Color
 
     func color(for status: FileGitStatus) -> Color {
         switch status {
@@ -518,6 +517,12 @@ struct RowStyle {
         case .deleted, .conflicted: return errorColor
         case .ignored: return mutedColor
         }
+    }
+
+    /// Name tint: git status colors, except ignored files (dimmed via opacity instead).
+    func nameColor(for status: FileGitStatus?) -> Color {
+        guard let status, status != .ignored else { return textColor }
+        return color(for: status)
     }
 
     func rowBackground(selected: Bool, focused: Bool, hovered: Bool) -> Color {
@@ -717,11 +722,6 @@ struct FileTreeRowView: View {
 
     // MARK: Row Content
 
-    private var nameColor: Color {
-        guard let gitStatus, gitStatus != .ignored else { return style.textColor }
-        return style.color(for: gitStatus)
-    }
-
     private var rowContent: some View {
         let isDropTarget = dragState.dropPosition == .onFolder(node.path)
         return HStack(spacing: 5) {
@@ -735,10 +735,7 @@ struct FileTreeRowView: View {
             }
 
             if style.showIcons {
-                Image(systemName: node.isDirectory ? folderIcon(for: node.name) : fileIcon(for: node.name))
-                    .font(.system(size: style.fontSize))
-                    .frame(width: 16, height: 16)
-                    .foregroundStyle(node.isDirectory ? style.accentColor.opacity(0.8) : style.mutedColor)
+                FileTreeIcon(name: node.name, isDirectory: node.isDirectory, style: style)
             }
 
             if isRenaming {
@@ -750,7 +747,7 @@ struct FileTreeRowView: View {
             } else {
                 Text(node.name)
                     .font(style.font)
-                    .foregroundStyle(nameColor)
+                    .foregroundStyle(style.nameColor(for: gitStatus))
                     .lineLimit(1)
                     .truncationMode(.middle)
             }
@@ -812,10 +809,7 @@ struct FileTreeRowView: View {
         Button("Paste \(count) Paths to Terminal") {
             for path in menuPaths { actions.onPastePath?(path) }
         }
-        Button("Copy \(count) Paths") {
-            NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString(menuPaths.joined(separator: "\n"), forType: .string)
-        }
+        Button("Copy \(count) Paths") { actions.onCopyPath?(menuPaths.joined(separator: "\n")) }
         Button("Reveal in Finder") {
             NSWorkspace.shared.activateFileViewerSelecting(menuPaths.map { URL(fileURLWithPath: $0) })
         }
@@ -889,9 +883,7 @@ struct FileTreeRowView: View {
         Button("Copy Path") { actions.onCopyPath?(node.path) }
         Button("Copy Relative Path") {
             let prefix = rootPath.hasSuffix("/") ? rootPath : rootPath + "/"
-            let rel = node.path.hasPrefix(prefix) ? String(node.path.dropFirst(prefix.count)) : node.path
-            NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString(rel, forType: .string)
+            actions.onCopyPath?(node.path.hasPrefix(prefix) ? String(node.path.dropFirst(prefix.count)) : node.path)
         }
     }
 
@@ -929,13 +921,7 @@ struct FileTreeMatchRowView: View {
     var body: some View {
         HStack(spacing: 5) {
             if style.showIcons {
-                Image(
-                    systemName: match.entry.isDirectory
-                        ? folderIcon(for: match.entry.name) : fileIcon(for: match.entry.name)
-                )
-                .font(.system(size: style.fontSize))
-                .frame(width: 16, height: 16)
-                .foregroundStyle(match.entry.isDirectory ? style.accentColor.opacity(0.8) : style.mutedColor)
+                FileTreeIcon(name: match.entry.name, isDirectory: match.entry.isDirectory, style: style)
             }
             highlightedName
                 .font(style.font)
@@ -979,17 +965,30 @@ struct FileTreeMatchRowView: View {
 
     /// Name with the fuzzy-matched characters emphasized.
     private var highlightedName: Text {
-        let hits = Set(match.nameHighlights)
-        var text = Text("")
-        for (i, ch) in match.entry.name.enumerated() {
-            let piece = Text(String(ch))
-            text =
-                text
-                + (hits.contains(i)
-                    ? piece.foregroundColor(style.accentColor).bold()
-                    : piece.foregroundColor(gitStatus.map { style.color(for: $0) } ?? style.textColor))
+        var name = AttributedString(match.entry.name)
+        name.foregroundColor = style.nameColor(for: gitStatus)
+        let indices = Array(name.characters.indices)
+        for i in match.nameHighlights where i < indices.count {
+            let range = indices[i]..<name.characters.index(after: indices[i])
+            name[range].foregroundColor = style.accentColor
+            name[range].inlinePresentationIntent = .stronglyEmphasized
         }
-        return text
+        return Text(name)
+    }
+}
+
+// MARK: - Icon
+
+struct FileTreeIcon: View {
+    let name: String
+    let isDirectory: Bool
+    var style: RowStyle
+
+    var body: some View {
+        Image(systemName: isDirectory ? folderIcon(for: name) : fileIcon(for: name))
+            .font(.system(size: style.fontSize))
+            .frame(width: 16, height: 16)
+            .foregroundStyle(isDirectory ? style.accentColor.opacity(0.8) : style.mutedColor)
     }
 }
 

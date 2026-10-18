@@ -1,21 +1,11 @@
 import Foundation
 
-/// Per-path git state shown as file tree decorations.
-enum FileGitStatus: Equatable, Sendable {
-    case conflicted, modified, deleted, added, renamed, untracked, ignored
+/// Per-path git state shown as file tree decorations. Declared weakest first: the
+/// raw value is the rank a folder uses to roll up the state of its descendants.
+enum FileGitStatus: Int, Comparable, Sendable {
+    case ignored, untracked, renamed, added, deleted, modified, conflicted
 
-    /// Higher wins when a folder rolls up the state of its descendants.
-    var rank: Int {
-        switch self {
-        case .conflicted: return 6
-        case .modified: return 5
-        case .deleted: return 4
-        case .added: return 3
-        case .renamed: return 2
-        case .untracked: return 1
-        case .ignored: return 0
-        }
-    }
+    static func < (a: Self, b: Self) -> Bool { a.rawValue < b.rawValue }
 
     /// One-letter badge, VS Code style.
     var badge: String {
@@ -55,10 +45,6 @@ struct FileTreeGitStatus: Equatable, Sendable {
     /// Strongest non-ignored status found below each ancestor folder.
     private(set) var folderRollup: [String: FileGitStatus] = [:]
 
-    init(repoRoot: String) {
-        self.repoRoot = repoRoot
-    }
-
     /// Parse `git status --porcelain=v1 -z --ignored` output.
     init(repoRoot: String, porcelainZ output: String) {
         self.repoRoot = repoRoot
@@ -79,12 +65,12 @@ struct FileTreeGitStatus: Equatable, Sendable {
         }
     }
 
-    mutating func record(_ status: FileGitStatus, at path: String) {
+    private mutating func record(_ status: FileGitStatus, at path: String) {
         entries[path] = status
         guard status != .ignored else { return }
         var dir = (path as NSString).deletingLastPathComponent
         while dir.count >= repoRoot.count {
-            if let existing = folderRollup[dir], existing.rank >= status.rank { break }
+            if let existing = folderRollup[dir], existing >= status { break }
             folderRollup[dir] = status
             if dir == repoRoot { break }
             dir = (dir as NSString).deletingLastPathComponent
@@ -112,27 +98,20 @@ struct FileTreeGitStatus: Equatable, Sendable {
     /// strip `--show-prefix` (rootPath's location inside the repo) off rootPath itself
     /// so the repo root keeps the tree's path form.
     static func load(rootPath: String) -> FileTreeGitStatus? {
-        guard let prefix = git(["-C", rootPath, "rev-parse", "--show-prefix"]) else { return nil }
+        guard let prefix = GitPlugin.gitOutput(["-C", rootPath, "rev-parse", "--show-prefix"]) else {
+            return nil
+        }
         var repoRoot = rootPath
         let depth = prefix.trimmingCharacters(in: .whitespacesAndNewlines)
             .split(separator: "/").count
         for _ in 0..<depth { repoRoot = (repoRoot as NSString).deletingLastPathComponent }
 
         guard
-            let output = git([
-                "-C", rootPath, "--no-optional-locks", "status", "--porcelain=v1", "-z", "--ignored"
-            ])
+            // `-- .` scopes the walk to the tree root; porcelain paths stay repo-relative.
+            let output = GitPlugin.gitOutput(
+                ["-C", rootPath, "--no-optional-locks", "status", "--porcelain=v1", "-z", "--ignored", "--", "."]
+            )
         else { return nil }
         return FileTreeGitStatus(repoRoot: repoRoot, porcelainZ: output)
-    }
-
-    private static func git(_ arguments: [String]) -> String? {
-        let task = Process()
-        task.executableURL = URL(fileURLWithPath: "/usr/bin/git")
-        task.arguments = arguments
-        guard let result = RemoteExplorer.runProcessCapturing(task, timeout: 10),
-            result.status == 0
-        else { return nil }
-        return result.stdout
     }
 }

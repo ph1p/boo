@@ -21,7 +21,8 @@ extension GitPlugin {
     ///
     /// Every detector here shells out the same way; the shared helper owns the
     /// drain-while-running that keeps a >64KB `git status` from deadlocking.
-    private nonisolated static func gitOutput(_ arguments: [String]) -> String? {
+    /// Run `/usr/bin/git` and return stdout, or nil on failure. Shared with the file tree.
+    nonisolated static func gitOutput(_ arguments: [String]) -> String? {
         let task = Process()
         task.executableURL = URL(fileURLWithPath: "/usr/bin/git")
         task.arguments = arguments

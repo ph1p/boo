@@ -304,7 +304,6 @@ final class LocalFileTreePlugin: BooPluginProtocol {
                         for (rootPath, root) in self.cachedRoots
                         where paths.contains(where: { $0.hasPrefix(rootPath) }) {
                             root.refreshAll()
-                            self.refreshGitStatus(root)
                         }
                     }
                 }
@@ -464,7 +463,6 @@ final class LocalFileTreePlugin: BooPluginProtocol {
         root.isExpanded = true
         cachedRoots[path] = root
         setupWatcher(for: path)
-        refreshGitStatus(root)
         if cachedRoots.count > 10 {
             // Persist what we're about to drop, then evict all entries except the
             // current path to bound cache growth.

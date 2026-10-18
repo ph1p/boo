@@ -57,13 +57,9 @@ enum FileTreeIndex {
     }
 
     private static func gitFiles(rootPath: String) -> [String]? {
-        let task = Process()
-        task.executableURL = URL(fileURLWithPath: "/usr/bin/git")
         // ls-files paths are relative to -C, i.e. to the tree root — no path-form mapping.
-        task.arguments = ["-C", rootPath, "ls-files", "-z", "--cached", "--others", "--exclude-standard"]
-        guard let result = RemoteExplorer.runProcessCapturing(task, timeout: 10), result.status == 0
-        else { return nil }
-        return result.stdout.split(separator: "\0").map(String.init)
+        GitPlugin.gitOutput(["-C", rootPath, "ls-files", "-z", "--cached", "--others", "--exclude-standard"])?
+            .split(separator: "\0").map(String.init)
     }
 
     private static func walk(rootPath: String, showHidden: Bool, limit: Int) -> [FileTreeIndexEntry] {
@@ -96,9 +92,13 @@ enum FileTreeFuzzy {
     /// `/` matches the relative path; otherwise the name is tried first and the path is
     /// a weaker fallback (so `ftv` still finds `FileTree/View.swift`).
     static func match(_ query: String, _ entry: FileTreeIndexEntry) -> FileTreeFilterMatch? {
-        let q = Array(query.lowercased())
+        match(Array(query.lowercased()), entry)
+    }
+
+    /// `q` is the already-lowercased query, so `rank` lowercases it once, not per entry.
+    static func match(_ q: [Character], _ entry: FileTreeIndexEntry) -> FileTreeFilterMatch? {
         guard !q.isEmpty else { return nil }
-        if !query.contains("/"), let (score, hits) = score(q, entry.name) {
+        if !q.contains("/"), let (score, hits) = score(q, entry.name) {
             // Shorter paths win ties: the shallow `README.md` before `docs/x/README.md`.
             let depthPenalty = entry.relativePath.filter { $0 == "/" }.count
             return FileTreeFilterMatch(entry: entry, score: score * 4 - depthPenalty, nameHighlights: hits)
@@ -141,7 +141,13 @@ enum FileTreeFuzzy {
 
     /// Rank every entry and keep the best `limit`.
     static func rank(_ query: String, in index: [FileTreeIndexEntry], limit: Int = 200) -> [FileTreeFilterMatch] {
-        var matches = index.compactMap { match(query, $0) }
+        let q = Array(query.lowercased())
+        var matches: [FileTreeFilterMatch] = []
+        for entry in index {
+            // Superseded by a newer keystroke — stop scanning.
+            if Task.isCancelled { return [] }
+            if let m = match(q, entry) { matches.append(m) }
+        }
         matches.sort {
             if $0.score != $1.score { return $0.score > $1.score }
             return $0.entry.relativePath.localizedStandardCompare($1.entry.relativePath) == .orderedAscending
@@ -160,7 +166,8 @@ final class FileTreeFilterModel: ObservableObject {
     @Published private(set) var matches: [FileTreeFilterMatch] = []
     @Published private(set) var isIndexing = false
 
-    var isActive: Bool { !query.trimmingCharacters(in: .whitespaces).isEmpty }
+    var isActive: Bool { !trimmedQuery.isEmpty }
+    private var trimmedQuery: String { query.trimmingCharacters(in: .whitespaces) }
 
     private var rootPath = ""
     private var showHidden = false
@@ -187,7 +194,7 @@ final class FileTreeFilterModel: ObservableObject {
 
     private func scheduleSearch() {
         searchTask?.cancel()
-        let q = query.trimmingCharacters(in: .whitespaces)
+        let q = trimmedQuery
         guard !q.isEmpty else {
             matches = []
             return
@@ -196,13 +203,15 @@ final class FileTreeFilterModel: ObservableObject {
             buildIndex()
             return
         }
-        searchTask = Task { [weak self] in
-            let ranked = await Task.detached(priority: .userInitiated) {
-                FileTreeFuzzy.rank(q, in: index)
-            }.value
-            guard !Task.isCancelled, let self, self.query.trimmingCharacters(in: .whitespaces) == q
-            else { return }
-            self.matches = ranked
+        // Detached (not a child of a main-actor task) so `cancel()` reaches the scan
+        // inside `rank` and a superseded keystroke stops early.
+        searchTask = Task.detached(priority: .userInitiated) { [weak self] in
+            let ranked = FileTreeFuzzy.rank(q, in: index)
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                guard let self, self.trimmedQuery == q else { return }
+                self.matches = ranked
+            }
         }
     }
 

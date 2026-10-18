@@ -15,6 +15,11 @@ final class FileTreeNode: Identifiable, ObservableObject, @unchecked Sendable {
     /// Only meaningful on the root node.
     @Published var treeRevision: Int = 0
 
+    /// Incremented only when a re-read finds the directory contents changed on disk
+    /// (not on expand/collapse or a first load), so the filter index knows to rebuild.
+    /// Only meaningful on the root node.
+    @Published private(set) var contentRevision: Int = 0
+
     /// Weak back-pointer to the tree root so child nodes can bump `treeRevision`.
     weak var root: FileTreeNode?
 
@@ -98,8 +103,12 @@ final class FileTreeNode: Identifiable, ObservableObject, @unchecked Sendable {
         let treeRoot = root ?? self
         guard let sorted = listing else {
             let wasEmpty = children?.isEmpty ?? false
+            let wasLoaded = children != nil
             children = []
-            if !wasEmpty { treeRoot.treeRevision &+= 1 }
+            if !wasEmpty {
+                treeRoot.treeRevision &+= 1
+                if wasLoaded { treeRoot.contentRevision &+= 1 }
+            }
             return
         }
 
@@ -124,16 +133,23 @@ final class FileTreeNode: Identifiable, ObservableObject, @unchecked Sendable {
         // churns (build output, node_modules) otherwise re-flattens the whole
         // tree on every FS event, which shows up as visible reload flicker.
         let unchanged = reusedAll && children?.count == newChildren.count
+        let wasLoaded = children != nil
         children = newChildren
-        if !unchanged { treeRoot.treeRevision &+= 1 }
+        if !unchanged {
+            treeRoot.treeRevision &+= 1
+            if wasLoaded { treeRoot.contentRevision &+= 1 }
+        }
     }
 
     /// Collapse every folder below this node.
     func collapseAll() {
-        for child in children ?? [] where child.isDirectory {
-            child.isExpanded = false
-            child.collapseAll()
+        func collapse(_ node: FileTreeNode) {
+            for child in node.children ?? [] where child.isDirectory && child.isExpanded {
+                child.isExpanded = false
+                collapse(child)
+            }
         }
+        collapse(self)
         (root ?? self).treeRevision &+= 1
     }
 
