@@ -44,6 +44,13 @@ final class FileTreeNodeScopedRefreshTests: XCTestCase {
         return root
     }
 
+    /// Refreshes list off-main; wait for the batch to land.
+    private func refreshAndWait(_ node: FileTreeNode, _ dirs: Set<String>) {
+        let done = expectation(description: "refresh")
+        node.refresh(changedDirs: dirs) { done.fulfill() }
+        wait(for: [done], timeout: 5)
+    }
+
     private func child(_ root: FileTreeNode, _ name: String) throws -> FileTreeNode {
         try XCTUnwrap(root.children?.first { $0.name == name })
     }
@@ -56,7 +63,7 @@ final class FileTreeNodeScopedRefreshTests: XCTestCase {
         XCTAssertEqual(root.children?.count, 0)
 
         try touch(tmpDir.appendingPathComponent("new.txt"))
-        root.refresh(changedDirs: [tmpDir.path])
+        refreshAndWait(root, [tmpDir.path])
 
         XCTAssertEqual(
             root.children?.map(\.name), ["new.txt"],
@@ -72,7 +79,7 @@ final class FileTreeNodeScopedRefreshTests: XCTestCase {
         XCTAssertEqual(subNode.children?.count, 0)
 
         try touch(sub.appendingPathComponent("deep.txt"))
-        root.refresh(changedDirs: [sub.path])
+        refreshAndWait(root, [sub.path])
 
         XCTAssertEqual(
             subNode.children?.map(\.name), ["deep.txt"],
@@ -91,7 +98,7 @@ final class FileTreeNodeScopedRefreshTests: XCTestCase {
         // Both directories gain a file, but only `noisy` is reported as changed.
         try touch(noisy.appendingPathComponent("build.log"))
         try touch(quiet.appendingPathComponent("unseen.txt"))
-        root.refresh(changedDirs: [noisy.path])
+        refreshAndWait(root, [noisy.path])
 
         XCTAssertEqual(
             try child(root, "noisy").children?.map(\.name), ["build.log"],
@@ -109,7 +116,7 @@ final class FileTreeNodeScopedRefreshTests: XCTestCase {
         subNode.isExpanded = false
 
         try touch(sub.appendingPathComponent("later.txt"))
-        root.refresh(changedDirs: [sub.path])
+        refreshAndWait(root, [sub.path])
 
         XCTAssertEqual(
             subNode.children?.count, 0,
@@ -122,7 +129,7 @@ final class FileTreeNodeScopedRefreshTests: XCTestCase {
         let revisionBefore = root.treeRevision
 
         try touch(tmpDir.appendingPathComponent("appeared.txt"))
-        root.refresh(changedDirs: ["/some/other/place"])
+        refreshAndWait(root, ["/some/other/place"])
 
         XCTAssertEqual(root.children?.count, 0, "An unrelated path must not trigger a re-read")
         XCTAssertEqual(root.treeRevision, revisionBefore)
@@ -137,7 +144,7 @@ final class FileTreeNodeScopedRefreshTests: XCTestCase {
         let srcGenNode = try child(root, "src-gen")
 
         try touch(srcGen.appendingPathComponent("generated.swift"))
-        root.refresh(changedDirs: [tmpDir.appendingPathComponent("src").path])
+        refreshAndWait(root, [tmpDir.appendingPathComponent("src").path])
 
         XCTAssertEqual(
             srcGenNode.children?.count, 0,
@@ -156,7 +163,7 @@ final class FileTreeNodeScopedRefreshTests: XCTestCase {
         nested.loadChildren()
 
         try touch(sub.appendingPathComponent("sibling.txt"))
-        root.refresh(changedDirs: [sub.path])
+        refreshAndWait(root, [sub.path])
 
         let nestedAfter = try XCTUnwrap(
             try child(root, "sub").children?.first { $0.name == "nested" })
@@ -169,7 +176,7 @@ final class FileTreeNodeScopedRefreshTests: XCTestCase {
         let before = root.treeRevision
 
         try touch(tmpDir.appendingPathComponent("added.txt"))
-        root.refresh(changedDirs: [tmpDir.path])
+        refreshAndWait(root, [tmpDir.path])
 
         XCTAssertGreaterThan(
             root.treeRevision, before, "Adding a row must bump the revision the view watches")
@@ -180,7 +187,7 @@ final class FileTreeNodeScopedRefreshTests: XCTestCase {
         try touch(tmpDir.appendingPathComponent("plain.txt"))
         let root = try makeRoot()
         let fileNode = try child(root, "plain.txt")
-        fileNode.refresh(changedDirs: [fileNode.path])
+        refreshAndWait(fileNode, [fileNode.path])
         XCTAssertNil(fileNode.children)
     }
 }

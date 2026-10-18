@@ -44,7 +44,11 @@ final class FileTreeNode: Identifiable, ObservableObject, @unchecked Sendable {
         let isDir: Bool
     }
 
-    /// Load or reload children for a directory.
+    /// Main-actor completion for the async loaders; always invoked on a later turn.
+    typealias Completion = @MainActor @Sendable () -> Void
+
+    /// Synchronous load. Only for a brand-new root's first paint and tests — anything
+    /// driven by the UI or FS events goes through `loadAsync`.
     func loadChildren() {
         guard isDirectory else { return }
         apply(Self.listEntries(of: path))
@@ -52,22 +56,41 @@ final class FileTreeNode: Identifiable, ObservableObject, @unchecked Sendable {
 
     /// Off-main variant for user-initiated expands — a slow volume or a huge directory
     /// must not hitch the sidebar. Falls back to the sync path's diffing on apply.
-    func loadChildrenAsync() {
-        guard isDirectory else { return }
-        loadGeneration &+= 1
-        let generation = loadGeneration
-        let dirPath = path
-        // Only show a spinner when the listing is actually slow.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
-            guard let self, self.loadGeneration == generation, self.children == nil else { return }
-            self.isLoading = true
+    func loadChildrenAsync(completion: Completion? = nil) {
+        Self.loadAsync([self], completion: completion)
+    }
+
+    /// List every directory in `nodes` in one off-main hop, then apply all listings on
+    /// main together. Existing children stay in place until their listing lands, so a
+    /// reload never blanks a folder. Each node's generation is bumped so an older
+    /// in-flight load can't overwrite a newer one.
+    static func loadAsync(_ nodes: [FileTreeNode], completion: Completion? = nil) {
+        let dirs = nodes.filter(\.isDirectory)
+        guard !dirs.isEmpty else {
+            if let completion { Task { @MainActor in completion() } }
+            return
         }
-        Task.detached(priority: .userInitiated) { [weak self] in
-            let entries = Self.listEntries(of: dirPath)
+        var generations: [Int] = []
+        for node in dirs {
+            node.loadGeneration &+= 1
+            let generation = node.loadGeneration
+            generations.append(generation)
+            // Only show a spinner when the listing is actually slow.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak node] in
+                guard let node, node.loadGeneration == generation, node.children == nil else { return }
+                node.isLoading = true
+            }
+        }
+        let paths = dirs.map(\.path)
+        let expected = generations
+        Task.detached(priority: .userInitiated) {
+            let listings = paths.map { Self.listEntries(of: $0) }
             await MainActor.run {
-                guard let self, self.loadGeneration == generation else { return }
-                self.isLoading = false
-                self.apply(entries)
+                for (index, node) in dirs.enumerated() where node.loadGeneration == expected[index] {
+                    node.isLoading = false
+                    node.apply(listings[index])
+                }
+                completion?()
             }
         }
     }
@@ -134,10 +157,70 @@ final class FileTreeNode: Identifiable, ObservableObject, @unchecked Sendable {
         // tree on every FS event, which shows up as visible reload flicker.
         let unchanged = reusedAll && children?.count == newChildren.count
         let wasLoaded = children != nil
-        children = newChildren
         if !unchanged {
+            // `children` is @Published: reassigning an identical listing would
+            // still re-render every view observing this node (the whole tree at the root).
+            children = newChildren
             treeRoot.treeRevision &+= 1
             if wasLoaded { treeRoot.contentRevision &+= 1 }
+        }
+    }
+
+    /// Expand this folder and reload it plus every still-expanded descendant — their
+    /// listings went stale while hidden. Current children stay on screen until the new
+    /// listings land.
+    func expand() {
+        guard isDirectory else { return }
+        isExpanded = true
+        (root ?? self).treeRevision &+= 1
+        var stale = [self]
+        collectExpandedDescendants(into: &stale)
+        Self.loadAsync(stale)
+    }
+
+    /// Collapse this folder and drop the listings it now hides.
+    func collapse() {
+        guard isDirectory, isExpanded else { return }
+        isExpanded = false
+        releaseHiddenDescendants()
+        (root ?? self).treeRevision &+= 1
+    }
+
+    private func collectExpandedDescendants(into result: inout [FileTreeNode]) {
+        for child in children ?? [] where child.isDirectory && child.isExpanded {
+            result.append(child)
+            child.collectExpandedDescendants(into: &result)
+        }
+    }
+
+    /// Above this many retained nodes, a hidden subtree is dropped wholesale instead
+    /// of kept around for its nested open folders.
+    static let hiddenRetainLimit = 2000
+
+    /// Release listings nobody can see below this (collapsed) node: every collapsed
+    /// descendant loses its children, which are re-listed on expand anyway. This node
+    /// keeps its own listing so re-expanding it paints immediately, and expanded
+    /// descendants keep theirs so their open state survives a collapse/expand of the
+    /// parent — unless that adds up to more than `hiddenRetainLimit` nodes, in which
+    /// case the whole subtree collapses (its nested state isn't persisted either: see
+    /// `expandedPaths`).
+    private func releaseHiddenDescendants() {
+        var retained = 0
+        func prune(_ node: FileTreeNode) {
+            for child in node.children ?? [] where child.isDirectory {
+                if child.isExpanded {
+                    retained += child.children?.count ?? 0
+                    prune(child)
+                } else if child.children != nil {
+                    child.children = nil
+                }
+            }
+        }
+        prune(self)
+        guard retained > Self.hiddenRetainLimit else { return }
+        for child in children ?? [] where child.isDirectory {
+            child.isExpanded = false
+            child.children = nil
         }
     }
 
@@ -150,29 +233,50 @@ final class FileTreeNode: Identifiable, ObservableObject, @unchecked Sendable {
             }
         }
         collapse(self)
+        releaseHiddenDescendants()
         (root ?? self).treeRevision &+= 1
     }
 
-    /// Expand every folder from this node down to `path` so it becomes visible.
-    /// Returns false when `path` isn't under this node.
+    /// Expand every folder from this node down to `path` so it becomes visible,
+    /// loading unread folders off-main one level per hop. Returns false when `path`
+    /// isn't under this node; `completion` reports whether every folder was found.
     @discardableResult
-    func reveal(_ path: String) -> Bool {
+    func reveal(_ path: String, completion: (@MainActor @Sendable (Bool) -> Void)? = nil) -> Bool {
         let prefix = self.path.hasSuffix("/") ? self.path : self.path + "/"
         guard path.hasPrefix(prefix) else { return false }
-        var node = self
-        let components = path.dropFirst(prefix.count).split(separator: "/")
-        for component in components.dropLast() {
-            if node.children == nil { node.loadChildren() }
-            guard let next = node.children?.first(where: { $0.name == component && $0.isDirectory })
-            else { return false }
-            if !next.isExpanded {
-                next.isExpanded = true
-                next.loadChildren()
-            }
-            node = next
-        }
-        (root ?? self).treeRevision &+= 1
+        let components = path.dropFirst(prefix.count).split(separator: "/").dropLast()
+        revealStep(components.map(String.init)[...], completion: completion)
         return true
+    }
+
+    private func revealStep(
+        _ components: ArraySlice<String>, completion: (@MainActor @Sendable (Bool) -> Void)?
+    ) {
+        let treeRoot = root ?? self
+        func finish(_ found: Bool) {
+            treeRoot.treeRevision &+= 1
+            if let completion { Task { @MainActor in completion(found) } }
+        }
+        guard let component = components.first else { return finish(true) }
+        guard let children else {
+            Self.loadAsync([self]) { [self] in
+                // Still unlisted means a newer load superseded this one; stop here
+                // rather than chase it.
+                guard self.children != nil else { return finish(false) }
+                self.revealStep(components, completion: completion)
+            }
+            return
+        }
+        guard let next = children.first(where: { $0.name == component && $0.isDirectory })
+        else { return finish(false) }
+        let rest = components.dropFirst()
+        if next.isExpanded, next.children != nil {
+            next.revealStep(rest, completion: completion)
+        } else {
+            next.isExpanded = true
+            treeRoot.treeRevision &+= 1
+            Self.loadAsync([next]) { next.revealStep(rest, completion: completion) }
+        }
     }
 
     /// Collect all expanded directory paths in this subtree.
@@ -192,18 +296,44 @@ final class FileTreeNode: Identifiable, ObservableObject, @unchecked Sendable {
         }
     }
 
-    /// Restore expanded state from a set of previously expanded paths.
-    func restoreExpanded(_ paths: Set<String>) {
-        guard isDirectory else { return }
-        let shouldExpand = paths.contains(path)
-        if shouldExpand && !isExpanded {
-            isExpanded = true
-            loadChildren()
-        } else if !shouldExpand && isExpanded {
-            isExpanded = false
+    /// Restore expanded state from a set of previously expanded paths. Flags on
+    /// already-listed nodes flip immediately; folders that open are listed off-main in
+    /// one batch per tree level, then their children are restored in turn.
+    func restoreExpanded(_ paths: Set<String>, completion: Completion? = nil) {
+        Self.restoreLevel([self], paths: paths, treeRoot: root ?? self, completion: completion)
+    }
+
+    private static func restoreLevel(
+        _ nodes: [FileTreeNode], paths: Set<String>, treeRoot: FileTreeNode, completion: Completion?
+    ) {
+        var opened: [FileTreeNode] = []
+        var changed = false
+        func visit(_ node: FileTreeNode) {
+            guard node.isDirectory else { return }
+            let shouldExpand = paths.contains(node.path)
+            if shouldExpand && (!node.isExpanded || node.children == nil) {
+                if !node.isExpanded { changed = true }
+                node.isExpanded = true
+                opened.append(node)
+                return
+            }
+            if !shouldExpand && node.isExpanded {
+                node.isExpanded = false
+                changed = true
+            }
+            for child in node.children ?? [] { visit(child) }
         }
-        for child in children ?? [] {
-            child.restoreExpanded(paths)
+        nodes.forEach(visit)
+        if changed { treeRoot.treeRevision &+= 1 }
+        guard !opened.isEmpty else {
+            if let completion { Task { @MainActor in completion() } }
+            return
+        }
+        let batch = opened
+        loadAsync(batch) {
+            restoreLevel(
+                batch.flatMap { $0.children ?? [] }, paths: paths, treeRoot: treeRoot,
+                completion: completion)
         }
     }
 
@@ -213,51 +343,44 @@ final class FileTreeNode: Identifiable, ObservableObject, @unchecked Sendable {
     /// tree open that is a lot of `contentsOfDirectory` calls per event burst, when the
     /// events usually name one or two directories. A node is re-read when it *is* a
     /// changed directory; it is descended into when a changed directory lies below it.
-    func refresh(changedDirs: Set<String>) {
-        guard isDirectory else { return }
-        let treeRoot = root ?? self
-        let before = treeRoot.treeRevision
-        refreshMatching(changedDirs)
-        if treeRoot.treeRevision != before {
-            objectWillChange.send()
-        }
+    /// The re-reads run off-main in one batch.
+    func refresh(changedDirs: Set<String>, completion: Completion? = nil) {
+        var stale: [FileTreeNode] = []
+        if isDirectory { collectMatching(changedDirs, into: &stale) }
+        reload(stale, completion: completion)
     }
 
-    private func refreshMatching(_ changedDirs: Set<String>) {
+    private func collectMatching(_ changedDirs: Set<String>, into result: inout [FileTreeNode]) {
         // Anything below this node lives under "path/" — no descendant can be affected
         // unless a changed directory is this one or sits inside it.
         let prefix = path.hasSuffix("/") ? path : path + "/"
         let touchesSubtree = changedDirs.contains { $0 == path || $0.hasPrefix(prefix) }
         guard touchesSubtree else { return }
         if children != nil, changedDirs.contains(path) {
-            loadChildren()
+            result.append(self)
         }
         for child in children ?? [] where child.isDirectory && child.isExpanded {
-            child.refreshMatching(changedDirs)
+            child.collectMatching(changedDirs, into: &result)
         }
     }
 
-    /// Recursively refresh this node and all expanded children.
-    /// When called on the root, triggers `objectWillChange` so SwiftUI
-    /// picks up deep child-list mutations that would otherwise be invisible.
-    func refreshAll(isRoot: Bool = true) {
-        guard isDirectory else { return }
+    /// Refresh this node and all expanded children, off-main in one batch.
+    func refreshAll(completion: Completion? = nil) {
+        var stale: [FileTreeNode] = []
+        if isDirectory, children != nil { stale.append(self) }
+        collectExpandedDescendants(into: &stale)
+        reload(stale.filter { $0.children != nil }, completion: completion)
+    }
+
+    /// Re-list `nodes`, then trigger `objectWillChange` so SwiftUI picks up deep
+    /// child-list mutations that would otherwise be invisible — but only when a child
+    /// list actually changed, so FS-event storms don't repaint the whole tree.
+    private func reload(_ nodes: [FileTreeNode], completion: Completion?) {
         let treeRoot = root ?? self
         let before = treeRoot.treeRevision
-        if children != nil {
-            loadChildren()
-        }
-        // Refresh expanded subdirectories
-        for child in children ?? [] {
-            if child.isDirectory && child.isExpanded {
-                child.refreshAll(isRoot: false)
-            }
-        }
-        // Force SwiftUI to re-render the tree from the root — but only when a child
-        // list actually changed, so FS-event storms don't repaint the whole tree.
-        if isRoot && treeRoot.treeRevision != before {
-            objectWillChange.send()
+        Self.loadAsync(nodes) { [self] in
+            if treeRoot.treeRevision != before { self.objectWillChange.send() }
+            completion?()
         }
     }
-
 }

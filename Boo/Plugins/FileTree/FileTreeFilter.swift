@@ -173,6 +173,10 @@ final class FileTreeFilterModel: ObservableObject {
     private var showHidden = false
     private var index: [FileTreeIndexEntry]?
     private var indexTask: Task<Void, Never>?
+    /// Set when the index went stale while a build was running. The build walk can't be
+    /// interrupted, so instead of starting a second one alongside it, the running build's
+    /// result is discarded and one fresh build follows.
+    private var indexDirty = false
     private var searchTask: Task<Void, Never>?
 
     func configure(rootPath: String, showHidden: Bool) {
@@ -185,8 +189,10 @@ final class FileTreeFilterModel: ObservableObject {
     /// Drop the index; rebuilt immediately only while a query is showing.
     func invalidate() {
         index = nil
-        indexTask?.cancel()
-        indexTask = nil
+        if indexTask != nil {
+            indexDirty = true
+            return
+        }
         if isActive { scheduleSearch() }
     }
 
@@ -220,14 +226,20 @@ final class FileTreeFilterModel: ObservableObject {
         let root = rootPath
         let hidden = showHidden
         isIndexing = true
+        indexDirty = false
         indexTask = Task { [weak self] in
             let built = await Task.detached(priority: .userInitiated) {
                 FileTreeIndex.build(rootPath: root, showHidden: hidden)
             }.value
-            guard !Task.isCancelled, let self, self.rootPath == root else { return }
-            self.index = built
+            guard let self else { return }
             self.indexTask = nil
             self.isIndexing = false
+            if self.indexDirty || self.rootPath != root || self.showHidden != hidden {
+                self.indexDirty = false
+                if self.isActive { self.scheduleSearch() }
+                return
+            }
+            self.index = built
             self.scheduleSearch()
         }
     }

@@ -225,9 +225,20 @@ final class FileTreeNodeNavigationTests: XCTestCase {
         node?.children?.first { $0.name == name }
     }
 
+    private func revealAndWait(_ root: FileTreeNode, _ path: String) -> Bool {
+        let done = expectation(description: "reveal")
+        nonisolated(unsafe) var found = false
+        let started = root.reveal(path) {
+            found = $0
+            done.fulfill()
+        }
+        wait(for: [done], timeout: 5)
+        return started && found
+    }
+
     func testRevealExpandsAncestors() {
         let root = makeRoot()
-        XCTAssertTrue(root.reveal(tmpDir.appendingPathComponent("a/b/file.txt").path))
+        XCTAssertTrue(revealAndWait(root, tmpDir.appendingPathComponent("a/b/file.txt").path))
         let a = child(root, "a")
         let b = child(a, "b")
         XCTAssertEqual(a?.isExpanded, true)
@@ -241,10 +252,13 @@ final class FileTreeNodeNavigationTests: XCTestCase {
 
     func testCollapseAllCollapsesDescendants() {
         let root = makeRoot()
-        root.reveal(tmpDir.appendingPathComponent("a/b/file.txt").path)
+        let a = child(root, "a")
+        XCTAssertTrue(revealAndWait(root, tmpDir.appendingPathComponent("a/b/file.txt").path))
+        let b = child(a, "b")
         root.collapseAll()
-        XCTAssertEqual(child(root, "a")?.isExpanded, false)
-        XCTAssertEqual(child(child(root, "a"), "b")?.isExpanded, false)
+        XCTAssertEqual(a?.isExpanded, false)
+        XCTAssertEqual(b?.isExpanded, false)
+        XCTAssertNil(a?.children, "Listings hidden by the collapse are released")
         XCTAssertTrue(root.isExpanded, "The root itself stays open")
     }
 

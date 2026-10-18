@@ -136,6 +136,7 @@ struct FileTreeView: View {
     @State private var pendingTrash: [String] = []
     @State private var typeAhead = ""
     @State private var typeAheadAt = Date.distantPast
+    @State private var rowCache = FileTreeRowCache()
     var actions: FileTreeActions
 
     var body: some View {
@@ -159,8 +160,9 @@ struct FileTreeView: View {
         )
         let showHidden = AppSettings.shared.showHiddenFiles
         let git = AppSettings.shared.explorerGitDecorations ? root.gitStatus : nil
-        let rows = filter.isActive ? [] : flattenedRows(root: root, showHidden: showHidden)
-        let order = filter.isActive ? filter.matches.map { absolutePath($0.entry) } : rows.map(\.node.path)
+        let flat = filter.isActive ? nil : rowCache.rows(for: root, showHidden: showHidden)
+        let rows = flat?.rows ?? []
+        let order = flat?.order ?? filter.matches.map { absolutePath($0.entry) }
 
         VStack(alignment: .leading, spacing: 0) {
             if AppSettings.shared.explorerShowFilterBar {
@@ -219,7 +221,7 @@ struct FileTreeView: View {
         // view was handed a root that has never been read (nil children), so a real
         // install doesn't re-walk the directory a second time.
         .onAppear {
-            if root.children == nil { root.loadChildren() }
+            if root.children == nil { root.loadChildrenAsync() }
             filter.configure(rootPath: root.path, showHidden: showHidden)
         }
         .onChange(of: root.path) { _, path in
@@ -250,6 +252,9 @@ struct FileTreeView: View {
                     FileTreeRowView(
                         node: row.node, depth: row.depth, parentPath: row.parentPath,
                         actions: actions, renameState: renameState, dragState: dragState,
+                        dropLineAbove: dragState.dropPosition == .abovePath(path),
+                        isDropTarget: dragState.dropPosition == .onFolder(path),
+                        isDragged: dragState.draggedPath == path,
                         style: cfg, rootPath: root.path,
                         isSelected: selection.contains(path),
                         isCursor: selection.cursor == path,
@@ -341,9 +346,7 @@ struct FileTreeView: View {
 
     private func setExpanded(_ node: FileTreeNode, _ expanded: Bool) {
         guard node.isDirectory, node.isExpanded != expanded else { return }
-        node.isExpanded = expanded
-        if expanded { node.loadChildrenAsync() }
-        (node.root ?? node).treeRevision &+= 1
+        if expanded { node.expand() } else { node.collapse() }
     }
 
     private func activate(_ entry: FileTreeIndexEntry) {
@@ -368,9 +371,10 @@ struct FileTreeView: View {
     /// Leave filter mode and show `path` in the tree, selected.
     private func reveal(_ path: String) {
         filter.clear()
-        root.reveal(path)
-        selection.select(path)
         treeFocused = true
+        // Select once the folders are listed, or pruning against the not-yet-visible
+        // rows would drop the selection again.
+        root.reveal(path) { _ in selection.select(path) }
     }
 
     private func copyProviders(order: [String]) -> [NSItemProvider] {
@@ -475,21 +479,6 @@ struct FileTreeView: View {
         let node: FileTreeNode
         let depth: Int
         let parentPath: String
-    }
-
-    private func flattenedRows(root: FileTreeNode, showHidden: Bool) -> [FlatRow] {
-        var result: [FlatRow] = []
-        func collect(_ node: FileTreeNode, depth: Int, parent: String) {
-            guard let children = node.children else { return }
-            for child in (showHidden ? children : children.filter { !$0.name.hasPrefix(".") }) {
-                result.append(FlatRow(node: child, depth: depth, parentPath: parent))
-                if child.isDirectory && child.isExpanded {
-                    collect(child, depth: depth + 1, parent: child.path)
-                }
-            }
-        }
-        collect(root, depth: 0, parent: root.path)
-        return result
     }
 }
 
@@ -654,6 +643,42 @@ private func currentClickKind() -> FileTreeSelection.ClickKind {
     return .plain
 }
 
+// MARK: - Row Cache
+
+/// Flattened rows and their path order, rebuilt only when the tree's shape changes.
+/// Selection, focus, hover and drag updates re-run `FileTreeView.body` but leave the
+/// tree alone, so they reuse the last flattening instead of walking every node.
+/// Every structural change (listing, expand, collapse) bumps the root's `treeRevision`.
+final class FileTreeRowCache {
+    private struct Key: Equatable {
+        let root: ObjectIdentifier
+        let revision: Int
+        let showHidden: Bool
+    }
+
+    private var key: Key?
+    private var cached: (rows: [FileTreeView.FlatRow], order: [String]) = ([], [])
+
+    func rows(for root: FileTreeNode, showHidden: Bool) -> (rows: [FileTreeView.FlatRow], order: [String]) {
+        let key = Key(root: ObjectIdentifier(root), revision: root.treeRevision, showHidden: showHidden)
+        guard key != self.key else { return cached }
+        var rows: [FileTreeView.FlatRow] = []
+        func collect(_ node: FileTreeNode, depth: Int, parent: String) {
+            guard let children = node.children else { return }
+            for child in (showHidden ? children : children.filter { !$0.name.hasPrefix(".") }) {
+                rows.append(FileTreeView.FlatRow(node: child, depth: depth, parentPath: parent))
+                if child.isDirectory && child.isExpanded {
+                    collect(child, depth: depth + 1, parent: child.path)
+                }
+            }
+        }
+        collect(root, depth: 0, parent: root.path)
+        self.key = key
+        cached = (rows, rows.map(\.node.path))
+        return cached
+    }
+}
+
 // MARK: - Row View
 
 struct FileTreeRowView: View {
@@ -662,7 +687,12 @@ struct FileTreeRowView: View {
     let parentPath: String
     var actions: FileTreeActions
     @ObservedObject var renameState: FileTreeRenameState
-    @ObservedObject var dragState: FileTreeDragState
+    /// Not observed: rows get their drag state as values below, so a moving drop
+    /// target re-renders only the rows it enters and leaves.
+    let dragState: FileTreeDragState
+    var dropLineAbove: Bool
+    var isDropTarget: Bool
+    var isDragged: Bool
     var style: RowStyle
     var rootPath: String
     var isSelected: Bool
@@ -677,7 +707,6 @@ struct FileTreeRowView: View {
     @State private var isHovered = false
 
     private var isRenaming: Bool { renameState.renamingPath == node.path }
-    private var isDragged: Bool { dragState.draggedPath == node.path }
 
     private var rowOpacity: Double {
         if isDragged { return 0.4 }
@@ -687,7 +716,7 @@ struct FileTreeRowView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if dragState.dropPosition == .abovePath(node.path) {
+            if dropLineAbove {
                 FileTreeDropLine(accentColor: style.accentColor)
                     .padding(.leading, CGFloat(depth) * 16 + 12)
             }
@@ -723,8 +752,7 @@ struct FileTreeRowView: View {
     // MARK: Row Content
 
     private var rowContent: some View {
-        let isDropTarget = dragState.dropPosition == .onFolder(node.path)
-        return HStack(spacing: 5) {
+        HStack(spacing: 5) {
             if node.isDirectory {
                 Image(systemName: node.isExpanded ? "chevron.down" : "chevron.right")
                     .font(.system(size: 9, weight: .semibold))
@@ -1048,10 +1076,8 @@ struct RowDropDelegate: DropDelegate {
             dragState.expandTimer?.cancel()
             let path = node.path
             let timer = DispatchWorkItem { [weak node] in
-                guard let node, dragState.dropPosition == .onFolder(path) else { return }
-                node.isExpanded = true
-                node.loadChildren()
-                (node.root ?? node).treeRevision &+= 1
+                guard let node, !node.isExpanded, dragState.dropPosition == .onFolder(path) else { return }
+                node.expand()
             }
             dragState.expandTimer = timer
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.6, execute: timer)

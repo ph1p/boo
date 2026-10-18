@@ -184,7 +184,7 @@ final class LocalFileTreePlugin: BooPluginProtocol {
         // NSHostingView.rootView, so we must trigger the load here.
         // A brand-new root already loaded in getOrCreateRoot; don't load twice.
         if !isSameTerminalAndCwd && !wasCreated {
-            root.loadChildren()
+            root.loadChildrenAsync()
         }
         if !isSameTerminalAndCwd { refreshGitStatus(root) }
 
@@ -459,6 +459,8 @@ final class LocalFileTreePlugin: BooPluginProtocol {
         if let cached = cachedRoots[path] { return (cached, false) }
         let name = (path as NSString).lastPathComponent
         let root = FileTreeNode(name: name, path: path, isDirectory: true)
+        // Sync on purpose: one top-level listing for the first paint. Async here would
+        // show an empty explorer for a frame on every new directory.
         root.loadChildren()
         root.isExpanded = true
         cachedRoots[path] = root

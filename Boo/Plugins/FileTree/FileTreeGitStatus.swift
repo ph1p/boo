@@ -45,7 +45,7 @@ struct FileTreeGitStatus: Equatable, Sendable {
     /// Strongest non-ignored status found below each ancestor folder.
     private(set) var folderRollup: [String: FileGitStatus] = [:]
 
-    /// Parse `git status --porcelain=v1 -z --ignored` output.
+    /// Parse `git status --porcelain=v1 -z --ignored=matching` output.
     init(repoRoot: String, porcelainZ output: String) {
         self.repoRoot = repoRoot
         let fields = output.split(separator: "\0", omittingEmptySubsequences: true)
@@ -108,8 +108,13 @@ struct FileTreeGitStatus: Equatable, Sendable {
 
         guard
             // `-- .` scopes the walk to the tree root; porcelain paths stay repo-relative.
+            // `--ignored=matching` reports ignored folders without walking into them
+            // (plain `--ignored` descends node_modules/.build: ~50x slower).
             let output = GitPlugin.gitOutput(
-                ["-C", rootPath, "--no-optional-locks", "status", "--porcelain=v1", "-z", "--ignored", "--", "."]
+                [
+                    "-C", rootPath, "--no-optional-locks", "status", "--porcelain=v1", "-z", "--ignored=matching",
+                    "--", "."
+                ]
             )
         else { return nil }
         return FileTreeGitStatus(repoRoot: repoRoot, porcelainZ: output)
