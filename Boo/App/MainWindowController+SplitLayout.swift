@@ -40,7 +40,7 @@ extension MainWindowController {
     }
 
     /// Make `paneID` active and focused, leaving zoom when it was hidden.
-    private func focusPane(_ paneID: UUID, in workspace: Workspace) {
+    func focusPane(_ paneID: UUID, in workspace: Workspace) {
         revealPane(paneID, in: workspace)
         workspace.activePaneID = paneID
         updatePaneCloseButtons()
@@ -54,11 +54,12 @@ extension MainWindowController {
         setZoomedPane(nil, in: workspace)
     }
 
-    /// Move the divider next to the active pane `amount` points toward `direction`.
-    func resizeActivePane(toward direction: PaneDirection, by amount: CGFloat) {
+    /// Move the divider next to `paneID` (default: the active pane) `amount`
+    /// points toward `direction`.
+    func resizeActivePane(toward direction: PaneDirection, by amount: CGFloat, paneID: UUID? = nil) {
         guard let workspace = activeWorkspace, workspace.zoomedPaneID == nil else { return }
         let resized = workspace.splitTree.resizing(
-            leafID: workspace.activePaneID, toward: direction, by: amount, in: splitLayoutSize,
+            leafID: paneID ?? workspace.activePaneID, toward: direction, by: amount, in: splitLayoutSize,
             minimum: splitContainer.minPaneDimension)
         guard resized != workspace.splitTree else { return }
         workspace.splitTree = resized
@@ -67,9 +68,9 @@ extension MainWindowController {
     }
 
     /// Swap the active pane with its neighbor in `direction`; focus moves with it.
-    func swapActivePane(toward direction: PaneDirection) {
+    func swapActivePane(toward direction: PaneDirection, paneID: UUID? = nil) {
         guard let workspace = activeWorkspace else { return }
-        let active = workspace.activePaneID
+        let active = paneID ?? workspace.activePaneID
         guard let target = workspace.splitTree.neighbor(of: active, toward: direction, in: splitLayoutSize)
         else { return }
         swapPanes(active, target, in: workspace)

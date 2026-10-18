@@ -303,12 +303,11 @@ final class DockerService: ObservableObject, @unchecked Sendable {
 
     private func stopEventStream() {
         refreshDebounce.cancel()
+        // The source's cancel handler closes the fd; closing it here too could
+        // close an unrelated descriptor that reused the number meanwhile.
         eventSource?.cancel()
         eventSource = nil
-        if eventFD >= 0 {
-            close(eventFD)
-            eventFD = -1
-        }
+        eventFD = -1
     }
 
     /// Stream events from GET /events over the socket.
@@ -342,9 +341,11 @@ final class DockerService: ObservableObject, @unchecked Sendable {
             if n <= 0 {
                 source.cancel()
                 DispatchQueue.main.async { [weak self] in
-                    self?.eventFD = -1
-                    self?.eventSource = nil
-                    self?.refreshAll()
+                    // A restart may already have replaced this stream.
+                    guard let self, self.eventSource === source else { return }
+                    self.eventFD = -1
+                    self.eventSource = nil
+                    self.refreshAll()
                 }
                 return
             }

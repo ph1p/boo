@@ -239,12 +239,12 @@ final class SidebarController {
         wc.mainSplitView.setPosition(pos, ofDividerAt: 0)
     }
 
-    func syncWorkspaceSidebarState() {
+    func syncWorkspaceSidebarState(rememberAsDefault: Bool = true) {
         guard suppressSidebarStateSync == 0 else {
             debugLog("[Sidebar] syncWorkspaceSidebarState suppressed (suppress=\(suppressSidebarStateSync))")
             return
         }
-        persistLiveState()
+        persistLiveState(rememberAsDefault: rememberAsDefault)
     }
 
     /// Bump activation generation and return the new value. The async width-restore

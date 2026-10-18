@@ -61,6 +61,28 @@ final class IPCLayoutCommandTests: XCTestCase {
         XCTAssertEqual(run(controller, ["cmd": "close_pane"])["ok"] as? Bool, false, "only pane stays")
     }
 
+    func testPaneIDTargetsNamedPane() throws {
+        let (controller, workspace) = try makeController()
+        let first = workspace.activePaneID
+        _ = run(controller, ["cmd": "split_pane", "direction": "right"])
+        let second = workspace.activePaneID
+
+        XCTAssertEqual(
+            run(controller, ["cmd": "focus_pane", "pane_id": first.uuidString])["active_pane"] as? String,
+            first.uuidString)
+        XCTAssertEqual(run(controller, ["cmd": "zoom_pane", "pane_id": second.uuidString])["zoomed"] as? Bool, true)
+        XCTAssertEqual(workspace.zoomedPaneID, second)
+        XCTAssertEqual(workspace.activePaneID, second)
+        _ = run(controller, ["cmd": "zoom_pane", "zoomed": false])
+
+        _ = run(controller, ["cmd": "focus_pane", "pane_id": first.uuidString])
+        _ = run(controller, ["cmd": "swap_pane", "direction": "left", "pane_id": second.uuidString])
+        XCTAssertEqual(workspace.splitTree.leafIDs, [second, first])
+        XCTAssertEqual(
+            run(controller, ["cmd": "resize_pane", "direction": "left", "pane_id": UUID().uuidString])["ok"] as? Bool,
+            false)
+    }
+
     func testGetLayoutDescribesTree() throws {
         let (controller, workspace) = try makeController()
         _ = run(controller, ["cmd": "split_pane", "direction": "down"])

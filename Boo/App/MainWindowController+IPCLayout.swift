@@ -18,6 +18,7 @@ extension MainWindowController {
         case "swap_pane": ipcSwapPane(json: json, reply: reply)
         case "zoom_pane": ipcZoomPane(json: json, reply: reply)
         case "equalize_splits":
+            guard ipcOnScreenPane(json, reply: reply) != nil else { return true }
             equalizeSplitsAction(nil)
             reply(["ok": true])
         case "get_layout": ipcGetLayout(json: json, reply: reply)
@@ -56,6 +57,22 @@ extension MainWindowController {
             return nil
         }
         return (workspace, workspace.activePaneID)
+    }
+
+    /// `ipcTargetPane`, limited to the on-screen workspace: focus, resize, swap,
+    /// zoom and equalize work on the visible layout. Replies with an error for
+    /// a pane in a background workspace.
+    private func ipcOnScreenPane(
+        _ json: [String: Any], reply: ([String: Any]) -> Void
+    ) -> (
+        workspace: Workspace, paneID: UUID
+    )? {
+        guard let target = ipcTargetPane(json, reply: reply) else { return nil }
+        guard target.workspace === activeWorkspace else {
+            reply(["ok": false, "error": "pane is in a background workspace; switch to it first"])
+            return nil
+        }
+        return target
     }
 
     private func ipcSplitPane(json: [String: Any], reply: @escaping ([String: Any]) -> Void) {
@@ -102,38 +119,53 @@ extension MainWindowController {
         reply(["ok": true, "active_pane": workspace.activePaneID.uuidString])
     }
 
+    /// Moves focus from `pane_id` (default: the active pane) by `direction`;
+    /// with `pane_id` and no direction, focuses that pane.
     private func ipcFocusPane(json: [String: Any], reply: @escaping ([String: Any]) -> Void) {
-        switch json["direction"] as? String {
+        guard let (workspace, paneID) = ipcOnScreenPane(json, reply: reply) else { return }
+        let name = json["direction"] as? String
+        var direction: PaneDirection?
+        if name != "next", name != "previous", name != nil || json["pane_id"] == nil {
+            guard let parsed = ipcDirection(json, reply: reply) else { return }
+            direction = parsed
+        }
+        if paneID != workspace.activePaneID { focusPane(paneID, in: workspace) }
+        switch name {
         case "next": cyclePaneFocus(by: 1)
         case "previous": cyclePaneFocus(by: -1)
-        default:
-            guard let direction = ipcDirection(json, reply: reply) else { return }
-            focusPane(direction)
+        default: if let direction { focusPane(direction) }
         }
         reply(["ok": true, "active_pane": activeWorkspace?.activePaneID.uuidString ?? ""])
     }
 
     private func ipcResizePane(json: [String: Any], reply: @escaping ([String: Any]) -> Void) {
-        guard let direction = ipcDirection(json, reply: reply) else { return }
+        guard let direction = ipcDirection(json, reply: reply), let target = ipcOnScreenPane(json, reply: reply)
+        else { return }
         let amount = (json["amount"] as? NSNumber)?.doubleValue ?? 10
-        resizeActivePane(toward: direction, by: CGFloat(amount))
+        resizeActivePane(toward: direction, by: CGFloat(amount), paneID: target.paneID)
         reply(["ok": true])
     }
 
     private func ipcSwapPane(json: [String: Any], reply: @escaping ([String: Any]) -> Void) {
-        guard let direction = ipcDirection(json, reply: reply) else { return }
-        swapActivePane(toward: direction)
+        guard let direction = ipcDirection(json, reply: reply), let target = ipcOnScreenPane(json, reply: reply)
+        else { return }
+        swapActivePane(toward: direction, paneID: target.paneID)
         reply(["ok": true])
     }
 
-    /// Toggles zoom, or sets it with `"zoomed": true/false`.
+    /// Toggles zoom, or sets it with `"zoomed": true/false`. Zooming in shows
+    /// `pane_id` (default: the active pane) and focuses it.
     private func ipcZoomPane(json: [String: Any], reply: @escaping ([String: Any]) -> Void) {
-        guard let workspace = activeWorkspace else {
-            reply(["ok": false, "error": "no active workspace"])
-            return
-        }
+        guard let (workspace, paneID) = ipcOnScreenPane(json, reply: reply) else { return }
         let wanted = (json["zoomed"] as? Bool) ?? (workspace.zoomedPaneID == nil)
-        if wanted != (workspace.zoomedPaneID != nil) { toggleZoomPaneAction(nil) }
+        if wanted {
+            if paneID != workspace.activePaneID { focusPane(paneID, in: workspace) }
+            if workspace.zoomedPaneID != paneID, workspace.splitTree.leafCount > 1 {
+                setZoomedPane(paneID, in: workspace)
+            }
+        } else if workspace.zoomedPaneID != nil {
+            setZoomedPane(nil, in: workspace)
+        }
         reply(["ok": true, "zoomed": workspace.zoomedPaneID != nil])
     }
 

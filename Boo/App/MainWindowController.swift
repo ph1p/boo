@@ -659,7 +659,8 @@ class ThemedSplitView: NSSplitView {
         ) { [weak self] notification in
             let topicString = notification.userInfo?["topic"] as? String
             MainActor.assumeIsolated {
-                guard let self, self.window?.isVisible == true else { return }
+                // Minimized windows still apply changes: nothing replays them on restore.
+                guard let self, let window = self.window, window.isVisible || window.isMiniaturized else { return }
                 let topic = topicString.flatMap(SettingsTopic.init(rawValue:))
                 // Socket broadcasts and AppStore theme are app-wide: WindowManager
                 // handles them once, not per window.
@@ -1438,11 +1439,16 @@ class ThemedSplitView: NSSplitView {
         guard let splitView = notification.object as? NSSplitView else { return }
         guard splitView == mainSplitView, sidebarVisible else { return }
 
-        sidebarController.syncWorkspaceSidebarState()
+        // Remembering the width as the app default writes settings.json; do that
+        // once the drag settles, not on every frame.
+        sidebarController.syncWorkspaceSidebarState(rememberAsDefault: false)
 
         sidebarStateSaveTimer?.invalidate()
         sidebarStateSaveTimer = Timer.scheduledTimer(withTimeInterval: 0.2, repeats: false) { [weak self] _ in
-            MainActor.assumeIsolated { self?.saveSession() }
+            MainActor.assumeIsolated {
+                self?.sidebarController.syncWorkspaceSidebarState()
+                self?.saveSession()
+            }
         }
     }
 
