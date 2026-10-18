@@ -1,7 +1,8 @@
 import Foundation
 
-/// Data model for file tree entries.
-final class FileTreeNode: Identifiable, ObservableObject {
+/// Data model for file tree entries. Mutated on the main thread only; the async loader
+/// lists off-main and hops back before touching state (hence `@unchecked Sendable`).
+final class FileTreeNode: Identifiable, ObservableObject, @unchecked Sendable {
     let id: String
     let name: String
     let path: String
@@ -24,63 +25,138 @@ final class FileTreeNode: Identifiable, ObservableObject {
         self.isDirectory = isDirectory
     }
 
+    /// True while an async listing for this directory is in flight.
+    @Published private(set) var isLoading = false
+    /// Bumped per async load so a slow listing can't overwrite a newer one.
+    private var loadGeneration = 0
+
+    /// Git decorations for the tree. Only meaningful on the root node.
+    @Published var gitStatus: FileTreeGitStatus?
+
+    struct Entry: Sendable {
+        let name: String
+        let path: String
+        let isDir: Bool
+    }
+
     /// Load or reload children for a directory.
     func loadChildren() {
         guard isDirectory else { return }
-        let url = URL(fileURLWithPath: path)
-        let treeRoot = root ?? self
-        do {
-            let urls = try FileManager.default.contentsOfDirectory(
-                at: url,
+        apply(Self.listEntries(of: path))
+    }
+
+    /// Off-main variant for user-initiated expands — a slow volume or a huge directory
+    /// must not hitch the sidebar. Falls back to the sync path's diffing on apply.
+    func loadChildrenAsync() {
+        guard isDirectory else { return }
+        loadGeneration &+= 1
+        let generation = loadGeneration
+        let dirPath = path
+        // Only show a spinner when the listing is actually slow.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
+            guard let self, self.loadGeneration == generation, self.children == nil else { return }
+            self.isLoading = true
+        }
+        Task.detached(priority: .userInitiated) { [weak self] in
+            let entries = Self.listEntries(of: dirPath)
+            await MainActor.run {
+                guard let self, self.loadGeneration == generation else { return }
+                self.isLoading = false
+                self.apply(entries)
+            }
+        }
+    }
+
+    /// Sorted listing of a directory (folders first), or nil when unreadable.
+    ///
+    /// Each child path is built from `dirPath` rather than taken from the enumerator's
+    /// `u.path`: FileManager hands back *resolved* paths (a cwd of `/var/folders/…` lists
+    /// as `/private/var/folders/…`), which would leave a child in a different path form
+    /// from its parent. Anything that compares node paths across levels then silently
+    /// misses — `refresh(changedDirs:)` skips descendants, and `restoreExpanded` fails to
+    /// match saved keys.
+    static func listEntries(of dirPath: String) -> [Entry]? {
+        guard
+            let urls = try? FileManager.default.contentsOfDirectory(
+                at: URL(fileURLWithPath: dirPath),
                 includingPropertiesForKeys: [.isDirectoryKey],
                 options: []
             )
+        else { return nil }
+        let entries = urls.map { u in
+            let isDir = (try? u.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) ?? false
+            let name = u.lastPathComponent
+            return Entry(name: name, path: (dirPath as NSString).appendingPathComponent(name), isDir: isDir)
+        }
+        return entries.sorted { lhs, rhs in
+            if lhs.isDir != rhs.isDir { return lhs.isDir }
+            return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
+        }
+    }
 
-            // Build each child path from this node's own path rather than taking the
-            // enumerator's `u.path`: FileManager hands back *resolved* paths (a cwd of
-            // `/var/folders/…` lists as `/private/var/folders/…`), which would leave a
-            // child in a different path form from its parent. Anything that compares node
-            // paths across levels then silently misses — `refresh(changedDirs:)` skips
-            // descendants, and `restoreExpanded` fails to match saved keys.
-            let entries: [(name: String, path: String, isDir: Bool)] = urls.compactMap { u in
-                let isDir = (try? u.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) ?? false
-                let name = u.lastPathComponent
-                return (name: name, path: (path as NSString).appendingPathComponent(name), isDir: isDir)
-            }
-
-            let sorted = entries.sorted { lhs, rhs in
-                if lhs.isDir != rhs.isDir { return lhs.isDir }
-                return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
-            }
-
-            // Index existing children by path so reuse is O(n) rather than O(n²) —
-            // this runs for every expanded directory on every FS event, and a
-            // node_modules-sized listing makes the linear scan bite.
-            var existingByPath: [String: FileTreeNode] = [:]
-            for child in children ?? [] { existingByPath[child.path] = child }
-
-            var reusedAll = true
-            let newChildren = sorted.map { entry -> FileTreeNode in
-                if let existing = existingByPath[entry.path], existing.isDirectory == entry.isDir {
-                    return existing
-                }
-                reusedAll = false
-                let child = FileTreeNode(name: entry.name, path: entry.path, isDirectory: entry.isDir)
-                child.root = treeRoot
-                return child
-            }
-
-            // Skip the revision bump when nothing changed. A watched directory that
-            // churns (build output, node_modules) otherwise re-flattens the whole
-            // tree on every FS event, which shows up as visible reload flicker.
-            let unchanged = reusedAll && children?.count == newChildren.count
-            children = newChildren
-            if !unchanged { treeRoot.treeRevision &+= 1 }
-        } catch {
+    private func apply(_ listing: [Entry]?) {
+        let treeRoot = root ?? self
+        guard let sorted = listing else {
             let wasEmpty = children?.isEmpty ?? false
             children = []
             if !wasEmpty { treeRoot.treeRevision &+= 1 }
+            return
         }
+
+        // Index existing children by path so reuse is O(n) rather than O(n²) —
+        // this runs for every expanded directory on every FS event, and a
+        // node_modules-sized listing makes the linear scan bite.
+        var existingByPath: [String: FileTreeNode] = [:]
+        for child in children ?? [] { existingByPath[child.path] = child }
+
+        var reusedAll = true
+        let newChildren = sorted.map { entry -> FileTreeNode in
+            if let existing = existingByPath[entry.path], existing.isDirectory == entry.isDir {
+                return existing
+            }
+            reusedAll = false
+            let child = FileTreeNode(name: entry.name, path: entry.path, isDirectory: entry.isDir)
+            child.root = treeRoot
+            return child
+        }
+
+        // Skip the revision bump when nothing changed. A watched directory that
+        // churns (build output, node_modules) otherwise re-flattens the whole
+        // tree on every FS event, which shows up as visible reload flicker.
+        let unchanged = reusedAll && children?.count == newChildren.count
+        children = newChildren
+        if !unchanged { treeRoot.treeRevision &+= 1 }
+    }
+
+    /// Collapse every folder below this node.
+    func collapseAll() {
+        for child in children ?? [] where child.isDirectory {
+            child.isExpanded = false
+            child.collapseAll()
+        }
+        (root ?? self).treeRevision &+= 1
+    }
+
+    /// Expand every folder from this node down to `path` so it becomes visible.
+    /// Returns false when `path` isn't under this node.
+    @discardableResult
+    func reveal(_ path: String) -> Bool {
+        let prefix = self.path.hasSuffix("/") ? self.path : self.path + "/"
+        guard path.hasPrefix(prefix) else { return false }
+        var node = self
+        let components = path.dropFirst(prefix.count).split(separator: "/")
+        for component in components.dropLast() {
+            if node.children == nil { node.loadChildren() }
+            guard let next = node.children?.first(where: { $0.name == component && $0.isDirectory })
+            else { return false }
+            if !next.isExpanded {
+                next.isExpanded = true
+                next.loadChildren()
+            }
+            node = next
+        }
+        (root ?? self).treeRevision &+= 1
+        return true
     }
 
     /// Collect all expanded directory paths in this subtree.

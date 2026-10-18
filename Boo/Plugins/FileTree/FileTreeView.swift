@@ -20,7 +20,8 @@ struct FileTreeActions: @unchecked Sendable {
     var onRevealInFinder: (@MainActor (String) -> Void)?
     var onRunCommand: (@MainActor (String) -> Void)?
     var onNavigate: (@MainActor (String) -> Void)?
-    var onMoveToTrash: (@MainActor (String) -> Void)?
+    /// Trash one or more paths (the multi-selection); the view confirms first.
+    var onMoveToTrash: (@MainActor ([String]) -> Void)?
     var onRename: (@MainActor (_ oldPath: String, _ newName: String) -> Void)?
     var onMove: (@MainActor (_ sourcePath: String, _ destinationDir: String) -> Void)?
     var onCreateFolder: (@MainActor (_ parentPath: String) -> Void)?
@@ -125,9 +126,16 @@ final class FileTreeDragState: ObservableObject {
 
 struct FileTreeView: View {
     @ObservedObject var root: FileTreeNode
-    @ObservedObject var settings = SettingsObserver(topics: [.theme, .explorer, .sidebarFont])
+    @ObservedObject var settings = SettingsObserver(topics: [.theme, .explorer, .sidebarFont, .plugins])
     @StateObject private var renameState = FileTreeRenameState()
     @StateObject private var dragState = FileTreeDragState()
+    @StateObject private var selection = FileTreeSelection()
+    @StateObject private var filter = FileTreeFilterModel()
+    @FocusState private var treeFocused: Bool
+    @FocusState private var filterFocused: Bool
+    @State private var pendingTrash: [String] = []
+    @State private var typeAhead = ""
+    @State private var typeAheadAt = Date.distantPast
     var actions: FileTreeActions
 
     var body: some View {
@@ -141,11 +149,92 @@ struct FileTreeView: View {
             textColor: Color(nsColor: theme.chromeText),
             mutedColor: Color(nsColor: theme.chromeMuted),
             accentColor: Color(nsColor: theme.accentColor),
-            hoverColor: Color(nsColor: theme.chromeMuted).opacity(0.15)
+            hoverColor: Color(nsColor: theme.hoverFill),
+            selectionColor: Color(nsColor: theme.accentSelectionFill),
+            inactiveSelectionColor: Color(nsColor: theme.controlFill),
+            controlFill: Color(nsColor: theme.subtleFill),
+            successColor: Color(nsColor: theme.success),
+            warningColor: Color(nsColor: theme.warning),
+            errorColor: Color(nsColor: theme.error)
         )
         let showHidden = AppSettings.shared.showHiddenFiles
-        let rows = flattenedRows(root: root, showHidden: showHidden)
+        let git = AppSettings.shared.explorerGitDecorations ? root.gitStatus : nil
+        let rows = filter.isActive ? [] : flattenedRows(root: root, showHidden: showHidden)
+        let order = filter.isActive ? filter.matches.map { absolutePath($0.entry) } : rows.map(\.node.path)
 
+        VStack(alignment: .leading, spacing: 0) {
+            if AppSettings.shared.explorerShowFilterBar {
+                FileTreeFilterBar(
+                    filter: filter, focused: $filterFocused, style: cfg,
+                    onCollapseAll: { root.collapseAll() },
+                    onSubmit: { activateFirstMatch() },
+                    onMoveIntoTree: {
+                        treeFocused = true
+                        selection.move(by: 1, order: order, extend: false)
+                    }
+                )
+            }
+
+            Group {
+                if filter.isActive {
+                    filterResults(cfg: cfg, git: git, order: order)
+                } else {
+                    tree(rows: rows, cfg: cfg, git: git, order: order)
+                }
+            }
+            .focusable()
+            .focused($treeFocused)
+            .focusEffectDisabled()
+            .onKeyPress(phases: .down) { handleKey($0, rows: rows, order: order) }
+            .onCopyCommand { copyProviders(order: order) }
+            .onCommand(#selector(NSResponder.selectAll(_:))) { selection.selectAll(order: order) }
+
+            Spacer(minLength: 0)
+        }
+        .frame(maxHeight: .infinity)
+        .background(Color(nsColor: theme.sidebarBg))
+        .contentShape(Rectangle())
+        .contextMenu {
+            Button("New File") { actions.onCreateFile?(root.path) }
+            Button("New Folder") { actions.onCreateFolder?(root.path) }
+            Divider()
+            Button("Collapse All Folders") { root.collapseAll() }
+        }
+        .onDrop(
+            of: [.fileURL],
+            delegate: RootDropDelegate(
+                dragState: dragState, actions: actions, rootPath: root.path
+            )
+        )
+        .confirmationDialog(
+            trashTitle, isPresented: trashBinding, titleVisibility: .visible
+        ) {
+            Button("Move to Trash", role: .destructive) {
+                actions.onMoveToTrash?(pendingTrash)
+                pendingTrash = []
+            }
+            Button("Cancel", role: .cancel) { pendingTrash = [] }
+        }
+        // The plugin loads the root before handing it over; only load here when this
+        // view was handed a root that has never been read (nil children), so a real
+        // install doesn't re-walk the directory a second time.
+        .onAppear {
+            if root.children == nil { root.loadChildren() }
+            filter.configure(rootPath: root.path, showHidden: showHidden)
+        }
+        .onChange(of: root.path) { _, path in
+            selection.clear()
+            filter.configure(rootPath: path, showHidden: AppSettings.shared.showHiddenFiles)
+        }
+        .onChange(of: showHidden) { _, hidden in filter.configure(rootPath: root.path, showHidden: hidden) }
+        .onChange(of: root.treeRevision) { _, _ in filter.invalidate() }
+        .onChange(of: order) { _, newOrder in selection.prune(visible: newOrder) }
+    }
+
+    // MARK: Tree
+
+    @ViewBuilder
+    private func tree(rows: [FlatRow], cfg: RowStyle, git: FileTreeGitStatus?, order: [String]) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             if root.path != "/" {
                 ParentDirectoryButton(style: cfg) {
@@ -155,40 +244,230 @@ struct FileTreeView: View {
 
             LazyVStack(alignment: .leading, spacing: 0) {
                 ForEach(rows, id: \.node.id) { row in
+                    let path = row.node.path
                     FileTreeRowView(
                         node: row.node, depth: row.depth, parentPath: row.parentPath,
                         actions: actions, renameState: renameState, dragState: dragState,
-                        style: cfg, rootPath: root.path, showHidden: showHidden
+                        style: cfg, rootPath: root.path,
+                        isSelected: selection.contains(path),
+                        isCursor: selection.cursor == path,
+                        treeFocused: treeFocused,
+                        gitStatus: git?.status(for: path, isDirectory: row.node.isDirectory),
+                        dimIgnored: AppSettings.shared.explorerDimIgnored,
+                        menuPaths: menuPaths(for: path, order: order),
+                        onClick: { kind in click(row.node, kind: kind, order: order) },
+                        onTrash: { pendingTrash = $0 }
                     )
                 }
             }
             .padding(.top, 6)
-
-            Spacer(minLength: 0)
         }
-        .frame(maxHeight: .infinity)
-        .background(Color(nsColor: theme.sidebarBg))
-        .contentShape(Rectangle())
-        .contextMenu {
-            Button("New Folder") { actions.onCreateFolder?(root.path) }
-        }
-        .onDrop(
-            of: [.fileURL],
-            delegate: RootDropDelegate(
-                dragState: dragState, actions: actions, rootPath: root.path
-            )
-        )
-        // The plugin loads the root before handing it over; only load here when this
-        // view was handed a root that has never been read (nil children), so a real
-        // install doesn't re-walk the directory a second time.
-        .onAppear { if root.children == nil { root.loadChildren() } }
     }
+
+    // MARK: Filter Results
+
+    @ViewBuilder
+    private func filterResults(cfg: RowStyle, git: FileTreeGitStatus?, order: [String]) -> some View {
+        LazyVStack(alignment: .leading, spacing: 0) {
+            if filter.matches.isEmpty && !filter.isIndexing {
+                Text("No matches")
+                    .font(cfg.font)
+                    .foregroundStyle(cfg.mutedColor)
+                    .padding(.leading, 12)
+                    .padding(.vertical, 6)
+            }
+            ForEach(filter.matches, id: \.entry.relativePath) { match in
+                let path = absolutePath(match.entry)
+                FileTreeMatchRowView(
+                    match: match, absolutePath: path, style: cfg,
+                    isSelected: selection.contains(path),
+                    isCursor: selection.cursor == path,
+                    treeFocused: treeFocused,
+                    gitStatus: git?.status(for: path, isDirectory: match.entry.isDirectory),
+                    onClick: { kind in
+                        if kind != .plain || match.entry.isDirectory { treeFocused = true }
+                        selection.click(path, kind: kind, order: order)
+                        if kind == .plain { activate(match.entry) }
+                    },
+                    onReveal: { reveal(path) },
+                    actions: actions
+                )
+            }
+        }
+        .padding(.top, 4)
+    }
+
+    // MARK: Helpers
 
     private var explorerFont: Font {
         let name = AppSettings.shared.sidebarFontName
         let size = AppSettings.shared.sidebarFontSize
         if name.isEmpty || name == "System Default" { return .system(size: size) }
         return .custom(name, size: size)
+    }
+
+    private var trashTitle: String {
+        pendingTrash.count == 1
+            ? "Move \"\((pendingTrash[0] as NSString).lastPathComponent)\" to Trash?"
+            : "Move \(pendingTrash.count) items to Trash?"
+    }
+
+    private var trashBinding: Binding<Bool> {
+        Binding(get: { !pendingTrash.isEmpty }, set: { if !$0 { pendingTrash = [] } })
+    }
+
+    private func absolutePath(_ entry: FileTreeIndexEntry) -> String {
+        (root.path as NSString).appendingPathComponent(entry.relativePath)
+    }
+
+    /// Paths a row's context menu acts on: the whole selection when the row is part of
+    /// a multi-selection, else just the row.
+    private func menuPaths(for path: String, order: [String]) -> [String] {
+        guard selection.selected.count > 1, selection.contains(path) else { return [path] }
+        return selection.ordered(in: order)
+    }
+
+    private func click(_ node: FileTreeNode, kind: FileTreeSelection.ClickKind, order: [String]) {
+        guard renameState.renamingPath != node.path else { return }
+        // Opening a file hands focus to its tab; grabbing it here would steal it back.
+        if kind != .plain || node.isDirectory { treeFocused = true }
+        selection.click(node.path, kind: kind, order: order)
+        guard kind == .plain else { return }
+        if node.isDirectory {
+            setExpanded(node, !node.isExpanded)
+        } else {
+            actions.onFileClicked?(node.path)
+        }
+    }
+
+    private func setExpanded(_ node: FileTreeNode, _ expanded: Bool) {
+        guard node.isDirectory, node.isExpanded != expanded else { return }
+        node.isExpanded = expanded
+        if expanded { node.loadChildrenAsync() }
+        (node.root ?? node).treeRevision &+= 1
+    }
+
+    private func activate(_ entry: FileTreeIndexEntry) {
+        let path = absolutePath(entry)
+        if entry.isDirectory {
+            reveal(path)
+        } else {
+            actions.onFileClicked?(path)
+        }
+    }
+
+    private func activateFirstMatch() {
+        guard filter.isActive else { return }
+        if let cursor = selection.cursor, let match = filter.matches.first(where: { absolutePath($0.entry) == cursor })
+        {
+            activate(match.entry)
+        } else if let first = filter.matches.first {
+            activate(first.entry)
+        }
+    }
+
+    /// Leave filter mode and show `path` in the tree, selected.
+    private func reveal(_ path: String) {
+        filter.clear()
+        root.reveal(path)
+        selection.select(path)
+        treeFocused = true
+    }
+
+    private func copyProviders(order: [String]) -> [NSItemProvider] {
+        let paths = selection.ordered(in: order)
+        guard !paths.isEmpty else { return [] }
+        return [NSItemProvider(object: paths.joined(separator: "\n") as NSString)]
+    }
+
+    // MARK: Keyboard
+
+    private func handleKey(_ press: KeyPress, rows: [FlatRow], order: [String]) -> KeyPress.Result {
+        guard renameState.renamingPath == nil else { return .ignored }
+        let mods = press.modifiers
+        let shift = mods.contains(.shift)
+        let cursorRow = rows.first { $0.node.path == selection.cursor }
+
+        switch press.key {
+        case .upArrow:
+            selection.move(by: -1, order: order, extend: shift)
+            return .handled
+        case .downArrow:
+            selection.move(by: 1, order: order, extend: shift)
+            return .handled
+        case .rightArrow:
+            guard let node = cursorRow?.node, node.isDirectory else { return .ignored }
+            if node.isExpanded {
+                selection.move(by: 1, order: order, extend: false)
+            } else {
+                setExpanded(node, true)
+            }
+            return .handled
+        case .leftArrow:
+            guard let row = cursorRow else { return .ignored }
+            if row.node.isDirectory && row.node.isExpanded {
+                setExpanded(row.node, false)
+            } else if row.parentPath != root.path {
+                selection.select(row.parentPath)
+            }
+            return .handled
+        case .return:
+            if filter.isActive {
+                activateFirstMatch()
+            } else if let node = cursorRow?.node {
+                if node.isDirectory { setExpanded(node, !node.isExpanded) } else { actions.onFileClicked?(node.path) }
+            }
+            return .handled
+        case .escape:
+            if filter.isActive {
+                filter.clear()
+            } else {
+                selection.clear()
+            }
+            return .handled
+        case .delete where mods.contains(.command):
+            let paths = selection.ordered(in: order)
+            if !paths.isEmpty { pendingTrash = paths }
+            return .handled
+        default:
+            break
+        }
+
+        // F2 renames the cursor row, Finder/VS Code style.
+        if press.characters == String(UnicodeScalar(NSF2FunctionKey)!), let node = cursorRow?.node {
+            renameState.beginRename(path: node.path, currentName: node.name)
+            return .handled
+        }
+        guard mods.isDisjoint(with: [.command, .control, .option]) else { return .ignored }
+        if press.characters == "/" && AppSettings.shared.explorerShowFilterBar {
+            filterFocused = true
+            return .handled
+        }
+        return typeAheadSelect(press.characters, order: order)
+    }
+
+    /// Typing a name jumps to the first visible row starting with it; repeating a
+    /// single letter cycles through rows with that initial.
+    private func typeAheadSelect(_ chars: String, order: [String]) -> KeyPress.Result {
+        guard let ch = chars.first, chars.count == 1, ch.isLetter || ch.isNumber || ch == "." || ch == "_" || ch == "-"
+        else { return .ignored }
+        let now = Date()
+        typeAhead = now.timeIntervalSince(typeAheadAt) > 1 ? String(ch) : typeAhead + String(ch)
+        typeAheadAt = now
+        let needle = typeAhead.lowercased()
+        let names = order.map { ($0 as NSString).lastPathComponent.lowercased() }
+        let repeating = needle.count > 1 && Set(needle).count == 1
+        let probe = repeating ? String(needle.prefix(1)) : needle
+        let start =
+            (selection.cursor.flatMap { order.firstIndex(of: $0) } ?? -1) + (repeating || needle.count == 1 ? 1 : 0)
+        for offset in 0..<order.count {
+            let i = (max(0, start) + offset) % order.count
+            if names[i].hasPrefix(probe) {
+                selection.select(order[i])
+                return .handled
+            }
+        }
+        return .handled
     }
 
     // MARK: - Flatten
@@ -225,20 +504,149 @@ struct RowStyle {
     let mutedColor: Color
     let accentColor: Color
     let hoverColor: Color
+    var selectionColor: Color = .clear
+    var inactiveSelectionColor: Color = .clear
+    var controlFill: Color = .clear
+    var successColor: Color = .green
+    var warningColor: Color = .yellow
+    var errorColor: Color = .red
+
+    func color(for status: FileGitStatus) -> Color {
+        switch status {
+        case .modified: return warningColor
+        case .added, .untracked, .renamed: return successColor
+        case .deleted, .conflicted: return errorColor
+        case .ignored: return mutedColor
+        }
+    }
+
+    func rowBackground(selected: Bool, focused: Bool, hovered: Bool) -> Color {
+        if selected { return focused ? selectionColor : inactiveSelectionColor }
+        return hovered ? hoverColor : .clear
+    }
 }
 
-// MARK: - Drop Line
+// MARK: - Filter Bar
 
-struct FileTreeDropLine: View {
-    var accentColor: Color
+struct FileTreeFilterBar: View {
+    @ObservedObject var filter: FileTreeFilterModel
+    var focused: FocusState<Bool>.Binding
+    var style: RowStyle
+    var onCollapseAll: () -> Void
+    var onSubmit: () -> Void
+    var onMoveIntoTree: () -> Void
+
     var body: some View {
-        HStack(spacing: 0) {
-            Circle().fill(accentColor).frame(width: 6, height: 6)
-            Rectangle().fill(accentColor).frame(height: 1.5)
+        HStack(spacing: 6) {
+            HStack(spacing: 4) {
+                Image(systemName: "line.3.horizontal.decrease")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(style.mutedColor)
+                TextField("Filter files", text: $filter.query)
+                    .textFieldStyle(.plain)
+                    .font(style.font)
+                    .foregroundStyle(style.textColor)
+                    .focused(focused)
+                    .onSubmit(onSubmit)
+                    .onKeyPress(.downArrow) {
+                        onMoveIntoTree()
+                        return .handled
+                    }
+                    .onKeyPress(.escape) {
+                        filter.clear()
+                        focused.wrappedValue = false
+                        return .handled
+                    }
+                if filter.isIndexing {
+                    ProgressView().controlSize(.mini)
+                } else if filter.isActive {
+                    Button {
+                        filter.clear()
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 10))
+                            .foregroundStyle(style.mutedColor)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Clear filter")
+                }
+            }
+            .padding(.horizontal, 6)
+            .padding(.vertical, 3)
+            .background(RoundedRectangle(cornerRadius: 5).fill(style.controlFill))
+            .overlay(
+                RoundedRectangle(cornerRadius: 5)
+                    .stroke(focused.wrappedValue ? style.accentColor.opacity(0.6) : .clear, lineWidth: 1)
+            )
+
+            Button(action: onCollapseAll) {
+                Image(systemName: "rectangle.compress.vertical")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(style.mutedColor)
+                    .frame(width: 16, height: 16)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help("Collapse All Folders")
         }
-        .frame(height: 2)
-        .padding(.trailing, 8)
+        .padding(.horizontal, 8)
+        .padding(.top, 6)
     }
+}
+
+// MARK: - Git Decoration
+
+/// Trailing badge: a letter for files, a dot for folders that contain changes.
+struct FileTreeGitBadge: View {
+    let status: FileGitStatus?
+    let isDirectory: Bool
+    let style: RowStyle
+
+    var body: some View {
+        if let status, status != .ignored {
+            if isDirectory {
+                Circle()
+                    .fill(style.color(for: status).opacity(0.8))
+                    .frame(width: 5, height: 5)
+            } else {
+                Text(status.badge)
+                    .font(.system(size: max(8, style.fontSize - 2), weight: .semibold, design: .monospaced))
+                    .foregroundStyle(style.color(for: status))
+            }
+        }
+    }
+}
+
+/// Scrolls the enclosing NSScrollView so this row stays visible while it holds the
+/// keyboard cursor. The sidebar's scroll view is AppKit-owned, so `ScrollViewReader`
+/// can't reach it.
+private struct ScrollIntoView: NSViewRepresentable {
+    let active: Bool
+
+    func makeNSView(context: Context) -> NSView { NSView() }
+
+    func updateNSView(_ view: NSView, context: Context) {
+        guard active, !context.coordinator.wasActive else {
+            context.coordinator.wasActive = active
+            return
+        }
+        context.coordinator.wasActive = true
+        DispatchQueue.main.async {
+            view.scrollToVisible(view.bounds.insetBy(dx: 0, dy: -6))
+        }
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+    final class Coordinator { var wasActive = false }
+}
+
+/// Click kind from the live modifier state — `onTapGesture` doesn't report it.
+@MainActor
+private func currentClickKind() -> FileTreeSelection.ClickKind {
+    let flags = NSEvent.modifierFlags
+    if flags.contains(.shift) { return .extend }
+    if flags.contains(.command) { return .toggle }
+    return .plain
 }
 
 // MARK: - Row View
@@ -252,12 +660,25 @@ struct FileTreeRowView: View {
     @ObservedObject var dragState: FileTreeDragState
     var style: RowStyle
     var rootPath: String
-    var showHidden: Bool
+    var isSelected: Bool
+    var isCursor: Bool
+    var treeFocused: Bool
+    var gitStatus: FileGitStatus?
+    var dimIgnored: Bool
+    /// Paths the context menu acts on (the multi-selection, or just this row).
+    var menuPaths: [String]
+    var onClick: (FileTreeSelection.ClickKind) -> Void
+    var onTrash: ([String]) -> Void
     @State private var isHovered = false
-    @State private var showTrashConfirm = false
 
     private var isRenaming: Bool { renameState.renamingPath == node.path }
     private var isDragged: Bool { dragState.draggedPath == node.path }
+
+    private var rowOpacity: Double {
+        if isDragged { return 0.4 }
+        if dimIgnored && gitStatus == .ignored { return 0.45 }
+        return node.name.hasPrefix(".") ? 0.5 : 1.0
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -268,10 +689,10 @@ struct FileTreeRowView: View {
 
             rowContent
         }
-        .opacity(isDragged ? 0.4 : (node.name.hasPrefix(".") ? 0.5 : 1.0))
+        .opacity(rowOpacity)
         .contentShape(Rectangle())
         .onHover { isHovered = $0 }
-        .onTapGesture { handleTap() }
+        .onTapGesture { onClick(currentClickKind()) }
         .onDrag {
             dragState.beginDrag(path: node.path)
             return NSItemProvider(object: URL(fileURLWithPath: node.path) as NSURL)
@@ -283,17 +704,23 @@ struct FileTreeRowView: View {
                 actions: actions, rootPath: rootPath
             )
         )
-        .contextMenu { contextMenuContent }
-        .confirmationDialog(
-            "Move \"\(node.name)\" to Trash?",
-            isPresented: $showTrashConfirm, titleVisibility: .visible
-        ) {
-            Button("Move to Trash", role: .destructive) { actions.onMoveToTrash?(node.path) }
-            Button("Cancel", role: .cancel) {}
+        .contextMenu {
+            if menuPaths.count > 1 {
+                multiSelectionMenu
+            } else {
+                contextMenuContent
+            }
         }
+        .help(node.name)
+        .background(ScrollIntoView(active: isCursor))
     }
 
     // MARK: Row Content
+
+    private var nameColor: Color {
+        guard let gitStatus, gitStatus != .ignored else { return style.textColor }
+        return style.color(for: gitStatus)
+    }
 
     private var rowContent: some View {
         let isDropTarget = dragState.dropPosition == .onFolder(node.path)
@@ -308,7 +735,7 @@ struct FileTreeRowView: View {
             }
 
             if style.showIcons {
-                Image(systemName: node.isDirectory ? "folder.fill" : fileIcon(for: node.name))
+                Image(systemName: node.isDirectory ? folderIcon(for: node.name) : fileIcon(for: node.name))
                     .font(.system(size: style.fontSize))
                     .frame(width: 16, height: 16)
                     .foregroundStyle(node.isDirectory ? style.accentColor.opacity(0.8) : style.mutedColor)
@@ -323,17 +750,28 @@ struct FileTreeRowView: View {
             } else {
                 Text(node.name)
                     .font(style.font)
-                    .foregroundStyle(style.textColor)
+                    .foregroundStyle(nameColor)
                     .lineLimit(1)
+                    .truncationMode(.middle)
             }
 
-            Spacer()
+            Spacer(minLength: 4)
+
+            if node.isLoading {
+                ProgressView().controlSize(.mini)
+            }
+            FileTreeGitBadge(status: gitStatus, isDirectory: node.isDirectory, style: style)
+                .padding(.trailing, 10)
         }
         .padding(.leading, CGFloat(depth) * 16 + 12)
         .padding(.vertical, 3)
         .background(
             RoundedRectangle(cornerRadius: 4)
-                .fill(isDropTarget ? style.accentColor.opacity(0.12) : (isHovered ? style.hoverColor : .clear))
+                .fill(
+                    isDropTarget
+                        ? style.accentColor.opacity(0.12)
+                        : style.rowBackground(selected: isSelected, focused: treeFocused, hovered: isHovered)
+                )
                 .padding(.horizontal, 4)
         )
         .overlay {
@@ -342,19 +780,6 @@ struct FileTreeRowView: View {
                     .stroke(style.accentColor, lineWidth: 1.5)
                     .padding(.horizontal, 4)
             }
-        }
-    }
-
-    // MARK: Tap
-
-    private func handleTap() {
-        guard !isRenaming else { return }
-        if node.isDirectory {
-            node.isExpanded.toggle()
-            if node.isExpanded { node.loadChildren() }
-            (node.root ?? node).treeRevision &+= 1
-        } else {
-            actions.onFileClicked?(node.path)
         }
     }
 
@@ -373,6 +798,29 @@ struct FileTreeRowView: View {
 
         if ContentType.isEditorFilePattern(filename: filename) { return .editor }
         return .externalOnly
+    }
+
+    @ViewBuilder
+    private var multiSelectionMenu: some View {
+        let count = menuPaths.count
+        if actions.isAIAgentRunning {
+            Button("Reference \(count) Items in AI (@)") {
+                for path in menuPaths { actions.onReferenceInAI?(path) }
+            }
+            Divider()
+        }
+        Button("Paste \(count) Paths to Terminal") {
+            for path in menuPaths { actions.onPastePath?(path) }
+        }
+        Button("Copy \(count) Paths") {
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(menuPaths.joined(separator: "\n"), forType: .string)
+        }
+        Button("Reveal in Finder") {
+            NSWorkspace.shared.activateFileViewerSelecting(menuPaths.map { URL(fileURLWithPath: $0) })
+        }
+        Divider()
+        Button("Move \(count) Items to Trash", role: .destructive) { onTrash(menuPaths) }
     }
 
     @ViewBuilder
@@ -406,6 +854,9 @@ struct FileTreeRowView: View {
             }
             Button("Open Terminal Tab") { actions.onOpenInTab?(node.path) }
             Button("Open Terminal Pane") { actions.onOpenInPane?(node.path) }
+            if node.isExpanded {
+                Button("Collapse Subfolders") { node.collapseAll() }
+            }
         } else {
             Button("Open") { actions.onFileClicked?(node.path) }
             if cap != .externalOnly {
@@ -436,6 +887,12 @@ struct FileTreeRowView: View {
         Divider()
         Button("Reveal in Finder") { actions.onRevealInFinder?(node.path) }
         Button("Copy Path") { actions.onCopyPath?(node.path) }
+        Button("Copy Relative Path") {
+            let prefix = rootPath.hasSuffix("/") ? rootPath : rootPath + "/"
+            let rel = node.path.hasPrefix(prefix) ? String(node.path.dropFirst(prefix.count)) : node.path
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(rel, forType: .string)
+        }
     }
 
     @ViewBuilder
@@ -448,7 +905,105 @@ struct FileTreeRowView: View {
             Button("Duplicate") { actions.onDuplicate?(node.path) }
         }
         Button("Rename") { renameState.beginRename(path: node.path, currentName: node.name) }
-        Button("Move to Trash", role: .destructive) { showTrashConfirm = true }
+        Button("Move to Trash", role: .destructive) { onTrash([node.path]) }
+    }
+}
+
+// MARK: - Filter Match Row
+
+struct FileTreeMatchRowView: View {
+    let match: FileTreeFilterMatch
+    let absolutePath: String
+    var style: RowStyle
+    var isSelected: Bool
+    var isCursor: Bool
+    var treeFocused: Bool
+    var gitStatus: FileGitStatus?
+    var onClick: (FileTreeSelection.ClickKind) -> Void
+    var onReveal: () -> Void
+    var actions: FileTreeActions
+    @State private var isHovered = false
+
+    private var path: String { match.entry.relativePath }
+
+    var body: some View {
+        HStack(spacing: 5) {
+            if style.showIcons {
+                Image(
+                    systemName: match.entry.isDirectory
+                        ? folderIcon(for: match.entry.name) : fileIcon(for: match.entry.name)
+                )
+                .font(.system(size: style.fontSize))
+                .frame(width: 16, height: 16)
+                .foregroundStyle(match.entry.isDirectory ? style.accentColor.opacity(0.8) : style.mutedColor)
+            }
+            highlightedName
+                .font(style.font)
+                .lineLimit(1)
+                .layoutPriority(1)
+            let parent = (path as NSString).deletingLastPathComponent
+            if !parent.isEmpty {
+                Text(parent)
+                    .font(.system(size: max(9, style.fontSize - 2)))
+                    .foregroundStyle(style.mutedColor)
+                    .lineLimit(1)
+                    .truncationMode(.head)
+            }
+            Spacer(minLength: 4)
+            FileTreeGitBadge(status: gitStatus, isDirectory: match.entry.isDirectory, style: style)
+                .padding(.trailing, 10)
+        }
+        .padding(.leading, 12)
+        .padding(.vertical, 3)
+        .background(
+            RoundedRectangle(cornerRadius: 4)
+                .fill(style.rowBackground(selected: isSelected, focused: treeFocused, hovered: isHovered))
+                .padding(.horizontal, 4)
+        )
+        .contentShape(Rectangle())
+        .onHover { isHovered = $0 }
+        .onTapGesture { onClick(currentClickKind()) }
+        .help(path)
+        .background(ScrollIntoView(active: isCursor))
+        .contextMenu {
+            Button("Reveal in Tree") { onReveal() }
+            if !match.entry.isDirectory {
+                Button("Open") { onClick(.plain) }
+            }
+            Divider()
+            Button("Paste Path to Terminal") { actions.onPastePath?(absolutePath) }
+            Button("Copy Path") { actions.onCopyPath?(absolutePath) }
+            Button("Reveal in Finder") { actions.onRevealInFinder?(absolutePath) }
+        }
+    }
+
+    /// Name with the fuzzy-matched characters emphasized.
+    private var highlightedName: Text {
+        let hits = Set(match.nameHighlights)
+        var text = Text("")
+        for (i, ch) in match.entry.name.enumerated() {
+            let piece = Text(String(ch))
+            text =
+                text
+                + (hits.contains(i)
+                    ? piece.foregroundColor(style.accentColor).bold()
+                    : piece.foregroundColor(gitStatus.map { style.color(for: $0) } ?? style.textColor))
+        }
+        return text
+    }
+}
+
+// MARK: - Drop Line
+
+struct FileTreeDropLine: View {
+    var accentColor: Color
+    var body: some View {
+        HStack(spacing: 0) {
+            Circle().fill(accentColor).frame(width: 6, height: 6)
+            Rectangle().fill(accentColor).frame(height: 1.5)
+        }
+        .frame(height: 2)
+        .padding(.trailing, 8)
     }
 }
 

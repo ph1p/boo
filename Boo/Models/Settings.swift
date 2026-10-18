@@ -473,6 +473,22 @@ final class AppSettings {
         set { setPluginSetting("file-tree-local", "showIcons", newValue, topic: .explorer) }
     }
 
+    var explorerShowFilterBar: Bool {
+        get { pluginBool("file-tree-local", "showFilterBar", default: true) }
+        set { setPluginSetting("file-tree-local", "showFilterBar", newValue, topic: .explorer) }
+    }
+
+    /// Tint names and badge files/folders with their `git status`.
+    var explorerGitDecorations: Bool {
+        get { pluginBool("file-tree-local", "gitDecorations", default: true) }
+        set { setPluginSetting("file-tree-local", "gitDecorations", newValue, topic: .explorer) }
+    }
+
+    var explorerDimIgnored: Bool {
+        get { pluginBool("file-tree-local", "dimIgnored", default: true) }
+        set { setPluginSetting("file-tree-local", "dimIgnored", newValue, topic: .explorer) }
+    }
+
     /// Command used to open files from the file tree (e.g. "vim", "nvim", "nano").
     /// Empty string means use $EDITOR env var, falling back to "vi".
     var fileEditorCommand: String {

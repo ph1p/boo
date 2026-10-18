@@ -28,6 +28,15 @@ final class LocalFileTreePlugin: BooPluginProtocol {
                 key: "showProcess", type: .bool, label: "Show running process",
                 defaultValue: AnyCodableValue(true), options: nil, group: "Display"),
             PluginManifest.SettingManifest(
+                key: "showFilterBar", type: .bool, label: "Show filter bar",
+                defaultValue: AnyCodableValue(true), options: nil, group: "Display"),
+            PluginManifest.SettingManifest(
+                key: "gitDecorations", type: .bool, label: "Show git status",
+                defaultValue: AnyCodableValue(true), options: nil, group: "Display"),
+            PluginManifest.SettingManifest(
+                key: "dimIgnored", type: .bool, label: "Dim git-ignored files",
+                defaultValue: AnyCodableValue(true), options: nil, group: "Display"),
+            PluginManifest.SettingManifest(
                 key: "editorFilePatterns", type: .string,
                 label: "Open in editor (file patterns)",
                 defaultValue: AnyCodableValue(ContentType.builtInEditorFilePatterns),
@@ -68,6 +77,9 @@ final class LocalFileTreePlugin: BooPluginProtocol {
     private let refreshDebouncer = Debouncer(delay: 0.2)
     /// Directories named by FS events since the last refresh ran.
     private var pendingChangedDirs: Set<String> = []
+    /// Roots with a `git status` run in flight / a follow-up run requested.
+    private var gitRefreshInFlight: Set<String> = []
+    private var gitRefreshQueued: Set<String> = []
 
     /// FileSystemWatcher self-retains while running (passRetained in start()), so its own
     /// deinit never fires — the owner must stop() it or the FSEventStream leaks per window.
@@ -174,6 +186,7 @@ final class LocalFileTreePlugin: BooPluginProtocol {
         if !isSameTerminalAndCwd && !wasCreated {
             root.loadChildren()
         }
+        if !isSameTerminalAndCwd { refreshGitStatus(root) }
 
         // Only restore on terminal/CWD switch — skipping on same-context re-renders
         // prevents save→restore from collapsing folders the user just opened.
@@ -283,13 +296,15 @@ final class LocalFileTreePlugin: BooPluginProtocol {
             onNavigate: { path in
                 act()?.sendToTerminal?("cd \(shellEscape(path))\r")
             },
-            onMoveToTrash: { [weak self] path in
-                let url = URL(fileURLWithPath: path)
-                NSWorkspace.shared.recycle([url]) { _, _ in
+            onMoveToTrash: { [weak self] paths in
+                guard !paths.isEmpty else { return }
+                NSWorkspace.shared.recycle(paths.map { URL(fileURLWithPath: $0) }) { _, _ in
                     DispatchQueue.main.async {
                         guard let self else { return }
-                        for (rootPath, root) in self.cachedRoots where path.hasPrefix(rootPath) {
+                        for (rootPath, root) in self.cachedRoots
+                        where paths.contains(where: { $0.hasPrefix(rootPath) }) {
                             root.refreshAll()
+                            self.refreshGitStatus(root)
                         }
                     }
                 }
@@ -414,6 +429,9 @@ final class LocalFileTreePlugin: BooPluginProtocol {
 
     func terminalFocusChanged(terminalID: UUID, context: TerminalContext) {
         setupWatcher(for: context.cwd)
+        // A commit or checkout in the terminal changes status without touching the
+        // worktree files the watcher reports, so re-read git on focus too.
+        if let root = cachedRoots[context.cwd] { refreshGitStatus(root) }
     }
 
     func processChanged(name: String, context: TerminalContext) {
@@ -446,6 +464,7 @@ final class LocalFileTreePlugin: BooPluginProtocol {
         root.isExpanded = true
         cachedRoots[path] = root
         setupWatcher(for: path)
+        refreshGitStatus(root)
         if cachedRoots.count > 10 {
             // Persist what we're about to drop, then evict all entries except the
             // current path to bound cache growth.
@@ -499,8 +518,33 @@ final class LocalFileTreePlugin: BooPluginProtocol {
             for (rootPath, root) in self.cachedRoots
             where path.hasPrefix(rootPath) || rootPath.hasPrefix(path) {
                 root.refresh(changedDirs: dirs)
+                self.refreshGitStatus(root)
             }
             FolderInfoCache.shared.invalidate(path)
+        }
+    }
+
+    /// Re-read `git status` for a root off the main thread. One run per root at a time;
+    /// a request arriving mid-run queues exactly one follow-up so the result is never stale.
+    private func refreshGitStatus(_ root: FileTreeNode) {
+        guard AppSettings.shared.explorerGitDecorations else {
+            root.gitStatus = nil
+            return
+        }
+        let path = root.path
+        guard !gitRefreshInFlight.contains(path) else {
+            gitRefreshQueued.insert(path)
+            return
+        }
+        gitRefreshInFlight.insert(path)
+        Task { [weak self, weak root] in
+            let status = await Task.detached(priority: .utility) {
+                FileTreeGitStatus.load(rootPath: path)
+            }.value
+            guard let self else { return }
+            self.gitRefreshInFlight.remove(path)
+            if let root, root.gitStatus != status { root.gitStatus = status }
+            if self.gitRefreshQueued.remove(path) != nil, let root { self.refreshGitStatus(root) }
         }
     }
 }
