@@ -69,6 +69,8 @@ Keep the connection open after `subscribe` to receive push events:
 | `workspace_switched`     | `workspace_id`                      |
 | `theme_changed`          | `name`, `is_dark`                   |
 | `settings_changed`       | `topic`                             |
+| `cmd_started`            | `command`, `pane_id`                |
+| `cmd_ended`              | `command`, `exit_code`, `duration`, `pane_id` |
 
 Use `"events": ["*"]` to subscribe to all events.
 

@@ -144,7 +144,7 @@ extension BooSocketServer {
     static let availableEvents: Set<String> = [
         "cwd_changed", "title_changed", "process_changed",
         "remote_session_changed", "focus_changed", "workspace_switched",
-        "theme_changed", "settings_changed"
+        "theme_changed", "settings_changed", "cmd_started", "cmd_ended"
     ]
 
     func handleSubscribe(json: [String: Any], clientFD: Int32) {

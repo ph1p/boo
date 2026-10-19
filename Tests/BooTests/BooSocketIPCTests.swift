@@ -28,6 +28,12 @@ final class BooSocketSubscriptionTests: BooSocketIntegrationTestCase {
         XCTAssertEqual(socketStringSet(response["subscribed"]), BooSocketServer.availableEvents)
     }
 
+    func testSubscribeCommandEvents() throws {
+        let response = try roundTrip(["cmd": "subscribe", "events": ["cmd_started", "cmd_ended"]])
+        XCTAssertEqual(response["ok"] as? Bool, true)
+        XCTAssertEqual(socketStringSet(response["subscribed"]), Set(["cmd_started", "cmd_ended"]))
+    }
+
     func testSubscribeRejectsInvalidEvents() throws {
         let response = try roundTrip(["cmd": "subscribe", "events": ["nonexistent_event"]])
         XCTAssertEqual(response["ok"] as? Bool, false)
