@@ -2,26 +2,31 @@
 
 ## Stack
 
-- **Swift** (macOS 13+) with **AppKit** for terminal UI and **SwiftUI** for sidebar/settings
+- **Swift** (macOS 15+) with **AppKit** for terminal UI and **SwiftUI** for sidebar/settings
 - **GhosttyKit** — Metal GPU-accelerated terminal emulation via C API ([ghostty-org/ghostty](https://github.com/ghostty-org/ghostty))
-- **POSIX PTY** — `forkpty()` via C helper (`CPTYHelper/`)
+- **PTY** — owned by Ghostty: each `GhosttyView` surface spawns and drives its own shell process
 
 ## Project Structure
 
 ```
-Boo/
-  App/              AppDelegate, MainWindowController, WindowStateCoordinator
+Boo/                Library target (all app code)
+  App/              AppDelegate, AppStore, WindowManager, MainWindowController (+extensions),
+                    SidebarController, WindowStateCoordinator
+  Content/          Tab content: terminal, browser, editor (Monaco), image viewer, markdown, plugin tabs
   Ghostty/          GhosttyRuntime (singleton), GhosttyView (Metal surface)
-  Terminal/         TerminalBackend (PTY lifecycle protocol)
-  Models/           Workspace, Pane (+ TabState), SplitTree, AppSettings, Theme
-  Plugin/           Core framework (protocol, registry, runtime, DSL)
-  Plugins/          Built-in plugins (FileTree, Git, ClaudeCode, Docker, Bookmarks, Snippets, etc.)
-  Views/            PaneView, StatusBarView, ToolbarView, SettingsWindow
-  Services/         TerminalBridge, RemoteExplorer, BooSocketServer, SparkleUpdater
+  Models/           Workspace, Pane (+ TabState), SplitTree, AppSettings (Settings.swift), Theme
+  Plugin/           Core framework (protocol, registry, runtime, ViewDSL)
+  Plugins/          Built-in plugins (Agents, FileTree, RemoteExplorer, Git, Docker, Bookmarks,
+                    Snippets, SystemInfo, Debug)
+  Views/            PaneView, SplitContainerView, StatusBarView, ToolbarView, SettingsWindow
+  Services/         TerminalBridge, RemoteExplorer, SessionStore, BooSocketServer, BooMCPServer,
+                    RemoteControlServer, AgentInbox, SparkleUpdater
+  Resources/        MonacoSource → MonacoBundle, RemoteControl web UI (ghostty-vt.wasm)
+BooApp/             Executable entry point (calls BooMain.run())
 CGhostty/           C module wrapping ghostty.h
-CPTYHelper/         C helper for forkpty()
 CIronmark/          C module wrapping ironmark (Rust markdown parser)
-Vendor/ghostty/     Ghostty source (git submodule)
+CObjCSafe/          Obj-C shim that catches AppKit exceptions around string drawing
+Vendor/             ghostty + ironmark submodules, patches/ (local Ghostty patches)
 ```
 
 Plugin code is colocated — all files for a plugin live in one directory under `Boo/Plugins/`. Tests mirror this layout under `Tests/BooTests/Plugins/`.
@@ -34,16 +39,25 @@ Theme, font, layout, status bar toggles, and per-plugin settings. Changes broadc
 
 ### Per-Tab — `TabState`
 
-Each `Pane.Tab` owns a `TabState` — the single source of truth for that tab:
+Each `Pane.Tab` owns a `TabState` — the single source of truth for that tab (excerpt from `Pane.swift`):
 
 ```swift
 struct TabState {
+    var contentType: ContentType = .terminal
+    var contentState: ContentState = .terminal(TerminalContentState())
+
     var workingDirectory: String
     var remoteSession: RemoteSessionType?
     var remoteWorkingDirectory: String?
     var shellPID: pid_t = 0
     var title: String
     var foregroundProcess: String = ""
+    var foregroundProcessPID: pid_t?
+    var foregroundProcessCategory: String?
+    var foregroundProcessMetadata: [String: String] = [:]
+    var agentSessionID: String?
+    var hasActivity: Bool = false
+    var isCommandRunning: Bool = false
 
     // Plugin UI
     var expandedPluginIDs: Set<String> = []
@@ -54,6 +68,10 @@ struct TabState {
     var selectedPluginTabID: String? = nil
 }
 ```
+
+### Observable — `AppStore`
+
+`AppStore.shared` projects the current `TerminalContext`, theme snapshot, and sidebar visibility for SwiftUI views. Updated at the end of each plugin cycle.
 
 ### Data Flow
 
@@ -79,10 +97,14 @@ Workspace → SplitTree → Pane[] → Tab[] → TabState
 
 Each split pane owns its own tab bar and terminal sessions.
 
+### Windows
+
+`WindowManager` owns every `MainWindowController`. Each window has its own workspaces, sidebar, and plugin registry; settings, themes, and bookmarks stay global. App-wide entry points (Unix socket, remote control, MCP) go through `WindowManager.dispatchCommand`, which routes a command carrying `pane_id` to the window owning that pane, otherwise to the active window.
+
 ## Build
 
 ```bash
-make setup         # First time: clone Ghostty + build GhosttyKit + build Boo
+make setup         # First time: clone Ghostty + build GhosttyKit + ironmark + Boo
 make run           # Build and launch
 make test          # Run tests
 make clean-ghostty # Rebuild GhosttyKit after updating Vendor/ghostty
@@ -104,9 +126,9 @@ Development note: `make run` produces a debug app bundle with Sparkle feed keys 
 | **Terminal Title**      | BridgeState (live)     | TabState                | Sync to TabState on tab switch          |
 | **Agent Session ID**    | TabState               | SessionStore            | Updated by plugin detection             |
 | **Plugin Expanded IDs** | WindowStateCoordinator | TabState                | Sync on tab switch                      |
-| **Section Heights**     | DetailPanelView        | AppSettings.`__sidebar` | Sync on panel switch, app quit          |
+| **Section Heights**     | SidebarPanelView       | TabState + AppSettings.`__sidebar` | Sync on tab switch, app quit |
 | **Section Order**       | WindowStateCoordinator | AppSettings.`__sidebar` | Sync on reorder, app quit               |
-| **Scroll Offsets**      | DetailPanelView        | TabState                | Sync on tab switch                      |
+| **Scroll Offsets**      | SidebarPanelView       | TabState                | Sync on tab switch                      |
 | **Active Plugin Tab**   | WindowStateCoordinator | TabState                | Sync on tab switch                      |
 | **Theme**               | AppSettings            | UserDefaults + file     | Immediate                               |
 | **Sidebar Visible**     | MainWindowController   | NOT persisted           | Runtime only                            |
@@ -129,15 +151,16 @@ Development note: `make run` produces a debug app bundle with Sparkle feed keys 
 
 **App Quit:**
 
-1. For each workspace: sync bridge + plugin state
-2. `saveSidebarHeightsToSettings()`
-3. `saveSidebarOrderToSettings()`
-4. `SessionStore.save(appState)`
+`WindowManager.saveSessionForTermination()`:
+
+1. For each window: `coordinator.saveSidebarStateToSettings()` (heights, order, and global sidebar state → `AppSettings.__sidebar`) and `prepareSessionSave()` (persist pane content, sidebar, and plugin state into the model)
+2. `SessionStore.save(snapshot)` — a version 2 `SessionSnapshot` with one `SessionWindow` per window plus `keyWindowIndex`
 
 ### Controller Responsibilities
 
 | Controller                 | Responsibility                                          |
 | -------------------------- | ------------------------------------------------------- |
+| **WindowManager**          | All windows, command routing by `pane_id`, session save |
 | **MainWindowController**   | Window lifecycle, menu actions, high-level coordination |
 | **SidebarController**      | Panel visibility, tab selection, heights sync           |
 | **WindowStateCoordinator** | Bridge↔Tab sync, plugin state save/restore              |

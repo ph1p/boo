@@ -537,14 +537,16 @@ Every `makeDetailView` call receives a `PluginContext` — the single source of 
 | Property            | Type                   | Description                                                        |
 | ------------------- | ---------------------- | ------------------------------------------------------------------ |
 | `context.terminal`  | `TerminalContext`      | CWD, process, git, remote session info                             |
-| `context.theme`     | `ThemeSnapshot`        | Resolved theme colors (chromeText, chromeMuted, accentColor, etc.) |
+| `context.theme`     | `ThemeSnapshot`        | Resolved base theme colors (chromeText, chromeMuted, accentColor, etc.) |
 | `context.density`   | `SidebarDensity`       | `.comfortable` or `.compact`                                       |
 | `context.settings`  | `PluginSettingsReader` | Scoped reader for this plugin's settings                           |
 | `context.fontScale` | `SidebarFontScale`     | Tailwind-inspired font scale (see below)                           |
 
+> **Theme colors:** `ThemeSnapshot` currently exposes only the raw base fields (`chromeText`, `chromeMuted`, `accentColor`, `sidebarBg`, `chromeBg`, `foreground`, `background`, `ansiColors`). The derived semantic tokens described in [Theming](/theming#derived-semantic-tokens) (`textSecondary`, `separator`, `hoverFill`, …) live on `TerminalTheme` and the app's `Tokens` environment and are not part of the plugin context yet. Until they are, derive the same role from the base field with the documented alpha, e.g. `chromeMuted.withAlphaComponent(0.7)` for secondary text.
+
 ### Font Scale
 
-`context.fontScale` gives every plugin a Tailwind-inspired type scale that automatically reflects the user's base font size from **Settings → Sidebar**.
+`context.fontScale` gives every plugin a Tailwind-inspired type scale that automatically reflects the sidebar font size from **Settings → Appearance → Sidebar Font**.
 
 ```swift
 func makeDetailView(context: PluginContext) -> AnyView? {
@@ -595,10 +597,12 @@ func registerBuiltins() {
     register(LocalFileTreePlugin())
     register(RemoteFileTreePlugin())
     register(GitPlugin())
-    register(ClaudeCodePlugin())
+    register(AgentsPlugin())
     register(DockerPluginNew())
     register(BookmarksPluginNew())
+    register(SnippetsPlugin())
     register(SystemInfoPlugin())
+    register(DebugPlugin())
     register(MyPlugin())  // Add here
 }
 ```
@@ -679,6 +683,8 @@ Available `PluginEvent` cases:
 | `.terminalCreated`       | A new terminal was created         |
 | `.terminalClosed`        | A terminal was closed              |
 | `.remoteDirectoryListed` | Remote directory listing completed |
+| `.commandStarted`        | A shell command started running    |
+| `.commandEnded`          | A shell command finished           |
 
 Override the corresponding methods to respond to terminal state changes:
 
@@ -700,6 +706,13 @@ func remoteSessionChanged(session: RemoteSessionType?, context: TerminalContext)
 // Focus moved to a different pane
 func terminalFocusChanged(terminalID: UUID, context: TerminalContext) {
     // Update cached state for the new pane
+}
+
+// Shell command started / finished (subscribe to .commandStarted / .commandEnded)
+func commandStarted(command: String, context: TerminalContext) {}
+
+func commandEnded(result: CommandResult, context: TerminalContext) {
+    // result.command, result.exitCode, result.duration
 }
 ```
 
@@ -810,7 +823,7 @@ final class MySegment: StatusBarPlugin {
               settings: AppSettings, state: StatusBarState, ctx: CGContext) -> CGFloat {
         let attrs: [NSAttributedString.Key: Any] = [
             .font: NSFont.systemFont(ofSize: 10),
-            .foregroundColor: theme.chromeMuted
+            .foregroundColor: theme.textSecondary  // semantic token on TerminalTheme
         ]
         let str = "Hello" as NSString
         str.draw(at: NSPoint(x: x, y: y), withAttributes: attrs)
@@ -819,6 +832,9 @@ final class MySegment: StatusBarPlugin {
 
     func handleClick(at point: NSPoint, in barView: StatusBarView) -> Bool { false }
     func update(state: StatusBarState) {}
+
+    // Optional (default nil): hover tooltip and VoiceOver label
+    var tooltipText: String? { "My segment" }
 }
 ```
 

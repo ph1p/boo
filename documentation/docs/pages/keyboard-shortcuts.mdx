@@ -1,15 +1,19 @@
 # Keyboard Shortcuts
 
-All shortcuts are also listed (and searchable) in **Settings → Shortcuts**.
+All shortcuts are also listed (and searchable) in **Settings → Shortcuts**. That page is a read-only reference — built-in shortcuts can't be rebound.
 
-## Window & Workspace
+## App & Window
 
-| Shortcut        | Action                         |
-| --------------- | ------------------------------ |
-| **Cmd+N**       | New workspace (home directory) |
-| **Cmd+1-9**     | Switch to workspace N          |
-| **Cmd+Shift+O** | Open folder as workspace       |
-| **Cmd+,**       | Settings                       |
+| Shortcut         | Action                                |
+| ---------------- | ------------------------------------- |
+| **Cmd+N**        | New window                            |
+| **Cmd+Shift+N**  | New workspace (home directory)        |
+| **Cmd+Shift+O**  | Open folder as workspace              |
+| **Cmd+1-9**      | Switch to workspace N                 |
+| **Cmd+M**        | Minimize window                       |
+| **Cmd+Shift+J**  | Jump to next agent waiting for input  |
+| **Cmd+,**        | Settings                              |
+| **Cmd+Q**        | Quit Boo                              |
 
 ## Tabs
 
@@ -24,42 +28,49 @@ All shortcuts are also listed (and searchable) in **Settings → Shortcuts**.
 
 ## Panes
 
-| Shortcut                    | Action              |
-| --------------------------- | ------------------- |
-| **Cmd+D**                   | Split right         |
-| **Cmd+Shift+D**             | Split down          |
-| **Cmd+Shift+W**             | Close pane          |
-| **Cmd+]** or **Cmd+Opt+→**  | Focus next pane     |
-| **Cmd+[** or **Cmd+Opt+←**  | Focus previous pane |
-| **Cmd+Ctrl+=**              | Equalize splits     |
+| Shortcut                  | Action                                  |
+| ------------------------- | --------------------------------------- |
+| **Cmd+D**                 | Split right                             |
+| **Cmd+Shift+D**           | Split down                              |
+| **Cmd+Shift+W**           | Close pane                              |
+| **Cmd+]** / **Cmd+[**     | Focus next / previous pane              |
+| **Cmd+Opt+Arrows**        | Select pane in that direction           |
+| **Cmd+Ctrl+Arrows**       | Resize pane in that direction           |
+| **Cmd+Ctrl+Shift+Arrows** | Move (swap) pane in that direction      |
+| **Cmd+Shift+Return**      | Zoom pane (toggle)                      |
+| **Cmd+Ctrl+=**            | Equalize splits                         |
+
+See [Windows & Splits](/windows-and-splits) for details.
 
 ## Terminal
 
-| Shortcut        | Action             |
-| --------------- | ------------------ |
-| **Cmd+K**       | Clear screen       |
-| **Cmd+Shift+K** | Clear scrollback   |
-| **Cmd++**       | Increase font size |
-| **Cmd+-**       | Decrease font size |
-| **Cmd+0**       | Reset font size    |
-| **Cmd+Opt+Return** | Send selection or last output to agent |
+| Shortcut           | Action                                  |
+| ------------------ | --------------------------------------- |
+| **Cmd+K**          | Clear screen                            |
+| **Cmd+Shift+K**    | Clear scrollback                        |
+| **Cmd++**          | Increase font size                      |
+| **Cmd+-**          | Decrease font size                      |
+| **Cmd+0**          | Reset font size                         |
+| **Cmd+Opt+Return** | Send selection or last output to agent  |
 
-## Selection & Clipboard
+## Edit & Clipboard
 
-| Shortcut  | Action         |
-| --------- | -------------- |
-| **Cmd+C** | Copy selection |
-| **Cmd+X** | Cut            |
-| **Cmd+V** | Paste          |
-| **Cmd+A** | Select all     |
-| **Cmd+F** | Find           |
+| Shortcut        | Action         |
+| --------------- | -------------- |
+| **Cmd+Z**       | Undo           |
+| **Cmd+Shift+Z** | Redo           |
+| **Cmd+C**       | Copy selection |
+| **Cmd+X**       | Cut            |
+| **Cmd+V**       | Paste          |
+| **Cmd+A**       | Select all     |
+| **Cmd+F**       | Find           |
 
 ## View
 
-| Shortcut                          | Action               |
-| --------------------------------- | -------------------- |
-| **Cmd+B**                         | Toggle file explorer |
-| **Cmd+Return** or **Cmd+Ctrl+F**  | Toggle full screen   |
+| Shortcut                          | Action             |
+| --------------------------------- | ------------------ |
+| **Cmd+B**                         | Toggle sidebar     |
+| **Cmd+Return** or **Cmd+Ctrl+F**  | Toggle full screen |
 
 ## Bookmarks
 
@@ -67,3 +78,37 @@ All shortcuts are also listed (and searchable) in **Settings → Shortcuts**.
 | --------------- | -------------------------- |
 | **Cmd+Shift+B** | Bookmark current directory |
 | **Ctrl+1-9**    | Jump to bookmark N         |
+
+## File Explorer
+
+When the file tree has focus:
+
+| Shortcut                       | Action                                                  |
+| ------------------------------ | ------------------------------------------------------- |
+| **↑** / **↓**                  | Move selection (hold **Shift** to extend)               |
+| **→** / **←**                  | Expand folder / collapse folder or jump to parent       |
+| **Return**                     | Open file or toggle folder (first match while filtering) |
+| **Esc**                        | Clear filter, then selection                            |
+| **Cmd+Delete**                 | Move selection to Trash                                 |
+| **F2**                         | Rename                                                  |
+| **/**                          | Focus filter bar (when enabled)                         |
+| Type letters                   | Jump to matching name (type-ahead)                      |
+| **Cmd+click** / **Shift+click** | Toggle / extend multi-selection                        |
+
+## Agents
+
+| Shortcut           | Action                                            |
+| ------------------ | ------------------------------------------------- |
+| **Cmd+Opt+Return** | Send terminal selection or last output to agent   |
+| **Cmd+Return**     | Send review comments to agent (in a review tab)   |
+| **Cmd+Shift+J**    | Jump to next waiting agent                        |
+
+See [Agents](/agents) for details.
+
+## Menu-Only Commands
+
+These have no default shortcut:
+
+- **File → New Agent Task…**, **File → Review Changes…**, **File → Agent Timeline**
+- **Window → Move Workspace to New Window**, **Window → Merge All Windows**
+- **Terminal → Start Remote Control Server**, **Terminal → Copy Remote Control URL**

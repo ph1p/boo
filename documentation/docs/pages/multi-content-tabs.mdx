@@ -8,10 +8,12 @@ Boo supports multiple content types within tabs — not just terminals. A tab ca
 | ----------------- | ----------------------------------- | ----------------- |
 | `terminal`        | Default. Ghostty terminal emulator  | Terminal icon     |
 | `browser`         | WebKit-based web browser            | Globe icon        |
-| `editor`          | Text/code editor (CodeEditTextView) | Document icon     |
+| `editor`          | Code editor (Monaco in WKWebView)   | Document icon     |
 | `imageViewer`     | Image preview                       | Image icon        |
 | `markdownPreview` | Rendered markdown                   | Markdown icon     |
 | `pluginView`      | Ephemeral custom SwiftUI view       | Puzzle piece icon |
+
+Agent review (diff + comments) and agent timeline tabs are `pluginView` tabs, not separate content types — see [Agents](/agents).
 
 ## Creating Tabs
 
@@ -26,7 +28,9 @@ When opening a file from the file explorer, Boo routes to the correct tab type:
 
 - Image files → Image viewer tab (configurable)
 - Markdown files → Markdown preview tab (configurable)
-- Text/code files in `editorExtensions` → Editor tab (configurable)
+- PDF files → Browser tab (configurable)
+- HTML files → Browser tab, if enabled (off by default)
+- Text/code files matching `editorFilePatterns` → Editor tab (configurable)
 - URLs cmd+clicked in terminal → Browser tab
 
 ### Plugin API
@@ -70,10 +74,10 @@ actions.openMultiContentTab?("my-diff-view", ctx)
 
 ## Editor Features
 
-- **Syntax Highlighting:** powered by [CodeEditTextView](https://github.com/CodeEditApp/CodeEditTextView)
+- **Syntax Highlighting:** powered by the [Monaco editor](https://microsoft.github.io/monaco-editor/), bundled and hosted in a `WKWebView`
 - **Theme Integration:** follows the active Boo theme
 - **Save:** Cmd+S writes to disk; new (unsaved) files prompt with a save dialog
-- **File Routing:** files whose extension is in Settings → Files → "Open in editor" open in the built-in editor tab
+- **File Routing:** files matching Settings → Plugins → Files → "Open in editor (file patterns)" open in the built-in editor tab
 
 ## File Explorer Settings
 
@@ -96,6 +100,24 @@ Settings → Plugins → Files → "Open text files as":
 | `editor` (default) | Opens in the built-in editor tab    |
 | `terminalEditor`   | Opens in a terminal using `$EDITOR` |
 | `external`         | Opens in the system default app     |
+
+### Markdown Opening Mode
+
+Settings → Plugins → Files → "Open markdown files as":
+
+| Value               | Behavior                            |
+| ------------------- | ----------------------------------- |
+| `preview` (default) | Opens in a markdown preview tab     |
+| `builtInEditor`     | Opens in the built-in editor tab    |
+| `editor`            | Opens in a terminal using `$EDITOR` |
+| `external`          | Opens in the system default app     |
+
+### Browser Opening
+
+| Setting             | Default | Behavior                                   |
+| ------------------- | ------- | ------------------------------------------ |
+| `pdfOpenInBrowser`  | `true`  | PDFs open in a browser tab (else external) |
+| `htmlOpenInBrowser` | `false` | HTML files open in a browser tab           |
 
 ## Mixing Tabs
 

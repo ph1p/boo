@@ -24,13 +24,17 @@ Download the latest release from [GitHub Releases](https://github.com/ph1p/boo/r
 ## Features
 
 - **Workspaces** — Open folders as workspaces with their own file tree (Cmd+Shift+N); multiple windows (Cmd+N), each with its own workspaces
+- **Multiple windows** — Drag workspaces and tabs between windows, or drop them outside to tear off a new window; Window → Move Workspace to New Window / Merge All Windows. All windows are restored on relaunch ([docs](https://ph1p.github.io/boo/windows-and-splits))
 - **Per-pane tabs** — Each split pane has its own tab bar (Cmd+T)
-- **Split panes** — Split right (Cmd+D) or down (Cmd+Shift+D)
-- **File explorer** — Live-updating sidebar with file tree (Cmd+B to toggle)
+- **Split panes** — Split right (Cmd+D) or down (Cmd+Shift+D), or drag a tab onto a pane edge; select, resize and move panes with the arrow keys, zoom one pane (Cmd+Shift+Return, with a zoom badge), Option-drop a tab to swap panes
+- **File explorer** — Live-updating sidebar with file tree (Cmd+B to toggle): multi-selection, keyboard navigation, filter, git status colors, ignored files dimmed
 - **32 color themes** — Catppuccin (all 4), Tokyo Night, Dracula, Nord, Solarized (dark/light), Gruvbox (dark/light), One Dark/Light, Rosé Pine, Kanagawa, Everforest (dark/light), GitHub (dark/light), Ayu (dark/light), Cobalt2, Horizon Dark, Material (dark/light), Monokai, Moonlight, Night Owl, Palenight, Synthwave '84, Default (dark/light)
-- **Custom themes** — Create your own themes with a full color picker editor
+- **Custom themes** — Create your own themes with a full color picker editor; the UI is styled from semantic tokens derived from each theme ([theming](https://ph1p.github.io/boo/theming))
 - **Multi-content tabs** — Tabs can host a terminal, browser (Cmd+Shift+T), text editor, image viewer, or markdown preview
 - **Agent Center** — Auto-detects Claude Code, Codex, OpenCode, and other AI CLI sessions with config/diff overview
+- **Agent inbox** — Tracks agents across all windows and flags the ones waiting for input; Cmd+Shift+J jumps to the next waiting agent ([agents](https://ph1p.github.io/boo/agents))
+- **Agent tasks** — File → New Agent Task starts an agent in its own git worktree, branch and workspace; merge or discard the worktree from the workspace's context menu
+- **Review mode** — File → Review Changes opens a diff review tab for the workspace, with comments you can send to the agent
 - **Remote explorer** — Auto-detects SSH/Mosh, container (docker, podman, kubectl, …), VM, and device shells; shows the remote file tree
 - **Remote control** — Optional token-protected web UI to control Boo from any device on your LAN, including approving or denying waiting agents (Terminal → Start Remote Control Server)
 - **Git integration** — Branch name in status bar, clickable branch switcher with local + remote branches
@@ -44,17 +48,18 @@ Download the latest release from [GitHub Releases](https://github.com/ph1p/boo/r
 - **IPC socket** — Unix socket at `~/.boo/boo.sock` for reliable process detection and plugin commands
 - **Agent timeline** — Per-session replay of prompts, tool calls, tokens, cost and files touched, with repeated calls flagged as loops (File → Agent Timeline)
 - **Context handoff** — Send a selection or the last command's output to an agent pane (Cmd+Opt+Return or right-click), or drop text and files onto it
-- **MCP server** — `~/.boo/shell-integration/boo-mcp` lets coding agents split panes, run commands beside themselves, read other panes and start agent tasks
+- **MCP server** — `Boo --mcp` (or `~/.boo/shell-integration/boo-mcp`) is a stdio MCP server that lets coding agents split panes, run commands beside themselves, read other panes and start agent tasks. Tools: `get_layout`, `split_pane`, `read_pane`, `send_text`, `close_pane`, `list_agents`, `new_agent_task`, `open_review`
 - **Debug plugin** — Live event log and terminal state inspector for diagnostics
 
 ## Build from Source
 
 ### Prerequisites
 
-- **macOS 13+** (Ventura or later)
-- **Xcode Command Line Tools** — `xcode-select --install`
-- **Zig 0.15+** — `brew install zig`
+- **macOS 15+** (Sequoia or later)
+- **Xcode 26 / Swift 6.2** — or the matching Command Line Tools (`xcode-select --install`)
+- **Zig 0.16.0** — the version pinned by `Vendor/ghostty/build.zig.zon` (`brew install zig`)
 - **Rust** — `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`
+- **Node.js + pnpm** — `make build`/`make test` build the bundled Monaco editor (`make monaco`)
 - **Metal Toolchain** — `xcodebuild -downloadComponent MetalToolchain` (if not already installed)
 
 ### Quick Start
@@ -70,22 +75,27 @@ make run      # Build and launch
 
 ### Make Targets
 
-| Target               | Description                                                |
-| -------------------- | ---------------------------------------------------------- |
-| `make setup`         | First-time setup (init submodule + build everything)       |
-| `make build`         | Debug build                                                |
-| `make run`           | Build and launch                                           |
-| `make release`       | Optimized release build                                    |
-| `make test`          | Run all tests                                              |
-| `make app`           | Create `.app` bundle from release build                    |
-| `make zip`           | Create distributable ZIP from the signed `.app` bundle     |
-| `make dmg`           | Create optional distributable DMG                          |
-| `make dist`          | Full release pipeline (build, bundle, sign, notarize, ZIP) |
-| `make lint`          | Check code style with swift-format                         |
-| `make format`        | Format source code in-place                                |
-| `make clean`         | Clean build artifacts                                      |
-| `make clean-ghostty` | Clean GhosttyKit build (for rebuild)                       |
-| `make ghostty`       | Build GhosttyKit only                                      |
+| Target                 | Description                                                |
+| ---------------------- | ---------------------------------------------------------- |
+| `make setup`           | First-time setup (init submodule + build everything)       |
+| `make build`           | Debug build                                                |
+| `make run`             | Build and launch                                           |
+| `make release`         | Optimized release build                                    |
+| `make test`            | Run all tests                                              |
+| `make monaco`          | Build the bundled Monaco editor assets (pnpm + Vite)       |
+| `make app`             | Create `.app` bundle from release build                    |
+| `make zip`             | Create distributable ZIP from the signed `.app` bundle     |
+| `make dmg`             | Create optional distributable DMG                          |
+| `make zip-from-app`    | ZIP an existing `.app` bundle without rebuilding           |
+| `make dmg-from-app`    | DMG an existing `.app` bundle without rebuilding           |
+| `make dist`            | Full release pipeline (build, bundle, sign, notarize, ZIP) |
+| `make lint`            | Check code style with swift-format                         |
+| `make format`          | Format source code in-place                                |
+| `make clean`           | Clean build artifacts                                      |
+| `make clean-ghostty`   | Clean GhosttyKit build (for rebuild)                       |
+| `make ghostty`         | Build GhosttyKit only                                      |
+| `make ghostty-patches` | Apply local Ghostty patches from `Vendor/patches/`         |
+| `make ghostty-wasm`    | Build `ghostty-vt.wasm` for the Remote Control web UI      |
 
 ## Keyboard Shortcuts
 
@@ -104,8 +114,14 @@ make run      # Build and launch
 | **Cmd+Shift+W**                      | Close pane                           |
 | **Cmd+D**                            | Split right                          |
 | **Cmd+Shift+D**                      | Split down                           |
-| **Cmd+]** or **Cmd+Opt+→**           | Focus next pane                      |
-| **Cmd+[** or **Cmd+Opt+←**           | Focus previous pane                  |
+| **Cmd+]** / **Cmd+[**                | Focus next / previous pane           |
+| **Cmd+Opt+Arrow**                    | Select pane in that direction        |
+| **Cmd+Ctrl+Arrow**                   | Resize pane                          |
+| **Cmd+Ctrl+Shift+Arrow**             | Move (swap) pane in that direction   |
+| **Cmd+Shift+Return**                 | Zoom pane                            |
+| **Cmd+Opt+Return**                   | Send selection/output to agent       |
+| **Cmd+Shift+J**                      | Jump to next waiting agent           |
+| **Cmd+M**                            | Minimize window                      |
 | **Cmd+B**                            | Toggle file explorer                 |
 | **Cmd+F**                            | Find                                 |
 | **Cmd+K**                            | Clear screen                         |
@@ -128,16 +144,18 @@ make run      # Build and launch
 Boo/
   App/              AppDelegate, MainWindowController (+extensions), WindowStateCoordinator, AppStore
   Ghostty/          GhosttyRuntime (app singleton), GhosttyView (Metal surface), TerminalScrollView
-  Terminal/         TerminalBackend (PTY lifecycle protocol)
+  Content/          Tab content types (terminal, browser, editor, image viewer, markdown preview, plugin tabs)
   Models/           Workspace, Pane (+ TabState), SplitTree, AppSettings, Theme
   Plugin/           Core plugin framework (protocol, registry, runtime, DSL, watcher)
     ViewDSL/        DSL parser, renderer, elements, action handler
   Plugins/          One directory per plugin (FileTree/, RemoteExplorer/, Git/, Agents/, Docker/, Bookmarks/, Snippets/, SystemInfo/, Debug/)
   Views/            App-level views (PaneView, StatusBarView, ToolbarView, SettingsWindow, AboutWindow, etc.)
-  Services/         Shared infrastructure (TerminalBridge, RemoteExplorer, BooSocketServer, SparkleUpdater, etc.)
+  Services/         Shared infrastructure (TerminalBridge, RemoteExplorer, BooSocketServer, BooMCPServer, SessionStore, SparkleUpdater, etc.)
+  Resources/        Images, Monaco editor (source + bundle), Remote Control web UI + ghostty-vt.wasm
+BooApp/             Executable entry point
 CGhostty/           C module wrapping ghostty.h
 CIronmark/          C module wrapping ironmark (Rust markdown parser)
-CPTYHelper/         C helper for forkpty()
+CObjCSafe/          Objective-C shim that catches NSExceptions from AppKit text drawing
 Vendor/ghostty/     Ghostty source (git submodule)
 Vendor/ironmark/    ironmark source (git submodule)
 ```
@@ -192,9 +210,9 @@ Three layers of state:
 │  └────────┬───────────┘                                             │
 │           │                                                         │
 │  ┌────────▼───────────┐   ┌──────────────────────────────────┐      │
-│  │ PTY (CPTYHelper)   │   │ BooSocketServer               │      │
-│  │ forkpty() + GCD    │   │ ~/.boo/boo.sock            │      │
-│  │ background I/O     │   │ process registration (IPC)       │      │
+│  │ PTY + shell        │   │ BooSocketServer                  │      │
+│  │ (owned by Ghostty  │   │ ~/.boo/boo.sock                  │      │
+│  │  surface)          │   │ process registration (IPC)       │      │
 │  └────────────────────┘   └──────────────────────────────────┘      │
 │                                       ▲                             │
 └───────────────────────────────────────┼─────────────────────────────┘
@@ -238,36 +256,54 @@ Boo exposes a Unix domain socket (`~/.boo/boo.sock`) as the primary communicatio
 
 ### Command Reference
 
-| Category       | Command                | Description                                                   |
-| -------------- | ---------------------- | ------------------------------------------------------------- |
-| **Process**    | `set_status`           | Register a process (pid, name, category, metadata)            |
-|                | `clear_status`         | Unregister a process                                          |
-|                | `list_status`          | List all registered processes                                 |
-| **Query**      | `get_context`          | Current terminal context (pane_id, CWD, git, process, remote) |
-|                | `get_theme`            | Current theme name and dark/light mode                        |
-|                | `get_settings`         | App settings snapshot                                         |
-|                | `list_themes`          | All available theme names                                     |
-|                | `get_workspaces`       | List workspaces with active state                             |
-| **Control**    | `set_theme`            | Change theme (`name` parameter)                               |
-|                | `toggle_sidebar`       | Toggle sidebar visibility                                     |
-|                | `switch_workspace`     | Switch workspace by `index` or `id`                           |
-|                | `new_tab`              | Open new tab (optional `cwd`)                                 |
-|                | `new_workspace`        | Open new workspace (optional `path`)                          |
-|                | `new_window`           | Open new window with a fresh workspace                        |
-|                | `send_text`            | Write text to the active terminal, or `pane_id` (`submit`)    |
-| **Agents**     | `agent_event`          | Report agent state (`working`/`needs-input`/`done`/`error`/`end`) |
-|                | `agent_inbox`          | List agents across all windows, waiting ones first            |
-|                | `agent_jump`           | Focus an agent's tab (`tab_id`, or next waiting)              |
-|                | `agent_respond`        | Approve (Return) or deny (Escape) a waiting agent (`tab_id`, `response`) |
-|                | `agent_timeline`       | Prompts, tool calls, tokens and cost of a Claude Code session (`tab_id` or `session_id`) |
-|                | `new_agent_task`       | Worktree + branch + workspace running an agent (`name`, `prompt`) |
-|                | `review_changes`       | Open the diff review tab for a workspace (`workspace_id`/`pane_id`) |
-| **Events**     | `subscribe`            | Subscribe to push events (`events` array)                     |
-|                | `unsubscribe`          | Remove event subscriptions                                    |
-| **Status Bar** | `statusbar.set`        | Push an external status bar segment                           |
-|                | `statusbar.clear`      | Remove an external segment                                    |
-|                | `statusbar.list`       | List external segments                                        |
-| **Plugin**     | `<namespace>.<action>` | Route to a plugin's registered handler                        |
+| Category       | Command                        | Description                                                                              |
+| -------------- | ------------------------------ | ---------------------------------------------------------------------------------------- |
+| **Process**    | `set_status`                   | Register a process (pid, name, category, metadata)                                       |
+|                | `clear_status`                 | Unregister a process                                                                     |
+|                | `list_status`                  | List all registered processes                                                            |
+| **Query**      | `get_context`                  | Current terminal context (pane_id, CWD, git, process, remote)                            |
+|                | `get_theme`                    | Current theme name and dark/light mode                                                   |
+|                | `get_settings`                 | App settings snapshot                                                                    |
+|                | `list_themes`                  | All available theme names                                                                |
+|                | `get_workspaces`               | List workspaces with active state                                                        |
+| **Control**    | `set_theme`                    | Change theme (`name` parameter)                                                          |
+|                | `toggle_sidebar`               | Toggle sidebar visibility                                                                |
+|                | `switch_workspace`             | Switch workspace by `index` or `id`                                                      |
+|                | `new_tab`                      | Open new tab (optional `cwd`)                                                            |
+|                | `new_workspace`                | Open new workspace (optional `path`)                                                     |
+|                | `new_window`                   | Open new window with a fresh workspace                                                   |
+|                | `send_text`                    | Write text to the active terminal, or `pane_id` (`submit`)                               |
+|                | `send_key`                     | Send a special key to the active terminal (`key`)                                        |
+|                | `select_pane`                  | Focus a pane (`id`)                                                                      |
+|                | `select_tab`                   | Switch tab in the active pane (`index`)                                                  |
+|                | `get_state`                    | Workspaces, panes, tabs and focus (Remote Control snapshot)                              |
+|                | `get_screen`                   | Active screen, or a pane's text (`pane_id`, `lines` of scrollback)                       |
+|                | `agent_idle`                   | Signal that the agent in `pane_id` went idle (activity indicator)                        |
+| **Layout**     | `split_pane`                   | Split a pane (`direction`, `cwd`, `command`, `focus`) → new `pane_id`                    |
+|                | `close_pane`                   | Close a pane (not the workspace's last one)                                              |
+|                | `focus_pane`                   | Focus `pane_id`, or move focus by `direction` (incl. `next`/`previous`)                  |
+|                | `resize_pane`                  | Grow a pane toward `direction` by `amount` (default 10)                                  |
+|                | `swap_pane`                    | Swap a pane with its neighbour in `direction`                                            |
+|                | `zoom_pane`                    | Toggle zoom, or set it with `zoomed`                                                     |
+|                | `equalize_splits`              | Equalize split sizes                                                                     |
+|                | `get_layout`                   | Split tree, pane frames, tabs and windows of a workspace                                 |
+|                | `move_workspace_to_new_window` | Move a workspace (`index`, default active) to a new window                               |
+|                | `merge_all_windows`            | Merge every window's workspaces into this one                                            |
+| **Agents**     | `agent_event`                  | Report agent state (`event`, `tab_id`/`pane_id`, see below)                              |
+|                | `agent_inbox`                  | List agents across all windows, waiting ones first                                       |
+|                | `agent_jump`                   | Focus an agent's tab (`tab_id`, or next waiting)                                         |
+|                | `agent_respond`                | Approve (Return) or deny (Escape) a waiting agent (`tab_id`, `response`)                 |
+|                | `agent_timeline`               | Prompts, tool calls, tokens and cost of a Claude Code session (`tab_id` or `session_id`) |
+|                | `new_agent_task`               | Worktree + branch + workspace running an agent (`name`, `prompt`)                        |
+|                | `review_changes`               | Open the diff review tab for a workspace (`workspace_id`/`pane_id`)                      |
+| **Events**     | `subscribe`                    | Subscribe to push events (`events` array)                                                |
+|                | `unsubscribe`                  | Remove event subscriptions                                                               |
+| **Status Bar** | `statusbar.set`                | Push an external status bar segment                                                      |
+|                | `statusbar.clear`              | Remove an external segment                                                               |
+|                | `statusbar.list`               | List external segments                                                                   |
+| **Plugin**     | `<namespace>.<action>`         | Route to a plugin's registered handler                                                   |
+
+Commands that name a `pane_id` are routed to the window holding that pane, even in the background. `split_pane`, `close_pane` and `get_layout` also work on background workspaces; `focus_pane`, `resize_pane`, `swap_pane`, `zoom_pane` and `equalize_splits` only act on the on-screen workspace. `agent_event` accepts `prompt`/`tool`/`working` (working), `permission`/`question`/`needs-input` (waiting), `stop`/`done`, `error`, and `end` (removes the agent). See the [IPC socket docs](https://ph1p.github.io/boo/ipc-socket) for full parameters and responses.
 
 ### Usage Examples
 
@@ -295,16 +331,18 @@ echo '{"cmd":"subscribe","events":["cwd_changed","process_changed"]}' | nc -U "$
 
 Subscribe to real-time push events by keeping a socket connection open:
 
-| Event                    | Data                                |
-| ------------------------ | ----------------------------------- |
-| `cwd_changed`            | `path`, `is_remote`, `pane_id`      |
-| `title_changed`          | `title`, `pane_id`                  |
-| `process_changed`        | `name`, `category`, `pane_id`       |
-| `remote_session_changed` | `type`, `host`, `active`, `pane_id` |
-| `focus_changed`          | `pane_id`                           |
-| `workspace_switched`     | `workspace_id`                      |
-| `theme_changed`          | `name`, `is_dark`                   |
-| `settings_changed`       | `topic`                             |
+| Event                    | Data                                          |
+| ------------------------ | --------------------------------------------- |
+| `cwd_changed`            | `path`, `is_remote`, `pane_id`                |
+| `title_changed`          | `title`, `pane_id`                            |
+| `process_changed`        | `name`, `category`, `pane_id`                 |
+| `remote_session_changed` | `type`, `host`, `active`, `pane_id`           |
+| `focus_changed`          | `pane_id`                                     |
+| `workspace_switched`     | `workspace_id`                                |
+| `theme_changed`          | `name`, `is_dark`                             |
+| `settings_changed`       | `topic`                                       |
+| `cmd_started`            | `command`, `pane_id`                          |
+| `cmd_ended`              | `command`, `exit_code`, `duration`, `pane_id` |
 
 All terminal-scoped events include a `pane_id` field identifying which pane the event originated from. This allows subscribers to filter events by pane and avoid cross-pane interference in split-view setups.
 
@@ -489,7 +527,7 @@ Plugins declare which events they need. The registry only delivers callbacks for
 var subscribedEvents: Set<PluginEvent> { [.cwdChanged, .focusChanged] }
 ```
 
-Available: `.cwdChanged`, `.processChanged`, `.remoteSessionChanged`, `.focusChanged`, `.terminalCreated`, `.terminalClosed`, `.remoteDirectoryListed`. Default is all events.
+Available: `.cwdChanged`, `.processChanged`, `.remoteSessionChanged`, `.focusChanged`, `.terminalCreated`, `.terminalClosed`, `.remoteDirectoryListed`, `.commandStarted`, `.commandEnded`. Default is all events.
 
 See [AGENTS.md](AGENTS.md) for detailed protocol reference and architecture.
 
@@ -497,9 +535,13 @@ See [AGENTS.md](AGENTS.md) for detailed protocol reference and architecture.
 
 Boo can serve a small web UI to control the terminal from another device on your LAN (e.g. a phone or tablet). Start it via **Terminal → Start Remote Control Server** — Boo shows a URL containing a per-session token; open it on any device in your network.
 
-- Live screen view rendered in the browser, text/key input, workspace/tab/pane switching
+- Live screen view rendered in the browser with Ghostty's VT parser compiled to WebAssembly (`ghostty-vt.wasm`, rebuilt via `make ghostty-wasm`)
+- Text/key input, workspace/tab/pane switching
+- Approve or deny agents waiting for input
 - Every API request requires the session token (`Authorization: Bearer`); the token is regenerated on each start and travels only in the URL fragment
 - Configurable port in settings; **Terminal → Copy Remote Control URL** to re-share
+
+See the [Remote Control docs](https://ph1p.github.io/boo/remote-control) for the command API.
 
 > Anyone with the URL can control your terminal — treat the link like a password.
 
@@ -523,13 +565,14 @@ Open with **Cmd+,**. Organized in tabs:
 - **Editor** — Built-in text editor preferences
 - **Browser** — Browser tab history and behavior
 - **Notifications** — Notification preferences
-- **Plugins** — Enable/disable plugins, per-plugin settings
+- **Plugins** — Enable/disable plugins
+- **Per-plugin pages** — Plugins with settings get their own page in the sidebar
 - **Shortcuts** — Searchable reference of all keyboard shortcuts
 
 ## Tests
 
 ```bash
-swift test
+make test    # builds Monaco assets, then runs swift test --disable-swift-testing
 ```
 
 The test suite covers models, themes, plugins, terminal bridge, remote explorer, SSH control manager, sidebar layout, accessibility, E2E plugin lifecycle, split/workspace operations, IPC socket protocol, process detection, event subscriptions, JSC runtime, DSL parsing, and script plugin adapters.

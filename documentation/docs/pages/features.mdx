@@ -2,7 +2,7 @@
 
 ## Workspaces
 
-Open folders as workspaces with their own file tree using **Cmd+N** (home directory) or **Cmd+Shift+O** (choose folder). Each workspace maintains its own state, color, and name.
+Open folders as workspaces with their own file tree using **Cmd+Shift+N** (home directory) or **Cmd+Shift+O** (choose folder). Each workspace maintains its own state, color, and name.
 
 - **Workspace colors** — Assign preset or custom colors per workspace
 - **Pinning** — Pin frequently used workspaces
@@ -16,9 +16,18 @@ Split your terminal in any direction:
 
 - **Cmd+D** — Split right
 - **Cmd+Shift+D** — Split down
-- **Cmd+]** / **Cmd+[** (or **Cmd+Opt+→** / **Cmd+Opt+←**) — Navigate between panes
+- **Cmd+]** / **Cmd+[** — Focus next / previous pane
+- **Cmd+Opt+Arrows** — Select the pane in that direction
+- **Cmd+Ctrl+Arrows** / **Cmd+Ctrl+Shift+Arrows** — Resize / swap panes
+- **Cmd+Shift+Return** — Zoom the active pane; **Cmd+Ctrl+=** — equalize splits
 
-Each split pane is independent with its own tab bar and terminal sessions. Drag the divider between panes to resize; the ratio is saved and restored across launches.
+Each split pane is independent with its own tab bar and terminal sessions. Drag the divider between panes to resize, or drag a tab onto a pane edge to split; ratios are saved and restored across launches.
+
+## Multiple Windows
+
+**Cmd+N** opens a new window. Drag a tab out of the window to tear it off, move a workspace with **Window → Move Workspace to New Window** (or the workspace context menu), or bring everything back with **Window → Merge All Windows**. All windows are restored on next launch.
+
+See [Windows & Splits](/windows-and-splits) for the full guide.
 
 ## Per-Pane Tabs
 
@@ -37,13 +46,23 @@ Toggle the sidebar with **Cmd+B**. The explorer shows a live-updating file tree 
 - **Remote SSH / Mosh** — Auto-detects SSH-style sessions and reuses shared connections for file listing when possible
 - **Remote containers / VMs / devices** — Auto-detects interactive `docker`, `podman`, `nerdctl`, `kubectl`, `oc`, `lxc`, `limactl`, `colima`, `distrobox`, `toolbox`, `vagrant`, and `adb shell` sessions and runs the appropriate listing command for each tool
 
-**File click behavior:**
+**Local explorer:**
 
-- **Source/text files** — Opens a new tab in the file's parent directory and runs the configured editor (set in General Settings → File Editor, falls back to `$EDITOR`, then `vi`)
-- **Images** — Rendered inline using the Kitty Graphics Protocol (supported natively by Ghostty); otherwise opens with the default macOS app
+- **Multi-select** — **Cmd+click** toggles, **Shift+click** / **Shift+↑↓** extends a range
+- **Keyboard navigation** — Arrows, **Return** to open, **F2** rename, **Cmd+Delete** to Trash, type-ahead to jump (see [shortcuts](/keyboard-shortcuts#file-explorer))
+- **Filter bar** — Fuzzy-filter the whole tree; press **/** to focus it
+- **Git status** — VS Code–style badges (M, A, D, R, U, !) on files, rolled up to folders; git-ignored files are dimmed
+
+**File click behavior** (local files):
+
+- **Text/code files** matching the editor file patterns — Built-in editor tab (`textOpenMode`; can also run your terminal editor or open externally)
+- **Images** — Image viewer tab (`imageOpenMode`; or inline via the Kitty Graphics Protocol, or the default macOS app)
+- **Markdown** — Rendered preview tab (`markdownOpenMode`; or editor, terminal editor, or external app)
+- **PDF** — Browser tab (`pdfOpenInBrowser`, on by default)
+- **HTML** — Browser tab when `htmlOpenInBrowser` is enabled (off by default)
 - **Other files** — Opens with the default macOS app
 
-Configure which extensions open in the editor (and toggle inline image preview) in **Settings → Plugins → Files**.
+Configure all of this in **Settings → Plugins → Files**. See [Multi-Content Tabs](/multi-content-tabs#file-explorer-settings).
 
 ## Themes
 
@@ -83,8 +102,27 @@ The sidebar shows stacked, collapsible panels powered by the [plugin system](/pl
 - **Snippets** — Saved code snippets with syntax highlighting and quick insertion.
 - **Docker** — Running containers with exec, logs, start/stop/restart. Live updates via `docker events` stream. Local sessions only.
 - **Bookmarks** — Saved directory shortcuts with per-host namespacing for remote sessions.
+- **System** — CPU, memory, disk, network, load, uptime and battery, with quick `df -h` / `top` / `netstat` / `uptime` actions. Optional status bar readouts.
+- **Debug** — Live log of plugin lifecycle events and current terminal state, for plugin authors.
 
 Toggle panels via status bar icons or extend with [custom plugins](/plugin-development).
+
+## Agents
+
+Boo tracks coding agents running in your terminals across all windows:
+
+- **Agent inbox** — See which agents are working or waiting; **Cmd+Shift+J** jumps to the next waiting one
+- **Agent tasks** — **File → New Agent Task…** starts an agent in its own git worktree
+- **Review mode** — **File → Review Changes…** opens a diff tab where you comment on lines and send feedback back (**Cmd+Return**)
+- **Handoff** — **Cmd+Opt+Return** sends the terminal selection or last command output to the nearest agent
+- **Timeline** — **File → Agent Timeline** replays a session with tokens and estimated cost
+- **Remote approve** — Approve or deny waiting agents from the [remote control](/remote-control) page
+
+See [Agents](/agents) for the full guide.
+
+## MCP Server
+
+`Boo --mcp` runs a stdio [MCP](https://modelcontextprotocol.io) server that lets agents read the pane layout, split panes, read or type into other panes, list agents, start agent tasks and open reviews. See [Agents](/agents).
 
 ## Git Integration
 

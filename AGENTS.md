@@ -6,23 +6,30 @@ Full documentation: https://ph1p.github.io/boo/
 
 ## Build
 
-- **Swift** (macOS 13+), **AppKit**, **GhosttyKit** (Metal GPU rendering)
-- Swift Package Manager (`Package.swift`)
-- Prerequisites: macOS 13+, Xcode CLT, Zig 0.15+ (`brew install zig`), Rust (`rustup`)
+- **Swift** (macOS 15+), **AppKit**, **GhosttyKit** (Metal GPU rendering)
+- Swift Package Manager (`Package.swift`, swift-tools 6.2)
+- Prerequisites: macOS 15+, Xcode CLT, Zig 0.16.0 (`brew install zig`), Rust (`rustup`), Node + pnpm (Monaco editor bundle)
 
 ```bash
 make setup          # First time: clone Ghostty + build GhosttyKit + build ironmark + build Boo
-make run            # Build and launch
-make test           # Run tests
-swift build         # Build only (requires GhosttyKit already built)
-make lint           # swift-format lint
-make format         # swift-format format
-make app            # Create .app bundle (after make release)
+make build          # monaco + swift build + bundle Ghostty resources
+make run            # Build and launch (debug .app, Sparkle disabled)
+make test           # Run tests (builds monaco first)
+swift build         # Build only (requires GhosttyKit + Boo/Resources/MonacoBundle already built)
+make monaco         # Build the Monaco editor bundle (pnpm + Vite) into Boo/Resources/MonacoBundle
+make lint           # monaco-lint + swift-format lint
+make format         # monaco-format + swift-format format
+make release        # Optimized build
+make app            # Create .app bundle (runs make release)
+make zip            # Create distributable ZIP (+ dSYM ZIP)
 make dmg            # Create distributable DMG
-make dist           # Full release: build + bundle + sign + notarize + DMG
+make dist           # Full release: app + sign + notarize + ZIP
 make clean-ghostty  # Rebuild GhosttyKit after updating Vendor/ghostty
 make ghostty-wasm   # Rebuild ghostty-vt.wasm for the Remote Control web UI
 ```
+
+`Boo/Resources/MonacoBundle` is gitignored and is a `.copy` resource of the Boo target, so a bare
+`swift build` on a fresh checkout fails until `make monaco` (or any of `make build/test/release`) has run.
 
 Ghostty carries local patches (`Vendor/patches/*.patch`), applied idempotently by
 `make ghostty` / `make ghostty-wasm`. After updating the submodule, re-apply via
@@ -34,29 +41,70 @@ Ghostty carries local patches (`Vendor/patches/*.patch`), applied idempotently b
 
 ```
 Boo/                  Library target (all app code)
-  App/                AppDelegate, MainWindowController, WindowStateCoordinator
-  Ghostty/            GhosttyRuntime, GhosttyView (Metal surface)
-  Terminal/           TerminalBackend (PTY lifecycle protocol)
-  Models/             Workspace, Pane, SplitTree, AppSettings, Theme
-  Plugin/             Core plugin framework (protocol, registry, runtime, DSL)
-  Plugins/            Built-in plugins (FileTree, Git, Agents, Docker, Bookmarks, Snippets, etc.)
-  Views/              PaneView, StatusBarView, ToolbarView, SettingsWindow
-  Services/           TerminalBridge, RemoteExplorer, BooSocketServer, BinaryScanner, AutoUpdater
+  App/                AppDelegate (BooMain), AppStore, WindowManager, MainWindowController (+Panes,
+                      +Terminal, +Plugins, +Workspace, +Menu, +IPC, +IPCLayout, +SplitLayout,
+                      +WindowDrag, +AgentTasks, +AgentTimeline, +RemoteControl), SidebarController,
+                      WindowStateCoordinator, TrafficLightPositioner
+  Content/            Tab content views: Terminal, Browser, Editor (Monaco), ImageViewer,
+                      MarkdownPreview, PluginTab; ContentType + ContentTypeDetector
+  Ghostty/            GhosttyRuntime, GhosttyView (Metal surface), TerminalScrollView
+  Models/             Settings.swift (AppSettings), Theme + TerminalTheme+BuiltIn, Workspace,
+                      Pane (+ TabState), SplitTree (+Layout), AppState
+  Plugin/             Core plugin framework (protocol, registry, runtime, JSC script plugins)
+    ViewDSL/          JSON view DSL parser/renderer for script plugins
+  Plugins/            Built-in plugins (Agents, FileTree, RemoteExplorer, Git, Docker, Bookmarks,
+                      Snippets, SystemInfo, Debug)
+  Services/           TerminalBridge, ProcessTree, RemoteExplorer, SessionStore, BooPaths,
+                      BinaryScanner, SparkleUpdater
+                      Sockets: SocketServerCore, BooSocketServer (+Commands, +Events),
+                      RemoteControlServer, BooMCPServer
+                      Agents: AgentInbox (+Remote), AgentWorktree, AgentReview, AgentTimeline,
+                      AgentHandoff
+  Views/              PaneView, SplitContainerView, StatusBarView, ToolbarView, WorkspaceBarView,
+                      TabDragCoordinator, ZoomBadgeView, DetailPanelView (SidebarPanelView),
+                      AgentReviewView, AgentTimelineView, AgentInboxSegment, SettingsWindow
+    Settings/         One SwiftUI view per settings page
+    SwiftUI/          AppContentView, SidebarView, PaneSplitRepresentable
+  Resources/          Images, MonacoSource (pnpm/Vite) → MonacoBundle (generated),
+                      RemoteControl (index.html + ghostty-vt.wasm)
 BooApp/               Executable entry point (just calls BooMain.run())
 CGhostty/             C module wrapping ghostty.h
 CIronmark/            C module wrapping ironmark (Rust markdown parser)
-Tests/BooTests/       1100+ tests
+CObjCSafe/            Obj-C shim for exception-safe AppKit calls
+Vendor/               ghostty + ironmark submodules; patches/ (local Ghostty patches)
+Resources/shell-integration/  boo.{zsh,bash,fish}, boo-claude-hook (agent inbox hook)
+examples/plugins/     Example script plugins
+Tests/BooTests/       1300+ tests
 documentation/        Vocs documentation site
 ```
 
 ## Key Architecture
 
 - **Boo** is a library target; **BooApp** is the thin executable
-- **GhosttyKit** embedded via C API — wakeup/tick loop drains surface mailbox
-- **Two-layer state**: `AppSettings` (global singleton) + `TabState` (per-terminal)
+- **GhosttyKit** embedded via C API — wakeup/tick loop drains surface mailbox; Ghostty owns the PTY
+- **State layers**: `AppSettings` (global singleton) + `TabState` (per-terminal, source of truth) +
+  `AppStore` (observable projection of context/theme/sidebar for SwiftUI)
 - **Plugin system**: `BooPluginProtocol` with two-phase cycle (enrich → freeze → react)
-- **IPC**: Unix socket at `~/.boo/boo.sock` for child process communication
+- **IPC**: Unix socket at `~/.boo/boo.sock` — child-process status, layout/window control API,
+  transport for the MCP server, and backend for remote control (see [IPC](#ipc))
+- **Multi-window**: `WindowManager` owns every `MainWindowController`; each window has its own
+  workspaces, sidebar and plugin registry, while settings/themes/bookmarks stay global. Session v2
+  (`SessionStore`) snapshots all windows (`SessionSnapshot.windows` + `keyWindowIndex`).
 - **Remote detection**: Title heuristics + process tree polling, reconciled in `TerminalBridge`
+
+## IPC
+
+- `BooSocketServer.processCommand` handles built-ins (`set_status`, `clear_status`, `list_status`, …)
+  and plugin-namespaced handlers; control commands reach `WindowManager.dispatchCommand` via
+  `onControlCommand` (installed in `WindowManager.installSharedHandlers`).
+- `dispatchCommand` first offers agent commands to `AgentInbox.handleSocketCommand` (`agent_event`,
+  `agent_inbox`, `agent_respond`, `agent_jump`), then routes by `pane_id` to the window owning that
+  pane (even in the background), falling back to the active window.
+- Per-window handlers: `MainWindowController+IPC.swift` (`handleIPCCommand`: theme, tabs, workspaces,
+  send/read text) and `+IPCLayout.swift` (split/close/focus/resize/swap/zoom panes).
+- **MCP**: `Boo --mcp` (`BooMCPServer`) is a stdio JSON-RPC server that forwards tool calls to the
+  socket; pane arguments default to the caller's `BOO_PANE_ID`.
+- `RemoteControlServer` (HTTP, web UI) feeds its `onCommand` into the same `dispatchCommand`.
 
 ## Plugin System
 
@@ -202,6 +250,9 @@ Runs `AgentBinaryScanner.detectInstalledAgents()` on a background task and store
 | Field | Source |
 |---|---|
 | `kind` | Inferred from process name or `agent_kind` metadata |
+| `displayName` | Human-readable agent name |
+| `processName` | Foreground process name |
+| `startedAt` | When the session was first seen |
 | `sessionID` | `session_id` from MCP metadata |
 | `transcriptPath` | `transcript_path` from MCP metadata |
 | `model` | `model` from MCP metadata |
@@ -209,10 +260,26 @@ Runs `AgentBinaryScanner.detectInstalledAgents()` on a background task and store
 | `state` | `AgentRunState`: `running`, `idle`, `needs-input`, `unknown` |
 | `pid` | `pid` from MCP metadata or process tree |
 | `cwd` | CWD at session start |
+| `metadata` | Raw `set_status` metadata |
 
 ### `WorkspaceAgentSession`
 
 Wraps `AgentSession` with `paneID`, `tabID`, `tabTitle`, and `isFocused` so the plugin can present all active agent tabs across the workspace in a single "Open Sessions" section.
+
+### Agent workflow features
+
+- **Inbox** (`Services/AgentInbox.swift`) — cross-window agent state keyed by terminal tab ID, fed by
+  `Resources/shell-integration/boo-claude-hook` via `agent_event`. Shown in the status bar by `AgentInboxSegment`.
+- **Worktree tasks** (`AgentWorktree`, `MainWindowController+AgentTasks.swift`) — one git worktree per
+  agent task; merge/discard from the task menu.
+- **Review mode** (`AgentReview`, `AgentReviewView`) — diff of the agent's changes with inline comments
+  sent back to the agent.
+- **Timeline** (`AgentTimeline`, `AgentTimelineView`) — transcript replay with token usage and an
+  estimated cost (`AgentTimeline.estimatedCost`).
+- **Handoff** (`AgentHandoff`) — ⌥⌘↩ "Send to Agent" pastes the selection or last command output into
+  the nearest agent's prompt.
+- **Remote approve** (`AgentInbox+Remote.swift`) — `agent_respond` approves/denies a waiting agent from
+  the Remote Control page; a mismatched `updated_at` is rejected as stale.
 
 ## Settings Architecture
 
@@ -245,19 +312,15 @@ Fixed tabs are listed in `Tab.fixed`. The **PLUGINS** sidebar section is generat
 
 `ContentType` exposes static extension sets used for routing: `imageExtensions`, `markdownExtensions`, `htmlExtensions`, `pdfExtensions`. Add new extension groups here and wire routing in `ContentType.forFile`, `ContentTypeDetector.detect`, and the file tree plugin.
 
-### Editor Themes
+### Editor Theme
 
-`EditorThemeLibrary` (in `Boo/Content/EditorContentView.swift`) holds all built-in syntax themes.
-
-- Add a new theme as a `static let` `Entry(id:, name:, isDark:, theme:)` and append it to `all`.
-- The live editor overrides `theme.background` and `lineHighlight` with the global app theme so the editor blends with the UI; the Settings preview uses the raw theme background.
-- `isDark` drives the `Dark`/`Light` badge in the theme picker.
+The editor tab is Monaco (bundled from `Boo/Resources/MonacoSource` by `make monaco`) hosted in `Boo/Content/EditorContentView.swift`. There is no separate editor theme library: `buildMonacoTheme()` derives a Monaco theme from the app theme (`vs`/`vs-dark` base, token colors from the ANSI palette, editor colors from background/foreground/cursor/selection) and re-applies it on theme change.
 
 ## Browser Tab
 
 `BrowserContentView` (AppKit, `Boo/Content/`) renders a WKWebView with a themed toolbar:
 
-- Background, URL field, separator, and button tints all use `AppSettings.shared.theme` chrome colors (`chromeBg`, `chromeMuted`, `chromeText`, `sidebarBg`, `chromeBorder`).
+- Toolbar background uses `theme.background`; URL field, separator, and button tints use chrome colors (`chromeText`, `chromeMuted`, `chromeBorder`), with `controlFill` as button hover background.
 - Theme changes are applied live via `.settingsChanged` notification → `applyToolbarTheme()`.
 - Navigation buttons (back/forward/reload-stop) update their enabled state and tint after each navigation event.
 

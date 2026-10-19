@@ -6,17 +6,30 @@
 2. `make setup` to build all dependencies
 3. `make test` to verify everything works
 4. Install swift-format: `brew install swift-format`
+5. Install Node.js + pnpm — `make monaco` builds the editor bundle (`Boo/Resources/MonacoBundle`, gitignored) and runs before `make build`, `make test`, and `make release`
 
 ## Code Style
 
 Boo uses [swift-format](https://github.com/swiftlang/swift-format) (config in `.swift-format`).
 
 ```bash
-make format   # Format all source files
-make lint     # Check for violations (CI runs this)
+make format   # Format all source files (monaco-format + swift-format)
+make lint     # Check for violations (monaco-lint + swift-format; CI runs this)
 ```
 
 Rules: 4-space indent, 120-char lines, zero compiler warnings, all UI on main thread.
+
+## Ghostty
+
+```bash
+make ghostty-patches   # Apply Vendor/patches/*.patch to Vendor/ghostty (idempotent)
+make clean-ghostty     # Force a GhosttyKit rebuild
+make ghostty-wasm      # Rebuild ghostty-vt.wasm for the Remote Control web UI
+```
+
+After updating the submodule, re-sync `CGhostty/include/ghostty.h` from `Vendor/ghostty/include/ghostty.h` (`make ghostty` does this) and keep a zig matching Ghostty's `minimum_zig_version`.
+
+The Makefile still has Linux targets (`setup-linux`, `build-linux`, `ghostty-linux`, `tarball`), but `Package.swift` declares only macOS and the `CLinuxGTK` sources they reference are gone, so they are not expected to work.
 
 ## Making Changes
 

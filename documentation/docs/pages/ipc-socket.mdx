@@ -10,11 +10,11 @@ Newline-delimited JSON. One request per line, one response per request. Long-liv
 
 | Category       | Commands                                                                                   |
 | -------------- | ------------------------------------------------------------------------------------------ |
-| **Query**      | `get_context`, `get_theme`, `get_settings`, `get_workspaces`                               |
-| **Control**    | `set_theme`, `toggle_sidebar`, `switch_workspace`, `new_tab`, `new_workspace`, `send_text` |
+| **Query**      | `get_context`, `get_theme`, `get_settings`, `get_workspaces`, `list_themes`, `get_state`, `get_screen` |
+| **Control**    | `set_theme`, `toggle_sidebar`, `switch_workspace`, `new_tab`, `new_workspace`, `send_text`, `send_key`, `select_pane`, `select_tab` |
 | **Panes**      | `split_pane`, `close_pane`, `focus_pane`, `resize_pane`, `swap_pane`, `zoom_pane`, `equalize_splits`, `get_layout` |
 | **Windows**    | `new_window`, `move_workspace_to_new_window`, `merge_all_windows`                          |
-| **Agents**     | `agent_event`, `agent_inbox`, `agent_jump`, `agent_respond`, `agent_timeline`, `new_agent_task`, `review_changes` |
+| **Agents**     | `agent_event`, `agent_idle`, `agent_inbox`, `agent_jump`, `agent_respond`, `agent_timeline`, `new_agent_task`, `review_changes` |
 | **Process**    | `set_status`, `clear_status`, `list_status`                                                |
 | **Events**     | `subscribe`, `unsubscribe`                                                                 |
 | **Status Bar** | `statusbar.set`, `statusbar.clear`, `statusbar.list`                                       |
@@ -37,6 +37,24 @@ echo '{"cmd":"statusbar.set","id":"ci","text":"CI: passing","icon":"checkmark.ci
   | nc -U "$BOO_SOCK"
 ```
 
+## Workspaces, Tabs and Keys
+
+Without a `pane_id`, commands go to the frontmost Boo window.
+
+| Command            | Arguments                                                                 | Reply                                    |
+| ------------------ | ------------------------------------------------------------------------- | ---------------------------------------- |
+| `get_workspaces`   |                                                                           | `workspaces` (`index`, `id`, `name`, `path`, `is_active`, `pane_count`) |
+| `get_state`        |                                                                           | `workspaces`, `panes` of the active workspace with their `tabs`, `agents`, `theme` |
+| `list_themes`      |                                                                           | `themes` (names)                         |
+| `switch_workspace` | `index` or `id`                                                           |                                          |
+| `new_tab`          | optional `cwd` (default: the workspace folder); opens in the active pane  |                                          |
+| `new_workspace`    | optional `path` (default: home)                                           |                                          |
+| `new_window`       |                                                                           | `windows` (count)                        |
+| `select_pane`      | `id` of a pane in the active workspace                                    |                                          |
+| `select_tab`       | `index` of a tab in the active pane                                       |                                          |
+| `send_key`         | `key`: `enter`, `tab`, `escape`, `backspace`, `up`, `down`, `left`, `right`, `ctrl_c`, `ctrl_d`, `ctrl_z` or `ctrl_l`; goes to the active terminal |   |
+| `agent_idle`       | `pane_id`: marks activity on that pane's tab, even when it is in front    |                                          |
+
 ## Event Subscriptions
 
 Keep the connection open after `subscribe` to receive push events:
@@ -45,7 +63,7 @@ Keep the connection open after `subscribe` to receive push events:
 | ------------------------ | ----------------------------------- |
 | `cwd_changed`            | `path`, `is_remote`, `pane_id`      |
 | `title_changed`          | `title`, `pane_id`                  |
-| `process_changed`        | `name`, `category`, `pane_id`       |
+| `process_changed`        | `name`, `category`, `pane_id`, `pid`, `metadata` |
 | `remote_session_changed` | `type`, `host`, `active`, `pane_id` |
 | `focus_changed`          | `pane_id`                           |
 | `workspace_switched`     | `workspace_id`                      |
@@ -58,7 +76,7 @@ Use `"events": ["*"]` to subscribe to all events.
 
 `send_text` writes text directly to the active terminal's PTY — identical to typing it. With `pane_id` it targets that pane, in any workspace of its window; with `submit: true` the text is pasted as one input and Return is pressed, which is how to send a prompt to an agent.
 
-`get_screen` with `pane_id` and/or `lines` (max 5000) returns that pane's last lines of output, scrollback included, as `text`, plus `title` and `cwd`.
+`get_screen` with `pane_id` and/or `lines` (max 5000) returns that pane's last lines of output, scrollback included, as `text`, plus `title` and `cwd`; with `pane_id` but no `lines`, the visible screen. Without either, it returns the visible screen of the active pane, plus `cols`, `rows` and a styled `vt` snapshot.
 
 ```bash
 echo '{"cmd":"send_text","text":"cd ~/projects/myapp\n"}' | nc -U "$BOO_SOCK"
@@ -68,17 +86,17 @@ echo '{"cmd":"get_screen","pane_id":"<id>","lines":50}' | nc -U "$BOO_SOCK"
 
 ## Pane Layout
 
-Commands act on the active workspace of the frontmost Boo window. `split_pane`, `close_pane` and `get_layout` also take a `pane_id`: the command then goes to the window and workspace holding that pane, even in the background. `direction` is `left`, `right`, `up` or `down`.
+Commands act on the active workspace of the frontmost Boo window. `split_pane`, `close_pane` and `get_layout` also take a `pane_id`: the command then goes to the window and workspace holding that pane, even in the background. `focus_pane`, `resize_pane`, `swap_pane`, `zoom_pane` and `equalize_splits` take a `pane_id` too, but only for a pane on screen; in a background workspace they fail with `pane is in a background workspace; switch to it first`. `direction` is `left`, `right`, `up` or `down`.
 
 | Command                        | Arguments                                         | Reply                        |
 | ------------------------------ | ------------------------------------------------- | ---------------------------- |
 | `split_pane`                   | `direction` (default `right`): side of the new pane; `pane_id` to split (default active); `command` to run in it; `cwd`; `focus` (default `true`) | `pane_id`, `started` |
 | `close_pane`                   | `pane_id` (default active); never the only pane   | `active_pane`                |
-| `focus_pane`                   | `direction`, or `next` / `previous`               | `active_pane`                |
-| `resize_pane`                  | `direction`, `amount` in points (default 10)      |                              |
-| `swap_pane`                    | `direction`                                       |                              |
-| `zoom_pane`                    | `zoomed` (`true`/`false`; omit to toggle)         | `zoomed`                     |
-| `equalize_splits`              |                                                   |                              |
+| `focus_pane`                   | `direction`, or `next` / `previous`; `pane_id` alone focuses that pane, with a `direction` it moves from there | `active_pane` |
+| `resize_pane`                  | `direction`, `amount` in points (default 10), `pane_id` |                        |
+| `swap_pane`                    | `direction`, `pane_id`                            |                              |
+| `zoom_pane`                    | `zoomed` (`true`/`false`; omit to toggle), `pane_id` | `zoomed`                  |
+| `equalize_splits`              | optional `pane_id`                                |                              |
 | `get_layout`                   | `pane_id`: lay out that pane's workspace          | `tree`, `panes`, `windows`, `workspace_visible` |
 | `move_workspace_to_new_window` | `index` (default active)                          | `windows`                    |
 | `merge_all_windows`            | moves every window's workspaces into the active one | `workspaces`               |
@@ -94,7 +112,7 @@ echo '{"cmd":"get_layout"}' | nc -U "$BOO_SOCK"
 
 Boo keeps one list of coding agents across all windows: which are working, which wait for an answer, which finished. The status bar shows it; clicking lists every agent and jumps to its tab.
 
-Claude Code feeds it automatically: on launch Boo registers `~/.boo/shell-integration/boo-claude-hook` in `~/.claude/settings.json` for `UserPromptSubmit`, `PostToolUse`, `Notification`, `Stop` and `SessionEnd`. For Codex, add to `~/.codex/config.toml`:
+Claude Code feeds it automatically: on launch Boo registers `~/.boo/shell-integration/boo-claude-hook` in `~/.claude/settings.json` for `UserPromptSubmit`, `PostToolUse`, `Notification`, `Stop` and `SessionEnd` (only if that file already exists; your own hooks are kept). For Codex, add to `~/.codex/config.toml`:
 
 ```toml
 notify = ["~/.boo/shell-integration/boo-claude-hook", "codex"]
@@ -152,7 +170,7 @@ Last-command output needs shell integration: Boo cuts it out of the scrollback b
 
 ## MCP Server
 
-Boo is also an [MCP](https://modelcontextprotocol.io) server, so an agent running in a Boo terminal can arrange its own workspace: start a dev server or test watcher in a pane beside it and read the output later, type into other panes, start parallel agent tasks, or open the review for you. Boo writes a launcher to `~/.boo/shell-integration/boo-mcp` on every start; register it once:
+Boo is also an [MCP](https://modelcontextprotocol.io) server, so an agent running in a Boo terminal can arrange its own workspace: start a dev server or test watcher in a pane beside it and read the output later, type into other panes, start parallel agent tasks, or open the review for you. Boo (the installed app, not a bare development binary) writes a launcher to `~/.boo/shell-integration/boo-mcp` on every start; register it once:
 
 ```bash
 claude mcp add -s user boo -- ~/.boo/shell-integration/boo-mcp

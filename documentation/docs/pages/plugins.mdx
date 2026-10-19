@@ -137,15 +137,31 @@ AppSettings.shared.pluginString("my-plugin", "myKey", default: "")
 AppSettings.shared.pluginDouble("my-plugin", "myKey", default: 12.0)
 ```
 
-| Plugin | Key                | Type   | Default | Description                    |
-| ------ | ------------------ | ------ | ------- | ------------------------------ |
-| Git    | `showBranch`       | Bool   | `true`  | Show branch in status bar      |
-| Files  | `showHiddenFiles`  | Bool   | `false` | Show hidden files              |
-| Files  | `showIcons`        | Bool   | `true`  | Show file icons                |
-| Files  | `showPath`         | Bool   | `true`  | Show path above tree           |
-| Files  | `showProcess`      | Bool   | `true`  | Show running process           |
-| Files  | `useKitty`         | Bool   | `true`  | Inline image preview (Kitty)   |
-| Files  | `editorExtensions` | String | —       | Extensions that open in editor |
+| Plugin | Key                  | Type   | Default       | Description                                                |
+| ------ | -------------------- | ------ | ------------- | ---------------------------------------------------------- |
+| Files  | `showHiddenFiles`    | Bool   | `false`       | Show hidden files                                          |
+| Files  | `showIcons`          | Bool   | `true`        | Show file icons                                            |
+| Files  | `showPath`           | Bool   | `true`        | Show path above tree                                       |
+| Files  | `showProcess`        | Bool   | `true`        | Show running process                                       |
+| Files  | `showFilterBar`      | Bool   | `true`        | Show filter bar (**/** focuses it)                         |
+| Files  | `gitDecorations`     | Bool   | `true`        | Show git status badges                                     |
+| Files  | `dimIgnored`         | Bool   | `true`        | Dim git-ignored files                                      |
+| Files  | `editorFilePatterns` | String | built-in list | Comma-separated patterns that open in the editor           |
+| Files  | `markdownOpenMode`   | String | `preview`     | `preview`, `builtInEditor`, `editor` (terminal), `external` |
+| Files  | `imageOpenMode`      | String | `imageViewer` | `imageViewer`, `kitty`, `external`                         |
+| Files  | `textOpenMode`       | String | `editor`      | `editor`, `terminalEditor`, `external`                     |
+| Files  | `htmlOpenInBrowser`  | Bool   | `false`       | Open HTML files in a browser tab                           |
+| Files  | `pdfOpenInBrowser`   | Bool   | `true`        | Open PDF files in a browser tab                            |
+| Git    | `showBranch`         | Bool   | `true`        | Show branch in status bar                                  |
+| Git    | `diffTool`           | String | `""`          | External diff command, `{file}` placeholder                |
+| Docker | `socketPath`         | String | `""`          | Docker socket path (empty = auto-detect)                   |
+| System | `statusBarMemory`    | Bool   | `false`       | Show memory in status bar                                  |
+| System | `statusBarDisk`      | Bool   | `false`       | Show disk in status bar                                    |
+| System | `statusBarCPU`       | Bool   | `false`       | Show CPU in status bar                                     |
+| System | `statusBarBattery`   | Bool   | `false`       | Show battery in status bar                                 |
+| Debug  | `maxEntries`         | Double | `200`         | Max log entries                                            |
+
+The Agents plugin uses its own custom settings page instead of manifest-rendered controls.
 
 ## Status Bar
 

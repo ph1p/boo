@@ -17,12 +17,12 @@ Boo checks for updates on launch. See [Updates](/updates).
 
 ## Build from Source
 
-**Prerequisites:** macOS 13+, Xcode CLT, Zig 0.15+ (`brew install zig`), Rust (`rustup`), Metal Toolchain
+**Prerequisites:** macOS 15+, Xcode CLT, Zig 0.16.0 (`brew install zig`), Rust (`rustup`), Metal Toolchain, Node.js + pnpm (Monaco editor bundle)
 
 ```bash
 git clone --recursive https://github.com/ph1p/boo.git
 cd boo
-make setup    # Builds GhosttyKit + ironmark + Boo
+make setup    # Builds GhosttyKit + ironmark + Monaco bundle + Boo
 make run      # Build and launch
 ```
 
@@ -57,13 +57,14 @@ make test
 
 ## System Requirements
 
-| Requirement       | Minimum               |
-| ----------------- | --------------------- |
-| macOS             | 13.0 (Ventura)        |
-| Architecture      | Apple Silicon (arm64) |
-| Disk space        | ~200MB                |
-| Zig (build only)  | 0.15+                 |
-| Rust (build only) | stable                |
+| Requirement              | Minimum               |
+| ------------------------ | --------------------- |
+| macOS                    | 15.0 (Sequoia)        |
+| Architecture             | Apple Silicon (arm64) |
+| Disk space               | ~200MB                |
+| Zig (build only)         | 0.16.0                |
+| Rust (build only)        | stable                |
+| Node + pnpm (build only) | recent                |
 
 ## Uninstall
 
