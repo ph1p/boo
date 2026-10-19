@@ -59,6 +59,7 @@ final class SocketServerCore: @unchecked Sendable {
 
     private var serverFD: Int32 = -1
     private var acceptSource: DispatchSourceRead?
+    private var listenerClosed: DispatchSemaphore?
     private var clientSources: [Int32: DispatchSourceRead] = [:]
     private var clientBuffers: [Int32: Data] = [:]
     /// Per-connection idle deadlines. Without them a peer that connects and never
@@ -88,19 +89,29 @@ final class SocketServerCore: @unchecked Sendable {
         serverFD = fd
         let source = DispatchSource.makeReadSource(fileDescriptor: fd, queue: queue)
         source.setEventHandler { [weak self] in self?.acceptClient() }
-        source.setCancelHandler { [weak self] in
-            guard let self, self.serverFD >= 0 else { return }
-            close(self.serverFD)
-            self.serverFD = -1
+        let closed = DispatchSemaphore(value: 0)
+        // Close only this fd, and only here: closing before the source is cancelled
+        // is unsafe, and `serverFD` may already hold a restarted listener.
+        source.setCancelHandler {
+            close(fd)
+            closed.signal()
         }
         source.resume()
         acceptSource = source
+        listenerClosed = closed
     }
 
     /// Drop every connection and stop listening. Safe to call when not listening.
-    func shutdown() {
+    ///
+    /// The listener closes asynchronously on `queue`; wait on the returned
+    /// semaphore (off `queue`) before rebinding the same address.
+    @discardableResult
+    func shutdown() -> DispatchSemaphore? {
+        let closed = listenerClosed
         acceptSource?.cancel()
         acceptSource = nil
+        listenerClosed = nil
+        serverFD = -1
         // Cancelling a read source runs its cancel handler, which is the single
         // owner of per-connection teardown — including the timer and the buffer.
         for source in clientSources.values {
@@ -114,10 +125,7 @@ final class SocketServerCore: @unchecked Sendable {
         clientTimers.removeAll()
         clientSources.removeAll()
         clientBuffers.removeAll()
-        if serverFD >= 0 {
-            close(serverFD)
-            serverFD = -1
-        }
+        return closed
     }
 
     // MARK: - Accept

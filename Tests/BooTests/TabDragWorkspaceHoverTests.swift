@@ -165,6 +165,8 @@ import XCTest
         coordinator.simulateHoverAt(screenPoint: NSPoint(x: 100, y: 19))
         coordinator.simulateHoverAt(screenPoint: NSPoint(x: 120, y: 19))
 
+        // Wait for the first fire, then give a re-armed timer room to fire again
+        waitUntil(timeout: 1.0) { firedCount >= 1 }
         waitForHoverWindow()
 
         XCTAssertEqual(firedCount, 1)

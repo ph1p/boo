@@ -133,13 +133,15 @@ final class AgentReviewModel: ObservableObject {
 /// agent's prompt.
 struct AgentReviewView: View {
     @ObservedObject var model: AgentReviewModel
-
-    private var t: Tokens { Tokens(theme: AppSettings.shared.theme) }
+    /// Repaints on editor-font changes; the theme comes from the tab host.
+    @StateObject private var settings = SettingsObserver(topics: [.editor])
+    @Environment(\.tokens) private var t
     private var mono: Font {
         .custom(AppSettings.shared.editorFontName, size: max(10, CGFloat(AppSettings.shared.editorFontSize) - 1))
     }
 
     var body: some View {
+        let _ = settings.revision
         VStack(spacing: 0) {
             header
             Rectangle().fill(t.separator).frame(height: 1)
@@ -207,15 +209,14 @@ struct AgentReviewView: View {
     private struct NoteField: View {
         @ObservedObject var model: AgentReviewModel
         @ObservedObject var note: AgentReviewModel.TextBox
-
-        private var t: Tokens { Tokens(theme: AppSettings.shared.theme) }
+        @Environment(\.tokens) private var t
 
         var body: some View {
             TextField("Overall note for the agent (optional)", text: $note.text)
                 .textFieldStyle(.roundedBorder)
                 .onSubmit { model.send() }
             if let status = model.status {
-                Text(status).font(.system(size: 11)).foregroundStyle(t.color(\.error))
+                Text(status).font(.system(size: 11)).foregroundStyle(t.error)
             }
             Button("Send to Agent") { model.send() }
                 .keyboardShortcut(.return, modifiers: .command)
@@ -266,14 +267,14 @@ struct AgentReviewView: View {
                     Image(systemName: "text.bubble").font(.system(size: 10)).foregroundStyle(t.accent)
                 }
                 if !file.isBinary {
-                    Text("+\(file.additions)").foregroundStyle(t.color(\.success))
-                    Text("−\(file.deletions)").foregroundStyle(t.color(\.error))
+                    Text("+\(file.additions)").foregroundStyle(t.success)
+                    Text("−\(file.deletions)").foregroundStyle(t.error)
                 }
             }
             .font(.system(size: 10, design: .monospaced))
             .padding(.horizontal, 10).padding(.vertical, 4)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(selected ? t.color(\.accentSelectionFill) : .clear)
+            .background(selected ? t.accentSelectionFill : .clear)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -290,9 +291,9 @@ struct AgentReviewView: View {
 
     private func statusColor(_ status: AgentReview.FileDiff.Status) -> Color {
         switch status {
-        case .modified, .renamed: return t.color(\.warning)
-        case .added: return t.color(\.success)
-        case .deleted: return t.color(\.error)
+        case .modified, .renamed: return t.warning
+        case .added: return t.success
+        case .deleted: return t.error
         }
     }
 
@@ -372,8 +373,8 @@ struct AgentReviewView: View {
     private func lineBackground(_ kind: AgentReview.DiffLine.Kind) -> Color {
         switch kind {
         // Deliberate raw alpha: diff tints sit between subtle and hover bands.
-        case .added: return t.color(\.success).opacity(0.12)
-        case .removed: return t.color(\.error).opacity(0.12)
+        case .added: return t.success.opacity(0.12)
+        case .removed: return t.error.opacity(0.12)
         case .context: return .clear
         }
     }

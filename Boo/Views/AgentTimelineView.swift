@@ -98,13 +98,15 @@ struct AgentTimelineView: View {
     @ObservedObject var model: AgentTimelineModel
     @State private var expanded: Set<Int> = []
     @State private var problemsOnly = false
-
-    private var t: Tokens { Tokens(theme: AppSettings.shared.theme) }
+    /// Repaints on editor-font changes; the theme comes from the tab host.
+    @StateObject private var settings = SettingsObserver(topics: [.editor])
+    @Environment(\.tokens) private var t
     private var mono: Font {
         .custom(AppSettings.shared.editorFontName, size: max(10, CGFloat(AppSettings.shared.editorFontSize) - 2))
     }
 
     var body: some View {
+        let _ = settings.revision
         VStack(spacing: 0) {
             if let timeline = model.timeline {
                 header(timeline)
@@ -156,7 +158,7 @@ struct AgentTimelineView: View {
                 if timeline.loopCount > 0 {
                     stat(
                         "\(timeline.loopCount) repeated call\(timeline.loopCount == 1 ? "" : "s")",
-                        icon: "arrow.triangle.2.circlepath", color: t.color(\.warning))
+                        icon: "arrow.triangle.2.circlepath", color: t.warning)
                 }
                 Spacer()
                 Toggle("Loops & failures only", isOn: $problemsOnly).toggleStyle(.checkbox)
@@ -177,7 +179,7 @@ struct AgentTimelineView: View {
                                 )
                                 .font(.system(size: 10)).foregroundStyle(t.text)
                                 .padding(.horizontal, 6).padding(.vertical, 2)
-                                .background(RoundedRectangle(cornerRadius: 4).fill(t.separator))
+                                .background(RoundedRectangle(cornerRadius: 4).fill(t.controlFill))
                             }
                             .buttonStyle(.plain)
                             .help(file.path)
@@ -273,7 +275,8 @@ struct AgentTimelineView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(.horizontal, 14).padding(.vertical, 10)
-        .background(turn.hasLoop ? t.color(\.warning).opacity(0.06) : .clear)
+        // Deliberate raw alpha: a status-tinted row in the subtle band.
+        .background(turn.hasLoop ? t.warning.opacity(0.06) : .clear)
     }
 
     private func prompt(_ turn: AgentTimeline.Turn, isExpanded: Bool) -> some View {
@@ -310,12 +313,12 @@ struct AgentTimelineView: View {
         return HStack(spacing: 6) {
             Text(parts.joined(separator: " · ")).font(.system(size: 10)).foregroundStyle(t.textTertiary)
             if turn.interrupted {
-                Text("interrupted").font(.system(size: 10)).foregroundStyle(t.color(\.warning))
+                Text("interrupted").font(.system(size: 10)).foregroundStyle(t.warning)
             }
             Spacer()
             if turn.cost > 0 {
                 // Bar: share of the most expensive prompt, to spot the costly ones.
-                RoundedRectangle(cornerRadius: 2).fill(t.accent.opacity(0.5))
+                RoundedRectangle(cornerRadius: 2).fill(t.accentEmphasis)
                     .frame(width: max(2, 60 * CGFloat(peak > 0 ? turn.cost / peak : 0)), height: 4)
                 Text(Self.money(turn.cost, exact: true)).font(.system(size: 10, design: .monospaced))
                     .foregroundStyle(t.textSecondary)
@@ -342,11 +345,11 @@ struct AgentTimelineView: View {
             Spacer(minLength: 4)
             if tool.failures > 0 {
                 Label(tool.count > 1 ? "\(tool.failures) failed" : "failed", systemImage: "xmark.circle")
-                    .font(.system(size: 10)).foregroundStyle(t.color(\.error))
+                    .font(.system(size: 10)).foregroundStyle(t.error)
             }
             if tool.count > 1 {
                 Text("×\(tool.count)").font(.system(size: 10, weight: .semibold, design: .monospaced))
-                    .foregroundStyle(tool.isLoop ? t.color(\.warning) : t.textSecondary)
+                    .foregroundStyle(tool.isLoop ? t.warning : t.textSecondary)
                     .help(tool.isLoop ? "Same call \(tool.count) times in a row — the agent may be stuck" : "")
             }
         }

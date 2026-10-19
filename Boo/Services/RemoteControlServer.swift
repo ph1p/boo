@@ -115,11 +115,13 @@ final class RemoteControlServer: @unchecked Sendable {
     }
 
     func stop() {
-        queue.sync {
-            core.shutdown()
+        let listenerClosed = queue.sync {
             token = ""
             booLog(.info, .socket, "RemoteControl: stopped")
+            return core.shutdown()
         }
+        // Hold until the port is released so an immediate restart can bind it.
+        listenerClosed?.wait()
     }
 
     /// Case-insensitive lookup of a header value in raw header text.

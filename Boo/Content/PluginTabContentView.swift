@@ -21,7 +21,7 @@ final class PluginTabContentView: NSView, ContentViewProtocol {
     init(view: AnyView, title: String, icon: String = "puzzlepiece") {
         self.tabTitle = title
         self.iconSymbol = icon
-        self.hostingView = NSHostingView(rootView: view)
+        self.hostingView = NSHostingView(rootView: AnyView(PluginTabThemeHost(content: view)))
         super.init(frame: .zero)
         wantsLayer = true
         hostingView.translatesAutoresizingMaskIntoConstraints = false
@@ -62,4 +62,16 @@ final class PluginTabContentView: NSView, ContentViewProtocol {
     // MARK: - First Responder
 
     override var acceptsFirstResponder: Bool { true }
+}
+
+/// Hands plugin tab views the current theme as `\.tokens` and repaints them
+/// on theme switches, which they would otherwise miss (tabs outlive them).
+private struct PluginTabThemeHost: View {
+    let content: AnyView
+    @StateObject private var settings = SettingsObserver(topics: [.theme])
+
+    var body: some View {
+        let _ = settings.revision
+        content.environment(\.tokens, .current)
+    }
 }

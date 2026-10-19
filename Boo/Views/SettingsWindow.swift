@@ -38,6 +38,7 @@ struct Tokens {
     var subtleFill: Color { Color(nsColor: theme.subtleFill) }
     var controlFill: Color { Color(nsColor: theme.controlFill) }
     var accentSelectionFill: Color { Color(nsColor: theme.accentSelectionFill) }
+    var accentEmphasis: Color { Color(nsColor: theme.accentEmphasis) }
     var focusRing: Color { Color(nsColor: theme.focusRing) }
     var success: Color { Color(nsColor: theme.success) }
     var warning: Color { Color(nsColor: theme.warning) }

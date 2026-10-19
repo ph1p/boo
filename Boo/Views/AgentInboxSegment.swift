@@ -52,9 +52,9 @@ final class AgentInboxSegment: StatusBarPlugin {
 
     @MainActor static func color(for item: AgentInbox.Item, theme: TerminalTheme) -> NSColor {
         switch item.state {
-        case .needsInput: return .booRemote
-        case .error: return .booDeleted
-        case .done: return item.seen ? theme.textTertiary : .booLocal
+        case .needsInput: return theme.warning
+        case .error: return theme.error
+        case .done: return item.seen ? theme.textTertiary : theme.success
         case .working: return theme.accentColor
         }
     }
