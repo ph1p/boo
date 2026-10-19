@@ -1,0 +1,72 @@
+# Agents
+
+Boo is built to run coding agents (Claude Code, Codex, OpenCode) side by side. It tracks their state across all windows, gives each task its own git worktree, lets you review and comment on what they changed, and shows what a session cost.
+
+## Agents Sidebar
+
+The **Agents** sidebar tab is the agent center for the current workspace:
+
+| Section       | What it shows                                                                              |
+| ------------- | ------------------------------------------------------------------------------------------ |
+| Open Sessions | Agent sessions; click to focus, or right-click to resume, copy the session ID, open the transcript or show the timeline |
+| Changes       | Files changed while an agent is active, with diff stats; open a file, copy its path, or reference it in the agent's prompt |
+| Worktrees     | The repository's worktrees; click one to open it in a new tab                              |
+| Config, Skills | The agent's configuration files and skills                                                |
+
+With no agent in the tab, the sidebar offers **Start** buttons for each installed agent CLI.
+
+## Agent Inbox
+
+Boo keeps one list of agents across all windows: which are working, which wait for input, which finished or failed. A status bar segment summarizes it ("Claude needs your input", "2 agents waiting", "3 agents"), colored by state:
+
+| Color   | State                          |
+| ------- | ------------------------------ |
+| Warning | Needs input                    |
+| Error   | Failed                         |
+| Success | Done, not yet looked at        |
+| Accent  | Working                        |
+
+Click the segment to list every agent with its workspace and jump to it, or to open its timeline. **Window → Jump to Next Waiting Agent** (⇧⌘J) goes straight to the next agent that needs you. When an agent starts waiting or finishes in a tab you are not looking at, Boo sends a notification.
+
+Claude Code reports to the inbox through hooks: on launch Boo adds `~/.boo/shell-integration/boo-claude-hook` to `~/.claude/settings.json` for `UserPromptSubmit`, `PostToolUse`, `Notification`, `Stop` and `SessionEnd`. Your own hook entries are kept, and the file must already exist (start Claude Code once). The hook never blocks the agent. For Codex and other agents, see [Agent Inbox](/ipc-socket#agent-inbox).
+
+From your phone, [Remote Control](/remote-control) can approve or deny an agent that is waiting for permission.
+
+## Agent Tasks
+
+**File → New Agent Task…** starts an agent in its own checkout, so several agents can work on one repository without touching each other. Enter a task name, an optional first message and the agent (Claude Code, Codex or OpenCode). Boo creates branch `boo/<task>` in `~/.boo/worktrees/<repo>/<task>`, opens it as a workspace and starts the agent with your message.
+
+Right-click the task's workspace:
+
+- **Review Changes…** opens the review (below).
+- **Merge Worktree…** merges the branch with `git merge --no-ff` into the branch checked out in the main repository. It refuses while there are uncommitted changes, and aborts on conflicts. By default it then removes the worktree and closes the workspace.
+- **Discard Worktree…** deletes the worktree and its branch after a warning about unmerged commits or uncommitted changes, and closes the workspace.
+
+## Reviewing Changes
+
+**File → Review Changes…** opens a diff tab for the workspace. For an agent task it shows every commit since the branch was created, plus uncommitted and untracked files. For any other repository it shows the changes since the last commit.
+
+Click a line to comment on it, add an optional overall note, then press **Send to Agent** (⌘↩). Boo pastes all comments as one numbered message (`file:line`, the quoted line, your comment) into the workspace's agent terminal and presses Return. For a task, the header also has **Merge…** and **Discard…**.
+
+## Sending Context to an Agent
+
+**Terminal → Send to Agent** (⌥⌘↩) pastes the selection, or else the output of the last command, into the nearest agent's prompt and brings its tab to the front. It does not press Return, so you can add what to do with it. An agent in the same workspace wins, then the most recently active one.
+
+Right-click a terminal for **Send Selection to …** and **Send Output of “…” to …**. Last-command output needs shell integration. Details: [Handing context to an agent](/ipc-socket#handing-context-to-an-agent).
+
+## Agent Timeline
+
+**File → Agent Timeline**, or **Show Timeline** in the sidebar or the status bar menu, opens a tab with what a Claude Code session did: each prompt with its tool calls, duration, tokens and cost, the reply and the edited files. Calls repeated three or more times in a row are folded and highlighted, so loops stand out.
+
+Cost is Claude Code's own figure once the session has ended. While it runs, Boo estimates it from token counts, shown with ≈. See [Agent Timeline](/ipc-socket#agent-timeline).
+
+## MCP Server
+
+Boo is also an [MCP](https://modelcontextprotocol.io) server (`Boo --mcp`), so an agent inside Boo can arrange its own workspace. Register the launcher once:
+
+```bash
+claude mcp add -s user boo -- ~/.boo/shell-integration/boo-mcp
+codex mcp add boo -- ~/.boo/shell-integration/boo-mcp
+```
+
+The agent can then read the layout (`get_layout`), open a pane beside it for a dev server or tests (`split_pane`), read and type into other panes (`read_pane`, `send_text`), close them (`close_pane`), list agents (`list_agents`), start parallel tasks (`new_agent_task`) and open the review for you (`open_review`). It never types into or closes its own pane. Full tool list: [MCP Server](/ipc-socket#mcp-server).

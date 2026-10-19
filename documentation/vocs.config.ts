@@ -18,6 +18,14 @@ export default defineConfig({
       link: '/features',
     },
     {
+      text: 'Windows & Splits',
+      link: '/windows-and-splits',
+    },
+    {
+      text: 'Agents',
+      link: '/agents',
+    },
+    {
       text: 'Updates',
       link: '/updates',
     },
