@@ -1,6 +1,4 @@
-.PHONY: build run clean ghostty ghostty-linux ironmark monaco setup setup-linux release test app sign notarize zip zip-from-app dmg dmg-from-app dist lint format
-
-UNAME := $(shell uname -s)
+.PHONY: build run clean ghostty ironmark monaco setup release test app sign notarize zip zip-from-app dmg dmg-from-app dist lint format
 
 # ── Configuration ────────────────────────────────────────────────────────────
 
@@ -118,21 +116,6 @@ ghostty-wasm: $(XCRUN_WRAPPER_DIR)/xcrun ghostty-patches
 	@cp Vendor/ghostty/zig-out/bin/ghostty-vt.wasm Boo/Resources/RemoteControl/ghostty-vt.wasm
 	@echo "==> Copied to Boo/Resources/RemoteControl/ghostty-vt.wasm"
 
-# ── Ghostty GTK (Linux) ─────────────────────────────────────────────────────
-
-# Build Ghostty GTK executable for Linux
-ghostty-linux:
-	@if [ ! -f Vendor/ghostty/build.zig ]; then \
-		echo "==> Initializing Ghostty submodule..."; \
-		git submodule update --init --depth 1 Vendor/ghostty; \
-	fi
-	@if [ ! -f Vendor/ghostty/zig-out/bin/ghostty ]; then \
-		echo "==> Building Ghostty GTK..."; \
-		cd Vendor/ghostty && zig build -Dapp-runtime=gtk -Doptimize=ReleaseFast; \
-	else \
-		echo "==> Ghostty GTK already built"; \
-	fi
-
 # ── Ironmark (macOS) ────────────────────────────────────────────────────────
 
 # Build ironmark static library for markdown rendering
@@ -161,15 +144,8 @@ monaco-format:
 
 # ── Build ────────────────────────────────────────────────────────────────────
 
-# Full setup (auto-detects platform)
-ifeq ($(UNAME),Darwin)
+# Full setup: Ghostty, ironmark, then Boo
 setup: ghostty ironmark build
-else
-setup: setup-linux
-endif
-
-# Linux setup: build Boo with GTK4 sidebar + VTE terminal
-setup-linux: build-linux
 
 # Build Boo (macOS — requires GhosttyKit)
 build: monaco
@@ -183,11 +159,6 @@ build: monaco
 		fi; \
 	done
 	@echo "==> Ghostty resources bundled"
-
-# Build Boo for Linux (GTK4 + VTE terminal with sidebar)
-build-linux: monaco
-	swift build
-	@echo "==> Linux build complete"
 
 # Build and run as a proper .app bundle so macOS menu/shortcut wiring works
 run: build
@@ -220,7 +191,6 @@ run: build
 	open .build/debug/Boo.app
 
 # Release build
-ifeq ($(UNAME),Darwin)
 release: monaco
 	swift build -c release
 	@for dir in .build/release .build/arm64-apple-macosx/release; do \
@@ -231,11 +201,6 @@ release: monaco
 		fi; \
 	done
 	@echo "==> Release build complete"
-else
-release: monaco
-	swift build -c release
-	@echo "==> Release build complete"
-endif
 
 # Run tests (macOS only — tests depend on AppKit types)
 test: monaco
@@ -285,20 +250,6 @@ app: release
 		cp assets/AppIcon.icns "$(APP_BUNDLE)/Contents/Resources/"; \
 	fi
 	@echo "==> $(APP_BUNDLE) created"
-
-# ── Linux Packaging ─────────────────────────────────────────────────────────
-
-# Create a tar.gz archive for Linux distribution
-tarball: release
-	@echo "==> Creating Linux tarball..."
-	@mkdir -p "$(BUILD_DIR)/boo-$(VERSION)-linux"
-	@cp .build/release/BooApp "$(BUILD_DIR)/boo-$(VERSION)-linux/boo"
-	@if [ -f CLinuxGTK/boo.css ]; then \
-		cp CLinuxGTK/boo.css "$(BUILD_DIR)/boo-$(VERSION)-linux/"; \
-	fi
-	@cd "$(BUILD_DIR)" && tar czf "boo-$(VERSION)-linux-$$(uname -m).tar.gz" "boo-$(VERSION)-linux/"
-	@rm -rf "$(BUILD_DIR)/boo-$(VERSION)-linux"
-	@echo "==> $(BUILD_DIR)/boo-$(VERSION)-linux-$$(uname -m).tar.gz created"
 
 # ── Code Signing (macOS) ────────────────────────────────────────────────────
 

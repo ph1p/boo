@@ -29,8 +29,6 @@ make ghostty-wasm      # Rebuild ghostty-vt.wasm for the Remote Control web UI
 
 After updating the submodule, re-sync `CGhostty/include/ghostty.h` from `Vendor/ghostty/include/ghostty.h` (`make ghostty` does this) and keep a zig matching Ghostty's `minimum_zig_version`.
 
-The Makefile still has Linux targets (`setup-linux`, `build-linux`, `ghostty-linux`, `tarball`), but `Package.swift` declares only macOS and the `CLinuxGTK` sources they reference are gone, so they are not expected to work.
-
 ## Making Changes
 
 1. Create a feature branch from `main` (e.g., `feature/plugin-name`, `fix/tab-close-crash`)
