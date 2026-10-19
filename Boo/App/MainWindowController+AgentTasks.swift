@@ -24,15 +24,34 @@ extension MainWindowController {
 
     // MARK: - New task
 
+    /// Where a new task looks for its repository: the active tab's cwd first
+    /// (the workspace folder is often `~` or a parent of the repo), then the
+    /// workspace folder unless the cwd is inside it (git would fail there too).
+    /// Never empty.
+    private var agentTaskCandidateFolders: [String] {
+        guard let workspace = activeWorkspace else { return [AppSettings.shared.defaultFolder] }
+        let folder = workspace.folderPath
+        guard let cwd = workspace.activeWorkingDirectory.map({ ($0 as NSString).expandingTildeInPath }) else {
+            return [folder]
+        }
+        return cwd == folder || cwd.hasPrefix(folder + "/") ? [cwd] : [cwd, folder]
+    }
+
+    /// Main checkout of the first folder that is inside a git repository.
+    /// Blocks; call off the main thread.
+    nonisolated private static func agentTaskRepo(in folders: [String]) -> String? {
+        folders.lazy.filter { FileManager.default.fileExists(atPath: $0) }.compactMap(AgentWorktree.mainRoot(of:)).first
+    }
+
     @objc func newAgentTaskAction(_ sender: Any?) {
-        let folder = activeWorkspace?.folderPath ?? AppSettings.shared.defaultFolder
+        let folders = agentTaskCandidateFolders
         DispatchQueue.global(qos: .userInitiated).async {
-            let root = AgentWorktree.info(for: folder)?.mainRoot ?? AgentWorktree.repoRoot(of: folder)
+            let root = Self.agentTaskRepo(in: folders)
             DispatchQueue.main.async { [weak self] in
                 guard let self else { return }
                 guard let root else {
                     self.showAgentTaskError(
-                        "\((folder as NSString).abbreviatingWithTildeInPath) is not a git repository.",
+                        "\((folders[0] as NSString).abbreviatingWithTildeInPath) is not a git repository.",
                         title: "Can't Start Agent Task")
                     return
                 }
@@ -115,22 +134,32 @@ extension MainWindowController {
             reply(["ok": false, "error": "agent must be claude, codex or opencode"])
             return
         }
-        let repo = (json["repo"] as? String).map { ($0 as NSString).expandingTildeInPath }
-        guard let repo = repo ?? activeWorkspace?.folderPath else {
+        let explicitRepo = (json["repo"] as? String).map { ($0 as NSString).expandingTildeInPath }
+        guard activeWorkspace != nil || explicitRepo != nil else {
             reply(["ok": false, "error": "missing repo"])
             return
         }
+        // An explicit repo is passed through so create() reports its own error;
+        // otherwise pick the first candidate folder that is in a repository.
+        let folders = agentTaskCandidateFolders
         let title = name.isEmpty ? String(prompt.prefix(40)) : name
-        startAgentTask(repo: repo, name: title, kind: kind, prompt: prompt) { [weak self] error in
-            if let error {
-                reply(["ok": false, "error": error])
-                return
+        Task { @MainActor [weak self] in
+            let repo =
+                if let explicitRepo { explicitRepo } else {
+                    await Task.detached(priority: .userInitiated) { Self.agentTaskRepo(in: folders) }.value
+                        ?? folders[0]
+                }
+            self?.startAgentTask(repo: repo, name: title, kind: kind, prompt: prompt) { [weak self] error in
+                if let error {
+                    reply(["ok": false, "error": error])
+                    return
+                }
+                let workspace = self?.activeWorkspace
+                reply([
+                    "ok": true, "path": workspace?.folderPath ?? "",
+                    "workspace_id": workspace?.id.uuidString ?? ""
+                ])
             }
-            let workspace = self?.activeWorkspace
-            reply([
-                "ok": true, "path": workspace?.folderPath ?? "",
-                "workspace_id": workspace?.id.uuidString ?? ""
-            ])
         }
     }
 

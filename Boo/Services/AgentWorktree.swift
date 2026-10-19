@@ -45,6 +45,12 @@ enum AgentWorktree {
         return out.flatMap { $0.isEmpty ? nil : $0 }
     }
 
+    /// Main checkout of the repository containing `path`, also when `path` is
+    /// inside a linked worktree: where task branches and worktrees hang off.
+    static func mainRoot(of path: String) -> String? {
+        info(for: path)?.mainRoot ?? repoRoot(of: path).map(standardized)
+    }
+
     /// Worktree details when `path` is inside a linked worktree; nil for a main
     /// checkout or a folder outside git.
     static func info(for path: String) -> Info? {
@@ -88,7 +94,7 @@ enum AgentWorktree {
     /// `<root>/<repo name>/<slug>`. Picks a free suffix when either is taken.
     /// `repo` may be a worktree: tasks always hang off the main checkout.
     static func create(repo: String, name: String, root: String = defaultRoot) throws -> Info {
-        guard let repoRoot = info(for: repo)?.mainRoot ?? repoRoot(of: repo).map(standardized) else {
+        guard let repoRoot = mainRoot(of: repo) else {
             throw GitError(message: "\((repo as NSString).abbreviatingWithTildeInPath) is not a git repository.")
         }
         let base = slug(name)

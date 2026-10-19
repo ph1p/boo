@@ -127,7 +127,7 @@ Cost is exact (Claude Code's own figure) once a session has ended; while it runs
 
 ## Agent Tasks
 
-**File → New Agent Task…** gives an agent its own checkout: Boo creates branch `boo/<task>` from the repository's HEAD in `~/.boo/worktrees/<repo>/<task>`, opens it as a workspace and starts the agent with your first message. Several agents can work on one repository without touching each other.
+**File → New Agent Task…** gives an agent its own checkout: Boo creates branch `boo/<task>` from the HEAD of the repository the active terminal is in (falling back to the workspace folder) in `~/.boo/worktrees/<repo>/<task>`, opens it as a workspace and starts the agent with your first message. Several agents can work on one repository without touching each other.
 
 Right-click a task's workspace for **Merge Worktree…** (`git merge --no-ff` into the branch checked out in the main repository; refuses with uncommitted changes, aborts on conflicts) or **Discard Worktree…**. Both can delete the worktree and branch and close the workspace.
 
@@ -135,7 +135,7 @@ Right-click a task's workspace for **Merge Worktree…** (`git merge --no-ff` in
 
 | Command          | Arguments                                                                                                     | Reply                         |
 | ---------------- | ------------------------------------------------------------------------------------------------------------- | ----------------------------- |
-| `new_agent_task` | `name` and/or `prompt`; optional `agent` (`claude`, `codex`, `opencode`) and `repo` (default: active workspace) | `path`, `workspace_id`        |
+| `new_agent_task` | `name` and/or `prompt`; optional `agent` (`claude`, `codex`, `opencode`) and `repo` (default: active terminal's repo, else workspace) | `path`, `workspace_id` |
 | `review_changes` | optional `workspace_id` or `pane_id` (default: active workspace)                                                | —                             |
 
 ```bash

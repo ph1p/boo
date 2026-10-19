@@ -137,6 +137,12 @@ final class Workspace {
 
     func pane(for id: UUID) -> Pane? { panes[id] }
 
+    /// Working directory of the active pane's active tab; nil when unknown.
+    var activeWorkingDirectory: String? {
+        guard let cwd = pane(for: activePaneID)?.activeTab?.workingDirectory, !cwd.isEmpty else { return nil }
+        return cwd
+    }
+
     var totalTabCount: Int { panes.values.reduce(0) { $0 + $1.tabs.count } }
 
     func normalizePaneState() {
