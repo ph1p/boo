@@ -300,8 +300,23 @@ extension MainWindowController {
     /// a terminal that runs the command as soon as the shell starts.
     @discardableResult
     func openWorkspace(path: String, name: String? = nil, initialCommand: String? = nil) -> Workspace {
-        let previousIndex = appState.activeWorkspaceIndex
         let workspace = Workspace(folderPath: path)
+        workspace.customName = name ?? appState.nextGeneratedWorkspaceName()
+        if let initialCommand, let pane = workspace.pane(for: workspace.activePaneID) {
+            pane.stopAll()
+            pane.addTab(workingDirectory: path)
+            if let tab = pane.tabs.last { GhosttyView.pendingLaunch[tab.id] = LaunchSpec(command: initialCommand) }
+        } else {
+            configureInitialTab(for: workspace)
+        }
+        presentNewWorkspace(workspace)
+        return workspace
+    }
+
+    /// Adds `workspace` after the others, with the sidebar state a new
+    /// workspace inherits, and switches to it.
+    func presentNewWorkspace(_ workspace: Workspace) {
+        let previousIndex = appState.activeWorkspaceIndex
         if AppSettings.shared.sidebarPerWorkspaceState {
             let currentSidebarState = sidebarController.captureLiveState()
             workspace.sidebarState = SidebarWorkspaceState(
@@ -311,14 +326,6 @@ extension MainWindowController {
         } else {
             workspace.sidebarState = sidebarController.resolveEffectiveSidebarState()
         }
-        workspace.customName = name ?? appState.nextGeneratedWorkspaceName()
-        if let initialCommand, let pane = workspace.pane(for: workspace.activePaneID) {
-            pane.stopAll()
-            pane.addTab(workingDirectory: path)
-            if let tab = pane.tabs.last { GhosttyView.pendingLaunch[tab.id] = LaunchSpec(command: initialCommand) }
-        } else {
-            configureInitialTab(for: workspace)
-        }
         appState.addWorkspace(workspace)
         if previousIndex >= 0 {
             appState.setActiveWorkspace(previousIndex)
@@ -326,7 +333,6 @@ extension MainWindowController {
         activateWorkspace(appState.workspaces.count - 1)
         savePluginStateForActiveTab()
         WindowManager.shared.writeSession(from: self, sync: false)
-        return workspace
     }
 
     private func configureInitialTab(for workspace: Workspace) {

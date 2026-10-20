@@ -25,6 +25,10 @@ extension MainWindowController {
             ipcNewWorkspace(json: json, reply: reply)
         case "new_agent_task":
             ipcNewAgentTask(json: json, reply: reply)
+        case "run_recipe":
+            ipcRunRecipe(json: json, reply: reply)
+        case "list_recipes":
+            ipcListRecipes(reply: reply)
         case "review_changes":
             ipcReviewChanges(json: json, reply: reply)
         case "new_window":

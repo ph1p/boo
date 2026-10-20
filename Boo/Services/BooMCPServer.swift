@@ -165,6 +165,11 @@ struct BooMCPServer {
             var out: [String: Any] = [:]
             for key in ["tab_id", "workspace_id", "path", "branch"] { out[key] = reply[key] ?? NSNull() }
             return Self.json(out)
+        case "run_recipe":
+            var message: [String: Any] = ["cmd": "run_recipe"]
+            for key in ["name", "path"] { message[key] = args[key] }
+            let reply = try boo(message, pane: nil)
+            return Self.json(["workspace_id": reply["workspace_id"] ?? NSNull(), "name": reply["name"] ?? NSNull()])
         case "open_review":
             _ = try boo(["cmd": "review_changes"], pane: args["pane_id"] as? String ?? ownPaneID)
             return "opened"
@@ -263,7 +268,8 @@ struct BooMCPServer {
         scope app covers every window. new_agent_task hands independent work to another agent \
         on its own worktree; wait_for_events blocks until agents change state, so loop on it \
         (pass the last seq as since) instead of polling. task_status says whether a task can \
-        merge and why not; merge_task and discard_task always wait for the user's approval.
+        merge and why not; merge_task and discard_task always wait for the user's approval. \
+        run_recipe opens one of the user's saved workspace layouts.
         """
 
     private static func object(_ properties: [String: Any], required: [String] = []) -> [String: Any] {
@@ -360,6 +366,16 @@ struct BooMCPServer {
                         ],
                         "model": ["type": "string", "description": "Model for the agent (default: its own)"]
                     ], required: ["prompt"])
+            ],
+            [
+                "name": "run_recipe",
+                "description":
+                    "Opens a saved workspace recipe from ~/.boo/recipes (a folder plus a layout of panes and the commands they start) as a new Boo workspace. An unknown name fails with the list of recipes.",
+                "inputSchema": object(
+                    [
+                        "name": ["type": "string", "description": "Recipe name: its file name without .json"],
+                        "path": ["type": "string", "description": "Path to a recipe file, instead of name"]
+                    ])
             ],
             [
                 "name": "open_review",

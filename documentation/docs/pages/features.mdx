@@ -18,6 +18,25 @@ Open folders as workspaces with their own file tree using **Cmd+Shift+N** (home 
 - **Session persistence** — Workspace names, colors, split layouts, tab paths, and split pane ratios are saved to `~/.boo/session.json` and restored on next launch. Remote connections are not restored; tabs reopen at their local working directory.
 - **Drag to switch workspace** — While dragging a tab, hover over a workspace pill for ~500 ms to spring-load into that workspace, then drop the tab onto any pane there.
 
+## Recipes
+
+A recipe is a workspace you can open again: a folder plus a layout of panes, each with tabs that start in a given directory and can run a command. Recipes are JSON files in `~/.boo/recipes/`; open one from **File → Recipes**, the command palette, or `run_recipe` over the socket and MCP.
+
+```json
+{
+  "name": "web",
+  "folder": "~/code/app",
+  "layout": {
+    "split": "right", "ratio": 0.6,
+    "a": { "tabs": [{ "command": "pnpm dev" }, {}] },
+    "b": { "split": "down",
+           "a": { "tabs": [{ "cwd": "./api", "command": "pnpm test --watch", "env": { "PORT": "4000" } }] },
+           "b": {} } }
+}
+```
+
+A node is either a pane (`tabs`, empty for one plain shell) or a split: `"right"` puts `a` left of `b`, `"down"` puts it above, and `ratio` (default 0.5) is `a`'s share. A tab's `cwd` is absolute, `~/…`, or relative to `folder`. **File → Recipes → Save Workspace as Recipe…** writes the current layout and tab folders. It never stores commands to run: each tab's last command is kept as `lastCommand`, so copy it into `command` if the tab should run it. A recipe whose folder no longer exists opens nothing and says why.
+
 ## Split Panes
 
 Split your terminal in any direction:

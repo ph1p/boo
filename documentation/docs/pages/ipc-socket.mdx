@@ -15,6 +15,7 @@ Newline-delimited JSON. One request per line, one response per request. Long-liv
 | **Panes**      | `split_pane`, `close_pane`, `focus_pane`, `resize_pane`, `swap_pane`, `zoom_pane`, `equalize_splits`, `get_layout` |
 | **Windows**    | `new_window`, `move_workspace_to_new_window`, `merge_all_windows`                          |
 | **Agents**     | `agent_event`, `agent_idle`, `agent_inbox`, `agent_jump`, `agent_respond`, `agent_timeline`, `new_agent_task`, `review_changes` |
+| **Recipes**    | `run_recipe`, `list_recipes`                                                               |
 | **Process**    | `set_status`, `clear_status`, `list_status`                                                |
 | **Events**     | `subscribe`, `unsubscribe`                                                                 |
 | **Status Bar** | `statusbar.set`, `statusbar.clear`, `statusbar.list`                                       |
@@ -54,6 +55,8 @@ Without a `pane_id`, commands go to the frontmost Boo window.
 | `select_tab`       | `index` of a tab in the active pane                                       |                                          |
 | `send_key`         | `key`: `enter`, `tab`, `escape`, `backspace`, `up`, `down`, `left`, `right`, `ctrl_c`, `ctrl_d`, `ctrl_z` or `ctrl_l`; goes to the active terminal |   |
 | `agent_idle`       | `pane_id`: marks activity on that pane's tab, even when it is in front    |                                          |
+| `run_recipe`       | `name` (file name in `~/.boo/recipes` without `.json`; case-insensitive) or `path`; opens a [recipe](/features#recipes) as a new workspace | `workspace_id`, `name`; an unknown name's `error` lists the recipes |
+| `list_recipes`     |                                                                           | `recipes` (`name`, `path`, `folder`, null when the file is invalid) |
 
 ## Event Subscriptions
 
@@ -188,6 +191,7 @@ codex mcp add boo -- ~/.boo/shell-integration/boo-mcp
 | `close_pane`     | Close another pane                                                                                |
 | `list_agents`    | The agent inbox                                                                                   |
 | `new_agent_task` | Worktree task on the agent's repository with a first `prompt`                                     |
+| `run_recipe`     | Open a saved [recipe](/features#recipes) by `name` as a new workspace                            |
 | `open_review`    | Review tab for the agent's workspace                                                              |
 | `wait_for_events` | Blocks until an agent changes state, a task is spawned or finishes, a pane closes or an approval resolves (`since`, `timeout`) |
 | `agent_respond`  | Approve, deny or answer a waiting agent by `tab_id`                                               |

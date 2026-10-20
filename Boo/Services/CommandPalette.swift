@@ -134,14 +134,15 @@ enum PaletteRanker {
 @MainActor
 enum PaletteSources {
     static func items(menu: NSMenu? = NSApplication.shared.mainMenu) -> [PaletteItem] {
-        actions(menu: menu) + workspaces() + tabs() + bookmarks() + themes() + extraSources.flatMap { $0() }
+        actions(menu: menu) + workspaces() + tabs() + bookmarks() + themes() + RecipesMenu.paletteItems()
     }
 
-    /// Further sources (recipes register here).
-    static var extraSources: [@MainActor () -> [PaletteItem]] = []
-
     static func actions(menu: NSMenu?) -> [PaletteItem] {
-        ActionRegistry.actions(in: menu).filter { !$0.isAlternate && $0.id != paletteActionID }.map { action in
+        ActionRegistry.actions(in: menu).filter {
+            // Recipes get their own rows, with the folder as subtitle.
+            !$0.isAlternate && $0.id != paletteActionID
+                && $0.item.action != #selector(MainWindowController.runRecipeAction(_:))
+        }.map { action in
             PaletteItem(
                 id: "action:\(action.id)", kind: .action,
                 title: action.path.dropFirst().joined(separator: " › "),

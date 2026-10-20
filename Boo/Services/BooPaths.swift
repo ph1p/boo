@@ -84,6 +84,13 @@ enum BooPaths {
         return path
     }()
 
+    /// Workspace recipes: ~/.boo/recipes/
+    static let recipesDir: String = {
+        let path = (configDir as NSString).appendingPathComponent("recipes")
+        try? FileManager.default.createDirectory(atPath: path, withIntermediateDirectories: true)
+        return path
+    }()
+
     /// Logs directory: ~/.boo/logs/
     static let logsDir: String = {
         let path = (configDir as NSString).appendingPathComponent("logs")

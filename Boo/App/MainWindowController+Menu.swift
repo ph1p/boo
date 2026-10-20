@@ -30,6 +30,9 @@ extension MainWindowController {
             title: "Open Folder...", action: #selector(openFolderAction(_:)), keyEquivalent: "O")
         openFolder.keyEquivalentModifierMask = [.command, .shift]
         fileMenu.addItem(openFolder)
+        let recipes = NSMenuItem(title: "Recipes", action: nil, keyEquivalent: "")
+        recipes.submenu = RecipesMenu.shared.makeMenu()
+        fileMenu.addItem(recipes)
         fileMenu.addItem(
             withTitle: "New Agent Task...", action: #selector(newAgentTaskAction(_:)), keyEquivalent: "")
         fileMenu.addItem(
