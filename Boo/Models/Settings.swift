@@ -58,11 +58,14 @@ enum SidebarDensity: Int, CaseIterable {
 enum TabOverflowMode: Int, CaseIterable {
     case scroll = 0
     case wrap = 1
+    /// Tabs as a list in a column on the pane's left.
+    case vertical = 2
 
     var label: String {
         switch self {
         case .scroll: return "Scroll"
         case .wrap: return "Wrap"
+        case .vertical: return "Vertical"
         }
     }
 }

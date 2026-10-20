@@ -6,6 +6,7 @@ extension PaneView {
 
     func tabIndex(at point: NSPoint) -> Int? {
         let mode = AppSettings.shared.tabOverflowMode
+        if mode == .vertical { return verticalTabIndex(at: point) }
         if mode == .wrap {
             let layouts = wrapLayout()
             for i in 0..<layouts.count {
@@ -41,6 +42,7 @@ extension PaneView {
     func isOverCloseButton(point: NSPoint, tabIndex idx: Int) -> Bool {
         guard showTabClose, !pane.isTabHidden(at: idx) else { return false }
         let mode = AppSettings.shared.tabOverflowMode
+        if mode == .vertical { return isOverVerticalCloseButton(point: point, tabIndex: idx) }
         let localX: CGFloat
         let w: CGFloat
         if mode == .wrap {
@@ -62,6 +64,13 @@ extension PaneView {
 
     override func scrollWheel(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
+        if isVerticalTabs, isInTabBar(point) {
+            let maxScroll = verticalScrollMaxOffset()
+            guard maxScroll > 0 else { return }
+            tabScrollOffset = min(max(0, tabScrollOffset - event.scrollingDeltaY), maxScroll)
+            needsDisplay = true
+            return
+        }
         guard point.y < tabBarHeight, AppSettings.shared.tabOverflowMode == .scroll else {
             super.scrollWheel(with: event)
             return
@@ -84,7 +93,7 @@ extension PaneView {
 
     override func mouseDown(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
-        guard !pane.tabs.isEmpty, point.y < tabBarHeight else { return }
+        guard !pane.tabs.isEmpty, isInTabBar(point) else { return }
 
         if let idx = tabIndex(at: point) {
             if let groupID = groupChipHit(at: point, tabIndex: idx) {
@@ -149,7 +158,7 @@ extension PaneView {
 
     override func rightMouseDown(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
-        guard point.y < tabBarHeight, let idx = tabIndex(at: point) else {
+        guard isInTabBar(point), let idx = tabIndex(at: point) else {
             super.rightMouseDown(with: event)
             return
         }
@@ -347,8 +356,10 @@ extension PaneView {
     // MARK: - Drag Auto-scroll
 
     /// Auto-scroll the tab bar during a drag. Called by the drag coordinator.
-    /// `localX` is the cursor x in pane-local coords. Scrolls when near edges.
-    func autoscrollTabBar(localX: CGFloat) {
+    /// `local` is the cursor in pane-local coords. Scrolls when near edges.
+    func autoscrollTabBar(local: NSPoint) {
+        if isVerticalTabs { return autoscrollVerticalTabs(localY: local.y) }
+        let localX = local.x
         guard AppSettings.shared.tabOverflowMode == .scroll else { return }
         let maxScroll = scrollMaxOffset()
         guard maxScroll > 0 else { return }
@@ -381,6 +392,7 @@ extension PaneView {
     /// Returns (x, y) where y accounts for the correct row in wrap mode.
     func tabInsertionPosition(at index: Int) -> NSPoint {
         let mode = AppSettings.shared.tabOverflowMode
+        if mode == .vertical { return NSPoint(x: Self.tabBarSideInset, y: verticalInsertionY(at: index)) }
         if mode == .wrap {
             let layouts = wrapLayout()
             if index < layouts.count {
@@ -412,6 +424,7 @@ extension PaneView {
     /// Compute the insertion index for a tab bar drop at the given local point.
     func tabInsertionIndex(at point: NSPoint) -> Int {
         let count = pane.tabs.count
+        if isVerticalTabs { return verticalInsertionIndex(at: point) }
         if AppSettings.shared.tabOverflowMode == .wrap {
             let layouts = wrapLayout()
             // Determine which row the point is on (rows start below the bar's top inset)

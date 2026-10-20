@@ -276,7 +276,7 @@ enum TabDropZone: Equatable {
             if case .tabBarInsert = zone, let pvWindow = pv.window {
                 let windowPoint = pvWindow.convertPoint(fromScreen: screenLoc)
                 let localPoint = pv.convert(windowPoint, from: nil)
-                pv.autoscrollTabBar(localX: localPoint.x)
+                pv.autoscrollTabBar(local: localPoint)
             }
             if isNoOpDrop(on: pv, zone: zone) {
                 hideIndicators()
@@ -306,10 +306,12 @@ enum TabDropZone: Equatable {
 
         // PaneView is flipped (isFlipped = true), so y=0 is top.
         // Tab bar region: show insertion indicator between tabs.
-        if point.y < paneView.tabBarHeight {
+        if paneView.isInTabBar(point) {
             if paneView === sourcePaneView, let target = paneView.tabIndex(at: point), target != sourceTabIndex,
                 let pill = paneView.visibleTabPillRect(at: target),
-                point.x > pill.minX + pill.width / 3, point.x < pill.maxX - pill.width / 3
+                paneView.isVerticalTabs
+                    ? point.y > pill.minY + pill.height / 3 && point.y < pill.maxY - pill.height / 3
+                    : point.x > pill.minX + pill.width / 3 && point.x < pill.maxX - pill.width / 3
             {
                 return .tabBarGroup(index: target)
             }
@@ -416,6 +418,15 @@ enum TabDropZone: Equatable {
             if insertInd.superview !== contentView {
                 insertInd.removeFromSuperview()
                 contentView.addSubview(insertInd)
+            }
+
+            if paneView.isVerticalTabs {
+                // Horizontal line across the column, in the gap between rows.
+                let y = paneView.tabInsertionPosition(at: index).y
+                let inset = PaneView.tabBarSideInset + 4
+                let line = CGRect(x: inset, y: y - 1.5, width: paneView.verticalTabColumnWidth - inset * 2, height: 3)
+                insertInd.frame = paneView.convert(line, to: contentView)
+                return
             }
 
             // Compute position of the insertion gap in pane-local coords

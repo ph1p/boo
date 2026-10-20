@@ -145,6 +145,7 @@ class PaneView: NSView {
     /// as they keep between each other.
     var tabBarHeight: CGFloat {
         let mode = AppSettings.shared.tabOverflowMode
+        if mode == .vertical { return 0 }
         let rows = mode == .wrap ? wrapRowCount() : 1
         return singleRowTabHeight * CGFloat(rows) + Self.tabBarSideInset * 2
     }
@@ -360,6 +361,8 @@ class PaneView: NSView {
 
     private var findBar: FindBarView?
     private var searchMatchTotal: Int = -1
+    /// Repaints agent status in vertical tab rows.
+    private var agentInboxObserver: NSObjectProtocol?
 
     var isFindBarVisible: Bool { findBar != nil }
 
@@ -383,6 +386,14 @@ class PaneView: NSView {
         }
         updateOverlayColors()
         updateTabBarTrackingArea()
+        agentInboxObserver = NotificationCenter.default.addObserver(
+            forName: .agentInboxChanged, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, self.isVerticalTabs else { return }
+                self.needsDisplay = true
+            }
+        }
     }
 
     required init?(coder: NSCoder) {
@@ -787,8 +798,10 @@ class PaneView: NSView {
 
     func layoutTerminalView() {
         let barH = tabBarHeight
+        let colW = verticalTabColumnWidth
         let findH = findBar != nil ? FindBarView.height : 0
-        let newFrame = NSRect(x: 0, y: barH + findH, width: bounds.width, height: max(0, bounds.height - barH - findH))
+        let newFrame = NSRect(
+            x: colW, y: barH + findH, width: max(0, bounds.width - colW), height: max(0, bounds.height - barH - findH))
 
         // Layout terminal view if present
         if let container: NSView = scrollWrapper ?? ghosttyView {
@@ -802,7 +815,7 @@ class PaneView: NSView {
 
         // Layout find bar just above tab bar
         if let bar = findBar {
-            let barFrame = NSRect(x: 0, y: barH, width: bounds.width, height: FindBarView.height)
+            let barFrame = NSRect(x: colW, y: barH, width: max(0, bounds.width - colW), height: FindBarView.height)
             if bar.frame != barFrame { bar.frame = barFrame }
         }
 
@@ -835,7 +848,7 @@ class PaneView: NSView {
     // MARK: - Tab Bar Hover Tracking
 
     func updateTabBarTrackingArea() {
-        let newRect = NSRect(x: 0, y: 0, width: bounds.width, height: tabBarHeight)
+        let newRect = tabBarRect
         guard tabBarTrackingArea?.rect != newRect else { return }
         if let existing = tabBarTrackingArea { removeTrackingArea(existing) }
         let area = NSTrackingArea(
@@ -848,7 +861,7 @@ class PaneView: NSView {
 
     override func mouseMoved(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
-        guard point.y < tabBarHeight else {
+        guard isInTabBar(point) else {
             clearTabHover()
             return
         }
@@ -1177,6 +1190,10 @@ class PaneView: NSView {
         let theme = AppSettings.shared.theme
         let overflowMode = AppSettings.shared.tabOverflowMode
         let barH = tabBarHeight
+        if overflowMode == .vertical {
+            drawTabsVertical(ctx: ctx, theme: theme)
+            return
+        }
 
         // Tab bar background — same as the terminal below, so the pills read as
         // sitting inside the pane rather than on a separate chrome strip.
@@ -1204,50 +1221,21 @@ class PaneView: NSView {
 
     override func accessibilityChildren() -> [Any]? {
         guard !pane.tabs.isEmpty else { return nil }
-        let mode = AppSettings.shared.tabOverflowMode
         var elements: [NSAccessibilityElement] = []
-
-        if mode == .wrap {
-            let layouts = wrapLayout()
-            for (i, tab) in pane.tabs.enumerated() {
-                guard i < layouts.count else { break }
-                let lay = layouts[i]
-                guard !pane.isTabHidden(at: i) else { continue }
-                let element = NSAccessibilityElement()
-                element.setAccessibilityParent(self)
-                element.setAccessibilityRole(.radioButton)
-                let (_, envPrefix) = Self.environmentIndicator(for: tab.remoteSession)
-                let groupSuffix = pane.group(id: tab.groupID).map { ", group \($0.name)" } ?? ""
-                element.setAccessibilityLabel("\(envPrefix) \(tab.title)\(groupSuffix)")
-                element.setAccessibilityValue((i == pane.activeTabIndex ? 1 : 0) as NSNumber)
-                let rect = NSRect(x: lay.x, y: lay.y, width: lay.width, height: singleRowTabHeight)
-                let windowRect = convert(rect, to: nil)
-                if let screenRect = window?.convertToScreen(windowRect) {
-                    element.setAccessibilityFrame(screenRect)
-                }
-                elements.append(element)
+        for (i, tab) in pane.tabs.enumerated() {
+            guard !pane.isTabHidden(at: i), let rect = tabSlotRect(at: i) else { continue }
+            let element = NSAccessibilityElement()
+            element.setAccessibilityParent(self)
+            element.setAccessibilityRole(.radioButton)
+            let (_, envPrefix) = Self.environmentIndicator(for: tab.remoteSession)
+            let groupSuffix = pane.group(id: tab.groupID).map { ", group \($0.name)" } ?? ""
+            element.setAccessibilityLabel("\(envPrefix) \(tab.title)\(groupSuffix)")
+            element.setAccessibilityValue((i == pane.activeTabIndex ? 1 : 0) as NSNumber)
+            let windowRect = convert(rect, to: nil)
+            if let screenRect = window?.convertToScreen(windowRect) {
+                element.setAccessibilityFrame(screenRect)
             }
-        } else {
-            let widths = allTabWidths()
-            var tabX: CGFloat = Self.tabBarSideInset - tabScrollOffset
-            for (i, tab) in pane.tabs.enumerated() {
-                let w = widths[i]
-                defer { tabX += w }
-                guard !pane.isTabHidden(at: i) else { continue }
-                let element = NSAccessibilityElement()
-                element.setAccessibilityParent(self)
-                element.setAccessibilityRole(.radioButton)
-                let (_, envPrefix) = Self.environmentIndicator(for: tab.remoteSession)
-                let groupSuffix = pane.group(id: tab.groupID).map { ", group \($0.name)" } ?? ""
-                element.setAccessibilityLabel("\(envPrefix) \(tab.title)\(groupSuffix)")
-                element.setAccessibilityValue((i == pane.activeTabIndex ? 1 : 0) as NSNumber)
-                let rect = NSRect(x: tabX, y: 0, width: w, height: singleRowTabHeight)
-                let windowRect = convert(rect, to: nil)
-                if let screenRect = window?.convertToScreen(windowRect) {
-                    element.setAccessibilityFrame(screenRect)
-                }
-                elements.append(element)
-            }
+            elements.append(element)
         }
         return elements
     }
@@ -1271,5 +1259,10 @@ class PaneView: NSView {
         activeContentView = nil
     }
 
-    deinit { MainActor.assumeIsolated { stopAll() } }
+    deinit {
+        MainActor.assumeIsolated {
+            if let agentInboxObserver { NotificationCenter.default.removeObserver(agentInboxObserver) }
+            stopAll()
+        }
+    }
 }

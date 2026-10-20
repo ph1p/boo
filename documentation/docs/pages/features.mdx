@@ -80,6 +80,7 @@ Smart close order: tab → pane → workspace.
 - **Right-click a tab** — Context menu with "Close Tab" (or "Close Workspace" when it's the only tab) and a "Move Tab to Workspace →" submenu listing all other open workspaces.
 - **Drag tabs across workspaces** — Drag a tab to a different pane or split zone in the current workspace, or use the workspace pill hover to move it to another workspace entirely. Moving the last tab out of a workspace prompts to close that workspace.
 - **Tab groups** — Drag a tab onto the middle of another tab in the same pane, or right-click → **Add to New Group**, to group them under a colored chip named after the folder. Click the chip to collapse the group to the chip alone (it shows the tab count); picking a hidden tab by shortcut or palette opens it again. Right-click a grouped tab to rename, recolor, collapse, remove it from the group or ungroup. Dragging a tab between two tabs of a group adds it; dragging it out removes it. Groups are saved with the session.
+- **Vertical tabs** — Settings → Layout → Tab Overflow → **Vertical** moves each pane's tabs into a column on its left (up to 168pt, at most 40% of a narrow pane). Each row shows the title and, under it, the agent status (with its color) or the folder of a running program. Groups get a header row with their chip. Rows scroll with the trackpad; drag to reorder, onto a row's middle to group.
 - **Progress bars** — Programs that report progress with OSC 9;4 (cargo, winget, systemd and others) show a thin bar on their tab. The workspace pill shows its furthest-along bar and the Dock icon shows one for all windows. Errors are red, paused is yellow, and an indeterminate report fills the bar. Bars clear when the command finishes or after 15 minutes without a report. Try `printf '\e]9;4;1;50\a'`.
 
 ## Command Blocks
@@ -205,7 +206,7 @@ Open with **Cmd+,**. Organized in tabs:
 | **Theme**         | 32 color themes with live preview, custom theme editor (whole UI restyles live while editing)      |
 | **Appearance**    | Terminal font, font size, cursor style (block/beam/underline/outline); sidebar font and font size |
 | **Status Bar**    | Toggle individual segments (connection, path, git branch, process, pane count, clock)              |
-| **Layout**        | Sidebar position (toggle with Cmd+B), workspace bar position, tab overflow mode                    |
+| **Layout**        | Sidebar position (toggle with Cmd+B), workspace bar position, tab overflow mode (scroll/wrap/vertical) |
 | **Editor**        | Built-in text editor preferences                                                                   |
 | **Browser**       | Browser tab history and behavior                                                                   |
 | **Notifications** | Notification preferences                                                                           |

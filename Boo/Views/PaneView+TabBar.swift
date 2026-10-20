@@ -31,6 +31,7 @@ extension PaneView {
 
     /// Slot of tab `index` in view coordinates (scroll offset applied).
     func tabSlotRect(at index: Int) -> CGRect? {
+        if isVerticalTabs { return verticalSlotRect(at: index) }
         if AppSettings.shared.tabOverflowMode == .wrap {
             let layouts = wrapLayout()
             guard index < layouts.count else { return nil }
@@ -46,6 +47,7 @@ extension PaneView {
     /// Pill of tab `index` in view coordinates; nil while its group is collapsed.
     func visibleTabPillRect(at index: Int) -> CGRect? {
         guard !pane.isTabHidden(at: index), var slot = tabSlotRect(at: index) else { return nil }
+        if isVerticalTabs { return verticalPillRect(inRow: verticalRowRect(inSlot: slot, index: index)) }
         let chipW = groupChipWidth(at: index)
         slot.origin.x += chipW
         slot.size.width -= chipW
@@ -54,12 +56,18 @@ extension PaneView {
 
     /// The group whose chip is under `point`, given the tab slot it is in.
     func groupChipHit(at point: NSPoint, tabIndex idx: Int) -> UUID? {
+        if isVerticalTabs {
+            guard pane.isFirstTabOfGroup(at: idx), let slot = tabSlotRect(at: idx),
+                point.y < slot.minY + Self.verticalGroupHeaderHeight
+            else { return nil }
+            return pane.tabs[idx].groupID
+        }
         let chipW = groupChipWidth(at: idx)
         guard chipW > 0, let slot = tabSlotRect(at: idx), point.x < slot.minX + chipW else { return nil }
         return pane.tabs[idx].groupID
     }
 
-    private func drawGroupChip(
+    func drawGroupChip(
         ctx: CGContext, theme: TerminalTheme, group: TabGroup, x: CGFloat, y: CGFloat, width: CGFloat, rowH: CGFloat,
         hovered: Bool
     ) {
@@ -210,6 +218,7 @@ extension PaneView {
     /// tab, or on a row of its own when it doesn't fit.
     func plusButtonSlot(widths: [CGFloat]? = nil) -> CGRect {
         let inset = Self.tabBarSideInset
+        if isVerticalTabs { return verticalPlusSlot }
         let w = widths ?? allTabWidths()
         if AppSettings.shared.tabOverflowMode == .wrap {
             return plusButtonSlot(layouts: wrapLayout(widths: w))
@@ -272,39 +281,7 @@ extension PaneView {
         let showClose = showTabClose && (isActive || isHovered)
         let closeZone: CGFloat = showClose ? 18 : 8
 
-        // Content type icon for non-terminal tabs
-        if tab.contentType != .terminal {
-            let iconColor = isActive ? theme.chromeText : theme.chromeMuted
-            if let drawn = Self.drawTabIcon(
-                symbolName: tab.contentType.symbolName, color: iconColor,
-                x: textX, midY: midY, isActive: isActive
-            ) {
-                drawn.draw()
-                textX += drawn.width
-            }
-        }
-
-        // Process icon (when a non-shell process is running) — terminal tabs only.
-        // Gated on the same predicate `measuredTabWidth` uses to reserve the space.
-        let process = tab.state.foregroundProcess
-        if tab.contentType == .terminal, tabHasLeadingIcon(tab) {
-            let iconColor = ProcessIcon.themeColor(for: process, theme: theme, isActive: isActive)
-            let iconSize: CGFloat = 12
-            let opacity: CGFloat = isActive ? 1.0 : 0.7
-            if let customImg = ProcessIcon.customImage(for: process, color: iconColor, size: iconSize) {
-                let iconRect = CGRect(x: textX, y: midY - iconSize / 2, width: iconSize, height: iconSize)
-                customImg.draw(in: iconRect, from: .zero, operation: .sourceOver, fraction: opacity)
-                textX += Self.tabIconAdvance
-            } else if let iconName = ProcessIcon.icon(for: process),
-                let drawn = Self.drawTabIcon(
-                    symbolName: iconName, color: iconColor,
-                    x: textX, midY: midY, isActive: isActive
-                )
-            {
-                drawn.draw()
-                textX += drawn.width
-            }
-        }
+        textX += drawLeadingIcon(tab: tab, theme: theme, x: textX, midY: midY, isActive: isActive)
 
         // Title — use truncating tail paragraph style for automatic ellipsis
         let para = NSMutableParagraphStyle()
@@ -369,6 +346,41 @@ extension PaneView {
             cs.draw(
                 at: NSPoint(x: circleCenterX - csz.width / 2, y: circleCenterY - csz.height / 2), withAttributes: ca)
         }
+    }
+
+    /// Draws the tab's content-type or process icon at `x`; returns how far
+    /// the title moves right (0 without an icon).
+    func drawLeadingIcon(tab: Pane.Tab, theme: TerminalTheme, x: CGFloat, midY: CGFloat, isActive: Bool) -> CGFloat {
+        // Content type icon for non-terminal tabs
+        if tab.contentType != .terminal {
+            let iconColor = isActive ? theme.chromeText : theme.chromeMuted
+            guard
+                let drawn = Self.drawTabIcon(
+                    symbolName: tab.contentType.symbolName, color: iconColor, x: x, midY: midY, isActive: isActive)
+            else { return 0 }
+            drawn.draw()
+            return drawn.width
+        }
+
+        // Process icon (when a non-shell process is running) — terminal tabs only.
+        // Gated on the same predicate `measuredTabWidth` uses to reserve the space.
+        guard tabHasLeadingIcon(tab) else { return 0 }
+        let process = tab.state.foregroundProcess
+        let iconColor = ProcessIcon.themeColor(for: process, theme: theme, isActive: isActive)
+        let iconSize: CGFloat = 12
+        let opacity: CGFloat = isActive ? 1.0 : 0.7
+        if let customImg = ProcessIcon.customImage(for: process, color: iconColor, size: iconSize) {
+            let iconRect = CGRect(x: x, y: midY - iconSize / 2, width: iconSize, height: iconSize)
+            customImg.draw(in: iconRect, from: .zero, operation: .sourceOver, fraction: opacity)
+            return Self.tabIconAdvance
+        }
+        if let iconName = ProcessIcon.icon(for: process),
+            let drawn = Self.drawTabIcon(symbolName: iconName, color: iconColor, x: x, midY: midY, isActive: isActive)
+        {
+            drawn.draw()
+            return drawn.width
+        }
+        return 0
     }
 
     func drawPlusButton(ctx: CGContext, theme: TerminalTheme, x: CGFloat, y: CGFloat, width: CGFloat, rowH: CGFloat) {
