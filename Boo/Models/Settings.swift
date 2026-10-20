@@ -287,6 +287,8 @@ final class AppSettings {
         static let activityNotificationsEnabled = "activityNotificationsEnabled"
 
         static let remoteControlPort = "remoteControlPort"
+
+        static let paletteRecents = "paletteRecents"
     }
 
     /// Bool from UserDefaults with a custom default (since .bool returns false for unset keys).
@@ -785,6 +787,15 @@ final class AppSettings {
             return (v >= 1024 && v <= 65535) ? v : 8899
         }
         set { set(newValue, forKey: K.remoteControlPort) }
+    }
+
+    // MARK: - Command Palette
+
+    /// Palette item ids, most recent pick first. Not in settings.json and not
+    /// broadcast: it changes on every pick and nothing observes it.
+    var paletteRecents: [String] {
+        get { UserDefaults.standard.stringArray(forKey: K.paletteRecents) ?? [] }
+        set { UserDefaults.standard.set(Array(newValue.prefix(PaletteRanker.recentLimit)), forKey: K.paletteRecents) }
     }
 
     // MARK: - Plugins

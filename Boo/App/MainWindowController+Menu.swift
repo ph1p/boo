@@ -59,6 +59,11 @@ extension MainWindowController {
         let viewMenuItem = NSMenuItem()
         viewMenuItem.title = "View"
         let viewMenu = NSMenu(title: "View")
+        let palette = NSMenuItem(
+            title: "Command Palette…", action: #selector(showCommandPaletteAction(_:)), keyEquivalent: "p")
+        palette.keyEquivalentModifierMask = [.command, .shift]
+        viewMenu.addItem(palette)
+        viewMenu.addItem(.separator())
         viewMenu.addItem(withTitle: "Toggle Sidebar", action: #selector(toggleSidebarAction(_:)), keyEquivalent: "b")
         let fullscreen = NSMenuItem(
             title: "Toggle Full Screen", action: #selector(toggleFullScreenAction(_:)), keyEquivalent: "\r")
