@@ -9,6 +9,84 @@ extension PaneView {
         nonisolated(unsafe) static let title10Medium = NSFont.systemFont(ofSize: 10.5, weight: .medium)
         nonisolated(unsafe) static let close8Bold = NSFont.systemFont(ofSize: 8, weight: .bold)
         nonisolated(unsafe) static let plus15Light = NSFont.systemFont(ofSize: 15, weight: .light)
+        nonisolated(unsafe) static let groupChip = NSFont.systemFont(ofSize: 10, weight: .semibold)
+    }
+
+    // MARK: - Tab Groups
+
+    /// Text in a group's chip: the name, plus the tab count while collapsed.
+    func groupChipLabel(_ group: TabGroup) -> String {
+        let count = pane.tabIndices(inGroup: group.id).count
+        return group.isCollapsed ? "\(group.name) \(count)" : group.name
+    }
+
+    /// Width of the group chip at the start of tab `index`'s slot; 0 unless
+    /// the tab opens a group.
+    func groupChipWidth(at index: Int) -> CGFloat {
+        guard pane.isFirstTabOfGroup(at: index), let group = pane.group(id: pane.tabs[index].groupID) else { return 0 }
+        let label = groupChipLabel(group) as NSString
+        let textW = ceil(label.size(withAttributes: [.font: TabFonts.groupChip]).width)
+        return min(tabMaxWidth, textW + 16 + Self.tabPillInsetX * 2)
+    }
+
+    /// Slot of tab `index` in view coordinates (scroll offset applied).
+    func tabSlotRect(at index: Int) -> CGRect? {
+        if AppSettings.shared.tabOverflowMode == .wrap {
+            let layouts = wrapLayout()
+            guard index < layouts.count else { return nil }
+            let lay = layouts[index]
+            return CGRect(x: lay.x, y: lay.y, width: lay.width, height: singleRowTabHeight)
+        }
+        let widths = allTabWidths()
+        guard index < widths.count else { return nil }
+        return CGRect(
+            x: tabStartX(index, widths: widths) - tabScrollOffset, y: 0, width: widths[index], height: tabBarHeight)
+    }
+
+    /// Pill of tab `index` in view coordinates; nil while its group is collapsed.
+    func visibleTabPillRect(at index: Int) -> CGRect? {
+        guard !pane.isTabHidden(at: index), var slot = tabSlotRect(at: index) else { return nil }
+        let chipW = groupChipWidth(at: index)
+        slot.origin.x += chipW
+        slot.size.width -= chipW
+        return Self.tabPillRect(inSlot: slot)
+    }
+
+    /// The group whose chip is under `point`, given the tab slot it is in.
+    func groupChipHit(at point: NSPoint, tabIndex idx: Int) -> UUID? {
+        let chipW = groupChipWidth(at: idx)
+        guard chipW > 0, let slot = tabSlotRect(at: idx), point.x < slot.minX + chipW else { return nil }
+        return pane.tabs[idx].groupID
+    }
+
+    private func drawGroupChip(
+        ctx: CGContext, theme: TerminalTheme, group: TabGroup, x: CGFloat, y: CGFloat, width: CGFloat, rowH: CGFloat,
+        hovered: Bool
+    ) {
+        let pill = Self.tabPillRect(inSlot: CGRect(x: x, y: y, width: width, height: rowH))
+        let color = group.color.nsColor ?? theme.accentColor
+        let path = CGPath(roundedRect: pill, cornerWidth: pill.height / 2, cornerHeight: pill.height / 2, transform: nil)
+        ctx.addPath(path)
+        ctx.setFillColor(color.withAlphaComponent(group.isCollapsed ? 0.35 : (hovered ? 0.3 : 0.2)).cgColor)
+        ctx.fillPath()
+        if group.isCollapsed {
+            ctx.addPath(path)
+            ctx.setStrokeColor(color.withAlphaComponent(0.7).cgColor)
+            ctx.setLineWidth(1)
+            ctx.strokePath()
+        }
+        let para = NSMutableParagraphStyle()
+        para.lineBreakMode = .byTruncatingTail
+        let attrs: [NSAttributedString.Key: Any] = [
+            .font: TabFonts.groupChip, .foregroundColor: theme.chromeText, .paragraphStyle: para
+        ]
+        let label = groupChipLabel(group) as NSString
+        let size = label.size(withAttributes: attrs)
+        label.draw(
+            in: CGRect(
+                x: pill.minX + 8, y: pill.midY - size.height / 2, width: min(size.width, pill.width - 16),
+                height: size.height),
+            withAttributes: attrs)
     }
 
     // MARK: - Pill Metrics
@@ -159,8 +237,20 @@ extension PaneView {
         ctx: CGContext, theme: TerminalTheme, tab: Pane.Tab, index: Int, x: CGFloat, y: CGFloat,
         width: CGFloat, rowH: CGFloat, isActive: Bool
     ) {
+        var x = x
+        var width = width
+        let group = pane.group(id: tab.groupID)
+        let chipW = groupChipWidth(at: index)
+        if let group, chipW > 0 {
+            drawGroupChip(
+                ctx: ctx, theme: theme, group: group, x: x, y: y, width: chipW, rowH: rowH,
+                hovered: hoveredTabIndex == index && isGroupChipHovered)
+            x += chipW
+            width -= chipW
+        }
+        guard width > 0, !pane.isTabHidden(at: index) else { return }
         let tabRect = CGRect(x: x, y: y, width: width, height: rowH)
-        let isHovered = hoveredTabIndex == index
+        let isHovered = hoveredTabIndex == index && !isGroupChipHovered
 
         // Pill inside the tab slot — the horizontal inset supplies the gap between
         // neighbouring pills, the vertical one keeps the pill off the bar edges.
@@ -168,6 +258,12 @@ extension PaneView {
         WorkspacePillStyle.fill(
             ctx, rect: pillRect, active: isActive, hovered: isHovered,
             wsColor: nil, neutral: theme.chromeMuted)
+        // Group members share a line under their pills, chip color.
+        if let group {
+            let color = group.color.nsColor ?? theme.accentColor
+            ctx.setFillColor(color.withAlphaComponent(isActive ? 0.9 : 0.6).cgColor)
+            ctx.fill(CGRect(x: pillRect.minX + 4, y: pillRect.maxY + 1, width: pillRect.width - 8, height: 1.5))
+        }
 
         let midY = y + rowH / 2
         var textX = pillRect.minX + Self.tabTextLeadIn

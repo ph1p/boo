@@ -64,6 +64,8 @@ class PaneView: NSView {
     // Hover state for tab bar
     var hoveredTabIndex: Int = -1
     var isCloseButtonHovered: Bool = false
+    /// The pointer is on the group chip of `hoveredTabIndex`.
+    var isGroupChipHovered: Bool = false
     var isPlusButtonHovered: Bool = false
     private var tabBarTrackingArea: NSTrackingArea?
 
@@ -72,7 +74,7 @@ class PaneView: NSView {
 
     // MARK: - Tab Size Constants
     private let tabMinWidth: CGFloat = 60
-    private let tabMaxWidth: CGFloat = 180
+    let tabMaxWidth: CGFloat = 180
     let plusButtonWidth: CGFloat = 32
 
     /// Tracks last active tab index that triggered auto-scroll, to avoid fighting manual scroll.
@@ -112,10 +114,23 @@ class PaneView: NSView {
     private var _tabWidthsCache: (key: [String], widths: [CGFloat])?
 
     /// Compute all tab widths at once (memoized until tab content changes).
+    /// Slot width per tab. The first tab of a group also holds the group's
+    /// chip; tabs of a collapsed group get 0 (the first keeps the chip).
     func allTabWidths() -> [CGFloat] {
-        let key = pane.tabs.map { "\(Self.tabDisplayTitle(tab: $0))|\(tabHasLeadingIcon($0))" }
+        let key = pane.tabs.indices.map { i -> String in
+            let tab = pane.tabs[i]
+            var k = "\(Self.tabDisplayTitle(tab: tab))|\(tabHasLeadingIcon(tab))"
+            if let group = pane.group(id: tab.groupID) {
+                k += "|\(group.id)|\(group.isCollapsed)|\(pane.isFirstTabOfGroup(at: i) ? group.name : "")"
+            }
+            return k
+        }
         if let cached = _tabWidthsCache, cached.key == key { return cached.widths }
-        let widths = pane.tabs.map { measuredTabWidth(for: $0) }
+        let widths = pane.tabs.indices.map { i -> CGFloat in
+            let chip = groupChipWidth(at: i)
+            if pane.isTabHidden(at: i) { return chip }
+            return chip + measuredTabWidth(for: pane.tabs[i])
+        }
         _tabWidthsCache = (key, widths)
         return widths
     }
@@ -838,10 +853,14 @@ class PaneView: NSView {
             return
         }
         if let idx = tabIndex(at: point) {
-            let overClose = isOverCloseButton(point: point, tabIndex: idx)
-            if hoveredTabIndex != idx || isPlusButtonHovered || isCloseButtonHovered != overClose {
+            let overChip = groupChipHit(at: point, tabIndex: idx) != nil
+            let overClose = !overChip && isOverCloseButton(point: point, tabIndex: idx)
+            if hoveredTabIndex != idx || isPlusButtonHovered || isCloseButtonHovered != overClose
+                || isGroupChipHovered != overChip
+            {
                 hoveredTabIndex = idx
                 isCloseButtonHovered = overClose
+                isGroupChipHovered = overChip
                 isPlusButtonHovered = false
                 needsDisplay = true
             }
@@ -1193,11 +1212,13 @@ class PaneView: NSView {
             for (i, tab) in pane.tabs.enumerated() {
                 guard i < layouts.count else { break }
                 let lay = layouts[i]
+                guard !pane.isTabHidden(at: i) else { continue }
                 let element = NSAccessibilityElement()
                 element.setAccessibilityParent(self)
                 element.setAccessibilityRole(.radioButton)
                 let (_, envPrefix) = Self.environmentIndicator(for: tab.remoteSession)
-                element.setAccessibilityLabel("\(envPrefix) \(tab.title)")
+                let groupSuffix = pane.group(id: tab.groupID).map { ", group \($0.name)" } ?? ""
+                element.setAccessibilityLabel("\(envPrefix) \(tab.title)\(groupSuffix)")
                 element.setAccessibilityValue((i == pane.activeTabIndex ? 1 : 0) as NSNumber)
                 let rect = NSRect(x: lay.x, y: lay.y, width: lay.width, height: singleRowTabHeight)
                 let windowRect = convert(rect, to: nil)
@@ -1211,11 +1232,14 @@ class PaneView: NSView {
             var tabX: CGFloat = Self.tabBarSideInset - tabScrollOffset
             for (i, tab) in pane.tabs.enumerated() {
                 let w = widths[i]
+                defer { tabX += w }
+                guard !pane.isTabHidden(at: i) else { continue }
                 let element = NSAccessibilityElement()
                 element.setAccessibilityParent(self)
                 element.setAccessibilityRole(.radioButton)
                 let (_, envPrefix) = Self.environmentIndicator(for: tab.remoteSession)
-                element.setAccessibilityLabel("\(envPrefix) \(tab.title)")
+                let groupSuffix = pane.group(id: tab.groupID).map { ", group \($0.name)" } ?? ""
+                element.setAccessibilityLabel("\(envPrefix) \(tab.title)\(groupSuffix)")
                 element.setAccessibilityValue((i == pane.activeTabIndex ? 1 : 0) as NSNumber)
                 let rect = NSRect(x: tabX, y: 0, width: w, height: singleRowTabHeight)
                 let windowRect = convert(rect, to: nil)
@@ -1223,7 +1247,6 @@ class PaneView: NSView {
                     element.setAccessibilityFrame(screenRect)
                 }
                 elements.append(element)
-                tabX += w
             }
         }
         return elements

@@ -39,6 +39,15 @@ struct TabState {
     var selectedPluginTabID: String? = nil
 }
 
+/// A named, colored run of adjacent tabs in one pane's tab bar. Collapsed,
+/// it shows as its chip alone.
+struct TabGroup: Equatable {
+    let id: UUID
+    var name: String
+    var color: WorkspaceColor
+    var isCollapsed = false
+}
+
 /// A pane is a leaf in the split tree. It has its own tab bar with multiple terminal tabs.
 final class Pane {
     let id: UUID
@@ -46,6 +55,8 @@ final class Pane {
     struct Tab {
         let id: UUID
         var state: TabState
+        /// The `TabGroup` in this pane the tab belongs to.
+        var groupID: UUID?
 
         // Convenience accessors for backward compatibility
         var title: String {
@@ -94,6 +105,8 @@ final class Pane {
 
     private(set) var tabs: [Tab] = []
     private(set) var activeTabIndex: Int = -1
+    /// Tab groups of this pane; a group sits wherever its tabs are.
+    private(set) var groups: [TabGroup] = []
 
     var activeTab: Tab? {
         guard activeTabIndex >= 0, activeTabIndex < tabs.count else { return nil }
@@ -115,7 +128,9 @@ final class Pane {
     }
 
     func cloned(withID id: UUID) -> Pane {
-        Pane(id: id, tabs: tabs, activeTabIndex: activeTabIndex)
+        let pane = Pane(id: id, tabs: tabs, activeTabIndex: activeTabIndex)
+        pane.groups = groups
+        return pane
     }
 
     @discardableResult
@@ -157,6 +172,11 @@ final class Pane {
         else { return }
         let tab = tabs.remove(at: sourceIndex)
         tabs.insert(tab, at: destinationIndex)
+        tabs[destinationIndex].groupID = Self.groupAfterMove(
+            tab.groupID, left: tabAt(destinationIndex - 1)?.groupID,
+            right: tabAt(destinationIndex + 1)?.groupID,
+            alone: !tabs.contains { $0.id != tab.id && $0.groupID != nil && $0.groupID == tab.groupID })
+        pruneGroups()
         // Keep active tab pointing at the same tab
         if activeTabIndex == sourceIndex {
             activeTabIndex = destinationIndex
@@ -174,6 +194,141 @@ final class Pane {
     func setActiveTab(_ index: Int) {
         guard index >= 0, index < tabs.count else { return }
         activeTabIndex = index
+        // A tab picked by shortcut or palette shows its collapsed group again.
+        if let gid = tabs[index].groupID, let g = groups.firstIndex(where: { $0.id == gid }) {
+            groups[g].isCollapsed = false
+        }
+    }
+
+    // MARK: - Tab Groups
+
+    func group(id: UUID?) -> TabGroup? {
+        guard let id else { return nil }
+        return groups.first { $0.id == id }
+    }
+
+    /// Tab hidden inside a collapsed group.
+    func isTabHidden(at index: Int) -> Bool {
+        group(id: tabAt(index)?.groupID)?.isCollapsed == true
+    }
+
+    /// Index of the first tab of each group: where its chip is drawn.
+    func isFirstTabOfGroup(at index: Int) -> Bool {
+        guard let gid = tabAt(index)?.groupID else { return false }
+        return tabAt(index - 1)?.groupID != gid
+    }
+
+    func tabIndices(inGroup id: UUID) -> [Int] {
+        tabs.indices.filter { tabs[$0].groupID == id }
+    }
+
+    /// Drops `source` onto `target`: joins the target's group, or makes a new
+    /// group of both. The source moves next to the group so it stays one run.
+    @discardableResult
+    func groupTab(at source: Int, with target: Int) -> UUID? {
+        guard source != target, tabs.indices.contains(source), tabs.indices.contains(target) else { return nil }
+        let gid: UUID
+        if let existing = tabs[target].groupID {
+            gid = existing
+        } else {
+            gid = UUID()
+            let name = (tabs[target].workingDirectory as NSString).lastPathComponent
+            groups.append(TabGroup(id: gid, name: name.isEmpty ? "Group" : name, color: nextGroupColor()))
+            tabs[target].groupID = gid
+        }
+        let activeID = activeTabID
+        tabs[source].groupID = gid
+        // Place it after the group's last tab (or right after the target).
+        let others = tabs.indices.filter { tabs[$0].groupID == gid && $0 != source }
+        let last = others.max() ?? target
+        let dest = source < last ? last : last + 1
+        if dest != source {
+            let tab = tabs.remove(at: source)
+            tabs.insert(tab, at: dest)
+        }
+        if let activeID, let i = tabs.firstIndex(where: { $0.id == activeID }) { activeTabIndex = i }
+        pruneGroups()
+        return gid
+    }
+
+    /// Takes the tab out of its group, moving it past the group's end.
+    func removeTabFromGroup(at index: Int) {
+        guard let gid = tabAt(index)?.groupID else { return }
+        let activeID = activeTabID
+        let tab = tabs.remove(at: index)
+        let end = (tabs.lastIndex { $0.groupID == gid } ?? (index - 1)) + 1
+        var freed = tab
+        freed.groupID = nil
+        tabs.insert(freed, at: min(end, tabs.count))
+        if let activeID, let i = tabs.firstIndex(where: { $0.id == activeID }) { activeTabIndex = i }
+        pruneGroups()
+    }
+
+    func ungroup(_ id: UUID) {
+        for i in tabs.indices where tabs[i].groupID == id { tabs[i].groupID = nil }
+        pruneGroups()
+    }
+
+    func updateGroup(_ id: UUID, _ change: (inout TabGroup) -> Void) {
+        guard let g = groups.firstIndex(where: { $0.id == id }) else { return }
+        change(&groups[g])
+    }
+
+    /// Collapses or expands `id`. A collapsed group can't hold the active tab,
+    /// so the caller switches to `outsideTabIndex(of:)` first; nil when every
+    /// tab of the pane is in the group, and the group stays open.
+    func outsideTabIndex(of id: UUID) -> Int? {
+        let members = tabIndices(inGroup: id)
+        guard let first = members.first, let last = members.last else { return nil }
+        if last + 1 < tabs.count, !isTabHidden(at: last + 1) { return last + 1 }
+        return (0..<first).reversed().first { !isTabHidden(at: $0) }
+            ?? (last + 1 < tabs.count ? (last + 1..<tabs.count).first { !isTabHidden(at: $0) } : nil)
+    }
+
+    /// Restores groups saved with the session; `memberships` is per tab, in order.
+    func restoreGroups(_ saved: [TabGroup], memberships: [UUID?]) {
+        groups = saved
+        let known = Set(saved.map(\.id))
+        for (i, gid) in memberships.enumerated() where i < tabs.count {
+            tabs[i].groupID = gid.flatMap { known.contains($0) ? $0 : nil }
+        }
+        pruneGroups()
+    }
+
+    private var activeTabID: UUID? { activeTab?.id }
+
+    private func tabAt(_ index: Int) -> Tab? {
+        tabs.indices.contains(index) ? tabs[index] : nil
+    }
+
+    private func nextGroupColor() -> WorkspaceColor {
+        let palette = WorkspaceColor.allCases.filter { $0 != .none }
+        let used = Set(groups.map(\.color))
+        return palette.first { !used.contains($0) } ?? palette[groups.count % palette.count]
+    }
+
+    /// Where a moved tab belongs: inside a group when dropped between two of
+    /// its tabs, out of its own group once it no longer touches it.
+    static func groupAfterMove(_ own: UUID?, left: UUID?, right: UUID?, alone: Bool) -> UUID? {
+        if let left, left == right { return left }
+        guard let own else { return nil }
+        if alone || own == left || own == right { return own }
+        return nil
+    }
+
+    /// Drops groups that lost their tabs, and splits a group whose tabs are no
+    /// longer one run, keeping the first run.
+    private func pruneGroups() {
+        var seenEnded = Set<UUID>()
+        var previous: UUID?
+        for i in tabs.indices {
+            let gid = tabs[i].groupID
+            if let gid, gid != previous, seenEnded.contains(gid) { tabs[i].groupID = nil }
+            if let previous, previous != tabs[i].groupID { seenEnded.insert(previous) }
+            previous = tabs[i].groupID
+        }
+        let live = Set(tabs.compactMap(\.groupID))
+        groups.removeAll { !live.contains($0.id) }
     }
 
     @discardableResult
@@ -335,14 +490,23 @@ final class Pane {
         } else if index < activeTabIndex {
             activeTabIndex -= 1
         }
+        pruneGroups()
         return tab
     }
 
     /// Insert an existing tab at a specific index. Used for cross-pane drag.
     func insertTab(_ tab: Tab, at index: Int) {
         let clampedIndex = min(max(index, 0), tabs.count)
+        var tab = tab
+        // Groups belong to a pane; a tab from another pane arrives ungrouped.
+        if group(id: tab.groupID) == nil { tab.groupID = nil }
         tabs.insert(tab, at: clampedIndex)
         activeTabIndex = clampedIndex
+        tabs[clampedIndex].groupID = Self.groupAfterMove(
+            tab.groupID, left: tabAt(clampedIndex - 1)?.groupID,
+            right: tabAt(clampedIndex + 1)?.groupID, alone: false)
+        if let gid = tabs[clampedIndex].groupID { updateGroup(gid) { $0.isCollapsed = false } }
+        pruneGroups()
     }
 
     func stopAll() {

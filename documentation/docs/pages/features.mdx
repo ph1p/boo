@@ -14,6 +14,7 @@ Open folders as workspaces with their own file tree using **Cmd+Shift+N** (home 
 
 - **Workspace colors** — Assign preset or custom colors per workspace
 - **Pinning** — Pin frequently used workspaces
+- **Color by project** — With **Settings → Layout → Color new workspaces by project**, each new workspace gets a color derived from its repository (or folder). The same project gets the same color every time; a color you pick wins.
 - **Renaming** — Double-click a workspace pill to rename it, or use the right-click context menu
 - **Session persistence** — Workspace names, colors, split layouts, tab paths, and split pane ratios are saved to `~/.boo/session.json` and restored on next launch. Remote connections are not restored; tabs reopen at their local working directory.
 - **Drag to switch workspace** — While dragging a tab, hover over a workspace pill for ~500 ms to spring-load into that workspace, then drop the tab onto any pane there.
@@ -78,6 +79,7 @@ Smart close order: tab → pane → workspace.
 
 - **Right-click a tab** — Context menu with "Close Tab" (or "Close Workspace" when it's the only tab) and a "Move Tab to Workspace →" submenu listing all other open workspaces.
 - **Drag tabs across workspaces** — Drag a tab to a different pane or split zone in the current workspace, or use the workspace pill hover to move it to another workspace entirely. Moving the last tab out of a workspace prompts to close that workspace.
+- **Tab groups** — Drag a tab onto the middle of another tab in the same pane, or right-click → **Add to New Group**, to group them under a colored chip named after the folder. Click the chip to collapse the group to the chip alone (it shows the tab count); picking a hidden tab by shortcut or palette opens it again. Right-click a grouped tab to rename, recolor, collapse, remove it from the group or ungroup. Dragging a tab between two tabs of a group adds it; dragging it out removes it. Groups are saved with the session.
 - **Progress bars** — Programs that report progress with OSC 9;4 (cargo, winget, systemd and others) show a thin bar on their tab. The workspace pill shows its furthest-along bar and the Dock icon shows one for all windows. Errors are red, paused is yellow, and an indeterminate report fills the bar. Bars clear when the command finishes or after 15 minutes without a report. Try `printf '\e]9;4;1;50\a'`.
 
 ## Command Blocks

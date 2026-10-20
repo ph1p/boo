@@ -39,7 +39,7 @@ extension PaneView {
 
     /// Check if a point is over the close button area of a given tab.
     func isOverCloseButton(point: NSPoint, tabIndex idx: Int) -> Bool {
-        guard showTabClose else { return false }
+        guard showTabClose, !pane.isTabHidden(at: idx) else { return false }
         let mode = AppSettings.shared.tabOverflowMode
         let localX: CGFloat
         let w: CGFloat
@@ -87,7 +87,9 @@ extension PaneView {
         guard !pane.tabs.isEmpty, point.y < tabBarHeight else { return }
 
         if let idx = tabIndex(at: point) {
-            if isOverCloseButton(point: point, tabIndex: idx) {
+            if let groupID = groupChipHit(at: point, tabIndex: idx) {
+                toggleGroupCollapsed(groupID)
+            } else if isOverCloseButton(point: point, tabIndex: idx) {
                 paneDelegate?.paneView(self, didRequestCloseTab: idx, paneID: paneID)
             } else {
                 dragTabIndex = idx
@@ -165,6 +167,8 @@ extension PaneView {
         closeItem.tag = index
         menu.addItem(closeItem)
 
+        addGroupItems(to: menu, tabIndex: index)
+
         // Move to workspace submenu
         if let workspaces = paneDelegate?.paneViewWorkspaceNames(self), !workspaces.isEmpty {
             menu.addItem(.separator())
@@ -199,6 +203,118 @@ extension PaneView {
         }
 
         NSMenu.popUpContextMenu(menu, with: event, for: self)
+    }
+
+    // MARK: - Tab Group Actions
+
+    private func addGroupItems(to menu: NSMenu, tabIndex index: Int) {
+        menu.addItem(.separator())
+        func item(_ title: String, _ action: Selector, _ tag: Int = 0) -> NSMenuItem {
+            let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
+            item.target = self
+            item.tag = index
+            item.representedObject = tag
+            return item
+        }
+        guard let group = pane.group(id: pane.tabs[index].groupID) else {
+            if pane.tabs.count > 1, index + 1 < pane.tabs.count || index > 0 {
+                menu.addItem(item("Add to New Group", #selector(contextNewGroup(_:))))
+            }
+            return
+        }
+        menu.addItem(item("Rename Group…", #selector(contextRenameGroup(_:))))
+        let colors = NSMenu()
+        for (i, color) in WorkspaceColor.allCases.enumerated() where color != .none {
+            let c = item(color.label, #selector(contextGroupColor(_:)), i)
+            c.state = group.color == color ? .on : .off
+            colors.addItem(c)
+        }
+        let colorItem = NSMenuItem(title: "Group Color", action: nil, keyEquivalent: "")
+        colorItem.submenu = colors
+        menu.addItem(colorItem)
+        menu.addItem(item(group.isCollapsed ? "Expand Group" : "Collapse Group", #selector(contextToggleGroup(_:))))
+        menu.addItem(item("Remove from Group", #selector(contextRemoveFromGroup(_:))))
+        menu.addItem(item("Ungroup", #selector(contextUngroup(_:))))
+    }
+
+    /// Collapses or expands a group. Collapsing moves off a tab inside it
+    /// first; a group holding every tab of the pane stays open.
+    func toggleGroupCollapsed(_ id: UUID) {
+        guard let group = pane.group(id: id) else { return }
+        if !group.isCollapsed, let active = pane.activeTab, active.groupID == id {
+            guard let outside = pane.outsideTabIndex(of: id) else {
+                NSSound.beep()
+                return
+            }
+            activateTab(outside)
+        }
+        pane.updateGroup(id) { $0.isCollapsed.toggle() }
+        groupsChanged()
+    }
+
+    func groupsChanged() {
+        hoveredTabIndex = -1
+        isGroupChipHovered = false
+        isCloseButtonHovered = false
+        needsDisplay = true
+        WindowManager.shared.saveSessionSoon()
+    }
+
+    private func groupID(ofTab index: Int) -> UUID? {
+        pane.tabs.indices.contains(index) ? pane.tabs[index].groupID : nil
+    }
+
+    @objc private func contextNewGroup(_ sender: NSMenuItem) {
+        let index = sender.tag
+        // Group with the right neighbour, or the left one for the last tab.
+        let partner = index + 1 < pane.tabs.count ? index + 1 : index - 1
+        guard partner >= 0, let gid = pane.groupTab(at: partner, with: index) else { return }
+        groupsChanged()
+        renameGroup(gid)
+    }
+
+    @objc private func contextRenameGroup(_ sender: NSMenuItem) {
+        guard let gid = groupID(ofTab: sender.tag) else { return }
+        renameGroup(gid)
+    }
+
+    private func renameGroup(_ gid: UUID) {
+        guard let group = pane.group(id: gid) else { return }
+        let alert = NSAlert()
+        alert.messageText = "Rename Group"
+        alert.addButton(withTitle: "Rename")
+        alert.addButton(withTitle: "Cancel")
+        let field = NSTextField(string: group.name)
+        field.frame = NSRect(x: 0, y: 0, width: 240, height: 24)
+        alert.accessoryView = field
+        alert.window.initialFirstResponder = field
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        let name = field.stringValue.trimmingCharacters(in: .whitespaces)
+        guard !name.isEmpty else { return }
+        pane.updateGroup(gid) { $0.name = name }
+        groupsChanged()
+    }
+
+    @objc private func contextGroupColor(_ sender: NSMenuItem) {
+        guard let gid = groupID(ofTab: sender.tag), let i = sender.representedObject as? Int else { return }
+        pane.updateGroup(gid) { $0.color = WorkspaceColor.allCases[i] }
+        groupsChanged()
+    }
+
+    @objc private func contextToggleGroup(_ sender: NSMenuItem) {
+        guard let gid = groupID(ofTab: sender.tag) else { return }
+        toggleGroupCollapsed(gid)
+    }
+
+    @objc private func contextRemoveFromGroup(_ sender: NSMenuItem) {
+        pane.removeTabFromGroup(at: sender.tag)
+        groupsChanged()
+    }
+
+    @objc private func contextUngroup(_ sender: NSMenuItem) {
+        guard let gid = groupID(ofTab: sender.tag) else { return }
+        pane.ungroup(gid)
+        groupsChanged()
     }
 
     @objc private func contextNewTab(_ sender: NSMenuItem) {
@@ -304,7 +420,7 @@ extension PaneView {
             // Filter to tabs on this row, find insertion point by x
             for i in 0..<layouts.count {
                 let lay = layouts[i]
-                if lay.y == rowY && point.x < lay.x + lay.width / 2 { return i }
+                if lay.y == rowY && lay.width > 0 && point.x < lay.x + lay.width / 2 { return i }
             }
             // Past all tabs on this row — find last tab index on this row + 1
             if let lastOnRow = layouts.lastIndex(where: { $0.y == rowY }) {
@@ -317,7 +433,7 @@ extension PaneView {
             var cx: CGFloat = Self.tabBarSideInset
             for i in 0..<count {
                 let w = widths[i]
-                if adjusted < cx + w / 2 { return i }
+                if w > 0 && adjusted < cx + w / 2 { return i }
                 cx += w
             }
         }

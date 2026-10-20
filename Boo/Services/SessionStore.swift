@@ -13,6 +13,7 @@ struct SessionTab: Codable, Sendable {
     let sidebarScrollOffsets: [String: [Double]]?
     let sidebarSectionOrder: [String: [String]]?
     let selectedPluginTabID: String?
+    let groupID: UUID?
 
     init(
         contentState: ContentState? = nil,
@@ -21,7 +22,8 @@ struct SessionTab: Codable, Sendable {
         sidebarSectionHeights: [String: Double]? = nil,
         sidebarScrollOffsets: [String: [Double]]? = nil,
         sidebarSectionOrder: [String: [String]]? = nil,
-        selectedPluginTabID: String? = nil
+        selectedPluginTabID: String? = nil,
+        groupID: UUID? = nil
     ) {
         self.contentState = contentState
         self.expandedPluginIDs = expandedPluginIDs
@@ -30,6 +32,25 @@ struct SessionTab: Codable, Sendable {
         self.sidebarScrollOffsets = sidebarScrollOffsets
         self.sidebarSectionOrder = sidebarSectionOrder
         self.selectedPluginTabID = selectedPluginTabID
+        self.groupID = groupID
+    }
+}
+
+struct SessionTabGroup: Codable, Sendable, Equatable {
+    let id: UUID
+    let name: String
+    let color: String
+    let collapsed: Bool
+
+    init(_ group: TabGroup) {
+        id = group.id
+        name = group.name
+        color = group.color.rawValue
+        collapsed = group.isCollapsed
+    }
+
+    var tabGroup: TabGroup {
+        TabGroup(id: id, name: name, color: WorkspaceColor(rawValue: color) ?? .blue, isCollapsed: collapsed)
     }
 }
 
@@ -37,6 +58,8 @@ struct SessionPane: Codable, Sendable {
     let id: UUID
     let tabs: [SessionTab]
     let activeTabIndex: Int
+    /// Optional so sessions saved before tab groups decode.
+    var groups: [SessionTabGroup]? = nil
 }
 
 struct SessionWorkspace: Codable, Sendable {
@@ -178,13 +201,15 @@ enum SessionStore {
                             [$0.x, $0.y]
                         },
                         sidebarSectionOrder: tab.state.sidebarSectionOrder,
-                        selectedPluginTabID: tab.state.selectedPluginTabID
+                        selectedPluginTabID: tab.state.selectedPluginTabID,
+                        groupID: tab.groupID
                     )
                 }
                 return SessionPane(
                     id: pane.id,
                     tabs: tabs,
-                    activeTabIndex: pane.activeTabIndex
+                    activeTabIndex: pane.activeTabIndex,
+                    groups: pane.groups.isEmpty ? nil : pane.groups.map(SessionTabGroup.init)
                 )
             }
 
@@ -357,6 +382,9 @@ enum SessionStore {
                             sidebarSectionOrder: tab.sidebarSectionOrder ?? [:],
                             selectedPluginTabID: tab.selectedPluginTabID
                         )
+                    }
+                    if let groups = sp.groups {
+                        pane.restoreGroups(groups.map(\.tabGroup), memberships: sp.tabs.map(\.groupID))
                     }
                     let safeIndex = min(max(sp.activeTabIndex, 0), sp.tabs.count - 1)
                     pane.setActiveTab(safeIndex)

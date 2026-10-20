@@ -892,6 +892,8 @@ extension MainWindowController {
         case .swapPanes:
             guard let workspace = activeWorkspace else { break }
             swapPanes(source.paneID, dest.paneID, in: workspace)
+        case .tabBarGroup:
+            break  // same-pane only, done by the coordinator
         case .left, .right, .top, .bottom, .workspaceEdge:
             guard let placement = zone.splitPlacement else { break }
             splitPaneWithTab(

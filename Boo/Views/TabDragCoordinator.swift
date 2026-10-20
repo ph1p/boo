@@ -3,6 +3,8 @@ import Cocoa
 /// Where a tab can be dropped relative to a pane.
 enum TabDropZone: Equatable {
     case tabBarInsert(index: Int)  // insert at position in tab bar
+    /// Over the middle of another tab of the same pane: group the two.
+    case tabBarGroup(index: Int)
     case left  // near the left edge — new pane on the left of this one
     case right  // near the right edge — new pane on the right of this one
     case top  // near the top edge — new pane above this one
@@ -24,7 +26,7 @@ enum TabDropZone: Equatable {
         case .top: return (.up, false)
         case .bottom: return (.down, false)
         case .workspaceEdge(let edge): return (edge, true)
-        case .tabBarInsert, .center, .swapPanes: return nil
+        case .tabBarInsert, .tabBarGroup, .center, .swapPanes: return nil
         }
     }
 }
@@ -110,6 +112,14 @@ enum TabDropZone: Equatable {
         }
 
         if isNoOpDrop(on: dest, zone: zone) {
+            cleanup()
+            return
+        }
+
+        if case .tabBarGroup(let target) = zone {
+            if source.paneID == dest.paneID, source.pane.groupTab(at: tabIdx, with: target) != nil {
+                source.groupsChanged()
+            }
             cleanup()
             return
         }
@@ -297,6 +307,12 @@ enum TabDropZone: Equatable {
         // PaneView is flipped (isFlipped = true), so y=0 is top.
         // Tab bar region: show insertion indicator between tabs.
         if point.y < paneView.tabBarHeight {
+            if paneView === sourcePaneView, let target = paneView.tabIndex(at: point), target != sourceTabIndex,
+                let pill = paneView.visibleTabPillRect(at: target),
+                point.x > pill.minX + pill.width / 3, point.x < pill.maxX - pill.width / 3
+            {
+                return .tabBarGroup(index: target)
+            }
             let idx = paneView.tabInsertionIndex(at: point)
             return .tabBarInsert(index: idx)
         }
@@ -418,7 +434,7 @@ enum TabDropZone: Equatable {
                 y: barTop - rowCenterY - lineHeight / 2,
                 width: lineWidth, height: lineHeight)
 
-        case .left, .right, .top, .bottom, .center, .workspaceEdge, .swapPanes:
+        case .left, .right, .top, .bottom, .center, .workspaceEdge, .swapPanes, .tabBarGroup:
             // Hide tab insertion indicator
             tabInsertIndicator?.removeFromSuperview()
             tabInsertIndicator = nil
@@ -448,6 +464,9 @@ enum TabDropZone: Equatable {
             case .workspaceEdge(let edge):
                 guard let rect = workspaceEdgeRect(for: paneView, edge: edge, in: contentView) else { return }
                 indicatorRect = rect
+            case .tabBarGroup(let target):
+                guard let pill = paneView.visibleTabPillRect(at: target) else { return }
+                indicatorRect = paneView.convert(pill, to: contentView).insetBy(dx: -2, dy: -2)
             default:
                 return
             }
