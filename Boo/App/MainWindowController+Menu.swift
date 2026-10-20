@@ -119,6 +119,10 @@ extension MainWindowController {
         termMenu.addItem(.separator())
         termMenu.addItem(
             withTitle: "Record Session", action: #selector(toggleRecordingAction(_:)), keyEquivalent: "")
+        let marker = NSMenuItem(
+            title: "Add Recording Marker", action: #selector(addRecordingMarkerAction(_:)), keyEquivalent: "M")
+        marker.keyEquivalentModifierMask = [.command, .shift]
+        termMenu.addItem(marker)
         termMenu.addItem(
             withTitle: "Record All Panes", action: #selector(recordAllPanesAction(_:)), keyEquivalent: "")
         termMenu.addItem(

@@ -14,12 +14,21 @@ struct CastPlayback {
         let event: Event
     }
 
+    /// A chapter marker (asciicast `m` event) on the playback timeline.
+    struct Marker: Equatable {
+        let time: TimeInterval
+        let label: String
+    }
+
     let width: Int
     let height: Int
     let title: String?
     let events: [TimedEvent]
+    let markers: [Marker]
+    /// Recording start, from the header's `timestamp`.
+    let startDate: Date?
 
-    var duration: TimeInterval { events.last?.time ?? 0 }
+    var duration: TimeInterval { max(events.last?.time ?? 0, markers.last?.time ?? 0) }
 
     static let defaultIdleLimit: TimeInterval = 2
 
@@ -28,9 +37,10 @@ struct CastPlayback {
         case unsupportedVersion(Int)
     }
 
-    /// Parses `text`; pauses longer than the header's `idle_time_limit` (or
-    /// `idleLimit`) shrink to that limit. Malformed event lines are skipped.
-    init(text: String, idleLimit: TimeInterval? = nil) throws {
+    /// Parses `text`; pauses shrink to `idleLimit`, else the header's
+    /// `idle_time_limit`, else `fallbackIdleLimit` (0 keeps them). Malformed
+    /// event lines are skipped.
+    init(text: String, idleLimit: TimeInterval? = nil, fallbackIdleLimit: TimeInterval = defaultIdleLimit) throws {
         var lines = text.split(separator: "\n", omittingEmptySubsequences: true).makeIterator()
         guard let first = lines.next(),
             let header = try? JSONSerialization.jsonObject(with: Data(first.utf8)) as? [String: Any]
@@ -40,9 +50,12 @@ struct CastPlayback {
         width = max(1, header["width"] as? Int ?? 80)
         height = max(1, header["height"] as? Int ?? 24)
         title = header["title"] as? String
-        let limit = idleLimit ?? (header["idle_time_limit"] as? Double) ?? Self.defaultIdleLimit
+        startDate = (header["timestamp"] as? NSNumber).map { Date(timeIntervalSince1970: $0.doubleValue) }
+        let limit =
+            idleLimit ?? (header["idle_time_limit"] as? NSNumber)?.doubleValue ?? fallbackIdleLimit
 
         var out: [TimedEvent] = []
+        var marks: [Marker] = []
         var lastRaw: TimeInterval = 0
         var clock: TimeInterval = 0
         while let line = lines.next() {
@@ -50,7 +63,7 @@ struct CastPlayback {
                 let raw = (arr[0] as? NSNumber)?.doubleValue, let code = arr[1] as? String,
                 let data = arr[2] as? String
             else { continue }
-            let event: Event
+            let event: Event?
             switch code {
             case "o":
                 event = .output(data)
@@ -58,14 +71,31 @@ struct CastPlayback {
                 let parts = data.split(separator: "x").compactMap { Int($0) }
                 guard parts.count == 2, parts[0] > 0, parts[1] > 0 else { continue }
                 event = .resize(columns: parts[0], rows: parts[1])
+            case "m":
+                event = nil
             default:
-                continue  // input and markers don't replay
+                continue  // input doesn't replay
             }
             clock += min(max(0, raw - lastRaw), limit > 0 ? limit : .infinity)
             lastRaw = max(lastRaw, raw)
-            out.append(TimedEvent(time: clock, event: event))
+            if let event {
+                out.append(TimedEvent(time: clock, event: event))
+            } else {
+                marks.append(Marker(time: clock, label: data))
+            }
         }
         events = out
+        markers = marks
+    }
+
+    /// The marker before `time` (with a little slack, so a second press while
+    /// playing skips past the one just passed), or nil.
+    func marker(before time: TimeInterval) -> Marker? {
+        markers.last { $0.time < time - 1 }
+    }
+
+    func marker(after time: TimeInterval) -> Marker? {
+        markers.first { $0.time > time + 0.05 }
     }
 
     /// Index of the first event after `time`; events before it are due.

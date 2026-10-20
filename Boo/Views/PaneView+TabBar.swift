@@ -478,7 +478,7 @@ extension PaneView {
     /// Red dot on the pill's top-left corner while the tab records.
     static func drawRecordingDot(_ ctx: CGContext, in pill: CGRect) {
         let size: CGFloat = 6
-        ctx.setFillColor(NSColor.systemRed.cgColor)
+        ctx.setFillColor(AppSettings.shared.theme.error.cgColor)
         ctx.fillEllipse(in: CGRect(x: pill.minX + 3, y: pill.minY + 3, width: size, height: size))
     }
 

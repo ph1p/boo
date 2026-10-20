@@ -371,11 +371,11 @@ import Cocoa
     var isRecording: Bool { recorder != nil }
 
     /// Taps the pty output into an asciicast file at `url`.
-    func startRecording(to url: URL, title: String?) throws {
+    func startRecording(to url: URL, title: String?, idleTimeLimit: TimeInterval? = nil) throws {
         guard let surface, recorder == nil else { return }
         let grid = ghostty_surface_size(surface)
         let rec = try SessionRecorder(
-            url: url, columns: Int(grid.columns), rows: Int(grid.rows), title: title)
+            url: url, columns: Int(grid.columns), rows: Int(grid.rows), title: title, idleTimeLimit: idleTimeLimit)
         recorder = rec
         recordedGrid = (Int(grid.columns), Int(grid.rows))
         let token = Unmanaged.passRetained(rec).toOpaque()

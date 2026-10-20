@@ -1,61 +1,66 @@
 import Cocoa
 
-/// What a pane-controls button asks the window to do.
+/// What a pane-controls item asks the window to do.
 enum PaneControlAction {
     case toggleRecording
+    case addMarker
     case splitRight
     case splitDown
     case toggleZoom
     case closePane
 }
 
-/// Floating pill in a pane's top-right corner: record, split, zoom, more, close.
-/// Collapses to just the recording timer while the pane records and the
-/// pointer is elsewhere, so a recording is never invisible.
+/// One pane action as the notch's ⋯ menu lists it.
+struct PaneControlEntry: Equatable {
+    let action: PaneControlAction
+    let title: String
+    let symbol: String
+}
+
+/// Tab carved into a pane's bottom-right corner, over any tab type: a ⋯
+/// button whose menu holds the pane actions. While the pane records it also
+/// shows the elapsed time (click to stop), and while zoomed an unzoom button;
+/// those stay when the pointer leaves, so neither state is ever invisible.
 final class PaneControlsView: NSView {
-    static let height: CGFloat = 24
-    private static let buttonWidth: CGFloat = 24
-    private static let inset: CGFloat = 2
+    static let bodyHeight: CGFloat = 24
+    /// Radius of the concave curves joining the pane's bottom and right edges.
+    static let fillet: CGFloat = 6
+    static let height: CGFloat = bodyHeight + fillet
+    static let buttonWidth: CGFloat = 24
+    private static let cornerRadius: CGFloat = 7
+    private static let itemHeight: CGFloat = 20
+    private static let leading: CGFloat = 4
+    private static let trailing: CGFloat = 3
 
     var onAction: ((PaneControlAction) -> Void)?
+    var onUnzoom: (() -> Void)?
     /// Builds the ⋯ menu on demand, so it always reflects current state.
     var menuProvider: (() -> NSMenu?)?
 
     private let recordChip = RecordChip()
-    private let splitRight = PaneControlButton(symbol: "rectangle.split.2x1", help: "Split Right")
-    private let splitDown = PaneControlButton(symbol: "rectangle.split.1x2", help: "Split Down")
-    private let zoom = PaneControlButton(symbol: "arrow.up.left.and.arrow.down.right", help: "Zoom Pane")
-    private let more = PaneControlButton(symbol: "ellipsis", help: "More")
-    private let close = PaneControlButton(symbol: "xmark", help: "Close Pane")
+    private let unzoom = PaneControlButton(
+        symbol: "arrow.down.right.and.arrow.up.left", help: "Show All Panes (\u{21E7}\u{2318}\u{23CE})")
+    private let more = PaneControlButton(symbol: "ellipsis", help: "Pane Actions")
 
-    /// Whether the full set of buttons shows, or only the recording timer.
+    /// Whether the ⋯ button shows, or only the recording / zoom state.
     private(set) var isExpanded = false
+    private(set) var isZoomed = false
 
-    override var isFlipped: Bool { true }
+    /// Unflipped, so the shape and items measure up from the pane's bottom edge.
+    override var isFlipped: Bool { false }
 
     override init(frame: NSRect) {
         super.init(frame: frame)
         wantsLayer = true
-        layer?.cornerRadius = Self.height / 2
-        layer?.cornerCurve = .continuous
-        layer?.borderWidth = 1
-        shadow = NSShadow()
-        layer?.shadowOpacity = 0.18
-        layer?.shadowRadius = 6
-        layer?.shadowOffset = CGSize(width: 0, height: -1)
-
         recordChip.onClick = { [weak self] in self?.onAction?(.toggleRecording) }
-        splitRight.onClick = { [weak self] in self?.onAction?(.splitRight) }
-        splitDown.onClick = { [weak self] in self?.onAction?(.splitDown) }
-        zoom.onClick = { [weak self] in self?.onAction?(.toggleZoom) }
-        close.onClick = { [weak self] in self?.onAction?(.closePane) }
+        unzoom.onClick = { [weak self] in self?.onUnzoom?() }
         more.onClick = { [weak self] in self?.showMoreMenu() }
-        for view in [recordChip, splitRight, splitDown, zoom, more, close] as [NSView] { addSubview(view) }
+        for view in [recordChip, unzoom, more] as [NSView] { addSubview(view) }
 
         setAccessibilityElement(true)
         setAccessibilityRole(.group)
         setAccessibilityLabel("Pane Controls")
-        applyTheme()
+        configure(expanded: false, recordingSince: nil, isZoomed: false)
     }
 
     required init?(coder: NSCoder) {
@@ -63,63 +68,167 @@ final class PaneControlsView: NSView {
     }
 
     func applyTheme() {
-        let theme = AppSettings.shared.theme
-        layer?.backgroundColor = theme.dragGhostBg.cgColor
-        layer?.borderColor = theme.focusBorder.cgColor
-        for button in [splitRight, splitDown, zoom, more, close] { button.applyTheme() }
+        for button in [unzoom, more] { button.applyTheme() }
         recordChip.applyTheme()
+        needsDisplay = true
     }
 
-    /// Updates which buttons exist and whether the recording timer runs.
-    func configure(
-        expanded: Bool, canRecord: Bool, recordingSince: Date?, canZoom: Bool, canClose: Bool
-    ) {
+    /// Updates which items show and whether the recording timer runs.
+    func configure(expanded: Bool, recordingSince: Date?, isZoomed: Bool) {
         isExpanded = expanded
+        self.isZoomed = isZoomed
         recordChip.recordingSince = recordingSince
-        recordChip.isHidden = !(canRecord || recordingSince != nil)
-        for button in [splitRight, splitDown, more] { button.isHidden = !expanded }
-        zoom.isHidden = !(expanded && canZoom)
-        close.isHidden = !(expanded && canClose)
+        recordChip.isHidden = recordingSince == nil
+        unzoom.isHidden = !isZoomed
+        more.isHidden = !expanded
         setFrameSize(fittingSize)
         needsLayout = true
     }
 
-    /// True when there is nothing to show — collapsed and not recording.
-    var isEmpty: Bool { !isExpanded && recordChip.recordingSince == nil }
+    /// True when there is nothing to show — collapsed, not recording, not zoomed.
+    var isEmpty: Bool { !isExpanded && recordChip.recordingSince == nil && !isZoomed }
 
-    private var visibleItems: [NSView] {
-        [recordChip, splitRight, splitDown, zoom, more, close].filter { !$0.isHidden }
-    }
+    private var visibleItems: [PaneControlItem] { [recordChip, unzoom, more].filter { !$0.isHidden } }
 
     override var fittingSize: NSSize {
-        let width = visibleItems.reduce(Self.inset * 2) { $0 + itemWidth($1) }
-        return NSSize(width: width, height: Self.height)
+        let items = visibleItems.reduce(CGFloat(0)) { $0 + itemWidth($1) }
+        return NSSize(width: Self.fillet + Self.leading + items + Self.trailing, height: Self.height)
     }
 
-    private func itemWidth(_ view: NSView) -> CGFloat {
-        view === recordChip ? recordChip.fittingSize.width : Self.buttonWidth
+    private func itemWidth(_ item: PaneControlItem) -> CGFloat {
+        item === recordChip ? recordChip.fittingSize.width : Self.buttonWidth
+    }
+
+    /// The tab itself, without the fillets: the only part that takes clicks.
+    var bodyRect: NSRect {
+        NSRect(x: Self.fillet, y: 0, width: max(0, bounds.width - Self.fillet), height: Self.bodyHeight)
     }
 
     override func layout() {
         super.layout()
-        var x = Self.inset
-        for view in visibleItems {
-            let w = itemWidth(view)
-            view.frame = NSRect(x: x, y: Self.inset, width: w, height: Self.height - Self.inset * 2)
+        var x = Self.fillet + Self.leading
+        let y = (Self.bodyHeight - Self.itemHeight) / 2
+        for item in visibleItems {
+            let w = itemWidth(item)
+            item.frame = NSRect(x: x, y: y, width: w, height: Self.itemHeight)
             x += w
         }
     }
 
-    /// Zoom icon flips with state; the badge handles unzoom, but keep it honest.
-    func setZoomed(_ zoomed: Bool) {
-        zoom.setSymbol(
-            zoomed ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right",
-            help: zoomed ? "Show All Panes" : "Zoom Pane")
+    // MARK: Shape
+
+    /// Outline of the notch, y up: flush with the bottom and right edges, a
+    /// rounded top-left corner, and concave fillets where it meets the pane's
+    /// bottom edge (bottom-left) and right edge (top-right).
+    static func outline(in size: NSSize) -> NSBezierPath {
+        let w = size.width
+        let h = bodyHeight
+        let r = fillet
+        let c = min(cornerRadius, h - r)
+        let k: CGFloat = 0.552
+        let path = NSBezierPath()
+        path.move(to: NSPoint(x: 0, y: 0))
+        path.curve(
+            to: NSPoint(x: r, y: r), controlPoint1: NSPoint(x: k * r, y: 0),
+            controlPoint2: NSPoint(x: r, y: r - k * r))
+        path.line(to: NSPoint(x: r, y: h - c))
+        path.curve(
+            to: NSPoint(x: r + c, y: h), controlPoint1: NSPoint(x: r, y: h - c + k * c),
+            controlPoint2: NSPoint(x: r + c - k * c, y: h))
+        path.line(to: NSPoint(x: w - r, y: h))
+        path.curve(
+            to: NSPoint(x: w, y: h + r), controlPoint1: NSPoint(x: w - r + k * r, y: h),
+            controlPoint2: NSPoint(x: w, y: h + r - k * r))
+        path.line(to: NSPoint(x: w, y: 0))
+        path.close()
+        return path
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        // The backdrop between islands, so the corner reads as cut out of the
+        // pane; the pane strokes the cut's edge (`islandOutline`).
+        AppSettings.shared.theme.windowBackdrop.setFill()
+        Self.outline(in: bounds.size).fill()
+    }
+
+    /// The pane's island edge with the notch cut out of its bottom-right
+    /// corner, in flipped pane coordinates, inset half a point for a 1pt
+    /// stroke. Stands in for the layer border while the notch shows, so the
+    /// edge runs around the cut instead of through it.
+    static func islandOutline(paneSize: NSSize, notchWidth: CGFloat, radius: CGFloat) -> CGPath {
+        let i: CGFloat = 0.5
+        let right = paneSize.width - i
+        let bottom = paneSize.height - i
+        let x0 = paneSize.width - notchWidth
+        let top = paneSize.height - bodyHeight
+        let r = fillet
+        let c = min(cornerRadius, bodyHeight - r)
+        let k: CGFloat = 0.552
+        let p = CGMutablePath()
+        p.move(to: CGPoint(x: x0, y: bottom))
+        p.addCurve(
+            to: CGPoint(x: x0 + r, y: bottom - r), control1: CGPoint(x: x0 + k * r, y: bottom),
+            control2: CGPoint(x: x0 + r, y: bottom - r + k * r))
+        p.addLine(to: CGPoint(x: x0 + r, y: top + c))
+        p.addCurve(
+            to: CGPoint(x: x0 + r + c, y: top), control1: CGPoint(x: x0 + r, y: top + c - k * c),
+            control2: CGPoint(x: x0 + r + c - k * c, y: top))
+        p.addLine(to: CGPoint(x: right - r, y: top))
+        p.addCurve(
+            to: CGPoint(x: right, y: top - r), control1: CGPoint(x: right - r + k * r, y: top),
+            control2: CGPoint(x: right, y: top - r + k * r))
+        p.addArc(tangent1End: CGPoint(x: right, y: i), tangent2End: CGPoint(x: i, y: i), radius: radius)
+        p.addArc(tangent1End: CGPoint(x: i, y: i), tangent2End: CGPoint(x: i, y: bottom), radius: radius)
+        p.addArc(tangent1End: CGPoint(x: i, y: bottom), tangent2End: CGPoint(x: x0, y: bottom), radius: radius)
+        p.closeSubpath()
+        return p
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        guard !isHidden, alphaValue > 0, let superview else { return nil }
+        let local = convert(point, from: superview)
+        guard bodyRect.contains(local) else { return nil }
+        return super.hitTest(point) ?? self
+    }
+
+    // MARK: Menu
+
+    /// The pane actions heading the ⋯ menu, nil marking a separator.
+    static func primaryEntries(
+        canRecord: Bool, isRecording: Bool, multiPane: Bool, isZoomed: Bool
+    ) -> [PaneControlEntry?] {
+        var entries: [PaneControlEntry?] = []
+        if isRecording {
+            entries.append(PaneControlEntry(action: .toggleRecording, title: "Stop Recording", symbol: "stop.circle"))
+            entries.append(PaneControlEntry(action: .addMarker, title: "Add Marker", symbol: "bookmark"))
+        } else if canRecord {
+            entries.append(
+                PaneControlEntry(action: .toggleRecording, title: "Start Recording", symbol: "record.circle"))
+        }
+        if !entries.isEmpty { entries.append(nil) }
+        entries.append(PaneControlEntry(action: .splitRight, title: "Split Right", symbol: "rectangle.split.2x1"))
+        entries.append(PaneControlEntry(action: .splitDown, title: "Split Down", symbol: "rectangle.split.1x2"))
+        if multiPane {
+            entries.append(
+                isZoomed
+                    ? PaneControlEntry(
+                        action: .toggleZoom, title: "Show All Panes", symbol: "arrow.down.right.and.arrow.up.left")
+                    : PaneControlEntry(
+                        action: .toggleZoom, title: "Zoom Pane", symbol: "arrow.up.left.and.arrow.down.right"))
+            entries.append(nil)
+            entries.append(PaneControlEntry(action: .closePane, title: "Close Pane", symbol: "xmark.square"))
+        }
+        return entries
     }
 
     private func showMoreMenu() {
         guard let menu = menuProvider?() else { return }
-        menu.popUp(positioning: nil, at: NSPoint(x: more.frame.minX, y: more.frame.maxY + 4), in: self)
+        // Up and to the left, away from the pane's corner: the point is the
+        // menu's top-left, so its bottom-right lands above the button.
+        let size = menu.size
+        menu.popUp(
+            positioning: nil, at: NSPoint(x: more.frame.maxX - size.width, y: more.frame.maxY + 4 + size.height),
+            in: self)
     }
 
     override func viewDidMoveToWindow() {
@@ -127,7 +236,7 @@ final class PaneControlsView: NSView {
         recordChip.windowChanged(window != nil)
     }
 
-    // Swallow clicks on the pill's padding so they don't fall through to the terminal.
+    // Swallow clicks on the tab's padding so they don't fall through to the terminal.
     override func mouseDown(with event: NSEvent) {}
 }
 
@@ -142,7 +251,7 @@ class PaneControlItem: NSView {
     override init(frame: NSRect) {
         super.init(frame: frame)
         wantsLayer = true
-        layer?.cornerRadius = (PaneControlsView.height - 4) / 2
+        layer?.cornerRadius = 6
         layer?.cornerCurve = .continuous
         setAccessibilityElement(true)
         setAccessibilityRole(.button)
@@ -185,9 +294,9 @@ class PaneControlItem: NSView {
         addCursorRect(bounds, cursor: .arrow)
     }
 
-    /// Centers a 14pt icon frame in the item.
+    /// Centers a 16pt icon frame in the item.
     var iconFrame: NSRect {
-        let side: CGFloat = 14
+        let side: CGFloat = 16
         return NSRect(x: (bounds.width - side) / 2, y: (bounds.height - side) / 2, width: side, height: side)
     }
 }
@@ -199,7 +308,7 @@ final class PaneControlButton: PaneControlItem {
 
     init(symbol: String, help: String) {
         super.init(frame: .zero)
-        icon.symbolConfiguration = .init(pointSize: 11, weight: .medium)
+        icon.symbolConfiguration = .init(pointSize: 12, weight: .regular)
         addSubview(icon)
         setSymbol(symbol, help: help)
         applyTheme()
@@ -249,13 +358,11 @@ final class RecordChip: PaneControlItem {
 
     override init(frame: NSRect) {
         super.init(frame: frame)
-        icon.symbolConfiguration = .init(pointSize: 11, weight: .medium)
+        icon.symbolConfiguration = .init(pointSize: 12, weight: .regular)
         icon.image = NSImage(systemSymbolName: "record.circle", accessibilityDescription: "Record")
         dot.wantsLayer = true
         dot.layer?.cornerRadius = 3.5
-        dot.layer?.backgroundColor = NSColor.systemRed.cgColor
-        label.font = .monospacedDigitSystemFont(ofSize: 10.5, weight: .semibold)
-        label.textColor = .systemRed
+        label.font = .monospacedDigitSystemFont(ofSize: 11, weight: .medium)
         for view in [icon, dot, label] as [NSView] { addSubview(view) }
         updateState()
     }
@@ -272,11 +379,12 @@ final class RecordChip: PaneControlItem {
     }
 
     override var fittingSize: NSSize {
-        guard recordingSince != nil else { return NSSize(width: 24, height: PaneControlsView.height - 4) }
+        let height: CGFloat = 20
+        guard recordingSince != nil else { return NSSize(width: PaneControlsView.buttonWidth, height: height) }
         // Sized for the widest label in its range, so the pill doesn't jitter each second.
         let sample = label.stringValue.count > 5 ? "00:00:00" : "00:00"
         let width = (sample as NSString).size(withAttributes: [.font: label.font as Any]).width
-        return NSSize(width: 8 + 7 + 5 + ceil(width) + 8, height: PaneControlsView.height - 4)
+        return NSSize(width: 8 + 7 + 5 + ceil(width) + 8, height: height)
     }
 
     override func layout() {
@@ -323,11 +431,14 @@ final class RecordChip: PaneControlItem {
 
     override func hoverChanged() {
         let theme = AppSettings.shared.theme
-        icon.contentTintColor = hovered ? .systemRed : theme.textSecondary
+        icon.contentTintColor = hovered ? theme.error : theme.textSecondary
+        dot.layer?.backgroundColor = theme.error.cgColor
+        label.textColor = theme.error
         let recording = recordingSince != nil
+        // Deliberate raw alpha: status-tinted chip, hover band when pointed at.
         let fill: NSColor? =
             recording
-            ? NSColor.systemRed.withAlphaComponent(hovered ? 0.22 : 0.14)
+            ? theme.error.withAlphaComponent(hovered ? 0.22 : 0.14)
             : (hovered ? theme.hoverFill : nil)
         layer?.backgroundColor = fill?.cgColor
     }

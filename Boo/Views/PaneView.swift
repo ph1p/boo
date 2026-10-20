@@ -295,20 +295,40 @@ class PaneView: NSView {
         v.autoresizingMask = [.width, .height]
         v.isHidden = true
         v.layer?.borderWidth = PaneView.activityBorderWidth
-        v.layer?.borderColor = NSColor.systemRed.withAlphaComponent(0.8).cgColor
         v.layer?.cornerRadius = IslandMetrics.innerRadius
         v.layer?.cornerCurve = .continuous
         return v
     }()
 
-    /// Record / split / zoom / close pill in the content's top-right corner.
+    /// ⋯ notch with record / split / zoom / close in the pane's bottom-right corner.
     let paneControls = PaneControlsView()
     /// Pointer-in-pane tracking for `paneControls`; its own owner so the tab
     /// bar's enter/exit handling stays untouched.
     let paneHoverTracker = PaneHoverTracker()
     var isPointerInPane = false
-    /// The visibility `paneControls` is fading towards.
+    /// Whether `paneControls` currently shows.
     var paneControlsShown = false
+    /// The island edge drawn around the notch's cut while it shows. A view,
+    /// not a sublayer, so it shares the pane's flipped coordinates.
+    final class IslandCutStroke: NSView {
+        var path: CGPath? { didSet { needsDisplay = true } }
+        var color: NSColor = .clear { didSet { needsDisplay = true } }
+        override var isFlipped: Bool { true }
+        override func hitTest(_ point: NSPoint) -> NSView? { nil }
+        override func draw(_ dirtyRect: NSRect) {
+            guard let path, let ctx = NSGraphicsContext.current?.cgContext else { return }
+            ctx.addPath(path)
+            ctx.setStrokeColor(color.cgColor)
+            ctx.setLineWidth(IslandMetrics.borderWidth)
+            ctx.strokePath()
+        }
+    }
+
+    let islandCutStroke: IslandCutStroke = {
+        let v = IslandCutStroke()
+        v.isHidden = true
+        return v
+    }()
     private var paneSettingsObserver: NSObjectProtocol?
 
     var isFocused: Bool = false {
@@ -339,7 +359,7 @@ class PaneView: NSView {
         guard let layer else { return }
         let theme = AppSettings.shared.theme
         if !recordingBorder.isHidden {
-            layer.borderColor = NSColor.systemRed.withAlphaComponent(0.8).cgColor
+            layer.borderColor = theme.error.withAlphaComponent(0.8).cgColor
         } else if !activityBorder.isHidden {
             layer.borderColor = theme.accentColor.withAlphaComponent(Self.activityBorderAlpha).cgColor
         } else if isFocused {
@@ -347,11 +367,12 @@ class PaneView: NSView {
         } else {
             layer.borderColor = theme.paneBorder.cgColor
         }
+        if let c = layer.borderColor { islandCutStroke.color = NSColor(cgColor: c) ?? .clear }
     }
 
     func updateFindBarTheme() {
-        zoomBadge?.applyTheme()
         paneControls.applyTheme()
+        recordingBorder.layer?.borderColor = AppSettings.shared.theme.error.withAlphaComponent(0.8).cgColor
         findBar?.applyTheme()
         findBar?.needsDisplay = true
     }
@@ -379,29 +400,20 @@ class PaneView: NSView {
     private var pendingCwds: [UUID: String] = [:]
     private static let debounceInterval: TimeInterval = 0.12
 
-    // MARK: - Zoom badge
+    // MARK: - Zoom
 
     /// True while this pane is zoomed (its workspace's other panes are hidden).
+    /// The corner notch then carries an unzoom button.
     var isZoomed = false {
         didSet {
             guard isZoomed != oldValue else { return }
-            if isZoomed {
-                let badge = ZoomBadgeView()
-                badge.onClick = { [weak self] in self?.onUnzoomRequested?() }
-                zoomBadge = badge
-                addSubview(badge)
-            } else {
-                zoomBadge?.removeFromSuperview()
-                zoomBadge = nil
-            }
             updatePaneControls()
             needsLayout = true
         }
     }
 
-    /// Called when the zoom badge is clicked.
+    /// Called when the notch's unzoom button is clicked.
     var onUnzoomRequested: (() -> Void)?
-    private var zoomBadge: ZoomBadgeView?
 
     /// Per tab: clears a progress bar nobody updated for `TerminalProgress.staleAfter`.
     private var progressExpiry: [UUID: DispatchWorkItem] = [:]
@@ -429,9 +441,12 @@ class PaneView: NSView {
         addSubview(focusCatcher)
         addSubview(broadcastBorder)
         addSubview(activityBorder)
+        recordingBorder.layer?.borderColor = AppSettings.shared.theme.error.withAlphaComponent(0.8).cgColor
         addSubview(recordingBorder)
         paneControls.isHidden = true
         paneControls.alphaValue = 0
+        addSubview(islandCutStroke)
+        paneControls.onUnzoom = { [weak self] in self?.onUnzoomRequested?() }
         addSubview(paneControls)
         paneHoverTracker.onChange = { [weak self] inside in
             self?.isPointerInPane = inside
@@ -901,27 +916,20 @@ class PaneView: NSView {
         // dim overlay first (it swallows clicks to focus the pane), activity frame on top so
         // it stays visible on unfocused panes. Adding a content subview buries them, so the
         // order is re-asserted here — checking BOTH slots, since either can slip.
-        // The zoom badge sits above both, in the content's top-right corner.
+        // The corner notch sits above all of them, in the bottom-right corner.
         if focusCatcher.frame != bounds { focusCatcher.frame = bounds }
         if activityBorder.frame != bounds { activityBorder.frame = bounds }
         if broadcastBorder.frame != bounds { broadcastBorder.frame = bounds }
         if recordingBorder.frame != bounds { recordingBorder.frame = bounds }
-        var controlsMaxX = bounds.width - 8
-        if let badge = zoomBadge {
-            let size = badge.fittingSize
-            let badgeFrame = NSRect(
-                x: bounds.width - size.width - 8, y: barH + findH + 8, width: size.width, height: size.height)
-            if badge.frame != badgeFrame { badge.frame = badgeFrame }
-            controlsMaxX = badgeFrame.minX - 6
-        }
         let controlsSize = paneControls.frame.size
         let controlsFrame = NSRect(
-            x: controlsMaxX - controlsSize.width, y: barH + findH + 8,
+            x: bounds.width - controlsSize.width, y: bounds.height - controlsSize.height,
             width: controlsSize.width, height: controlsSize.height)
         if paneControls.frame != controlsFrame { paneControls.frame = controlsFrame }
-        let overlays: [NSView] =
-            [focusCatcher, broadcastBorder, activityBorder, recordingBorder, paneControls]
-            + (zoomBadge.map { [$0] } ?? [])
+        syncIslandCut()
+        let overlays: [NSView] = [
+            focusCatcher, broadcastBorder, activityBorder, recordingBorder, paneControls, islandCutStroke
+        ]
         if !zip(subviews.suffix(overlays.count), overlays).allSatisfy({ $0 === $1 }) {
             for overlay in overlays { addSubview(overlay, positioned: .above, relativeTo: nil) }
         }

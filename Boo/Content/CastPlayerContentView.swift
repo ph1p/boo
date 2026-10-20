@@ -12,9 +12,11 @@ final class CastPlayerContentView: NSView, ContentViewProtocol {
 
     /// Keeps the pty quiet: no echo of terminal query replies, no prompt.
     static let quietProgram = "/bin/sh -c 'stty -echo; exec tail -f /dev/null'"
-    static let speeds: [Double] = [0.5, 1, 2, 4]
+    static let speeds: [Double] = [0.25, 0.5, 1, 1.5, 2, 4]
     /// Ghostty resizes the grid on its IO thread; hold output until it has.
     private static let resizeSettle: CFTimeInterval = 0.1
+    static let shortcutsHelp =
+        "Space play/pause · ←/→ 5s (⇧ 1s) · [ ] previous/next marker · −/+ speed · 0 restart · 1–9 jump"
 
     private var filePath: String?
     private var currentTitle = "Recording"
@@ -23,11 +25,14 @@ final class CastPlayerContentView: NSView, ContentViewProtocol {
     private let terminalHost = NSView()
     private let ghosttyView: GhosttyView
     private let bar = NSView()
-    private let playButton = NSButton()
-    private let restartButton = NSButton()
-    private let slider = NSSlider()
+    private let barRule = NSView()
+    private let restartButton = PaneControlButton(symbol: "backward.end.fill", help: "Restart (0)")
+    private let playButton = PaneControlButton(symbol: "play.fill", help: "Play (Space)")
+    private let prevMarkerButton = PaneControlButton(symbol: "chevron.backward.to.line", help: "Previous Marker ([)")
+    private let nextMarkerButton = PaneControlButton(symbol: "chevron.forward.to.line", help: "Next Marker (])")
+    private let scrubber = CastScrubber()
     private let timeLabel = NSTextField(labelWithString: "0:00 / 0:00")
-    private let speedPopup = NSPopUpButton()
+    private let speedButton = PlayerTextButton()
     private let messageLabel = NSTextField(labelWithString: "")
 
     private var timer: Timer?
@@ -40,7 +45,7 @@ final class CastPlayerContentView: NSView, ContentViewProtocol {
     private var needsCatchUp = false
     private var grid: (columns: Int, rows: Int) = (80, 24)
 
-    private static let barHeight: CGFloat = 34
+    private static let barHeight: CGFloat = 36
 
     init(filePath: String?) {
         ghosttyView = GhosttyView(
@@ -72,45 +77,31 @@ final class CastPlayerContentView: NSView, ContentViewProtocol {
         addSubview(terminalHost)
 
         bar.wantsLayer = true
+        bar.toolTip = Self.shortcutsHelp
+        barRule.wantsLayer = true
         addSubview(bar)
 
-        func symbolButton(_ button: NSButton, _ symbol: String, _ label: String, _ action: Selector) {
-            button.image = NSImage(systemSymbolName: symbol, accessibilityDescription: label)
-            button.bezelStyle = .accessoryBarAction
-            button.isBordered = false
-            button.imagePosition = .imageOnly
-            button.target = self
-            button.action = action
-            button.toolTip = label
-            button.setAccessibilityLabel(label)
-        }
-        symbolButton(playButton, "play.fill", "Play", #selector(togglePlay))
-        symbolButton(restartButton, "backward.end.fill", "Restart", #selector(restart))
-
-        slider.minValue = 0
-        slider.maxValue = 1
-        slider.isContinuous = true
-        slider.controlSize = .small
-        slider.target = self
-        slider.action = #selector(sliderMoved)
-        slider.setAccessibilityLabel("Position")
+        restartButton.onClick = { [weak self] in self?.restart() }
+        playButton.onClick = { [weak self] in self?.togglePlay() }
+        prevMarkerButton.onClick = { [weak self] in self?.jumpToMarker(forward: false) }
+        nextMarkerButton.onClick = { [weak self] in self?.jumpToMarker(forward: true) }
+        scrubber.onSeek = { [weak self] time in self?.seek(to: time) }
+        speedButton.onClick = { [weak self] in self?.showSpeedMenu() }
+        speedButton.title = Self.speedTitle(speed)
+        speedButton.toolTip = "Playback Speed (− / +)"
 
         timeLabel.font = .monospacedDigitSystemFont(ofSize: 11, weight: .regular)
         timeLabel.alignment = .right
-
-        speedPopup.controlSize = .small
-        speedPopup.font = .systemFont(ofSize: 11)
-        for s in Self.speeds { speedPopup.addItem(withTitle: Self.speedTitle(s)) }
-        speedPopup.selectItem(at: Self.speeds.firstIndex(of: 1) ?? 0)
-        speedPopup.target = self
-        speedPopup.action = #selector(speedChanged)
-        speedPopup.setAccessibilityLabel("Speed")
 
         messageLabel.alignment = .center
         messageLabel.isHidden = true
         addSubview(messageLabel)
 
-        for v in [playButton, restartButton, slider, timeLabel, speedPopup] { bar.addSubview(v) }
+        for v in [
+            barRule, restartButton, playButton, prevMarkerButton, nextMarkerButton, scrubber, timeLabel, speedButton
+        ] as [NSView] {
+            bar.addSubview(v)
+        }
     }
 
     static func speedTitle(_ s: Double) -> String {
@@ -121,21 +112,28 @@ final class CastPlayerContentView: NSView, ContentViewProtocol {
         super.layout()
         let h = Self.barHeight
         bar.frame = CGRect(x: 0, y: 0, width: bounds.width, height: h)
+        barRule.frame = CGRect(x: 0, y: h - 1, width: bounds.width, height: 1)
         terminalHost.frame = CGRect(x: 0, y: h, width: bounds.width, height: max(0, bounds.height - h))
         messageLabel.frame = terminalHost.frame.insetBy(dx: 20, dy: 0)
             .divided(atDistance: 40, from: .maxYEdge).slice.offsetBy(dx: 0, dy: -40)
 
-        let midY = h / 2
+        let midY = (h - 1) / 2
+        let side: CGFloat = 24
         var x: CGFloat = 8
-        for b in [restartButton, playButton] {
-            b.frame = CGRect(x: x, y: midY - 12, width: 24, height: 24)
-            x += 28
+        let hasMarkers = !(playback?.markers.isEmpty ?? true)
+        prevMarkerButton.isHidden = !hasMarkers
+        nextMarkerButton.isHidden = !hasMarkers
+        for b in [restartButton, playButton, prevMarkerButton, nextMarkerButton] where !b.isHidden {
+            b.frame = CGRect(x: x, y: midY - side / 2, width: side, height: side)
+            x += side + 2
         }
-        let popupW: CGFloat = 64
-        let labelW: CGFloat = 96
-        speedPopup.frame = CGRect(x: bounds.width - popupW - 8, y: midY - 11, width: popupW, height: 22)
-        timeLabel.frame = CGRect(x: speedPopup.frame.minX - labelW - 6, y: midY - 8, width: labelW, height: 16)
-        slider.frame = CGRect(x: x + 4, y: midY - 10, width: max(40, timeLabel.frame.minX - x - 12), height: 20)
+        let speedW = max(36, speedButton.fittingSize.width)
+        speedButton.frame = CGRect(x: bounds.width - speedW - 8, y: midY - 11, width: speedW, height: 22)
+        let labelW =
+            ceil(
+                (timeLabel.stringValue as NSString).size(withAttributes: [.font: timeLabel.font as Any]).width) + 4
+        timeLabel.frame = CGRect(x: speedButton.frame.minX - labelW - 8, y: midY - 8, width: labelW, height: 16)
+        scrubber.frame = CGRect(x: x + 8, y: midY - 10, width: max(40, timeLabel.frame.minX - x - 20), height: 20)
         layoutTerminal()
     }
 
@@ -176,8 +174,11 @@ final class CastPlayerContentView: NSView, ContentViewProtocol {
         onTitleChanged?(currentTitle)
         do {
             let text = try String(contentsOfFile: path, encoding: .utf8)
-            let pb = try CastPlayback(text: text)
+            let pb = try CastPlayback(
+                text: text, fallbackIdleLimit: AppSettings.shared.recordingIdleTimeLimit)
             playback = pb
+            scrubber.duration = pb.duration
+            scrubber.markers = pb.markers
             messageLabel.isHidden = true
             grid = (pb.width, pb.height)
             needsLayout = true
@@ -185,6 +186,8 @@ final class CastPlayerContentView: NSView, ContentViewProtocol {
             setPlaying(true)
         } catch {
             playback = nil
+            scrubber.duration = 0
+            scrubber.markers = []
             messageLabel.stringValue = "Can't play \(currentTitle): not an asciicast v2 file."
             messageLabel.isHidden = false
             setPlaying(false)
@@ -271,43 +274,67 @@ final class CastPlayerContentView: NSView, ContentViewProtocol {
 
     private func setPlaying(_ playing: Bool) {
         isPlaying = playing
-        let symbol = playing ? "pause.fill" : "play.fill"
-        let label = playing ? "Pause" : "Play"
-        playButton.image = NSImage(systemSymbolName: symbol, accessibilityDescription: label)
-        playButton.toolTip = label
-        playButton.setAccessibilityLabel(label)
+        playButton.setSymbol(playing ? "pause.fill" : "play.fill", help: playing ? "Pause (Space)" : "Play (Space)")
         lastTick = CACurrentMediaTime()
     }
 
     private func updateControls() {
         let duration = playback?.duration ?? 0
-        slider.isEnabled = playback != nil
-        playButton.isEnabled = playback != nil
-        restartButton.isEnabled = playback != nil
-        slider.maxValue = max(duration, 0.001)
-        slider.doubleValue = playhead
-        timeLabel.stringValue = "\(CastPlayback.formatTime(playhead)) / \(CastPlayback.formatTime(duration))"
+        let loaded = playback != nil
+        for item in [scrubber, playButton, restartButton, speedButton] as [NSView] {
+            item.alphaValue = loaded ? 1 : 0.4
+        }
+        scrubber.position = playhead
+        let text = "\(CastPlayback.formatTime(playhead)) / \(CastPlayback.formatTime(duration))"
+        if timeLabel.stringValue != text {
+            let widthChanged = text.count != timeLabel.stringValue.count
+            timeLabel.stringValue = text
+            if widthChanged { needsLayout = true }
+        }
     }
 
-    @objc private func togglePlay() {
+    private func togglePlay() {
         guard let pb = playback else { return }
         if !isPlaying, playhead >= pb.duration { seek(to: 0) }
         setPlaying(!isPlaying)
     }
 
-    @objc private func restart() {
+    private func restart() {
         seek(to: 0)
         setPlaying(true)
     }
 
-    @objc private func sliderMoved() {
-        seek(to: slider.doubleValue)
+    private func jumpToMarker(forward: Bool) {
+        guard let pb = playback else { return }
+        if let m = forward ? pb.marker(after: playhead) : pb.marker(before: playhead) {
+            seek(to: m.time)
+        } else if !forward {
+            seek(to: 0)
+        }
     }
 
-    @objc private func speedChanged() {
-        let i = speedPopup.indexOfSelectedItem
-        guard Self.speeds.indices.contains(i) else { return }
-        speed = Self.speeds[i]
+    private func setSpeed(_ s: Double) {
+        speed = s
+        speedButton.title = Self.speedTitle(s)
+        needsLayout = true
+    }
+
+    /// Steps through `speeds`; -1 slower, +1 faster.
+    private func stepSpeed(_ delta: Int) {
+        let i = Self.speeds.firstIndex(of: speed) ?? Self.speeds.firstIndex(of: 1) ?? 0
+        setSpeed(Self.speeds[min(max(0, i + delta), Self.speeds.count - 1)])
+    }
+
+    private func showSpeedMenu() {
+        let menu = NSMenu()
+        for s in Self.speeds {
+            let item = ClosureMenuItem(title: Self.speedTitle(s)) { [weak self] in self?.setSpeed(s) }
+            item.state = s == speed ? .on : .off
+            menu.addItem(item)
+        }
+        menu.popUp(
+            positioning: menu.items.first { $0.state == .on }, at: NSPoint(x: 0, y: speedButton.bounds.maxY),
+            in: speedButton)
     }
 
     // MARK: - Keys
@@ -315,11 +342,29 @@ final class CastPlayerContentView: NSView, ContentViewProtocol {
     override var acceptsFirstResponder: Bool { true }
 
     override func keyDown(with event: NSEvent) {
+        let mods = event.modifierFlags.intersection([.command, .control, .option])
+        guard mods.isEmpty, playback != nil else { return super.keyDown(with: event) }
+        let step: TimeInterval = event.modifierFlags.contains(.shift) ? 1 : 5
         switch event.keyCode {
         case 49: togglePlay()  // space
-        case 123: seek(to: playhead - 5)  // left
-        case 124: seek(to: playhead + 5)  // right
-        default: super.keyDown(with: event)
+        case 123: seek(to: playhead - step)  // left
+        case 124: seek(to: playhead + step)  // right
+        case 115: restart()  // home
+        case 119: seek(to: playback?.duration ?? 0)  // end
+        default:
+            switch event.charactersIgnoringModifiers ?? "" {
+            case "k": togglePlay()
+            case "j": seek(to: playhead - 10)
+            case "l": seek(to: playhead + 10)
+            case "[": jumpToMarker(forward: false)
+            case "]": jumpToMarker(forward: true)
+            case "-", "_": stepSpeed(-1)
+            case "+", "=": stepSpeed(1)
+            case "0": restart()
+            case let c where c.count == 1 && ("1"..."9").contains(c):
+                seek(to: (playback?.duration ?? 0) * (Double(c) ?? 0) / 10)
+            default: super.keyDown(with: event)
+            }
         }
     }
 
@@ -370,8 +415,191 @@ final class CastPlayerContentView: NSView, ContentViewProtocol {
         let theme = AppSettings.shared.theme
         layer?.backgroundColor = theme.background.nsColor.cgColor
         bar.layer?.backgroundColor = theme.chromeBg.cgColor
-        timeLabel.textColor = theme.chromeMuted
-        messageLabel.textColor = theme.chromeMuted
-        for b in [playButton, restartButton] { b.contentTintColor = theme.chromeText }
+        barRule.layer?.backgroundColor = theme.separator.cgColor
+        timeLabel.textColor = theme.textSecondary
+        messageLabel.textColor = theme.textSecondary
+        for b in [playButton, restartButton, prevMarkerButton, nextMarkerButton] { b.applyTheme() }
+        speedButton.applyTheme()
+        scrubber.needsDisplay = true
+    }
+}
+
+// MARK: - Scrubber
+
+/// Timeline track: played part in the accent, marker ticks, and a knob that
+/// grows on hover. Click or drag to seek; drags snap to nearby markers.
+final class CastScrubber: NSView {
+    var onSeek: ((TimeInterval) -> Void)?
+    var duration: TimeInterval = 0 { didSet { rebuildToolTips() } }
+    var markers: [CastPlayback.Marker] = [] { didSet { rebuildToolTips() } }
+    var position: TimeInterval = 0 {
+        didSet { if position != oldValue { needsDisplay = true } }
+    }
+
+    private var hovered = false { didSet { needsDisplay = true } }
+    private var dragging = false
+    private var trackingArea: NSTrackingArea?
+    private static let inset: CGFloat = 6
+    private static let snap: CGFloat = 5
+
+    override var isFlipped: Bool { true }
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        setAccessibilityElement(true)
+        setAccessibilityRole(.slider)
+        setAccessibilityLabel("Position")
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    private var track: NSRect {
+        NSRect(x: Self.inset, y: bounds.midY - 2, width: max(0, bounds.width - Self.inset * 2), height: 4)
+    }
+
+    private func x(for time: TimeInterval) -> CGFloat {
+        guard duration > 0 else { return track.minX }
+        return track.minX + track.width * CGFloat(min(max(0, time / duration), 1))
+    }
+
+    private func time(at x: CGFloat) -> TimeInterval {
+        guard track.width > 0 else { return 0 }
+        if let near = markers.first(where: { abs(self.x(for: $0.time) - x) <= Self.snap }) { return near.time }
+        return duration * Double(min(max(0, (x - track.minX) / track.width), 1))
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        let theme = AppSettings.shared.theme
+        let track = self.track
+        theme.controlFill.setFill()
+        NSBezierPath(roundedRect: track, xRadius: 2, yRadius: 2).fill()
+        let head = x(for: position)
+        theme.accentColor.setFill()
+        NSBezierPath(
+            roundedRect: NSRect(x: track.minX, y: track.minY, width: head - track.minX, height: track.height),
+            xRadius: 2, yRadius: 2
+        ).fill()
+        for m in markers {
+            let mx = x(for: m.time)
+            (m.time <= position ? theme.chromeBg : theme.warning).setFill()
+            NSBezierPath(
+                roundedRect: NSRect(x: mx - 1.5, y: track.midY - 4, width: 3, height: 8), xRadius: 1.5, yRadius: 1.5
+            ).fill()
+        }
+        let r: CGFloat = hovered || dragging ? 6 : 4.5
+        let knob = NSRect(x: head - r, y: track.midY - r, width: r * 2, height: r * 2)
+        theme.accentColor.setFill()
+        NSBezierPath(ovalIn: knob).fill()
+        theme.chromeBg.setStroke()
+        let ring = NSBezierPath(ovalIn: knob.insetBy(dx: 0.75, dy: 0.75))
+        ring.lineWidth = 1.5
+        ring.stroke()
+    }
+
+    private func rebuildToolTips() {
+        removeAllToolTips()
+        for (i, m) in markers.enumerated() {
+            let mx = x(for: m.time)
+            let label = m.label.isEmpty ? "Marker \(i + 1)" : m.label
+            addToolTip(
+                NSRect(x: mx - Self.snap, y: 0, width: Self.snap * 2, height: bounds.height),
+                owner: "\(label) · \(CastPlayback.formatTime(m.time))" as NSString, userData: nil)
+        }
+        needsDisplay = true
+    }
+
+    override func setFrameSize(_ newSize: NSSize) {
+        let changed = newSize != frame.size
+        super.setFrameSize(newSize)
+        if changed { rebuildToolTips() }
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let trackingArea { removeTrackingArea(trackingArea) }
+        let area = NSTrackingArea(
+            rect: .zero, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect], owner: self)
+        addTrackingArea(area)
+        trackingArea = area
+    }
+
+    override func mouseEntered(with event: NSEvent) { hovered = true }
+    override func mouseExited(with event: NSEvent) { hovered = false }
+
+    override func mouseDown(with event: NSEvent) {
+        guard duration > 0 else { return }
+        dragging = true
+        seek(event)
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        guard dragging else { return }
+        seek(event)
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        dragging = false
+        needsDisplay = true
+    }
+
+    private func seek(_ event: NSEvent) {
+        let t = time(at: convert(event.locationInWindow, from: nil).x)
+        position = t
+        onSeek?(t)
+    }
+
+    override func accessibilityValue() -> Any? { CastPlayback.formatTime(position) }
+    override func accessibilityPerformIncrement() -> Bool {
+        onSeek?(position + 5)
+        return true
+    }
+    override func accessibilityPerformDecrement() -> Bool {
+        onSeek?(position - 5)
+        return true
+    }
+}
+
+/// Text segment with the pane-controls hover treatment; the player's speed menu.
+final class PlayerTextButton: PaneControlItem {
+    private let label = NSTextField(labelWithString: "")
+
+    var title: String {
+        get { label.stringValue }
+        set {
+            label.stringValue = newValue
+            setAccessibilityLabel("Speed \(newValue)")
+        }
+    }
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        label.font = .monospacedDigitSystemFont(ofSize: 11, weight: .medium)
+        label.alignment = .center
+        addSubview(label)
+        applyTheme()
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override var fittingSize: NSSize {
+        NSSize(width: ceil(label.intrinsicContentSize.width) + 16, height: 22)
+    }
+
+    func applyTheme() { hoverChanged() }
+
+    override func hoverChanged() {
+        let theme = AppSettings.shared.theme
+        label.textColor = hovered ? theme.chromeText : theme.textSecondary
+        layer?.backgroundColor = (hovered ? theme.hoverFill : theme.subtleFill).cgColor
+    }
+
+    override func layout() {
+        super.layout()
+        let h = label.intrinsicContentSize.height
+        label.frame = NSRect(x: 0, y: (bounds.height - h) / 2, width: bounds.width, height: h)
     }
 }

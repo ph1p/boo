@@ -161,9 +161,9 @@ struct AgentTimelineView: View {
                         icon: "arrow.triangle.2.circlepath", color: t.warning)
                 }
                 Spacer()
-                Toggle("Loops & failures only", isOn: $problemsOnly).toggleStyle(.checkbox)
+                Toggle("Loops & failures only", isOn: $problemsOnly).toggleStyle(.themedCheckbox)
                     .font(.system(size: 11)).foregroundStyle(t.textSecondary)
-                Button("Transcript") { model.openTranscript() }.disabled(model.transcript == nil)
+                Button("Transcript") { model.openTranscript() }.buttonStyle(.themed).disabled(model.transcript == nil)
             }
             if !timeline.files.isEmpty {
                 ScrollView(.horizontal, showsIndicators: false) {
@@ -265,7 +265,7 @@ struct AgentTimelineView: View {
                 ForEach(Array(shown.enumerated()), id: \.offset) { _, tool in toolRow(tool) }
                 if shown.count < tools.count {
                     Button("Show all \(tools.count) tool rows") { expanded.insert(turn.id) }
-                        .buttonStyle(.link).font(.system(size: 11))
+                        .buttonStyle(.themedLink).font(.system(size: 11))
                 }
                 if let reply = turn.reply {
                     Text(reply).font(.system(size: 11)).foregroundStyle(t.textSecondary)
@@ -335,7 +335,7 @@ struct AgentTimelineView: View {
             Text(Self.shortName(tool.name)).font(.system(size: 10, weight: .semibold)).foregroundStyle(t.textSecondary)
             Group {
                 if let file = tool.file {
-                    Button(model.display(file)) { model.open(file) }.buttonStyle(.link)
+                    Button(model.display(file)) { model.open(file) }.buttonStyle(.themedLink)
                 } else {
                     Text(tool.name == "Read" ? model.display(tool.summary) : tool.summary)
                         .foregroundStyle(t.text)

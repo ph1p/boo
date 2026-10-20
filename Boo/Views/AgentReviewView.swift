@@ -181,11 +181,11 @@ struct AgentReviewView: View {
                 }
             }
             Spacer()
-            if model.isLoading { ProgressView().controlSize(.small) }
-            Button("Refresh") { model.reload() }
+            if model.isLoading { ProgressView().controlSize(.small).tint(t.textSecondary) }
+            Button("Refresh") { model.reload() }.buttonStyle(.themed)
             if model.isWorktree {
-                Button("Merge…") { model.merge() }
-                Button("Discard…") { model.discard() }
+                Button("Merge…") { model.merge() }.buttonStyle(.themed)
+                Button("Discard…") { model.discard() }.buttonStyle(.themed)
             }
         }
         .padding(.horizontal, 14).padding(.vertical, 8)
@@ -213,12 +213,13 @@ struct AgentReviewView: View {
 
         var body: some View {
             TextField("Overall note for the agent (optional)", text: $note.text)
-                .textFieldStyle(.roundedBorder)
+                .themedTextField()
                 .onSubmit { model.send() }
             if let status = model.status {
                 Text(status).font(.system(size: 11)).foregroundStyle(t.error)
             }
             Button("Send to Agent") { model.send() }
+                .buttonStyle(.themedProminent)
                 .keyboardShortcut(.return, modifiers: .command)
                 .disabled(!model.canSend && model.draftAnchor == nil)
         }
@@ -403,8 +404,10 @@ struct AgentReviewView: View {
             DraftField(draft: model.draft) { model.commitDraft() }
             HStack {
                 Button("Cancel") { model.draftAnchor = nil }
+                    .buttonStyle(.themed)
                     .keyboardShortcut(.cancelAction)
                 Button("Add Comment") { model.commitDraft() }
+                    .buttonStyle(.themedProminent)
             }
         }
         .padding(8)
@@ -420,7 +423,7 @@ struct AgentReviewView: View {
 
         var body: some View {
             TextField("Comment for the agent", text: $draft.text, axis: .vertical)
-                .textFieldStyle(.roundedBorder)
+                .themedTextField()
                 .lineLimit(2...6)
                 .onSubmit(submit)
         }

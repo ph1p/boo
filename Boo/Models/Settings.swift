@@ -310,6 +310,8 @@ final class AppSettings {
         static let highlightRecordingPane = "highlightRecordingPane"
         static let recordingStopAction = "recordingStopAction"
         static let recordingsFolder = "recordingsFolder"
+        static let recordingFileNameTemplate = "recordingFileNameTemplate"
+        static let recordingIdleTimeLimit = "recordingIdleTimeLimit"
         static let defaultTabType = "defaultTabType"
         static let autoDetectContentType = "autoDetectContentType"
         static let markdownOpenMode = "markdownOpenMode"
@@ -789,6 +791,25 @@ final class AppSettings {
         set { set(newValue, forKey: K.recordingsFolder, topic: .layout) }
     }
 
+    /// File name for new recordings; see `SessionRecorder.fileName` for the tokens.
+    var recordingFileNameTemplate: String {
+        get {
+            let raw = UserDefaults.standard.string(forKey: K.recordingFileNameTemplate) ?? ""
+            return raw.trimmingCharacters(in: .whitespaces).isEmpty ? SessionRecorder.defaultTemplate : raw
+        }
+        set { set(newValue, forKey: K.recordingFileNameTemplate, topic: .layout) }
+    }
+
+    /// Longest pause kept on playback, written as the cast's `idle_time_limit`.
+    /// 0 keeps pauses as recorded.
+    var recordingIdleTimeLimit: Double {
+        get {
+            guard UserDefaults.standard.object(forKey: K.recordingIdleTimeLimit) != nil else { return 2 }
+            return max(0, UserDefaults.standard.double(forKey: K.recordingIdleTimeLimit))
+        }
+        set { set(max(0, newValue), forKey: K.recordingIdleTimeLimit, topic: .layout) }
+    }
+
     // MARK: - Tabs
 
     /// Default content type for new tabs (terminal, browser, etc.).
@@ -1250,6 +1271,8 @@ final class AppSettings {
             K.highlightRecordingPane: highlightRecordingPane,
             K.recordingStopAction: recordingStopAction.rawValue,
             K.recordingsFolder: recordingsFolder,
+            K.recordingFileNameTemplate: recordingFileNameTemplate,
+            K.recordingIdleTimeLimit: recordingIdleTimeLimit,
             K.editorFontSize: Double(editorFontSize),
             K.editorFontName: editorFontName,
             K.editorTabSize: editorTabSize,

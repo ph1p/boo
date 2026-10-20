@@ -99,6 +99,43 @@ final class SessionRecordingTests: XCTestCase {
         XCTAssertEqual(pb.events.map(\.time), [0.5, 1.0, 1.5, 2.0, 2.25])
     }
 
+    func testPlaybackReadsMarkersOnCappedTimeline() throws {
+        let text = """
+            {"version": 2, "width": 80, "height": 24, "timestamp": 1700000000}
+            [0.5, "o", "a"]
+            [1.0, "m", "intro"]
+            [11.0, "m", ""]
+            [11.5, "o", "b"]
+            """
+        let pb = try CastPlayback(text: text)
+        XCTAssertEqual(pb.markers, [.init(time: 1.0, label: "intro"), .init(time: 3.0, label: "")])
+        XCTAssertEqual(pb.events.map(\.time), [0.5, 3.5])
+        XCTAssertEqual(pb.duration, 3.5)
+        XCTAssertEqual(pb.startDate, Date(timeIntervalSince1970: 1_700_000_000))
+        XCTAssertEqual(pb.marker(after: 0)?.label, "intro")
+        XCTAssertEqual(pb.marker(after: 1.0)?.time, 3.0)
+        XCTAssertNil(pb.marker(after: 3.0))
+        XCTAssertEqual(pb.marker(before: 3.5)?.time, 1.0)
+        XCTAssertNil(pb.marker(before: 1.5))
+    }
+
+    func testIdleLimitPrecedenceAndZeroDisablesCap() throws {
+        // Explicit beats the header; the fallback applies only without either; 0 means no cap.
+        let header = cast.replacingOccurrences(of: "\"height\": 20", with: "\"height\": 20, \"idle_time_limit\": 0.5")
+        XCTAssertEqual(try CastPlayback(text: header, idleLimit: 1).events.map(\.time), [0.5, 1.5, 2.5, 3.0, 3.25])
+        XCTAssertEqual(try CastPlayback(text: cast, fallbackIdleLimit: 0).duration, 12.25)
+        XCTAssertEqual(try CastPlayback(text: header, fallbackIdleLimit: 0).duration, 2.25)
+    }
+
+    func testHeaderWritesIdleLimitAndMarkerEvent() throws {
+        var w = AsciicastWriter(width: 80, height: 24, startDate: Date(), title: nil, env: [:])
+        XCTAssertFalse(w.header().contains("idle_time_limit"))
+        w.idleTimeLimit = 1.5
+        let obj = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(w.header().utf8)) as? [String: Any])
+        XCTAssertEqual(obj["idle_time_limit"] as? Double, 1.5)
+        XCTAssertEqual(AsciicastWriter.markerEvent(time: 2, label: "x"), "[2.000000, \"m\", \"x\"]\n")
+    }
+
     func testDueIndexAndGrid() throws {
         let pb = try CastPlayback(text: cast)
         XCTAssertEqual(pb.dueIndex(at: 0), 0)

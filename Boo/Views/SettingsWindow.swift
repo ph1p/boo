@@ -82,6 +82,7 @@ struct SettingsView: View {
         case appearance
         case statusBar
         case layout
+        case recordings
         case editor
         case browser
         case notifications
@@ -91,8 +92,8 @@ struct SettingsView: View {
 
         static var fixed: [Tab] {
             [
-                .general, .theme, .appearance, .statusBar, .layout, .editor, .browser, .notifications, .plugins,
-                .shortcuts
+                .general, .theme, .appearance, .statusBar, .layout, .recordings, .editor, .browser, .notifications,
+                .plugins, .shortcuts
             ]
         }
 
@@ -103,6 +104,7 @@ struct SettingsView: View {
             case .appearance: return "Appearance"
             case .statusBar: return "Status Bar"
             case .layout: return "Layout"
+            case .recordings: return "Recordings"
             case .editor: return "Editor"
             case .browser: return "Browser"
             case .notifications: return "Notifications"
@@ -120,6 +122,7 @@ struct SettingsView: View {
             case .appearance: return "textformat"
             case .statusBar: return "rectangle.bottomthird.inset.filled"
             case .layout: return "rectangle.3.group"
+            case .recordings: return "record.circle"
             case .editor: return "chevron.left.forwardslash.chevron.right"
             case .browser: return "globe"
             case .notifications: return "bell"
@@ -229,6 +232,7 @@ struct SettingsView: View {
         case .appearance: AppearanceSettingsView()
         case .statusBar: StatusBarSettingsView()
         case .layout: LayoutSettingsView()
+        case .recordings: RecordingsSettingsView()
         case .editor: EditorSettingsView()
         case .browser: BrowserSettingsView()
         case .notifications: NotificationsSettingsView()

@@ -32,6 +32,13 @@ extension MainWindowController {
         }
     }
 
+    /// Drops a marker into the active terminal's recording; the player jumps between them.
+    @objc func addRecordingMarkerAction(_ sender: Any?) {
+        guard let gv = activeGhosttyView, let recorder = gv.recorder else { return }
+        recorder.addMarker()
+        BooAlert.showTransient("Marker added")
+    }
+
     @objc func stopAllRecordingsAction(_ sender: Any?) {
         stopRecordings(activeRecordings.map { ($0.paneView, $0.view) })
     }
@@ -80,9 +87,12 @@ extension MainWindowController {
     @discardableResult
     func startRecording(_ gv: GhosttyView, in pv: PaneView) -> Bool {
         guard let tabID = gv.tabID else { return false }
-        let title = pv.pane.tabs.first { $0.id == tabID }?.title ?? "terminal"
+        let tab = pv.pane.tabs.first { $0.id == tabID }
+        let title = tab?.title ?? "terminal"
         do {
-            try gv.startRecording(to: SessionRecorder.defaultURL(title: title), title: title)
+            try gv.startRecording(
+                to: SessionRecorder.defaultURL(title: title, directory: tab?.workingDirectory), title: title,
+                idleTimeLimit: AppSettings.shared.recordingIdleTimeLimit)
         } catch {
             BooAlert.showError(title: "Couldn't start recording", message: error.localizedDescription)
             return false
@@ -199,6 +209,7 @@ extension MainWindowController {
         guard focusControlsOwner(pv) else { return }
         switch action {
         case .toggleRecording: toggleRecordingAction(nil)
+        case .addMarker: addRecordingMarkerAction(nil)
         case .splitRight: splitVerticalAction(nil)
         case .splitDown: splitHorizontalAction(nil)
         case .toggleZoom: toggleZoomPaneAction(nil)
@@ -206,11 +217,35 @@ extension MainWindowController {
         }
     }
 
-    /// The pane controls' ⋯ menu. Built per click, after the pane took focus,
-    /// so the selector items act on it and validate against current state.
+    /// The corner notch's ⋯ menu: the pane's own actions first, then the
+    /// window-wide extras. Built per click, after the pane took focus, so the
+    /// selector items act on it and validate against current state.
     func paneControlsMenu(for pv: PaneView) -> NSMenu {
         focusControlsOwner(pv)
         let menu = NSMenu()
+        let gv = activeGhosttyView
+        let entries = PaneControlsView.primaryEntries(
+            canRecord: pv.pane.activeTab?.contentType == .terminal && gv?.isInputLocked == false,
+            isRecording: gv?.isRecording == true,
+            multiPane: pv.showCloseOnSingleTab,
+            isZoomed: pv.isZoomed)
+        for entry in entries {
+            guard let entry else {
+                menu.addItem(.separator())
+                continue
+            }
+            let item = ClosureMenuItem(title: entry.title) { [weak self, weak pv] in
+                guard let self, let pv else { return }
+                self.handlePaneControl(entry.action, in: pv)
+            }
+            item.image = NSImage(systemSymbolName: entry.symbol, accessibilityDescription: nil)
+            if let shortcut = Self.mainMenuItem(for: Self.selector(for: entry.action)) {
+                item.keyEquivalent = shortcut.keyEquivalent
+                item.keyEquivalentModifierMask = shortcut.keyEquivalentModifierMask
+            }
+            menu.addItem(item)
+        }
+        menu.addItem(.separator())
         func add(_ title: String, _ action: Selector, _ symbol: String) {
             let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
             item.target = self
@@ -234,6 +269,30 @@ extension MainWindowController {
         add("Broadcast Input to All Panes", #selector(broadcastToAllPanesAction(_:)), "dot.radiowaves.left.and.right")
         add("Equalize Splits", #selector(equalizeSplitsAction(_:)), "square.split.2x2")
         return menu
+    }
+
+    /// The main-menu action behind each pane control.
+    private static func selector(for action: PaneControlAction) -> Selector {
+        switch action {
+        case .toggleRecording: return #selector(toggleRecordingAction(_:))
+        case .addMarker: return #selector(addRecordingMarkerAction(_:))
+        case .splitRight: return #selector(splitVerticalAction(_:))
+        case .splitDown: return #selector(splitHorizontalAction(_:))
+        case .toggleZoom: return #selector(toggleZoomPaneAction(_:))
+        case .closePane: return #selector(closePaneAction(_:))
+        }
+    }
+
+    /// The main-menu item for `action`, whose shortcut the notch menu shows.
+    private static func mainMenuItem(for action: Selector) -> NSMenuItem? {
+        func search(_ menu: NSMenu) -> NSMenuItem? {
+            for item in menu.items {
+                if item.action == action { return item }
+                if let sub = item.submenu, let found = search(sub) { return found }
+            }
+            return nil
+        }
+        return NSApp.mainMenu.flatMap(search)
     }
 }
 
@@ -263,8 +322,6 @@ final class RecordingSegment: StatusBarPlugin {
     var hitRect: NSRect = .zero
     var count = 0
 
-    static let color = NSColor.systemRed
-
     var tooltipText: String? { "Click to stop a recording" }
 
     static func label(count: Int) -> String { "● \(count) recording" }
@@ -275,7 +332,7 @@ final class RecordingSegment: StatusBarPlugin {
         at x: CGFloat, y: CGFloat, theme: TerminalTheme, settings: AppSettings, state: StatusBarState, ctx: CGContext
     ) -> CGFloat {
         guard count > 0 else { return 0 }
-        hitRect = Self.drawAlertLabel(Self.label(count: count), color: Self.color, at: x, y: y)
+        hitRect = Self.drawAlertLabel(Self.label(count: count), color: theme.error, at: x, y: y)
         return hitRect.width
     }
 

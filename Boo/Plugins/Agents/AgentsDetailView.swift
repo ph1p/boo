@@ -39,7 +39,7 @@ struct AgentOpenSessionsView: View {
         return Button(action: { onSessionClicked(session) }) {
             HStack(spacing: 6) {
                 Circle()
-                    .fill(session.isFocused ? Color.green : accentColor.opacity(0.65))
+                    .fill(session.isFocused ? Tokens.current.success : accentColor.opacity(0.65))
                     .frame(width: 7, height: 7)
                 Text(session.agent.kind.shortName)
                     .font(fontScale.font(.base).weight(.semibold))
@@ -210,7 +210,7 @@ struct AgentCenterSettingsView: View {
         return VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
                 Circle()
-                    .fill(isFound ? Color.green : Color.orange)
+                    .fill(isFound ? t.success : t.warning)
                     .frame(width: 7, height: 7)
                 Text(kind.displayName)
                     .font(.system(size: 12, weight: .semibold))
@@ -218,7 +218,7 @@ struct AgentCenterSettingsView: View {
                 Spacer()
                 Text(isFound ? "Installed" : "Not found")
                     .font(.system(size: 10))
-                    .foregroundStyle(isFound ? Color.green : t.muted)
+                    .foregroundStyle(isFound ? t.success : t.muted)
             }
 
             if let path = binaryPath {
@@ -357,10 +357,10 @@ struct ClaudeChangesView: View {
                 HStack(spacing: 2) {
                     Text("+\(entry.insertions)")
                         .font(fontScale.font(.xs, design: .monospaced))
-                        .foregroundStyle(Color(nsColor: .systemGreen))
+                        .foregroundStyle(Tokens.current.success)
                     Text("-\(entry.deletions)")
                         .font(fontScale.font(.xs, design: .monospaced))
-                        .foregroundStyle(Color(nsColor: .systemRed))
+                        .foregroundStyle(Tokens.current.error)
                 }
                 .frame(width: 56, alignment: .leading)
 

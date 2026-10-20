@@ -8,6 +8,8 @@ struct AsciicastWriter {
     let startDate: Date
     let title: String?
     let env: [String: String]
+    /// Pauses longer than this shrink to it on playback; nil keeps them.
+    var idleTimeLimit: TimeInterval?
 
     func header() -> String {
         var obj: [String: Any] = [
@@ -18,6 +20,7 @@ struct AsciicastWriter {
         ]
         if let title, !title.isEmpty { obj["title"] = title }
         if !env.isEmpty { obj["env"] = env }
+        if let idleTimeLimit, idleTimeLimit > 0 { obj["idle_time_limit"] = idleTimeLimit }
         let data = (try? JSONSerialization.data(withJSONObject: obj, options: [.sortedKeys])) ?? Data("{}".utf8)
         return String(decoding: data, as: UTF8.self) + "\n"
     }
@@ -28,6 +31,10 @@ struct AsciicastWriter {
 
     static func resizeEvent(time: TimeInterval, columns: Int, rows: Int) -> String {
         event(time: time, code: "r", data: "\(columns)x\(rows)")
+    }
+
+    static func markerEvent(time: TimeInterval, label: String) -> String {
+        event(time: time, code: "m", data: label)
     }
 
     private static func event(time: TimeInterval, code: String, data: String) -> String {
@@ -110,7 +117,7 @@ final class SessionRecorder: @unchecked Sendable {
     private var carry = UTF8Carry()
     private var closed = false
 
-    init(url: URL, columns: Int, rows: Int, title: String?) throws {
+    init(url: URL, columns: Int, rows: Int, title: String?, idleTimeLimit: TimeInterval? = nil) throws {
         try FileManager.default.createDirectory(
             at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         guard FileManager.default.createFile(atPath: url.path, contents: nil) else {
@@ -122,7 +129,8 @@ final class SessionRecorder: @unchecked Sendable {
         let env = ProcessInfo.processInfo.environment
         let header = AsciicastWriter(
             width: columns, height: rows, startDate: startDate, title: title,
-            env: ["TERM": "xterm-256color", "SHELL": env["SHELL"] ?? "/bin/zsh"]
+            env: ["TERM": "xterm-256color", "SHELL": env["SHELL"] ?? "/bin/zsh"],
+            idleTimeLimit: idleTimeLimit
         ).header()
         handle.write(Data(header.utf8))
     }
@@ -151,6 +159,15 @@ final class SessionRecorder: @unchecked Sendable {
         }
     }
 
+    /// Writes a chapter marker that players show on the timeline.
+    func addMarker(label: String = "") {
+        let now = DispatchTime.now().uptimeNanoseconds
+        queue.async { [self] in
+            guard !closed else { return }
+            write(AsciicastWriter.markerEvent(time: elapsed(now), label: label))
+        }
+    }
+
     /// Flushes and closes the file. Call after the output tap is removed.
     func finish(completion: (@Sendable () -> Void)? = nil) {
         queue.async { [self] in
@@ -169,17 +186,42 @@ final class SessionRecorder: @unchecked Sendable {
         handle.write(Data(line.utf8))
     }
 
-    /// `<recordings folder>/<date>-<title>.cast`
-    static func defaultURL(title: String, date: Date = Date()) -> URL {
+    static let defaultTemplate = "{date}-{time}-{title}"
+    static let templateTokens = ["{title}", "{date}", "{time}", "{dir}"]
+
+    /// Expands a file name template: `{title}` the tab title, `{date}`
+    /// yyyy-MM-dd, `{time}` HHmmss, `{dir}` the working directory's name.
+    /// Unsafe characters become dashes; no extension.
+    static func fileName(template: String, title: String, directory: String? = nil, date: Date = Date()) -> String {
         let fmt = DateFormatter()
         fmt.locale = Locale(identifier: "en_US_POSIX")
-        fmt.dateFormat = "yyyy-MM-dd-HHmmss"
-        let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_"))
-        let cleaned = String(
-            title.unicodeScalars.map { allowed.contains($0) ? Character($0) : "-" }
-        )
-        .split(separator: "-", omittingEmptySubsequences: true).joined(separator: "-")
-        let name = fmt.string(from: date) + (cleaned.isEmpty ? "" : "-" + String(cleaned.prefix(40)))
+        fmt.dateFormat = "yyyy-MM-dd"
+        let day = fmt.string(from: date)
+        fmt.dateFormat = "HHmmss"
+        let time = fmt.string(from: date)
+        let dir = directory.map { ($0 as NSString).lastPathComponent } ?? ""
+        let name =
+            template
+            .replacingOccurrences(of: "{title}", with: String(sanitized(title).prefix(40)))
+            .replacingOccurrences(of: "{date}", with: day)
+            .replacingOccurrences(of: "{time}", with: time)
+            .replacingOccurrences(of: "{dir}", with: sanitized(dir))
+        let cleaned = sanitized(name, keep: " .")
+        return cleaned.isEmpty ? day + "-" + time : cleaned
+    }
+
+    /// Runs of characters outside letters, digits, `-`, `_` (and `keep`) collapse to one dash.
+    private static func sanitized(_ s: String, keep: String = "") -> String {
+        let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_" + keep))
+        return String(s.unicodeScalars.map { allowed.contains($0) ? Character($0) : "-" })
+            .split(separator: "-", omittingEmptySubsequences: true).joined(separator: "-")
+            .trimmingCharacters(in: CharacterSet(charactersIn: " ."))
+    }
+
+    /// `<recordings folder>/<template>.cast`, suffixed `-2`, `-3`… if taken.
+    static func defaultURL(title: String, directory: String? = nil, date: Date = Date()) -> URL {
+        let name = fileName(
+            template: AppSettings.shared.recordingFileNameTemplate, title: title, directory: directory, date: date)
         // "Record All Panes" starts several same-titled recordings within one second.
         var url = recordingsDirectory.appendingPathComponent(name + ".cast")
         var suffix = 2

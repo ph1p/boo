@@ -142,22 +142,22 @@ final class ZoomBadgeTests: XCTestCase {
     /// Pane views must outlive the suite: deallocating one can hang teardown.
     private static var kept: [PaneView] = []
 
-    func testZoomTogglesBadgeAndClickRequestsUnzoom() {
+    func testZoomShowsUnzoomInNotchAndClickRequestsUnzoom() {
         let pane = PaneView(paneID: UUID(), pane: Pane())
         Self.kept.append(pane)
         pane.frame = NSRect(x: 0, y: 0, width: 600, height: 400)
-        XCTAssertFalse(pane.subviews.contains { $0 is ZoomBadgeView })
+        XCTAssertFalse(pane.paneControls.isZoomed)
 
         pane.isZoomed = true
-        let badge = pane.subviews.compactMap { $0 as? ZoomBadgeView }.first
-        XCTAssertNotNil(badge)
+        XCTAssertTrue(pane.paneControls.isZoomed)
+        XCTAssertTrue(pane.paneControlsShown)
 
         var unzoomRequests = 0
         pane.onUnzoomRequested = { unzoomRequests += 1 }
-        badge?.onClick?()
+        pane.paneControls.onUnzoom?()
         XCTAssertEqual(unzoomRequests, 1)
 
         pane.isZoomed = false
-        XCTAssertFalse(pane.subviews.contains { $0 is ZoomBadgeView })
+        XCTAssertFalse(pane.paneControls.isZoomed)
     }
 }
