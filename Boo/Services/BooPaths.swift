@@ -94,6 +94,13 @@ enum BooPaths {
         return path
     }()
 
+    /// Session recordings (asciicast): ~/.boo/recordings/
+    static let recordingsDir: String = {
+        let path = (configDir as NSString).appendingPathComponent("recordings")
+        try? FileManager.default.createDirectory(atPath: path, withIntermediateDirectories: true)
+        return path
+    }()
+
     /// Logs directory: ~/.boo/logs/
     static let logsDir: String = {
         let path = (configDir as NSString).appendingPathComponent("logs")

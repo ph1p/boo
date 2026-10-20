@@ -82,7 +82,16 @@ import Cocoa
     /// surface is created.
     static var pendingLaunch: [UUID: LaunchSpec] = [:]
 
-    init(workingDirectory: String, paneID: UUID? = nil, tabID: UUID? = nil) {
+    /// Active session recording; its retained pointer is the output tap's userdata.
+    nonisolated(unsafe) private var recorderToken: UnsafeMutableRawPointer?
+    private(set) var recorder: SessionRecorder?
+    private var recordedGrid: (columns: Int, rows: Int)?
+
+    /// Drops keyboard and paste input (the cast player's display-only terminal).
+    var isInputLocked = false
+
+    /// `launch` overrides `pendingLaunch` (for surfaces that aren't tabs).
+    init(workingDirectory: String, paneID: UUID? = nil, tabID: UUID? = nil, launch: LaunchSpec? = nil) {
         self.tabID = tabID
         super.init(frame: .zero)
         wantsLayer = true
@@ -91,14 +100,16 @@ import Cocoa
         // placeholder flashes visibly on light themes.
         layer?.backgroundColor = AppSettings.shared.theme.background.nsColor.cgColor
         registerForDraggedTypes([.fileURL, .URL, .string])
-        createSurface(workingDirectory: workingDirectory, paneID: paneID, tabID: tabID)
+        createSurface(workingDirectory: workingDirectory, paneID: paneID, tabID: tabID, launch: launch)
     }
 
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
     }
 
-    private func createSurface(workingDirectory: String, paneID: UUID? = nil, tabID: UUID? = nil) {
+    private func createSurface(
+        workingDirectory: String, paneID: UUID? = nil, tabID: UUID? = nil, launch explicitLaunch: LaunchSpec? = nil
+    ) {
         guard let app = GhosttyRuntime.shared.app else { return }
 
         // Snapshot child PIDs before surface creation (which forks a shell)
@@ -120,7 +131,7 @@ import Cocoa
         func addEnv(_ key: String, _ value: String) {
             envPairs.append((key: Array(key.utf8CString), value: Array(value.utf8CString)))
         }
-        let launch = tabID.flatMap { Self.pendingLaunch.removeValue(forKey: $0) }
+        let launch = explicitLaunch ?? tabID.flatMap { Self.pendingLaunch.removeValue(forKey: $0) }
         // Boo's own variables always win over a launch spec's.
         for (key, value) in (launch?.env ?? [:]).sorted(by: { $0.key < $1.key }) where !key.hasPrefix("BOO_") {
             addEnv(key, value)
@@ -140,12 +151,14 @@ import Cocoa
 
         // Typed as Ghostty's `initial_input`: no race with shell startup.
         let initialInput = launch?.command.map { $0 + "\n" }
-        withExtendedLifetime(envPairs) {
+        let program = launch?.program.map { Array($0.utf8CString) }
+        withExtendedLifetime((envPairs, program)) {
             (launch?.cwd ?? workingDirectory).withCString { cwd in
                 envVars.withUnsafeMutableBufferPointer { buf in
                     config.working_directory = cwd
                     config.env_vars = buf.baseAddress
                     config.env_var_count = buf.count
+                    config.command = program?.withUnsafeBufferPointer { $0.baseAddress }
                     if let initialInput {
                         initialInput.withCString { input in
                             config.initial_input = input
@@ -350,6 +363,72 @@ import Cocoa
         }
         lastSurfaceSize = (w, h)
         ghostty_surface_set_size(surface, w, h)
+        recordResizeIfNeeded()
+    }
+
+    // MARK: - Session recording
+
+    var isRecording: Bool { recorder != nil }
+
+    /// Taps the pty output into an asciicast file at `url`.
+    func startRecording(to url: URL, title: String?) throws {
+        guard let surface, recorder == nil else { return }
+        let grid = ghostty_surface_size(surface)
+        let rec = try SessionRecorder(
+            url: url, columns: Int(grid.columns), rows: Int(grid.rows), title: title)
+        recorder = rec
+        recordedGrid = (Int(grid.columns), Int(grid.rows))
+        let token = Unmanaged.passRetained(rec).toOpaque()
+        recorderToken = token
+        ghostty_surface_set_output_callback(
+            surface,
+            { userdata, bytes, len in
+                guard let userdata, let bytes, len > 0 else { return }
+                Unmanaged<SessionRecorder>.fromOpaque(userdata).takeUnretainedValue()
+                    .append(bytes, count: Int(len))
+            }, token)
+    }
+
+    /// Removes the tap and closes the file; returns its URL.
+    @discardableResult
+    func stopRecording(completion: (@Sendable () -> Void)? = nil) -> URL? {
+        guard let rec = recorder else { return nil }
+        Self.clearOutputTap(surface: surface, token: recorderToken)
+        recorderToken = nil
+        recorder = nil
+        recordedGrid = nil
+        rec.finish(completion: completion)
+        return rec.url
+    }
+
+    /// Removes the tap and balances the token's retain. The setter takes the
+    /// terminal lock, so no callback is running once it returns.
+    @discardableResult
+    nonisolated private static func clearOutputTap(
+        surface: ghostty_surface_t?, token: UnsafeMutableRawPointer?
+    ) -> SessionRecorder? {
+        guard let token else { return nil }
+        if let surface { ghostty_surface_set_output_callback(surface, nil, nil) }
+        return Unmanaged<SessionRecorder>.fromOpaque(token).takeRetainedValue()
+    }
+
+    private func recordResizeIfNeeded() {
+        guard let rec = recorder, let surface else { return }
+        let grid = ghostty_surface_size(surface)
+        let next = (columns: Int(grid.columns), rows: Int(grid.rows))
+        guard next.columns > 0, next.rows > 0,
+            recordedGrid.map({ $0.columns != next.columns || $0.rows != next.rows }) ?? true
+        else { return }
+        recordedGrid = next
+        rec.resized(columns: next.columns, rows: next.rows)
+    }
+
+    /// Replays recorded bytes as if the pty had written them.
+    func feedOutput(_ bytes: [UInt8]) {
+        guard let surface, !bytes.isEmpty else { return }
+        bytes.withUnsafeBufferPointer { buf in
+            ghostty_surface_feed_output(surface, buf.baseAddress, UInt(buf.count))
+        }
     }
 
     /// Live resize (window edge / split divider drag) can drop the final frame:
@@ -408,7 +487,7 @@ import Cocoa
     // MARK: - Keyboard (via NSTextInputClient)
 
     override func keyDown(with event: NSEvent) {
-        guard let surface = surface else { return }
+        guard let surface = surface, !isInputLocked else { return }
         if KeyTables.shared.intercept(event, in: self) { return }
 
         let action: ghostty_input_action_e = event.isARepeat ? GHOSTTY_ACTION_REPEAT : GHOSTTY_ACTION_PRESS
@@ -560,6 +639,7 @@ import Cocoa
     // MARK: - NSTextInputClient
 
     func insertText(_ string: Any, replacementRange: NSRange) {
+        guard !isInputLocked else { return }
         let text: String
         if let str = string as? String {
             text = str
@@ -789,7 +869,7 @@ import Cocoa
     }
 
     private func sendText(_ text: String) {
-        guard let surface = surface else { return }
+        guard let surface = surface, !isInputLocked else { return }
         text.withCString { ghostty_surface_text(surface, $0, UInt(strlen($0))) }
     }
 
@@ -1158,6 +1238,7 @@ import Cocoa
             claimedDirectChild = 0
         }
         guard let surface = surface else { return }
+        stopRecording()
         self.surface = nil  // nil first to prevent callbacks reaching a freed surface
         GhosttyRuntime.shared.unregisterSurface(surface)
         ghostty_surface_free(surface)
@@ -1201,6 +1282,8 @@ import Cocoa
     deinit {
         let s = surface
         let dc = claimedDirectChild
+        Self.clearOutputTap(surface: s, token: recorderToken)?.finish()
+        recorderToken = nil
         surface = nil
         claimedDirectChild = 0
         Task { @MainActor in

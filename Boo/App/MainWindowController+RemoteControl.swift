@@ -224,6 +224,11 @@ extension MainWindowController: NSMenuItemValidation {
         case #selector(jumpToPreviousPromptAction(_:)), #selector(jumpToNextPromptAction(_:)),
             #selector(copyLastOutputAction(_:)):
             return focusedGhosttyView != nil
+        // Stable title (palette IDs are menu paths); the checkmark shows state.
+        case #selector(toggleRecordingAction(_:)):
+            let gv = activeGhosttyView
+            menuItem.state = gv?.isRecording == true ? .on : .off
+            return gv != nil && gv?.isInputLocked == false
         case #selector(broadcastToAllPanesAction(_:)), #selector(broadcastToSelectedPanesAction(_:)):
             let selecting = menuItem.action == #selector(broadcastToSelectedPanesAction(_:))
             menuItem.state = broadcast.map { $0.isSelecting == selecting } == true ? .on : .off

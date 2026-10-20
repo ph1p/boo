@@ -261,6 +261,8 @@ extension PaneView {
             ProgressBarStyle.draw(ctx, progress: progress, in: bar, theme: theme)
         }
 
+        if tab.state.isRecording { Self.drawRecordingDot(ctx, in: pill) }
+
         if tab.state.hasActivity && !isActive {
             let dotSize: CGFloat = 5
             ctx.setFillColor(theme.accentEmphasis.cgColor)

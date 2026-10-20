@@ -117,6 +117,11 @@ extension MainWindowController {
         copyOutput.keyEquivalentModifierMask = [.command, .option]
         termMenu.addItem(copyOutput)
         termMenu.addItem(.separator())
+        termMenu.addItem(
+            withTitle: "Record Session", action: #selector(toggleRecordingAction(_:)), keyEquivalent: "")
+        termMenu.addItem(
+            withTitle: "Open Recording…", action: #selector(openRecordingAction(_:)), keyEquivalent: "")
+        termMenu.addItem(.separator())
         termMenu.addItem(withTitle: "Split Right", action: #selector(splitVerticalAction(_:)), keyEquivalent: "d")
         let splitH = NSMenuItem(title: "Split Down", action: #selector(splitHorizontalAction(_:)), keyEquivalent: "D")
         splitH.keyEquivalentModifierMask = [.command, .shift]

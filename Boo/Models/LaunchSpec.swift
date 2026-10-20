@@ -10,6 +10,8 @@ struct LaunchSpec: Equatable {
     var cwd: String?
     /// Added to the shell's environment; `BOO_*` keys are ignored.
     var env: [String: String] = [:]
+    /// Runs instead of the login shell (via `/bin/sh -c`).
+    var program: String?
 }
 
 extension LaunchSpec {

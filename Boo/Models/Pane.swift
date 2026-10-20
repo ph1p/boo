@@ -26,6 +26,8 @@ struct TabState {
     var isCommandRunning: Bool = false
     /// OSC 9;4 progress; not persisted.
     var progress: TerminalProgress?
+    /// A session recording is running; not persisted.
+    var isRecording: Bool = false
 
     // Plugin UI State
     var expandedPluginIDs: Set<String> = []
@@ -339,6 +341,13 @@ final class Pane {
         return true
     }
 
+    @discardableResult
+    func setRecording(_ recording: Bool, at index: Int) -> Bool {
+        guard index >= 0, index < tabs.count, tabs[index].state.isRecording != recording else { return false }
+        tabs[index].state.isRecording = recording
+        return true
+    }
+
     /// False when nothing changed, so callers can skip the redraw.
     @discardableResult
     func setProgress(_ progress: TerminalProgress?, at index: Int) -> Bool {
@@ -442,6 +451,10 @@ final class Pane {
             if !markdownState.filePath.isEmpty {
                 tabs[index].state.workingDirectory = (markdownState.filePath as NSString).deletingLastPathComponent
             }
+        case .castPlayer(let castState):
+            if !castState.filePath.isEmpty {
+                tabs[index].state.workingDirectory = (castState.filePath as NSString).deletingLastPathComponent
+            }
         case .pluginView:
             break
         }
@@ -531,6 +544,8 @@ final class Pane {
             return .markdownPreview(MarkdownPreviewContentState(title: title, filePath: ""))
         case .pluginView:
             return .pluginView(PluginViewContentState(title: title))
+        case .castPlayer:
+            return .castPlayer(CastPlayerContentState(title: title, filePath: ""))
         }
     }
 }

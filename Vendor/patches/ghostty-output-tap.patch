@@ -1,0 +1,72 @@
+diff --git a/include/ghostty.h b/include/ghostty.h
+--- a/include/ghostty.h
++++ b/include/ghostty.h
+@@ -1209,6 +1209,13 @@
+ GHOSTTY_API void ghostty_surface_set_content_scale(ghostty_surface_t, double, double);
+ GHOSTTY_API void ghostty_surface_set_focus(ghostty_surface_t, bool);
+ GHOSTTY_API void ghostty_surface_set_occlusion(ghostty_surface_t, bool);
++typedef void (*ghostty_surface_output_cb)(void*, const uint8_t*, uintptr_t);
++GHOSTTY_API void ghostty_surface_set_output_callback(ghostty_surface_t,
++                                                     ghostty_surface_output_cb,
++                                                     void*);
++GHOSTTY_API void ghostty_surface_feed_output(ghostty_surface_t,
++                                             const uint8_t*,
++                                             uintptr_t);
+ GHOSTTY_API void ghostty_surface_set_size(ghostty_surface_t, uint32_t, uint32_t);
+ GHOSTTY_API ghostty_surface_size_s ghostty_surface_size(ghostty_surface_t);
+ GHOSTTY_API uint64_t ghostty_surface_foreground_pid(ghostty_surface_t);
+diff --git a/src/apprt/embedded.zig b/src/apprt/embedded.zig
+--- a/src/apprt/embedded.zig
++++ b/src/apprt/embedded.zig
+@@ -2094,6 +2094,27 @@
+         surface.occlusionCallback(visible);
+     }
+ 
++    /// Tap the raw pty output of a surface (before parsing), or clear the
++    /// tap with a null callback. The callback runs on the termio read
++    /// thread with the terminal lock held: copy the bytes and return.
++    export fn ghostty_surface_set_output_callback(
++        surface: *Surface,
++        cb: ?*const fn (?*anyopaque, [*]const u8, usize) callconv(.c) void,
++        userdata: ?*anyopaque,
++    ) void {
++        const core_surface = &surface.core_surface;
++        core_surface.renderer_state.mutex.lockUncancelable(global.io());
++        defer core_surface.renderer_state.mutex.unlock(global.io());
++        core_surface.io.output_cb = cb;
++        core_surface.io.output_userdata = userdata;
++    }
++
++    /// Feed bytes to the terminal as if the pty had written them. Used to
++    /// replay recordings; the surface's own process should stay quiet.
++    export fn ghostty_surface_feed_output(surface: *Surface, ptr: [*]const u8, len: usize) void {
++        surface.core_surface.io.processOutput(ptr[0..len]);
++    }
++
+     /// Filter the mods if necessary. This handles settings such as
+     /// `macos-option-as-alt`. The filtered mods should be used for
+     /// key translation but should NOT be sent back via the `_key`
+diff --git a/src/termio/Termio.zig b/src/termio/Termio.zig
+--- a/src/termio/Termio.zig
++++ b/src/termio/Termio.zig
+@@ -58,6 +58,11 @@
+ /// The cached size info
+ size: renderer.Size,
+ 
++/// Optional tap on raw pty output, set through the embedding API. Read and
++/// written under renderer_state.mutex.
++output_cb: ?*const fn (?*anyopaque, [*]const u8, usize) callconv(.c) void = null,
++output_userdata: ?*anyopaque = null,
++
+ /// The mailbox implementation to use.
+ mailbox: termio.Mailbox,
+ 
+@@ -704,6 +709,8 @@
+ 
+ /// Process output from readdata but the lock is already held.
+ fn processOutputLocked(self: *Termio, buf: []const u8) void {
++    if (self.output_cb) |cb| cb(self.output_userdata, buf.ptr, buf.len);
++
+     // Schedule a render. We can call this first because we have the lock.
+     self.terminal_stream.handler.queueRender() catch unreachable;
+ 

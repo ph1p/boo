@@ -732,6 +732,13 @@ class PaneView: NSView {
     }
 
     /// Stores a tab's progress, redraws, and re-arms its stale timer.
+    func setRecording(_ recording: Bool, forTab tabID: UUID) {
+        guard let index = pane.tabs.firstIndex(where: { $0.id == tabID }),
+            pane.setRecording(recording, at: index)
+        else { return }
+        needsDisplay = true
+    }
+
     func setProgress(_ progress: TerminalProgress?, forTab tabID: UUID) {
         guard let index = pane.tabs.firstIndex(where: { $0.id == tabID }) else { return }
         progressExpiry.removeValue(forKey: tabID)?.cancel()
@@ -1041,6 +1048,8 @@ class PaneView: NSView {
             _ = pane.addTab(contentType: .imageViewer, workingDirectory: workingDirectory)
         case .markdownPreview:
             _ = pane.addTab(contentType: .markdownPreview, workingDirectory: workingDirectory)
+        case .castPlayer:
+            _ = pane.addTab(contentType: .castPlayer, workingDirectory: workingDirectory)
         case .pluginView:
             _ = pane.addTab(contentType: .pluginView, workingDirectory: workingDirectory, title: "Panel")
         }

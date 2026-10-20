@@ -309,6 +309,8 @@ extension PaneView {
             ProgressBarStyle.draw(ctx, progress: progress, in: bar, theme: theme)
         }
 
+        if tab.state.isRecording { Self.drawRecordingDot(ctx, in: pillRect) }
+
         // Activity dot — shown on inactive tabs when a command finished in background
         if tab.state.hasActivity && !isActive {
             let dotSize: CGFloat = 5
@@ -350,6 +352,13 @@ extension PaneView {
 
     /// Draws the tab's content-type or process icon at `x`; returns how far
     /// the title moves right (0 without an icon).
+    /// Red dot on the pill's top-left corner while the tab records.
+    static func drawRecordingDot(_ ctx: CGContext, in pill: CGRect) {
+        let size: CGFloat = 6
+        ctx.setFillColor(NSColor.systemRed.cgColor)
+        ctx.fillEllipse(in: CGRect(x: pill.minX + 3, y: pill.minY + 3, width: size, height: size))
+    }
+
     func drawLeadingIcon(tab: Pane.Tab, theme: TerminalTheme, x: CGFloat, midY: CGFloat, isActive: Bool) -> CGFloat {
         // Content type icon for non-terminal tabs
         if tab.contentType != .terminal {

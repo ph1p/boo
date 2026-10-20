@@ -33,6 +33,37 @@ extension MainWindowController {
 
     @objc func copyLastOutputAction(_ sender: Any?) { focusedGhosttyView?.copyLastCommandOutput() }
 
+    /// Starts or stops an asciicast recording of the active terminal; on stop,
+    /// reveals the file in Finder.
+    @objc func toggleRecordingAction(_ sender: Any?) {
+        guard let workspace = activeWorkspace, let gv = activeGhosttyView, !gv.isInputLocked else { return }
+        let pv = paneViews[workspace.activePaneID]
+        if gv.isRecording {
+            guard let url = gv.recorder?.url else { return }
+            gv.stopRecording {
+                DispatchQueue.main.async { NSWorkspace.shared.activateFileViewerSelecting([url]) }
+            }
+        } else {
+            let title = workspace.pane(for: workspace.activePaneID)?.activeTab?.title ?? "terminal"
+            do {
+                try gv.startRecording(to: SessionRecorder.defaultURL(title: title), title: title)
+            } catch {
+                BooAlert.showError(title: "Couldn't start recording", message: error.localizedDescription)
+                return
+            }
+        }
+        if let tabID = gv.tabID { pv?.setRecording(gv.isRecording, forTab: tabID) }
+    }
+
+    @objc func openRecordingAction(_ sender: Any?) {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.init(filenameExtension: "cast") ?? .data]
+        panel.directoryURL = SessionRecorder.recordingsDirectory
+        panel.canChooseDirectories = false
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        handleOpenTab(.file(path: url.path))
+    }
+
     @objc func clearScreenAction(_ sender: Any?) {
         // Simulate Ctrl+L key press — the standard terminal clear screen
         activeGhosttyView?.sendKey(keyCode: 0x25, mods: GHOSTTY_MODS_CTRL, text: "l")
@@ -206,6 +237,9 @@ extension MainWindowController {
                     )
                 )
                 contentView.restoreState(state)
+            case .castPlayer:
+                contentView.restoreState(
+                    .castPlayer(CastPlayerContentState(title: (path as NSString).lastPathComponent, filePath: path)))
             default:
                 break
             }

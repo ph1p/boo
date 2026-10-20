@@ -439,6 +439,8 @@ enum SessionStore {
             return s.filePath.isEmpty || FileManager.default.fileExists(atPath: s.filePath)
         case .markdownPreview(let s):
             return s.filePath.isEmpty || FileManager.default.fileExists(atPath: s.filePath)
+        case .castPlayer(let s):
+            return !s.filePath.isEmpty && FileManager.default.fileExists(atPath: s.filePath)
         default:
             return true
         }
@@ -467,6 +469,10 @@ enum SessionStore {
         case .markdownPreview(let markdownState):
             if !markdownState.filePath.isEmpty {
                 return (markdownState.filePath as NSString).deletingLastPathComponent
+            }
+        case .castPlayer(let castState):
+            if !castState.filePath.isEmpty {
+                return (castState.filePath as NSString).deletingLastPathComponent
             }
         case .pluginView:
             break

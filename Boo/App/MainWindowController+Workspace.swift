@@ -406,7 +406,7 @@ extension MainWindowController {
                     )
                 )
             )
-        case .pluginView:
+        case .pluginView, .castPlayer:
             _ = pane.addTab(workingDirectory: workspace.folderPath)
         }
     }

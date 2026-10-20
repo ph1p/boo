@@ -84,6 +84,8 @@ enum ContentViewFactory {
             return ImageViewerContentView(filePath: imageState.filePath)
         case .markdownPreview(let markdownState):
             return MarkdownPreviewContentView(filePath: markdownState.filePath)
+        case .castPlayer(let castState):
+            return CastPlayerContentView(filePath: castState.filePath.isEmpty ? nil : castState.filePath)
         case .pluginView(let pluginState):
             // Plugin views are ephemeral; restore shows a placeholder.
             return PluginTabContentView(
@@ -107,6 +109,8 @@ enum ContentViewFactory {
             return ImageViewerContentView(filePath: nil)
         case .markdownPreview:
             return MarkdownPreviewContentView(filePath: nil)
+        case .castPlayer:
+            return CastPlayerContentView(filePath: nil)
         case .pluginView:
             return PluginTabContentView(view: AnyView(PluginViewPlaceholder()), title: "Panel")
         }

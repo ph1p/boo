@@ -5,13 +5,14 @@ import XCTest
 final class ContentTypeTests: XCTestCase {
     func testAllCases() {
         let allCases = ContentType.allCases
-        XCTAssertEqual(allCases.count, 6)
+        XCTAssertEqual(allCases.count, 7)
         XCTAssertTrue(allCases.contains(.terminal))
         XCTAssertTrue(allCases.contains(.browser))
         XCTAssertTrue(allCases.contains(.editor))
         XCTAssertTrue(allCases.contains(.imageViewer))
         XCTAssertTrue(allCases.contains(.markdownPreview))
         XCTAssertTrue(allCases.contains(.pluginView))
+        XCTAssertTrue(allCases.contains(.castPlayer))
     }
 
     func testSymbolNames() {

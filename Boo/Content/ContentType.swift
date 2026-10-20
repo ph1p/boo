@@ -8,6 +8,7 @@ enum ContentType: String, Codable, CaseIterable {
     case imageViewer
     case markdownPreview
     case pluginView
+    case castPlayer
 
     /// SF Symbol name for this content type.
     var symbolName: String {
@@ -18,6 +19,7 @@ enum ContentType: String, Codable, CaseIterable {
         case .imageViewer: return "photo"
         case .markdownPreview: return "doc.richtext"
         case .pluginView: return "puzzlepiece"
+        case .castPlayer: return "play.rectangle"
         }
     }
 
@@ -36,6 +38,7 @@ enum ContentType: String, Codable, CaseIterable {
         case .imageViewer: return "Image"
         case .markdownPreview: return "Markdown"
         case .pluginView: return "Panel"
+        case .castPlayer: return "Recording"
         }
     }
 
@@ -65,6 +68,7 @@ enum ContentType: String, Codable, CaseIterable {
         case .imageViewer: return "Image"
         case .markdownPreview: return "Markdown"
         case .pluginView: return "Panel"
+        case .castPlayer: return "Recording"
         }
     }
 
@@ -103,6 +107,9 @@ enum ContentType: String, Codable, CaseIterable {
     /// PDF file extensions — can open in browser tab (WKWebView renders natively).
     static let pdfExtensions: Set<String> = ["pdf"]
 
+    /// asciicast recordings — open in the cast player.
+    static let castExtensions: Set<String> = ["cast"]
+
     /// Resolve content type for a file path based on extension.
     /// Returns nil for files that should fall back to external/editor handling.
     static func forFile(_ path: String) -> ContentType? {
@@ -115,6 +122,9 @@ enum ContentType: String, Codable, CaseIterable {
         }
         if pdfExtensions.contains(ext) {
             return .browser
+        }
+        if castExtensions.contains(ext) {
+            return .castPlayer
         }
         return nil
     }

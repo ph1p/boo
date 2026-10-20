@@ -17,6 +17,7 @@ enum ContentState: Codable, Sendable {
     case markdownPreview(MarkdownPreviewContentState)
     /// Plugin-owned view tab. State is ephemeral — not persisted across sessions.
     case pluginView(PluginViewContentState)
+    case castPlayer(CastPlayerContentState)
 
     var contentType: ContentType {
         switch self {
@@ -26,6 +27,7 @@ enum ContentState: Codable, Sendable {
         case .imageViewer: return .imageViewer
         case .markdownPreview: return .markdownPreview
         case .pluginView: return .pluginView
+        case .castPlayer: return .castPlayer
         }
     }
 
@@ -38,6 +40,7 @@ enum ContentState: Codable, Sendable {
             case .imageViewer(let s): return s.title
             case .markdownPreview(let s): return s.title
             case .pluginView(let s): return s.title
+            case .castPlayer(let s): return s.title
             }
         }
         set {
@@ -60,6 +63,9 @@ enum ContentState: Codable, Sendable {
             case .pluginView(var s):
                 s.title = newValue
                 self = .pluginView(s)
+            case .castPlayer(var s):
+                s.title = newValue
+                self = .castPlayer(s)
             }
         }
     }
@@ -179,6 +185,23 @@ struct ImageViewerContentState: ContentStateProtocol, Codable, Sendable {
         self.title = title
         self.filePath = filePath
         self.zoom = zoom
+    }
+}
+
+// MARK: - Cast Player State
+
+struct CastPlayerContentState: ContentStateProtocol, Codable, Sendable {
+    var contentType: ContentType { .castPlayer }
+    var title: String = ""
+    var filePath: String
+
+    enum CodingKeys: String, CodingKey {
+        case title, filePath
+    }
+
+    init(title: String, filePath: String) {
+        self.title = title
+        self.filePath = filePath
     }
 }
 

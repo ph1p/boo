@@ -92,6 +92,18 @@ Boo's shell integration marks each prompt (OSC 133), so the terminal knows where
 - **Right-click a command** — Copy Command, Copy Output, Re-run, or send its output to an agent
 - **Copy Last Output** — **Cmd+Opt+C** copies the output of the last command
 
+## Session Recording
+
+**Terminal → Record Session** records the active terminal's output as an [asciicast v2](https://docs.asciinema.org/manual/asciicast/v2/) file. The tab shows a red dot while recording. Choose the item again to stop; Finder then shows the file in `~/.boo/recordings/`. Only output and resizes are recorded, never keystrokes. Closing the tab also stops the recording.
+
+**Terminal → Open Recording…**, or opening any `.cast` file, plays it in a player tab:
+
+- **Play / Pause** — the button or **Space**; **Left** / **Right** jump 5 seconds
+- **Seek** — drag the position slider
+- **Speed** — 0.5×, 1×, 2× or 4×
+- Pauses longer than 2 seconds are shortened to 2 seconds (or to the file's `idle_time_limit`)
+- The terminal keeps the recorded size; if the tab is smaller, the edges are cut off
+
 ## File Explorer
 
 Toggle the sidebar with **Cmd+B**. The explorer shows a live-updating file tree for the current workspace.
