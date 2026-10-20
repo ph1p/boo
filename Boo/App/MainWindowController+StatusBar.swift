@@ -43,6 +43,7 @@ extension MainWindowController {
     }
 
     @objc private func _doRefreshStatusBar() {
+        refreshBroadcast()
         guard let ws = activeWorkspace else {
             statusBar.update(directory: "", paneCount: 0, tabCount: 0, runningProcess: "")
             return

@@ -101,8 +101,10 @@ import Cocoa
     // MARK: - Plugin Registration
 
     let systemInfoSegment = SystemInfoSegment()
+    let broadcastSegment = BroadcastSegment()
 
     private func registerDefaultPlugins() {
+        registerPlugin(broadcastSegment)
         registerPlugin(EnvironmentSegment())
         registerPlugin(GitBranchSegment())
         registerPlugin(PathSegment())

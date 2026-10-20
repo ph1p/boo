@@ -50,6 +50,10 @@ Split your terminal in any direction:
 
 Each split pane is independent with its own tab bar and terminal sessions. Drag the divider between panes to resize, or drag a tab onto a pane edge to split; ratios are saved and restored across launches.
 
+### Broadcast Input
+
+**Terminal → Broadcast Input to → All Panes in Workspace** sends what you type in one pane to every other terminal pane of the workspace, for running the same command on several hosts. **Selected Panes…** starts with the active pane; ⌘-click other panes to add or remove them. Broadcasting panes have an orange border and the status bar reads "Broadcasting to N panes" (click it to stop). Keys and pastes are mirrored; Boo shortcuts are not. Panes running an agent never receive broadcast input, even if one starts later. Broadcast stops when you switch workspaces or only one pane is left in the group.
+
 ## Multiple Windows
 
 **Cmd+N** opens a new window. Drag a tab out of the window to tear it off, move a workspace with **Window → Move Workspace to New Window** (or the workspace context menu), or bring everything back with **Window → Merge All Windows**. All windows are restored on next launch.

@@ -175,6 +175,8 @@ class ThemedSplitView: NSSplitView {
 
     /// PaneViews keyed by workspace ID → pane ID → PaneView
     var workspacePaneViews: [UUID: [UUID: PaneView]] = [:]
+    /// Panes of the active workspace that mirror each other's typing.
+    var broadcast: BroadcastGroup?
     /// Workspace whose split tree is currently rendered in the split container.
     var renderedWorkspaceID: UUID?
     /// Other window highlighted as the drop target while a workspace is dragged out of this one.

@@ -224,6 +224,13 @@ extension MainWindowController: NSMenuItemValidation {
         case #selector(jumpToPreviousPromptAction(_:)), #selector(jumpToNextPromptAction(_:)),
             #selector(copyLastOutputAction(_:)):
             return focusedGhosttyView != nil
+        case #selector(broadcastToAllPanesAction(_:)), #selector(broadcastToSelectedPanesAction(_:)):
+            let selecting = menuItem.action == #selector(broadcastToSelectedPanesAction(_:))
+            menuItem.state = broadcast.map { $0.isSelecting == selecting } == true ? .on : .off
+            guard let workspace = activeWorkspace else { return false }
+            return workspace.splitTree.leafIDs.filter { isBroadcastEligible($0, in: workspace) }.count > 1
+        case #selector(stopBroadcastAction(_:)):
+            return broadcast != nil
         case #selector(jumpToNextWaitingAgentAction(_:)):
             return AgentInbox.shared.attentionCount > 0
         default:

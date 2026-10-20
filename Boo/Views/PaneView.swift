@@ -232,6 +232,25 @@ class PaneView: NSView {
         return v
     }()
 
+    /// Orange frame on every pane that receives broadcast input; shown even
+    /// on the focused pane, since typing into the wrong host is the accident.
+    let broadcastBorder: ActivityBorderOverlay = {
+        let v = ActivityBorderOverlay()
+        v.wantsLayer = true
+        v.autoresizingMask = [.width, .height]
+        v.isHidden = true
+        v.layer?.borderWidth = PaneView.activityBorderWidth
+        v.layer?.borderColor = BroadcastSegment.color.cgColor
+        v.layer?.cornerRadius = IslandMetrics.innerRadius
+        v.layer?.cornerCurve = .continuous
+        return v
+    }()
+
+    var isBroadcasting: Bool {
+        get { !broadcastBorder.isHidden }
+        set { broadcastBorder.isHidden = !newValue }
+    }
+
     var isFocused: Bool = false {
         didSet {
             guard isFocused != oldValue else { return }
@@ -341,6 +360,7 @@ class PaneView: NSView {
             self, radius: IslandMetrics.innerRadius,
             borderColor: AppSettings.shared.theme.paneBorder)
         addSubview(focusCatcher)
+        addSubview(broadcastBorder)
         addSubview(activityBorder)
         focusCatcher.onClicked = { [weak self] in
             guard let self else { return }
@@ -778,13 +798,14 @@ class PaneView: NSView {
         // The zoom badge sits above both, in the content's top-right corner.
         if focusCatcher.frame != bounds { focusCatcher.frame = bounds }
         if activityBorder.frame != bounds { activityBorder.frame = bounds }
+        if broadcastBorder.frame != bounds { broadcastBorder.frame = bounds }
         if let badge = zoomBadge {
             let size = badge.fittingSize
             let badgeFrame = NSRect(
                 x: bounds.width - size.width - 8, y: barH + findH + 8, width: size.width, height: size.height)
             if badge.frame != badgeFrame { badge.frame = badgeFrame }
         }
-        let overlays: [NSView] = [focusCatcher, activityBorder] + (zoomBadge.map { [$0] } ?? [])
+        let overlays: [NSView] = [focusCatcher, broadcastBorder, activityBorder] + (zoomBadge.map { [$0] } ?? [])
         if !zip(subviews.suffix(overlays.count), overlays).allSatisfy({ $0 === $1 }) {
             for overlay in overlays { addSubview(overlay, positioned: .above, relativeTo: nil) }
         }

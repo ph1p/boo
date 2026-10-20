@@ -163,6 +163,16 @@ extension MainWindowController {
         handoff.keyEquivalentModifierMask = [.command, .option]
         handoff.toolTip = "Paste the selection, or the last command's output, into the nearest coding agent's prompt"
         termMenu.addItem(handoff)
+        let broadcastItem = NSMenuItem(title: "Broadcast Input to", action: nil, keyEquivalent: "")
+        let broadcastMenu = NSMenu(title: "Broadcast Input to")
+        broadcastMenu.addItem(
+            withTitle: "All Panes in Workspace", action: #selector(broadcastToAllPanesAction(_:)), keyEquivalent: "")
+        broadcastMenu.addItem(
+            withTitle: "Selected Panes…", action: #selector(broadcastToSelectedPanesAction(_:)), keyEquivalent: "")
+        broadcastMenu.addItem(.separator())
+        broadcastMenu.addItem(withTitle: "Stop Broadcasting", action: #selector(stopBroadcastAction(_:)), keyEquivalent: "")
+        broadcastItem.submenu = broadcastMenu
+        termMenu.addItem(broadcastItem)
         let equalize = NSMenuItem(
             title: "Equalize Splits", action: #selector(equalizeSplitsAction(_:)), keyEquivalent: "=")
         equalize.keyEquivalentModifierMask = [.command, .control]

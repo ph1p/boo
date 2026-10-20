@@ -424,6 +424,7 @@ import Cocoa
         }
 
         // Let the input system process it (handles IME, dead keys, etc.)
+        let wasComposing = hasMarkedText()
         pendingText = nil
         interpretKeyEvents([event])
 
@@ -448,6 +449,20 @@ import Cocoa
         } else {
             _ = ghostty_surface_key(surface, key)
         }
+
+        // Mirror to broadcast peers: an IME commit as text, a plain key as
+        // the same key event; keys still composing stay local.
+        if let controller = window?.windowController as? MainWindowController, controller.broadcast != nil {
+            if wasComposing, let committed = pendingText {
+                controller.broadcastInput(.text(committed), from: self)
+            } else if !wasComposing, !hasMarkedText() {
+                controller.broadcastInput(
+                    .key(
+                        action: action.rawValue, keyCode: key.keycode, mods: key.mods.rawValue,
+                        consumedMods: key.consumed_mods.rawValue, unshiftedCodepoint: key.unshifted_codepoint,
+                        text: textToSend), from: self)
+            }
+        }
         pendingText = nil
     }
 
@@ -459,6 +474,15 @@ import Cocoa
             mods: translateMods(event.modifierFlags),
             consumedMods: params.consumedMods, unshiftedCodepoint: params.unshiftedCodepoint)
         _ = ghostty_surface_key(surface, key)
+        if !hasMarkedText(), let controller = window?.windowController as? MainWindowController,
+            controller.broadcast != nil
+        {
+            controller.broadcastInput(
+                .key(
+                    action: key.action.rawValue, keyCode: key.keycode, mods: key.mods.rawValue,
+                    consumedMods: key.consumed_mods.rawValue, unshiftedCodepoint: key.unshifted_codepoint,
+                    text: nil), from: self)
+        }
     }
 
     override func flagsChanged(with event: NSEvent) {
@@ -596,6 +620,12 @@ import Cocoa
     // MARK: - Mouse
 
     override func mouseDown(with event: NSEvent) {
+        // ⌘-click while picking broadcast panes adds or removes this pane.
+        if event.modifierFlags.contains(.command),
+            (window?.windowController as? MainWindowController)?.toggleBroadcastMember(clickedIn: self) == true
+        {
+            return
+        }
         window?.makeFirstResponder(self)
         guard let surface = surface else { return }
         updateMousePos(event)
@@ -992,6 +1022,7 @@ import Cocoa
     @objc func paste(_ sender: Any?) {
         guard let str = NSPasteboard.general.string(forType: .string) else { return }
         sendText(str)
+        (window?.windowController as? MainWindowController)?.broadcastInput(.text(str), from: self)
     }
 
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
@@ -1164,6 +1195,32 @@ import Cocoa
             if let s {
                 GhosttyRuntime.shared.unregisterSurface(s)
                 ghostty_surface_free(s)
+            }
+        }
+    }
+}
+
+// MARK: - Broadcast Input
+
+extension GhosttyView: BroadcastReceiver {
+    /// Replays input typed into a peer pane as if typed here.
+    func receiveBroadcast(_ input: BroadcastInput) {
+        switch input {
+        case .text(let text):
+            sendText(text)
+        case .key(let action, let keyCode, let mods, let consumedMods, let unshiftedCodepoint, let text):
+            guard let surface else { return }
+            var key = makeKeyEvent(
+                action: ghostty_input_action_e(rawValue: action), keyCode: keyCode,
+                mods: ghostty_input_mods_e(rawValue: mods), consumedMods: ghostty_input_mods_e(rawValue: consumedMods),
+                unshiftedCodepoint: unshiftedCodepoint)
+            guard let text else {
+                _ = ghostty_surface_key(surface, key)
+                return
+            }
+            text.withCString { cstr in
+                key.text = cstr
+                _ = ghostty_surface_key(surface, key)
             }
         }
     }
