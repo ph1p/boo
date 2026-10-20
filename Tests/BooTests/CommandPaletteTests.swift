@@ -5,7 +5,9 @@ import XCTest
 
 @MainActor
 final class CommandPaletteTests: XCTestCase {
-    private func item(_ kind: PaletteItem.Kind, _ title: String, enabled: Bool = true, ran: (() -> Void)? = nil)
+    private func item(
+        _ kind: PaletteItem.Kind, _ title: String, enabled: Bool = true, ran: (() -> Void)? = nil
+    )
         -> PaletteItem
     {
         PaletteItem(id: "\(kind):\(title)", kind: kind, title: title, isEnabled: enabled, perform: { ran?() })

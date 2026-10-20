@@ -14,7 +14,7 @@ struct AsciicastWriter {
             "version": 2,
             "width": width,
             "height": height,
-            "timestamp": Int(startDate.timeIntervalSince1970),
+            "timestamp": Int(startDate.timeIntervalSince1970)
         ]
         if let title, !title.isEmpty { obj["title"] = title }
         if !env.isEmpty { obj["env"] = env }

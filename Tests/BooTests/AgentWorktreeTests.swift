@@ -174,7 +174,8 @@ final class AgentWorktreeTests: XCTestCase {
         let conflicts = AgentWorktree.MergeCheck(
             status: .init(isDirty: false, ahead: 2, target: "main"), behind: 1, targetDirty: false,
             conflicts: ["a.txt"])
-        XCTAssertEqual(C.blockerMessage(conflicts, info), "boo/x conflicts with main in a.txt. Ask its agent to rebase onto main.")
+        XCTAssertEqual(
+            C.blockerMessage(conflicts, info), "boo/x conflicts with main in a.txt. Ask its agent to rebase onto main.")
         let ready = AgentWorktree.MergeCheck(
             status: .init(isDirty: false, ahead: 2, target: "main"), behind: 0, targetDirty: false, conflicts: [])
         XCTAssertNil(C.blockerMessage(ready, info))

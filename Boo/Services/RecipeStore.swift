@@ -17,7 +17,9 @@ enum RecipeStore {
 
     static func entry(named name: String, in directory: String = BooPaths.recipesDir) throws -> Entry {
         let all = list(in: directory)
-        guard let entry = all.first(where: { $0.name == name }) ?? all.first(where: { $0.name.lowercased() == name.lowercased() })
+        guard
+            let entry = all.first(where: { $0.name == name })
+                ?? all.first(where: { $0.name.lowercased() == name.lowercased() })
         else { throw RecipeError.notFound(name, available: all.map(\.name)) }
         return entry
     }

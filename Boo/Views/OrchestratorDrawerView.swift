@@ -381,7 +381,8 @@ struct OrchestratorEmptyState: View {
                 Text(Self.installCommand)
                     .font(.system(size: 11, design: .monospaced)).textSelection(.enabled)
                     .padding(6)
-                    .background(RoundedRectangle(cornerRadius: 4).fill(Color(nsColor: theme.textTertiary).opacity(0.12)))
+                    .background(
+                        RoundedRectangle(cornerRadius: 4).fill(Color(nsColor: theme.textTertiary).opacity(0.12)))
                 Button("Check Again") { OrchestratorController.shared.checkClaudeInstalled(force: true) }
                     .controlSize(.regular)
             } else {

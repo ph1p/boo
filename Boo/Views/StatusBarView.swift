@@ -81,7 +81,8 @@ import Cocoa
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.needsDisplay = true }
         }
-        orchestratorObservers = [Notification.Name.approvalsChanged, .orchestratorChanged, .keyTableChanged].map { name in
+        orchestratorObservers = [Notification.Name.approvalsChanged, .orchestratorChanged, .keyTableChanged].map {
+            name in
             NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
                 MainActor.assumeIsolated { self?.needsDisplay = true }
             }

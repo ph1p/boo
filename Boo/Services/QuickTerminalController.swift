@@ -293,7 +293,10 @@ final class QuickTerminalController: NSObject, NSWindowDelegate, NSMenuItemValid
 
     /// Closes every tab and forgets the panel (tests).
     func reset() {
-        for host in hosts { host.onExited = nil; host.stop() }
+        for host in hosts {
+            host.onExited = nil
+            host.stop()
+        }
         hosts = []
         activeIndex = 0
         pendingRestore = nil

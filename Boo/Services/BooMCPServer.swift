@@ -233,7 +233,9 @@ struct BooMCPServer {
         return reply
     }
 
-    private func requiredPane(_ args: [String: Any], notOwn refusal: String? = nil, orTab: Bool = false) throws
+    private func requiredPane(
+        _ args: [String: Any], notOwn refusal: String? = nil, orTab: Bool = false
+    ) throws
         -> String
     {
         guard let pane = args["pane_id"] as? String, !pane.isEmpty else {
@@ -358,7 +360,8 @@ struct BooMCPServer {
                         "prompt": ["type": "string", "description": "First message for the agent"],
                         "repo": ["type": "string", "description": "Repository path (default: your cwd)"],
                         "base": [
-                            "type": "string", "description": "Branch or commit to start from (default: the repo's HEAD)"
+                            "type": "string",
+                            "description": "Branch or commit to start from (default: the repo's HEAD)"
                         ],
                         "agent": [
                             "type": "string", "enum": ["claude", "codex", "opencode"],

@@ -125,7 +125,8 @@ final class QuickTerminalTabStrip: NSView {
             let text = title as NSString
             let size = text.size(withAttributes: attrs)
             text.draw(
-                in: NSRect(x: rect.minX + 8, y: (bounds.height - size.height) / 2, width: rect.width - 16, height: size.height),
+                in: NSRect(
+                    x: rect.minX + 8, y: (bounds.height - size.height) / 2, width: rect.width - 16, height: size.height),
                 withAttributes: attrs)
         }
         let plus = "+" as NSString
@@ -135,7 +136,8 @@ final class QuickTerminalTabStrip: NSView {
         let size = plus.size(withAttributes: attrs)
         plus.draw(
             at: NSPoint(
-                x: width * CGFloat(titles.count) + (Self.plusWidth - size.width) / 2, y: (bounds.height - size.height) / 2),
+                x: width * CGFloat(titles.count) + (Self.plusWidth - size.width) / 2,
+                y: (bounds.height - size.height) / 2),
             withAttributes: attrs)
         theme.separator.setFill()
         NSRect(x: 0, y: bounds.height - 1, width: bounds.width, height: 1).fill()

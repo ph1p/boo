@@ -108,7 +108,9 @@ final class OrchestratorEventsTests: XCTestCase {
         events.inboxChanged(inbox.items, owner: owner)
         let finished = events.ring.filter { $0.type == "task_finished" }
         XCTAssertEqual(finished.map { $0.data["tab_id"] as? String }, [owned.uuidString], "only owned tasks finish")
-        let ownedDone = events.ring.last { $0.type == "state_changed" && $0.data["tab_id"] as? String == owned.uuidString }
+        let ownedDone = events.ring.last {
+            $0.type == "state_changed" && $0.data["tab_id"] as? String == owned.uuidString
+        }
         XCTAssertEqual(ownedDone?.data["owned"] as? Bool, true)
         XCTAssertEqual(ownedDone?.data["previous"] as? String, "working")
 

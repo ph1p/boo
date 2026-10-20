@@ -47,7 +47,8 @@ final class PhonePushTests: XCTestCase {
     func testRejectsNonHTTPURLs() {
         for bad in ["", "ntfy.sh/topic", "file:///etc/passwd", "ftp://x/y", "https://"] {
             XCTAssertNil(
-                PhonePush.request(topicURL: bad, event: .longCommand, workspaceName: "w", agentName: nil, clickURL: nil),
+                PhonePush.request(
+                    topicURL: bad, event: .longCommand, workspaceName: "w", agentName: nil, clickURL: nil),
                 bad)
         }
     }
@@ -56,7 +57,8 @@ final class PhonePushTests: XCTestCase {
         XCTAssertEqual(PhonePush.classify(command: "make", duration: 61, exitCode: 0, threshold: 60), .longCommand)
         XCTAssertEqual(PhonePush.classify(command: "make", duration: 61, exitCode: 2, threshold: 60), .longCommand)
         XCTAssertNil(PhonePush.classify(command: "make", duration: 59, exitCode: 0, threshold: 60))
-        XCTAssertEqual(PhonePush.classify(command: "ssh prod", duration: 600, exitCode: 255, threshold: 60), .sshDropped)
+        XCTAssertEqual(
+            PhonePush.classify(command: "ssh prod", duration: 600, exitCode: 255, threshold: 60), .sshDropped)
         XCTAssertNil(PhonePush.classify(command: "ssh prod", duration: 600, exitCode: 0, threshold: 60))
         XCTAssertNil(PhonePush.classify(command: "ssh prod", duration: 1, exitCode: 255, threshold: 60))
         XCTAssertEqual(
@@ -96,7 +98,8 @@ final class PhonePushTests: XCTestCase {
             XCTAssertNotNil(asset, path)
             XCTAssertNotNil(
                 asset.flatMap {
-                    BooResourceBundle.bundle.url(forResource: $0.name, withExtension: $0.ext, subdirectory: "RemoteControl")
+                    BooResourceBundle.bundle.url(
+                        forResource: $0.name, withExtension: $0.ext, subdirectory: "RemoteControl")
                 }, path)
         }
     }

@@ -217,10 +217,11 @@ final class CastPlayerContentView: NSView, ContentViewProtocol {
         if needsCatchUp {
             needsCatchUp = false
             let end = pb.dueIndex(at: playhead)
-            feed(pb.events[0..<end].compactMap {
-                if case .output(let s) = $0.event { return s }
-                return nil
-            })
+            feed(
+                pb.events[0..<end].compactMap {
+                    if case .output(let s) = $0.event { return s }
+                    return nil
+                })
             cursor = end
             updateControls()
             return

@@ -175,7 +175,8 @@ extension MainWindowController {
         broadcastMenu.addItem(
             withTitle: "Selected Panes…", action: #selector(broadcastToSelectedPanesAction(_:)), keyEquivalent: "")
         broadcastMenu.addItem(.separator())
-        broadcastMenu.addItem(withTitle: "Stop Broadcasting", action: #selector(stopBroadcastAction(_:)), keyEquivalent: "")
+        broadcastMenu.addItem(
+            withTitle: "Stop Broadcasting", action: #selector(stopBroadcastAction(_:)), keyEquivalent: "")
         broadcastItem.submenu = broadcastMenu
         termMenu.addItem(broadcastItem)
         let equalize = NSMenuItem(

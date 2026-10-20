@@ -161,7 +161,8 @@ extension Recipe {
                     direction == .horizontal ? .right : .down, ratio: Double(ratio), a: node(first), b: node(second))
             }
         }
-        self.init(name: name, folder: (folder as NSString).abbreviatingWithTildeInPath, layout: node(workspace.splitTree))
+        self.init(
+            name: name, folder: (folder as NSString).abbreviatingWithTildeInPath, layout: node(workspace.splitTree))
     }
 
     /// nil for the folder itself, `./sub` inside it, else the path with `~`.
@@ -187,7 +188,9 @@ enum RecipeError: LocalizedError, Equatable {
         case .missingFolder(let folder):
             return "The recipe's folder \(abbreviatePath(folder)) does not exist."
         case .notFound(let name, let available):
-            let list = available.isEmpty ? "There are no recipes in ~/.boo/recipes." : "Recipes: \(available.joined(separator: ", "))."
+            let list =
+                available.isEmpty
+                ? "There are no recipes in ~/.boo/recipes." : "Recipes: \(available.joined(separator: ", "))."
             return "No recipe named \"\(name)\". \(list)"
         }
     }

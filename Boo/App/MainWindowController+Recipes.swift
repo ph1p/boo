@@ -27,7 +27,9 @@ extension MainWindowController {
     /// Loads and runs the recipe file at `path`, or explains why not.
     func runRecipe(atPath path: String) {
         do {
-            try runRecipe(RecipeStore.load(path), fallbackName: ((path as NSString).lastPathComponent as NSString).deletingPathExtension)
+            try runRecipe(
+                RecipeStore.load(path),
+                fallbackName: ((path as NSString).lastPathComponent as NSString).deletingPathExtension)
         } catch {
             BooAlert.showError(title: "Cannot Run Recipe", message: error.localizedDescription, window: window)
         }
@@ -154,7 +156,9 @@ final class RecipesMenu: NSObject, NSMenuDelegate {
         RecipeStore.list().map { entry in
             PaletteItem(
                 id: "recipe:\(entry.name)", kind: .recipe, title: entry.name,
-                subtitle: (try? RecipeStore.load(entry.path)).map { abbreviatePath(Recipe.expand($0.folder, relativeTo: nil)) }
+                subtitle: (try? RecipeStore.load(entry.path)).map {
+                    abbreviatePath(Recipe.expand($0.folder, relativeTo: nil))
+                }
                     ?? "invalid recipe",
                 perform: { WindowManager.shared.activeController?.runRecipe(atPath: entry.path) })
         }

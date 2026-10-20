@@ -16,7 +16,8 @@ enum ProgressBarStyle {
 
     static func draw(_ ctx: CGContext, progress: TerminalProgress, in rect: CGRect, theme: TerminalTheme) {
         ctx.saveGState()
-        let track = CGPath(roundedRect: rect, cornerWidth: rect.height / 2, cornerHeight: rect.height / 2, transform: nil)
+        let track = CGPath(
+            roundedRect: rect, cornerWidth: rect.height / 2, cornerHeight: rect.height / 2, transform: nil)
         ctx.addPath(track)
         ctx.clip()
         ctx.setFillColor(theme.controlFill.cgColor)
@@ -70,7 +71,10 @@ private final class DockProgressView: NSView {
         let rect = CGRect(x: inset, y: bounds.height * 0.08, width: bounds.width - inset * 2, height: height)
         // Dock bars sit on arbitrary wallpapers; draw on an opaque dark track.
         ctx.setFillColor(NSColor.black.withAlphaComponent(0.55).cgColor)
-        ctx.addPath(CGPath(roundedRect: rect.insetBy(dx: -1, dy: -1), cornerWidth: height / 2, cornerHeight: height / 2, transform: nil))
+        ctx.addPath(
+            CGPath(
+                roundedRect: rect.insetBy(dx: -1, dy: -1), cornerWidth: height / 2, cornerHeight: height / 2,
+                transform: nil))
         ctx.fillPath()
         ProgressBarStyle.draw(ctx, progress: progress, in: rect, theme: AppSettings.shared.theme)
     }

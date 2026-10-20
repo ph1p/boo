@@ -234,12 +234,15 @@ final class TabGroupTests: XCTestCase {
             (root as NSString).resolvingSymlinksInPath)
         XCTAssertEqual(WorkspaceColor.auto(forFolder: sub), WorkspaceColor.auto(forFolder: root))
         XCTAssertNotEqual(WorkspaceColor.auto(forFolder: root), WorkspaceColor.none)
-        XCTAssertEqual(WorkspaceColor.auto(forFolder: "/nonexistent/x"), WorkspaceColor.auto(forFolder: "/nonexistent/x/"))
+        XCTAssertEqual(
+            WorkspaceColor.auto(forFolder: "/nonexistent/x"), WorkspaceColor.auto(forFolder: "/nonexistent/x/"))
     }
 
     func testAutoColorKnownValue() {
         // FNV-1a is fixed: the same folder gets the same color on every launch and machine.
-        let colors = Set(["/a", "/b", "/c", "/d", "/e", "/f", "/g", "/h"].map { WorkspaceColor.auto(forFolder: "/nonexistent\($0)") })
+        let colors = Set(
+            ["/a", "/b", "/c", "/d", "/e", "/f", "/g", "/h"].map { WorkspaceColor.auto(forFolder: "/nonexistent\($0)") }
+        )
         XCTAssertGreaterThan(colors.count, 2, "spreads across the palette")
     }
 }

@@ -181,7 +181,8 @@ final class RecipeTests: XCTestCase {
         let menu = NSMenu()
         let file = NSMenuItem(title: "File", action: nil, keyEquivalent: "")
         file.submenu = NSMenu(title: "File")
-        let run = NSMenuItem(title: "dev", action: #selector(MainWindowController.runRecipeAction(_:)), keyEquivalent: "")
+        let run = NSMenuItem(
+            title: "dev", action: #selector(MainWindowController.runRecipeAction(_:)), keyEquivalent: "")
         file.submenu?.addItem(run)
         file.submenu?.addItem(
             withTitle: "Open Recipes Folder", action: #selector(MainWindowController.openRecipesFolderAction(_:)),

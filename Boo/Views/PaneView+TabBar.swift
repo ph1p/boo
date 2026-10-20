@@ -73,7 +73,8 @@ extension PaneView {
     ) {
         let pill = Self.tabPillRect(inSlot: CGRect(x: x, y: y, width: width, height: rowH))
         let color = group.color.nsColor ?? theme.accentColor
-        let path = CGPath(roundedRect: pill, cornerWidth: pill.height / 2, cornerHeight: pill.height / 2, transform: nil)
+        let path = CGPath(
+            roundedRect: pill, cornerWidth: pill.height / 2, cornerHeight: pill.height / 2, transform: nil)
         ctx.addPath(path)
         ctx.setFillColor(color.withAlphaComponent(group.isCollapsed ? 0.35 : (hovered ? 0.3 : 0.2)).cgColor)
         ctx.fillPath()

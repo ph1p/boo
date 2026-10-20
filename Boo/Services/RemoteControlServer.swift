@@ -265,7 +265,7 @@ final class RemoteControlServer: @unchecked Sendable {
         "/manifest.webmanifest": ("manifest", "webmanifest", "application/manifest+json"),
         "/icon-192.png": ("icon-192", "png", "image/png"),
         "/icon-512.png": ("icon-512", "png", "image/png"),
-        "/apple-touch-icon.png": ("apple-touch-icon", "png", "image/png"),
+        "/apple-touch-icon.png": ("apple-touch-icon", "png", "image/png")
     ]
 
     private static let staticAssetData: [String: Data] = staticAssets.compactMapValues { asset in

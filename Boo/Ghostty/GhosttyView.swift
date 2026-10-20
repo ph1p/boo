@@ -1017,7 +1017,7 @@ import Cocoa
         guard let command = blockCommand(at: block) else { return }
         var items: [(String, Selector)] = [
             ("Copy Command", #selector(copyBlockCommand(_:))),
-            ("Copy Output", #selector(copyBlockOutput(_:))),
+            ("Copy Output", #selector(copyBlockOutput(_:)))
         ]
         // Typing into a running program would not re-run anything.
         if commandHistory.last?.isRunning != true {

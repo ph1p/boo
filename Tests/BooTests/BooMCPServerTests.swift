@@ -48,7 +48,8 @@ final class BooMCPServerTests: XCTestCase {
             tools.compactMap { $0["name"] as? String },
             [
                 "get_layout", "split_pane", "read_pane", "send_text", "close_pane", "list_agents", "new_agent_task",
-                "run_recipe", "open_review", "wait_for_events", "agent_respond", "focus_pane", "task_status", "task_diff",
+                "run_recipe", "open_review", "wait_for_events", "agent_respond", "focus_pane", "task_status",
+                "task_diff",
                 "merge_task", "discard_task"
             ])
         for tool in tools {

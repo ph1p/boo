@@ -147,7 +147,8 @@ final class OrchestratorController {
                 let wholeWorkspace = inside(workspace.folderPath)
                 for paneID in workspace.splitTree.leafIDs {
                     guard let pane = workspace.pane(for: paneID) else { continue }
-                    for tab in pane.tabs where wholeWorkspace || (tab.contentType == .terminal && inside(tab.workingDirectory)) {
+                    for tab in pane.tabs
+                    where wholeWorkspace || (tab.contentType == .terminal && inside(tab.workingDirectory)) {
                         tabs.append(tab.id)
                     }
                 }

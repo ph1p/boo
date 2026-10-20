@@ -3,7 +3,8 @@ import Foundation
 /// Keyboard input typed into one terminal, as it is replayed into the others.
 enum BroadcastInput: Equatable {
     /// A key event with the raw values of `ghostty_input_key_s`.
-    case key(action: UInt32, keyCode: UInt32, mods: UInt32, consumedMods: UInt32, unshiftedCodepoint: UInt32, text: String?)
+    case key(
+        action: UInt32, keyCode: UInt32, mods: UInt32, consumedMods: UInt32, unshiftedCodepoint: UInt32, text: String?)
     /// Pasted text or an IME commit.
     case text(String)
 }

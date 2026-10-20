@@ -16,7 +16,8 @@ struct ShortcutsSettingsView: View {
             let matchingItems = group.entries.filter {
                 $0.title.lowercased().contains(q) || $0.shortcut.lowercased().contains(q)
             }
-            return matchingItems.isEmpty ? nil : ActionRegistry.ShortcutGroup(title: group.title, entries: matchingItems)
+            return matchingItems.isEmpty
+                ? nil : ActionRegistry.ShortcutGroup(title: group.title, entries: matchingItems)
         }
     }
 

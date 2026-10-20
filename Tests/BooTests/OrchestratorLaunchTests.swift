@@ -9,7 +9,8 @@ final class OrchestratorLaunchTests: XCTestCase {
             sessionID: "abc", resume: false, mcpConfig: "/m/mcp.json", promptFile: "/p/prompt.md")
         XCTAssertEqual(
             line,
-            "exec claude --session-id 'abc' --mcp-config '/m/mcp.json' --append-system-prompt \"$(cat '/p/prompt.md')\"")
+            "exec claude --session-id 'abc' --mcp-config '/m/mcp.json' --append-system-prompt \"$(cat '/p/prompt.md')\""
+        )
     }
 
     func testResumeCommandWithNotice() {
