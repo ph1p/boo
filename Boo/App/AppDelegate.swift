@@ -54,6 +54,7 @@ public enum BooMain {
 
         WindowManager.shared.openInitialWindow()
         QuickTerminalController.shared.start()
+        KeyTables.shared.start()
 
         // Watch system appearance changes for auto-theme
         appearanceObserver = NSApp.observe(\.effectiveAppearance) { _, _ in

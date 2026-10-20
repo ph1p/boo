@@ -84,6 +84,9 @@ enum BooPaths {
         return path
     }()
 
+    /// Leader-key tables: ~/.boo/keytables.json (absent = off).
+    static let keyTablesFile = (configDir as NSString).appendingPathComponent("keytables.json")
+
     /// Workspace recipes: ~/.boo/recipes/
     static let recipesDir: String = {
         let path = (configDir as NSString).appendingPathComponent("recipes")

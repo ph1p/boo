@@ -81,7 +81,7 @@ import Cocoa
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.needsDisplay = true }
         }
-        orchestratorObservers = [Notification.Name.approvalsChanged, .orchestratorChanged].map { name in
+        orchestratorObservers = [Notification.Name.approvalsChanged, .orchestratorChanged, .keyTableChanged].map { name in
             NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
                 MainActor.assumeIsolated { self?.needsDisplay = true }
             }
@@ -102,8 +102,10 @@ import Cocoa
 
     let systemInfoSegment = SystemInfoSegment()
     let broadcastSegment = BroadcastSegment()
+    let keyTableSegment = KeyTableSegment()
 
     private func registerDefaultPlugins() {
+        registerPlugin(keyTableSegment)
         registerPlugin(broadcastSegment)
         registerPlugin(EnvironmentSegment())
         registerPlugin(GitBranchSegment())

@@ -409,6 +409,7 @@ import Cocoa
 
     override func keyDown(with event: NSEvent) {
         guard let surface = surface else { return }
+        if KeyTables.shared.intercept(event, in: self) { return }
 
         let action: ghostty_input_action_e = event.isARepeat ? GHOSTTY_ACTION_REPEAT : GHOSTTY_ACTION_PRESS
         let translatedMods = ghostty_surface_key_translation_mods(surface, translateMods(event.modifierFlags))
@@ -468,6 +469,7 @@ import Cocoa
 
     override func keyUp(with event: NSEvent) {
         guard let surface = surface else { return }
+        if KeyTables.shared.swallowsRelease(event) { return }
         let params = eventKeyParams(event)
         let key = makeKeyEvent(
             action: GHOSTTY_ACTION_RELEASE, keyCode: UInt32(event.keyCode),
@@ -791,6 +793,11 @@ import Cocoa
         text.withCString { ghostty_surface_text(surface, $0, UInt(strlen($0))) }
     }
 
+    /// Types `text` as if the user had (a key table's `send:`).
+    func typeText(_ text: String) {
+        sendText(text)
+    }
+
     /// Read the visible viewport text (used by the Remote Control web mirror).
     /// Must be called on the main thread — surface access is not thread-safe.
     func readViewportText() -> String? {
@@ -1032,6 +1039,12 @@ import Cocoa
 
         let hasCmd = event.modifierFlags.contains(.command)
         let hasCtrl = event.modifierFlags.contains(.control)
+
+        // While a key table waits, or for a ⌘ leader, the key is the table's.
+        if hasCmd, KeyTables.shared.isActive || KeyTables.shared.machine?.config.leader == KeyChord(event: event) {
+            keyDown(with: event)
+            return true
+        }
 
         // Ctrl+key (without Cmd) always goes to the terminal — these are
         // terminal control characters (Ctrl+C, Ctrl+R, Ctrl+Z, etc.)

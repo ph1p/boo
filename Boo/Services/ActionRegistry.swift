@@ -123,7 +123,7 @@ enum ActionRegistry {
         return (String(title.dropLast(2)), number)
     }
 
-    static func display(key: String, modifiers: NSEvent.ModifierFlags) -> String {
+    nonisolated static func display(key: String, modifiers: NSEvent.ModifierFlags) -> String {
         var display = ""
         if modifiers.contains(.control) { display += "\u{2303}" }
         if modifiers.contains(.option) { display += "\u{2325}" }

@@ -120,3 +120,31 @@ These have no default shortcut:
 - **File → New Agent Task…**, **File → Review Changes…**, **File → Agent Timeline**
 - **Window → Move Workspace to New Window**, **Window → Merge All Windows**
 - **Terminal → Start Remote Control Server**, **Terminal → Copy Remote Control URL**
+- **Terminal → Broadcast Input to → All Panes in Workspace / Selected Panes…**
+
+## Key Tables
+
+Key tables add tmux-style leader keys. They are off until you create `~/.boo/keytables.json`:
+
+```json
+{
+  "leader": "ctrl+a",
+  "timeout": 2,
+  "tables": {
+    "root": {
+      "v": "Terminal/Split Right",
+      "s": "Terminal/Split Down",
+      "z": "Terminal/Zoom Pane",
+      "k": "send:kubectl get pods\n",
+      "w": { "table": "window" }
+    },
+    "window": {
+      "n": "Window/Merge All Windows"
+    }
+  }
+}
+```
+
+Press the leader, then a key from `root`. The status bar shows the mode (**⌃A …**, or **⌃A → window** in a chained table) and the key goes nowhere else. A value is a menu command named by its menu path joined with `/` (`Terminal/Split Right`; a submenu adds a level, as in `Terminal/Broadcast Input to/All Panes in Workspace`), `send:<text>` to type text into the terminal, or `{ "table": "<name>" }` to wait for a key from another table. Escape, an unbound key or `timeout` seconds (default 2) without a key end the mode; pressing the leader twice types the leader itself.
+
+Keys are written as `v`, `V` (or `shift+v`), `ctrl+w`, `cmd+opt+left`; named keys are `escape`, `tab`, `return`, `space`, `backspace` and the arrows. Boo reads the file when it becomes active and the file has changed, and lists unknown commands, tables or keys in one alert.
