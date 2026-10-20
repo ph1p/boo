@@ -81,7 +81,7 @@ final class ActivityNotifier: NSObject, UNUserNotificationCenterDelegate {
     /// is logged.
     private func deliver(
         kind: String, title: String, body: String, sound: UNNotificationSound?,
-        workspaceID: UUID, paneID: UUID, tabIndex: Int
+        workspaceID: UUID?, paneID: UUID?, tabIndex: Int, extraInfo: [String: Any] = [:]
     ) {
         guard let center = Self.center else { return }
         guard cachedAuthStatus == .authorized || !hasResolvedAuthStatus else {
@@ -94,12 +94,14 @@ final class ActivityNotifier: NSObject, UNUserNotificationCenterDelegate {
         content.title = title
         content.body = body
         content.sound = sound
-        content.threadIdentifier = paneID.uuidString
-        content.userInfo = [
-            "workspaceID": workspaceID.uuidString,
-            "paneID": paneID.uuidString,
-            "tabIndex": tabIndex
-        ]
+        content.threadIdentifier = paneID?.uuidString ?? kind
+        var userInfo = extraInfo
+        if let workspaceID, let paneID {
+            userInfo["workspaceID"] = workspaceID.uuidString
+            userInfo["paneID"] = paneID.uuidString
+            userInfo["tabIndex"] = tabIndex
+        }
+        content.userInfo = userInfo
         let req = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
         center.add(req) { error in
             if let error {
@@ -159,12 +161,31 @@ final class ActivityNotifier: NSObject, UNUserNotificationCenterDelegate {
             sound: .default, workspaceID: workspaceID, paneID: paneID, tabIndex: tabIndex)
     }
 
+    /// An orchestrator card waits while its drawer is out of sight; clicking opens the drawer.
+    func notifyOrchestrator(title: String, body: String) {
+        guard AppSettings.shared.activityNotificationsEnabled else { return }
+        deliver(
+            kind: "orchestrator", title: title, body: body, sound: .default,
+            workspaceID: nil, paneID: nil, tabIndex: 0, extraInfo: ["orchestrator": true])
+    }
+
     nonisolated func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         didReceive response: UNNotificationResponse,
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
         let info = response.notification.request.content.userInfo
+        if info["orchestrator"] as? Bool == true {
+            Task { @MainActor in
+                NSApp.activate(ignoringOtherApps: true)
+                guard let controller = WindowManager.shared.activeController ?? WindowManager.shared.controllers.first
+                else { return }
+                controller.window?.makeKeyAndOrderFront(nil)
+                OrchestratorController.shared.openDrawer(in: controller)
+            }
+            completionHandler()
+            return
+        }
         guard
             let wsStr = info["workspaceID"] as? String,
             let paneStr = info["paneID"] as? String,

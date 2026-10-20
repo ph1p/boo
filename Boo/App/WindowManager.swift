@@ -239,6 +239,7 @@ final class WindowManager {
         sharedHandlersInstalled = true
         ApprovalCenter.shared.startObserving()
         OrchestratorEvents.shared.startObserving()
+        OrchestratorController.shared.startObserving()
 
         // Only socket traffic is gated; remote control has its own bearer auth.
         BooSocketServer.shared.onControlCommand = { cmd, json, reply in

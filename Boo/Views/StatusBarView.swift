@@ -22,6 +22,7 @@ import Cocoa
     var barHeight: CGFloat { DensityMetrics.current.statusBarHeight }
     nonisolated(unsafe) private var settingsObserver: Any?
     nonisolated(unsafe) private var agentInboxObserver: Any?
+    nonisolated(unsafe) private var orchestratorObservers: [Any] = []
 
     // Git state (shared with GitBranchSegment)
     var gitBranch: String?
@@ -80,6 +81,11 @@ import Cocoa
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.needsDisplay = true }
         }
+        orchestratorObservers = [Notification.Name.approvalsChanged, .orchestratorChanged].map { name in
+            NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.needsDisplay = true }
+            }
+        }
     }
 
     required init?(coder: NSCoder) {
@@ -105,6 +111,7 @@ import Cocoa
         registerPlugin(PaneInfoSegment())
         registerPlugin(TimeSegment())
         registerPlugin(AgentInboxSegment())
+        registerPlugin(OrchestratorSegment())
     }
 
     func registerPlugin(_ plugin: StatusBarPlugin) {
@@ -367,7 +374,7 @@ import Cocoa
     }
 
     deinit {
-        for observer in [settingsObserver, agentInboxObserver].compactMap({ $0 }) {
+        for observer in [settingsObserver, agentInboxObserver].compactMap({ $0 }) + orchestratorObservers {
             NotificationCenter.default.removeObserver(observer)
         }
     }

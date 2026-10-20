@@ -23,6 +23,7 @@ struct ShortcutsSettingsView: View {
                 ("Reopen Closed Tab", "\u{2325}\u{2318}Z"),
                 ("Close Pane", "\u{21E7}\u{2318}W"),
                 ("Jump to Next Waiting Agent", "\u{21E7}\u{2318}J"),
+                ("Toggle Orchestrator", "\u{2325}\u{2318}O"),
                 ("Switch Workspace 1-9", "\u{2318}1-9"),
                 ("Switch Tab 1-9", "\u{2325}\u{2318}1-9"),
                 ("Switch Tab 1-9", "\u{21E7}\u{2318}1-9")

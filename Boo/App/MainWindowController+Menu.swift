@@ -222,6 +222,11 @@ extension MainWindowController {
             keyEquivalent: "J")
         jumpAgent.keyEquivalentModifierMask = [.command, .shift]
         windowMenu.addItem(jumpAgent)
+        // ⌥⌘O: ⇧⌘O is Open Folder.
+        let orchestrator = NSMenuItem(
+            title: "Toggle Orchestrator", action: #selector(toggleOrchestratorAction(_:)), keyEquivalent: "o")
+        orchestrator.keyEquivalentModifierMask = [.command, .option]
+        windowMenu.addItem(orchestrator)
         windowMenu.addItem(.separator())
         windowMenu.addItem(
             withTitle: "Bring All to Front", action: #selector(NSApplication.arrangeInFront(_:)), keyEquivalent: "")

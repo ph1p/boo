@@ -250,6 +250,7 @@ final class AppSettings {
         static let disabledPluginIDs = "disabledPluginIDs"
         static let sidebarPluginOrder = "sidebarPluginOrder"
         static let sidebarWidth = "sidebarWidth"
+        static let orchestratorDrawerWidth = "orchestratorDrawerWidth"
         static let pluginSettings = "pluginSettings"
         static let migratedPluginSettings_v1 = "migratedPluginSettings_v1"
         static let fileEditorCommand = "fileEditorCommand"
@@ -583,6 +584,15 @@ final class AppSettings {
             return v > 0 ? CGFloat(v) : 250
         }
         set { set(Double(newValue), forKey: K.sidebarWidth, topic: .layout) }
+    }
+
+    /// The orchestrator drawer's width; the drawer clamps it to the window.
+    var orchestratorDrawerWidth: CGFloat {
+        get {
+            let v = UserDefaults.standard.double(forKey: K.orchestratorDrawerWidth)
+            return v > 0 ? CGFloat(v) : 420
+        }
+        set { set(Double(newValue), forKey: K.orchestratorDrawerWidth) }
     }
 
     /// When true, the sidebar starts hidden in new windows.

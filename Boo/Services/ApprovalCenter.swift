@@ -46,6 +46,8 @@ final class ApprovalCenter {
     var tabExists: (UUID) -> Bool = { AgentInbox.shared.locate($0) != nil }
     /// Called once per request with its outcome and, when allowed, the command's reply.
     var onResolved: ((Request, Outcome, [String: Any]?) -> Void)?
+    /// Called when a card is added, before anyone answers it.
+    var onEnqueued: ((Request) -> Void)?
 
     private var performers: [UUID: (@escaping ([String: Any]) -> Void) -> Void] = [:]
     private var inboxObserver: NSObjectProtocol?
@@ -78,6 +80,7 @@ final class ApprovalCenter {
         pending.append(request)
         performers[request.id] = perform
         changed()
+        onEnqueued?(request)
         return request
     }
 

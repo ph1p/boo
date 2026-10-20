@@ -170,6 +170,8 @@ class ThemedSplitView: NSSplitView {
     var toolbarLeadingConstraint: NSLayoutConstraint?
     var mainSplitTrailingConstraint: NSLayoutConstraint?
     var toolbarTrailingConstraint: NSLayoutConstraint?
+    /// Set while the orchestrator drawer is open in this window.
+    var orchestratorDrawer: OrchestratorDrawerView?
 
     /// PaneViews keyed by workspace ID → pane ID → PaneView
     var workspacePaneViews: [UUID: [UUID: PaneView]] = [:]
@@ -1490,6 +1492,7 @@ class ThemedSplitView: NSSplitView {
     /// Because `saveSession()` now uses a background write queue, we flush a synchronous
     /// snapshot here so the final state is guaranteed on disk before the process exits.
     func windowWillClose(_ notification: Notification) {
+        if hasOrchestratorDrawer { OrchestratorController.shared.closeDrawer() }
         coordinator?.saveSidebarStateToSettings()
         // Persist all live state to the model synchronously, then write synchronously.
         for paneView in paneViews.values {
