@@ -106,8 +106,9 @@ extension MainWindowController {
             return
         }
         let cwd = json["cwd"] as? String ?? workspace.folderPath
-        pv.addNewTab(workingDirectory: cwd)
-        reply(["ok": true])
+        let launch = LaunchSpec.from(json: json)
+        let tabID = pv.addNewTab(workingDirectory: cwd, launch: launch)
+        reply(["ok": true, "tab_id": tabID?.uuidString ?? NSNull()])
     }
 
     private func ipcNewWorkspace(json: [String: Any], reply: @escaping ([String: Any]) -> Void) {

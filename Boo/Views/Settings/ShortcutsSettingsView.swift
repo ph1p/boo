@@ -7,94 +7,16 @@ struct ShortcutsSettingsView: View {
     @ObservedObject private var observer = SettingsObserver(topics: [.theme])
     @State private var searchText: String = ""
 
-    static let groups: [(String, [(String, String)])] = [
-        (
-            "General",
-            [
-                ("Settings", "\u{2318},"),
-                ("New Window", "\u{2318}N"),
-                ("New Workspace", "\u{21E7}\u{2318}N"),
-                ("Minimize", "\u{2318}M"),
-                ("Open Folder", "\u{21E7}\u{2318}O"),
-                ("New Terminal Tab", "\u{2318}T"),
-                ("New Browser Tab", "\u{21E7}\u{2318}T"),
-                ("Save", "\u{2318}S"),
-                ("Close", "\u{2318}W"),
-                ("Reopen Closed Tab", "\u{2325}\u{2318}Z"),
-                ("Close Pane", "\u{21E7}\u{2318}W"),
-                ("Jump to Next Waiting Agent", "\u{21E7}\u{2318}J"),
-                ("Toggle Orchestrator", "\u{2325}\u{2318}O"),
-                ("Switch Workspace 1-9", "\u{2318}1-9"),
-                ("Switch Tab 1-9", "\u{2325}\u{2318}1-9"),
-                ("Switch Tab 1-9", "\u{21E7}\u{2318}1-9")
-            ]
-        ),
-        (
-            "Terminal",
-            [
-                ("Clear Screen", "\u{2318}K"),
-                ("Clear Scrollback", "\u{21E7}\u{2318}K"),
-                ("Split Right", "\u{2318}D"),
-                ("Split Down", "\u{21E7}\u{2318}D"),
-                ("Focus Next Pane", "\u{2318}]"),
-                ("Focus Previous Pane", "\u{2318}["),
-                ("Select Pane Left", "\u{2325}\u{2318}\u{2190}"),
-                ("Select Pane Right", "\u{2325}\u{2318}\u{2192}"),
-                ("Select Pane Up", "\u{2325}\u{2318}\u{2191}"),
-                ("Select Pane Down", "\u{2325}\u{2318}\u{2193}"),
-                ("Resize Pane Left", "\u{2303}\u{2318}\u{2190}"),
-                ("Resize Pane Right", "\u{2303}\u{2318}\u{2192}"),
-                ("Resize Pane Up", "\u{2303}\u{2318}\u{2191}"),
-                ("Resize Pane Down", "\u{2303}\u{2318}\u{2193}"),
-                ("Move Pane Left", "\u{2303}\u{21E7}\u{2318}\u{2190}"),
-                ("Move Pane Right", "\u{2303}\u{21E7}\u{2318}\u{2192}"),
-                ("Move Pane Up", "\u{2303}\u{21E7}\u{2318}\u{2191}"),
-                ("Move Pane Down", "\u{2303}\u{21E7}\u{2318}\u{2193}"),
-                ("Zoom Pane", "\u{21E7}\u{2318}\u{23CE}"),
-                ("Send to Agent", "\u{2325}\u{2318}\u{23CE}"),
-                ("Equalize Splits", "\u{2303}\u{2318}="),
-                ("Increase Font Size", "\u{2318}+"),
-                ("Decrease Font Size", "\u{2318}-"),
-                ("Reset Font Size", "\u{2318}0")
-            ]
-        ),
-        (
-            "View",
-            [
-                ("Toggle Sidebar", "\u{2318}B"),
-                ("Toggle Full Screen", "\u{2318}\u{23CE}"),
-                ("Toggle Full Screen", "\u{2303}\u{2318}F")
-            ]
-        ),
-        (
-            "Edit",
-            [
-                ("Undo", "\u{2318}Z"),
-                ("Redo", "\u{21E7}\u{2318}Z"),
-                ("Cut", "\u{2318}X"),
-                ("Copy", "\u{2318}C"),
-                ("Paste", "\u{2318}V"),
-                ("Select All", "\u{2318}A"),
-                ("Find…", "\u{2318}F")
-            ]
-        ),
-        (
-            "Bookmarks",
-            [
-                ("Bookmark Directory", "\u{21E7}\u{2318}B"),
-                ("Jump to Bookmark 1-9", "\u{2303}1-9")
-            ]
-        )
-    ]
-
-    private var filteredGroups: [(String, [(String, String)])] {
+    /// Generated from the live main menu, so it cannot drift from it.
+    private var filteredGroups: [ActionRegistry.ShortcutGroup] {
+        let groups = ActionRegistry.shortcutGroups()
         let q = searchText.trimmingCharacters(in: .whitespaces).lowercased()
-        guard !q.isEmpty else { return Self.groups }
-        return Self.groups.compactMap { group in
-            let matchingItems = group.1.filter {
-                $0.0.lowercased().contains(q) || $0.1.lowercased().contains(q)
+        guard !q.isEmpty else { return groups }
+        return groups.compactMap { group in
+            let matchingItems = group.entries.filter {
+                $0.title.lowercased().contains(q) || $0.shortcut.lowercased().contains(q)
             }
-            return matchingItems.isEmpty ? nil : (group.0, matchingItems)
+            return matchingItems.isEmpty ? nil : ActionRegistry.ShortcutGroup(title: group.title, entries: matchingItems)
         }
     }
 
@@ -117,10 +39,10 @@ struct ShortcutsSettingsView: View {
                     .frame(maxWidth: .infinity, alignment: .center)
                     .padding(.top, 24)
             } else {
-                ForEach(filteredGroups, id: \.0) { group in
-                    Section(title: group.0) {
-                        ForEach(Array(group.1.enumerated()), id: \.offset) { _, item in
-                            shortcutRow(label: item.0, binding: item.1, t: t)
+                ForEach(filteredGroups, id: \.title) { group in
+                    Section(title: group.title) {
+                        ForEach(Array(group.entries.enumerated()), id: \.offset) { _, item in
+                            shortcutRow(label: item.title, binding: item.shortcut, t: t)
                         }
                     }
                 }

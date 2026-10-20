@@ -47,7 +47,7 @@ Without a `pane_id`, commands go to the frontmost Boo window.
 | `get_state`        |                                                                           | `workspaces`, `panes` of the active workspace with their `tabs`, `agents`, `theme` |
 | `list_themes`      |                                                                           | `themes` (names)                         |
 | `switch_workspace` | `index` or `id`                                                           |                                          |
-| `new_tab`          | optional `cwd` (default: the workspace folder); opens in the active pane  |                                          |
+| `new_tab`          | optional `cwd` (default: the workspace folder), `command` (run in the new shell), `env` (object of strings; `BOO_*` keys ignored); opens in the active pane | `tab_id` |
 | `new_workspace`    | optional `path` (default: home)                                           |                                          |
 | `new_window`       |                                                                           | `windows` (count)                        |
 | `select_pane`      | `id` of a pane in the active workspace                                    |                                          |

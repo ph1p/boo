@@ -930,19 +930,22 @@ class PaneView: NSView {
     }
 
     @discardableResult
-    func addNewTab(workingDirectory: String) -> UUID? {
-        addNewTab(contentType: .terminal, workingDirectory: workingDirectory)
+    func addNewTab(workingDirectory: String, launch: LaunchSpec? = nil) -> UUID? {
+        addNewTab(contentType: .terminal, workingDirectory: workingDirectory, launch: launch)
     }
 
     /// Add a new tab with a specific content type.
     @discardableResult
-    func addNewTab(contentType: ContentType, workingDirectory: String = "~", url: URL? = nil) -> UUID? {
+    func addNewTab(
+        contentType: ContentType, workingDirectory: String = "~", url: URL? = nil, launch: LaunchSpec? = nil
+    ) -> UUID? {
         storeCurrentView()
         lastAutoScrolledTabIndex = -1
 
         switch contentType {
         case .terminal:
             _ = pane.addTab(contentType: .terminal, workingDirectory: workingDirectory)
+            if let launch, let tab = pane.tabs.last { GhosttyView.pendingLaunch[tab.id] = launch }
         case .browser:
             _ = pane.addTab(contentType: .browser, workingDirectory: workingDirectory, title: url?.host ?? "New Tab")
         case .editor:
