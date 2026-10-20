@@ -82,6 +82,7 @@ final class WindowManager {
             let controller = MainWindowController(restoreSession: true)
             register(controller)
             show(controller, fullScreen: false)
+            OrchestratorController.shared.restore(snapshot?.orchestrator, in: [controller])
             return controller
         }
 
@@ -94,8 +95,15 @@ final class WindowManager {
         }
         let key = restored[keyIndex]
         show(key, fullScreen: saved[keyIndex].isFullScreen == true)
+        OrchestratorController.shared.restore(snapshot?.orchestrator, in: restored)
         writeSession(from: key, sync: false)
         return key
+    }
+
+    /// Saves the session in the background, from whichever window is in front.
+    func saveSessionSoon() {
+        guard let controller = activeController ?? controllers.first else { return }
+        writeSession(from: controller, sync: false)
     }
 
     private func show(_ controller: MainWindowController, fullScreen: Bool) {
@@ -199,8 +207,9 @@ final class WindowManager {
         guard controller.persistsSession else { return }
         let windows = isManaged(controller) ? controllers.filter(\.persistsSession) : [controller]
         let keyIndex = windows.firstIndex { $0 === activeController } ?? 0
-        let snapshot = SessionSnapshot(
+        var snapshot = SessionSnapshot(
             windows: windows.map { $0.sessionWindow() }, keyWindowIndex: keyIndex)
+        snapshot.orchestrator = OrchestratorController.shared.session
         if sync {
             SessionStore.save(snapshot)
         } else {

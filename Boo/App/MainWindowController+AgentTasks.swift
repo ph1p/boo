@@ -183,6 +183,9 @@ extension MainWindowController {
                     // Owned before the reply, so the caller's next write needs no approval.
                     if let caller, let tabID = launch.tabID {
                         CapabilityTokens.shared.markOwned(tabID, by: caller.tabID)
+                        if caller.tabID == OrchestratorController.shared.tabID {
+                            OrchestratorController.shared.recordOwnedWorktree(launch.info.path)
+                        }
                     }
                     let task: [String: Any] = [
                         "tab_id": launch.tabID?.uuidString ?? NSNull(),

@@ -90,6 +90,8 @@ struct SessionSnapshot: Codable, Sendable {
     var version: Int? = nil
     var windows: [SessionWindow]? = nil
     var keyWindowIndex: Int? = nil
+    /// The orchestrator conversation and the task worktrees it owns.
+    var orchestrator: OrchestratorSession? = nil
 
     /// Every saved window; a version 1 file is a single window.
     var allWindows: [SessionWindow] {

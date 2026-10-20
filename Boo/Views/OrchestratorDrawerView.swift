@@ -177,6 +177,9 @@ final class OrchestratorDrawerModel: ObservableObject {
     @Published private(set) var agents: [AgentRow] = []
     @Published private(set) var cards: [Card] = []
     @Published private(set) var running = false
+    @Published private(set) var canResume = false
+    @Published private(set) var claudeMissing = false
+    @Published private(set) var launchError: String?
     @Published private(set) var stateColor = NSColor.secondaryLabelColor
     @Published private(set) var theme = AppSettings.shared.theme
     var onReload: (() -> Void)?
@@ -219,6 +222,9 @@ final class OrchestratorDrawerModel: ObservableObject {
         }
         stateColor = inbox.orchestrator.map { AgentInboxSegment.color(for: $0, theme: theme) } ?? theme.textTertiary
         running = orchestrator.isRunning
+        canResume = orchestrator.canResume
+        claudeMissing = orchestrator.claudeInstalled == false
+        launchError = orchestrator.launchError
         onReload?()
     }
 }
@@ -360,17 +366,50 @@ struct ApprovalCardView: View {
 struct OrchestratorEmptyState: View {
     @ObservedObject var model: OrchestratorDrawerModel
 
+    static let installCommand = "curl -fsSL https://claude.ai/install.sh | bash"
+
     var body: some View {
         let theme = model.theme
         VStack(spacing: 10) {
             Image(systemName: "point.3.connected.trianglepath.dotted").font(.system(size: 26))
                 .foregroundColor(Color(nsColor: theme.textTertiary))
-            Text("One Claude Code session that sees every window and agent: it unblocks waiting agents, splits work into worktree tasks and merges them when they're done.")
+            if model.claudeMissing {
+                Text("Claude Code is not installed. Install it, then check again:")
+                    .font(.system(size: 11)).multilineTextAlignment(.center)
+                    .foregroundColor(Color(nsColor: theme.textSecondary))
+                    .frame(maxWidth: 280)
+                Text(Self.installCommand)
+                    .font(.system(size: 11, design: .monospaced)).textSelection(.enabled)
+                    .padding(6)
+                    .background(RoundedRectangle(cornerRadius: 4).fill(Color(nsColor: theme.textTertiary).opacity(0.12)))
+                Button("Check Again") { OrchestratorController.shared.checkClaudeInstalled(force: true) }
+                    .controlSize(.regular)
+            } else {
+                Text(
+                    model.canResume
+                        ? "The orchestrator stopped. Resume picks up the same conversation."
+                        : "One Claude Code session that sees every window and agent: it unblocks waiting agents, splits work into worktree tasks and merges them when they're done."
+                )
                 .font(.system(size: 11)).multilineTextAlignment(.center)
                 .foregroundColor(Color(nsColor: theme.textSecondary))
                 .frame(maxWidth: 280)
-            Button("Start Orchestrator") { OrchestratorController.shared.launch() }
-                .controlSize(.regular)
+                if model.canResume {
+                    HStack(spacing: 8) {
+                        Button("Resume") { OrchestratorController.shared.launch() }
+                            .keyboardShortcut(.defaultAction)
+                        Button("New Conversation") { OrchestratorController.shared.newConversation() }
+                    }
+                    .controlSize(.regular)
+                } else {
+                    Button("Start Orchestrator") { OrchestratorController.shared.launch() }
+                        .controlSize(.regular)
+                }
+            }
+            if let error = model.launchError {
+                Text(error).font(.system(size: 11)).multilineTextAlignment(.center)
+                    .foregroundColor(Color(nsColor: theme.error))
+                    .frame(maxWidth: 280)
+            }
         }
         .padding(20)
         .frame(maxWidth: .infinity, maxHeight: .infinity)

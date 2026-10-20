@@ -45,12 +45,119 @@ final class OrchestratorController {
 
     func isOrchestratorPane(_ paneID: UUID) -> Bool { self.paneID == paneID }
 
-    /// Starts the orchestrator in the open drawer.
-    func launch() {
-        start(LaunchSpec(command: "claude"))
+    // MARK: - Launch and persistence
+
+    /// The conversation to resume; the hook's id wins once Claude reports one
+    /// (`/clear` starts a new id).
+    private(set) var sessionID: String?
+    /// Worktrees of the tasks it started; their tabs are owned again after a relaunch.
+    private(set) var ownedWorktrees: Set<String> = []
+    /// Why the last start failed, shown in the empty state.
+    private(set) var launchError: String?
+    /// nil until checked.
+    private(set) var claudeInstalled: Bool?
+
+    var currentSessionID: String? { AgentInbox.shared.orchestrator?.sessionID ?? sessionID }
+    var canResume: Bool { !isRunning && currentSessionID != nil }
+
+    /// What the session snapshot keeps; nil when there is nothing to keep.
+    var session: OrchestratorSession? {
+        let fm = FileManager.default
+        let worktrees = ownedWorktrees.filter { fm.fileExists(atPath: $0) }.sorted()
+        guard currentSessionID != nil || !worktrees.isEmpty else { return nil }
+        return OrchestratorSession(sessionID: currentSessionID, ownedWorktrees: worktrees)
+    }
+
+    /// Starts the orchestrator in the open drawer, resuming the last
+    /// conversation when there is one.
+    func launch() { launch(resume: true) }
+
+    func newConversation() { launch(resume: false) }
+
+    private func launch(resume: Bool) {
+        guard !isRunning else {
+            host?.focus()
+            return
+        }
+        let previous = resume ? currentSessionID : nil
+        let resumable = previous.map { AgentTimeline.transcriptURL(sessionID: $0) != nil } ?? false
+        let id = resumable ? previous! : UUID().uuidString.lowercased()
+        do {
+            guard let prompt = OrchestratorLaunch.promptURL else { throw LaunchError.missingPrompt }
+            let config = try OrchestratorLaunch.writeMCPConfig(executable: Bundle.main.executablePath ?? "Boo")
+            let command = OrchestratorLaunch.command(
+                sessionID: id, resume: resumable, mcpConfig: config.path, promptFile: prompt.path,
+                notice: previous != nil && !resumable ? "Previous conversation unavailable; starting a new one." : nil)
+            launchError = nil
+            sessionID = id
+            start(OrchestratorLaunch.spec(command: command))
+        } catch {
+            launchError = error.localizedDescription
+            changed()
+            return
+        }
         attachTerminal()
         host?.focus()
         changed()
+        WindowManager.shared.saveSessionSoon()
+    }
+
+    private enum LaunchError: LocalizedError {
+        case missingPrompt
+        var errorDescription: String? { "The orchestrator prompt is missing from the app bundle." }
+    }
+
+    /// Checks once whether `claude` is installed, for the empty state.
+    func checkClaudeInstalled(force: Bool = false) {
+        guard force || claudeInstalled == nil else { return }
+        Task { @MainActor in
+            claudeInstalled = await OrchestratorLaunch.claudeInstalled()
+            changed()
+        }
+    }
+
+    /// Restores the saved session after the windows are back: the conversation
+    /// to resume, and ownership of the tabs in its task worktrees.
+    func restore(_ saved: OrchestratorSession?, in controllers: [MainWindowController]) {
+        guard let saved else { return }
+        sessionID = saved.sessionID
+        ownedWorktrees = Set(saved.ownedWorktrees)
+        let owner = ensureHost().tabID
+        for tab in Self.tabsInWorktrees(ownedWorktrees, controllers: controllers) {
+            CapabilityTokens.shared.markOwned(tab, by: owner)
+        }
+        changed()
+    }
+
+    /// Notes a worktree task the orchestrator started.
+    func recordOwnedWorktree(_ path: String) {
+        ownedWorktrees.insert(Self.standardized(path))
+    }
+
+    /// Tabs in workspaces opened on, or terminals sitting in, one of `worktrees`.
+    static func tabsInWorktrees(_ worktrees: Set<String>, controllers: [MainWindowController]) -> [UUID] {
+        guard !worktrees.isEmpty else { return [] }
+        func inside(_ path: String) -> Bool {
+            let path = standardized(path)
+            return worktrees.contains { path == $0 || path.hasPrefix($0 + "/") }
+        }
+        var tabs: [UUID] = []
+        for controller in controllers {
+            for workspace in controller.appState.workspaces {
+                let wholeWorkspace = inside(workspace.folderPath)
+                for paneID in workspace.splitTree.leafIDs {
+                    guard let pane = workspace.pane(for: paneID) else { continue }
+                    for tab in pane.tabs where wholeWorkspace || (tab.contentType == .terminal && inside(tab.workingDirectory)) {
+                        tabs.append(tab.id)
+                    }
+                }
+            }
+        }
+        return tabs
+    }
+
+    private static func standardized(_ path: String) -> String {
+        ((path as NSString).expandingTildeInPath as NSString).standardizingPath
     }
 
     // MARK: - Drawer
@@ -99,6 +206,7 @@ final class OrchestratorController {
             host?.focus()
         } else {
             controller.window?.makeFirstResponder(drawer)
+            checkClaudeInstalled()
         }
         changed()
     }
@@ -160,9 +268,12 @@ final class OrchestratorController {
     // MARK: - Private
 
     private func terminalExited() {
+        // Keep the id the hook reported before the inbox forgets it.
+        sessionID = currentSessionID
         // Its cards can no longer be answered into a running session.
         ApprovalCenter.shared.expireAll()
         AgentInbox.shared.applyOrchestrator(event: "end", tabID: host?.tabID ?? UUID())
         changed()
+        WindowManager.shared.saveSessionSoon()
     }
 }
