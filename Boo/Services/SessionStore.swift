@@ -92,6 +92,8 @@ struct SessionSnapshot: Codable, Sendable {
     var keyWindowIndex: Int? = nil
     /// The orchestrator conversation and the task worktrees it owns.
     var orchestrator: OrchestratorSession? = nil
+    /// The quick terminal's tabs.
+    var quickTerminal: QuickTerminalSession? = nil
 
     /// Every saved window; a version 1 file is a single window.
     var allWindows: [SessionWindow] {

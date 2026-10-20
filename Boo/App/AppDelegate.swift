@@ -53,6 +53,7 @@ public enum BooMain {
         ActivityNotifier.shared.refreshCachedStatus()
 
         WindowManager.shared.openInitialWindow()
+        QuickTerminalController.shared.start()
 
         // Watch system appearance changes for auto-theme
         appearanceObserver = NSApp.observe(\.effectiveAppearance) { _, _ in

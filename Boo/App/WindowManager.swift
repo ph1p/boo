@@ -68,6 +68,7 @@ final class WindowManager {
     func openInitialWindow() -> MainWindowController {
         installSharedHandlers()
         let snapshot = SessionStore.load()
+        QuickTerminalController.shared.restore(snapshot?.quickTerminal)
         var saved = snapshot?.allWindows ?? []
         var keyIndex = snapshot?.resolvedKeyWindowIndex ?? 0
         // Extra windows whose folders all vanished would restore as default windows.
@@ -210,6 +211,7 @@ final class WindowManager {
         var snapshot = SessionSnapshot(
             windows: windows.map { $0.sessionWindow() }, keyWindowIndex: keyIndex)
         snapshot.orchestrator = OrchestratorController.shared.session
+        snapshot.quickTerminal = QuickTerminalController.shared.session
         if sync {
             SessionStore.save(snapshot)
         } else {

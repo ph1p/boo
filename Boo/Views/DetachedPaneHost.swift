@@ -32,6 +32,9 @@ final class DetachedPaneHost {
 
     var isRunning: Bool { terminal != nil }
 
+    /// The shell's directory, as last reported by OSC 7.
+    var workingDirectory: String { pane.tabs[0].workingDirectory }
+
     /// Starts the terminal unless it is running. Parked until attached.
     func start(_ launch: LaunchSpec = LaunchSpec()) {
         guard terminal == nil else { return }
@@ -43,6 +46,7 @@ final class DetachedPaneHost {
             self?.title = title
             self?.onTitleChanged?(title)
         }
+        view.onPwdChanged = { [weak self] path in self?.pane.updateWorkingDirectory(at: 0, path) }
         view.onProcessExited = { [weak self] in self?.stop() }
         terminal = view
         hostView = TerminalScrollView(ghosttyView: view)

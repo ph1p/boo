@@ -243,6 +243,13 @@ extension MainWindowController {
             title: "Toggle Orchestrator", action: #selector(toggleOrchestratorAction(_:)), keyEquivalent: "o")
         orchestrator.keyEquivalentModifierMask = [.command, .option]
         windowMenu.addItem(orchestrator)
+        // Targeted: no window implements it, and the panel may not exist yet.
+        let quickTerminal = NSMenuItem(
+            title: "Toggle Quick Terminal",
+            action: #selector(QuickTerminalController.toggleQuickTerminalAction(_:)), keyEquivalent: "")
+        quickTerminal.target = QuickTerminalController.shared
+        QuickTerminalController.shared.configure(quickTerminal)
+        windowMenu.addItem(quickTerminal)
         windowMenu.addItem(.separator())
         windowMenu.addItem(
             withTitle: "Bring All to Front", action: #selector(NSApplication.arrangeInFront(_:)), keyEquivalent: "")

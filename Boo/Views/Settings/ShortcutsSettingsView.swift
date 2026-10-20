@@ -25,6 +25,8 @@ struct ShortcutsSettingsView: View {
         let t = tokens
 
         SettingsPage(title: "Keyboard Shortcuts") {
+            QuickTerminalSettingsSection()
+
             SettingTextField(
                 placeholder: "Filter shortcuts",
                 text: $searchText,
@@ -59,5 +61,59 @@ struct ShortcutsSettingsView: View {
             ShortcutPill(text: binding)
         }
         .padding(.vertical, 2)
+    }
+}
+
+// MARK: - Quick Terminal
+
+struct QuickTerminalSettingsSection: View {
+    @Environment(\.tokens) private var tokens
+    @ObservedObject private var observer = SettingsObserver()
+    @State private var hotkey = AppSettings.shared.quickTerminalHotkey
+
+    var body: some View {
+        let _ = observer.revision
+        let t = tokens
+        let settings = AppSettings.shared
+
+        Section(title: "Quick Terminal") {
+            ToggleRow(
+                label: "Global hotkey",
+                help: "Drops a terminal down from the top of the screen, from any app.",
+                isOn: LayoutSettingsBindings.binding(\.quickTerminalEnabled)
+            )
+            SettingRow(
+                label: "Shortcut",
+                help: "Like opt+space, ctrl+`, cmd+shift+t or f12. Press Return to apply."
+            ) {
+                HStack(spacing: 8) {
+                    SettingTextField(
+                        placeholder: "opt+space", text: $hotkey, monospaced: true, width: 160,
+                        onCommit: { settings.quickTerminalHotkey = hotkey.trimmingCharacters(in: .whitespaces) })
+                    if let spec = HotKeySpec.parse(settings.quickTerminalHotkey) {
+                        ShortcutPill(text: spec.display)
+                    }
+                }
+            }
+            if settings.quickTerminalEnabled, let problem = QuickTerminalController.shared.hotKeyProblem {
+                Text(problem)
+                    .font(.system(size: 11))
+                    .foregroundStyle(Color(nsColor: settings.theme.error))
+            }
+            SettingRow(label: "Height") {
+                HStack(spacing: 8) {
+                    Slider(value: LayoutSettingsBindings.binding(\.quickTerminalHeight), in: 0.2...0.9, step: 0.05)
+                    Text("\(Int((settings.quickTerminalHeight * 100).rounded()))%")
+                        .font(.system(size: 11).monospacedDigit())
+                        .foregroundStyle(t.muted)
+                        .frame(width: 36, alignment: .trailing)
+                }
+            }
+            ToggleRow(
+                label: "Hide when it loses focus",
+                help: "Hiding keeps the shells running.",
+                isOn: LayoutSettingsBindings.binding(\.quickTerminalHideOnResign)
+            )
+        }
     }
 }

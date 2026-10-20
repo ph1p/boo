@@ -251,6 +251,10 @@ final class AppSettings {
         static let sidebarPluginOrder = "sidebarPluginOrder"
         static let sidebarWidth = "sidebarWidth"
         static let orchestratorDrawerWidth = "orchestratorDrawerWidth"
+        static let quickTerminalEnabled = "quickTerminalEnabled"
+        static let quickTerminalHotkey = "quickTerminalHotkey"
+        static let quickTerminalHeight = "quickTerminalHeight"
+        static let quickTerminalHideOnResign = "quickTerminalHideOnResign"
         static let pluginSettings = "pluginSettings"
         static let migratedPluginSettings_v1 = "migratedPluginSettings_v1"
         static let fileEditorCommand = "fileEditorCommand"
@@ -595,6 +599,35 @@ final class AppSettings {
             return v > 0 ? CGFloat(v) : 420
         }
         set { set(Double(newValue), forKey: K.orchestratorDrawerWidth) }
+    }
+
+    // MARK: - Quick Terminal
+
+    /// Registers the quick terminal's global hotkey.
+    var quickTerminalEnabled: Bool {
+        get { bool(K.quickTerminalEnabled, default: true) }
+        set { set(newValue, forKey: K.quickTerminalEnabled) }
+    }
+
+    /// The global hotkey, e.g. "opt+space" (see `HotKeySpec.parse`).
+    var quickTerminalHotkey: String {
+        get { UserDefaults.standard.string(forKey: K.quickTerminalHotkey) ?? "opt+space" }
+        set { set(newValue, forKey: K.quickTerminalHotkey) }
+    }
+
+    /// The quick terminal's height as a fraction of the screen.
+    var quickTerminalHeight: Double {
+        get {
+            let v = UserDefaults.standard.double(forKey: K.quickTerminalHeight)
+            return v > 0 ? min(max(v, 0.2), 0.9) : 0.4
+        }
+        set { set(min(max(newValue, 0.2), 0.9), forKey: K.quickTerminalHeight) }
+    }
+
+    /// Hides the quick terminal when it loses focus.
+    var quickTerminalHideOnResign: Bool {
+        get { bool(K.quickTerminalHideOnResign, default: true) }
+        set { set(newValue, forKey: K.quickTerminalHideOnResign) }
     }
 
     /// When true, the sidebar starts hidden in new windows.
@@ -1094,7 +1127,11 @@ final class AppSettings {
             K.editorLineNumbers: editorLineNumbers,
             K.editorMinimap: editorMinimap,
             K.editorFormatOnSave: editorFormatOnSave,
-            K.editorRulerColumn: editorRulerColumn
+            K.editorRulerColumn: editorRulerColumn,
+            K.quickTerminalEnabled: quickTerminalEnabled,
+            K.quickTerminalHotkey: quickTerminalHotkey,
+            K.quickTerminalHeight: quickTerminalHeight,
+            K.quickTerminalHideOnResign: quickTerminalHideOnResign
         ]
         if let sshControlMasterApproved {
             dict[K.sshControlMasterApproved] = sshControlMasterApproved
