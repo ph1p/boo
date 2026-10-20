@@ -309,7 +309,7 @@ final class BooSocketServer: @unchecked Sendable {
             return
         case "split_pane", "close_pane", "focus_pane", "resize_pane", "swap_pane", "zoom_pane",
             "equalize_splits", "get_layout", "move_workspace_to_new_window", "merge_all_windows",
-            "agent_event", "agent_inbox", "agent_jump", "agent_respond", "agent_timeline", "new_agent_task",
+            "agent_event", "agent_inbox", "agent_jump", "agent_respond", "agent_timeline", "wait_for_events", "new_agent_task",
             "review_changes":
             handleControlCommand(cmd: cmd, json: json, clientFD: clientFD)
             return
@@ -429,6 +429,12 @@ final class BooSocketServer: @unchecked Sendable {
     /// Must be called on `queue`.
     func isConnected(fd: Int32) -> Bool {
         core.connectedFDs.contains(fd)
+    }
+
+    /// Identifies the connection now on `fd`; compare before a deferred write.
+    /// Must be called on `queue`.
+    func connectionGeneration(fd: Int32) -> UInt64? {
+        core.generation(of: fd)
     }
 
     // MARK: - Sweep

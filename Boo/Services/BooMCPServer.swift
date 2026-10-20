@@ -26,6 +26,14 @@ struct BooMCPServer {
         let message: String
     }
 
+    /// Seconds to wait for Boo's reply: `wait_for_events` is held by Boo for up
+    /// to its own `timeout`, everything else answers at once.
+    static func clientTimeout(for message: [String: Any]) -> Int {
+        guard message["cmd"] as? String == "wait_for_events" else { return 10 }
+        let held = (message["timeout"] as? Double) ?? (message["timeout"] as? Int).map(Double.init)
+        return Int(min(max(held ?? OrchestratorEvents.defaultTimeout, 0), OrchestratorEvents.maxTimeout)) + 15
+    }
+
     // MARK: - Stdio loop
 
     static func runStdio() -> Never {
@@ -34,7 +42,7 @@ struct BooMCPServer {
             env["BOO_SOCK"].flatMap { $0.isEmpty ? nil : $0 }
             ?? (NSHomeDirectory() as NSString).appendingPathComponent(".boo/boo.sock")
         let server = BooMCPServer(
-            send: { try BooSocketClient.request($0, socketPath: socketPath) },
+            send: { try BooSocketClient.request($0, socketPath: socketPath, timeout: clientTimeout(for: $0)) },
             ownPaneID: env["BOO_PANE_ID"].flatMap { $0.isEmpty ? nil : $0 },
             cwd: FileManager.default.currentDirectoryPath,
             token: env["BOO_TOKEN"].flatMap { $0.isEmpty ? nil : $0 })

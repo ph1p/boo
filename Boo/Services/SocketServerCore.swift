@@ -66,6 +66,10 @@ final class SocketServerCore: @unchecked Sendable {
     /// finishes a message holds a slot forever, so `maxClients` silent connections
     /// lock every real request out until the process restarts.
     private var clientTimers: [Int32: DispatchSourceTimer] = [:]
+    /// A number per accepted connection, so a deferred reply can tell its client
+    /// from a later one that got the same descriptor.
+    private var clientGenerations: [Int32: UInt64] = [:]
+    private var nextGeneration: UInt64 = 0
 
     init(queue: DispatchQueue, config: Config, delegate: Delegate) {
         self.queue = queue
@@ -75,6 +79,9 @@ final class SocketServerCore: @unchecked Sendable {
 
     /// Descriptors of the currently connected clients.
     var connectedFDs: [Int32] { Array(clientSources.keys) }
+
+    /// The connection now on `fd`, nil when none is. Must be called on `queue`.
+    func generation(of fd: Int32) -> UInt64? { clientGenerations[fd] }
 
     var isListening: Bool { serverFD >= 0 }
 
@@ -157,10 +164,13 @@ final class SocketServerCore: @unchecked Sendable {
             self.clientBuffers.removeValue(forKey: clientFD)
             self.clientSources.removeValue(forKey: clientFD)
             self.clientTimers.removeValue(forKey: clientFD)?.cancel()
+            self.clientGenerations.removeValue(forKey: clientFD)
             self.delegate?.socketServerDidCloseClient(fd: clientFD)
         }
         source.resume()
         clientSources[clientFD] = source
+        nextGeneration += 1
+        clientGenerations[clientFD] = nextGeneration
 
         armIdleTimer(fd: clientFD)
     }

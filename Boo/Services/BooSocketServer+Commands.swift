@@ -129,10 +129,14 @@ extension BooSocketServer {
             return
         }
         let fd = clientFD
+        // Replies may come much later (`wait_for_events` holds one for minutes);
+        // by then the client may be gone and its descriptor reused.
+        let generation = connectionGeneration(fd: fd)
         handler(cmd, json) { [weak self] response in
             guard let self else { return }
             nonisolated(unsafe) let sendableResponse = response
             queue.async {
+                guard self.connectionGeneration(fd: fd) == generation else { return }
                 self.sendJSON(fd: fd, dict: sendableResponse)
             }
         }
@@ -144,7 +148,7 @@ extension BooSocketServer {
     static let availableEvents: Set<String> = [
         "cwd_changed", "title_changed", "process_changed",
         "remote_session_changed", "focus_changed", "workspace_switched",
-        "theme_changed", "settings_changed", "cmd_started", "cmd_ended"
+        "theme_changed", "settings_changed", "cmd_started", "cmd_ended", "agent_state_changed"
     ]
 
     func handleSubscribe(json: [String: Any], clientFD: Int32) {

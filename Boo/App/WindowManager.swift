@@ -238,6 +238,7 @@ final class WindowManager {
         guard !sharedHandlersInstalled else { return }
         sharedHandlersInstalled = true
         ApprovalCenter.shared.startObserving()
+        OrchestratorEvents.shared.startObserving()
 
         // Only socket traffic is gated; remote control has its own bearer auth.
         BooSocketServer.shared.onControlCommand = { cmd, json, reply in
@@ -289,6 +290,10 @@ final class WindowManager {
     ) {
         if cmd == "agent_timeline" {
             AgentInbox.shared.timeline(json, reply: reply)
+            return
+        }
+        if cmd == "wait_for_events" {
+            OrchestratorEvents.shared.handleSocketCommand(json, reply: reply)
             return
         }
         if let response = AgentInbox.shared.handleSocketCommand(cmd: cmd, json: json) {

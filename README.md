@@ -294,6 +294,7 @@ Boo exposes a Unix domain socket (`~/.boo/boo.sock`) as the primary communicatio
 |                | `agent_jump`                   | Focus an agent's tab (`tab_id`, or next waiting)                                         |
 |                | `agent_respond`                | Approve (Return) or deny (Escape) a waiting agent (`tab_id`, `response`)                 |
 |                | `agent_timeline`               | Prompts, tool calls, tokens and cost of a Claude Code session (`tab_id` or `session_id`) |
+|                | `wait_for_events`              | Agent events after `since` (a `seq`), held up to `timeout` seconds until one arrives     |
 |                | `new_agent_task`               | Worktree + branch + workspace running an agent (`name`, `prompt`)                        |
 |                | `review_changes`               | Open the diff review tab for a workspace (`workspace_id`/`pane_id`)                      |
 | **Events**     | `subscribe`                    | Subscribe to push events (`events` array)                                                |
@@ -343,6 +344,7 @@ Subscribe to real-time push events by keeping a socket connection open:
 | `settings_changed`       | `topic`                                       |
 | `cmd_started`            | `command`, `pane_id`                          |
 | `cmd_ended`              | `command`, `exit_code`, `duration`, `pane_id` |
+| `agent_state_changed`    | `tab_id`, `agent`, `state`, `previous`, `owned`, `message`, `tool` |
 
 All terminal-scoped events include a `pane_id` field identifying which pane the event originated from. This allows subscribers to filter events by pane and avoid cross-pane interference in split-view setups.
 

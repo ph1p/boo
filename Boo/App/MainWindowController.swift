@@ -346,6 +346,7 @@ class ThemedSplitView: NSSplitView {
 
     func notifyTerminalClosed(for terminalID: UUID) {
         pluginRegistry.notifyTerminalClosed(terminalID: terminalID)
+        OrchestratorEvents.shared.terminalClosed(terminalID)
         pendingImageSends.removeValue(forKey: terminalID)
         // Clean up stale scroll offsets for the closed terminal.
         // Coordinator is authoritative; panel copy is cleaned to stay in sync.
