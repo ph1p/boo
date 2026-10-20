@@ -16,6 +16,8 @@ import SwiftUI
     func paneView(_ paneView: PaneView, shellPIDDiscovered pid: pid_t, paneID: UUID, tabID: UUID?)
     func paneView(_ paneView: PaneView, commandStarted command: String, paneID: UUID, tabID: UUID?)
     func paneView(_ paneView: PaneView, commandEnded exitCode: Int32, paneID: UUID, tabID: UUID?)
+    /// A tab's OSC 9;4 progress changed (already stored on the pane).
+    func paneView(_ paneView: PaneView, progressChangedIn paneID: UUID)
     /// Terminal bell (BEL) fired in the given pane.
     func paneView(_ paneView: PaneView, bellRangIn paneID: UUID, tabID: UUID?)
     /// OSC 777/99 desktop notification request from the given pane.
@@ -316,6 +318,9 @@ class PaneView: NSView {
     /// Called when the zoom badge is clicked.
     var onUnzoomRequested: (() -> Void)?
     private var zoomBadge: ZoomBadgeView?
+
+    /// Per tab: clears a progress bar nobody updated for `TerminalProgress.staleAfter`.
+    private var progressExpiry: [UUID: DispatchWorkItem] = [:]
 
     // MARK: - Find Bar
 
@@ -624,7 +629,17 @@ class PaneView: NSView {
 
         gv.onCommandEnd = { [weak self, tabID = gv.tabID] exitCode in
             guard let self else { return }
+            // A finished command can't still be making progress.
+            if let tabID { self.setProgress(nil, forTab: tabID) }
             self.paneDelegate?.paneView(self, commandEnded: exitCode, paneID: self.paneID, tabID: tabID)
+        }
+
+        gv.onProgressReport = { [weak self, tabID = gv.tabID] report, percent in
+            guard let self, let tabID,
+                let index = self.pane.tabs.firstIndex(where: { $0.id == tabID })
+            else { return }
+            let next = TerminalProgress.applying(report, percent: percent, to: self.pane.tabs[index].state.progress)
+            self.setProgress(next, forTab: tabID)
         }
 
         gv.onBell = { [weak self, tabID = gv.tabID] in
@@ -668,6 +683,25 @@ class PaneView: NSView {
             self.findBar = nil
             self.layoutTerminalView()
         }
+    }
+
+    /// Stores a tab's progress, redraws, and re-arms its stale timer.
+    func setProgress(_ progress: TerminalProgress?, forTab tabID: UUID) {
+        guard let index = pane.tabs.firstIndex(where: { $0.id == tabID }) else { return }
+        progressExpiry.removeValue(forKey: tabID)?.cancel()
+        if let progress {
+            let expiry = DispatchWorkItem { [weak self] in
+                guard let self, let index = self.pane.tabs.firstIndex(where: { $0.id == tabID }),
+                    self.pane.tabs[index].state.progress?.updatedAt == progress.updatedAt
+                else { return }
+                self.setProgress(nil, forTab: tabID)
+            }
+            progressExpiry[tabID] = expiry
+            DispatchQueue.main.asyncAfter(deadline: .now() + TerminalProgress.staleAfter, execute: expiry)
+        }
+        guard pane.setProgress(progress, at: index) else { return }
+        needsDisplay = true
+        paneDelegate?.paneView(self, progressChangedIn: paneID)
     }
 
     func showFindBar() {

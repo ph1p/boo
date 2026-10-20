@@ -34,6 +34,7 @@ class ToolbarView: NSView {
         var color: WorkspaceColor = .none
         var hasCustomColor: Bool = false
         var hasActivity: Bool = false
+        var progress: TerminalProgress?
     }
 
     // MARK: - Font Cache (avoids NSFont alloc on every draw pass)

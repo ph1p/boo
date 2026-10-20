@@ -228,6 +228,14 @@ extension PaneView {
                 width: min(titleSize.width, maxTitleW), height: titleSize.height),
             withAttributes: attrs)
 
+        // OSC 9;4 progress along the pill's bottom edge.
+        if let progress = tab.state.progress {
+            let bar = CGRect(
+                x: pillRect.minX + 6, y: pillRect.maxY - ProgressBarStyle.height - 1,
+                width: pillRect.width - 12, height: ProgressBarStyle.height)
+            ProgressBarStyle.draw(ctx, progress: progress, in: bar, theme: theme)
+        }
+
         // Activity dot — shown on inactive tabs when a command finished in background
         if tab.state.hasActivity && !isActive {
             let dotSize: CGFloat = 5

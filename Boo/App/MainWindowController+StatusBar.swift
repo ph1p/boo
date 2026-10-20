@@ -17,7 +17,8 @@ extension MainWindowController {
             ToolbarView.WorkspaceItem(
                 name: ws.displayName, isActive: i == appState.activeWorkspaceIndex, resolvedColor: ws.resolvedColor,
                 isPinned: ws.isPinned, color: ws.color, hasCustomColor: ws.customColor != nil,
-                hasActivity: ws.hasActivity && i != appState.activeWorkspaceIndex)
+                hasActivity: ws.hasActivity && i != appState.activeWorkspaceIndex,
+                progress: TerminalProgress.summary(ws.progressReports))
         }
         toolbar.update(workspaces: wsItems, sidebarVisible: sidebarVisible)
         if let sideBar = sideWorkspaceBar {
@@ -28,6 +29,8 @@ extension MainWindowController {
             }
             sideBar.setItems(barItems, selectedIndex: appState.activeWorkspaceIndex)
         }
+        // Here rather than on each report so closed tabs drop off the dock too.
+        DockProgressTile.shared.refresh()
         refreshStatusBar()
         if let w = window { TrafficLightPositioner.apply(to: w) }
     }

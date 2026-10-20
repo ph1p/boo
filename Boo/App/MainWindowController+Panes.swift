@@ -250,6 +250,10 @@ extension MainWindowController: PaneViewDelegate {
             workspaceID: workspace.id, paneID: pane.id, tabIndex: tabIndex)
     }
 
+    func paneView(_ paneView: PaneView, progressChangedIn paneID: UUID) {
+        refreshToolbar()
+    }
+
     func paneView(_ paneView: PaneView, bellRangIn paneID: UUID, tabID: UUID?) {
         guard let workspace = appState.workspaceContainingPane(paneID),
             let pane = workspace.pane(for: paneID)

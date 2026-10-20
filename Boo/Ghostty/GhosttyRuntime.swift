@@ -101,6 +101,23 @@ private func ghosttyAction(_ app: ghostty_app_t?, _ target: ghostty_target_s, _ 
         }
         return true
 
+    case GHOSTTY_ACTION_PROGRESS_REPORT:
+        guard let view = viewFromTarget() else { return false }
+        let raw = action.action.progress_report
+        let report: TerminalProgress.Report
+        switch raw.state {
+        case GHOSTTY_PROGRESS_STATE_SET: report = .set
+        case GHOSTTY_PROGRESS_STATE_ERROR: report = .error
+        case GHOSTTY_PROGRESS_STATE_INDETERMINATE: report = .indeterminate
+        case GHOSTTY_PROGRESS_STATE_PAUSE: report = .pause
+        default: report = .remove
+        }
+        let percent = Int(raw.progress)
+        DispatchQueue.main.async { [weak view] in
+            view?.onProgressReport?(report, percent)
+        }
+        return true
+
     case GHOSTTY_ACTION_RING_BELL:
         guard let view = viewFromTarget() else { return false }
         DispatchQueue.main.async { [weak view] in

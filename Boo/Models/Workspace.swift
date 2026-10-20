@@ -67,6 +67,11 @@ final class Workspace {
         }
     }
 
+    /// Every tab's progress report, for the workspace pill and the dock tile.
+    var progressReports: [TerminalProgress] {
+        panes.values.flatMap { pane in pane.tabs.compactMap(\.state.progress) }
+    }
+
     var splitTree: SplitTree {
         didSet {
             // Zoom survives ratio changes only; a pane added, closed or moved shows the layout again.

@@ -38,6 +38,8 @@ import Cocoa
     /// The last command the shell ran here and its exit code (nil while it runs).
     /// Set by the runtime before `onCommandStart` / `onCommandEnd`.
     var lastCommand: (command: String, exitCode: Int32?)?
+    /// OSC 9;4 progress report; the percent is -1 when none was sent.
+    var onProgressReport: ((TerminalProgress.Report, Int) -> Void)?
     /// Called when Ghostty fires a terminal bell (BEL / GHOSTTY_ACTION_RING_BELL).
     var onBell: (() -> Void)?
     /// Called when Ghostty requests a desktop notification (OSC 777 / 99).

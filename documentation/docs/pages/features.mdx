@@ -45,6 +45,7 @@ Smart close order: tab → pane → workspace.
 
 - **Right-click a tab** — Context menu with "Close Tab" (or "Close Workspace" when it's the only tab) and a "Move Tab to Workspace →" submenu listing all other open workspaces.
 - **Drag tabs across workspaces** — Drag a tab to a different pane or split zone in the current workspace, or use the workspace pill hover to move it to another workspace entirely. Moving the last tab out of a workspace prompts to close that workspace.
+- **Progress bars** — Programs that report progress with OSC 9;4 (cargo, winget, systemd and others) show a thin bar on their tab. The workspace pill shows its furthest-along bar and the Dock icon shows one for all windows. Errors are red, paused is yellow, and an indeterminate report fills the bar. Bars clear when the command finishes or after 15 minutes without a report. Try `printf '\e]9;4;1;50\a'`.
 
 ## File Explorer
 

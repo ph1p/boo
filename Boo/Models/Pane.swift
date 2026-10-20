@@ -24,6 +24,8 @@ struct TabState {
 
     var hasActivity: Bool = false
     var isCommandRunning: Bool = false
+    /// OSC 9;4 progress; not persisted.
+    var progress: TerminalProgress?
 
     // Plugin UI State
     var expandedPluginIDs: Set<String> = []
@@ -180,6 +182,15 @@ final class Pane {
         guard tabs[index].state.hasActivity != active else { return false }
         tabs[index].state.hasActivity = active
         return true
+    }
+
+    /// False when nothing changed, so callers can skip the redraw.
+    @discardableResult
+    func setProgress(_ progress: TerminalProgress?, at index: Int) -> Bool {
+        guard index >= 0, index < tabs.count else { return false }
+        let old = tabs[index].state.progress
+        tabs[index].state.progress = progress
+        return old?.state != progress?.state || old?.percent != progress?.percent
     }
 
     func setCommandRunning(_ running: Bool, at index: Int) {
