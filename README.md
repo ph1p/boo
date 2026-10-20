@@ -48,7 +48,7 @@ Download the latest release from [GitHub Releases](https://github.com/ph1p/boo/r
 - **IPC socket** — Unix socket at `~/.boo/boo.sock` for reliable process detection and plugin commands
 - **Agent timeline** — Per-session replay of prompts, tool calls, tokens, cost and files touched, with repeated calls flagged as loops (File → Agent Timeline)
 - **Context handoff** — Send a selection or the last command's output to an agent pane (Cmd+Opt+Return or right-click), or drop text and files onto it
-- **MCP server** — `Boo --mcp` (or `~/.boo/shell-integration/boo-mcp`) is a stdio MCP server that lets coding agents split panes, run commands beside themselves, read other panes and start agent tasks. Tools: `get_layout`, `split_pane`, `read_pane`, `send_text`, `close_pane`, `list_agents`, `new_agent_task`, `open_review`
+- **MCP server** — `Boo --mcp` (or `~/.boo/shell-integration/boo-mcp`) is a stdio MCP server that lets coding agents split panes, run commands beside themselves, read other panes and start agent tasks. Tools: `get_layout`, `split_pane`, `read_pane`, `send_text`, `close_pane`, `list_agents`, `new_agent_task`, `open_review`, `wait_for_events`, `agent_respond`, `focus_pane`, `task_status`, `task_diff`, `merge_task`, `discard_task`
 - **Debug plugin** — Live event log and terminal state inspector for diagnostics
 
 ## Build from Source
@@ -277,7 +277,7 @@ Boo exposes a Unix domain socket (`~/.boo/boo.sock`) as the primary communicatio
 |                | `select_pane`                  | Focus a pane (`id`)                                                                      |
 |                | `select_tab`                   | Switch tab in the active pane (`index`)                                                  |
 |                | `get_state`                    | Workspaces, panes, tabs and focus (Remote Control snapshot)                              |
-|                | `get_screen`                   | Active screen, or a pane's text (`pane_id`, `lines` of scrollback)                       |
+|                | `get_screen`                   | Active screen, or a pane's or tab's text (`pane_id`/`tab_id`, `lines` of scrollback)     |
 |                | `agent_idle`                   | Signal that the agent in `pane_id` went idle (activity indicator)                        |
 | **Layout**     | `split_pane`                   | Split a pane (`direction`, `cwd`, `command`, `focus`) → new `pane_id`                    |
 |                | `close_pane`                   | Close a pane (not the workspace's last one)                                              |
@@ -286,17 +286,21 @@ Boo exposes a Unix domain socket (`~/.boo/boo.sock`) as the primary communicatio
 |                | `swap_pane`                    | Swap a pane with its neighbour in `direction`                                            |
 |                | `zoom_pane`                    | Toggle zoom, or set it with `zoomed`                                                     |
 |                | `equalize_splits`              | Equalize split sizes                                                                     |
-|                | `get_layout`                   | Split tree, pane frames, tabs and windows of a workspace                                 |
+|                | `get_layout`                   | Split tree, pane frames, tabs and windows of a workspace; `scope: app` for every window  |
 |                | `move_workspace_to_new_window` | Move a workspace (`index`, default active) to a new window                               |
 |                | `merge_all_windows`            | Merge every window's workspaces into this one                                            |
 | **Agents**     | `agent_event`                  | Report agent state (`event`, `tab_id`/`pane_id`, see below)                              |
 |                | `agent_inbox`                  | List agents across all windows, waiting ones first                                       |
 |                | `agent_jump`                   | Focus an agent's tab (`tab_id`, or next waiting)                                         |
-|                | `agent_respond`                | Approve (Return) or deny (Escape) a waiting agent (`tab_id`, `response`)                 |
+|                | `agent_respond`                | Approve/deny a waiting agent (`tab_id`, `response`), or type `text` into an idle one     |
 |                | `agent_timeline`               | Prompts, tool calls, tokens and cost of a Claude Code session (`tab_id` or `session_id`) |
 |                | `wait_for_events`              | Agent events after `since` (a `seq`), held up to `timeout` seconds until one arrives     |
-|                | `new_agent_task`               | Worktree + branch + workspace running an agent (`name`, `prompt`)                        |
+|                | `new_agent_task`               | Worktree + branch + workspace running an agent (`name`, `prompt`, `base`, `model`)       |
 |                | `review_changes`               | Open the diff review tab for a workspace (`workspace_id`/`pane_id`)                      |
+|                | `task_status`                  | Branch, ahead/behind, dirty state and merge blockers of a task (`tab_id`)                |
+|                | `task_diff`                    | A task's changed files and diff text (`tab_id`, `stat_only`)                             |
+|                | `merge_task`                   | Merge a task into its main checkout (`tab_id`, `cleanup` default true)                   |
+|                | `discard_task`                 | Close a task's workspace, remove its worktree and branch (`tab_id`)                      |
 | **Events**     | `subscribe`                    | Subscribe to push events (`events` array)                                                |
 |                | `unsubscribe`                  | Remove event subscriptions                                                               |
 | **Status Bar** | `statusbar.set`                | Push an external status bar segment                                                      |

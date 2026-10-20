@@ -298,7 +298,8 @@ extension MainWindowController {
 
     /// Opens `path` as a new workspace. With `initialCommand`, its first tab is
     /// a terminal that runs the command as soon as the shell starts.
-    func openWorkspace(path: String, name: String? = nil, initialCommand: String? = nil) {
+    @discardableResult
+    func openWorkspace(path: String, name: String? = nil, initialCommand: String? = nil) -> Workspace {
         let previousIndex = appState.activeWorkspaceIndex
         let workspace = Workspace(folderPath: path)
         if AppSettings.shared.sidebarPerWorkspaceState {
@@ -325,6 +326,7 @@ extension MainWindowController {
         activateWorkspace(appState.workspaces.count - 1)
         savePluginStateForActiveTab()
         WindowManager.shared.writeSession(from: self, sync: false)
+        return workspace
     }
 
     private func configureInitialTab(for workspace: Workspace) {

@@ -71,6 +71,33 @@ final class AgentInboxRemoteTests: XCTestCase {
         XCTAssertEqual(inbox.items[tab]?.state, .needsInput)
     }
 
+    func testTextIsTypedIntoAnIdleAgent() {
+        let inbox = makeInbox()
+        var messages: [(UUID, String)] = []
+        inbox.sendMessage = { tab, text in
+            messages.append((tab, text))
+            return true
+        }
+        let tab = UUID()
+        inbox.apply(event: "stop", tabID: tab)
+
+        var reply = inbox.respond(["tab_id": tab.uuidString, "text": "also add tests"])
+        XCTAssertEqual(reply["ok"] as? Bool, true)
+        XCTAssertEqual(messages.map(\.1), ["also add tests"])
+        XCTAssertEqual(inbox.items[tab]?.state, .working)
+
+        reply = inbox.respond(["tab_id": tab.uuidString, "text": "  "])
+        XCTAssertEqual(reply["ok"] as? Bool, false)
+        reply = inbox.respond(["tab_id": UUID().uuidString, "text": "hi"])
+        XCTAssertEqual(reply["ok"] as? Bool, false, "no agent in that tab")
+
+        let (asking, _) = waiting(inbox)
+        reply = inbox.respond(["tab_id": asking.uuidString, "text": "hi"])
+        XCTAssertEqual(reply["ok"] as? Bool, false, "a permission prompt takes approve or deny")
+        XCTAssertEqual(messages.count, 1)
+        XCTAssertTrue(sent.isEmpty)
+    }
+
     func testPreviewKeepsTheEndWithoutTrailingBlanks() {
         let screen = (1...30).map { "line \($0)   " }.joined(separator: "\n") + "\n\n   \n"
         let preview = AgentInbox.preview(of: screen, lines: 3)

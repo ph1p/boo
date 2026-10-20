@@ -69,6 +69,12 @@ final class AgentInbox {
         AgentInbox.sendResponse(response, to: view)
         return true
     }
+    /// Pastes a message into a tab's terminal and submits it; false when it is not open.
+    var sendMessage: (UUID, String) -> Bool = { tabID, text in
+        guard let view = AgentInbox.terminalView(ofTab: tabID) else { return false }
+        view.paste(text, submit: true)
+        return true
+    }
 
     init() {}
 

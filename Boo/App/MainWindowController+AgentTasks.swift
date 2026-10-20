@@ -9,17 +9,33 @@ extension MainWindowController {
     static let agentTaskKinds: [AgentKind] = [.claudeCode, .codex, .openCode]
 
     /// Shell command that starts `kind`, passing `prompt` as the first message.
-    static func agentTaskCommand(kind: AgentKind, prompt: String) -> String {
+    static func agentTaskCommand(kind: AgentKind, prompt: String, model: String? = nil) -> String {
         let prompt = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
-        let base: String
+        var base: String
         switch kind {
         case .claudeCode, .custom: base = "claude"
         case .codex: base = "codex"
-        case .openCode: base = prompt.isEmpty ? "opencode" : "opencode --prompt"
+        case .openCode: base = "opencode"
+        }
+        // All three take --model.
+        if let model = model?.trimmingCharacters(in: .whitespaces), !model.isEmpty {
+            base += " --model " + shellQuoted(model)
         }
         guard !prompt.isEmpty else { return base }
+        if kind == .openCode { base += " --prompt" }
         // Always quote: a bare word prompt could still be read as a subcommand.
-        return base + " '" + prompt.replacingOccurrences(of: "'", with: "'\\''") + "'"
+        return base + " " + shellQuoted(prompt)
+    }
+
+    private static func shellQuoted(_ text: String) -> String {
+        "'" + text.replacingOccurrences(of: "'", with: "'\\''") + "'"
+    }
+
+    /// A started task: its worktree, workspace and the tab the agent runs in.
+    struct AgentTaskLaunch {
+        let info: AgentWorktree.Info
+        let workspaceID: UUID
+        let tabID: UUID?
     }
 
     // MARK: - New task
@@ -91,37 +107,42 @@ extension MainWindowController {
             var name = nameField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
             if name.isEmpty { name = String(prompt.prefix(40)) }
             let kind = Self.agentTaskKinds[max(0, agentPopup.indexOfSelectedItem)]
-            self.startAgentTask(repo: repo, name: name, kind: kind, prompt: prompt) { error in
-                if let error { self.showAgentTaskError(error, title: "Can't Start Agent Task") }
-            }
-        }
-    }
-
-    /// Creates the worktree off the main thread, then opens its workspace with
-    /// the agent running. `completion` gets an error message or nil.
-    func startAgentTask(
-        repo: String, name: String, kind: AgentKind, prompt: String,
-        completion: @escaping @MainActor (String?) -> Void = { _ in }
-    ) {
-        DispatchQueue.global(qos: .userInitiated).async {
-            let result = Result { try AgentWorktree.create(repo: repo, name: name) }
-            DispatchQueue.main.async { [weak self] in
-                switch result {
-                case .success(let info):
-                    let title = name.isEmpty ? (info.path as NSString).lastPathComponent : name
-                    self?.openWorkspace(
-                        path: info.path, name: title,
-                        initialCommand: Self.agentTaskCommand(kind: kind, prompt: prompt))
-                    completion(nil)
-                case .failure(let error):
-                    completion(error.localizedDescription)
+            self.startAgentTask(repo: repo, name: name, kind: kind, prompt: prompt) { result in
+                if case .failure(let error) = result {
+                    self.showAgentTaskError(error.localizedDescription, title: "Can't Start Agent Task")
                 }
             }
         }
     }
 
-    /// `new_agent_task {name?, prompt?, agent?, repo?}`: repo defaults to the
-    /// active workspace's repository; agent is claude (default), codex or opencode.
+    /// Creates the worktree off the main thread (branching from `base`, default
+    /// HEAD), then opens its workspace with the agent running.
+    func startAgentTask(
+        repo: String, name: String, kind: AgentKind, prompt: String, base: String? = nil, model: String? = nil,
+        completion: @escaping @MainActor (Result<AgentTaskLaunch, Error>) -> Void = { _ in }
+    ) {
+        DispatchQueue.global(qos: .userInitiated).async {
+            let result = Result { try AgentWorktree.create(repo: repo, name: name, base: base) }
+            DispatchQueue.main.async { [weak self] in
+                switch result {
+                case .success(let info):
+                    guard let self else { return }
+                    let title = name.isEmpty ? (info.path as NSString).lastPathComponent : name
+                    let workspace = self.openWorkspace(
+                        path: info.path, name: title,
+                        initialCommand: Self.agentTaskCommand(kind: kind, prompt: prompt, model: model))
+                    let tabID = workspace.pane(for: workspace.activePaneID)?.tabs.last?.id
+                    completion(.success(AgentTaskLaunch(info: info, workspaceID: workspace.id, tabID: tabID)))
+                case .failure(let error):
+                    completion(.failure(error))
+                }
+            }
+        }
+    }
+
+    /// `new_agent_task {name?, prompt?, agent?, repo?, base?, model?}`: repo
+    /// defaults to the active workspace's repository; agent is claude (default),
+    /// codex or opencode. The caller (by `token`) owns the new agent's tab.
     func ipcNewAgentTask(json: [String: Any], reply: @escaping ([String: Any]) -> Void) {
         let name = (json["name"] as? String) ?? ""
         let prompt = (json["prompt"] as? String) ?? ""
@@ -143,22 +164,35 @@ extension MainWindowController {
         // otherwise pick the first candidate folder that is in a repository.
         let folders = agentTaskCandidateFolders
         let title = name.isEmpty ? String(prompt.prefix(40)) : name
+        let base = json["base"] as? String
+        let model = json["model"] as? String
+        let caller = CapabilityTokens.shared.resolve(json["token"] as? String)
         Task { @MainActor [weak self] in
             let repo =
                 if let explicitRepo { explicitRepo } else {
                     await Task.detached(priority: .userInitiated) { Self.agentTaskRepo(in: folders) }.value
                         ?? folders[0]
                 }
-            self?.startAgentTask(repo: repo, name: title, kind: kind, prompt: prompt) { [weak self] error in
-                if let error {
-                    reply(["ok": false, "error": error])
-                    return
+            self?.startAgentTask(
+                repo: repo, name: title, kind: kind, prompt: prompt, base: base, model: model
+            ) { result in
+                switch result {
+                case .failure(let error):
+                    reply(["ok": false, "error": error.localizedDescription])
+                case .success(let launch):
+                    // Owned before the reply, so the caller's next write needs no approval.
+                    if let caller, let tabID = launch.tabID {
+                        CapabilityTokens.shared.markOwned(tabID, by: caller.tabID)
+                    }
+                    let task: [String: Any] = [
+                        "tab_id": launch.tabID?.uuidString ?? NSNull(),
+                        "workspace_id": launch.workspaceID.uuidString,
+                        "path": launch.info.path, "branch": launch.info.branch ?? NSNull(),
+                        "name": title, "agent": json["agent"] as? String ?? "claude"
+                    ]
+                    OrchestratorEvents.shared.post("task_spawned", task)
+                    reply(task.merging(["ok": true]) { $1 })
                 }
-                let workspace = self?.activeWorkspace
-                reply([
-                    "ok": true, "path": workspace?.folderPath ?? "",
-                    "workspace_id": workspace?.id.uuidString ?? ""
-                ])
             }
         }
     }
@@ -299,7 +333,7 @@ extension MainWindowController {
 
     /// Closes the workspace first (its shells hold the folder), then deletes
     /// the worktree and branch.
-    private func closeAndRemoveAgentTask(workspaceID: UUID, info: AgentWorktree.Info) {
+    func closeAndRemoveAgentTask(workspaceID: UUID, info: AgentWorktree.Info) {
         if let index = appState.workspaces.firstIndex(where: { $0.id == workspaceID }) {
             forceCloseWorkspace(at: index)
         }

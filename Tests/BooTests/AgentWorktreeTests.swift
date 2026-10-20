@@ -96,6 +96,51 @@ final class AgentWorktreeTests: XCTestCase {
         XCTAssertEqual(try String(contentsOfFile: "\(repo!)/a.txt", encoding: .utf8), "ours\n")
     }
 
+    func testCreateFromBase() throws {
+        try git("branch", "old")
+        try commit("a.txt", "two\n", in: repo)
+        let info = try AgentWorktree.create(repo: repo, name: "from old", base: "old", root: root)
+        XCTAssertEqual(try String(contentsOfFile: "\(info.path)/a.txt", encoding: .utf8), "one\n")
+        XCTAssertEqual(AgentWorktree.mergeCheck(of: info).behind, 1)
+        XCTAssertThrowsError(try AgentWorktree.create(repo: repo, name: "x", base: "nope", root: root))
+    }
+
+    func testMergeCheckBlockers() throws {
+        let info = try AgentWorktree.create(repo: repo, name: "check", root: root)
+        XCTAssertEqual(AgentWorktree.mergeCheck(of: info).blocker, "nothing_to_merge")
+
+        try commit("b.txt", "new\n", in: info.path)
+        var check = AgentWorktree.mergeCheck(of: info)
+        XCTAssertNil(check.blocker)
+        XCTAssertEqual(check.conflicts, [])
+        XCTAssertEqual(check.status.ahead, 1)
+
+        try write("a.txt", "local edit\n", in: repo)
+        check = AgentWorktree.mergeCheck(of: info)
+        XCTAssertTrue(check.targetDirty)
+        XCTAssertEqual(check.blocker, "target_dirty")
+        XCTAssertThrowsError(try AgentWorktree.merge(info), "never merges over the user's uncommitted work")
+        XCTAssertEqual(try String(contentsOfFile: "\(repo!)/a.txt", encoding: .utf8), "local edit\n")
+        try git("checkout", "a.txt")
+
+        try write("untracked.txt", "x\n", in: repo)
+        XCTAssertFalse(AgentWorktree.mergeCheck(of: info).targetDirty, "untracked files don't block")
+
+        try write("c.txt", "wip\n", in: info.path)
+        XCTAssertEqual(AgentWorktree.mergeCheck(of: info).blocker, "dirty")
+    }
+
+    func testMergeCheckFindsConflicts() throws {
+        let info = try AgentWorktree.create(repo: repo, name: "clash", root: root)
+        try commit("a.txt", "theirs\n", in: info.path)
+        try commit("a.txt", "ours\n", in: repo)
+        let check = AgentWorktree.mergeCheck(of: info)
+        XCTAssertEqual(check.conflicts, ["a.txt"])
+        XCTAssertEqual(check.behind, 1)
+        XCTAssertEqual(check.blocker, "conflicts")
+        XCTAssertEqual(try git("status", "--porcelain"), "", "checking touches no checkout")
+    }
+
     func testCreateOutsideGitFails() {
         XCTAssertThrowsError(try AgentWorktree.create(repo: sandbox, name: "x", root: root))
     }
@@ -107,5 +152,31 @@ final class AgentWorktreeTests: XCTestCase {
         XCTAssertEqual(C.agentTaskCommand(kind: .codex, prompt: "don't"), "codex 'don'\\''t'")
         XCTAssertEqual(C.agentTaskCommand(kind: .openCode, prompt: "go"), "opencode --prompt 'go'")
         XCTAssertEqual(C.agentTaskCommand(kind: .openCode, prompt: ""), "opencode")
+        XCTAssertEqual(
+            C.agentTaskCommand(kind: .claudeCode, prompt: "go", model: "opus"), "claude --model 'opus' 'go'")
+        XCTAssertEqual(C.agentTaskCommand(kind: .openCode, prompt: "", model: " "), "opencode")
+    }
+
+    func testTaskDiffTextAndBlockerHints() {
+        typealias C = MainWindowController
+        var file = AgentReview.FileDiff(path: "a.txt")
+        file.hunks = [
+            .init(
+                header: "@@ -1 +1 @@",
+                lines: [
+                    .init(kind: .removed, oldLine: 1, newLine: nil, text: "one"),
+                    .init(kind: .added, oldLine: nil, newLine: 1, text: "two")
+                ])
+        ]
+        XCTAssertEqual(C.unifiedText([file]), "--- a.txt (modified)\n@@ -1 +1 @@\n-one\n+two\n")
+
+        let info = AgentWorktree.Info(path: "/wt/x", mainRoot: "/repo", branch: "boo/x")
+        let conflicts = AgentWorktree.MergeCheck(
+            status: .init(isDirty: false, ahead: 2, target: "main"), behind: 1, targetDirty: false,
+            conflicts: ["a.txt"])
+        XCTAssertEqual(C.blockerMessage(conflicts, info), "boo/x conflicts with main in a.txt. Ask its agent to rebase onto main.")
+        let ready = AgentWorktree.MergeCheck(
+            status: .init(isDirty: false, ahead: 2, target: "main"), behind: 0, targetDirty: false, conflicts: [])
+        XCTAssertNil(C.blockerMessage(ready, info))
     }
 }

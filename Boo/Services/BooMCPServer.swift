@@ -119,7 +119,9 @@ struct BooMCPServer {
     private func call(_ name: String, _ args: [String: Any]) throws -> String {
         switch name {
         case "get_layout":
-            var reply = try boo(["cmd": "get_layout"], pane: args["pane_id"] as? String ?? ownPaneID)
+            var message: [String: Any] = ["cmd": "get_layout"]
+            if let scope = args["scope"] as? String { message["scope"] = scope }
+            var reply = try boo(message, pane: args["pane_id"] as? String ?? ownPaneID)
             reply["your_pane"] = ownPaneID ?? NSNull()
             return Self.json(reply)
         case "split_pane":
@@ -136,32 +138,81 @@ struct BooMCPServer {
             }
             return Self.json(out)
         case "read_pane":
-            let pane = try requiredPane(args)
             let lines = (args["lines"] as? Int) ?? 100
+            if let tab = args["tab_id"] as? String, !tab.isEmpty {
+                return try boo(["cmd": "get_screen", "lines": lines, "tab_id": tab], pane: nil)["text"] as? String ?? ""
+            }
+            let pane = try requiredPane(args, orTab: true)
             let reply = try boo(["cmd": "get_screen", "lines": lines], pane: pane)
             return reply["text"] as? String ?? ""
         case "send_text":
             let pane = try requiredPane(args, notOwn: "Refusing to type into your own pane.")
             guard let text = args["text"] as? String else { throw Failure(message: "text is required") }
-            _ = try boo(["cmd": "send_text", "text": text, "submit": args["submit"] as? Bool ?? true], pane: pane)
-            return "sent"
+            let reply = try boo(
+                ["cmd": "send_text", "text": text, "submit": args["submit"] as? Bool ?? true], pane: pane)
+            return Self.pending(reply) ?? "sent"
         case "close_pane":
             let pane = try requiredPane(args, notOwn: "Refusing to close your own pane.")
-            _ = try boo(["cmd": "close_pane"], pane: pane)
-            return "closed"
+            let reply = try boo(["cmd": "close_pane"], pane: pane)
+            return Self.pending(reply) ?? "closed"
         case "list_agents":
             return Self.json(try boo(["cmd": "agent_inbox"], pane: nil))
         case "new_agent_task":
-            var message: [String: Any] = ["cmd": "new_agent_task", "repo": cwd]
-            for key in ["name", "prompt", "agent"] { message[key] = args[key] }
+            let repo = (args["repo"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? cwd
+            var message: [String: Any] = ["cmd": "new_agent_task", "repo": repo]
+            for key in ["name", "prompt", "agent", "base", "model"] { message[key] = args[key] }
             let reply = try boo(message, pane: nil)
-            return Self.json(["path": reply["path"] ?? NSNull(), "workspace_id": reply["workspace_id"] ?? NSNull()])
+            var out: [String: Any] = [:]
+            for key in ["tab_id", "workspace_id", "path", "branch"] { out[key] = reply[key] ?? NSNull() }
+            return Self.json(out)
         case "open_review":
-            _ = try boo(["cmd": "review_changes"], pane: ownPaneID)
+            _ = try boo(["cmd": "review_changes"], pane: args["pane_id"] as? String ?? ownPaneID)
             return "opened"
+        case "wait_for_events":
+            var message: [String: Any] = ["cmd": "wait_for_events"]
+            for key in ["since", "timeout"] { message[key] = args[key] }
+            return Self.json(try boo(message, pane: nil))
+        case "agent_respond":
+            var message: [String: Any] = ["cmd": "agent_respond", "tab_id": try requiredTab(args)]
+            if let text = args["text"] as? String, args["response"] == nil {
+                message["text"] = text
+            } else {
+                guard let response = args["response"] as? String else {
+                    throw Failure(message: "response (approve or deny) or text is required")
+                }
+                message["response"] = response
+                if let shown = args["updated_at"] { message["updated_at"] = shown }
+            }
+            return Self.pending(try boo(message, pane: nil)) ?? "sent"
+        case "focus_pane":
+            _ = try boo(["cmd": "agent_jump", "tab_id": try requiredTab(args)], pane: nil)
+            return "focused"
+        case "task_status":
+            return Self.json(try boo(["cmd": "task_status", "tab_id": try requiredTab(args)], pane: nil))
+        case "task_diff":
+            let message: [String: Any] = [
+                "cmd": "task_diff", "tab_id": try requiredTab(args), "stat_only": args["stat_only"] as? Bool ?? false
+            ]
+            return Self.json(try boo(message, pane: nil))
+        case "merge_task", "discard_task":
+            var message: [String: Any] = ["cmd": name, "tab_id": try requiredTab(args)]
+            if name == "merge_task" {
+                message["cleanup"] = args["cleanup"] as? Bool ?? true
+                if let summary = args["summary"] as? String { message["summary"] = summary }
+            }
+            let reply = try boo(message, pane: nil)
+            return Self.pending(reply) ?? Self.json(reply)
         default:
             throw Failure(message: "unknown tool: \(name)")
         }
+    }
+
+    /// What to tell the agent when Boo put the command on an approval card.
+    private static func pending(_ reply: [String: Any]) -> String? {
+        guard reply["status"] as? String == "pending" else { return nil }
+        let id = reply["approval_id"] as? String ?? ""
+        return
+            "Waiting for the user to approve (approval_id \(id)). The outcome arrives as an approval_resolved event from wait_for_events; do not repeat the call."
     }
 
     /// Sends `message` aimed at `pane` and unwraps Boo's `ok`/`error` reply.
@@ -177,14 +228,23 @@ struct BooMCPServer {
         return reply
     }
 
-    private func requiredPane(_ args: [String: Any], notOwn refusal: String? = nil) throws -> String {
+    private func requiredPane(_ args: [String: Any], notOwn refusal: String? = nil, orTab: Bool = false) throws
+        -> String
+    {
         guard let pane = args["pane_id"] as? String, !pane.isEmpty else {
-            throw Failure(message: "pane_id is required (get_layout lists the panes)")
+            throw Failure(message: "\(orTab ? "pane_id or tab_id" : "pane_id") is required (get_layout lists them)")
         }
         if let refusal, pane.caseInsensitiveCompare(ownPaneID ?? "") == .orderedSame {
             throw Failure(message: refusal)
         }
         return pane
+    }
+
+    private func requiredTab(_ args: [String: Any]) throws -> String {
+        guard let tab = args["tab_id"] as? String, !tab.isEmpty else {
+            throw Failure(message: "tab_id is required (get_layout with scope app lists them)")
+        }
+        return tab
     }
 
     private static func json(_ value: [String: Any]) -> String {
@@ -199,7 +259,11 @@ struct BooMCPServer {
         Boo is the terminal you are running in. Use these tools to work beside the user: \
         open a pane next to yours for a dev server, test watcher or log tail and read its output \
         later, instead of blocking your own shell. New panes leave focus with the user. \
-        get_layout shows every pane, its tabs and running processes; your_pane is yours.
+        get_layout shows every pane, its tabs and running processes; your_pane is yours; \
+        scope app covers every window. new_agent_task hands independent work to another agent \
+        on its own worktree; wait_for_events blocks until agents change state, so loop on it \
+        (pass the last seq as since) instead of polling. task_status says whether a task can \
+        merge and why not; merge_task and discard_task always wait for the user's approval.
         """
 
     private static func object(_ properties: [String: Any], required: [String] = []) -> [String: Any] {
@@ -210,13 +274,23 @@ struct BooMCPServer {
         ["type": "string", "description": "Pane id from get_layout"]
     }
 
+    private static var tabProperty: [String: Any] {
+        ["type": "string", "description": "Tab id of an agent, from get_layout (scope app) or list_agents"]
+    }
+
     static var tools: [[String: Any]] {
         [
             [
                 "name": "get_layout",
                 "description":
-                    "Panes of the Boo workspace you run in: split tree, and each pane's tabs with title, cwd and running process. your_pane is the pane you are in.",
-                "inputSchema": object(["pane_id": paneProperty]),
+                    "Panes of the Boo workspace you run in: split tree, and each pane's tabs with title, cwd and running process. your_pane is the pane you are in. With scope app: every window, workspace, pane and tab, each agent's state and whether you started it (owned).",
+                "inputSchema": object([
+                    "pane_id": paneProperty,
+                    "scope": [
+                        "type": "string", "enum": ["workspace", "app"],
+                        "description": "workspace (default) or the whole app"
+                    ]
+                ]),
                 "annotations": ["readOnlyHint": true]
             ],
             [
@@ -236,12 +310,13 @@ struct BooMCPServer {
             ],
             [
                 "name": "read_pane",
-                "description": "Reads the last lines of a pane's terminal output, scrollback included.",
-                "inputSchema": object(
-                    [
-                        "pane_id": paneProperty,
-                        "lines": ["type": "integer", "description": "How many lines (default 100, max 5000)"]
-                    ], required: ["pane_id"]),
+                "description":
+                    "Reads the last lines of a terminal's output, scrollback included: a pane's active tab, or any tab by tab_id in any window.",
+                "inputSchema": object([
+                    "pane_id": paneProperty,
+                    "tab_id": tabProperty,
+                    "lines": ["type": "integer", "description": "How many lines (default 100, max 5000)"]
+                ]),
                 "annotations": ["readOnlyHint": true]
             ],
             [
@@ -270,22 +345,95 @@ struct BooMCPServer {
             [
                 "name": "new_agent_task",
                 "description":
-                    "Starts another coding agent on its own git worktree and branch (boo/<name>) of your repository, in a new Boo workspace, with prompt as its first message. For independent work that can run in parallel; the user merges or discards it.",
+                    "Starts another coding agent on its own git worktree and branch (boo/<name>) of a repository, in a new Boo workspace, with prompt as its first message. For independent work that can run in parallel. Returns the agent's tab_id.",
                 "inputSchema": object(
                     [
                         "name": ["type": "string", "description": "Short task name, used for the branch"],
                         "prompt": ["type": "string", "description": "First message for the agent"],
+                        "repo": ["type": "string", "description": "Repository path (default: your cwd)"],
+                        "base": [
+                            "type": "string", "description": "Branch or commit to start from (default: the repo's HEAD)"
+                        ],
                         "agent": [
                             "type": "string", "enum": ["claude", "codex", "opencode"],
                             "description": "Which agent (default claude)"
-                        ]
+                        ],
+                        "model": ["type": "string", "description": "Model for the agent (default: its own)"]
                     ], required: ["prompt"])
             ],
             [
                 "name": "open_review",
                 "description":
-                    "Opens Boo's review of this workspace's changes for the user, who can comment on lines and send the comments back to you as one message.",
-                "inputSchema": object([:])
+                    "Opens Boo's review of a workspace's changes for the user (yours, or pane_id's), who can comment on lines and send the comments back to the agent as one message.",
+                "inputSchema": object(["pane_id": paneProperty])
+            ],
+            [
+                "name": "wait_for_events",
+                "description":
+                    "Blocks until something happens (an agent changes state, a task is spawned or finishes, a pane closes, an approval resolves) or timeout passes, then returns the events and seq. Pass the last seq as since so nothing is lost between calls; missed true means older events were dropped, so re-read get_layout.",
+                "inputSchema": object([
+                    "since": ["type": "integer", "description": "Return events after this seq (default: now)"],
+                    "timeout": ["type": "number", "description": "Seconds to wait (default 300, max 540)"]
+                ]),
+                "annotations": ["readOnlyHint": true]
+            ],
+            [
+                "name": "agent_respond",
+                "description":
+                    "Answers an agent: approve or deny the permission prompt it waits on, or send it text as a message (for an agent that is not waiting on a prompt). Needs the user's approval unless you started the agent.",
+                "inputSchema": object(
+                    [
+                        "tab_id": tabProperty,
+                        "response": ["type": "string", "enum": ["approve", "deny"]],
+                        "text": ["type": "string", "description": "A message instead of approve or deny"],
+                        "updated_at": [
+                            "type": "number",
+                            "description":
+                                "The agent's updated_at you looked at, so the answer never lands on a newer prompt"
+                        ]
+                    ], required: ["tab_id"])
+            ],
+            [
+                "name": "focus_pane",
+                "description": "Brings an agent's tab to the front for the user, in whatever window it is.",
+                "inputSchema": object(["tab_id": tabProperty], required: ["tab_id"])
+            ],
+            [
+                "name": "task_status",
+                "description":
+                    "Whether an agent task can merge: branch, target, commits ahead and behind, uncommitted changes in the task or the main checkout, files that would conflict, and blocker with a hint when it cannot.",
+                "inputSchema": object(["tab_id": tabProperty], required: ["tab_id"]),
+                "annotations": ["readOnlyHint": true]
+            ],
+            [
+                "name": "task_diff",
+                "description":
+                    "An agent task's changes against its target branch: files with line counts and, unless stat_only, the diff.",
+                "inputSchema": object(
+                    [
+                        "tab_id": tabProperty,
+                        "stat_only": ["type": "boolean", "description": "Only the file list (default false)"]
+                    ], required: ["tab_id"]),
+                "annotations": ["readOnlyHint": true]
+            ],
+            [
+                "name": "merge_task",
+                "description":
+                    "Merges an agent task's branch into the main checkout's branch, after the user approves. Check task_status first. With cleanup (default true) the workspace, worktree and branch are removed after.",
+                "inputSchema": object(
+                    [
+                        "tab_id": tabProperty,
+                        "cleanup": ["type": "boolean", "description": "Remove the task after merging (default true)"],
+                        "summary": ["type": "string", "description": "One line for the user's approval card"]
+                    ], required: ["tab_id"]),
+                "annotations": ["destructiveHint": true]
+            ],
+            [
+                "name": "discard_task",
+                "description":
+                    "Closes an agent task and deletes its worktree and branch, after the user approves. Unmerged work is lost.",
+                "inputSchema": object(["tab_id": tabProperty], required: ["tab_id"]),
+                "annotations": ["destructiveHint": true]
             ]
         ]
     }

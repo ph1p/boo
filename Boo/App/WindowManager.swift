@@ -300,6 +300,7 @@ final class WindowManager {
             reply(response)
             return
         }
+        if dispatchAppWide(cmd: cmd, json: json, reply: reply) { return }
         // A command naming a pane goes to the window holding it, which may be in the background.
         let paneID = (json["pane_id"] as? String).flatMap(UUID.init(uuidString:))
         if let paneID, OrchestratorController.shared.isOrchestratorPane(paneID) {

@@ -32,6 +32,22 @@ extension AgentInbox {
         }
     }
 
+    /// `agent_respond {text}`: a message for the agent in any state, pasted and
+    /// submitted like typed input. Not for permission prompts, where Return and
+    /// Escape are the answers.
+    private func message(_ tabID: UUID, _ text: String) -> [String: Any] {
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return ["ok": false, "error": "text is empty"]
+        }
+        guard let item = items[tabID] else { return ["ok": false, "error": "no agent runs in that tab"] }
+        if item.state == .needsInput {
+            return ["ok": false, "error": "the agent is waiting for approve or deny, not a message"]
+        }
+        guard sendMessage(tabID, text) else { return ["ok": false, "error": "the agent's terminal is not open"] }
+        _ = apply(event: "working", tabID: tabID, agent: item.agent)
+        return ["ok": true]
+    }
+
     /// Last `lines` non-trailing-blank lines of a screen, trailing spaces trimmed.
     static func preview(of screen: String, lines: Int = previewLines) -> String {
         var rows = screen.components(separatedBy: "\n").map { row in
@@ -44,10 +60,14 @@ extension AgentInbox {
     }
 
     /// `agent_respond`: `tab_id`, `response` (`approve` or `deny`) and the
-    /// `updated_at` the page showed, so an answer never lands on a newer prompt.
+    /// `updated_at` the page showed, so an answer never lands on a newer prompt;
+    /// or `tab_id` and `text`, a message for the agent.
     func respond(_ json: [String: Any]) -> [String: Any] {
         guard let tabID = (json["tab_id"] as? String).flatMap(UUID.init(uuidString:)) else {
             return ["ok": false, "error": "missing tab_id"]
+        }
+        if json["response"] == nil, let text = json["text"] as? String {
+            return message(tabID, text)
         }
         guard let response = (json["response"] as? String).flatMap(Response.init(rawValue:)) else {
             return ["ok": false, "error": "response must be approve or deny"]

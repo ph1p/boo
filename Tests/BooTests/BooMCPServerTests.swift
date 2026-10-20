@@ -48,7 +48,8 @@ final class BooMCPServerTests: XCTestCase {
             tools.compactMap { $0["name"] as? String },
             [
                 "get_layout", "split_pane", "read_pane", "send_text", "close_pane", "list_agents", "new_agent_task",
-                "open_review"
+                "open_review", "wait_for_events", "agent_respond", "focus_pane", "task_status", "task_diff",
+                "merge_task", "discard_task"
             ])
         for tool in tools {
             XCTAssertEqual((tool["inputSchema"] as? [String: Any])?["type"] as? String, "object")
@@ -111,6 +112,66 @@ final class BooMCPServerTests: XCTestCase {
         XCTAssertEqual(text(call(server, "send_text", ["pane_id": otherPane, "text": "q"])), "sent")
         XCTAssertEqual(sent().last?["submit"] as? Bool, true)
         XCTAssertEqual(call(server, "read_pane")["isError"] as? Bool, true, "pane_id is required")
+
+        XCTAssertEqual(text(call(server, "read_pane", ["tab_id": "t1"])), "ready on :3000")
+        XCTAssertEqual(sent().last?["tab_id"] as? String, "t1")
+        XCTAssertNil(sent().last?["pane_id"], "a tab is found in any window")
+    }
+
+    func testAppScopeAndTaskSpawnArguments() {
+        let (server, sent) = makeServer { _ in
+            ["ok": true, "tab_id": "t1", "workspace_id": "w", "path": "/wt/x", "branch": "boo/x"]
+        }
+        _ = call(server, "get_layout", ["scope": "app"])
+        XCTAssertEqual(sent().last?["scope"] as? String, "app")
+
+        let spawned = text(
+            call(
+                server, "new_agent_task",
+                ["prompt": "p", "repo": "/other", "base": "dev", "model": "opus", "agent": "codex"]))
+        let message = sent().last ?? [:]
+        XCTAssertEqual(message["repo"] as? String, "/other")
+        XCTAssertEqual(message["base"] as? String, "dev")
+        XCTAssertEqual(message["model"] as? String, "opus")
+        XCTAssertEqual(message["agent"] as? String, "codex")
+        XCTAssertTrue(spawned.contains("\"tab_id\" : \"t1\""))
+        XCTAssertTrue(spawned.contains("\"branch\" : \"boo/x\""))
+    }
+
+    func testOrchestratorToolsForwardByTab() {
+        let (server, sent) = makeServer()
+        _ = call(server, "wait_for_events", ["since": 4, "timeout": 30])
+        XCTAssertEqual(sent().last?["cmd"] as? String, "wait_for_events")
+        XCTAssertEqual(sent().last?["since"] as? Int, 4)
+
+        _ = call(server, "agent_respond", ["tab_id": "t", "response": "approve", "updated_at": 12.5])
+        XCTAssertEqual(sent().last?["response"] as? String, "approve")
+        XCTAssertEqual(sent().last?["updated_at"] as? Double, 12.5)
+        _ = call(server, "agent_respond", ["tab_id": "t", "text": "also add tests"])
+        XCTAssertEqual(sent().last?["text"] as? String, "also add tests")
+        XCTAssertNil(sent().last?["response"])
+        XCTAssertEqual(call(server, "agent_respond", ["tab_id": "t"])["isError"] as? Bool, true)
+
+        _ = call(server, "focus_pane", ["tab_id": "t"])
+        XCTAssertEqual(sent().last?["cmd"] as? String, "agent_jump")
+        _ = call(server, "task_diff", ["tab_id": "t", "stat_only": true])
+        XCTAssertEqual(sent().last?["stat_only"] as? Bool, true)
+        _ = call(server, "merge_task", ["tab_id": "t"])
+        XCTAssertEqual(sent().last?["cleanup"] as? Bool, true)
+
+        let count = sent().count
+        for tool in ["task_status", "task_diff", "merge_task", "discard_task", "focus_pane"] {
+            XCTAssertEqual(call(server, tool)["isError"] as? Bool, true, "\(tool) needs tab_id")
+        }
+        XCTAssertEqual(sent().count, count)
+    }
+
+    func testPendingApprovalIsExplained() {
+        let (server, _) = makeServer { _ in ["ok": true, "status": "pending", "approval_id": "A1"] }
+        let result = text(call(server, "merge_task", ["tab_id": "t"]))
+        XCTAssertTrue(result.contains("approval_id A1"))
+        XCTAssertTrue(result.contains("approval_resolved"))
+        XCTAssertTrue(text(call(server, "send_text", ["pane_id": otherPane, "text": "y"])).contains("A1"))
     }
 
     func testRefusesToTypeIntoOrCloseOwnPane() {
