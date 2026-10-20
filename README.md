@@ -34,6 +34,7 @@ Download the latest release from [GitHub Releases](https://github.com/ph1p/boo/r
 - **Agent Center** — Auto-detects Claude Code, Codex, OpenCode, and other AI CLI sessions with config/diff overview
 - **Agent inbox** — Tracks agents across all windows and flags the ones waiting for input; Cmd+Shift+J jumps to the next waiting agent ([agents](https://ph1p.github.io/boo/agents))
 - **Agent tasks** — File → New Agent Task starts an agent in its own git worktree, branch and workspace; merge or discard the worktree from the workspace's context menu
+- **Orchestrator** — Cmd+Opt+O opens a drawer with one Claude Code session that sees every agent: it answers waiting agents, splits work into agent tasks and merges them, with your approval for anything it did not start ([orchestrator](https://ph1p.github.io/boo/agents#orchestrator))
 - **Review mode** — File → Review Changes opens a diff review tab for the workspace, with comments you can send to the agent
 - **Remote explorer** — Auto-detects SSH/Mosh, container (docker, podman, kubectl, …), VM, and device shells; shows the remote file tree
 - **Remote control** — Optional token-protected web UI to control Boo from any device on your LAN, including approving or denying waiting agents (Terminal → Start Remote Control Server)

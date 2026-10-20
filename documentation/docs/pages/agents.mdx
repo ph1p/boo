@@ -70,3 +70,31 @@ codex mcp add boo -- ~/.boo/shell-integration/boo-mcp
 ```
 
 The agent can then read the layout (`get_layout`), open a pane beside it for a dev server or tests (`split_pane`), read and type into other panes (`read_pane`, `send_text`), close them (`close_pane`), list agents (`list_agents`), start parallel tasks (`new_agent_task`) and open the review for you (`open_review`). It never types into or closes its own pane. Full tool list: [MCP Server](/ipc-socket#mcp-server).
+
+## Orchestrator
+
+The orchestrator is one Claude Code session that sees every window, workspace and agent. It **triages** (reads waiting agents and answers them), **dispatches** (splits work into parallel agent tasks) and **integrates** (reviews finished tasks, has their agents rebase on conflicts, and merges them).
+
+Open it with **Window → Toggle Orchestrator** (⌥⌘O) or the **Orchestrator** status bar segment. It lives in a drawer on the right edge of the front window. The drawer moves with you between windows, and the session keeps running while the drawer is closed. At the top the drawer lists all agents (tagged **owned** when the orchestrator started them), followed by approval cards, then the orchestrator's terminal. Drag the drawer's left edge to resize it.
+
+Boo starts `claude` with its own MCP config (`~/.boo/orchestrator/mcp.json`, Boo's server only) and a bundled system prompt. It needs [Claude Code](https://claude.ai/code) installed; the drawer shows the install command if it is missing. Boo remembers the conversation: after you quit Claude or Boo, **Resume** picks it up again with `claude --resume`, and **New Conversation** starts over. If the old transcript is gone, Boo starts a new conversation and says so.
+
+### Approvals
+
+The orchestrator can read everything. It writes into panes freely only when it started them (its agent tasks). Any other write needs your approval on a card in the drawer:
+
+- answering an agent (`agent_respond`), or typing or pressing keys into an agent or a remote session (SSH, container, VM)
+- closing an agent's pane
+- merging or discarding a task (always, even for its own tasks)
+
+Each card shows the action, the target agent and the exact text. Choose **Allow** (⌘↩), **Deny** (⎋) or **Allow for this pane** (for the rest of the session; never offered for merge or discard). If the target changes state before you decide, the card turns stale and nothing is sent. When a card arrives while the drawer is out of sight, Boo sends a notification that opens it. The status bar segment counts waiting cards.
+
+Its own tasks are remembered by worktree folder, so they stay its own after Boo restarts.
+
+### Loop guard
+
+If the orchestrator writes to the same agent more than three times without the agent changing state, the next write waits on a **Possible loop** card. Allowing it resets the count.
+
+### Merging
+
+Before a merge the orchestrator checks the task with `task_status`. It asks the agent to commit if the worktree is dirty, and to rebase in its own worktree if the merge would conflict. If your main checkout has uncommitted changes, it tells you and waits; it never stashes, resets or checks out anything there. Clean tasks get a diff summary and a merge card.

@@ -46,7 +46,8 @@ means the target changed; read it again before deciding anything.
 - Do not edit files in the user's repositories yourself; agents do the work in
   their worktrees. Your shell is for reading (git log, tests, files).
 - If an agent does not change state after a few messages from you, stop and
-  tell the user instead of repeating yourself.
+  tell the user instead of repeating yourself. Boo enforces this: a pending
+  reply with `reason: "possible_loop"` means the user must allow the next one.
 - If `merge_task` fails, report the error. Do not retry in a loop.
 - Keep messages to agents short and specific: what to do, in which files, and
   what "done" means.

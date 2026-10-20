@@ -69,13 +69,14 @@ final class ApprovalCenter {
     /// Adds a card. `perform` runs the command when allowed and hands back its reply.
     @discardableResult
     func enqueue(
-        cmd: String, json: [String: Any], caller: UUID, targets: [UUID],
+        cmd: String, json: [String: Any], caller: UUID, targets: [UUID], loop: Bool = false,
         perform: @escaping (@escaping ([String: Any]) -> Void) -> Void
     ) -> Request {
+        let action = Self.action(cmd: cmd, json: json)
         let request = Request(
             id: UUID(), cmd: cmd, json: json, callerTabID: caller, targetTabIDs: targets,
-            action: Self.action(cmd: cmd, json: json), payload: Self.payload(cmd: cmd, json: json),
-            allowsTabGrant: !OrchestratorGate.alwaysApproved.contains(cmd), createdAt: Date(),
+            action: loop ? "Possible loop · \(action)" : action, payload: Self.payload(cmd: cmd, json: json),
+            allowsTabGrant: !loop && !OrchestratorGate.alwaysApproved.contains(cmd), createdAt: Date(),
             stamps: Dictionary(uniqueKeysWithValues: targets.map { ($0, stamp($0)) }))
         pending.append(request)
         performers[request.id] = perform

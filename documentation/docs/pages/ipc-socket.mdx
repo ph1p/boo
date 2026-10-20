@@ -189,6 +189,13 @@ codex mcp add boo -- ~/.boo/shell-integration/boo-mcp
 | `list_agents`    | The agent inbox                                                                                   |
 | `new_agent_task` | Worktree task on the agent's repository with a first `prompt`                                     |
 | `open_review`    | Review tab for the agent's workspace                                                              |
+| `wait_for_events` | Blocks until an agent changes state, a task is spawned or finishes, a pane closes or an approval resolves (`since`, `timeout`) |
+| `agent_respond`  | Approve, deny or answer a waiting agent by `tab_id`                                               |
+| `focus_pane`     | Bring an agent's tab to the front                                                                 |
+| `task_status`    | A task's commits, uncommitted changes, merge conflicts, and whether the main checkout is dirty    |
+| `task_diff`      | A task's changes (`stat_only` for the summary)                                                    |
+| `merge_task`     | Merge a task into its main checkout (`cleanup` removes the worktree)                              |
+| `discard_task`   | Delete a task's worktree and branch                                                               |
 
 The server (`Boo --mcp`) talks to the running app over `$BOO_SOCK` and defaults to the agent's pane through `$BOO_PANE_ID`, which every Boo terminal sets. It refuses to type into or close the agent's own pane.
 
@@ -202,3 +209,20 @@ External processes can publish status bar segments. Tint accepts named colors (`
 - Connecting processes are verified with `LOCAL_PEERCRED`
 - Registered PIDs are checked as descendants of the shell
 - Dead processes and disconnected clients are cleaned up automatically
+
+### Capability tokens
+
+Every Boo terminal gets a random `BOO_TOKEN` next to `BOO_PANE_ID`. A command needs this token when it would give a process power it lacks in its own shell:
+
+- `agent_respond`
+- `send_text` or `send_key` into an agent or a remote session
+- `close_pane` on an agent pane
+- merging or discarding a task
+
+Send the token as `"token"` in the request. The MCP server does this for you.
+
+- A normal terminal's token runs these commands directly.
+- The [orchestrator](/agents#orchestrator)'s token puts them on an approval card, except writes to agents it started. Merge and discard always need a card. The reply is `{"status":"pending","approval_id":…}`.
+- Without a token, these commands are rejected. Everything else works without a token, so scripts keep working as long as they do not type into agents or remote sessions.
+
+Tokens are kept in memory and change when Boo restarts. They catch mistakes and overreach by a model. They do not stop an attacker running as the same user, who can read another process's environment.

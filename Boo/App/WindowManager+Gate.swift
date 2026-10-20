@@ -13,7 +13,14 @@ extension WindowManager {
             granted: { tab in caller.map { ApprovalCenter.shared.isGranted(caller: $0.tabID, tab: tab) } ?? false })
         switch decision {
         case .allow:
-            dispatchCommand(cmd: cmd, json: json, reply: reply)
+            if let caller, caller.grade == .gated, let target, target.isAgent,
+                OrchestratorLoopGuard.writeCommands.contains(cmd),
+                OrchestratorLoopGuard.shared.record(target.tabIDs)
+            {
+                enqueueCard(cmd: cmd, json: json, caller: caller, target: target, loop: true, reply: reply)
+            } else {
+                dispatchCommand(cmd: cmd, json: json, reply: reply)
+            }
         case .reject(let error):
             reply(["ok": false, "error": error])
         case .approve:
@@ -21,18 +28,30 @@ extension WindowManager {
                 reply(["ok": false, "error": "missing token"])
                 return
             }
-            // Pin the target so the card's command cannot drift to another pane later.
-            var pinned = json
-            if pinned["pane_id"] == nil, let paneID = resolvedPaneID(json) {
-                pinned["pane_id"] = paneID.uuidString
-            }
-            let request = ApprovalCenter.shared.enqueue(
-                cmd: cmd, json: pinned, caller: caller.tabID, targets: target?.tabIDs ?? []
-            ) { [weak self] done in
-                self?.dispatchCommand(cmd: cmd, json: pinned, reply: done)
-            }
-            reply(["ok": true, "status": "pending", "approval_id": request.id.uuidString])
+            enqueueCard(cmd: cmd, json: json, caller: caller, target: target, loop: false, reply: reply)
         }
+    }
+
+    /// Holds the command on an approval card and replies `pending` at once.
+    private func enqueueCard(
+        cmd: String, json: [String: Any], caller: CapabilityTokens.Caller, target: OrchestratorGate.Target?,
+        loop: Bool, reply: @escaping ([String: Any]) -> Void
+    ) {
+        // Pin the target so the card's command cannot drift to another pane later.
+        var pinned = json
+        if pinned["pane_id"] == nil, let paneID = resolvedPaneID(json) {
+            pinned["pane_id"] = paneID.uuidString
+        }
+        let targets = target?.tabIDs ?? []
+        let request = ApprovalCenter.shared.enqueue(
+            cmd: cmd, json: pinned, caller: caller.tabID, targets: targets, loop: loop
+        ) { [weak self] done in
+            if loop { targets.forEach(OrchestratorLoopGuard.shared.reset) }
+            self?.dispatchCommand(cmd: cmd, json: pinned, reply: done)
+        }
+        var pending: [String: Any] = ["ok": true, "status": "pending", "approval_id": request.id.uuidString]
+        if loop { pending["reason"] = "possible_loop" }
+        reply(pending)
     }
 
     /// The tabs a sensitive command acts on, nil when its id resolves nowhere.

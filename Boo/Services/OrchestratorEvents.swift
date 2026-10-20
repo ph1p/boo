@@ -120,6 +120,7 @@ final class OrchestratorEvents {
         for (tabID, item) in items.sorted(by: { $0.value.updatedAt < $1.value.updatedAt }) {
             let previous = lastStates[tabID]
             guard previous != item.state else { continue }
+            OrchestratorLoopGuard.shared.reset(tabID)
             let owned = owner.map { CapabilityTokens.shared.owns($0, tabID) } ?? false
             var data: [String: Any] = [
                 "tab_id": tabID.uuidString, "agent": item.agent, "state": item.state.rawValue,
@@ -159,6 +160,7 @@ final class OrchestratorEvents {
         let owner = OrchestratorController.shared.tabID
         let owned = owner.map { CapabilityTokens.shared.owns($0, tabID) } ?? false
         CapabilityTokens.shared.disown(tabID)
+        OrchestratorLoopGuard.shared.reset(tabID)
         ApprovalCenter.shared.revokeGrants(tab: tabID)
         post("pane_closed", ["tab_id": tabID.uuidString, "owned": owned])
         AgentInbox.shared.remove(tabID: tabID)

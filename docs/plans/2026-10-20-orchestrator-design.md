@@ -1,7 +1,7 @@
 # Orchestrator Drawer — Design
 
 Date: 2026-10-20
-Status: approved in brainstorming, not yet implemented
+Status: implemented on `feat/orchestrator`
 
 ## Goal
 
@@ -19,7 +19,7 @@ through the existing MCP server.
 | Scope | Whole app: all windows, workspaces, agents |
 | Autonomy | Reads free; writes to non-owned panes gated by a Boo-side approval card |
 | Job | Triage + dispatch + integrate, all in the first implementation |
-| UI | Right-edge slide-over drawer, global toggle ⌘⇧O |
+| UI | Right-edge slide-over drawer, global toggle ⌥⌘O (⌘⇧O is Open Folder) |
 | Events | Blocking `wait_for_events` MCP tool (no prompt injection) |
 | Conflicts | Owning task agent rebases in its own worktree; main checkout never left mid-conflict |
 | Persistence | Resume the same conversation via `claude --resume <session_id>` |
