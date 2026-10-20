@@ -160,7 +160,8 @@ extension MainWindowController {
 
         let editor = InlineEditorView(
             name: ws.customName ?? ws.displayName, color: ws.color, hasCustomColor: ws.customColor != nil,
-            placeholder: ws.folderPath.lastPathComponent, allowsNone: true,
+            placeholder: ws.folderPath.lastPathComponent,
+            subtitle: (ws.folderPath as NSString).abbreviatingWithTildeInPath, allowsNone: true,
             onRename: { name in
                 let trimmed = name.trimmingCharacters(in: .whitespaces)
                 // Empty falls back to the folder name rather than a blank pill.
