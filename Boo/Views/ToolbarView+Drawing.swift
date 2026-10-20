@@ -271,7 +271,7 @@ extension ToolbarView {
         // Workspace zone — use tracking loop for drag reordering
         if !hideWorkspaces, let hitIdx = hitTestWorkspaceIndex(at: startPoint) {
             if event.clickCount == 2 {
-                showRenameAlert(at: hitIdx)
+                editWorkspace(at: hitIdx)
                 return
             }
             handleWorkspaceMouseDown(event, startPoint: startPoint, hitIndex: hitIdx)
@@ -509,47 +509,17 @@ extension ToolbarView {
         let menu = NSMenu()
         let ws = workspaces[index]
 
-        // Rename
-        let renameItem = NSMenuItem(title: "Rename...", action: #selector(contextRename(_:)), keyEquivalent: "")
-        renameItem.target = self
-        renameItem.tag = index
-        menu.addItem(renameItem)
+        let editItem = NSMenuItem(
+            title: "Edit Workspace…", action: #selector(contextEditWorkspace(_:)), keyEquivalent: "")
+        editItem.target = self
+        editItem.tag = index
+        menu.addItem(editItem)
 
-        menu.addItem(.separator())
-
-        // Pin/Unpin
         let pinTitle = ws.isPinned ? "Unpin" : "Pin"
         let pinItem = NSMenuItem(title: pinTitle, action: #selector(contextTogglePin(_:)), keyEquivalent: "")
         pinItem.target = self
         pinItem.tag = index
         menu.addItem(pinItem)
-
-        menu.addItem(.separator())
-
-        // Color submenu
-        let colorItem = NSMenuItem(title: "Color", action: nil, keyEquivalent: "")
-        let colorMenu = NSMenu()
-        for color in WorkspaceColor.allCases {
-            let item = NSMenuItem(title: color.label, action: #selector(contextSetColor(_:)), keyEquivalent: "")
-            item.target = self
-            item.tag = index
-            item.representedObject = color
-            if !ws.hasCustomColor && color == ws.color {
-                item.state = .on
-            }
-            colorMenu.addItem(item)
-        }
-        colorMenu.addItem(.separator())
-        let customItem = NSMenuItem(
-            title: "Custom Color...", action: #selector(contextCustomColor(_:)), keyEquivalent: "")
-        customItem.target = self
-        customItem.tag = index
-        if ws.hasCustomColor {
-            customItem.state = .on
-        }
-        colorMenu.addItem(customItem)
-        colorItem.submenu = colorMenu
-        menu.addItem(colorItem)
 
         menu.addItem(.separator())
 
@@ -577,58 +547,27 @@ extension ToolbarView {
         NSMenu.popUpContextMenu(menu, with: event, for: self)
     }
 
-    @objc internal func contextRename(_ sender: NSMenuItem) {
-        showRenameAlert(at: sender.tag)
+    @objc internal func contextEditWorkspace(_ sender: NSMenuItem) {
+        editWorkspace(at: sender.tag)
     }
 
-    internal func showRenameAlert(at index: Int) {
-        guard index >= 0, index < workspaces.count else { return }
+    /// Frame of the top-bar pill at `index`, in view coordinates.
+    func workspacePillRect(at index: Int) -> CGRect? {
+        guard index >= 0, index < workspaces.count else { return nil }
+        var x = trafficLightWidth - workspaceScrollOffset
+        for i in 0..<index { x += measureWorkspace(at: i) + Self.workspaceGap }
+        let h = Self.workspacePillHeight
+        return CGRect(x: x, y: (barHeight - h) / 2, width: measureWorkspace(at: index), height: h)
+    }
 
-        let alert = NSAlert()
-        alert.messageText = "Rename Workspace"
-        alert.informativeText = "Enter a new name for this workspace."
-        alert.addButton(withTitle: "Rename")
-        alert.addButton(withTitle: "Cancel")
-
-        let input = NSTextField(frame: NSRect(x: 0, y: 0, width: 220, height: 24))
-        input.stringValue = workspaces[index].name
-        alert.accessoryView = input
-
-        guard let window = window else { return }
-        alert.beginSheetModal(for: window) { [weak self] response in
-            guard let self else { return }
-            if response == .alertFirstButtonReturn {
-                let name = input.stringValue.trimmingCharacters(in: .whitespaces)
-                if !name.isEmpty {
-                    self.delegate?.toolbar(self, renameWorkspaceAt: index, to: name)
-                }
-            }
-        }
-        alert.window.makeFirstResponder(input)
+    /// Ask the delegate to show the inline editor for the pill at `index`.
+    func editWorkspace(at index: Int) {
+        guard let rect = workspacePillRect(at: index) else { return }
+        delegate?.toolbar(self, editWorkspaceAt: index, anchor: rect)
     }
 
     @objc internal func contextTogglePin(_ sender: NSMenuItem) {
         delegate?.toolbar(self, togglePinForWorkspaceAt: sender.tag)
-    }
-
-    @objc internal func contextSetColor(_ sender: NSMenuItem) {
-        guard let color = sender.representedObject as? WorkspaceColor else { return }
-        // Clear custom color when selecting a preset
-        delegate?.toolbar(self, setCustomColorForWorkspaceAt: sender.tag, color: .clear)
-        delegate?.toolbar(self, setColorForWorkspaceAt: sender.tag, color: color)
-    }
-
-    @objc internal func contextCustomColor(_ sender: NSMenuItem) {
-        colorPickerIndex = sender.tag
-        colorPickerActive = true
-        let picker = NSColorPanel.shared
-        picker.setTarget(self)
-        picker.setAction(#selector(colorPickerChanged(_:)))
-        picker.orderFront(nil)
-    }
-
-    @objc internal func colorPickerChanged(_ sender: NSColorPanel) {
-        delegate?.toolbar(self, setCustomColorForWorkspaceAt: colorPickerIndex, color: sender.color)
     }
 
     @objc internal func contextMoveToNewWindow(_ sender: NSMenuItem) {
@@ -641,8 +580,8 @@ extension ToolbarView {
 
     // MARK: - Testing Hooks
 
-    /// Directly invoke the double-click rename path. For tests only.
+    /// Directly invoke the double-click edit path. For tests only.
     func triggerDoubleClickForTesting(at index: Int) {
-        showRenameAlert(at: index)
+        editWorkspace(at: index)
     }
 }

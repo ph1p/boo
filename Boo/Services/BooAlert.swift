@@ -17,10 +17,18 @@ enum BooAlert {
     private static let toastSpacing: CGFloat = 8
     private static let toastBottomInset: CGFloat = 24
     private static let toastLifetime: TimeInterval = 2.5
+    /// Toasts with buttons stay longer — they ask for a decision, not a glance.
+    private static let actionToastLifetime: TimeInterval = 7
+
+    /// A button on a transient toast; clicking it runs `handler` and dismisses the toast.
+    struct ToastAction {
+        let title: String
+        let handler: () -> Void
+    }
 
     /// Show a brief message bubble at the bottom of the key window, fading out
     /// after ~2.5 seconds.  Follows the `flashTerminal()` animation pattern.
-    static func showTransient(_ message: String) {
+    static func showTransient(_ message: String, actions: [ToastAction] = []) {
         guard let window = NSApp.keyWindow,
             let contentView = window.contentView
         else { return }
@@ -57,12 +65,31 @@ enum BooAlert {
         label.lineBreakMode = .byTruncatingTail
         label.maximumNumberOfLines = 2
 
+        // With actions the label and its buttons share one row.
+        let content: NSView
+        if actions.isEmpty {
+            content = label
+        } else {
+            let buttons = actions.map { item in
+                ToastActionButton(title: item.title) {
+                    item.handler()
+                    dismissToast(shell, in: contentView)
+                }
+            }
+            let row = NSStackView(views: [label] + buttons)
+            row.orientation = .horizontal
+            row.spacing = 10
+            row.setCustomSpacing(14, after: label)
+            row.translatesAutoresizingMaskIntoConstraints = false
+            content = row
+        }
+
         bubble.translatesAutoresizingMaskIntoConstraints = false
-        bubble.addSubview(label)
+        bubble.addSubview(content)
         shell.addSubview(bubble)
         contentView.addSubview(shell)
 
-        let width = label.widthAnchor.constraint(lessThanOrEqualTo: contentView.widthAnchor, multiplier: 0.8)
+        let width = content.widthAnchor.constraint(lessThanOrEqualTo: contentView.widthAnchor, multiplier: 0.8)
         width.priority = .required
 
         // Animated via its `constant`, not `setFrameOrigin` — under Auto Layout a
@@ -78,11 +105,11 @@ enum BooAlert {
             bubble.leadingAnchor.constraint(equalTo: shell.leadingAnchor),
             bubble.trailingAnchor.constraint(equalTo: shell.trailingAnchor),
 
-            label.leadingAnchor.constraint(equalTo: bubble.leadingAnchor, constant: 16),
-            label.trailingAnchor.constraint(equalTo: bubble.trailingAnchor, constant: -16),
-            label.topAnchor.constraint(equalTo: bubble.topAnchor, constant: 9),
-            label.bottomAnchor.constraint(equalTo: bubble.bottomAnchor, constant: -9),
-            label.centerYAnchor.constraint(equalTo: bubble.centerYAnchor),
+            content.leadingAnchor.constraint(equalTo: bubble.leadingAnchor, constant: 16),
+            content.trailingAnchor.constraint(equalTo: bubble.trailingAnchor, constant: -16),
+            content.topAnchor.constraint(equalTo: bubble.topAnchor, constant: 9),
+            content.bottomAnchor.constraint(equalTo: bubble.bottomAnchor, constant: -9),
+            content.centerYAnchor.constraint(equalTo: bubble.centerYAnchor),
             width,
 
             // Centred and pinned to the bottom, so it tracks window resizing.
@@ -106,19 +133,26 @@ enum BooAlert {
         }
 
         // Fade out after delay, then remove and close the gap.
-        DispatchQueue.main.asyncAfter(deadline: .now() + toastLifetime) {
-            NSAnimationContext.runAnimationGroup({ ctx in
-                ctx.duration = 0.4
-                shell.animator().alphaValue = 0
-            }) {
-                MainActor.assumeIsolated {
-                    shell.removeFromSuperview()
-                    liveToasts.removeAll { $0.view === shell }
-                    NSAnimationContext.runAnimationGroup { ctx in
-                        ctx.duration = 0.2
-                        ctx.allowsImplicitAnimation = true
-                        reflowToasts(in: contentView)
-                    }
+        let lifetime = actions.isEmpty ? toastLifetime : actionToastLifetime
+        DispatchQueue.main.asyncAfter(deadline: .now() + lifetime) {
+            dismissToast(shell, in: contentView)
+        }
+    }
+
+    /// Fades a toast out and closes its gap; a no-op once it's gone.
+    private static func dismissToast(_ shell: NSView, in contentView: NSView) {
+        guard liveToasts.contains(where: { $0.view === shell }) else { return }
+        liveToasts.removeAll { $0.view === shell }
+        NSAnimationContext.runAnimationGroup({ ctx in
+            ctx.duration = 0.4
+            shell.animator().alphaValue = 0
+        }) {
+            MainActor.assumeIsolated {
+                shell.removeFromSuperview()
+                NSAnimationContext.runAnimationGroup { ctx in
+                    ctx.duration = 0.2
+                    ctx.allowsImplicitAnimation = true
+                    reflowToasts(in: contentView)
                 }
             }
         }
@@ -150,5 +184,35 @@ enum BooAlert {
         } else {
             alert.runModal()
         }
+    }
+}
+
+/// Link-style button on a toast, backed by a closure.
+private final class ToastActionButton: NSButton {
+    private let handler: () -> Void
+
+    init(title: String, handler: @escaping () -> Void) {
+        self.handler = handler
+        super.init(frame: .zero)
+        isBordered = false
+        attributedTitle = NSAttributedString(
+            string: title,
+            attributes: [
+                .font: NSFont.systemFont(ofSize: 12, weight: .semibold),
+                .foregroundColor: NSColor.controlAccentColor
+            ])
+        target = self
+        action = #selector(fire)
+        setContentHuggingPriority(.required, for: .horizontal)
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    @objc private func fire() { handler() }
+
+    override func resetCursorRects() {
+        addCursorRect(bounds, cursor: .pointingHand)
     }
 }

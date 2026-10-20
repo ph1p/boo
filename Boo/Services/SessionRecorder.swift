@@ -103,6 +103,7 @@ struct UTF8Carry {
 /// Ghostty's read thread; everything after `append` runs on a serial queue.
 final class SessionRecorder: @unchecked Sendable {
     let url: URL
+    let startDate = Date()
     private let queue = DispatchQueue(label: "boo.session-recorder")
     private let handle: FileHandle
     private let startNanos: UInt64
@@ -120,7 +121,7 @@ final class SessionRecorder: @unchecked Sendable {
         startNanos = DispatchTime.now().uptimeNanoseconds
         let env = ProcessInfo.processInfo.environment
         let header = AsciicastWriter(
-            width: columns, height: rows, startDate: Date(), title: title,
+            width: columns, height: rows, startDate: startDate, title: title,
             env: ["TERM": "xterm-256color", "SHELL": env["SHELL"] ?? "/bin/zsh"]
         ).header()
         handle.write(Data(header.utf8))
@@ -168,7 +169,7 @@ final class SessionRecorder: @unchecked Sendable {
         handle.write(Data(line.utf8))
     }
 
-    /// `~/.boo/recordings/<date>-<title>.cast`
+    /// `<recordings folder>/<date>-<title>.cast`
     static func defaultURL(title: String, date: Date = Date()) -> URL {
         let fmt = DateFormatter()
         fmt.locale = Locale(identifier: "en_US_POSIX")
@@ -179,10 +180,20 @@ final class SessionRecorder: @unchecked Sendable {
         )
         .split(separator: "-", omittingEmptySubsequences: true).joined(separator: "-")
         let name = fmt.string(from: date) + (cleaned.isEmpty ? "" : "-" + String(cleaned.prefix(40)))
-        return recordingsDirectory.appendingPathComponent(name + ".cast")
+        // "Record All Panes" starts several same-titled recordings within one second.
+        var url = recordingsDirectory.appendingPathComponent(name + ".cast")
+        var suffix = 2
+        while FileManager.default.fileExists(atPath: url.path) {
+            url = recordingsDirectory.appendingPathComponent("\(name)-\(suffix).cast")
+            suffix += 1
+        }
+        return url
     }
 
+    /// The folder chosen in settings, or `~/.boo/recordings`.
     static var recordingsDirectory: URL {
-        URL(fileURLWithPath: BooPaths.recordingsDir, isDirectory: true)
+        let custom = AppSettings.shared.recordingsFolder
+        let path = custom.isEmpty ? BooPaths.recordingsDir : (custom as NSString).expandingTildeInPath
+        return URL(fileURLWithPath: path, isDirectory: true)
     }
 }

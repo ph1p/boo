@@ -15,6 +15,8 @@ extension PaneView {
         nonisolated(unsafe) static let titleActive = NSFont.systemFont(ofSize: 11, weight: .medium)
         nonisolated(unsafe) static let detail = NSFont.systemFont(ofSize: 9.5, weight: .regular)
         nonisolated(unsafe) static let close = NSFont.systemFont(ofSize: 8, weight: .bold)
+        nonisolated(unsafe) static let groupName = NSFont.systemFont(ofSize: 10.5, weight: .semibold)
+        nonisolated(unsafe) static let groupCount = NSFont.monospacedDigitSystemFont(ofSize: 9.5, weight: .medium)
     }
 
     static let verticalTabColumnMaxWidth: CGFloat = 168
@@ -150,14 +152,17 @@ extension PaneView {
 
         ctx.saveGState()
         ctx.clip(to: CGRect(x: 0, y: 0, width: colW - 1, height: plusSlot.minY))
+        drawVerticalGroupContainers(ctx: ctx, theme: theme, heights: heights)
         for (i, tab) in pane.tabs.enumerated() {
             guard let slot = verticalSlotRect(at: i, heights: heights), slot.height > 0,
                 slot.maxY > 0, slot.minY < plusSlot.minY
             else { continue }
             if pane.isFirstTabOfGroup(at: i), let group = pane.group(id: tab.groupID) {
-                drawGroupChip(
-                    ctx: ctx, theme: theme, group: group, x: slot.minX, y: slot.minY, width: slot.width,
-                    rowH: Self.verticalGroupHeaderHeight, hovered: hoveredTabIndex == i && isGroupChipHovered)
+                drawVerticalGroupHeader(
+                    ctx: ctx, theme: theme, group: group,
+                    header: CGRect(
+                        x: slot.minX, y: slot.minY, width: slot.width, height: Self.verticalGroupHeaderHeight),
+                    hovered: hoveredTabIndex == i && isGroupChipHovered)
             }
             guard !pane.isTabHidden(at: i) else { continue }
             drawVerticalTab(
@@ -170,11 +175,81 @@ extension PaneView {
                 from: CGPoint(x: 0, y: plusSlot.minY), to: CGPoint(x: 0, y: plusSlot.minY - 24),
                 color: theme.background.nsColor)
         }
+        drawGroupDropIndicator(ctx: ctx, theme: theme)
         ctx.restoreGState()
 
         drawPlusButton(
             ctx: ctx, theme: theme, x: plusSlot.minX, y: plusSlot.minY, width: plusSlot.width,
             rowH: plusSlot.height)
+    }
+
+    /// Tinted backdrop spanning an expanded group's header and rows.
+    private func drawVerticalGroupContainers(ctx: CGContext, theme: TerminalTheme, heights: [CGFloat]) {
+        for group in pane.groups where !group.isCollapsed {
+            let members = pane.tabIndices(inGroup: group.id)
+            guard let first = members.first, let last = members.last,
+                let top = verticalSlotRect(at: first, heights: heights),
+                let bottom = verticalSlotRect(at: last, heights: heights)
+            else { continue }
+            let rect = CGRect(x: top.minX + 1, y: top.minY, width: top.width - 2, height: bottom.maxY - top.minY)
+            drawGroupBackdrop(
+                ctx, rect: rect, tint: groupTint(group, theme: theme),
+                faded: groupDropIndex != nil && groupPressID == group.id)
+        }
+    }
+
+    func verticalGroupHeaderPill(_ header: CGRect) -> CGRect {
+        header.insetBy(dx: Self.tabPillInsetX + 1, dy: 3)
+    }
+
+    /// Group header row: dot, name, muted tab count, and a disclosure chevron.
+    /// Collapsed, it fills with the group color like the horizontal chip.
+    private func drawVerticalGroupHeader(
+        ctx: CGContext, theme: TerminalTheme, group: TabGroup, header: CGRect, hovered: Bool
+    ) {
+        let pill = verticalGroupHeaderPill(header)
+        let tint = groupTint(group, theme: theme)
+        let text: NSColor
+        if group.isCollapsed {
+            ctx.setFillColor(tint.withAlphaComponent(hovered ? 1 : 0.85).cgColor)
+            WorkspacePillStyle.fillRoundedRect(ctx, rect: pill)
+            text = Self.contrastingText(on: tint)
+        } else {
+            if hovered {
+                ctx.setFillColor(tint.withAlphaComponent(0.18).cgColor)
+                WorkspacePillStyle.fillRoundedRect(ctx, rect: pill)
+            }
+            text = theme.chromeText
+        }
+        var x = pill.minX + 7
+        if !group.isCollapsed {
+            ctx.setFillColor(tint.cgColor)
+            ctx.fillEllipse(in: CGRect(x: x, y: pill.midY - 3, width: 6, height: 6))
+            x += 11
+        }
+        let chevron = (group.isCollapsed ? "\u{25B8}" : "\u{25BE}") as NSString
+        let mutedAttrs: [NSAttributedString.Key: Any] = [
+            .font: VerticalFonts.groupCount, .foregroundColor: text.withAlphaComponent(0.6)
+        ]
+        let chevronSize = chevron.size(withAttributes: mutedAttrs)
+        let chevronX = pill.maxX - 7 - chevronSize.width
+        chevron.draw(at: NSPoint(x: chevronX, y: pill.midY - chevronSize.height / 2), withAttributes: mutedAttrs)
+
+        let count = "\(pane.tabIndices(inGroup: group.id).count)" as NSString
+        let countSize = count.size(withAttributes: mutedAttrs)
+        let para = NSMutableParagraphStyle()
+        para.lineBreakMode = .byTruncatingTail
+        let nameAttrs: [NSAttributedString.Key: Any] = [
+            .font: VerticalFonts.groupName, .foregroundColor: text, .paragraphStyle: para
+        ]
+        let name = (group.name.isEmpty ? "Group" : group.name) as NSString
+        let nameSize = name.size(withAttributes: nameAttrs)
+        let nameW = max(0, min(nameSize.width, chevronX - 6 - countSize.width - 5 - x))
+        name.draw(
+            in: CGRect(x: x, y: pill.midY - nameSize.height / 2, width: nameW, height: nameSize.height),
+            withAttributes: nameAttrs)
+        count.draw(
+            at: NSPoint(x: x + nameW + 5, y: pill.midY - countSize.height / 2), withAttributes: mutedAttrs)
     }
 
     /// Second line of a row: agent status, else the folder of a running program.
@@ -202,12 +277,17 @@ extension PaneView {
     ) {
         let isHovered = hoveredTabIndex == index && !isGroupChipHovered
         let pill = verticalPillRect(inRow: row)
+        // Tabs of a group being dragged fade so the drop indicator reads clearly.
+        let inFlight = tab.groupID != nil && groupDropIndex != nil && groupPressID == tab.groupID
+        if inFlight {
+            ctx.saveGState()
+            ctx.setAlpha(0.45)
+        }
+        defer { if inFlight { ctx.restoreGState() } }
         WorkspacePillStyle.fill(
             ctx, rect: pill, active: isActive, hovered: isHovered, wsColor: nil, neutral: theme.chromeMuted)
-        if let group = pane.group(id: tab.groupID) {
-            let color = group.color.nsColor ?? theme.accentColor
-            ctx.setFillColor(color.withAlphaComponent(isActive ? 0.9 : 0.6).cgColor)
-            ctx.fill(CGRect(x: pill.minX + 2, y: pill.minY + 6, width: 2, height: pill.height - 12))
+        if selectedTabIDs.contains(tab.id) {
+            WorkspacePillStyle.strokeHairline(ctx, rect: pill, color: theme.accentColor)
         }
 
         let showClose = showTabClose && (isActive || isHovered)

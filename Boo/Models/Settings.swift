@@ -70,6 +70,36 @@ enum TabOverflowMode: Int, CaseIterable {
     }
 }
 
+/// When the floating controls in a pane's top-right corner show.
+enum PaneControlsVisibility: Int, CaseIterable {
+    case hover = 0
+    case focused = 1
+    case never = 2
+
+    var label: String {
+        switch self {
+        case .hover: return "On Hover"
+        case .focused: return "Focused Pane"
+        case .never: return "Never"
+        }
+    }
+}
+
+/// What happens once a terminal recording is stopped.
+enum RecordingStopAction: Int, CaseIterable {
+    case toast = 0
+    case reveal = 1
+    case nothing = 2
+
+    var label: String {
+        switch self {
+        case .toast: return "Show Toast"
+        case .reveal: return "Reveal in Finder"
+        case .nothing: return "Nothing"
+        }
+    }
+}
+
 enum NewTabCwdMode: Int, CaseIterable {
     case samePath = 0
     case defaultFolder = 1
@@ -273,6 +303,13 @@ final class AppSettings {
         static let sidebarGlobalState = "sidebarGlobalState"
         static let sidebarPerWorkspaceState = "sidebarPerWorkspaceState"
         static let autoColorWorkspaces = "autoColorWorkspaces"
+        static let openWorkspaceEditorOnCreate = "openWorkspaceEditorOnCreate"
+        static let openGroupEditorOnCreate = "openGroupEditorOnCreate"
+        static let newTabsJoinActiveGroup = "newTabsJoinActiveGroup"
+        static let paneControlsVisibility = "paneControlsVisibility"
+        static let highlightRecordingPane = "highlightRecordingPane"
+        static let recordingStopAction = "recordingStopAction"
+        static let recordingsFolder = "recordingsFolder"
         static let defaultTabType = "defaultTabType"
         static let autoDetectContentType = "autoDetectContentType"
         static let markdownOpenMode = "markdownOpenMode"
@@ -699,6 +736,57 @@ final class AppSettings {
     var autoColorWorkspaces: Bool {
         get { bool(K.autoColorWorkspaces, default: false) }
         set { set(newValue, forKey: K.autoColorWorkspaces, topic: .layout) }
+    }
+
+    /// When true, a workspace created from the + button or menu opens its
+    /// name/color editor right away.
+    var openWorkspaceEditorOnCreate: Bool {
+        get { bool(K.openWorkspaceEditorOnCreate, default: true) }
+        set { set(newValue, forKey: K.openWorkspaceEditorOnCreate, topic: .layout) }
+    }
+
+    /// When true, a new tab group opens its name/color editor right away.
+    var openGroupEditorOnCreate: Bool {
+        get { bool(K.openGroupEditorOnCreate, default: true) }
+        set { set(newValue, forKey: K.openGroupEditorOnCreate, topic: .layout) }
+    }
+
+    /// When true, a new tab opened from a grouped tab joins that tab's group.
+    var newTabsJoinActiveGroup: Bool {
+        get { bool(K.newTabsJoinActiveGroup, default: true) }
+        set { set(newValue, forKey: K.newTabsJoinActiveGroup, topic: .layout) }
+    }
+
+    var paneControlsVisibility: PaneControlsVisibility {
+        get {
+            guard UserDefaults.standard.object(forKey: K.paneControlsVisibility) != nil else { return .hover }
+            return PaneControlsVisibility(rawValue: UserDefaults.standard.integer(forKey: K.paneControlsVisibility))
+                ?? .hover
+        }
+        set { set(newValue.rawValue, forKey: K.paneControlsVisibility, topic: .layout) }
+    }
+
+    // MARK: - Recording
+
+    /// When true, a pane whose visible terminal is recording gets a red outline.
+    var highlightRecordingPane: Bool {
+        get { bool(K.highlightRecordingPane, default: true) }
+        set { set(newValue, forKey: K.highlightRecordingPane, topic: .layout) }
+    }
+
+    var recordingStopAction: RecordingStopAction {
+        get {
+            guard UserDefaults.standard.object(forKey: K.recordingStopAction) != nil else { return .toast }
+            return RecordingStopAction(rawValue: UserDefaults.standard.integer(forKey: K.recordingStopAction))
+                ?? .toast
+        }
+        set { set(newValue.rawValue, forKey: K.recordingStopAction, topic: .layout) }
+    }
+
+    /// Where new `.cast` recordings go. Empty means `~/.boo/recordings`.
+    var recordingsFolder: String {
+        get { UserDefaults.standard.string(forKey: K.recordingsFolder) ?? "" }
+        set { set(newValue, forKey: K.recordingsFolder, topic: .layout) }
     }
 
     // MARK: - Tabs
@@ -1155,6 +1243,13 @@ final class AppSettings {
             K.sidebarGlobalState: sidebarGlobalState,
             K.sidebarPerWorkspaceState: sidebarPerWorkspaceState,
             K.autoColorWorkspaces: autoColorWorkspaces,
+            K.openWorkspaceEditorOnCreate: openWorkspaceEditorOnCreate,
+            K.openGroupEditorOnCreate: openGroupEditorOnCreate,
+            K.newTabsJoinActiveGroup: newTabsJoinActiveGroup,
+            K.paneControlsVisibility: paneControlsVisibility.rawValue,
+            K.highlightRecordingPane: highlightRecordingPane,
+            K.recordingStopAction: recordingStopAction.rawValue,
+            K.recordingsFolder: recordingsFolder,
             K.editorFontSize: Double(editorFontSize),
             K.editorFontName: editorFontName,
             K.editorTabSize: editorTabSize,

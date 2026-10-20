@@ -12,6 +12,12 @@ extension MainWindowController {
         perform(#selector(_doRefreshToolbar), with: nil, afterDelay: 0)
     }
 
+    /// Applies a pending `refreshToolbar()` now, for callers that need the new pills laid out.
+    func refreshToolbarNow() {
+        NSObject.cancelPreviousPerformRequests(withTarget: self, selector: #selector(_doRefreshToolbar), object: nil)
+        _doRefreshToolbar()
+    }
+
     @objc private func _doRefreshToolbar() {
         let wsItems = appState.workspaces.enumerated().map { (i, ws) in
             ToolbarView.WorkspaceItem(
@@ -44,6 +50,7 @@ extension MainWindowController {
 
     @objc private func _doRefreshStatusBar() {
         refreshBroadcast()
+        refreshRecordingSegment()
         guard let ws = activeWorkspace else {
             statusBar.update(directory: "", paneCount: 0, tabCount: 0, runningProcess: "")
             return

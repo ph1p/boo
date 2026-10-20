@@ -380,13 +380,16 @@ import Cocoa
         recordedGrid = (Int(grid.columns), Int(grid.rows))
         let token = Unmanaged.passRetained(rec).toOpaque()
         recorderToken = token
-        ghostty_surface_set_output_callback(
-            surface,
-            { userdata, bytes, len in
-                guard let userdata, let bytes, len > 0 else { return }
-                Unmanaged<SessionRecorder>.fromOpaque(userdata).takeUnretainedValue()
-                    .append(bytes, count: Int(len))
-            }, token)
+        ghostty_surface_set_output_callback(surface, Self.outputTap, token)
+    }
+
+    /// Runs on Ghostty's io-reader thread. Declared nonisolated: a closure
+    /// written inside this @MainActor class inherits main-actor isolation and
+    /// Swift 6 traps on its executor check the first time the pty writes.
+    nonisolated private static let outputTap: ghostty_surface_output_cb = { userdata, bytes, len in
+        guard let userdata, let bytes, len > 0 else { return }
+        Unmanaged<SessionRecorder>.fromOpaque(userdata).takeUnretainedValue()
+            .append(bytes, count: Int(len))
     }
 
     /// Removes the tap and closes the file; returns its URL.

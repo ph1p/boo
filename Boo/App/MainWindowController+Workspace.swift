@@ -14,27 +14,6 @@ extension MainWindowController: ToolbarViewDelegate {
 
     func toolbarDidToggleSidebar(_ toolbar: ToolbarView) { toggleSidebar(userInitiated: true) }
 
-    func toolbar(_ toolbar: ToolbarView, renameWorkspaceAt index: Int, to name: String) {
-        guard index >= 0, index < appState.workspaces.count else { return }
-        appState.workspaces[index].customName = name
-        refreshToolbar()
-        saveSession()
-    }
-
-    func toolbar(_ toolbar: ToolbarView, setColorForWorkspaceAt index: Int, color: WorkspaceColor) {
-        guard index >= 0, index < appState.workspaces.count else { return }
-        appState.workspaces[index].color = color
-        refreshToolbar()
-        saveSession()
-    }
-
-    func toolbar(_ toolbar: ToolbarView, setCustomColorForWorkspaceAt index: Int, color: NSColor) {
-        guard index >= 0, index < appState.workspaces.count else { return }
-        appState.workspaces[index].customColor = (color == .clear) ? nil : color
-        refreshToolbar()
-        saveSession()
-    }
-
     func toolbar(_ toolbar: ToolbarView, togglePinForWorkspaceAt index: Int) {
         appState.togglePin(at: index)
         refreshToolbar()
@@ -66,6 +45,10 @@ extension MainWindowController: ToolbarViewDelegate {
     func toolbarDidRequestNewWorkspace(_ toolbar: ToolbarView) {
         newWorkspaceAction(nil)
     }
+
+    func toolbar(_ toolbar: ToolbarView, editWorkspaceAt index: Int, anchor rect: NSRect) {
+        showWorkspaceEditor(at: index, anchor: rect, in: toolbar, edge: .maxY)
+    }
 }
 
 // MARK: - WorkspaceBarViewDelegate
@@ -78,27 +61,6 @@ extension MainWindowController: WorkspaceBarViewDelegate {
 
     func workspaceBar(_ bar: WorkspaceBarView, didCloseAt index: Int) {
         toolbarDidCloseWorkspace(at: index)
-    }
-
-    func workspaceBar(_ bar: WorkspaceBarView, renameWorkspaceAt index: Int, to name: String) {
-        guard index >= 0, index < appState.workspaces.count else { return }
-        appState.workspaces[index].customName = name
-        refreshToolbar()
-        saveSession()
-    }
-
-    func workspaceBar(_ bar: WorkspaceBarView, setColorForWorkspaceAt index: Int, color: WorkspaceColor) {
-        guard index >= 0, index < appState.workspaces.count else { return }
-        appState.workspaces[index].color = color
-        refreshToolbar()
-        saveSession()
-    }
-
-    func workspaceBar(_ bar: WorkspaceBarView, setCustomColorForWorkspaceAt index: Int, color: NSColor) {
-        guard index >= 0, index < appState.workspaces.count else { return }
-        appState.workspaces[index].customColor = (color == .clear) ? nil : color
-        refreshToolbar()
-        saveSession()
     }
 
     func workspaceBar(_ bar: WorkspaceBarView, togglePinForWorkspaceAt index: Int) {
@@ -131,6 +93,107 @@ extension MainWindowController: WorkspaceBarViewDelegate {
 
     func workspaceBarDidRequestNewWorkspace(_ bar: WorkspaceBarView) {
         newWorkspaceAction(nil)
+    }
+
+    func workspaceBar(_ bar: WorkspaceBarView, editWorkspaceAt index: Int, anchor rect: NSRect) {
+        showWorkspaceEditor(at: index, anchor: rect, in: bar, edge: bar.isRightAligned ? .minX : .maxX)
+    }
+}
+
+// MARK: - Workspace Editor
+
+extension MainWindowController {
+    /// Inline popover to rename and recolor a workspace, plus its common actions.
+    /// Edits apply live and are keyed by workspace ID, so reordering while the
+    /// popover is open can't retarget them.
+    func showWorkspaceEditor(at index: Int, anchor rect: NSRect, in view: NSView, edge: NSRectEdge) {
+        guard index >= 0, index < appState.workspaces.count, view.window != nil else { return }
+        workspaceEditorPopover?.close()
+        let ws = appState.workspaces[index]
+        let wsID = ws.id
+        let canMove = !ws.isPinned && appState.workspaces.count > 1
+
+        weak var popoverRef: NSPopover?
+        let close: () -> Void = { popoverRef?.close() }
+        let edit: (@MainActor (Workspace) -> Void) -> Void = { [weak self] change in
+            guard let self, let target = self.appState.workspaces.first(where: { $0.id == wsID }) else { return }
+            change(target)
+            self.refreshToolbar()
+            self.saveSession()
+        }
+        let workspaceIndex: () -> Int? = { [weak self] in
+            self?.appState.workspaces.firstIndex(where: { $0.id == wsID })
+        }
+
+        var actions = [
+            InlineEditorAction(title: "New Tab", symbol: "plus") { [weak self] in
+                close()
+                guard let self, let i = workspaceIndex() else { return }
+                if i != self.appState.activeWorkspaceIndex { self.activateWorkspace(i) }
+                self.newTabAction(nil)
+            },
+            InlineEditorAction(title: ws.isPinned ? "Unpin" : "Pin", symbol: ws.isPinned ? "pin.slash" : "pin") {
+                [weak self] in
+                close()
+                guard let self, let i = workspaceIndex() else { return }
+                self.appState.togglePin(at: i)
+                self.refreshToolbar()
+                self.saveSession()
+            }
+        ]
+        if canMove {
+            actions.append(
+                InlineEditorAction(title: "Move to New Window", symbol: "macwindow.badge.plus") { [weak self] in
+                    close()
+                    guard let i = workspaceIndex() else { return }
+                    self?.moveWorkspaceToNewWindow(at: i)
+                })
+        }
+        if !ws.isPinned {
+            actions.append(
+                InlineEditorAction(title: "Close Workspace", symbol: "xmark", isDestructive: true) { [weak self] in
+                    close()
+                    guard let i = workspaceIndex() else { return }
+                    self?.toolbarDidCloseWorkspace(at: i)
+                })
+        }
+
+        let editor = InlineEditorView(
+            name: ws.customName ?? ws.displayName, color: ws.color, hasCustomColor: ws.customColor != nil,
+            placeholder: ws.folderPath.lastPathComponent, allowsNone: true,
+            onRename: { name in
+                let trimmed = name.trimmingCharacters(in: .whitespaces)
+                // Empty falls back to the folder name rather than a blank pill.
+                edit { $0.customName = trimmed.isEmpty ? nil : trimmed }
+            },
+            onColor: { color in
+                edit {
+                    $0.customColor = nil
+                    $0.color = color
+                }
+            },
+            onCustomColor: { [weak self] in
+                let initial = self?.appState.workspaces.first(where: { $0.id == wsID })?.resolvedColor
+                ColorPanelRelay.shared.begin(initial: initial) { color in
+                    edit { $0.customColor = color }
+                }
+            },
+            actions: actions,
+            onDone: close)
+        let popover = makeInlineEditorPopover(editor, tag: wsID)
+        popoverRef = popover
+        workspaceEditorPopover = popover
+        popover.show(relativeTo: rect, of: view, preferredEdge: edge)
+    }
+
+    /// Opens the editor on the active workspace's pill, wherever workspaces are shown.
+    func showActiveWorkspaceEditor() {
+        let index = appState.activeWorkspaceIndex
+        if let bar = sideWorkspaceBar, bar.window != nil, !bar.isHidden {
+            bar.editWorkspace(at: index)
+        } else if !toolbar.hideWorkspaces {
+            toolbar.editWorkspace(at: index)
+        }
     }
 }
 

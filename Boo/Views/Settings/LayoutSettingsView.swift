@@ -71,6 +71,87 @@ struct LayoutSettingsView: View {
                         "Each new workspace gets a color derived from its git repository (or folder), the same every time. A color you pick yourself wins.",
                     isOn: LayoutSettingsBindings.binding(\.autoColorWorkspaces)
                 )
+                ToggleRow(
+                    label: "Edit name and color of new workspaces",
+                    help: "Opens the inline editor right after ⌘N. Double-click a workspace to edit it any time.",
+                    isOn: LayoutSettingsBindings.binding(\.openWorkspaceEditorOnCreate)
+                )
+            }
+
+            Section(title: "Tab Groups") {
+                ToggleRow(
+                    label: "Edit name and color of new groups",
+                    help:
+                        "Opens the inline editor when a group is created. Right-click a group chip to edit it any time.",
+                    isOn: LayoutSettingsBindings.binding(\.openGroupEditorOnCreate)
+                )
+                ToggleRow(
+                    label: "New tabs join the active group",
+                    help: "A tab opened while a grouped tab is active is added to that group.",
+                    isOn: LayoutSettingsBindings.binding(\.newTabsJoinActiveGroup)
+                )
+            }
+
+            Section(title: "Pane Controls") {
+                SettingStack(
+                    label: "Show",
+                    help:
+                        "Record, split, zoom and close buttons in a pane's top-right corner. A running recording's timer always shows."
+                ) {
+                    Picker("", selection: LayoutSettingsBindings.binding(\.paneControlsVisibility)) {
+                        ForEach(PaneControlsVisibility.allCases, id: \.self) { Text($0.label).tag($0) }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.segmented)
+                }
+            }
+
+            Section(title: "Recording") {
+                ToggleRow(
+                    label: "Highlight recording panes",
+                    help: "Draws a red frame around every pane whose terminal is being recorded.",
+                    isOn: LayoutSettingsBindings.binding(\.highlightRecordingPane)
+                )
+                SettingStack(label: "When a recording stops") {
+                    Picker("", selection: LayoutSettingsBindings.binding(\.recordingStopAction)) {
+                        ForEach(RecordingStopAction.allCases, id: \.self) { Text($0.label).tag($0) }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.segmented)
+                }
+                SettingStack(label: "Save recordings to") {
+                    HStack(spacing: 8) {
+                        Text((SessionRecorder.recordingsDirectory.path as NSString).abbreviatingWithTildeInPath)
+                            .font(.system(size: 12, design: .monospaced))
+                            .foregroundStyle(t.muted)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+
+                        Button("Choose…") {
+                            let panel = NSOpenPanel()
+                            panel.canChooseDirectories = true
+                            panel.canChooseFiles = false
+                            panel.canCreateDirectories = true
+                            panel.allowsMultipleSelection = false
+                            panel.directoryURL = SessionRecorder.recordingsDirectory
+                            panel.message = "Choose where terminal recordings are saved"
+                            if panel.runModal() == .OK, let url = panel.url {
+                                FolderBookmarkStore.shared.save(url)
+                                AppSettings.shared.recordingsFolder = url.path
+                            }
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+
+                        Button("Reset") {
+                            AppSettings.shared.recordingsFolder = ""
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        .disabled(AppSettings.shared.recordingsFolder.isEmpty)
+                    }
+                }
             }
 
             Section(title: "Tab Overflow") {

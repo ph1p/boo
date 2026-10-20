@@ -103,16 +103,8 @@ final class BroadcastSegment: StatusBarPlugin {
         at x: CGFloat, y: CGFloat, theme: TerminalTheme, settings: AppSettings, state: StatusBarState, ctx: CGContext
     ) -> CGFloat {
         guard let count = memberCount else { return 0 }
-        let attrs: [NSAttributedString.Key: Any] = [
-            .font: NSFont.systemFont(ofSize: 10, weight: .semibold),
-            .foregroundColor: Self.color
-        ]
-        let str = Self.label(memberCount: count) as NSString
-        let size = str.safeSize(withAttributes: attrs)
-        let barH = DensityMetrics.current.statusBarHeight
-        str.safeDraw(at: NSPoint(x: x + 4, y: y), withAttributes: attrs)
-        hitRect = NSRect(x: x, y: 0, width: size.width + 8, height: barH)
-        return size.width + 8
+        hitRect = Self.drawAlertLabel(Self.label(memberCount: count), color: Self.color, at: x, y: y)
+        return hitRect.width
     }
 
     func handleClick(at point: NSPoint, in barView: StatusBarView) -> Bool {

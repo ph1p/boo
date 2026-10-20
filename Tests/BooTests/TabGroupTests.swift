@@ -245,4 +245,71 @@ final class TabGroupTests: XCTestCase {
         )
         XCTAssertGreaterThan(colors.count, 2, "spreads across the palette")
     }
+
+    // MARK: - Multi-tab grouping & group moves
+
+    func testCreateGroupGathersScatteredTabs() throws {
+        let p = pane(5)
+        p.setActiveTab(3)
+        let gid = try XCTUnwrap(p.createGroup(withTabsAt: [1, 4, 3]))
+        XCTAssertEqual(dirs(p), ["a", "b", "d", "e", "c"], "members gather at the first pick")
+        XCTAssertEqual(p.tabIndices(inGroup: gid), [1, 2, 3])
+        XCTAssertEqual(p.group(id: gid)?.name, "b")
+        XCTAssertEqual(p.activeTab?.workingDirectory, "/tmp/d", "active tab follows its tab")
+        XCTAssertNil(p.createGroup(withTabsAt: [9]))
+    }
+
+    func testAddTabToExistingGroupJoinsAtEnd() throws {
+        let p = pane(4)
+        let gid = try XCTUnwrap(p.createGroup(withTabsAt: [0, 1]))
+        p.addTab(at: 3, toGroup: gid)
+        XCTAssertEqual(dirs(p), ["a", "b", "d", "c"])
+        XCTAssertEqual(p.tabIndices(inGroup: gid), [0, 1, 2])
+        XCTAssertEqual(p.groupEndIndex(forTabAt: 0), 3)
+        XCTAssertNil(p.groupEndIndex(forTabAt: 3))
+    }
+
+    func testMovingTabBetweenGroupsDropsEmptiedGroup() throws {
+        let p = pane(3)
+        let g1 = try XCTUnwrap(p.createGroup(withTabsAt: [0]))
+        let g2 = try XCTUnwrap(p.createGroup(withTabsAt: [2]))
+        p.addTab(at: 0, toGroup: g2)
+        XCTAssertEqual(dirs(p), ["b", "c", "a"])
+        XCTAssertNil(p.group(id: g1), "group emptied by the move is pruned")
+        XCTAssertEqual(p.tabIndices(inGroup: g2), [1, 2])
+    }
+
+    func testMoveGroupKeepsBlockAndSkipsOtherGroups() throws {
+        let p = pane(5)
+        let g1 = try XCTUnwrap(p.createGroup(withTabsAt: [0, 1]))
+        let g2 = try XCTUnwrap(p.createGroup(withTabsAt: [2, 3]))
+        p.moveGroup(g1, to: 5)
+        XCTAssertEqual(dirs(p), ["c", "d", "e", "a", "b"])
+        XCTAssertEqual(p.activeTab?.workingDirectory, "/tmp/a")
+        // Dropping into the middle of another group snaps to its nearest edge.
+        p.moveGroup(g1, to: 1)
+        XCTAssertEqual(dirs(p), ["a", "b", "c", "d", "e"])
+        XCTAssertEqual(p.tabIndices(inGroup: g2), [2, 3])
+        // Dropping onto itself is a no-op.
+        p.moveGroup(g1, to: 1)
+        XCTAssertEqual(dirs(p), ["a", "b", "c", "d", "e"])
+    }
+
+    func testExtractAndInsertGroupRoundTrip() throws {
+        let src = pane(4)
+        let gid = try XCTUnwrap(src.createGroup(withTabsAt: [1, 2]))
+        src.updateGroup(gid) { $0.isCollapsed = true }
+        let (group, tabs) = try XCTUnwrap(src.extractGroup(gid))
+        XCTAssertEqual(dirs(src), ["a", "d"])
+        XCTAssertNil(src.group(id: gid))
+
+        let dst = pane(3)
+        let other = try XCTUnwrap(dst.createGroup(withTabsAt: [0, 1]))
+        dst.insertGroup(group, tabs: tabs, at: 1)
+        XCTAssertEqual(dirs(dst), ["a", "b", "b", "c", "c"], "never splits an existing group")
+        XCTAssertEqual(dst.tabIndices(inGroup: other), [0, 1])
+        XCTAssertEqual(dst.tabIndices(inGroup: gid), [2, 3])
+        XCTAssertEqual(dst.group(id: gid)?.isCollapsed, false, "arrives expanded")
+        XCTAssertEqual(dst.activeTabIndex, 2)
+    }
 }

@@ -229,6 +229,10 @@ extension MainWindowController: NSMenuItemValidation {
             let gv = activeGhosttyView
             menuItem.state = gv?.isRecording == true ? .on : .off
             return gv != nil && gv?.isInputLocked == false
+        case #selector(recordAllPanesAction(_:)):
+            return !recordablePanes.isEmpty
+        case #selector(stopAllRecordingsAction(_:)):
+            return hasActiveRecordings
         case #selector(broadcastToAllPanesAction(_:)), #selector(broadcastToSelectedPanesAction(_:)):
             let selecting = menuItem.action == #selector(broadcastToSelectedPanesAction(_:))
             menuItem.state = broadcast.map { $0.isSelecting == selecting } == true ? .on : .off

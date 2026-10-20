@@ -183,6 +183,8 @@ class ThemedSplitView: NSSplitView {
     weak var workspaceDragTarget: MainWindowController?
     /// Overlay shown on this window while another window drags a workspace over it.
     var workspaceDropHighlight: NSView?
+    /// Inline name/color editor currently shown for a workspace pill.
+    var workspaceEditorPopover: NSPopover?
 
     /// Convenience accessor for current workspace's pane views.
     var paneViews: [UUID: PaneView] {
@@ -1362,6 +1364,10 @@ class ThemedSplitView: NSSplitView {
 
     @objc func newWorkspaceAction(_ sender: Any?) {
         openWorkspace(path: AppSettings.shared.defaultFolder)
+        guard AppSettings.shared.openWorkspaceEditorOnCreate else { return }
+        // The new pill only exists once the debounced toolbar refresh runs; flush it.
+        refreshToolbarNow()
+        showActiveWorkspaceEditor()
     }
 
     @objc func newWindowAction(_ sender: Any?) {
@@ -1395,7 +1401,7 @@ class ThemedSplitView: NSSplitView {
         } else {
             cwd = workspace.folderPath
         }
-        pv.addNewTab(workingDirectory: cwd)
+        pv.addNewTab(workingDirectory: cwd, group: pv.activeGroupID)
         saveSession()
     }
 
@@ -1404,7 +1410,7 @@ class ThemedSplitView: NSSplitView {
             workspace.pane(for: workspace.activePaneID) != nil,
             let pv = paneViews[workspace.activePaneID]
         else { return }
-        pv.addNewTab(contentType: .browser, url: ContentType.newTabURL)
+        pv.addNewTab(contentType: .browser, url: ContentType.newTabURL, group: pv.activeGroupID)
         saveSession()
     }
 
@@ -1423,7 +1429,7 @@ class ThemedSplitView: NSSplitView {
         } else {
             cwd = workspace.folderPath
         }
-        pv.addNewTab(contentType: type, workingDirectory: cwd)
+        pv.addNewTab(contentType: type, workingDirectory: cwd, group: pv.activeGroupID)
         saveSession()
     }
 

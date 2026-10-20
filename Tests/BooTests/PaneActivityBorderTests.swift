@@ -56,7 +56,11 @@ import XCTest
     func testOverlayCoversWholePaneAndStaysTopmost() {
         let pv = makePaneView(activityAt: 0)
         XCTAssertEqual(pv.activityBorder.frame, pv.bounds)
-        XCTAssertTrue(pv.subviews.last === pv.activityBorder)
+        // Above every content view; only the recording frame and the corner
+        // controls (and zoom badge) may sit higher.
+        let index = pv.subviews.firstIndex { $0 === pv.activityBorder } ?? -1
+        let above = pv.subviews.suffix(from: index + 1)
+        XCTAssertTrue(above.allSatisfy { $0 === pv.recordingBorder || $0 === pv.paneControls })
     }
 
     /// Border, not blur/shadow: a plain layer border, no shadow, no fill.

@@ -4,9 +4,6 @@ import Cocoa
     func toolbar(_ toolbar: ToolbarView, didSelectWorkspaceAt index: Int)
     func toolbar(_ toolbar: ToolbarView, didCloseWorkspaceAt index: Int)
     func toolbarDidToggleSidebar(_ toolbar: ToolbarView)
-    func toolbar(_ toolbar: ToolbarView, renameWorkspaceAt index: Int, to name: String)
-    func toolbar(_ toolbar: ToolbarView, setColorForWorkspaceAt index: Int, color: WorkspaceColor)
-    func toolbar(_ toolbar: ToolbarView, setCustomColorForWorkspaceAt index: Int, color: NSColor)
     func toolbar(_ toolbar: ToolbarView, togglePinForWorkspaceAt index: Int)
     func toolbar(_ toolbar: ToolbarView, moveWorkspaceFrom source: Int, to destination: Int)
     /// A workspace was dragged out and released outside this window.
@@ -17,10 +14,13 @@ import Cocoa
     func toolbarDidRequestNewWorkspace(_ toolbar: ToolbarView)
     /// Extra items for a workspace's context menu, shown above Close.
     func toolbar(_ toolbar: ToolbarView, contextMenuItemsForWorkspaceAt index: Int) -> [NSMenuItem]
+    /// Open the inline name/color editor for a workspace, anchored on `rect` in the toolbar.
+    func toolbar(_ toolbar: ToolbarView, editWorkspaceAt index: Int, anchor rect: NSRect)
 }
 
 extension ToolbarViewDelegate {
     func toolbar(_ toolbar: ToolbarView, contextMenuItemsForWorkspaceAt index: Int) -> [NSMenuItem] { [] }
+    func toolbar(_ toolbar: ToolbarView, editWorkspaceAt index: Int, anchor rect: NSRect) {}
 }
 
 class ToolbarView: NSView {
@@ -68,8 +68,6 @@ class ToolbarView: NSView {
     var mouseDownLocation: NSPoint?
     var dragSourceIndex: Int?
     var dropTargetIndex: Int?
-    var colorPickerIndex: Int = 0
-    var colorPickerActive: Bool = false
 
     // Ghost drag state
     var ghostWindow: NSWindow?
@@ -153,12 +151,6 @@ class ToolbarView: NSView {
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
-        if window == nil, colorPickerActive {
-            // Clear color panel target to prevent retain leak
-            NSColorPanel.shared.setTarget(nil)
-            NSColorPanel.shared.setAction(nil)
-            colorPickerActive = false
-        }
         _cachedTrafficLightWidth = nil
         clampScrollOffset()
         needsDisplay = true

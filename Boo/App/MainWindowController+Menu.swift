@@ -120,7 +120,14 @@ extension MainWindowController {
         termMenu.addItem(
             withTitle: "Record Session", action: #selector(toggleRecordingAction(_:)), keyEquivalent: "")
         termMenu.addItem(
+            withTitle: "Record All Panes", action: #selector(recordAllPanesAction(_:)), keyEquivalent: "")
+        termMenu.addItem(
+            withTitle: "Stop All Recordings", action: #selector(stopAllRecordingsAction(_:)), keyEquivalent: "")
+        termMenu.addItem(
             withTitle: "Open Recording…", action: #selector(openRecordingAction(_:)), keyEquivalent: "")
+        termMenu.addItem(
+            withTitle: "Show Recordings Folder", action: #selector(revealRecordingsFolderAction(_:)),
+            keyEquivalent: "")
         termMenu.addItem(.separator())
         termMenu.addItem(withTitle: "Split Right", action: #selector(splitVerticalAction(_:)), keyEquivalent: "d")
         let splitH = NSMenuItem(title: "Split Down", action: #selector(splitHorizontalAction(_:)), keyEquivalent: "D")

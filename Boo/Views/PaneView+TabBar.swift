@@ -10,23 +10,37 @@ extension PaneView {
         nonisolated(unsafe) static let close8Bold = NSFont.systemFont(ofSize: 8, weight: .bold)
         nonisolated(unsafe) static let plus15Light = NSFont.systemFont(ofSize: 15, weight: .light)
         nonisolated(unsafe) static let groupChip = NSFont.systemFont(ofSize: 10, weight: .semibold)
+        nonisolated(unsafe) static let groupBadge = NSFont.monospacedDigitSystemFont(ofSize: 9, weight: .bold)
     }
 
     // MARK: - Tab Groups
 
-    /// Text in a group's chip: the name, plus the tab count while collapsed.
-    func groupChipLabel(_ group: TabGroup) -> String {
-        let count = pane.tabIndices(inGroup: group.id).count
-        return group.isCollapsed ? "\(group.name) \(count)" : group.name
+    private static let groupChipPadX: CGFloat = 8
+    private static let groupDotSize: CGFloat = 6
+    private static let groupDotGap: CGFloat = 5
+
+    /// Chip content: a dot and the name while expanded; the name and a tab
+    /// count badge while collapsed. An unnamed group drops the name.
+    private func groupChipContentWidth(_ group: TabGroup) -> CGFloat {
+        let nameW =
+            group.name.isEmpty
+            ? 0 : ceil((group.name as NSString).size(withAttributes: [.font: TabFonts.groupChip]).width)
+        if group.isCollapsed {
+            return (nameW > 0 ? nameW + Self.groupDotGap : 0) + groupBadgeWidth(group)
+        }
+        return Self.groupDotSize + (nameW > 0 ? Self.groupDotGap + nameW : 0)
+    }
+
+    private func groupBadgeWidth(_ group: TabGroup) -> CGFloat {
+        let count = "\(pane.tabIndices(inGroup: group.id).count)" as NSString
+        return max(14, ceil(count.size(withAttributes: [.font: TabFonts.groupBadge]).width) + 8)
     }
 
     /// Width of the group chip at the start of tab `index`'s slot; 0 unless
     /// the tab opens a group.
     func groupChipWidth(at index: Int) -> CGFloat {
         guard pane.isFirstTabOfGroup(at: index), let group = pane.group(id: pane.tabs[index].groupID) else { return 0 }
-        let label = groupChipLabel(group) as NSString
-        let textW = ceil(label.size(withAttributes: [.font: TabFonts.groupChip]).width)
-        return min(tabMaxWidth, textW + 16 + Self.tabPillInsetX * 2)
+        return min(tabMaxWidth, groupChipContentWidth(group) + Self.groupChipPadX * 2 + Self.tabPillInsetX * 2)
     }
 
     /// Slot of tab `index` in view coordinates (scroll offset applied).
@@ -54,6 +68,18 @@ extension PaneView {
         return Self.tabPillRect(inSlot: slot)
     }
 
+    /// The chip of group `id` in view coordinates (the header row in vertical mode).
+    func groupChipRect(for id: UUID) -> CGRect? {
+        guard let first = pane.tabs.firstIndex(where: { $0.groupID == id }), let slot = tabSlotRect(at: first)
+        else { return nil }
+        if isVerticalTabs {
+            return verticalGroupHeaderPill(
+                CGRect(x: slot.minX, y: slot.minY, width: slot.width, height: Self.verticalGroupHeaderHeight))
+        }
+        return Self.tabPillRect(
+            inSlot: CGRect(x: slot.minX, y: slot.minY, width: groupChipWidth(at: first), height: slot.height))
+    }
+
     /// The group whose chip is under `point`, given the tab slot it is in.
     func groupChipHit(at point: NSPoint, tabIndex idx: Int) -> UUID? {
         if isVerticalTabs {
@@ -67,35 +93,123 @@ extension PaneView {
         return pane.tabs[idx].groupID
     }
 
+    func groupTint(_ group: TabGroup, theme: TerminalTheme) -> NSColor {
+        group.color.nsColor ?? theme.accentColor
+    }
+
+    /// Black or white, whichever reads better on a solid `color` fill.
+    static func contrastingText(on color: NSColor) -> NSColor {
+        guard let c = color.usingColorSpace(.sRGB) else { return .white }
+        let luminance = 0.299 * c.redComponent + 0.587 * c.greenComponent + 0.114 * c.blueComponent
+        return luminance > 0.6 ? NSColor.black.withAlphaComponent(0.85) : .white
+    }
+
+    /// Tinted backdrop behind an expanded group's chip and tabs, one per row,
+    /// so the group reads as a single unit.
+    func drawGroupContainers(ctx: CGContext, theme: TerminalTheme) {
+        for group in pane.groups where !group.isCollapsed {
+            var rows: [CGRect] = []
+            for i in pane.tabIndices(inGroup: group.id) {
+                guard let slot = tabSlotRect(at: i), slot.width > 0 else { continue }
+                if let last = rows.last, last.minY == slot.minY {
+                    rows[rows.count - 1] = last.union(slot)
+                } else {
+                    rows.append(slot)
+                }
+            }
+            let tint = groupTint(group, theme: theme)
+            let dragged = groupDropIndex != nil && groupPressID == group.id
+            for row in rows {
+                let padY = (row.height - Self.tabPillHeight) / 2 - 2
+                let rect = CGRect(
+                    x: row.minX + 1, y: row.minY + padY, width: row.width - 2, height: Self.tabPillHeight + 4)
+                drawGroupBackdrop(ctx, rect: rect, tint: tint, faded: dragged)
+            }
+        }
+    }
+
+    func drawGroupBackdrop(_ ctx: CGContext, rect: CGRect, tint: NSColor, faded: Bool) {
+        let radius = WorkspacePillStyle.cornerRadius + 2
+        ctx.setFillColor(tint.withAlphaComponent(faded ? 0.04 : 0.09).cgColor)
+        WorkspacePillStyle.fillRoundedRect(ctx, rect: rect, radius: radius)
+        ctx.setStrokeColor(tint.withAlphaComponent(faded ? 0.15 : 0.32).cgColor)
+        ctx.setLineWidth(1)
+        ctx.addPath(
+            CGPath(
+                roundedRect: rect.insetBy(dx: 0.5, dy: 0.5), cornerWidth: radius - 0.5, cornerHeight: radius - 0.5,
+                transform: nil))
+        ctx.strokePath()
+    }
+
     func drawGroupChip(
         ctx: CGContext, theme: TerminalTheme, group: TabGroup, x: CGFloat, y: CGFloat, width: CGFloat, rowH: CGFloat,
         hovered: Bool
     ) {
         let pill = Self.tabPillRect(inSlot: CGRect(x: x, y: y, width: width, height: rowH))
-        let color = group.color.nsColor ?? theme.accentColor
-        let path = CGPath(
-            roundedRect: pill, cornerWidth: pill.height / 2, cornerHeight: pill.height / 2, transform: nil)
-        ctx.addPath(path)
-        ctx.setFillColor(color.withAlphaComponent(group.isCollapsed ? 0.35 : (hovered ? 0.3 : 0.2)).cgColor)
-        ctx.fillPath()
+        let tint = groupTint(group, theme: theme)
+        let text: NSColor
         if group.isCollapsed {
-            ctx.addPath(path)
-            ctx.setStrokeColor(color.withAlphaComponent(0.7).cgColor)
-            ctx.setLineWidth(1)
-            ctx.strokePath()
+            ctx.setFillColor(tint.withAlphaComponent(hovered ? 1 : 0.85).cgColor)
+            text = Self.contrastingText(on: tint)
+        } else {
+            ctx.setFillColor(tint.withAlphaComponent(hovered ? 0.34 : 0.22).cgColor)
+            text = theme.chromeText
         }
-        let para = NSMutableParagraphStyle()
-        para.lineBreakMode = .byTruncatingTail
-        let attrs: [NSAttributedString.Key: Any] = [
-            .font: TabFonts.groupChip, .foregroundColor: theme.chromeText, .paragraphStyle: para
-        ]
-        let label = groupChipLabel(group) as NSString
-        let size = label.size(withAttributes: attrs)
-        label.draw(
-            in: CGRect(
-                x: pill.minX + 8, y: pill.midY - size.height / 2, width: min(size.width, pill.width - 16),
-                height: size.height),
-            withAttributes: attrs)
+        WorkspacePillStyle.fillRoundedRect(ctx, rect: pill)
+
+        var cx = pill.minX + Self.groupChipPadX
+        if !group.isCollapsed {
+            if group.name.isEmpty { cx = pill.midX - Self.groupDotSize / 2 }
+            ctx.setFillColor(tint.cgColor)
+            ctx.fillEllipse(
+                in: CGRect(
+                    x: cx, y: pill.midY - Self.groupDotSize / 2, width: Self.groupDotSize, height: Self.groupDotSize))
+            cx += Self.groupDotSize + Self.groupDotGap
+        }
+        let badgeW = group.isCollapsed ? groupBadgeWidth(group) : 0
+        if !group.isCollapsed || !group.name.isEmpty {
+            let para = NSMutableParagraphStyle()
+            para.lineBreakMode = .byTruncatingTail
+            let attrs: [NSAttributedString.Key: Any] = [
+                .font: TabFonts.groupChip, .foregroundColor: text, .paragraphStyle: para
+            ]
+            let label = group.name as NSString
+            let size = label.size(withAttributes: attrs)
+            let room = pill.maxX - Self.groupChipPadX - cx - (badgeW > 0 ? badgeW + Self.groupDotGap : 0)
+            label.draw(
+                in: CGRect(
+                    x: cx, y: pill.midY - size.height / 2, width: max(0, min(size.width, room)), height: size.height),
+                withAttributes: attrs)
+        }
+        if badgeW > 0 {
+            let badge = CGRect(
+                x: group.name.isEmpty ? pill.midX - badgeW / 2 : pill.maxX - Self.groupChipPadX - badgeW,
+                y: pill.midY - 7, width: badgeW, height: 14)
+            ctx.setFillColor(text.withAlphaComponent(0.2).cgColor)
+            WorkspacePillStyle.fillRoundedRect(ctx, rect: badge, radius: 7)
+            let attrs: [NSAttributedString.Key: Any] = [.font: TabFonts.groupBadge, .foregroundColor: text]
+            let count = "\(pane.tabIndices(inGroup: group.id).count)" as NSString
+            let size = count.size(withAttributes: attrs)
+            count.draw(
+                at: NSPoint(x: badge.midX - size.width / 2, y: badge.midY - size.height / 2), withAttributes: attrs)
+        }
+    }
+
+    /// Insertion marker while a group is dragged by its chip, in the group's color.
+    func drawGroupDropIndicator(ctx: CGContext, theme: TerminalTheme) {
+        guard let index = groupDropIndex, let group = pane.group(id: groupPressID) else { return }
+        let pos = tabInsertionPosition(at: index)
+        ctx.setFillColor(groupTint(group, theme: theme).cgColor)
+        if isVerticalTabs {
+            WorkspacePillStyle.fillRoundedRect(
+                ctx, rect: CGRect(x: pos.x + 4, y: pos.y - 1, width: verticalTabColumnWidth - pos.x * 2 - 8, height: 2),
+                radius: 1)
+        } else {
+            let midY = tabInsertionRowCenterY(at: index)
+            WorkspacePillStyle.fillRoundedRect(
+                ctx, rect: CGRect(x: pos.x - 1, y: midY - Self.tabPillHeight / 2, width: 2, height: Self.tabPillHeight),
+                radius: 1)
+        }
     }
 
     // MARK: - Pill Metrics
@@ -157,6 +271,7 @@ extension PaneView {
         ctx.saveGState()
         ctx.clip(to: CGRect(x: 0, y: 0, width: pinnedPlusX, height: barH + 1))
 
+        drawGroupContainers(ctx: ctx, theme: theme)
         var x: CGFloat = inset - tabScrollOffset
         for (i, tab) in pane.tabs.enumerated() {
             let isActive = i == pane.activeTabIndex
@@ -185,6 +300,7 @@ extension PaneView {
                     color: theme.background.nsColor)
             }
         }
+        drawGroupDropIndicator(ctx: ctx, theme: theme)
 
         ctx.restoreGState()
 
@@ -198,6 +314,7 @@ extension PaneView {
         let widths = allTabWidths()
         let layouts = wrapLayout(widths: widths)
 
+        drawGroupContainers(ctx: ctx, theme: theme)
         for (i, tab) in pane.tabs.enumerated() {
             guard i < layouts.count else { break }
             let lay = layouts[i]
@@ -206,6 +323,7 @@ extension PaneView {
                 ctx: ctx, theme: theme, tab: tab, index: i, x: lay.x, y: lay.y,
                 width: lay.width, rowH: singleRowTabHeight, isActive: isActive)
         }
+        drawGroupDropIndicator(ctx: ctx, theme: theme)
 
         let plusSlot = plusButtonSlot(layouts: layouts)
         drawPlusButton(
@@ -250,6 +368,13 @@ extension PaneView {
         var x = x
         var width = width
         let group = pane.group(id: tab.groupID)
+        // The group being dragged by its chip fades while it is in flight.
+        let inFlight = group != nil && groupDropIndex != nil && groupPressID == group?.id
+        if inFlight {
+            ctx.saveGState()
+            ctx.setAlpha(0.45)
+        }
+        defer { if inFlight { ctx.restoreGState() } }
         let chipW = groupChipWidth(at: index)
         if let group, chipW > 0 {
             drawGroupChip(
@@ -268,11 +393,8 @@ extension PaneView {
         WorkspacePillStyle.fill(
             ctx, rect: pillRect, active: isActive, hovered: isHovered,
             wsColor: nil, neutral: theme.chromeMuted)
-        // Group members share a line under their pills, chip color.
-        if let group {
-            let color = group.color.nsColor ?? theme.accentColor
-            ctx.setFillColor(color.withAlphaComponent(isActive ? 0.9 : 0.6).cgColor)
-            ctx.fill(CGRect(x: pillRect.minX + 4, y: pillRect.maxY + 1, width: pillRect.width - 8, height: 1.5))
+        if selectedTabIDs.contains(tab.id) {
+            WorkspacePillStyle.strokeHairline(ctx, rect: pillRect, color: theme.accentColor)
         }
 
         let midY = y + rowH / 2
@@ -541,6 +663,6 @@ extension PaneView {
 
     @objc private func newTabMenuAction(_ sender: NSMenuItem) {
         guard let type = sender.representedObject as? ContentType else { return }
-        addNewTab(contentType: type, workingDirectory: pane.activeTab?.workingDirectory ?? "~")
+        addNewTab(contentType: type, workingDirectory: pane.activeTab?.workingDirectory ?? "~", group: activeGroupID)
     }
 }

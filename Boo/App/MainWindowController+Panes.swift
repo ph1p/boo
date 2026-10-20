@@ -316,13 +316,50 @@ extension MainWindowController: PaneViewDelegate {
     }
 
     func paneView(_ paneView: PaneView, didRequestMoveTab index: Int, toWorkspaceAt workspaceIndex: Int, paneID: UUID) {
+        moveTabs(
+            fromPane: paneID, count: 1, toWorkspaceAt: workspaceIndex,
+            extract: { pane in pane.extractTab(at: index).map { [$0] } ?? [] },
+            insert: { pane, tabs in
+                let insertIndex = pane.tabs.count
+                pane.insertTab(tabs[0], at: insertIndex)
+                return insertIndex
+            })
+    }
+
+    func paneView(
+        _ paneView: PaneView, didRequestMoveGroup groupID: UUID, toWorkspaceAt workspaceIndex: Int, paneID: UUID
+    ) {
+        let count = paneView.pane.tabs.filter { $0.groupID == groupID }.count
+        guard count > 0 else { return }
+        var moved: TabGroup?
+        moveTabs(
+            fromPane: paneID, count: count, toWorkspaceAt: workspaceIndex,
+            extract: { pane in
+                guard let (group, tabs) = pane.extractGroup(groupID) else { return [] }
+                moved = group
+                return tabs
+            },
+            insert: { pane, tabs in
+                let insertIndex = pane.tabs.count
+                if let moved { pane.insertGroup(moved, tabs: tabs, at: insertIndex) }
+                return insertIndex
+            })
+    }
+
+    /// Moves `count` tabs (pulled out by `extract`) and their live views into the
+    /// destination workspace's active pane; closes the source pane or workspace
+    /// if that empties it. `insert` returns the index to activate.
+    private func moveTabs(
+        fromPane paneID: UUID, count: Int, toWorkspaceAt workspaceIndex: Int,
+        extract: (Pane) -> [Pane.Tab], insert: (Pane, [Pane.Tab]) -> Int
+    ) {
         guard workspaceIndex >= 0, workspaceIndex < appState.workspaces.count else { return }
         guard let sourceWorkspace = appState.workspaces.first(where: { $0.panes[paneID] != nil }),
             let sourcePane = sourceWorkspace.pane(for: paneID),
             let pv = workspacePaneViews[sourceWorkspace.id]?[paneID]
         else { return }
 
-        let isLastTabInWorkspace = sourceWorkspace.totalTabCount == 1
+        let isLastTabInWorkspace = sourceWorkspace.totalTabCount == count
 
         if isLastTabInWorkspace && appState.workspaces.count <= 1 {
             // Only workspace — can't move, nothing to move to
@@ -333,10 +370,15 @@ extension MainWindowController: PaneViewDelegate {
         let destPaneID = destWorkspace.activePaneID
         guard let destPane = destWorkspace.pane(for: destPaneID) else { return }
 
-        // Extract the tab and its view from the source pane
-        guard let tab = sourcePane.extractTab(at: index) else { return }
-        let gv = tab.contentType == .terminal ? pv.extractGhosttyView(for: tab.id) : nil
-        let cv = tab.contentType != .terminal ? pv.extractContentView(for: tab.id) : nil
+        // Extract the tabs and their views from the source pane
+        let tabs = extract(sourcePane)
+        guard !tabs.isEmpty else { return }
+        let gvs = tabs.compactMap { tab in
+            tab.contentType == .terminal ? pv.extractGhosttyView(for: tab.id).map { (tab.id, $0) } : nil
+        }
+        let cvs = tabs.compactMap { tab in
+            tab.contentType != .terminal ? pv.extractContentView(for: tab.id).map { (tab.id, $0) } : nil
+        }
 
         // Restore source view if it still has tabs
         if !sourcePane.tabs.isEmpty {
@@ -345,17 +387,13 @@ extension MainWindowController: PaneViewDelegate {
             pv.needsDisplay = true
         }
 
-        // Insert tab into destination workspace's active pane
-        let insertIndex = destPane.tabs.count
-        destPane.insertTab(tab, at: insertIndex)
+        // Insert tabs into destination workspace's active pane
+        let insertIndex = insert(destPane, tabs)
 
-        // Cache the view in the destination pane view (if it exists)
+        // Cache the views in the destination pane view (if it exists)
         if let destPV = workspacePaneViews[destWorkspace.id]?[destPaneID] {
-            if let gv = gv {
-                destPV.insertGhosttyView(gv, for: tab.id)
-            } else if let cv = cv {
-                destPV.insertContentView(cv, for: tab.id)
-            }
+            for (id, gv) in gvs { destPV.insertGhosttyView(gv, for: id) }
+            for (id, cv) in cvs { destPV.insertContentView(cv, for: id) }
         }
 
         // If source pane is now empty, close it (which may close the workspace)
@@ -379,7 +417,7 @@ extension MainWindowController: PaneViewDelegate {
             }
         }
 
-        // Switch to destination workspace so user sees where tab landed
+        // Switch to destination workspace so user sees where tabs landed
         if let destIndex = appState.workspaces.firstIndex(where: { $0.id == destWorkspace.id }) {
             activateWorkspace(destIndex)
             // Activate the moved tab in the destination pane
@@ -602,6 +640,14 @@ extension MainWindowController {
             pv.onUnzoomRequested = { [weak self] in
                 guard let self, let workspace = self.activeWorkspace else { return }
                 self.setZoomedPane(nil, in: workspace)
+            }
+            pv.paneControls.onAction = { [weak self, weak pv] action in
+                guard let self, let pv else { return }
+                self.handlePaneControl(action, in: pv)
+            }
+            pv.paneControls.menuProvider = { [weak self, weak pv] in
+                guard let self, let pv else { return nil }
+                return self.paneControlsMenu(for: pv)
             }
         }
     }
@@ -1307,5 +1353,137 @@ extension MainWindowController {
         }
 
         return true
+    }
+}
+
+// MARK: - Tab group actions
+
+extension MainWindowController {
+    func paneView(_ paneView: PaneView, didRequestCloseGroup groupID: UUID, paneID: UUID) {
+        guard let workspace = activeWorkspace,
+            let pane = workspace.pane(for: paneID),
+            let group = pane.group(id: groupID),
+            let window
+        else { return }
+        let members = pane.tabs.filter { $0.groupID == groupID }
+        guard !members.isEmpty else { return }
+        let ids = members.map(\.id)
+
+        let close = { [weak self, weak paneView] in
+            guard let self, let pv = paneView else { return }
+            for id in ids {
+                guard let index = pane.tabs.firstIndex(where: { $0.id == id }) else { continue }
+                if pane.tabs.count == 1 {
+                    // The group was the whole pane: close it like its last tab.
+                    workspace.activePaneID = paneID
+                    self.smartCloseAction(nil)
+                    break
+                }
+                let tab = pane.tabs[index]
+                if tab.contentType == .terminal {
+                    self.pushUndo(
+                        ClosedItem.tab(paneID: paneID, workingDirectory: tab.workingDirectory, index: index))
+                }
+                self.notifyTerminalClosed(for: tab.id)
+                pv.closeTab(at: index)
+            }
+            self.refreshStatusBar()
+            self.saveSession()
+            DispatchQueue.main.async { AgentInbox.shared.prune() }
+        }
+
+        let terminals = members.filter { $0.contentType == .terminal }.count
+        let confirmTerminals = {
+            guard terminals > 0 else { return close() }
+            let alert = NSAlert()
+            let name = group.name.isEmpty ? "this group" : "“\(group.name)”"
+            alert.messageText =
+                members.count == 1 ? "Close the tab in \(name)?" : "Close \(members.count) tabs in \(name)?"
+            alert.informativeText =
+                terminals == 1 ? "This will end the terminal session." : "This will end \(terminals) terminal sessions."
+            alert.alertStyle = .warning
+            alert.addButton(withTitle: "Close")
+            alert.addButton(withTitle: "Cancel")
+            alert.beginSheetModal(for: window) { response in
+                if response == .alertFirstButtonReturn { close() }
+            }
+        }
+
+        let unsaved = pane.tabs.indices.lazy
+            .filter { pane.tabs[$0].groupID == groupID }
+            .compactMap {
+                self.unsavedEditorLocation(
+                    workspaceIndex: self.appState.activeWorkspaceIndex, paneID: paneID, tabIndex: $0)
+            }
+            .first
+        if let unsaved {
+            confirmUnsavedEditorClose(unsaved, proceed: confirmTerminals)
+        } else {
+            confirmTerminals()
+        }
+    }
+
+    func paneView(_ paneView: PaneView, didRequestSplitGroup groupID: UUID, paneID: UUID) {
+        let activeID = paneView.pane.activeTab?.id
+        guard let workspace = activeWorkspace,
+            let sourcePane = workspace.pane(for: paneID),
+            let originalIndex = sourcePane.tabs.firstIndex(where: { $0.groupID == groupID }),
+            // A group holding every tab would just leave an empty pane behind.
+            sourcePane.tabs.contains(where: { $0.groupID != groupID }),
+            let (group, tabs) = sourcePane.extractGroup(groupID)
+        else { return }
+        let gvs = tabs.compactMap { tab in
+            tab.contentType == .terminal ? paneView.extractGhosttyView(for: tab.id).map { (tab.id, $0) } : nil
+        }
+        let cvs = tabs.compactMap { tab in
+            tab.contentType != .terminal ? paneView.extractContentView(for: tab.id).map { (tab.id, $0) } : nil
+        }
+
+        window?.makeFirstResponder(nil)
+        guard let newPaneID = workspace.splitPane(paneID, toward: .right, wholeWorkspace: false),
+            let newPane = workspace.pane(for: newPaneID)
+        else {
+            sourcePane.insertGroup(group, tabs: tabs, at: originalIndex)
+            for (id, gv) in gvs { paneView.insertGhosttyView(gv, for: id) }
+            for (id, cv) in cvs { paneView.insertContentView(cv, for: id) }
+            paneView.startActiveSession()
+            return
+        }
+
+        // Replace the new pane's default tab with the group.
+        newPane.stopAll()
+        newPane.insertGroup(group, tabs: tabs, at: 0)
+        if let active = tabs.firstIndex(where: { $0.id == activeID }) {
+            newPane.setActiveTab(active)
+        }
+        workspace.activePaneID = newPaneID
+        paneView.startActiveSession()
+        paneView.layoutTerminalView()
+        paneView.needsDisplay = true
+
+        updateSplits(workspace.splitTree, fadingIn: newPaneID)
+        saveSession()
+
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            // Hand the live views over before sessions start, so startActiveSession
+            // reuses them instead of spawning fresh terminals.
+            if let newPV = self.paneViews[newPaneID] {
+                for (id, gv) in gvs { newPV.insertGhosttyView(gv, for: id) }
+                for (id, cv) in cvs { newPV.insertContentView(cv, for: id) }
+            }
+            for id in workspace.splitTree.leafIDs {
+                if let pv = self.paneViews[id] {
+                    pv.tabDragCoordinator = self.tabDragCoordinator
+                    pv.startActiveSession()
+                }
+            }
+            self.refreshAllSurfaces()
+            self.syncCoordinatorPaneViews()
+            self.updatePaneCloseButtons()
+            DispatchQueue.main.async { [weak self] in
+                self?.paneViews[newPaneID]?.focusActiveView()
+            }
+        }
     }
 }

@@ -38,6 +38,19 @@ protocol StatusBarPlugin: AnyObject {
 extension StatusBarPlugin {
     func accessibilitySegmentLabel(state: StatusBarState) -> String? { nil }
     var tooltipText: String? { nil }
+
+    /// Draws a semibold colored status label (broadcast, recording) and
+    /// returns its full-height hit rect; its width is what `draw` consumes.
+    static func drawAlertLabel(_ text: String, color: NSColor, at x: CGFloat, y: CGFloat) -> NSRect {
+        let attrs: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: 10, weight: .semibold),
+            .foregroundColor: color
+        ]
+        let str = text as NSString
+        let size = str.safeSize(withAttributes: attrs)
+        str.safeDraw(at: NSPoint(x: x + 4, y: y), withAttributes: attrs)
+        return NSRect(x: x, y: 0, width: size.width + 8, height: DensityMetrics.current.statusBarHeight)
+    }
 }
 
 /// Snapshot of state available to status bar plugins.

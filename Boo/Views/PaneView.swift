@@ -29,6 +29,12 @@ import SwiftUI
         tabID: UUID?
     )
     func paneView(_ paneView: PaneView, didRequestMoveTab index: Int, toWorkspaceAt workspaceIndex: Int, paneID: UUID)
+    func paneView(
+        _ paneView: PaneView, didRequestMoveGroup groupID: UUID, toWorkspaceAt workspaceIndex: Int, paneID: UUID)
+    /// Moves a whole tab group into a new split beside its pane.
+    func paneView(_ paneView: PaneView, didRequestSplitGroup groupID: UUID, paneID: UUID)
+    /// Closes every tab in a group after one confirmation.
+    func paneView(_ paneView: PaneView, didRequestCloseGroup groupID: UUID, paneID: UUID)
     func paneViewWorkspaceNames(_ paneView: PaneView) -> [(index: Int, name: String)]
     /// Returns true if this pane is the only pane in its workspace (used for close-label wording).
     func paneViewIsOnlyPaneInWorkspace(_ paneView: PaneView) -> Bool
@@ -61,6 +67,16 @@ class PaneView: NSView {
     var dragCurrentX: CGFloat?
     let dragThreshold: CGFloat = 5
 
+    // Group chip press/drag: a click toggles collapse, a drag moves the group.
+    var groupPressID: UUID?
+    var groupPressPoint: NSPoint?
+    /// Insertion index while a group is being dragged (nil until past threshold).
+    var groupDropIndex: Int?
+
+    /// Tabs picked with ⌘-click for grouping. Transient, never persisted.
+    var selectedTabIDs: Set<UUID> = []
+    var groupEditorPopover: NSPopover?
+
     // Hover state for tab bar
     var hoveredTabIndex: Int = -1
     var isCloseButtonHovered: Bool = false
@@ -81,7 +97,12 @@ class PaneView: NSView {
     var lastAutoScrolledTabIndex: Int = -1
 
     /// When true, show the close button even on single-tab panes (e.g. when multiple panes exist).
-    var showCloseOnSingleTab = false
+    var showCloseOnSingleTab = false {
+        didSet {
+            guard showCloseOnSingleTab != oldValue else { return }
+            updatePaneControls()
+        }
+    }
 
     /// Whether tabs should display a close button.
     var showTabClose: Bool { pane.tabs.count > 1 || showCloseOnSingleTab }
@@ -267,11 +288,35 @@ class PaneView: NSView {
         set { broadcastBorder.isHidden = !newValue }
     }
 
+    /// Red frame while the front tab records, so it's clear which split is captured.
+    let recordingBorder: ActivityBorderOverlay = {
+        let v = ActivityBorderOverlay()
+        v.wantsLayer = true
+        v.autoresizingMask = [.width, .height]
+        v.isHidden = true
+        v.layer?.borderWidth = PaneView.activityBorderWidth
+        v.layer?.borderColor = NSColor.systemRed.withAlphaComponent(0.8).cgColor
+        v.layer?.cornerRadius = IslandMetrics.innerRadius
+        v.layer?.cornerCurve = .continuous
+        return v
+    }()
+
+    /// Record / split / zoom / close pill in the content's top-right corner.
+    let paneControls = PaneControlsView()
+    /// Pointer-in-pane tracking for `paneControls`; its own owner so the tab
+    /// bar's enter/exit handling stays untouched.
+    let paneHoverTracker = PaneHoverTracker()
+    var isPointerInPane = false
+    /// The visibility `paneControls` is fading towards.
+    var paneControlsShown = false
+    private var paneSettingsObserver: NSObjectProtocol?
+
     var isFocused: Bool = false {
         didSet {
             guard isFocused != oldValue else { return }
             focusCatcher.isHidden = isFocused
             updateActivityBorder()
+            updatePaneControls()
             needsDisplay = true
         }
     }
@@ -293,7 +338,9 @@ class PaneView: NSView {
     func syncIslandStroke() {
         guard let layer else { return }
         let theme = AppSettings.shared.theme
-        if !activityBorder.isHidden {
+        if !recordingBorder.isHidden {
+            layer.borderColor = NSColor.systemRed.withAlphaComponent(0.8).cgColor
+        } else if !activityBorder.isHidden {
             layer.borderColor = theme.accentColor.withAlphaComponent(Self.activityBorderAlpha).cgColor
         } else if isFocused {
             layer.borderColor = theme.focusBorder.cgColor
@@ -304,6 +351,7 @@ class PaneView: NSView {
 
     func updateFindBarTheme() {
         zoomBadge?.applyTheme()
+        paneControls.applyTheme()
         findBar?.applyTheme()
         findBar?.needsDisplay = true
     }
@@ -346,6 +394,7 @@ class PaneView: NSView {
                 zoomBadge?.removeFromSuperview()
                 zoomBadge = nil
             }
+            updatePaneControls()
             needsLayout = true
         }
     }
@@ -380,6 +429,26 @@ class PaneView: NSView {
         addSubview(focusCatcher)
         addSubview(broadcastBorder)
         addSubview(activityBorder)
+        addSubview(recordingBorder)
+        paneControls.isHidden = true
+        paneControls.alphaValue = 0
+        addSubview(paneControls)
+        paneHoverTracker.onChange = { [weak self] inside in
+            self?.isPointerInPane = inside
+            self?.updatePaneControls()
+        }
+        addTrackingArea(
+            NSTrackingArea(
+                rect: .zero, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+                owner: paneHoverTracker))
+        paneSettingsObserver = NotificationCenter.default.addObserver(
+            forName: .settingsChanged, object: nil, queue: .main
+        ) { [weak self] note in
+            // Pane controls and recording settings all post `.layout`; nil is a full reload.
+            let topic = (note.userInfo?["topic"] as? String).flatMap(SettingsTopic.init(rawValue:))
+            guard topic == nil || topic == .layout else { return }
+            MainActor.assumeIsolated { self?.updatePaneControls() }
+        }
         focusCatcher.onClicked = { [weak self] in
             guard let self else { return }
             self.paneDelegate?.paneView(self, didFocus: self.paneID)
@@ -423,6 +492,7 @@ class PaneView: NSView {
             startContentSession(for: tab)
         }
         layoutTerminalView()
+        updatePaneControls()
         // A restored cached surface may re-enter the hierarchy at its previous size, so
         // `ghostty_surface_set_size` does not dirty it and the pane shows stale/blank
         // content until a keystroke or resize. Force a repaint now that layout is done.
@@ -736,6 +806,7 @@ class PaneView: NSView {
         guard let index = pane.tabs.firstIndex(where: { $0.id == tabID }),
             pane.setRecording(recording, at: index)
         else { return }
+        updatePaneControls()
         needsDisplay = true
     }
 
@@ -834,13 +905,23 @@ class PaneView: NSView {
         if focusCatcher.frame != bounds { focusCatcher.frame = bounds }
         if activityBorder.frame != bounds { activityBorder.frame = bounds }
         if broadcastBorder.frame != bounds { broadcastBorder.frame = bounds }
+        if recordingBorder.frame != bounds { recordingBorder.frame = bounds }
+        var controlsMaxX = bounds.width - 8
         if let badge = zoomBadge {
             let size = badge.fittingSize
             let badgeFrame = NSRect(
                 x: bounds.width - size.width - 8, y: barH + findH + 8, width: size.width, height: size.height)
             if badge.frame != badgeFrame { badge.frame = badgeFrame }
+            controlsMaxX = badgeFrame.minX - 6
         }
-        let overlays: [NSView] = [focusCatcher, broadcastBorder, activityBorder] + (zoomBadge.map { [$0] } ?? [])
+        let controlsSize = paneControls.frame.size
+        let controlsFrame = NSRect(
+            x: controlsMaxX - controlsSize.width, y: barH + findH + 8,
+            width: controlsSize.width, height: controlsSize.height)
+        if paneControls.frame != controlsFrame { paneControls.frame = controlsFrame }
+        let overlays: [NSView] =
+            [focusCatcher, broadcastBorder, activityBorder, recordingBorder, paneControls]
+            + (zoomBadge.map { [$0] } ?? [])
         if !zip(subviews.suffix(overlays.count), overlays).allSatisfy({ $0 === $1 }) {
             for overlay in overlays { addSubview(overlay, positioned: .above, relativeTo: nil) }
         }
@@ -1024,14 +1105,16 @@ class PaneView: NSView {
     }
 
     @discardableResult
-    func addNewTab(workingDirectory: String, launch: LaunchSpec? = nil) -> UUID? {
-        addNewTab(contentType: .terminal, workingDirectory: workingDirectory, launch: launch)
+    func addNewTab(workingDirectory: String, launch: LaunchSpec? = nil, group: UUID? = nil) -> UUID? {
+        addNewTab(contentType: .terminal, workingDirectory: workingDirectory, launch: launch, group: group)
     }
 
-    /// Add a new tab with a specific content type.
+    /// Add a new tab with a specific content type. With `group`, it joins
+    /// that group at its end instead of opening at the end of the bar.
     @discardableResult
     func addNewTab(
-        contentType: ContentType, workingDirectory: String = "~", url: URL? = nil, launch: LaunchSpec? = nil
+        contentType: ContentType, workingDirectory: String = "~", url: URL? = nil, launch: LaunchSpec? = nil,
+        group: UUID? = nil
     ) -> UUID? {
         storeCurrentView()
         lastAutoScrolledTabIndex = -1
@@ -1053,6 +1136,10 @@ class PaneView: NSView {
         case .pluginView:
             _ = pane.addTab(contentType: .pluginView, workingDirectory: workingDirectory, title: "Panel")
         }
+        if let group, pane.group(id: group) != nil {
+            pane.addTab(at: pane.tabs.count - 1, toGroup: group)
+            WindowManager.shared.saveSessionSoon()
+        }
 
         startActiveSession()
         // Trigger single layout + display pass, not redundant calls
@@ -1067,7 +1154,12 @@ class PaneView: NSView {
         }
 
         paneDelegate?.paneView(self, didFocus: paneID)
-        return pane.tabs.last?.id
+        return pane.activeTab?.id
+    }
+
+    /// Group of the active tab: where a tab the user opens from it goes.
+    var activeGroupID: UUID? {
+        AppSettings.shared.newTabsJoinActiveGroup ? pane.activeTab?.groupID : nil
     }
 
     /// Add a plugin-owned SwiftUI view in a new tab.
@@ -1271,6 +1363,7 @@ class PaneView: NSView {
     deinit {
         MainActor.assumeIsolated {
             if let agentInboxObserver { NotificationCenter.default.removeObserver(agentInboxObserver) }
+            if let paneSettingsObserver { NotificationCenter.default.removeObserver(paneSettingsObserver) }
             stopAll()
         }
     }

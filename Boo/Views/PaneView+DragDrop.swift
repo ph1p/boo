@@ -1,4 +1,5 @@
 import Cocoa
+import SwiftUI
 
 extension PaneView {
 
@@ -97,10 +98,16 @@ extension PaneView {
 
         if let idx = tabIndex(at: point) {
             if let groupID = groupChipHit(at: point, tabIndex: idx) {
-                toggleGroupCollapsed(groupID)
+                // Click toggles collapse, drag moves the group — decided on mouseUp.
+                groupPressID = groupID
+                groupPressPoint = point
+                groupDropIndex = nil
             } else if isOverCloseButton(point: point, tabIndex: idx) {
                 paneDelegate?.paneView(self, didRequestCloseTab: idx, paneID: paneID)
+            } else if event.modifierFlags.contains(.command) {
+                toggleTabSelection(idx)
             } else {
+                clearTabSelection()
                 dragTabIndex = idx
                 dragStartPoint = point
                 dragCurrentX = nil
@@ -114,8 +121,15 @@ extension PaneView {
     }
 
     override func mouseDragged(with event: NSEvent) {
-        guard let dragIdx = dragTabIndex, let startPt = dragStartPoint else { return }
         let point = convert(event.locationInWindow, from: nil)
+        if groupPressID != nil, let start = groupPressPoint {
+            guard groupDropIndex != nil || hypot(point.x - start.x, point.y - start.y) > dragThreshold else { return }
+            autoscrollTabBar(local: point)
+            groupDropIndex = tabInsertionIndex(at: point)
+            needsDisplay = true
+            return
+        }
+        guard let dragIdx = dragTabIndex, let startPt = dragStartPoint else { return }
 
         // Use euclidean distance for threshold
         if dragCurrentX == nil {
@@ -137,7 +151,14 @@ extension PaneView {
     }
 
     override func mouseUp(with event: NSEvent) {
-        if let idx = dragTabIndex {
+        if let groupID = groupPressID {
+            if let index = groupDropIndex {
+                pane.moveGroup(groupID, to: index)
+                groupsChanged()
+            } else {
+                toggleGroupCollapsed(groupID)
+            }
+        } else if let idx = dragTabIndex {
             // Activate the tab now that mouse is released (click or drag-end)
             if idx == pane.activeTabIndex {
                 focusActiveView()
@@ -148,10 +169,37 @@ extension PaneView {
                 activateTab(idx)
             }
         }
+        groupPressID = nil
+        groupPressPoint = nil
+        groupDropIndex = nil
         dragTabIndex = nil
         dragStartPoint = nil
         dragCurrentX = nil
         needsDisplay = true
+    }
+
+    // MARK: - Multi-select
+
+    /// ⌘-click adds or removes a tab from the selection; the first pick also
+    /// takes in the active tab, so ⌘-clicking one other tab selects two.
+    private func toggleTabSelection(_ index: Int) {
+        let id = pane.tabs[index].id
+        if selectedTabIDs.isEmpty, let active = pane.activeTab?.id, active != id {
+            selectedTabIDs.insert(active)
+        }
+        if selectedTabIDs.remove(id) == nil { selectedTabIDs.insert(id) }
+        needsDisplay = true
+    }
+
+    func clearTabSelection() {
+        guard !selectedTabIDs.isEmpty else { return }
+        selectedTabIDs = []
+        needsDisplay = true
+    }
+
+    /// Indices of the selected tabs still in this pane, in tab order.
+    private var selectedTabIndices: [Int] {
+        pane.tabs.indices.filter { selectedTabIDs.contains(pane.tabs[$0].id) }
     }
 
     // MARK: - Right-Click Context Menu
@@ -162,10 +210,15 @@ extension PaneView {
             super.rightMouseDown(with: event)
             return
         }
-        showTabContextMenu(at: idx, event: event)
+        if let groupID = groupChipHit(at: point, tabIndex: idx) {
+            showGroupContextMenu(groupID, event: event)
+        } else {
+            showTabContextMenu(at: idx, event: event)
+        }
     }
 
     private func showTabContextMenu(at index: Int, event: NSEvent) {
+        if !selectedTabIDs.contains(pane.tabs[index].id) { clearTabSelection() }
         let menu = NSMenu()
 
         // Close tab
@@ -216,34 +269,124 @@ extension PaneView {
 
     // MARK: - Tab Group Actions
 
+    /// What a group menu item acts on: the tabs (by ID, so a menu held open
+    /// across tab changes can't hit the wrong tab) and/or the group.
+    private struct GroupMenuAction {
+        var tabIDs: [UUID] = []
+        var groupID: UUID?
+        var color: WorkspaceColor?
+        var workspaceIndex: Int?
+    }
+
+    private func groupMenuItem(_ title: String, _ action: Selector, _ payload: GroupMenuAction) -> NSMenuItem {
+        let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
+        item.target = self
+        item.representedObject = payload
+        return item
+    }
+
+    /// Small filled circle in the group's color, for menu items naming a group.
+    private func groupSwatch(_ group: TabGroup) -> NSImage {
+        let color = groupTint(group, theme: AppSettings.shared.theme)
+        return NSImage(size: NSSize(width: 10, height: 10), flipped: false) { rect in
+            color.setFill()
+            NSBezierPath(ovalIn: rect.insetBy(dx: 1, dy: 1)).fill()
+            return true
+        }
+    }
+
+    private func groupMenuTitle(_ group: TabGroup) -> String {
+        group.name.isEmpty ? "Unnamed Group" : group.name
+    }
+
+    /// "New Group" plus one item per group other than `excluded`.
+    private func addToGroupSubmenu(tabIDs: [UUID], excluding excluded: UUID?) -> NSMenu {
+        let sub = NSMenu()
+        sub.addItem(groupMenuItem("New Group", #selector(contextNewGroup(_:)), GroupMenuAction(tabIDs: tabIDs)))
+        let others = pane.groups.filter { $0.id != excluded }
+        if !others.isEmpty { sub.addItem(.separator()) }
+        for group in others {
+            let item = groupMenuItem(
+                groupMenuTitle(group), #selector(contextAddToGroup(_:)),
+                GroupMenuAction(tabIDs: tabIDs, groupID: group.id))
+            item.image = groupSwatch(group)
+            sub.addItem(item)
+        }
+        return sub
+    }
+
     private func addGroupItems(to menu: NSMenu, tabIndex index: Int) {
         menu.addItem(.separator())
-        func item(_ title: String, _ action: Selector, _ tag: Int = 0) -> NSMenuItem {
-            let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
-            item.target = self
-            item.tag = index
-            item.representedObject = tag
-            return item
-        }
-        guard let group = pane.group(id: pane.tabs[index].groupID) else {
-            if pane.tabs.count > 1, index + 1 < pane.tabs.count || index > 0 {
-                menu.addItem(item("Add to New Group", #selector(contextNewGroup(_:))))
+        let tab = pane.tabs[index]
+        let selection = selectedTabIndices
+        if selection.count > 1, selection.contains(index) {
+            let ids = selection.map { pane.tabs[$0].id }
+            menu.addItem(
+                groupMenuItem(
+                    "Add \(ids.count) Tabs to New Group", #selector(contextNewGroup(_:)),
+                    GroupMenuAction(tabIDs: ids)))
+            if !pane.groups.isEmpty {
+                let item = NSMenuItem(title: "Add \(ids.count) Tabs to Group", action: nil, keyEquivalent: "")
+                item.submenu = addToGroupSubmenu(tabIDs: ids, excluding: nil)
+                menu.addItem(item)
             }
             return
         }
-        menu.addItem(item("Rename Group…", #selector(contextRenameGroup(_:))))
-        let colors = NSMenu()
-        for (i, color) in WorkspaceColor.allCases.enumerated() where color != .none {
-            let c = item(color.label, #selector(contextGroupColor(_:)), i)
-            c.state = group.color == color ? .on : .off
-            colors.addItem(c)
+        guard let group = pane.group(id: tab.groupID) else {
+            if pane.groups.isEmpty {
+                menu.addItem(
+                    groupMenuItem(
+                        "Add Tab to New Group", #selector(contextNewGroup(_:)), GroupMenuAction(tabIDs: [tab.id])))
+            } else {
+                let item = NSMenuItem(title: "Add Tab to Group", action: nil, keyEquivalent: "")
+                item.submenu = addToGroupSubmenu(tabIDs: [tab.id], excluding: nil)
+                menu.addItem(item)
+            }
+            return
         }
-        let colorItem = NSMenuItem(title: "Group Color", action: nil, keyEquivalent: "")
-        colorItem.submenu = colors
-        menu.addItem(colorItem)
-        menu.addItem(item(group.isCollapsed ? "Expand Group" : "Collapse Group", #selector(contextToggleGroup(_:))))
-        menu.addItem(item("Remove from Group", #selector(contextRemoveFromGroup(_:))))
-        menu.addItem(item("Ungroup", #selector(contextUngroup(_:))))
+        let target = GroupMenuAction(tabIDs: [tab.id], groupID: group.id)
+        menu.addItem(groupMenuItem("Edit Group…", #selector(contextEditGroup(_:)), target))
+        let move = NSMenuItem(title: "Move Tab to Group", action: nil, keyEquivalent: "")
+        move.submenu = addToGroupSubmenu(tabIDs: [tab.id], excluding: group.id)
+        menu.addItem(move)
+        menu.addItem(groupMenuItem("Remove from Group", #selector(contextRemoveFromGroup(_:)), target))
+    }
+
+    /// Menu for a group chip / header: everything that acts on the whole group.
+    private func showGroupContextMenu(_ id: UUID, event: NSEvent) {
+        guard let group = pane.group(id: id) else { return }
+        clearTabSelection()
+        let target = GroupMenuAction(groupID: id)
+        let menu = NSMenu()
+        menu.addItem(groupMenuItem("Edit Group…", #selector(contextEditGroup(_:)), target))
+        menu.addItem(groupMenuItem("New Tab in Group", #selector(contextNewTabInGroup(_:)), target))
+        menu.addItem(
+            groupMenuItem(
+                group.isCollapsed ? "Expand Group" : "Collapse Group", #selector(contextToggleGroup(_:)), target))
+
+        menu.addItem(.separator())
+        let split = groupMenuItem("Move Group to New Split", #selector(contextSplitGroup(_:)), target)
+        // A group holding every tab would leave an empty pane behind.
+        if !pane.tabs.contains(where: { $0.groupID != id }) {
+            split.action = nil
+        }
+        menu.addItem(split)
+        if let workspaces = paneDelegate?.paneViewWorkspaceNames(self), !workspaces.isEmpty {
+            let sub = NSMenu()
+            for ws in workspaces {
+                var payload = target
+                payload.workspaceIndex = ws.index
+                sub.addItem(groupMenuItem(ws.name, #selector(contextMoveGroupToWorkspace(_:)), payload))
+            }
+            let item = NSMenuItem(title: "Move Group to Workspace", action: nil, keyEquivalent: "")
+            item.submenu = sub
+            menu.addItem(item)
+        }
+
+        menu.addItem(.separator())
+        menu.addItem(groupMenuItem("Ungroup", #selector(contextUngroup(_:)), target))
+        menu.addItem(groupMenuItem("Close Group", #selector(contextCloseGroup(_:)), target))
+        NSMenu.popUpContextMenu(menu, with: event, for: self)
     }
 
     /// Collapses or expands a group. Collapsing moves off a tab inside it
@@ -265,70 +408,143 @@ extension PaneView {
         hoveredTabIndex = -1
         isGroupChipHovered = false
         isCloseButtonHovered = false
+        selectedTabIDs.formIntersection(pane.tabs.map(\.id))
+        if let popover = groupEditorPopover, popover.isShown,
+            let id = popover.contentViewController?.representedObject as? UUID, pane.group(id: id) == nil
+        {
+            popover.close()
+        }
         needsDisplay = true
         WindowManager.shared.saveSessionSoon()
     }
 
-    private func groupID(ofTab index: Int) -> UUID? {
-        pane.tabs.indices.contains(index) ? pane.tabs[index].groupID : nil
+    private func groupAction(_ sender: NSMenuItem) -> GroupMenuAction? {
+        sender.representedObject as? GroupMenuAction
+    }
+
+    private func tabIndices(of ids: [UUID]) -> [Int] {
+        ids.compactMap { id in pane.tabs.firstIndex { $0.id == id } }
     }
 
     @objc private func contextNewGroup(_ sender: NSMenuItem) {
-        let index = sender.tag
-        // Group with the right neighbour, or the left one for the last tab.
-        let partner = index + 1 < pane.tabs.count ? index + 1 : index - 1
-        guard partner >= 0, let gid = pane.groupTab(at: partner, with: index) else { return }
+        guard let action = groupAction(sender),
+            let gid = pane.createGroup(withTabsAt: tabIndices(of: action.tabIDs))
+        else { return }
+        selectedTabIDs = []
         groupsChanged()
-        renameGroup(gid)
+        if AppSettings.shared.openGroupEditorOnCreate { showGroupEditor(gid) }
     }
 
-    @objc private func contextRenameGroup(_ sender: NSMenuItem) {
-        guard let gid = groupID(ofTab: sender.tag) else { return }
-        renameGroup(gid)
-    }
-
-    private func renameGroup(_ gid: UUID) {
-        guard let group = pane.group(id: gid) else { return }
-        let alert = NSAlert()
-        alert.messageText = "Rename Group"
-        alert.addButton(withTitle: "Rename")
-        alert.addButton(withTitle: "Cancel")
-        let field = NSTextField(string: group.name)
-        field.frame = NSRect(x: 0, y: 0, width: 240, height: 24)
-        alert.accessoryView = field
-        alert.window.initialFirstResponder = field
-        guard alert.runModal() == .alertFirstButtonReturn else { return }
-        let name = field.stringValue.trimmingCharacters(in: .whitespaces)
-        guard !name.isEmpty else { return }
-        pane.updateGroup(gid) { $0.name = name }
+    @objc private func contextAddToGroup(_ sender: NSMenuItem) {
+        guard let action = groupAction(sender), let gid = action.groupID, pane.group(id: gid) != nil else { return }
+        for id in action.tabIDs {
+            guard let index = pane.tabs.firstIndex(where: { $0.id == id }) else { continue }
+            pane.addTab(at: index, toGroup: gid)
+        }
+        selectedTabIDs = []
         groupsChanged()
     }
 
-    @objc private func contextGroupColor(_ sender: NSMenuItem) {
-        guard let gid = groupID(ofTab: sender.tag), let i = sender.representedObject as? Int else { return }
-        pane.updateGroup(gid) { $0.color = WorkspaceColor.allCases[i] }
-        groupsChanged()
+    @objc private func contextEditGroup(_ sender: NSMenuItem) {
+        guard let gid = groupAction(sender)?.groupID else { return }
+        showGroupEditor(gid)
+    }
+
+    @objc private func contextNewTabInGroup(_ sender: NSMenuItem) {
+        guard let gid = groupAction(sender)?.groupID else { return }
+        newTab(inGroup: gid)
     }
 
     @objc private func contextToggleGroup(_ sender: NSMenuItem) {
-        guard let gid = groupID(ofTab: sender.tag) else { return }
+        guard let gid = groupAction(sender)?.groupID else { return }
         toggleGroupCollapsed(gid)
     }
 
     @objc private func contextRemoveFromGroup(_ sender: NSMenuItem) {
-        pane.removeTabFromGroup(at: sender.tag)
+        guard let id = groupAction(sender)?.tabIDs.first, let index = pane.tabs.firstIndex(where: { $0.id == id })
+        else { return }
+        pane.removeTabFromGroup(at: index)
         groupsChanged()
     }
 
     @objc private func contextUngroup(_ sender: NSMenuItem) {
-        guard let gid = groupID(ofTab: sender.tag) else { return }
+        guard let gid = groupAction(sender)?.groupID else { return }
         pane.ungroup(gid)
         groupsChanged()
     }
 
+    @objc private func contextCloseGroup(_ sender: NSMenuItem) {
+        guard let gid = groupAction(sender)?.groupID else { return }
+        paneDelegate?.paneView(self, didRequestCloseGroup: gid, paneID: paneID)
+    }
+
+    @objc private func contextSplitGroup(_ sender: NSMenuItem) {
+        guard let gid = groupAction(sender)?.groupID else { return }
+        paneDelegate?.paneView(self, didRequestSplitGroup: gid, paneID: paneID)
+    }
+
+    @objc private func contextMoveGroupToWorkspace(_ sender: NSMenuItem) {
+        guard let action = groupAction(sender), let gid = action.groupID, let ws = action.workspaceIndex else { return }
+        paneDelegate?.paneView(self, didRequestMoveGroup: gid, toWorkspaceAt: ws, paneID: paneID)
+    }
+
+    /// Opens a terminal in the group's folder (its first tab's) and adds it to the group.
+    func newTab(inGroup id: UUID) {
+        let cwd = pane.tabs.first { $0.groupID == id }?.workingDirectory ?? pane.activeTab?.workingDirectory ?? "~"
+        addNewTab(workingDirectory: cwd, group: id)
+    }
+
+    // MARK: - Group Editor
+
+    /// Inline editor for a group's name and color, anchored on its chip.
+    func showGroupEditor(_ id: UUID) {
+        groupEditorPopover?.close()
+        guard let group = pane.group(id: id) else { return }
+        // The chip may be scrolled out of view; anchor on the visible bar then.
+        guard var anchor = groupChipRect(for: id) else { return }
+        if !visibleRect.intersects(anchor) {
+            anchor = NSRect(x: visibleRect.midX, y: anchor.minY, width: 1, height: anchor.height)
+        }
+
+        weak var popoverRef: NSPopover?
+        let close: () -> Void = { popoverRef?.close() }
+        let editor = InlineEditorView(
+            name: group.name, color: group.color, hasCustomColor: false,
+            placeholder: "Name this group",
+            onRename: { [weak self] name in
+                self?.pane.updateGroup(id) { $0.name = name.trimmingCharacters(in: .whitespaces) }
+                self?.groupsChanged()
+            },
+            onColor: { [weak self] color in
+                self?.pane.updateGroup(id) { $0.color = color }
+                self?.groupsChanged()
+            },
+            actions: [
+                InlineEditorAction(title: "New Tab in Group", symbol: "plus") { [weak self] in
+                    close()
+                    self?.newTab(inGroup: id)
+                },
+                InlineEditorAction(title: "Ungroup", symbol: "rectangle.dashed") { [weak self] in
+                    close()
+                    self?.pane.ungroup(id)
+                    self?.groupsChanged()
+                },
+                InlineEditorAction(title: "Close Group", symbol: "xmark", isDestructive: true) { [weak self] in
+                    close()
+                    guard let self else { return }
+                    self.paneDelegate?.paneView(self, didRequestCloseGroup: id, paneID: self.paneID)
+                }
+            ],
+            onDone: close)
+        let popover = makeInlineEditorPopover(editor, tag: id)
+        popoverRef = popover
+        groupEditorPopover = popover
+        popover.show(relativeTo: anchor, of: self, preferredEdge: isVerticalTabs ? .maxX : .maxY)
+    }
+
     @objc private func contextNewTab(_ sender: NSMenuItem) {
         guard let type = sender.representedObject as? ContentType else { return }
-        addNewTab(contentType: type, workingDirectory: pane.activeTab?.workingDirectory ?? "~")
+        addNewTab(contentType: type, workingDirectory: pane.activeTab?.workingDirectory ?? "~", group: activeGroupID)
     }
 
     /// Returns true when closing any tab would leave the workspace empty.

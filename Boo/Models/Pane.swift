@@ -229,28 +229,104 @@ final class Pane {
     @discardableResult
     func groupTab(at source: Int, with target: Int) -> UUID? {
         guard source != target, tabs.indices.contains(source), tabs.indices.contains(target) else { return nil }
-        let gid: UUID
-        if let existing = tabs[target].groupID {
-            gid = existing
-        } else {
-            gid = UUID()
-            let name = (tabs[target].workingDirectory as NSString).lastPathComponent
-            groups.append(TabGroup(id: gid, name: name.isEmpty ? "Group" : name, color: nextGroupColor()))
-            tabs[target].groupID = gid
-        }
+        guard let gid = tabs[target].groupID ?? createGroup(withTabsAt: [target]) else { return nil }
+        addTab(at: source, toGroup: gid)
+        return gid
+    }
+
+    /// Makes a new group of the given tabs, gathered into one run where the
+    /// first of them sits, in tab order. Named after the first tab's folder.
+    @discardableResult
+    func createGroup(withTabsAt indices: [Int]) -> UUID? {
+        let picked = Set(indices.filter { tabs.indices.contains($0) })
+        guard let first = picked.min() else { return nil }
+        let gid = UUID()
+        let name = (tabs[first].workingDirectory as NSString).lastPathComponent
+        groups.append(TabGroup(id: gid, name: name.isEmpty ? "Group" : name, color: nextGroupColor()))
         let activeID = activeTabID
-        tabs[source].groupID = gid
-        // Place it after the group's last tab (or right after the target).
-        let others = tabs.indices.filter { tabs[$0].groupID == gid && $0 != source }
-        let last = others.max() ?? target
-        let dest = source < last ? last : last + 1
-        if dest != source {
-            let tab = tabs.remove(at: source)
-            tabs.insert(tab, at: dest)
-        }
-        if let activeID, let i = tabs.firstIndex(where: { $0.id == activeID }) { activeTabIndex = i }
+        var members = picked.sorted().map { tabs[$0] }
+        for i in members.indices { members[i].groupID = gid }
+        let before = tabs.indices.filter { $0 < first && !picked.contains($0) }.map { tabs[$0] }
+        let after = tabs.indices.filter { $0 > first && !picked.contains($0) }.map { tabs[$0] }
+        tabs = before + members + after
+        restoreActive(activeID)
         pruneGroups()
         return gid
+    }
+
+    /// Moves the tab to the end of group `id` and makes it a member.
+    func addTab(at index: Int, toGroup id: UUID) {
+        guard tabs.indices.contains(index), group(id: id) != nil, tabs[index].groupID != id else { return }
+        let activeID = activeTabID
+        var tab = tabs.remove(at: index)
+        tab.groupID = id
+        let end = (tabs.lastIndex { $0.groupID == id } ?? (index - 1)) + 1
+        tabs.insert(tab, at: min(max(end, 0), tabs.count))
+        restoreActive(activeID)
+        pruneGroups()
+    }
+
+    /// Moves a whole group so it starts at `index` (an insertion index in the
+    /// current tab order). A spot inside another group snaps to that group's
+    /// nearer edge, so groups never interleave.
+    func moveGroup(_ id: UUID, to index: Int) {
+        let members = tabIndices(inGroup: id)
+        guard let first = members.first, let last = members.last, index < first || index > last + 1 else { return }
+        let activeID = activeTabID
+        let block = Array(tabs[first...last])
+        var rest = tabs
+        rest.removeSubrange(first...last)
+        var dest = min(max(index > last ? index - block.count : index, 0), rest.count)
+        if dest > 0, dest < rest.count, let other = rest[dest].groupID, rest[dest - 1].groupID == other {
+            let start = rest.firstIndex { $0.groupID == other } ?? dest
+            let end = (rest.lastIndex { $0.groupID == other } ?? dest) + 1
+            dest = dest - start <= end - dest ? start : end
+        }
+        rest.insert(contentsOf: block, at: dest)
+        tabs = rest
+        restoreActive(activeID)
+    }
+
+    /// Removes a group and its tabs, for moving them to another pane with
+    /// `insertGroup`. The views stay alive like `extractTab`'s.
+    func extractGroup(_ id: UUID) -> (group: TabGroup, tabs: [Tab])? {
+        guard let group = group(id: id) else { return nil }
+        var moved: [Tab] = []
+        while let i = tabs.lastIndex(where: { $0.groupID == id }), let tab = extractTab(at: i) {
+            moved.insert(tab, at: 0)
+        }
+        return (group, moved)
+    }
+
+    /// Inserts tabs taken out by `extractGroup` as one group at `index`
+    /// (snapped out of any group there). The first of them becomes active.
+    func insertGroup(_ group: TabGroup, tabs moved: [Tab], at index: Int) {
+        guard !moved.isEmpty else { return }
+        var dest = min(max(index, 0), tabs.count)
+        if dest > 0, dest < tabs.count, let other = tabs[dest].groupID, tabs[dest - 1].groupID == other {
+            dest = (tabs.lastIndex { $0.groupID == other } ?? dest) + 1
+        }
+        var group = group
+        group.isCollapsed = false
+        groups.removeAll { $0.id == group.id }
+        groups.append(group)
+        tabs.insert(
+            contentsOf: moved.map { tab -> Tab in
+                var tab = tab
+                tab.groupID = group.id
+                return tab
+            }, at: dest)
+        activeTabIndex = dest
+        pruneGroups()
+    }
+
+    /// Index a new tab started from tab `index` lands at: the end of that
+    /// tab's group, or nil when it isn't grouped.
+    func groupEndIndex(forTabAt index: Int) -> Int? {
+        guard let gid = tabAt(index)?.groupID, let last = tabs.lastIndex(where: { $0.groupID == gid }) else {
+            return nil
+        }
+        return last + 1
     }
 
     /// Takes the tab out of its group, moving it past the group's end.
@@ -262,7 +338,7 @@ final class Pane {
         var freed = tab
         freed.groupID = nil
         tabs.insert(freed, at: min(end, tabs.count))
-        if let activeID, let i = tabs.firstIndex(where: { $0.id == activeID }) { activeTabIndex = i }
+        restoreActive(activeID)
         pruneGroups()
     }
 
@@ -298,6 +374,10 @@ final class Pane {
     }
 
     private var activeTabID: UUID? { activeTab?.id }
+
+    private func restoreActive(_ id: UUID?) {
+        if let id, let i = tabs.firstIndex(where: { $0.id == id }) { activeTabIndex = i }
+    }
 
     private func tabAt(_ index: Int) -> Tab? {
         tabs.indices.contains(index) ? tabs[index] : nil

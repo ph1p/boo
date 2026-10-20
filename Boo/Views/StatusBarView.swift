@@ -103,11 +103,13 @@ import Cocoa
 
     let systemInfoSegment = SystemInfoSegment()
     let broadcastSegment = BroadcastSegment()
+    let recordingSegment = RecordingSegment()
     let keyTableSegment = KeyTableSegment()
 
     private func registerDefaultPlugins() {
         registerPlugin(keyTableSegment)
         registerPlugin(broadcastSegment)
+        registerPlugin(recordingSegment)
         registerPlugin(EnvironmentSegment())
         registerPlugin(GitBranchSegment())
         registerPlugin(PathSegment())

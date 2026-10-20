@@ -84,8 +84,12 @@ struct CastPlayback {
         return size
     }
 
+    /// "m:ss", or "h:mm:ss" past an hour.
     static func formatTime(_ t: TimeInterval) -> String {
-        let s = Int(t.rounded(.down))
-        return String(format: "%d:%02d", s / 60, s % 60)
+        let total = max(0, Int(t.rounded(.down)))
+        let h = total / 3600
+        let m = (total % 3600) / 60
+        let s = total % 60
+        return h > 0 ? String(format: "%d:%02d:%02d", h, m, s) : String(format: "%d:%02d", m, s)
     }
 }
