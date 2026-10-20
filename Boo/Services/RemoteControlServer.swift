@@ -161,6 +161,8 @@ final class RemoteControlServer: @unchecked Sendable {
             serveIndex(fd: fd)
         case ("GET", "/ghostty-vt.wasm"):
             serveWasm(fd: fd)
+        case ("GET", _) where Self.staticAssets[path] != nil:
+            serveStatic(fd: fd, path: path)
         case ("POST", "/api/cmd"):
             guard authorized(headerText: headerText) else {
                 sendJSON(fd: fd, status: "401 Unauthorized", dict: ["ok": false, "error": "unauthorized"])
@@ -256,6 +258,28 @@ final class RemoteControlServer: @unchecked Sendable {
             return
         }
         sendResponse(fd: fd, status: "200 OK", contentType: "application/wasm", body: wasm)
+    }
+
+    /// Home-screen install files (web manifest and icons): path → (resource, content type).
+    static let staticAssets: [String: (name: String, ext: String, contentType: String)] = [
+        "/manifest.webmanifest": ("manifest", "webmanifest", "application/manifest+json"),
+        "/icon-192.png": ("icon-192", "png", "image/png"),
+        "/icon-512.png": ("icon-512", "png", "image/png"),
+        "/apple-touch-icon.png": ("apple-touch-icon", "png", "image/png"),
+    ]
+
+    private static let staticAssetData: [String: Data] = staticAssets.compactMapValues { asset in
+        BooResourceBundle.bundle.url(
+            forResource: asset.name, withExtension: asset.ext, subdirectory: "RemoteControl"
+        ).flatMap { try? Data(contentsOf: $0) }
+    }
+
+    private func serveStatic(fd: Int32, path: String) {
+        guard let asset = Self.staticAssets[path], let data = Self.staticAssetData[path] else {
+            sendError(fd: fd, status: "404 Not Found")
+            return
+        }
+        sendResponse(fd: fd, status: "200 OK", contentType: asset.contentType, body: data)
     }
 
     /// Encode a response dict, falling back to an empty object so a non-encodable

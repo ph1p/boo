@@ -4,6 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <title>Boo Remote Control</title>
+<!-- Home-screen install. The manifest has no start_url, so the installed app
+     opens the URL it was added from, #token included. -->
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Boo">
 <!-- Tailwind Play CDN, inlined: the remote-control server exposes only "/",
      "/ghostty-vt.wasm" and "/api/cmd", and it is reached over the LAN where the
      phone may have no internet at all. A single self-contained document is the

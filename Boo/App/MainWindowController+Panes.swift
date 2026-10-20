@@ -143,6 +143,9 @@ extension MainWindowController: PaneViewDelegate {
         {
             let tabIndex = tabID.flatMap { id in pane.tabs.firstIndex { $0.id == id } } ?? pane.activeTabIndex
             pane.setCommandRunning(true, at: tabIndex)
+            if pane.tabs.indices.contains(tabIndex) {
+                PhonePusher.shared.commandStarted(tabID: pane.tabs[tabIndex].id, command: command)
+            }
             booLog(
                 .debug, .terminal,
                 "[Activity] cmd_start pane=\(paneID.uuidString.prefix(8)) tab=\(tabIndex) cmd=\(command.prefix(40))"
@@ -190,6 +193,11 @@ extension MainWindowController: PaneViewDelegate {
         }
         guard tabIndex >= 0 else { return }
         pane.setCommandRunning(false, at: tabIndex)
+        if pane.tabs.indices.contains(tabIndex) {
+            PhonePusher.shared.commandEnded(
+                tabID: pane.tabs[tabIndex].id, exitCode: exitCode, workspaceName: workspace.displayName,
+                focused: isTabFocused(workspace: workspace, pane: pane, tabIndex: tabIndex))
+        }
 
         signalActivity(paneID: paneID, tabIndex: tabIndex, exitCode: exitCode)
     }

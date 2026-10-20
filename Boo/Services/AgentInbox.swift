@@ -288,6 +288,10 @@ extension AgentInbox {
             return
         }
         guard let item = items[tabID] else { return }
+        if item.state == .needsInput {
+            PhonePusher.shared.agentNeedsInput(
+                workspaceName: location.workspace.displayName, agentName: Self.displayName(of: item.agent))
+        }
         location.controller.signalAgentAttention(
             workspace: location.workspace, pane: location.pane, tabIndex: location.tabIndex,
             body: Self.summary(of: item))

@@ -293,6 +293,9 @@ final class AppSettings {
         static let editorRulerColumn = "editorRulerColumn"
 
         static let activityNotificationsEnabled = "activityNotificationsEnabled"
+        static let phonePushEnabled = "phonePushEnabled"
+        static let phonePushURL = "phonePushURL"
+        static let phonePushLongCommandSeconds = "phonePushLongCommandSeconds"
 
         static let remoteControlPort = "remoteControlPort"
 
@@ -821,6 +824,27 @@ final class AppSettings {
     var activityNotificationsEnabled: Bool {
         get { bool(K.activityNotificationsEnabled, default: true) }
         set { set(newValue, forKey: K.activityNotificationsEnabled, topic: .notifications) }
+    }
+
+    /// Phone push (ntfy webhook). Off by default: it sends data to an external service.
+    var phonePushEnabled: Bool {
+        get { bool(K.phonePushEnabled, default: false) }
+        set { set(newValue, forKey: K.phonePushEnabled, topic: .notifications) }
+    }
+
+    /// ntfy topic URL, e.g. `https://ntfy.sh/<secret-topic>`.
+    var phonePushURL: String {
+        get { UserDefaults.standard.string(forKey: K.phonePushURL) ?? "" }
+        set { set(newValue, forKey: K.phonePushURL, topic: .notifications) }
+    }
+
+    /// A command running at least this long pushes when it finishes.
+    var phonePushLongCommandSeconds: Int {
+        get {
+            let v = UserDefaults.standard.integer(forKey: K.phonePushLongCommandSeconds)
+            return v > 0 ? v : 60
+        }
+        set { set(newValue, forKey: K.phonePushLongCommandSeconds, topic: .notifications) }
     }
 
     // MARK: - Remote Control
