@@ -667,7 +667,7 @@ extension MainWindowController {
             }
         }
         if let command, let newTab = workspace.pane(for: newID)?.activeTab {
-            GhosttyView.pendingInitialInput[newTab.id] = command + "\n"
+            GhosttyView.pendingLaunch[newTab.id] = LaunchSpec(command: command)
         }
         if focus { workspace.activePaneID = newID }
         guard isVisible else {

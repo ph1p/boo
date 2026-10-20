@@ -297,6 +297,10 @@ final class WindowManager {
         }
         // A command naming a pane goes to the window holding it, which may be in the background.
         let paneID = (json["pane_id"] as? String).flatMap(UUID.init(uuidString:))
+        if let paneID, OrchestratorController.shared.isOrchestratorPane(paneID) {
+            OrchestratorController.shared.handleIPCCommand(cmd: cmd, json: json, reply: reply)
+            return
+        }
         guard let target = paneID.flatMap(controller(owningPane:)) ?? activeController else {
             reply(["ok": false, "error": "no window"])
             return

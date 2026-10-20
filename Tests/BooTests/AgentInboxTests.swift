@@ -88,6 +88,31 @@ final class AgentInboxTests: XCTestCase {
         XCTAssertEqual(inbox.handleSocketCommand(cmd: "agent_inbox", json: [:])?["attention"] as? Int, 0)
     }
 
+    func testOrchestratorEventsStayOutOfTheAgentList() {
+        let inbox = makeInbox()
+        let orchestratorTab = UUID()
+        let orchestratorPane = UUID()
+        inbox.orchestratorTabID = { orchestratorTab }
+        inbox.orchestratorPaneID = { orchestratorPane }
+
+        let byTab = inbox.handleSocketEvent(["tab_id": orchestratorTab.uuidString, "event": "permission"])
+        XCTAssertEqual(byTab["ok"] as? Bool, true, "its tab is in no window but still resolves")
+        XCTAssertEqual(inbox.orchestrator?.state, .needsInput)
+        XCTAssertTrue(inbox.items.isEmpty)
+        XCTAssertEqual(inbox.attentionCount, 0)
+
+        inbox.handleSocketEvent(["pane_id": orchestratorPane.uuidString, "event": "tool", "tool": "Bash"])
+        XCTAssertEqual(inbox.orchestrator?.state, .working)
+        XCTAssertEqual(inbox.orchestrator?.tool, "Bash")
+
+        let listed = inbox.handleSocketCommand(cmd: "agent_inbox", json: [:])
+        XCTAssertEqual((listed?["items"] as? [[String: Any]])?.count, 0)
+        XCTAssertFalse(inbox.jumpToNextAttention())
+
+        inbox.handleSocketEvent(["tab_id": orchestratorTab.uuidString, "event": "end"])
+        XCTAssertNil(inbox.orchestrator)
+    }
+
     func testPruneDropsClosedTabs() {
         let inbox = makeInbox()
         let open = UUID()

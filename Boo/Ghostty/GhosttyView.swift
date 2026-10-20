@@ -70,9 +70,9 @@ import Cocoa
     override func accessibilityRole() -> NSAccessibility.Role? { .textArea }
     override func accessibilityLabel() -> String? { "Terminal" }
 
-    /// Text typed into a tab's shell as soon as its surface starts, keyed by tab
-    /// ID (Ghostty's `initial_input`: no race with shell startup). Consumed once.
-    static var pendingInitialInput: [UUID: String] = [:]
+    /// How a tab's terminal starts, keyed by tab ID. Consumed once, when its
+    /// surface is created.
+    static var pendingLaunch: [UUID: LaunchSpec] = [:]
 
     init(workingDirectory: String, paneID: UUID? = nil, tabID: UUID? = nil) {
         self.tabID = tabID
@@ -112,6 +112,11 @@ import Cocoa
         func addEnv(_ key: String, _ value: String) {
             envPairs.append((key: Array(key.utf8CString), value: Array(value.utf8CString)))
         }
+        let launch = tabID.flatMap { Self.pendingLaunch.removeValue(forKey: $0) }
+        // Boo's own variables always win over a launch spec's.
+        for (key, value) in (launch?.env ?? [:]).sorted(by: { $0.key < $1.key }) where !key.hasPrefix("BOO_") {
+            addEnv(key, value)
+        }
         addEnv("BOO_TERM", "1")
         if let paneID { addEnv("BOO_PANE_ID", paneID.uuidString) }
         if let tabID {
@@ -125,9 +130,10 @@ import Cocoa
                 value: pair.value.withUnsafeBufferPointer { $0.baseAddress! })
         }
 
-        let initialInput = tabID.flatMap { Self.pendingInitialInput.removeValue(forKey: $0) }
+        // Typed as Ghostty's `initial_input`: no race with shell startup.
+        let initialInput = launch?.command.map { $0 + "\n" }
         withExtendedLifetime(envPairs) {
-            workingDirectory.withCString { cwd in
+            (launch?.cwd ?? workingDirectory).withCString { cwd in
                 envVars.withUnsafeMutableBufferPointer { buf in
                     config.working_directory = cwd
                     config.env_vars = buf.baseAddress

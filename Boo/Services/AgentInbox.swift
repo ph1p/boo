@@ -54,6 +54,11 @@ final class AgentInbox {
     }
 
     private(set) var items: [UUID: Item] = [:]
+    /// The orchestrator's own session; never in `items`.
+    private(set) var orchestrator: Item?
+    /// The orchestrator's tab and pane (its hooks report like any agent's).
+    var orchestratorTabID: () -> UUID? = { OrchestratorController.shared.tabID }
+    var orchestratorPaneID: () -> UUID? = { OrchestratorController.shared.paneID }
     /// Resolves a tab to its window, workspace and pane; nil once the tab is gone.
     var locate: (UUID) -> Location? = { AgentInbox.locateInWindows($0) }
     /// Reads the screen of a tab's terminal; for the remote page's previews.
@@ -92,22 +97,57 @@ final class AgentInbox {
         event: String, tabID: UUID, agent: String = "claude", message: String? = nil,
         tool: String? = nil, sessionID: String? = nil, cwd: String? = nil, now: Date = Date()
     ) -> State? {
+        if event == "end" {
+            remove(tabID: tabID)
+            return nil
+        }
+        let previous = items[tabID]?.state
+        guard
+            let item = Self.updated(
+                items[tabID], event: event, tabID: tabID, agent: agent, message: message, tool: tool,
+                sessionID: sessionID, cwd: cwd, now: now)
+        else { return nil }
+        items[tabID] = item
+        changed()
+        return item.needsAttention && item.state != previous ? item.state : nil
+    }
+
+    /// Applies a hook event from the orchestrator's own session. Kept out of
+    /// `items`: the orchestrator is not an agent to triage, it only drives the
+    /// drawer's status.
+    func applyOrchestrator(
+        event: String, tabID: UUID, message: String? = nil, tool: String? = nil,
+        sessionID: String? = nil, cwd: String? = nil, now: Date = Date()
+    ) {
+        if event == "end" {
+            guard orchestrator != nil else { return }
+            orchestrator = nil
+        } else {
+            guard
+                let item = Self.updated(
+                    orchestrator, event: event, tabID: tabID, agent: "claude", message: message, tool: tool,
+                    sessionID: sessionID, cwd: cwd, now: now)
+            else { return }
+            orchestrator = item
+        }
+        changed()
+    }
+
+    /// `existing` after one hook event; nil for events that change nothing.
+    private static func updated(
+        _ existing: Item?, event: String, tabID: UUID, agent: String, message: String?,
+        tool: String?, sessionID: String?, cwd: String?, now: Date
+    ) -> Item? {
         let state: State
         switch event {
         case "prompt", "tool", "working": state = .working
         case "permission", "question", "needs-input": state = .needsInput
         case "stop", "done": state = .done
         case "error": state = .error
-        case "end":
-            remove(tabID: tabID)
-            return nil
         default: return nil
         }
-        var item =
-            items[tabID]
-            ?? Item(
-                tabID: tabID, agent: agent, state: state, updatedAt: now, seen: false)
-        let previous = items[tabID]?.state
+        var item = existing ?? Item(tabID: tabID, agent: agent, state: state, updatedAt: now, seen: false)
+        let previous = existing?.state
         item.agent = agent
         item.state = state
         item.updatedAt = now
@@ -121,9 +161,7 @@ final class AgentInbox {
             item.message = message
             if state != previous { item.seen = false }
         }
-        items[tabID] = item
-        changed()
-        return item.needsAttention && state != previous ? state : nil
+        return item
     }
 
     /// The user is looking at `tabID`: done/error stop asking for attention.
@@ -193,6 +231,12 @@ extension AgentInbox {
     /// A bare `pane_id` resolves to that pane's active tab.
     func handleSocketEvent(_ json: [String: Any]) -> [String: Any] {
         guard let event = json["event"] as? String else { return ["ok": false, "error": "missing event"] }
+        if let tabID = orchestratorTab(json) {
+            applyOrchestrator(
+                event: event, tabID: tabID, message: Self.nonEmpty(json["message"]), tool: Self.nonEmpty(json["tool"]),
+                sessionID: Self.nonEmpty(json["session_id"]), cwd: Self.nonEmpty(json["cwd"]))
+            return ["ok": true, "state": orchestrator?.state.rawValue ?? NSNull()]
+        }
         guard let tabID = resolveTabID(json) else { return ["ok": false, "error": "tab not found"] }
         let newState = apply(
             event: event, tabID: tabID,
@@ -201,6 +245,18 @@ extension AgentInbox {
             sessionID: Self.nonEmpty(json["session_id"]), cwd: Self.nonEmpty(json["cwd"]))
         if newState != nil { signalAttention(tabID: tabID) }
         return ["ok": true, "state": items[tabID]?.state.rawValue ?? NSNull()]
+    }
+
+    /// The orchestrator's tab when the event names its tab or pane.
+    private func orchestratorTab(_ json: [String: Any]) -> UUID? {
+        guard let tabID = orchestratorTabID() else { return nil }
+        if (json["tab_id"] as? String).flatMap(UUID.init(uuidString:)) == tabID { return tabID }
+        if let paneID = orchestratorPaneID(),
+            (json["pane_id"] as? String).flatMap(UUID.init(uuidString:)) == paneID
+        {
+            return tabID
+        }
+        return nil
     }
 
     private func resolveTabID(_ json: [String: Any]) -> UUID? {

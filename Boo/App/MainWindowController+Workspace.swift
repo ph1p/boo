@@ -314,7 +314,7 @@ extension MainWindowController {
         if let initialCommand, let pane = workspace.pane(for: workspace.activePaneID) {
             pane.stopAll()
             pane.addTab(workingDirectory: path)
-            if let tab = pane.tabs.last { GhosttyView.pendingInitialInput[tab.id] = initialCommand + "\n" }
+            if let tab = pane.tabs.last { GhosttyView.pendingLaunch[tab.id] = LaunchSpec(command: initialCommand) }
         } else {
             configureInitialTab(for: workspace)
         }
