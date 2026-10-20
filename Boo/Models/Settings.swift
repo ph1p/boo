@@ -269,6 +269,7 @@ final class AppSettings {
         static let sidebarTabBarPosition = "sidebarTabBarPosition"
         static let sidebarGlobalState = "sidebarGlobalState"
         static let sidebarPerWorkspaceState = "sidebarPerWorkspaceState"
+        static let autoColorWorkspaces = "autoColorWorkspaces"
         static let defaultTabType = "defaultTabType"
         static let autoDetectContentType = "autoDetectContentType"
         static let markdownOpenMode = "markdownOpenMode"
@@ -685,6 +686,13 @@ final class AppSettings {
     var sidebarPerWorkspaceState: Bool {
         get { bool(K.sidebarPerWorkspaceState, default: false) }
         set { set(newValue, forKey: K.sidebarPerWorkspaceState, topic: .layout) }
+    }
+
+    /// When true, new workspaces get a color derived from their git root.
+    /// A color picked by hand replaces it.
+    var autoColorWorkspaces: Bool {
+        get { bool(K.autoColorWorkspaces, default: false) }
+        set { set(newValue, forKey: K.autoColorWorkspaces, topic: .layout) }
     }
 
     // MARK: - Tabs
@@ -1119,6 +1127,7 @@ final class AppSettings {
             K.sidebarTabBarPosition: sidebarTabBarPosition.rawValue,
             K.sidebarGlobalState: sidebarGlobalState,
             K.sidebarPerWorkspaceState: sidebarPerWorkspaceState,
+            K.autoColorWorkspaces: autoColorWorkspaces,
             K.editorFontSize: Double(editorFontSize),
             K.editorFontName: editorFontName,
             K.editorTabSize: editorTabSize,

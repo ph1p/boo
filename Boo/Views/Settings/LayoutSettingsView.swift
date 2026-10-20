@@ -65,6 +65,12 @@ struct LayoutSettingsView: View {
                     .labelsHidden()
                     .pickerStyle(.segmented)
                 }
+                ToggleRow(
+                    label: "Color new workspaces by project",
+                    help:
+                        "Each new workspace gets a color derived from its git repository (or folder), the same every time. A color you pick yourself wins.",
+                    isOn: LayoutSettingsBindings.binding(\.autoColorWorkspaces)
+                )
             }
 
             Section(title: "Tab Overflow") {

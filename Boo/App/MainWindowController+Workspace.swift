@@ -317,6 +317,9 @@ extension MainWindowController {
     /// workspace inherits, and switches to it.
     func presentNewWorkspace(_ workspace: Workspace) {
         let previousIndex = appState.activeWorkspaceIndex
+        if AppSettings.shared.autoColorWorkspaces, workspace.color == .none, workspace.customColor == nil {
+            workspace.color = .auto(forFolder: workspace.folderPath)
+        }
         if AppSettings.shared.sidebarPerWorkspaceState {
             let currentSidebarState = sidebarController.captureLiveState()
             workspace.sidebarState = SidebarWorkspaceState(

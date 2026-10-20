@@ -24,6 +24,33 @@ enum WorkspaceColor: String, CaseIterable {
     }
 
     var label: String { rawValue.capitalized }
+
+    /// A color that stays the same for a project across launches and machines:
+    /// FNV-1a of its git root (or the folder itself), since `Hasher` is seeded
+    /// per process.
+    static func auto(forFolder folder: String, fileManager: FileManager = .default) -> WorkspaceColor {
+        let key = gitRoot(of: folder, fileManager: fileManager) ?? (folder as NSString).standardizingPath
+        var hash: UInt64 = 0xcbf2_9ce4_8422_2325
+        for byte in key.utf8 {
+            hash ^= UInt64(byte)
+            hash = hash &* 0x100_0000_01b3
+        }
+        let palette = allCases.filter { $0 != .none }
+        return palette[Int(hash % UInt64(palette.count))]
+    }
+
+    /// Nearest folder at or above `folder` holding `.git` (a directory, or a
+    /// file in worktrees and submodules).
+    static func gitRoot(of folder: String, fileManager: FileManager = .default) -> String? {
+        var dir = ((folder as NSString).expandingTildeInPath as NSString).standardizingPath
+        while !dir.isEmpty {
+            if fileManager.fileExists(atPath: (dir as NSString).appendingPathComponent(".git")) { return dir }
+            let parent = (dir as NSString).deletingLastPathComponent
+            if parent == dir { break }
+            dir = parent
+        }
+        return nil
+    }
 }
 
 struct SidebarWorkspaceState {
