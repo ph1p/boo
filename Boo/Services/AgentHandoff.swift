@@ -165,7 +165,9 @@ enum AgentHandoff {
 
     /// "Send … to Agent" items for a terminal's context menu: one per kind of
     /// context available, each with a submenu of agents when there are several.
-    func menuItems(for view: GhosttyView) -> [NSMenuItem] {
+    /// - Parameter block: prompt index of the right-clicked command block;
+    ///   its output is offered instead of the last command's.
+    func menuItems(for view: GhosttyView, block: Int? = nil) -> [NSMenuItem] {
         let targets = AgentHandoff.targets(excluding: view.tabID)
         guard !targets.isEmpty else { return [] }
         let cwd = view.tabID.flatMap(AgentHandoff.workingDirectory(ofTab:))
@@ -175,11 +177,22 @@ enum AgentHandoff {
             contexts.append(("Send Selection", { text }))
         }
         // Offered whenever a command ran; its output is read only if picked.
-        if let command = view.lastCommand?.command {
-            let short = command.count > 30 ? String(command.prefix(29)) + "…" : command
+        if let block, let command = view.blockCommand(at: block) {
             contexts.append(
                 (
-                    "Send Output of “\(short)”",
+                    "Send Output of “\(Self.short(command))”",
+                    { [weak view] in
+                        guard let view, let output = view.readCommand(index: block, part: .output), !output.isEmpty
+                        else { return nil }
+                        let source = AgentHandoff.Source.output(
+                            command: command, exitCode: view.exitCode(ofBlock: block, command: command))
+                        return AgentHandoff.compose(output, source: source, cwd: cwd)
+                    }
+                ))
+        } else if let command = view.lastCommand?.command {
+            contexts.append(
+                (
+                    "Send Output of “\(Self.short(command))”",
                     { [weak view] in
                         guard let (source, output) = view?.lastCommandOutput(), !output.isEmpty else { return nil }
                         return AgentHandoff.compose(output, source: source, cwd: cwd)
@@ -198,6 +211,10 @@ enum AgentHandoff {
             parent.submenu = submenu
             return parent
         }
+    }
+
+    static func short(_ command: String) -> String {
+        command.count > 30 ? String(command.prefix(29)) + "…" : command
     }
 
     private func item(_ title: String, _ text: @escaping @MainActor () -> String?, _ tabID: UUID) -> NSMenuItem {

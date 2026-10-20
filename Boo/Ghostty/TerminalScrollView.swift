@@ -13,6 +13,7 @@ class TerminalScrollView: NSView {
     let ghosttyView: GhosttyView
     private let scrollView: NSScrollView
     private let documentView: NSView
+    private let gutter = PromptGutterView()
     private var currentScrollbar: GhosttyView.GhosttyScrollbar?
 
     /// True while the user is actively dragging the scrollbar knob.
@@ -39,9 +40,13 @@ class TerminalScrollView: NSView {
 
         super.init(frame: .zero)
         addSubview(scrollView)
+        addSubview(gutter)
 
         ghosttyView.onScrollbarChanged = { [weak self] sb in
             self?.handleScrollbarUpdate(sb)
+        }
+        ghosttyView.onPromptMarksChanged = { [weak self] in
+            self?.refreshGutter()
         }
 
         // Bounds changes — keep surface view pinned to visible rect
@@ -85,10 +90,16 @@ class TerminalScrollView: NSView {
     override func layout() {
         super.layout()
         scrollView.frame = bounds
+        gutter.frame = bounds
         ghosttyView.frame.size = scrollView.bounds.size
         documentView.frame.size.width = scrollView.bounds.width
         synchronizeScrollView()
         synchronizeSurfaceView()
+        refreshGutter()
+    }
+
+    private func refreshGutter() {
+        gutter.update(from: ghosttyView)
     }
 
     /// Pin GhosttyView to the visible rect of the scroll view.
@@ -137,6 +148,7 @@ class TerminalScrollView: NSView {
     private func handleScrollbarUpdate(_ sb: GhosttyView.GhosttyScrollbar) {
         currentScrollbar = sb
         synchronizeScrollView()
+        refreshGutter()
     }
 
     // MARK: - Notifications

@@ -455,6 +455,26 @@ typedef struct {
   uintptr_t text_len;
 } ghostty_text_s;
 
+// A shell prompt (OSC 133) visible in the viewport.
+typedef enum {
+  GHOSTTY_COMMAND_STATUS_NONE,
+  GHOSTTY_COMMAND_STATUS_SUCCEEDED,
+  GHOSTTY_COMMAND_STATUS_FAILED,
+} ghostty_command_status_e;
+
+typedef struct {
+  // Viewport row of the prompt's first line.
+  uint32_t row;
+  // 0 for the newest prompt on the screen, counting up into history.
+  uint32_t index;
+  ghostty_command_status_e status;
+} ghostty_prompt_mark_s;
+
+typedef enum {
+  GHOSTTY_COMMAND_PART_INPUT,
+  GHOSTTY_COMMAND_PART_OUTPUT,
+} ghostty_command_part_e;
+
 typedef enum {
   GHOSTTY_POINT_ACTIVE,
   GHOSTTY_POINT_VIEWPORT,
@@ -1202,8 +1222,17 @@ GHOSTTY_API bool ghostty_surface_key_is_binding(ghostty_surface_t,
                                                    ghostty_input_key_s,
                                                    ghostty_binding_flags_e*);
 GHOSTTY_API void ghostty_surface_text(ghostty_surface_t, const char*, uintptr_t);
+GHOSTTY_API void ghostty_surface_paste_text(ghostty_surface_t, const char*, uintptr_t);
 GHOSTTY_API void ghostty_surface_preedit(ghostty_surface_t, const char*, uintptr_t);
 GHOSTTY_API bool ghostty_surface_mouse_captured(ghostty_surface_t);
+GHOSTTY_API uintptr_t ghostty_surface_prompt_marks(ghostty_surface_t,
+                                                   ghostty_prompt_mark_s*,
+                                                   uintptr_t);
+GHOSTTY_API int32_t ghostty_surface_prompt_index_at(ghostty_surface_t, uint32_t);
+GHOSTTY_API bool ghostty_surface_read_command(ghostty_surface_t,
+                                              uint32_t,
+                                              ghostty_command_part_e,
+                                              ghostty_text_s*);
 GHOSTTY_API bool ghostty_surface_mouse_button(ghostty_surface_t,
                                                  ghostty_input_mouse_state_e,
                                                  ghostty_input_mouse_button_e,

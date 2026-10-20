@@ -38,6 +38,8 @@ import Cocoa
     /// Commands the shell ran here. Updated by the runtime before
     /// `onCommandStart` / `onCommandEnd`.
     var commandHistory = CommandHistory()
+    /// Called after a command starts or ends, when prompt marks change status.
+    var onPromptMarksChanged: (() -> Void)?
     /// The last command the shell ran here and its exit code (nil while it runs).
     var lastCommand: (command: String, exitCode: Int32?)? {
         commandHistory.last.map { ($0.command, $0.exitCode) }
@@ -628,6 +630,9 @@ import Cocoa
 
         menu.addItem(.separator())
 
+        let block = viewportRow(at: convert(event.locationInWindow, from: nil)).flatMap(promptIndex(atViewportRow:))
+        if let block { addCommandBlockItems(to: menu, block: block) }
+
         let splitRight = NSMenuItem(
             title: "Split Horizontally", action: #selector(MainWindowController.splitVerticalAction(_:)),
             keyEquivalent: "")
@@ -640,7 +645,7 @@ import Cocoa
 
         menu.addItem(.separator())
 
-        let handoff = AgentHandoffMenuTarget.shared.menuItems(for: self)
+        let handoff = AgentHandoffMenuTarget.shared.menuItems(for: self, block: block)
         if !handoff.isEmpty {
             handoff.forEach(menu.addItem)
             menu.addItem(.separator())
@@ -779,12 +784,166 @@ import Cocoa
         return string(from: text)
     }
 
-    /// Output of the last command run here, from the scrollback.
+    /// Output of the last command run here: from the shell's OSC 133 marks
+    /// when it sends them, else matched in the scrollback.
     func lastCommandOutput() -> (AgentHandoff.Source, String)? {
-        guard let last = lastCommand, let screen = readRecentText(lines: 5000),
+        guard let last = lastCommand else { return nil }
+        let source = AgentHandoff.Source.output(command: last.command, exitCode: last.exitCode)
+        if let index = lastCommandIndex() {
+            return (source, readCommand(index: index, part: .output) ?? "")
+        }
+        guard let screen = readRecentText(lines: 5000),
             let output = AgentHandoff.output(of: last.command, in: screen, finished: last.exitCode != nil)
         else { return nil }
-        return (.output(command: last.command, exitCode: last.exitCode), output)
+        return (source, output)
+    }
+
+    /// Prompt index of the last command that was run. A finished command is
+    /// followed by a fresh prompt, so it starts looking one prompt up; prompts
+    /// left empty (Return on a blank line) are skipped.
+    func lastCommandIndex() -> Int? {
+        let start = commandHistory.last?.isRunning == true ? 0 : 1
+        for index in start..<(start + 10) {
+            guard let input = readCommand(index: index, part: .input) else { continue }
+            if !input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return index }
+        }
+        return nil
+    }
+
+    // MARK: - Command blocks (OSC 133 marks, via ghostty-command-output.patch)
+
+    struct PromptMark: Equatable {
+        enum Status { case none, succeeded, failed }
+        /// Viewport row of the prompt's first line.
+        var row: Int
+        /// 0 for the newest prompt on the screen, counting up into history.
+        var index: Int
+        var status: Status
+    }
+
+    enum CommandPart { case input, output }
+
+    /// Matches `window-padding-x/y` in the generated Ghostty config.
+    nonisolated static let gridPadding: CGFloat = 3
+
+    /// Prompts that start in the viewport, newest first.
+    func promptMarks() -> [PromptMark] {
+        guard let surface else { return [] }
+        var buffer = [ghostty_prompt_mark_s](repeating: ghostty_prompt_mark_s(), count: 256)
+        let count = Int(ghostty_surface_prompt_marks(surface, &buffer, UInt(buffer.count)))
+        return buffer.prefix(count).map { mark in
+            let status: PromptMark.Status
+            switch mark.status {
+            case GHOSTTY_COMMAND_STATUS_SUCCEEDED: status = .succeeded
+            case GHOSTTY_COMMAND_STATUS_FAILED: status = .failed
+            default: status = .none
+            }
+            return PromptMark(row: Int(mark.row), index: Int(mark.index), status: status)
+        }
+    }
+
+    /// Index of the prompt whose command block contains a viewport row.
+    func promptIndex(atViewportRow row: Int) -> Int? {
+        guard let surface, row >= 0 else { return nil }
+        let index = ghostty_surface_prompt_index_at(surface, UInt32(row))
+        return index < 0 ? nil : Int(index)
+    }
+
+    /// The typed command or the output of the command block at a prompt index.
+    func readCommand(index: Int, part: CommandPart) -> String? {
+        guard let surface, index >= 0 else { return nil }
+        var text = ghostty_text_s()
+        let tag = part == .input ? GHOSTTY_COMMAND_PART_INPUT : GHOSTTY_COMMAND_PART_OUTPUT
+        guard ghostty_surface_read_command(surface, UInt32(index), tag, &text) else { return nil }
+        defer { ghostty_surface_free_text(surface, &text) }
+        return string(from: text)
+    }
+
+    /// Height of one grid row in points.
+    var cellHeight: CGFloat? {
+        guard let size = gridSize, size.cell_height_px > 0 else { return nil }
+        let scale = window?.backingScaleFactor ?? layer?.contentsScale ?? 2
+        return CGFloat(size.cell_height_px) / scale
+    }
+
+    /// Viewport row under a point in this view's coordinates.
+    func viewportRow(at point: NSPoint) -> Int? {
+        guard let cellHeight, let rows = gridSize?.rows else { return nil }
+        let fromTop = bounds.height - point.y - Self.gridPadding
+        guard fromTop >= 0 else { return nil }
+        let row = Int(fromTop / cellHeight)
+        return row < Int(rows) ? row : nil
+    }
+
+    /// The command typed at a prompt, or nil for an empty prompt.
+    func blockCommand(at index: Int) -> String? {
+        guard let input = readCommand(index: index, part: .input) else { return nil }
+        let command = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        return command.isEmpty ? nil : command
+    }
+
+    /// Exit code of a command block: from the history when it recorded the
+    /// command, else 0 or 1 from the prompt's mark; nil while it runs.
+    func exitCode(ofBlock index: Int, command: String) -> Int32? {
+        if index == 0, commandHistory.last?.isRunning == true { return nil }
+        if let record = commandHistory.records.last(where: { $0.command == command && !$0.isRunning }) {
+            return record.exitCode
+        }
+        switch promptMarks().first(where: { $0.index == index })?.status {
+        case .failed: return 1
+        case .succeeded: return 0
+        default: return nil
+        }
+    }
+
+    private func addCommandBlockItems(to menu: NSMenu, block: Int) {
+        guard let command = blockCommand(at: block) else { return }
+        var items: [(String, Selector)] = [
+            ("Copy Command", #selector(copyBlockCommand(_:))),
+            ("Copy Output", #selector(copyBlockOutput(_:))),
+        ]
+        // Typing into a running program would not re-run anything.
+        if commandHistory.last?.isRunning != true {
+            items.append(("Re-run “\(AgentHandoffMenuTarget.short(command))”", #selector(rerunBlockCommand(_:))))
+        }
+        for (title, action) in items {
+            let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
+            item.target = self
+            item.representedObject = block
+            menu.addItem(item)
+        }
+        menu.addItem(.separator())
+    }
+
+    @objc private func copyBlockCommand(_ sender: NSMenuItem) {
+        guard let block = sender.representedObject as? Int, let command = blockCommand(at: block) else { return }
+        copyToPasteboard(command)
+    }
+
+    @objc private func copyBlockOutput(_ sender: NSMenuItem) {
+        guard let block = sender.representedObject as? Int else { return }
+        copyToPasteboard(readCommand(index: block, part: .output) ?? "")
+    }
+
+    @objc private func rerunBlockCommand(_ sender: NSMenuItem) {
+        guard let block = sender.representedObject as? Int, let command = blockCommand(at: block) else { return }
+        paste(command, submit: true)
+    }
+
+    /// Copies the last command's output; beeps when there is none.
+    @discardableResult
+    func copyLastCommandOutput() -> Bool {
+        guard let (_, output) = lastCommandOutput(), !output.isEmpty else {
+            NSSound.beep()
+            return false
+        }
+        copyToPasteboard(output)
+        return true
+    }
+
+    private func copyToPasteboard(_ text: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
     }
 
     private func readText(_ tag: ghostty_point_tag_e) -> String? {

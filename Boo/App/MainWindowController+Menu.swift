@@ -109,6 +109,10 @@ extension MainWindowController {
         termMenu.addItem(
             withTitle: "Next Prompt", action: #selector(jumpToNextPromptAction(_:)),
             keyEquivalent: String(UnicodeScalar(NSDownArrowFunctionKey)!))
+        let copyOutput = NSMenuItem(
+            title: "Copy Last Output", action: #selector(copyLastOutputAction(_:)), keyEquivalent: "c")
+        copyOutput.keyEquivalentModifierMask = [.command, .option]
+        termMenu.addItem(copyOutput)
         termMenu.addItem(.separator())
         termMenu.addItem(withTitle: "Split Right", action: #selector(splitVerticalAction(_:)), keyEquivalent: "d")
         let splitH = NSMenuItem(title: "Split Down", action: #selector(splitHorizontalAction(_:)), keyEquivalent: "D")

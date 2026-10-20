@@ -31,6 +31,8 @@ extension MainWindowController {
 
     @objc func jumpToNextPromptAction(_ sender: Any?) { focusedGhosttyView?.jumpToPrompt(1) }
 
+    @objc func copyLastOutputAction(_ sender: Any?) { focusedGhosttyView?.copyLastCommandOutput() }
+
     @objc func clearScreenAction(_ sender: Any?) {
         // Simulate Ctrl+L key press — the standard terminal clear screen
         activeGhosttyView?.sendKey(keyCode: 0x25, mods: GHOSTTY_MODS_CTRL, text: "l")

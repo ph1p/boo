@@ -1,0 +1,315 @@
+diff --git a/include/ghostty.h b/include/ghostty.h
+index 9a12b9cad..e5870d3e1 100644
+--- a/include/ghostty.h
++++ b/include/ghostty.h
+@@ -455,6 +455,26 @@ typedef struct {
+   uintptr_t text_len;
+ } ghostty_text_s;
+ 
++// A shell prompt (OSC 133) visible in the viewport.
++typedef enum {
++  GHOSTTY_COMMAND_STATUS_NONE,
++  GHOSTTY_COMMAND_STATUS_SUCCEEDED,
++  GHOSTTY_COMMAND_STATUS_FAILED,
++} ghostty_command_status_e;
++
++typedef struct {
++  // Viewport row of the prompt's first line.
++  uint32_t row;
++  // 0 for the newest prompt on the screen, counting up into history.
++  uint32_t index;
++  ghostty_command_status_e status;
++} ghostty_prompt_mark_s;
++
++typedef enum {
++  GHOSTTY_COMMAND_PART_INPUT,
++  GHOSTTY_COMMAND_PART_OUTPUT,
++} ghostty_command_part_e;
++
+ typedef enum {
+   GHOSTTY_POINT_ACTIVE,
+   GHOSTTY_POINT_VIEWPORT,
+@@ -1205,6 +1225,14 @@ GHOSTTY_API void ghostty_surface_text(ghostty_surface_t, const char*, uintptr_t)
+ GHOSTTY_API void ghostty_surface_paste_text(ghostty_surface_t, const char*, uintptr_t);
+ GHOSTTY_API void ghostty_surface_preedit(ghostty_surface_t, const char*, uintptr_t);
+ GHOSTTY_API bool ghostty_surface_mouse_captured(ghostty_surface_t);
++GHOSTTY_API uintptr_t ghostty_surface_prompt_marks(ghostty_surface_t,
++                                                   ghostty_prompt_mark_s*,
++                                                   uintptr_t);
++GHOSTTY_API int32_t ghostty_surface_prompt_index_at(ghostty_surface_t, uint32_t);
++GHOSTTY_API bool ghostty_surface_read_command(ghostty_surface_t,
++                                              uint32_t,
++                                              ghostty_command_part_e,
++                                              ghostty_text_s*);
+ GHOSTTY_API bool ghostty_surface_mouse_button(ghostty_surface_t,
+                                                  ghostty_input_mouse_state_e,
+                                                  ghostty_input_mouse_button_e,
+diff --git a/src/apprt/embedded.zig b/src/apprt/embedded.zig
+index 3c6b2c1f6..1a00cc330 100644
+--- a/src/apprt/embedded.zig
++++ b/src/apprt/embedded.zig
+@@ -2136,6 +2136,71 @@ pub const CAPI = struct {
+         surface.preeditCallback(if (len == 0) null else ptr[0..len]);
+     }
+ 
++    pub const PromptMark = extern struct {
++        row: u32,
++        index: u32,
++        status: c_int,
++    };
++
++    pub const CommandPart = enum(c_int) { input, output };
++
++    /// Writes the OSC 133 prompts that start in the viewport into `out`,
++    /// newest first, and returns how many it wrote.
++    export fn ghostty_surface_prompt_marks(
++        surface: *Surface,
++        out: [*]PromptMark,
++        cap: usize,
++    ) usize {
++        const core_surface = &surface.core_surface;
++        core_surface.renderer_state.mutex.lockUncancelable(global.io());
++        defer core_surface.renderer_state.mutex.unlock(global.io());
++
++        const screen = core_surface.renderer_state.terminal.screens.active;
++        var marks: [256]terminal.Screen.PromptMark = undefined;
++        const n = screen.viewportPromptMarks(marks[0..@min(cap, marks.len)]);
++        for (marks[0..n], 0..) |mark, i| {
++            const pt = screen.pages.pointFromPin(.viewport, mark.pin) orelse continue;
++            out[i] = .{
++                .row = @intCast(pt.coord().y),
++                .index = @intCast(mark.index),
++                .status = @intFromEnum(mark.status),
++            };
++        }
++        return n;
++    }
++
++    /// The index (as in ghostty_surface_prompt_marks) of the prompt at or
++    /// above viewport row `row`, or -1 if there is none.
++    export fn ghostty_surface_prompt_index_at(surface: *Surface, row: u32) i32 {
++        const core_surface = &surface.core_surface;
++        core_surface.renderer_state.mutex.lockUncancelable(global.io());
++        defer core_surface.renderer_state.mutex.unlock(global.io());
++
++        const screen = core_surface.renderer_state.terminal.screens.active;
++        const pin = screen.pages.pin(.{ .viewport = .{ .y = row } }) orelse return -1;
++        const index = screen.promptIndex(pin) orelse return -1;
++        return std.math.cast(i32, index) orelse -1;
++    }
++
++    /// Reads the input or output of the command at prompt `index`
++    /// (0 = newest prompt). Free the result with ghostty_surface_free_text.
++    export fn ghostty_surface_read_command(
++        surface: *Surface,
++        index: u32,
++        part: CommandPart,
++        result: *Text,
++    ) bool {
++        surface.core_surface.renderer_state.mutex.lockUncancelable(global.io());
++        defer surface.core_surface.renderer_state.mutex.unlock(global.io());
++
++        const screen = surface.core_surface.renderer_state.terminal.screens.active;
++        const core_sel = screen.selectCommand(index, switch (part) {
++            .input => .input,
++            .output => .output,
++        }) orelse return false;
++        return readTextLocked(surface, core_sel, result);
++    }
++
+     /// Returns true if the surface currently has mouse capturing
+     /// enabled.
+     export fn ghostty_surface_mouse_captured(surface: *Surface) bool {
+diff --git a/src/terminal/Screen.zig b/src/terminal/Screen.zig
+index 820455e64..10c605fec 100644
+--- a/src/terminal/Screen.zig
++++ b/src/terminal/Screen.zig
+@@ -3535,6 +3535,86 @@ pub fn selectOutput(self: *Screen, pin: Pin) ?Selection {
+     return .init(hl.start, hl.end, false);
+ }
+ 
++/// A shell prompt in the viewport, for gutter marks.
++pub const PromptMark = struct {
++    /// The prompt's first row.
++    pin: Pin,
++    /// 0 for the newest prompt on the screen, counting up into history.
++    index: usize,
++    status: Row.CommandStatus,
++};
++
++/// Records how the command above the cursor ended on its prompt row.
++/// Called on OSC 133 D; a missing exit code counts as success.
++pub fn markCommandStatus(self: *Screen, exit_code: ?i32) void {
++    if (!self.semantic_prompt.seen) return;
++    var it = self.cursor.page_pin.promptIterator(.left_up, null);
++    const prompt = it.next() orelse return;
++    prompt.rowAndCell().row.command_status =
++        if ((exit_code orelse 0) == 0) .succeeded else .failed;
++}
++
++/// The first row of the prompt `index` prompts back from the newest one.
++pub fn promptPin(self: *Screen, index: usize) ?Pin {
++    if (!self.semantic_prompt.seen) return null;
++    const bottom = self.pages.getBottomRight(.screen) orelse return null;
++    var it = bottom.promptIterator(.left_up, null);
++    var i: usize = 0;
++    while (it.next()) |prompt| : (i += 1) {
++        if (i == index) return prompt;
++    }
++    return null;
++}
++
++/// The index (see `promptPin`) of the prompt at or above `pin`.
++pub fn promptIndex(self: *Screen, pin: Pin) ?usize {
++    if (!self.semantic_prompt.seen) return null;
++    var above = pin.promptIterator(.left_up, null);
++    const target = above.next() orelse return null;
++    const bottom = self.pages.getBottomRight(.screen) orelse return null;
++    var it = bottom.promptIterator(.left_up, null);
++    var i: usize = 0;
++    while (it.next()) |prompt| : (i += 1) {
++        if (prompt.eql(target)) return i;
++    }
++    return null;
++}
++
++/// The input or output of the command at prompt `index` (see `promptPin`),
++/// or null if it has none.
++pub fn selectCommand(
++    self: *Screen,
++    index: usize,
++    content: Cell.SemanticContent,
++) ?Selection {
++    const prompt = self.promptPin(index) orelse return null;
++    const hl = self.pages.highlightSemanticContent(prompt, content) orelse return null;
++    return .init(hl.start, hl.end, false);
++}
++
++/// Fills `out` with the prompts that start in the viewport, newest first,
++/// and returns how many it wrote.
++pub fn viewportPromptMarks(self: *Screen, out: []PromptMark) usize {
++    if (!self.semantic_prompt.seen or out.len == 0) return 0;
++    const bottom = self.pages.getBottomRight(.screen) orelse return 0;
++    const top = self.pages.getTopLeft(.viewport);
++    var it = bottom.promptIterator(.left_up, null);
++    var index: usize = 0;
++    var n: usize = 0;
++    while (it.next()) |prompt| : (index += 1) {
++        if (prompt.before(top)) break;
++        if (self.pages.pointFromPin(.viewport, prompt) == null) continue;
++        out[n] = .{
++            .pin = prompt,
++            .index = index,
++            .status = prompt.rowAndCell().row.command_status,
++        };
++        n += 1;
++        if (n == out.len) break;
++    }
++    return n;
++}
++
+ pub const LineIterator = struct {
+     screen: *const Screen,
+     current: ?Pin = null,
+@@ -12770,3 +12850,65 @@ test "Screen: selectLine does not join lines across a recycled row" {
+         try testing.expectEqualStrings("world", contents);
+     }
+ }
++
++test "Screen: command marks and selectCommand" {
++    const testing = std.testing;
++    const alloc = testing.allocator;
++    const io = testing.io;
++
++    var s = try init(io, alloc, .{ .cols = 10, .rows = 10, .max_scrollback_bytes = 0 });
++    defer s.deinit();
++
++    // Row 0: "$ " + "ls"        (command 1, fails)
++    // Row 1: "a"                (output 1)
++    // Row 2: "$ " + "pwd"       (command 2, succeeds)
++    // Row 3: "/tmp"             (output 2)
++    // Row 4: "$ "               (current prompt)
++    s.cursorSetSemanticContent(.{ .prompt = .initial });
++    try s.testWriteString("$ ");
++    s.cursorSetSemanticContent(.{ .input = .clear_explicit });
++    try s.testWriteString("ls\n");
++    s.cursorSetSemanticContent(.output);
++    try s.testWriteString("a\n");
++    s.markCommandStatus(1);
++    s.cursorSetSemanticContent(.{ .prompt = .initial });
++    try s.testWriteString("$ ");
++    s.cursorSetSemanticContent(.{ .input = .clear_explicit });
++    try s.testWriteString("pwd\n");
++    s.cursorSetSemanticContent(.output);
++    try s.testWriteString("/tmp\n");
++    s.markCommandStatus(null);
++    s.cursorSetSemanticContent(.{ .prompt = .initial });
++    try s.testWriteString("$ ");
++
++    var marks: [8]PromptMark = undefined;
++    const n = s.viewportPromptMarks(&marks);
++    try testing.expectEqual(@as(usize, 3), n);
++    try testing.expectEqual(@as(usize, 0), marks[0].index);
++    try testing.expectEqual(Row.CommandStatus.none, marks[0].status);
++    try testing.expectEqual(Row.CommandStatus.succeeded, marks[1].status);
++    try testing.expectEqual(Row.CommandStatus.failed, marks[2].status);
++    try testing.expectEqual(point.Point{ .viewport = .{ .x = 0, .y = 2 } }, s.pages.pointFromPin(.viewport, marks[1].pin).?);
++
++    // The newest prompt has no output yet; the one before it does.
++    try testing.expect(s.selectCommand(0, .output) == null);
++    {
++        var sel = s.selectCommand(1, .output).?;
++        defer sel.deinit(&s);
++        const contents = try s.selectionString(alloc, .{ .sel = sel, .trim = true });
++        defer alloc.free(contents);
++        try testing.expectEqualStrings("/tmp", contents);
++    }
++    {
++        var sel = s.selectCommand(2, .input).?;
++        defer sel.deinit(&s);
++        const contents = try s.selectionString(alloc, .{ .sel = sel, .trim = true });
++        defer alloc.free(contents);
++        try testing.expectEqualStrings("ls", contents);
++    }
++    try testing.expect(s.selectCommand(3, .output) == null);
++
++    // A row in output 1 belongs to the oldest prompt.
++    const row1 = s.pages.pin(.{ .active = .{ .x = 0, .y = 1 } }).?;
++    try testing.expectEqual(@as(?usize, 2), s.promptIndex(row1));
++}
+diff --git a/src/terminal/Terminal.zig b/src/terminal/Terminal.zig
+index 2667c51b3..babaa5064 100644
+--- a/src/terminal/Terminal.zig
++++ b/src/terminal/Terminal.zig
+@@ -2236,6 +2236,7 @@ pub fn semanticPrompt(
+             // its reasonable at this point to reset our semantic content
+             // state but the spec doesn't really say what to do.
+             self.screens.active.cursorSetSemanticContent(.output);
++            self.screens.active.markCommandStatus(cmd.readOption(.exit_code));
+         },
+     }
+ }
+diff --git a/src/terminal/page.zig b/src/terminal/page.zig
+index 82e07583c..08fccf411 100644
+--- a/src/terminal/page.zig
++++ b/src/terminal/page.zig
+@@ -2071,7 +2071,18 @@ pub const Row = packed struct(u64) {
+     /// screen.
+     dirty: bool = false,
+ 
+-    _padding: u23 = 0,
++    /// How the command started at this prompt row ended (OSC 133 D).
++    /// Only meaningful on a row whose semantic_prompt is `.prompt`.
++    command_status: CommandStatus = .none,
++
++    _padding: u21 = 0,
++
++    pub const CommandStatus = enum(u2) {
++        /// No command finished here yet (or the prompt was never ended).
++        none = 0,
++        succeeded = 1,
++        failed = 2,
++    };
+ 
+     /// The semantic prompt state of the row. See `semantic_prompt`.
+     pub const SemanticPrompt = enum(u2) {

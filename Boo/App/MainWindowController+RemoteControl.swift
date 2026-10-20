@@ -221,7 +221,8 @@ extension MainWindowController: NSMenuItemValidation {
         case #selector(mergeAllWindowsAction(_:)):
             return WindowManager.shared.controllers.count > 1
         // Disabled items pass the key on, so ⌘↑ still works in editors.
-        case #selector(jumpToPreviousPromptAction(_:)), #selector(jumpToNextPromptAction(_:)):
+        case #selector(jumpToPreviousPromptAction(_:)), #selector(jumpToNextPromptAction(_:)),
+            #selector(copyLastOutputAction(_:)):
             return focusedGhosttyView != nil
         case #selector(jumpToNextWaitingAgentAction(_:)):
             return AgentInbox.shared.attentionCount > 0

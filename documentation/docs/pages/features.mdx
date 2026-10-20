@@ -47,6 +47,15 @@ Smart close order: tab → pane → workspace.
 - **Drag tabs across workspaces** — Drag a tab to a different pane or split zone in the current workspace, or use the workspace pill hover to move it to another workspace entirely. Moving the last tab out of a workspace prompts to close that workspace.
 - **Progress bars** — Programs that report progress with OSC 9;4 (cargo, winget, systemd and others) show a thin bar on their tab. The workspace pill shows its furthest-along bar and the Dock icon shows one for all windows. Errors are red, paused is yellow, and an indeterminate report fills the bar. Bars clear when the command finishes or after 15 minutes without a report. Try `printf '\e]9;4;1;50\a'`.
 
+## Command Blocks
+
+Boo's shell integration marks each prompt (OSC 133), so the terminal knows where every command and its output begin and end.
+
+- **Gutter marks** — A thin tick at the left edge of each prompt; red when the command failed
+- **Jump** — **Cmd+Up** / **Cmd+Down** scroll to the previous / next prompt
+- **Right-click a command** — Copy Command, Copy Output, Re-run, or send its output to an agent
+- **Copy Last Output** — **Cmd+Opt+C** copies the output of the last command
+
 ## File Explorer
 
 Toggle the sidebar with **Cmd+B**. The explorer shows a live-updating file tree for the current workspace.

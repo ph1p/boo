@@ -74,6 +74,7 @@ private func ghosttyAction(_ app: ghostty_app_t?, _ target: ghostty_target_s, _ 
                     DispatchQueue.main.async { [weak view] in
                         view?.commandHistory.start(data)
                         view?.onCommandStart?(data)
+                        view?.onPromptMarksChanged?()
                     }
                 }
             }
@@ -99,6 +100,7 @@ private func ghosttyAction(_ app: ghostty_app_t?, _ target: ghostty_target_s, _ 
         DispatchQueue.main.async { [weak view] in
             view?.commandHistory.finish(exitCode: exitCode, durationNanos: duration)
             view?.onCommandEnd?(exitCode)
+            view?.onPromptMarksChanged?()
         }
         return true
 
@@ -597,8 +599,8 @@ private func ghosttyCloseSurface(_ userdata: UnsafeMutableRawPointer?, _ process
 
         // Window / terminal behavior
         lines.append("window-decoration = none")
-        lines.append("window-padding-x = 3")
-        lines.append("window-padding-y = 3")
+        lines.append("window-padding-x = \(Int(GhosttyView.gridPadding))")
+        lines.append("window-padding-y = \(Int(GhosttyView.gridPadding))")
         lines.append("confirm-close-surface = false")
         lines.append("quit-after-last-window-closed = false")
         lines.append("mouse-hide-while-typing = true")
