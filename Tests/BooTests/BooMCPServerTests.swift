@@ -57,6 +57,21 @@ final class BooMCPServerTests: XCTestCase {
         XCTAssertTrue(sent().isEmpty, "no socket traffic for protocol messages")
     }
 
+    func testSendsTokenWithEveryCommand() {
+        var sent: [[String: Any]] = []
+        let server = BooMCPServer(
+            send: { message in
+                sent.append(message)
+                return ["ok": true]
+            }, ownPaneID: ownPane, cwd: "/work/repo", token: "secret")
+        _ = call(server, "send_text", ["pane_id": otherPane, "text": "q"])
+        _ = call(server, "get_layout")
+        XCTAssertEqual(sent.map { $0["token"] as? String }, ["secret", "secret"])
+        let (tokenless, tokenlessSent) = makeServer()
+        _ = call(tokenless, "get_layout")
+        XCTAssertNil(tokenlessSent().first?["token"])
+    }
+
     func testNotificationsAndErrors() {
         let (server, _) = makeServer()
         XCTAssertNil(server.handle(["jsonrpc": "2.0", "method": "notifications/initialized"]))

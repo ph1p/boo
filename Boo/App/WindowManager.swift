@@ -237,10 +237,12 @@ final class WindowManager {
     func installSharedHandlers() {
         guard !sharedHandlersInstalled else { return }
         sharedHandlersInstalled = true
+        ApprovalCenter.shared.startObserving()
 
+        // Only socket traffic is gated; remote control has its own bearer auth.
         BooSocketServer.shared.onControlCommand = { cmd, json, reply in
             DispatchQueue.main.async {
-                WindowManager.shared.dispatchCommand(cmd: cmd, json: json, reply: reply)
+                WindowManager.shared.dispatchGated(cmd: cmd, json: json, reply: reply)
             }
         }
         RemoteControlServer.shared.onCommand = { cmd, json, reply in
@@ -282,7 +284,7 @@ final class WindowManager {
         }
     }
 
-    private func dispatchCommand(
+    func dispatchCommand(
         cmd: String, json: [String: Any], reply: @escaping ([String: Any]) -> Void
     ) {
         if cmd == "agent_timeline" {

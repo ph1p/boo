@@ -16,6 +16,9 @@ struct BooMCPServer {
     let ownPaneID: String?
     /// The agent's working directory: default cwd for new panes and the repo for new tasks.
     let cwd: String
+    /// `BOO_TOKEN` of the agent's terminal, sent with every command so Boo
+    /// knows who asks (some commands are refused without it).
+    var token: String? = nil
 
     static let protocolVersion = "2025-06-18"
 
@@ -33,7 +36,8 @@ struct BooMCPServer {
         let server = BooMCPServer(
             send: { try BooSocketClient.request($0, socketPath: socketPath) },
             ownPaneID: env["BOO_PANE_ID"].flatMap { $0.isEmpty ? nil : $0 },
-            cwd: FileManager.default.currentDirectoryPath)
+            cwd: FileManager.default.currentDirectoryPath,
+            token: env["BOO_TOKEN"].flatMap { $0.isEmpty ? nil : $0 })
         while let line = readLine(strippingNewline: true) {
             guard !line.trimmingCharacters(in: .whitespaces).isEmpty else { continue }
             let response: [String: Any]?
@@ -156,6 +160,7 @@ struct BooMCPServer {
     private func boo(_ message: [String: Any], pane: String?) throws -> [String: Any] {
         var message = message
         if let pane { message["pane_id"] = pane }
+        if let token { message["token"] = token }
         var reply = try send(message)
         guard reply["ok"] as? Bool == true else {
             throw Failure(message: reply["error"] as? String ?? "Boo refused \(message["cmd"] ?? "the command")")
