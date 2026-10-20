@@ -1,7 +1,9 @@
-import { defineConfig } from 'vocs'
+import { defineConfig } from 'vocs/config'
 
 export default defineConfig({
   title: 'Boo',
+  srcDir: 'docs',
+  renderStrategy: 'full-static',
   basePath: '/boo',
   logoUrl: '/logo.png',
   sidebar: [

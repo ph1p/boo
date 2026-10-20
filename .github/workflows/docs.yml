@@ -39,9 +39,9 @@ jobs:
 
       - name: Restore published Sparkle appcast
         run: |
-          mkdir -p docs/public/updates
+          mkdir -p public/updates
           curl -fsSL "https://ph1p.github.io/boo/updates/appcast.xml" \
-            -o docs/public/updates/appcast.xml || true
+            -o public/updates/appcast.xml || true
         working-directory: documentation
 
       - name: Build
@@ -50,7 +50,7 @@ jobs:
 
       - uses: actions/upload-pages-artifact@v5
         with:
-          path: documentation/docs/dist
+          path: documentation/dist/public
 
   deploy:
     name: Deploy

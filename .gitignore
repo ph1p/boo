@@ -10,9 +10,9 @@ zig-cache/
 .claude
 _bmad
 _bmad-output
-documentation/docs/dist
+documentation/dist
 documentation/node_modules
-documentation/docs/public/updates/appcast.xml
+documentation/public/updates/appcast.xml
 Boo/Resources/MonacoBundle
 Boo/Resources/MonacoSource/node_modules
 *.dmg

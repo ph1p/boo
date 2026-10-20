@@ -252,8 +252,8 @@ jobs:
 
       - name: Inject generated Sparkle appcast
         run: |
-          mkdir -p documentation/docs/public/updates
-          cp /tmp/sparkle-appcast/appcast.xml documentation/docs/public/updates/appcast.xml
+          mkdir -p documentation/public/updates
+          cp /tmp/sparkle-appcast/appcast.xml documentation/public/updates/appcast.xml
 
       - name: Build documentation site
         run: pnpm build
@@ -261,7 +261,7 @@ jobs:
 
       - uses: actions/upload-pages-artifact@v5
         with:
-          path: documentation/docs/dist
+          path: documentation/dist/public
 
   release-pages-deploy:
     name: Release Pages Deploy

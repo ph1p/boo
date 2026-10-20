@@ -1,4 +1,4 @@
-<p align="center"><img width="251" height="251" alt="Boo Logo" src="./documentation/docs/public/logo.png" /></p>
+<p align="center"><img width="251" height="251" alt="Boo Logo" src="./documentation/public/logo.png" /></p>
 
 # Boo
 
@@ -7,8 +7,8 @@ A macOS terminal emulator with integrated file explorer, workspace management, s
 ## Screenshots
 
 <p align="center">
-  <img width="80%" alt="Boo App" src="./documentation/docs/public/app.png" />
-  <img width="60%" alt="Boo Settings" src="./documentation/docs/public/settings.png" />
+  <img width="80%" alt="Boo App" src="./documentation/public/app.png" />
+  <img width="60%" alt="Boo Settings" src="./documentation/public/settings.png" />
 </p>
 
 ## Install
