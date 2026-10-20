@@ -220,6 +220,9 @@ extension MainWindowController: NSMenuItemValidation {
             return appState.workspaces.count > 1 && activeWorkspace?.isPinned == false
         case #selector(mergeAllWindowsAction(_:)):
             return WindowManager.shared.controllers.count > 1
+        // Disabled items pass the key on, so ⌘↑ still works in editors.
+        case #selector(jumpToPreviousPromptAction(_:)), #selector(jumpToNextPromptAction(_:)):
+            return focusedGhosttyView != nil
         case #selector(jumpToNextWaitingAgentAction(_:)):
             return AgentInbox.shared.attentionCount > 0
         default:

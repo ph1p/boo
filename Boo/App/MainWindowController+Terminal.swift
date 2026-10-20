@@ -20,6 +20,17 @@ extension MainWindowController {
         if !wasVisible { activeGhosttyView?.startSearch() }
     }
 
+    /// The terminal that has keyboard focus; prompt jumps only apply there so
+    /// ⌘↑ keeps its meaning in text fields and editors.
+    var focusedGhosttyView: GhosttyView? {
+        guard let gv = activeGhosttyView, window?.firstResponder === gv else { return nil }
+        return gv
+    }
+
+    @objc func jumpToPreviousPromptAction(_ sender: Any?) { focusedGhosttyView?.jumpToPrompt(-1) }
+
+    @objc func jumpToNextPromptAction(_ sender: Any?) { focusedGhosttyView?.jumpToPrompt(1) }
+
     @objc func clearScreenAction(_ sender: Any?) {
         // Simulate Ctrl+L key press — the standard terminal clear screen
         activeGhosttyView?.sendKey(keyCode: 0x25, mods: GHOSTTY_MODS_CTRL, text: "l")

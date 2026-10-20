@@ -35,9 +35,13 @@ import Cocoa
     var onCommandStart: ((String) -> Void)?
     /// Called when OSC 9999 cmd_end fires. Argument is the exit code.
     var onCommandEnd: ((Int32) -> Void)?
+    /// Commands the shell ran here. Updated by the runtime before
+    /// `onCommandStart` / `onCommandEnd`.
+    var commandHistory = CommandHistory()
     /// The last command the shell ran here and its exit code (nil while it runs).
-    /// Set by the runtime before `onCommandStart` / `onCommandEnd`.
-    var lastCommand: (command: String, exitCode: Int32?)?
+    var lastCommand: (command: String, exitCode: Int32?)? {
+        commandHistory.last.map { ($0.command, $0.exitCode) }
+    }
     /// OSC 9;4 progress report; the percent is -1 when none was sent.
     var onProgressReport: ((TerminalProgress.Report, Int) -> Void)?
     /// Called when Ghostty fires a terminal bell (BEL / GHOSTTY_ACTION_RING_BELL).
@@ -712,6 +716,9 @@ import Cocoa
     // MARK: - Copy / Paste / Flash
 
     @objc func copy(_ sender: Any?) { sendBindingAction("copy:clipboard") }
+
+    /// Scrolls to the previous (-1) or next (1) shell prompt (OSC 133 A).
+    func jumpToPrompt(_ delta: Int) { sendBindingAction("jump_to_prompt:\(delta)") }
 
     @objc override func selectAll(_ sender: Any?) { sendBindingAction("select_all") }
 

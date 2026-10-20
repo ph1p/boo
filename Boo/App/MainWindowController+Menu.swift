@@ -103,6 +103,13 @@ extension MainWindowController {
             withTitle: "Clear Scrollback", action: #selector(clearScrollbackAction(_:)), keyEquivalent: "K")
         (termMenu.items.last)?.keyEquivalentModifierMask = [.command, .shift]
         termMenu.addItem(.separator())
+        termMenu.addItem(
+            withTitle: "Previous Prompt", action: #selector(jumpToPreviousPromptAction(_:)),
+            keyEquivalent: String(UnicodeScalar(NSUpArrowFunctionKey)!))
+        termMenu.addItem(
+            withTitle: "Next Prompt", action: #selector(jumpToNextPromptAction(_:)),
+            keyEquivalent: String(UnicodeScalar(NSDownArrowFunctionKey)!))
+        termMenu.addItem(.separator())
         termMenu.addItem(withTitle: "Split Right", action: #selector(splitVerticalAction(_:)), keyEquivalent: "d")
         let splitH = NSMenuItem(title: "Split Down", action: #selector(splitHorizontalAction(_:)), keyEquivalent: "D")
         splitH.keyEquivalentModifierMask = [.command, .shift]
