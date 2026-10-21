@@ -158,7 +158,7 @@ import XCTest
 
     func testNarrowPaneHidesControls() {
         let pv = makePaneView()
-        pv.frame.size.width = 60
+        pv.frame.size.width = 50
         pv.isPointerInPane = true
         pv.updatePaneControls()
         XCTAssertFalse(pv.paneControlsShown)

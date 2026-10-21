@@ -26,14 +26,19 @@ final class PaneControlsView: NSView {
     /// Radius of the concave curves joining the pane's bottom and right edges.
     static let fillet: CGFloat = 6
     static let height: CGFloat = bodyHeight + fillet
-    static let buttonWidth: CGFloat = 24
     private static let cornerRadius: CGFloat = 7
     private static let itemHeight: CGFloat = 20
-    private static let leading: CGFloat = 4
-    private static let trailing: CGFloat = 3
+    /// Square buttons, so the glyph sits as far from the sides as from top and bottom.
+    static let buttonWidth: CGFloat = itemHeight
+    /// One gap on every side and between items: the space above and below an item.
+    static let inset: CGFloat = (bodyHeight - itemHeight) / 2
+    /// Concentric with the notch's rounded corner.
+    static let itemCornerRadius: CGFloat = cornerRadius - inset
 
     var onAction: ((PaneControlAction) -> Void)?
     var onUnzoom: (() -> Void)?
+    /// The notch's width changed on its own (the recording timer grew a digit).
+    var onResize: (() -> Void)?
     /// Builds the ⋯ menu on demand, so it always reflects current state.
     var menuProvider: (() -> NSMenu?)?
 
@@ -53,6 +58,7 @@ final class PaneControlsView: NSView {
         super.init(frame: frame)
         wantsLayer = true
         recordChip.onClick = { [weak self] in self?.onAction?(.toggleRecording) }
+        recordChip.onWidthChange = { [weak self] in self?.onResize?() }
         unzoom.onClick = { [weak self] in self?.onUnzoom?() }
         more.onClick = { [weak self] in self?.showMoreMenu() }
         for view in [recordChip, unzoom, more] as [NSView] { addSubview(view) }
@@ -92,7 +98,8 @@ final class PaneControlsView: NSView {
 
     override var fittingSize: NSSize {
         let items = visibleItems.reduce(CGFloat(0)) { $0 + itemWidth($1) }
-        return NSSize(width: Self.fillet + Self.leading + items + Self.trailing, height: Self.height)
+        let gaps = CGFloat(visibleItems.count + 1) * Self.inset
+        return NSSize(width: Self.fillet + items + gaps, height: Self.height)
     }
 
     private func itemWidth(_ item: PaneControlItem) -> CGFloat {
@@ -106,12 +113,11 @@ final class PaneControlsView: NSView {
 
     override func layout() {
         super.layout()
-        var x = Self.fillet + Self.leading
-        let y = (Self.bodyHeight - Self.itemHeight) / 2
+        var x = Self.fillet + Self.inset
         for item in visibleItems {
             let w = itemWidth(item)
-            item.frame = NSRect(x: x, y: y, width: w, height: Self.itemHeight)
-            x += w
+            item.frame = NSRect(x: x, y: Self.inset, width: w, height: Self.itemHeight)
+            x += w + Self.inset
         }
     }
 
@@ -251,7 +257,7 @@ class PaneControlItem: NSView {
     override init(frame: NSRect) {
         super.init(frame: frame)
         wantsLayer = true
-        layer?.cornerRadius = 6
+        layer?.cornerRadius = PaneControlsView.itemCornerRadius
         layer?.cornerCurve = .continuous
         setAccessibilityElement(true)
         setAccessibilityRole(.button)
@@ -350,6 +356,12 @@ final class RecordChip: PaneControlItem {
         }
     }
 
+    var onWidthChange: (() -> Void)?
+
+    private static let inset: CGFloat = 8
+    private static let dotSize: CGFloat = 7
+    private static let gap: CGFloat = 5
+
     private let icon = NSImageView()
     private let dot = NSView()
     private let label = NSTextField(labelWithString: "")
@@ -381,20 +393,23 @@ final class RecordChip: PaneControlItem {
     override var fittingSize: NSSize {
         let height: CGFloat = 20
         guard recordingSince != nil else { return NSSize(width: PaneControlsView.buttonWidth, height: height) }
-        // Sized for the widest label in its range, so the pill doesn't jitter each second.
-        let sample = label.stringValue.count > 5 ? "00:00:00" : "00:00"
+        // Measured with every digit zeroed: digits are monospaced, so the pill
+        // only grows when the format does (0:59 → 1:00:00), never each second.
+        let sample = String(label.stringValue.map { $0.isNumber ? "0" : $0 })
         let width = (sample as NSString).size(withAttributes: [.font: label.font as Any]).width
-        return NSSize(width: 8 + 7 + 5 + ceil(width) + 8, height: height)
+        return NSSize(width: Self.inset + Self.dotSize + Self.gap + ceil(width) + Self.inset, height: height)
     }
 
     override func layout() {
         super.layout()
         icon.frame = iconFrame
-        dot.frame = NSRect(x: 8, y: (bounds.height - 7) / 2, width: 7, height: 7)
+        dot.frame = NSRect(
+            x: Self.inset, y: (bounds.height - Self.dotSize) / 2, width: Self.dotSize, height: Self.dotSize)
         let labelSize = label.intrinsicContentSize
+        let labelX = dot.frame.maxX + Self.gap
         label.frame = NSRect(
-            x: dot.frame.maxX + 5, y: (bounds.height - labelSize.height) / 2,
-            width: bounds.width - dot.frame.maxX - 5 - 6, height: labelSize.height)
+            x: labelX, y: (bounds.height - labelSize.height) / 2,
+            width: max(0, bounds.width - labelX - Self.inset), height: labelSize.height)
     }
 
     private func updateState() {
@@ -402,6 +417,7 @@ final class RecordChip: PaneControlItem {
         icon.isHidden = recording
         dot.isHidden = !recording
         label.isHidden = !recording
+        if !recording { label.stringValue = "" }
         toolTip = recording ? "Stop Recording" : "Record Session"
         setAccessibilityLabel(toolTip)
         tick()
@@ -425,7 +441,9 @@ final class RecordChip: PaneControlItem {
 
     private func tick() {
         guard let since = recordingSince else { return }
+        let old = label.stringValue
         label.stringValue = CastPlayback.formatTime(Date().timeIntervalSince(since))
+        if label.stringValue.count != old.count, !old.isEmpty { onWidthChange?() }
         setAccessibilityValue("Recording, \(label.stringValue)")
     }
 

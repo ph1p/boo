@@ -447,6 +447,7 @@ class PaneView: NSView {
         paneControls.alphaValue = 0
         addSubview(islandCutStroke)
         paneControls.onUnzoom = { [weak self] in self?.onUnzoomRequested?() }
+        paneControls.onResize = { [weak self] in self?.updatePaneControls() }
         addSubview(paneControls)
         paneHoverTracker.onChange = { [weak self] inside in
             self?.isPointerInPane = inside
