@@ -1,7 +1,8 @@
 diff --git a/include/ghostty.h b/include/ghostty.h
+index e5870d3e1..035f74fb4 100644
 --- a/include/ghostty.h
 +++ b/include/ghostty.h
-@@ -1209,6 +1209,16 @@
+@@ -1209,6 +1209,16 @@ GHOSTTY_API void ghostty_surface_draw(ghostty_surface_t);
  GHOSTTY_API void ghostty_surface_set_content_scale(ghostty_surface_t, double, double);
  GHOSTTY_API void ghostty_surface_set_focus(ghostty_surface_t, bool);
  GHOSTTY_API void ghostty_surface_set_occlusion(ghostty_surface_t, bool);
@@ -19,9 +20,10 @@ diff --git a/include/ghostty.h b/include/ghostty.h
  GHOSTTY_API ghostty_surface_size_s ghostty_surface_size(ghostty_surface_t);
  GHOSTTY_API uint64_t ghostty_surface_foreground_pid(ghostty_surface_t);
 diff --git a/src/apprt/embedded.zig b/src/apprt/embedded.zig
+index 1a00cc330..f83107e57 100644
 --- a/src/apprt/embedded.zig
 +++ b/src/apprt/embedded.zig
-@@ -2094,6 +2094,61 @@
+@@ -2046,6 +2046,61 @@ pub const CAPI = struct {
          surface.occlusionCallback(visible);
      }
  
@@ -77,16 +79,17 @@ diff --git a/src/apprt/embedded.zig b/src/apprt/embedded.zig
 +    /// Feed bytes to the terminal as if the pty had written them. Used to
 +    /// replay recordings; the surface's own process should stay quiet.
 +    export fn ghostty_surface_feed_output(surface: *Surface, ptr: [*]const u8, len: usize) void {
-+        surface.core_surface.io.processOutput(ptr[0..len]);
++        surface.core_surface.io.processReplayOutput(ptr[0..len]);
 +    }
 +
      /// Filter the mods if necessary. This handles settings such as
      /// `macos-option-as-alt`. The filtered mods should be used for
      /// key translation but should NOT be sent back via the `_key`
 diff --git a/src/termio/Termio.zig b/src/termio/Termio.zig
+index 0a0549c12..24bbbb69d 100644
 --- a/src/termio/Termio.zig
 +++ b/src/termio/Termio.zig
-@@ -58,6 +58,13 @@
+@@ -58,6 +58,13 @@ surface_mailbox: apprt.surface.Mailbox,
  /// The cached size info
  size: renderer.Size,
  
@@ -100,7 +103,7 @@ diff --git a/src/termio/Termio.zig b/src/termio/Termio.zig
  /// The mailbox implementation to use.
  mailbox: termio.Mailbox,
  
-@@ -544,6 +551,8 @@
+@@ -544,6 +551,8 @@ pub fn resize(
              },
          );
  
@@ -109,8 +112,21 @@ diff --git a/src/termio/Termio.zig b/src/termio/Termio.zig
          // If we have size reporting enabled we need to send a report.
          if (self.terminal.modes.get(.in_band_size_reports)) {
              try self.sizeReportLocked(td, .mode_2048);
-@@ -704,6 +713,8 @@
+@@ -702,8 +711,21 @@ pub fn processOutput(self: *Termio, buf: []const u8) void {
+     self.processOutputLocked(buf);
+ }
  
++/// Process output fed by the apprt thread (recording playback) rather
++/// than the pty. Never blocks on a full surface mailbox.
++pub fn processReplayOutput(self: *Termio, buf: []const u8) void {
++    self.renderer_state.mutex.lockUncancelable(global.io());
++    defer self.renderer_state.mutex.unlock(global.io());
++    const handler = &self.terminal_stream.handler;
++    handler.replaying = true;
++    defer handler.replaying = false;
++    self.processOutputLocked(buf);
++}
++
  /// Process output from readdata but the lock is already held.
  fn processOutputLocked(self: *Termio, buf: []const u8) void {
 +    if (self.output_cb) |cb| cb(self.output_userdata, buf.ptr, buf.len);
@@ -118,3 +134,27 @@ diff --git a/src/termio/Termio.zig b/src/termio/Termio.zig
      // Schedule a render. We can call this first because we have the lock.
      self.terminal_stream.handler.queueRender() catch unreachable;
  
+diff --git a/src/termio/stream_handler.zig b/src/termio/stream_handler.zig
+index 2fdd9baa9..dd6d7ef75 100644
+--- a/src/termio/stream_handler.zig
++++ b/src/termio/stream_handler.zig
+@@ -93,6 +93,11 @@ pub const StreamHandler = struct {
+     /// this to determine if we need to default the window title.
+     seen_title: bool = false,
+ 
++    /// Set while the apprt feeds recorded output on its own (main) thread.
++    /// That thread drains the surface mailbox, so waiting for room would
++    /// deadlock; surface messages are dropped instead when it is full.
++    replaying: bool = false,
++
+     pub const Stream = terminal.Stream(StreamHandler);
+ 
+     /// True if we have tmux control mode built in.
+@@ -140,6 +145,7 @@ pub const StreamHandler = struct {
+         // See messageWriter which has similar logic and explains why
+         // we may have to do this.
+         if (self.surface_mailbox.push(msg, .{ .instant = {} }) == 0) {
++            if (self.replaying) return;
+             self.renderer_state.mutex.unlock(global.io());
+             defer self.renderer_state.mutex.lockUncancelable(global.io());
+             _ = self.surface_mailbox.push(msg, .{ .forever = {} });
