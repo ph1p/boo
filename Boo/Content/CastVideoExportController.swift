@@ -104,14 +104,20 @@ final class CastVideoExportController {
         let style = CastVideoExporter.Style.current
         let idle = AppSettings.shared.recordingIdleTimeLimit
         let began = Date()
+        // Progress comes back through a stream so the detached render never
+        // captures self (older compilers reject that as a data race).
+        let (updates, sink) = AsyncStream.makeStream(of: Double.self, bufferingPolicy: .bufferingNewest(1))
         task = Task { [weak self] in
+            let work = Task.detached(priority: .userInitiated) {
+                defer { sink.finish() }
+                try await CastVideoExporter.export(cast: cast, to: output, style: style, idleLimit: idle) {
+                    sink.yield($0)
+                }
+            }
+            for await p in updates { self?.update(progress: p, since: began) }
             let result: Error?
             do {
-                try await Task.detached(priority: .userInitiated) {
-                    try await CastVideoExporter.export(cast: cast, to: output, style: style, idleLimit: idle) { p in
-                        Task { @MainActor in self?.update(progress: p, since: began) }
-                    }
-                }.valueForwardingCancellation()
+                try await work.valueForwardingCancellation()
                 result = nil
             } catch {
                 result = error
