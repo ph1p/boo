@@ -34,6 +34,9 @@ final class PaneControlsView: NSView {
     static let inset: CGFloat = (bodyHeight - itemHeight) / 2
     /// Concentric with the notch's rounded corner.
     static let itemCornerRadius: CGFloat = cornerRadius - inset
+    /// Widest the notch gets over a tab that can't record: ⋯ plus unzoom.
+    /// Content with controls in its bottom-right corner keeps this clear.
+    static let nonRecordingMaxWidth: CGFloat = fillet + 2 * buttonWidth + 3 * inset
 
     var onAction: ((PaneControlAction) -> Void)?
     var onUnzoom: (() -> Void)?

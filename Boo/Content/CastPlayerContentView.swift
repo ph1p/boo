@@ -131,7 +131,8 @@ final class CastPlayerContentView: NSView, ContentViewProtocol {
             x += side + 2
         }
         exportButton.isHidden = playback == nil
-        var right = bounds.width - 8
+        // The pane's corner notch overlays the bar's right end; keep clear of it.
+        var right = bounds.width - 8 - PaneControlsView.nonRecordingMaxWidth
         if !exportButton.isHidden {
             exportButton.frame = CGRect(x: right - side, y: midY - side / 2, width: side, height: side)
             right = exportButton.frame.minX - 4
