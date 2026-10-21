@@ -1259,6 +1259,14 @@ import Cocoa
         if let urls = pb.readObjects(forClasses: [NSURL.self]) as? [URL],
             !urls.isEmpty, urls.allSatisfy({ $0.isFileURL })
         {
+            // Recordings open in a player tab; hold ⌥ to paste the path instead.
+            if !NSEvent.modifierFlags.contains(.option),
+                urls.allSatisfy({ ContentType.forFile($0.path) == .castPlayer }),
+                let controller = window?.windowController as? MainWindowController
+            {
+                for url in urls { controller.handleOpenTab(.file(path: url.path)) }
+                return true
+            }
             sendText(urls.map { shellEscape($0.path) }.joined(separator: " "))
             return true
         }

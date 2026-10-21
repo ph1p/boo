@@ -217,6 +217,7 @@ struct RecordingsSettingsView: View {
     @ViewBuilder
     private func rowMenu(_ file: RecordingFile) -> some View {
         Button("Play") { play(file) }
+        Button("Export Video…") { CastVideoExportController.run(cast: file.url) }
         Button("Reveal in Finder") { NSWorkspace.shared.activateFileViewerSelecting([file.url]) }
         Button("Copy Path") {
             NSPasteboard.general.clearContents()

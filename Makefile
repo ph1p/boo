@@ -59,6 +59,8 @@ exec /usr/bin/xcrun "$$@"\n' "$$CLT_SDK" > $(XCRUN_WRAPPER_DIR)/xcrun; \
 # working — so keep this the single source of truth and assert it after building.
 GHOSTTY_LIB_NAME = ghostty-internal
 GHOSTTY_LIB = Vendor/ghostty/macos/GhosttyKit.xcframework/macos-arm64/lib$(GHOSTTY_LIB_NAME).a
+# Prelinked libghostty-vt for the recording video exporter (CGhosttyVT).
+GHOSTTY_VT_LIB = Vendor/ghostty/macos/GhosttyVT/libghostty-vt-boo.a
 
 # Initialize Ghostty submodule and build GhosttyKit xcframework (macOS)
 ghostty: $(XCRUN_WRAPPER_DIR)/xcrun
@@ -74,8 +76,11 @@ ghostty: $(XCRUN_WRAPPER_DIR)/xcrun
 	if [ ! -f $(GHOSTTY_LIB) ] \
 		|| [ "$$(cat $$STAMP 2>/dev/null)" != "$$PATCH_HASH" ]; then \
 		echo "==> Building GhosttyKit..."; \
-		cd Vendor/ghostty && PATH="$(CURDIR)/$(XCRUN_WRAPPER_DIR):$$PATH" zig build -Demit-xcframework=true -Dxcframework-target=native -Demit-macos-app=false -Doptimize=ReleaseFast && \
+		(cd Vendor/ghostty && PATH="$(CURDIR)/$(XCRUN_WRAPPER_DIR):$$PATH" zig build -Demit-xcframework=true -Dxcframework-target=native -Demit-macos-app=false -Doptimize=ReleaseFast) && \
+		PATH="$(CURDIR)/$(XCRUN_WRAPPER_DIR):$$PATH" scripts/build-ghostty-vt.sh && \
 		echo "$$PATCH_HASH" > "$(CURDIR)/$$STAMP"; \
+	elif [ ! -f $(GHOSTTY_VT_LIB) ]; then \
+		PATH="$(CURDIR)/$(XCRUN_WRAPPER_DIR):$$PATH" scripts/build-ghostty-vt.sh; \
 	else \
 		echo "==> GhosttyKit already built"; \
 	fi

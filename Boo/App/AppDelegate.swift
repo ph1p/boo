@@ -14,6 +14,9 @@ public enum BooMain {
 
 @MainActor public class AppDelegate: NSObject, NSApplicationDelegate {
     private var appearanceObserver: NSKeyValueObservation?
+    /// Files opened before the first window exists (Finder launch).
+    private var pendingOpenURLs: [URL] = []
+    private var didOpenInitialWindow = false
 
     public func applicationDidFinishLaunching(_ notification: Notification) {
         // Verify ~/.boo directories are usable; warn once if not.
@@ -53,6 +56,13 @@ public enum BooMain {
         ActivityNotifier.shared.refreshCachedStatus()
 
         WindowManager.shared.openInitialWindow()
+        didOpenInitialWindow = true
+        if !pendingOpenURLs.isEmpty {
+            let urls = pendingOpenURLs
+            pendingOpenURLs = []
+            // Let the restored session settle before adding tabs to it.
+            DispatchQueue.main.async { self.openFiles(urls) }
+        }
         QuickTerminalController.shared.start()
         KeyTables.shared.start()
 
@@ -72,6 +82,25 @@ public enum BooMain {
         BooSocketServer.shared.stop()
         RemoteControlServer.shared.stop()
         FolderBookmarkStore.shared.stopAll()
+    }
+
+    /// Finder double-click / Open With / Dock drop. Recordings open in a player tab.
+    public func application(_ application: NSApplication, open urls: [URL]) {
+        let files = urls.filter { $0.isFileURL && ContentType.forFile($0.path) == .castPlayer }
+        guard !files.isEmpty else { return }
+        if didOpenInitialWindow {
+            openFiles(files)
+        } else {
+            pendingOpenURLs += files
+        }
+    }
+
+    private func openFiles(_ urls: [URL]) {
+        guard let controller = WindowManager.shared.activeController ?? WindowManager.shared.controllers.first
+        else { return }
+        controller.window?.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        for url in urls { controller.handleOpenTab(.file(path: url.path)) }
     }
 
     public func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {

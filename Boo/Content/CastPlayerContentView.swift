@@ -33,6 +33,7 @@ final class CastPlayerContentView: NSView, ContentViewProtocol {
     private let scrubber = CastScrubber()
     private let timeLabel = NSTextField(labelWithString: "0:00 / 0:00")
     private let speedButton = PlayerTextButton()
+    private let exportButton = PaneControlButton(symbol: "square.and.arrow.up", help: "Export Video…")
     private let messageLabel = NSTextField(labelWithString: "")
 
     private var timer: Timer?
@@ -89,6 +90,7 @@ final class CastPlayerContentView: NSView, ContentViewProtocol {
         speedButton.onClick = { [weak self] in self?.showSpeedMenu() }
         speedButton.title = Self.speedTitle(speed)
         speedButton.toolTip = "Playback Speed (− / +)"
+        exportButton.onClick = { [weak self] in self?.exportVideo() }
 
         timeLabel.font = .monospacedDigitSystemFont(ofSize: 11, weight: .regular)
         timeLabel.alignment = .right
@@ -98,7 +100,8 @@ final class CastPlayerContentView: NSView, ContentViewProtocol {
         addSubview(messageLabel)
 
         for v in [
-            barRule, restartButton, playButton, prevMarkerButton, nextMarkerButton, scrubber, timeLabel, speedButton
+            barRule, restartButton, playButton, prevMarkerButton, nextMarkerButton, scrubber, timeLabel, speedButton,
+            exportButton
         ] as [NSView] {
             bar.addSubview(v)
         }
@@ -127,8 +130,14 @@ final class CastPlayerContentView: NSView, ContentViewProtocol {
             b.frame = CGRect(x: x, y: midY - side / 2, width: side, height: side)
             x += side + 2
         }
+        exportButton.isHidden = playback == nil
+        var right = bounds.width - 8
+        if !exportButton.isHidden {
+            exportButton.frame = CGRect(x: right - side, y: midY - side / 2, width: side, height: side)
+            right = exportButton.frame.minX - 4
+        }
         let speedW = max(36, speedButton.fittingSize.width)
-        speedButton.frame = CGRect(x: bounds.width - speedW - 8, y: midY - 11, width: speedW, height: 22)
+        speedButton.frame = CGRect(x: right - speedW, y: midY - 11, width: speedW, height: 22)
         let labelW =
             ceil(
                 (timeLabel.stringValue as NSString).size(withAttributes: [.font: timeLabel.font as Any]).width) + 4
@@ -320,6 +329,12 @@ final class CastPlayerContentView: NSView, ContentViewProtocol {
     }
 
     /// Steps through `speeds`; -1 slower, +1 faster.
+    private func exportVideo() {
+        guard let filePath else { return }
+        setPlaying(false)
+        CastVideoExportController.run(cast: URL(fileURLWithPath: filePath), from: window)
+    }
+
     private func stepSpeed(_ delta: Int) {
         let i = Self.speeds.firstIndex(of: speed) ?? Self.speeds.firstIndex(of: 1) ?? 0
         setSpeed(Self.speeds[min(max(0, i + delta), Self.speeds.count - 1)])
@@ -418,7 +433,7 @@ final class CastPlayerContentView: NSView, ContentViewProtocol {
         barRule.layer?.backgroundColor = theme.separator.cgColor
         timeLabel.textColor = theme.textSecondary
         messageLabel.textColor = theme.textSecondary
-        for b in [playButton, restartButton, prevMarkerButton, nextMarkerButton] { b.applyTheme() }
+        for b in [playButton, restartButton, prevMarkerButton, nextMarkerButton, exportButton] { b.applyTheme() }
         speedButton.applyTheme()
         scrubber.needsDisplay = true
     }

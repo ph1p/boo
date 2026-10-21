@@ -5,6 +5,7 @@ let booDeps: [Target.Dependency] = [
     "CGhostty",
     "CObjCSafe",
     "CIronmark",
+    "CGhosttyVT",
     .product(name: "Sparkle", package: "Sparkle")
 ]
 let booExclude: [String] = [
@@ -58,6 +59,25 @@ let allTargets: [Target] = [
             .linkedFramework("AppKit"),
             .linkedFramework("UniformTypeIdentifiers"),
             .linkedFramework("Carbon")
+        ]
+    ),
+    // libghostty-vt, prelinked by scripts/build-ghostty-vt.sh so its private
+    // zig runtime doesn't clash with GhosttyKit's. Headless terminal for the
+    // recording video exporter.
+    .target(
+        name: "CGhosttyVT",
+        path: "CGhosttyVT",
+        publicHeadersPath: "include",
+        cSettings: [
+            .headerSearchPath("../Vendor/ghostty/include"),
+            .define("GHOSTTY_STATIC"),
+            // Vendor/ghostty/include has GhosttyKit's umbrella modulemap, which
+            // would swallow ghostty/vt.h; include it textually instead.
+            .unsafeFlags(["-fno-modules"])
+        ],
+        linkerSettings: [
+            .unsafeFlags(["-L", "Vendor/ghostty/macos/GhosttyVT"]),
+            .linkedLibrary("ghostty-vt-boo")
         ]
     ),
     .target(
