@@ -11,7 +11,18 @@ final class RemoteControlServerTests: XCTestCase {
 
     override func setUp() {
         super.setUp()
-        XCTAssertTrue(RemoteControlServer.shared.start(port: port))
+        XCTAssertTrue(startServer())
+    }
+
+    /// The previous test's connections close asynchronously, so a restart on
+    /// the same port can briefly fail to bind (seen on CI after the wasm test).
+    private func startServer() -> Bool {
+        let deadline = Date().addingTimeInterval(3)
+        while !RemoteControlServer.shared.start(port: port) {
+            guard Date() < deadline else { return false }
+            Thread.sleep(forTimeInterval: 0.05)
+        }
+        return true
     }
 
     override func tearDown() {
@@ -59,7 +70,7 @@ final class RemoteControlServerTests: XCTestCase {
     func testTokenRegeneratedOnRestart() {
         let first = RemoteControlServer.shared.token
         RemoteControlServer.shared.stop()
-        XCTAssertTrue(RemoteControlServer.shared.start(port: port))
+        XCTAssertTrue(startServer())
         XCTAssertNotEqual(first, RemoteControlServer.shared.token)
     }
 
