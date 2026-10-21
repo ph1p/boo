@@ -85,7 +85,6 @@ import Cocoa
     /// Active session recording; its retained pointer is the output tap's userdata.
     nonisolated(unsafe) private var recorderToken: UnsafeMutableRawPointer?
     private(set) var recorder: SessionRecorder?
-    private var recordedGrid: (columns: Int, rows: Int)?
 
     /// Drops keyboard and paste input (the cast player's display-only terminal).
     var isInputLocked = false
@@ -363,7 +362,6 @@ import Cocoa
         }
         lastSurfaceSize = (w, h)
         ghostty_surface_set_size(surface, w, h)
-        recordResizeIfNeeded()
     }
 
     // MARK: - Session recording
@@ -377,10 +375,12 @@ import Cocoa
         let rec = try SessionRecorder(
             url: url, columns: Int(grid.columns), rows: Int(grid.rows), title: title, idleTimeLimit: idleTimeLimit)
         recorder = rec
-        recordedGrid = (Int(grid.columns), Int(grid.rows))
         let token = Unmanaged.passRetained(rec).toOpaque()
         recorderToken = token
-        ghostty_surface_set_output_callback(surface, Self.outputTap, token)
+        // The snapshot seeds the cast with the screen as it is now: apps that
+        // redraw only changed cells (TUIs, spinners) would otherwise replay
+        // as fragments on a blank grid.
+        ghostty_surface_set_output_callback(surface, Self.outputTap, Self.resizeTap, token, true)
     }
 
     /// Runs on Ghostty's io-reader thread. Declared nonisolated: a closure
@@ -392,6 +392,14 @@ import Cocoa
             .append(bytes, count: Int(len))
     }
 
+    /// Runs on Ghostty's io thread right after the terminal grid resizes,
+    /// in order with the output, so playback reflows exactly as it did live.
+    nonisolated private static let resizeTap: ghostty_surface_resize_cb = { userdata, columns, rows in
+        guard let userdata else { return }
+        Unmanaged<SessionRecorder>.fromOpaque(userdata).takeUnretainedValue()
+            .resized(columns: Int(columns), rows: Int(rows))
+    }
+
     /// Removes the tap and closes the file; returns its URL.
     @discardableResult
     func stopRecording(completion: (@Sendable () -> Void)? = nil) -> URL? {
@@ -399,7 +407,6 @@ import Cocoa
         Self.clearOutputTap(surface: surface, token: recorderToken)
         recorderToken = nil
         recorder = nil
-        recordedGrid = nil
         rec.finish(completion: completion)
         return rec.url
     }
@@ -411,19 +418,8 @@ import Cocoa
         surface: ghostty_surface_t?, token: UnsafeMutableRawPointer?
     ) -> SessionRecorder? {
         guard let token else { return nil }
-        if let surface { ghostty_surface_set_output_callback(surface, nil, nil) }
+        if let surface { ghostty_surface_set_output_callback(surface, nil, nil, nil, false) }
         return Unmanaged<SessionRecorder>.fromOpaque(token).takeRetainedValue()
-    }
-
-    private func recordResizeIfNeeded() {
-        guard let rec = recorder, let surface else { return }
-        let grid = ghostty_surface_size(surface)
-        let next = (columns: Int(grid.columns), rows: Int(grid.rows))
-        guard next.columns > 0, next.rows > 0,
-            recordedGrid.map({ $0.columns != next.columns || $0.rows != next.rows }) ?? true
-        else { return }
-        recordedGrid = next
-        rec.resized(columns: next.columns, rows: next.rows)
     }
 
     /// Replays recorded bytes as if the pty had written them.

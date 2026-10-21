@@ -116,6 +116,8 @@ final class SessionRecorder: @unchecked Sendable {
     private let startNanos: UInt64
     private var carry = UTF8Carry()
     private var closed = false
+    /// The grid the cast is at; resizes to the same grid are dropped.
+    private var grid: (columns: Int, rows: Int)
 
     init(url: URL, columns: Int, rows: Int, title: String?, idleTimeLimit: TimeInterval? = nil) throws {
         try FileManager.default.createDirectory(
@@ -125,6 +127,7 @@ final class SessionRecorder: @unchecked Sendable {
         }
         handle = try FileHandle(forWritingTo: url)
         self.url = url
+        grid = (columns, rows)
         startNanos = DispatchTime.now().uptimeNanoseconds
         let env = ProcessInfo.processInfo.environment
         let header = AsciicastWriter(
@@ -151,10 +154,12 @@ final class SessionRecorder: @unchecked Sendable {
         }
     }
 
+    /// Called from Ghostty's io thread with the terminal locked, after the grid changed.
     func resized(columns: Int, rows: Int) {
         let now = DispatchTime.now().uptimeNanoseconds
         queue.async { [self] in
-            guard !closed else { return }
+            guard !closed, columns > 0, rows > 0, grid != (columns, rows) else { return }
+            grid = (columns, rows)
             write(AsciicastWriter.resizeEvent(time: elapsed(now), columns: columns, rows: rows))
         }
     }

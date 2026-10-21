@@ -1,14 +1,17 @@
 diff --git a/include/ghostty.h b/include/ghostty.h
 --- a/include/ghostty.h
 +++ b/include/ghostty.h
-@@ -1209,6 +1209,13 @@
+@@ -1209,6 +1209,16 @@
  GHOSTTY_API void ghostty_surface_set_content_scale(ghostty_surface_t, double, double);
  GHOSTTY_API void ghostty_surface_set_focus(ghostty_surface_t, bool);
  GHOSTTY_API void ghostty_surface_set_occlusion(ghostty_surface_t, bool);
 +typedef void (*ghostty_surface_output_cb)(void*, const uint8_t*, uintptr_t);
++typedef void (*ghostty_surface_resize_cb)(void*, uint16_t, uint16_t);
 +GHOSTTY_API void ghostty_surface_set_output_callback(ghostty_surface_t,
 +                                                     ghostty_surface_output_cb,
-+                                                     void*);
++                                                     ghostty_surface_resize_cb,
++                                                     void*,
++                                                     bool);
 +GHOSTTY_API void ghostty_surface_feed_output(ghostty_surface_t,
 +                                             const uint8_t*,
 +                                             uintptr_t);
@@ -18,23 +21,57 @@ diff --git a/include/ghostty.h b/include/ghostty.h
 diff --git a/src/apprt/embedded.zig b/src/apprt/embedded.zig
 --- a/src/apprt/embedded.zig
 +++ b/src/apprt/embedded.zig
-@@ -2094,6 +2094,27 @@
+@@ -2094,6 +2094,61 @@
          surface.occlusionCallback(visible);
      }
  
-+    /// Tap the raw pty output of a surface (before parsing), or clear the
-+    /// tap with a null callback. The callback runs on the termio read
-+    /// thread with the terminal lock held: copy the bytes and return.
++    /// Tap the raw pty output of a surface (before parsing) and its grid
++    /// resizes, or clear the tap with null callbacks. The callbacks run on
++    /// the termio thread with the terminal lock held: copy and return.
++    ///
++    /// With `snapshot`, the tap first receives the current grid size and the
++    /// terminal state as VT sequences (modes, screen contents, cursor,
++    /// palette, scrolling region), taken under the same lock that installs
++    /// the tap, so a recording started mid-session replays from a complete
++    /// screen with no output lost or doubled in between.
 +    export fn ghostty_surface_set_output_callback(
 +        surface: *Surface,
 +        cb: ?*const fn (?*anyopaque, [*]const u8, usize) callconv(.c) void,
++        resize_cb: ?*const fn (?*anyopaque, u16, u16) callconv(.c) void,
 +        userdata: ?*anyopaque,
++        snapshot: bool,
 +    ) void {
 +        const core_surface = &surface.core_surface;
 +        core_surface.renderer_state.mutex.lockUncancelable(global.io());
 +        defer core_surface.renderer_state.mutex.unlock(global.io());
 +        core_surface.io.output_cb = cb;
++        core_surface.io.resize_cb = resize_cb;
 +        core_surface.io.output_userdata = userdata;
++        if (snapshot) snapshotTerminal(&core_surface.io);
++    }
++
++    fn snapshotTerminal(io: anytype) void {
++        const term = &io.terminal;
++        if (io.resize_cb) |cb| cb(io.output_userdata, term.cols, term.rows);
++        const out = io.output_cb orelse return;
++
++        const pages = &term.screens.active.pages;
++        const br = pages.getBottomRight(.active) orelse return;
++        var fmt: terminal.formatter.TerminalFormatter = .init(term, .{
++            .emit = .vt,
++            .trim = false,
++        });
++        fmt.content = .{ .selection = terminal.Selection.init(pages.getTopLeft(.active), br, false) };
++        fmt.extra = .all;
++
++        var aw: std.Io.Writer.Allocating = .init(global.alloc());
++        defer aw.deinit();
++        fmt.format(&aw.writer) catch |err| {
++            log.warn("error formatting terminal snapshot err={}", .{err});
++            return;
++        };
++        const bytes = aw.written();
++        if (bytes.len > 0) out(io.output_userdata, bytes.ptr, bytes.len);
 +    }
 +
 +    /// Feed bytes to the terminal as if the pty had written them. Used to
@@ -49,19 +86,30 @@ diff --git a/src/apprt/embedded.zig b/src/apprt/embedded.zig
 diff --git a/src/termio/Termio.zig b/src/termio/Termio.zig
 --- a/src/termio/Termio.zig
 +++ b/src/termio/Termio.zig
-@@ -58,6 +58,11 @@
+@@ -58,6 +58,13 @@
  /// The cached size info
  size: renderer.Size,
  
-+/// Optional tap on raw pty output, set through the embedding API. Read and
-+/// written under renderer_state.mutex.
++/// Optional tap on raw pty output and grid resizes, set through the
++/// embedding API. Read and written under renderer_state.mutex, so a resize
++/// is reported in order with the output parsed against it.
 +output_cb: ?*const fn (?*anyopaque, [*]const u8, usize) callconv(.c) void = null,
++resize_cb: ?*const fn (?*anyopaque, u16, u16) callconv(.c) void = null,
 +output_userdata: ?*anyopaque = null,
 +
  /// The mailbox implementation to use.
  mailbox: termio.Mailbox,
  
-@@ -704,6 +709,8 @@
+@@ -544,6 +551,8 @@
+             },
+         );
+ 
++        if (self.resize_cb) |cb| cb(self.output_userdata, self.terminal.cols, self.terminal.rows);
++
+         // If we have size reporting enabled we need to send a report.
+         if (self.terminal.modes.get(.in_band_size_reports)) {
+             try self.sizeReportLocked(td, .mode_2048);
+@@ -704,6 +713,8 @@
  
  /// Process output from readdata but the lock is already held.
  fn processOutputLocked(self: *Termio, buf: []const u8) void {

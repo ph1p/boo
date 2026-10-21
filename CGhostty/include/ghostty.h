@@ -1210,9 +1210,12 @@ GHOSTTY_API void ghostty_surface_set_content_scale(ghostty_surface_t, double, do
 GHOSTTY_API void ghostty_surface_set_focus(ghostty_surface_t, bool);
 GHOSTTY_API void ghostty_surface_set_occlusion(ghostty_surface_t, bool);
 typedef void (*ghostty_surface_output_cb)(void*, const uint8_t*, uintptr_t);
+typedef void (*ghostty_surface_resize_cb)(void*, uint16_t, uint16_t);
 GHOSTTY_API void ghostty_surface_set_output_callback(ghostty_surface_t,
                                                      ghostty_surface_output_cb,
-                                                     void*);
+                                                     ghostty_surface_resize_cb,
+                                                     void*,
+                                                     bool);
 GHOSTTY_API void ghostty_surface_feed_output(ghostty_surface_t,
                                              const uint8_t*,
                                              uintptr_t);

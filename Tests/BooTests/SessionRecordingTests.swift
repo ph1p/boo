@@ -63,6 +63,25 @@ final class SessionRecordingTests: XCTestCase {
         XCTAssertEqual(pb.events.map(\.event), [.output("hi\r\n"), .resize(columns: 100, rows: 30)])
     }
 
+    /// Ghostty reports the grid when the tap starts and on every resize; only
+    /// actual changes become events.
+    func testRecorderDropsResizesToTheSameGrid() throws {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("boo-rec-\(UUID().uuidString).cast")
+        defer { try? FileManager.default.removeItem(at: url) }
+        let rec = try SessionRecorder(url: url, columns: 80, rows: 24, title: "t")
+        rec.resized(columns: 80, rows: 24)
+        rec.resized(columns: 100, rows: 30)
+        rec.resized(columns: 100, rows: 30)
+        rec.resized(columns: 0, rows: 30)
+        let done = expectation(description: "finish")
+        rec.finish { done.fulfill() }
+        wait(for: [done], timeout: 2)
+
+        let pb = try CastPlayback(text: String(contentsOf: url, encoding: .utf8))
+        XCTAssertEqual(pb.events.map(\.event), [.resize(columns: 100, rows: 30)])
+    }
+
     func testDefaultURLSanitizesTitle() {
         let date = Date(timeIntervalSince1970: 0)
         let url = SessionRecorder.defaultURL(title: "~/dev: vim  a/b", date: date)

@@ -74,7 +74,7 @@ ghostty: $(XCRUN_WRAPPER_DIR)/xcrun
 	if [ ! -f $(GHOSTTY_LIB) ] \
 		|| [ "$$(cat $$STAMP 2>/dev/null)" != "$$PATCH_HASH" ]; then \
 		echo "==> Building GhosttyKit..."; \
-		cd Vendor/ghostty && PATH="$(CURDIR)/$(XCRUN_WRAPPER_DIR):$$PATH" zig build -Demit-xcframework=true -Dxcframework-target=native -Demit-macos-app=false -Doptimize=ReleaseFast; \
+		cd Vendor/ghostty && PATH="$(CURDIR)/$(XCRUN_WRAPPER_DIR):$$PATH" zig build -Demit-xcframework=true -Dxcframework-target=native -Demit-macos-app=false -Doptimize=ReleaseFast && \
 		echo "$$PATCH_HASH" > "$(CURDIR)/$$STAMP"; \
 	else \
 		echo "==> GhosttyKit already built"; \
