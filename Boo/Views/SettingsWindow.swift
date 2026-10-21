@@ -117,17 +117,17 @@ struct SettingsView: View {
 
         var icon: String {
             switch self {
-            case .general: return "gear"
+            case .general: return "gearshape"
             case .theme: return "paintpalette"
-            case .appearance: return "textformat"
+            case .appearance: return "textformat.size"
             case .statusBar: return "rectangle.bottomthird.inset.filled"
-            case .layout: return "rectangle.3.group"
+            case .layout: return "square.grid.2x2"
             case .recordings: return "record.circle"
-            case .editor: return "chevron.left.forwardslash.chevron.right"
+            case .editor: return "curlybraces"
             case .browser: return "globe"
             case .notifications: return "bell"
             case .plugins: return "puzzlepiece"
-            case .shortcuts: return "keyboard"
+            case .shortcuts: return "command"
             case .pluginSettings(let id):
                 return PluginSettingsView.registeredManifests.first(where: { $0.id == id })?.icon ?? "puzzlepiece"
             }
@@ -153,6 +153,18 @@ struct SettingsView: View {
             .map { .pluginSettings(pluginID: $0.id) }
     }
 
+    /// Icons centred in one fixed-width column, so wide and narrow symbols
+    /// alike leave every title starting at the same x.
+    private func sidebarLabel(_ tab: Tab) -> some View {
+        Label {
+            Text(tab.label)
+        } icon: {
+            Image(systemName: tab.icon)
+                .frame(width: 22, alignment: .center)
+                .padding(.trailing, 4)
+        }
+    }
+
     var body: some View {
         let _ = observer.revision
         let t = Tokens.current
@@ -167,13 +179,13 @@ struct SettingsView: View {
                         // repeating it as a section title stutters.
                         SwiftUI.Section {
                             ForEach(Tab.fixed, id: \.label) { tab in
-                                Label(tab.label, systemImage: tab.icon).tag(tab)
+                                sidebarLabel(tab).tag(tab)
                             }
                         }
                         if !pluginTabs.isEmpty {
                             SwiftUI.Section("Plugins") {
                                 ForEach(pluginTabs, id: \.label) { tab in
-                                    Label(tab.label, systemImage: tab.icon).tag(tab)
+                                    sidebarLabel(tab).tag(tab)
                                 }
                             }
                         }
