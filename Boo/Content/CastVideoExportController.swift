@@ -15,6 +15,7 @@ final class CastVideoExportController {
     private let detailLabel = NSTextField(labelWithString: "Preparing…")
     private weak var parent: NSWindow?
     private var task: Task<Void, Never>?
+    private var closeObserver: NSObjectProtocol?
 
     /// Starts an export of `cast`, attaching its sheets to `window` (or the key window).
     static func run(cast: URL, from window: NSWindow? = nil) {
@@ -95,6 +96,12 @@ final class CastVideoExportController {
             panel.setFrameOrigin(
                 NSPoint(x: parent.frame.midX - size.width / 2, y: parent.frame.maxY - size.height - 72 - step))
             parent.addChildWindow(panel, ordered: .above)
+            // Closing the window would orphan the panel; stop the export with it.
+            closeObserver = NotificationCenter.default.addObserver(
+                forName: NSWindow.willCloseNotification, object: parent, queue: .main
+            ) { [weak self] _ in
+                MainActor.assumeIsolated { self?.cancel() }
+            }
         } else {
             panel.center()
         }
@@ -145,6 +152,8 @@ final class CastVideoExportController {
         panel.parent?.removeChildWindow(panel)
         panel.orderOut(nil)
         Self.active.removeAll { $0 === self }
+        if let closeObserver { NotificationCenter.default.removeObserver(closeObserver) }
+        closeObserver = nil
         switch error {
         case nil:
             NSWorkspace.shared.activateFileViewerSelecting([output])
