@@ -1,9 +1,10 @@
 import Cocoa
+import SwiftUI
 import WebKit
 
 /// ContentViewProtocol implementation for browser tabs.
 /// Uses WKWebView to display web content with a toolbar containing navigation buttons and URL bar.
-final class BrowserContentView: NSView, ContentViewProtocol, NSTextFieldDelegate {
+final class BrowserContentView: NSView, ContentViewProtocol, NSTextFieldDelegate, NSMenuItemValidation {
     let contentType: ContentType = .browser
 
     private var urlBar: SelectAllTextField?
@@ -13,16 +14,33 @@ final class BrowserContentView: NSView, ContentViewProtocol, NSTextFieldDelegate
     private var webView: WKWebView?
     private weak var toolbarView: NSView?
     private weak var toolbarSeparator: NSView?
+    private weak var progressView: BrowserProgressView?
+    private weak var zoomButton: NSButton?
+    private var urlBarToPill: NSLayoutConstraint?
+    private var urlBarToZoom: NSLayoutConstraint?
+    private var errorHost: NSHostingView<AnyView>?
+    private var lastError: Error?
     private var currentURL: URL
     private var currentTitle: String = "New Tab"
     private var isLoading = false
     private var autocompletePanel: URLAutocompletePanel?
     private weak var urlBarPill: URLBarPillView?
-    private var urlObservation: NSKeyValueObservation?
+    private var observations: [NSKeyValueObservation] = []
     private var completedDownloadDestinations: [ObjectIdentifier: URL] = [:]
     private weak var openExternalButton: NavHoverButton?
+    private weak var serversButton: NavHoverButton?
+
+    private var findNeedle = ""
+    private var findTotal = 0
+    private var findIndex = -1
+    /// Bumped on every new search so late JS / find callbacks from an older
+    /// needle can't overwrite the current match count.
+    private var findGeneration = 0
 
     private let toolbarHeight: CGFloat = 44
+
+    /// Safari's zoom ladder.
+    static let zoomSteps: [CGFloat] = [0.5, 0.67, 0.75, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2, 2.5, 3]
 
     // MARK: - Callbacks
 
@@ -33,6 +51,8 @@ final class BrowserContentView: NSView, ContentViewProtocol, NSTextFieldDelegate
     /// Browser-specific: called when URL changes.
     var onURLChanged: ((URL) -> Void)?
     var onOpenURLInNewTab: ((URL) -> Void)?
+    /// Find-in-page results: (selected index or -1, total or -1 for no search).
+    var onFindMatches: ((Int, Int) -> Void)?
 
     // MARK: - Init
 
@@ -40,9 +60,9 @@ final class BrowserContentView: NSView, ContentViewProtocol, NSTextFieldDelegate
         self.currentURL = url
         super.init(frame: .zero)
         wantsLayer = true
-        applyTheme()
         setupToolbar()
         setupWebView()
+        applyTheme()
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(themeDidChange),
@@ -52,22 +72,51 @@ final class BrowserContentView: NSView, ContentViewProtocol, NSTextFieldDelegate
     }
 
     deinit {
-        urlObservation?.invalidate()
+        for observation in observations { observation.invalidate() }
         NotificationCenter.default.removeObserver(self)
-    }
-
-    @objc private func themeDidChange() {
-        applyTheme()
-        applyToolbarTheme()
-    }
-
-    private func applyTheme() {
-        let theme = AppSettings.shared.theme
-        layer?.backgroundColor = theme.chromeBg.cgColor
     }
 
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
+    }
+
+    // MARK: - Theme
+
+    @objc private func themeDidChange() {
+        applyTheme()
+    }
+
+    /// Pane content uses the terminal background (like the editor and image
+    /// viewer); chrome tokens only tint the controls on top of it.
+    private func applyTheme() {
+        let theme = AppSettings.shared.theme
+        let background = theme.background.nsColor
+        layer?.backgroundColor = background.cgColor
+        toolbarView?.layer?.backgroundColor = background.cgColor
+        toolbarSeparator?.layer?.backgroundColor = theme.separator.cgColor
+        progressView?.color = theme.accentColor
+
+        urlBar?.textColor = theme.chromeText
+        urlBar?.placeholderAttributedString = NSAttributedString(
+            string: "Search or enter address",
+            attributes: [.foregroundColor: theme.textTertiary, .font: NSFont.systemFont(ofSize: 12)])
+        urlBarPill?.theme = theme
+        for btn in [backButton, forwardButton, reloadStopButton, openExternalButton, serversButton] {
+            btn?.hoverBackground = theme.hoverFill
+        }
+        for btn in [reloadStopButton, openExternalButton, serversButton] {
+            btn?.contentTintColor = theme.textSecondary
+        }
+        updateNavButtons()
+        updateZoomButton()
+
+        // Pages that honor prefers-color-scheme follow the Boo theme, and the
+        // overscroll / pre-paint area matches the pane instead of flashing white.
+        if let wv = webView {
+            wv.appearance = NSAppearance(named: theme.isDark ? .darkAqua : .aqua)
+            wv.underPageBackgroundColor = background
+        }
+        if let lastError { showError(lastError) }
     }
 
     // MARK: - Toolbar Setup
@@ -77,7 +126,6 @@ final class BrowserContentView: NSView, ContentViewProtocol, NSTextFieldDelegate
         let toolbar = NSView()
         toolbar.translatesAutoresizingMaskIntoConstraints = false
         toolbar.wantsLayer = true
-        toolbar.layer?.backgroundColor = theme.background.nsColor.cgColor
         addSubview(toolbar)
         toolbarView = toolbar
 
@@ -92,49 +140,63 @@ final class BrowserContentView: NSView, ContentViewProtocol, NSTextFieldDelegate
         let separator = NSView()
         separator.translatesAutoresizingMaskIntoConstraints = false
         separator.wantsLayer = true
-        separator.layer?.backgroundColor = theme.chromeBorder.cgColor
         toolbar.addSubview(separator)
         toolbarSeparator = separator
+
+        // Load progress, drawn over the separator
+        let progress = BrowserProgressView()
+        progress.translatesAutoresizingMaskIntoConstraints = false
+        toolbar.addSubview(progress)
+        progressView = progress
+
         NSLayoutConstraint.activate([
             separator.bottomAnchor.constraint(equalTo: toolbar.bottomAnchor),
             separator.leadingAnchor.constraint(equalTo: toolbar.leadingAnchor),
             separator.trailingAnchor.constraint(equalTo: toolbar.trailingAnchor),
-            separator.heightAnchor.constraint(equalToConstant: 0.5)
+            separator.heightAnchor.constraint(equalToConstant: 0.5),
+
+            progress.bottomAnchor.constraint(equalTo: toolbar.bottomAnchor),
+            progress.leadingAnchor.constraint(equalTo: toolbar.leadingAnchor),
+            progress.trailingAnchor.constraint(equalTo: toolbar.trailingAnchor),
+            progress.heightAnchor.constraint(equalToConstant: 2)
         ])
 
-        // Back button
-        let back = makeNavButton(symbolName: "chevron.left", action: #selector(backAction), theme: theme)
+        let back = makeNavButton(symbolName: "chevron.left", action: #selector(backAction), help: "Back")
         toolbar.addSubview(back)
         backButton = back
 
-        // Forward button
-        let fwd = makeNavButton(symbolName: "chevron.right", action: #selector(forwardAction), theme: theme)
+        let fwd = makeNavButton(symbolName: "chevron.right", action: #selector(forwardAction), help: "Forward")
         toolbar.addSubview(fwd)
         forwardButton = fwd
 
-        // Reload/Stop button
-        let reload = makeNavButton(symbolName: "arrow.clockwise", action: #selector(reloadStopAction), theme: theme)
+        let reload = makeNavButton(
+            symbolName: "arrow.clockwise", action: #selector(reloadStopAction), help: "Reload Page")
         toolbar.addSubview(reload)
         reloadStopButton = reload
 
-        // URL field — pill-style, matches active tab background
+        // URL field — pill-style
         let bar = SelectAllTextField()
         bar.translatesAutoresizingMaskIntoConstraints = false
-        bar.placeholderString = "Enter URL or search…"
         bar.font = .systemFont(ofSize: 12)
         bar.isBordered = false
         bar.drawsBackground = false
         bar.focusRingType = .none
-        bar.textColor = theme.chromeText
+        bar.lineBreakMode = .byTruncatingTail
+        bar.cell?.isScrollable = true
         bar.delegate = self
         bar.target = self
         bar.action = #selector(urlBarAction(_:))
 
-        // Open in external browser button
         let openExt = makeNavButton(
-            symbolName: "arrow.up.right.square", action: #selector(openInExternalBrowserAction), theme: theme)
+            symbolName: "arrow.up.right.square", action: #selector(openInExternalBrowserAction),
+            help: "Open in Default Browser")
         toolbar.addSubview(openExt)
         openExternalButton = openExt
+
+        let servers = makeNavButton(
+            symbolName: "server.rack", action: #selector(showServersMenu(_:)), help: "Servers Running in Panes")
+        toolbar.addSubview(servers)
+        serversButton = servers
 
         // Pill container drawn behind the field
         let pill = URLBarPillView()
@@ -145,10 +207,23 @@ final class BrowserContentView: NSView, ContentViewProtocol, NSTextFieldDelegate
         urlBarPill = pill
         urlBar = bar
 
+        // Page zoom badge inside the pill; hidden at 100%, click resets.
+        let zoom = NSButton(title: "", target: self, action: #selector(resetFontSizeAction(_:)))
+        zoom.translatesAutoresizingMaskIntoConstraints = false
+        zoom.isBordered = false
+        zoom.toolTip = "Reset Zoom"
+        zoom.setContentCompressionResistancePriority(.required, for: .horizontal)
+        zoom.setContentHuggingPriority(.required, for: .horizontal)
+        toolbar.addSubview(zoom)
+        zoomButton = zoom
+
         bar.onFocusGained = { [weak pill] in pill?.isFocused = true }
         bar.onFocusLost = { [weak pill] in pill?.isFocused = false }
 
-        // Layout: [8] [back] [4] [fwd] [4] [reload] [8] [pill/urlbar] [4] [openExt] [8]
+        urlBarToPill = bar.trailingAnchor.constraint(equalTo: pill.trailingAnchor, constant: -10)
+        urlBarToZoom = bar.trailingAnchor.constraint(equalTo: zoom.leadingAnchor, constant: -6)
+
+        // Layout: [8] [back] [2] [fwd] [2] [reload] [8] [pill: urlbar zoom] [4] [servers] [2] [openExt] [8]
         NSLayoutConstraint.activate([
             back.leadingAnchor.constraint(equalTo: toolbar.leadingAnchor, constant: 8),
             back.centerYAnchor.constraint(equalTo: toolbar.centerYAnchor),
@@ -160,33 +235,33 @@ final class BrowserContentView: NSView, ContentViewProtocol, NSTextFieldDelegate
             reload.centerYAnchor.constraint(equalTo: toolbar.centerYAnchor),
 
             pill.leadingAnchor.constraint(equalTo: reload.trailingAnchor, constant: 8),
-            pill.trailingAnchor.constraint(equalTo: openExt.leadingAnchor, constant: -4),
+            pill.trailingAnchor.constraint(equalTo: servers.leadingAnchor, constant: -4),
             pill.centerYAnchor.constraint(equalTo: toolbar.centerYAnchor),
             pill.heightAnchor.constraint(equalToConstant: 26),
 
             bar.leadingAnchor.constraint(equalTo: pill.leadingAnchor, constant: 10),
-            bar.trailingAnchor.constraint(equalTo: pill.trailingAnchor, constant: -10),
             bar.centerYAnchor.constraint(equalTo: pill.centerYAnchor),
+
+            zoom.trailingAnchor.constraint(equalTo: pill.trailingAnchor, constant: -8),
+            zoom.centerYAnchor.constraint(equalTo: pill.centerYAnchor),
+
+            servers.trailingAnchor.constraint(equalTo: openExt.leadingAnchor, constant: -2),
+            servers.centerYAnchor.constraint(equalTo: toolbar.centerYAnchor),
 
             openExt.trailingAnchor.constraint(equalTo: toolbar.trailingAnchor, constant: -8),
             openExt.centerYAnchor.constraint(equalTo: toolbar.centerYAnchor)
         ])
 
-        if currentURL.absoluteString != "about:blank" {
-            bar.stringValue = currentURL.absoluteString
-        }
-
-        updateNavButtons()
+        bar.stringValue = Self.displayString(for: currentURL)
     }
 
-    private func makeNavButton(symbolName: String, action: Selector, theme: TerminalTheme) -> NavHoverButton {
+    private func makeNavButton(symbolName: String, action: Selector, help: String) -> NavHoverButton {
         let btn = NavHoverButton()
         btn.translatesAutoresizingMaskIntoConstraints = false
         let cfg = NSImage.SymbolConfiguration(pointSize: 12, weight: .regular)
-        btn.image = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil)?
+        btn.image = NSImage(systemSymbolName: symbolName, accessibilityDescription: help)?
             .withSymbolConfiguration(cfg)
-        btn.contentTintColor = theme.chromeMuted
-        btn.hoverBackground = theme.controlFill
+        btn.toolTip = help
         btn.target = self
         btn.action = action
         NSLayoutConstraint.activate([
@@ -194,25 +269,6 @@ final class BrowserContentView: NSView, ContentViewProtocol, NSTextFieldDelegate
             btn.heightAnchor.constraint(equalToConstant: 26)
         ])
         return btn
-    }
-
-    private func applyToolbarTheme() {
-        let theme = AppSettings.shared.theme
-        toolbarView?.layer?.backgroundColor = theme.background.nsColor.cgColor
-        toolbarSeparator?.layer?.backgroundColor = theme.chromeBorder.cgColor
-        urlBar?.textColor = theme.chromeText
-        urlBarPill?.theme = theme
-        let activeColor = theme.chromeText
-        let mutedColor = theme.chromeMuted
-        let hoverBg = theme.controlFill
-        backButton?.contentTintColor = (webView?.canGoBack ?? false) ? activeColor : mutedColor
-        forwardButton?.contentTintColor = (webView?.canGoForward ?? false) ? activeColor : mutedColor
-        reloadStopButton?.contentTintColor = mutedColor
-        openExternalButton?.contentTintColor = mutedColor
-        for btn in [backButton, forwardButton, reloadStopButton, openExternalButton] {
-            btn?.hoverBackground = hoverBg
-        }
-        layer?.backgroundColor = theme.chromeBg.cgColor
     }
 
     private func setupWebView() {
@@ -223,13 +279,11 @@ final class BrowserContentView: NSView, ContentViewProtocol, NSTextFieldDelegate
         wv.navigationDelegate = self
         wv.uiDelegate = self
         wv.allowsBackForwardNavigationGestures = true
+        wv.allowsMagnification = true
         wv.translatesAutoresizingMaskIntoConstraints = false
-        urlObservation = wv.observe(\.url, options: [.initial, .new]) { [weak self] _, change in
-            guard let url = change.newValue ?? nil else { return }
-            Task { @MainActor [weak self] in
-                self?.syncVisibleURL(url)
-            }
-        }
+        // Hidden until the first commit: an unpainted WKWebView is white, which
+        // flashes on dark themes. The view's own background shows meanwhile.
+        wv.isHidden = true
         addSubview(wv)
         NSLayoutConstraint.activate([
             wv.topAnchor.constraint(equalTo: topAnchor, constant: toolbarHeight),
@@ -239,12 +293,30 @@ final class BrowserContentView: NSView, ContentViewProtocol, NSTextFieldDelegate
         ])
         webView = wv
 
+        // SPA route changes, document.title updates and history pushes never
+        // fire navigation delegate callbacks, so mirror them through KVO.
+        // Progress ticks many times per load, so it only moves the bar.
+        func watch<Value>(
+            _ keyPath: KeyPath<WKWebView, Value>,
+            _ update: @escaping @MainActor (BrowserContentView) -> Void = { $0.syncWebViewState() }
+        ) -> NSKeyValueObservation {
+            wv.observe(keyPath, options: [.new]) { [weak self] _, _ in
+                Task { @MainActor [weak self] in
+                    if let self { update(self) }
+                }
+            }
+        }
+        observations = [
+            watch(\.url), watch(\.title), watch(\.isLoading), watch(\.canGoBack), watch(\.canGoForward),
+            watch(\.estimatedProgress) { $0.updateProgress() }
+        ]
+
         let click = NSClickGestureRecognizer(target: self, action: #selector(webViewClicked))
         click.delaysPrimaryMouseButtonEvents = false
         wv.addGestureRecognizer(click)
 
-        if currentURL.absoluteString != "about:blank" {
-            wv.load(URLRequest(url: currentURL))
+        if !Self.isBlank(currentURL) {
+            load(currentURL)
         }
     }
 
@@ -252,37 +324,154 @@ final class BrowserContentView: NSView, ContentViewProtocol, NSTextFieldDelegate
         onFocused?()
     }
 
+    /// Mirror the web view's observable state into the toolbar and callbacks.
+    private func syncWebViewState() {
+        guard let wv = webView else { return }
+        if let url = wv.url, url != currentURL {
+            syncVisibleURL(url)
+        }
+        if let title = wv.title, !title.isEmpty, title != currentTitle {
+            currentTitle = title
+            onTitleChanged?(title)
+        }
+        if wv.isLoading != isLoading {
+            isLoading = wv.isLoading
+            updateLoadingState()
+        }
+        updateProgress()
+        updateNavButtons()
+    }
+
+    private func updateProgress() {
+        guard let wv = webView else { return }
+        progressView?.progress = wv.isLoading ? wv.estimatedProgress : nil
+    }
+
     // MARK: - Toolbar Actions
 
-    @objc private func backAction() { webView?.goBack() }
-    @objc private func forwardAction() { webView?.goForward() }
-    @objc private func openInExternalBrowserAction() { NSWorkspace.shared.open(currentURL) }
+    @objc private func backAction() { goBack() }
+    @objc private func forwardAction() { goForward() }
+
+    @objc private func openInExternalBrowserAction() {
+        guard currentURL.scheme != "about" else { return NSSound.beep() }
+        NSWorkspace.shared.open(currentURL)
+    }
+
+    /// Lists the dev servers listening in any pane; picking one opens it here.
+    @objc private func showServersMenu(_ sender: NSView) {
+        PaneServerMonitor.shared.refresh { [weak self, weak sender] servers in
+            guard let self, let sender else { return }
+            let menu = NSMenu()
+            if servers.isEmpty {
+                let empty = NSMenuItem(title: "No Servers Running in Panes", action: nil, keyEquivalent: "")
+                empty.isEnabled = false
+                menu.addItem(empty)
+            } else {
+                menu.addItem(NSMenuItem.sectionHeader(title: "Servers Running in Panes"))
+                for server in servers {
+                    let item = NSMenuItem(
+                        title: server.hostLabel, action: #selector(self.openServerMenuItem(_:)), keyEquivalent: "")
+                    item.target = self
+                    item.representedObject = server.url
+                    item.subtitle = server.detail
+                    item.image = NSImage(systemSymbolName: "server.rack", accessibilityDescription: nil)
+                    let isCurrent =
+                        self.currentURL.port == Int(server.port)
+                        && TerminalBridge.isLocalHost(self.currentURL.host ?? "")
+                    item.state = isCurrent ? .on : .off
+                    menu.addItem(item)
+                }
+            }
+            let below = sender.isFlipped ? sender.bounds.maxY + 4 : -4
+            menu.popUp(positioning: nil, at: NSPoint(x: 0, y: below), in: sender)
+        }
+    }
+
+    @objc private func openServerMenuItem(_ sender: NSMenuItem) {
+        guard let url = sender.representedObject as? URL else { return }
+        navigate(to: url)
+        window?.makeFirstResponder(webView)
+    }
 
     @objc private func reloadStopAction() {
         if isLoading {
-            webView?.stopLoading()
+            stopLoading()
         } else {
-            webView?.reload()
+            reload()
         }
     }
 
     @objc private func urlBarAction(_ sender: NSTextField) {
         autocompletePanel?.close()
-        let input = sender.stringValue.trimmingCharacters(in: .whitespaces)
-        guard !input.isEmpty else { return }
-
-        let url: URL
-        if let parsed = URL(string: input), parsed.scheme != nil {
-            url = parsed
-        } else if input.contains(".") && !input.contains(" ") {
-            url = URL(string: "https://\(input)") ?? ContentType.blankURL
-        } else {
-            let query = input.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? input
-            url = URL(string: "https://www.google.com/search?q=\(query)") ?? ContentType.blankURL
-        }
-
+        let knownPorts = Set(PaneServerMonitor.shared.servers.map(\.port))
+        guard let url = Self.resolveInput(sender.stringValue, knownPorts: knownPorts) else { return }
         navigate(to: url)
         window?.makeFirstResponder(webView)
+    }
+
+    /// Turn address-bar input into a URL: explicit schemes and file paths load
+    /// as-is, local hosts get http, anything that looks like a domain gets
+    /// https, and everything else becomes a web search.
+    ///
+    /// Port shorthand: ":3000" always means localhost:3000; a bare "3000" does
+    /// too when it is in `knownPorts` (a server running in a pane), and is a
+    /// search otherwise.
+    static func resolveInput(_ raw: String, knownPorts: Set<UInt16> = []) -> URL? {
+        let input = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !input.isEmpty else { return nil }
+
+        let portDigits = input.hasPrefix(":") ? input.dropFirst() : Substring(input)
+        if let port = UInt16(portDigits), port > 0, input.hasPrefix(":") || knownPorts.contains(port) {
+            return URL(string: "http://localhost:\(port)")
+        }
+
+        if input.hasPrefix("/") || input == "~" || input.hasPrefix("~/") {
+            return URL(fileURLWithPath: (input as NSString).expandingTildeInPath)
+        }
+
+        if !input.contains(where: \.isWhitespace) {
+            let lower = input.lowercased()
+            if lower.contains("://") || ["about:", "data:", "mailto:", "file:"].contains(where: lower.hasPrefix),
+                let url = URL(string: input), url.scheme != nil
+            {
+                return url
+            }
+
+            // `URL(string: "localhost:3000")` parses "localhost" as the scheme,
+            // so inspect the host part by hand.
+            let hostAndPort = lower.prefix { $0 != "/" && $0 != "?" && $0 != "#" }
+            let host = hostAndPort.split(separator: ":", maxSplits: 1).first.map(String.init) ?? ""
+            if host == "localhost" || host.hasSuffix(".localhost") || host.hasSuffix(".local") || isIPv4(host) {
+                return URL(string: "http://\(input)")
+            }
+            if let tld = host.split(separator: ".").last, host.contains("."), tld.count >= 2,
+                tld.allSatisfy(\.isLetter)
+            {
+                return URL(string: "https://\(input)")
+            }
+        }
+
+        return searchURL(for: input)
+    }
+
+    static func searchURL(for query: String) -> URL? {
+        var allowed = CharacterSet.urlQueryAllowed
+        allowed.remove(charactersIn: "&+=?#")
+        let encoded = query.addingPercentEncoding(withAllowedCharacters: allowed) ?? query
+        return URL(string: "https://www.google.com/search?q=\(encoded)")
+    }
+
+    private static func isIPv4(_ host: String) -> Bool {
+        let parts = host.split(separator: ".", omittingEmptySubsequences: false)
+        return parts.count == 4 && parts.allSatisfy { UInt8($0) != nil }
+    }
+
+    private static func isBlank(_ url: URL) -> Bool {
+        url.absoluteString == "about:blank"
+    }
+
+    private static func displayString(for url: URL) -> String {
+        isBlank(url) ? "" : url.absoluteString
     }
 
     // MARK: - NSTextFieldDelegate (autocomplete)
@@ -297,6 +486,14 @@ final class BrowserContentView: NSView, ContentViewProtocol, NSTextFieldDelegate
         guard let field = obj.object as? NSTextField else { return }
         let query = field.stringValue.trimmingCharacters(in: .whitespaces)
         showAutocomplete(query: query)
+
+        // Rescan once per edit (not per keystroke) and redraw if the servers
+        // changed while the user is still in this field.
+        let shown = PaneServerMonitor.shared.servers
+        PaneServerMonitor.shared.refresh { [weak self] found in
+            guard let self, found != shown, let urlBar = self.urlBar, urlBar.isFieldActive else { return }
+            self.showAutocomplete(query: urlBar.stringValue.trimmingCharacters(in: .whitespaces))
+        }
     }
 
     func controlTextDidEndEditing(_ obj: Notification) {
@@ -314,6 +511,16 @@ final class BrowserContentView: NSView, ContentViewProtocol, NSTextFieldDelegate
                 return true
             }
         }
+        // Escape with no suggestions open: abandon the edit, like Safari.
+        if commandSelector == #selector(NSResponder.cancelOperation(_:)) {
+            urlBar?.stringValue = Self.displayString(for: currentURL)
+            if webView?.isHidden == false {
+                window?.makeFirstResponder(webView)
+            } else {
+                urlBar?.currentEditor()?.selectAll(nil)
+            }
+            return true
+        }
         return false
     }
 
@@ -323,7 +530,7 @@ final class BrowserContentView: NSView, ContentViewProtocol, NSTextFieldDelegate
 
         let entries = BrowserHistory.shared.entries
         let filtered: [BrowserHistoryEntry]
-        if query.count < 1 {
+        if query.isEmpty {
             filtered = Array(entries.prefix(8))
         } else {
             filtered = entries.filter {
@@ -336,7 +543,11 @@ final class BrowserContentView: NSView, ContentViewProtocol, NSTextFieldDelegate
         var seen = Set<URL>()
         let deduped = filtered.filter { seen.insert($0.url).inserted }
 
-        let matches = deduped.prefix(8).map { URLAutocompletePanel.Item(title: $0.title, url: $0.url) }
+        let servers = Self.serverItems(PaneServerMonitor.shared.servers, matching: query)
+        let serverURLs = Set(servers.map(\.url))
+        let history = deduped.lazy.filter { !serverURLs.contains($0.url) }.prefix(8)
+            .map { URLAutocompletePanel.Item(title: $0.title, url: $0.url) }
+        let matches = servers + history
 
         if matches.isEmpty {
             autocompletePanel?.close()
@@ -345,11 +556,25 @@ final class BrowserContentView: NSView, ContentViewProtocol, NSTextFieldDelegate
         }
     }
 
+    /// Suggestions for servers running in panes. All of them on an empty
+    /// query; otherwise those whose address, port, process or pane matches.
+    static func serverItems(_ servers: [PaneServer], matching query: String) -> [URLAutocompletePanel.Item] {
+        let needle = query.hasPrefix(":") ? String(query.dropFirst()) : query
+        return
+            servers
+            .filter { server in
+                let fields = [server.hostLabel, server.url.absoluteString, server.processName, server.location]
+                return needle.isEmpty || fields.contains { $0.localizedCaseInsensitiveContains(needle) }
+            }
+            .map {
+                URLAutocompletePanel.Item(title: $0.hostLabel, url: $0.url, subtitle: $0.detail, symbol: "server.rack")
+            }
+    }
+
     private func ensureAutocompletePanel() {
         guard autocompletePanel == nil else { return }
         autocompletePanel = URLAutocompletePanel()
         autocompletePanel?.onSelect = { [weak self] url in
-            self?.urlBar?.stringValue = url.absoluteString
             self?.navigate(to: url)
             self?.window?.makeFirstResponder(self?.webView)
         }
@@ -361,8 +586,8 @@ final class BrowserContentView: NSView, ContentViewProtocol, NSTextFieldDelegate
         let canFwd = webView?.canGoForward ?? false
         backButton?.isEnabled = canBack
         forwardButton?.isEnabled = canFwd
-        backButton?.contentTintColor = canBack ? theme.chromeText : theme.chromeMuted
-        forwardButton?.contentTintColor = canFwd ? theme.chromeText : theme.chromeMuted
+        backButton?.contentTintColor = canBack ? theme.chromeText : theme.textSecondary
+        forwardButton?.contentTintColor = canFwd ? theme.chromeText : theme.textSecondary
     }
 
     private func updateLoadingState() {
@@ -373,26 +598,224 @@ final class BrowserContentView: NSView, ContentViewProtocol, NSTextFieldDelegate
         {
             reloadStopButton?.image = img
         }
-        reloadStopButton?.contentTintColor = AppSettings.shared.theme.chromeMuted
+        reloadStopButton?.toolTip = isLoading ? "Stop Loading" : "Reload Page"
+    }
+
+    // MARK: - Error Page
+
+    private func showError(_ error: Error) {
+        lastError = error
+        let failedURL = ((error as NSError).userInfo[NSURLErrorFailingURLErrorKey] as? URL) ?? currentURL
+        let page = BrowserErrorView(url: failedURL, error: error) { [weak self] in
+            self?.retryAfterError(failedURL)
+        }
+        .environment(\.tokens, .current)
+        if let errorHost {
+            errorHost.rootView = AnyView(page)
+        } else {
+            let host = NSHostingView(rootView: AnyView(page))
+            host.translatesAutoresizingMaskIntoConstraints = false
+            addSubview(host)
+            NSLayoutConstraint.activate([
+                host.topAnchor.constraint(equalTo: topAnchor, constant: toolbarHeight),
+                host.leadingAnchor.constraint(equalTo: leadingAnchor),
+                host.trailingAnchor.constraint(equalTo: trailingAnchor),
+                host.bottomAnchor.constraint(equalTo: bottomAnchor)
+            ])
+            errorHost = host
+        }
+        webView?.isHidden = true
+    }
+
+    private func hideError() {
+        lastError = nil
+        errorHost?.removeFromSuperview()
+        errorHost = nil
+    }
+
+    private func retryAfterError(_ url: URL) {
+        hideError()
+        load(url)
+    }
+
+    // MARK: - Page Zoom
+
+    static func nextZoom(from current: CGFloat, zoomIn: Bool) -> CGFloat {
+        if zoomIn {
+            return zoomSteps.first { $0 > current + 0.001 } ?? zoomSteps[zoomSteps.count - 1]
+        }
+        return zoomSteps.last { $0 < current - 0.001 } ?? zoomSteps[0]
+    }
+
+    /// Same selectors as the Terminal menu's font-size items: the browser sits
+    /// ahead of the window controller in the responder chain, so ⌘+ / ⌘- / ⌘0
+    /// zoom the page while it has focus.
+    @objc func increaseFontSizeAction(_ sender: Any?) { setPageZoom(Self.nextZoom(from: pageZoom, zoomIn: true)) }
+    @objc func decreaseFontSizeAction(_ sender: Any?) { setPageZoom(Self.nextZoom(from: pageZoom, zoomIn: false)) }
+    @objc func resetFontSizeAction(_ sender: Any?) { setPageZoom(1) }
+
+    var pageZoom: CGFloat { webView?.pageZoom ?? 1 }
+
+    private func setPageZoom(_ zoom: CGFloat) {
+        webView?.pageZoom = zoom
+        updateZoomButton()
+    }
+
+    private func updateZoomButton() {
+        guard let zoomButton else { return }
+        let zoom = pageZoom
+        let isDefault = abs(zoom - 1) < 0.001
+        zoomButton.isHidden = isDefault
+        urlBarToZoom?.isActive = false
+        urlBarToPill?.isActive = false
+        (isDefault ? urlBarToPill : urlBarToZoom)?.isActive = true
+        zoomButton.attributedTitle = NSAttributedString(
+            string: "\(Int((zoom * 100).rounded()))%",
+            attributes: [
+                .foregroundColor: AppSettings.shared.theme.textSecondary,
+                .font: NSFont.monospacedDigitSystemFont(ofSize: 10.5, weight: .medium)
+            ])
+    }
+
+    // MARK: - Menu Actions
+
+    /// Focus the address bar (⌘L).
+    @objc func browserOpenLocationAction(_ sender: Any?) {
+        guard let urlBar else { return }
+        window?.makeFirstResponder(urlBar)
+        urlBar.currentEditor()?.selectAll(nil)
+    }
+
+    @objc func browserReloadAction(_ sender: Any?) { reload() }
+    @objc func browserGoBackAction(_ sender: Any?) { goBack() }
+    @objc func browserGoForwardAction(_ sender: Any?) { goForward() }
+
+    func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        switch menuItem.action {
+        case #selector(browserGoBackAction(_:)): return canGoBack
+        case #selector(browserGoForwardAction(_:)): return canGoForward
+        case #selector(increaseFontSizeAction(_:)): return pageZoom < Self.zoomSteps[Self.zoomSteps.count - 1]
+        case #selector(decreaseFontSizeAction(_:)): return pageZoom > Self.zoomSteps[0]
+        default: return true
+        }
+    }
+
+    // MARK: - Find in Page
+
+    private static let countMatchesScript = """
+        const text = document.body ? document.body.innerText.toLowerCase() : "";
+        const n = needle.toLowerCase();
+        let count = 0;
+        let i = text.indexOf(n);
+        while (i !== -1) { count++; i = text.indexOf(n, i + n.length); }
+        return count;
+        """
+
+    /// Start a new search. WKWebView's find API reports only found / not
+    /// found, so the total comes from counting matches in the page text.
+    func find(_ needle: String) {
+        resetFind(needle: needle)
+        let generation = findGeneration
+        guard webView != nil, !needle.isEmpty else {
+            clearPageSelection()
+            onFindMatches?(-1, -1)
+            return
+        }
+        Task { @MainActor [weak self] in
+            // Called per keystroke and counting re-reads the whole page text,
+            // so wait for a pause in typing.
+            try? await Task.sleep(for: .milliseconds(120))
+            guard let self, generation == self.findGeneration else { return }
+            self.countAndStepFind(needle, generation: generation)
+        }
+    }
+
+    private func countAndStepFind(_ needle: String, generation: Int) {
+        webView?.callAsyncJavaScript(
+            Self.countMatchesScript, arguments: ["needle": needle], in: nil, in: .defaultClient
+        ) { [weak self] result in
+            guard let self, generation == self.findGeneration else { return }
+            let total = ((try? result.get()) as? NSNumber)?.intValue ?? 0
+            self.findTotal = total
+            guard total > 0 else {
+                self.clearPageSelection()
+                self.onFindMatches?(-1, 0)
+                return
+            }
+            // Start from the top of the page, not after the previous match.
+            self.clearPageSelection { [weak self] in
+                self?.stepFind(forward: true, generation: generation)
+            }
+        }
+    }
+
+    func findNext(_ forward: Bool) {
+        guard findTotal > 0 else { return }
+        stepFind(forward: forward, generation: findGeneration)
+    }
+
+    func endFind() {
+        resetFind(needle: "")
+        clearPageSelection()
+    }
+
+    /// Invalidates in-flight find callbacks (via the generation) and clears counts.
+    private func resetFind(needle: String) {
+        findGeneration += 1
+        findNeedle = needle
+        findTotal = 0
+        findIndex = -1
+    }
+
+    private func stepFind(forward: Bool, generation: Int) {
+        let config = WKFindConfiguration()
+        config.caseSensitive = false
+        config.wraps = true
+        config.backwards = !forward
+        webView?.find(findNeedle, configuration: config) { [weak self] result in
+            guard let self, generation == self.findGeneration, result.matchFound, self.findTotal > 0 else { return }
+            self.findIndex =
+                forward
+                ? (self.findIndex + 1) % self.findTotal
+                : (self.findIndex - 1 + self.findTotal) % self.findTotal
+            self.onFindMatches?(self.findIndex, self.findTotal)
+        }
+    }
+
+    private func clearPageSelection(then completion: (@MainActor () -> Void)? = nil) {
+        guard let webView else { return }
+        webView.evaluateJavaScript("window.getSelection().removeAllRanges(); 0", in: nil, in: .defaultClient) { _ in
+            completion?()
+        }
     }
 
     // MARK: - ContentViewProtocol
 
     func activate() {
-        window?.makeFirstResponder(webView)
+        // A blank tab has nothing to interact with yet; start in the address bar.
+        if webView?.isHidden == false {
+            window?.makeFirstResponder(webView)
+        } else {
+            browserOpenLocationAction(nil)
+        }
         onFocused?()
     }
 
     func deactivate() {
-        // WebView stays alive in background
+        autocompletePanel?.close()
     }
 
     func cleanup() {
-        urlObservation?.invalidate()
-        urlObservation = nil
+        autocompletePanel?.close()
+        autocompletePanel = nil
+        for observation in observations { observation.invalidate() }
+        observations = []
         webView?.stopLoading()
+        webView?.navigationDelegate = nil
+        webView?.uiDelegate = nil
         webView?.removeFromSuperview()
         webView = nil
+        hideError()
     }
 
     func saveState() -> ContentState {
@@ -407,10 +830,10 @@ final class BrowserContentView: NSView, ContentViewProtocol, NSTextFieldDelegate
 
     func restoreState(_ state: ContentState) {
         guard case .browser(let browserState) = state else { return }
-        currentURL = browserState.url
         currentTitle = browserState.title
-        if browserState.url.absoluteString != "about:blank" {
-            webView?.load(URLRequest(url: browserState.url))
+        syncVisibleURL(browserState.url)
+        if !Self.isBlank(browserState.url) {
+            load(browserState.url)
         }
     }
 
@@ -419,7 +842,20 @@ final class BrowserContentView: NSView, ContentViewProtocol, NSTextFieldDelegate
     /// Navigate to a URL.
     func navigate(to url: URL) {
         syncVisibleURL(url)
-        webView?.load(URLRequest(url: url))
+        // The address bar may still own focus (Return was just pressed), which
+        // makes syncVisibleURL leave its text alone.
+        urlBar?.stringValue = Self.displayString(for: url)
+        load(url)
+    }
+
+    private func load(_ url: URL) {
+        guard let webView else { return }
+        if url.isFileURL {
+            let readAccess = url.hasDirectoryPath ? url : url.deletingLastPathComponent()
+            webView.loadFileURL(url, allowingReadAccessTo: readAccess)
+        } else {
+            webView.load(URLRequest(url: url))
+        }
     }
 
     /// Go back in history.
@@ -428,8 +864,15 @@ final class BrowserContentView: NSView, ContentViewProtocol, NSTextFieldDelegate
     /// Go forward in history.
     func goForward() { webView?.goForward() }
 
-    /// Reload the current page.
-    func reload() { webView?.reload() }
+    /// Reload the current page; after a failed load there is no page to reload.
+    func reload() {
+        if lastError != nil || webView?.url == nil {
+            hideError()
+            if !Self.isBlank(currentURL) { load(currentURL) }
+        } else {
+            webView?.reload()
+        }
+    }
 
     /// Stop loading.
     func stopLoading() { webView?.stopLoading() }
@@ -441,7 +884,10 @@ final class BrowserContentView: NSView, ContentViewProtocol, NSTextFieldDelegate
 
     func syncVisibleURL(_ url: URL) {
         currentURL = url
-        urlBar?.stringValue = url.absoluteString
+        // Don't clobber what the user is typing when a redirect or SPA route lands.
+        if urlBar?.isFieldActive != true {
+            urlBar?.stringValue = Self.displayString(for: url)
+        }
         onURLChanged?(url)
     }
 
@@ -506,11 +952,13 @@ final class BrowserContentView: NSView, ContentViewProtocol, NSTextFieldDelegate
     override var acceptsFirstResponder: Bool { true }
 
     // WKWebView only handles Cmd+C/V/X/A/Z/Y when it is first responder.
+    // performKeyEquivalent walks every view in the window, so only redirect
+    // when focus is on this browser itself — never steal from another pane.
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         guard let wv = webView, event.type == .keyDown,
             event.modifierFlags.contains(.command),
-            window?.firstResponder !== wv,
-            !urlBarOwnsFirstResponder
+            !wv.isHidden,
+            window?.firstResponder === self
         else { return super.performKeyEquivalent(with: event) }
 
         switch event.charactersIgnoringModifiers {
@@ -522,13 +970,6 @@ final class BrowserContentView: NSView, ContentViewProtocol, NSTextFieldDelegate
         default:
             return super.performKeyEquivalent(with: event)
         }
-    }
-
-    private var urlBarOwnsFirstResponder: Bool {
-        guard let urlBar, let firstResponder = window?.firstResponder else { return false }
-        if firstResponder === urlBar { return true }
-        guard let textView = firstResponder as? NSTextView else { return false }
-        return (textView.delegate as? NSTextField) === urlBar
     }
 }
 
@@ -644,48 +1085,33 @@ extension BrowserContentView: WKNavigationDelegate {
         decisionHandler(.allow)
     }
 
-    func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
-        isLoading = true
-        updateLoadingState()
+    // Toolbar state (URL, title, loading, history) follows KVO in
+    // syncWebViewState; these callbacks only handle their own side effects.
+
+    func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
+        hideError()
+        webView.isHidden = false
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-        isLoading = false
-        updateLoadingState()
-        updateNavButtons()
-        if let url = webView.url {
-            syncVisibleURL(url)
-        }
-        if let title = webView.title, !title.isEmpty {
-            currentTitle = title
-            onTitleChanged?(title)
+        if !findNeedle.isEmpty {
+            find(findNeedle)
         }
         // Record in browser history after title + URL are both known
         if let url = webView.url {
-            let title = webView.title ?? ""
-            Task { @MainActor in
-                BrowserHistory.shared.record(title: title, url: url)
-            }
+            BrowserHistory.shared.record(title: webView.title ?? "", url: url)
         }
-    }
-
-    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
-        isLoading = false
-        updateLoadingState()
-        updateNavButtons()
     }
 
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
-        isLoading = false
-        updateLoadingState()
-        updateNavButtons()
+        guard !BrowserErrorView.isSilent(error) else { return }
+        showError(error)
     }
 
-    func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
-        updateNavButtons()
-        if let url = webView.url {
-            syncVisibleURL(url)
-        }
+    func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+        // The page's renderer crashed or was killed under memory pressure;
+        // reloading brings it back instead of leaving a dead white view.
+        webView.reload()
     }
 
     func webView(_ webView: WKWebView, navigationAction: WKNavigationAction, didBecome download: WKDownload) {
@@ -715,6 +1141,74 @@ extension BrowserContentView: WKUIDelegate {
     func webViewDidClose(_ webView: WKWebView) {
         onCloseRequested?()
     }
+
+    func webView(
+        _ webView: WKWebView,
+        runJavaScriptAlertPanelWithMessage message: String,
+        initiatedByFrame frame: WKFrameInfo,
+        completionHandler: @escaping @MainActor @Sendable () -> Void
+    ) {
+        guard let window else { return completionHandler() }
+        let alert = Self.pageAlert(message: message, frame: frame)
+        alert.beginSheetModal(for: window) { _ in completionHandler() }
+    }
+
+    func webView(
+        _ webView: WKWebView,
+        runJavaScriptConfirmPanelWithMessage message: String,
+        initiatedByFrame frame: WKFrameInfo,
+        completionHandler: @escaping @MainActor @Sendable (Bool) -> Void
+    ) {
+        guard let window else { return completionHandler(false) }
+        let alert = Self.pageAlert(message: message, frame: frame)
+        alert.addButton(withTitle: "Cancel")
+        alert.beginSheetModal(for: window) { completionHandler($0 == .alertFirstButtonReturn) }
+    }
+
+    func webView(
+        _ webView: WKWebView,
+        runJavaScriptTextInputPanelWithPrompt prompt: String,
+        defaultText: String?,
+        initiatedByFrame frame: WKFrameInfo,
+        completionHandler: @escaping @MainActor @Sendable (String?) -> Void
+    ) {
+        guard let window else { return completionHandler(nil) }
+        let alert = Self.pageAlert(message: prompt, frame: frame)
+        alert.addButton(withTitle: "Cancel")
+        let field = NSTextField(string: defaultText ?? "")
+        field.frame = NSRect(x: 0, y: 0, width: 260, height: 22)
+        alert.accessoryView = field
+        alert.window.initialFirstResponder = field
+        alert.beginSheetModal(for: window) {
+            completionHandler($0 == .alertFirstButtonReturn ? field.stringValue : nil)
+        }
+    }
+
+    /// Page dialogs name the site they came from so they can't pose as Boo.
+    private static func pageAlert(message: String, frame: WKFrameInfo) -> NSAlert {
+        let alert = NSAlert()
+        let host = frame.securityOrigin.host
+        alert.messageText = host.isEmpty ? "This page says" : "\(host) says"
+        alert.informativeText = message
+        alert.addButton(withTitle: "OK")
+        return alert
+    }
+
+    func webView(
+        _ webView: WKWebView,
+        runOpenPanelWith parameters: WKOpenPanelParameters,
+        initiatedByFrame frame: WKFrameInfo,
+        completionHandler: @escaping @MainActor @Sendable ([URL]?) -> Void
+    ) {
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = parameters.allowsMultipleSelection
+        panel.canChooseDirectories = parameters.allowsDirectories
+        panel.canChooseFiles = true
+        guard let window else { return completionHandler(nil) }
+        panel.beginSheetModal(for: window) { response in
+            completionHandler(response == .OK ? panel.urls : nil)
+        }
+    }
 }
 
 // MARK: - WKDownloadDelegate
@@ -736,7 +1230,11 @@ extension BrowserContentView: WKDownloadDelegate {
     }
 
     func downloadDidFinish(_ download: WKDownload) {
-        _ = completedDownloadDestinations.removeValue(forKey: ObjectIdentifier(download))
+        guard let destination = completedDownloadDestinations.removeValue(forKey: ObjectIdentifier(download))
+        else { return }
+        // Bounce the Downloads stack in the Dock like Safari does.
+        DistributedNotificationCenter.default().post(
+            name: .init("com.apple.DownloadFileFinished"), object: destination.path)
     }
 
     func download(_ download: WKDownload, didFailWithError error: Error, resumeData: Data?) {
@@ -748,7 +1246,6 @@ extension BrowserContentView: WKDownloadDelegate {
 // MARK: - URLBarPillView
 
 /// Rounded-rect pill behind the URL text field.
-/// Background: sidebarBg (lighter than the active-tab toolbar).
 /// Draws a focus ring around itself when the embedded field is first responder.
 final class URLBarPillView: NSView {
     var theme: TerminalTheme? { didSet { needsDisplay = true } }
@@ -758,14 +1255,13 @@ final class URLBarPillView: NSView {
     override func draw(_ dirtyRect: NSRect) {
         guard let theme else { return }
         let radius = bounds.height / 2
-        let inset = bounds.insetBy(dx: 0.5, dy: 0.5)
+        let inset = bounds.insetBy(dx: 0.75, dy: 0.75)
         let path = NSBezierPath(roundedRect: inset, xRadius: radius, yRadius: radius)
 
-        // Fill: sidebar background (lighter than active-tab bg)
-        theme.sidebarBg.setFill()
+        theme.subtleFill.setFill()
         path.fill()
 
-        // Border: subtle when idle, accent-colored when focused
+        // Border: subtle when idle, focus ring when editing
         if isFocused {
             theme.focusRing.setStroke()
             path.lineWidth = 1.5
@@ -774,6 +1270,36 @@ final class URLBarPillView: NSView {
             path.lineWidth = 0.5
         }
         path.stroke()
+    }
+}
+
+// MARK: - BrowserProgressView
+
+/// Thin load-progress line along the bottom of the browser toolbar.
+final class BrowserProgressView: NSView {
+    var color: NSColor = .controlAccentColor { didSet { needsDisplay = true } }
+
+    /// nil hides the bar.
+    var progress: Double? {
+        didSet {
+            guard progress != oldValue else { return }
+            isHidden = progress == nil
+            needsDisplay = true
+        }
+    }
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        isHidden = true
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func draw(_ dirtyRect: NSRect) {
+        guard let progress else { return }
+        color.setFill()
+        // Never fully empty: a just-started load still shows it is working.
+        NSRect(x: 0, y: 0, width: bounds.width * max(0.08, min(progress, 1)), height: bounds.height).fill()
     }
 }
 

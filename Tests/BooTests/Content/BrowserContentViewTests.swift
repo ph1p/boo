@@ -75,21 +75,123 @@ final class BrowserContentViewTests: XCTestCase {
         XCTAssertEqual(result.lastPathComponent, "asset 3.zip")
     }
 
+    // MARK: - Address bar input
+
+    func testResolveInputKeepsExplicitScheme() {
+        XCTAssertEqual(
+            BrowserContentView.resolveInput("http://example.com/a?b=1")?.absoluteString, "http://example.com/a?b=1")
+        XCTAssertEqual(BrowserContentView.resolveInput("about:blank")?.absoluteString, "about:blank")
+    }
+
+    func testResolveInputUsesHTTPForLocalHosts() {
+        XCTAssertEqual(BrowserContentView.resolveInput("localhost:3000")?.absoluteString, "http://localhost:3000")
+        XCTAssertEqual(
+            BrowserContentView.resolveInput("localhost:5173/app")?.absoluteString, "http://localhost:5173/app")
+        XCTAssertEqual(BrowserContentView.resolveInput("127.0.0.1:8080")?.absoluteString, "http://127.0.0.1:8080")
+        XCTAssertEqual(BrowserContentView.resolveInput("printer.local")?.absoluteString, "http://printer.local")
+    }
+
+    func testResolveInputUsesHTTPSForDomains() {
+        XCTAssertEqual(BrowserContentView.resolveInput("example.com")?.absoluteString, "https://example.com")
+        XCTAssertEqual(
+            BrowserContentView.resolveInput("  github.com/ph1p/boo ")?.absoluteString, "https://github.com/ph1p/boo")
+    }
+
+    func testResolveInputTreatsPathsAsFiles() {
+        let url = BrowserContentView.resolveInput("/tmp/index.html")
+        XCTAssertEqual(url?.isFileURL, true)
+        XCTAssertEqual(url?.path, "/tmp/index.html")
+        XCTAssertEqual(BrowserContentView.resolveInput("~/x.html")?.path, NSHomeDirectory() + "/x.html")
+    }
+
+    func testResolveInputSearchesEverythingElse() {
+        XCTAssertEqual(
+            BrowserContentView.resolveInput("swift concurrency")?.absoluteString,
+            "https://www.google.com/search?q=swift%20concurrency")
+        XCTAssertEqual(
+            BrowserContentView.resolveInput("a&b=c")?.absoluteString,
+            "https://www.google.com/search?q=a%26b%3Dc")
+        XCTAssertEqual(
+            BrowserContentView.resolveInput("1.5")?.absoluteString, "https://www.google.com/search?q=1.5")
+        XCTAssertNil(BrowserContentView.resolveInput("   "))
+    }
+
+    func testResolveInputPortShorthand() {
+        XCTAssertEqual(BrowserContentView.resolveInput(":3000")?.absoluteString, "http://localhost:3000")
+        // A bare number is a port only when a pane server listens on it.
+        XCTAssertEqual(
+            BrowserContentView.resolveInput("5173", knownPorts: [5173])?.absoluteString, "http://localhost:5173")
+        XCTAssertEqual(
+            BrowserContentView.resolveInput("2024")?.absoluteString, "https://www.google.com/search?q=2024")
+        XCTAssertEqual(
+            BrowserContentView.resolveInput(":abc")?.absoluteString, "https://www.google.com/search?q=:abc")
+    }
+
+    func testServerItemsFilterByPortProcessAndPane() {
+        let servers = [
+            PaneServer(port: 3000, pid: 1, processName: "node", location: "web · shop"),
+            PaneServer(port: 8000, pid: 2, processName: "python3", location: "api · shop")
+        ]
+        XCTAssertEqual(BrowserContentView.serverItems(servers, matching: "").count, 2)
+        XCTAssertEqual(BrowserContentView.serverItems(servers, matching: ":30").map(\.url), [servers[0].url])
+        XCTAssertEqual(BrowserContentView.serverItems(servers, matching: "python").map(\.url), [servers[1].url])
+        XCTAssertEqual(BrowserContentView.serverItems(servers, matching: "api").map(\.url), [servers[1].url])
+        XCTAssertTrue(BrowserContentView.serverItems(servers, matching: "github").isEmpty)
+        XCTAssertEqual(BrowserContentView.serverItems(servers, matching: "").first?.subtitle, "node — web · shop")
+    }
+
+    func testServersButtonExistsInToolbar() {
+        let view = BrowserContentView(url: ContentType.blankURL)
+        XCTAssertNotNil(navButton(action: "showServersMenu:", in: view))
+    }
+
+    // MARK: - Zoom
+
+    func testNextZoomStepsThroughLadderAndClamps() {
+        XCTAssertEqual(BrowserContentView.nextZoom(from: 1, zoomIn: true), 1.1)
+        XCTAssertEqual(BrowserContentView.nextZoom(from: 1, zoomIn: false), 0.9)
+        XCTAssertEqual(BrowserContentView.nextZoom(from: 1.05, zoomIn: true), 1.1)
+        XCTAssertEqual(BrowserContentView.nextZoom(from: 3, zoomIn: true), 3)
+        XCTAssertEqual(BrowserContentView.nextZoom(from: 0.5, zoomIn: false), 0.5)
+    }
+
+    // MARK: - URL bar
+
+    func testBlankURLLeavesAddressBarEmpty() {
+        let view = BrowserContentView(url: ContentType.blankURL)
+        XCTAssertEqual(view.displayedURLString, "")
+    }
+
+    func testRestoreStateUpdatesAddressBar() {
+        let view = BrowserContentView(url: ContentType.blankURL)
+        let url = URL(string: "https://example.com/restored")!
+        view.restoreState(.browser(BrowserContentState(title: "R", url: url, canGoBack: false, canGoForward: false)))
+        XCTAssertEqual(view.url, url)
+        XCTAssertEqual(view.displayedURLString, url.absoluteString)
+    }
+
+    // MARK: - Error page
+
+    func testCancelledAndDownloadFailuresAreSilent() {
+        XCTAssertTrue(BrowserErrorView.isSilent(NSError(domain: NSURLErrorDomain, code: NSURLErrorCancelled)))
+        XCTAssertTrue(BrowserErrorView.isSilent(NSError(domain: "WebKitErrorDomain", code: 102)))
+        XCTAssertFalse(
+            BrowserErrorView.isSilent(NSError(domain: NSURLErrorDomain, code: NSURLErrorCannotFindHost)))
+    }
+
     // MARK: - External browser button
 
     func testExternalBrowserButtonExistsInToolbar() {
         let view = BrowserContentView(url: ContentType.blankURL)
+        XCTAssertNotNil(
+            navButton(action: "openInExternalBrowserAction", in: view),
+            "External browser button must exist in the toolbar")
+    }
 
-        // Walk subview tree to find a button whose action is openInExternalBrowserAction
-        let sel = NSSelectorFromString("openInExternalBrowserAction")
-        func findButton(in v: NSView) -> NavHoverButton? {
-            if let btn = v as? NavHoverButton, btn.action == sel { return btn }
-            for sub in v.subviews {
-                if let found = findButton(in: sub) { return found }
-            }
-            return nil
-        }
-        XCTAssertNotNil(findButton(in: view), "External browser button must exist in the toolbar")
+    /// The toolbar button wired to `action`, found by walking the subview tree.
+    private func navButton(action: String, in view: NSView) -> NavHoverButton? {
+        if let btn = view as? NavHoverButton, btn.action == NSSelectorFromString(action) { return btn }
+        return view.subviews.lazy.compactMap { self.navButton(action: action, in: $0) }.first
     }
 
     // MARK: - performKeyEquivalent: non-edit keys pass through normally

@@ -77,6 +77,20 @@ extension MainWindowController {
         fullscreenAlt.keyEquivalentModifierMask = [.command, .control]
         fullscreenAlt.isAlternate = true
         viewMenu.addItem(fullscreenAlt)
+        // Browser items have no target: they resolve to the focused
+        // BrowserContentView through the responder chain and stay disabled
+        // otherwise. ⌘[ / ⌘] already focus panes, so Back/Forward stay unbound.
+        viewMenu.addItem(.separator())
+        viewMenu.addItem(
+            withTitle: "Open Location…", action: #selector(BrowserContentView.browserOpenLocationAction(_:)),
+            keyEquivalent: "l")
+        viewMenu.addItem(
+            withTitle: "Reload Page", action: #selector(BrowserContentView.browserReloadAction(_:)),
+            keyEquivalent: "r")
+        viewMenu.addItem(
+            withTitle: "Back", action: #selector(BrowserContentView.browserGoBackAction(_:)), keyEquivalent: "")
+        viewMenu.addItem(
+            withTitle: "Forward", action: #selector(BrowserContentView.browserGoForwardAction(_:)), keyEquivalent: "")
         viewMenuItem.submenu = viewMenu
         mainMenu.addItem(viewMenuItem)
 

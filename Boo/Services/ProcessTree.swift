@@ -35,6 +35,25 @@ enum ProcessTree {
         return name.hasPrefix("-") ? String(name.dropFirst()) : name
     }
 
+    /// `proc_name`, or argv[0]'s basename when that is empty or a version
+    /// string (e.g. `claude` reports "2.1.117").
+    static func displayName(pid: pid_t) -> String {
+        let raw = processName(pid: pid)
+        if let first = raw.first, !first.isNumber { return raw }
+        return argv0Name(pid: pid) ?? raw
+    }
+
+    /// `root` and the processes below it, breadth-first, at most `limit`.
+    static func descendants(of root: pid_t, limit: Int) -> [pid_t] {
+        var result = [root]
+        var next = 0
+        while next < result.count, result.count < limit {
+            result.append(contentsOf: childPIDs(of: result[next]).prefix(limit - result.count))
+            next += 1
+        }
+        return result
+    }
+
     /// Walk from a process down single-child chains to find the actual shell.
     /// Ghostty forks: Boo → login → shell. This walks login → shell.
     /// Stops when: the process has 0 children, >1 children, or is a known shell.

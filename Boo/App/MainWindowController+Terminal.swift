@@ -17,7 +17,8 @@ extension MainWindowController {
         else { return }
         let wasVisible = pv.isFindBarVisible
         pv.showFindBar()
-        if !wasVisible { activeGhosttyView?.startSearch() }
+        // Browser tabs search the page; only a terminal tab starts a Ghostty search.
+        if !wasVisible, !(pv.activeContentView is BrowserContentView) { activeGhosttyView?.startSearch() }
     }
 
     /// The terminal that has keyboard focus; prompt jumps only apply there so

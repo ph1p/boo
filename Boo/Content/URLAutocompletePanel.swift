@@ -1,6 +1,7 @@
 import Cocoa
 
-/// Floating dropdown panel that shows URL history matches beneath the browser address bar.
+/// Floating dropdown panel beneath the browser address bar: servers running in
+/// panes, then URL history matches.
 @MainActor final class URLAutocompletePanel: NSObject, NSTableViewDataSource, NSTableViewDelegate {
     static let defaultRowHeight: CGFloat = 44
     static let maxVisibleRows: CGFloat = 6
@@ -9,6 +10,9 @@ import Cocoa
     struct Item {
         let title: String
         let url: URL
+        /// Second line; the URL when nil.
+        var subtitle: String?
+        var symbol = "clock"
     }
 
     var onSelect: ((URL) -> Void)?
@@ -29,7 +33,8 @@ import Cocoa
         if panel == nil { buildPanel() }
 
         let theme = AppSettings.shared.theme
-        tableView?.backgroundColor = theme.sidebarBg
+        tableView?.backgroundColor = theme.cardBg
+        tableView?.enclosingScrollView?.layer?.borderColor = theme.separator.cgColor
         tableView?.reloadData()
 
         guard let panel = panel, let anchorWindow = anchor.window else { return }
@@ -126,10 +131,12 @@ import Cocoa
         scroll.wantsLayer = true
         scroll.layer?.cornerRadius = 8
         scroll.layer?.masksToBounds = true
+        scroll.layer?.borderWidth = 0.5
+        scroll.layer?.borderColor = theme.separator.cgColor
 
         let tv = HoverTableView()
         tv.headerView = nil
-        tv.backgroundColor = theme.sidebarBg
+        tv.backgroundColor = theme.cardBg
         tv.rowHeight = rowHeight
         tv.intercellSpacing = .zero
         tv.gridStyleMask = []
@@ -218,16 +225,16 @@ import Cocoa
 
         (cell.viewWithTag(1) as? NSTextField)?.stringValue = item.title.isEmpty ? item.url.host ?? "" : item.title
         (cell.viewWithTag(1) as? NSTextField)?.textColor = theme.chromeText
-        (cell.viewWithTag(2) as? NSTextField)?.stringValue = item.url.absoluteString
-        (cell.viewWithTag(2) as? NSTextField)?.textColor = theme.chromeMuted
+        (cell.viewWithTag(2) as? NSTextField)?.stringValue = item.subtitle ?? item.url.absoluteString
+        (cell.viewWithTag(2) as? NSTextField)?.textColor = theme.textTertiary
 
         let cfg = NSImage.SymbolConfiguration(pointSize: 11, weight: .light)
-        let img = NSImage(systemSymbolName: "clock", accessibilityDescription: nil)?
+        let img = NSImage(systemSymbolName: item.symbol, accessibilityDescription: nil)?
             .withSymbolConfiguration(cfg)
         img?.isTemplate = true
         if let iv = cell.viewWithTag(3) as? NSImageView {
             iv.image = img
-            iv.contentTintColor = theme.chromeMuted
+            iv.contentTintColor = theme.textTertiary
         }
 
         return cell
@@ -302,7 +309,7 @@ private final class ThemedRowView: NSTableRowView {
     }
 
     override func drawSelection(in dirtyRect: NSRect) {
-        theme.controlFill.setFill()
+        theme.accentSelectionFill.setFill()
         bounds.fill()
     }
 
@@ -310,7 +317,7 @@ private final class ThemedRowView: NSTableRowView {
         if isHovered && !isSelected {
             theme.hoverFill.setFill()
         } else {
-            theme.sidebarBg.setFill()
+            theme.cardBg.setFill()
         }
         bounds.fill()
     }

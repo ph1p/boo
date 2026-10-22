@@ -320,6 +320,7 @@ final class AppSettings {
         static let browserPersistentWebsiteDataEnabled = "browserPersistentWebsiteDataEnabled"
         static let browserHistoryEnabled = "browserHistoryEnabled"
         static let browserHistoryLimit = "browserHistoryLimit"
+        static let browserConfirmClose = "browserConfirmClose"
 
         static let editorFontSize = "editorFontSize"
         static let editorFontName = "editorFontName"
@@ -856,6 +857,12 @@ final class AppSettings {
         set { set(newValue, forKey: K.browserPersistentWebsiteDataEnabled, topic: .layout) }
     }
 
+    /// When true, closing a browser tab asks first (a page can hold unsent form input).
+    var browserConfirmClose: Bool {
+        get { bool(K.browserConfirmClose, default: true) }
+        set { set(newValue, forKey: K.browserConfirmClose, topic: .layout) }
+    }
+
     var browserHistoryEnabled: Bool {
         get { bool(K.browserHistoryEnabled, default: true) }
         set { set(newValue, forKey: K.browserHistoryEnabled, topic: .layout) }
@@ -1253,6 +1260,7 @@ final class AppSettings {
             K.autoDetectContentType: autoDetectContentType,
             K.browserHomePage: browserHomePage,
             K.browserPersistentWebsiteDataEnabled: browserPersistentWebsiteDataEnabled,
+            K.browserConfirmClose: browserConfirmClose,
             K.linkOpenMode: linkOpenMode.rawValue,
             K.disabledPluginIDs: disabledPluginIDs,
             K.sidebarPluginOrder: sidebarTabOrder,

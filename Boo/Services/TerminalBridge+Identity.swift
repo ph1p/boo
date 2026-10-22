@@ -20,9 +20,9 @@ extension TerminalBridge {
 
     /// All known local hostnames (lowercased), collected once at launch.
     /// Covers: ProcessInfo.hostName, gethostname(2), SCDynamicStore LocalHostName,
-    /// and the always-local aliases "localhost" / "127.0.0.1".
+    /// and the always-local aliases "localhost" / "127.0.0.1" / "::1".
     static let localHostnames: Set<String> = {
-        var names: Set<String> = ["localhost", "127.0.0.1"]
+        var names: Set<String> = ["localhost", "127.0.0.1", "::1", "[::1]"]
 
         // ProcessInfo.hostName  e.g. "pwork-mac.local"
         let piHost = ProcessInfo.processInfo.hostName

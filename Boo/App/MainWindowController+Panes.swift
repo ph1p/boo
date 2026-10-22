@@ -622,7 +622,34 @@ extension MainWindowController {
             tabIndex: tabIndex
         ) {
             confirmUnsavedEditorClose(location, proceed: proceed)
+        } else if let tabs = activeWorkspace?.pane(for: paneID)?.tabs, tabs.indices.contains(tabIndex),
+            tabs[tabIndex].contentType == .browser
+        {
+            confirmBrowserTabClose(title: tabs[tabIndex].title, proceed: proceed)
         } else {
+            proceed()
+        }
+    }
+
+    /// Browser tabs ask before closing: a page can hold form input or a login
+    /// flow that reloading won't bring back. "Don't ask again" turns the
+    /// global setting off (Settings → Browser turns it back on).
+    func confirmBrowserTabClose(title: String, proceed: @escaping () -> Void) {
+        guard AppSettings.shared.browserConfirmClose, let window else { return proceed() }
+        let alert = NSAlert()
+        let name = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        alert.messageText = name.isEmpty ? "Close this browser tab?" : "Close “\(name)”?"
+        alert.informativeText = "The page will be closed. Anything entered on it is lost."
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "Close")
+        alert.addButton(withTitle: "Cancel")
+        alert.showsSuppressionButton = true
+        alert.suppressionButton?.title = "Don't ask again"
+        alert.beginSheetModal(for: window) { response in
+            guard response == .alertFirstButtonReturn else { return }
+            if alert.suppressionButton?.state == .on {
+                AppSettings.shared.browserConfirmClose = false
+            }
             proceed()
         }
     }

@@ -7,6 +7,7 @@ struct BrowserSettingsView: View {
     @State private var historyEnabled = AppSettings.shared.browserHistoryEnabled
     @State private var historyLimit = AppSettings.shared.browserHistoryLimit
     @State private var linkOpenMode = AppSettings.shared.linkOpenMode
+    @State private var confirmClose = AppSettings.shared.browserConfirmClose
     @State private var showClearConfirm = false
     @State private var historyEntries: [BrowserHistoryEntry] = []
     @State private var searchText = ""
@@ -47,6 +48,15 @@ struct BrowserSettingsView: View {
                 )
                 .onChange(of: persistentWebsiteDataEnabled) { _, value in
                     AppSettings.shared.browserPersistentWebsiteDataEnabled = value
+                }
+
+                ToggleRow(
+                    label: "Ask before closing a browser tab",
+                    help: "Shows a confirmation when a browser tab is closed, so a page isn't lost by accident.",
+                    isOn: $confirmClose
+                )
+                .onChange(of: confirmClose) { _, value in
+                    AppSettings.shared.browserConfirmClose = value
                 }
 
                 SettingRow(label: "Terminal links") {
