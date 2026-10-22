@@ -2,6 +2,7 @@ import Cocoa
 
 /// Status bar summary of the agent inbox ("● Claude needs your input",
 /// "2 agents"). Click lists every agent across windows; picking one jumps there.
+/// Near or past an agent budget, an amber or red cost badge follows.
 final class AgentInboxSegment: StatusBarPlugin {
     let id = "agent-inbox"
     let position: StatusBarPosition = .right
@@ -10,7 +11,17 @@ final class AgentInboxSegment: StatusBarPlugin {
     /// Retained while the menu is open (menu items hold their target weakly).
     private var menuTarget: AgentInboxMenuTarget?
 
-    var tooltipText: String? { "Agents — click to jump" }
+    var tooltipText: String? {
+        MainActor.assumeIsolated {
+            let today = AgentBudget.shared.todayTotal
+            guard today > 0 else { return "Agents — click to jump" }
+            var text = "Agents — click to jump\nToday ≈ \(AgentBudget.format(today)) (estimated)"
+            if let budget = AppSettings.shared.agentBudgetPerDay {
+                text += " of \(AgentBudget.format(budget))"
+            }
+            return text
+        }
+    }
 
     func isVisible(settings: AppSettings, state: StatusBarState) -> Bool {
         MainActor.assumeIsolated { !AgentInbox.shared.items.isEmpty }
@@ -19,20 +30,32 @@ final class AgentInboxSegment: StatusBarPlugin {
     func draw(
         at rx: CGFloat, y: CGFloat, theme: TerminalTheme, settings: AppSettings, state: StatusBarState, ctx: CGContext
     ) -> CGFloat {
-        let (label, color) = MainActor.assumeIsolated { Self.label(theme: theme) }
+        let (label, color, badge) = MainActor.assumeIsolated {
+            let (label, color) = Self.label(theme: theme)
+            return (label, color, Self.badge(theme: theme))
+        }
         let attrs: [NSAttributedString.Key: Any] = [
             .font: NSFont.systemFont(ofSize: 10, weight: .medium),
             .foregroundColor: color
         ]
         let str = label as NSString
         let size = str.safeSize(withAttributes: attrs)
+        let badgeAttrs: [NSAttributedString.Key: Any] = [
+            .font: NSFont.monospacedDigitSystemFont(ofSize: 10, weight: .semibold),
+            .foregroundColor: badge?.color ?? color
+        ]
+        let badgeStr = (badge?.text ?? "") as NSString
+        let badgeWidth = badge == nil ? 0 : badgeStr.safeSize(withAttributes: badgeAttrs).width + 6
         let dot: CGFloat = 6
-        let width = dot + 4 + size.width
+        let width = dot + 4 + size.width + badgeWidth
         let x = rx - width - 4
         let barH = DensityMetrics.current.statusBarHeight
         ctx.setFillColor(color.cgColor)
         ctx.fillEllipse(in: CGRect(x: x, y: (barH - dot) / 2, width: dot, height: dot))
         str.safeDraw(at: NSPoint(x: x + dot + 4, y: y), withAttributes: attrs)
+        if badge != nil {
+            badgeStr.safeDraw(at: NSPoint(x: x + dot + 4 + size.width + 6, y: y), withAttributes: badgeAttrs)
+        }
         hitRect = NSRect(x: x - 4, y: 0, width: width + 8, height: barH)
         return width + 8
     }
@@ -48,6 +71,18 @@ final class AgentInboxSegment: StatusBarPlugin {
         }
         let count = inbox.items.count
         return (count == 1 ? "1 agent" : "\(count) agents", theme.textTertiary)
+    }
+
+    /// The cost to show when a budget is at 80 % or more: today's total when
+    /// the day budget is the one in trouble, else the costliest task's.
+    @MainActor private static func badge(theme: TerminalTheme) -> (text: String, color: NSColor)? {
+        let budget = AgentBudget.shared
+        let level = budget.level
+        guard level >= .warning else { return nil }
+        let color = level == .over ? theme.error : theme.warning
+        if budget.dayLevel == level { return (AgentBudget.format(budget.todayTotal), color) }
+        let worst = budget.taskCosts.filter { budget.taskLevel($0.key) == level }.values.max() ?? 0
+        return (AgentBudget.format(worst), color)
     }
 
     @MainActor static func color(for item: AgentInbox.Item, theme: TerminalTheme) -> NSColor {
@@ -72,7 +107,15 @@ final class AgentInboxSegment: StatusBarPlugin {
     func update(state: StatusBarState) {}
 
     func accessibilitySegmentLabel(state: StatusBarState) -> String? {
-        MainActor.assumeIsolated { "Agents: " + Self.label(theme: AppSettings.shared.theme).0 }
+        MainActor.assumeIsolated {
+            let theme = AppSettings.shared.theme
+            var text = "Agents: " + Self.label(theme: theme).0
+            if let badge = Self.badge(theme: theme) {
+                text += AgentBudget.shared.level == .over ? ", over budget " : ", near budget "
+                text += badge.text
+            }
+            return text
+        }
     }
 }
 
@@ -84,7 +127,10 @@ final class AgentInboxMenuTarget: NSObject {
         let inbox = AgentInbox.shared
         for item in inbox.sortedItems {
             let where_ = inbox.locate(item.tabID).map { $0.workspace.displayName } ?? ""
-            let title = where_.isEmpty ? AgentInbox.summary(of: item) : "\(where_) — \(AgentInbox.summary(of: item))"
+            var title = where_.isEmpty ? AgentInbox.summary(of: item) : "\(where_) — \(AgentInbox.summary(of: item))"
+            if let cost = AgentBudget.shared.taskCosts[item.tabID], cost > 0 {
+                title += " · ≈ \(AgentBudget.format(cost))"
+            }
             let menuItem = NSMenuItem(title: title, action: #selector(jump(_:)), keyEquivalent: "")
             menuItem.target = self
             menuItem.representedObject = item.tabID

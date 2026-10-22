@@ -28,6 +28,13 @@ struct TabState {
     var progress: TerminalProgress?
     /// A session recording is running; not persisted.
     var isRecording: Bool = false
+    /// Profile picked by hand (tab menu, palette); wins over rules until
+    /// reset to "Auto". Not persisted.
+    var profileOverride: String?
+    /// The profile in effect: override, rule match or default. Not persisted.
+    var profile: String?
+    /// A trigger marked this tab; cleared when the tab is focused. Not persisted.
+    var triggerMark: String?
 
     // Plugin UI State
     var expandedPluginIDs: Set<String> = []
@@ -53,6 +60,10 @@ struct TabGroup: Equatable {
 /// A pane is a leaf in the split tree. It has its own tab bar with multiple terminal tabs.
 final class Pane {
     let id: UUID
+
+    /// Called with a tab's ID when its host, cwd or foreground process
+    /// changes (the rules engine re-evaluates it). Set once at launch.
+    nonisolated(unsafe) static var onTabContextChanged: ((UUID) -> Void)?
 
     struct Tab {
         let id: UUID
@@ -416,6 +427,8 @@ final class Pane {
     @discardableResult
     func setActivity(_ active: Bool, at index: Int) -> Bool {
         guard index >= 0, index < tabs.count else { return false }
+        // A trigger's mark goes with the activity it raised.
+        if !active { tabs[index].state.triggerMark = nil }
         guard tabs[index].state.hasActivity != active else { return false }
         tabs[index].state.hasActivity = active
         return true
@@ -461,7 +474,9 @@ final class Pane {
 
     func updateWorkingDirectory(at index: Int, _ path: String) {
         guard index >= 0, index < tabs.count else { return }
+        let changed = tabs[index].workingDirectory != path
         tabs[index].workingDirectory = path
+        if changed { Self.onTabContextChanged?(tabs[index].id) }
     }
 
     func updateRemoteSession(at index: Int, _ session: RemoteSessionType?) {
@@ -470,11 +485,33 @@ final class Pane {
         if session == nil {
             tabs[index].remoteWorkingDirectory = nil
         }
+        Self.onTabContextChanged?(tabs[index].id)
     }
 
     func updateRemoteWorkingDirectory(at index: Int, _ path: String?) {
         guard index >= 0, index < tabs.count else { return }
+        let changed = tabs[index].remoteWorkingDirectory != path
         tabs[index].remoteWorkingDirectory = path
+        if changed { Self.onTabContextChanged?(tabs[index].id) }
+    }
+
+    /// Sets the hand-picked and effective profile; false when nothing changed.
+    @discardableResult
+    func setProfile(at index: Int, override: String?, effective: String?) -> Bool {
+        guard index >= 0, index < tabs.count else { return false }
+        let state = tabs[index].state
+        guard state.profileOverride != override || state.profile != effective else { return false }
+        tabs[index].state.profileOverride = override
+        tabs[index].state.profile = effective
+        return true
+    }
+
+    /// False when nothing changed, so callers can skip the redraw.
+    @discardableResult
+    func setTriggerMark(_ mark: String?, at index: Int) -> Bool {
+        guard index >= 0, index < tabs.count, tabs[index].state.triggerMark != mark else { return false }
+        tabs[index].state.triggerMark = mark
+        return true
     }
 
     func updateForegroundProcess(
@@ -485,6 +522,8 @@ final class Pane {
         metadata: [String: String] = [:]
     ) {
         guard index >= 0, index < tabs.count else { return }
+        let changed = tabs[index].state.foregroundProcess != process
+        defer { if changed { Self.onTabContextChanged?(tabs[index].id) } }
         tabs[index].state.foregroundProcess = process
         tabs[index].state.foregroundProcessPID = pid
         tabs[index].state.foregroundProcessCategory = category

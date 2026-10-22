@@ -10,8 +10,11 @@ struct EditorSettingsView: View {
     @State private var minimap = AppSettings.shared.editorMinimap
     @State private var formatOnSave = AppSettings.shared.editorFormatOnSave
     @State private var rulerColumn = AppSettings.shared.editorRulerColumn
+    @State private var linkTarget = AppSettings.shared.defaultLinkTarget
+    @State private var editorPreset = AppSettings.shared.externalEditorPreset
+    @State private var editorTemplate = AppSettings.shared.externalEditorTemplate
 
-    @ObservedObject private var observer = SettingsObserver(topics: [.editor])
+    @ObservedObject private var observer = SettingsObserver(topics: [.editor, .links])
 
     private let monoFonts = AppSettings.availableMonospaceFonts
 
@@ -68,6 +71,43 @@ struct EditorSettingsView: View {
                         alignment: .leading,
                         onCommit: { v in AppSettings.shared.editorRulerColumn = max(0, v) }
                     )
+                }
+            }
+
+            Section(title: "Terminal Links") {
+                SettingRow(
+                    label: "⌘-click opens",
+                    help: "file:line links in terminal output. ⌘⌥-click opens the other one. "
+                        + "Remote panes always use the built-in editor."
+                ) {
+                    Picker("", selection: $linkTarget) {
+                        ForEach(LinkTarget.allCases, id: \.self) { Text($0.displayName).tag($0) }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.menu)
+                    .frame(maxWidth: 200, alignment: .leading)
+                    .onChange(of: linkTarget) { _, v in AppSettings.shared.defaultLinkTarget = v }
+                }
+                SettingRow(label: "External editor") {
+                    Picker("", selection: $editorPreset) {
+                        ForEach(ExternalEditorPreset.allCases, id: \.self) { Text($0.displayName).tag($0) }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.menu)
+                    .frame(maxWidth: 220, alignment: .leading)
+                    .onChange(of: editorPreset) { _, v in AppSettings.shared.externalEditorPreset = v }
+                }
+                if editorPreset == .custom {
+                    SettingRow(
+                        label: "Command",
+                        help: "A URL or shell command. {path}, {line} and {col} are filled in; "
+                            + "paths are quoted for you."
+                    ) {
+                        SettingTextField(
+                            placeholder: "nvim +{line} {path}", text: $editorTemplate, monospaced: true
+                        )
+                        .onChange(of: editorTemplate) { _, v in AppSettings.shared.externalEditorTemplate = v }
+                    }
                 }
             }
 

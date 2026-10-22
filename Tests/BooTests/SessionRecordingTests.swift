@@ -52,8 +52,8 @@ final class SessionRecordingTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: url) }
         let rec = try SessionRecorder(url: url, columns: 80, rows: 24, title: "t")
         let bytes = Array("hi\r\n".utf8)
-        bytes.withUnsafeBufferPointer { rec.append($0.baseAddress!, count: $0.count) }
-        rec.resized(columns: 100, rows: 30)
+        bytes.withUnsafeBufferPointer { rec.tapOutput($0) }
+        rec.tapResized(columns: 100, rows: 30)
         let done = expectation(description: "finish")
         rec.finish { done.fulfill() }
         wait(for: [done], timeout: 2)
@@ -70,10 +70,10 @@ final class SessionRecordingTests: XCTestCase {
             .appendingPathComponent("boo-rec-\(UUID().uuidString).cast")
         defer { try? FileManager.default.removeItem(at: url) }
         let rec = try SessionRecorder(url: url, columns: 80, rows: 24, title: "t")
-        rec.resized(columns: 80, rows: 24)
-        rec.resized(columns: 100, rows: 30)
-        rec.resized(columns: 100, rows: 30)
-        rec.resized(columns: 0, rows: 30)
+        rec.tapResized(columns: 80, rows: 24)
+        rec.tapResized(columns: 100, rows: 30)
+        rec.tapResized(columns: 100, rows: 30)
+        rec.tapResized(columns: 0, rows: 30)
         let done = expectation(description: "finish")
         rec.finish { done.fulfill() }
         wait(for: [done], timeout: 2)

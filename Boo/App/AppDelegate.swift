@@ -65,6 +65,10 @@ public enum BooMain {
         }
         QuickTerminalController.shared.start()
         KeyTables.shared.start()
+        RuleEngine.shared.start()
+        HistoryRecorder.shared.start()
+        SyncService.shared.start()
+        AgentBudget.shared.start()
 
         // Watch system appearance changes for auto-theme
         appearanceObserver = NSApp.observe(\.effectiveAppearance) { _, _ in

@@ -136,6 +136,17 @@ final class ActivityNotifier: NSObject, UNUserNotificationCenterDelegate {
             workspaceID: workspaceID, paneID: paneID, tabIndex: tabIndex)
     }
 
+    /// A process in a pane started listening on `port`.
+    func notifyPort(
+        _ port: UInt16, process: String, workspaceName: String,
+        workspaceID: UUID, paneID: UUID, tabIndex: Int
+    ) {
+        guard AppSettings.shared.portNotificationsEnabled else { return }
+        deliver(
+            kind: "port", title: workspaceName, body: "\(process) is listening on localhost:\(port)",
+            sound: nil, workspaceID: workspaceID, paneID: paneID, tabIndex: tabIndex)
+    }
+
     /// Post a notification for a terminal bell, analogous to `notifyCommandEnded`.
     /// Suppression mirrors the command-end path: skip when `activityNotificationsEnabled` is off.
     func notifyBell(
@@ -159,6 +170,15 @@ final class ActivityNotifier: NSObject, UNUserNotificationCenterDelegate {
         deliver(
             kind: "desktop", title: title.isEmpty ? workspaceName : title, body: body,
             sound: .default, workspaceID: workspaceID, paneID: paneID, tabIndex: tabIndex)
+    }
+
+    /// An agent task or today's agent spend passed its budget (once per crossing).
+    func notifyBudget(
+        title: String, body: String, workspaceID: UUID? = nil, paneID: UUID? = nil, tabIndex: Int = 0
+    ) {
+        deliver(
+            kind: "budget", title: title, body: body, sound: .default,
+            workspaceID: workspaceID, paneID: paneID, tabIndex: tabIndex)
     }
 
     /// An orchestrator card waits while its drawer is out of sight; clicking opens the drawer.

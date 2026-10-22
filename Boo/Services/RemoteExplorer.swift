@@ -536,7 +536,7 @@ final class RemoteExplorer: @unchecked Sendable {
         return result.stdout
     }
 
-    private static func runRemoteCommand(
+    static func runRemoteCommand(
         session: RemoteSessionType, command: String, completion: @escaping @Sendable (String?) -> Void
     ) {
         DispatchQueue.global(qos: .userInitiated).async {

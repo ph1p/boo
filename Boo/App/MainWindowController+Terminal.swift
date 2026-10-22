@@ -21,6 +21,14 @@ extension MainWindowController {
         if !wasVisible, !(pv.activeContentView is BrowserContentView) { activeGhosttyView?.startSearch() }
     }
 
+    /// Opens a new tab in the active pane running `command`, in `cwd` or the
+    /// workspace folder.
+    func openCommandTab(_ command: String, cwd: String? = nil) {
+        guard let workspace = activeWorkspace else { return }
+        paneViews[workspace.activePaneID]?.addNewTab(
+            workingDirectory: cwd ?? workspace.folderPath, launch: LaunchSpec(command: command))
+    }
+
     /// The terminal that has keyboard focus; prompt jumps only apply there so
     /// ⌘↑ keeps its meaning in text fields and editors.
     var focusedGhosttyView: GhosttyView? {
@@ -226,7 +234,7 @@ extension MainWindowController {
     }
 
     /// Open a file in the terminal editor (respects user's editor preference).
-    private func openFileInTerminalEditor(_ path: String) {
+    func openFileInTerminalEditor(_ path: String, line: Int? = nil) {
         let parentDir = (path as NSString).deletingLastPathComponent
         openDirectoryInNewTab(parentDir)
 
@@ -235,10 +243,22 @@ extension MainWindowController {
             configured.isEmpty
             ? (ProcessInfo.processInfo.environment["EDITOR"] ?? "vi")
             : configured
+        // vi, vim, nvim, nano, emacs, micro, kak and helix all take `+line`.
+        let lineArg = line.map { " +\($0)" } ?? ""
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-            self?.sendRawToActivePane("\(editorCmd) \(shellEscape(path))\r")
+            self?.sendRawToActivePane("\(editorCmd)\(lineArg) \(shellEscape(path))\r")
         }
+    }
+
+    /// Opens `path` in a Monaco editor tab with the cursor at `line`:`column`.
+    func openFileInEditor(path: String, line: Int?, column: Int?) {
+        openFileInTab(path: path, type: .editor)
+        guard let line,
+            let workspace = activeWorkspace,
+            let editor = paneViews[workspace.activePaneID]?.activeContentView as? EditorContentView
+        else { return }
+        editor.reveal(line: line, column: column ?? 1)
     }
 
     /// Open or focus a custom tab registered via registerMultiContentTab.

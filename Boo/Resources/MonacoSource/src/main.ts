@@ -17,10 +17,12 @@ declare global {
     initEditorFromJSON: (data: EditorInitData) => void;
     setContent: (content: string) => void;
     getContent: () => string;
+    markClean: (saved: string) => boolean;
     setTheme: (themeData: MonacoThemeData) => void;
     setEditorOptions: (options: EditorOptions) => void;
     setAppearance: (themeData: MonacoThemeData, options: EditorOptions) => void;
     focusEditor: () => void;
+    revealPosition: (line: number, column: number) => void;
     webkit?: {
       messageHandlers?: {
         boo?: BooMessageHandler;
@@ -67,6 +69,9 @@ type EditorOptions = {
   minimap?: boolean;
   rulers?: number[];
   formatOnSave?: boolean;
+  placeholder?: string;
+  folding?: boolean;
+  glyphMargin?: boolean;
 };
 
 type BooMessage =
@@ -74,11 +79,15 @@ type BooMessage =
   | { type: "error"; message: string }
   | { type: "ready" }
   | { type: "dirty" }
+  | { type: "changed" }
   | { type: "focused" };
 
 let editor: monaco.editor.IStandaloneCodeEditor | undefined;
 let isDirty = false;
 let dirtyTimer: ReturnType<typeof setTimeout> | undefined;
+let changedTimer: ReturnType<typeof setTimeout> | undefined;
+// True while Swift replaces the content, so it doesn't count as an edit.
+let applyingContent = false;
 let dropDragoverHandler: ((e: DragEvent) => void) | null = null;
 let dropDropHandler: ((e: DragEvent) => void) | null = null;
 
@@ -152,6 +161,9 @@ function resolveEditorOptions(
     lineNumbers: options?.lineNumbers ?? "on",
     minimap: { enabled: options?.minimap ?? false },
     rulers: options?.rulers ?? [],
+    placeholder: options?.placeholder,
+    folding: options?.folding ?? true,
+    glyphMargin: options?.glyphMargin ?? true,
   };
 }
 
@@ -241,6 +253,10 @@ window.initEditorFromJSON = (data: EditorInitData): void => {
     });
 
     editor.onDidChangeModelContent(() => {
+      if (applyingContent) return;
+      // Debounced per-edit signal for autosaving hosts (notes).
+      clearTimeout(changedTimer);
+      changedTimer = setTimeout(() => postMessage({ type: "changed" }), 500);
       if (isDirty) return;
       clearTimeout(dirtyTimer);
       dirtyTimer = setTimeout(() => {
@@ -266,8 +282,19 @@ window.initEditorFromJSON = (data: EditorInitData): void => {
 
 window.setContent = (content: string): void => {
   clearTimeout(dirtyTimer);
+  clearTimeout(changedTimer);
+  applyingContent = true;
   editor?.setValue(content);
+  applyingContent = false;
   isDirty = false;
+};
+
+/** Called after a save; stays dirty when edits landed during the write. */
+window.markClean = (saved: string): boolean => {
+  if (editor?.getValue() !== saved) return false;
+  clearTimeout(dirtyTimer);
+  isDirty = false;
+  return true;
 };
 
 window.getContent = (): string => editor?.getValue() ?? "";
@@ -289,6 +316,15 @@ window.setAppearance = (themeData: MonacoThemeData, options: EditorOptions): voi
 
 window.focusEditor = (): void => {
   editor?.focus();
+};
+
+window.revealPosition = (line: number, column: number): void => {
+  if (!editor) return;
+  const lineNumber = Math.max(1, Math.min(line, editor.getModel()?.getLineCount() ?? line));
+  const position = { lineNumber, column: Math.max(1, column) };
+  editor.setPosition(position);
+  editor.revealPositionInCenter(position);
+  editor.focus();
 };
 
 log("monaco bundle loaded");

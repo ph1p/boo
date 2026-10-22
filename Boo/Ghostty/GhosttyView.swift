@@ -40,6 +40,11 @@ import Cocoa
     var commandHistory = CommandHistory()
     /// Called after a command starts or ends, when prompt marks change status.
     var onPromptMarksChanged: (() -> Void)?
+    /// The shell sourced Boo's integration and sits at a prompt (no command
+    /// running); set from its cmd_start / cmd_end markers.
+    var atBooPrompt = false
+    /// ⌃R at a Boo prompt; the view's owner opens history search.
+    var onHistorySearch: ((GhosttyView) -> Void)?
     /// The last command the shell ran here and its exit code (nil while it runs).
     var lastCommand: (command: String, exitCode: Int32?)? {
         commandHistory.last.map { ($0.command, $0.exitCode) }
@@ -82,9 +87,11 @@ import Cocoa
     /// surface is created.
     static var pendingLaunch: [UUID: LaunchSpec] = [:]
 
-    /// Active session recording; its retained pointer is the output tap's userdata.
-    nonisolated(unsafe) private var recorderToken: UnsafeMutableRawPointer?
-    private(set) var recorder: SessionRecorder?
+    /// Fans the surface's raw pty output out to the recorder and trigger matcher.
+    let outputTap = OutputTapHub()
+    nonisolated(unsafe) private(set) var recorder: SessionRecorder?
+    /// The mouse-down was a link click Ghostty never saw.
+    private var swallowMouseUp = false
 
     /// Drops keyboard and paste input (the cast player's display-only terminal).
     var isInputLocked = false
@@ -130,7 +137,14 @@ import Cocoa
         func addEnv(_ key: String, _ value: String) {
             envPairs.append((key: Array(key.utf8CString), value: Array(value.utf8CString)))
         }
-        let launch = explicitLaunch ?? tabID.flatMap { Self.pendingLaunch.removeValue(forKey: $0) }
+        var launch = explicitLaunch ?? tabID.flatMap { Self.pendingLaunch.removeValue(forKey: $0) }
+        // A tab starts with its profile's shell, env and cwd (rules can only
+        // see the starting directory at this point).
+        if explicitLaunch == nil, tabID != nil,
+            let profile = RuleEngine.shared.launchProfile(cwd: launch?.cwd ?? workingDirectory)
+        {
+            launch = profile.launchSpec(merging: launch)
+        }
         // Boo's own variables always win over a launch spec's.
         for (key, value) in (launch?.env ?? [:]).sorted(by: { $0.key < $1.key }) where !key.hasPrefix("BOO_") {
             addEnv(key, value)
@@ -174,6 +188,7 @@ import Cocoa
             GhosttyRuntime.shared.registerSurface(s)
             // Start unfocused — only becomeFirstResponder sets focus
             ghostty_surface_set_focus(s, false)
+            if tabID != nil { RuleEngine.shared.register(self) }
         }
 
         // Schedule shell PID discovery on next run loop tick, after callbacks are wired
@@ -375,51 +390,20 @@ import Cocoa
         let rec = try SessionRecorder(
             url: url, columns: Int(grid.columns), rows: Int(grid.rows), title: title, idleTimeLimit: idleTimeLimit)
         recorder = rec
-        let token = Unmanaged.passRetained(rec).toOpaque()
-        recorderToken = token
         // The snapshot seeds the cast with the screen as it is now: apps that
         // redraw only changed cells (TUIs, spinners) would otherwise replay
         // as fragments on a blank grid.
-        ghostty_surface_set_output_callback(surface, Self.outputTap, Self.resizeTap, token, true)
-    }
-
-    /// Runs on Ghostty's io-reader thread. Declared nonisolated: a closure
-    /// written inside this @MainActor class inherits main-actor isolation and
-    /// Swift 6 traps on its executor check the first time the pty writes.
-    nonisolated private static let outputTap: ghostty_surface_output_cb = { userdata, bytes, len in
-        guard let userdata, let bytes, len > 0 else { return }
-        Unmanaged<SessionRecorder>.fromOpaque(userdata).takeUnretainedValue()
-            .append(bytes, count: Int(len))
-    }
-
-    /// Runs on Ghostty's io thread right after the terminal grid resizes,
-    /// in order with the output, so playback reflows exactly as it did live.
-    nonisolated private static let resizeTap: ghostty_surface_resize_cb = { userdata, columns, rows in
-        guard let userdata else { return }
-        Unmanaged<SessionRecorder>.fromOpaque(userdata).takeUnretainedValue()
-            .resized(columns: Int(columns), rows: Int(rows))
+        outputTap.add(rec, snapshot: true, surface: surface)
     }
 
     /// Removes the tap and closes the file; returns its URL.
     @discardableResult
     func stopRecording(completion: (@Sendable () -> Void)? = nil) -> URL? {
         guard let rec = recorder else { return nil }
-        Self.clearOutputTap(surface: surface, token: recorderToken)
-        recorderToken = nil
+        outputTap.remove(rec, surface: surface)
         recorder = nil
         rec.finish(completion: completion)
         return rec.url
-    }
-
-    /// Removes the tap and balances the token's retain. The setter takes the
-    /// terminal lock, so no callback is running once it returns.
-    @discardableResult
-    nonisolated private static func clearOutputTap(
-        surface: ghostty_surface_t?, token: UnsafeMutableRawPointer?
-    ) -> SessionRecorder? {
-        guard let token else { return nil }
-        if let surface { ghostty_surface_set_output_callback(surface, nil, nil, nil, false) }
-        return Unmanaged<SessionRecorder>.fromOpaque(token).takeRetainedValue()
     }
 
     /// Replays recorded bytes as if the pty had written them.
@@ -488,6 +472,10 @@ import Cocoa
     override func keyDown(with event: NSEvent) {
         guard let surface = surface, !isInputLocked else { return }
         if KeyTables.shared.intercept(event, in: self) { return }
+        if isHistorySearchKey(event) {
+            onHistorySearch?(self)
+            return
+        }
 
         let action: ghostty_input_action_e = event.isARepeat ? GHOSTTY_ACTION_REPEAT : GHOSTTY_ACTION_PRESS
         let translatedMods = ghostty_surface_key_translation_mods(surface, translateMods(event.modifierFlags))
@@ -616,6 +604,24 @@ import Cocoa
         _ = ghostty_surface_key(surface, key)
     }
 
+    /// ⌃R at a prompt of a shell with Boo integration, when the setting allows.
+    private func isHistorySearchKey(_ event: NSEvent) -> Bool {
+        guard atBooPrompt, onHistorySearch != nil, !hasMarkedText(),
+            event.keyCode == 0x0F,  // kVK_ANSI_R
+            event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .control
+        else { return false }
+        return AppSettings.shared.historySearchShortcutEnabled
+    }
+
+    /// Replaces the prompt's input line with `command` (as a paste, so a
+    /// multi-line command isn't run line by line); `run` presses Return.
+    func replacePromptLine(with command: String, run: Bool) {
+        sendKey(keyCode: 0x0E, mods: GHOSTTY_MODS_CTRL, text: "e")  // ⌃E: end of line
+        sendKey(keyCode: 0x20, mods: GHOSTTY_MODS_CTRL, text: "u")  // ⌃U: kill to start
+        sendText(command)
+        if run { sendKey(keyCode: 0x24, mods: GHOSTTY_MODS_NONE, text: "\r") }
+    }
+
     /// Send text as keyboard input, splitting on \r/\n to synthesize Enter key events.
     func sendRaw(_ text: String) {
         var buf = ""
@@ -708,6 +714,16 @@ import Cocoa
             return
         }
         window?.makeFirstResponder(self)
+        // ⌘-click opens a link or file:line under the pointer; ⌘⌥ uses the
+        // other link target (editor tab vs external editor).
+        if event.modifierFlags.contains(.command),
+            openLink(
+                at: convert(event.locationInWindow, from: nil),
+                otherTarget: event.modifierFlags.contains(.option))
+        {
+            swallowMouseUp = true
+            return
+        }
         guard let surface = surface else { return }
         updateMousePos(event)
         _ = ghostty_surface_mouse_button(
@@ -715,6 +731,10 @@ import Cocoa
     }
 
     override func mouseUp(with event: NSEvent) {
+        if swallowMouseUp {
+            swallowMouseUp = false
+            return
+        }
         guard let surface = surface else { return }
         updateMousePos(event)
         _ = ghostty_surface_mouse_button(
@@ -722,7 +742,15 @@ import Cocoa
     }
 
     override func mouseDragged(with event: NSEvent) { updateMousePos(event) }
-    override func mouseMoved(with event: NSEvent) { updateMousePos(event) }
+    override func mouseMoved(with event: NSEvent) {
+        updateMousePos(event)
+        // Ghostty shows the hand over URLs itself; file paths need ours.
+        if event.modifierFlags.contains(.command),
+            case .file = link(at: convert(event.locationInWindow, from: nil))?.kind
+        {
+            NSCursor.pointingHand.set()
+        }
+    }
 
     override func rightMouseDown(with event: NSEvent) {
         guard surface != nil else {
@@ -877,6 +905,21 @@ import Cocoa
         sendText(text)
     }
 
+    /// The terminal has echo turned off (a password prompt), per the pty's termios.
+    var isEchoOff: Bool {
+        guard let surface else { return false }
+        let name = ghostty_surface_tty_name(surface)
+        defer { ghostty_string_free(name) }
+        guard let ptr = name.ptr, name.len > 0 else { return false }
+        let path = String(decoding: UnsafeRawBufferPointer(start: ptr, count: Int(name.len)), as: UTF8.self)
+        let fd = open(path, O_RDONLY | O_NOCTTY | O_NONBLOCK)
+        guard fd >= 0 else { return false }
+        defer { close(fd) }
+        var attrs = termios()
+        guard tcgetattr(fd, &attrs) == 0 else { return false }
+        return attrs.c_lflag & tcflag_t(ECHO) == 0
+    }
+
     /// Read the visible viewport text (used by the Remote Control web mirror).
     /// Must be called on the main thread — surface access is not thread-safe.
     func readViewportText() -> String? {
@@ -898,6 +941,13 @@ import Cocoa
         guard ghostty_surface_read_selection(surface, &text) else { return nil }
         defer { ghostty_surface_free_text(surface, &text) }
         return string(from: text)
+    }
+
+    /// The selection, or else the last command's output; nil when both are empty.
+    func selectionOrLastOutput() -> (AgentHandoff.Source, String)? {
+        if let selection = readSelectionText(), !selection.isEmpty { return (.selection, selection) }
+        if let (source, output) = lastCommandOutput(), !output.isEmpty { return (source, output) }
+        return nil
     }
 
     /// Output of the last command run here: from the shell's OSC 133 marks
@@ -989,6 +1039,55 @@ import Cocoa
         guard fromTop >= 0 else { return nil }
         let row = Int(fromTop / cellHeight)
         return row < Int(rows) ? row : nil
+    }
+
+    /// Viewport column under a point in this view's coordinates.
+    func viewportColumn(at point: NSPoint) -> Int? {
+        guard let size = gridSize, size.cell_width_px > 0 else { return nil }
+        let scale = window?.backingScaleFactor ?? layer?.contentsScale ?? 2
+        let x = point.x - Self.gridPadding
+        guard x >= 0 else { return nil }
+        let column = Int(x / (CGFloat(size.cell_width_px) / scale))
+        return column < Int(size.columns) ? column : nil
+    }
+
+    /// The text of one viewport row.
+    func viewportLine(_ row: Int) -> String? {
+        guard let surface, let columns = gridSize?.columns, columns > 0 else { return nil }
+        let selection = ghostty_selection_s(
+            top_left: ghostty_point_s(
+                tag: GHOSTTY_POINT_VIEWPORT, coord: GHOSTTY_POINT_COORD_EXACT, x: 0, y: UInt32(row)),
+            bottom_right: ghostty_point_s(
+                tag: GHOSTTY_POINT_VIEWPORT, coord: GHOSTTY_POINT_COORD_EXACT, x: UInt32(columns - 1), y: UInt32(row)),
+            rectangle: false)
+        var text = ghostty_text_s()
+        guard ghostty_surface_read_text(surface, selection, &text) else { return nil }
+        defer { ghostty_surface_free_text(surface, &text) }
+        return string(from: text)
+    }
+
+    /// The link or file reference under a point, if any.
+    func link(at point: NSPoint) -> TerminalLink? {
+        guard let row = viewportRow(at: point), let column = viewportColumn(at: point),
+            let line = viewportLine(row)
+        else { return nil }
+        guard let index = LinkResolver.characterIndex(forColumn: column, in: line) else { return nil }
+        return LinkResolver.link(in: line, at: index)
+    }
+
+    /// Opens the link under `point`; false when there is none.
+    func openLink(at point: NSPoint, otherTarget: Bool) -> Bool {
+        guard let link = link(at: point) else { return false }
+        let location = tabID.flatMap { AgentInbox.locateInWindows($0) }
+        let tab = location.map { $0.pane.tabs[$0.tabIndex] }
+        let cwd = tab.map { $0.remoteSession != nil ? ($0.remoteWorkingDirectory ?? "") : $0.workingDirectory }
+        let origin = LinkOpener.Origin(
+            cwd: cwd?.isEmpty == false ? cwd : nil, remote: tab?.remoteSession,
+            controller: location?.controller ?? window?.windowController as? MainWindowController)
+        let profile = ProfileStore.shared.profile(named: tab?.state.profile)
+        let target = profile?.linkTarget ?? AppSettings.shared.defaultLinkTarget
+        LinkOpener.open(link.kind, from: origin, target: otherTarget ? target.other : target)
+        return true
     }
 
     /// The command typed at a prompt, or nil for an empty prompt.
@@ -1238,6 +1337,8 @@ import Cocoa
         }
         guard let surface = surface else { return }
         stopRecording()
+        if let tabID { RuleEngine.shared.unregister(tabID: tabID) }
+        outputTap.detach(surface: surface)
         self.surface = nil  // nil first to prevent callbacks reaching a freed surface
         GhosttyRuntime.shared.unregisterSurface(surface)
         ghostty_surface_free(surface)
@@ -1289,8 +1390,8 @@ import Cocoa
     deinit {
         let s = surface
         let dc = claimedDirectChild
-        Self.clearOutputTap(surface: s, token: recorderToken)?.finish()
-        recorderToken = nil
+        outputTap.detach(surface: s)
+        recorder?.finish()
         surface = nil
         claimedDirectChild = 0
         Task { @MainActor in

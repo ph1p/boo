@@ -54,6 +54,34 @@ enum AgentHandoff {
         return true
     }
 
+    /// Starts Claude Code in a split next to `sourceTab` with `text` as its
+    /// first message. The text goes through a temp file: it can be tens of
+    /// kilobytes, too long to type into the shell.
+    @MainActor @discardableResult
+    static func startAgent(with text: String, nextTo sourceTab: UUID) -> Bool {
+        guard let location = AgentInbox.locateInWindows(sourceTab) else { return false }
+        let file = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("boo-agent-\(UUID().uuidString).md")
+        do {
+            try text.write(to: file, atomically: true, encoding: .utf8)
+        } catch {
+            booLog(.error, .app, "[AgentHandoff] can't write prompt: \(error)")
+            return false
+        }
+        let path = MainWindowController.shellQuoted(file.path)
+        let command = "claude \"$(cat \(path); rm -f \(path))\""
+        let tab = location.pane.tabs[location.tabIndex]
+        // A remote tab's folder doesn't exist here; the split starts in the default.
+        let cwd = tab.remoteSession == nil ? workingDirectory(ofTab: sourceTab) : nil
+        return location.controller.splitPane(
+            location.pane.id, in: location.workspace, toward: .right, cwd: cwd, command: command) != nil
+    }
+
+    /// First message for an agent started from a failed command.
+    static func fixRequest(_ composed: String) -> String {
+        "This command failed. Find out why and fix it.\n\n" + composed
+    }
+
     // MARK: - Composing
 
     /// The block pasted into the agent: a one-line header and the text fenced.
@@ -76,8 +104,14 @@ enum AgentHandoff {
             header = "Output of `\(firstLine)`\(status)\(place):"
         }
         if truncated { header += " (end only, it was longer)" }
-        let fence = String(repeating: "`", count: max(3, longestBacktickRun(in: body) + 1))
-        return "\(header)\n\(fence)\n\(body)\n\(fence)\n"
+        return "\(header)\n\(fenced(body))"
+    }
+
+    /// `text` in a markdown code block whose fence is longer than any backtick
+    /// run inside, so pasted terminal text can't close it early.
+    static func fenced(_ text: String) -> String {
+        let fence = String(repeating: "`", count: max(3, longestBacktickRun(in: text) + 1))
+        return "\(fence)\n\(text)\n\(fence)\n"
     }
 
     private static func longestBacktickRun(in text: String) -> Int {
@@ -169,7 +203,10 @@ enum AgentHandoff {
     ///   its output is offered instead of the last command's.
     func menuItems(for view: GhosttyView, block: Int? = nil) -> [NSMenuItem] {
         let targets = AgentHandoff.targets(excluding: view.tabID)
-        guard !targets.isEmpty else { return [] }
+        guard !targets.isEmpty else {
+            if let block, let start = startAgentItem(for: view, block: block) { return [start] }
+            return []
+        }
         let cwd = view.tabID.flatMap(AgentHandoff.workingDirectory(ofTab:))
         var contexts: [(title: String, text: @MainActor () -> String?)] = []
         if let selection = view.readSelectionText(), !selection.isEmpty {
@@ -179,16 +216,7 @@ enum AgentHandoff {
         // Offered whenever a command ran; its output is read only if picked.
         if let block, let command = view.blockCommand(at: block) {
             contexts.append(
-                (
-                    "Send Output of “\(Self.short(command))”",
-                    { [weak view] in
-                        guard let view, let output = view.readCommand(index: block, part: .output), !output.isEmpty
-                        else { return nil }
-                        let source = AgentHandoff.Source.output(
-                            command: command, exitCode: view.exitCode(ofBlock: block, command: command))
-                        return AgentHandoff.compose(output, source: source, cwd: cwd)
-                    }
-                ))
+                ("Send Output of “\(Self.short(command))”", blockText(view, block: block, command: command)))
         } else if let command = view.lastCommand?.command {
             contexts.append(
                 (
@@ -199,6 +227,7 @@ enum AgentHandoff {
                     }
                 ))
         }
+        let start = block.flatMap { startAgentItem(for: view, block: $0) }
         return contexts.map { context in
             if targets.count == 1, let target = targets.first {
                 return item("\(context.title) to \(AgentHandoff.label(for: target))", context.text, target.tabID)
@@ -210,6 +239,53 @@ enum AgentHandoff {
             }
             parent.submenu = submenu
             return parent
+        } + (start.map { [$0] } ?? [])
+    }
+
+    /// The menu of a failed block's hover button: each agent, then a new one.
+    func failedBlockMenu(for view: GhosttyView, block: Int) -> NSMenu? {
+        guard let tabID = view.tabID, let command = view.blockCommand(at: block) else { return nil }
+        let menu = NSMenu()
+        let header = NSMenuItem(title: "Send “\(Self.short(command))” to", action: nil, keyEquivalent: "")
+        header.isEnabled = false
+        menu.addItem(header)
+        let text = blockText(view, block: block, command: command)
+        for target in AgentHandoff.targets(excluding: tabID) {
+            menu.addItem(item(AgentHandoff.label(for: target), text, target.tabID))
+        }
+        if menu.items.count > 1 { menu.addItem(.separator()) }
+        if let start = startAgentItem(for: view, block: block) { menu.addItem(start) }
+        return menu
+    }
+
+    /// "Fix with New Agent": only for failed blocks.
+    private func startAgentItem(for view: GhosttyView, block: Int) -> NSMenuItem? {
+        guard let tabID = view.tabID, let command = view.blockCommand(at: block),
+            let code = view.exitCode(ofBlock: block, command: command), code != 0
+        else { return nil }
+        let item = NSMenuItem(title: "Fix with New Claude Code Agent", action: #selector(start(_:)), keyEquivalent: "")
+        item.target = self
+        item.representedObject = Payload(text: blockText(view, block: block, command: command), tabID: tabID)
+        return item
+    }
+
+    @objc private func start(_ sender: NSMenuItem) {
+        guard let payload = sender.representedObject as? Payload, let text = payload.text(),
+            AgentHandoff.startAgent(with: AgentHandoff.fixRequest(text), nextTo: payload.tabID)
+        else {
+            NSSound.beep()
+            return
+        }
+    }
+
+    /// The block's output composed for an agent, read when picked.
+    private func blockText(_ view: GhosttyView, block: Int, command: String) -> @MainActor () -> String? {
+        let cwd = view.tabID.flatMap(AgentHandoff.workingDirectory(ofTab:))
+        return { [weak view] in
+            guard let view, let output = view.readCommand(index: block, part: .output) else { return nil }
+            let source = AgentHandoff.Source.output(
+                command: command, exitCode: view.exitCode(ofBlock: block, command: command))
+            return AgentHandoff.compose(output, source: source, cwd: cwd)
         }
     }
 

@@ -86,7 +86,10 @@ final class CommandPaletteController: NSObject, NSTextFieldDelegate, NSWindowDel
             NSSound.beep()
             return
         }
-        AppSettings.shared.paletteRecents = PaletteRanker.recording(item.id, in: AppSettings.shared.paletteRecents)
+        // History has its own recency; commands stay out of the settings plist.
+        if item.kind != .history {
+            AppSettings.shared.paletteRecents = PaletteRanker.recording(item.id, in: AppSettings.shared.paletteRecents)
+        }
         // The window takes key back first so responder-chain actions reach it.
         closing = true
         close(panel)
@@ -113,7 +116,7 @@ final class CommandPaletteController: NSObject, NSTextFieldDelegate, NSWindowDel
         separator.layer?.backgroundColor = theme.separator.cgColor
         field.textColor = theme.chromeText
         field.placeholderAttributedString = NSAttributedString(
-            string: "Search commands, workspaces, tabs, themes   > @ # :",
+            string: "Search commands, workspaces, tabs, themes   > @ # : !",
             attributes: [.foregroundColor: theme.textTertiary, .font: NSFont.systemFont(ofSize: 15)])
     }
 
@@ -220,6 +223,7 @@ final class CommandPaletteModel: ObservableObject {
     var onSelectionChanged: (() -> Void)?
 
     private var items: [PaletteItem] = []
+    private var historyLoaded = false
     private var recents: [String] = []
     nonisolated(unsafe) private var observer: NSObjectProtocol?
 
@@ -237,6 +241,7 @@ final class CommandPaletteModel: ObservableObject {
 
     func load(items: [PaletteItem], recents: [String]) {
         self.items = items
+        historyLoaded = false
         self.recents = recents
         theme = AppSettings.shared.theme
         query = ""
@@ -272,7 +277,12 @@ final class CommandPaletteModel: ObservableObject {
     }
 
     private func rerank() {
-        groups = PaletteRanker.rank(items, query: PaletteQuery(query), recents: recents)
+        let parsed = PaletteQuery(query)
+        if parsed.kind == .history, !historyLoaded {
+            historyLoaded = true
+            items += PaletteSources.history()
+        }
+        groups = PaletteRanker.rank(items, query: parsed, recents: recents)
         selection = 0
     }
 }

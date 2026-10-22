@@ -13,12 +13,19 @@ final class EditorContentView: NSView, ContentViewProtocol {
     private var currentTitle: String
     private var isDirty = false
     private var isReady = false  // Set when JS signals 'ready'
+    /// A line to jump to once the editor holds the file.
+    private var pendingReveal: (line: Int, column: Int)?
 
     // MARK: - Callbacks
 
     var onTitleChanged: ((String) -> Void)?
     var onFocused: (() -> Void)?
     var onCloseRequested: (() -> Void)?
+    /// Save on every (debounced) edit instead of waiting for ⌘S.
+    var autosave = false
+    /// Monaco options that win over the editor settings (e.g. a compact sidebar
+    /// editor without line numbers). Set before the editor loads.
+    var optionOverrides: [String: Any] = [:]
 
     var hasUnsavedChanges: Bool { isDirty }
     var fileDisplayName: String { filePath.map { ($0 as NSString).lastPathComponent } ?? "Untitled" }
@@ -159,13 +166,26 @@ final class EditorContentView: NSView, ContentViewProtocol {
 
         guard let jsonStr = jsonString(from: initData) else { return }
         debugLog("[Editor] Sending initial data to JS (\(initialContent.count) chars)")
-        webView?.evaluateJavaScript("initEditorFromJSON(\(jsonStr))") { _, error in
+        webView?.evaluateJavaScript("initEditorFromJSON(\(jsonStr))") { [weak self] _, error in
             if let error = error {
                 debugLog("[Editor] JS Init Error: \(error.localizedDescription)")
             } else {
                 debugLog("[Editor] Initial data sent successfully")
+                self?.applyPendingReveal()
             }
         }
+    }
+
+    /// Moves the cursor to `line`:`column` (1-based), now or once the editor is loaded.
+    func reveal(line: Int, column: Int = 1) {
+        pendingReveal = (max(1, line), max(1, column))
+        if isReady { applyPendingReveal() }
+    }
+
+    private func applyPendingReveal() {
+        guard let reveal = pendingReveal else { return }
+        pendingReveal = nil
+        webView?.evaluateJavaScript("revealPosition(\(reveal.line), \(reveal.column))")
     }
 
     private func getMonacoLanguage() -> String {
@@ -243,7 +263,7 @@ final class EditorContentView: NSView, ContentViewProtocol {
         } else {
             opts["rulers"] = [Int]()
         }
-        return opts
+        return opts.merging(optionOverrides) { _, override in override }
     }
 
     // MARK: - ContentViewProtocol
@@ -322,14 +342,37 @@ final class EditorContentView: NSView, ContentViewProtocol {
             }
             do {
                 try content.write(to: URL(fileURLWithPath: path), atomically: true, encoding: .utf8)
-                self.isDirty = false
-                self.updateTitle()
+                self.markClean(saved: content)
                 completion?(true)
             } catch {
                 debugLog("[Editor] Save failed: \(error.localizedDescription)")
                 completion?(false)
             }
         }
+    }
+
+    /// Clears dirty state in Swift and JS unless edits landed during the write.
+    private func markClean(saved: String) {
+        guard let data = try? JSONEncoder().encode(saved), let json = String(data: data, encoding: .utf8) else {
+            return
+        }
+        webView?.evaluateJavaScript("markClean(\(json))") { [weak self] result, _ in
+            guard let self, (result as? Bool) != false else { return }
+            self.isDirty = false
+            self.updateTitle()
+        }
+    }
+
+    /// Re-reads the file from disk into the editor (after an external write).
+    func reload() {
+        guard let path = filePath else { return }
+        loadContentFromDisk(path: path)
+        isDirty = false
+        updateTitle()
+        guard isReady, let data = try? JSONEncoder().encode(initialContent),
+            let json = String(data: data, encoding: .utf8)
+        else { return }
+        webView?.evaluateJavaScript("setContent(\(json))")
     }
 
     private func updateTitle() {
@@ -362,6 +405,8 @@ extension EditorContentView: WKScriptMessageHandler {
         case "dirty":
             isDirty = true
             updateTitle()
+        case "changed":
+            if autosave { saveFile() }
         case "focused":
             onFocused?()
         default:

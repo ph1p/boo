@@ -15,6 +15,11 @@ final class DockerService: ObservableObject, @unchecked Sendable {
         let ports: String
         /// Unix timestamp when the container was created, for uptime display.
         let createdAt: Date?
+        /// Compose labels, when started by `docker compose`.
+        var composeProject: String? = nil
+        var composeService: String? = nil
+        var composeWorkingDir: String? = nil
+        var composeConfigFiles: [String] = []
 
         enum ContainerState: String {
             case running
@@ -490,6 +495,39 @@ final class DockerService: ObservableObject, @unchecked Sendable {
             completion: completion)
     }
 
+    /// Runs `docker compose … <action>` in the background; `completion`
+    /// gets nil on success or the error text.
+    @MainActor func composeAction(
+        _ action: ComposeProject.Action, project: ComposeProject,
+        completion: @escaping @MainActor (String?) -> Void
+    ) {
+        guard let docker = dockerPath else {
+            completion("docker CLI not found")
+            return
+        }
+        let args = project.arguments(action)
+        let cwd = project.workingDir.flatMap { FileManager.default.fileExists(atPath: $0) ? $0 : nil }
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: docker)
+            process.arguments = args
+            if let cwd { process.currentDirectoryURL = URL(fileURLWithPath: cwd) }
+            // `up` may pull images.
+            let result = RemoteExplorer.runProcessCapturing(process, timeout: action == .up ? 600 : 120)
+            let error: String? =
+                switch result {
+                case nil: "docker compose \(action.rawValue) timed out"
+                case let r? where r.status != 0:
+                    r.stderr.split(separator: "\n").last.map(String.init) ?? "exit \(r.status)"
+                default: nil
+                }
+            DispatchQueue.main.async {
+                self?.refreshAll()
+                MainActor.assumeIsolated { completion(error) }
+            }
+        }
+    }
+
     /// Exec into a container — returns the command string to paste into terminal.
     func execCommand(for container: Container) -> String {
         "docker exec -it \(shellEscape(container.name)) sh\r"
@@ -554,7 +592,7 @@ final class DockerService: ObservableObject, @unchecked Sendable {
 
     // MARK: - JSON Parsing (socket API)
 
-    private static func parseContainersJSON(_ data: Data?) -> [Container] {
+    static func parseContainersJSON(_ data: Data?) -> [Container] {
         guard let data = data else { return [] }
         guard
             let json = try? JSONSerialization.jsonObject(with: data)
@@ -582,6 +620,7 @@ final class DockerService: ObservableObject, @unchecked Sendable {
                 createdAt = nil
             }
 
+            let labels = obj["Labels"] as? [String: String] ?? [:]
             return Container(
                 id: String(id.prefix(12)),
                 name: name,
@@ -589,7 +628,13 @@ final class DockerService: ObservableObject, @unchecked Sendable {
                 status: status,
                 state: state,
                 ports: ports,
-                createdAt: createdAt
+                createdAt: createdAt,
+                composeProject: labels[ComposeGrouping.projectLabel].flatMap { $0.isEmpty ? nil : $0 },
+                composeService: labels[ComposeGrouping.serviceLabel],
+                composeWorkingDir: labels[ComposeGrouping.workingDirLabel],
+                composeConfigFiles: labels[ComposeGrouping.configFilesLabel].map {
+                    $0.split(separator: ",").map { String($0).trimmingCharacters(in: .whitespaces) }
+                } ?? []
             )
         }
     }

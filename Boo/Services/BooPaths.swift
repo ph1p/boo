@@ -87,6 +87,25 @@ enum BooPaths {
     /// Leader-key tables: ~/.boo/keytables.json (absent = off).
     static let keyTablesFile = (configDir as NSString).appendingPathComponent("keytables.json")
 
+    /// Context and output rules: ~/.boo/rules.json (absent = no rules).
+    static let rulesFile = (configDir as NSString).appendingPathComponent("rules.json")
+
+    /// Terminal profiles: ~/.boo/profiles.json (absent = none).
+    static let profilesFile = (configDir as NSString).appendingPathComponent("profiles.json")
+
+    /// Command history database: ~/.boo/history.db
+    static let historyDB = (configDir as NSString).appendingPathComponent("history.db")
+
+    /// Workspace notes: ~/.boo/notes/
+    static let notesDir: String = {
+        let path = (configDir as NSString).appendingPathComponent("notes")
+        try? FileManager.default.createDirectory(atPath: path, withIntermediateDirectories: true)
+        return path
+    }()
+
+    /// Hashes of the files at the last sync: ~/.boo/sync-state.json
+    static let syncStateFile = (configDir as NSString).appendingPathComponent("sync-state.json")
+
     /// Workspace recipes: ~/.boo/recipes/
     static let recipesDir: String = {
         let path = (configDir as NSString).appendingPathComponent("recipes")

@@ -28,6 +28,28 @@ struct SidebarSection: Identifiable {
     /// Monotonic generation counter. `updateContentView` is skipped when generation matches.
     let generation: UInt64
 
+    /// `identity` names the content's view state. The host swaps `content` into
+    /// the existing hosting view, which keeps SwiftUI `@State`/`@StateObject`; when
+    /// the identity changes, the content starts over with fresh state instead (a
+    /// note panel switching to another workspace's note). Nil keeps state across
+    /// swaps. A new identity also counts as a new generation.
+    init(
+        id: String, name: String, icon: String, content: AnyView, prefersOuterScrollView: Bool,
+        generation: UInt64, identity: String? = nil
+    ) {
+        self.id = id
+        self.name = name
+        self.icon = icon
+        self.prefersOuterScrollView = prefersOuterScrollView
+        if let identity {
+            self.content = AnyView(content.id(identity))
+            self.generation = Self.generation(for: [String(generation), identity])
+        } else {
+            self.content = content
+            self.generation = generation
+        }
+    }
+
     /// Generation derived from a section's row identities.
     ///
     /// Plugins must not use a plain row count here: `updateContentView` is skipped

@@ -246,6 +246,11 @@ enum SettingsTopic: String, CaseIterable {
     case plugins  // disabled plugins, default enabled plugins, plugin settings
     case editor  // editor font size, font family
     case notifications  // activity notifications
+    case profiles  // default profile, shader
+    case links  // link target, external editor
+    case history  // command history
+    case sync  // sync folder
+    case agents  // agent budgets
 }
 
 final class AppSettings {
@@ -273,6 +278,7 @@ final class AppSettings {
         static let statusBarShowGitBranch = "statusBarShowGitBranch"  // legacy, migrated to plugin settings
         static let statusBarShowTime = "statusBarShowTime"
         static let statusBarShowPaneInfo = "statusBarShowPaneInfo"
+        static let statusBarShowPorts = "statusBarShowPorts"
         static let statusBarShowShell = "statusBarShowShell"
         static let statusBarShowConnection = "statusBarShowConnection"
         static let debugLogging = "debugLogging"
@@ -288,8 +294,23 @@ final class AppSettings {
         static let quickTerminalHotkey = "quickTerminalHotkey"
         static let quickTerminalHeight = "quickTerminalHeight"
         static let quickTerminalHideOnResign = "quickTerminalHideOnResign"
+        static let defaultProfile = "defaultProfile"
+        static let terminalShader = "terminalShader"
+        static let defaultLinkTarget = "defaultLinkTarget"
+        static let externalEditorPreset = "externalEditorPreset"
+        static let externalEditorTemplate = "externalEditorTemplate"
+        static let historyEnabled = "historyEnabled"
+        static let historyIgnorePattern = "historyIgnorePattern"
+        static let historyRetentionDays = "historyRetentionDays"
+        static let historySearchShortcutEnabled = "historySearchShortcutEnabled"
+        static let syncFolder = "syncFolder"
+        static let agentBudgetPerTask = "agentBudgetPerTask"
+        static let agentBudgetPerDay = "agentBudgetPerDay"
+        static let portNotificationsEnabled = "portNotificationsEnabled"
+        static let errorAgentButtonEnabled = "errorAgentButtonEnabled"
         static let pluginSettings = "pluginSettings"
         static let migratedPluginSettings_v1 = "migratedPluginSettings_v1"
+        static let defaultOffPluginsApplied = "defaultOffPluginsApplied"
         static let fileEditorCommand = "fileEditorCommand"
 
         static let sidebarDefaultHidden = "sidebarDefaultHidden"
@@ -395,6 +416,14 @@ final class AppSettings {
     /// cleared (nil) when the editor saves or cancels.
     var previewTheme: TerminalTheme? {
         didSet { notify(topic: .theme) }
+    }
+
+    /// A built-in or custom theme by name; nil when none has that name.
+    func theme(named name: String) -> TerminalTheme? {
+        if let t = Self.builtInThemesByName[name] { return t }
+        let data = UserDefaults.standard.data(forKey: K.customThemes)
+        let decoded = data.flatMap { try? JSONDecoder().decode([CustomThemeData].self, from: $0) } ?? []
+        return decoded.first(where: { $0.name == name })?.toTheme()
     }
 
     var theme: TerminalTheme {
@@ -579,6 +608,12 @@ final class AppSettings {
         set { set(newValue, forKey: K.statusBarShowPaneInfo, topic: .statusBar) }
     }
 
+    /// Listening ports of the active workspace's processes.
+    var statusBarShowPorts: Bool {
+        get { bool(K.statusBarShowPorts, default: true) }
+        set { set(newValue, forKey: K.statusBarShowPorts, topic: .statusBar) }
+    }
+
     var statusBarShowShell: Bool {
         get { bool(K.statusBarShowShell, default: false) }
         set { set(newValue, forKey: K.statusBarShowShell, topic: .statusBar) }
@@ -675,6 +710,162 @@ final class AppSettings {
     var quickTerminalHideOnResign: Bool {
         get { bool(K.quickTerminalHideOnResign, default: true) }
         set { set(newValue, forKey: K.quickTerminalHideOnResign) }
+    }
+
+    // MARK: - Profiles
+
+    /// Profile applied to tabs no rule or override picks; nil = plain settings.
+    var defaultProfile: String? {
+        get { UserDefaults.standard.string(forKey: K.defaultProfile).flatMap { $0.isEmpty ? nil : $0 } }
+        set { set(newValue ?? "", forKey: K.defaultProfile, topic: .profiles) }
+    }
+
+    /// Global terminal shader: a preset name, a GLSL file path, or "" for none.
+    var terminalShader: String {
+        get { UserDefaults.standard.string(forKey: K.terminalShader) ?? "" }
+        set { set(newValue, forKey: K.terminalShader, topic: .terminal) }
+    }
+
+    // MARK: - Links
+
+    /// Where ⌘-clicked `file:line` links open; ⌘⌥-click uses the other one.
+    var defaultLinkTarget: LinkTarget {
+        get { UserDefaults.standard.string(forKey: K.defaultLinkTarget).flatMap(LinkTarget.init) ?? .monaco }
+        set { set(newValue.rawValue, forKey: K.defaultLinkTarget, topic: .links) }
+    }
+
+    var externalEditorPreset: ExternalEditorPreset {
+        get {
+            UserDefaults.standard.string(forKey: K.externalEditorPreset).flatMap(ExternalEditorPreset.init)
+                ?? .vscode
+        }
+        set { set(newValue.rawValue, forKey: K.externalEditorPreset, topic: .links) }
+    }
+
+    /// Template for `.custom`: `{path}`, `{line}`, `{col}`; a URL or a shell command.
+    var externalEditorTemplate: String {
+        get { UserDefaults.standard.string(forKey: K.externalEditorTemplate) ?? "" }
+        set { set(newValue, forKey: K.externalEditorTemplate, topic: .links) }
+    }
+
+    // MARK: - History
+
+    var historyEnabled: Bool {
+        get { bool(K.historyEnabled, default: true) }
+        set { set(newValue, forKey: K.historyEnabled, topic: .history) }
+    }
+
+    static let defaultHistoryIgnorePattern = #"^\s|(?i)(token|secret|password|passwd|api_key|apikey)="#
+
+    /// Commands matching this regex aren't recorded.
+    var historyIgnorePattern: String {
+        get { UserDefaults.standard.string(forKey: K.historyIgnorePattern) ?? Self.defaultHistoryIgnorePattern }
+        set { set(newValue, forKey: K.historyIgnorePattern, topic: .history) }
+    }
+
+    /// Entries older than this are pruned; 0 keeps everything.
+    var historyRetentionDays: Int {
+        get {
+            UserDefaults.standard.object(forKey: K.historyRetentionDays) == nil
+                ? 365 : UserDefaults.standard.integer(forKey: K.historyRetentionDays)
+        }
+        set { set(max(0, newValue), forKey: K.historyRetentionDays, topic: .history) }
+    }
+
+    /// ⌃R opens Boo's history search in shells with Boo integration.
+    var historySearchShortcutEnabled: Bool {
+        get { bool(K.historySearchShortcutEnabled, default: true) }
+        set { set(newValue, forKey: K.historySearchShortcutEnabled, topic: .history) }
+    }
+
+    // MARK: - Sync
+
+    /// Folder (e.g. in iCloud Drive) mirrored with `~/.boo`; "" = off.
+    var syncFolder: String {
+        get { UserDefaults.standard.string(forKey: K.syncFolder) ?? "" }
+        set { set(newValue, forKey: K.syncFolder, topic: .sync) }
+    }
+
+    /// Keys mirrored to the sync folder. Left out: machine paths (default
+    /// folder, recordings folder, editor commands), per-machine layout and
+    /// state, the sync folder itself and security decisions.
+    static let syncedKeys: [String] = [
+        K.themeName, K.autoTheme, K.darkThemeName, K.lightThemeName, K.cursorStyle, K.fontSize, K.fontName,
+        K.statusBarShowPath, K.statusBarShowTime, K.statusBarShowPaneInfo, K.statusBarShowPorts,
+        K.statusBarShowShell, K.statusBarShowConnection, K.sidebarPosition, K.workspaceBarPosition,
+        K.sidebarDefaultHidden, K.tabOverflowMode, K.defaultTabType, K.autoDetectContentType, K.browserHomePage,
+        K.browserConfirmClose, K.linkOpenMode, K.disabledPluginIDs, K.sidebarPluginOrder, K.pluginSettings,
+        K.sidebarFontSize, K.sidebarFontName, K.sidebarTabBarPosition, K.autoColorWorkspaces,
+        K.openWorkspaceEditorOnCreate, K.openGroupEditorOnCreate, K.newTabsJoinActiveGroup,
+        K.paneControlsVisibility, K.highlightRecordingPane, K.recordingStopAction, K.recordingFileNameTemplate,
+        K.recordingIdleTimeLimit, K.editorFontSize, K.editorFontName, K.editorTabSize, K.editorInsertSpaces,
+        K.editorWordWrap, K.editorLineNumbers, K.editorMinimap, K.editorFormatOnSave, K.editorRulerColumn,
+        K.quickTerminalEnabled, K.quickTerminalHotkey, K.quickTerminalHeight, K.quickTerminalHideOnResign,
+        K.defaultProfile, K.terminalShader, K.defaultLinkTarget, K.externalEditorPreset, K.historyEnabled,
+        K.historyIgnorePattern, K.historyRetentionDays, K.historySearchShortcutEnabled, K.agentBudgetPerTask,
+        K.agentBudgetPerDay, K.portNotificationsEnabled, K.errorAgentButtonEnabled
+    ]
+
+    static let syncedCustomThemesKey = "customThemes"
+
+    /// The synced subset of the settings, plus custom themes, as JSON values.
+    func syncSnapshot() -> [String: Any] {
+        let all = fileDictionary()
+        var dict: [String: Any] = [:]
+        for key in Self.syncedKeys { dict[key] = all[key] }
+        if let data = UserDefaults.standard.data(forKey: K.customThemes),
+            let themes = try? JSONSerialization.jsonObject(with: data)
+        {
+            dict[Self.syncedCustomThemesKey] = themes
+        }
+        return dict
+    }
+
+    /// Applies a snapshot pulled from the sync folder. Unknown keys are ignored.
+    func applySyncSnapshot(_ dict: [String: Any]) {
+        for key in Self.syncedKeys {
+            if let value = dict[key] { UserDefaults.standard.set(value, forKey: key) }
+        }
+        if let themes = dict[Self.syncedCustomThemesKey],
+            let data = try? JSONSerialization.data(withJSONObject: themes)
+        {
+            UserDefaults.standard.set(data, forKey: K.customThemes)
+        }
+        _disabledPluginIDsSet = nil
+        saveToFile()
+        notify()
+        if autoTheme { DispatchQueue.main.async { AppSettings.shared.applySystemAppearance() } }
+    }
+
+    // MARK: - Agents
+
+    /// Warn when one agent task's estimated cost passes this (USD); nil = off.
+    var agentBudgetPerTask: Double? {
+        get { positiveDouble(K.agentBudgetPerTask) }
+        set { set(newValue ?? 0, forKey: K.agentBudgetPerTask, topic: .agents) }
+    }
+
+    /// Warn when today's estimated agent cost passes this (USD); nil = off.
+    var agentBudgetPerDay: Double? {
+        get { positiveDouble(K.agentBudgetPerDay) }
+        set { set(newValue ?? 0, forKey: K.agentBudgetPerDay, topic: .agents) }
+    }
+
+    private func positiveDouble(_ key: String) -> Double? {
+        let v = UserDefaults.standard.double(forKey: key)
+        return v > 0 ? v : nil
+    }
+
+    /// Notify when a process in the active workspace starts listening on a port.
+    var portNotificationsEnabled: Bool {
+        get { bool(K.portNotificationsEnabled, default: true) }
+        set { set(newValue, forKey: K.portNotificationsEnabled, topic: .notifications) }
+    }
+
+    /// Hover button on failed command blocks that sends them to an agent.
+    var errorAgentButtonEnabled: Bool {
+        get { bool(K.errorAgentButtonEnabled, default: true) }
+        set { set(newValue, forKey: K.errorAgentButtonEnabled, topic: .agents) }
     }
 
     /// When true, the sidebar starts hidden in new windows.
@@ -1234,7 +1425,8 @@ final class AppSettings {
 
     // MARK: - File Persistence (~/.boo/settings.json)
 
-    private func saveToFile() {
+    /// Everything `settings.json` holds, as stored in UserDefaults.
+    private func fileDictionary() -> [String: Any] {
         var dict: [String: Any] = [
             K.themeName: themeName,
             K.autoTheme: autoTheme,
@@ -1247,6 +1439,7 @@ final class AppSettings {
             K.statusBarShowPath: statusBarShowPath,
             K.statusBarShowTime: statusBarShowTime,
             K.statusBarShowPaneInfo: statusBarShowPaneInfo,
+            K.statusBarShowPorts: statusBarShowPorts,
             K.statusBarShowShell: statusBarShowShell,
             K.statusBarShowConnection: statusBarShowConnection,
             K.sidebarPosition: sidebarPosition.rawValue,
@@ -1293,13 +1486,32 @@ final class AppSettings {
             K.quickTerminalEnabled: quickTerminalEnabled,
             K.quickTerminalHotkey: quickTerminalHotkey,
             K.quickTerminalHeight: quickTerminalHeight,
-            K.quickTerminalHideOnResign: quickTerminalHideOnResign
+            K.quickTerminalHideOnResign: quickTerminalHideOnResign,
+            K.defaultProfile: defaultProfile ?? "",
+            K.terminalShader: terminalShader,
+            K.defaultLinkTarget: defaultLinkTarget.rawValue,
+            K.externalEditorPreset: externalEditorPreset.rawValue,
+            K.externalEditorTemplate: externalEditorTemplate,
+            K.historyEnabled: historyEnabled,
+            K.historyIgnorePattern: historyIgnorePattern,
+            K.historyRetentionDays: historyRetentionDays,
+            K.historySearchShortcutEnabled: historySearchShortcutEnabled,
+            K.syncFolder: syncFolder,
+            K.agentBudgetPerTask: agentBudgetPerTask ?? 0,
+            K.agentBudgetPerDay: agentBudgetPerDay ?? 0,
+            K.portNotificationsEnabled: portNotificationsEnabled,
+            K.errorAgentButtonEnabled: errorAgentButtonEnabled
         ]
         if let sshControlMasterApproved {
             dict[K.sshControlMasterApproved] = sshControlMasterApproved
         }
+        return dict
+    }
+
+    private func saveToFile() {
         do {
-            let data = try JSONSerialization.data(withJSONObject: dict, options: [.prettyPrinted, .sortedKeys])
+            let data = try JSONSerialization.data(
+                withJSONObject: fileDictionary(), options: [.prettyPrinted, .sortedKeys])
             try data.write(to: URL(fileURLWithPath: BooPaths.settingsFile))
         } catch {
             debugLog("[Settings] Failed to save: \(error)")
@@ -1333,6 +1545,24 @@ final class AppSettings {
         // Ensure the config directory exists
         _ = BooPaths.configDir
         migratePluginSettings()
+        applyDefaultOffPlugins()
+    }
+
+    /// Built-in plugins that start disabled. Each is disabled once, so a
+    /// user who enables one keeps it enabled.
+    static let defaultOffPluginIDs = ["kube"]
+
+    private func applyDefaultOffPlugins() {
+        let applied = Set(UserDefaults.standard.stringArray(forKey: K.defaultOffPluginsApplied) ?? [])
+        let pending = Self.defaultOffPluginIDs.filter { !applied.contains($0) }
+        guard !pending.isEmpty else { return }
+        var disabled = disabledPluginIDs
+        for id in pending where !disabled.contains(id) { disabled.append(id) }
+        // Still inside init: no change notification (observers would re-enter `shared`).
+        UserDefaults.standard.set(disabled, forKey: K.disabledPluginIDs)
+        _disabledPluginIDsSet = nil
+        UserDefaults.standard.set(Array(applied) + pending, forKey: K.defaultOffPluginsApplied)
+        saveToFile()
     }
 
     private func migratePluginSettings() {

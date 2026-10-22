@@ -77,6 +77,7 @@ extension MainWindowController {
         fullscreenAlt.keyEquivalentModifierMask = [.command, .control]
         fullscreenAlt.isAlternate = true
         viewMenu.addItem(fullscreenAlt)
+        viewMenu.addItem(withTitle: "Reload Shaders", action: #selector(reloadShadersAction(_:)), keyEquivalent: "")
         // Browser items have no target: they resolve to the focused
         // BrowserContentView through the responder chain and stay disabled
         // otherwise. ⌘[ / ⌘] already focus panes, so Back/Forward stay unbound.
@@ -193,6 +194,10 @@ extension MainWindowController {
         handoff.keyEquivalentModifierMask = [.command, .option]
         handoff.toolTip = "Paste the selection, or the last command's output, into the nearest coding agent's prompt"
         termMenu.addItem(handoff)
+        let appendNote = NSMenuItem(
+            title: "Append Selection to Note", action: #selector(appendSelectionToNoteAction(_:)), keyEquivalent: "")
+        appendNote.toolTip = "Append the selection, or the last command's output, to this workspace's note"
+        termMenu.addItem(appendNote)
         let broadcastItem = NSMenuItem(title: "Broadcast Input to", action: nil, keyEquivalent: "")
         let broadcastMenu = NSMenu(title: "Broadcast Input to")
         broadcastMenu.addItem(

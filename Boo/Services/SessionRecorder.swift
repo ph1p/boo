@@ -108,7 +108,7 @@ struct UTF8Carry {
 
 /// Writes one terminal's pty output to an asciicast file. Output arrives on
 /// Ghostty's read thread; everything after `append` runs on a serial queue.
-final class SessionRecorder: @unchecked Sendable {
+final class SessionRecorder: OutputTapSubscriber, @unchecked Sendable {
     let url: URL
     let startDate = Date()
     private let queue = DispatchQueue(label: "boo.session-recorder")
@@ -143,8 +143,8 @@ final class SessionRecorder: @unchecked Sendable {
     }
 
     /// Called from Ghostty's read thread with the terminal locked: copy and return.
-    func append(_ bytes: UnsafePointer<UInt8>, count: Int) {
-        let copy = Array(UnsafeBufferPointer(start: bytes, count: count))
+    func tapOutput(_ bytes: UnsafeBufferPointer<UInt8>) {
+        let copy = Array(bytes)
         let now = DispatchTime.now().uptimeNanoseconds
         queue.async { [self] in
             guard !closed else { return }
@@ -155,7 +155,7 @@ final class SessionRecorder: @unchecked Sendable {
     }
 
     /// Called from Ghostty's io thread with the terminal locked, after the grid changed.
-    func resized(columns: Int, rows: Int) {
+    func tapResized(columns: Int, rows: Int) {
         let now = DispatchTime.now().uptimeNanoseconds
         queue.async { [self] in
             guard !closed, columns > 0, rows > 0, grid != (columns, rows) else { return }

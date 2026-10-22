@@ -108,6 +108,9 @@ final class WindowManager {
     }
 
     private func show(_ controller: MainWindowController, fullScreen: Bool) {
+        // Without a first responder, ordering front focuses the first key view
+        // (the explorer filter field), which wakes macOS AutoFill's empty panel.
+        if let paneID = controller.activeWorkspace?.activePaneID { controller.paneViews[paneID]?.focusActiveView() }
         controller.showWindow(nil)
         controller.window?.makeKeyAndOrderFront(nil)
         if fullScreen, controller.window?.styleMask.contains(.fullScreen) == false {

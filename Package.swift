@@ -109,7 +109,8 @@ let allTargets: [Target] = [
             .copy("Resources/Images"),
             .copy("Resources/MonacoBundle"),
             .copy("Resources/Orchestrator"),
-            .copy("Resources/RemoteControl")
+            .copy("Resources/RemoteControl"),
+            .copy("Resources/Shaders")
         ],
         linkerSettings: booLibLinkerSettings
     ),

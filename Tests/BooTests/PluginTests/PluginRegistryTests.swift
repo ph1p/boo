@@ -40,6 +40,9 @@ final class PluginRegistryTests: XCTestCase {
             "agents",
             "docker",
             "bookmarks",
+            "hosts",
+            "kube",
+            "notes",
             "snippets",
             "system-info",
             "debug"
@@ -54,8 +57,9 @@ final class PluginRegistryTests: XCTestCase {
     func testUnregister() {
         let registry = PluginRegistry()
         registry.registerBuiltins()
+        let count = registry.plugins.count
         registry.unregister(pluginID: "docker")
-        XCTAssertEqual(registry.plugins.count, 8)
+        XCTAssertEqual(registry.plugins.count, count - 1)
         XCTAssertNil(registry.plugin(for: "docker"))
     }
 

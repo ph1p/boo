@@ -60,6 +60,11 @@ final class PluginActions {
     }
 
     func copy(_ text: String) {
+        Self.copyToPasteboard(text)
+    }
+
+    /// Puts `text` on the general pasteboard; toasts when that fails.
+    static func copyToPasteboard(_ text: String) {
         NSPasteboard.general.clearContents()
         if !NSPasteboard.general.setString(text, forType: .string) {
             BooAlert.showTransient("Could not copy to clipboard")

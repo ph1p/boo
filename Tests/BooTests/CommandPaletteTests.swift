@@ -76,6 +76,19 @@ final class CommandPaletteTests: XCTestCase {
         XCTAssertEqual(groups.map(\.kind), [.theme])
     }
 
+    func testSSHPrefixSelectsHosts() {
+        XCTAssertEqual(PaletteQuery("@ssh web"), PaletteQuery(kind: .host, text: "web"))
+        XCTAssertEqual(PaletteQuery("@ssh"), PaletteQuery(kind: .host, text: ""))
+        XCTAssertEqual(PaletteQuery("@sshd"), PaletteQuery(kind: .workspace, text: "sshd"))
+    }
+
+    func testHistoryOnlyWithBangPrefix() {
+        XCTAssertEqual(PaletteQuery("! git"), PaletteQuery(kind: .history, text: "git"))
+        let items = [item(.action, "Git Pull"), item(.history, "git pull --rebase")]
+        XCTAssertEqual(PaletteRanker.rank(items, query: PaletteQuery("git"), recents: []).map(\.kind), [.action])
+        XCTAssertEqual(PaletteRanker.rank(items, query: PaletteQuery("!git"), recents: []).map(\.kind), [.history])
+    }
+
     func testRecordingMovesToFrontAndCaps() {
         let full = (0..<PaletteRanker.recentLimit).map { "id\($0)" }
         let recorded = PaletteRanker.recording("id7", in: full)

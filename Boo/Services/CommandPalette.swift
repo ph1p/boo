@@ -4,7 +4,7 @@ import Cocoa
 @MainActor
 struct PaletteItem: Identifiable {
     enum Kind: Int, CaseIterable {
-        case action, workspace, tab, bookmark, theme, recipe
+        case action, workspace, tab, bookmark, host, theme, profile, recipe, history
 
         var title: String {
             switch self {
@@ -12,8 +12,11 @@ struct PaletteItem: Identifiable {
             case .workspace: return "Workspaces"
             case .tab: return "Tabs"
             case .bookmark: return "Bookmarks"
+            case .host: return "SSH Hosts"
             case .theme: return "Themes"
+            case .profile: return "Profiles"
             case .recipe: return "Recipes"
+            case .history: return "History"
             }
         }
     }
@@ -40,10 +43,20 @@ struct PaletteQuery: Equatable {
         self.text = text
     }
 
-    /// `>` actions, `@` workspaces, `#` tabs, `:` themes.
+    /// `>` actions, `@` workspaces, `@ssh` hosts, `#` tabs, `:` themes and
+    /// profiles, `!` history.
     init(_ raw: String) {
         let trimmed = raw.trimmingCharacters(in: .whitespaces)
-        let prefixes: [Character: PaletteItem.Kind] = [">": .action, "@": .workspace, "#": .tab, ":": .theme]
+        if trimmed.lowercased().hasPrefix("@ssh"),
+            trimmed.count == 4 || trimmed.dropFirst(4).first?.isWhitespace == true
+        {
+            kind = .host
+            text = String(trimmed.dropFirst(4)).trimmingCharacters(in: .whitespaces)
+            return
+        }
+        let prefixes: [Character: PaletteItem.Kind] = [
+            ">": .action, "@": .workspace, "#": .tab, ":": .theme, "!": .history
+        ]
         if let first = trimmed.first, let kind = prefixes[first] {
             self.kind = kind
             text = String(trimmed.dropFirst()).trimmingCharacters(in: .whitespaces)
@@ -104,7 +117,12 @@ enum PaletteRanker {
     static func rank(_ items: [PaletteItem], query: PaletteQuery, recents: [String]) -> [Group] {
         let recentRank = Dictionary(recents.enumerated().map { ($1, $0) }, uniquingKeysWith: { a, _ in a })
         var scored: [PaletteItem.Kind: [(item: PaletteItem, score: Int)]] = [:]
-        for item in items where query.kind == nil || item.kind == query.kind {
+        for item in items
+        where query.kind == nil || item.kind == query.kind
+            || (query.kind == .theme && item.kind == .profile)
+        {
+            // Commands would drown everything else; only `!` lists them.
+            if item.kind == .history && query.kind != .history { continue }
             let haystack = item.subtitle.isEmpty ? item.title : "\(item.title) \(item.subtitle)"
             guard let match = FuzzyMatcher.score(query.text, item.title) ?? FuzzyMatcher.score(query.text, haystack)
             else { continue }
@@ -134,7 +152,9 @@ enum PaletteRanker {
 @MainActor
 enum PaletteSources {
     static func items(menu: NSMenu? = NSApplication.shared.mainMenu) -> [PaletteItem] {
-        actions(menu: menu) + workspaces() + tabs() + bookmarks() + themes() + RecipesMenu.paletteItems()
+        let places = workspaces() + tabs() + bookmarks() + hosts()
+        let looks = themes() + profiles()
+        return actions(menu: menu) + places + looks + RecipesMenu.paletteItems()
     }
 
     static func actions(menu: NSMenu?) -> [PaletteItem] {
@@ -215,6 +235,55 @@ enum PaletteSources {
                     AppSettings.shared.themeName = theme.name
                 },
                 preview: { AppSettings.shared.previewTheme = theme })
+        }
+    }
+
+    /// Profiles for the focused terminal tab; "Auto" hands it back to the rules.
+    static func profiles() -> [PaletteItem] {
+        guard let controller = WindowManager.shared.activeController,
+            let workspace = controller.activeWorkspace,
+            let tab = workspace.pane(for: workspace.activePaneID)?.activeTab, tab.contentType == .terminal
+        else { return [] }
+        let names = ProfileStore.shared.names
+        guard !names.isEmpty else { return [] }
+        let override = tab.state.profileOverride
+        let tabID = tab.id
+        let auto = PaletteItem(
+            id: "profile:", kind: .profile, title: "Auto",
+            subtitle: override == nil ? "profile · current" : "profile · from rules",
+            perform: { RuleEngine.shared.setProfileOverride(nil, tabID: tabID) })
+        return [auto]
+            + names.map { name in
+                PaletteItem(
+                    id: "profile:\(name)", kind: .profile, title: name,
+                    subtitle: override == name ? "profile · current" : "profile",
+                    perform: { RuleEngine.shared.setProfileOverride(name, tabID: tabID) })
+            }
+    }
+
+    static func hosts() -> [PaletteItem] {
+        let store = HostsStore.shared
+        store.start()
+        return store.hosts.map { host in
+            PaletteItem(
+                id: "host:\(host.alias)", kind: .host, title: host.alias,
+                subtitle: host.address == host.alias ? "" : host.address,
+                perform: { store.connect(host, split: false) })
+        }
+    }
+
+    /// Recent distinct commands; picking one puts it on the focused prompt.
+    /// Loaded only once the query switches to `!`.
+    static func history() -> [PaletteItem] {
+        guard AppSettings.shared.historyEnabled,
+            let terminal = WindowManager.shared.activeController?.focusedGhosttyView
+        else { return [] }
+        return HistoryStore.shared.searchSync(HistoryFilter(), limit: 300).map { entry in
+            PaletteItem(
+                id: "history:\(entry.command)", kind: .history,
+                title: entry.command.replacingOccurrences(of: "\n", with: " ⏎ "),
+                subtitle: abbreviate(entry.cwd),
+                perform: { [weak terminal] in terminal?.replacePromptLine(with: entry.command, run: false) })
         }
     }
 

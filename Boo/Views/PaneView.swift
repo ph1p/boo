@@ -768,6 +768,18 @@ class PaneView: NSView {
             self.paneDelegate?.paneView(self, commandEnded: exitCode, paneID: self.paneID, tabID: tabID)
         }
 
+        gv.onHistorySearch = { [weak self, tabID = gv.tabID] view in
+            guard let self, let tab = self.pane.tabs.first(where: { $0.id == tabID }) else { return }
+            let controller = self.window?.windowController as? MainWindowController
+            HistorySearchController.shared.open(
+                for: view,
+                context: HistorySearchContext(
+                    workspaceID: controller?.appState.workspaceContainingPane(self.paneID)?.id,
+                    host: tab.remoteSession.map(\.displayName),
+                    cwd: tab.remoteSession != nil
+                        ? (tab.remoteWorkingDirectory ?? tab.workingDirectory) : tab.workingDirectory))
+        }
+
         gv.onProgressReport = { [weak self, tabID = gv.tabID] report, percent in
             guard let self, let tabID,
                 let index = self.pane.tabs.firstIndex(where: { $0.id == tabID })
@@ -1231,6 +1243,7 @@ class PaneView: NSView {
         let tabID = pane.tabs[index].id
         let tab = pane.tabs[index]
         cancelPendingDebounces(for: tabID)
+        CommandLog.shared.tabClosed(tabID)
 
         // Clean up the appropriate view type
         if tab.contentType == .terminal {

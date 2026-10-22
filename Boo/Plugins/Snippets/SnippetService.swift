@@ -68,6 +68,15 @@ final class SnippetService {
         }
     }
 
+    /// Re-reads the file after an outside write (sync); a missing file means no snippets.
+    func reload() {
+        guard FileManager.default.fileExists(atPath: filePath) else {
+            snippets = []
+            return
+        }
+        load()
+    }
+
     private func load() {
         guard let data = try? Data(contentsOf: URL(fileURLWithPath: filePath)),
             let saved = try? JSONDecoder().decode([Snippet].self, from: data)

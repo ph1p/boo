@@ -153,6 +153,9 @@ final class DockerPluginNew: BooPluginProtocol {
                 ? "Containers (\(totalCount))"
                 : "Containers (\(runningCount)/\(totalCount))"
 
+        let workspaceFolder = WindowManager.shared.activeController?.activeWorkspace?.folderPath
+        let pinnedFolder = workspaceFolder.flatMap { ComposeGrouping.hasComposeFile(in: $0) ? $0 : nil }
+
         let containersSection = SidebarSection(
             id: "docker",
             name: containerTitle,
@@ -160,6 +163,13 @@ final class DockerPluginNew: BooPluginProtocol {
             content: AnyView(
                 DockerContainersView(
                     theme: theme, fontScale: fontScale, density: density,
+                    pinnedFolder: pinnedFolder,
+                    onComposeLogs: { project in
+                        act?.handle(
+                            DSLAction(
+                                type: "exec", path: nil,
+                                command: project.shellCommand("logs --tail 100 -f") + "\r", text: nil))
+                    },
                     onExec: { c in
                         act?.handle(
                             DSLAction(
@@ -190,7 +200,10 @@ final class DockerPluginNew: BooPluginProtocol {
                 )),
             prefersOuterScrollView: true,
             generation: SidebarSection.generation(
-                for: DockerService.shared.containers.map { "\($0.id)|\($0.state.rawValue)|\($0.status)" }))
+                for: [pinnedFolder ?? ""]
+                    + DockerService.shared.containers.map {
+                        "\($0.id)|\($0.state.rawValue)|\($0.status)|\($0.composeProject ?? "")"
+                    }))
 
         // Images section
         let imagesSection = SidebarSection(
@@ -301,6 +314,9 @@ struct DockerContainersView: View {
     let theme: TerminalTheme
     let fontScale: SidebarFontScale
     let density: SidebarDensity
+    /// Workspace folder holding a compose file; its project is listed first.
+    var pinnedFolder: String?
+    var onComposeLogs: ((ComposeProject) -> Void)?
     var onExec: ((DockerService.Container) -> Void)?
     var onLogs: ((DockerService.Container) -> Void)?
     var onStart: ((DockerService.Container) -> Void)?
@@ -314,24 +330,41 @@ struct DockerContainersView: View {
 
     @ObservedObject private var service = DockerService.shared
     @State private var deleteTarget: DockerService.Container?
+    @State private var downTarget: ComposeProject?
+    @State private var busyProjects: Set<String> = []
 
-    private var running: [DockerService.Container] {
-        service.containers.filter {
-            $0.state == .running || $0.state == .paused || $0.state == .restarting
-        }
-    }
-    private var stopped: [DockerService.Container] {
-        service.containers.filter {
-            $0.state == .exited || $0.state == .dead
-                || $0.state == .created || $0.state == .unknown
-        }
+    private static func isUp(_ c: DockerService.Container) -> Bool {
+        c.state == .running || c.state == .paused || c.state == .restarting
     }
 
     var body: some View {
+        let groups = ComposeGrouping.group(service.containers, pinnedFolder: pinnedFolder)
+        let running = groups.loose.filter(Self.isUp)
+        let stopped = groups.loose.filter { !Self.isUp($0) }
         VStack(alignment: .leading, spacing: 0) {
-            if service.containers.isEmpty {
+            if service.containers.isEmpty && groups.projects.isEmpty {
                 DockerEmptyView(icon: "shippingbox", label: "No containers", theme: theme, fontScale: fontScale)
             } else {
+                ForEach(groups.projects) { project in
+                    ComposeProjectHeader(
+                        project: project, density: density, theme: theme, fontScale: fontScale,
+                        isBusy: busyProjects.contains(project.id),
+                        canRun: service.dockerPath != nil,
+                        onAction: { action in
+                            if action == .down {
+                                downTarget = project
+                            } else {
+                                run(action, project)
+                            }
+                        },
+                        onLogs: { onComposeLogs?(project) })
+                    ForEach(project.containers, id: \.id) { c in
+                        row(c).padding(.leading, 10)
+                    }
+                }
+                if !groups.projects.isEmpty && !groups.loose.isEmpty {
+                    Divider().padding(.vertical, 4)
+                }
                 ForEach(running, id: \.id) { c in row(c) }
                 if !running.isEmpty && !stopped.isEmpty {
                     Divider().padding(.vertical, 4)
@@ -353,6 +386,28 @@ struct DockerContainersView: View {
             Button("Cancel", role: .cancel) { deleteTarget = nil }
         } message: {
             Text("This will permanently delete the container.")
+        }
+        .alert(
+            "Take down \"\(downTarget?.displayName ?? "")\"?",
+            isPresented: Binding(
+                get: { downTarget != nil },
+                set: { if !$0 { downTarget = nil } })
+        ) {
+            Button("Down", role: .destructive) {
+                if let project = downTarget { run(.down, project) }
+                downTarget = nil
+            }
+            Button("Cancel", role: .cancel) { downTarget = nil }
+        } message: {
+            Text("Stops and removes the project's containers and networks. Volumes are kept.")
+        }
+    }
+
+    private func run(_ action: ComposeProject.Action, _ project: ComposeProject) {
+        busyProjects.insert(project.id)
+        DockerService.shared.composeAction(action, project: project) { error in
+            busyProjects.remove(project.id)
+            if let error { BooAlert.showTransient("compose \(action.rawValue): \(error)") }
         }
     }
 
@@ -518,6 +573,86 @@ private struct DockerEmptyView: View {
 }
 
 // MARK: - Container Row
+
+private struct ComposeProjectHeader: View {
+    let project: ComposeProject
+    let density: SidebarDensity
+    let theme: TerminalTheme
+    let fontScale: SidebarFontScale
+    let isBusy: Bool
+    let canRun: Bool
+    let onAction: (ComposeProject.Action) -> Void
+    let onLogs: () -> Void
+    @State private var isHovered = false
+
+    private var muted: Color { Color(nsColor: theme.chromeMuted) }
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: project.isPinned ? "pin.fill" : "square.stack.3d.up")
+                .font(.system(size: fontScale.size(.base) - 3))
+                .foregroundStyle(project.runningCount > 0 ? Color.green : muted.opacity(0.7))
+                .frame(width: 14)
+            Text(project.displayName)
+                .font(fontScale.font(.base).weight(.semibold))
+                .foregroundStyle(Color(nsColor: theme.chromeText))
+                .lineLimit(1)
+            if !project.containers.isEmpty {
+                Text("\(project.runningCount)/\(project.containers.count)")
+                    .font(fontScale.font(.sm, design: .monospaced))
+                    .foregroundStyle(muted.opacity(0.6))
+            }
+            Spacer()
+            if isBusy {
+                ProgressView().controlSize(.mini)
+            } else if isHovered && canRun {
+                if project.runningCount < project.containers.count || project.containers.isEmpty {
+                    iconButton("play.fill", help: "Up (docker compose up -d)") { onAction(.up) }
+                }
+                if !project.containers.isEmpty {
+                    iconButton("arrow.clockwise", help: "Restart") { onAction(.restart) }
+                    iconButton("stop.fill", help: "Down (removes containers)") { onAction(.down) }
+                }
+            }
+        }
+        .padding(.horizontal, 8)
+        .frame(height: density == .comfortable ? 26 : 22)
+        .contentShape(Rectangle())
+        .onHover { isHovered = $0 }
+        .help(canRun ? (project.workingDir ?? project.displayName) : "docker CLI not found")
+        .contextMenu {
+            Button("Up") { onAction(.up) }.disabled(!canRun)
+            if !project.containers.isEmpty {
+                Button("Restart") { onAction(.restart) }.disabled(!canRun)
+                Button("Stop") { onAction(.stop) }.disabled(!canRun)
+                Button("Down…") { onAction(.down) }.disabled(!canRun)
+                Divider()
+                Button("Follow Logs") { onLogs() }
+            }
+            if let dir = project.workingDir {
+                Divider()
+                Button("Copy Project Folder") {
+                    copyToClipboard(dir)
+                }
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(
+            "Compose project \(project.displayName), \(project.runningCount) of \(project.containers.count) running")
+    }
+
+    private func iconButton(_ icon: String, help: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: icon)
+                .font(.system(size: fontScale.size(.base) - 3))
+                .foregroundStyle(muted.opacity(0.7))
+                .frame(width: 20, height: 20)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(help)
+    }
+}
 
 private struct DockerContainerRow: View {
     let container: DockerService.Container

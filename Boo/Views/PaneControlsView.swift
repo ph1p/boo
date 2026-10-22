@@ -21,6 +21,7 @@ struct PaneControlEntry: Equatable {
 /// button whose menu holds the pane actions. While the pane records it also
 /// shows the elapsed time (click to stop), and while zoomed an unzoom button;
 /// those stay when the pointer leaves, so neither state is ever invisible.
+/// A tab running a non-default profile shows its name; clicking it switches.
 final class PaneControlsView: NSView {
     static let bodyHeight: CGFloat = 24
     /// Radius of the concave curves joining the pane's bottom and right edges.
@@ -44,7 +45,10 @@ final class PaneControlsView: NSView {
     var onResize: (() -> Void)?
     /// Builds the ⋯ menu on demand, so it always reflects current state.
     var menuProvider: (() -> NSMenu?)?
+    /// Builds the menu the profile chip opens.
+    var profileMenuProvider: (() -> NSMenu?)?
 
+    private let profileChip = ProfileChip()
     private let recordChip = RecordChip()
     private let unzoom = PaneControlButton(
         symbol: "arrow.down.right.and.arrow.up.left", help: "Show All Panes (\u{21E7}\u{2318}\u{23CE})")
@@ -64,12 +68,13 @@ final class PaneControlsView: NSView {
         recordChip.onWidthChange = { [weak self] in self?.onResize?() }
         unzoom.onClick = { [weak self] in self?.onUnzoom?() }
         more.onClick = { [weak self] in self?.showMoreMenu() }
-        for view in [recordChip, unzoom, more] as [NSView] { addSubview(view) }
+        profileChip.onClick = { [weak self] in self?.showProfileMenu() }
+        for view in [profileChip, recordChip, unzoom, more] as [NSView] { addSubview(view) }
 
         setAccessibilityElement(true)
         setAccessibilityRole(.group)
         setAccessibilityLabel("Pane Controls")
-        configure(expanded: false, recordingSince: nil, isZoomed: false)
+        configure(expanded: false, recordingSince: nil, isZoomed: false, profile: nil)
     }
 
     required init?(coder: NSCoder) {
@@ -79,11 +84,14 @@ final class PaneControlsView: NSView {
     func applyTheme() {
         for button in [unzoom, more] { button.applyTheme() }
         recordChip.applyTheme()
+        profileChip.applyTheme()
         needsDisplay = true
     }
 
     /// Updates which items show and whether the recording timer runs.
-    func configure(expanded: Bool, recordingSince: Date?, isZoomed: Bool) {
+    func configure(expanded: Bool, recordingSince: Date?, isZoomed: Bool, profile: String?) {
+        profileChip.profile = profile
+        profileChip.isHidden = profile == nil
         isExpanded = expanded
         self.isZoomed = isZoomed
         recordChip.recordingSince = recordingSince
@@ -94,10 +102,12 @@ final class PaneControlsView: NSView {
         needsLayout = true
     }
 
-    /// True when there is nothing to show — collapsed, not recording, not zoomed.
-    var isEmpty: Bool { !isExpanded && recordChip.recordingSince == nil && !isZoomed }
+    /// True when there is nothing to show — collapsed, not recording, not zoomed, no profile.
+    var isEmpty: Bool { !isExpanded && recordChip.recordingSince == nil && !isZoomed && profileChip.profile == nil }
 
-    private var visibleItems: [PaneControlItem] { [recordChip, unzoom, more].filter { !$0.isHidden } }
+    private var visibleItems: [PaneControlItem] {
+        [profileChip, recordChip, unzoom, more].filter { !$0.isHidden }
+    }
 
     override var fittingSize: NSSize {
         let items = visibleItems.reduce(CGFloat(0)) { $0 + itemWidth($1) }
@@ -106,7 +116,9 @@ final class PaneControlsView: NSView {
     }
 
     private func itemWidth(_ item: PaneControlItem) -> CGFloat {
-        item === recordChip ? recordChip.fittingSize.width : Self.buttonWidth
+        if item === recordChip { return recordChip.fittingSize.width }
+        if item === profileChip { return profileChip.fittingSize.width }
+        return Self.buttonWidth
     }
 
     /// The tab itself, without the fillets: the only part that takes clicks.
@@ -232,11 +244,20 @@ final class PaneControlsView: NSView {
 
     private func showMoreMenu() {
         guard let menu = menuProvider?() else { return }
-        // Up and to the left, away from the pane's corner: the point is the
-        // menu's top-left, so its bottom-right lands above the button.
+        popUp(menu, above: more)
+    }
+
+    private func showProfileMenu() {
+        guard let menu = profileMenuProvider?() else { return }
+        popUp(menu, above: profileChip)
+    }
+
+    /// Up and to the left, away from the pane's corner: the point is the
+    /// menu's top-left, so its bottom-right lands above the item.
+    private func popUp(_ menu: NSMenu, above item: NSView) {
         let size = menu.size
         menu.popUp(
-            positioning: nil, at: NSPoint(x: more.frame.maxX - size.width, y: more.frame.maxY + 4 + size.height),
+            positioning: nil, at: NSPoint(x: item.frame.maxX - size.width, y: item.frame.maxY + 4 + size.height),
             in: self)
     }
 
@@ -462,5 +483,66 @@ final class RecordChip: PaneControlItem {
             ? theme.error.withAlphaComponent(hovered ? 0.22 : 0.14)
             : (hovered ? theme.hoverFill : nil)
         layer?.backgroundColor = fill?.cgColor
+    }
+}
+
+/// The tab's profile name with its accent dot. Clicking opens the profile menu.
+final class ProfileChip: PaneControlItem {
+    var profile: String? {
+        didSet {
+            guard profile != oldValue else { return }
+            label.stringValue = profile ?? ""
+            toolTip = profile.map { "Profile: \($0)" }
+            setAccessibilityLabel(toolTip)
+            applyTheme()
+            needsLayout = true
+        }
+    }
+
+    private static let inset: CGFloat = 8
+    private static let dotSize: CGFloat = 6
+    private static let gap: CGFloat = 5
+    private static let maxLabelWidth: CGFloat = 120
+
+    private let dot = NSView()
+    private let label = NSTextField(labelWithString: "")
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        dot.wantsLayer = true
+        dot.layer?.cornerRadius = Self.dotSize / 2
+        label.font = .systemFont(ofSize: 11, weight: .medium)
+        label.lineBreakMode = .byTruncatingTail
+        for view in [dot, label] as [NSView] { addSubview(view) }
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    func applyTheme() { hoverChanged() }
+
+    override var fittingSize: NSSize {
+        let width = min(Self.maxLabelWidth, ceil(label.intrinsicContentSize.width))
+        return NSSize(width: Self.inset + Self.dotSize + Self.gap + width + Self.inset, height: 20)
+    }
+
+    override func layout() {
+        super.layout()
+        dot.frame = NSRect(
+            x: Self.inset, y: (bounds.height - Self.dotSize) / 2, width: Self.dotSize, height: Self.dotSize)
+        let labelSize = label.intrinsicContentSize
+        let labelX = dot.frame.maxX + Self.gap
+        label.frame = NSRect(
+            x: labelX, y: (bounds.height - labelSize.height) / 2,
+            width: max(0, bounds.width - labelX - Self.inset), height: labelSize.height)
+    }
+
+    override func hoverChanged() {
+        let theme = AppSettings.shared.theme
+        let accent = profile.flatMap { ProfileStore.shared.accent(forProfile: $0) } ?? theme.accentColor
+        dot.layer?.backgroundColor = accent.cgColor
+        label.textColor = hovered ? theme.chromeText : theme.textSecondary
+        layer?.backgroundColor = hovered ? theme.hoverFill.cgColor : nil
     }
 }

@@ -740,6 +740,19 @@ func formatAgentRuntime(_ seconds: TimeInterval) -> String {
     }
 }
 
+/// "now", "5m", "3h", "2d", "6w", "1y".
+func formatCompactAge(_ date: Date, now: Date = Date()) -> String {
+    let s = max(0, now.timeIntervalSince(date))
+    switch s {
+    case ..<60: return "now"
+    case ..<3600: return "\(Int(s / 60))m"
+    case ..<86_400: return "\(Int(s / 3600))h"
+    case ..<(86_400 * 14): return "\(Int(s / 86_400))d"
+    case ..<(86_400 * 365): return "\(Int(s / 604_800))w"
+    default: return "\(Int(s / 31_536_000))y"
+    }
+}
+
 /// Format date as relative string (e.g., "2h ago", "3d ago").
 func formatAgentRelativeDate(_ date: Date) -> String {
     let interval = Date().timeIntervalSince(date)

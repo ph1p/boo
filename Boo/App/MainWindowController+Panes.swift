@@ -145,6 +145,7 @@ extension MainWindowController: PaneViewDelegate {
             pane.setCommandRunning(true, at: tabIndex)
             if pane.tabs.indices.contains(tabIndex) {
                 PhonePusher.shared.commandStarted(tabID: pane.tabs[tabIndex].id, command: command)
+                CommandLog.shared.commandStarted(tabID: pane.tabs[tabIndex].id)
             }
             booLog(
                 .debug, .terminal,
@@ -194,9 +195,16 @@ extension MainWindowController: PaneViewDelegate {
         guard tabIndex >= 0 else { return }
         pane.setCommandRunning(false, at: tabIndex)
         if pane.tabs.indices.contains(tabIndex) {
+            let tab = pane.tabs[tabIndex]
             PhonePusher.shared.commandEnded(
-                tabID: pane.tabs[tabIndex].id, exitCode: exitCode, workspaceName: workspace.displayName,
+                tabID: tab.id, exitCode: exitCode, workspaceName: workspace.displayName,
                 focused: isTabFocused(workspace: workspace, pane: pane, tabIndex: tabIndex))
+            if let finished = CommandLog.finishedCommand(
+                record: paneView.terminalView(forTab: tab.id)?.commandHistory.last, tab: tab,
+                workspaceID: workspace.id, paneID: pane.id)
+            {
+                CommandLog.shared.publish(finished)
+            }
         }
 
         signalActivity(paneID: paneID, tabIndex: tabIndex, exitCode: exitCode)
@@ -233,6 +241,23 @@ extension MainWindowController: PaneViewDelegate {
         ActivityNotifier.shared.notifyAgent(
             workspaceName: workspace.displayName, body: body, workspaceID: workspace.id, paneID: pane.id,
             tabIndex: tabIndex)
+    }
+
+    /// A trigger rule's `markTab` action: marks the tab like background
+    /// activity, with the rule's id as the reason. Focusing the tab clears it.
+    func markTabFromTrigger(ruleID: String, workspace: Workspace, pane: Pane, tabIndex: Int) {
+        guard !isTabFocused(workspace: workspace, pane: pane, tabIndex: tabIndex) else { return }
+        pane.setTriggerMark(ruleID, at: tabIndex)
+        markActivity(workspace: workspace, pane: pane, tabIndex: tabIndex)
+    }
+
+    /// Redraws a pane's tab bar after tab state changed outside it (profile).
+    func refreshTabBar(workspace: Workspace, pane: Pane) {
+        if let pv = workspacePaneViews[workspace.id]?[pane.id] {
+            pv.needsDisplay = true
+            pv.updatePaneControls()
+        }
+        refreshToolbar()
     }
 
     private func markActivity(workspace: Workspace, pane: Pane, tabIndex: Int) {
@@ -675,6 +700,10 @@ extension MainWindowController {
             pv.paneControls.menuProvider = { [weak self, weak pv] in
                 guard let self, let pv else { return nil }
                 return self.paneControlsMenu(for: pv)
+            }
+            pv.paneControls.profileMenuProvider = { [weak pv] in
+                guard let tabID = pv?.pane.activeTab?.id else { return nil }
+                return RuleEngine.shared.profileMenu(tabID: tabID)
             }
         }
     }

@@ -132,6 +132,12 @@ protocol BooPluginProtocol: BooPlugin {
     /// `SidebarSection.generation(for:)`, or its rows go stale on screen.
     func sectionGeneration(context: PluginContext) -> UInt64
 
+    /// Identity of the section's view state, for the section built by the default
+    /// `makeSidebarTab` (see `SidebarSection.identity`). Return a new value when the
+    /// view should start over with fresh `@State` — e.g. a per-workspace view on
+    /// workspace switch. Default nil: state survives every content swap.
+    func sectionIdentity(context: PluginContext) -> String?
+
     /// Unified action dispatch for terminal and system operations.
     var actions: PluginActions? { get set }
 
@@ -212,7 +218,8 @@ extension BooPluginProtocol {
             icon: manifest.icon,
             content: view,
             prefersOuterScrollView: prefersOuterScrollView,
-            generation: sectionGeneration(context: context)
+            generation: sectionGeneration(context: context),
+            identity: sectionIdentity(context: context)
         )
         return SidebarTab(
             id: SidebarTabID(manifest.id),
@@ -224,6 +231,7 @@ extension BooPluginProtocol {
 
     func makeStatusBarContent(context: PluginContext) -> StatusBarContent? { nil }
     func sectionTitle(context: PluginContext) -> String? { nil }
+    func sectionIdentity(context: PluginContext) -> String? { nil }
 
     /// Default: build menu contributions from manifest.menus.
     func menuContributions() -> PluginMenuContribution? {

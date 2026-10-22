@@ -433,9 +433,13 @@ extension MainWindowController {
         // which is why the explorer used to jump to the top whenever an unrelated
         // context field (foreground process, git status) changed.
         switch (pluginPanelViews[id], sections.count) {
-        case (let scrollView as PluginScrollView, 1):
+        case (let scrollView as PluginScrollView, 1) where sections[0].prefersOuterScrollView:
             scrollView.setContent(sections[0].content)
             scrollView.isHidden = false
+            return
+        case (let hosting as NSHostingView<AnyView>, 1) where !sections[0].prefersOuterScrollView:
+            hosting.rootView = PluginScrollView.documentContent(sections[0].content)
+            hosting.isHidden = false
             return
         case (let panel as SidebarPanelView, let count) where count > 1:
             // `updateSections` owns the in-place-vs-rebuild decision internally.
@@ -465,15 +469,33 @@ extension MainWindowController {
     private func installSingleSection(
         _ section: SidebarSection, pluginID: String
     ) {
-        let container: NSView
-        let contentView = PluginScrollView.documentContent(section.content)
+        let container = section.prefersOuterScrollView ? makeSectionScrollView(section) : makeBareSectionView(section)
+        let edgePad: CGFloat = 2
+        sidebarContainer.addSubview(container)
+        NSLayoutConstraint.activate([
+            container.topAnchor.constraint(equalTo: sidebarContentTopAnchor, constant: edgePad),
+            container.leadingAnchor.constraint(equalTo: sidebarContainer.leadingAnchor),
+            container.trailingAnchor.constraint(equalTo: sidebarContainer.trailingAnchor),
+            container.bottomAnchor.constraint(equalTo: sidebarContentBottomAnchor, constant: -edgePad)
+        ])
+        pluginPanelViews[pluginID] = container
+    }
 
+    /// Content with its own scrolling (an editor, a list) fills the sidebar as is:
+    /// an outer scroll view would fight its scrolling and size it to fit content.
+    private func makeBareSectionView(_ section: SidebarSection) -> NSView {
+        let hosting = NSHostingView(rootView: PluginScrollView.documentContent(section.content))
+        hosting.translatesAutoresizingMaskIntoConstraints = false
+        return hosting
+    }
+
+    private func makeSectionScrollView(_ section: SidebarSection) -> NSView {
         // sizingOptions = [.intrinsicContentSize] lets Auto Layout see the SwiftUI
         // content's natural height so the document view grows to fit tall content
         // and the scroll view can actually scroll.
         // The greaterThanOrEqualTo height constraint ensures short content fills
         // the viewport (top-pinned) rather than collapsing to zero.
-        let hosting = NSHostingView(rootView: contentView)
+        let hosting = NSHostingView(rootView: PluginScrollView.documentContent(section.content))
         hosting.sizingOptions = [.intrinsicContentSize]
         hosting.translatesAutoresizingMaskIntoConstraints = false
 
@@ -492,18 +514,7 @@ extension MainWindowController {
             hosting.trailingAnchor.constraint(equalTo: scrollView.contentView.trailingAnchor),
             hosting.heightAnchor.constraint(greaterThanOrEqualTo: scrollView.contentView.heightAnchor)
         ])
-        container = scrollView
-
-        let edgePad: CGFloat = 2
-        sidebarContainer.addSubview(container)
-        NSLayoutConstraint.activate([
-            container.topAnchor.constraint(equalTo: sidebarContentTopAnchor, constant: edgePad),
-            container.leadingAnchor.constraint(equalTo: sidebarContainer.leadingAnchor),
-            container.trailingAnchor.constraint(equalTo: sidebarContainer.trailingAnchor),
-            container.bottomAnchor.constraint(equalTo: sidebarContentBottomAnchor, constant: -edgePad)
-        ])
-
-        pluginPanelViews[pluginID] = container
+        return scrollView
     }
 
     /// Install a multi-section plugin view using SidebarPanelView with collapsible headers.

@@ -123,6 +123,12 @@ struct GeneralSettingsView: View {
                 }
             }
 
+            CommandHistorySection()
+
+            SyncFolderSection()
+
+            AgentsSection()
+
             Section(title: "Advanced") {
                 ToggleRow(
                     label: "Debug logging",
@@ -136,5 +142,216 @@ struct GeneralSettingsView: View {
             }
         }
         .foregroundStyle(t.text)
+    }
+}
+
+// MARK: - Agents
+
+private struct AgentsSection: View {
+    @State private var errorButton = AppSettings.shared.errorAgentButtonEnabled
+    @State private var perTask = Self.text(AppSettings.shared.agentBudgetPerTask)
+    @State private var perDay = Self.text(AppSettings.shared.agentBudgetPerDay)
+
+    var body: some View {
+        Section(title: "Agents") {
+            ToggleRow(
+                label: "Send failed commands to agent",
+                help: "Show a button on failed command blocks that sends the command and its output to an agent.",
+                isOn: Binding(
+                    get: { errorButton },
+                    set: {
+                        errorButton = $0
+                        AppSettings.shared.errorAgentButtonEnabled = $0
+                    }
+                )
+            )
+            SettingRow(label: "Budget per task", help: "USD, estimated from the transcript. Empty = off.") {
+                SettingTextField(placeholder: "Off", text: $perTask, monospaced: true, width: 90)
+                    .onChange(of: perTask) { _, value in AppSettings.shared.agentBudgetPerTask = Self.amount(value) }
+            }
+            SettingRow(label: "Budget per day", help: "USD across all agents today. Empty = off.") {
+                SettingTextField(placeholder: "Off", text: $perDay, monospaced: true, width: 90)
+                    .onChange(of: perDay) { _, value in AppSettings.shared.agentBudgetPerDay = Self.amount(value) }
+            }
+            DescriptionLabel(
+                text:
+                    "Warn only: the agent status shows the cost in amber at 80 % and red with a notification once a budget is passed."
+            )
+        }
+    }
+
+    private static func text(_ value: Double?) -> String {
+        value.map { $0 == $0.rounded() ? String(Int($0)) : String($0) } ?? ""
+    }
+
+    static func amount(_ text: String) -> Double? {
+        let cleaned = text.trimmingCharacters(in: .whitespaces)
+            .replacingOccurrences(of: "$", with: "").replacingOccurrences(of: ",", with: ".")
+        return Double(cleaned).flatMap { $0 > 0 ? $0 : nil }
+    }
+}
+
+// MARK: - Sync Folder
+
+/// Mirrors settings, profiles, rules, key tables, snippets, themes and recipes
+/// with a folder such as one in iCloud Drive.
+private struct SyncFolderSection: View {
+    @Environment(\.tokens) private var tokens
+    @State private var folder = AppSettings.shared.syncFolder
+    @State private var status = ""
+
+    var body: some View {
+        let t = tokens
+        Section(title: "Sync Folder") {
+            HStack(spacing: 8) {
+                Text(folder.isEmpty ? "Off" : folder)
+                    .font(.system(size: 12, design: folder.isEmpty ? .default : .monospaced))
+                    .foregroundStyle(t.muted)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                Button("Choose…") {
+                    let panel = NSOpenPanel()
+                    panel.canChooseDirectories = true
+                    panel.canChooseFiles = false
+                    panel.canCreateDirectories = true
+                    panel.allowsMultipleSelection = false
+                    panel.message = "Choose a folder to mirror Boo's settings with (e.g. in iCloud Drive)"
+                    if panel.runModal() == .OK, let url = panel.url {
+                        folder = url.path
+                        AppSettings.shared.syncFolder = url.path
+                    }
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+
+                Button("Sync Now") { SyncService.shared.syncNow() }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .disabled(folder.isEmpty)
+
+                Button("Turn Off") {
+                    folder = ""
+                    AppSettings.shared.syncFolder = ""
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .disabled(folder.isEmpty)
+            }
+            Text(
+                "Mirrors appearance, editor, status bar, plugin and history settings, custom themes, "
+                    + "profiles, rules, key tables, snippets, themes and recipes. Folders, paths and "
+                    + "window layout stay per machine."
+            )
+            .font(.system(size: 11))
+            .foregroundStyle(t.muted)
+            .fixedSize(horizontal: false, vertical: true)
+            if !status.isEmpty {
+                Text(status).font(.system(size: 11)).foregroundStyle(t.muted)
+            }
+        }
+        .onAppear { refresh() }
+        .onReceive(NotificationCenter.default.publisher(for: .syncStatusChanged)) { _ in refresh() }
+    }
+
+    private func refresh() {
+        let service = SyncService.shared
+        if let error = service.lastError {
+            status = error
+        } else if !service.conflicts.isEmpty {
+            status = "Conflicts: \(service.conflicts.joined(separator: ", ")) — resolve from the status bar"
+        } else if let last = service.lastSync {
+            status = "Last synced \(last.formatted(date: .omitted, time: .shortened))"
+        } else {
+            status = ""
+        }
+    }
+}
+
+// MARK: - Command History
+
+/// Settings for the shell command history behind ⌃R and the palette's `!`.
+private struct CommandHistorySection: View {
+    @Environment(\.tokens) private var tokens
+    @State private var enabled = AppSettings.shared.historyEnabled
+    @State private var shortcut = AppSettings.shared.historySearchShortcutEnabled
+    @State private var ignorePattern = AppSettings.shared.historyIgnorePattern
+    @State private var retentionDays = AppSettings.shared.historyRetentionDays
+    @State private var entryCount: Int?
+    @State private var confirmClear = false
+
+    private var patternError: String? {
+        guard !ignorePattern.isEmpty, (try? NSRegularExpression(pattern: ignorePattern)) == nil else { return nil }
+        return "Invalid regex; the default pattern is used instead."
+    }
+
+    var body: some View {
+        let t = tokens
+        Section(title: "Command History") {
+            ToggleRow(
+                label: "Record commands",
+                help: "Saves finished commands with their folder, exit code and duration to ~/.boo/history.db.",
+                isOn: $enabled
+            )
+            .onChange(of: enabled) { _, v in AppSettings.shared.historyEnabled = v }
+
+            ToggleRow(
+                label: "⌃R opens history search",
+                help: "At a shell prompt with Boo's shell integration. Off leaves ⌃R to the shell.",
+                isOn: $shortcut
+            )
+            .onChange(of: shortcut) { _, v in AppSettings.shared.historySearchShortcutEnabled = v }
+
+            SettingRow(
+                label: "Ignore pattern",
+                help: "Commands matching this regex are never saved. Empty saves everything."
+            ) {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 6) {
+                        SettingTextField(
+                            placeholder: "regex", text: $ignorePattern, monospaced: true)
+                        Button("Default") {
+                            ignorePattern = AppSettings.defaultHistoryIgnorePattern
+                        }
+                        .controlSize(.small)
+                        .disabled(ignorePattern == AppSettings.defaultHistoryIgnorePattern)
+                    }
+                    if let patternError {
+                        Text(patternError).font(.system(size: 11)).foregroundStyle(t.error)
+                    }
+                }
+                .onChange(of: ignorePattern) { _, v in AppSettings.shared.historyIgnorePattern = v }
+            }
+
+            SettingRow(label: "Keep for", help: "Older commands are removed at launch. 0 keeps them forever.") {
+                Stepper(value: $retentionDays, in: 0...3650, step: 30) {
+                    Text(retentionDays == 0 ? "Forever" : "\(retentionDays) days")
+                        .font(.system(size: 12).monospacedDigit())
+                }
+                .controlSize(.small)
+                .onChange(of: retentionDays) { _, v in AppSettings.shared.historyRetentionDays = v }
+            }
+
+            HStack {
+                Text(entryCount.map { "\($0) commands saved" } ?? " ")
+                    .font(.system(size: 11))
+                    .foregroundStyle(t.muted)
+                Spacer()
+                Button("Clear History…") { confirmClear = true }
+                    .controlSize(.small)
+                    .disabled(entryCount == 0)
+            }
+        }
+        .task { entryCount = await HistoryStore.shared.count() }
+        .confirmationDialog("Clear all command history?", isPresented: $confirmClear) {
+            Button("Clear History", role: .destructive) {
+                HistoryStore.shared.clear {
+                    Task { @MainActor in entryCount = 0 }
+                }
+            }
+        } message: {
+            Text("This can't be undone.")
+        }
     }
 }

@@ -51,6 +51,20 @@ extension StatusBarPlugin {
         str.safeDraw(at: NSPoint(x: x + 4, y: y), withAttributes: attrs)
         return NSRect(x: x, y: 0, width: size.width + 8, height: DensityMetrics.current.statusBarHeight)
     }
+
+    /// Draws a right-side text segment ending at `rx` and returns its
+    /// full-height hit rect; its width is what `draw` consumes.
+    static func drawLabel(
+        _ text: String, attrs: [NSAttributedString.Key: Any], endingAt rx: CGFloat, y: CGFloat
+    )
+        -> NSRect
+    {
+        let str = text as NSString
+        let size = str.safeSize(withAttributes: attrs)
+        str.safeDraw(at: NSPoint(x: rx - size.width - 4, y: y), withAttributes: attrs)
+        return NSRect(
+            x: rx - size.width - 8, y: 0, width: size.width + 8, height: DensityMetrics.current.statusBarHeight)
+    }
 }
 
 /// Snapshot of state available to status bar plugins.

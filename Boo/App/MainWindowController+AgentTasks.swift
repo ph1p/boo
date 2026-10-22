@@ -27,7 +27,7 @@ extension MainWindowController {
         return base + " " + shellQuoted(prompt)
     }
 
-    private static func shellQuoted(_ text: String) -> String {
+    static func shellQuoted(_ text: String) -> String {
         "'" + text.replacingOccurrences(of: "'", with: "'\\''") + "'"
     }
 
@@ -431,16 +431,12 @@ extension MainWindowController {
             NSSound.beep()
             return
         }
-        let cwd = view.tabID.flatMap(AgentHandoff.workingDirectory(ofTab:))
-        let text: String
-        if let selection = view.readSelectionText(), !selection.isEmpty {
-            text = AgentHandoff.compose(selection, source: .selection, cwd: cwd)
-        } else if let (source, output) = view.lastCommandOutput(), !output.isEmpty {
-            text = AgentHandoff.compose(output, source: source, cwd: cwd)
-        } else {
+        guard let (source, captured) = view.selectionOrLastOutput() else {
             NSSound.beep()
             return
         }
+        let cwd = view.tabID.flatMap(AgentHandoff.workingDirectory(ofTab:))
+        let text = AgentHandoff.compose(captured, source: source, cwd: cwd)
         guard let target = AgentHandoff.targets(excluding: view.tabID).first,
             AgentHandoff.send(text, to: target.tabID)
         else {

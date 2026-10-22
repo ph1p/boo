@@ -231,6 +231,12 @@ extension PaneView {
 
         addGroupItems(to: menu, tabIndex: index)
 
+        if pane.tabs[index].contentType == .terminal {
+            let profileItem = NSMenuItem(title: "Profile", action: nil, keyEquivalent: "")
+            profileItem.submenu = RuleEngine.shared.profileMenu(tabID: pane.tabs[index].id)
+            menu.addItem(profileItem)
+        }
+
         // Move to workspace submenu
         if let workspaces = paneDelegate?.paneViewWorkspaceNames(self), !workspaces.isEmpty {
             menu.addItem(.separator())

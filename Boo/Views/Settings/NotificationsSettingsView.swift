@@ -5,6 +5,7 @@ import UserNotifications
 struct NotificationsSettingsView: View {
     @Environment(\.tokens) private var tokens
     @State private var activityNotificationsEnabled = AppSettings.shared.activityNotificationsEnabled
+    @State private var portNotificationsEnabled = AppSettings.shared.portNotificationsEnabled
     @State private var authStatus: UNAuthorizationStatus = .notDetermined
     @State private var phonePushEnabled = AppSettings.shared.phonePushEnabled
     @State private var phonePushURL = AppSettings.shared.phonePushURL
@@ -32,7 +33,21 @@ struct NotificationsSettingsView: View {
                     )
                 )
 
-                if activityNotificationsEnabled {
+                ToggleRow(
+                    label: "New port notifications",
+                    help:
+                        "Notify when a process in the active workspace starts listening on a port. Needs the Listening ports status bar segment.",
+                    isOn: Binding(
+                        get: { portNotificationsEnabled },
+                        set: {
+                            portNotificationsEnabled = $0
+                            AppSettings.shared.portNotificationsEnabled = $0
+                            if $0 { ActivityNotifier.shared.requestPermission() }
+                        }
+                    )
+                )
+
+                if activityNotificationsEnabled || portNotificationsEnabled {
                     permissionRow
                 }
             }

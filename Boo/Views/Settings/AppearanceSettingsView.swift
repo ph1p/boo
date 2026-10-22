@@ -7,6 +7,7 @@ struct AppearanceSettingsView: View {
     @State private var cursorStyle = AppSettings.shared.cursorStyle
     @State private var termFontSize = Double(AppSettings.shared.fontSize)
     @State private var termSelectedFont = AppSettings.shared.fontName
+    @State private var shader = AppSettings.shared.terminalShader
     @State private var sidebarFontSize = Double(AppSettings.shared.sidebarFontSize)
     @State private var sidebarSelectedFont =
         AppSettings.shared.sidebarFontName.isEmpty ? "System Default" : AppSettings.shared.sidebarFontName
@@ -46,6 +47,17 @@ struct AppearanceSettingsView: View {
                     .padding(8)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(RoundedRectangle(cornerRadius: 6).fill(t.termBg))
+            }
+
+            Section(title: "Terminal Shader") {
+                SettingRow(
+                    label: "Shader",
+                    help: "Post-processing for every terminal. Profiles can override it. "
+                        + "Custom files are Shadertoy-style GLSL (mainImage, iChannel0)."
+                ) {
+                    ShaderPicker(value: $shader)
+                        .onChange(of: shader) { _, v in AppSettings.shared.terminalShader = v }
+                }
             }
 
             Section(title: "Sidebar Font") {

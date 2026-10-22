@@ -82,6 +82,8 @@ struct SettingsView: View {
         case appearance
         case statusBar
         case layout
+        case profiles
+        case rules
         case recordings
         case editor
         case browser
@@ -92,7 +94,8 @@ struct SettingsView: View {
 
         static var fixed: [Tab] {
             [
-                .general, .theme, .appearance, .statusBar, .layout, .recordings, .editor, .browser, .notifications,
+                .general, .theme, .appearance, .statusBar, .layout, .profiles, .rules, .recordings, .editor, .browser,
+                .notifications,
                 .plugins, .shortcuts
             ]
         }
@@ -104,6 +107,8 @@ struct SettingsView: View {
             case .appearance: return "Appearance"
             case .statusBar: return "Status Bar"
             case .layout: return "Layout"
+            case .profiles: return "Profiles"
+            case .rules: return "Rules"
             case .recordings: return "Recordings"
             case .editor: return "Editor"
             case .browser: return "Browser"
@@ -122,6 +127,8 @@ struct SettingsView: View {
             case .appearance: return "textformat.size"
             case .statusBar: return "rectangle.bottomthird.inset.filled"
             case .layout: return "square.grid.2x2"
+            case .profiles: return "person.crop.rectangle.stack"
+            case .rules: return "wand.and.stars"
             case .recordings: return "record.circle"
             case .editor: return "curlybraces"
             case .browser: return "globe"
@@ -135,6 +142,9 @@ struct SettingsView: View {
     }
 
     @State private var selectedTab: Tab? = .general
+    /// A tab asked for from outside (e.g. "Edit Profiles…"); taken by the view.
+    nonisolated(unsafe) static var requestedTab: Tab?
+    static let selectTabNotification = Notification.Name("BooSettingsSelectTab")
     @ObservedObject private var observer = SettingsObserver(topics: [.theme, .plugins])
 
     private var pluginTabs: [Tab] {
@@ -212,6 +222,14 @@ struct SettingsView: View {
         // One tokens snapshot per render for the whole tree — and the environment
         // change is what forces otherwise-unchanged rows to repaint on theme switch.
         .environment(\.tokens, t)
+        .onAppear(perform: takeRequestedTab)
+        .onReceive(NotificationCenter.default.publisher(for: Self.selectTabNotification)) { _ in takeRequestedTab() }
+    }
+
+    private func takeRequestedTab() {
+        guard let tab = Self.requestedTab else { return }
+        Self.requestedTab = nil
+        selectedTab = tab
     }
 
     /// The window's header strip: traffic lights on the left, title centred on the
@@ -244,6 +262,8 @@ struct SettingsView: View {
         case .appearance: AppearanceSettingsView()
         case .statusBar: StatusBarSettingsView()
         case .layout: LayoutSettingsView()
+        case .profiles: ProfilesSettingsView()
+        case .rules: RulesSettingsView()
         case .recordings: RecordingsSettingsView()
         case .editor: EditorSettingsView()
         case .browser: BrowserSettingsView()
@@ -726,5 +746,12 @@ class SettingsWindowController: NSWindowController {
     func showSettings() {
         showWindow(nil)
         window?.makeKeyAndOrderFront(nil)
+    }
+
+    /// Opens the window on `tab`.
+    func showSettings(tab: SettingsView.Tab) {
+        SettingsView.requestedTab = tab
+        NotificationCenter.default.post(name: SettingsView.selectTabNotification, object: nil)
+        showSettings()
     }
 }

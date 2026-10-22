@@ -16,6 +16,11 @@ struct PaneServer: Equatable, Sendable {
     /// "node — dev · api" — what runs it and where.
     var detail: String { "\(processName) — \(location)" }
     var url: URL { URL(string: "http://\(hostLabel)")! }
+
+    /// The tab whose shell started it; nil in tests.
+    var tabID: UUID? = nil
+    /// When the listening process started.
+    var startedAt: Date? = nil
 }
 
 /// Finds listening TCP ports owned by the process trees of terminal panes,
@@ -26,6 +31,7 @@ enum PaneServers {
     struct Shell: Sendable {
         let pid: pid_t
         let location: String
+        var tabID: UUID? = nil
     }
 
     /// Bound on processes walked per shell, so a fork bomb or a huge build
@@ -34,16 +40,17 @@ enum PaneServers {
 
     /// Every terminal tab with a known shell, across all windows.
     @MainActor static func shells() -> [Shell] {
+        WindowManager.shared.controllers.flatMap { $0.appState.workspaces.flatMap(shells(in:)) }
+    }
+
+    /// Terminal tabs with a known shell in one workspace.
+    @MainActor static func shells(in workspace: Workspace) -> [Shell] {
         var result: [Shell] = []
-        for controller in WindowManager.shared.controllers {
-            for workspace in controller.appState.workspaces {
-                for pane in workspace.panes.values {
-                    for tab in pane.tabs where tab.contentType == .terminal && tab.shellPID > 0 {
-                        let title = tab.title.trimmingCharacters(in: .whitespacesAndNewlines)
-                        let location = title.isEmpty ? workspace.displayName : "\(title) · \(workspace.displayName)"
-                        result.append(Shell(pid: tab.shellPID, location: location))
-                    }
-                }
+        for pane in workspace.panes.values {
+            for tab in pane.tabs where tab.contentType == .terminal && tab.shellPID > 0 {
+                let title = tab.title.trimmingCharacters(in: .whitespacesAndNewlines)
+                let location = title.isEmpty ? workspace.displayName : "\(title) · \(workspace.displayName)"
+                result.append(Shell(pid: tab.shellPID, location: location, tabID: tab.id))
             }
         }
         return result
@@ -60,11 +67,21 @@ enum PaneServers {
                 guard !ports.isEmpty else { continue }
                 let name = ProcessTree.displayName(pid: pid)
                 for port in ports where byPort[port] == nil {
-                    byPort[port] = PaneServer(port: port, pid: pid, processName: name, location: shell.location)
+                    byPort[port] = PaneServer(
+                        port: port, pid: pid, processName: name, location: shell.location,
+                        tabID: shell.tabID, startedAt: startTime(pid: pid))
                 }
             }
         }
         return byPort.values.sorted { $0.port < $1.port }
+    }
+
+    static func startTime(pid: pid_t) -> Date? {
+        var info = proc_bsdinfo()
+        let size = Int32(MemoryLayout<proc_bsdinfo>.size)
+        guard proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, size) == size else { return nil }
+        return Date(
+            timeIntervalSince1970: TimeInterval(info.pbi_start_tvsec) + TimeInterval(info.pbi_start_tvusec) / 1_000_000)
     }
 
     /// TCP ports `pid` has a socket in LISTEN state on (IPv4 and IPv6 merged).

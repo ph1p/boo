@@ -432,12 +432,23 @@ extension PaneView {
             ProgressBarStyle.draw(ctx, progress: progress, in: bar, theme: theme)
         }
 
+        // Profile accent along the pill's bottom edge; progress takes that spot.
+        if tab.state.progress == nil, let name = tab.state.profile,
+            let accent = ProfileStore.shared.accent(forProfile: name)
+        {
+            ctx.setFillColor(accent.cgColor)
+            let bar = CGRect(x: pillRect.minX + 8, y: pillRect.maxY - 2.5, width: pillRect.width - 16, height: 1.5)
+            ctx.addPath(CGPath(roundedRect: bar, cornerWidth: 0.75, cornerHeight: 0.75, transform: nil))
+            ctx.fillPath()
+        }
+
         if tab.state.isRecording { Self.drawRecordingDot(ctx, in: pillRect) }
 
-        // Activity dot — shown on inactive tabs when a command finished in background
+        // Activity dot — shown on inactive tabs when a command finished in
+        // background; a trigger's mark shows in the warning color.
         if tab.state.hasActivity && !isActive {
             let dotSize: CGFloat = 5
-            ctx.setFillColor(theme.accentEmphasis.cgColor)
+            ctx.setFillColor((tab.state.triggerMark != nil ? theme.warning : theme.accentEmphasis).cgColor)
             ctx.fillEllipse(
                 in: CGRect(
                     x: pillRect.maxX - closeZone - dotSize - 2,

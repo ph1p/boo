@@ -200,12 +200,17 @@ final class AgentInbox {
             remove(tabID: tabID)
             return false
         }
+        Self.focus(location)
+        markSeen(tabID: tabID)
+        return true
+    }
+
+    /// Brings a located tab's window forward and selects the tab.
+    static func focus(_ location: Location) {
         NSApp.activate(ignoringOtherApps: true)
         location.controller.window?.makeKeyAndOrderFront(nil)
         location.controller.focusActivity(
             workspaceID: location.workspace.id, paneID: location.pane.id, tabIndex: location.tabIndex)
-        markSeen(tabID: tabID)
-        return true
     }
 
     /// Jump to the first item waiting for the user.

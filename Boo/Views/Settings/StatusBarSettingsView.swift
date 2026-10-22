@@ -6,6 +6,7 @@ struct StatusBarSettingsView: View {
     @Environment(\.tokens) private var tokens
     @State private var showTime = AppSettings.shared.statusBarShowTime
     @State private var showPaneInfo = AppSettings.shared.statusBarShowPaneInfo
+    @State private var showPorts = AppSettings.shared.statusBarShowPorts
     @State private var showConnection = AppSettings.shared.statusBarShowConnection
     @State private var showPath = AppSettings.shared.pluginBool("file-tree-local", "showPath", default: true)
     @ObservedObject private var observer = SettingsObserver(topics: [.theme, .statusBar, .plugins])
@@ -29,6 +30,12 @@ struct StatusBarSettingsView: View {
                     .onChange(of: showTime) { _, v in AppSettings.shared.statusBarShowTime = v }
                 ToggleRow(label: "Pane & tab count", isOn: $showPaneInfo)
                     .onChange(of: showPaneInfo) { _, v in AppSettings.shared.statusBarShowPaneInfo = v }
+                ToggleRow(
+                    label: "Listening ports",
+                    help: "Ports that processes in the active workspace listen on, with open, copy and stop actions.",
+                    isOn: $showPorts
+                )
+                .onChange(of: showPorts) { _, v in AppSettings.shared.statusBarShowPorts = v }
             }
 
             pluginSegmentsSection(t)

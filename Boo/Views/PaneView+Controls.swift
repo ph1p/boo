@@ -29,7 +29,10 @@ extension PaneView {
         let oldSize = paneControls.frame.size
         let expanded = Self.paneControlsExpanded(
             settings.paneControlsVisibility, pointerInside: isPointerInPane, isFocused: isFocused)
-        paneControls.configure(expanded: expanded, recordingSince: recordingSince, isZoomed: isZoomed)
+        // Only a profile that differs from the default earns the notch.
+        let profile = tab?.state.profile.flatMap { $0 == settings.defaultProfile ? nil : $0 }
+        paneControls.configure(
+            expanded: expanded, recordingSince: recordingSince, isZoomed: isZoomed, profile: profile)
         // Hover and focus flips mostly keep the size; only re-anchor when it changed.
         if paneControls.frame.size != oldSize { layoutTerminalView() }
 

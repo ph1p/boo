@@ -72,10 +72,14 @@ private func ghosttyAction(_ app: ghostty_app_t?, _ target: ghostty_target_s, _ 
                 let data = String(payload[payload.index(after: semicolonIdx)...])
                 if action == "cmd_start" {
                     DispatchQueue.main.async { [weak view] in
+                        view?.atBooPrompt = false
                         view?.commandHistory.start(data)
                         view?.onCommandStart?(data)
                         view?.onPromptMarksChanged?()
                     }
+                } else if action == "cmd_end" {
+                    // Sent at every prompt, the first one included.
+                    DispatchQueue.main.async { [weak view] in view?.atBooPrompt = true }
                 }
             }
             return true
@@ -395,9 +399,15 @@ private func ghosttyCloseSurface(_ userdata: UnsafeMutableRawPointer?, _ process
     private(set) var app: ghostty_app_t?
     private(set) var config: ghostty_config_t?
     private var settingsObserver: Any?
+    private var profilesObserver: Any?
 
     /// All active surfaces that need config updates.
     private var surfaces: [ghostty_surface_t] = []
+    /// The profile each surface shows; surfaces not listed use `config`.
+    private var surfaceProfiles: [ghostty_surface_t: Profile] = [:]
+    /// Configs built for profiles that change the surface, by profile name.
+    /// Rebuilt lazily after every reload.
+    private var profileConfigs: [String: (profile: Profile, config: ghostty_config_t)] = [:]
 
     func registerSurface(_ surface: ghostty_surface_t) {
         surfaces.append(surface)
@@ -405,6 +415,41 @@ private func ghosttyCloseSurface(_ userdata: UnsafeMutableRawPointer?, _ process
 
     func unregisterSurface(_ surface: ghostty_surface_t) {
         surfaces.removeAll { $0 == surface }
+        surfaceProfiles[surface] = nil
+    }
+
+    /// Shows `profile` on `surface` (nil: the global settings). Only fields
+    /// that change the look (theme, font, shader) need a config of their own.
+    func setProfile(_ profile: Profile?, for surface: ghostty_surface_t) {
+        let effective = profile?.changesSurface == true ? profile : nil
+        let previous = surfaceProfiles[surface]
+        guard previous != effective else { return }
+        surfaceProfiles[surface] = effective
+        guard let cfg = effectiveConfig(for: surface) else { return }
+        pushConfig(cfg, to: surface)
+    }
+
+    private func effectiveConfig(for surface: ghostty_surface_t) -> ghostty_config_t? {
+        guard let profile = surfaceProfiles[surface] else { return config }
+        if let cached = profileConfigs[profile.name] {
+            if cached.profile == profile { return cached.config }
+            // Edited since it was built; surfaces copy their config, so the
+            // stale one can go now.
+            ghostty_config_free(cached.config)
+            profileConfigs[profile.name] = nil
+        }
+        guard let cfg = buildConfig(profile: profile) else { return config }
+        profileConfigs[profile.name] = (profile, cfg)
+        return cfg
+    }
+
+    private func pushConfig(_ cfg: ghostty_config_t, to surface: ghostty_surface_t) {
+        // Reset font size first — Ghostty tracks manual adjustments (Cmd+/-)
+        // and skips config-based font changes if the flag is set.
+        "reset_font_size".withCString { action in
+            _ = ghostty_surface_binding_action(surface, action, 15)
+        }
+        ghostty_surface_update_config(surface, cfg)
     }
 
     /// Find Ghostty's resources directory so shell integration (OSC 7) works.
@@ -514,17 +559,22 @@ private func ghosttyCloseSurface(_ userdata: UnsafeMutableRawPointer?, _ process
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.reloadConfig() }
         }
+        profilesObserver = NotificationCenter.default.addObserver(
+            forName: .profilesChanged, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.reloadProfiles() }
+        }
     }
 
     /// Build a fresh Ghostty config from Boo settings.
-    private func buildConfig() -> ghostty_config_t? {
+    private func buildConfig(profile: Profile? = nil) -> ghostty_config_t? {
         let cfg = ghostty_config_new()
         guard let cfg = cfg else { return nil }
 
         // Skip ghostty_config_load_default_files — Boo manages its own
         // settings.  Loading the user's Ghostty config would prepend values
         // for repeatable keys like font-family, making our settings ignored.
-        applyBooSettings(to: cfg)
+        applyBooSettings(to: cfg, profile: profile)
         ghostty_config_finalize(cfg)
 
         return cfg
@@ -542,31 +592,40 @@ private func ghosttyCloseSurface(_ userdata: UnsafeMutableRawPointer?, _ process
             ghostty_app_update_config(app, newConfig)
         }
 
+        // Profile configs inherit the global settings, so they are rebuilt too.
+        let oldProfileConfigs = profileConfigs
+        profileConfigs = [:]
+
         // Push config to each existing surface (font, colors, cursor, etc.).
-        // Reset font size first — Ghostty tracks manual adjustments (Cmd+/-)
-        // and skips config-based font changes if the flag is set.
         for surface in surfaces {
-            "reset_font_size".withCString { action in
-                _ = ghostty_surface_binding_action(surface, action, 15)
-            }
-            ghostty_surface_update_config(surface, newConfig)
+            pushConfig(effectiveConfig(for: surface) ?? newConfig, to: surface)
         }
 
         if let old = old { ghostty_config_free(old) }
+        for entry in oldProfileConfigs.values { ghostty_config_free(entry.config) }
 
         booLog(.info, .app, "Config reloaded, pushed to \(surfaces.count) surface(s)")
     }
 
     /// Write Boo settings as a Ghostty config file and load it.
-    private func applyBooSettings(to cfg: ghostty_config_t) {
+    /// Profiles in `profiles.json` changed: surfaces showing an edited
+    /// profile get it rebuilt.
+    private func reloadProfiles() {
+        let store = ProfileStore.shared
+        for (surface, profile) in surfaceProfiles {
+            setProfile(store.profile(named: profile.name), for: surface)
+        }
+    }
+
+    private func applyBooSettings(to cfg: ghostty_config_t, profile: Profile? = nil) {
         let settings = AppSettings.shared
-        let theme = settings.theme
+        let theme = profile?.theme.flatMap { settings.theme(named: $0) } ?? settings.theme
 
         var lines: [String] = []
 
         // Font
-        lines.append("font-family = \(settings.fontName)")
-        lines.append("font-size = \(Int(settings.fontSize))")
+        lines.append("font-family = \(profile?.fontFamily ?? settings.fontName)")
+        lines.append("font-size = \(Int(profile?.fontSize ?? settings.fontSize))")
 
         // Cursor
         switch settings.cursorStyle {
@@ -610,8 +669,17 @@ private func ghosttyCloseSurface(_ userdata: UnsafeMutableRawPointer?, _ process
         lines.append("clipboard-write = allow")
         lines.append("copy-on-select = clipboard")
 
+        // A profile's shader ("" = none) replaces the global one.
+        if let shader = ShaderLibrary.path(for: profile?.shader ?? settings.terminalShader) {
+            lines.append("custom-shader = \(shader)")
+            lines.append("custom-shader-animation = true")
+        }
+
         // Write temp config file and load it
-        let tmpPath = BooPaths.ghosttyConfigFile
+        var tmpPath = BooPaths.ghosttyConfigFile
+        if let profile {
+            tmpPath = (tmpPath as NSString).deletingPathExtension + "-profile-\(RuleSet.hash(profile.name)).conf"
+        }
         let content = lines.joined(separator: "\n") + "\n"
         do {
             try content.write(toFile: tmpPath, atomically: true, encoding: .utf8)

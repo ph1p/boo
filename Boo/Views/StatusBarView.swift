@@ -81,7 +81,10 @@ import Cocoa
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.needsDisplay = true }
         }
-        orchestratorObservers = [Notification.Name.approvalsChanged, .orchestratorChanged, .keyTableChanged].map {
+        orchestratorObservers = [
+            Notification.Name.approvalsChanged, .orchestratorChanged, .keyTableChanged, .portsChanged,
+            .kubeContextChanged, .rulesChanged, .syncStatusChanged, .agentBudgetChanged
+        ].map {
             name in
             NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
                 MainActor.assumeIsolated { self?.needsDisplay = true }
@@ -118,6 +121,9 @@ import Cocoa
         registerPlugin(PaneInfoSegment())
         registerPlugin(TimeSegment())
         registerPlugin(AgentInboxSegment())
+        registerPlugin(PortsSegment())
+        registerPlugin(KubeSegment())
+        registerPlugin(SyncSegment())
         registerPlugin(OrchestratorSegment())
     }
 

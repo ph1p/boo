@@ -10,6 +10,8 @@ enum PhonePush {
         case agentNeedsInput = "agent"
         case longCommand = "command"
         case sshDropped = "ssh"
+        /// A trigger rule fired; carries the rule id, never the matched text.
+        case trigger = "trigger"
     }
 
     /// ssh exits 255 when the connection itself failed or dropped.
@@ -50,6 +52,8 @@ enum PhonePush {
             return (title, "Long command finished")
         case .sshDropped:
             return (title, "SSH connection dropped")
+        case .trigger:
+            return (title, "Rule \"\(agentName ?? "trigger")\" matched")
         }
     }
 
@@ -82,6 +86,7 @@ enum PhonePush {
         case .agentNeedsInput: return "robot"
         case .longCommand: return "hourglass"
         case .sshDropped: return "electric_plug"
+        case .trigger: return "bell"
         }
     }
 
@@ -131,6 +136,10 @@ final class PhonePusher {
 
     func agentNeedsInput(workspaceName: String, agentName: String) {
         send(.agentNeedsInput, workspaceName: workspaceName, agentName: agentName)
+    }
+
+    func triggerFired(ruleID: String, workspaceName: String) {
+        send(.trigger, workspaceName: workspaceName, agentName: ruleID)
     }
 
     /// Settings "Send Test" button: bypasses the enabled flag and throttle.
