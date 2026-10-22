@@ -475,13 +475,12 @@ import XCTest
         let neutral = WorkspacePillStyle.islandBorderAlpha(colored: false)
         XCTAssertLessThan(colored, neutral, "a tinted edge carries less alpha than the neutral rule")
 
-        // The active-pill accent stroke matches the focused pane's island border:
-        // same hairline weight, and both draw the shared `theme.focusBorder`
-        // token — one shared focus marker by construction.
+        // The active-pill accent stroke is heavier than the island hairline so the
+        // current workspace stands out from the inactive pills around it.
         XCTAssertEqual(IslandMetrics.borderWidth, 1, "island hairline is 1px")
-        XCTAssertEqual(
+        XCTAssertGreaterThan(
             WorkspacePillStyle.borderWidth, IslandMetrics.borderWidth,
-            "the active-pill accent stroke matches the island hairline")
+            "the active-pill accent stroke is heavier than the island hairline")
 
         // Sanity: the helper resolves to the workspace colour, not the fallback.
         let rect = CGRect(x: 0, y: 0, width: 32, height: 32)

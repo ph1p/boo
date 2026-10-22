@@ -7,10 +7,9 @@ import Cocoa
 /// per surface; fill, accent border, and close button are identical and live here.
 enum WorkspacePillStyle {
     static let cornerRadius: CGFloat = IslandMetrics.controlRadius
-    // Active-pill stroke matches the focused pane's island border: same hairline
-    // weight, and both draw `theme.focusBorder` — one "this is current" marker
-    // everywhere by construction.
-    static let borderWidth: CGFloat = IslandMetrics.borderWidth
+    // Active-pill stroke is twice the island hairline so the current workspace
+    // reads at a glance next to the hairline every inactive pill carries.
+    static let borderWidth: CGFloat = IslandMetrics.borderWidth * 2
     static let borderInset: CGFloat = borderWidth / 2
 
     /// Diameter of the hover close-button circle, shared by every surface so the
@@ -108,11 +107,12 @@ enum WorkspacePillStyle {
         fillRoundedRect(ctx, rect: rect)
     }
 
-    /// Stroke the focus border drawn on the active pill (`theme.focusBorder`,
-    /// the same token the focused pane island uses).
+    /// Stroke the accent border drawn on the active pill.
     static func strokeBorder(_ ctx: CGContext, rect: CGRect, theme: TerminalTheme) {
         let strokeRect = rect.insetBy(dx: borderInset, dy: borderInset)
-        ctx.setStrokeColor(theme.focusBorder.cgColor)
+        // accentEmphasis, not focusBorder: the 0.45 island border disappears
+        // against tinted pill fills.
+        ctx.setStrokeColor(theme.accentEmphasis.cgColor)
         ctx.setLineWidth(borderWidth)
         ctx.addPath(
             CGPath(

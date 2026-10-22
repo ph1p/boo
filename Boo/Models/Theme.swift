@@ -72,7 +72,7 @@ struct TerminalTheme {
     /// Focus ring around focused text fields.
     var focusRing: NSColor { accentColor.withAlphaComponent(0.7) }
 
-    /// Border of the focused pane island / active workspace pill.
+    /// Border of the focused pane island.
     var focusBorder: NSColor { accentColor.withAlphaComponent(0.45) }
 
     /// Fill behind the selected item.
