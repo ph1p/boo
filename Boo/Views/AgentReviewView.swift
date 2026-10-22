@@ -161,7 +161,7 @@ struct AgentReviewView: View {
             Rectangle().fill(t.separator).frame(height: 1)
             footer
         }
-        .background(t.chromeBg)
+        .background(t.termBg)
     }
 
     // MARK: Header / footer

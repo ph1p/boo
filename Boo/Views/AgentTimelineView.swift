@@ -119,7 +119,7 @@ struct AgentTimelineView: View {
                         : "Loading timeline…")
             }
         }
-        .background(t.chromeBg)
+        .background(t.termBg)
         .onAppear { model.startRefreshing() }
         .onDisappear { model.stopRefreshing() }
     }
