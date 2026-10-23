@@ -13,7 +13,7 @@ final class SnippetsPlugin: BooPluginProtocol {
         id: "snippets",
         name: "Snippets",
         version: "1.0.0",
-        icon: "text.page",
+        icon: "curlybraces.square",
         description: "Save and paste frequently-used terminal commands",
         when: nil,
         runtime: nil,

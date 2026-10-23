@@ -14,7 +14,7 @@ final class KubePlugin: BooPluginProtocol {
         id: KubeStore.pluginID,
         name: "Kubernetes",
         version: "1.0.0",
-        icon: "steeringwheel",
+        icon: "helm",
         description: "Pods, deployments and services of the current kube context",
         when: "!process.ai",
         runtime: nil,

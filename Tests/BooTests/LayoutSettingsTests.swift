@@ -11,6 +11,7 @@ import XCTest
             UserDefaults.standard.removeObject(forKey: "sidebarDensity")
             UserDefaults.standard.removeObject(forKey: "sidebarDefaultHidden")
             UserDefaults.standard.removeObject(forKey: "sidebarPerWorkspaceState")
+            UserDefaults.standard.removeObject(forKey: "sidebarTabBarPosition")
         }
         try await super.tearDown()
     }
@@ -39,6 +40,13 @@ import XCTest
         XCTAssertEqual(AppSettings.shared.workspaceBarPosition, .right)
         AppSettings.shared.workspaceBarPosition = .left
         XCTAssertEqual(AppSettings.shared.workspaceBarPosition, .left)
+    }
+
+    func testSidebarTabBarPositionDefaultsToBottom() {
+        UserDefaults.standard.removeObject(forKey: "sidebarTabBarPosition")
+        XCTAssertEqual(AppSettings.shared.sidebarTabBarPosition, .bottom)
+        UserDefaults.standard.set("garbage", forKey: "sidebarTabBarPosition")
+        XCTAssertEqual(AppSettings.shared.sidebarTabBarPosition, .bottom)
     }
 
     func testSidebarDensityDefault() {

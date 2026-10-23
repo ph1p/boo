@@ -8,7 +8,7 @@ final class RemoteFileTreePlugin: BooPluginProtocol {
         id: "file-tree-remote",
         name: "Files (Remote)",
         version: "1.0.0",
-        icon: "folder.badge.gearshape",
+        icon: "externaldrive.connected.to.line.below",
         description: "File explorer for remote sessions",
         when: "env.ssh",
         runtime: nil,

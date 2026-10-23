@@ -46,7 +46,7 @@ struct KubePanelView: View {
             if store.kubectlPath == nil || store.context == nil {
                 VStack(spacing: 8) {
                     Spacer()
-                    Image(systemName: "steeringwheel")
+                    Image(systemName: "helm")
                         .font(.system(size: 24))
                         .foregroundStyle(colors.muted.opacity(0.3))
                     Text(store.kubectlPath == nil ? "kubectl not found" : "No current kube context")

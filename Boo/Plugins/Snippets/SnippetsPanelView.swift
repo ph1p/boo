@@ -20,7 +20,7 @@ struct SnippetsPanelView: View {
         VStack(alignment: .leading, spacing: 0) {
             // Header
             HStack {
-                Image(systemName: "text.page.fill")
+                Image(systemName: "curlybraces.square.fill")
                     .font(.system(size: 10))
                     .foregroundStyle(accentColor)
                 Text("SNIPPETS")
@@ -45,7 +45,7 @@ struct SnippetsPanelView: View {
             if snippets.isEmpty && !isAdding {
                 VStack(spacing: 8) {
                     Spacer()
-                    Image(systemName: "text.page")
+                    Image(systemName: "curlybraces.square")
                         .font(.system(size: 24))
                         .foregroundStyle(mutedColor.opacity(0.3))
                     Text("No snippets yet")

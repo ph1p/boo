@@ -13,7 +13,7 @@ final class DebugPlugin: BooPluginProtocol {
         id: "debug",
         name: "Debug",
         version: "1.0.0",
-        icon: "ladybug.fill",
+        icon: "ladybug",
         description: "Logs all plugin lifecycle events and displays live terminal state",
         when: nil,
         runtime: nil,

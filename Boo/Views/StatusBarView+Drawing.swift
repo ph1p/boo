@@ -27,8 +27,12 @@ extension StatusBarView {
         // Reset tracking
         segmentRects.removeAll()
 
+        // Sidebar toggle sits at the edge the sidebar is on
+        let toggleLeading = settings.sidebarPosition == .left
+        let sidebarToggleWidth = drawSidebarToggle(ctx: ctx, theme: theme, leading: toggleLeading)
+
         // Draw left plugins left-to-right
-        var x: CGFloat = IslandMetrics.contentInset
+        var x: CGFloat = toggleLeading ? sidebarToggleWidth : IslandMetrics.contentInset
         var isFirst = true
         for plugin in leftPlugins where plugin.isVisible(settings: settings, state: state) {
             if !isFirst {
@@ -61,12 +65,9 @@ extension StatusBarView {
             isFirst = false
         }
 
-        // Draw sidebar toggle at far right
-        let sidebarToggleWidth = drawSidebarToggle(ctx: ctx, theme: theme)
-
         // Draw right plugins right-to-left
         let visibleRight = rightPlugins.filter { $0.isVisible(settings: settings, state: state) }
-        var rx = bounds.width - sidebarToggleWidth + 2
+        var rx = bounds.width - (toggleLeading ? IslandMetrics.contentInset : sidebarToggleWidth) + 2
         for plugin in visibleRight {
             let width = plugin.draw(at: rx, y: textY, theme: theme, settings: settings, state: state, ctx: ctx)
             rx -= width
@@ -74,8 +75,9 @@ extension StatusBarView {
         }
     }
 
-    /// Draw the sidebar toggle button at the far right edge. Returns total width consumed (including separator).
-    internal func drawSidebarToggle(ctx: CGContext, theme: TerminalTheme) -> CGFloat {
+    /// Draw the sidebar toggle button at the far left (`leading`) or far right
+    /// edge. Returns total width consumed (including separator).
+    internal func drawSidebarToggle(ctx: CGContext, theme: TerminalTheme, leading: Bool) -> CGFloat {
         if sidebarToggleHidden {
             sidebarToggleRect = .zero
             return IslandMetrics.contentInset
@@ -86,15 +88,19 @@ extension StatusBarView {
         let toggleZoneWidth = sepGap + iconDrawSize + rightPadding
         let totalWidth = sepGap + 1 + toggleZoneWidth
 
-        // Separator line
+        // Separator line between the toggle zone and the segments
         let sepInset = round(barHeight * 0.22)
-        let sepX = bounds.width - totalWidth + sepGap
+        let sepX = leading ? totalWidth - sepGap - 1 : bounds.width - totalWidth + sepGap
         ctx.setFillColor(theme.separator.cgColor)
         ctx.fill(CGRect(x: sepX, y: sepInset, width: 0.5, height: barHeight - sepInset * 2))
 
+        // Zone between the bar edge and the separator
+        let zoneStart = leading ? 0 : sepX + 1
+        let zoneWidth = leading ? sepX : bounds.width - zoneStart
+
         // Hover highlight for sidebar toggle
         if isSidebarToggleHovered {
-            let hoverRect = CGRect(x: sepX + 2, y: 2, width: bounds.width - sepX - 4, height: barHeight - 4)
+            let hoverRect = CGRect(x: zoneStart + 2, y: 2, width: zoneWidth - 3, height: barHeight - 4)
             ctx.setFillColor(theme.hoverFill.cgColor)
             WorkspacePillStyle.fillRoundedRect(ctx, rect: hoverRect)
         }
@@ -105,8 +111,6 @@ extension StatusBarView {
             ? theme.accentColor
             : (isSidebarToggleHovered ? theme.textSecondary : theme.textTertiary)
 
-        let zoneStart = sepX + 1
-        let zoneWidth = bounds.width - zoneStart
         let iconX = zoneStart + (zoneWidth - iconDrawSize) / 2
         let iconH = iconDrawSize * 0.75
         let iconY = (barHeight - iconH) / 2
@@ -118,20 +122,25 @@ extension StatusBarView {
         ctx.addPath(CGPath(roundedRect: iconRect, cornerWidth: 2, cornerHeight: 2, transform: nil))
         ctx.strokePath()
 
-        // Vertical divider at 2/3
-        let divX = iconX + iconDrawSize * 0.65
+        // Vertical divider a third in from the side the sidebar is on
+        let sidebarLeft = AppSettings.shared.sidebarPosition == .left
+        let divX = iconX + iconDrawSize * (sidebarLeft ? 0.35 : 0.65)
         ctx.move(to: CGPoint(x: divX, y: iconRect.minY + 1))
         ctx.addLine(to: CGPoint(x: divX, y: iconRect.maxY - 1))
         ctx.strokePath()
 
-        // Fill right portion if sidebar visible
+        // Fill the sidebar portion if sidebar visible
         if sidebarVisible {
             ctx.setFillColor(color.withAlphaComponent(0.2).cgColor)
-            ctx.fill(CGRect(x: divX, y: iconRect.minY + 1, width: iconX + iconDrawSize - divX - 1, height: iconH - 2))
+            let fillRect =
+                sidebarLeft
+                ? CGRect(x: iconX + 1, y: iconRect.minY + 1, width: divX - iconX - 1, height: iconH - 2)
+                : CGRect(x: divX, y: iconRect.minY + 1, width: iconX + iconDrawSize - divX - 1, height: iconH - 2)
+            ctx.fill(fillRect)
         }
 
         // Track hit rect (whole zone after separator)
-        sidebarToggleRect = NSRect(x: sepX, y: 0, width: bounds.width - sepX, height: barHeight)
+        sidebarToggleRect = NSRect(x: zoneStart, y: 0, width: zoneWidth + 1, height: barHeight)
 
         return totalWidth
     }
@@ -145,7 +154,7 @@ extension StatusBarView {
         let settings = AppSettings.shared
         let state = currentState
 
-        // Sidebar toggle (far right)
+        // Sidebar toggle (edge on the sidebar's side)
         if sidebarToggleRect.contains(point) {
             onSidebarToggle?()
             return
