@@ -286,7 +286,7 @@ struct NotesPanelView: View {
     private func reloadList() {
         // Name every open workspace's note, so the menu lists names, not hashes.
         let open = WindowManager.shared.controllers.flatMap { $0.appState.workspaces }.map {
-            (NotesStore.path(folderPath: $0.folderPath, workspaceID: $0.id), $0.displayName)
+            (NotesStore.path(workspaceID: $0.id), $0.displayName)
         }
         Task {
             notes = await Task.detached(priority: .userInitiated) {

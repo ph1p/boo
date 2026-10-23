@@ -15,7 +15,7 @@ extension MainWindowController {
         let cwd = workspace.pane(for: workspace.activePaneID)?.activeTab.map { tab in
             tab.remoteSession != nil ? (tab.remoteWorkingDirectory ?? tab.workingDirectory) : tab.workingDirectory
         }
-        let path = NotesStore.path(folderPath: workspace.folderPath, workspaceID: workspace.id)
+        let path = NotesStore.path(workspaceID: workspace.id)
         let title = workspace.displayName
         NotesStore.flush(path) {
             guard NotesStore.append(text, command: command, cwd: cwd, to: path) else {

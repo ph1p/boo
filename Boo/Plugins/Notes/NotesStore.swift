@@ -1,5 +1,4 @@
 import AppKit
-import CryptoKit
 import Foundation
 
 extension Notification.Name {
@@ -28,26 +27,23 @@ struct NoteMatch: Identifiable, Equatable {
 }
 
 /// Per-workspace markdown notes in `~/.boo/notes/`. A note is keyed by the
-/// workspace folder (so it survives deleting and re-adding the workspace),
-/// or by the workspace ID when the workspace has no folder. `scratch.md` is
-/// one global note shared by all workspaces.
+/// workspace ID, not its folder: workspaces often share a folder (several
+/// opened on `~/dev`) and must still each have their own note. `scratch.md`
+/// is one global note shared by all workspaces.
 enum NotesStore {
     static let pluginID = "notes"
     static let scratchTitle = "Scratch"
     private static let scratchFileName = "scratch.md"
-    /// File name → workspace name, since hashed file names say nothing.
+    /// File name → workspace name, since ID file names say nothing.
     private static let indexFileName = "titles.json"
 
     /// File name (without directory) of the note for a workspace.
-    static func fileName(folderPath: String, workspaceID: UUID) -> String {
-        let folder = (folderPath as NSString).standardizingPath
-        guard !folder.isEmpty, folder != "/" else { return workspaceID.uuidString.lowercased() + ".md" }
-        let digest = Insecure.SHA1.hash(data: Data(folder.utf8))
-        return digest.map { String(format: "%02x", $0) }.joined() + ".md"
+    static func fileName(workspaceID: UUID) -> String {
+        workspaceID.uuidString.lowercased() + ".md"
     }
 
-    static func path(folderPath: String, workspaceID: UUID, in directory: String = BooPaths.notesDir) -> String {
-        directory.appendingPathComponent(fileName(folderPath: folderPath, workspaceID: workspaceID))
+    static func path(workspaceID: UUID, in directory: String = BooPaths.notesDir) -> String {
+        directory.appendingPathComponent(fileName(workspaceID: workspaceID))
     }
 
     static func scratchPath(in directory: String = BooPaths.notesDir) -> String {
@@ -58,7 +54,7 @@ enum NotesStore {
     @MainActor
     static func activeNotePath() -> (path: String, title: String)? {
         guard let workspace = WindowManager.shared.activeController?.activeWorkspace else { return nil }
-        return (path(folderPath: workspace.folderPath, workspaceID: workspace.id), workspace.displayName)
+        return (path(workspaceID: workspace.id), workspace.displayName)
     }
 
     // MARK: - Titles and listing

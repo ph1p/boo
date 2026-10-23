@@ -15,19 +15,11 @@ final class NotesStoreTests: XCTestCase {
         super.tearDown()
     }
 
-    func testFileNameHashesStandardizedFolder() {
-        let id = UUID()
-        let a = NotesStore.fileName(folderPath: "/Users/me/proj", workspaceID: id)
-        XCTAssertEqual(a, NotesStore.fileName(folderPath: "/Users/me/proj/", workspaceID: UUID()))
-        XCTAssertEqual(a, NotesStore.fileName(folderPath: "/Users/me/./proj", workspaceID: id))
-        XCTAssertNotEqual(a, NotesStore.fileName(folderPath: "/Users/me/other", workspaceID: id))
-        XCTAssertTrue(a.hasSuffix(".md"))
-        XCTAssertEqual(a.count, 40 + 3)
-    }
-
-    func testFileNameFallsBackToWorkspaceID() {
-        let id = UUID()
-        XCTAssertEqual(NotesStore.fileName(folderPath: "", workspaceID: id), id.uuidString.lowercased() + ".md")
+    func testFileNameIsWorkspaceIDSoSharedFoldersGetOwnNotes() {
+        let a = UUID()
+        let b = UUID()
+        XCTAssertEqual(NotesStore.fileName(workspaceID: a), a.uuidString.lowercased() + ".md")
+        XCTAssertNotEqual(NotesStore.path(workspaceID: a, in: dir), NotesStore.path(workspaceID: b, in: dir))
     }
 
     func testAppendBlockUsesLongerFence() {
@@ -38,7 +30,7 @@ final class NotesStoreTests: XCTestCase {
     }
 
     func testAppendCreatesAndSeparates() throws {
-        let path = NotesStore.path(folderPath: "/x", workspaceID: UUID(), in: dir)
+        let path = NotesStore.path(workspaceID: UUID(), in: dir)
         XCTAssertTrue(NotesStore.append("one", to: path))
         try "\(try String(contentsOfFile: path, encoding: .utf8))tail".write(
             toFile: path, atomically: true, encoding: .utf8)
@@ -58,8 +50,8 @@ final class NotesStoreTests: XCTestCase {
     }
 
     func testRememberTitlesBatchesAndSkipsScratch() {
-        let a = NotesStore.path(folderPath: "/a", workspaceID: UUID(), in: dir)
-        let b = NotesStore.path(folderPath: "/b", workspaceID: UUID(), in: dir)
+        let a = NotesStore.path(workspaceID: UUID(), in: dir)
+        let b = NotesStore.path(workspaceID: UUID(), in: dir)
         NotesStore.rememberTitles([(a, "A"), (b, "B"), (NotesStore.scratchPath(in: dir), "Nope")])
         XCTAssertTrue(NotesStore.append("x", to: a))
         XCTAssertTrue(NotesStore.append("y", to: b))
@@ -68,8 +60,8 @@ final class NotesStoreTests: XCTestCase {
     }
 
     func testListTitlesScratchFirstThenRecent() throws {
-        let old = NotesStore.path(folderPath: "/old", workspaceID: UUID(), in: dir)
-        let new = NotesStore.path(folderPath: "/new", workspaceID: UUID(), in: dir)
+        let old = NotesStore.path(workspaceID: UUID(), in: dir)
+        let new = NotesStore.path(workspaceID: UUID(), in: dir)
         XCTAssertTrue(NotesStore.append("a", to: old))
         XCTAssertTrue(NotesStore.append("b", to: new))
         XCTAssertTrue(NotesStore.append("c", to: NotesStore.scratchPath(in: dir)))
