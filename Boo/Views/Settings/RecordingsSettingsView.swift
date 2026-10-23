@@ -67,51 +67,41 @@ struct RecordingsSettingsView: View {
             )
 
             Section(title: "Saving") {
-                SettingStack(label: "Folder") {
-                    HStack(spacing: 8) {
-                        Text((SessionRecorder.recordingsDirectory.path as NSString).abbreviatingWithTildeInPath)
-                            .font(.system(size: 12, design: .monospaced))
-                            .foregroundStyle(t.muted)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                        Button("Choose…", action: chooseFolder).buttonStyle(.themed)
-                        Button("Reveal") {
-                            let dir = SessionRecorder.recordingsDirectory
-                            try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-                            NSWorkspace.shared.open(dir)
-                        }
-                        .buttonStyle(.themed)
-                        Button("Reset") { settings.recordingsFolder = "" }
-                            .buttonStyle(.themed)
-                            .disabled(settings.recordingsFolder.isEmpty)
+                PathRow(label: "Folder", path: SessionRecorder.recordingsDirectory.path) {
+                    Button("Choose…", action: chooseFolder)
+                    Button("Reveal") {
+                        let dir = SessionRecorder.recordingsDirectory
+                        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+                        NSWorkspace.shared.open(dir)
                     }
+                    Button("Reset") { settings.recordingsFolder = "" }
+                        .disabled(settings.recordingsFolder.isEmpty)
                 }
-                SettingsRowDivider()
-                SettingStack(
+                SettingRow(
                     label: "File name",
                     help:
                         "Tokens: \(SessionRecorder.templateTokens.joined(separator: " ")). A number is appended when the name is taken."
                 ) {
-                    HStack(spacing: 8) {
-                        TextField(
-                            SessionRecorder.defaultTemplate,
-                            text: LayoutSettingsBindings.binding(\.recordingFileNameTemplate)
-                        )
-                        .themedTextField()
-                        .font(.system(size: 12, design: .monospaced))
-                        Button("Default") { settings.recordingFileNameTemplate = SessionRecorder.defaultTemplate }
-                            .buttonStyle(.themed)
-                            .disabled(settings.recordingFileNameTemplate == SessionRecorder.defaultTemplate)
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack(spacing: 6) {
+                            TextField(
+                                SessionRecorder.defaultTemplate,
+                                text: LayoutSettingsBindings.binding(\.recordingFileNameTemplate)
+                            )
+                            .themedTextField()
+                            .font(.system(size: 12, design: .monospaced))
+                            Button("Default") { settings.recordingFileNameTemplate = SessionRecorder.defaultTemplate }
+                                .buttonStyle(.themed)
+                                .disabled(settings.recordingFileNameTemplate == SessionRecorder.defaultTemplate)
+                        }
+                        Text("Example: \(templatePreview).cast")
+                            .font(.system(size: 11, design: .monospaced))
+                            .foregroundStyle(t.muted)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
                     }
-                    Text("Example: \(templatePreview).cast")
-                        .font(.system(size: 11, design: .monospaced))
-                        .foregroundStyle(t.muted)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
                 }
-                SettingsRowDivider()
-                SettingStack(
+                SettingRow(
                     label: "Idle time limit",
                     help:
                         "Pauses longer than this are shortened when played back. Written into each new file's header, so other players honour it too."
@@ -131,13 +121,16 @@ struct RecordingsSettingsView: View {
                 }
             }
 
-            Section(title: "While Recording") {
+            Section(
+                title: "While Recording",
+                footer:
+                    "Start and stop from a pane's ⋯ corner menu or Terminal ▸ Record Session. Terminal ▸ Add Recording Marker (⇧⌘M) drops a chapter mark the player can jump to."
+            ) {
                 ToggleRow(
                     label: "Highlight recording panes",
                     help: "Draws a red frame around every pane whose terminal is being recorded.",
                     isOn: LayoutSettingsBindings.binding(\.highlightRecordingPane)
                 )
-                SettingsRowDivider()
                 SettingStack(label: "When a recording stops") {
                     Picker("", selection: LayoutSettingsBindings.binding(\.recordingStopAction)) {
                         ForEach(RecordingStopAction.allCases, id: \.self) { Text($0.label).tag($0) }
@@ -145,10 +138,6 @@ struct RecordingsSettingsView: View {
                     .labelsHidden()
                     .pickerStyle(.segmented)
                 }
-                DescriptionLabel(
-                    text:
-                        "Start and stop from a pane's ⋯ corner menu or Terminal ▸ Record Session. Terminal ▸ Add Recording Marker (⇧⌘M) drops a chapter mark the player can jump to."
-                )
             }
 
             library(t)

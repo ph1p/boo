@@ -115,7 +115,20 @@ struct ThemedTextFieldModifier: ViewModifier {
             .font(.system(size: 12))
             .foregroundStyle(t.text)
             .focused($focused)
-            .padding(.horizontal, 7).padding(.vertical, 4)
+            .themedFieldChrome(focused: focused)
+    }
+}
+
+/// The field look on its own, for composite fields (icon + text field +
+/// clear button) that track focus themselves.
+struct ThemedFieldChrome: ViewModifier {
+    @Environment(\.tokens) private var t
+    let focused: Bool
+
+    func body(content: Content) -> some View {
+        content
+            .padding(.horizontal, 7)
+            .frame(minHeight: 24)
             .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(t.subtleFill))
             .overlay(
                 RoundedRectangle(cornerRadius: 6, style: .continuous)
@@ -139,4 +152,5 @@ extension ToggleStyle where Self == ThemedCheckboxStyle {
 
 extension View {
     func themedTextField() -> some View { modifier(ThemedTextFieldModifier()) }
+    func themedFieldChrome(focused: Bool) -> some View { modifier(ThemedFieldChrome(focused: focused)) }
 }

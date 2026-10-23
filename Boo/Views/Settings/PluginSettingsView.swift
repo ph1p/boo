@@ -62,8 +62,7 @@ struct PluginSettingsView: View {
                         installError = "Install failed: \(error.localizedDescription)"
                     }
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
+                .buttonStyle(.themed)
             }
             .padding(.top, 4)
         }

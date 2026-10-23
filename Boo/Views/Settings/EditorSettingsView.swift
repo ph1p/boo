@@ -25,7 +25,7 @@ struct EditorSettingsView: View {
             Section(title: "Font") {
                 SettingRow(label: "Family") {
                     FontChooser(selectedFont: $fontName, fonts: monoFonts)
-                        .frame(maxWidth: 220, alignment: .leading)
+                        .frame(width: 220)
                         .onChange(of: fontName) { _, v in AppSettings.shared.editorFontName = v }
                 }
                 SettingRow(label: "Size") {
@@ -33,7 +33,7 @@ struct EditorSettingsView: View {
                         value: Binding(get: { Double(fontSize) }, set: { fontSize = CGFloat($0) }),
                         range: 9...24
                     )
-                    .frame(maxWidth: 120, alignment: .leading)
+                    .frame(width: 90)
                     .onChange(of: fontSize) { _, v in AppSettings.shared.editorFontSize = v }
                 }
             }
@@ -47,7 +47,7 @@ struct EditorSettingsView: View {
                     }
                     .pickerStyle(.menu)
                     .labelsHidden()
-                    .frame(width: 72, alignment: .leading)
+                    .fixedSize()
                     .onChange(of: tabSize) { _, v in AppSettings.shared.editorTabSize = v }
                 }
                 ToggleRow(label: "Insert spaces", isOn: $insertSpaces)
@@ -68,7 +68,6 @@ struct EditorSettingsView: View {
                     SettingNumberField(
                         value: $rulerColumn,
                         width: 64,
-                        alignment: .leading,
                         onCommit: { v in AppSettings.shared.editorRulerColumn = max(0, v) }
                     )
                 }
@@ -85,7 +84,7 @@ struct EditorSettingsView: View {
                     }
                     .labelsHidden()
                     .pickerStyle(.menu)
-                    .frame(maxWidth: 200, alignment: .leading)
+                    .fixedSize()
                     .onChange(of: linkTarget) { _, v in AppSettings.shared.defaultLinkTarget = v }
                 }
                 SettingRow(label: "External editor") {
@@ -94,7 +93,7 @@ struct EditorSettingsView: View {
                     }
                     .labelsHidden()
                     .pickerStyle(.menu)
-                    .frame(maxWidth: 220, alignment: .leading)
+                    .fixedSize()
                     .onChange(of: editorPreset) { _, v in AppSettings.shared.externalEditorPreset = v }
                 }
                 if editorPreset == .custom {

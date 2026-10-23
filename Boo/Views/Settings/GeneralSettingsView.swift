@@ -18,15 +18,8 @@ struct GeneralSettingsView: View {
         let t = tokens
 
         SettingsPage(title: "General") {
-            Section(title: "Default Folder") {
-                HStack(spacing: 8) {
-                    Text(defaultFolder)
-                        .font(.system(size: 12, design: .monospaced))
-                        .foregroundStyle(t.muted)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-
+            Section(title: "Folders") {
+                PathRow(label: "Default folder", path: defaultFolder, help: "Where new workspaces open.") {
                     Button("Choose…") {
                         let panel = NSOpenPanel()
                         panel.canChooseDirectories = true
@@ -40,16 +33,23 @@ struct GeneralSettingsView: View {
                             AppSettings.shared.defaultFolder = url.path
                         }
                     }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-
                     Button("Reset") {
                         let home = FileManager.default.homeDirectoryForCurrentUser.path
                         defaultFolder = home
                         AppSettings.shared.defaultFolder = home
                     }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
+                    .disabled(defaultFolder == FileManager.default.homeDirectoryForCurrentUser.path)
+                }
+                SettingStack(
+                    label: "New tabs and panes open in",
+                    help: "The active tab's current directory, or the workspace default folder."
+                ) {
+                    Picker("", selection: $newTabCwdMode) {
+                        ForEach(NewTabCwdMode.allCases, id: \.self) { Text($0.label).tag($0) }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.segmented)
+                    .onChange(of: newTabCwdMode) { _, v in AppSettings.shared.newTabCwdMode = v }
                 }
             }
 
@@ -63,7 +63,7 @@ struct GeneralSettingsView: View {
                         Text(ContentType.markdownPreview.displayName).tag(ContentType.markdownPreview)
                     }
                     .labelsHidden()
-                    .frame(maxWidth: 220, alignment: .leading)
+                    .fixedSize()
                     .onChange(of: defaultTabType) { _, v in
                         AppSettings.shared.defaultTabType = v
                     }
@@ -87,19 +87,6 @@ struct GeneralSettingsView: View {
                         AppSettings.shared.defaultMainPage = v.trimmingCharacters(in: .whitespaces)
                     }
                 }
-            }
-
-            Section(title: "New Tab & Pane Path") {
-                Picker("", selection: $newTabCwdMode) {
-                    ForEach(NewTabCwdMode.allCases, id: \.self) { Text($0.label).tag($0) }
-                }
-                .labelsHidden()
-                .pickerStyle(.segmented)
-                .onChange(of: newTabCwdMode) { _, v in AppSettings.shared.newTabCwdMode = v }
-                DescriptionLabel(
-                    text:
-                        "Whether new tabs and split panes open in the active tab's current directory or the workspace default folder."
-                )
             }
 
             Section(title: "File Editor") {
@@ -153,7 +140,11 @@ private struct AgentsSection: View {
     @State private var perDay = Self.text(AppSettings.shared.agentBudgetPerDay)
 
     var body: some View {
-        Section(title: "Agents") {
+        Section(
+            title: "Agents",
+            footer:
+                "Budgets only warn: the agent status shows the cost in amber at 80 % and red with a notification once a budget is passed."
+        ) {
             ToggleRow(
                 label: "Send failed commands to agent",
                 help: "Show a button on failed command blocks that sends the command and its output to an agent.",
@@ -173,10 +164,6 @@ private struct AgentsSection: View {
                 SettingTextField(placeholder: "Off", text: $perDay, monospaced: true, width: 90)
                     .onChange(of: perDay) { _, value in AppSettings.shared.agentBudgetPerDay = Self.amount(value) }
             }
-            DescriptionLabel(
-                text:
-                    "Warn only: the agent status shows the cost in amber at 80 % and red with a notification once a budget is passed."
-            )
         }
     }
 
@@ -196,21 +183,18 @@ private struct AgentsSection: View {
 /// Mirrors settings, profiles, rules, key tables, snippets, themes and recipes
 /// with a folder such as one in iCloud Drive.
 private struct SyncFolderSection: View {
-    @Environment(\.tokens) private var tokens
     @State private var folder = AppSettings.shared.syncFolder
     @State private var status = ""
 
     var body: some View {
-        let t = tokens
-        Section(title: "Sync Folder") {
-            HStack(spacing: 8) {
-                Text(folder.isEmpty ? "Off" : folder)
-                    .font(.system(size: 12, design: folder.isEmpty ? .default : .monospaced))
-                    .foregroundStyle(t.muted)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-
+        Section(
+            title: "Sync",
+            footer:
+                "Mirrors appearance, editor, status bar, plugin and history settings, custom themes, "
+                + "profiles, rules, key tables, snippets, themes and recipes. Folders, paths and "
+                + "window layout stay per machine."
+        ) {
+            PathRow(label: "Sync folder", path: folder, placeholder: "Off", help: status.isEmpty ? nil : status) {
                 Button("Choose…") {
                     let panel = NSOpenPanel()
                     panel.canChooseDirectories = true
@@ -223,32 +207,13 @@ private struct SyncFolderSection: View {
                         AppSettings.shared.syncFolder = url.path
                     }
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-
                 Button("Sync Now") { SyncService.shared.syncNow() }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
                     .disabled(folder.isEmpty)
-
                 Button("Turn Off") {
                     folder = ""
                     AppSettings.shared.syncFolder = ""
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
                 .disabled(folder.isEmpty)
-            }
-            Text(
-                "Mirrors appearance, editor, status bar, plugin and history settings, custom themes, "
-                    + "profiles, rules, key tables, snippets, themes and recipes. Folders, paths and "
-                    + "window layout stay per machine."
-            )
-            .font(.system(size: 11))
-            .foregroundStyle(t.muted)
-            .fixedSize(horizontal: false, vertical: true)
-            if !status.isEmpty {
-                Text(status).font(.system(size: 11)).foregroundStyle(t.muted)
             }
         }
         .onAppear { refresh() }
@@ -314,13 +279,14 @@ private struct CommandHistorySection: View {
                         Button("Default") {
                             ignorePattern = AppSettings.defaultHistoryIgnorePattern
                         }
-                        .controlSize(.small)
+                        .buttonStyle(.themed)
                         .disabled(ignorePattern == AppSettings.defaultHistoryIgnorePattern)
                     }
                     if let patternError {
                         Text(patternError).font(.system(size: 11)).foregroundStyle(t.error)
                     }
                 }
+                .frame(maxWidth: .infinity, alignment: .trailing)
                 .onChange(of: ignorePattern) { _, v in AppSettings.shared.historyIgnorePattern = v }
             }
 
@@ -339,7 +305,7 @@ private struct CommandHistorySection: View {
                     .foregroundStyle(t.muted)
                 Spacer()
                 Button("Clear History…") { confirmClear = true }
-                    .controlSize(.small)
+                    .buttonStyle(.themed)
                     .disabled(entryCount == 0)
             }
         }

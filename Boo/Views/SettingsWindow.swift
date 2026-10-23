@@ -315,8 +315,12 @@ struct SettingsPage<Content: View>: View {
     }
 }
 
+/// A titled card. Its direct children are rows, separated by hairlines.
+/// `footer` is muted text under the card for notes about the whole section.
 struct Section<Content: View>: View {
     let title: String
+    var footer: String? = nil
+    var dividers: Bool = true
     @ViewBuilder let content: () -> Content
     @Environment(\.tokens) private var tokens
 
@@ -330,20 +334,38 @@ struct Section<Content: View>: View {
                     .tracking(0.4)
                     .padding(.leading, 2)
             }
-            VStack(alignment: .leading, spacing: Tokens.rowSpacing) {
-                content()
+            VStack(alignment: .leading, spacing: dividers ? 0 : Tokens.rowSpacing) {
+                Group(subviews: content()) { rows in
+                    ForEach(rows) { row in
+                        if dividers && row.id != rows.first?.id { SettingsRowDivider() }
+                        row.padding(.vertical, dividers ? Tokens.rowSpacing - 2 : 0)
+                    }
+                }
             }
-            .padding(Tokens.sectionPadding)
+            .padding(.horizontal, Tokens.sectionPadding)
+            .padding(.vertical, dividers ? 2 : Tokens.sectionPadding)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(tokens.cardBg, in: RoundedRectangle(cornerRadius: 10))
-            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .background(tokens.cardBg, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .strokeBorder(tokens.separator, lineWidth: 0.5))
+            if let footer {
+                Text(footer)
+                    .font(.system(size: 11))
+                    .foregroundStyle(tokens.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 2)
+            }
         }
     }
 }
 
+/// Hairline between rows of a list or card.
 struct SettingsRowDivider: View {
+    @Environment(\.tokens) private var tokens
+
     var body: some View {
-        Divider()
+        Rectangle().fill(tokens.separator).frame(height: 0.5)
     }
 }
 
@@ -427,70 +449,61 @@ struct FontChooser: NSViewRepresentable {
     }
 }
 
+/// Label on the left, switch on the right.
 struct ToggleRow: View {
-    @Environment(\.tokens) private var tokens
     let label: String
     var help: String? = nil
     @Binding var isOn: Bool
 
     var body: some View {
-        let t = tokens
-        VStack(alignment: .leading, spacing: 4) {
-            HStack {
-                Text(label)
-                    .font(.system(size: 12))
-                    .foregroundStyle(t.text)
-                Spacer()
-                Toggle("", isOn: $isOn)
-                    .labelsHidden()
-                    .toggleStyle(.switch)
-                    .controlSize(.small)
-            }
-            if let help {
-                Text(help)
-                    .font(.system(size: 11))
-                    .foregroundStyle(t.muted)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+        SettingRow(label: label, help: help, alignment: .center) {
+            Toggle("", isOn: $isOn)
+                .labelsHidden()
+                .toggleStyle(.switch)
+                .controlSize(.small)
         }
-        .padding(.vertical, 2)
     }
 }
 
 // MARK: - Unified Settings Row
 
-/// Label + control + optional help text. Primary building block for settings pages.
+/// Label on the left, control trailing, optional help underneath. Primary
+/// building block for settings pages; a control that wants the full width
+/// (a text field) fills the space after the label.
 struct SettingRow<Control: View>: View {
     @Environment(\.tokens) private var tokens
     let label: String
     var help: String? = nil
-    var alignment: VerticalAlignment = .firstTextBaseline
+    var alignment: VerticalAlignment = .center
     @ViewBuilder let control: () -> Control
 
     var body: some View {
-        let t = tokens
         VStack(alignment: .leading, spacing: 4) {
-            HStack(alignment: alignment, spacing: 10) {
-                Text(label)
-                    .font(.system(size: 12))
-                    .foregroundStyle(t.text)
-                    .frame(width: Tokens.labelWidth, alignment: .leading)
+            HStack(alignment: alignment, spacing: 12) {
+                SettingLabel(text: label)
+                    .frame(minWidth: Tokens.labelWidth, alignment: .leading)
+                    .layoutPriority(1)
                 control()
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
             }
-            if let help {
-                Text(help)
-                    .font(.system(size: 11))
-                    .foregroundStyle(t.muted)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.leading, Tokens.labelWidth + 10)
-            }
+            if let help { DescriptionLabel(text: help) }
         }
-        .padding(.vertical, 2)
     }
 }
 
-/// Standalone 11pt muted description line — use when a row is unlabeled (e.g. segmented pickers).
+/// The 12pt row label shared by every row type.
+struct SettingLabel: View {
+    @Environment(\.tokens) private var tokens
+    let text: String
+
+    var body: some View {
+        Text(text)
+            .font(.system(size: 12))
+            .foregroundStyle(tokens.text)
+    }
+}
+
+/// Standalone 11pt muted description line.
 struct DescriptionLabel: View {
     @Environment(\.tokens) private var tokens
     let text: String
@@ -500,31 +513,66 @@ struct DescriptionLabel: View {
             .font(.system(size: 11))
             .foregroundStyle(tokens.muted)
             .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
-/// Label-above-control layout for full-width controls (segmented pickers, pickers with long options).
+/// Row for wide controls (segmented pickers): label and control side by
+/// side like `SettingRow` when the control fits, label above it when not.
 struct SettingStack<Control: View>: View {
-    @Environment(\.tokens) private var tokens
     let label: String
     var help: String? = nil
     @ViewBuilder let control: () -> Control
 
     var body: some View {
-        let t = tokens
-        VStack(alignment: .leading, spacing: 6) {
-            Text(label)
-                .font(.system(size: 12))
-                .foregroundStyle(t.text)
-            control()
-            if let help {
-                Text(help)
-                    .font(.system(size: 11))
-                    .foregroundStyle(t.muted)
-                    .fixedSize(horizontal: false, vertical: true)
+        VStack(alignment: .leading, spacing: 4) {
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 12) {
+                    SettingLabel(text: label)
+                        .frame(minWidth: Tokens.labelWidth, alignment: .leading)
+                        .fixedSize()
+                    Spacer(minLength: 0)
+                    control().fixedSize()
+                }
+                VStack(alignment: .leading, spacing: 6) {
+                    SettingLabel(text: label)
+                    control()
+                }
             }
+            if let help { DescriptionLabel(text: help) }
         }
-        .padding(.vertical, 2)
+    }
+}
+
+/// A folder (or file) setting: label with the current path under it, actions
+/// trailing. An empty `path` shows `placeholder` instead.
+struct PathRow<Actions: View>: View {
+    @Environment(\.tokens) private var tokens
+    let label: String
+    let path: String
+    var placeholder: String = "None"
+    var help: String? = nil
+    @ViewBuilder let actions: () -> Actions
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 2) {
+                    SettingLabel(text: label)
+                    Text(path.isEmpty ? placeholder : (path as NSString).abbreviatingWithTildeInPath)
+                        .font(.system(size: 11, design: path.isEmpty ? .default : .monospaced))
+                        .foregroundStyle(tokens.muted)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .help(path)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                HStack(spacing: 6) { actions() }
+                    .buttonStyle(.themed)
+                    .fixedSize()
+            }
+            if let help { DescriptionLabel(text: help) }
+        }
     }
 }
 
@@ -540,6 +588,7 @@ struct SettingTextField: View {
     var icon: String? = nil
     var trailingClear: Bool = false
     var onCommit: (() -> Void)? = nil
+    @FocusState private var focused: Bool
 
     var body: some View {
         let t = tokens
@@ -553,6 +602,7 @@ struct SettingTextField: View {
                 .textFieldStyle(.plain)
                 .font(monospaced ? .system(size: 12, design: .monospaced) : .system(size: 12))
                 .foregroundStyle(t.text)
+                .focused($focused)
                 .onSubmit { onCommit?() }
             if trailingClear && !text.isEmpty {
                 Button(action: { text = "" }) {
@@ -563,14 +613,8 @@ struct SettingTextField: View {
                 .buttonStyle(.plain)
             }
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 5)
+        .themedFieldChrome(focused: focused)
         .frame(width: width)
-        .background(
-            RoundedRectangle(cornerRadius: 6)
-                .fill(t.chromeBg.opacity(0.4))
-                .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(t.border, lineWidth: 1))
-        )
     }
 }
 
@@ -580,22 +624,17 @@ struct SettingNumberField: View {
     var width: CGFloat = 70
     var alignment: TextAlignment = .trailing
     var onCommit: ((Int) -> Void)? = nil
+    @FocusState private var focused: Bool
 
     var body: some View {
-        let t = tokens
         TextField("", value: $value, format: .number)
             .textFieldStyle(.plain)
-            .font(.system(size: 12, design: .monospaced))
+            .font(.system(size: 12).monospacedDigit())
             .multilineTextAlignment(alignment)
-            .foregroundStyle(t.text)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 5)
+            .foregroundStyle(tokens.text)
+            .focused($focused)
+            .themedFieldChrome(focused: focused)
             .frame(width: width)
-            .background(
-                RoundedRectangle(cornerRadius: 6)
-                    .fill(t.chromeBg.opacity(0.4))
-                    .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(t.border, lineWidth: 1))
-            )
             .onChange(of: value) { _, v in onCommit?(v) }
     }
 }

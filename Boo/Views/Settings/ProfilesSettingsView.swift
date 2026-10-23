@@ -38,9 +38,9 @@ struct ShaderPicker: View {
             }
             .labelsHidden()
             .pickerStyle(.menu)
-            .frame(maxWidth: 180, alignment: .leading)
+            .fixedSize()
             Button("Choose File…") { choose() }
-                .controlSize(.small)
+                .buttonStyle(.themed)
         }
     }
 
@@ -95,7 +95,7 @@ struct ProfilesSettingsView: View {
                     }
                     .labelsHidden()
                     .pickerStyle(.menu)
-                    .frame(maxWidth: 200, alignment: .leading)
+                    .fixedSize()
                 }
             }
 
@@ -110,11 +110,10 @@ struct ProfilesSettingsView: View {
                 }
                 HStack {
                     Button("Add Profile") { add() }
-                        .controlSize(.small)
                     Spacer()
                     Button("Open profiles.json") { openFile() }
-                        .controlSize(.small)
                 }
+                .buttonStyle(.themed)
             }
 
             if let draft {
@@ -268,7 +267,6 @@ private struct ProfileEditor: View {
             SettingRow(label: "Name") {
                 SettingTextField(placeholder: "Production", text: $profile.name, width: 220)
             }
-            SettingsRowDivider()
 
             field("Theme", value: $profile.theme, fallback: AppSettings.shared.themeName) { binding in
                 Picker("", selection: binding) {
@@ -276,15 +274,15 @@ private struct ProfileEditor: View {
                 }
                 .labelsHidden()
                 .pickerStyle(.menu)
-                .frame(maxWidth: 220, alignment: .leading)
+                .fixedSize()
             }
             field("Font", value: $profile.fontFamily, fallback: AppSettings.shared.fontName) { binding in
                 FontChooser(selectedFont: binding, fonts: monoFonts)
-                    .frame(maxWidth: 220, alignment: .leading)
+                    .frame(width: 220)
             }
             field("Font size", value: $profile.fontSize, fallback: Double(AppSettings.shared.fontSize)) { binding in
                 FontSizePicker(value: binding, range: 8...36)
-                    .frame(maxWidth: 120, alignment: .leading)
+                    .frame(width: 90)
             }
             field("Shader", value: $profile.shader, fallback: AppSettings.shared.terminalShader) { binding in
                 ShaderPicker(value: binding)
@@ -296,10 +294,9 @@ private struct ProfileEditor: View {
                 }
                 .labelsHidden()
                 .pickerStyle(.menu)
-                .frame(maxWidth: 200, alignment: .leading)
+                .fixedSize()
             }
 
-            SettingsRowDivider()
             Text("New tabs only")
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(t.muted)
@@ -315,10 +312,8 @@ private struct ProfileEditor: View {
                     .scrollContentBackground(.hidden)
                     .frame(height: 54)
                     .padding(4)
-                    .background(
-                        RoundedRectangle(cornerRadius: 6)
-                            .fill(t.chromeBg.opacity(0.4))
-                            .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(t.border, lineWidth: 1)))
+                    .background(RoundedRectangle(cornerRadius: 6).fill(t.subtleFill))
+                    .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(t.separator, lineWidth: 0.5))
             }
 
             if let error {
@@ -329,20 +324,19 @@ private struct ProfileEditor: View {
             HStack {
                 if !isNew {
                     Button("Delete", role: .destructive) { onDelete() }
-                        .controlSize(.small)
                 }
                 Spacer()
                 Button("Cancel") { onCancel() }
-                    .controlSize(.small)
                     .keyboardShortcut(.cancelAction)
                 Button("Save") {
                     var p = profile
                     p.env = Self.parseEnv(envText)
                     onSave(p)
                 }
-                .controlSize(.small)
+                .buttonStyle(.themedProminent)
                 .keyboardShortcut(.defaultAction)
             }
+            .buttonStyle(.themed)
         }
         .onAppear { envText = Self.formatEnv(profile.env) }
     }
@@ -357,20 +351,19 @@ private struct ProfileEditor: View {
         let t = tokens
         let inherits = value.wrappedValue == nil
         SettingRow(label: label) {
-            HStack(spacing: 8) {
+            HStack(spacing: 10) {
+                if !inherits {
+                    control(Binding(get: { value.wrappedValue ?? fallback }, set: { value.wrappedValue = $0 }))
+                }
                 Toggle(
                     "Inherit",
                     isOn: Binding(
                         get: { value.wrappedValue == nil },
                         set: { value.wrappedValue = $0 ? nil : fallback })
                 )
-                .toggleStyle(.checkbox)
+                .toggleStyle(.themedCheckbox)
                 .font(.system(size: 11))
                 .foregroundStyle(t.muted)
-                if !inherits {
-                    control(Binding(get: { value.wrappedValue ?? fallback }, set: { value.wrappedValue = $0 }))
-                }
-                Spacer(minLength: 0)
             }
         }
     }

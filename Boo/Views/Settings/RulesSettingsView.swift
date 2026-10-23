@@ -35,7 +35,7 @@ struct RulesSettingsView: View {
                                 .foregroundStyle(t.muted)
                             Spacer()
                             Button("Resume") { rules.resume(id) }
-                                .controlSize(.small)
+                                .buttonStyle(.themed)
                         }
                     }
                 }
@@ -48,10 +48,8 @@ struct RulesSettingsView: View {
                     .scrollContentBackground(.hidden)
                     .frame(minHeight: 220)
                     .padding(4)
-                    .background(
-                        RoundedRectangle(cornerRadius: 6)
-                            .fill(t.chromeBg.opacity(0.4))
-                            .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(t.border, lineWidth: 1)))
+                    .background(RoundedRectangle(cornerRadius: 6).fill(t.subtleFill))
+                    .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(t.separator, lineWidth: 0.5))
                 if let saveError {
                     Text(saveError)
                         .font(.system(size: 11))
@@ -63,19 +61,17 @@ struct RulesSettingsView: View {
                         .foregroundStyle(t.muted)
                     Spacer()
                     Button("Open in Editor") { NSWorkspace.shared.open(URL(fileURLWithPath: rules.path)) }
-                        .controlSize(.small)
                     Button("Revert") {
                         text = rules.text()
                         savedText = text
                         saveError = nil
                     }
-                    .controlSize(.small)
                     .disabled(text == savedText)
                     Button("Save") { save() }
-                        .controlSize(.small)
                         .keyboardShortcut("s", modifiers: .command)
                         .disabled(text == savedText && FileManager.default.fileExists(atPath: rules.path))
                 }
+                .buttonStyle(.themed)
             }
 
             Section(title: "Regex Tester") {
@@ -89,10 +85,8 @@ struct RulesSettingsView: View {
                         .scrollContentBackground(.hidden)
                         .frame(height: 60)
                         .padding(4)
-                        .background(
-                            RoundedRectangle(cornerRadius: 6)
-                                .fill(t.chromeBg.opacity(0.4))
-                                .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(t.border, lineWidth: 1)))
+                        .background(RoundedRectangle(cornerRadius: 6).fill(t.subtleFill))
+                        .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(t.separator, lineWidth: 0.5))
                 }
                 testerResult(t)
             }
@@ -103,7 +97,7 @@ struct RulesSettingsView: View {
                     help: "Each sendText rule asks once before it types into a terminal. Reset to be asked again."
                 ) {
                     Button("Reset Approvals") { RuleEngine.resetConfirmations() }
-                        .controlSize(.small)
+                        .buttonStyle(.themed)
                 }
             }
         }

@@ -71,6 +71,7 @@ struct NotificationsSettingsView: View {
                         label: "Topic URL",
                         help:
                             "An ntfy.sh topic (pick a hard-to-guess name) or your own ntfy server. With remote control running, tapping the push opens the remote page."
+                            + (pushTestResult.map { "\n\nTest: \($0)" } ?? "")
                     ) {
                         HStack(spacing: 8) {
                             SettingTextField(
@@ -85,13 +86,9 @@ struct NotificationsSettingsView: View {
                                     pushTestResult = failure.map { "Failed: \($0)" } ?? "Sent"
                                 }
                             }
-                            .buttonStyle(.bordered)
-                            .controlSize(.small)
+                            .buttonStyle(.themed)
                             .disabled(phonePushURL.isEmpty)
                         }
-                    }
-                    if let pushTestResult {
-                        DescriptionLabel(text: pushTestResult)
                     }
 
                     SettingRow(label: "Long command") {
@@ -110,8 +107,7 @@ struct NotificationsSettingsView: View {
                             }
                         }
                         .labelsHidden()
-                        .controlSize(.small)
-                        .frame(width: 140)
+                        .fixedSize()
                     }
                 }
             }
@@ -131,7 +127,7 @@ struct NotificationsSettingsView: View {
         case .authorized:
             HStack(spacing: 6) {
                 Image(systemName: "checkmark.circle.fill")
-                    .foregroundStyle(.green)
+                    .foregroundStyle(t.success)
                     .font(.system(size: 12))
                 Text("Notifications are allowed in System Settings.")
                     .font(.system(size: 11))
@@ -140,7 +136,7 @@ struct NotificationsSettingsView: View {
         case .denied:
             HStack(alignment: .top, spacing: 6) {
                 Image(systemName: "exclamationmark.triangle.fill")
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(t.warning)
                     .font(.system(size: 12))
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Boo is not allowed to send notifications.")
@@ -150,8 +146,7 @@ struct NotificationsSettingsView: View {
                         NSWorkspace.shared.open(
                             URL(string: "x-apple.systempreferences:com.apple.preference.notifications")!)
                     }
-                    .buttonStyle(.bordered)
-                    .controlSize(.mini)
+                    .buttonStyle(.themed)
                 }
             }
         case .notDetermined:
@@ -162,8 +157,7 @@ struct NotificationsSettingsView: View {
                     await refreshAuthStatus()
                 }
             }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
+            .buttonStyle(.themed)
         default:
             EmptyView()
         }

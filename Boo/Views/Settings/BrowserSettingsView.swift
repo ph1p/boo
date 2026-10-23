@@ -66,7 +66,7 @@ struct BrowserSettingsView: View {
                         }
                     }
                     .labelsHidden()
-                    .frame(maxWidth: 220, alignment: .leading)
+                    .fixedSize()
                     .onChange(of: linkOpenMode) { _, v in AppSettings.shared.linkOpenMode = v }
                 }
             }
@@ -85,11 +85,9 @@ struct BrowserSettingsView: View {
                         )
                         Text("entries")
                             .font(.system(size: 12))
-                            .foregroundStyle(t.text)
-                        Spacer()
+                            .foregroundStyle(t.muted)
                         Button("Clear All…") { showClearConfirm = true }
-                            .buttonStyle(.bordered)
-                            .controlSize(.small)
+                            .buttonStyle(.themed)
                             .confirmationDialog(
                                 "Clear all browser history?",
                                 isPresented: $showClearConfirm,
@@ -127,15 +125,10 @@ struct BrowserSettingsView: View {
                                     historyEntries = BrowserHistory.shared.entries
                                 }
                                 if entry.id != filteredEntries.prefix(200).last?.id {
-                                    Divider()
-                                        .background(t.border.opacity(0.4))
+                                    SettingsRowDivider()
                                 }
                             }
                         }
-                        .background(
-                            RoundedRectangle(cornerRadius: 6)
-                                .stroke(t.border.opacity(0.5), lineWidth: 0.5)
-                        )
 
                         if filteredEntries.count > 200 {
                             DescriptionLabel(text: "Showing 200 of \(filteredEntries.count) entries.")
@@ -190,7 +183,6 @@ private struct HistoryRow: View {
                 IconButton(systemName: "xmark", size: 10, frame: 20, fillOpacity: 0, action: onDelete)
             }
         }
-        .padding(.horizontal, 8)
         .padding(.vertical, 6)
         .contentShape(Rectangle())
         .onHover { isHovered = $0 }

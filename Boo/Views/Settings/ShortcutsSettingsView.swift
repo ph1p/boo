@@ -61,7 +61,6 @@ struct ShortcutsSettingsView: View {
             Spacer()
             ShortcutPill(text: binding)
         }
-        .padding(.vertical, 2)
     }
 }
 
