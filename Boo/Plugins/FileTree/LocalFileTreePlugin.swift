@@ -31,11 +31,24 @@ final class LocalFileTreePlugin: BooPluginProtocol {
                 key: "showFilterBar", type: .bool, label: "Show filter bar",
                 defaultValue: AnyCodableValue(true), options: nil, group: "Display"),
             PluginManifest.SettingManifest(
+                key: "showNavigationBar", type: .bool, label: "Show navigation bar",
+                defaultValue: AnyCodableValue(true), options: nil, group: "Display"),
+            PluginManifest.SettingManifest(
                 key: "gitDecorations", type: .bool, label: "Show git status",
                 defaultValue: AnyCodableValue(true), options: nil, group: "Display"),
             PluginManifest.SettingManifest(
                 key: "dimIgnored", type: .bool, label: "Dim git-ignored files",
                 defaultValue: AnyCodableValue(true), options: nil, group: "Display"),
+            PluginManifest.SettingManifest(
+                key: "navigationMode", type: .string, label: "Folder navigation",
+                description: "Browse moves only the explorer (⌥↑ up, ⌥↓ into, ⌥←/⌥→ back/forward); "
+                    + "cd types the command into the terminal.",
+                defaultValue: AnyCodableValue(ExplorerNavigationMode.browse.rawValue),
+                options: "explorerNavigationMode", group: "Navigation"),
+            PluginManifest.SettingManifest(
+                key: "followTerminal", type: .bool, label: "Follow terminal directory changes",
+                description: "When the shell changes directory, a detached explorer jumps back to it.",
+                defaultValue: AnyCodableValue(true), options: nil, group: "Navigation"),
             PluginManifest.SettingManifest(
                 key: "editorFilePatterns", type: .string,
                 label: "Open in editor (file patterns)",
@@ -93,8 +106,10 @@ final class LocalFileTreePlugin: BooPluginProtocol {
     private var expandedState = ExpandedStateStore()
     /// Row actions, built once and reused — only `isAIAgentRunning` varies per cycle.
     private var treeActions: FileTreeActions?
-    /// CWD per terminal so we can find the right root on save.
+    /// Root shown per terminal on the last cycle, to detect a context switch.
     private var terminalCwd: [UUID: String] = [:]
+    /// Explorer navigation per terminal — lets the tree browse away from the shell's cwd.
+    private var browseStates: [UUID: FileTreeBrowseState] = [:]
     /// The last terminal ID we rendered for, so we can save state on switch.
     private var lastTerminalID: UUID?
 
@@ -111,13 +126,87 @@ final class LocalFileTreePlugin: BooPluginProtocol {
 
     func terminalClosed(terminalID: UUID) {
         terminalCwd.removeValue(forKey: terminalID)
+        browseStates.removeValue(forKey: terminalID)
     }
 
     // MARK: - Section Title
 
     func sectionTitle(context: PluginContext) -> String? {
-        let dirName = (context.terminal.cwd as NSString).lastPathComponent
+        let dirName = (rootPath(for: context.terminal) as NSString).lastPathComponent
         return dirName.isEmpty ? nil : dirName
+    }
+
+    // MARK: - Browsing
+
+    /// The folder the explorer shows for a terminal: its cwd, unless browsed away.
+    func rootPath(for terminal: TerminalContext) -> String {
+        browseStates[terminal.terminalID]?.root(terminalCwd: terminal.cwd) ?? terminal.cwd
+    }
+
+    /// Apply a navigation step (handed the terminal's cwd) to a terminal's browse state and
+    /// redraw if the root moved. The redraw re-points the watcher at the new root.
+    func updateBrowseState(
+        _ terminalID: UUID, terminalCwd: String, _ change: (inout FileTreeBrowseState, String) -> Void
+    ) {
+        var state = browseStates[terminalID] ?? FileTreeBrowseState()
+        let before = state
+        change(&state, terminalCwd)
+        guard state != before else { return }
+        guard FileManager.default.fileExists(atPath: state.root(terminalCwd: terminalCwd)) else {
+            BooAlert.showTransient("Folder no longer exists")
+            return
+        }
+        browseStates[terminalID] = state
+        onRequestCycleRerun?()
+    }
+
+    /// Make `path` the root for a terminal, per the navigation-mode setting. `cd` mode falls
+    /// back to browsing while an AI agent owns the terminal (the text would hit its prompt).
+    func open(_ path: String, terminal: TerminalContext, canSendToTerminal: Bool) {
+        open(path, terminalID: terminal.terminalID, terminalCwd: terminal.cwd, canSendToTerminal: canSendToTerminal)
+    }
+
+    private func open(_ path: String, terminalID: UUID, terminalCwd: String, canSendToTerminal: Bool) {
+        if AppSettings.shared.explorerNavigationMode == .terminal && canSendToTerminal {
+            cdTerminal(to: path, terminalID: terminalID, terminalCwd: terminalCwd)
+        } else {
+            updateBrowseState(terminalID, terminalCwd: terminalCwd) { $0.browse(to: path, terminalCwd: $1) }
+        }
+    }
+
+    /// Type `cd` into the terminal and re-link the explorer, which then follows the shell there.
+    private func cdTerminal(to path: String, terminalID: UUID, terminalCwd: String) {
+        actions?.sendToTerminal?(Self.cdCommand(path))
+        updateBrowseState(terminalID, terminalCwd: terminalCwd) { $0.attach(terminalCwd: $1) }
+    }
+
+    private static func cdCommand(_ path: String) -> String { "cd \(shellEscape(path))\r" }
+
+    /// Closures capture only the terminal's ID and cwd, not the whole context.
+    private func makeNavigation(context: PluginContext, canSendToTerminal canSend: Bool) -> FileTreeNavigation {
+        let tid = context.terminal.terminalID
+        let cwd = context.terminal.cwd
+        let state = browseStates[tid] ?? FileTreeBrowseState()
+        let root = state.root(terminalCwd: cwd)
+        let step: (@escaping (inout FileTreeBrowseState, String) -> Void) -> @MainActor () -> Void = { change in
+            { [weak self] in self?.updateBrowseState(tid, terminalCwd: cwd, change) }
+        }
+        return FileTreeNavigation(
+            mode: AppSettings.shared.explorerNavigationMode,
+            terminalCwd: cwd,
+            isDetached: state.isDetached,
+            canGoBack: state.canGoBack,
+            canGoForward: state.canGoForward,
+            canSendToTerminal: canSend,
+            open: { [weak self] in self?.open($0, terminalID: tid, terminalCwd: cwd, canSendToTerminal: canSend) },
+            browse: { [weak self] path in
+                self?.updateBrowseState(tid, terminalCwd: cwd) { $0.browse(to: path, terminalCwd: $1) }
+            },
+            goBack: step { $0.goBack(terminalCwd: $1) },
+            goForward: step { $0.goForward(terminalCwd: $1) },
+            attach: step { $0.attach(terminalCwd: $1) },
+            cdTerminalHere: { [weak self] in self?.cdTerminal(to: root, terminalID: tid, terminalCwd: cwd) }
+        )
     }
 
     // MARK: - Sidebar Tab (two sections: file tree + folder info)
@@ -126,7 +215,7 @@ final class LocalFileTreePlugin: BooPluginProtocol {
         guard manifest.capabilities?.sidebarTab == true else { return nil }
         guard let treeView = makeDetailView(context: context) else { return nil }
         let title = sectionTitle(context: context) ?? manifest.name
-        let cwd = context.terminal.cwd
+        let cwd = rootPath(for: context.terminal)
 
         // Generations must change only when the section's *content* changes, not on
         // every plugin cycle: a changed generation swaps the hosting view's rootView,
@@ -140,7 +229,7 @@ final class LocalFileTreePlugin: BooPluginProtocol {
             icon: manifest.icon,
             content: treeView,
             prefersOuterScrollView: true,
-            generation: SidebarSection.generation(for: [cwd, isAIAgent ? "ai" : "plain"])
+            generation: SidebarSection.generation(for: [cwd, isAIAgent ? "ai" : "plain", navigationKey(context)])
         )
         let infoSection = SidebarSection(
             id: "\(manifest.id).info",
@@ -158,6 +247,13 @@ final class LocalFileTreePlugin: BooPluginProtocol {
         )
     }
 
+    /// Nav-bar state baked into the generation: Back/Forward enablement and the linked
+    /// indicator change without the root moving (e.g. re-linking to the same folder).
+    private func navigationKey(_ context: PluginContext) -> String {
+        let state = browseStates[context.terminal.terminalID] ?? FileTreeBrowseState()
+        return "\(state.isDetached)|\(state.canGoBack)|\(state.canGoForward)|\(context.terminal.cwd)"
+    }
+
     // MARK: - Detail View
 
     func makeDetailView(context: PluginContext) -> AnyView? {
@@ -165,16 +261,26 @@ final class LocalFileTreePlugin: BooPluginProtocol {
         // and only re-stamp the flag. The closures read `self.actions` live, so a later
         // `PluginRegistry.actions` reassignment still reaches them.
         if treeActions == nil { treeActions = buildTreeActions() }
-        treeActions?.isAIAgentRunning = FileTreeActions.isAIAgentContext(context)
+        let isAIAgent = FileTreeActions.isAIAgentContext(context)
+        treeActions?.isAIAgentRunning = isAIAgent
         guard let treeActions else { return nil }
 
         let tid = context.terminal.terminalID
-        let cwd = context.terminal.cwd
+        // The shell moving re-attaches a detached explorer when "follow terminal" is on.
+        var state = browseStates[tid] ?? FileTreeBrowseState()
+        state.observe(terminalCwd: context.terminal.cwd, follow: AppSettings.shared.explorerFollowTerminal)
+        if let shown = state.detachedPath, !FileManager.default.fileExists(atPath: shown) {
+            // The browsed folder was deleted or renamed — fall back to the shell's folder.
+            state.attach(terminalCwd: context.terminal.cwd)
+        }
+        browseStates[tid] = state
+        let cwd = state.root(terminalCwd: context.terminal.cwd)
         let isSameTerminalAndCwd = (tid == lastTerminalID && terminalCwd[tid] == cwd)
 
         if !isSameTerminalAndCwd {
             // The root we're leaving keeps its open folders under its own path key.
             snapshotExpandedState(except: cwd)
+            setupWatcher(for: cwd)
         }
         let (root, wasCreated) = getOrCreateRoot(for: cwd)
 
@@ -198,7 +304,8 @@ final class LocalFileTreePlugin: BooPluginProtocol {
         lastTerminalID = tid
         terminalCwd[tid] = cwd
 
-        return AnyView(FileTreeView(root: root, actions: treeActions))
+        let navigation = makeNavigation(context: context, canSendToTerminal: !isAIAgent)
+        return AnyView(FileTreeView(root: root, actions: treeActions, navigation: navigation))
     }
 
     private func buildTreeActions() -> FileTreeActions {
@@ -294,7 +401,7 @@ final class LocalFileTreePlugin: BooPluginProtocol {
                 act()?.sendToTerminal?(cmd)
             },
             onNavigate: { path in
-                act()?.sendToTerminal?("cd \(shellEscape(path))\r")
+                act()?.sendToTerminal?(Self.cdCommand(path))
             },
             onMoveToTrash: { [weak self] paths in
                 guard !paths.isEmpty else { return }
@@ -415,22 +522,25 @@ final class LocalFileTreePlugin: BooPluginProtocol {
     // MARK: - Lifecycle
 
     func cwdChanged(newPath: String, context: TerminalContext) {
-        setupWatcher(for: newPath)
+        // A detached explorer keeps watching the folder it shows; if "follow terminal"
+        // re-links it, the next cycle's makeDetailView re-points the watcher.
+        setupWatcher(for: rootPath(for: context))
     }
 
     func remoteSessionChanged(session: RemoteSessionType?, context: TerminalContext) {
         if session != nil {
             stopWatching()
         } else {
-            setupWatcher(for: context.cwd)
+            setupWatcher(for: rootPath(for: context))
         }
     }
 
     func terminalFocusChanged(terminalID: UUID, context: TerminalContext) {
-        setupWatcher(for: context.cwd)
+        let root = rootPath(for: context)
+        setupWatcher(for: root)
         // A commit or checkout in the terminal changes status without touching the
         // worktree files the watcher reports, so re-read git on focus too.
-        if let root = cachedRoots[context.cwd] { refreshGitStatus(root) }
+        if let node = cachedRoots[root] { refreshGitStatus(node) }
     }
 
     func processChanged(name: String, context: TerminalContext) {

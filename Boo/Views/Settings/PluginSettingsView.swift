@@ -292,6 +292,12 @@ private struct PluginSettingControl: View {
                         .normalized,
                     set: { AppSettings.shared.setPluginSetting(pluginID, key, $0.rawValue) }
                 )
+            } else if setting.options == "explorerNavigationMode" {
+                openModePicker(
+                    cases: ExplorerNavigationMode.visibleCases,
+                    current: ExplorerNavigationMode(rawValue: value) ?? .browse,
+                    set: { AppSettings.shared.setPluginSetting(pluginID, key, $0.rawValue) }
+                )
             } else if setting.options == "fontPicker:system" {
                 SettingRow(label: setting.label, help: setting.description) {
                     fontPicker(value: value, fonts: AppSettings.availableSystemFonts)

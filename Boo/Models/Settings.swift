@@ -564,6 +564,17 @@ final class AppSettings {
 
     var explorerDimIgnored: Bool { pluginBool("file-tree-local", "dimIgnored", default: true) }
 
+    var explorerShowNavigationBar: Bool { pluginBool("file-tree-local", "showNavigationBar", default: true) }
+
+    /// Whether `..`, Go Up and Browse Folder move the explorer or `cd` the shell.
+    var explorerNavigationMode: ExplorerNavigationMode {
+        ExplorerNavigationMode(rawValue: pluginString("file-tree-local", "navigationMode", default: "browse"))
+            ?? .browse
+    }
+
+    /// A detached explorer snaps back to the terminal's folder when the shell changes directory.
+    var explorerFollowTerminal: Bool { pluginBool("file-tree-local", "followTerminal", default: true) }
+
     /// Command used to open files from the file tree (e.g. "vim", "nvim", "nano").
     /// Empty string means use $EDITOR env var, falling back to "vi".
     var fileEditorCommand: String {

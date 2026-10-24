@@ -167,6 +167,127 @@ final class LocalFileTreePluginTests: XCTestCase {
         XCTAssertNotNil(view2)
     }
 
+    // MARK: - Detached browsing
+
+    func testBrowseShowsFolderWithoutChangingTerminalCwd() throws {
+        let sub = tmpDir.appendingPathComponent("sub")
+        try FileManager.default.createDirectory(at: sub, withIntermediateDirectories: true)
+        let plugin = LocalFileTreePlugin()
+        let ctx = makeContext(cwd: tmpDir.path)
+        _ = plugin.makeDetailView(context: ctx)
+
+        plugin.open(sub.path, terminal: ctx.terminal, canSendToTerminal: false)
+
+        XCTAssertEqual(plugin.rootPath(for: ctx.terminal), sub.path)
+        XCTAssertEqual(plugin.sectionTitle(context: ctx), "sub")
+        _ = plugin.makeDetailView(context: ctx)
+        XCTAssertNotNil(plugin.cachedRoot(for: sub.path), "the browsed folder becomes the tree root")
+    }
+
+    func testShellMoveReattachesWhenFollowingTerminal() throws {
+        let sub = tmpDir.appendingPathComponent("sub")
+        let other = tmpDir.appendingPathComponent("other")
+        try FileManager.default.createDirectory(at: sub, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: other, withIntermediateDirectories: true)
+        try withPluginSettings(["followTerminal": true]) {
+            let plugin = LocalFileTreePlugin()
+            let tab = UUID()
+            let ctx = makeContext(cwd: tmpDir.path, tabID: tab)
+            _ = plugin.makeDetailView(context: ctx)
+            plugin.open(sub.path, terminal: ctx.terminal, canSendToTerminal: false)
+
+            let moved = makeContext(cwd: other.path, tabID: tab)
+            _ = plugin.makeDetailView(context: moved)
+            XCTAssertEqual(plugin.rootPath(for: moved.terminal), other.path)
+        }
+    }
+
+    func testShellMoveKeepsDetachedRootWhenNotFollowing() throws {
+        let sub = tmpDir.appendingPathComponent("sub")
+        let other = tmpDir.appendingPathComponent("other")
+        try FileManager.default.createDirectory(at: sub, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: other, withIntermediateDirectories: true)
+        try withPluginSettings(["followTerminal": false]) {
+            let plugin = LocalFileTreePlugin()
+            let tab = UUID()
+            let ctx = makeContext(cwd: tmpDir.path, tabID: tab)
+            _ = plugin.makeDetailView(context: ctx)
+            plugin.open(sub.path, terminal: ctx.terminal, canSendToTerminal: false)
+
+            let moved = makeContext(cwd: other.path, tabID: tab)
+            _ = plugin.makeDetailView(context: moved)
+            XCTAssertEqual(plugin.rootPath(for: moved.terminal), sub.path)
+        }
+    }
+
+    func testBrowseStateIsPerTerminal() throws {
+        let sub = tmpDir.appendingPathComponent("sub")
+        try FileManager.default.createDirectory(at: sub, withIntermediateDirectories: true)
+        let plugin = LocalFileTreePlugin()
+        let ctxA = makeContext(cwd: tmpDir.path)
+        let ctxB = makeContext(cwd: tmpDir.path)
+        _ = plugin.makeDetailView(context: ctxA)
+        plugin.open(sub.path, terminal: ctxA.terminal, canSendToTerminal: false)
+
+        XCTAssertEqual(plugin.rootPath(for: ctxA.terminal), sub.path)
+        XCTAssertEqual(plugin.rootPath(for: ctxB.terminal), tmpDir.path)
+        plugin.terminalClosed(terminalID: ctxA.terminal.terminalID)
+        XCTAssertEqual(plugin.rootPath(for: ctxA.terminal), tmpDir.path)
+    }
+
+    func testDeletedBrowsedFolderFallsBackToTerminalCwd() throws {
+        let sub = tmpDir.appendingPathComponent("sub")
+        try FileManager.default.createDirectory(at: sub, withIntermediateDirectories: true)
+        let plugin = LocalFileTreePlugin()
+        let ctx = makeContext(cwd: tmpDir.path)
+        _ = plugin.makeDetailView(context: ctx)
+        plugin.open(sub.path, terminal: ctx.terminal, canSendToTerminal: false)
+        try FileManager.default.removeItem(at: sub)
+
+        _ = plugin.makeDetailView(context: ctx)
+        XCTAssertEqual(plugin.rootPath(for: ctx.terminal), tmpDir.path)
+    }
+
+    func testTerminalModeTypesCd() throws {
+        let sub = tmpDir.appendingPathComponent("sub")
+        try FileManager.default.createDirectory(at: sub, withIntermediateDirectories: true)
+        try withPluginSettings(["navigationMode": "terminal"]) {
+            let plugin = LocalFileTreePlugin()
+            var sent: [String] = []
+            let actions = PluginActions()
+            actions.sendToTerminal = { sent.append($0) }
+            plugin.actions = actions
+            let ctx = makeContext(cwd: tmpDir.path)
+            _ = plugin.makeDetailView(context: ctx)
+
+            plugin.open(sub.path, terminal: ctx.terminal, canSendToTerminal: true)
+            XCTAssertEqual(sent, ["cd \(shellEscape(sub.path))\r"])
+            XCTAssertEqual(plugin.rootPath(for: ctx.terminal), tmpDir.path, "root waits for the shell")
+
+            // An AI agent owns the terminal: browse instead of typing into its prompt.
+            plugin.open(sub.path, terminal: ctx.terminal, canSendToTerminal: false)
+            XCTAssertEqual(sent.count, 1)
+            XCTAssertEqual(plugin.rootPath(for: ctx.terminal), sub.path)
+        }
+    }
+
+    private func withPluginSettings(_ values: [String: Any], _ body: () throws -> Void) rethrows {
+        let defaults = UserDefaults.standard
+        let original = defaults.object(forKey: "pluginSettings")
+        defer {
+            if let original {
+                defaults.set(original, forKey: "pluginSettings")
+            } else {
+                defaults.removeObject(forKey: "pluginSettings")
+            }
+        }
+        // Straight to UserDefaults: `setPluginSetting` would also rewrite ~/.boo/settings.json.
+        var all = defaults.dictionary(forKey: "pluginSettings") as? [String: [String: Any]] ?? [:]
+        all["file-tree-local", default: [:]].merge(values) { _, new in new }
+        defaults.set(all, forKey: "pluginSettings")
+        try body()
+    }
+
     // MARK: - Expanded state persistence
 
     /// Opening a folder, navigating away, then returning to the same directory must

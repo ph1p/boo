@@ -20,6 +20,9 @@ struct FileTreeActions: @unchecked Sendable {
     var onRevealInFinder: (@MainActor (String) -> Void)?
     var onRunCommand: (@MainActor (String) -> Void)?
     var onNavigate: (@MainActor (String) -> Void)?
+    /// Show a folder as the explorer root without touching the shell. Set by `FileTreeView`
+    /// from its navigation, so it acts on the terminal the view was built for.
+    var onBrowse: (@MainActor (String) -> Void)?
     /// Trash one or more paths (the multi-selection); the view confirms first.
     var onMoveToTrash: (@MainActor ([String]) -> Void)?
     var onRename: (@MainActor (_ oldPath: String, _ newName: String) -> Void)?
@@ -138,6 +141,8 @@ struct FileTreeView: View {
     @State private var typeAheadAt = Date.distantPast
     @State private var rowCache = FileTreeRowCache()
     var actions: FileTreeActions
+    /// Back/forward/up and terminal linking; nil hides the navigation bar.
+    var navigation: FileTreeNavigation? = nil
 
     var body: some View {
         let _ = settings.revision
@@ -165,6 +170,9 @@ struct FileTreeView: View {
         let order = flat?.order ?? filter.matches.map { absolutePath($0.entry) }
 
         VStack(alignment: .leading, spacing: 0) {
+            if let navigation, AppSettings.shared.explorerShowNavigationBar {
+                FileTreeNavigationBar(navigation: navigation, rootPath: root.path, style: cfg)
+            }
             if AppSettings.shared.explorerShowFilterBar {
                 FileTreeFilterBar(
                     filter: filter, focused: $filterFocused, style: cfg,
@@ -239,9 +247,7 @@ struct FileTreeView: View {
     private func tree(rows: [FlatRow], cfg: RowStyle, git: FileTreeGitStatus?, order: [String]) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             if root.path != "/" {
-                ParentDirectoryButton(style: cfg) {
-                    actions.onNavigate?((root.path as NSString).deletingLastPathComponent)
-                }
+                ParentDirectoryButton(style: cfg) { goUp() }
             }
 
             // Multi-selection in row order, computed once for every row's context menu.
@@ -251,7 +257,7 @@ struct FileTreeView: View {
                     let path = row.node.path
                     FileTreeRowView(
                         node: row.node, depth: row.depth, parentPath: row.parentPath,
-                        actions: actions, renameState: renameState, dragState: dragState,
+                        actions: rowActions, renameState: renameState, dragState: dragState,
                         dropLineAbove: dragState.dropPosition == .abovePath(path),
                         isDropTarget: dragState.dropPosition == .onFolder(path),
                         isDragged: dragState.draggedPath == path,
@@ -297,7 +303,7 @@ struct FileTreeView: View {
                         if kind == .plain { activate(match.entry) }
                     },
                     onReveal: { reveal(path) },
-                    actions: actions
+                    actions: rowActions
                 )
             }
         }
@@ -377,6 +383,19 @@ struct FileTreeView: View {
         root.reveal(path) { _ in selection.select(path) }
     }
 
+    /// Row actions with "Browse Folder" wired to this view's navigation.
+    private var rowActions: FileTreeActions {
+        var rowActions = actions
+        rowActions.onBrowse = navigation?.browse
+        return rowActions
+    }
+
+    private func goUp() {
+        guard root.path != "/" else { return }
+        let parent = (root.path as NSString).deletingLastPathComponent
+        if let navigation { navigation.open(parent) } else { actions.onNavigate?(parent) }
+    }
+
     private func copyProviders(order: [String]) -> [NSItemProvider] {
         let paths = selection.ordered(in: order)
         guard !paths.isEmpty else { return [] }
@@ -390,6 +409,26 @@ struct FileTreeView: View {
         let mods = press.modifiers
         let shift = mods.contains(.shift)
         let cursorRow = rows.first { $0.node.path == selection.cursor }
+
+        // ⌥-arrows navigate folders (⌘-arrows and ⌘[ ⌘] belong to menu items).
+        if mods.contains(.option), let navigation {
+            switch press.key {
+            case .upArrow:
+                goUp()
+                return .handled
+            case .downArrow:
+                if let node = cursorRow?.node, node.isDirectory { navigation.open(node.path) }
+                return .handled
+            case .leftArrow:
+                navigation.goBack()
+                return .handled
+            case .rightArrow:
+                navigation.goForward()
+                return .handled
+            default:
+                break
+            }
+        }
 
         switch press.key {
         case .upArrow:
@@ -431,6 +470,9 @@ struct FileTreeView: View {
         case .delete where mods.contains(.command):
             let paths = selection.ordered(in: order)
             if !paths.isEmpty { pendingTrash = paths }
+            return .handled
+        case .delete where mods.isEmpty && !filter.isActive && navigation != nil:
+            goUp()
             return .handled
         default:
             break
@@ -585,6 +627,103 @@ struct FileTreeFilterBar: View {
         }
         .padding(.horizontal, 8)
         .padding(.top, 6)
+    }
+}
+
+// MARK: - Navigation
+
+/// Folder navigation for the explorer root, rebuilt by the plugin every cycle.
+struct FileTreeNavigation {
+    var mode: ExplorerNavigationMode
+    var terminalCwd: String
+    var isDetached: Bool
+    var canGoBack: Bool
+    var canGoForward: Bool
+    /// False while an AI agent holds the terminal — typing `cd` would land in its prompt.
+    var canSendToTerminal: Bool
+    /// Make a folder the root: browses or `cd`s depending on `mode`.
+    var open: @MainActor (String) -> Void
+    /// Make a folder the root inside the explorer, whatever the mode (row "Browse Folder").
+    var browse: @MainActor (String) -> Void
+    var goBack: @MainActor () -> Void
+    var goForward: @MainActor () -> Void
+    /// Re-link the explorer to the terminal's working directory.
+    var attach: @MainActor () -> Void
+    /// `cd` the terminal into the folder the explorer shows, and re-link.
+    var cdTerminalHere: @MainActor () -> Void
+}
+
+struct FileTreeNavigationBar: View {
+    var navigation: FileTreeNavigation
+    var rootPath: String
+    var style: RowStyle
+
+    var body: some View {
+        HStack(spacing: 2) {
+            button("chevron.left", help: "Back (⌥←)", enabled: navigation.canGoBack, action: navigation.goBack)
+            button(
+                "chevron.right", help: "Forward (⌥→)", enabled: navigation.canGoForward,
+                action: navigation.goForward)
+            button(
+                "arrow.up",
+                help: navigation.mode == .terminal ? "cd to Enclosing Folder (⌥↑)" : "Enclosing Folder (⌥↑)",
+                enabled: rootPath != "/"
+            ) {
+                navigation.open((rootPath as NSString).deletingLastPathComponent)
+            }
+
+            Text(displayPath)
+                .font(style.font)
+                .foregroundStyle(navigation.isDetached ? style.textColor : style.mutedColor)
+                .lineLimit(1)
+                .truncationMode(.head)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.leading, 4)
+                .help(rootPath)
+
+            if navigation.isDetached {
+                if navigation.canSendToTerminal {
+                    button("terminal", help: "cd Terminal Here", enabled: true, action: navigation.cdTerminalHere)
+                }
+                button(
+                    "location.fill", help: "Back to Terminal Folder", enabled: true, tint: style.accentColor,
+                    action: navigation.attach)
+            } else {
+                Image(systemName: "link")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(style.mutedColor.opacity(0.7))
+                    .frame(width: 18, height: 18)
+                    .help("Following the terminal's folder")
+            }
+        }
+        .padding(.horizontal, 6)
+        .padding(.top, 6)
+    }
+
+    /// Root shown relative to the terminal folder when inside it, else `~`-abbreviated.
+    private var displayPath: String {
+        let cwd = navigation.terminalCwd
+        if rootPath == cwd { return (rootPath as NSString).lastPathComponent }
+        if !cwd.isEmpty, rootPath.hasPrefix(cwd + "/") {
+            return "./" + String(rootPath.dropFirst(cwd.count + 1))
+        }
+        return abbreviatePath(rootPath)
+    }
+
+    private func button(
+        _ icon: String, help: String, enabled: Bool, tint: Color? = nil, action: @escaping @MainActor () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: icon)
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(enabled ? (tint ?? style.textColor) : style.mutedColor.opacity(0.4))
+                .frame(width: 18, height: 18)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(!enabled)
+        .help(help)
+        .accessibilityLabel(help)
     }
 }
 
@@ -871,6 +1010,9 @@ struct FileTreeRowView: View {
         }
 
         if node.isDirectory {
+            if let onBrowse = actions.onBrowse {
+                Button("Browse Folder") { onBrowse(node.path) }
+            }
             if !actions.isAIAgentRunning {
                 Button("cd into") { actions.onNavigate?(node.path) }
             }
@@ -983,6 +1125,8 @@ struct FileTreeMatchRowView: View {
             Button("Reveal in Tree") { onReveal() }
             if !match.entry.isDirectory {
                 Button("Open") { onClick(.plain) }
+            } else if let onBrowse = actions.onBrowse {
+                Button("Browse Folder") { onBrowse(absolutePath) }
             }
             Divider()
             Button("Paste Path to Terminal") { actions.onPastePath?(absolutePath) }
