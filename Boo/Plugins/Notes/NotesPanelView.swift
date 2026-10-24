@@ -177,16 +177,7 @@ struct NotesPanelView: View {
     private func iconButton(
         _ symbol: String, help: String, tint: Color, action: @escaping () -> Void
     ) -> some View {
-        Button(action: action) {
-            Image(systemName: symbol)
-                .font(.system(size: 11))
-                .foregroundStyle(tint)
-                .frame(width: 18, height: 18)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .help(help)
-        .accessibilityLabel(help)
+        SidebarIconButton(systemName: symbol, help: help, tint: tint, action: action)
     }
 
     // MARK: - Search

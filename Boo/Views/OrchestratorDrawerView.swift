@@ -303,13 +303,9 @@ struct OrchestratorPanel: View {
     }
 
     private func iconButton(_ symbol: String, help: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: symbol).font(.system(size: 10, weight: .medium))
-                .foregroundColor(Color(nsColor: model.theme.textSecondary))
-                .frame(width: 18, height: 18).contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .help(help)
+        SidebarIconButton(
+            systemName: symbol, help: help, tint: Color(nsColor: model.theme.textSecondary), size: 10,
+            weight: .medium, action: action)
     }
 }
 

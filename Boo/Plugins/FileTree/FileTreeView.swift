@@ -704,17 +704,9 @@ struct FileTreeNavigationBar: View {
     private func button(
         _ icon: String, help: String, enabled: Bool, tint: Color? = nil, action: @escaping @MainActor () -> Void
     ) -> some View {
-        Button(action: action) {
-            Image(systemName: icon)
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(enabled ? (tint ?? style.textColor) : style.mutedColor.opacity(0.4))
-                .frame(width: 18, height: 18)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .disabled(!enabled)
-        .help(help)
-        .accessibilityLabel(help)
+        SidebarIconButton(
+            systemName: icon, help: help, tint: enabled ? (tint ?? style.textColor) : style.mutedColor,
+            enabled: enabled, size: 10, weight: .semibold, action: action)
     }
 }
 

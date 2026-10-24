@@ -642,15 +642,9 @@ private struct ComposeProjectHeader: View {
     }
 
     private func iconButton(_ icon: String, help: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: icon)
-                .font(.system(size: fontScale.size(.base) - 3))
-                .foregroundStyle(muted.opacity(0.7))
-                .frame(width: 20, height: 20)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .help(help)
+        SidebarIconButton(
+            systemName: icon, help: help, tint: muted.opacity(0.7), size: fontScale.size(.base) - 3, frame: 20,
+            action: action)
     }
 }
 
@@ -839,17 +833,10 @@ private struct DockerContainerRow: View {
         }
     }
 
-    @ViewBuilder
     private func iconButton(_ icon: String, help: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: icon)
-                .font(.system(size: fontScale.size(.base) - 2))
-                .foregroundStyle(Color(nsColor: theme.chromeMuted).opacity(0.7))
-                .frame(width: 22, height: 22)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .help(help)
+        SidebarIconButton(
+            systemName: icon, help: help, tint: Color(nsColor: theme.chromeMuted).opacity(0.7),
+            size: fontScale.size(.base) - 2, frame: 22, action: action)
     }
 }
 

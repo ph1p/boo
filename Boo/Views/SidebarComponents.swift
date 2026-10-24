@@ -252,3 +252,34 @@ struct SidebarPluginStackView: NSViewRepresentable {
         nsView.updateSections(sections, expandedIDs: expandedIDs)
     }
 }
+
+// MARK: - Sidebar Icon Button
+
+/// Small borderless glyph button for sidebar and drawer chrome. Unlike `IconButton` it
+/// draws no hover fill; the whole frame is the hit area and `help` doubles as the
+/// accessibility label.
+struct SidebarIconButton: View {
+    let systemName: String
+    let help: String
+    let tint: Color
+    var enabled = true
+    var size: CGFloat = 11
+    var weight: Font.Weight = .regular
+    var frame: CGFloat = 18
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.system(size: size, weight: weight))
+                .foregroundStyle(tint)
+                .opacity(enabled ? 1 : 0.4)
+                .frame(width: frame, height: frame)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(!enabled)
+        .help(help)
+        .accessibilityLabel(help)
+    }
+}
