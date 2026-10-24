@@ -54,9 +54,17 @@ struct PluginManifest: Codable {
         var min: Double? = nil
         var max: Double? = nil
         var step: Double? = nil
+        /// Fixed values for a string setting, rendered as a menu picker. A stored value
+        /// outside the list (e.g. a legacy alias) shows as the default.
+        var choices: [Choice]? = nil
+
+        struct Choice: Codable, Equatable, Hashable {
+            let value: String
+            let label: String
+        }
 
         enum CodingKeys: String, CodingKey {
-            case key, type, label, description, options, group, min, max, step
+            case key, type, label, description, options, group, min, max, step, choices
             case defaultValue = "default"
         }
 

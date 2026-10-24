@@ -101,4 +101,29 @@ final class PluginManifestTests: XCTestCase {
         XCTAssertEqual(manifest.settings?[2].type, .int)
         XCTAssertEqual(manifest.settings?[3].type, .double)
     }
+
+    func testSettingChoicesParsing() throws {
+        let json = """
+            {
+                "id": "test", "name": "Test", "version": "1.0.0", "icon": "star",
+                "settings": [
+                    { "key": "mode", "type": "string", "label": "Mode", "default": "a",
+                      "choices": [{ "value": "a", "label": "Alpha" }, { "value": "b", "label": "Beta" }] },
+                    { "key": "plain", "type": "string", "label": "Plain", "default": "x" }
+                ]
+            }
+            """
+        let manifest = try PluginManifest.parse(from: json)
+        XCTAssertEqual(
+            manifest.settings?[0].choices,
+            [.init(value: "a", label: "Alpha"), .init(value: "b", label: "Beta")])
+        XCTAssertNil(manifest.settings?[1].choices)
+    }
+
+    func testSettingChoiceEnumsHideLegacyAliases() {
+        XCTAssertEqual(ImageOpenMode.choices.map(\.value), ["imageViewer", "kitty", "external"])
+        XCTAssertEqual(TextOpenMode.choices.map(\.value), ["editor", "terminalEditor", "external"])
+        XCTAssertEqual(ExplorerNavigationMode.choices.map(\.label), ["Browse in Explorer", "cd in Terminal"])
+        XCTAssertEqual(ExplorerNavigationMode.terminal.normalized, .terminal)
+    }
 }

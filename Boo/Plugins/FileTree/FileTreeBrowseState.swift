@@ -1,7 +1,7 @@
 import Foundation
 
 /// How the explorer's folder navigation (`..`, Go Up, Open Folder) moves around.
-enum ExplorerNavigationMode: String, CaseIterable, Codable, OpenModePickable {
+enum ExplorerNavigationMode: String, CaseIterable, Codable, SettingChoice {
     /// Navigate inside the explorer only; the shell's working directory is untouched.
     case browse = "browse"
     /// Navigate by typing `cd` into the terminal, so the explorer follows the shell.

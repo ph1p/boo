@@ -112,12 +112,24 @@ enum NewTabCwdMode: Int, CaseIterable {
     }
 }
 
-protocol OpenModePickable: RawRepresentable, Hashable where RawValue == String {
+/// A string enum offered as a settings picker via `SettingManifest.choices`.
+protocol SettingChoice: RawRepresentable, Hashable where RawValue == String {
     var displayName: String { get }
+    /// Maps legacy aliases to their canonical case.
+    var normalized: Self { get }
+    /// Cases shown in the picker (legacy aliases excluded).
     static var visibleCases: [Self] { get }
 }
 
-enum MarkdownOpenMode: String, CaseIterable, Codable, OpenModePickable {
+extension SettingChoice {
+    var normalized: Self { self }
+
+    static var choices: [PluginManifest.SettingManifest.Choice] {
+        visibleCases.map { .init(value: $0.rawValue, label: $0.displayName) }
+    }
+}
+
+enum MarkdownOpenMode: String, CaseIterable, Codable, SettingChoice {
     case preview = "preview"
     case builtInEditor = "builtInEditor"
     case terminalEditor = "editor"
@@ -142,7 +154,7 @@ enum MarkdownOpenMode: String, CaseIterable, Codable, OpenModePickable {
     static var visibleCases: [MarkdownOpenMode] { [.preview, .builtInEditor, .terminalEditor, .external] }
 }
 
-enum ImageOpenMode: String, CaseIterable, Codable, OpenModePickable {
+enum ImageOpenMode: String, CaseIterable, Codable, SettingChoice {
     case imageViewer = "imageViewer"
     case kitty = "kitty"
     case external = "external"
@@ -165,7 +177,7 @@ enum ImageOpenMode: String, CaseIterable, Codable, OpenModePickable {
     static var visibleCases: [ImageOpenMode] { [.imageViewer, .kitty, .external] }
 }
 
-enum TextOpenMode: String, CaseIterable, Codable, OpenModePickable {
+enum TextOpenMode: String, CaseIterable, Codable, SettingChoice {
     case editor = "editor"
     case terminalEditor = "terminalEditor"
     case external = "external"

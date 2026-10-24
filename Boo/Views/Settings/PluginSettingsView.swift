@@ -269,34 +269,18 @@ private struct PluginSettingControl: View {
         let value = AppSettings.shared.pluginString(
             pluginID, key, default: setting.defaultValue?.value as? String ?? "")
         return Group {
-            if setting.options == "markdownOpenMode" {
-                openModePicker(
-                    cases: MarkdownOpenMode.visibleCases,
-                    current: (MarkdownOpenMode(rawValue: AppSettings.shared.markdownOpenMode.rawValue) ?? .builtInEditor)
-                        .normalized,
-                    set: { AppSettings.shared.markdownOpenMode = $0 }
+            if let choices = setting.choices, setting.options == "markdownOpenMode" {
+                // Stored as a top-level app setting, not under the plugin.
+                choicePicker(
+                    choices: choices,
+                    current: AppSettings.shared.markdownOpenMode.normalized.rawValue,
+                    set: { AppSettings.shared.markdownOpenMode = MarkdownOpenMode(rawValue: $0) ?? .preview }
                 )
-            } else if setting.options == "imageOpenMode" {
-                openModePicker(
-                    cases: ImageOpenMode.visibleCases,
-                    current: (ImageOpenMode(
-                        rawValue: AppSettings.shared.pluginString(pluginID, key, default: "imageViewer"))
-                        ?? .imageViewer).normalized,
-                    set: { AppSettings.shared.setPluginSetting(pluginID, key, $0.rawValue) }
-                )
-            } else if setting.options == "textOpenMode" {
-                openModePicker(
-                    cases: TextOpenMode.visibleCases,
-                    current: (TextOpenMode(
-                        rawValue: AppSettings.shared.pluginString(pluginID, key, default: "editor")) ?? .editor)
-                        .normalized,
-                    set: { AppSettings.shared.setPluginSetting(pluginID, key, $0.rawValue) }
-                )
-            } else if setting.options == "explorerNavigationMode" {
-                openModePicker(
-                    cases: ExplorerNavigationMode.visibleCases,
-                    current: ExplorerNavigationMode(rawValue: value) ?? .browse,
-                    set: { AppSettings.shared.setPluginSetting(pluginID, key, $0.rawValue) }
+            } else if let choices = setting.choices {
+                choicePicker(
+                    choices: choices,
+                    current: value,
+                    set: { AppSettings.shared.setPluginSetting(pluginID, key, $0) }
                 )
             } else if setting.options == "fontPicker:system" {
                 SettingRow(label: setting.label, help: setting.description) {
@@ -337,12 +321,15 @@ private struct PluginSettingControl: View {
         return setting.description
     }
 
-    private func openModePicker<M: OpenModePickable>(
-        cases: [M], current: M, set: @escaping @Sendable (M) -> Void
+    private func choicePicker(
+        choices: [PluginManifest.SettingManifest.Choice], current: String,
+        set: @escaping @Sendable (String) -> Void
     ) -> some View {
-        SettingRow(label: setting.label, help: setting.description) {
-            Picker("", selection: Binding(get: { current }, set: set)) {
-                ForEach(cases, id: \.self) { Text($0.displayName).tag($0) }
+        let fallback = setting.defaultValue?.value as? String ?? choices.first?.value ?? ""
+        let selected = choices.contains { $0.value == current } ? current : fallback
+        return SettingRow(label: setting.label, help: setting.description) {
+            Picker("", selection: Binding(get: { selected }, set: set)) {
+                ForEach(choices, id: \.value) { Text($0.label).tag($0.value) }
             }
             .pickerStyle(.menu)
             .labelsHidden()

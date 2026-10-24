@@ -44,7 +44,7 @@ final class LocalFileTreePlugin: BooPluginProtocol {
                 description: "Browse moves only the explorer (⌥↑ up, ⌥↓ into, ⌥←/⌥→ back/forward); "
                     + "cd types the command into the terminal.",
                 defaultValue: AnyCodableValue(ExplorerNavigationMode.browse.rawValue),
-                options: "explorerNavigationMode", group: "Navigation"),
+                options: nil, group: "Navigation", choices: ExplorerNavigationMode.choices),
             PluginManifest.SettingManifest(
                 key: "followTerminal", type: .bool, label: "Follow terminal directory changes",
                 description: "When the shell changes directory, a detached explorer jumps back to it.",
@@ -58,17 +58,17 @@ final class LocalFileTreePlugin: BooPluginProtocol {
                 key: "markdownOpenMode", type: .string,
                 label: "Open markdown files as",
                 defaultValue: AnyCodableValue("preview"),
-                options: "markdownOpenMode", group: "File Opening"),
+                options: "markdownOpenMode", group: "File Opening", choices: MarkdownOpenMode.choices),
             PluginManifest.SettingManifest(
                 key: "imageOpenMode", type: .string,
                 label: "Open images as",
                 defaultValue: AnyCodableValue("imageViewer"),
-                options: "imageOpenMode", group: "File Opening"),
+                options: nil, group: "File Opening", choices: ImageOpenMode.choices),
             PluginManifest.SettingManifest(
                 key: "textOpenMode", type: .string,
                 label: "Open text files as",
                 defaultValue: AnyCodableValue("editor"),
-                options: "textOpenMode", group: "File Opening"),
+                options: nil, group: "File Opening", choices: TextOpenMode.choices),
             PluginManifest.SettingManifest(
                 key: "htmlOpenInBrowser", type: .bool,
                 label: "Open HTML files in browser",
