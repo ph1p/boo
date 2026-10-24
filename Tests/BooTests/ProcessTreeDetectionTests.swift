@@ -279,4 +279,33 @@ final class ProcessTreeDetectionTests: XCTestCase {
         try? process.run()
         return process
     }
+
+    // MARK: - stdinIsTerminal
+
+    private func sleeper(stdin: Any) throws -> Process {
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: "/bin/sleep")
+        p.arguments = ["5"]
+        p.standardInput = stdin
+        try p.run()
+        return p
+    }
+
+    func testStdinIsTerminalFalseForNullAndPipe() throws {
+        for stdin: Any in [FileHandle.nullDevice, Pipe()] {
+            let p = try sleeper(stdin: stdin)
+            defer { p.terminate() }
+            XCTAssertFalse(ProcessTree.stdinIsTerminal(pid: p.processIdentifier))
+        }
+    }
+
+    func testStdinIsTerminalTrueForPty() throws {
+        var master: Int32 = 0
+        var slave: Int32 = 0
+        XCTAssertEqual(openpty(&master, &slave, nil, nil, nil), 0)
+        defer { close(master) }
+        let p = try sleeper(stdin: FileHandle(fileDescriptor: slave, closeOnDealloc: true))
+        defer { p.terminate() }
+        XCTAssertTrue(ProcessTree.stdinIsTerminal(pid: p.processIdentifier))
+    }
 }

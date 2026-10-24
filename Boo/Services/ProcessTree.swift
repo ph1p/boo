@@ -27,6 +27,27 @@ enum ProcessTree {
         return Array(pids.prefix(Int(actual)))
     }
 
+    /// Whether a process reads stdin from a terminal. False for /dev/null, pipes and sockets.
+    /// True when it cannot be told (another user's process, e.g. under sudo).
+    static func stdinIsTerminal(pid: pid_t) -> Bool {
+        let size = proc_pidinfo(pid, PROC_PIDLISTFDS, 0, nil, 0)
+        guard size > 0 else { return true }
+        let stride = MemoryLayout<proc_fdinfo>.stride
+        var fds = [proc_fdinfo](repeating: proc_fdinfo(), count: Int(size) / stride)
+        let got = proc_pidinfo(pid, PROC_PIDLISTFDS, 0, &fds, size)
+        guard got > 0 else { return true }
+        guard let stdin = fds.prefix(Int(got) / stride).first(where: { $0.proc_fd == 0 }),
+            stdin.proc_fdtype == UInt32(PROX_FDTYPE_VNODE)
+        else { return false }
+        var info = vnode_fdinfowithpath()
+        let n = proc_pidfdinfo(pid, 0, PROC_PIDFDVNODEPATHINFO, &info, Int32(MemoryLayout<vnode_fdinfowithpath>.size))
+        guard n > 0 else { return true }
+        let path = withUnsafeBytes(of: info.pvip.vip_path) { buf in
+            String(decoding: buf.prefix(while: { $0 != 0 }), as: UTF8.self)
+        }
+        return path.hasPrefix("/dev/tty")
+    }
+
     /// Get the process name for a PID, stripping the login-shell "-" prefix.
     static func processName(pid: pid_t) -> String {
         var nameBuffer = [CChar](repeating: 0, count: Int(MAXCOMLEN) + 1)

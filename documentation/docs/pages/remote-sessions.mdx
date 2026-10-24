@@ -12,7 +12,7 @@ Boo auto-detects remote terminal sessions and adapts the file explorer, status b
 | Toolboxes  | `distrobox`, `toolbox`                                |
 | Devices    | `adb shell`                                           |
 
-Only interactive sessions trigger remote mode. Non-interactive commands (e.g. `docker exec myapp cat /etc/hosts`) don't switch the pane.
+Only interactive sessions trigger remote mode. Non-interactive commands (e.g. `docker exec myapp cat /etc/hosts`) don't switch the pane. Neither does an `ssh` whose stdin isn't the terminal, such as one a dev server or deploy tool in the pane starts in the background.
 
 ## Detection
 

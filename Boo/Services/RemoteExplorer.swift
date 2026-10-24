@@ -31,9 +31,17 @@ final class RemoteExplorer: @unchecked Sendable {
     }
 
     private static func detectSSH(shellPID: pid_t) -> String? {
-        guard let pid = findChildProcess(parentPID: shellPID, name: "ssh") else { return nil }
-        guard let host = parseSSHHost(pid: pid), !isGitForgeHost(host) else { return nil }
-        return host
+        guard let pid = findChildProcess(parentPID: shellPID, name: "ssh", matching: isInteractiveSSH) else { return nil }
+        return parseSSHHost(pid: pid)
+    }
+
+    /// An ssh the user is typing into: not a tunnel, not a git forge, and stdin on a terminal.
+    /// Tools in the pane (a dev server checking its hosts, say) run ssh with stdin on
+    /// /dev/null or a pipe; those must not switch the pane.
+    private static func isInteractiveSSH(pid: pid_t) -> Bool {
+        guard !isSSHTunnel(pid: pid), ProcessTree.stdinIsTerminal(pid: pid) else { return false }
+        guard let host = parseSSHHost(pid: pid) else { return false }
+        return !isGitForgeHost(host)
     }
 
     /// Whether a host is a known git forge (non-interactive SSH like git push/pull).
@@ -79,7 +87,9 @@ final class RemoteExplorer: @unchecked Sendable {
 
     /// Find a child process by name using pgrep.
     /// Find child process by name using proc_listchildpids + proc_name.
-    private static func findChildProcess(parentPID: pid_t, name: String, maxDepth: Int = 4) -> pid_t? {
+    private static func findChildProcess(
+        parentPID: pid_t, name: String, maxDepth: Int = 4, matching accept: (pid_t) -> Bool = { _ in true }
+    ) -> pid_t? {
         let children = ProcessTree.childPIDs(of: parentPID)
         for child in children {
             // Try proc_name first (fast, kernel-level)
@@ -87,19 +97,21 @@ final class RemoteExplorer: @unchecked Sendable {
             proc_name(child, &nameBuffer, UInt32(nameBuffer.count))
             let procName = String(
                 decoding: nameBuffer.prefix(while: { $0 != 0 }).map(UInt8.init(bitPattern:)), as: UTF8.self)
-            if procName.contains(name) { return child }
+            if procName.contains(name), accept(child) { return child }
             // Fallback: proc_name can return empty for PTY child processes on macOS.
             // Use sysctl KERN_PROCARGS2 to get the executable path instead.
             if procName.isEmpty, let args = ProcessTree.processArgs(pid: child) {
                 let exe = args.split(separator: " ").first.map(String.init) ?? ""
                 let base = exe.lastPathComponent
-                if base.contains(name) { return child }
+                if base.contains(name), accept(child) { return child }
             }
         }
         // Recurse into children
         if maxDepth > 0 {
             for child in children {
-                if let found = findChildProcess(parentPID: child, name: name, maxDepth: maxDepth - 1) {
+                if let found = findChildProcess(
+                    parentPID: child, name: name, maxDepth: maxDepth - 1, matching: accept)
+                {
                     return found
                 }
             }
@@ -270,12 +282,8 @@ final class RemoteExplorer: @unchecked Sendable {
     static func detectRemoteSessionFiltered(shellPID: pid_t) -> RemoteSessionType? {
         remoteLog("[RemoteExplorer] detectRemoteSessionFiltered: shellPID=\(shellPID)")
         // Check SSH first
-        if let sshPID = findChildProcess(parentPID: shellPID, name: "ssh") {
-            if !isSSHTunnel(pid: sshPID) {
-                if let host = parseSSHHost(pid: sshPID), !isGitForgeHost(host) {
-                    return .ssh(host: host)
-                }
-            }
+        if let host = detectSSH(shellPID: shellPID) {
+            return .ssh(host: host)
         }
         // Check Mosh
         if let host = detectMosh(shellPID: shellPID) {
