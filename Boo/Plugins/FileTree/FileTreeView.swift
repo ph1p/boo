@@ -246,7 +246,8 @@ struct FileTreeView: View {
     @ViewBuilder
     private func tree(rows: [FlatRow], cfg: RowStyle, git: FileTreeGitStatus?, order: [String]) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            if root.path != "/" {
+            // The navigation bar's ↑ replaces the `..` row; keep it only without a bar.
+            if navigation == nil, root.path != "/" {
                 ParentDirectoryButton(style: cfg) { goUp() }
             }
 
