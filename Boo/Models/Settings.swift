@@ -843,6 +843,7 @@ final class AppSettings {
             UserDefaults.standard.set(data, forKey: K.customThemes)
         }
         _disabledPluginIDsSet = nil
+        _pluginSettingsDict = nil
         saveToFile()
         notify()
         if autoTheme { DispatchQueue.main.async { AppSettings.shared.applySystemAppearance() } }
@@ -1301,9 +1302,26 @@ final class AppSettings {
 
     // MARK: - Plugin Settings
 
+    private var _pluginSettingsDict: [String: [String: Any]]?
+
+    /// Cached — plugins read settings on every sidebar cycle, and bridging the whole
+    /// UserDefaults dictionary per read adds up. Invalidated on write.
     private var pluginSettingsDict: [String: [String: Any]] {
-        get { UserDefaults.standard.dictionary(forKey: K.pluginSettings) as? [String: [String: Any]] ?? [:] }
-        set { UserDefaults.standard.set(newValue, forKey: K.pluginSettings) }
+        get {
+            if let cached = _pluginSettingsDict { return cached }
+            let dict = UserDefaults.standard.dictionary(forKey: K.pluginSettings) as? [String: [String: Any]] ?? [:]
+            _pluginSettingsDict = dict
+            return dict
+        }
+        set {
+            UserDefaults.standard.set(newValue, forKey: K.pluginSettings)
+            _pluginSettingsDict = newValue
+        }
+    }
+
+    /// Drop the cached plugin settings after the defaults key was written directly.
+    func reloadPluginSettings() {
+        _pluginSettingsDict = nil
     }
 
     func pluginSetting<T>(_ pluginID: String, _ key: String, default defaultValue: T) -> T {

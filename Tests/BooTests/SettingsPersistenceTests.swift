@@ -242,4 +242,17 @@ final class SettingsPersistenceTests: XCTestCase {
         XCTAssertEqual(bookmarks.count, countBefore + 1)
         XCTAssertEqual(bookmarks.last?.name, "TestBM")
     }
+
+    @MainActor
+    func testPluginSettingsCacheReloadsAfterDirectWrite() {
+        withPluginSettings("cache-test", ["flag": true]) {
+            XCTAssertTrue(AppSettings.shared.pluginBool("cache-test", "flag", default: false))
+            // Raw write bypasses the cache until it is reloaded.
+            UserDefaults.standard.set(["cache-test": ["flag": false]], forKey: "pluginSettings")
+            XCTAssertTrue(AppSettings.shared.pluginBool("cache-test", "flag", default: false))
+            AppSettings.shared.reloadPluginSettings()
+            XCTAssertFalse(AppSettings.shared.pluginBool("cache-test", "flag", default: false))
+        }
+        XCTAssertNil(AppSettings.shared.pluginSettingsDict(for: "cache-test")["flag"])
+    }
 }

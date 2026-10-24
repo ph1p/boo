@@ -12,43 +12,35 @@ final class AgentCenterTests: XCTestCase {
     }
 
     func testLegacyClaudeCodeSettingsMigrateToAgents() {
-        let defaults = UserDefaults.standard
         let settings = AppSettings.shared
-        let originalPluginSettings = defaults.object(forKey: "pluginSettings")
         let originalOrder = settings.sidebarTabOrder
         let originalDisabled = settings.disabledPluginIDs
-
         defer {
-            if let originalPluginSettings {
-                defaults.set(originalPluginSettings, forKey: "pluginSettings")
-            } else {
-                defaults.removeObject(forKey: "pluginSettings")
-            }
             settings.sidebarTabOrder = originalOrder
             settings.disabledPluginIDs = originalDisabled
         }
 
-        defaults.set(
-            [
+        withPluginSettings({
+            $0 = [
                 "claude-code": ["legacy": "yes"],
                 "__sidebar": [
                     "sectionOrder": ["claude-code": ["agents.status", "agents.timeline"]],
                     "globalSelectedPluginTabID": "claude-code"
                 ]
-            ],
-            forKey: "pluginSettings"
-        )
-        settings.sidebarTabOrder = ["git-panel", "claude-code"]
-        settings.disabledPluginIDs = ["claude-code", "docker"]
+            ]
+        }) {
+            settings.sidebarTabOrder = ["git-panel", "claude-code"]
+            settings.disabledPluginIDs = ["claude-code", "docker"]
 
-        settings.migratePluginIdentity(from: "claude-code", to: "agents")
+            settings.migratePluginIdentity(from: "claude-code", to: "agents")
 
-        XCTAssertEqual(settings.pluginSettingsDict(for: "agents")["legacy"] as? String, "yes")
-        XCTAssertEqual(settings.sidebarTabOrder, ["git-panel", "agents"])
-        XCTAssertEqual(settings.sidebarGlobalSelectedPluginTabID, "agents")
-        XCTAssertEqual(settings.sidebarSectionOrder["agents"], ["agents.status", "agents.timeline"])
-        XCTAssertTrue(settings.disabledPluginIDs.contains("agents"))
-        XCTAssertFalse(settings.disabledPluginIDs.contains("claude-code"))
+            XCTAssertEqual(settings.pluginSettingsDict(for: "agents")["legacy"] as? String, "yes")
+            XCTAssertEqual(settings.sidebarTabOrder, ["git-panel", "agents"])
+            XCTAssertEqual(settings.sidebarGlobalSelectedPluginTabID, "agents")
+            XCTAssertEqual(settings.sidebarSectionOrder["agents"], ["agents.status", "agents.timeline"])
+            XCTAssertTrue(settings.disabledPluginIDs.contains("agents"))
+            XCTAssertFalse(settings.disabledPluginIDs.contains("claude-code"))
+        }
     }
 
     func testSocketMetadataBuildsAgentSession() {

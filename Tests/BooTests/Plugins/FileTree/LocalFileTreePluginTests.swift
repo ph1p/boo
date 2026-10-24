@@ -189,7 +189,7 @@ final class LocalFileTreePluginTests: XCTestCase {
         let other = tmpDir.appendingPathComponent("other")
         try FileManager.default.createDirectory(at: sub, withIntermediateDirectories: true)
         try FileManager.default.createDirectory(at: other, withIntermediateDirectories: true)
-        try withPluginSettings(["followTerminal": true]) {
+        try withPluginSettings("file-tree-local", ["followTerminal": true]) {
             let plugin = LocalFileTreePlugin()
             let tab = UUID()
             let ctx = makeContext(cwd: tmpDir.path, tabID: tab)
@@ -207,7 +207,7 @@ final class LocalFileTreePluginTests: XCTestCase {
         let other = tmpDir.appendingPathComponent("other")
         try FileManager.default.createDirectory(at: sub, withIntermediateDirectories: true)
         try FileManager.default.createDirectory(at: other, withIntermediateDirectories: true)
-        try withPluginSettings(["followTerminal": false]) {
+        try withPluginSettings("file-tree-local", ["followTerminal": false]) {
             let plugin = LocalFileTreePlugin()
             let tab = UUID()
             let ctx = makeContext(cwd: tmpDir.path, tabID: tab)
@@ -251,7 +251,7 @@ final class LocalFileTreePluginTests: XCTestCase {
     func testTerminalModeTypesCd() throws {
         let sub = tmpDir.appendingPathComponent("sub")
         try FileManager.default.createDirectory(at: sub, withIntermediateDirectories: true)
-        try withPluginSettings(["navigationMode": "terminal"]) {
+        try withPluginSettings("file-tree-local", ["navigationMode": "terminal"]) {
             let plugin = LocalFileTreePlugin()
             var sent: [String] = []
             let actions = PluginActions()
@@ -269,23 +269,6 @@ final class LocalFileTreePluginTests: XCTestCase {
             XCTAssertEqual(sent.count, 1)
             XCTAssertEqual(plugin.rootPath(for: ctx.terminal), sub.path)
         }
-    }
-
-    private func withPluginSettings(_ values: [String: Any], _ body: () throws -> Void) rethrows {
-        let defaults = UserDefaults.standard
-        let original = defaults.object(forKey: "pluginSettings")
-        defer {
-            if let original {
-                defaults.set(original, forKey: "pluginSettings")
-            } else {
-                defaults.removeObject(forKey: "pluginSettings")
-            }
-        }
-        // Straight to UserDefaults: `setPluginSetting` would also rewrite ~/.boo/settings.json.
-        var all = defaults.dictionary(forKey: "pluginSettings") as? [String: [String: Any]] ?? [:]
-        all["file-tree-local", default: [:]].merge(values) { _, new in new }
-        defaults.set(all, forKey: "pluginSettings")
-        try body()
     }
 
     // MARK: - Expanded state persistence
