@@ -635,7 +635,8 @@ struct FileTreeFilterBar: View {
 /// Folder navigation for the explorer root, rebuilt by the plugin every cycle.
 struct FileTreeNavigation {
     var mode: ExplorerNavigationMode
-    var terminalCwd: String
+    /// Root label for the bar, computed by the plugin so it matches the generation key.
+    var displayPath: String
     var isDetached: Bool
     var canGoBack: Bool
     var canGoForward: Bool
@@ -672,7 +673,7 @@ struct FileTreeNavigationBar: View {
                 navigation.open((rootPath as NSString).deletingLastPathComponent)
             }
 
-            Text(displayPath)
+            Text(navigation.displayPath)
                 .font(style.font)
                 .foregroundStyle(navigation.isDetached ? style.textColor : style.mutedColor)
                 .lineLimit(1)
@@ -698,16 +699,6 @@ struct FileTreeNavigationBar: View {
         }
         .padding(.horizontal, 6)
         .padding(.top, 6)
-    }
-
-    /// Root shown relative to the terminal folder when inside it, else `~`-abbreviated.
-    private var displayPath: String {
-        let cwd = navigation.terminalCwd
-        if rootPath == cwd { return (rootPath as NSString).lastPathComponent }
-        if !cwd.isEmpty, rootPath.hasPrefix(cwd + "/") {
-            return "./" + String(rootPath.dropFirst(cwd.count + 1))
-        }
-        return abbreviatePath(rootPath)
     }
 
     private func button(

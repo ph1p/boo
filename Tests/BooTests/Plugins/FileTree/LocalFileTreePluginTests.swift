@@ -235,17 +235,84 @@ final class LocalFileTreePluginTests: XCTestCase {
         XCTAssertEqual(plugin.rootPath(for: ctxA.terminal), tmpDir.path)
     }
 
-    func testDeletedBrowsedFolderFallsBackToTerminalCwd() throws {
+    func testDeletedBrowsedFolderFallsBackOnRootChangedEvent() throws {
         let sub = tmpDir.appendingPathComponent("sub")
         try FileManager.default.createDirectory(at: sub, withIntermediateDirectories: true)
         let plugin = LocalFileTreePlugin()
         let ctx = makeContext(cwd: tmpDir.path)
         _ = plugin.makeDetailView(context: ctx)
         plugin.open(sub.path, terminal: ctx.terminal, canSendToTerminal: false)
+        _ = plugin.makeDetailView(context: ctx)
+        try FileManager.default.removeItem(at: sub)
+
+        _ = plugin.makeDetailView(context: ctx)
+        XCTAssertEqual(plugin.rootPath(for: ctx.terminal), sub.path, "no stat on a same-context cycle")
+        plugin.watchedRootChanged()
+        _ = plugin.makeDetailView(context: ctx)
+        XCTAssertEqual(plugin.rootPath(for: ctx.terminal), tmpDir.path)
+    }
+
+    func testDeletedBrowsedFolderFallsBackOnContextSwitch() throws {
+        let sub = tmpDir.appendingPathComponent("sub")
+        try FileManager.default.createDirectory(at: sub, withIntermediateDirectories: true)
+        let plugin = LocalFileTreePlugin()
+        let ctx = makeContext(cwd: tmpDir.path)
+        _ = plugin.makeDetailView(context: ctx)
+        plugin.open(sub.path, terminal: ctx.terminal, canSendToTerminal: false)
+        _ = plugin.makeDetailView(context: makeContext(cwd: tmpDir.path))
         try FileManager.default.removeItem(at: sub)
 
         _ = plugin.makeDetailView(context: ctx)
         XCTAssertEqual(plugin.rootPath(for: ctx.terminal), tmpDir.path)
+    }
+
+    func testBackgroundShellMoveReattachesOnFocus() throws {
+        let sub = tmpDir.appendingPathComponent("sub")
+        let other = tmpDir.appendingPathComponent("other")
+        try FileManager.default.createDirectory(at: sub, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: other, withIntermediateDirectories: true)
+        try withPluginSettings("file-tree-local", ["followTerminal": true]) {
+            let plugin = LocalFileTreePlugin()
+            let tab = UUID()
+            let ctx = makeContext(cwd: tmpDir.path, tabID: tab)
+            _ = plugin.makeDetailView(context: ctx)
+            plugin.open(sub.path, terminal: ctx.terminal, canSendToTerminal: false)
+            // Another terminal is shown while this one's shell moves (no cwdChanged event).
+            _ = plugin.makeDetailView(context: makeContext(cwd: tmpDir.path))
+
+            let refocused = makeContext(cwd: other.path, tabID: tab)
+            _ = plugin.makeDetailView(context: refocused)
+            XCTAssertEqual(plugin.rootPath(for: refocused.terminal), other.path)
+        }
+    }
+
+    func testDetachedShellMoveKeepsTreeGenerationWhenNotFollowing() throws {
+        let sub = tmpDir.appendingPathComponent("sub")
+        let other = FileManager.default.temporaryDirectory.appendingPathComponent("boo-other-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: sub, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: other, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: other) }
+        try withPluginSettings("file-tree-local", ["followTerminal": false]) {
+            let plugin = LocalFileTreePlugin()
+            let tab = UUID()
+            let ctx = makeContext(cwd: tmpDir.path, tabID: tab)
+            _ = plugin.makeSidebarTab(context: ctx)
+            plugin.open(sub.path, terminal: ctx.terminal, canSendToTerminal: false)
+            // Outside the old cwd, so the bar label is the same `~`-path either way.
+            plugin.open(other.path, terminal: ctx.terminal, canSendToTerminal: false)
+            let before = plugin.makeSidebarTab(context: ctx)?.sections.first?.generation
+
+            let moved = makeContext(cwd: sub.path, tabID: tab)
+            let after = plugin.makeSidebarTab(context: moved)?.sections.first?.generation
+            XCTAssertNotNil(before)
+            XCTAssertEqual(before, after, "a shell cd must not swap the detached tree view")
+        }
+    }
+
+    func testDisplayPath() {
+        XCTAssertEqual(LocalFileTreePlugin.displayPath(root: "/a/b", terminalCwd: "/a/b"), "b")
+        XCTAssertEqual(LocalFileTreePlugin.displayPath(root: "/a/b/c", terminalCwd: "/a/b"), "./c")
+        XCTAssertEqual(LocalFileTreePlugin.displayPath(root: "/a/bc", terminalCwd: "/a/b"), "/a/bc")
     }
 
     func testTerminalModeTypesCd() throws {

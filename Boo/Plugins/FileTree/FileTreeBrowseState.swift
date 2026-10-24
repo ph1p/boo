@@ -29,7 +29,7 @@ struct FileTreeBrowseState: Equatable {
     private(set) var detachedPath: String?
     private(set) var back: [String] = []
     private(set) var forward: [String] = []
-    /// Terminal cwd seen on the previous `observe`, to notice the shell moving.
+    /// Terminal cwd seen on the previous `reconcile`, to notice the shell moving.
     private(set) var lastTerminalCwd: String?
 
     var isDetached: Bool { detachedPath != nil }
@@ -69,14 +69,20 @@ struct FileTreeBrowseState: Equatable {
         detachedPath = nil
     }
 
-    /// Fed the terminal's cwd every cycle. When the shell has moved since the last call
-    /// and `follow` is on, a detached explorer re-attaches to the shell's new directory.
-    /// Returns true when the shown root changed because of it.
+    /// The one per-cycle root step. When the shell has moved since the last call and
+    /// `follow` is on, a detached explorer re-attaches to the shell's new directory; a
+    /// browsed folder that `folderExists` rejects (deleted or renamed) is dropped without
+    /// entering history. Returns true when the shown root changed.
     @discardableResult
-    mutating func observe(terminalCwd: String, follow: Bool) -> Bool {
+    mutating func reconcile(terminalCwd: String, follow: Bool, folderExists: (String) -> Bool) -> Bool {
         defer { lastTerminalCwd = terminalCwd }
-        guard let last = lastTerminalCwd, last != terminalCwd, isDetached, follow else { return false }
-        attach(terminalCwd: terminalCwd)
+        guard let shown = detachedPath else { return false }
+        if follow, let last = lastTerminalCwd, last != terminalCwd {
+            attach(terminalCwd: terminalCwd)
+            return true
+        }
+        guard !folderExists(shown) else { return false }
+        detachedPath = nil
         return true
     }
 

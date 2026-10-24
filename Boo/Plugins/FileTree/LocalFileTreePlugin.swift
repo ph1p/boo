@@ -107,7 +107,13 @@ final class LocalFileTreePlugin: BooPluginProtocol {
     /// Row actions, built once and reused — only `isAIAgentRunning` varies per cycle.
     private var treeActions: FileTreeActions?
     /// Root shown per terminal on the last cycle, to detect a context switch.
-    private var terminalCwd: [UUID: String] = [:]
+    private var shownRoot: [UUID: String] = [:]
+    /// Each terminal's cwd as of the last cycle. Navigation closures read it at call time,
+    /// so a tree view kept across cycles never acts on a stale cwd.
+    private var latestCwd: [UUID: String] = [:]
+    /// Set when the watcher reports its root deleted/renamed: the next cycle re-checks that
+    /// the browsed folder still exists instead of stat-ing it every cycle.
+    private var rootMaybeGone = false
     /// Explorer navigation per terminal — lets the tree browse away from the shell's cwd.
     private var browseStates: [UUID: FileTreeBrowseState] = [:]
     /// The last terminal ID we rendered for, so we can save state on switch.
@@ -125,7 +131,8 @@ final class LocalFileTreePlugin: BooPluginProtocol {
     }
 
     func terminalClosed(terminalID: UUID) {
-        terminalCwd.removeValue(forKey: terminalID)
+        shownRoot.removeValue(forKey: terminalID)
+        latestCwd.removeValue(forKey: terminalID)
         browseStates.removeValue(forKey: terminalID)
     }
 
@@ -182,31 +189,49 @@ final class LocalFileTreePlugin: BooPluginProtocol {
 
     private static func cdCommand(_ path: String) -> String { "cd \(shellEscape(path))\r" }
 
-    /// Closures capture only the terminal's ID and cwd, not the whole context.
+    /// The bar's path label: relative to the terminal folder when inside it, else
+    /// `~`-abbreviated. Also part of the navigation generation key.
+    static func displayPath(root: String, terminalCwd cwd: String) -> String {
+        if root == cwd { return (root as NSString).lastPathComponent }
+        if !cwd.isEmpty, root.hasPrefix(cwd + "/") { return "./" + String(root.dropFirst(cwd.count + 1)) }
+        return abbreviatePath(root)
+    }
+
+    /// Closures capture only the terminal's ID and read its cwd/root at call time, so a view
+    /// kept across cycles (same generation) still navigates from where the shell is now.
     private func makeNavigation(context: PluginContext, canSendToTerminal canSend: Bool) -> FileTreeNavigation {
         let tid = context.terminal.terminalID
         let cwd = context.terminal.cwd
         let state = browseStates[tid] ?? FileTreeBrowseState()
-        let root = state.root(terminalCwd: cwd)
         let step: (@escaping (inout FileTreeBrowseState, String) -> Void) -> @MainActor () -> Void = { change in
-            { [weak self] in self?.updateBrowseState(tid, terminalCwd: cwd, change) }
+            { [weak self] in self?.withLiveCwd(tid) { $0.updateBrowseState(tid, terminalCwd: $1, change) } }
         }
         return FileTreeNavigation(
             mode: AppSettings.shared.explorerNavigationMode,
-            terminalCwd: cwd,
+            displayPath: Self.displayPath(root: state.root(terminalCwd: cwd), terminalCwd: cwd),
             isDetached: state.isDetached,
             canGoBack: state.canGoBack,
             canGoForward: state.canGoForward,
             canSendToTerminal: canSend,
-            open: { [weak self] in self?.open($0, terminalID: tid, terminalCwd: cwd, canSendToTerminal: canSend) },
-            browse: { [weak self] path in
-                self?.updateBrowseState(tid, terminalCwd: cwd) { $0.browse(to: path, terminalCwd: $1) }
+            open: { [weak self] path in
+                self?.withLiveCwd(tid) { $0.open(path, terminalID: tid, terminalCwd: $1, canSendToTerminal: canSend) }
             },
+            browse: { path in step { $0.browse(to: path, terminalCwd: $1) }() },
             goBack: step { $0.goBack(terminalCwd: $1) },
             goForward: step { $0.goForward(terminalCwd: $1) },
             attach: step { $0.attach(terminalCwd: $1) },
-            cdTerminalHere: { [weak self] in self?.cdTerminal(to: root, terminalID: tid, terminalCwd: cwd) }
+            cdTerminalHere: { [weak self] in
+                self?.withLiveCwd(tid) { plugin, cwd in
+                    let root = plugin.browseStates[tid]?.root(terminalCwd: cwd) ?? cwd
+                    plugin.cdTerminal(to: root, terminalID: tid, terminalCwd: cwd)
+                }
+            }
         )
+    }
+
+    private func withLiveCwd(_ tid: UUID, _ body: (LocalFileTreePlugin, String) -> Void) {
+        guard let cwd = latestCwd[tid] else { return }
+        body(self, cwd)
     }
 
     // MARK: - Sidebar Tab (two sections: file tree + folder info)
@@ -249,9 +274,13 @@ final class LocalFileTreePlugin: BooPluginProtocol {
 
     /// Nav-bar state baked into the generation: Back/Forward enablement and the linked
     /// indicator change without the root moving (e.g. re-linking to the same folder).
+    /// Only what the bar draws — a shell `cd` that leaves the bar unchanged keeps the view.
     private func navigationKey(_ context: PluginContext) -> String {
+        let cwd = context.terminal.cwd
         let state = browseStates[context.terminal.terminalID] ?? FileTreeBrowseState()
-        return "\(state.isDetached)|\(state.canGoBack)|\(state.canGoForward)|\(context.terminal.cwd)"
+        let path = Self.displayPath(root: state.root(terminalCwd: cwd), terminalCwd: cwd)
+        let mode = AppSettings.shared.explorerNavigationMode.rawValue
+        return "\(state.isDetached)|\(state.canGoBack)|\(state.canGoForward)|\(path)|\(mode)"
     }
 
     // MARK: - Detail View
@@ -266,16 +295,18 @@ final class LocalFileTreePlugin: BooPluginProtocol {
         guard let treeActions else { return nil }
 
         let tid = context.terminal.terminalID
-        // The shell moving re-attaches a detached explorer when "follow terminal" is on.
+        // Existence is only in doubt on a context switch (the folder may have gone while
+        // another terminal was shown) or after the watcher saw its root change.
+        let checkExists = tid != lastTerminalID || rootMaybeGone
+        rootMaybeGone = false
         var state = browseStates[tid] ?? FileTreeBrowseState()
-        state.observe(terminalCwd: context.terminal.cwd, follow: AppSettings.shared.explorerFollowTerminal)
-        if let shown = state.detachedPath, !FileManager.default.fileExists(atPath: shown) {
-            // The browsed folder was deleted or renamed — fall back to the shell's folder.
-            state.attach(terminalCwd: context.terminal.cwd)
-        }
+        state.reconcile(
+            terminalCwd: context.terminal.cwd, follow: AppSettings.shared.explorerFollowTerminal,
+            folderExists: { !checkExists || FileManager.default.fileExists(atPath: $0) })
         browseStates[tid] = state
+        latestCwd[tid] = context.terminal.cwd
         let cwd = state.root(terminalCwd: context.terminal.cwd)
-        let isSameTerminalAndCwd = (tid == lastTerminalID && terminalCwd[tid] == cwd)
+        let isSameTerminalAndCwd = (tid == lastTerminalID && shownRoot[tid] == cwd)
 
         if !isSameTerminalAndCwd {
             // The root we're leaving keeps its open folders under its own path key.
@@ -302,7 +333,7 @@ final class LocalFileTreePlugin: BooPluginProtocol {
             root.restoreExpanded(saved)
         }
         lastTerminalID = tid
-        terminalCwd[tid] = cwd
+        shownRoot[tid] = cwd
 
         let navigation = makeNavigation(context: context, canSendToTerminal: !isAIAgent)
         return AnyView(FileTreeView(root: root, actions: treeActions, navigation: navigation))
@@ -594,10 +625,17 @@ final class LocalFileTreePlugin: BooPluginProtocol {
         watchedPath = path
         // Reads `watchedPath` rather than capturing the path, so re-pointing the
         // watcher never leaves a stale path captured in a live closure.
-        fileWatcher = FileSystemWatcher(path: path) { [weak self] changed in
-            self?.scheduleRefresh(changed: changed)
-        }
+        fileWatcher = FileSystemWatcher(
+            path: path,
+            onRootChanged: { [weak self] in self?.watchedRootChanged() },
+            onChange: { [weak self] changed in self?.scheduleRefresh(changed: changed) })
         fileWatcher?.start()
+    }
+
+    /// The watched root was deleted, renamed or moved: re-check it on the next cycle.
+    func watchedRootChanged() {
+        rootMaybeGone = true
+        onRequestCycleRerun?()
     }
 
     /// Tear down the live watcher and any refresh it had queued.

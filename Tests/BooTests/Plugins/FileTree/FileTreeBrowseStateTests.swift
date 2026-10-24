@@ -60,23 +60,44 @@ final class FileTreeBrowseStateTests: XCTestCase {
         XCTAssertEqual(state.root(terminalCwd: "/b"), "/x")
     }
 
-    func testObserveReattachesWhenShellMovesAndFollowOn() {
+    private let exists: (String) -> Bool = { _ in true }
+
+    func testReconcileReattachesWhenShellMovesAndFollowOn() {
         var state = FileTreeBrowseState()
-        state.observe(terminalCwd: "/a", follow: true)
+        state.reconcile(terminalCwd: "/a", follow: true, folderExists: exists)
         state.browse(to: "/x", terminalCwd: "/a")
-        XCTAssertFalse(state.observe(terminalCwd: "/a", follow: true), "no shell move, stay detached")
+        XCTAssertFalse(
+            state.reconcile(terminalCwd: "/a", follow: true, folderExists: exists), "no shell move, stay detached")
         XCTAssertTrue(state.isDetached)
-        XCTAssertTrue(state.observe(terminalCwd: "/b", follow: true))
+        XCTAssertTrue(state.reconcile(terminalCwd: "/b", follow: true, folderExists: exists))
         XCTAssertFalse(state.isDetached)
         XCTAssertEqual(state.root(terminalCwd: "/b"), "/b")
     }
 
-    func testObserveKeepsDetachedWhenFollowOff() {
+    func testReconcileKeepsDetachedWhenFollowOff() {
         var state = FileTreeBrowseState()
-        state.observe(terminalCwd: "/a", follow: false)
+        state.reconcile(terminalCwd: "/a", follow: false, folderExists: exists)
         state.browse(to: "/x", terminalCwd: "/a")
-        XCTAssertFalse(state.observe(terminalCwd: "/b", follow: false))
+        XCTAssertFalse(state.reconcile(terminalCwd: "/b", follow: false, folderExists: exists))
         XCTAssertEqual(state.root(terminalCwd: "/b"), "/x")
+    }
+
+    func testReconcileDropsMissingFolderWithoutHistory() {
+        var state = FileTreeBrowseState()
+        state.browse(to: "/x", terminalCwd: "/a")
+        XCTAssertTrue(state.reconcile(terminalCwd: "/a", follow: false, folderExists: { $0 != "/x" }))
+        XCTAssertEqual(state.root(terminalCwd: "/a"), "/a")
+        state.goBack(terminalCwd: "/a")
+        XCTAssertEqual(state.root(terminalCwd: "/a"), "/a", "the gone folder is not a Back target")
+    }
+
+    func testReconcileSkipsExistenceCheckWhileAttached() {
+        var state = FileTreeBrowseState()
+        XCTAssertFalse(
+            state.reconcile(terminalCwd: "/a", follow: true) { _ in
+                XCTFail("attached roots are never stat-ed")
+                return false
+            })
     }
 
     func testHistoryIsBounded() {

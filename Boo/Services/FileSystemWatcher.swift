@@ -10,10 +10,17 @@ final class FileSystemWatcher: @unchecked Sendable {
     private let onChange: ([String]) -> Void
     /// When set, only fire onChange if at least one changed path passes the filter.
     private let filter: ((String) -> Bool)?
+    /// When set, the stream also watches the root itself (`WatchRoot`) and calls this when
+    /// the watched path is deleted, renamed or moved — FSEvents reports that only on request.
+    private let onRootChanged: (() -> Void)?
 
-    init(path: String, filter: ((String) -> Bool)? = nil, onChange: @escaping ([String]) -> Void) {
+    init(
+        path: String, filter: ((String) -> Bool)? = nil, onRootChanged: (() -> Void)? = nil,
+        onChange: @escaping ([String]) -> Void
+    ) {
         self.path = path
         self.filter = filter
+        self.onRootChanged = onRootChanged
         self.onChange = onChange
     }
 
@@ -29,20 +36,33 @@ final class FileSystemWatcher: @unchecked Sendable {
         // called explicitly — deinit could never run.
         context.info = Unmanaged.passUnretained(self).toOpaque()
 
-        let callback: FSEventStreamCallback = { _, info, numEvents, eventPaths, _, _ in
+        let callback: FSEventStreamCallback = { _, info, numEvents, eventPaths, eventFlags, _ in
             guard let info = info else { return }
             let watcher = Unmanaged<FileSystemWatcher>.fromOpaque(info).takeUnretainedValue()
             let raw = unsafeBitCast(eventPaths, to: NSArray.self)
             var changed: [String] = []
+            var rootChanged = false
             changed.reserveCapacity(numEvents)
             for i in 0..<numEvents {
+                if eventFlags[i] & FSEventStreamEventFlags(kFSEventStreamEventFlagRootChanged) != 0 {
+                    rootChanged = true
+                    continue
+                }
                 guard let p = raw[i] as? String else { continue }
                 if let filter = watcher.filter, !filter(p) { continue }
                 changed.append(p)
             }
+            if rootChanged, let onRootChanged = watcher.onRootChanged {
+                DispatchQueue.main.async { onRootChanged() }
+            }
             guard !changed.isEmpty else { return }
             DispatchQueue.main.async { watcher.onChange(changed) }
         }
+
+        var flags =
+            kFSEventStreamCreateFlagUseCFTypes | kFSEventStreamCreateFlagFileEvents
+            | kFSEventStreamCreateFlagNoDefer
+        if onRootChanged != nil { flags |= kFSEventStreamCreateFlagWatchRoot }
 
         stream = FSEventStreamCreate(
             nil,
@@ -51,9 +71,7 @@ final class FileSystemWatcher: @unchecked Sendable {
             pathsToWatch,
             FSEventStreamEventId(kFSEventStreamEventIdSinceNow),
             0.1,  // latency in seconds
-            UInt32(
-                kFSEventStreamCreateFlagUseCFTypes | kFSEventStreamCreateFlagFileEvents
-                    | kFSEventStreamCreateFlagNoDefer)
+            UInt32(flags)
         )
 
         if let stream = stream {
