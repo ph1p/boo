@@ -208,4 +208,38 @@ final class FileTreeNodeTests: XCTestCase {
             cache.rows(for: root, showHidden: false).order.map { ($0 as NSString).lastPathComponent },
             ["sub", "inner.txt"], "A revision bump re-flattens")
     }
+
+    /// An open folder that is empty or unreadable gets one placeholder row, which never
+    /// joins the selection order.
+    func testRowCacheAddsPlaceholdersForEmptyAndFailedFolders() {
+        let root = FileTreeNode(name: "r", path: "/r", isDirectory: true)
+        root.applyListing([
+            .init(name: "empty", path: "/r/empty", isDir: true),
+            .init(name: "locked", path: "/r/locked", isDir: true),
+            .init(name: "closed", path: "/r/closed", isDir: true)
+        ])
+        let empty = root.children![0]
+        let locked = root.children![1]
+        empty.isExpanded = true
+        empty.applyListing([])
+        locked.isExpanded = true
+        locked.applyListing(nil)
+        root.children![2].applyListing([])
+
+        let (rows, order) = FileTreeRowCache().rows(for: root, showHidden: false)
+        XCTAssertEqual(rows.compactMap(\.placeholder), [.empty, .failed])
+        XCTAssertEqual(order, ["/r/empty", "/r/locked", "/r/closed"])
+        XCTAssertTrue(locked.loadFailed)
+        XCTAssertEqual(locked.children?.count, 0)
+    }
+
+    /// A successful listing clears an earlier failure.
+    func testListingAfterFailureClearsLoadFailed() {
+        let node = FileTreeNode(name: "d", path: "/d", isDirectory: true)
+        node.applyListing(nil)
+        XCTAssertTrue(node.loadFailed)
+        node.applyListing([.init(name: "a", path: "/d/a", isDir: false)])
+        XCTAssertFalse(node.loadFailed)
+        XCTAssertEqual(node.children?.map(\.name), ["a"])
+    }
 }

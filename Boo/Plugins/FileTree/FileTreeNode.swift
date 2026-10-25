@@ -1,5 +1,42 @@
 import Foundation
 
+/// Where a file tree's listings come from. The local disk and remote sessions share the
+/// same node, view, selection and filter code; only listing and indexing differ.
+protocol FileTreeSource: AnyObject, Sendable {
+    /// True when paths are on this Mac (Finder, NSWorkspace and drag-out apply).
+    var isLocal: Bool { get }
+    /// One listing per path, in order; nil for a directory that can't be read.
+    func list(_ paths: [String]) async -> [[FileTreeNode.Entry]?]
+    /// Every file and folder below `rootPath`, for the fuzzy filter.
+    func buildIndex(rootPath: String, showHidden: Bool) async -> [FileTreeIndexEntry]
+    /// Git decorations for the tree rooted at `rootPath`, or nil outside a repo.
+    func gitStatus(rootPath: String) async -> FileTreeGitStatus?
+}
+
+final class LocalFileTreeSource: FileTreeSource {
+    static let shared = LocalFileTreeSource()
+
+    var isLocal: Bool { true }
+
+    func list(_ paths: [String]) async -> [[FileTreeNode.Entry]?] {
+        await Task.detached(priority: .userInitiated) {
+            paths.map { FileTreeNode.listEntries(of: $0) }
+        }.value
+    }
+
+    func buildIndex(rootPath: String, showHidden: Bool) async -> [FileTreeIndexEntry] {
+        await Task.detached(priority: .userInitiated) {
+            FileTreeIndex.build(rootPath: rootPath, showHidden: showHidden)
+        }.value
+    }
+
+    func gitStatus(rootPath: String) async -> FileTreeGitStatus? {
+        await Task.detached(priority: .utility) {
+            FileTreeGitStatus.load(rootPath: rootPath)
+        }.value
+    }
+}
+
 /// Data model for file tree entries. Mutated on the main thread only; the async loader
 /// lists off-main and hops back before touching state (hence `@unchecked Sendable`).
 final class FileTreeNode: Identifiable, ObservableObject, @unchecked Sendable {
@@ -23,12 +60,20 @@ final class FileTreeNode: Identifiable, ObservableObject, @unchecked Sendable {
     /// Weak back-pointer to the tree root so child nodes can bump `treeRevision`.
     weak var root: FileTreeNode?
 
-    init(name: String, path: String, isDirectory: Bool) {
+    /// Where listings come from; children inherit their parent's source.
+    let source: FileTreeSource
+
+    init(name: String, path: String, isDirectory: Bool, source: FileTreeSource = LocalFileTreeSource.shared) {
         self.id = path
         self.name = name
         self.path = path
         self.isDirectory = isDirectory
+        self.source = source
     }
+
+    /// True when the last listing of this directory failed (unreadable, gone, or the
+    /// remote side couldn't be reached). Cleared by the next successful listing.
+    @Published private(set) var loadFailed = false
 
     /// True while an async listing for this directory is in flight.
     @Published private(set) var isLoading = false
@@ -48,10 +93,12 @@ final class FileTreeNode: Identifiable, ObservableObject, @unchecked Sendable {
     typealias Completion = @MainActor @Sendable () -> Void
 
     /// Synchronous load. Only for a brand-new root's first paint and tests — anything
-    /// driven by the UI or FS events goes through `loadAsync`.
+    /// driven by the UI or FS events goes through `loadAsync`. A non-local source can't
+    /// list synchronously, so it falls back to the async path.
     func loadChildren() {
         guard isDirectory else { return }
-        apply(Self.listEntries(of: path))
+        guard source.isLocal else { return loadChildrenAsync() }
+        applyListing(Self.listEntries(of: path))
     }
 
     /// Off-main variant for user-initiated expands — a slow volume or a huge directory
@@ -60,8 +107,8 @@ final class FileTreeNode: Identifiable, ObservableObject, @unchecked Sendable {
         Self.loadAsync([self], completion: completion)
     }
 
-    /// List every directory in `nodes` in one off-main hop, then apply all listings on
-    /// main together. Existing children stay in place until their listing lands, so a
+    /// List every directory in `nodes` in one off-main hop (one round-trip for a remote
+    /// source), then apply all listings on main together. Existing children stay in place until their listing lands, so a
     /// reload never blanks a folder. Each node's generation is bumped so an older
     /// in-flight load can't overwrite a newer one.
     static func loadAsync(_ nodes: [FileTreeNode], completion: Completion? = nil) {
@@ -83,15 +130,15 @@ final class FileTreeNode: Identifiable, ObservableObject, @unchecked Sendable {
         }
         let paths = dirs.map(\.path)
         let expected = generations
-        Task.detached(priority: .userInitiated) {
-            let listings = paths.map { Self.listEntries(of: $0) }
-            await MainActor.run {
-                for (index, node) in dirs.enumerated() where node.loadGeneration == expected[index] {
-                    node.isLoading = false
-                    node.apply(listings[index])
-                }
-                completion?()
+        // Nodes passed together always belong to one tree, so they share a source.
+        let source = dirs[0].source
+        Task { @MainActor in
+            let listings = await source.list(paths)
+            for (index, node) in dirs.enumerated() where node.loadGeneration == expected[index] {
+                node.isLoading = false
+                node.applyListing(index < listings.count ? listings[index] : nil)
             }
+            completion?()
         }
     }
 
@@ -116,14 +163,30 @@ final class FileTreeNode: Identifiable, ObservableObject, @unchecked Sendable {
             let name = u.lastPathComponent
             return Entry(name: name, path: (dirPath as NSString).appendingPathComponent(name), isDir: isDir)
         }
-        return entries.sorted { lhs, rhs in
+        return sorted(entries)
+    }
+
+    /// Folders first, then case-insensitive by name.
+    static func sorted(_ entries: [Entry]) -> [Entry] {
+        entries.sorted { lhs, rhs in
             if lhs.isDir != rhs.isDir { return lhs.isDir }
             return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
         }
     }
 
-    private func apply(_ listing: [Entry]?) {
+    /// Replace this directory's children with `listing` (nil = unreadable), reusing
+    /// nodes whose path survived. Also the entry point for listings pushed in from
+    /// outside (a remote `ls` the terminal already ran). Bumps the generation so an
+    /// older in-flight load can't overwrite it.
+    func applyListing(_ listing: [Entry]?) {
+        loadGeneration &+= 1
+        isLoading = false
         let treeRoot = root ?? self
+        let failed = listing == nil
+        if loadFailed != failed {
+            loadFailed = failed
+            treeRoot.treeRevision &+= 1
+        }
         guard let sorted = listing else {
             let wasEmpty = children?.isEmpty ?? false
             let wasLoaded = children != nil
@@ -147,7 +210,7 @@ final class FileTreeNode: Identifiable, ObservableObject, @unchecked Sendable {
                 return existing
             }
             reusedAll = false
-            let child = FileTreeNode(name: entry.name, path: entry.path, isDirectory: entry.isDir)
+            let child = FileTreeNode(name: entry.name, path: entry.path, isDirectory: entry.isDir, source: source)
             child.root = treeRoot
             return child
         }

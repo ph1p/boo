@@ -49,50 +49,27 @@ final class RemoteFileTreePluginTests: XCTestCase {
         XCTAssertEqual(RemoteFileTreePlugin.remoteRootPath(for: context), "~/src/boo")
     }
 
-    // MARK: - Remote Root Reuse on cd
+    // MARK: - Root cache
 
+    private func entry(_ dir: String, _ name: String, isDir: Bool = true) -> FileTreeNode.Entry {
+        FileTreeNode.Entry(name: name, path: RemoteFileTreeSource.childPath(dir, name), isDir: isDir)
+    }
+
+    /// Each folder is its own root, like the local tree — a cd keeps the previous root
+    /// (and its open folders) cached for the way back.
     @MainActor
-    func testRemoteRootReusedOnCd() {
+    func testEachPathGetsItsOwnRoot() {
         let plugin = RemoteFileTreePlugin()
         let session = RemoteSessionType.ssh(host: "devbox")
 
-        // Create initial root for home directory
-        let root1 = plugin.getOrCreateRemoteRoot(for: "~", session: session)
-        // Simulate successful load
-        root1.applyEntries([.init(name: "src", isDirectory: true)])
-
-        // Now cd to a different directory — should reuse the same root object
-        let root2 = plugin.getOrCreateRemoteRoot(for: "/home/user/project", session: session)
-        XCTAssertTrue(root1 === root2, "Same root object should be reused for the same host on cd")
-        XCTAssertEqual(root2.remotePath, "/home/user/project")
-    }
-
-    @MainActor
-    func testRemoteRootNotReusedAcrossHosts() {
-        let plugin = RemoteFileTreePlugin()
-
-        let rootA = plugin.getOrCreateRemoteRoot(for: "~", session: .ssh(host: "hostA"))
-        rootA.applyEntries([.init(name: "file", isDirectory: false)])
-
-        let rootB = plugin.getOrCreateRemoteRoot(for: "~", session: .ssh(host: "hostB"))
-        XCTAssertFalse(rootA === rootB, "Different hosts should have separate root objects")
-    }
-
-    @MainActor
-    func testRemoteRootTildePromotionViaReuse() {
-        let plugin = RemoteFileTreePlugin()
-        let session = RemoteSessionType.ssh(host: "devbox")
-
-        // Start with tilde root
-        let tildeRoot = plugin.getOrCreateRemoteRoot(for: "~", session: session)
-        tildeRoot.applyEntries([.init(name: "Documents", isDirectory: true)])
-
-        // Title resolves to absolute path — reuses the tilde root
-        let resolved = plugin.getOrCreateRemoteRoot(for: "/home/user", session: session)
-        XCTAssertTrue(tildeRoot === resolved)
-        XCTAssertEqual(resolved.remotePath, "/home/user")
-        // Children should still be present (no spinner)
-        XCTAssertNotNil(resolved.children)
+        let (root1, created1) = plugin.getOrCreateRoot(for: "/srv/app", session: session)
+        let (root2, created2) = plugin.getOrCreateRoot(for: "/srv/other", session: session)
+        XCTAssertTrue(created1)
+        XCTAssertTrue(created2)
+        XCTAssertFalse(root1 === root2)
+        XCTAssertEqual(root2.path, "/srv/other")
+        XCTAssertEqual(root2.name, "other")
+        XCTAssertFalse(root2.source.isLocal, "Remote roots must list through the remote source")
     }
 
     @MainActor
@@ -100,40 +77,50 @@ final class RemoteFileTreePluginTests: XCTestCase {
         let plugin = RemoteFileTreePlugin()
         let session = RemoteSessionType.ssh(host: "devbox")
 
-        let root1 = plugin.getOrCreateRemoteRoot(for: "~", session: session)
-        let root2 = plugin.getOrCreateRemoteRoot(for: "~", session: session)
+        let (root1, _) = plugin.getOrCreateRoot(for: "/srv", session: session)
+        let (root2, created) = plugin.getOrCreateRoot(for: "/srv", session: session)
         XCTAssertTrue(root1 === root2, "Cache hit should return the same root object")
+        XCTAssertFalse(created)
     }
 
     @MainActor
-    func testRemoteRootResolvesAbsolutePathWhenHomeCached() {
+    func testRemoteRootNotSharedAcrossHosts() {
         let plugin = RemoteFileTreePlugin()
-        let session = RemoteSessionType.ssh(host: "devbox")
-
-        // Pre-populate home cache so resolveTilde works synchronously
-        RemoteExplorer.resolveRemoteHome(session: session) { _ in }
-        // Manually seed the cache for test (resolveRemoteHome requires real SSH)
-        // Instead, test with an absolute path directly
-        let root = plugin.getOrCreateRemoteRoot(for: "/root", session: session)
-        XCTAssertEqual(root.remotePath, "/root")
-        XCTAssertFalse(root.remotePath.hasPrefix("~"))
+        let (rootA, _) = plugin.getOrCreateRoot(for: "/srv", session: .ssh(host: "hostA"))
+        let (rootB, _) = plugin.getOrCreateRoot(for: "/srv", session: .ssh(host: "hostB"))
+        XCTAssertFalse(rootA === rootB, "Different hosts should have separate root objects")
     }
 
     @MainActor
-    func testRemoteRootAbsolutePathChildrenAreAbsolute() {
+    func testRootAtFilesystemRootIsNamedSlash() {
+        let plugin = RemoteFileTreePlugin()
+        let (root, _) = plugin.getOrCreateRoot(for: "/", session: .ssh(host: "devbox"))
+        XCTAssertEqual(root.name, "/")
+    }
+
+    @MainActor
+    func testRemoteChildrenGetAbsolutePathsAndShareSource() {
+        let plugin = RemoteFileTreePlugin()
+        let (root, _) = plugin.getOrCreateRoot(for: "/root", session: .ssh(host: "devbox"))
+        root.applyListing([entry("/root", "container"), entry("/root", "file.txt", isDir: false)])
+
+        XCTAssertEqual(root.children?.map(\.path), ["/root/container", "/root/file.txt"])
+        XCTAssertTrue(root.children?[0].source === root.source)
+    }
+
+    @MainActor
+    func testOldestRootEvictedPastLimit() {
         let plugin = RemoteFileTreePlugin()
         let session = RemoteSessionType.ssh(host: "devbox")
-
-        let root = plugin.getOrCreateRemoteRoot(for: "/root", session: session)
-        root.applyEntries([
-            .init(name: "container", isDirectory: true),
-            .init(name: "file.txt", isDirectory: false)
-        ])
-
-        // Children should have absolute paths, not tilde-relative
-        XCTAssertEqual(root.children?[0].remotePath, "/root/container")
-        XCTAssertEqual(root.children?[1].remotePath, "/root/file.txt")
-        XCTAssertFalse(root.children?[0].remotePath.hasPrefix("~") ?? true)
+        let (first, _) = plugin.getOrCreateRoot(for: "/p0", session: session)
+        for i in 1...RemoteFileTreePlugin.maxCachedRoots {
+            plugin.getOrCreateRoot(for: "/p\(i)", session: session)
+        }
+        let key0 = RemoteFileTreePlugin.cacheKey(for: "/p0", session: session)
+        XCTAssertNil(plugin.cachedRoot(forKey: key0), "The least recently used root must be evicted")
+        let (again, created) = plugin.getOrCreateRoot(for: "/p0", session: session)
+        XCTAssertTrue(created)
+        XCTAssertFalse(again === first)
     }
 
     // MARK: - Cache Key Consistency with Alias
@@ -141,51 +128,50 @@ final class RemoteFileTreePluginTests: XCTestCase {
     /// When the session has an alias, the cache key must use sshConnectionTarget (the alias),
     /// not the display host. This ensures the cache key matches the SSHControlManager socket key.
     @MainActor
-    func testCacheKeyUsesAliasNotDisplayHost() {
-        let plugin = RemoteFileTreePlugin()
-
-        // Session where display host differs from alias
-        let session = RemoteSessionType.ssh(host: "root@ubuntu-server", alias: "devbox")
-
-        let root1 = plugin.getOrCreateRemoteRoot(for: "~", session: session)
-        root1.applyEntries([.init(name: "src", isDirectory: true)])
-
-        // Same alias, same path — must return cached root
-        let root2 = plugin.getOrCreateRemoteRoot(for: "~", session: session)
-        XCTAssertTrue(root1 === root2, "Cache hit must work when alias matches")
-    }
-
-    /// Sessions with different display hosts but the same alias must share cache.
-    @MainActor
     func testCacheSharedBySameAlias() {
         let plugin = RemoteFileTreePlugin()
 
-        // Title-based session: host="devbox", alias="devbox"
         let session1 = RemoteSessionType.ssh(host: "devbox", alias: "devbox")
-        let root1 = plugin.getOrCreateRemoteRoot(for: "~", session: session1)
-        root1.applyEntries([.init(name: "docs", isDirectory: true)])
+        let (root1, _) = plugin.getOrCreateRoot(for: "/srv", session: session1)
 
-        // After reconciliation: host="root@ubuntu-server", alias="devbox"
         let session2 = RemoteSessionType.ssh(host: "root@ubuntu-server", alias: "devbox")
-        let root2 = plugin.getOrCreateRemoteRoot(for: "~", session: session2)
-        XCTAssertTrue(
-            root1 === root2,
-            "Same alias must hit same cache entry regardless of display host")
+        let (root2, _) = plugin.getOrCreateRoot(for: "/srv", session: session2)
+        XCTAssertTrue(root1 === root2, "Same alias must hit same cache entry regardless of display host")
+        XCTAssertEqual(RemoteFileTreePlugin.cacheKey(for: "/srv", session: session2), "devbox:/srv")
     }
 
-    /// On cd, the existing root must be reused even with aliased sessions.
-    @MainActor
-    func testRemoteRootReusedOnCdWithAlias() {
-        let plugin = RemoteFileTreePlugin()
-        let session = RemoteSessionType.ssh(host: "devbox", alias: "devbox")
+    // MARK: - Display path
 
-        let root1 = plugin.getOrCreateRemoteRoot(for: "~", session: session)
-        root1.applyEntries([.init(name: "src", isDirectory: true)])
+    func testDisplayPathRelativeToTerminalFolder() {
+        XCTAssertEqual(RemoteFileTreePlugin.displayPath(root: "/srv/app", terminalCwd: "/srv/app", home: nil), "app")
+        XCTAssertEqual(
+            RemoteFileTreePlugin.displayPath(root: "/srv/app/src/lib", terminalCwd: "/srv/app", home: nil),
+            "./src/lib")
+    }
 
-        // cd to /tmp — same host prefix, different path → reuse
-        let root2 = plugin.getOrCreateRemoteRoot(for: "/tmp", session: session)
-        XCTAssertTrue(root1 === root2, "Same root must be reused on cd")
-        XCTAssertEqual(root2.remotePath, "/tmp")
-        // Children from old path should be cleared by loadChildren (async)
+    func testDisplayPathAbbreviatesRemoteHome() {
+        let home = "/home/u"
+        XCTAssertEqual(RemoteFileTreePlugin.displayPath(root: "/home/u", terminalCwd: "/srv", home: home), "~")
+        XCTAssertEqual(
+            RemoteFileTreePlugin.displayPath(root: "/home/u/code", terminalCwd: "/srv", home: home), "~/code")
+        XCTAssertEqual(
+            RemoteFileTreePlugin.displayPath(root: "/home/user2", terminalCwd: "/srv", home: home), "/home/user2",
+            "A sibling sharing the home prefix must not be abbreviated")
+        XCTAssertEqual(RemoteFileTreePlugin.displayPath(root: "/etc", terminalCwd: "/srv", home: nil), "/etc")
+    }
+
+    // MARK: - Downloads
+
+    func testUniquePathAddsCounterBeforeExtension() {
+        let taken: Set<String> = ["/d/report.pdf", "/d/report 2.pdf", "/d/folder"]
+        XCTAssertEqual(
+            RemoteFileTreePlugin.uniquePath(in: "/d", name: "report.pdf") { taken.contains($0) }, "/d/report 3.pdf")
+        XCTAssertEqual(RemoteFileTreePlugin.uniquePath(in: "/d", name: "folder") { taken.contains($0) }, "/d/folder 2")
+        XCTAssertEqual(RemoteFileTreePlugin.uniquePath(in: "/d", name: "new.txt") { taken.contains($0) }, "/d/new.txt")
+    }
+
+    func testCachePathMirrorsRemotePathPerHost() {
+        let path = RemoteFileTreePlugin.cachePath(for: "/etc/nginx/nginx.conf", session: .ssh(host: "user@web-1"))
+        XCTAssertTrue(path.hasSuffix("Boo-remote/user_web-1/etc/nginx/nginx.conf"), path)
     }
 }

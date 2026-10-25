@@ -339,70 +339,76 @@ final class LocalFileTreePlugin: BooPluginProtocol {
         return AnyView(FileTreeView(root: root, actions: treeActions, navigation: navigation))
     }
 
+    /// Open a file on this Mac per the "File Opening" settings. Shared with the remote
+    /// tree, which hands it a downloaded copy.
+    static func openFile(_ path: String, actions: PluginActions?) {
+        let ext = (path as NSString).pathExtension.lowercased()
+        let filename = ((path as NSString).lastPathComponent).lowercased()
+        let isImage = ContentType.imageExtensions.contains(ext)
+        let isMarkdown = ContentType.markdownExtensions.contains(ext)
+        let isHTML = ContentType.htmlExtensions.contains(ext)
+        let isPDF = ContentType.pdfExtensions.contains(ext)
+        let isEditorFile = ContentType.isEditorFilePattern(filename: filename)
+
+        let htmlOpenInBrowser = AppSettings.shared.pluginBool(
+            "file-tree-local", "htmlOpenInBrowser", default: false)
+        let pdfOpenInBrowser = AppSettings.shared.pluginBool(
+            "file-tree-local", "pdfOpenInBrowser", default: true)
+        if isPDF && pdfOpenInBrowser {
+            actions?.openTab?(.browser(url: URL(fileURLWithPath: path)))
+        } else if isPDF {
+            NSWorkspace.shared.open(URL(fileURLWithPath: path))
+        } else if isHTML && htmlOpenInBrowser {
+            actions?.openTab?(.browser(url: URL(fileURLWithPath: path)))
+        } else if isImage {
+            let imageModeRaw = AppSettings.shared.pluginString(
+                "file-tree-local", "imageOpenMode", default: "imageViewer")
+            let imageMode = ImageOpenMode(rawValue: imageModeRaw) ?? .imageViewer
+            switch imageMode {
+            case .kitty:
+                actions?.displayImageInTerminal?(path, false)
+            case .external:
+                NSWorkspace.shared.open(URL(fileURLWithPath: path))
+            case .multiContent, .imageViewer:
+                actions?.openTab?(.file(path: path))
+            }
+        } else if isMarkdown {
+            actions?.openTab?(.file(path: path))
+        } else if isEditorFile {
+            let textModeRaw = AppSettings.shared.pluginString(
+                "file-tree-local", "textOpenMode", default: "editor")
+            let textMode = TextOpenMode(rawValue: textModeRaw) ?? .editor
+            switch textMode {
+            case .terminalEditor:
+                let parentDir = (path as NSString).deletingLastPathComponent
+                actions?.openDirectoryInNewTab?(parentDir)
+                let configured = AppSettings.shared.fileEditorCommand.trimmingCharacters(
+                    in: .whitespaces
+                )
+                let editorCmd =
+                    configured.isEmpty
+                    ? (ProcessInfo.processInfo.environment["EDITOR"] ?? "vi")
+                    : configured
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    actions?.sendToTerminal?("\(editorCmd) \(shellEscape(path))\r")
+                }
+            case .external:
+                NSWorkspace.shared.open(URL(fileURLWithPath: path))
+            case .editor, .multiContent:
+                actions?.openTab?(.file(path: path))
+            }
+        } else {
+            NSWorkspace.shared.open(URL(fileURLWithPath: path))
+        }
+    }
+
     private func buildTreeActions() -> FileTreeActions {
         // Resolved on each invocation rather than captured: `PluginRegistry.actions` is
         // reassigned after registration, and these closures outlive that assignment.
         let act: @MainActor () -> PluginActions? = { [weak self] in self?.actions }
         return FileTreeActions(
             onFileClicked: { path in
-                let ext = (path as NSString).pathExtension.lowercased()
-                let filename = ((path as NSString).lastPathComponent).lowercased()
-                let isImage = ContentType.imageExtensions.contains(ext)
-                let isMarkdown = ContentType.markdownExtensions.contains(ext)
-                let isHTML = ContentType.htmlExtensions.contains(ext)
-                let isPDF = ContentType.pdfExtensions.contains(ext)
-                let isEditorFile = ContentType.isEditorFilePattern(filename: filename)
-
-                let htmlOpenInBrowser = AppSettings.shared.pluginBool(
-                    "file-tree-local", "htmlOpenInBrowser", default: false)
-                let pdfOpenInBrowser = AppSettings.shared.pluginBool(
-                    "file-tree-local", "pdfOpenInBrowser", default: true)
-                if isPDF && pdfOpenInBrowser {
-                    act()?.openTab?(.browser(url: URL(fileURLWithPath: path)))
-                } else if isPDF {
-                    NSWorkspace.shared.open(URL(fileURLWithPath: path))
-                } else if isHTML && htmlOpenInBrowser {
-                    act()?.openTab?(.browser(url: URL(fileURLWithPath: path)))
-                } else if isImage {
-                    let imageModeRaw = AppSettings.shared.pluginString(
-                        "file-tree-local", "imageOpenMode", default: "imageViewer")
-                    let imageMode = ImageOpenMode(rawValue: imageModeRaw) ?? .imageViewer
-                    switch imageMode {
-                    case .kitty:
-                        act()?.displayImageInTerminal?(path, false)
-                    case .external:
-                        NSWorkspace.shared.open(URL(fileURLWithPath: path))
-                    case .multiContent, .imageViewer:
-                        act()?.openTab?(.file(path: path))
-                    }
-                } else if isMarkdown {
-                    act()?.openTab?(.file(path: path))
-                } else if isEditorFile {
-                    let textModeRaw = AppSettings.shared.pluginString(
-                        "file-tree-local", "textOpenMode", default: "editor")
-                    let textMode = TextOpenMode(rawValue: textModeRaw) ?? .editor
-                    switch textMode {
-                    case .terminalEditor:
-                        let parentDir = (path as NSString).deletingLastPathComponent
-                        act()?.openDirectoryInNewTab?(parentDir)
-                        let configured = AppSettings.shared.fileEditorCommand.trimmingCharacters(
-                            in: .whitespaces
-                        )
-                        let editorCmd =
-                            configured.isEmpty
-                            ? (ProcessInfo.processInfo.environment["EDITOR"] ?? "vi")
-                            : configured
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                            act()?.sendToTerminal?("\(editorCmd) \(shellEscape(path))\r")
-                        }
-                    case .external:
-                        NSWorkspace.shared.open(URL(fileURLWithPath: path))
-                    case .editor, .multiContent:
-                        act()?.openTab?(.file(path: path))
-                    }
-                } else {
-                    NSWorkspace.shared.open(URL(fileURLWithPath: path))
-                }
+                Self.openFile(path, actions: act())
             },
             onPastePath: { path in
                 act()?.pastePath(path)
@@ -546,6 +552,22 @@ final class LocalFileTreePlugin: BooPluginProtocol {
                     self?.hostActions?.setWorkspaceRoot?(url.path)
                 }
             },
+            onOpenExternally: { path in
+                NSWorkspace.shared.open(URL(fileURLWithPath: path))
+            },
+            onRefresh: { [weak self] rootPath in
+                guard let self, let root = self.cachedRoots[rootPath] else { return }
+                self.refreshGitStatus(root)
+            },
+            onFetchInfo: { path in
+                await Task.detached(priority: .utility) {
+                    guard let attrs = try? FileManager.default.attributesOfItem(atPath: path) else { return nil }
+                    let isDir = (attrs[.type] as? FileAttributeType) == .typeDirectory
+                    let size = (attrs[.size] as? NSNumber)?.int64Value
+                    return FileTreeInfo.summary(
+                        size: isDir ? nil : size, modified: attrs[.modificationDate] as? Date)
+                }.value
+            },
             isAIAgentRunning: false
         )
     }
@@ -685,10 +707,9 @@ final class LocalFileTreePlugin: BooPluginProtocol {
             return
         }
         gitRefreshInFlight.insert(path)
+        let source = root.source
         Task { [weak self, weak root] in
-            let status = await Task.detached(priority: .utility) {
-                FileTreeGitStatus.load(rootPath: path)
-            }.value
+            let status = await source.gitStatus(rootPath: path)
             guard let self else { return }
             self.gitRefreshInFlight.remove(path)
             if let root, root.gitStatus != status { root.gitStatus = status }

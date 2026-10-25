@@ -174,27 +174,6 @@ final class RemoteExplorerTests: XCTestCase {
         )
     }
 
-    func testDirectoryListCommandLeavesBareTildeUnquoted() {
-        XCTAssertEqual(
-            RemoteExplorer.directoryListCommand(for: "~"),
-            "ls -1AF ~ 2>/dev/null"
-        )
-    }
-
-    func testDirectoryListCommandPreservesTildeExpansionForNestedHomePath() {
-        XCTAssertEqual(
-            RemoteExplorer.directoryListCommand(for: "~/Projects/My App"),
-            "ls -1AF ~/Projects/'My App' 2>/dev/null"
-        )
-    }
-
-    func testDirectoryListCommandQuotesAbsolutePaths() {
-        XCTAssertEqual(
-            RemoteExplorer.directoryListCommand(for: "/var/log"),
-            "ls -1AF /var/log 2>/dev/null"
-        )
-    }
-
     // MARK: - shellEscPath for cd commands
 
     func testShellEscPathPreservesTildeExpansion() {

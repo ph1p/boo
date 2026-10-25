@@ -38,15 +38,17 @@ final class RemoteFileTreePluginExpansionTests: XCTestCase {
     /// Populate a root's children without going near SSH.
     private func seed(
         _ plugin: RemoteFileTreePlugin, _ ctx: PluginContext, names: [String]
-    ) throws -> RemoteFileTreeNode {
+    ) throws -> FileTreeNode {
         let root = try XCTUnwrap(
             plugin.cachedRoot(for: ctx.terminal),
             "makeDetailView must have cached a root for this context")
-        root.applyEntries(names.map { RemoteExplorer.RemoteEntry(name: $0, isDirectory: true) })
+        root.applyListing(
+            names.map { FileTreeNode.Entry(name: $0, path: RemoteFileTreeSource.childPath(root.path, $0), isDir: true) }
+        )
         return root
     }
 
-    private func child(_ root: RemoteFileTreeNode, _ name: String) throws -> RemoteFileTreeNode {
+    private func child(_ root: FileTreeNode, _ name: String) throws -> FileTreeNode {
         try XCTUnwrap(root.children?.first { $0.name == name })
     }
 
@@ -110,7 +112,7 @@ final class RemoteFileTreePluginExpansionTests: XCTestCase {
             plugin.savedExpandedPaths(for: ctxA.terminal),
             "Leaving a root must snapshot its open folders")
         XCTAssertTrue(
-            saved.contains(logs.remotePath),
+            saved.contains(logs.path),
             "The open folder must be recorded under the root it belongs to")
 
         // …and back: the root node is the cached one, and restore feeds it those paths.

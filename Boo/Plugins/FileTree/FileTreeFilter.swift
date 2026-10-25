@@ -171,6 +171,7 @@ final class FileTreeFilterModel: ObservableObject {
 
     private var rootPath = ""
     private var showHidden = false
+    private var source: FileTreeSource = LocalFileTreeSource.shared
     private var index: [FileTreeIndexEntry]?
     private var indexTask: Task<Void, Never>?
     /// Set when the index went stale while a build was running. The build walk can't be
@@ -179,10 +180,11 @@ final class FileTreeFilterModel: ObservableObject {
     private var indexDirty = false
     private var searchTask: Task<Void, Never>?
 
-    func configure(rootPath: String, showHidden: Bool) {
-        guard rootPath != self.rootPath || showHidden != self.showHidden else { return }
+    func configure(rootPath: String, showHidden: Bool, source: FileTreeSource = LocalFileTreeSource.shared) {
+        guard rootPath != self.rootPath || showHidden != self.showHidden || source !== self.source else { return }
         self.rootPath = rootPath
         self.showHidden = showHidden
+        self.source = source
         invalidate()
     }
 
@@ -228,16 +230,15 @@ final class FileTreeFilterModel: ObservableObject {
         guard indexTask == nil else { return }
         let root = rootPath
         let hidden = showHidden
+        let source = source
         isIndexing = true
         indexDirty = false
         indexTask = Task { [weak self] in
-            let built = await Task.detached(priority: .userInitiated) {
-                FileTreeIndex.build(rootPath: root, showHidden: hidden)
-            }.value
+            let built = await source.buildIndex(rootPath: root, showHidden: hidden)
             guard let self else { return }
             self.indexTask = nil
             self.isIndexing = false
-            if self.indexDirty || self.rootPath != root || self.showHidden != hidden {
+            if self.indexDirty || self.rootPath != root || self.showHidden != hidden || self.source !== source {
                 self.indexDirty = false
                 if self.isActive { self.scheduleSearch() }
                 return

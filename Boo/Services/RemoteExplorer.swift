@@ -417,47 +417,6 @@ final class RemoteExplorer: @unchecked Sendable {
         }
     }
 
-    /// List directory contents on the remote target.
-    /// Completion receives `nil` on connection/command failure, empty array for empty directory.
-    static func listRemoteDirectory(
-        session: RemoteSessionType, path: String, completion: @escaping @Sendable ([RemoteEntry]?) -> Void
-    ) {
-        let cmd = directoryListCommand(for: path)
-        remoteLog(
-            "[RemoteExplorer] listRemoteDirectory: session=\(session.envType):\(session.displayName) path=\(path) cmd=\(cmd)"
-        )
-
-        runRemoteCommand(session: session, command: cmd) { output in
-            guard let output = output else {
-                completion(nil)
-                return
-            }
-            guard !output.isEmpty else {
-                completion([])
-                return
-            }
-
-            var entries: [RemoteEntry] = []
-            for line in output.split(separator: "\n") {
-                var name = String(line)
-                let isDir = name.hasSuffix("/")
-                if isDir { name = String(name.dropLast()) }
-                if let last = name.last, "@*|=".contains(last) { name = String(name.dropLast()) }
-                guard !name.isEmpty else { continue }
-                entries.append(RemoteEntry(name: name, isDirectory: isDir))
-            }
-            entries.sort { lhs, rhs in
-                if lhs.isDirectory != rhs.isDirectory { return lhs.isDirectory }
-                return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
-            }
-            completion(entries)
-        }
-    }
-
-    static func directoryListCommand(for path: String) -> String {
-        "ls -1AF \(shellEscPath(path)) 2>/dev/null"
-    }
-
     // MARK: - Command Execution
 
     /// Find an existing ControlMaster socket for the given host.
@@ -510,8 +469,26 @@ final class RemoteExplorer: @unchecked Sendable {
         if disableRealSSH { return nil }
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/ssh")
+        // -n: no stdin — prevents password prompts from blocking.
+        process.arguments = ["-n"] + sshArguments(host: host, command: command, extraArgs: extraArgs)
+
+        guard let result = runProcessCapturing(process) else { return nil }
+        guard result.status == 0 else {
+            debugLog(
+                "[RemoteExplorer] SSH failed: host=\(host) exit=\(result.status) stderr=\(result.stderr.prefix(200))"
+            )
+            // Report the outcome; the manager owns what a failure means for the
+            // connection it established.
+            SSHControlManager.shared.reportFailure(alias: host, stderr: result.stderr)
+            return nil
+        }
+        return result.stdout
+    }
+
+    /// Non-interactive ssh options + control socket + `host command`, shared by the
+    /// captured commands above and the streaming transfers (which need stdin).
+    static func sshArguments(host: String, command: String, extraArgs: [String] = []) -> [String] {
         var args = [
-            "-n",  // no stdin — prevents password prompts from blocking
             "-o", "ConnectTimeout=3",
             "-o", "StrictHostKeyChecking=accept-new",
             "-o", "BatchMode=yes"
@@ -531,19 +508,7 @@ final class RemoteExplorer: @unchecked Sendable {
         }
         args += extraArgs
         args += [host, command]
-        process.arguments = args
-
-        guard let result = runProcessCapturing(process) else { return nil }
-        guard result.status == 0 else {
-            debugLog(
-                "[RemoteExplorer] SSH failed: host=\(host) exit=\(result.status) stderr=\(result.stderr.prefix(200))"
-            )
-            // Report the outcome; the manager owns what a failure means for the
-            // connection it established.
-            SSHControlManager.shared.reportFailure(alias: host, stderr: result.stderr)
-            return nil
-        }
-        return result.stdout
+        return args
     }
 
     static func runRemoteCommand(

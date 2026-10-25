@@ -33,13 +33,42 @@ struct FileTreeActions: @unchecked Sendable {
     var onCopyImage: (@MainActor (String) -> Void)?
     var onReferenceInAI: (@MainActor (String) -> Void)?
     var onSetFileRoot: (@MainActor (String) -> Void)?
+    /// Open a file with its default macOS app (a remote file is fetched first).
+    var onOpenExternally: (@MainActor (String) -> Void)?
+    /// Save files to this Mac (remote trees).
+    var onDownload: (@MainActor ([String]) -> Void)?
+    /// Copy files dropped from Finder into a folder (remote trees). Without it a Finder
+    /// drop moves the file via `onMove`.
+    var onUpload: (@MainActor (_ localPaths: [String], _ destinationDir: String) -> Void)?
+    /// Delete permanently — offered when there is no trash (remote trees).
+    var onDelete: (@MainActor ([String]) -> Void)?
+    /// Manual refresh: the view re-reads every expanded folder itself, then calls this
+    /// with the root path so the plugin can refresh what else it owns (git status).
+    var onRefresh: (@MainActor (_ rootPath: String) -> Void)?
+    /// One-line size/date summary for the hover tooltip, or nil when unavailable.
+    var onFetchInfo: (@MainActor (String) async -> String?)?
     var isAIAgentRunning: Bool = false
+
+    /// Whether rows offer removal at all, and whether it goes to the Trash.
+    var canRemove: Bool { onMoveToTrash != nil || onDelete != nil }
+    /// Remove goes to the Trash (local) rather than deleting outright (remote).
+    var removesToTrash: Bool { onMoveToTrash != nil }
 
     /// Whether an AI agent holds the foreground — row actions differ, so both file-tree
     /// plugins bake it into their section generation as well as into the actions.
     @MainActor
     static func isAIAgentContext(_ context: PluginContext) -> Bool {
         ProcessIcon.category(for: context.terminal.processName) == "ai"
+    }
+}
+
+/// Hover-tooltip summary shared by the local and remote trees.
+enum FileTreeInfo {
+    static func summary(size: Int64?, modified: Date?) -> String? {
+        var parts: [String] = []
+        if let size { parts.append(ByteCountFormatter.string(fromByteCount: size, countStyle: .file)) }
+        if let modified { parts.append("Modified " + modified.formatted(date: .abbreviated, time: .shortened)) }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 }
 
@@ -79,6 +108,9 @@ final class FileTreeDragState: ObservableObject {
 
     @Published var dropPosition: DropPosition?
     @Published var draggedPath: String?
+    /// The row dragged most recently. Unlike `draggedPath` it survives the drop, so a
+    /// drop can tell a row moved inside the tree from text dragged in from elsewhere.
+    private(set) var lastDraggedPath: String?
     var expandTimer: DispatchWorkItem?
     var exitTimer: DispatchWorkItem?
     /// Set after performDrop — suppresses all further state changes until the
@@ -122,6 +154,7 @@ final class FileTreeDragState: ObservableObject {
     func beginDrag(path: String) {
         dropped = false
         draggedPath = path
+        lastDraggedPath = path
     }
 }
 
@@ -136,6 +169,7 @@ struct FileTreeView: View {
     @StateObject private var filter = FileTreeFilterModel()
     @FocusState private var treeFocused: Bool
     @FocusState private var filterFocused: Bool
+    /// Paths awaiting confirmation for Move to Trash (or Delete without a trash).
     @State private var pendingTrash: [String] = []
     @State private var typeAhead = ""
     @State private var typeAheadAt = Date.distantPast
@@ -177,6 +211,7 @@ struct FileTreeView: View {
                 FileTreeFilterBar(
                     filter: filter, focused: $filterFocused, style: cfg,
                     onCollapseAll: { root.collapseAll() },
+                    onRefresh: refreshAction,
                     onSubmit: { activateFirstMatch() },
                     onMoveIntoTree: {
                         treeFocused = true
@@ -205,13 +240,20 @@ struct FileTreeView: View {
         .background(Color(nsColor: theme.sidebarBg))
         .contentShape(Rectangle())
         .contextMenu {
-            Button("New File") { actions.onCreateFile?(root.path) }
-            Button("New Folder") { actions.onCreateFolder?(root.path) }
+            if let onCreateFile = actions.onCreateFile {
+                Button("New File") { onCreateFile(root.path) }
+            }
+            if let onCreateFolder = actions.onCreateFolder {
+                Button("New Folder") { onCreateFolder(root.path) }
+            }
             Divider()
+            if let refreshAction {
+                Button("Refresh") { refreshAction() }
+            }
             Button("Collapse All Folders") { root.collapseAll() }
         }
         .onDrop(
-            of: [.fileURL],
+            of: fileTreeDropTypes,
             delegate: RootDropDelegate(
                 dragState: dragState, actions: actions, rootPath: root.path
             )
@@ -219,8 +261,12 @@ struct FileTreeView: View {
         .confirmationDialog(
             trashTitle, isPresented: trashBinding, titleVisibility: .visible
         ) {
-            Button("Move to Trash", role: .destructive) {
-                actions.onMoveToTrash?(pendingTrash)
+            Button(actions.removesToTrash ? "Move to Trash" : "Delete", role: .destructive) {
+                if let onMoveToTrash = actions.onMoveToTrash {
+                    onMoveToTrash(pendingTrash)
+                } else {
+                    actions.onDelete?(pendingTrash)
+                }
                 pendingTrash = []
             }
             Button("Cancel", role: .cancel) { pendingTrash = [] }
@@ -230,13 +276,15 @@ struct FileTreeView: View {
         // install doesn't re-walk the directory a second time.
         .onAppear {
             if root.children == nil { root.loadChildrenAsync() }
-            filter.configure(rootPath: root.path, showHidden: showHidden)
+            filter.configure(rootPath: root.path, showHidden: showHidden, source: root.source)
         }
         .onChange(of: root.path) { _, path in
             selection.clear()
-            filter.configure(rootPath: path, showHidden: AppSettings.shared.showHiddenFiles)
+            filter.configure(rootPath: path, showHidden: AppSettings.shared.showHiddenFiles, source: root.source)
         }
-        .onChange(of: showHidden) { _, hidden in filter.configure(rootPath: root.path, showHidden: hidden) }
+        .onChange(of: showHidden) { _, hidden in
+            filter.configure(rootPath: root.path, showHidden: hidden, source: root.source)
+        }
         .onChange(of: root.contentRevision) { _, _ in filter.invalidate() }
         .onChange(of: order) { _, newOrder in selection.prune(visible: newOrder) }
     }
@@ -254,24 +302,35 @@ struct FileTreeView: View {
             // Multi-selection in row order, computed once for every row's context menu.
             let selectedInOrder = selection.selected.count > 1 ? selection.ordered(in: order) : []
             LazyVStack(alignment: .leading, spacing: 0) {
-                ForEach(rows, id: \.node.id) { row in
+                if rows.isEmpty, root.children != nil {
+                    FileTreePlaceholderRow(
+                        text: root.loadFailed ? "Can't read folder" : "Empty folder", depth: 0, style: cfg,
+                        onRetry: root.loadFailed ? refreshAction : nil)
+                }
+                ForEach(rows) { row in
                     let path = row.node.path
-                    FileTreeRowView(
-                        node: row.node, depth: row.depth, parentPath: row.parentPath,
-                        actions: rowActions, renameState: renameState, dragState: dragState,
-                        dropLineAbove: dragState.dropPosition == .abovePath(path),
-                        isDropTarget: dragState.dropPosition == .onFolder(path),
-                        isDragged: dragState.draggedPath == path,
-                        style: cfg, rootPath: root.path,
-                        isSelected: selection.contains(path),
-                        isCursor: selection.cursor == path,
-                        treeFocused: treeFocused,
-                        gitStatus: git?.status(for: path, isDirectory: row.node.isDirectory),
-                        dimIgnored: AppSettings.shared.explorerDimIgnored,
-                        menuPaths: !selectedInOrder.isEmpty && selection.contains(path) ? selectedInOrder : [path],
-                        onClick: { kind in click(row.node, kind: kind, order: order) },
-                        onTrash: { pendingTrash = $0 }
-                    )
+                    if let placeholder = row.placeholder {
+                        FileTreePlaceholderRow(
+                            text: placeholder == .failed ? "Can't read folder" : "Empty folder", depth: row.depth,
+                            style: cfg, onRetry: nil)
+                    } else {
+                        FileTreeRowView(
+                            node: row.node, depth: row.depth, parentPath: row.parentPath,
+                            actions: rowActions, renameState: renameState, dragState: dragState,
+                            dropLineAbove: dragState.dropPosition == .abovePath(path),
+                            isDropTarget: dragState.dropPosition == .onFolder(path),
+                            isDragged: dragState.draggedPath == path,
+                            style: cfg, rootPath: root.path,
+                            isSelected: selection.contains(path),
+                            isCursor: selection.cursor == path,
+                            treeFocused: treeFocused,
+                            gitStatus: git?.status(for: path, isDirectory: row.node.isDirectory),
+                            dimIgnored: AppSettings.shared.explorerDimIgnored,
+                            menuPaths: !selectedInOrder.isEmpty && selection.contains(path) ? selectedInOrder : [path],
+                            onClick: { kind in click(row.node, kind: kind, order: order) },
+                            onTrash: { pendingTrash = $0 }
+                        )
+                    }
                 }
             }
             .padding(.top, 6)
@@ -321,9 +380,11 @@ struct FileTreeView: View {
     }
 
     private var trashTitle: String {
-        pendingTrash.count == 1
-            ? "Move \"\((pendingTrash[0] as NSString).lastPathComponent)\" to Trash?"
-            : "Move \(pendingTrash.count) items to Trash?"
+        let subject =
+            pendingTrash.count == 1
+            ? "\"\((pendingTrash.first.map { ($0 as NSString).lastPathComponent } ?? ""))\""
+            : "\(pendingTrash.count) items"
+        return actions.removesToTrash ? "Move \(subject) to Trash?" : "Delete \(subject)? This can't be undone."
     }
 
     private var trashBinding: Binding<Bool> {
@@ -384,6 +445,16 @@ struct FileTreeView: View {
         root.reveal(path) { _ in selection.select(path) }
     }
 
+    /// Manual refresh, offered when the plugin opts in via `onRefresh`.
+    private var refreshAction: (@MainActor () -> Void)? {
+        guard let onRefresh = actions.onRefresh else { return nil }
+        let root = root
+        return {
+            root.refreshAll()
+            onRefresh(root.path)
+        }
+    }
+
     /// Row actions with "Browse Folder" wired to this view's navigation.
     private var rowActions: FileTreeActions {
         var rowActions = actions
@@ -409,7 +480,7 @@ struct FileTreeView: View {
         guard renameState.renamingPath == nil else { return .ignored }
         let mods = press.modifiers
         let shift = mods.contains(.shift)
-        let cursorRow = rows.first { $0.node.path == selection.cursor }
+        let cursorRow = rows.first { $0.placeholder == nil && $0.node.path == selection.cursor }
 
         // ⌥-arrows navigate folders (⌘-arrows and ⌘[ ⌘] belong to menu items).
         if mods.contains(.option), let navigation {
@@ -470,7 +541,7 @@ struct FileTreeView: View {
             return .handled
         case .delete where mods.contains(.command):
             let paths = selection.ordered(in: order)
-            if !paths.isEmpty { pendingTrash = paths }
+            if !paths.isEmpty, actions.canRemove { pendingTrash = paths }
             return .handled
         case .delete where mods.isEmpty && !filter.isActive && navigation != nil:
             goUp()
@@ -480,7 +551,9 @@ struct FileTreeView: View {
         }
 
         // F2 renames the cursor row, Finder/VS Code style.
-        if press.characters == String(UnicodeScalar(NSF2FunctionKey)!), let node = cursorRow?.node {
+        if press.characters == String(UnicodeScalar(NSF2FunctionKey)!), actions.onRename != nil,
+            let node = cursorRow?.node
+        {
             renameState.beginRename(path: node.path, currentName: node.name)
             return .handled
         }
@@ -518,10 +591,17 @@ struct FileTreeView: View {
 
     // MARK: - Flatten
 
-    struct FlatRow {
+    struct FlatRow: Identifiable {
+        enum Placeholder { case empty, failed }
+
         let node: FileTreeNode
         let depth: Int
         let parentPath: String
+        /// Set for the hint row under an expanded folder that is empty or unreadable;
+        /// `node` is then that folder. Placeholders never take part in selection.
+        var placeholder: Placeholder? = nil
+
+        var id: String { placeholder == nil ? node.id : node.id + "\u{0}placeholder" }
     }
 }
 
@@ -570,6 +650,7 @@ struct FileTreeFilterBar: View {
     var focused: FocusState<Bool>.Binding
     var style: RowStyle
     var onCollapseAll: () -> Void
+    var onRefresh: (@MainActor () -> Void)? = nil
     var onSubmit: () -> Void
     var onMoveIntoTree: () -> Void
 
@@ -615,6 +696,18 @@ struct FileTreeFilterBar: View {
                 RoundedRectangle(cornerRadius: 5)
                     .stroke(focused.wrappedValue ? style.accentColor.opacity(0.6) : .clear, lineWidth: 1)
             )
+
+            if let onRefresh {
+                Button(action: onRefresh) {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(style.mutedColor)
+                        .frame(width: 16, height: 16)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help("Refresh")
+            }
 
             Button(action: onCollapseAll) {
                 Image(systemName: "rectangle.compress.vertical")
@@ -786,18 +879,26 @@ final class FileTreeRowCache {
         let key = Key(root: ObjectIdentifier(root), revision: root.treeRevision, showHidden: showHidden)
         guard key != self.key else { return cached }
         var rows: [FileTreeView.FlatRow] = []
-        func collect(_ node: FileTreeNode, depth: Int, parent: String) {
-            guard let children = node.children else { return }
-            for child in (showHidden ? children : children.filter { !$0.name.hasPrefix(".") }) {
+        /// Appends the visible children of `node`; returns how many it appended.
+        @discardableResult
+        func collect(_ node: FileTreeNode, depth: Int, parent: String) -> Int {
+            guard let children = node.children else { return 0 }
+            let visible = showHidden ? children : children.filter { !$0.name.hasPrefix(".") }
+            for child in visible {
                 rows.append(FileTreeView.FlatRow(node: child, depth: depth, parentPath: parent))
-                if child.isDirectory && child.isExpanded {
-                    collect(child, depth: depth + 1, parent: child.path)
+                guard child.isDirectory && child.isExpanded else { continue }
+                let added = collect(child, depth: depth + 1, parent: child.path)
+                if child.loadFailed {
+                    rows.append(.init(node: child, depth: depth + 1, parentPath: child.path, placeholder: .failed))
+                } else if added == 0, child.children != nil {
+                    rows.append(.init(node: child, depth: depth + 1, parentPath: child.path, placeholder: .empty))
                 }
             }
+            return visible.count
         }
         collect(root, depth: 0, parent: root.path)
         self.key = key
-        cached = (rows, rows.map(\.node.path))
+        cached = (rows, rows.compactMap { $0.placeholder == nil ? $0.node.path : nil })
         return cached
     }
 }
@@ -828,6 +929,9 @@ struct FileTreeRowView: View {
     var onClick: (FileTreeSelection.ClickKind) -> Void
     var onTrash: ([String]) -> Void
     @State private var isHovered = false
+    /// Size/date line for the tooltip, fetched once after the pointer rests on the row.
+    @State private var info: String?
+    @State private var infoRequested = false
 
     private var isRenaming: Bool { renameState.renamingPath == node.path }
 
@@ -848,14 +952,21 @@ struct FileTreeRowView: View {
         }
         .opacity(rowOpacity)
         .contentShape(Rectangle())
-        .onHover { isHovered = $0 }
+        .onHover { hovering in
+            isHovered = hovering
+            if hovering { requestInfo() }
+        }
         .onTapGesture { onClick(currentClickKind()) }
         .onDrag {
             dragState.beginDrag(path: node.path)
-            return NSItemProvider(object: URL(fileURLWithPath: node.path) as NSURL)
+            // A remote path is no file on this Mac: drag it as text, so it can still
+            // move inside the tree or drop into a terminal as a path.
+            return node.source.isLocal
+                ? NSItemProvider(object: URL(fileURLWithPath: node.path) as NSURL)
+                : NSItemProvider(object: node.path as NSString)
         }
         .onDrop(
-            of: [.fileURL],
+            of: fileTreeDropTypes,
             delegate: RowDropDelegate(
                 node: node, parentPath: parentPath, dragState: dragState,
                 actions: actions, rootPath: rootPath
@@ -868,8 +979,21 @@ struct FileTreeRowView: View {
                 contextMenuContent
             }
         }
-        .help(node.name)
+        .help(info.map { "\(node.name)\n\($0)" } ?? node.name)
         .background(ScrollIntoView(active: isCursor))
+    }
+
+    private func requestInfo() {
+        guard !infoRequested, let fetch = actions.onFetchInfo else { return }
+        let path = node.path
+        Task { @MainActor in
+            // Only rows the pointer rests on: sweeping across the tree must not fire a
+            // remote round-trip per row.
+            try? await Task.sleep(for: .milliseconds(400))
+            guard isHovered, !infoRequested else { return }
+            infoRequested = true
+            info = await fetch(path)
+        }
     }
 
     // MARK: Row Content
@@ -961,18 +1085,28 @@ struct FileTreeRowView: View {
             for path in menuPaths { actions.onPastePath?(path) }
         }
         Button("Copy \(count) Paths") { actions.onCopyPath?(menuPaths.joined(separator: "\n")) }
-        Button("Reveal in Finder") {
-            NSWorkspace.shared.activateFileViewerSelecting(menuPaths.map { URL(fileURLWithPath: $0) })
+        if actions.onRevealInFinder != nil {
+            Button("Reveal in Finder") {
+                NSWorkspace.shared.activateFileViewerSelecting(menuPaths.map { URL(fileURLWithPath: $0) })
+            }
         }
-        Divider()
-        Button("Move \(count) Items to Trash", role: .destructive) { onTrash(menuPaths) }
+        if let onDownload = actions.onDownload {
+            Button("Download \(count) Items") { onDownload(menuPaths) }
+        }
+        if actions.canRemove {
+            Divider()
+            Button(
+                actions.removesToTrash ? "Move \(count) Items to Trash" : "Delete \(count) Items",
+                role: .destructive
+            ) { onTrash(menuPaths) }
+        }
     }
 
     @ViewBuilder
     private var contextMenuContent: some View {
         let cap = resolveCapability()
-        if node.isDirectory && node.path == rootPath {
-            Button("Set as Root") { actions.onSetFileRoot?(node.path) }
+        if node.isDirectory && node.path == rootPath, let onSetFileRoot = actions.onSetFileRoot {
+            Button("Set as Root") { onSetFileRoot(node.path) }
             Divider()
         }
         contextMenuOpen(cap: cap)
@@ -1000,24 +1134,39 @@ struct FileTreeRowView: View {
             if !actions.isAIAgentRunning {
                 Button("cd into") { actions.onNavigate?(node.path) }
             }
-            Button("Open Terminal Tab") { actions.onOpenInTab?(node.path) }
-            Button("Open Terminal Pane") { actions.onOpenInPane?(node.path) }
+            if let onOpenInTab = actions.onOpenInTab {
+                Button("Open Terminal Tab") { onOpenInTab(node.path) }
+            }
+            if let onOpenInPane = actions.onOpenInPane {
+                Button("Open Terminal Pane") { onOpenInPane(node.path) }
+            }
             if node.isExpanded {
                 Button("Collapse Subfolders") { node.collapseAll() }
             }
         } else {
             Button("Open") { actions.onFileClicked?(node.path) }
             if cap != .externalOnly {
-                Button("Open in New Tab") { actions.onOpenFileInTab?(node.path) }
-                Button("Open in New Pane") { actions.onOpenFileInPane?(node.path) }
+                if let onOpenFileInTab = actions.onOpenFileInTab {
+                    Button("Open in New Tab") { onOpenFileInTab(node.path) }
+                }
+                if let onOpenFileInPane = actions.onOpenFileInPane {
+                    Button("Open in New Pane") { onOpenFileInPane(node.path) }
+                }
             }
-            Button("Open with Default App") { NSWorkspace.shared.open(URL(fileURLWithPath: node.path)) }
-            if (cap == .browser && !htmlOpenInBrowser) || (cap == .pdf && !pdfOpenInBrowser) {
-                Button("Open in Browser") { actions.onOpenFileInBrowser?(node.path) }
+            if let onOpenExternally = actions.onOpenExternally {
+                Button("Open with Default App") { onOpenExternally(node.path) }
             }
-            if cap == .image {
-                Button("Copy Image") { actions.onCopyImage?(node.path) }
+            if (cap == .browser && !htmlOpenInBrowser) || (cap == .pdf && !pdfOpenInBrowser),
+                let onOpenFileInBrowser = actions.onOpenFileInBrowser
+            {
+                Button("Open in Browser") { onOpenFileInBrowser(node.path) }
             }
+            if cap == .image, let onCopyImage = actions.onCopyImage {
+                Button("Copy Image") { onCopyImage(node.path) }
+            }
+        }
+        if let onDownload = actions.onDownload {
+            Button("Download") { onDownload([node.path]) }
         }
     }
 
@@ -1026,14 +1175,16 @@ struct FileTreeRowView: View {
         Divider()
         Button("Paste Path to Terminal") { actions.onPastePath?(node.path) }
         if !node.isDirectory && cap != .image {
-            Button("cat in Terminal") { actions.onRunCommand?("cat \(shellEscape(node.path))\r") }
+            Button("cat in Terminal") { actions.onRunCommand?("cat \(RemoteExplorer.shellEscPath(node.path))\r") }
         }
     }
 
     @ViewBuilder
     private var contextMenuFinderClipboard: some View {
         Divider()
-        Button("Reveal in Finder") { actions.onRevealInFinder?(node.path) }
+        if let onRevealInFinder = actions.onRevealInFinder {
+            Button("Reveal in Finder") { onRevealInFinder(node.path) }
+        }
         Button("Copy Path") { actions.onCopyPath?(node.path) }
         Button("Copy Relative Path") {
             let prefix = rootPath.hasSuffix("/") ? rootPath : rootPath + "/"
@@ -1045,13 +1196,23 @@ struct FileTreeRowView: View {
     private var contextMenuEdit: some View {
         Divider()
         if node.isDirectory {
-            Button("New File") { actions.onCreateFile?(node.path) }
-            Button("New Folder") { actions.onCreateFolder?(node.path) }
-        } else {
-            Button("Duplicate") { actions.onDuplicate?(node.path) }
+            if let onCreateFile = actions.onCreateFile {
+                Button("New File") { onCreateFile(node.path) }
+            }
+            if let onCreateFolder = actions.onCreateFolder {
+                Button("New Folder") { onCreateFolder(node.path) }
+            }
+        } else if let onDuplicate = actions.onDuplicate {
+            Button("Duplicate") { onDuplicate(node.path) }
         }
-        Button("Rename") { renameState.beginRename(path: node.path, currentName: node.name) }
-        Button("Move to Trash", role: .destructive) { onTrash([node.path]) }
+        if actions.onRename != nil {
+            Button("Rename") { renameState.beginRename(path: node.path, currentName: node.name) }
+        }
+        if actions.canRemove {
+            Button(actions.removesToTrash ? "Move to Trash" : "Delete", role: .destructive) {
+                onTrash([node.path])
+            }
+        }
     }
 }
 
@@ -1115,7 +1276,12 @@ struct FileTreeMatchRowView: View {
             Divider()
             Button("Paste Path to Terminal") { actions.onPastePath?(absolutePath) }
             Button("Copy Path") { actions.onCopyPath?(absolutePath) }
-            Button("Reveal in Finder") { actions.onRevealInFinder?(absolutePath) }
+            if let onRevealInFinder = actions.onRevealInFinder {
+                Button("Reveal in Finder") { onRevealInFinder(absolutePath) }
+            }
+            if !match.entry.isDirectory, let onDownload = actions.onDownload {
+                Button("Download") { onDownload([absolutePath]) }
+            }
         }
     }
 
@@ -1130,6 +1296,35 @@ struct FileTreeMatchRowView: View {
             name[range].inlinePresentationIntent = .stronglyEmphasized
         }
         return Text(name)
+    }
+}
+
+// MARK: - Placeholder Row
+
+/// Muted hint under an expanded folder (or at the root) that has nothing to show.
+struct FileTreePlaceholderRow: View {
+    let text: String
+    let depth: Int
+    var style: RowStyle
+    var onRetry: (@MainActor () -> Void)?
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Text(text)
+                .font(style.font)
+                .italic()
+                .foregroundStyle(style.mutedColor)
+                .lineLimit(1)
+            if let onRetry {
+                Button("Retry", action: onRetry)
+                    .buttonStyle(.link)
+                    .font(style.font)
+            }
+            Spacer(minLength: 0)
+        }
+        // Lines up with the names of sibling rows (chevron 10 + spacing 5).
+        .padding(.leading, CGFloat(depth) * 16 + 12 + 15)
+        .padding(.vertical, 3)
     }
 }
 
@@ -1166,15 +1361,63 @@ struct FileTreeDropLine: View {
 
 private let rowHeight: CGFloat = 22
 
-/// Move dropped file URLs into the target directory.
+/// Types the tree accepts: file URLs (Finder, local rows) and the plain-text path a
+/// remote row drags.
+private let fileTreeDropTypes: [UTType] = [.fileURL, .plainText]
+
+@MainActor private final class DropUploadBatch {
+    var paths: [String] = []
+}
+
+/// Move dropped rows into the target directory. Files from Finder are uploaded when the
+/// tree supports it (remote), and moved otherwise.
 private func executeDrop(info: DropInfo, target: String, dragState: FileTreeDragState, actions: FileTreeActions) {
+    let internalPath = dragState.lastDraggedPath
     dragState.clear()
+    // Uploads are collected so a multi-file drop is one transfer, not one per file.
+    let group = DispatchGroup()
+    let uploads = DropUploadBatch()
     for provider in info.itemProviders(for: [.fileURL]) {
+        group.enter()
         provider.loadObject(ofClass: NSURL.self) { item, _ in
-            guard let url = item as? URL else { return }
-            DispatchQueue.main.async { actions.onMove?(url.path, target) }
+            let path = (item as? URL)?.path
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    defer { group.leave() }
+                    guard let path else { return }
+                    if actions.onUpload != nil {
+                        uploads.paths.append(path)
+                    } else {
+                        actions.onMove?(path, target)
+                    }
+                }
+            }
         }
     }
+    group.notify(queue: .main) {
+        MainActor.assumeIsolated {
+            guard !uploads.paths.isEmpty else { return }
+            actions.onUpload?(uploads.paths, target)
+        }
+    }
+    // Text only counts as a move when it is the row this tree just dragged; anything
+    // else dropped as text is ignored.
+    for provider in info.itemProviders(for: [.plainText])
+    where !provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) {
+        provider.loadObject(ofClass: NSString.self) { item, _ in
+            guard let path = item as? String else { return }
+            DispatchQueue.main.async {
+                guard path == internalPath else { return }
+                actions.onMove?(path, target)
+            }
+        }
+    }
+}
+
+/// Copy for a Finder drop into an uploading tree, move for everything else.
+private func dropProposal(_ info: DropInfo, actions: FileTreeActions) -> DropProposal {
+    let uploading = actions.onUpload != nil && info.hasItemsConforming(to: [.fileURL])
+    return DropProposal(operation: uploading ? .copy : .move)
 }
 
 /// Returns false if `path` is the dragged item or a descendant of it.
@@ -1214,7 +1457,7 @@ struct RowDropDelegate: DropDelegate {
 
     func dropUpdated(info: DropInfo) -> DropProposal? {
         update(info)
-        return DropProposal(operation: .move)
+        return dropProposal(info, actions: actions)
     }
 
     func dropExited(info: DropInfo) { dragState.exited() }
@@ -1251,7 +1494,7 @@ struct RootDropDelegate: DropDelegate {
     let rootPath: String
 
     func dropEntered(info: DropInfo) { dragState.entered() }
-    func dropUpdated(info: DropInfo) -> DropProposal? { DropProposal(operation: .move) }
+    func dropUpdated(info: DropInfo) -> DropProposal? { dropProposal(info, actions: actions) }
     func dropExited(info: DropInfo) { dragState.exited() }
 
     func performDrop(info: DropInfo) -> Bool {
@@ -1334,13 +1577,6 @@ struct ParentDirectoryButton: View {
         self.mutedColor = style.mutedColor
         self.hoverColor = style.hoverColor
         self.explorerFont = style.font
-        self.action = action
-    }
-
-    init(mutedColor: Color, hoverColor: Color, explorerFont: Font, action: @escaping () -> Void) {
-        self.mutedColor = mutedColor
-        self.hoverColor = hoverColor
-        self.explorerFont = explorerFont
         self.action = action
     }
 
