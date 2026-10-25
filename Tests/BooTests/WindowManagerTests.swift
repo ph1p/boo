@@ -89,6 +89,24 @@ final class WindowManagerTests: XCTestCase {
         XCTAssertEqual(controller.sidebarController.windowState.width ?? -1, 333, accuracy: 0.001)
     }
 
+    func testRestoringFromUnpluggedDisplayKeepsItsPlacementForLater() throws {
+        guard let screen = NSScreen.screens.first else { throw XCTSkip("no screen") }
+        // Saved on a display to the right of every connected one, now unplugged.
+        let right = NSScreen.screens.map(\.frame.maxX).max() ?? screen.frame.maxX
+        var saved = SessionWindow(activeWorkspaceIndex: 0, workspaces: [])
+        saved.frame = [Double(right) + 100, 100, 900, 650]
+        saved.screenID = "UNPLUGGED"
+        saved.screenFrame = [Double(right), 0, 2560, 1440]
+
+        let controller = MainWindowController(restoreSession: false, restoring: saved)
+        Self.keptAlive.append(controller)
+        let frame = try XCTUnwrap(controller.window?.frame)
+        XCTAssertTrue(NSScreen.screens.contains { $0.visibleFrame.contains(frame) })
+        XCTAssertEqual(frame.size, NSSize(width: 900, height: 650))
+        XCTAssertEqual(controller.homePlacement, saved.placement)
+        XCTAssertEqual(controller.sessionWindow().homePlacement, saved.placement)
+    }
+
     func testDetachAndAdoptMovesLivePaneViews() throws {
         let source = MainWindowController(restoreSession: false)
         let target = MainWindowController(restoreSession: false)

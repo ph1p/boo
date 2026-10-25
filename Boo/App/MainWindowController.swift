@@ -200,6 +200,7 @@ class ThemedSplitView: NSSplitView {
     nonisolated(unsafe) private var settingsObserver: Any?
     nonisolated(unsafe) private var ghosttyActionObserver: Any?
     nonisolated(unsafe) private var ghosttyOpenURLObserver: Any?
+    nonisolated(unsafe) var screenParametersObserver: Any?
     var coordinator: WindowStateCoordinator!
     var bridge: TerminalBridge! { coordinator.bridge }
     nonisolated(unsafe) var bridgeCancellables = Set<AnyCancellable>()
@@ -239,7 +240,12 @@ class ThemedSplitView: NSSplitView {
     /// default workspace during setup.
     private var pendingAdoption: DetachedWorkspace?
     /// Frame before entering fullscreen, saved instead of the fullscreen frame.
-    private var windowedFrame: NSRect?
+    var windowedFrame: NSRect?
+    /// Last settled placement: becomes `homePlacement` if its display disappears.
+    var lastPlacement: WindowPlacement?
+    /// Placement on a display that is gone; reapplied when it reconnects.
+    var homePlacement: WindowPlacement?
+    var placementCommit: DispatchWorkItem?
     /// Debounce timer for saving the session after split-pane divider drags.
     var splitRatioSaveTimer: Timer?
     /// Debounce timer for saving workspace sidebar state after sidebar divider drags.
@@ -323,6 +329,7 @@ class ThemedSplitView: NSSplitView {
         if let obs = settingsObserver { NotificationCenter.default.removeObserver(obs) }
         if let obs = ghosttyActionObserver { NotificationCenter.default.removeObserver(obs) }
         if let obs = ghosttyOpenURLObserver { NotificationCenter.default.removeObserver(obs) }
+        if let obs = screenParametersObserver { NotificationCenter.default.removeObserver(obs) }
         bridgeCancellables.removeAll()
     }
 
@@ -412,11 +419,10 @@ class ThemedSplitView: NSSplitView {
         )
         window.center()
         Self.applyWindowChrome(window, autosaveFrame: restoreSession)
-        if let frame = sessionWindow?.frameRect, Self.isOnScreen(frame) {
-            window.setFrame(frame, display: false)
-        }
+        homePlacement = Self.applySavedPlacement(sessionWindow, to: window)
         super.init(window: window)
         performSetup()
+        startPlacementTracking()
     }
 
     private func performSetup() {
@@ -1547,19 +1553,18 @@ class ThemedSplitView: NSSplitView {
     func sessionWindow() -> SessionWindow {
         var entry = SessionStore.buildWindow(appState: appState)
         let isFullScreen = window?.styleMask.contains(.fullScreen) ?? false
-        if let frame = isFullScreen ? (windowedFrame ?? window?.frame) : window?.frame {
-            entry.frame = [frame.origin.x, frame.origin.y, frame.width, frame.height].map { Double($0) }
+        if let placement = currentPlacement() {
+            entry.frame = placement.frame
+            entry.screenID = placement.screenID
+            entry.screenFrame = placement.screenFrame
         }
+        rememberDisplacedPlacement(in: PlacementScreen.current)
+        entry.homePlacement = homePlacement
         entry.isFullScreen = isFullScreen
         let sidebar = sidebarController.windowState
         entry.sidebarIsVisible = sidebar.isVisible
         entry.sidebarWidth = sidebar.width.map { Double($0) }
         return entry
-    }
-
-    /// Whether a saved frame still lands on a connected screen.
-    static func isOnScreen(_ frame: NSRect) -> Bool {
-        NSScreen.screens.contains { $0.visibleFrame.intersects(frame) }
     }
 
     private func tearDownAllWorkspaces() {

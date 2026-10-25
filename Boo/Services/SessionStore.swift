@@ -85,6 +85,12 @@ struct SessionWindow: Codable, Sendable {
     var workspaces: [SessionWorkspace]
     /// Non-fullscreen frame in screen coordinates: [x, y, width, height].
     var frame: [Double]? = nil
+    /// Display `frame` was on (see `WindowPlacement`).
+    var screenID: String? = nil
+    var screenFrame: [Double]? = nil
+    /// Where the window lived before macOS moved it off an unplugged display;
+    /// restored once that display is back.
+    var homePlacement: WindowPlacement? = nil
     var isFullScreen: Bool? = nil
     /// Window-level sidebar state (fallback when per-workspace state is off).
     var sidebarIsVisible: Bool? = nil
@@ -93,6 +99,11 @@ struct SessionWindow: Codable, Sendable {
     var frameRect: NSRect? {
         guard let frame, frame.count == 4, frame[2] > 0, frame[3] > 0 else { return nil }
         return NSRect(x: frame[0], y: frame[1], width: frame[2], height: frame[3])
+    }
+
+    var placement: WindowPlacement? {
+        guard let frame, frameRect != nil else { return nil }
+        return WindowPlacement(frame: frame, screenID: screenID, screenFrame: screenFrame)
     }
 
     var sidebarState: SidebarWorkspaceState? {
