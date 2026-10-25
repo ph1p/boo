@@ -11,8 +11,13 @@ struct NotificationsSettingsView: View {
     @State private var phonePushURL = AppSettings.shared.phonePushURL
     @State private var longCommandSeconds = AppSettings.shared.phonePushLongCommandSeconds
     @State private var pushTestResult: String?
+    @State private var minCommandSeconds = AppSettings.shared.notifyMinCommandSeconds
+    @State private var groupBursts = AppSettings.shared.notificationGroupBursts
+    @State private var expiryMinutes = AppSettings.shared.notificationExpiryMinutes
 
     private static let longCommandChoices = [30, 60, 120, 300, 600, 1800]
+    private static let minCommandChoices = [0, 5, 10, 30, 60]
+    private static let expiryChoices = [0, 5, 15, 60]
     @ObservedObject private var observer = SettingsObserver(topics: [.notifications])
 
     var body: some View {
@@ -47,7 +52,67 @@ struct NotificationsSettingsView: View {
                     )
                 )
 
+                if activityNotificationsEnabled {
+                    SettingRow(
+                        label: "Minimum command duration",
+                        help: "Only commands that ran at least this long notify. Shorter ones still mark the tab."
+                    ) {
+                        Picker(
+                            "",
+                            selection: Binding(
+                                get: { minCommandSeconds },
+                                set: {
+                                    minCommandSeconds = $0
+                                    AppSettings.shared.notifyMinCommandSeconds = $0
+                                }
+                            )
+                        ) {
+                            ForEach(Self.minCommandChoices, id: \.self) { seconds in
+                                Text(seconds == 0 ? "Any" : "\(seconds) seconds").tag(seconds)
+                            }
+                        }
+                        .labelsHidden()
+                        .fixedSize()
+                    }
+                }
+
                 if activityNotificationsEnabled || portNotificationsEnabled {
+                    ToggleRow(
+                        label: "Group bursts",
+                        help:
+                            "When several tabs in one workspace report within a few seconds, show one summary instead of one notification each. Each tab keeps at most one notification either way.",
+                        isOn: Binding(
+                            get: { groupBursts },
+                            set: {
+                                groupBursts = $0
+                                AppSettings.shared.notificationGroupBursts = $0
+                            }
+                        )
+                    )
+
+                    SettingRow(
+                        label: "Remove after",
+                        help:
+                            "Clear notifications from Notification Center after this long. Focusing the tab always clears its notification."
+                    ) {
+                        Picker(
+                            "",
+                            selection: Binding(
+                                get: { expiryMinutes },
+                                set: {
+                                    expiryMinutes = $0
+                                    AppSettings.shared.notificationExpiryMinutes = $0
+                                }
+                            )
+                        ) {
+                            ForEach(Self.expiryChoices, id: \.self) { minutes in
+                                Text(minutes == 0 ? "Never" : minutes < 60 ? "\(minutes) min" : "1 hour").tag(minutes)
+                            }
+                        }
+                        .labelsHidden()
+                        .fixedSize()
+                    }
+
                     permissionRow
                 }
             }

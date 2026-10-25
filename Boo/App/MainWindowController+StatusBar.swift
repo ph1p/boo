@@ -28,10 +28,11 @@ extension MainWindowController {
         }
         toolbar.update(workspaces: wsItems, sidebarVisible: sidebarVisible)
         if let sideBar = sideWorkspaceBar {
-            let barItems = appState.workspaces.map { ws in
+            let barItems = zip(appState.workspaces, wsItems).map { ws, top in
                 WorkspaceBarView.Item(
                     name: ws.displayName, path: ws.folderPath, isPinned: ws.isPinned, color: ws.color,
-                    hasCustomColor: ws.customColor != nil, resolvedColor: ws.resolvedColor)
+                    hasCustomColor: ws.customColor != nil, resolvedColor: ws.resolvedColor,
+                    hasActivity: top.hasActivity, progress: top.progress)
             }
             sideBar.setItems(barItems, selectedIndex: appState.activeWorkspaceIndex)
         }

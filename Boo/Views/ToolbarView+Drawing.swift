@@ -185,24 +185,9 @@ extension ToolbarView {
                     tint: wsColor ?? theme.chromeMuted, bg: theme.chromeBg)
             }
 
-            // Furthest-along OSC 9;4 progress of the workspace's tabs.
-            if let progress = ws.progress {
-                let bar = CGRect(
-                    x: rect.minX + 8, y: rect.maxY - ProgressBarStyle.height - 2,
-                    width: rect.width - 16, height: ProgressBarStyle.height)
-                ProgressBarStyle.draw(ctx, progress: progress, in: bar, theme: theme)
-            }
-
-            // Activity dot — top-right corner inside the pill
-            if ws.hasActivity {
-                let dotSize: CGFloat = 5
-                ctx.setFillColor(theme.accentColor.cgColor)
-                ctx.fillEllipse(
-                    in: CGRect(
-                        x: rect.maxX - dotSize - 3,
-                        y: rect.minY + 3,
-                        width: dotSize, height: dotSize))
-            }
+            // Furthest-along OSC 9;4 progress of the workspace's tabs, and the activity dot.
+            WorkspacePillStyle.drawStatus(
+                ctx, rect: rect, hasActivity: ws.hasActivity, progress: ws.progress, theme: theme)
 
             x += w + Self.workspaceGap
         }

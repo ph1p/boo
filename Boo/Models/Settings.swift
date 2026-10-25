@@ -366,6 +366,9 @@ final class AppSettings {
         static let editorRulerColumn = "editorRulerColumn"
 
         static let activityNotificationsEnabled = "activityNotificationsEnabled"
+        static let notifyMinCommandSeconds = "notifyMinCommandSeconds"
+        static let notificationGroupBursts = "notificationGroupBursts"
+        static let notificationExpiryMinutes = "notificationExpiryMinutes"
         static let phonePushEnabled = "phonePushEnabled"
         static let phonePushURL = "phonePushURL"
         static let phonePushLongCommandSeconds = "phonePushLongCommandSeconds"
@@ -826,7 +829,8 @@ final class AppSettings {
         K.quickTerminalEnabled, K.quickTerminalHotkey, K.quickTerminalHeight, K.quickTerminalHideOnResign,
         K.defaultProfile, K.terminalShader, K.defaultLinkTarget, K.externalEditorPreset, K.historyEnabled,
         K.historyIgnorePattern, K.historyRetentionDays, K.historySearchShortcutEnabled, K.agentBudgetPerTask,
-        K.agentBudgetPerDay, K.portNotificationsEnabled, K.errorAgentButtonEnabled
+        K.agentBudgetPerDay, K.portNotificationsEnabled, K.errorAgentButtonEnabled, K.notifyMinCommandSeconds,
+        K.notificationGroupBursts, K.notificationExpiryMinutes
     ]
 
     static let syncedCustomThemesKey = "customThemes"
@@ -1155,6 +1159,26 @@ final class AppSettings {
     var activityNotificationsEnabled: Bool {
         get { bool(K.activityNotificationsEnabled, default: true) }
         set { set(newValue, forKey: K.activityNotificationsEnabled, topic: .notifications) }
+    }
+
+    /// A finished command notifies only when it ran at least this long. 0 = every command.
+    /// Shorter ones still mark the tab's activity dot.
+    var notifyMinCommandSeconds: Int {
+        get { UserDefaults.standard.object(forKey: K.notifyMinCommandSeconds) as? Int ?? 10 }
+        set { set(newValue, forKey: K.notifyMinCommandSeconds, topic: .notifications) }
+    }
+
+    /// Fold notifications from one workspace that land within a few seconds into one summary.
+    var notificationGroupBursts: Bool {
+        get { bool(K.notificationGroupBursts, default: true) }
+        set { set(newValue, forKey: K.notificationGroupBursts, topic: .notifications) }
+    }
+
+    /// Delivered notifications are removed from Notification Center after this many
+    /// minutes. 0 = keep until the tab is focused.
+    var notificationExpiryMinutes: Int {
+        get { UserDefaults.standard.object(forKey: K.notificationExpiryMinutes) as? Int ?? 15 }
+        set { set(newValue, forKey: K.notificationExpiryMinutes, topic: .notifications) }
     }
 
     /// Phone push (ntfy webhook). Off by default: it sends data to an external service.
@@ -1541,7 +1565,10 @@ final class AppSettings {
             K.agentBudgetPerTask: agentBudgetPerTask ?? 0,
             K.agentBudgetPerDay: agentBudgetPerDay ?? 0,
             K.portNotificationsEnabled: portNotificationsEnabled,
-            K.errorAgentButtonEnabled: errorAgentButtonEnabled
+            K.errorAgentButtonEnabled: errorAgentButtonEnabled,
+            K.notifyMinCommandSeconds: notifyMinCommandSeconds,
+            K.notificationGroupBursts: notificationGroupBursts,
+            K.notificationExpiryMinutes: notificationExpiryMinutes
         ]
         if let sshControlMasterApproved {
             dict[K.sshControlMasterApproved] = sshControlMasterApproved

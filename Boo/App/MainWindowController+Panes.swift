@@ -45,10 +45,10 @@ extension MainWindowController: PaneViewDelegate {
         workspace.activePaneID = paneID
         for (id, pv) in paneViews { pv.isFocused = id == paneID }
 
-        if let pane = workspace.pane(for: paneID),
-            pane.setActivity(false, at: pane.activeTabIndex)
-        {
-            refreshToolbar()
+        if let pane = workspace.pane(for: paneID) {
+            if pane.setActivity(false, at: pane.activeTabIndex) { refreshToolbar() }
+            // Unconditional: `activateTab` clears the dot before focus lands here.
+            ActivityNotifier.shared.clearDelivered(paneID: paneID, tabIndex: pane.activeTabIndex)
         }
         if let tabID = workspace.pane(for: paneID)?.activeTab?.id {
             AgentInbox.shared.markSeen(tabID: tabID)
@@ -194,6 +194,7 @@ extension MainWindowController: PaneViewDelegate {
         }
         guard tabIndex >= 0 else { return }
         pane.setCommandRunning(false, at: tabIndex)
+        var duration: TimeInterval?
         if pane.tabs.indices.contains(tabIndex) {
             let tab = pane.tabs[tabIndex]
             PhonePusher.shared.commandEnded(
@@ -204,18 +205,22 @@ extension MainWindowController: PaneViewDelegate {
                 workspaceID: workspace.id, paneID: pane.id)
             {
                 CommandLog.shared.publish(finished)
+                duration = finished.duration
             }
         }
 
-        signalActivity(paneID: paneID, tabIndex: tabIndex, exitCode: exitCode)
+        signalActivity(paneID: paneID, tabIndex: tabIndex, exitCode: exitCode, duration: duration)
     }
 
-    func signalActivity(paneID: UUID, tabIndex: Int, exitCode: Int32, skipIfFocused: Bool = true) {
+    func signalActivity(
+        paneID: UUID, tabIndex: Int, exitCode: Int32, duration: TimeInterval? = nil, skipIfFocused: Bool = true
+    ) {
         guard let workspace = appState.workspaceContainingPane(paneID),
             let pane = workspace.pane(for: paneID)
         else { return }
         signalActivity(
-            workspace: workspace, pane: pane, tabIndex: tabIndex, exitCode: exitCode, skipIfFocused: skipIfFocused)
+            workspace: workspace, pane: pane, tabIndex: tabIndex, exitCode: exitCode, duration: duration,
+            skipIfFocused: skipIfFocused)
     }
 
     /// True when this exact workspace + pane + tab is the one the user is looking at.
@@ -269,7 +274,11 @@ extension MainWindowController: PaneViewDelegate {
         refreshToolbar()
     }
 
-    func signalActivity(workspace: Workspace, pane: Pane, tabIndex: Int, exitCode: Int32, skipIfFocused: Bool = true) {
+    /// `duration` gates the notification (Notifications › minimum duration), never the dot.
+    func signalActivity(
+        workspace: Workspace, pane: Pane, tabIndex: Int, exitCode: Int32, duration: TimeInterval? = nil,
+        skipIfFocused: Bool = true
+    ) {
         guard tabIndex >= 0, tabIndex < pane.tabs.count else { return }
 
         if skipIfFocused {
@@ -280,7 +289,7 @@ extension MainWindowController: PaneViewDelegate {
         let tabTitle = pane.tabs[tabIndex].state.title.isEmpty ? "Terminal" : pane.tabs[tabIndex].state.title
         ActivityNotifier.shared.notifyCommandEnded(
             tabTitle: tabTitle, workspaceName: workspace.displayName, exitCode: exitCode,
-            workspaceID: workspace.id, paneID: pane.id, tabIndex: tabIndex)
+            workspaceID: workspace.id, paneID: pane.id, tabIndex: tabIndex, duration: duration)
     }
 
     func paneView(_ paneView: PaneView, progressChangedIn paneID: UUID) {

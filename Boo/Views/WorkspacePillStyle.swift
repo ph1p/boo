@@ -171,4 +171,25 @@ enum WorkspacePillStyle {
                 .foregroundColor: tint.withAlphaComponent(0.8)
             ])
     }
+
+    /// The workspace's furthest-along OSC 9;4 progress along the pill's bottom edge, and
+    /// the unseen-activity dot in its top-right corner. Shared by the top bar and the
+    /// side bars so both read the same; `inset` keeps the bar clear of the rounded ends.
+    static func drawStatus(
+        _ ctx: CGContext, rect: CGRect, hasActivity: Bool, progress: TerminalProgress?,
+        theme: TerminalTheme, inset: CGFloat = 8
+    ) {
+        if let progress {
+            let bar = CGRect(
+                x: rect.minX + inset, y: rect.maxY - ProgressBarStyle.height - 2,
+                width: rect.width - inset * 2, height: ProgressBarStyle.height)
+            ProgressBarStyle.draw(ctx, progress: progress, in: bar, theme: theme)
+        }
+        if hasActivity {
+            let dotSize: CGFloat = 5
+            ctx.setFillColor(theme.accentColor.cgColor)
+            ctx.fillEllipse(
+                in: CGRect(x: rect.maxX - dotSize - 3, y: rect.minY + 3, width: dotSize, height: dotSize))
+        }
+    }
 }

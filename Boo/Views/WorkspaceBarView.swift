@@ -42,6 +42,9 @@ class WorkspaceBarView: NSView {
         var color: WorkspaceColor = .none
         var hasCustomColor: Bool = false
         var resolvedColor: NSColor? = nil
+        /// Unseen activity in a background workspace (same rule as the top bar).
+        var hasActivity: Bool = false
+        var progress: TerminalProgress?
     }
 
     private(set) var items: [Item] = []
@@ -346,6 +349,9 @@ class WorkspaceBarView: NSView {
             if item.isPinned {
                 drawPinIcon(ctx, at: NSPoint(x: pillRect.minX + 2, y: pillRect.minY + 2), color: textColor)
             }
+            WorkspacePillStyle.drawStatus(
+                ctx, rect: pillRect, hasActivity: item.hasActivity, progress: item.progress, theme: theme,
+                inset: 4)
         }
 
         ctx.restoreGState()
@@ -466,6 +472,9 @@ class WorkspaceBarView: NSView {
                 ctx, in: verticalCloseButtonRect(in: rect),
                 tint: wsColor ?? theme.chromeMuted, bg: theme.chromeBg)
         }
+        // Clear of the close button: that sits vertically centred, 10pt in from the edge.
+        WorkspacePillStyle.drawStatus(
+            ctx, rect: rect, hasActivity: item.hasActivity, progress: item.progress, theme: theme)
     }
 
     // MARK: - Pin Icon
