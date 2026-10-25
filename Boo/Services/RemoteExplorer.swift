@@ -31,7 +31,9 @@ final class RemoteExplorer: @unchecked Sendable {
     }
 
     private static func detectSSH(shellPID: pid_t) -> String? {
-        guard let pid = findChildProcess(parentPID: shellPID, name: "ssh", matching: isInteractiveSSH) else { return nil }
+        guard let pid = findChildProcess(parentPID: shellPID, name: "ssh", matching: isInteractiveSSH) else {
+            return nil
+        }
         return parseSSHHost(pid: pid)
     }
 
