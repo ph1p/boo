@@ -144,7 +144,6 @@ extension MainWindowController: PaneViewDelegate {
             let tabIndex = tabID.flatMap { id in pane.tabs.firstIndex { $0.id == id } } ?? pane.activeTabIndex
             pane.setCommandRunning(true, at: tabIndex)
             if pane.tabs.indices.contains(tabIndex) {
-                PhonePusher.shared.commandStarted(tabID: pane.tabs[tabIndex].id, command: command)
                 CommandLog.shared.commandStarted(tabID: pane.tabs[tabIndex].id)
             }
             booLog(
@@ -197,9 +196,6 @@ extension MainWindowController: PaneViewDelegate {
         var duration: TimeInterval?
         if pane.tabs.indices.contains(tabIndex) {
             let tab = pane.tabs[tabIndex]
-            PhonePusher.shared.commandEnded(
-                tabID: tab.id, exitCode: exitCode, workspaceName: workspace.displayName,
-                focused: isTabFocused(workspace: workspace, pane: pane, tabIndex: tabIndex))
             if let finished = CommandLog.finishedCommand(
                 record: paneView.terminalView(forTab: tab.id)?.commandHistory.last, tab: tab,
                 workspaceID: workspace.id, paneID: pane.id)

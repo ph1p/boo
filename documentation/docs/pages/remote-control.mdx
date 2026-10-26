@@ -45,20 +45,6 @@ The agent's tab does not have to be in front on the Mac. If the agent has asked 
 
 The page ships a web manifest and icons, so **Share → Add to Home Screen** (iOS) or **Install app** (Android) gives it its own icon and a full-screen window. Add it while the page is open with the `#token` URL; the installed app opens that same URL. The token changes whenever the server restarts, so add it again after a restart.
 
-## Phone Push
-
-Browsers only allow web push on HTTPS pages, and this page is plain HTTP on your LAN. So Boo pushes through [ntfy](https://ntfy.sh) instead: install the ntfy app, subscribe to a hard-to-guess topic, and paste its URL (`https://ntfy.sh/<topic>`, or your own ntfy server) into **Settings → Notifications → Push to Phone**. **Send Test** checks the URL.
-
-Boo pushes when, in a tab you're not looking at:
-
-- an agent needs your input
-- a command that ran longer than the threshold (default 1 min) finishes
-- an `ssh` session drops (ssh exits with 255 after being connected)
-
-A push carries only the event type, the workspace name and the agent name — never commands or terminal output. At most one push per event type is sent every 10 seconds. While the remote control server runs, tapping the push opens this page; the link leaves out the token, which the page already remembers.
-
-Push is off by default.
-
 ## Security
 
 - Every API request must carry the session token via `Authorization: Bearer <token>`. Requests without it are rejected.

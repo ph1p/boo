@@ -269,8 +269,6 @@ final class RuleEngine {
             ActivityNotifier.shared.notifyDesktop(
                 title: title, body: body, workspaceName: loc.workspace.displayName,
                 workspaceID: loc.workspace.id, paneID: loc.pane.id, tabIndex: loc.tabIndex)
-            // The phone only learns which rule fired, never terminal content.
-            PhonePusher.shared.triggerFired(ruleID: rule.id, workspaceName: loc.workspace.displayName)
 
         case .markTab:
             loc.controller.markTabFromTrigger(
