@@ -132,6 +132,7 @@ enum ActionRegistry {
         switch key {
         case "": break
         case "\r": display += "\u{23CE}"
+        case " ": display += "Space"
         case String(UnicodeScalar(NSLeftArrowFunctionKey)!): display += "\u{2190}"
         case String(UnicodeScalar(NSRightArrowFunctionKey)!): display += "\u{2192}"
         case String(UnicodeScalar(NSUpArrowFunctionKey)!): display += "\u{2191}"

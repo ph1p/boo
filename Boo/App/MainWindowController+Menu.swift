@@ -137,6 +137,10 @@ extension MainWindowController {
             title: "Copy Last Output", action: #selector(copyLastOutputAction(_:)), keyEquivalent: "c")
         copyOutput.keyEquivalentModifierMask = [.command, .option]
         termMenu.addItem(copyOutput)
+        let quickSelect = NSMenuItem(
+            title: "Quick Select", action: #selector(quickSelectAction(_:)), keyEquivalent: " ")
+        quickSelect.keyEquivalentModifierMask = [.command, .shift]
+        termMenu.addItem(quickSelect)
         termMenu.addItem(.separator())
         termMenu.addItem(
             withTitle: "Record Session", action: #selector(toggleRecordingAction(_:)), keyEquivalent: "")

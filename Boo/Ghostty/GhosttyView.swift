@@ -452,6 +452,7 @@ import Cocoa
     }
 
     override func resignFirstResponder() -> Bool {
+        endQuickSelect()
         setFocused(false)
         return super.resignFirstResponder()
     }
@@ -476,6 +477,10 @@ import Cocoa
     // MARK: - Keyboard (via NSTextInputClient)
 
     override func keyDown(with event: NSEvent) {
+        if let quickSelectOverlay {
+            quickSelectOverlay.handle(event)
+            return
+        }
         guard let surface = surface, !isInputLocked else { return }
         if KeyTables.shared.intercept(event, in: self) { return }
         if isHistorySearchKey(event) {
@@ -818,6 +823,7 @@ import Cocoa
 
     override func scrollWheel(with event: NSEvent) {
         guard let surface = surface else { return }
+        endQuickSelect()
 
         var x = event.scrollingDeltaX
         var y = event.scrollingDeltaY
@@ -875,6 +881,47 @@ import Cocoa
     private func sendBindingAction(_ action: String) {
         guard let surface = surface else { return }
         _ = ghostty_surface_binding_action(surface, action, UInt(action.utf8.count))
+    }
+
+    // MARK: - Quick select
+
+    private var quickSelectOverlay: QuickSelectOverlay?
+
+    var isQuickSelecting: Bool { quickSelectOverlay != nil }
+
+    /// Label the matches on screen; the next keys pick one. Beeps when
+    /// there is nothing to pick.
+    func startQuickSelect() {
+        guard quickSelectOverlay == nil, let size = gridSize, size.cell_width_px > 0, let cellHeight else { return }
+        let scale = window?.backingScaleFactor ?? layer?.contentsScale ?? 2
+        let lines = (0..<Int(size.rows)).map { viewportLine($0) ?? "" }
+        let matches = QuickSelect.matches(in: lines)
+        guard !matches.isEmpty else {
+            NSSound.beep()
+            return
+        }
+        let overlay = QuickSelectOverlay(
+            frame: bounds, matches: matches,
+            cellSize: CGSize(width: CGFloat(size.cell_width_px) / scale, height: cellHeight),
+            onPick: { [weak self] text, insert in
+                guard let self else { return }
+                self.endQuickSelect()
+                if insert {
+                    self.sendText(text)
+                } else {
+                    self.copyToPasteboard(text)
+                    self.flashTerminal(nil)
+                }
+            },
+            onCancel: { [weak self] in self?.endQuickSelect() })
+        addSubview(overlay)
+        quickSelectOverlay = overlay
+        NSAccessibility.post(element: overlay, notification: .layoutChanged)
+    }
+
+    func endQuickSelect() {
+        quickSelectOverlay?.removeFromSuperview()
+        quickSelectOverlay = nil
     }
 
     @objc func flashTerminal(_ sender: Any?) {
