@@ -83,7 +83,8 @@ import Cocoa
         }
         orchestratorObservers = [
             Notification.Name.approvalsChanged, .orchestratorChanged, .keyTableChanged, .portsChanged,
-            .kubeContextChanged, .rulesChanged, .syncStatusChanged, .agentBudgetChanged
+            .kubeContextChanged, .rulesChanged, .syncStatusChanged, .agentBudgetChanged,
+            .remoteControlChanged
         ].map {
             name in
             NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
@@ -124,6 +125,7 @@ import Cocoa
         registerPlugin(PortsSegment())
         registerPlugin(KubeSegment())
         registerPlugin(SyncSegment())
+        registerPlugin(RemoteControlSegment())
         registerPlugin(OrchestratorSegment())
     }
 

@@ -160,6 +160,10 @@ extension MainWindowController {
                     window: window)
                 return
             }
+            server.onIdleStop = {
+                BooAlert.showTransient(
+                    "Remote Control stopped after \(Int(RemoteControlServer.idleTimeout / 60)) minutes without use")
+            }
             showRemoteControlURLAlert()
         }
     }
@@ -181,8 +185,11 @@ extension MainWindowController {
         alert.messageText = "Remote Control Server Running"
         alert.informativeText =
             "Open this URL on any device in your network:\n\n\(url)\n\n"
-            + "The link contains a session token — anyone with it can control this terminal."
-        alert.alertStyle = .informational
+            + "The link contains a session token — anyone with it can control this terminal. "
+            + "The connection is plain HTTP: use it only on a network you trust, since anyone on it "
+            + "can read the token and the terminal contents.\n\n"
+            + "The server stops after \(Int(RemoteControlServer.idleTimeout / 60)) minutes without use."
+        alert.alertStyle = .warning
         alert.addButton(withTitle: "Copy URL")
         alert.addButton(withTitle: "OK")
         let respond = { (response: NSApplication.ModalResponse) in

@@ -2,6 +2,11 @@ import Darwin
 import Foundation
 import Security
 
+extension Notification.Name {
+    /// Posted on main when the remote control server starts or stops.
+    static let remoteControlChanged = Notification.Name("BooRemoteControlChanged")
+}
+
 /// HTTP server exposing a web interface to control Boo remotely.
 /// Serves an embedded single-page UI plus a JSON command API. Commands are
 /// routed to MainActor handlers via `onCommand` (wired by MainWindowController).
@@ -52,6 +57,15 @@ final class RemoteControlServer: @unchecked Sendable {
 
     private(set) var token: String = ""
     private(set) var port: UInt16 = 0
+
+    /// The server stops itself after this long without an authorized request,
+    /// so a forgotten session doesn't leave the terminal open on the LAN.
+    static let idleTimeout: TimeInterval = 30 * 60
+    /// Uptime of the last authorized request (or the start). Touched only on `queue`.
+    private var lastActivity: TimeInterval = 0
+    private var idleTimer: DispatchSourceTimer?
+    /// Called on main after an idle stop.
+    var onIdleStop: (() -> Void)?
 
     var isRunning: Bool { queue.sync { core.isListening } }
 
@@ -108,6 +122,9 @@ final class RemoteControlServer: @unchecked Sendable {
             port = requestedPort
             token = Self.generateToken()
             core.adoptListener(fd: fd)
+            lastActivity = booUptime()
+            startIdleTimer()
+            Self.postChanged()
 
             booLog(.info, .socket, "RemoteControl: listening on :\(requestedPort)")
             return true
@@ -115,13 +132,38 @@ final class RemoteControlServer: @unchecked Sendable {
     }
 
     func stop() {
-        let listenerClosed = queue.sync {
-            token = ""
-            booLog(.info, .socket, "RemoteControl: stopped")
-            return core.shutdown()
-        }
+        let listenerClosed = queue.sync { shutdownOnQueue() }
         // Hold until the port is released so an immediate restart can bind it.
         listenerClosed?.wait()
+    }
+
+    private func shutdownOnQueue() -> DispatchSemaphore? {
+        idleTimer?.cancel()
+        idleTimer = nil
+        token = ""
+        booLog(.info, .socket, "RemoteControl: stopped")
+        Self.postChanged()
+        return core.shutdown()
+    }
+
+    private func startIdleTimer() {
+        idleTimer?.cancel()
+        let timer = DispatchSource.makeTimerSource(queue: queue)
+        timer.schedule(deadline: .now() + 60, repeating: 60)
+        timer.setEventHandler { [weak self] in
+            guard let self, self.core.isListening,
+                booUptime() - self.lastActivity >= Self.idleTimeout
+            else { return }
+            booLog(.info, .socket, "RemoteControl: idle for \(Int(Self.idleTimeout))s, stopping")
+            _ = self.shutdownOnQueue()
+            DispatchQueue.main.async { self.onIdleStop?() }
+        }
+        idleTimer = timer
+        timer.resume()
+    }
+
+    private static func postChanged() {
+        DispatchQueue.main.async { NotificationCenter.default.post(name: .remoteControlChanged, object: nil) }
     }
 
     /// Case-insensitive lookup of a header value in raw header text.
@@ -168,6 +210,7 @@ final class RemoteControlServer: @unchecked Sendable {
                 sendJSON(fd: fd, status: "401 Unauthorized", dict: ["ok": false, "error": "unauthorized"])
                 return
             }
+            lastActivity = booUptime()
             handleAPICommand(fd: fd, body: body)
         default:
             sendError(fd: fd, status: "404 Not Found")
