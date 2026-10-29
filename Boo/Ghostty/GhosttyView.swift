@@ -82,6 +82,10 @@ import Cocoa
 
     override func accessibilityRole() -> NSAccessibility.Role? { .textArea }
     override func accessibilityLabel() -> String? { "Terminal" }
+    override func isAccessibilityElement() -> Bool { true }
+    /// The visible screen, so VoiceOver can read the terminal. Read only on
+    /// demand: assistive apps query it, nothing pushes it.
+    override func accessibilityValue() -> Any? { readViewportText() ?? "" }
 
     /// How a tab's terminal starts, keyed by tab ID. Consumed once, when its
     /// surface is created.

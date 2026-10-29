@@ -397,3 +397,33 @@ extension ToolbarView {
         needsDisplay = true
     }
 }
+
+// MARK: - Accessibility
+
+extension ToolbarView {
+    override func accessibilityChildren() -> [Any]? {
+        let base = super.accessibilityChildren() ?? []
+        guard !hideWorkspaces, let window else { return base }
+        var elements: [Any] = []
+        for (index, screenFrame) in workspacePillScreenFrames() {
+            let ws = workspaces[index]
+            let local = convert(window.convertFromScreen(screenFrame), from: nil)
+            let label = ws.isPinned ? "Workspace \(ws.name), pinned" : "Workspace \(ws.name)"
+            elements.append(
+                AccessibleElement(
+                    parent: self, role: .radioButton, label: label, localRect: local, selected: ws.isActive
+                ) { [weak self] in
+                    guard let self else { return }
+                    self.delegate?.toolbar(self, didSelectWorkspaceAt: index)
+                })
+        }
+        elements.append(
+            AccessibleElement(
+                parent: self, role: .button, label: "New workspace", localRect: workspacePlusButtonRect
+            ) { [weak self] in
+                guard let self else { return }
+                self.delegate?.toolbarDidRequestNewWorkspace(self)
+            })
+        return elements + base
+    }
+}

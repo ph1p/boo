@@ -1371,25 +1371,40 @@ class PaneView: NSView {
         .tabGroup
     }
 
+    override func accessibilityLabel() -> String? { "Tabs" }
+
+    /// Drawn tabs plus the real subviews: returning only the tabs would hide
+    /// the terminal and other content views from VoiceOver.
     override func accessibilityChildren() -> [Any]? {
-        guard !pane.tabs.isEmpty else { return nil }
-        var elements: [NSAccessibilityElement] = []
+        let content = super.accessibilityChildren() ?? []
+        guard !pane.tabs.isEmpty else { return content }
+        var elements: [Any] = []
         for (i, tab) in pane.tabs.enumerated() {
             guard !pane.isTabHidden(at: i), let rect = tabSlotRect(at: i) else { continue }
-            let element = NSAccessibilityElement()
-            element.setAccessibilityParent(self)
-            element.setAccessibilityRole(.radioButton)
             let (_, envPrefix) = Self.environmentIndicator(for: tab.remoteSession)
             let groupSuffix = pane.group(id: tab.groupID).map { ", group \($0.name)" } ?? ""
-            element.setAccessibilityLabel("\(envPrefix) \(tab.title)\(groupSuffix)")
-            element.setAccessibilityValue((i == pane.activeTabIndex ? 1 : 0) as NSNumber)
-            let windowRect = convert(rect, to: nil)
-            if let screenRect = window?.convertToScreen(windowRect) {
-                element.setAccessibilityFrame(screenRect)
-            }
-            elements.append(element)
+            let title = Self.tabDisplayTitle(tab: tab)
+            let label = (envPrefix.isEmpty ? title : "\(envPrefix) \(title)") + groupSuffix
+            let tabID = tab.id
+            elements.append(
+                AccessibleElement(
+                    parent: self, role: .radioButton, label: label, localRect: rect,
+                    selected: i == pane.activeTabIndex
+                ) { [weak self] in
+                    guard let self, let idx = self.pane.tabs.firstIndex(where: { $0.id == tabID }) else { return }
+                    self.activateTab(idx)
+                    self.focusActiveView()
+                })
         }
-        return elements
+        elements.append(
+            AccessibleElement(parent: self, role: .button, label: "New tab", localRect: plusButtonSlot()) {
+                [weak self] in
+                guard let self else { return }
+                self.addNewTab(
+                    contentType: .terminal, workingDirectory: self.pane.activeTab?.workingDirectory ?? "~",
+                    group: self.activeGroupID)
+            })
+        return elements + content
     }
 
     // MARK: - Cleanup

@@ -970,3 +970,32 @@ class WorkspaceBarView: NSView {
         }
     }
 }
+
+// MARK: - Accessibility
+
+extension WorkspaceBarView {
+    override func accessibilityRole() -> NSAccessibility.Role? { .group }
+    override func accessibilityLabel() -> String? { "Workspaces" }
+
+    override func accessibilityChildren() -> [Any]? {
+        var elements: [Any] = []
+        for (index, item) in items.enumerated() {
+            let label = item.isPinned ? "Workspace \(item.name), pinned" : "Workspace \(item.name)"
+            elements.append(
+                AccessibleElement(
+                    parent: self, role: .radioButton, label: label, localRect: verticalItemRect(at: index),
+                    selected: index == selectedIndex
+                ) { [weak self] in
+                    guard let self else { return }
+                    self.delegate?.workspaceBar(self, didSelectAt: index)
+                })
+        }
+        elements.append(
+            AccessibleElement(parent: self, role: .button, label: "New workspace", localRect: verticalPlusRect) {
+                [weak self] in
+                guard let self else { return }
+                self.delegate?.workspaceBarDidRequestNewWorkspace(self)
+            })
+        return elements + (super.accessibilityChildren() ?? [])
+    }
+}
