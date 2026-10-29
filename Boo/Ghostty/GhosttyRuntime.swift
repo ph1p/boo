@@ -345,11 +345,71 @@ private func ghosttyConfirmReadClipboard(
     _ userdata: UnsafeMutableRawPointer?, _ confirm: UnsafePointer<ghostty_clipboard_confirm_s>?,
     _ state: UnsafeMutableRawPointer?, _ request: ghostty_clipboard_request_e
 ) {
-    // Boo sets clipboard-read = allow and has no confirmation UI. Deny anything
-    // that still asks, so the pending request is released instead of leaking.
-    guard let surface = userdata.flatMap({ Unmanaged<GhosttyView>.fromOpaque($0).takeUnretainedValue().surface })
-    else { return }
-    ghostty_surface_deny_clipboard_request(surface, state)
+    // Reached for pastes that paste protection flags and for OSC 52 reads
+    // (clipboard-read = ask). Every path must complete or deny `state`, or the
+    // request leaks.
+    guard let userdata else { return }
+    let view = Unmanaged<GhosttyView>.fromOpaque(userdata).takeUnretainedValue()
+    guard let surface = view.surface else { return }
+    guard let confirm,
+        request == GHOSTTY_CLIPBOARD_REQUEST_PASTE || request == GHOSTTY_CLIPBOARD_REQUEST_OSC_52_READ
+    else {
+        ghostty_surface_deny_clipboard_request(surface, state)
+        return
+    }
+    // The confirm payload is borrowed: copy what the completion needs now.
+    let c = confirm.pointee
+    var contents: [(mime: String, data: Data)] = []
+    for i in 0..<c.contents_len {
+        guard let content = c.contents?[i], let mime = content.mime else { continue }
+        let data = content.len > 0 && content.data != nil ? Data(bytes: content.data, count: content.len) : Data()
+        contents.append((String(cString: mime), data))
+    }
+    var available: [String] = []
+    for i in 0..<c.available_len {
+        if let name = c.available?[i] { available.append(String(cString: name)) }
+    }
+    let canRemember = c.can_remember
+    let isPaste = request == GHOSTTY_CLIPBOARD_REQUEST_PASTE
+    let state = UInt(bitPattern: state)
+
+    DispatchQueue.main.async {
+        MainActor.assumeIsolated {
+            let text = contents.first { $0.mime == "text/plain" }.flatMap { String(data: $0.data, encoding: .utf8) }
+            ClipboardConfirmation.ask(isPaste: isPaste, text: text ?? "", canRemember: canRemember, in: view) {
+                allowed, remember in
+                guard let surface = view.surface else { return }
+                let state = UnsafeMutableRawPointer(bitPattern: state)
+                guard allowed else {
+                    ghostty_surface_deny_clipboard_request(surface, state)
+                    return
+                }
+                let buffers = contents.map { item in
+                    item.data.withUnsafeBytes { raw -> UnsafeMutablePointer<CChar> in
+                        let copy = UnsafeMutablePointer<CChar>.allocate(capacity: raw.count + 1)
+                        raw.copyBytes(to: UnsafeMutableRawBufferPointer(start: copy, count: raw.count))
+                        copy[raw.count] = 0
+                        return copy
+                    }
+                }
+                defer { for buffer in buffers { buffer.deallocate() } }
+                withCStringArray(contents.map(\.mime)) { mimes in
+                    let items = zip(mimes, zip(buffers, contents)).map { mime, pair in
+                        ghostty_clipboard_content_s(mime: mime, data: pair.0, len: pair.1.data.count)
+                    }
+                    withCStringArray(available) { avail in
+                        items.withUnsafeBufferPointer { itemsBuf in
+                            var complete = ghostty_clipboard_complete_s(
+                                contents: itemsBuf.baseAddress, contents_len: itemsBuf.count,
+                                available: avail.baseAddress, available_len: avail.count,
+                                confirmed: true, remember: remember)
+                            ghostty_surface_complete_clipboard_request(surface, &complete, state)
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 private func ghosttyWriteClipboard(
@@ -665,7 +725,9 @@ private func ghosttyCloseSurface(_ userdata: UnsafeMutableRawPointer?, _ process
         lines.append("mouse-hide-while-typing = true")
         lines.append("cursor-click-to-move = true")
         lines.append("scrollback-limit = 10000000")
-        lines.append("clipboard-read = allow")
+        // OSC 52 reads hand the clipboard to whatever runs in the terminal,
+        // including a remote host: ask first (ghosttyConfirmReadClipboard).
+        lines.append("clipboard-read = ask")
         lines.append("clipboard-write = allow")
         lines.append("copy-on-select = clipboard")
 
