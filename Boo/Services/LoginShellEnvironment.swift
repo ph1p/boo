@@ -21,20 +21,43 @@ final class LoginShellEnvironment: @unchecked Sendable {
     private var resolved: [String: String]?
     private var resolving = false
     private var waiters: [DispatchSemaphore] = []
+    /// Failed captures so far and when the last one ended. A slow cold rc file
+    /// (nvm, conda) can miss the timeout once; caching `[:]` for the whole
+    /// session would strip SSH_AUTH_SOCK/KUBECONFIG/PATH from every spawn.
+    private var failures = 0
+    private var lastFailure: TimeInterval = 0
+    static let maxAttempts = 3
 
     /// No login shell under XCTest: rc files are slow and machine-specific.
     nonisolated(unsafe) static var disabled = NSClassFromString("XCTestCase") != nil
 
-    init() {}
+    private let capturer: @Sendable (TimeInterval) -> [String: String]?
+    private let isDisabled: Bool
+    private let retryDelay: TimeInterval
+
+    init(
+        disabled: Bool = LoginShellEnvironment.disabled,
+        retryDelay: TimeInterval = 10,
+        capture: @escaping @Sendable (TimeInterval) -> [String: String]? = LoginShellEnvironment.capture
+    ) {
+        self.isDisabled = disabled
+        self.retryDelay = retryDelay
+        self.capturer = capture
+    }
 
     /// Starts resolving in the background; cheap to call repeatedly.
     func prewarm() {
         lock.lock()
-        let start = resolved == nil && !resolving && !Self.disabled
+        let backoff = TimeInterval(failures) * retryDelay
+        let start =
+            resolved == nil && !resolving && !isDisabled && failures < Self.maxAttempts
+            && booUptime() - lastFailure >= backoff
         if start { resolving = true }
+        // Later attempts get more time: the first one may have raced a cold disk.
+        let timeout: TimeInterval = failures == 0 ? 5 : 15
         lock.unlock()
         guard start else { return }
-        DispatchQueue.global(qos: .utility).async { self.finish(Self.capture()) }
+        DispatchQueue.global(qos: .utility).async { self.finish(self.capturer(timeout)) }
     }
 
     /// The imported variables, or nil while not resolved yet. Never blocks.
@@ -47,12 +70,17 @@ final class LoginShellEnvironment: @unchecked Sendable {
     /// The imported variables, waiting up to `timeout` for the first resolution.
     /// Call off the main thread only.
     func values(timeout: TimeInterval = 6) -> [String: String] {
-        if Self.disabled { return [:] }
+        if isDisabled { return [:] }
         prewarm()
         lock.lock()
         if let resolved {
             lock.unlock()
             return resolved
+        }
+        guard resolving else {
+            // Failed and backing off: nothing in flight to wait for.
+            lock.unlock()
+            return [:]
         }
         let sem = DispatchSemaphore(value: 0)
         waiters.append(sem)
@@ -107,9 +135,16 @@ final class LoginShellEnvironment: @unchecked Sendable {
         return stat(path, &info) == 0 && (info.st_mode & S_IFMT) == S_IFSOCK
     }
 
-    private func finish(_ values: [String: String]) {
+    /// `nil` = the capture failed: stay unresolved so a later `prewarm` retries.
+    private func finish(_ values: [String: String]?) {
         lock.lock()
-        resolved = values
+        if let values {
+            resolved = values
+        } else {
+            failures += 1
+            lastFailure = booUptime()
+            if failures >= Self.maxAttempts { resolved = [:] }
+        }
         resolving = false
         let waiting = waiters
         waiters = []
@@ -120,7 +155,7 @@ final class LoginShellEnvironment: @unchecked Sendable {
     /// Marker printed before `env -0`, so rc-file output (motd, prompts) is skipped.
     private static let marker = "\u{1E}BOO_LOGIN_ENV\u{1E}"
 
-    private static func capture() -> [String: String] {
+    private static func capture(timeout: TimeInterval) -> [String: String]? {
         let shell = ProcessInfo.processInfo.environment["SHELL"].flatMap { $0.isEmpty ? nil : $0 } ?? "/bin/zsh"
         let process = Process()
         process.executableURL = URL(fileURLWithPath: shell)
@@ -130,9 +165,9 @@ final class LoginShellEnvironment: @unchecked Sendable {
         env["TERM"] = "dumb"
         env["BOO_LOGIN_ENV_PROBE"] = "1"
         process.environment = env
-        guard let result = RemoteExplorer.runProcessCapturing(process, timeout: 5), result.status == 0 else {
+        guard let result = RemoteExplorer.runProcessCapturing(process, timeout: timeout), result.status == 0 else {
             debugLog("[LoginShellEnvironment] \(shell) -ilc failed or timed out")
-            return [:]
+            return nil
         }
         return parse(result.stdout)
     }

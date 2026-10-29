@@ -28,4 +28,38 @@ final class LoginShellEnvironmentTests: XCTestCase {
         XCTAssertEqual(merged["KUBECONFIG"], "/k")
         XCTAssertEqual(merged["PATH"], "/usr/bin")
     }
+
+    func testFailedCaptureIsRetriedInsteadOfCached() {
+        let calls = Counter()
+        let env = LoginShellEnvironment(disabled: false, retryDelay: 0) { _ in
+            calls.increment() == 1 ? nil : ["PATH": "/shell/bin"]
+        }
+        XCTAssertEqual(env.values(timeout: 2), [:], "first capture fails")
+        XCTAssertNil(env.snapshot, "a failure must not be cached as resolved")
+        XCTAssertEqual(env.values(timeout: 2), ["PATH": "/shell/bin"], "the next call retries")
+        XCTAssertEqual(calls.value, 2)
+    }
+
+    func testGivesUpAfterMaxAttempts() {
+        let calls = Counter()
+        let env = LoginShellEnvironment(disabled: false, retryDelay: 0) { _ in
+            _ = calls.increment()
+            return nil
+        }
+        for _ in 0..<5 { _ = env.values(timeout: 2) }
+        XCTAssertEqual(calls.value, LoginShellEnvironment.maxAttempts)
+        XCTAssertEqual(env.snapshot, [:], "settles on empty once attempts run out")
+    }
+}
+
+private final class Counter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var count = 0
+    var value: Int { lock.withLock { count } }
+    func increment() -> Int {
+        lock.withLock {
+            count += 1
+            return count
+        }
+    }
 }
