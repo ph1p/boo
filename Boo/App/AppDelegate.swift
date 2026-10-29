@@ -90,6 +90,9 @@ public enum BooMain {
         BooSocketServer.shared.stop()
         RemoteControlServer.shared.stop()
         FolderBookmarkStore.shared.stopAll()
+        // `kubectl get -w` children otherwise outlive the app until the server
+        // times the watch out.
+        KubeStore.shared.stopWatching()
     }
 
     /// Finder double-click / Open With / Dock drop. Recordings open in a player tab.
