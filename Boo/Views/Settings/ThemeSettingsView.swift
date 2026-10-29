@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 // MARK: - Theme
@@ -66,6 +67,19 @@ struct ThemeSettingsView: View {
                         .padding(.vertical, 6)
                     }
                     .buttonStyle(.plain)
+                    Button(action: importTheme) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "square.and.arrow.down")
+                                .font(.system(size: 10, weight: .medium))
+                            Text("Import Theme…")
+                                .font(.system(size: 12))
+                        }
+                        .foregroundStyle(t.accent)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 6)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Import an iTerm2 .itermcolors file or a Ghostty theme file")
                 }
             }
         }
@@ -76,6 +90,23 @@ struct ThemeSettingsView: View {
             } onCancel: {
                 editingTheme = nil
             }
+        }
+    }
+
+    /// Pick a color scheme file and open it in the editor, so the derived
+    /// chrome colors can be reviewed before the theme is saved.
+    private func importTheme() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.message = "Choose an iTerm2 (.itermcolors) or Ghostty theme file"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            let imported = try ThemeImporter.importTheme(at: url)
+            editingTheme = imported.withName(AppSettings.shared.uniqueThemeName(imported.name))
+        } catch {
+            BooAlert.showError(title: "Cannot Import Theme", message: error.localizedDescription)
         }
     }
 
