@@ -34,6 +34,8 @@ public enum BooMain {
             )
         }
 
+        SecureKeyboardEntry.shared.start()
+
         // Apply initial log level from settings
         BooLogger.shared.applyDebugSetting(AppSettings.shared.debugLogging)
 

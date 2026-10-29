@@ -168,6 +168,14 @@ extension MainWindowController {
         }
     }
 
+    @objc func toggleSecureKeyboardEntryAction(_ sender: Any?) {
+        AppSettings.shared.secureKeyboardEntry.toggle()
+        SecureKeyboardEntry.shared.apply()
+        if AppSettings.shared.secureKeyboardEntry, !SecureKeyboardEntry.isActive {
+            BooAlert.showTransient("Secure Keyboard Entry is on, but another app is holding it")
+        }
+    }
+
     @objc func copyRemoteControlURLAction(_ sender: Any?) {
         let server = RemoteControlServer.shared
         guard server.isRunning else {
@@ -220,6 +228,9 @@ extension MainWindowController: NSMenuItemValidation {
             return true
         case #selector(copyRemoteControlURLAction(_:)):
             return RemoteControlServer.shared.isRunning
+        case #selector(toggleSecureKeyboardEntryAction(_:)):
+            menuItem.state = AppSettings.shared.secureKeyboardEntry ? .on : .off
+            return true
         case #selector(toggleZoomPaneAction(_:)):
             menuItem.state = activeWorkspace?.zoomedPaneID != nil ? .on : .off
             return (activeWorkspace?.splitTree.leafCount ?? 0) > 1

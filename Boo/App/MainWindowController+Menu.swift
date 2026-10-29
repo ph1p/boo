@@ -14,6 +14,10 @@ extension MainWindowController {
             withTitle: "Check for Updates...", action: #selector(checkForUpdatesAction(_:)), keyEquivalent: "")
         appMenu.addItem(withTitle: "Settings...", action: #selector(showSettingsAction(_:)), keyEquivalent: ",")
         appMenu.addItem(.separator())
+        appMenu.addItem(
+            withTitle: "Secure Keyboard Entry", action: #selector(toggleSecureKeyboardEntryAction(_:)),
+            keyEquivalent: "")
+        appMenu.addItem(.separator())
         appMenu.addItem(withTitle: "Quit Boo", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         appMenuItem.submenu = appMenu
         mainMenu.addItem(appMenuItem)

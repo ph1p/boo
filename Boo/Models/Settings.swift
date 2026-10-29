@@ -371,6 +371,7 @@ final class AppSettings {
         static let notificationExpiryMinutes = "notificationExpiryMinutes"
 
         static let remoteControlPort = "remoteControlPort"
+        static let secureKeyboardEntry = "secureKeyboardEntry"
 
         static let paletteRecents = "paletteRecents"
     }
@@ -1186,6 +1187,14 @@ final class AppSettings {
             return (v >= 1024 && v <= 65535) ? v : 8899
         }
         set { set(newValue, forKey: K.remoteControlPort) }
+    }
+
+    // MARK: - Secure Keyboard Entry
+
+    /// Process-wide, like Terminal's: other apps can't observe keystrokes while Boo is frontmost.
+    var secureKeyboardEntry: Bool {
+        get { bool(K.secureKeyboardEntry, default: false) }
+        set { set(newValue, forKey: K.secureKeyboardEntry) }
     }
 
     // MARK: - Command Palette
