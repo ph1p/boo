@@ -33,23 +33,32 @@ extension GitPlugin {
     }
 
     nonisolated static func detectChangedFiles(repoRoot: String) -> [GitChangedFile] {
-        guard let output = gitOutput(["-C", repoRoot, "--no-optional-locks", "status", "--porcelain=v1"])
+        guard
+            let output = gitOutput(["-C", repoRoot, "--no-optional-locks", "status", "--porcelain=v1", "-z"])
         else { return [] }
+        return parseChangedFiles(porcelainZ: output, repoRoot: repoRoot)
+    }
 
-        return output.split(separator: "\n").compactMap { line in
-            let str = String(line)
-            guard str.count >= 3 else { return nil }
-            let col1 = str[str.startIndex]  // index status
-            let col2 = str[str.index(after: str.startIndex)]  // work-tree status
-            let filePath = String(str.dropFirst(3))
+    /// Parse `git status --porcelain=v1 -z`. `-z` keeps paths verbatim: without
+    /// it, git quotes non-ASCII/space paths and prints renames as `old -> new`.
+    nonisolated static func parseChangedFiles(porcelainZ output: String, repoRoot: String) -> [GitChangedFile] {
+        let fields = output.split(separator: "\0", omittingEmptySubsequences: true)
+        var files: [GitChangedFile] = []
+        var i = 0
+        while i < fields.count {
+            let field = fields[i]
+            i += 1
+            guard field.count >= 4 else { continue }
+            let col1 = field[field.startIndex]  // index status
+            let col2 = field[field.index(after: field.startIndex)]  // work-tree status
+            // Renames/copies carry the original path in the next NUL field.
+            if col1 == "R" || col1 == "C" { i += 1 }
+            let filePath = String(field.dropFirst(3))
             let fullPath = (repoRoot as NSString).appendingPathComponent(filePath)
-            return GitChangedFile(
-                path: filePath,
-                indexStatus: col1,
-                workTreeStatus: col2,
-                fullPath: fullPath
-            )
+            files.append(
+                GitChangedFile(path: filePath, indexStatus: col1, workTreeStatus: col2, fullPath: fullPath))
         }
+        return files
     }
 
     nonisolated static func detectAheadBehind(repoRoot: String) -> (ahead: Int, behind: Int) {

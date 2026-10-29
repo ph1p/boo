@@ -815,7 +815,7 @@ func detectAgentDiffStats(repoRoot: String) -> [AgentsPlugin.DiffStatEntry] {
     task.executableURL = URL(fileURLWithPath: "/usr/bin/git")
     // --no-optional-locks: a plain `git diff` refreshes .git/index, which fires
     // GitService's index watcher and a full git status refresh every poll.
-    task.arguments = ["-C", repoRoot, "--no-optional-locks", "diff", "--numstat", "HEAD"]
+    task.arguments = ["-C", repoRoot, "--no-optional-locks", "diff", "--numstat", "-z", "HEAD"]
 
     // Drain-while-running: `--numstat` on a large working tree easily exceeds the
     // ~64KB pipe buffer, and the read-after-exit shape would deadlock the child.
@@ -824,20 +824,33 @@ func detectAgentDiffStats(repoRoot: String) -> [AgentsPlugin.DiffStatEntry] {
         return []
     }
     guard result.status == 0 else { return [] }
-    let output = result.stdout
+    return parseNumstatZ(result.stdout, repoRoot: repoRoot)
+}
 
-    return output.split(separator: "\n").compactMap { line in
-        let parts = line.split(separator: "\t", maxSplits: 2)
-        guard parts.count == 3 else { return nil }
-        let insertions = Int(parts[0]) ?? 0
-        let deletions = Int(parts[1]) ?? 0
-        let filePath = String(parts[2])
-        let fullPath = (repoRoot as NSString).appendingPathComponent(filePath)
-        return AgentsPlugin.DiffStatEntry(
-            path: filePath,
-            insertions: insertions,
-            deletions: deletions,
-            fullPath: fullPath
-        )
+/// Parse `git diff --numstat -z`: `ins\tdel\tpath\0`, or for renames
+/// `ins\tdel\t\0old\0new\0`. `-z` keeps paths unquoted.
+func parseNumstatZ(_ output: String, repoRoot: String) -> [AgentsPlugin.DiffStatEntry] {
+    let fields = output.split(separator: "\0", omittingEmptySubsequences: false).map(String.init)
+    var entries: [AgentsPlugin.DiffStatEntry] = []
+    var i = 0
+    while i < fields.count {
+        let parts = fields[i].split(separator: "\t", maxSplits: 2, omittingEmptySubsequences: false)
+        i += 1
+        guard parts.count == 3 else { continue }
+        var filePath = String(parts[2])
+        if filePath.isEmpty {
+            // Rename: old and new path follow as separate fields; keep the new one.
+            guard i + 1 < fields.count else { break }
+            filePath = fields[i + 1]
+            i += 2
+        }
+        entries.append(
+            AgentsPlugin.DiffStatEntry(
+                path: filePath,
+                insertions: Int(parts[0]) ?? 0,
+                deletions: Int(parts[1]) ?? 0,
+                fullPath: (repoRoot as NSString).appendingPathComponent(filePath)
+            ))
     }
+    return entries
 }
