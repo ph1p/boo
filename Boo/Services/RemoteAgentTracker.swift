@@ -82,4 +82,9 @@ final class RemoteAgentTracker {
         guard tracked.removeValue(forKey: tabID) != nil else { return }
         inbox.apply(event: "end", tabID: tabID)
     }
+
+    /// The tab closed: its inbox item goes with it, so only the entry is dropped.
+    func forget(tabID: UUID) {
+        tracked[tabID] = nil
+    }
 }

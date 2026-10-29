@@ -164,6 +164,7 @@ final class OrchestratorEvents {
         ApprovalCenter.shared.revokeGrants(tab: tabID)
         post("pane_closed", ["tab_id": tabID.uuidString, "owned": owned])
         AgentInbox.shared.remove(tabID: tabID)
+        RemoteAgentTracker.shared.forget(tabID: tabID)
     }
 
     private func approvalResolved(
