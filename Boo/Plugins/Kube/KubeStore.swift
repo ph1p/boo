@@ -83,7 +83,9 @@ final class KubeStore: ObservableObject {
         let mtime = Self.kubeconfigPaths().compactMap {
             (try? FileManager.default.attributesOfItem(atPath: $0))?[.modificationDate] as? Date
         }.max()
-        guard mtime != configMTime else { return }
+        // Record the mtime only once a load can start: otherwise a kubectl found
+        // later (or a change during a load) would never trigger the reload.
+        guard mtime != configMTime, kubectlPath != nil, !configLoading else { return }
         configMTime = mtime
         reloadConfig()
     }
