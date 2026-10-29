@@ -27,12 +27,10 @@ enum RemoteFileTransfer {
         switch session {
         case .ssh(let host, let alias):
             guard !RemoteExplorer.disableRealSSH else { return nil }
-            process.executableURL = URL(fileURLWithPath: "/usr/bin/ssh")
-            process.arguments = RemoteExplorer.sshArguments(host: alias ?? host, command: command)
+            return RemoteExplorer.sshProcess(RemoteExplorer.sshArguments(host: alias ?? host, command: command))
         case .mosh(let host):
             guard !RemoteExplorer.disableRealSSH else { return nil }
-            process.executableURL = URL(fileURLWithPath: "/usr/bin/ssh")
-            process.arguments = RemoteExplorer.sshArguments(host: host, command: command)
+            return RemoteExplorer.sshProcess(RemoteExplorer.sshArguments(host: host, command: command))
         case .container(let target, let tool):
             guard isSupported(session), let binary = RemoteExplorer.findBinary(tool.rawValue) else { return nil }
             process.executableURL = URL(fileURLWithPath: binary)

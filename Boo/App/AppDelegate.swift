@@ -19,6 +19,10 @@ public enum BooMain {
     private var didOpenInitialWindow = false
 
     public func applicationDidFinishLaunching(_ notification: Notification) {
+        // ssh/kubectl spawns need the login shell's SSH_AUTH_SOCK / PATH / KUBECONFIG;
+        // resolve them before the first remote listing asks, but after the first
+        // window's own shells have started (rc files compete for the same CPU).
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { LoginShellEnvironment.shared.prewarm() }
         // Verify ~/.boo directories are usable; warn once if not.
         do {
             try BooPaths.ensureDirectories()

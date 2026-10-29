@@ -64,29 +64,26 @@ struct RemoteConnectionFailedView: View {
                 .font(.system(size: 13, weight: .medium, design: .monospaced))
                 .foregroundStyle(Color(nsColor: theme.chromeText))
 
-            Text("File explorer requires key-based\nSSH auth or SSH agent.")
-                .font(.system(size: 10))
-                .foregroundStyle(Color(nsColor: theme.chromeMuted).opacity(0.6))
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 16)
+            Text(
+                canPrompt
+                    ? "Key and agent auth failed. Connect… asks for\na password, passphrase or 2FA code."
+                    : "File explorer requires key-based\nSSH auth or SSH agent."
+            )
+            .font(.system(size: 10))
+            .foregroundStyle(Color(nsColor: theme.chromeMuted).opacity(0.6))
+            .multilineTextAlignment(.center)
+            .padding(.horizontal, 16)
 
             if isRetrying {
                 ProgressView()
                     .scaleEffect(0.7)
             } else {
-                Button("Retry") {
-                    isRetrying = true
-                    if session.isSSHBased {
-                        SSHControlManager.shared.ensureConnection(alias: session.sshConnectionTarget) { [self] _ in
-                            MainActor.assumeIsolated {
-                                self.isRetrying = false
-                                self.onRetry?()
-                            }
-                        }
-                    } else {
-                        isRetrying = false
-                        onRetry?()
+                HStack(spacing: 8) {
+                    if canPrompt {
+                        Button("Connect…") { connect(interactive: true) }
+                            .help("Open a shared SSH connection, asking in a dialog if the host needs input")
                     }
+                    Button("Retry") { connect(interactive: false) }
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
@@ -98,6 +95,31 @@ struct RemoteConnectionFailedView: View {
         .background(Color(nsColor: theme.sidebarBg))
     }
 
+    /// Plain ssh/mosh hosts can prompt; container ssh (vagrant, colima) manages its own keys.
+    private var canPrompt: Bool {
+        if case .container = session { return false }
+        return true
+    }
+
+    private func connect(interactive: Bool) {
+        guard session.isSSHBased else {
+            onRetry?()
+            return
+        }
+        isRetrying = true
+        let done: @Sendable (Bool) -> Void = { [self] _ in
+            MainActor.assumeIsolated {
+                self.isRetrying = false
+                self.onRetry?()
+            }
+        }
+        let alias = session.sshConnectionTarget
+        if interactive {
+            SSHControlManager.shared.connectInteractively(alias: alias, completion: done)
+        } else {
+            SSHControlManager.shared.ensureConnection(alias: alias, completion: done)
+        }
+    }
 }
 
 /// The remote explorer: the shared `FileTreeView` once the first listing arrived, a

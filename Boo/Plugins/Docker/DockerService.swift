@@ -543,8 +543,7 @@ final class DockerService: ObservableObject, @unchecked Sendable {
             let fmt =
                 "{{.ID}}\\t{{.Names}}\\t{{.Image}}"
                 + "\\t{{.Status}}\\t{{.State}}\\t{{.Ports}}"
-            let output = runProcess(
-                "/usr/bin/ssh",
+            let output = runSSH(
                 args: [
                     "-o", "ConnectTimeout=3",
                     "-o", "BatchMode=yes",
@@ -562,8 +561,7 @@ final class DockerService: ObservableObject, @unchecked Sendable {
     ) {
         let cmd = "docker " + args.joined(separator: " ")
         DispatchQueue.global(qos: .utility).async {
-            _ = runProcess(
-                "/usr/bin/ssh",
+            _ = runSSH(
                 args: [
                     "-o", "ConnectTimeout=3",
                     "-o", "BatchMode=yes",
@@ -723,13 +721,8 @@ final class DockerService: ObservableObject, @unchecked Sendable {
     /// (a `docker ps` on a busy host can exceed the ~64KB pipe buffer, which
     /// deadlocks the `waitUntilExit()`-then-read shape) and bounds the wait, so a
     /// wedged `ssh` can't pin this utility thread forever.
-    private static func runProcess(
-        _ executable: String, args: [String]
-    ) -> String? {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: executable)
-        process.arguments = args
-        guard let result = RemoteExplorer.runProcessCapturing(process, timeout: 10),
+    private static func runSSH(args: [String]) -> String? {
+        guard let result = RemoteExplorer.runProcessCapturing(RemoteExplorer.sshProcess(args), timeout: 10),
             result.status == 0
         else { return nil }
         return result.stdout

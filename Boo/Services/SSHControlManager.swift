@@ -155,27 +155,32 @@ final class SSHControlManager: @unchecked Sendable {
         return exited
     }
 
-    /// Whether the master backing this alias is still alive.
-    /// Managed: probe Boo's own socket with `ssh -O check`.
-    /// Unmanaged: we don't own (or know) the user's socket path, but a stale
-    /// `.ready` user master still leaves the next command failing with a
-    /// `Broken pipe`. So probe with a cheap real command — if the user's
-    /// ControlMaster is dead, this returns false and the caller re-establishes.
+    /// Whether the master backing this alias is still alive, via a local `ssh -O check`.
+    /// Managed: Boo's own socket. Unmanaged: the user's master at the ControlPath from
+    /// their ssh config; a dead one would leave the next command failing with
+    /// `Broken pipe`, so the caller re-establishes.
     private static func isMasterAlive(alias: String, isManaged: Bool) -> Bool {
-        guard isManaged else {
-            return Self.runSSHCommand([
-                "-o", "BatchMode=yes",
-                "-o", "ConnectTimeout=2",
-                alias, "true"
-            ])
-        }
+        guard isManaged else { return userMasterAlive(alias) }
         let socketPath = Self.socketFilePath(for: alias)
         guard FileManager.default.fileExists(atPath: socketPath) else { return false }
         return Self.runSSHCommand(["-o", "ControlPath=\(socketPath)", "-O", "check", alias])
     }
 
-    /// Ensure a background SSH master connection exists for the given alias.
-    /// Calls completion(true) on success, completion(false) on failure. Always on main thread.
+    private static func userMasterAlive(_ alias: String) -> Bool {
+        runSSHCommand(["-O", "check", alias], timeout: 5)
+    }
+
+    /// Parks `completion` when the alias is already connecting; otherwise marks it
+    /// connecting and returns true. Must be called on `queue`.
+    private func beginConnecting(_ alias: String, completion: @escaping @Sendable (Bool) -> Void) -> Bool {
+        if connection(for: alias)?.state == .connecting {
+            waiters[alias, default: []].append(completion)
+            return false
+        }
+        setConnection(ManagedConnection(state: .connecting, isManaged: false), for: alias)
+        return true
+    }
+
     func ensureConnection(alias: String, completion: @escaping @Sendable (Bool) -> Void) {
         queue.async { [weak self] in
             guard let self else { return }
@@ -207,25 +212,23 @@ final class SSHControlManager: @unchecked Sendable {
                 // Fall through to re-establish.
                 case .connecting:
                     // Another caller is already establishing this master. Queue up
-                    // instead of reporting failure: the connection is very likely
-                    // about to succeed, and a spurious `false` makes callers burn a
-                    // retry (or surface an error) for a connection that works.
-                    self.waiters[alias, default: []].append(completion)
-                    return
+                    // instead of reporting failure (below): the connection is very
+                    // likely about to succeed, and a spurious `false` makes callers
+                    // burn a retry (or surface an error) for a connection that works.
+                    break
                 case .failed:
                     break  // Retry
                 }
             }
 
-            self.setConnection(ManagedConnection(state: .connecting, isManaged: false), for: alias)
+            guard self.beginConnecting(alias, completion: completion) else { return }
 
-            // Step 1: Quick probe — does the user's own ControlMaster work?
-            let probeResult = Self.runSSHCommand([
-                "-o", "BatchMode=yes",
-                "-o", "ConnectTimeout=2",
-                alias, "echo", "ok"
-            ])
-            if probeResult {
+            // Step 1: Is the user's own ControlMaster (ssh config ControlPath) running?
+            // `-O check` is local and only succeeds for a live master. A plain
+            // `ssh alias echo ok` also succeeded for key auth without any master,
+            // which marked the alias "unmanaged" and made every later listing pay a
+            // full SSH handshake.
+            if Self.userMasterAlive(alias) {
                 debugLog("[SSHControl] Probe succeeded for \(alias) — user's ControlMaster works")
                 self.setConnection(
                     ManagedConnection(state: .ready, isManaged: false, lastVerified: booUptime()),
@@ -235,10 +238,55 @@ final class SSHControlManager: @unchecked Sendable {
             }
 
             // Step 2: Spawn our own master
-            let socketPath = Self.socketFilePath(for: alias)
-            debugLog("[SSHControl] Spawning master for \(alias) at \(socketPath)")
+            self.record(Self.spawnManagedMaster(alias: alias, interactive: false), alias: alias, completion: completion)
+        }
+    }
 
-            let spawnResult = Self.runSSHCommand([
+    /// Opens a master for `alias` that may prompt: password, key passphrase or 2FA
+    /// codes go through a macOS dialog (SSH_ASKPASS). For hosts the BatchMode connect
+    /// can't reach; the file explorer's "Connect…" button calls this.
+    func connectInteractively(alias: String, completion: @escaping @Sendable (Bool) -> Void) {
+        queue.async { [weak self] in
+            guard let self, self.beginConnecting(alias, completion: completion) else { return }
+            // A half-dead master from an earlier attempt would make `ControlMaster=auto`
+            // reuse it instead of authenticating again.
+            Self.killMaster(alias: alias)
+            // Prompts can wait on the user for minutes: keep the serial queue free
+            // (teardownAll on quit runs on it). The alias stays `.connecting` meanwhile.
+            DispatchQueue.global(qos: .userInitiated).async {
+                let result = Self.spawnManagedMaster(alias: alias, interactive: true)
+                self.queue.async { self.record(result, alias: alias, completion: completion) }
+            }
+        }
+    }
+
+    /// Stores a spawn result and resolves everyone waiting on the alias.
+    /// Must be called on `queue`.
+    private func record(
+        _ result: ManagedConnection, alias: String, completion: @escaping @Sendable (Bool) -> Void
+    ) {
+        setConnection(result, for: alias)
+        finish(alias: alias, success: result.state == .ready, completion: completion)
+    }
+
+    /// Spawns and verifies Boo's own master for `alias`. Blocks for the ssh run.
+    private static func spawnManagedMaster(alias: String, interactive: Bool) -> ManagedConnection {
+        let socketPath = Self.socketFilePath(for: alias)
+        debugLog("[SSHControl] Spawning \(interactive ? "interactive " : "")master for \(alias) at \(socketPath)")
+
+        var environment: [String: String]?
+        if interactive {
+            guard let askpass = Self.installAskpass() else {
+                return ManagedConnection(state: .failed, isManaged: false)
+            }
+            var env = LoginShellEnvironment.sshEnvironment()
+            env["SSH_ASKPASS"] = askpass
+            env["SSH_ASKPASS_REQUIRE"] = "force"
+            env["DISPLAY"] = env["DISPLAY"] ?? ":0"
+            environment = env
+        }
+        let spawnResult = Self.runSSHCommand(
+            [
                 "-o", "ControlMaster=auto",
                 "-o", "ControlPath=\(socketPath)",
                 // Finite persist so an idle/orphaned master gets reaped instead of
@@ -249,41 +297,32 @@ final class SSHControlManager: @unchecked Sendable {
                 // that future commands hang/fail against.
                 "-o", "ServerAliveInterval=15",
                 "-o", "ServerAliveCountMax=3",
-                "-o", "BatchMode=yes",
-                "-o", "ConnectTimeout=5",
+                "-o", "BatchMode=\(interactive ? "no" : "yes")",
+                "-o", "ConnectTimeout=\(interactive ? 10 : 5)",
                 "-o", "StrictHostKeyChecking=accept-new",
                 "-N", "-f",
                 alias
-            ])
+            ],
+            // Prompts wait on the user.
+            timeout: interactive ? 180 : 10,
+            environment: environment)
 
-            guard spawnResult else {
-                debugLog("[SSHControl] Master spawn failed for \(alias)")
-                // No master exists — recording it as managed would make a later
-                // teardown try to kill and unlink a socket Boo never created.
-                self.setConnection(ManagedConnection(state: .failed, isManaged: false), for: alias)
-                self.finish(alias: alias, success: false, completion: completion)
-                return
-            }
-
-            // Step 3: Verify with -O check
-            let checkResult = Self.runSSHCommand([
-                "-o", "ControlPath=\(socketPath)",
-                "-O", "check",
-                alias
-            ])
-
-            if checkResult {
-                debugLog("[SSHControl] Master verified for \(alias)")
-                self.setConnection(
-                    ManagedConnection(state: .ready, isManaged: true, lastVerified: booUptime()),
-                    for: alias)
-                self.finish(alias: alias, success: true, completion: completion)
-            } else {
-                debugLog("[SSHControl] Master check failed for \(alias)")
-                self.setConnection(ManagedConnection(state: .failed, isManaged: true), for: alias)
-                self.finish(alias: alias, success: false, completion: completion)
-            }
+        guard spawnResult else {
+            debugLog("[SSHControl] Master spawn failed for \(alias)")
+            // No master exists — recording it as managed would make a later
+            // teardown try to kill and unlink a socket Boo never created.
+            return ManagedConnection(state: .failed, isManaged: false)
         }
+
+        // Step 3: Verify with -O check
+        let checkResult = Self.runSSHCommand(["-o", "ControlPath=\(socketPath)", "-O", "check", alias])
+
+        if checkResult {
+            debugLog("[SSHControl] Master verified for \(alias)")
+            return ManagedConnection(state: .ready, isManaged: true, lastVerified: booUptime())
+        }
+        debugLog("[SSHControl] Master check failed for \(alias)")
+        return ManagedConnection(state: .failed, isManaged: true)
     }
 
     /// Register `owner` as relying on `alias`, establishing the master if needed.
@@ -423,10 +462,17 @@ final class SSHControlManager: @unchecked Sendable {
     /// BatchMode) would otherwise block this serial queue forever — and
     /// `socketPath(for:)` / `connectionState(for:)` are `queue.sync`, called from
     /// the main thread, so that becomes a UI hang.
-    private static func runSSHCommand(_ args: [String], timeout: TimeInterval = 10) -> Bool {
+    private static func runSSHCommand(
+        _ args: [String], timeout: TimeInterval = 10, environment: [String: String]? = nil
+    ) -> Bool {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/ssh")
         process.arguments = args
+        // The login shell's SSH_AUTH_SOCK (1Password, Secretive, gpg-agent), not launchd's.
+        // `-O` control commands only talk to the local socket: no need to wait for it.
+        process.environment =
+            environment
+            ?? (args.contains("-O") ? ProcessInfo.processInfo.environment : LoginShellEnvironment.sshEnvironment())
         process.standardOutput = FileHandle.nullDevice
         process.standardError = FileHandle.nullDevice
         process.standardInput = FileHandle.nullDevice
@@ -436,6 +482,42 @@ final class SSHControlManager: @unchecked Sendable {
             return false
         }
         return true
+    }
+
+    /// SSH_ASKPASS helper: shows ssh's prompt (password, passphrase, 2FA code,
+    /// confirmation) as a macOS dialog. Cancel exits non-zero, which ssh treats as
+    /// a refused prompt. Rewritten on each use so an update reaches it.
+    static func installAskpass() -> String? {
+        let path = (BooPaths.configDir as NSString).appendingPathComponent("ssh-askpass")
+        let script = """
+            #!/bin/sh
+            # Written by Boo: SSH_ASKPASS helper for the remote file explorer.
+            prompt="${1:-Password:}"
+            case "$SSH_ASKPASS_PROMPT" in
+            confirm)
+                exec /usr/bin/osascript -e 'on run argv' \\
+                    -e 'display dialog (item 1 of argv) with title "Boo SSH" buttons {"Cancel", "OK"} default button "OK"' \\
+                    -e 'return ""' -e 'end run' "$prompt" >/dev/null ;;
+            none)
+                exec /usr/bin/osascript -e 'on run argv' \\
+                    -e 'display dialog (item 1 of argv) with title "Boo SSH" buttons {"OK"} default button "OK"' \\
+                    -e 'return ""' -e 'end run' "$prompt" >/dev/null ;;
+            esac
+            hidden=true
+            case "$prompt" in *"(yes/no"*) hidden=false ;; esac
+            exec /usr/bin/osascript -e 'on run argv' \\
+                -e 'set r to display dialog (item 1 of argv) default answer "" hidden answer ((item 2 of argv) is "true") with title "Boo SSH" buttons {"Cancel", "OK"} default button "OK"' \\
+                -e 'return text returned of r' -e 'end run' "$prompt" "$hidden"
+
+            """
+        do {
+            try script.write(toFile: path, atomically: true, encoding: .utf8)
+            try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: path)
+            return path
+        } catch {
+            debugLog("[SSHControl] askpass install failed: \(error)")
+            return nil
+        }
     }
 
     #if DEBUG

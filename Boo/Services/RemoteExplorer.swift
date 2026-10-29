@@ -465,12 +465,20 @@ final class RemoteExplorer: @unchecked Sendable {
         return nil
     }
 
-    private static func runSSH(host: String, command: String, extraArgs: [String] = []) -> String? {
-        if disableRealSSH { return nil }
+    /// An unlaunched `/usr/bin/ssh` with the login shell's agent socket
+    /// (1Password, Secretive, gpg-agent), not launchd's.
+    static func sshProcess(_ args: [String]) -> Process {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/ssh")
+        process.arguments = args
+        process.environment = LoginShellEnvironment.sshEnvironment()
+        return process
+    }
+
+    private static func runSSH(host: String, command: String, extraArgs: [String] = []) -> String? {
+        if disableRealSSH { return nil }
         // -n: no stdin — prevents password prompts from blocking.
-        process.arguments = ["-n"] + sshArguments(host: host, command: command, extraArgs: extraArgs)
+        let process = sshProcess(["-n"] + sshArguments(host: host, command: command, extraArgs: extraArgs))
 
         guard let result = runProcessCapturing(process) else { return nil }
         guard result.status == 0 else {
