@@ -79,7 +79,7 @@ final class KubeModelsTests: XCTestCase {
 
     func testDeploymentAndServiceParse() throws {
         let deploy = try XCTUnwrap(
-            KubeDeployment.parse(
+            KubeWorkload.parse(
                 object(#"{"metadata": {"name": "web"}, "spec": {"replicas": 3}, "status": {"readyReplicas": 2}}"#)))
         XCTAssertEqual(deploy.replicas, 3)
         XCTAssertEqual(deploy.ready, 2)
@@ -117,28 +117,107 @@ final class KubeModelsTests: XCTestCase {
     }
 
     func testCollectionAppliesEvents() {
-        var pods = KubeCollection<KubeDeployment>()
-        pods.apply(.added, KubeDeployment(name: "b", replicas: 1, ready: 0, updated: 0))
-        pods.apply(.added, KubeDeployment(name: "a", replicas: 1, ready: 0, updated: 0))
-        pods.apply(.modified, KubeDeployment(name: "b", replicas: 2, ready: 2, updated: 2))
+        var pods = KubeCollection<KubeWorkload>()
+        pods.apply(.added, KubeWorkload(name: "b", replicas: 1, ready: 0, updated: 0))
+        pods.apply(.added, KubeWorkload(name: "a", replicas: 1, ready: 0, updated: 0))
+        pods.apply(.modified, KubeWorkload(name: "b", replicas: 2, ready: 2, updated: 2))
         XCTAssertEqual(pods.items.map(\.name), ["a", "b"])
         XCTAssertEqual(pods.items[1].ready, 2)
-        pods.apply(.deleted, KubeDeployment(name: "a", replicas: 1, ready: 0, updated: 0))
+        pods.apply(.deleted, KubeWorkload(name: "a", replicas: 1, ready: 0, updated: 0))
         XCTAssertEqual(pods.items.map(\.name), ["b"])
     }
 
     func testCommands() {
         XCTAssertEqual(
             KubeCommand.logs("deployment/web", container: nil, context: "prod", namespace: "shop"),
-            "kubectl --context prod -n shop logs -f --tail 200 deployment/web --all-containers")
+            "kubectl --context prod -n shop logs -f --tail 200 deployment/web --all-containers --prefix")
         XCTAssertEqual(
-            KubeCommand.portForward("svc/web", port: 80, context: "prod", namespace: "shop"),
+            KubeCommand.portForward("svc/web", port: 80, localPort: 8080, context: "prod", namespace: "shop"),
             "kubectl --context prod -n shop port-forward svc/web 8080:80")
         XCTAssertEqual(
-            KubeCommand.portForward("pod/x", port: 3000, context: nil, namespace: nil),
+            KubeCommand.portForward("pod/x", port: 3000, localPort: 3000, context: nil, namespace: nil),
             "kubectl port-forward pod/x 3000:3000")
         XCTAssertTrue(
             KubeCommand.exec("api-1", container: "api", context: "a b", namespace: "n")
                 .hasPrefix("kubectl --context 'a b' -n n exec -it api-1 -c api -- sh -c"))
+    }
+
+    func testWorkloadJobCronJobIngressParse() throws {
+        let daemonset = try XCTUnwrap(
+            KubeWorkload.parse(
+                object(
+                    #"{"metadata": {"name": "ds"}, "status": {"desiredNumberScheduled": 3, "numberReady": 2}}"#)))
+        XCTAssertEqual(daemonset.replicas, 3)
+        XCTAssertEqual(daemonset.ready, 2)
+        XCTAssertFalse(daemonset.healthy)
+
+        let failed = try XCTUnwrap(
+            KubeJob.parse(
+                object(
+                    """
+                    {"metadata": {"name": "j"}, "spec": {"completions": 1},
+                     "status": {"conditions": [{"type": "Failed", "status": "True"}]}}
+                    """)))
+        XCTAssertEqual(failed.health, .failed)
+        let done = try XCTUnwrap(
+            KubeJob.parse(object(#"{"metadata": {"name": "j"}, "status": {"succeeded": 1}}"#)))
+        XCTAssertEqual(done.health, .complete)
+        let running = try XCTUnwrap(
+            KubeJob.parse(object(#"{"metadata": {"name": "j"}, "status": {"active": 1}}"#)))
+        XCTAssertEqual(running.health, .running)
+
+        let cron = try XCTUnwrap(
+            KubeCronJob.parse(
+                object(
+                    """
+                    {"metadata": {"name": "c"}, "spec": {"schedule": "*/5 * * * *", "suspend": true},
+                     "status": {"active": [{"name": "x"}], "lastScheduleTime": "2026-10-20T10:00:00Z"}}
+                    """)))
+        XCTAssertEqual(cron.schedule, "*/5 * * * *")
+        XCTAssertTrue(cron.suspended)
+        XCTAssertEqual(cron.active, 1)
+        XCTAssertNotNil(cron.lastSchedule)
+
+        let ingress = try XCTUnwrap(
+            KubeIngress.parse(
+                object(
+                    """
+                    {"metadata": {"name": "i"}, "spec": {"tls": [{"hosts": ["a.example"]}],
+                     "rules": [{"host": "a.example"}, {"host": "b.example"}, {"host": "a.example"}]}}
+                    """)))
+        XCTAssertEqual(ingress.hosts, ["a.example", "b.example"])
+        XCTAssertEqual(ingress.url(for: "a.example")?.absoluteString, "https://a.example")
+    }
+
+    func testCollectionStaleRelist() {
+        var items = KubeCollection<KubeWorkload>()
+        items.apply(.added, KubeWorkload(name: "a", replicas: 1, ready: 1, updated: 1))
+        items.apply(.added, KubeWorkload(name: "b", replicas: 1, ready: 1, updated: 1))
+        items.markStale()
+        // Rows stay visible while the new watch re-lists.
+        XCTAssertEqual(items.items.map(\.name), ["a", "b"])
+        items.apply(.added, KubeWorkload(name: "b", replicas: 1, ready: 1, updated: 1))
+        items.dropStale()
+        XCTAssertEqual(items.items.map(\.name), ["b"])
+        XCTAssertTrue(items.stale.isEmpty)
+    }
+
+    func testFreeLocalPortSkipsTakenPorts() {
+        XCTAssertEqual(KubeCommand.freeLocalPort(for: 80, isFree: { $0 != 8080 && $0 != 8081 }), 8082)
+        XCTAssertEqual(KubeCommand.freeLocalPort(for: 3000, isFree: { _ in true }), 3000)
+        XCTAssertEqual(
+            KubeCommand.portForward("svc/web", port: 80, localPort: 8082, context: nil, namespace: nil),
+            "kubectl port-forward svc/web 8082:80")
+        XCTAssertEqual(
+            KubeCommand.logs("pod/x", container: nil, previous: true, context: nil, namespace: nil),
+            "kubectl logs --previous --tail 500 pod/x")
+    }
+
+    func testManualJobNameFitsDNSLabel() {
+        let date = Date(timeIntervalSince1970: 1_800_000_000)
+        XCTAssertEqual(KubeStore.manualJobName(for: "backup", date: date), "backup-manual-1800000000")
+        let long = KubeStore.manualJobName(for: String(repeating: "x", count: 70), date: date)
+        XCTAssertEqual(long.count, 63)
+        XCTAssertTrue(long.hasSuffix("-manual-1800000000"))
     }
 }

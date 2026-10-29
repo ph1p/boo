@@ -14,10 +14,6 @@ struct KubePanelView: View {
             muted: Color(nsColor: theme.chromeMuted),
             accent: Color(nsColor: theme.accentColor))
         let query = filter.trimmingCharacters(in: .whitespaces).lowercased()
-        let pods = store.pods.items.filter { query.isEmpty || $0.name.lowercased().contains(query) }
-        let deployments = store.deployments.items.filter { query.isEmpty || $0.name.lowercased().contains(query) }
-        let services = store.services.items.filter { query.isEmpty || $0.name.lowercased().contains(query) }
-
         VStack(alignment: .leading, spacing: 0) {
             header(colors: colors, guarded: store.isGuardedContext(store.context))
 
@@ -58,12 +54,9 @@ struct KubePanelView: View {
             } else {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 2) {
-                        sectionTitle("Pods", count: pods.count, colors: colors)
-                        ForEach(pods) { KubePodRow(pod: $0, fontScale: fontScale, colors: colors) }
-                        sectionTitle("Deployments", count: deployments.count, colors: colors)
-                        ForEach(deployments) { KubeDeploymentRow(deployment: $0, fontScale: fontScale, colors: colors) }
-                        sectionTitle("Services", count: services.count, colors: colors)
-                        ForEach(services) { KubeServiceRow(service: $0, fontScale: fontScale, colors: colors) }
+                        ForEach(KubeKind.allCases, id: \.self) { kind in
+                            section(kind, query: query, colors: colors)
+                        }
                     }
                     .padding(.bottom, 20)
                 }
@@ -102,6 +95,16 @@ struct KubePanelView: View {
             }
             .help("Switch namespace of the current context")
             Spacer()
+            Button {
+                store.showEvents()
+            } label: {
+                Image(systemName: "list.bullet.rectangle")
+                    .font(.system(size: 10))
+                    .foregroundStyle(colors.muted)
+            }
+            .buttonStyle(.plain)
+            .help("Watch events of this namespace in a new tab")
+            .accessibilityLabel("Watch events")
         }
         .menuStyle(.borderlessButton)
         .fixedSize(horizontal: false, vertical: true)
@@ -112,13 +115,103 @@ struct KubePanelView: View {
         .disabled(store.context == nil)
     }
 
-    private func sectionTitle(_ title: String, count: Int, colors: KubeRowColors) -> some View {
-        Text("\(title.uppercased())  \(count)")
+    @ViewBuilder
+    private func section(_ kind: KubeKind, query: String, colors: KubeRowColors) -> some View {
+        switch kind {
+        case .pods:
+            kindSection(
+                kind, store.pods.items, query: query, colors: colors, fields: { [$0.name, $0.status] },
+                failing: { $0.health == .failing }
+            ) { KubePodRow(pod: $0, fontScale: fontScale, colors: colors) }
+        case .deployments, .statefulsets, .daemonsets:
+            let all =
+                kind == .deployments
+                ? store.deployments.items : kind == .statefulsets ? store.statefulsets.items : store.daemonsets.items
+            kindSection(kind, all, query: query, colors: colors, fields: { [$0.name] }, failing: { !$0.healthy }) {
+                KubeWorkloadRow(kind: kind, workload: $0, fontScale: fontScale, colors: colors)
+            }
+        case .jobs:
+            kindSection(
+                kind, store.jobs.items, query: query, colors: colors, fields: { [$0.name] },
+                failing: { $0.health == .failed }
+            ) { KubeJobRow(job: $0, fontScale: fontScale, colors: colors) }
+        case .cronjobs:
+            kindSection(kind, store.cronjobs.items, query: query, colors: colors, fields: { [$0.name] }) {
+                KubeCronJobRow(cronJob: $0, fontScale: fontScale, colors: colors)
+            }
+        case .services:
+            kindSection(kind, store.services.items, query: query, colors: colors, fields: { [$0.name, $0.type] }) {
+                KubeServiceRow(service: $0, fontScale: fontScale, colors: colors)
+            }
+        case .ingresses:
+            kindSection(kind, store.ingresses.items, query: query, colors: colors, fields: { [$0.name] + $0.hosts }) {
+                KubeIngressRow(ingress: $0, fontScale: fontScale, colors: colors)
+            }
+        }
+    }
+
+    /// Title with counts, then the rows when expanded. The filter matches names and
+    /// status words ("crash", "pending", "nodeport").
+    @ViewBuilder
+    private func kindSection<Item: Identifiable, Row: View>(
+        _ kind: KubeKind, _ all: [Item], query: String, colors: KubeRowColors,
+        fields: (Item) -> [String], failing: (Item) -> Bool = { _ in false },
+        @ViewBuilder row: @escaping (Item) -> Row
+    ) -> some View {
+        let items =
+            query.isEmpty
+            ? all : all.filter { fields($0).contains { $0.range(of: query, options: .caseInsensitive) != nil } }
+        sectionTitle(kind, count: items.count, failing: items.count(where: failing), colors: colors)
+        if store.isExpanded(kind) {
+            sectionError(kind)
+            ForEach(items, content: row)
+        }
+    }
+
+    @ViewBuilder
+    private func sectionError(_ kind: KubeKind) -> some View {
+        if let message = store.errors[kind] {
+            Text(message)
+                .font(fontScale.font(.xs))
+                .foregroundStyle(Color(nsColor: .systemRed).opacity(0.85))
+                .lineLimit(2)
+                .textSelection(.enabled)
+                .padding(.horizontal, 12)
+        }
+    }
+
+    /// Collapsed sections show no count: they aren't watched, so it would be stale.
+    private func sectionTitle(_ kind: KubeKind, count: Int, failing: Int, colors: KubeRowColors) -> some View {
+        let open = store.isExpanded(kind)
+        return Button {
+            store.toggle(kind)
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: open ? "chevron.down" : "chevron.right")
+                    .font(.system(size: 7, weight: .bold))
+                    .frame(width: 8)
+                Text(kind.title.uppercased())
+                if open {
+                    Text("\(count)")
+                    if failing > 0 {
+                        Text("· \(failing) unhealthy").foregroundStyle(Color(nsColor: .systemRed).opacity(0.85))
+                    }
+                }
+                Spacer()
+            }
             .font(.system(size: 9.5, weight: .semibold))
             .foregroundStyle(colors.muted.opacity(0.8))
             .tracking(0.6)
             .padding(.horizontal, 12)
             .padding(.top, 6)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(
+            open
+                ? "Collapse (stops watching \(kind.title.lowercased()))" : "Expand and watch \(kind.title.lowercased())"
+        )
+        .accessibilityLabel("\(kind.title), \(open ? "expanded, \(count) items" : "collapsed")")
     }
 }
 
@@ -228,41 +321,183 @@ private struct KubePodRow: View {
                     }
                 }
             }
-            Button("Describe") { store.describe("pod/" + pod.name) }
-            Button("Copy Name") { PluginActions.copyToPasteboard(pod.name) }
+            if pod.restarts > 0 {
+                if pod.containers.count > 1 {
+                    Menu("Previous Logs") {
+                        ForEach(pod.containers, id: \.self) { c in
+                            Button(c) { store.logs(pod.name, container: c, previous: true) }
+                        }
+                    }
+                } else {
+                    Button("Previous Logs") { store.logs(pod.name, previous: true) }
+                }
+            }
+            KubeInspectItems(target: "pod/" + pod.name, name: pod.name)
             Divider()
-            Button("Delete Pod…") { store.deletePod(pod) }
+            Button("Delete Pod…") { store.delete(.pods, name: pod.name, info: "A controller may recreate it.") }
         }
     }
 }
 
-private struct KubeDeploymentRow: View {
-    let deployment: KubeDeployment
+/// Describe / YAML / Edit / Copy Name, shared by every row's context menu.
+private struct KubeInspectItems: View {
+    let target: String
+    let name: String
+    private var store: KubeStore { .shared }
+
+    var body: some View {
+        Button("Describe") { store.describe(target) }
+        Button("View YAML") { store.showYAML(target) }
+        Button("Edit…") { store.edit(target) }
+        Button("Copy Name") { PluginActions.copyToPasteboard(name) }
+    }
+}
+
+private struct KubeWorkloadRow: View {
+    let kind: KubeKind
+    let workload: KubeWorkload
+    let fontScale: SidebarFontScale
+    let colors: KubeRowColors
+    private var store: KubeStore { .shared }
+    private var target: String { kind.resource + "/" + workload.name }
+
+    private var icon: String {
+        switch kind {
+        case .statefulsets: "cylinder.split.1x2"
+        case .daemonsets: "square.grid.3x1.below.line.grid.1x2"
+        default: "square.stack.3d.up"
+        }
+    }
+
+    var body: some View {
+        let healthy = workload.healthy
+        let rolling = workload.updated < workload.replicas
+        KubeRow(
+            icon: icon, iconColor: healthy ? colors.accent : Color(nsColor: .systemOrange),
+            title: workload.name,
+            subtitle: rolling && workload.replicas > 0 ? "updating \(workload.updated)/\(workload.replicas)" : nil,
+            fontScale: fontScale, colors: colors
+        ) {
+            Text("\(workload.ready)/\(workload.replicas)")
+                .font(fontScale.font(.xs).monospacedDigit())
+                .foregroundStyle(healthy ? colors.muted.opacity(0.7) : Color(nsColor: .systemOrange))
+        }
+        .onTapGesture(count: 2) { store.logs(target) }
+        .help("Double-click: follow logs · right-click: actions")
+        .accessibilityAddTraits(.isButton)
+        .accessibilityLabel("\(kind.resource) \(workload.name), \(workload.ready) of \(workload.replicas) ready")
+        .contextMenu {
+            Button("Follow Logs") { store.logs(target) }
+            KubeInspectItems(target: target, name: workload.name)
+            Divider()
+            if kind != .daemonsets {
+                Button("Scale…") { store.scale(kind, workload) }
+            }
+            Button("Rollout Restart…") { store.rolloutRestart(kind, workload) }
+        }
+    }
+}
+
+private struct KubeJobRow: View {
+    let job: KubeJob
     let fontScale: SidebarFontScale
     let colors: KubeRowColors
     private var store: KubeStore { .shared }
 
     var body: some View {
-        let healthy = deployment.ready == deployment.replicas
-        KubeRow(
-            icon: "square.stack.3d.up", iconColor: healthy ? colors.accent : Color(nsColor: .systemOrange),
-            title: deployment.name, subtitle: nil, fontScale: fontScale, colors: colors
-        ) {
-            Text("\(deployment.ready)/\(deployment.replicas)")
-                .font(fontScale.font(.xs).monospacedDigit())
-                .foregroundStyle(healthy ? colors.muted.opacity(0.7) : Color(nsColor: .systemOrange))
+        let (icon, color): (String, Color) =
+            switch job.health {
+            case .running: ("circle.dashed", Color(nsColor: .systemBlue))
+            case .complete: ("checkmark.circle", colors.muted.opacity(0.6))
+            case .failed: ("xmark.circle", Color(nsColor: .systemRed))
+            }
+        let subtitle =
+            "\(job.succeeded)/\(job.completions) done" + (job.active > 0 ? " · \(job.active) active" : "")
+            + (job.failed > 0 ? " · \(job.failed) failed" : "")
+        KubeRow(icon: icon, iconColor: color, title: job.name, subtitle: subtitle, fontScale: fontScale, colors: colors)
+        {
+            if let created = job.createdAt {
+                Text(formatCompactAge(created))
+                    .font(fontScale.font(.xs).monospacedDigit())
+                    .foregroundStyle(colors.muted.opacity(0.6))
+            }
         }
-        .onTapGesture(count: 2) { store.logs("deployment/" + deployment.name) }
+        .onTapGesture(count: 2) { store.logs("job/" + job.name) }
         .help("Double-click: follow logs · right-click: actions")
         .accessibilityAddTraits(.isButton)
-        .accessibilityLabel("Deployment \(deployment.name), \(deployment.ready) of \(deployment.replicas) ready")
+        .accessibilityLabel("Job \(job.name), \(subtitle)")
         .contextMenu {
-            Button("Follow Logs") { store.logs("deployment/" + deployment.name) }
-            Button("Describe") { store.describe("deployment/" + deployment.name) }
-            Button("Copy Name") { PluginActions.copyToPasteboard(deployment.name) }
+            Button("Follow Logs") { store.logs("job/" + job.name) }
+            KubeInspectItems(target: "job/" + job.name, name: job.name)
             Divider()
-            Button("Scale…") { store.scale(deployment) }
-            Button("Rollout Restart…") { store.rolloutRestart(deployment) }
+            Button("Delete Job…") { store.delete(.jobs, name: job.name, info: "Its pods are deleted too.") }
+        }
+    }
+}
+
+private struct KubeCronJobRow: View {
+    let cronJob: KubeCronJob
+    let fontScale: SidebarFontScale
+    let colors: KubeRowColors
+    private var store: KubeStore { .shared }
+
+    var body: some View {
+        let subtitle =
+            cronJob.schedule + (cronJob.suspended ? " · suspended" : "")
+            + (cronJob.active > 0 ? " · \(cronJob.active) running" : "")
+        KubeRow(
+            icon: "clock.arrow.circlepath",
+            iconColor: cronJob.suspended ? colors.muted.opacity(0.5) : colors.accent,
+            title: cronJob.name, subtitle: subtitle, fontScale: fontScale, colors: colors
+        ) {
+            if let last = cronJob.lastSchedule {
+                Text(formatCompactAge(last))
+                    .font(fontScale.font(.xs).monospacedDigit())
+                    .foregroundStyle(colors.muted.opacity(0.6))
+                    .help("Last scheduled")
+            }
+        }
+        .help("Right-click: actions")
+        .accessibilityLabel("CronJob \(cronJob.name), \(subtitle)")
+        .contextMenu {
+            Button("Run Now…") { store.trigger(cronJob) }
+            Button(cronJob.suspended ? "Resume" : "Suspend") { store.setSuspended(cronJob, !cronJob.suspended) }
+            KubeInspectItems(target: "cronjob/" + cronJob.name, name: cronJob.name)
+        }
+    }
+}
+
+private struct KubeIngressRow: View {
+    let ingress: KubeIngress
+    let fontScale: SidebarFontScale
+    let colors: KubeRowColors
+    private var store: KubeStore { .shared }
+
+    var body: some View {
+        KubeRow(
+            icon: "globe", iconColor: colors.muted.opacity(0.7), title: ingress.name,
+            subtitle: ingress.hosts.isEmpty ? "no hosts" : ingress.hosts.joined(separator: ", "),
+            fontScale: fontScale, colors: colors
+        ) {
+            if ingress.tls {
+                Image(systemName: "lock.fill")
+                    .font(.system(size: 8))
+                    .foregroundStyle(colors.muted.opacity(0.6))
+                    .help("TLS")
+            }
+        }
+        .onTapGesture(count: 2) {
+            if let host = ingress.hosts.first { store.openIngress(ingress, host: host) }
+        }
+        .help("Double-click: open the first host in the browser · right-click: actions")
+        .accessibilityAddTraits(.isButton)
+        .accessibilityLabel("Ingress \(ingress.name), hosts \(ingress.hosts.joined(separator: ", "))")
+        .contextMenu {
+            ForEach(ingress.hosts, id: \.self) { host in
+                Button("Open \(host)") { store.openIngress(ingress, host: host) }
+            }
+            if !ingress.hosts.isEmpty { Divider() }
+            KubeInspectItems(target: "ingress/" + ingress.name, name: ingress.name)
         }
     }
 }
@@ -300,8 +535,7 @@ private struct KubeServiceRow: View {
                     }
                 }
             }
-            Button("Describe") { store.describe("svc/" + service.name) }
-            Button("Copy Name") { PluginActions.copyToPasteboard(service.name) }
+            KubeInspectItems(target: "svc/" + service.name, name: service.name)
         }
     }
 }

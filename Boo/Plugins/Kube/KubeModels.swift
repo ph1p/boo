@@ -29,7 +29,38 @@ struct KubeConfigInfo: Equatable, Sendable {
 }
 
 enum KubeKind: String, CaseIterable, Sendable {
-    case pods, deployments, services
+    case pods, deployments, statefulsets, daemonsets, jobs, cronjobs, services, ingresses
+
+    var title: String {
+        switch self {
+        case .pods: "Pods"
+        case .deployments: "Deployments"
+        case .statefulsets: "StatefulSets"
+        case .daemonsets: "DaemonSets"
+        case .jobs: "Jobs"
+        case .cronjobs: "CronJobs"
+        case .services: "Services"
+        case .ingresses: "Ingresses"
+        }
+    }
+
+    /// `kubectl` resource prefix for `kind/name` targets.
+    var resource: String {
+        switch self {
+        case .pods: "pod"
+        case .deployments: "deployment"
+        case .statefulsets: "statefulset"
+        case .daemonsets: "daemonset"
+        case .jobs: "job"
+        case .cronjobs: "cronjob"
+        case .services: "svc"
+        case .ingresses: "ingress"
+        }
+    }
+
+    /// Sections open (and watched) until the user collapses them; the rest start
+    /// collapsed so a fresh install runs three kubectl watches, not eight.
+    static let expandedByDefault: Set<KubeKind> = [.pods, .deployments, .services]
 }
 
 struct KubePod: Equatable, Identifiable, Sendable {
@@ -106,23 +137,114 @@ struct KubePod: Equatable, Identifiable, Sendable {
     }
 }
 
-struct KubeDeployment: Equatable, Identifiable, Sendable {
+/// A deployment, statefulset or daemonset: desired vs ready replicas.
+struct KubeWorkload: Equatable, Identifiable, Sendable {
     var name: String
     var replicas: Int
     var ready: Int
     var updated: Int
 
     var id: String { name }
+    var healthy: Bool { ready >= replicas }
 
-    static func parse(_ object: [String: Any]) -> KubeDeployment? {
+    static func parse(_ object: [String: Any]) -> KubeWorkload? {
         guard let meta = object["metadata"] as? [String: Any], let name = meta["name"] as? String else { return nil }
         let spec = object["spec"] as? [String: Any] ?? [:]
         let status = object["status"] as? [String: Any] ?? [:]
-        return KubeDeployment(
+        // Daemonsets have no spec.replicas: one pod per scheduled node.
+        if let desired = status["desiredNumberScheduled"] as? Int {
+            return KubeWorkload(
+                name: name, replicas: desired, ready: status["numberReady"] as? Int ?? 0,
+                updated: status["updatedNumberScheduled"] as? Int ?? 0)
+        }
+        return KubeWorkload(
             name: name,
             replicas: spec["replicas"] as? Int ?? 1,
             ready: status["readyReplicas"] as? Int ?? 0,
             updated: status["updatedReplicas"] as? Int ?? 0)
+    }
+}
+
+struct KubeJob: Equatable, Identifiable, Sendable {
+    var name: String
+    var completions: Int
+    var succeeded: Int
+    var failed: Int
+    var active: Int
+    var createdAt: Date?
+
+    var id: String { name }
+
+    enum Health { case running, complete, failed }
+
+    var health: Health {
+        if succeeded >= completions { return .complete }
+        if active == 0 && failed > 0 { return .failed }
+        return .running
+    }
+
+    static func parse(_ object: [String: Any]) -> KubeJob? {
+        guard let meta = object["metadata"] as? [String: Any], let name = meta["name"] as? String else { return nil }
+        let spec = object["spec"] as? [String: Any] ?? [:]
+        let status = object["status"] as? [String: Any] ?? [:]
+        let conditions = status["conditions"] as? [[String: Any]] ?? []
+        let failedCondition = conditions.contains {
+            $0["type"] as? String == "Failed" && $0["status"] as? String == "True"
+        }
+        return KubeJob(
+            name: name,
+            completions: spec["completions"] as? Int ?? 1,
+            succeeded: status["succeeded"] as? Int ?? 0,
+            failed: max(status["failed"] as? Int ?? 0, failedCondition ? 1 : 0),
+            active: status["active"] as? Int ?? 0,
+            createdAt: (meta["creationTimestamp"] as? String).flatMap(KubeTime.parse))
+    }
+}
+
+struct KubeCronJob: Equatable, Identifiable, Sendable {
+    var name: String
+    var schedule: String
+    var suspended: Bool
+    var active: Int
+    var lastSchedule: Date?
+
+    var id: String { name }
+
+    static func parse(_ object: [String: Any]) -> KubeCronJob? {
+        guard let meta = object["metadata"] as? [String: Any], let name = meta["name"] as? String else { return nil }
+        let spec = object["spec"] as? [String: Any] ?? [:]
+        let status = object["status"] as? [String: Any] ?? [:]
+        return KubeCronJob(
+            name: name,
+            schedule: spec["schedule"] as? String ?? "",
+            suspended: spec["suspend"] as? Bool ?? false,
+            active: (status["active"] as? [Any])?.count ?? 0,
+            lastSchedule: (status["lastScheduleTime"] as? String).flatMap(KubeTime.parse))
+    }
+}
+
+struct KubeIngress: Equatable, Identifiable, Sendable {
+    var name: String
+    var hosts: [String]
+    var tls: Bool
+
+    var id: String { name }
+
+    /// Browser URL for a host; https when the ingress terminates TLS for it.
+    func url(for host: String) -> URL? {
+        URL(string: (tls ? "https://" : "http://") + host)
+    }
+
+    static func parse(_ object: [String: Any]) -> KubeIngress? {
+        guard let meta = object["metadata"] as? [String: Any], let name = meta["name"] as? String else { return nil }
+        let spec = object["spec"] as? [String: Any] ?? [:]
+        var seen = Set<String>()
+        let hosts = (spec["rules"] as? [[String: Any]] ?? []).compactMap { $0["host"] as? String }
+            .filter { seen.insert($0).inserted }
+        return KubeIngress(
+            name: name,
+            hosts: hosts,
+            tls: !(spec["tls"] as? [Any] ?? []).isEmpty)
     }
 }
 
@@ -185,8 +307,12 @@ struct KubeWatchEvent {
 /// Resources by name for one kind, kept sorted for display.
 struct KubeCollection<Item: Identifiable & Equatable>: Equatable where Item.ID == String {
     private(set) var items: [Item] = []
+    /// Items from before a watch restart, not yet re-sent by the new watch.
+    /// Kept visible (no flicker) until `dropStale` removes what really went away.
+    private(set) var stale: Set<String> = []
 
     mutating func apply(_ kind: KubeWatchEvent.Kind, _ item: Item) {
+        stale.remove(item.id)
         let index = items.firstIndex { $0.id == item.id }
         switch (kind, index) {
         case (.deleted, let i?): items.remove(at: i)
@@ -199,7 +325,20 @@ struct KubeCollection<Item: Identifiable & Equatable>: Equatable where Item.ID =
         }
     }
 
-    mutating func removeAll() { items = [] }
+    /// A watch restarted and will re-list everything: mark what we have as stale.
+    mutating func markStale() { stale = Set(items.map(\.id)) }
+
+    /// Drops items the restarted watch didn't re-send (deleted while it was down).
+    mutating func dropStale() {
+        guard !stale.isEmpty else { return }
+        items.removeAll { stale.contains($0.id) }
+        stale = []
+    }
+
+    mutating func removeAll() {
+        items = []
+        stale = []
+    }
 }
 
 /// Splits a byte stream of concatenated JSON objects (what `kubectl -o json -w`
@@ -254,10 +393,16 @@ struct JSONObjectStreamSplitter {
 }
 
 enum KubeTime {
-    static func parse(_ string: String) -> Date? {
+    /// Pod events arrive by the hundred; building a formatter per parse showed up in profiles.
+    /// ISO8601DateFormatter is thread-safe.
+    nonisolated(unsafe) private static let formatter: ISO8601DateFormatter = {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime]
-        return formatter.date(from: string)
+        return formatter
+    }()
+
+    static func parse(_ string: String) -> Date? {
+        formatter.date(from: string)
     }
 }
 
@@ -276,18 +421,59 @@ enum KubeCommand {
             + " -- sh -c 'command -v bash >/dev/null && exec bash || exec sh'"
     }
 
-    static func logs(_ target: String, container: String?, context: String?, namespace: String?) -> String {
-        base(context: context, namespace: namespace) + " logs -f --tail 200 " + shellEscape(target)
-            + (container.map { " -c " + shellEscape($0) }
-                ?? (target.hasPrefix("deployment/") ? " --all-containers" : ""))
+    static func logs(
+        _ target: String, container: String?, previous: Bool = false, context: String?, namespace: String?
+    ) -> String {
+        let multiPod = ["deployment/", "statefulset/", "daemonset/", "job/"].contains { target.hasPrefix($0) }
+        return base(context: context, namespace: namespace) + " logs "
+            + (previous ? "--previous --tail 500 " : "-f --tail 200 ")
+            + shellEscape(target)
+            + (container.map { " -c " + shellEscape($0) } ?? (multiPod ? " --all-containers --prefix" : ""))
     }
 
     /// Local port matches the remote one unless that needs root.
     static func localPort(for remote: Int) -> Int { remote < 1024 ? 8000 + remote : remote }
 
-    static func portForward(_ target: String, port: Int, context: String?, namespace: String?) -> String {
+    /// `localPort(for:)` when it's free, else the next free port above it, so a second
+    /// forward (or a dev server already on 8080) doesn't make kubectl exit at once.
+    static func freeLocalPort(for remote: Int, isFree: (Int) -> Bool = KubeCommand.isPortFree) -> Int {
+        let preferred = localPort(for: remote)
+        return (preferred..<min(preferred + 100, 65536)).first(where: isFree) ?? preferred
+    }
+
+    static func isPortFree(_ port: Int) -> Bool {
+        let fd = socket(AF_INET, SOCK_STREAM, 0)
+        guard fd >= 0 else { return false }
+        defer { close(fd) }
+        var addr = sockaddr_in()
+        addr.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
+        addr.sin_family = sa_family_t(AF_INET)
+        addr.sin_port = in_port_t(UInt16(port).bigEndian)
+        addr.sin_addr.s_addr = inet_addr("127.0.0.1")
+        return withUnsafePointer(to: &addr) {
+            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                bind(fd, $0, socklen_t(MemoryLayout<sockaddr_in>.size))
+            }
+        } == 0
+    }
+
+    static func portForward(
+        _ target: String, port: Int, localPort: Int, context: String?, namespace: String?
+    ) -> String {
         base(context: context, namespace: namespace) + " port-forward " + shellEscape(target)
-            + " \(localPort(for: port)):\(port)"
+            + " \(localPort):\(port)"
+    }
+
+    static func yaml(_ target: String, context: String?, namespace: String?) -> String {
+        base(context: context, namespace: namespace) + " get " + shellEscape(target) + " -o yaml"
+    }
+
+    static func edit(_ target: String, context: String?, namespace: String?) -> String {
+        base(context: context, namespace: namespace) + " edit " + shellEscape(target)
+    }
+
+    static func events(context: String?, namespace: String?) -> String {
+        base(context: context, namespace: namespace) + " get events --sort-by=.lastTimestamp -w"
     }
 
     static func describe(_ target: String, context: String?, namespace: String?) -> String {

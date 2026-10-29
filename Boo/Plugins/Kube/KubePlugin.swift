@@ -1,8 +1,8 @@
 import SwiftUI
 
-/// Built-in Kubernetes plugin (off by default): pods, deployments and
-/// services of the current kube context/namespace, watched while the panel
-/// is active.
+/// Built-in Kubernetes plugin (off by default): pods, workloads, jobs,
+/// services and ingresses of the current kube context/namespace, watched
+/// while the panel is active (only the expanded sections).
 @MainActor
 final class KubePlugin: BooPluginProtocol {
     var actions: PluginActions?
@@ -15,7 +15,7 @@ final class KubePlugin: BooPluginProtocol {
         name: "Kubernetes",
         version: "1.0.0",
         icon: "helm",
-        description: "Pods, deployments and services of the current kube context",
+        description: "Pods, workloads, jobs, services and ingresses of the current kube context",
         when: "!process.ai",
         runtime: nil,
         capabilities: PluginManifest.Capabilities(statusBarSegment: false, sidebarTab: true),
