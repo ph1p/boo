@@ -2,9 +2,9 @@
 
 ## Command Palette
 
-**Cmd+Shift+P** opens a search over every menu command (plugin commands included), the workspaces and tabs of all windows, bookmarks and themes. Matching is fuzzy, and recent picks rank higher. Each command shows its shortcut; commands that can't run right now are dimmed.
+**Cmd+Shift+P** opens a search over every menu command (plugin commands included), the workspaces and tabs of all windows, bookmarks, SSH hosts, themes, profiles and [recipes](#recipes). Matching is fuzzy, and recent picks rank higher. Each command shows its shortcut; commands that can't run right now are dimmed.
 
-- **Prefixes** — `>` commands, `@` workspaces, `#` tabs, `:` themes
+- **Prefixes** — `>` commands, `@` workspaces, `@ssh` SSH hosts, `#` tabs, `:` themes and [profiles](/rules-and-profiles#profiles), `!` [command history](/history-and-sync#shell-history)
 - **Theme preview** — Highlighting a theme previews it live; **Esc** reverts
 - **Keys** — **Up**/**Down** move, **Return** runs, **Esc** closes
 
@@ -17,6 +17,7 @@ Open folders as workspaces with their own file tree using **Cmd+Shift+N** (home 
 - **Color by project** — With **Settings → Layout → Color new workspaces by project**, each new workspace gets a color derived from its repository (or folder). The same project gets the same color every time; a color you pick wins.
 - **Renaming** — Double-click a workspace pill to rename it, or use the right-click context menu
 - **Session persistence** — Workspace names, colors, split layouts, tab paths, and split pane ratios are saved to `~/.boo/session.json` and restored on next launch. Remote connections are not restored; tabs reopen at their local working directory.
+- **Scrollback restore** — On quit, each terminal's screen and scrollback (up to 2 MB per tab, colors included) is saved to `~/.boo/scrollback/` and replayed into the tab on next launch. The files are owner-only and deleted once replayed. Turn it off under Settings → General → Startup.
 - **Drag to switch workspace** — While dragging a tab, hover over a workspace pill for ~500 ms to spring-load into that workspace, then drop the tab onto any pane there.
 
 ## Recipes
@@ -92,17 +93,52 @@ Boo's shell integration marks each prompt (OSC 133), so the terminal knows where
 - **Right-click a command** — Copy Command, Copy Output, Re-run, or send its output to an agent
 - **Copy Last Output** — **Cmd+Opt+C** copies the output of the last command
 
+## Quick Select
+
+**Terminal → Quick Select** (**Cmd+Shift+Space**) puts a short label on every URL, file path, git hash, IP address, UUID and hex number on screen. Type a label to copy that text; type it with **Shift** to insert it at the prompt instead. **Delete** removes the last typed letter, and **Esc**, a click or scrolling cancels. Identical matches share a label, and the newest output gets the shortest labels.
+
 ## Session Recording
 
-**Terminal → Record Session** records the active terminal's output as an [asciicast v2](https://docs.asciinema.org/manual/asciicast/v2/) file. The tab shows a red dot while recording. Choose the item again to stop; Finder then shows the file in `~/.boo/recordings/`. Only output and resizes are recorded, never keystrokes. Closing the tab also stops the recording.
+**Terminal → Record Session**, or **Start Recording** in a pane's **⋯** corner menu, records the terminal's output as an [asciicast v2](https://docs.asciinema.org/manual/asciicast/v2/) file. **Record All Panes** in the same menu records every terminal pane at once. The tab shows a red dot while recording, and the pane gets a red frame. Choose the item again to stop. Only output and resizes are recorded, never keystrokes. Closing the tab also stops the recording.
 
-**Terminal → Open Recording…**, or opening any `.cast` file, plays it in a player tab:
+**Terminal → Add Recording Marker** (**Cmd+Shift+M**) drops a chapter mark into the running recording; the player can jump between marks.
 
-- **Play / Pause** — the button or **Space**; **Left** / **Right** jump 5 seconds
+### Recordings settings
+
+**Settings → Recordings**:
+
+| Setting | Default | Description |
+| --- | --- | --- |
+| Folder | `~/.boo/recordings` | Where new recordings are saved. **Choose…**, **Reveal**, **Reset** |
+| File name | `{date}-{time}-{title}` | Template with `{title}`, `{date}`, `{time}` and `{dir}`. A number is appended when the name is taken |
+| Idle time limit | Shorten pauses, 2 s | Pauses longer than this (0.5–60 s) are shortened on playback. Written into each file's header, so other players honour it too |
+| Highlight recording panes | On | Red frame around every pane being recorded |
+| When a recording stops | Show Toast | **Show Toast**, **Reveal in Finder** or **Nothing** |
+
+The **Library** section lists your recordings. Right-click one to **Play**, **Export Video…**, **Reveal in Finder**, **Copy Path**, **Rename…** or **Move to Trash…**.
+
+### Player
+
+**Terminal → Open Recording…**, or opening any `.cast` file (from Finder or by dropping it on Boo), plays it in a player tab:
+
+| Key | Action |
+| --- | --- |
+| **Space** or **K** | Play / pause |
+| **Left** / **Right** | Back / forward 5 seconds (**Shift**: 1 second) |
+| **J** / **L** | Back / forward 10 seconds |
+| **[** / **]** | Previous / next marker |
+| **-** / **+** | Slower / faster: 0.25×, 0.5×, 1×, 1.5×, 2×, 4× |
+| **0** or **Home** | Restart |
+| **End** | Jump to the end |
+| **1**–**9** | Jump to 10%–90% |
+
 - **Seek** — drag the position slider
-- **Speed** — 0.5×, 1×, 2× or 4×
-- Pauses longer than 2 seconds are shortened to 2 seconds (or to the file's `idle_time_limit`)
+- Pauses are shortened to the file's `idle_time_limit`, or to the **Idle time limit** setting if the file has none
 - The terminal keeps the recorded size; if the tab is smaller, the edges are cut off
+
+### Export to MP4
+
+**Export Video…** in the player (or the Library's right-click menu) renders the recording to an H.264 MP4 file, faster than real time and with your current theme and terminal font. Pick where to save it (next to the `.cast` file by default); a progress panel shows while it renders, and Finder shows the video when it's done.
 
 ## File Explorer
 
@@ -158,6 +194,8 @@ Configure all of this in **Settings → Plugins → Files**. See [Multi-Content 
 | Synthwave '84 | —                               |
 | Moonlight     | —                               |
 
+**Import Theme…** in Settings → Theme reads an iTerm2 `.itermcolors` file or a Ghostty theme file. The imported colors open in the theme editor, so you can adjust and save them as a custom theme. Missing colors come from the default theme, and the UI chrome is derived from the background, foreground and blue.
+
 ## Sidebar Plugins
 
 The sidebar shows stacked, collapsible panels powered by the [plugin system](/plugins):
@@ -169,6 +207,9 @@ The sidebar shows stacked, collapsible panels powered by the [plugin system](/pl
 - **Docker** — Running containers with exec, logs, start/stop/restart. Live updates via `docker events` stream. Local sessions only.
 - **Bookmarks** — Saved directory shortcuts with per-host namespacing for remote sessions.
 - **System** — CPU, memory, disk, network, load, uptime and battery, with quick `df -h` / `top` / `netstat` / `uptime` actions. Optional status bar readouts.
+- **Hosts** — The `Host` entries of `~/.ssh/config` (including `Include`d files), with the last connection and the number of open sessions. Click to connect in a new tab, **Opt+click** to connect in a split; right-click to **Go to Session**, **Copy ssh Command** or **Edit in Config**.
+- **Notes** — One markdown note per workspace plus a global **Scratch** note, stored in `~/.boo/notes/` and saved as you type. Search all notes, switch between edit and preview, or open a note in an editor tab. **Terminal → Append Selection to Note** adds the selection (or the last command's output) to the workspace's note.
+- **Kubernetes** — Off by default; turn it on in **Settings → Plugins**. Pods, workloads, jobs, cronjobs, services and ingresses of the current context and namespace, watched only while their section is expanded. Pods offer **Exec Shell**, **Follow Logs** (or double-click), port-forwarding, **Previous Logs** and **Delete Pod…**; every resource has **Describe**, **View YAML**, **Edit…** and **Copy Name**; deployments, statefulsets and daemonsets add **Scale…** and **Rollout Restart…**, and cronjobs **Run Now…**.
 - **Debug** — Live log of plugin lifecycle events and current terminal state, for plugin authors.
 
 Toggle panels via status bar icons or extend with [custom plugins](/plugin-development).
@@ -205,22 +246,45 @@ Configurable segments displayed at the bottom of the window:
 - **Plugin icons** — Toggle icons for Files, Git, Docker, Bookmarks panels
 - **Pane count** — Number of active panes and tabs
 - **Clock** — Current time
+- **Listening ports** — Ports opened by processes in the workspace's terminals. Click a port to open it in a browser tab or your default browser, copy its URL, go to its pane, or stop the process. Boo notifies you when a new port opens (**Settings → Notifications**)
+- **Kube** — `⎈ context/namespace` while the Kubernetes plugin is on; click to switch context or namespace. Red when a [rule](/rules-and-profiles#rules) assigns a profile to that context
+- **Sync conflicts** — `⚠ Sync conflict` when a file changed both here and in the [sync folder](/history-and-sync#conflicts)
+- **◉ Remote** — while the [Remote Control](/remote-control) server runs
 
-Toggle individual segments in **Settings → Status Bar**, including path visibility and git branch display.
+**Settings → Status Bar** shows a preview, toggles the built-in segments (Connection status, Current path, Clock, Pane & tab count, Listening ports) and lists the segments plugins add.
+
+## Rules, Profiles and Shaders
+
+Profiles give a tab its own theme, font, shader, shell and environment; rules pick a profile by host, folder, container, kube context or process, or react to output. See [Rules & Profiles](/rules-and-profiles).
+
+## History and Sync
+
+**Ctrl+R** at a shell prompt searches every command you ran in Boo, across tabs, windows and hosts. Sync keeps your settings, profiles, rules, themes and recipes the same on several Macs through a shared folder. See [History & Sync](/history-and-sync).
+
+## Accessibility
+
+VoiceOver can read the visible terminal text, and the drawn tab bars, workspace pills and their **+** buttons are exposed as buttons you can press. Animations follow **Reduce Motion** in System Settings.
+
+## Security
+
+Secure Keyboard Entry, paste and clipboard-read confirmations, and the owner-only `~/.boo` folder are described in [Security](/security).
 
 ## Settings
 
 Open with **Cmd+,**. Organized in tabs:
 
-| Tab               | Options                                                                                            |
-| ----------------- | -------------------------------------------------------------------------------------------------- |
-| **General**       | Core editor and file-opening preferences                                                           |
-| **Theme**         | 32 color themes with live preview, custom theme editor (whole UI restyles live while editing)      |
-| **Appearance**    | Terminal font, font size, cursor style (block/beam/underline/outline); sidebar font and font size |
-| **Status Bar**    | Toggle individual segments (connection, path, git branch, process, pane count, clock)              |
-| **Layout**        | Sidebar position (toggle with Cmd+B), workspace bar position, tab overflow mode (scroll/wrap/vertical) |
-| **Editor**        | Built-in text editor preferences                                                                   |
-| **Browser**       | Browser tab history and behavior                                                                   |
-| **Notifications** | Notification preferences                                                                           |
-| **Plugins**       | Enable/disable plugins, per-plugin settings (file explorer icons/hidden files, git settings)       |
-| **Shortcuts**     | Searchable keyboard shortcut reference                                                             |
+| Tab               | Options |
+| ----------------- | ------- |
+| **General**       | Default folders, startup, file editor, advanced, agents, [sync](/history-and-sync#sync), [command history](/history-and-sync#history-settings) |
+| **Theme**         | 32 color themes with live preview, custom theme editor (whole UI restyles live while editing) |
+| **Appearance**    | Terminal font, font size, cursor style (block/beam/underline/outline), [terminal shader](/rules-and-profiles#shaders); sidebar font and font size |
+| **Status Bar**    | Preview, built-in segments (connection, path, clock, pane & tab count, listening ports), plugin segments |
+| **Layout**        | Sidebar position (toggle with Cmd+B), workspace bar, tab groups, pane controls, tab overflow mode (scroll/wrap/vertical) |
+| **Profiles**      | [Profiles](/rules-and-profiles#profiles) and the default for new tabs |
+| **Rules**         | [Rules](/rules-and-profiles#settings--rules) editor, regex tester, `sendText` approvals |
+| **Recordings**    | [Recording](#recordings-settings) folder, file names, idle limit, stop action, library |
+| **Editor**        | Font, editing, display, terminal links, formatting |
+| **Browser**       | Browser tab behavior and history |
+| **Notifications** | Command notifications, new port notifications, minimum duration, grouping bursts, removal |
+| **Plugins**       | Enable/disable plugins, per-plugin settings (file explorer icons/hidden files, git settings) |
+| **Shortcuts**     | Searchable keyboard shortcut reference, Quick Terminal hotkey |

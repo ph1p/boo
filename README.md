@@ -37,12 +37,23 @@ Download the latest release from [GitHub Releases](https://github.com/ph1p/boo/r
 - **Orchestrator** — Cmd+Opt+O opens a drawer with one Claude Code session that sees every agent: it answers waiting agents, splits work into agent tasks and merges them, with your approval for anything it did not start ([orchestrator](https://ph1p.github.io/boo/agents#orchestrator))
 - **Review mode** — File → Review Changes opens a diff review tab for the workspace, with comments you can send to the agent
 - **Remote explorer** — Auto-detects SSH/Mosh, container (docker, podman, kubectl, …), VM, and device shells; shows the remote file tree
-- **Remote control** — Optional token-protected web UI to control Boo from any device on your LAN, including approving or denying waiting agents (Terminal → Start Remote Control Server)
+- **Remote control** — Optional token-protected web UI to control Boo from any device on your LAN, including approving or denying waiting agents (Terminal → Start Remote Control Server); stops itself after 30 idle minutes
 - **Git integration** — Branch name in status bar, clickable branch switcher with local + remote branches
 - **Running process** — Status bar shows the foreground process (zsh, node, vim, etc.)
-- **Customizable** — Font, cursor style, status bar segments, explorer settings
+- **Customizable** — Font, cursor style, status bar segments, explorer settings; your own Ghostty options in `~/.boo/ghostty-user.conf` ([docs](https://ph1p.github.io/boo/ghostty-integration#your-own-ghostty-options))
+- **Profiles and rules** — Per-tab theme, font, shader, shell and environment, picked by host, folder, container, kube context or process; output rules can notify, mark the tab, run a command or type text ([docs](https://ph1p.github.io/boo/rules-and-profiles))
+- **Shaders** — Global or per-profile terminal shaders: bundled CRT, Bloom and Scanlines presets or your own Shadertoy-style GLSL
+- **Command history** — Ctrl+R searches every command run in Boo across tabs, windows and hosts, with filters for workspace, failures, host and folder ([docs](https://ph1p.github.io/boo/history-and-sync))
+- **Sync** — Keeps settings, profiles, rules, keytables, snippets, themes and recipes in step across Macs through a shared folder (e.g. iCloud Drive), with conflict resolution
+- **Session recording** — Record terminals as asciicast files with chapter markers, play them back, and export them to MP4 (Settings → Recordings)
+- **Listening ports** — Status bar segment with the ports your workspace's processes listen on: open, copy, go to pane or stop
+- **Hosts, Notes and Kubernetes plugins** — Connect to `~/.ssh/config` hosts; per-workspace markdown notes; browse and act on pods, workloads and services of the current kube context (off by default)
+- **Security** — Secure Keyboard Entry, confirmation before risky pastes and clipboard reads, owner-only `~/.boo` ([docs](https://ph1p.github.io/boo/security))
 - **Workspace colors** — Preset or custom colors per workspace, pinning, renaming
 - **Reopen closed tabs** — Cmd+Opt+Z reopens closed tabs and panes
+- **Scrollback restore** — Terminal screens and scrollback come back after a restart (Settings → General → Startup)
+- **Quick select** — Cmd+Shift+Space labels URLs, paths, hashes and IPs on screen; type a label to copy it, or Shift+label to insert it
+- **Theme import** — Settings → Theme → Import Theme… reads iTerm2 `.itermcolors` and Ghostty theme files
 - **Mouse selection** — Click, double-click (word), triple-click (line)
 - **Signed auto-updater** — Sparkle-based updates with appcast metadata on GitHub Pages and release archives on GitHub Releases
 - **Focus memory** — Remembers last focused pane per workspace, restores on switch
@@ -546,7 +557,9 @@ Boo can serve a small web UI to control the terminal from another device on your
 - Text/key input, workspace/tab/pane switching
 - Approve or deny agents waiting for input
 - Every API request requires the session token (`Authorization: Bearer`); the token is regenerated on each start and travels only in the URL fragment
-- Configurable port in settings; **Terminal → Copy Remote Control URL** to re-share
+- **Terminal → Copy Remote Control URL** to re-share; the orange **◉ Remote** status bar segment copies the URL or stops the server
+- Stops itself after 30 minutes without an authorized request
+- Plain HTTP: use it only on a network you trust
 
 See the [Remote Control docs](https://ph1p.github.io/boo/remote-control) for the command API.
 

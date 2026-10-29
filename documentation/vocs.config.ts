@@ -28,6 +28,18 @@ export default defineConfig({
       link: '/agents',
     },
     {
+      text: 'Rules & Profiles',
+      link: '/rules-and-profiles',
+    },
+    {
+      text: 'History & Sync',
+      link: '/history-and-sync',
+    },
+    {
+      text: 'Security',
+      link: '/security',
+    },
+    {
       text: 'Updates',
       link: '/updates',
     },

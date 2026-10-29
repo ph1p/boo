@@ -21,15 +21,35 @@ Boo embeds [GhosttyKit](https://github.com/ghostty-org/ghostty) as a static libr
 
 ### Event Callbacks
 
-Ghostty surfaces emit action callbacks for terminal state changes:
+Ghostty surfaces emit actions through `GhosttyRuntime`'s action callback. Boo handles these and returns `false` for anything else, so Ghostty falls back to its default:
 
-| Action                             | Trigger                |
-| ---------------------------------- | ---------------------- |
-| `GHOSTTY_ACTION_PWD`               | Shell `cd` (via OSC 7) |
-| `GHOSTTY_ACTION_SET_TITLE`         | Terminal title change  |
-| `GHOSTTY_ACTION_SHOW_CHILD_EXITED` | Shell process exited   |
+| Action | What Boo does |
+| --- | --- |
+| `GHOSTTY_ACTION_PWD` | Updates the tab's working directory (OSC 7) |
+| `GHOSTTY_ACTION_SET_TITLE` | Updates the tab title. Titles starting with `BOO_LS:` (directory listing) or `BOO_CMD:` (command start/end from Boo's shell hooks) are consumed instead of shown |
+| `GHOSTTY_ACTION_SHOW_CHILD_EXITED` | Marks the shell as exited |
+| `GHOSTTY_ACTION_COMMAND_FINISHED` | Records the exit code and duration of the last command (OSC 133) |
+| `GHOSTTY_ACTION_PROGRESS_REPORT` | Shows OSC 9;4 progress on the tab: set, error, indeterminate, pause, remove |
+| `GHOSTTY_ACTION_RING_BELL` | Bell |
+| `GHOSTTY_ACTION_DESKTOP_NOTIFICATION` | Posts a notification with the title and body |
+| `NEW_SPLIT`, `GOTO_SPLIT`, `RESIZE_SPLIT`, `TOGGLE_SPLIT_ZOOM`, `EQUALIZE_SPLITS`, `CLOSE_TAB`, `NEW_TAB`, `NEW_WINDOW`, `TOGGLE_FULLSCREEN`, `CLOSE_WINDOW` | Forwarded to the window's controller, so Ghostty keybinds drive Boo's own splits, tabs and windows |
+| `GHOSTTY_ACTION_QUIT` | Quits Boo |
+| `GHOSTTY_ACTION_OPEN_CONFIG` | Opens Boo's settings |
+| `GHOSTTY_ACTION_RELOAD_CONFIG` | Rebuilds the config (see [Configuration](#configuration)) |
+| `GHOSTTY_ACTION_OPEN_URL` | Opens `http`/`https` links only |
+| `GHOSTTY_ACTION_SCROLLBAR` | Updates the pane's scrollbar |
+| `START_SEARCH`, `END_SEARCH`, `SEARCH_TOTAL`, `SEARCH_SELECTED` | Drive the find bar |
 
-These flow through: `GhosttyView` → `PaneView` delegate → `MainWindowController` → `TerminalBridge` + sidebar update.
+Per-tab events flow through: `GhosttyView` → `PaneView` delegate → `MainWindowController` → `TerminalBridge` + sidebar update.
+
+### Clipboard
+
+Boo's generated config sets `clipboard-read = ask`, `clipboard-write = allow` and `copy-on-select = clipboard`. Two kinds of clipboard request open a confirmation sheet on the terminal's window, with a preview of the text:
+
+- **Paste protection** — Ghostty flags a paste that contains line breaks or control characters, which could run commands as soon as they are pasted. The sheet asks "Paste this text?".
+- **OSC 52 reads** — a program in the terminal, possibly on a remote host, asks for the clipboard contents. The sheet asks "Allow the program to read the clipboard?".
+
+When Ghostty allows it, the sheet offers **Remember for this terminal**. Any other confirmation request is denied. Only `text/plain` is read from the pasteboard.
 
 ### Shell Integration
 
@@ -37,4 +57,42 @@ Ghostty injects shell hooks so the shell emits OSC 7 on `cd`. The Makefile bundl
 
 ### Configuration
 
-`applyBooSettings(to:)` writes Boo's theme/font settings to a temp Ghostty config. The user's own Ghostty config at `~/Library/Application Support/com.mitchellh.ghostty/config` is also loaded.
+Boo does **not** load your Ghostty config (`~/.config/ghostty/config` or `~/Library/Application Support/com.mitchellh.ghostty/config`). It skips Ghostty's default config files, because those would prepend values for repeatable keys like `font-family` and override Boo's settings.
+
+Instead, `applyBooSettings(to:)` generates `~/.boo/ghostty.conf` from Boo's settings and loads it. The file is overwritten on every rebuild, so don't edit it. It sets, among others:
+
+- `font-family` and `font-size` (a [profile](/rules-and-profiles#profiles) can override both)
+- `cursor-style` and `cursor-style-blink`
+- the theme's colors and the 16-color palette, `term = xterm-256color`
+- `scrollback-limit`, `mouse-hide-while-typing`, `cursor-click-to-move`, `unfocused-split-opacity`
+- the clipboard options above
+- `custom-shader` and `custom-shader-animation`, when a [shader](/rules-and-profiles#shaders) is set
+
+A tab with a profile gets its own file next to it (`ghostty-profile-<hash>.conf`), built the same way with the profile's font, theme and shader.
+
+#### Your own Ghostty options
+
+To set Ghostty options Boo has no setting for, create `~/.boo/ghostty-user.conf`. It uses Ghostty's config syntax and is loaded **after** Boo's generated config, so its options win:
+
+```ini
+# ~/.boo/ghostty-user.conf
+font-thicken = true
+window-padding-balance = true
+```
+
+Repeatable keys such as `font-family` and `keybind` append to Boo's values instead of replacing them. To replace them, start with an empty value, which resets the list:
+
+```ini
+font-family =
+font-family = "Berkeley Mono"
+```
+
+The file also applies to tabs with a profile.
+
+#### Reloading
+
+The config is rebuilt and pushed to every open terminal when:
+
+- you change a setting in Boo
+- you choose **View → Reload Shaders and Ghostty Config** (use this after editing `ghostty-user.conf` or a shader file)
+- a Ghostty `reload_config` keybind fires

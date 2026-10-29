@@ -10,7 +10,13 @@ Boo can serve a small web UI to control the terminal from another device on your
 http://192.168.1.20:8899/#<session-token>
 ```
 
-Open the URL on any device in your network. **Terminal → Copy Remote Control URL** copies it again later; selecting the menu item again stops the server.
+Open the URL on any device in your network. **Terminal → Copy Remote Control URL** copies it again later. If the port is already in use, Boo shows an error and doesn't start the server.
+
+While the server runs, the status bar shows an orange **◉ Remote** segment. Click it to **Copy Remote Control URL** or **Stop Remote Control Server**. The menu item also reads **Terminal → Stop Remote Control Server** while it runs.
+
+### Idle stop
+
+The server stops by itself after **30 minutes without use**, and a toast says so. Every authorized request from the page counts as use. Start it again from the Terminal menu; it gets a new token, so open the new URL.
 
 ## What You Can Do
 
@@ -50,7 +56,10 @@ The page ships a web manifest and icons, so **Share → Add to Home Screen** (iO
 - Every API request must carry the session token via `Authorization: Bearer <token>`. Requests without it are rejected.
 - The token is **regenerated on every server start** and delivered in the URL *fragment* (`#...`), which browsers never send over the network.
 - Connections use `Connection: close`; idle connections are dropped, and client count and request sizes are bounded.
+- The server stops after 30 minutes without an authorized request (see [Idle stop](#idle-stop)).
 
 :::warning
 Anyone with the URL can control your terminal. Treat the link like a password and stop the server when you're done.
+
+The connection is **plain HTTP**, not HTTPS. Anyone on the same network can read the token and the terminal contents in transit. Use Remote Control only on a network you trust, never on public Wi-Fi.
 :::

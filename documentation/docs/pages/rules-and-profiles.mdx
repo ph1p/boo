@@ -1,0 +1,147 @@
+# Rules & Profiles
+
+A **profile** is a named set of terminal overrides: theme, font, shader, shell, environment. A **rule** picks a profile for a tab based on where it is (host, folder, container, kube context, process), or runs an action when a line of output matches a regex. Both live in plain JSON files under `~/.boo/` that Boo watches and reloads as you save.
+
+## Profiles
+
+Profiles are stored in `~/.boo/profiles.json`. Edit them in **Settings → Profiles** (**Add Profile**, **Open profiles.json**) or by hand:
+
+```json
+{
+  "profiles": [
+    {
+      "name": "Production",
+      "theme": "Gruvbox Dark",
+      "shader": "",
+      "env": { "AWS_PROFILE": "prod" }
+    },
+    {
+      "name": "Demo",
+      "fontFamily": "JetBrains Mono",
+      "fontSize": 18,
+      "shader": "crt"
+    }
+  ]
+}
+```
+
+| Field | Description |
+| --- | --- |
+| `name` | Required and unique. Rules and menus refer to the profile by name |
+| `theme` | A theme name from **Settings → Theme** (built-in or custom). The theme also tints the tab's accent |
+| `fontFamily`, `fontSize` | Terminal font. `fontSize` must be between 4 and 200 |
+| `shader` | A shader preset name or a path to a GLSL file. `""` turns the global shader off for this profile |
+| `shell` | Program that runs instead of your login shell in new tabs |
+| `env` | Extra environment variables for new tabs. A launch's own variables win |
+| `cwd` | Starting directory for new tabs (`~` is expanded) |
+| `linkTarget` | Where file links open: `"monaco"` (built-in editor) or `"external"` (the editor from **Settings → Editor**) |
+
+Every field you leave out inherits the global setting. `shell`, `env` and `cwd` only affect tabs created with the profile; theme, font and shader also change an open tab when its profile changes.
+
+A profile with an empty name, a duplicate name or an out-of-range `fontSize` is skipped. If the file doesn't parse, Boo keeps the last good profiles.
+
+### Which profile a tab uses
+
+1. The profile you picked for that tab by hand
+2. Otherwise, the profile of the first [rule](#rules) whose `when` matches
+3. Otherwise, the default from **Settings → Profiles → New tabs use**
+
+Pick a profile by hand from:
+
+- the tab's right-click menu → **Profile** (**Auto** returns the tab to rules and the default; **Edit Profiles…** opens the settings page)
+- the profile chip in the pane controls, shown while a tab runs a profile other than the default
+- the [command palette](/features#command-palette) with the `:` prefix, which lists themes and profiles
+
+A profile picked by hand is not saved with the session.
+
+## Shaders
+
+Shaders post-process the whole terminal image through Ghostty's `custom-shader` support.
+
+- **Global** — **Settings → Appearance → Terminal Shader** applies to every terminal
+- **Per profile** — a profile's `shader` replaces the global one; `""` turns it off
+
+Boo bundles three presets: `crt` (CRT), `bloom` (Bloom) and `scanlines` (Scanlines). Use **Choose File…** in the shader picker, or put a path in a profile, to load your own Shadertoy-style GLSL file (a `mainImage` function that samples `iChannel0`). A path that doesn't exist is ignored and logged.
+
+Boo doesn't watch shader files. After editing one, choose **View → Reload Shaders and Ghostty Config**.
+
+## Rules
+
+Rules are stored in `~/.boo/rules.json`, either as `{"rules": [...]}` or as a bare array:
+
+```json
+{
+  "rules": [
+    {
+      "id": "prod-ssh",
+      "when": { "host": "*.prod.example.com" },
+      "then": { "profile": "Production" }
+    },
+    {
+      "id": "tests-failed",
+      "when": { "output": "(\\d+) tests? failed" },
+      "then": [{ "notify": { "title": "Tests failed", "body": "$1 failing" } }, { "markTab": {} }],
+      "enabled": false
+    }
+  ]
+}
+```
+
+| Field | Default | Description |
+| --- | --- | --- |
+| `id` | `rule-N` | Names the rule in notifications and settings. A duplicate id is renamed `id#N` |
+| `when` | — | Conditions; every field you set must match |
+| `then` | — | A profile, or one or more actions |
+| `cooldown` | `5` | Output rules only: seconds before the rule can fire again |
+| `altScreen` | `false` | Output rules only: also match output of full-screen programs (vim, less, htop) |
+| `enabled` | `true` | Set to `false` to keep a rule without running it |
+
+A rule with errors is skipped and reported on the settings page; the other rules still load. If the file doesn't parse, Boo keeps the last good rules.
+
+### Conditions
+
+| Key | Matches |
+| --- | --- |
+| `host` | The remote host, by real hostname or by ssh alias |
+| `cwd` | The working directory (the remote one in a remote tab) |
+| `container` | The container the tab is attached to |
+| `kubeContext` | The `current-context` of your kubeconfig |
+| `process` | The foreground process |
+| `output` | A regex, matched against each line of output |
+
+All keys except `output` take glob patterns: `*` and `?`, case-insensitive. In `cwd`, `*` stops at `/` and `**` crosses it, a leading `~` is your home folder, and a pattern for a folder also matches everything below it. So `"cwd": "~/work/client"` matches `~/work/client/api` too.
+
+### Profile rules
+
+`"then": {"profile": "Name"}` gives a matching tab that profile. The profile follows the tab: `ssh` to a matching host and the tab switches to it; exit and it switches back. A profile rule can't use `output`.
+
+### Action rules
+
+`then` can also be one action or a list of actions. Each action is an object with exactly one key:
+
+| Action | What it does |
+| --- | --- |
+| `notify` | Posts a notification. Takes a body string, or `{"title": …, "body": …}`. The title defaults to the rule id, the body to the matched line |
+| `markTab` | `{}`. Marks the tab with activity, unless it is the focused tab |
+| `run` | Runs a command with `/bin/sh -c` in the tab's folder. It gets `BOO_MATCH_0` to `BOO_MATCH_9`, `BOO_RULE_ID` and `BOO_TAB_ID`. It is stopped after 30 seconds; its output goes to Boo's log |
+| `sendText` | Types text into the tab |
+| `openLink` | Opens the first link in the text |
+
+Text in actions can use `$0` (the whole match) to `$9` (capture groups); `$$` is a literal `$`.
+
+- An **output** rule fires on a matching line, then waits `cooldown` seconds. `sendText` fires at most once per command.
+- A rule **without** `output` fires when a tab enters the matching context (for example, `cd` into a folder), and again only after the tab leaves and comes back.
+
+### Safety
+
+- **`sendText` asks first.** The first time a `sendText` rule fires, Boo shows a toast with **Allow**. The approval is remembered until you edit that rule or choose **Settings → Rules → Reset Approvals**.
+- **`sendText` never types into password prompts.** It skips `sudo`, `su`, `doas`, `ssh`, `gpg`, `passwd` and `pinentry`, and any prompt with hidden input.
+- **Loop guard.** A rule that fires more than 10 times in 10 seconds is suspended. A toast offers **Resume**, and suspended rules are listed in **Settings → Rules** with a **Resume** button. Saving the file clears all suspensions.
+
+### Settings → Rules
+
+- An editor for `rules.json` with **Save** (**Cmd+S**), **Revert** and **Open in Editor**, and the number of rules loaded. Problems in the file are listed at the top of the page
+- A **Regex Tester**: enter a pattern and some sample lines to see which lines match and what `$0`…`$9` capture
+- **Confirmations**: **Reset Approvals** forgets every approved `sendText`
+
+Rules and profiles are part of [Sync](/history-and-sync#sync).

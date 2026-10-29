@@ -1,0 +1,83 @@
+# History & Sync
+
+## Shell History
+
+Boo keeps its own searchable history of the commands you run, across all tabs, windows and hosts. It is stored in `~/.boo/history.db` (SQLite with full-text search). Each entry stores the command, its folder, exit code and duration, the host and the workspace.
+
+Commands are recorded through Boo's shell integration, so they come from shells that report their prompts to Boo (see [Command Blocks](/features#command-blocks)).
+
+### Searching with ⌃R
+
+Press **Ctrl+R** at a shell prompt to open the history search over the terminal. Results are ranked by how recent and how frequent a command is, with a boost for commands run in the current folder, and filtered by fuzzy match as you type.
+
+| Key | Action |
+| --- | --- |
+| **Return** | Put the command on the prompt, without running it |
+| **Cmd+Return** | Run the command |
+| **Cmd+C** | Copy the command |
+| **Cmd+Delete** | Remove the entry from history |
+| **Up** / **Down** | Move the selection |
+| **Ctrl+R** / **Ctrl+S** | Move to an older / newer match, like the shell's own search |
+| **Esc** | Close |
+
+Four chips narrow the results; toggle them with **Cmd+1** to **Cmd+4**:
+
+- **This workspace**
+- **Failed** — non-zero exit codes only
+- the current host, or **Local**
+- the current folder
+
+Boo only takes over **Ctrl+R** at a prompt of a shell with Boo's shell integration. Elsewhere (inside vim, on a remote host without integration), the key goes to the program as usual. Turn the search off in settings to always leave **Ctrl+R** to your shell.
+
+The [command palette](/features#command-palette) searches the same history with the `!` prefix.
+
+### History settings
+
+**Settings → General → Command History**:
+
+| Setting | Default | Description |
+| --- | --- | --- |
+| Record commands | On | Save finished commands to `~/.boo/history.db` |
+| ⌃R opens history search | On | Off leaves **Ctrl+R** to the shell |
+| Ignore pattern | `^\s\|(?i)(token\|secret\|password\|passwd\|api_key\|apikey)=` | Commands matching this regex are never saved. Empty saves everything. **Default** restores it |
+| Keep for | 365 days | Older commands are removed at launch. 0 keeps them forever |
+
+**Clear History…** deletes every saved command. This can't be undone.
+
+The default ignore pattern skips commands that start with a space (like `HISTCONTROL=ignorespace` in bash) and commands that set a variable named like a secret, for example `API_KEY=… curl …`.
+
+## Sync
+
+Sync keeps Boo's configuration the same on several Macs through a folder they share, such as a folder in iCloud Drive. Boo doesn't run a sync server; it copies files between `~/.boo` and the folder.
+
+### Turning it on
+
+1. Open **Settings → General → Sync**.
+2. Click **Choose…** next to **Sync folder** and pick a folder that all your Macs can see.
+3. Do the same on your other Macs, with the same folder.
+
+**Sync Now** syncs right away. **Turn Off** stops syncing; the files already in the folder stay.
+
+### What syncs
+
+| Synced | Stays on each Mac |
+| --- | --- |
+| Appearance, editor, status bar, plugin and history settings, and custom themes (from `settings.json`) | Folders, paths and window layout |
+| `profiles.json`, `rules.json` | Session, bookmarks, history database, recordings |
+| `keytables.json`, `snippets.json` | |
+| `themes/`, `recipes/` | |
+
+### Conflicts
+
+Boo watches both `~/.boo` and the sync folder, and remembers a hash of each file as of the last sync in `~/.boo/sync-state.json`:
+
+- A file changed on one side only is copied to the other side. A file deleted on one side is deleted on the other.
+- A file changed on both sides since the last sync is a **conflict**, and so is a file that already differs on both sides the first time you sync. Neither side is overwritten.
+
+Conflicts show in the status bar as **⚠ Sync conflict** (or **⚠ N sync conflicts**). Click it and pick, for each file:
+
+- **Keep Mine** — your Mac's version wins
+- **Take Theirs** — the sync folder's version wins
+- **Show Diff** — compare the two first
+
+Files that iCloud hasn't downloaded yet (`.icloud` placeholders) are skipped until they arrive.
