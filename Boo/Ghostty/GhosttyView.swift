@@ -193,6 +193,8 @@ import Cocoa
             // Start unfocused — only becomeFirstResponder sets focus
             ghostty_surface_set_focus(s, false)
             if tabID != nil { RuleEngine.shared.register(self) }
+            // Before the shell's first output, so the old screen sits above the new prompt.
+            if let tabID, let saved = ScrollbackStore.take(for: tabID) { feedOutput(saved) }
         }
 
         // Schedule shell PID discovery on next run loop tick, after callbacks are wired
@@ -1190,11 +1192,21 @@ import Cocoa
     /// cursor) for replay into the Remote Control browser-side terminal.
     /// Must be called on the main thread — surface access is not thread-safe.
     func readViewportStyled() -> String? {
+        readStyled(GHOSTTY_POINT_VIEWPORT)
+    }
+
+    /// The whole screen including scrollback, styled; saved on quit for
+    /// scrollback restore.
+    func readScreenStyled() -> String? {
+        readStyled(GHOSTTY_POINT_SCREEN)
+    }
+
+    private func readStyled(_ tag: ghostty_point_tag_e) -> String? {
         guard let surface = surface else { return nil }
         let topLeft = ghostty_point_s(
-            tag: GHOSTTY_POINT_VIEWPORT, coord: GHOSTTY_POINT_COORD_TOP_LEFT, x: 0, y: 0)
+            tag: tag, coord: GHOSTTY_POINT_COORD_TOP_LEFT, x: 0, y: 0)
         let bottomRight = ghostty_point_s(
-            tag: GHOSTTY_POINT_VIEWPORT, coord: GHOSTTY_POINT_COORD_BOTTOM_RIGHT, x: 0, y: 0)
+            tag: tag, coord: GHOSTTY_POINT_COORD_BOTTOM_RIGHT, x: 0, y: 0)
         let selection = ghostty_selection_s(
             top_left: topLeft, bottom_right: bottomRight, rectangle: false)
         var text = ghostty_text_s()

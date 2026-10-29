@@ -372,6 +372,7 @@ final class AppSettings {
 
         static let remoteControlPort = "remoteControlPort"
         static let secureKeyboardEntry = "secureKeyboardEntry"
+        static let restoreScrollback = "restoreScrollback"
 
         static let paletteRecents = "paletteRecents"
     }
@@ -1192,6 +1193,12 @@ final class AppSettings {
     // MARK: - Secure Keyboard Entry
 
     /// Process-wide, like Terminal's: other apps can't observe keystrokes while Boo is frontmost.
+    /// Save terminal scrollback on quit and replay it into restored tabs.
+    var restoreScrollback: Bool {
+        get { bool(K.restoreScrollback, default: true) }
+        set { set(newValue, forKey: K.restoreScrollback) }
+    }
+
     var secureKeyboardEntry: Bool {
         get { bool(K.secureKeyboardEntry, default: false) }
         set { set(newValue, forKey: K.secureKeyboardEntry) }

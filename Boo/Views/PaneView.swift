@@ -1407,6 +1407,13 @@ class PaneView: NSView {
         return elements + content
     }
 
+    /// Terminal views by tab ID, for saving scrollback on quit.
+    var terminalViewsByTab: [UUID: GhosttyView] {
+        var views = tabViews
+        if let gv = ghosttyView, let id = gv.tabID { views[id] = gv }
+        return views
+    }
+
     // MARK: - Cleanup
 
     func stopAll() {

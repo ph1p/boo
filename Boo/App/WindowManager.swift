@@ -224,6 +224,19 @@ final class WindowManager {
 
     /// Final save on quit: flush every window's live state, then write all
     /// windows synchronously. Windows closing afterwards stay in the session.
+    /// Write every terminal tab's screen for the next launch to replay.
+    private func saveScrollback() {
+        ScrollbackStore.clear()
+        guard AppSettings.shared.restoreScrollback else { return }
+        for controller in controllers where controller.persistsSession {
+            for paneView in controller.paneViews.values {
+                for (tabID, view) in paneView.terminalViewsByTab {
+                    if let text = view.readScreenStyled() { ScrollbackStore.save(text, for: tabID) }
+                }
+            }
+        }
+    }
+
     func saveSessionForTermination() {
         isTerminating = true
         guard let first = controllers.first else { return }
@@ -231,6 +244,7 @@ final class WindowManager {
             controller.coordinator?.saveSidebarStateToSettings()
             controller.prepareSessionSave()
         }
+        saveScrollback()
         writeSession(from: first, sync: true)
     }
 

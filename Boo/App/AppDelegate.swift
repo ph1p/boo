@@ -63,6 +63,7 @@ public enum BooMain {
 
         WindowManager.shared.openInitialWindow()
         didOpenInitialWindow = true
+        ScrollbackStore.pruneUnclaimed()
         if !pendingOpenURLs.isEmpty {
             let urls = pendingOpenURLs
             pendingOpenURLs = []

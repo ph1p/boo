@@ -14,6 +14,8 @@ struct SessionTab: Codable, Sendable {
     let sidebarSectionOrder: [String: [String]]?
     let selectedPluginTabID: String?
     let groupID: UUID?
+    /// ID the tab's scrollback was saved under on quit (see ScrollbackStore).
+    let scrollbackID: UUID?
 
     init(
         contentState: ContentState? = nil,
@@ -23,7 +25,8 @@ struct SessionTab: Codable, Sendable {
         sidebarScrollOffsets: [String: [Double]]? = nil,
         sidebarSectionOrder: [String: [String]]? = nil,
         selectedPluginTabID: String? = nil,
-        groupID: UUID? = nil
+        groupID: UUID? = nil,
+        scrollbackID: UUID? = nil
     ) {
         self.contentState = contentState
         self.expandedPluginIDs = expandedPluginIDs
@@ -33,6 +36,7 @@ struct SessionTab: Codable, Sendable {
         self.sidebarSectionOrder = sidebarSectionOrder
         self.selectedPluginTabID = selectedPluginTabID
         self.groupID = groupID
+        self.scrollbackID = scrollbackID
     }
 }
 
@@ -213,7 +217,8 @@ enum SessionStore {
                         },
                         sidebarSectionOrder: tab.state.sidebarSectionOrder,
                         selectedPluginTabID: tab.state.selectedPluginTabID,
-                        groupID: tab.groupID
+                        groupID: tab.groupID,
+                        scrollbackID: tab.contentType == .terminal ? tab.id : nil
                     )
                 }
                 return SessionPane(
@@ -378,6 +383,9 @@ enum SessionStore {
                             title: restoredState.title
                         )
                         pane.updateContentState(at: idx, restoredState)
+                        if let savedID = tab.scrollbackID, restoredState.contentType == .terminal {
+                            ScrollbackStore.schedule(savedID: savedID, for: pane.tabs[idx].id)
+                        }
                         pane.updatePluginState(
                             at: idx,
                             expanded: Set(tab.expandedPluginIDs ?? []),

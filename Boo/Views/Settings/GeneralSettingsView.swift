@@ -11,6 +11,7 @@ struct GeneralSettingsView: View {
     @State private var newTabCwdMode = AppSettings.shared.newTabCwdMode
     @State private var debugLogging = AppSettings.shared.debugLogging
     @State private var fileEditorCommand = AppSettings.shared.fileEditorCommand
+    @State private var restoreScrollback = AppSettings.shared.restoreScrollback
     @ObservedObject private var observer = SettingsObserver(topics: [.theme])
 
     var body: some View {
@@ -86,6 +87,17 @@ struct GeneralSettingsView: View {
                     .onChange(of: defaultMainPage) { _, v in
                         AppSettings.shared.defaultMainPage = v.trimmingCharacters(in: .whitespaces)
                     }
+                }
+
+                ToggleRow(
+                    label: "Restore terminal scrollback",
+                    help:
+                        "On quit, save each terminal's output to ~/.boo/scrollback (owner-only) and show it again when the session is restored.",
+                    isOn: $restoreScrollback
+                )
+                .onChange(of: restoreScrollback) { _, v in
+                    AppSettings.shared.restoreScrollback = v
+                    if !v { ScrollbackStore.clear() }
                 }
             }
 
