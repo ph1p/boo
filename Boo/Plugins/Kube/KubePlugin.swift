@@ -43,6 +43,7 @@ final class KubePlugin: BooPluginProtocol {
     }
 
     func checkAvailability() async -> Bool {
-        KubeStore.findKubectl() != nil
+        // Off main: waiting for the login-shell PATH can take seconds at launch.
+        await Task.detached(priority: .utility) { KubeStore.findKubectl() != nil }.value
     }
 }
