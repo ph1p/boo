@@ -487,7 +487,9 @@ private struct KubeIngressRow: View {
             }
         }
         .onTapGesture(count: 2) {
-            if let host = ingress.hosts.first { store.openIngress(ingress, host: host) }
+            if let host = ingress.hosts.first(where: { ingress.url(for: $0) != nil }) {
+                store.openIngress(ingress, host: host)
+            }
         }
         .help("Double-click: open the first host in the browser · right-click: actions")
         .accessibilityAddTraits(.isButton)
@@ -495,6 +497,7 @@ private struct KubeIngressRow: View {
         .contextMenu {
             ForEach(ingress.hosts, id: \.self) { host in
                 Button("Open \(host)") { store.openIngress(ingress, host: host) }
+                    .disabled(ingress.url(for: host) == nil)
             }
             if !ingress.hosts.isEmpty { Divider() }
             KubeInspectItems(target: "ingress/" + ingress.name, name: ingress.name)

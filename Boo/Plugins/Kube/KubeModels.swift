@@ -231,8 +231,10 @@ struct KubeIngress: Equatable, Identifiable, Sendable {
     var id: String { name }
 
     /// Browser URL for a host; https when the ingress terminates TLS for it.
+    /// Nil for wildcard hosts (`*.example.com`), which name no single site.
     func url(for host: String) -> URL? {
-        URL(string: (tls ? "https://" : "http://") + host)
+        guard !host.hasPrefix("*") else { return nil }
+        return URL(string: (tls ? "https://" : "http://") + host)
     }
 
     static func parse(_ object: [String: Any]) -> KubeIngress? {

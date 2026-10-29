@@ -220,4 +220,10 @@ final class KubeModelsTests: XCTestCase {
         XCTAssertEqual(long.count, 63)
         XCTAssertTrue(long.hasSuffix("-manual-1800000000"))
     }
+
+    func testWildcardIngressHostHasNoURL() {
+        let ingress = KubeIngress(name: "web", hosts: ["*.example.com", "app.example.com"], tls: true)
+        XCTAssertNil(ingress.url(for: "*.example.com"))
+        XCTAssertEqual(ingress.url(for: "app.example.com")?.absoluteString, "https://app.example.com")
+    }
 }
