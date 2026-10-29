@@ -72,9 +72,8 @@ enum OrchestratorLaunch {
             process.standardInput = FileHandle.nullDevice
             process.standardOutput = FileHandle.nullDevice
             process.standardError = FileHandle.nullDevice
-            do { try process.run() } catch { return true }
-            process.waitUntilExit()
-            return process.terminationStatus == 0
+            // A hung rc file must not hang the check: a timeout counts as unknown.
+            return process.runToCompletion(seconds: 10, escalateAfter: 2) != .exitedNonZero
         }.value
     }
 }
