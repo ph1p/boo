@@ -301,6 +301,7 @@ extension MainWindowController: PaneViewDelegate {
 
         // Always mark the activity dot; skip notification if the exact pane+tab is focused.
         markActivity(workspace: workspace, pane: pane, tabIndex: tabIndex)
+        RemoteAgentTracker.shared.attentionRequested(tabID: pane.tabs[tabIndex].id)
 
         if !isTabFocused(workspace: workspace, pane: pane, tabIndex: tabIndex) {
             let tabTitle = pane.tabs[tabIndex].state.title.isEmpty ? "Terminal" : pane.tabs[tabIndex].state.title
@@ -321,6 +322,8 @@ extension MainWindowController: PaneViewDelegate {
 
         // Mark activity dot on the tab even for desktop notifications.
         markActivity(workspace: workspace, pane: pane, tabIndex: tabIndex)
+        RemoteAgentTracker.shared.attentionRequested(
+            tabID: pane.tabs[tabIndex].id, message: body.isEmpty ? nil : body)
 
         // Deliver the process-requested notification unless the exact pane+tab is focused.
         if !isTabFocused(workspace: workspace, pane: pane, tabIndex: tabIndex) {

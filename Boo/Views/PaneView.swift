@@ -1051,6 +1051,10 @@ class PaneView: NSView {
             self.titleDebounces.removeValue(forKey: capturedTabID)
             guard let resolvedIndex = self.pane.tabs.firstIndex(where: { $0.id == capturedTabID }) else { return }
             self.pane.updateTitle(at: resolvedIndex, title)
+            // Every tab, not only the active one: a remote agent in a background tab
+            // must still reach the inbox.
+            RemoteAgentTracker.shared.titleChanged(
+                tabID: capturedTabID, title: title, shellPID: self.pane.tabs[resolvedIndex].shellPID)
             // Only the active tab drives window/bridge title state.
             if resolvedIndex == self.pane.activeTabIndex {
                 self.paneDelegate?.paneView(self, titleChanged: title, paneID: self.paneID)
