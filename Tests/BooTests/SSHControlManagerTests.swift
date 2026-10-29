@@ -129,4 +129,21 @@ final class SSHControlManagerTests: XCTestCase {
         XCTAssertEqual(SSHControlManager.shared.testOwnerCount(alias: alias), 1)
         XCTAssertNotNil(SSHControlManager.shared.connectionState(for: alias))
     }
+
+    func testInteractiveConnectWaitsForBatchAttempt() {
+        let manager = SSHControlManager.shared
+        let alias = "batch-in-flight-test"
+        manager.setTestState(alias: alias, state: .connecting)
+        let done = expectation(description: "interactive completion")
+        manager.connectInteractively(alias: alias) { success in
+            XCTAssertTrue(success)
+            done.fulfill()
+        }
+        manager.drainForTesting()
+        // The batch attempt succeeding resolves the parked interactive request
+        // without a second spawn.
+        manager.resolveForTesting(alias: alias, success: true)
+        wait(for: [done], timeout: 2)
+        XCTAssertEqual(manager.connectionState(for: alias), .ready)
+    }
 }

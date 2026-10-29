@@ -79,6 +79,13 @@ final class SSHControlManager: @unchecked Sendable {
     /// Completions parked while an alias is `.connecting`, flushed once it resolves.
     private var waiters: [String: [@Sendable (Bool) -> Void]] = [:]
 
+    /// Aliases whose in-flight connect may prompt. Touched only on `queue`.
+    private var interactiveInFlight: Set<String> = []
+
+    /// Interactive ssh spawns still running (a prompt may be on screen), so quit
+    /// can kill them and their askpass dialog instead of orphaning both.
+    private static let interactiveSpawns = SpawnRegistry()
+
     private let queue = DispatchQueue(label: "com.boo.ssh-control", qos: .utility)
 
     /// Resolve `alias` for the calling completion and everyone queued behind it.
@@ -247,7 +254,21 @@ final class SSHControlManager: @unchecked Sendable {
     /// can't reach; the file explorer's "Connect…" button calls this.
     func connectInteractively(alias: String, completion: @escaping @Sendable (Bool) -> Void) {
         queue.async { [weak self] in
-            guard let self, self.beginConnecting(alias, completion: completion) else { return }
+            guard let self else { return }
+            if self.connection(for: alias)?.state == .connecting, !self.interactiveInFlight.contains(alias) {
+                // A BatchMode attempt is running: its `false` would come back without a
+                // prompt ever showing. Wait for it, and prompt only if it failed.
+                self.waiters[alias, default: []].append { [weak self] success in
+                    if success {
+                        completion(true)
+                    } else {
+                        self?.connectInteractively(alias: alias, completion: completion)
+                    }
+                }
+                return
+            }
+            guard self.beginConnecting(alias, completion: completion) else { return }
+            self.interactiveInFlight.insert(alias)
             // A half-dead master from an earlier attempt would make `ControlMaster=auto`
             // reuse it instead of authenticating again.
             Self.killMaster(alias: alias)
@@ -255,7 +276,10 @@ final class SSHControlManager: @unchecked Sendable {
             // (teardownAll on quit runs on it). The alias stays `.connecting` meanwhile.
             DispatchQueue.global(qos: .userInitiated).async {
                 let result = Self.spawnManagedMaster(alias: alias, interactive: true)
-                self.queue.async { self.record(result, alias: alias, completion: completion) }
+                self.queue.async {
+                    self.interactiveInFlight.remove(alias)
+                    self.record(result, alias: alias, completion: completion)
+                }
             }
         }
     }
@@ -305,7 +329,8 @@ final class SSHControlManager: @unchecked Sendable {
             ],
             // Prompts wait on the user.
             timeout: interactive ? 180 : 10,
-            environment: environment)
+            environment: environment,
+            tracked: interactive)
 
         guard spawnResult else {
             debugLog("[SSHControl] Master spawn failed for \(alias)")
@@ -391,6 +416,10 @@ final class SSHControlManager: @unchecked Sendable {
     /// a short deadline, then unlink the sockets unconditionally so a slow exit
     /// can't leave a stale socket behind for the next launch.
     func teardownAll() {
+        // A prompt still open at quit: answering it later would start a master
+        // nobody owns.
+        for process in Self.interactiveSpawns.all() { Self.terminateTree(process) }
+
         let managed: [String] = queue.sync {
             connLock.lock()
             let aliases = connections.filter { $0.value.isManaged }.map(\.key)
@@ -463,7 +492,7 @@ final class SSHControlManager: @unchecked Sendable {
     /// `socketPath(for:)` / `connectionState(for:)` are `queue.sync`, called from
     /// the main thread, so that becomes a UI hang.
     private static func runSSHCommand(
-        _ args: [String], timeout: TimeInterval = 10, environment: [String: String]? = nil
+        _ args: [String], timeout: TimeInterval = 10, environment: [String: String]? = nil, tracked: Bool = false
     ) -> Bool {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/ssh")
@@ -477,11 +506,43 @@ final class SSHControlManager: @unchecked Sendable {
         process.standardError = FileHandle.nullDevice
         process.standardInput = FileHandle.nullDevice
 
-        guard process.runAndWait(seconds: timeout, escalateAfter: 2) else {
-            debugLog("[SSHControl] failed within \(timeout)s: ssh \(args.joined(separator: " "))")
+        guard tracked else {
+            guard process.runAndWait(seconds: timeout, escalateAfter: 2) else {
+                debugLog("[SSHControl] failed within \(timeout)s: ssh \(args.joined(separator: " "))")
+                return false
+            }
+            return true
+        }
+
+        // A prompting ssh: on timeout kill its askpass child too, which would
+        // otherwise stay on screen after ssh is gone.
+        interactiveSpawns.insert(process)
+        defer { interactiveSpawns.remove(process) }
+        let deadline = DispatchWorkItem { terminateTree(process) }
+        DispatchQueue.global().asyncAfter(deadline: .now() + timeout, execute: deadline)
+        defer { deadline.cancel() }
+        guard process.runAndWait(seconds: timeout + 5, escalateAfter: 2) else {
+            debugLog("[SSHControl] interactive ssh failed: ssh \(args.joined(separator: " "))")
             return false
         }
         return true
+    }
+
+    /// SIGTERMs `process` and its descendants (askpass, osascript), children first.
+    private static func terminateTree(_ process: Process) {
+        guard process.isRunning else { return }
+        let pids = ProcessTree.descendants(of: process.processIdentifier, limit: 32)
+        for pid in pids.reversed() { kill(pid, SIGTERM) }
+    }
+
+    /// Lock-guarded set of running interactive ssh processes.
+    private final class SpawnRegistry: @unchecked Sendable {
+        private let lock = NSLock()
+        private var processes: [ObjectIdentifier: Process] = [:]
+
+        func insert(_ process: Process) { lock.withLock { processes[ObjectIdentifier(process)] = process } }
+        func remove(_ process: Process) { lock.withLock { processes[ObjectIdentifier(process)] = nil } }
+        func all() -> [Process] { lock.withLock { Array(processes.values) } }
     }
 
     /// SSH_ASKPASS helper: shows ssh's prompt (password, passphrase, 2FA code,
@@ -536,6 +597,15 @@ final class SSHControlManager: @unchecked Sendable {
                 connLock.unlock()
                 owners.removeAll()
                 waiters.removeAll()
+                interactiveInFlight.removeAll()
+            }
+        }
+
+        /// Resolve a `.connecting` alias as if its spawn returned, for testing.
+        func resolveForTesting(alias: String, success: Bool) {
+            queue.sync {
+                let result = ManagedConnection(state: success ? .ready : .failed, isManaged: true)
+                record(result, alias: alias) { _ in }
             }
         }
 
