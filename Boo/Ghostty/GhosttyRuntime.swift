@@ -634,6 +634,7 @@ private func ghosttyCloseSurface(_ userdata: UnsafeMutableRawPointer?, _ process
         // Skip ghostty_config_load_default_files — Boo manages its own
         // settings.  Loading the user's Ghostty config would prepend values
         // for repeatable keys like font-family, making our settings ignored.
+        // Overrides go in ~/.boo/ghostty-user.conf instead (applyBooSettings).
         applyBooSettings(to: cfg, profile: profile)
         ghostty_config_finalize(cfg)
 
@@ -752,6 +753,13 @@ private func ghosttyCloseSurface(_ userdata: UnsafeMutableRawPointer?, _ process
 
         tmpPath.withCString { path in
             ghostty_config_load_file(cfg, path)
+        }
+
+        // Last, so its options win over Boo's. Repeatable keys (font-family,
+        // keybind) append instead: an empty value first resets them.
+        let userPath = BooPaths.ghosttyUserConfigFile
+        if FileManager.default.fileExists(atPath: userPath) {
+            userPath.withCString { ghostty_config_load_file(cfg, $0) }
         }
     }
 

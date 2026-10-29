@@ -1439,7 +1439,7 @@ class ThemedSplitView: NSSplitView {
         saveSession()
     }
 
-    /// Re-reads shader files after editing them; Ghostty compiles on config push.
+    /// Re-reads shader files and ~/.boo/ghostty-user.conf after editing them; Ghostty compiles on config push.
     @objc func reloadShadersAction(_ sender: Any?) {
         GhosttyRuntime.shared.reloadConfig()
     }

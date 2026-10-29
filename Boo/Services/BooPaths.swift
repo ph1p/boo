@@ -74,8 +74,11 @@ enum BooPaths {
     /// Bookmarks file: ~/.boo/bookmarks.json
     static let bookmarksFile = (configDir as NSString).appendingPathComponent("bookmarks.json")
 
-    /// Ghostty config override: ~/.boo/ghostty.conf
+    /// Ghostty config Boo generates from its settings: ~/.boo/ghostty.conf (overwritten).
     static let ghosttyConfigFile = (configDir as NSString).appendingPathComponent("ghostty.conf")
+
+    /// The user's own Ghostty options, loaded after Boo's: ~/.boo/ghostty-user.conf
+    static let ghosttyUserConfigFile = (configDir as NSString).appendingPathComponent("ghostty-user.conf")
 
     /// Themes directory: ~/.boo/themes/
     static let themesDir: String = {
