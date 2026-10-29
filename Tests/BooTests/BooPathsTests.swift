@@ -26,4 +26,14 @@ final class BooPathsTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: path))
         XCTAssertTrue(path.hasSuffix("logs"))
     }
+
+    func testRestrictConfigDirMakesItOwnerOnly() throws {
+        let dir = NSTemporaryDirectory() + "boo-perm-\(UUID().uuidString)"
+        try FileManager.default.createDirectory(
+            atPath: dir, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o755])
+        defer { try? FileManager.default.removeItem(atPath: dir) }
+        BooPaths.restrictConfigDir(dir)
+        let mode = try FileManager.default.attributesOfItem(atPath: dir)[.posixPermissions] as? Int
+        XCTAssertEqual(mode, 0o700)
+    }
 }

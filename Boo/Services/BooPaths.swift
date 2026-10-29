@@ -265,5 +265,16 @@ enum BooPaths {
             // Attempt creation (the lazy lets already tried, but may have silently failed).
             try fm.createDirectory(atPath: dir, withIntermediateDirectories: true)
         }
+        restrictConfigDir()
+    }
+
+    /// Makes `configDir` owner-only (0700). It holds shell history, session
+    /// scrollback, recordings and logs, all created 0644 under the default
+    /// umask; closing the directory covers every file in it, existing ones too.
+    static func restrictConfigDir(_ dir: String = configDir) {
+        guard let attrs = try? FileManager.default.attributesOfItem(atPath: dir),
+            let mode = attrs[.posixPermissions] as? Int, mode & 0o077 != 0
+        else { return }
+        try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: dir)
     }
 }
