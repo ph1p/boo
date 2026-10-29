@@ -361,29 +361,18 @@ final class RuleEngine {
         if let cwd, FileManager.default.fileExists(atPath: cwd) {
             process.currentDirectoryURL = URL(fileURLWithPath: cwd)
         }
-        let output = Pipe()
-        process.standardOutput = output
-        process.standardError = output
-        process.standardInput = FileHandle.nullDevice
         let ruleID = rule.id
         DispatchQueue.global(qos: .utility).async {
-            do {
-                try process.run()
-            } catch {
-                booLog(.warning, .app, "[Rules] \(ruleID): run failed: \(error.localizedDescription)")
+            // Bounded drain: a backgrounded grandchild (`cmd &`) keeps the pipe
+            // open after the shell exits, which would block an EOF read forever.
+            guard let result = RemoteExplorer.runProcessCapturing(process, timeout: runTimeout) else {
+                booLog(.warning, .app, "[Rules] \(ruleID): run failed or timed out after \(Int(runTimeout))s")
                 return
             }
-            let timer = DispatchWorkItem { if process.isRunning { process.terminate() } }
-            DispatchQueue.global().asyncAfter(deadline: .now() + runTimeout, execute: timer)
-            let data = output.fileHandleForReading.readDataToEndOfFile()
-            process.waitUntilExit()
-            timer.cancel()
-            let text = String(decoding: data.prefix(4096), as: UTF8.self)
+            let text = String((result.stdout + result.stderr).prefix(4096))
                 .trimmingCharacters(in: .whitespacesAndNewlines)
-            let level: BooLogger.Level = process.terminationStatus == 0 ? .info : .warning
-            booLog(
-                level, .app,
-                "[Rules] \(ruleID): run exited \(process.terminationStatus)\(text.isEmpty ? "" : ": \(text)")")
+            let level: BooLogger.Level = result.status == 0 ? .info : .warning
+            booLog(level, .app, "[Rules] \(ruleID): run exited \(result.status)\(text.isEmpty ? "" : ": \(text)")")
         }
     }
 }
