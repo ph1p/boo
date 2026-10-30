@@ -44,6 +44,8 @@ public enum BooMain {
         // Proactively bookmark the default folder — it may predate bookmark persistence.
         FolderBookmarkStore.shared.saveIfNeeded(URL(fileURLWithPath: AppSettings.shared.defaultFolder))
 
+        // Every launch installs the MCP launcher, so it only lacks on a fresh install.
+        let returningUser = FileManager.default.fileExists(atPath: BooPaths.mcpLauncherPath)
         // Install/update shell integration scripts to ~/.boo/shell-integration/
         BooPaths.installShellIntegration()
 
@@ -82,6 +84,7 @@ public enum BooMain {
             Task { @MainActor in AppSettings.shared.applySystemAppearance() }
         }
         AppSettings.shared.applySystemAppearance()
+        WelcomeWindowController.showIfFirstLaunch(returningUser: returningUser)
 
         // Start Sparkle so it can manage automatic update checks and installs.
         SparkleUpdater.shared.start()

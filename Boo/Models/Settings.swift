@@ -330,6 +330,7 @@ final class AppSettings {
         static let defaultFolder = "defaultFolder"
         static let defaultMainPage = "defaultMainPage"
         static let sshControlMasterApproved = "sshControlMasterApproved"
+        static let welcomeShown = "welcomeShown"
         static let customThemes = "customThemes"
         static let newTabCwdMode = "newTabCwdMode"
         static let activeSidebarTab = "activeSidebarTab"
@@ -1196,6 +1197,13 @@ final class AppSettings {
 
     /// Process-wide, like Terminal's: other apps can't observe keystrokes while Boo is frontmost.
     /// Save terminal scrollback on quit and replay it into restored tabs.
+    /// Set once the first-launch welcome window has had its chance. Local
+    /// only: a synced second Mac is still a first launch there.
+    var welcomeShown: Bool {
+        get { UserDefaults.standard.bool(forKey: K.welcomeShown) }
+        set { UserDefaults.standard.set(newValue, forKey: K.welcomeShown) }
+    }
+
     var restoreScrollback: Bool {
         get { bool(K.restoreScrollback, default: true) }
         set { set(newValue, forKey: K.restoreScrollback) }

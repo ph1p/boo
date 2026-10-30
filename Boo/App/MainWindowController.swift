@@ -1501,6 +1501,14 @@ class ThemedSplitView: NSSplitView {
         AboutWindowController.shared.showAbout()
     }
 
+    @objc func showWelcomeAction(_ sender: Any?) {
+        WelcomeWindowController.shared.showWelcome()
+    }
+
+    @objc func openDocumentationAction(_ sender: Any?) {
+        if let url = URL(string: "https://ph1p.github.io/boo/") { NSWorkspace.shared.open(url) }
+    }
+
     @objc func checkForUpdatesAction(_ sender: Any?) {
         SparkleUpdater.shared.checkForUpdates()
     }

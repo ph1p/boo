@@ -319,6 +319,16 @@ extension MainWindowController {
         mainMenu.addItem(windowMenuItem)
         NSApplication.shared.windowsMenu = windowMenu
 
+        let helpMenuItem = NSMenuItem()
+        helpMenuItem.title = "Help"
+        let helpMenu = NSMenu(title: "Help")
+        helpMenu.addItem(withTitle: "Welcome to Boo", action: #selector(showWelcomeAction(_:)), keyEquivalent: "")
+        helpMenu.addItem(
+            withTitle: "Boo Documentation", action: #selector(openDocumentationAction(_:)), keyEquivalent: "")
+        helpMenuItem.submenu = helpMenu
+        mainMenu.addItem(helpMenuItem)
+        NSApplication.shared.helpMenu = helpMenu
+
         // Cmd+1 through Cmd+9 for workspace switching
         viewMenu.addItem(.separator())
         for i in 1...9 {

@@ -55,6 +55,7 @@ Download the latest release from [GitHub Releases](https://github.com/ph1p/boo/r
 - **Quick select** — Cmd+Shift+Space labels URLs, paths, hashes and IPs on screen; type a label to copy it, or Shift+label to insert it
 - **Copy mode** — Cmd+Shift+C moves a vi-style cursor through the scrollback to select and copy without the mouse
 - **Theme import** — Settings → Theme → Import Theme… reads iTerm2 `.itermcolors` and Ghostty theme files
+- **Welcome window** — A fresh install opens with a theme picker and the key shortcuts; Help → Welcome to Boo reopens it
 - **Mouse selection** — Click, double-click (word), triple-click (line)
 - **Signed auto-updater** — Sparkle-based updates with appcast metadata on GitHub Pages and release archives on GitHub Releases
 - **Focus memory** — Remembers last focused pane per workspace, restores on switch
@@ -576,13 +577,16 @@ Releases are automated via [semantic-release](https://github.com/semantic-releas
 
 ## Settings
 
-Open with **Cmd+,**. Organized in tabs:
+Open with **Cmd+,**. The tabs are grouped under Terminal, Appearance, Apps and Plugins, and a search field filters them by name and contents:
 
 - **General** — Core editor and file-opening preferences
 - **Theme** — 32 built-in color themes with live preview swatches, custom theme editor (whole UI restyles live while editing)
 - **Appearance** — Terminal and sidebar fonts, font sizes, cursor style (block/beam/underline/outline)
 - **Status Bar** — Toggle git branch, path, running process, pane count, clock
 - **Layout** — Sidebar position, workspace bar position, tab overflow mode
+- **Profiles** — Per-tab theme, font, shader, shell and environment, and the default profile
+- **Rules** — Output rules editor with a regex tester
+- **Recordings** — Recording folder, file names, idle limit and library
 - **Editor** — Built-in text editor preferences
 - **Browser** — Browser tab history and behavior
 - **Notifications** — Notification preferences
