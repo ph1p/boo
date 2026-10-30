@@ -65,3 +65,25 @@ extension MainWindowController: TmuxHost {
         }
     }
 }
+
+extension MainWindowController {
+    /// The active workspace, or a regular one when tmux owns it: tmux panes
+    /// only show tmux, so files, browsers and plugin views open elsewhere.
+    func contentWorkspace() -> Workspace? {
+        guard let active = activeWorkspace else { return nil }
+        guard active.tmuxWindowID != nil else { return active }
+        if let index = appState.workspaces.lastIndex(where: { $0.tmuxWindowID == nil }) {
+            activateWorkspace(index)
+        } else {
+            openWorkspace(path: active.folderPath)
+        }
+        return activeWorkspace
+    }
+
+    /// `paneView` shows a pane of a tmux window, in any Boo window.
+    func isTmuxPane(_ paneView: PaneView) -> Bool {
+        WindowManager.shared.controllers.contains {
+            $0.appState.workspaceContainingPane(paneView.paneID)?.tmuxWindowID != nil
+        }
+    }
+}

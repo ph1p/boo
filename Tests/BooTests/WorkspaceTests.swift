@@ -30,6 +30,16 @@ final class WorkspaceTests: XCTestCase {
         XCTAssertEqual(ws.splitTree.leafIDs.count, 2)
     }
 
+    func testSplitPaneInTmuxWorkspaceIsNoOp() {
+        let ws = Workspace(folderPath: "/tmp")
+        ws.tmuxWindowID = "@1"
+        let treeBeforeSplit = ws.splitTree
+
+        XCTAssertNil(ws.splitPane(ws.activePaneID, direction: .horizontal))
+        XCTAssertEqual(ws.splitTree, treeBeforeSplit, "tmux owns the layout")
+        XCTAssertEqual(ws.panes.count, 1)
+    }
+
     func testSplitPaneNonExistentLeafIsNoOp() {
         let ws = Workspace(folderPath: "/tmp")
         let treeBeforeSplit = ws.splitTree

@@ -10,7 +10,7 @@ extension MainWindowController {
     /// already showing it in this workspace.
     @discardableResult
     func openTimeline(sessionID: String, label: String) -> Bool {
-        guard let workspace = activeWorkspace else { return false }
+        guard let workspace = contentWorkspace() else { return false }
         // Drop tabs closed since: the map is shared by every window.
         timelineTabs = timelineTabs.filter { AgentInbox.locateInWindows($0.value) != nil }
         if let tabID = timelineTabs[sessionID] {

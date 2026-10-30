@@ -240,6 +240,8 @@ final class Workspace {
 
     @discardableResult
     func splitPane(_ paneID: UUID, direction: SplitTree.SplitDirection, cwd: String? = nil) -> UUID? {
+        // tmux owns this layout; its panes only come from `adopt`.
+        guard tmuxWindowID == nil else { return nil }
         let (newTree, newID) = splitTree.splitting(leafID: paneID, direction: direction)
         guard let newID = newID else {
             booLog(

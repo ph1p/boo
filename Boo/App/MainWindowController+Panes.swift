@@ -403,6 +403,7 @@ extension MainWindowController: PaneViewDelegate {
         }
 
         let destWorkspace = appState.workspaces[workspaceIndex]
+        guard sourceWorkspace.tmuxWindowID == nil, destWorkspace.tmuxWindowID == nil else { return }
         let destPaneID = destWorkspace.activePaneID
         guard let destPane = destWorkspace.pane(for: destPaneID) else { return }
 
@@ -887,6 +888,10 @@ extension MainWindowController {
 
     @objc func reopenTabAction(_ sender: Any?) {
         guard let item = undoStack.popLast(), let workspace = activeWorkspace else { return }
+        if let tmux = TmuxControlClient.owning(workspace: workspace.id) {
+            tmux.newWindow()
+            return
+        }
 
         switch item {
         case .tab(let paneID, let cwd, _):
@@ -978,6 +983,8 @@ extension MainWindowController {
 
     func handleTabDrop(source: PaneView, tabIndex: Int, dest: PaneView, zone: TabDropZone) {
         guard activeWorkspace != nil else { return }
+        // tmux owns which pane a tmux tab lives in.
+        if source.paneID != dest.paneID, isTmuxPane(source) || isTmuxPane(dest) { return }
 
         // Dropped on a pane of another window: the tab moves there.
         if let target = WindowManager.shared.controller(showing: dest), target !== self {
