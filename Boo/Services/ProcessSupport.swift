@@ -18,6 +18,8 @@ extension Process {
     /// `terminationHandler` is set before `run()` to eliminate the race where a fast-exiting
     /// process finishes before the handler is registered, leaving the semaphore unsignalled.
     ///
+    /// A timeout also sends `SIGTERM` to the process's descendants.
+    ///
     /// `escalateAfter` sends `SIGKILL` when the process ignores the `SIGTERM` from a timeout
     /// (a wedged `ssh` stuck in auth does exactly that). Pass nil to skip escalation.
     ///
@@ -49,7 +51,11 @@ extension Process {
         guard sem.wait(timeout: .now() + seconds) == .timedOut else {
             return terminationStatus == 0 ? .exitedZero : .exitedNonZero
         }
+        // Children first, read before the parent dies and they get reparented:
+        // an askpass dialog or a shell's background job would outlive it.
+        let children = ProcessTree.descendants(of: processIdentifier, limit: 32).dropFirst()
         terminate()
+        for pid in children.reversed() { kill(pid, SIGTERM) }
         if let escalateAfter, sem.wait(timeout: .now() + escalateAfter) == .timedOut {
             kill(processIdentifier, SIGKILL)
             _ = sem.wait(timeout: .now() + escalateAfter)

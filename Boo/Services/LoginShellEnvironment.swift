@@ -29,7 +29,7 @@ final class LoginShellEnvironment: @unchecked Sendable {
     static let maxAttempts = 3
 
     /// No login shell under XCTest: rc files are slow and machine-specific.
-    nonisolated(unsafe) static var disabled = NSClassFromString("XCTestCase") != nil
+    static let disabled = NSClassFromString("XCTestCase") != nil
 
     private let capturer: @Sendable (TimeInterval) -> [String: String]?
     private let isDisabled: Bool
@@ -50,7 +50,7 @@ final class LoginShellEnvironment: @unchecked Sendable {
         lock.lock()
         let backoff = TimeInterval(failures) * retryDelay
         let start =
-            resolved == nil && !resolving && !isDisabled && failures < Self.maxAttempts
+            resolved == nil && !resolving && !isDisabled
             && booUptime() - lastFailure >= backoff
         if start { resolving = true }
         // Later attempts get more time: the first one may have raced a cold disk.

@@ -506,23 +506,12 @@ final class SSHControlManager: @unchecked Sendable {
         process.standardError = FileHandle.nullDevice
         process.standardInput = FileHandle.nullDevice
 
-        guard tracked else {
-            guard process.runAndWait(seconds: timeout, escalateAfter: 2) else {
-                debugLog("[SSHControl] failed within \(timeout)s: ssh \(args.joined(separator: " "))")
-                return false
-            }
-            return true
-        }
-
-        // A prompting ssh: on timeout kill its askpass child too, which would
-        // otherwise stay on screen after ssh is gone.
-        interactiveSpawns.insert(process)
-        defer { interactiveSpawns.remove(process) }
-        let deadline = DispatchWorkItem { terminateTree(process) }
-        DispatchQueue.global().asyncAfter(deadline: .now() + timeout, execute: deadline)
-        defer { deadline.cancel() }
-        guard process.runAndWait(seconds: timeout + 5, escalateAfter: 2) else {
-            debugLog("[SSHControl] interactive ssh failed: ssh \(args.joined(separator: " "))")
+        // A prompting ssh is killed on quit too (see `teardownAll`); the
+        // timeout already takes its askpass child down with it.
+        if tracked { interactiveSpawns.insert(process) }
+        defer { if tracked { interactiveSpawns.remove(process) } }
+        guard process.runAndWait(seconds: timeout, escalateAfter: 2) else {
+            debugLog("[SSHControl] failed within \(timeout)s: ssh \(args.joined(separator: " "))")
             return false
         }
         return true
