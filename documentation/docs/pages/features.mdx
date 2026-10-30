@@ -97,6 +97,24 @@ Boo's shell integration marks each prompt (OSC 133), so the terminal knows where
 
 **Terminal → Quick Select** (**Cmd+Shift+Space**) puts a short label on every URL, file path, git hash, IP address, UUID and hex number on screen. Type a label to copy that text; type it with **Shift** to insert it at the prompt instead. **Delete** removes the last typed letter, and **Esc**, a click or scrolling cancels. Identical matches share a label, and the newest output gets the shortest labels.
 
+
+## Copy Mode
+
+**Terminal → Copy Mode** (**Cmd+Shift+C**) puts a keyboard cursor on the terminal, starting at the shell cursor. Move it through the whole scrollback with vi keys; the view scrolls along.
+
+| Keys | Action |
+| ---- | ------ |
+| **h j k l** / arrows | Move one cell or line |
+| **w** / **b** / **e** | Next word / previous word / end of word |
+| **0** / **^** / **$** | Line start / first non-blank / line end |
+| **g** / **G** | Top / bottom of the scrollback |
+| **Ctrl+U** / **Ctrl+D**, **Ctrl+B** / **Ctrl+F** | Half page / full page up and down |
+| **v** / **V** | Start (or stop) a character / line selection |
+| **y** or **Return** | Copy the selection (the cursor's line if none) and leave |
+| **Esc** | Clear the selection, then leave |
+
+A number before a motion repeats it (**5j**). **Cmd+C** copies the selection without leaving. Leaving scrolls the view back to where it was.
+
 ## Session Recording
 
 **Terminal → Record Session**, or **Start Recording** in a pane's **⋯** corner menu, records the terminal's output as an [asciicast v2](https://docs.asciinema.org/manual/asciicast/v2/) file. **Record All Panes** in the same menu records every terminal pane at once. The tab shows a red dot while recording, and the pane gets a red frame. Choose the item again to stop. Only output and resizes are recorded, never keystrokes. Closing the tab also stops the recording.

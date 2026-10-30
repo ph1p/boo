@@ -73,6 +73,13 @@ import Cocoa
         let offset: Int
         let len: Int
     }
+    /// Latest scrollbar state, so copy mode can map screen rows to the viewport.
+    var scrollbar: GhosttyScrollbar? {
+        didSet {
+            guard let copyModeOverlay, let scrollbar else { return }
+            copyModeOverlay.update(rows: scrollbar.total, pageRows: scrollbar.len)
+        }
+    }
     private var isFocused = false
     private var markedText = NSMutableAttributedString()
     private var pendingText: String?
@@ -453,6 +460,7 @@ import Cocoa
 
     override func resignFirstResponder() -> Bool {
         endQuickSelect()
+        endCopyMode(restoreScroll: false)
         setFocused(false)
         return super.resignFirstResponder()
     }
@@ -479,6 +487,10 @@ import Cocoa
     override func keyDown(with event: NSEvent) {
         if let quickSelectOverlay {
             quickSelectOverlay.handle(event)
+            return
+        }
+        if let copyModeOverlay {
+            copyModeOverlay.handle(event)
             return
         }
         guard let surface = surface, !isInputLocked else { return }
@@ -871,7 +883,13 @@ import Cocoa
 
     // MARK: - Copy / Paste / Flash
 
-    @objc func copy(_ sender: Any?) { sendBindingAction("copy:clipboard") }
+    @objc func copy(_ sender: Any?) {
+        if let range = copyModeOverlay?.state.range {
+            copyScreenText(from: range.start, to: range.end)
+            return
+        }
+        sendBindingAction("copy:clipboard")
+    }
 
     /// Scrolls to the previous (-1) or next (1) shell prompt (OSC 133 A).
     func jumpToPrompt(_ delta: Int) { sendBindingAction("jump_to_prompt:\(delta)") }
@@ -922,6 +940,100 @@ import Cocoa
     func endQuickSelect() {
         quickSelectOverlay?.removeFromSuperview()
         quickSelectOverlay = nil
+    }
+
+    // MARK: - Copy mode
+
+    private var copyModeOverlay: CopyModeOverlay?
+    /// Viewport top when copy mode started, restored when it ends.
+    private var copyModeReturnRow: Int?
+
+    var isInCopyMode: Bool { copyModeOverlay != nil }
+
+    /// A keyboard cursor over the scrollback; starts on the shell cursor
+    /// when the view is at the bottom, else mid-viewport.
+    func startCopyMode() {
+        guard copyModeOverlay == nil, let surface, let size = gridSize, size.cell_width_px > 0, let cellHeight
+        else { return }
+        endQuickSelect()
+        let scale = window?.backingScaleFactor ?? layer?.contentsScale ?? 2
+        let cellWidth = CGFloat(size.cell_width_px) / scale
+        let rows = Int(size.rows)
+        let bar = scrollbar ?? GhosttyScrollbar(total: rows, offset: 0, len: rows)
+
+        var cursor = CopyMode.Point(row: bar.offset + rows / 2, column: 0)
+        if bar.offset + bar.len >= bar.total {
+            var x = 0.0
+            var y = 0.0
+            var w = 0.0
+            var h = 0.0
+            ghostty_surface_ime_point(surface, &x, &y, &w, &h)
+            let row = Int((CGFloat(y) - cellHeight / 2 - Self.gridPadding) / cellHeight)
+            let column = Int((CGFloat(x) - Self.gridPadding + cellWidth / 2) / cellWidth)
+            cursor = CopyMode.Point(row: bar.offset + min(max(0, row), rows - 1), column: max(0, column))
+        }
+
+        let state = CopyMode(
+            cursor: cursor, rows: bar.total, columns: Int(size.columns), pageRows: bar.len,
+            cells: { [weak self] row in CopyMode.cells(of: self?.screenLine(row) ?? "") })
+        let overlay = CopyModeOverlay(
+            frame: bounds, state: state, cellSize: CGSize(width: cellWidth, height: cellHeight),
+            viewport: { [weak self] in
+                let bar = self?.scrollbar
+                return (bar?.offset ?? 0, bar?.len ?? rows)
+            },
+            onScroll: { [weak self] top in self?.sendBindingAction("scroll_to_row:\(top)") },
+            onCopy: { [weak self] start, end in
+                guard let self else { return }
+                self.copyScreenText(from: start, to: end)
+                self.endCopyMode()
+                self.flashTerminal(nil)
+            },
+            onExit: { [weak self] in self?.endCopyMode() })
+        addSubview(overlay)
+        copyModeOverlay = overlay
+        copyModeReturnRow = bar.offset
+        NSAccessibility.post(element: overlay, notification: .layoutChanged)
+    }
+
+    /// Leaves copy mode, scrolling back to where it started.
+    func endCopyMode(restoreScroll: Bool = true) {
+        guard let overlay = copyModeOverlay else { return }
+        overlay.removeFromSuperview()
+        copyModeOverlay = nil
+        if restoreScroll, let row = copyModeReturnRow { sendBindingAction("scroll_to_row:\(row)") }
+        copyModeReturnRow = nil
+    }
+
+    /// One screen row (scrollback included) as text.
+    private func screenLine(_ row: Int) -> String? {
+        guard let columns = gridSize?.columns, columns > 0 else { return nil }
+        return readScreenText(
+            from: CopyMode.Point(row: row, column: 0), to: CopyMode.Point(row: row, column: Int(columns) - 1))
+    }
+
+    private func readScreenText(from start: CopyMode.Point, to end: CopyMode.Point) -> String? {
+        guard let surface else { return nil }
+        let selection = ghostty_selection_s(
+            top_left: ghostty_point_s(
+                tag: GHOSTTY_POINT_SCREEN, coord: GHOSTTY_POINT_COORD_EXACT,
+                x: UInt32(max(0, start.column)), y: UInt32(max(0, start.row))),
+            bottom_right: ghostty_point_s(
+                tag: GHOSTTY_POINT_SCREEN, coord: GHOSTTY_POINT_COORD_EXACT,
+                x: UInt32(max(0, end.column)), y: UInt32(max(0, end.row))),
+            rectangle: false)
+        var text = ghostty_text_s()
+        guard ghostty_surface_read_text(surface, selection, &text) else { return nil }
+        defer { ghostty_surface_free_text(surface, &text) }
+        return string(from: text)
+    }
+
+    private func copyScreenText(from start: CopyMode.Point, to end: CopyMode.Point) {
+        guard let text = readScreenText(from: start, to: end), !text.isEmpty else {
+            NSSound.beep()
+            return
+        }
+        copyToPasteboard(text)
     }
 
     @objc func flashTerminal(_ sender: Any?) {

@@ -341,6 +341,8 @@ final class QuickTerminalController: NSObject, NSWindowDelegate, NSMenuItemValid
 
     @objc func quickSelectAction(_ sender: Any?) { focusedTerminal?.startQuickSelect() }
 
+    @objc func copyModeAction(_ sender: Any?) { focusedTerminal?.startCopyMode() }
+
     // Window-only commands: disabled here so they don't reach the window behind.
     @objc func newBrowserTabAction(_ sender: Any?) {}
     @objc func newTabOfType(_ sender: NSMenuItem) {}
@@ -389,7 +391,8 @@ final class QuickTerminalController: NSObject, NSWindowDelegate, NSMenuItemValid
             return true
         // Disabled items pass the key on, so ⌘↑ reaches the terminal unfocused.
         case #selector(jumpToPreviousPromptAction(_:)), #selector(jumpToNextPromptAction(_:)),
-            #selector(copyLastOutputAction(_:)), #selector(quickSelectAction(_:)):
+            #selector(copyLastOutputAction(_:)), #selector(quickSelectAction(_:)),
+            #selector(copyModeAction(_:)):
             return focusedTerminal != nil
         default:
             return Self.enabledActions.contains(action)

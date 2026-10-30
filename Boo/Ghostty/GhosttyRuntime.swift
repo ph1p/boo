@@ -254,6 +254,7 @@ private func ghosttyAction(_ app: ghostty_app_t?, _ target: ghostty_target_s, _ 
         let scrollbar = GhosttyView.GhosttyScrollbar(
             total: Int(sb.total), offset: Int(sb.offset), len: Int(sb.len))
         DispatchQueue.main.async { [weak view] in
+            view?.scrollbar = scrollbar
             view?.onScrollbarChanged?(scrollbar)
         }
         return true

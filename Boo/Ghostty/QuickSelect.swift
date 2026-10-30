@@ -21,7 +21,7 @@ enum QuickSelect {
         #"(?:~|\.{1,2})?(?:/[\w.@+-]+)+/?|\b[\w.@+-]+(?:/[\w.@+-]+)+/?"#,
         #"\b(?:\d{1,3}\.){3}\d{1,3}(?::\d+)?\b"#,
         #"\b0x[0-9a-fA-F]{4,}\b"#,
-        #"\b[0-9a-f]{7,40}\b"#,
+        #"\b[0-9a-f]{7,40}\b"#
     ].map { try! NSRegularExpression(pattern: $0) }
 
     /// Home-row first, so most selections are one easy key.
@@ -85,7 +85,7 @@ enum QuickSelect {
         text.reduce(0) { $0 + (isWide($1) ? 2 : 1) }
     }
 
-    private static func isWide(_ character: Character) -> Bool {
+    static func isWide(_ character: Character) -> Bool {
         guard let scalar = character.unicodeScalars.first else { return false }
         if character.unicodeScalars.count > 1, scalar.properties.isEmojiPresentation { return true }
         switch scalar.value {

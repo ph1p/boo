@@ -53,6 +53,7 @@ Download the latest release from [GitHub Releases](https://github.com/ph1p/boo/r
 - **Reopen closed tabs** — Cmd+Opt+Z reopens closed tabs and panes
 - **Scrollback restore** — Terminal screens and scrollback come back after a restart (Settings → General → Startup)
 - **Quick select** — Cmd+Shift+Space labels URLs, paths, hashes and IPs on screen; type a label to copy it, or Shift+label to insert it
+- **Copy mode** — Cmd+Shift+C moves a vi-style cursor through the scrollback to select and copy without the mouse
 - **Theme import** — Settings → Theme → Import Theme… reads iTerm2 `.itermcolors` and Ghostty theme files
 - **Mouse selection** — Click, double-click (word), triple-click (line)
 - **Signed auto-updater** — Sparkle-based updates with appcast metadata on GitHub Pages and release archives on GitHub Releases

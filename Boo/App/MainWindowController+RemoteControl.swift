@@ -240,7 +240,8 @@ extension MainWindowController: NSMenuItemValidation {
             return WindowManager.shared.controllers.count > 1
         // Disabled items pass the key on, so ⌘↑ still works in editors.
         case #selector(jumpToPreviousPromptAction(_:)), #selector(jumpToNextPromptAction(_:)),
-            #selector(copyLastOutputAction(_:)), #selector(quickSelectAction(_:)):
+            #selector(copyLastOutputAction(_:)), #selector(quickSelectAction(_:)),
+            #selector(copyModeAction(_:)):
             return focusedGhosttyView != nil
         // Stable title (palette IDs are menu paths); the checkmark shows state.
         case #selector(toggleRecordingAction(_:)):

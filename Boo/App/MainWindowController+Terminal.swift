@@ -44,6 +44,8 @@ extension MainWindowController {
 
     @objc func quickSelectAction(_ sender: Any?) { focusedGhosttyView?.startQuickSelect() }
 
+    @objc func copyModeAction(_ sender: Any?) { focusedGhosttyView?.startCopyMode() }
+
     @objc func openRecordingAction(_ sender: Any?) {
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [.init(filenameExtension: "cast") ?? .data]
