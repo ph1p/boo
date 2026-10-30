@@ -48,18 +48,9 @@ struct FileTreeGitStatus: Equatable, Sendable {
     /// Parse `git status --porcelain=v1 -z --ignored=matching` output.
     init(repoRoot: String, porcelainZ output: String) {
         self.repoRoot = repoRoot
-        let fields = output.split(separator: "\0", omittingEmptySubsequences: true)
-        var i = 0
-        while i < fields.count {
-            let field = fields[i]
-            i += 1
-            guard field.count >= 4 else { continue }
-            let x = field[field.startIndex]
-            let y = field[field.index(after: field.startIndex)]
-            // Renames/copies carry the original path in the next NUL field.
-            if x == "R" || x == "C" { i += 1 }
-            guard let status = FileGitStatus(x: x, y: y) else { continue }
-            var rel = String(field.dropFirst(3))
+        for entry in GitPorcelain.records(output) {
+            guard let status = FileGitStatus(x: entry.x, y: entry.y) else { continue }
+            var rel = entry.path
             if rel.hasSuffix("/") { rel.removeLast() }
             record(status, at: (repoRoot as NSString).appendingPathComponent(rel))
         }
