@@ -70,7 +70,7 @@ class ToolbarView: NSView {
     var dropTargetIndex: Int?
 
     // Ghost drag state
-    var ghostWindow: NSWindow?
+    var ghostWindow: DragGhostWindow?
     var isDragging: Bool = false
 
     // Hover state
