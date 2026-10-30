@@ -289,12 +289,14 @@ Settings window (`Boo/Views/SettingsWindow.swift`) uses a left sidebar + content
 
 ```swift
 enum Tab: Hashable {
-    case general, theme, appearance, statusBar, layout, editor, browser, notifications, plugins, shortcuts
+    case general, theme, appearance, statusBar, layout, profiles, rules, recordings
+    case editor, browser, notifications, plugins, shortcuts
     case pluginSettings(pluginID: String)  // per-plugin settings page
+    // `group` places each tab in a sidebar section; `keywords` feed the sidebar search.
 }
 ```
 
-Fixed tabs are listed in `Tab.fixed`. The **PLUGINS** sidebar section is generated dynamically from enabled plugins that have settings.
+Fixed tabs are listed in `Tab.fixed`, ordered by `Tab.Group` (Terminal, Appearance, Apps, Plugins). The **Plugins** section also lists, dynamically, the enabled plugins that have settings. New tabs need a `group` and `keywords` entry.
 
 ### Adding a setting to a built-in plugin
 

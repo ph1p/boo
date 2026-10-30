@@ -92,12 +92,62 @@ struct SettingsView: View {
         case shortcuts
         case pluginSettings(pluginID: String)
 
+        /// Sidebar sections, in display order.
+        enum Group: String, CaseIterable {
+            case terminal = "Terminal"
+            case appearance = "Appearance"
+            case apps = "Apps"
+            case plugins = "Plugins"
+        }
+
         static var fixed: [Tab] {
             [
-                .general, .theme, .appearance, .statusBar, .layout, .profiles, .rules, .recordings, .editor, .browser,
-                .notifications,
-                .plugins, .shortcuts
+                .general, .profiles, .rules, .shortcuts, .recordings,
+                .theme, .appearance, .statusBar, .layout,
+                .editor, .browser, .notifications,
+                .plugins
             ]
+        }
+
+        var group: Group {
+            switch self {
+            case .general, .profiles, .rules, .shortcuts, .recordings: return .terminal
+            case .theme, .appearance, .statusBar, .layout: return .appearance
+            case .editor, .browser, .notifications: return .apps
+            case .plugins, .pluginSettings: return .plugins
+            }
+        }
+
+        /// What the page holds, so the sidebar filter finds "font" or "sync"
+        /// without the user knowing which page has it.
+        var keywords: String {
+            switch self {
+            case .general:
+                return "folder startup sync history scrollback restore budget agent debug logging ignore"
+            case .theme: return "colors dark light system mode custom import iterm2 ghostty palette"
+            case .appearance: return "font size cursor shader sidebar font terminal font"
+            case .statusBar: return "segments git clock battery status"
+            case .layout: return "sidebar workspace bar tab groups pane controls tab overflow vertical tabs"
+            case .profiles: return "profile shell command environment ssh directory"
+            case .rules: return "regex trigger highlight notify confirm confirmation automation"
+            case .recordings: return "record asciinema cast video export markers idle"
+            case .editor: return "code font tab size spaces line numbers minimap word wrap format external"
+            case .browser: return "home page history website data links close"
+            case .notifications: return "alerts command duration ports bursts"
+            case .plugins: return "extensions installed enable disable"
+            case .shortcuts: return "keyboard keys bindings rebind hotkey quick terminal"
+            case .pluginSettings(let id): return id
+            }
+        }
+
+        /// Tabs whose label or keywords contain every word of `query`.
+        static func matching(_ query: String, in tabs: [Tab]) -> [Tab] {
+            let words = query.lowercased().split(whereSeparator: \.isWhitespace)
+            guard !words.isEmpty else { return tabs }
+            return tabs.filter { tab in
+                let haystack = (tab.label + " " + tab.keywords).lowercased()
+                return words.allSatisfy { haystack.contains($0) }
+            }
         }
 
         var label: String {
@@ -142,6 +192,7 @@ struct SettingsView: View {
     }
 
     @State private var selectedTab: Tab? = .general
+    @State private var query = ""
     /// A tab asked for from outside (e.g. "Edit Profiles…"); taken by the view.
     nonisolated(unsafe) static var requestedTab: Tab?
     static let selectTabNotification = Notification.Name("BooSettingsSelectTab")
@@ -184,24 +235,34 @@ struct SettingsView: View {
             HStack(spacing: IslandMetrics.gap) {
                 // Sidebar island
                 VStack(spacing: 0) {
+                    SettingTextField(
+                        placeholder: "Search", text: $query, icon: "magnifyingglass", trailingClear: true,
+                        onCommit: selectFirstMatch
+                    )
+                    .padding(.horizontal, 10)
+                    .padding(.top, 10)
+                    let visible = Tab.matching(query, in: Tab.fixed + pluginTabs)
                     List(selection: $selectedTab) {
-                        // Unlabelled: the window header already says "Settings", and
-                        // repeating it as a section title stutters.
-                        SwiftUI.Section {
-                            ForEach(Tab.fixed, id: \.label) { tab in
-                                sidebarLabel(tab).tag(tab)
-                            }
-                        }
-                        if !pluginTabs.isEmpty {
-                            SwiftUI.Section("Plugins") {
-                                ForEach(pluginTabs, id: \.label) { tab in
-                                    sidebarLabel(tab).tag(tab)
+                        ForEach(Tab.Group.allCases, id: \.self) { group in
+                            let tabs = visible.filter { $0.group == group }
+                            if !tabs.isEmpty {
+                                SwiftUI.Section(group.rawValue) {
+                                    ForEach(tabs, id: \.label) { tab in
+                                        sidebarLabel(tab).tag(tab)
+                                    }
                                 }
                             }
                         }
                     }
                     .listStyle(.sidebar)
                     .scrollContentBackground(.hidden)
+                    .overlay {
+                        if visible.isEmpty {
+                            Text("No matches")
+                                .font(.system(size: 12))
+                                .foregroundStyle(t.textTertiary)
+                        }
+                    }
                 }
                 .frame(width: 190)
                 .island(t)
@@ -224,6 +285,11 @@ struct SettingsView: View {
         .environment(\.tokens, t)
         .onAppear(perform: takeRequestedTab)
         .onReceive(NotificationCenter.default.publisher(for: Self.selectTabNotification)) { _ in takeRequestedTab() }
+    }
+
+    /// Return in the search field opens the first match.
+    private func selectFirstMatch() {
+        if let first = Tab.matching(query, in: Tab.fixed + pluginTabs).first { selectedTab = first }
     }
 
     private func takeRequestedTab() {
