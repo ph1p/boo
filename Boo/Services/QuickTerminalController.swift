@@ -366,6 +366,7 @@ final class QuickTerminalController: NSObject, NSWindowDelegate, NSMenuItemValid
     @objc func swapPaneDownAction(_ sender: Any?) {}
     @objc func findAction(_ sender: Any?) {}
     @objc func saveAction(_ sender: Any?) {}
+    @objc func saveAsAction(_ sender: Any?) {}
     @objc func toggleSidebarAction(_ sender: Any?) {}
     @objc func toggleFullScreenAction(_ sender: Any?) {}
     @objc func switchToWorkspaceAction(_ sender: NSMenuItem) {}

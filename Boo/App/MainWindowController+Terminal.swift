@@ -77,6 +77,14 @@ extension MainWindowController {
         }
     }
 
+    @objc func saveAsAction(_ sender: Any?) {
+        guard let ws = activeWorkspace,
+            let pane = ws.pane(for: ws.activePaneID),
+            let editor = paneViews[pane.id]?.activeContentView as? EditorContentView
+        else { return }
+        editor.saveAs()
+    }
+
     @objc func copy(_ sender: Any?) {
         activeGhosttyView?.copy(sender)
     }

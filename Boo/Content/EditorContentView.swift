@@ -7,28 +7,51 @@ import WebKit
 final class EditorContentView: NSView, ContentViewProtocol {
     let contentType: ContentType = .editor
 
+    /// Monaco gets unusably slow well before this; such files belong in a pager.
+    private static let maxFileSize = 50 * 1024 * 1024
+
     private var webView: WKWebView?
     private var filePath: String?
     private var initialContent: String = ""
+    /// The encoding the file was read in, and is written back in.
+    private var encoding: String.Encoding = .utf8
+    /// Why the file isn't editable (unreadable, binary, too large). While set the
+    /// editor is read-only and saving is refused, so an empty or partial buffer
+    /// can never overwrite the file.
+    private var loadError: String?
+    /// Reports other programs' writes; our own are noted so they don't echo back.
+    private var watcher: WatchedFile?
+    /// Set after a failed autosave so the next ones don't stack up alerts.
+    private var autosaveFailed = false
     private var currentTitle: String
     private var isDirty = false
     private var isReady = false  // Set when JS signals 'ready'
     /// A line to jump to once the editor holds the file.
     private var pendingReveal: (line: Int, column: Int)?
 
+    private enum SaveReason {
+        /// ⌘S, Save As, or saving before close: runs the on-save edits and reports errors.
+        case explicit
+        /// Autosave when the editor loses focus: runs the on-save edits.
+        case focusChange
+        /// Autosave while typing: leaves the text alone so the cursor doesn't jump.
+        case delay
+    }
+
     // MARK: - Callbacks
 
     var onTitleChanged: ((String) -> Void)?
     var onFocused: (() -> Void)?
     var onCloseRequested: (() -> Void)?
-    /// Save on every (debounced) edit instead of waiting for ⌘S.
+    /// Save on every (debounced) edit regardless of the autosave setting.
     var autosave = false
     /// Monaco options that win over the editor settings (e.g. a compact sidebar
     /// editor without line numbers). Set before the editor loads.
     var optionOverrides: [String: Any] = [:]
 
     var hasUnsavedChanges: Bool { isDirty }
-    var fileDisplayName: String { filePath.map { ($0 as NSString).lastPathComponent } ?? "Untitled" }
+    var fileDisplayName: String { fileName ?? "Untitled" }
+    private var fileName: String? { filePath.map { ($0 as NSString).lastPathComponent } }
 
     // MARK: - Init
 
@@ -52,6 +75,7 @@ final class EditorContentView: NSView, ContentViewProtocol {
         }
 
         setupWebView()
+        startWatching()
 
         NotificationCenter.default.addObserver(
             self,
@@ -63,24 +87,56 @@ final class EditorContentView: NSView, ContentViewProtocol {
 
     private func loadContentFromDisk(path: String) {
         debugLog("[Editor] Attempting to load from path: \(path)")
-        let url = URL(fileURLWithPath: path)
+        initialContent = ""
+        encoding = .utf8
+        loadError = nil
 
-        // Try reading with various encodings or as data first
+        // A missing file is a new one; the first save creates it.
+        guard let attributes = try? FileManager.default.attributesOfItem(atPath: path) else { return }
+
+        if let size = (attributes[.size] as? NSNumber)?.intValue, size > Self.maxFileSize {
+            let megabytes = ByteCountFormatter.string(fromByteCount: Int64(size), countStyle: .file)
+            loadError = "This file is too large to edit here (\(megabytes))."
+            return
+        }
+
+        let data: Data
         do {
-            // First try to coordinate access if it's a sandbox path (optional improvement)
-            let loaded = try String(contentsOf: url, encoding: .utf8)
-            self.initialContent = loaded
-            debugLog("[Editor] Successfully loaded \(loaded.count) characters from disk")
+            data = try Data(contentsOf: URL(fileURLWithPath: path))
         } catch {
-            debugLog("[Editor] UTF-8 load failed, trying MacOSRoman: \(error.localizedDescription)")
-            do {
-                let loaded = try String(contentsOf: url, encoding: .macOSRoman)
-                self.initialContent = loaded
-                debugLog("[Editor] Successfully loaded \(loaded.count) characters (MacOSRoman)")
-            } catch {
-                debugLog("[Editor] CRITICAL: Failed to load from disk: \(error.localizedDescription)")
-                self.initialContent = ""
-            }
+            debugLog("[Editor] CRITICAL: Failed to load from disk: \(error.localizedDescription)")
+            loadError = "Couldn't read this file: \(error.localizedDescription)"
+            return
+        }
+
+        guard let (text, detected) = Self.decode(data) else {
+            loadError = "This looks like a binary file, so it was opened read-only and empty."
+            return
+        }
+        initialContent = text
+        encoding = detected
+        debugLog("[Editor] Loaded \(text.count) characters (\(Self.displayName(of: detected)))")
+    }
+
+    /// UTF-16 needs its byte order mark; other text never contains NUL bytes,
+    /// which keeps binaries from being decoded as Mac Roman.
+    private static func decode(_ data: Data) -> (String, String.Encoding)? {
+        if data.starts(with: [0xFF, 0xFE]) || data.starts(with: [0xFE, 0xFF]) {
+            return String(data: data, encoding: .utf16).map { ($0, .utf16) }
+        }
+        if data.prefix(8192).contains(0) { return nil }
+        for candidate in [String.Encoding.utf8, .windowsCP1252, .macOSRoman] {
+            if let text = String(data: data, encoding: candidate) { return (text, candidate) }
+        }
+        return nil
+    }
+
+    private static func displayName(of encoding: String.Encoding) -> String {
+        switch encoding {
+        case .utf16: return "UTF-16"
+        case .windowsCP1252: return "Windows 1252"
+        case .macOSRoman: return "Mac Roman"
+        default: return "UTF-8"
         }
     }
 
@@ -146,23 +202,24 @@ final class EditorContentView: NSView, ContentViewProtocol {
         webView?.loadFileURL(bundleURL, allowingReadAccessTo: bundleURL.deletingLastPathComponent())
     }
 
-    private func jsonString(from object: [String: Any]) -> String? {
-        guard let data = try? JSONSerialization.data(withJSONObject: object),
-            let str = String(data: data, encoding: .utf8)
-        else { return nil }
-        return str
+    /// A JS literal for `value` (an object, array or string).
+    private func jsonString(from value: Any) -> String? {
+        guard let data = try? JSONSerialization.data(withJSONObject: value, options: .fragmentsAllowed) else {
+            return nil
+        }
+        return String(data: data, encoding: .utf8)
     }
 
     private func sendInitialData() {
-        let language = getMonacoLanguage()
-        let monacoTheme = buildMonacoTheme()
-
-        let initData: [String: Any] = [
+        var initData: [String: Any] = [
             "content": initialContent,
-            "language": language,
-            "themeData": monacoTheme,
+            "encoding": Self.displayName(of: encoding),
+            "readOnly": loadError != nil,
+            "themeData": buildMonacoTheme(),
             "options": buildEditorOptions()
         ]
+        if let fileName { initData["fileName"] = fileName }
+        if let loadError { initData["notice"] = loadError }
 
         guard let jsonStr = jsonString(from: initData) else { return }
         debugLog("[Editor] Sending initial data to JS (\(initialContent.count) chars)")
@@ -188,26 +245,12 @@ final class EditorContentView: NSView, ContentViewProtocol {
         webView?.evaluateJavaScript("revealPosition(\(reveal.line), \(reveal.column))")
     }
 
-    private func getMonacoLanguage() -> String {
-        guard let path = filePath else { return "plaintext" }
-        let ext = (path as NSString).pathExtension.lowercased()
-        switch ext {
-        case "swift": return "swift"
-        case "js", "mjs", "cjs": return "javascript"
-        case "ts": return "typescript"
-        case "json": return "json"
-        case "md", "markdown": return "markdown"
-        case "html", "htm": return "html"
-        case "css": return "css"
-        case "py": return "python"
-        case "sh", "bash", "zsh": return "shell"
-        case "yml", "yaml": return "yaml"
-        case "rs": return "rust"
-        case "go": return "go"
-        case "c", "h": return "c"
-        case "cpp", "hpp", "cc", "hh": return "cpp"
-        default: return "plaintext"
-        }
+    /// Tells the editor the file name (for the language) and encoding after they change.
+    private func sendFileInfo(includingName: Bool) {
+        var info: [String: Any] = ["encoding": Self.displayName(of: encoding)]
+        if includingName, let fileName { info["fileName"] = fileName }
+        guard isReady, let json = jsonString(from: info) else { return }
+        webView?.evaluateJavaScript("setFileInfo(\(json))")
     }
 
     private func applyEditorAppearance() {
@@ -253,10 +296,17 @@ final class EditorContentView: NSView, ContentViewProtocol {
             "lineHeight": Int((fontSize * 1.5).rounded(.up)),
             "tabSize": settings.editorTabSize,
             "insertSpaces": settings.editorInsertSpaces,
+            "detectIndentation": settings.editorDetectIndentation,
             "wordWrap": settings.editorWordWrap ? "on" : "off",
             "lineNumbers": settings.editorLineNumbers ? "on" : "off",
             "minimap": settings.editorMinimap,
-            "formatOnSave": settings.editorFormatOnSave
+            "renderWhitespace": settings.editorRenderWhitespace.rawValue,
+            "bracketPairColors": settings.editorBracketPairColors,
+            "stickyScroll": settings.editorStickyScroll,
+            "fontLigatures": settings.editorFontLigatures,
+            "cursorStyle": settings.editorCursorStyle.rawValue,
+            "cursorBlinking": settings.editorCursorBlinking,
+            "statusStrip": settings.editorShowStatusStrip
         ]
         if settings.editorRulerColumn > 0 {
             opts["rulers"] = [settings.editorRulerColumn]
@@ -279,9 +329,13 @@ final class EditorContentView: NSView, ContentViewProtocol {
         onTitleChanged?(currentTitle)
     }
 
-    func deactivate() {}
+    func deactivate() {
+        autosaveOnFocusLoss()
+    }
 
     func cleanup() {
+        watcher?.stop()
+        watcher = nil
         webView?.configuration.userContentController.removeScriptMessageHandler(forName: "boo")
         webView?.removeFromSuperview()
         webView = nil
@@ -299,20 +353,18 @@ final class EditorContentView: NSView, ContentViewProtocol {
     func restoreState(_ state: ContentState) {
         guard case .editor(let editorState) = state else { return }
         filePath = editorState.filePath
-        isDirty = editorState.isDirty
+        // The text comes back from disk, so the unsaved edits are gone.
+        isDirty = false
 
         if let path = editorState.filePath, !path.isEmpty {
             loadContentFromDisk(path: path)
         } else {
             initialContent = ""
+            loadError = nil
         }
+        startWatching()
 
         updateTitle()
-
-        if currentTitle != editorState.title {
-            currentTitle = editorState.title
-            onTitleChanged?(editorState.title)
-        }
 
         if isReady {
             sendInitialData()
@@ -321,68 +373,241 @@ final class EditorContentView: NSView, ContentViewProtocol {
 
     // MARK: - Persistence
 
+    /// Saves with the on-save edits; an untitled editor asks where.
     func saveFile(completion: ((Bool) -> Void)? = nil) {
-        guard let path = filePath else {
+        saveFile(reason: .explicit, completion: completion)
+    }
+
+    private func saveFile(reason: SaveReason, completion: ((Bool) -> Void)?) {
+        if let loadError {
+            if reason == .explicit { showSaveError("Nothing was saved, so the file stays as it is. \(loadError)") }
             completion?(false)
             return
         }
-        webView?.evaluateJavaScript("getContent()") { [weak self] result, error in
-            guard let self else {
+        guard let path = filePath else {
+            if reason == .explicit {
+                saveAs(completion: completion)
+            } else {
+                completion?(false)
+            }
+            return
+        }
+        contentForSave(applyingSaveActions: reason != .delay) { [weak self] payload in
+            guard let self, let payload else {
                 completion?(false)
                 return
             }
-            if let error {
-                debugLog("[Editor] Save failed reading content: \(error.localizedDescription)")
+            completion?(self.write(payload, to: path, reason: reason))
+        }
+    }
+
+    /// Asks for a new location, writes there and keeps editing that file.
+    func saveAs(completion: ((Bool) -> Void)? = nil) {
+        if let loadError {
+            showSaveError(loadError)
+            completion?(false)
+            return
+        }
+        let panel = NSSavePanel()
+        panel.canCreateDirectories = true
+        panel.nameFieldStringValue = fileDisplayName
+        if let filePath {
+            panel.directoryURL = URL(fileURLWithPath: filePath).deletingLastPathComponent()
+        }
+
+        let handler: (NSApplication.ModalResponse) -> Void = { [weak self] response in
+            guard let self, response == .OK, let url = panel.url else {
                 completion?(false)
                 return
             }
-            guard let content = result as? String else {
-                completion?(false)
-                return
-            }
-            do {
-                try content.write(to: URL(fileURLWithPath: path), atomically: true, encoding: .utf8)
-                self.markClean(saved: content)
+            self.contentForSave(applyingSaveActions: true) { payload in
+                guard let payload else {
+                    completion?(false)
+                    return
+                }
+                let previousPath = self.filePath
+                self.filePath = url.path
+                guard self.write(payload, to: url.path, reason: .explicit) else {
+                    self.filePath = previousPath
+                    completion?(false)
+                    return
+                }
+                self.startWatching()
+                self.sendFileInfo(includingName: true)
+                self.updateTitle()
                 completion?(true)
-            } catch {
-                debugLog("[Editor] Save failed: \(error.localizedDescription)")
-                completion?(false)
+            }
+        }
+        if let window {
+            panel.beginSheetModal(for: window, completionHandler: handler)
+        } else {
+            handler(panel.runModal())
+        }
+    }
+
+    private func autosaveOnFocusLoss() {
+        if AppSettings.shared.editorAutosave == .onFocusChange { autosaveIfNeeded(.focusChange) }
+    }
+
+    private func autosaveIfNeeded(_ reason: SaveReason) {
+        guard isDirty, filePath != nil, loadError == nil else { return }
+        saveFile(reason: reason, completion: nil)
+    }
+
+    /// The text to write, after format on save, whitespace trimming and the
+    /// final newline when `applyingSaveActions`.
+    private func contentForSave(applyingSaveActions: Bool, completion: @escaping (SavePayload?) -> Void) {
+        guard let webView else { return completion(nil) }
+        let settings = AppSettings.shared
+        let options: [String: Any] =
+            applyingSaveActions
+            ? [
+                "format": settings.editorFormatOnSave,
+                "trimTrailingWhitespace": settings.editorTrimTrailingWhitespace,
+                "insertFinalNewline": settings.editorInsertFinalNewline
+            ] : [:]
+        webView.callAsyncJavaScript(
+            "return await prepareSave(options)", arguments: ["options": options], in: nil, in: .page
+        ) { result in
+            switch result {
+            case .success(let value):
+                guard let dict = value as? [String: Any], let content = dict["content"] as? String,
+                    let version = dict["version"] as? Int
+                else { return completion(nil) }
+                completion(SavePayload(content: content, version: version))
+            case .failure(let error):
+                debugLog("[Editor] Save failed reading content: \(error.localizedDescription)")
+                completion(nil)
             }
         }
     }
 
-    /// Clears dirty state in Swift and JS unless edits landed during the write.
-    private func markClean(saved: String) {
-        guard let data = try? JSONEncoder().encode(saved), let json = String(data: data, encoding: .utf8) else {
-            return
+    private func write(_ payload: SavePayload, to path: String, reason: SaveReason) -> Bool {
+        let content = payload.content
+        var data = content.data(using: encoding)
+        if data == nil {
+            // The text gained characters the file's encoding can't store.
+            let previous = Self.displayName(of: encoding)
+            encoding = .utf8
+            data = content.data(using: .utf8)
+            sendFileInfo(includingName: false)
+            BooAlert.showTransient("Saved as UTF-8: the text no longer fits \(previous).")
         }
-        webView?.evaluateJavaScript("markClean(\(json))") { [weak self] result, _ in
+        guard let data else { return false }
+
+        // Writing through a symlink would replace the link with a plain file.
+        let url = URL(fileURLWithPath: path).resolvingSymlinksInPath()
+        let fm = FileManager.default
+        let permissions = (try? fm.attributesOfItem(atPath: url.path))?[.posixPermissions]
+        do {
+            try data.write(to: url, options: .atomic)
+            // The atomic replace is a new file; keep the original's mode (e.g. +x).
+            if let permissions {
+                try? fm.setAttributes([.posixPermissions: permissions], ofItemAtPath: url.path)
+            }
+        } catch {
+            debugLog("[Editor] Save failed: \(error.localizedDescription)")
+            if reason == .explicit || !autosaveFailed {
+                showSaveError(error.localizedDescription)
+            }
+            if reason != .explicit { autosaveFailed = true }
+            return false
+        }
+        autosaveFailed = false
+        watcher?.noteOwnWrite()
+        markClean(version: payload.version)
+        return true
+    }
+
+    private func showSaveError(_ message: String) {
+        BooAlert.showError(title: "Couldn't save \"\(fileDisplayName)\"", message: message, window: window)
+    }
+
+    /// Clears dirty state in Swift and JS unless edits landed during the write.
+    private func markClean(version: Int) {
+        webView?.evaluateJavaScript("markClean(\(version))") { [weak self] result, _ in
             guard let self, (result as? Bool) != false else { return }
             self.isDirty = false
             self.updateTitle()
         }
     }
 
-    /// Re-reads the file from disk into the editor (after an external write).
+    /// Re-reads the file from disk into the editor (after an external write),
+    /// keeping the cursor and scroll position.
     func reload() {
         guard let path = filePath else { return }
+        let wasReadOnly = loadError != nil
         loadContentFromDisk(path: path)
         isDirty = false
         updateTitle()
-        guard isReady, let data = try? JSONEncoder().encode(initialContent),
-            let json = String(data: data, encoding: .utf8)
-        else { return }
+        guard isReady else { return }
+        // Read-only state and the notice only change on a full re-init.
+        if wasReadOnly || loadError != nil {
+            sendInitialData()
+            return
+        }
+        guard let json = jsonString(from: initialContent) else { return }
         webView?.evaluateJavaScript("setContent(\(json))")
+        sendFileInfo(includingName: false)
+    }
+
+    // MARK: - External changes
+
+    /// Watches the file's folder, which also catches editors that save by
+    /// replacing the file (write to a temp file, then rename).
+    private func startWatching() {
+        watcher?.stop()
+        watcher = nil
+        guard let filePath else { return }
+        // Watch the link's target: that's the folder its writes land in.
+        let w = WatchedFile(path: (filePath as NSString).resolvingSymlinksInPath)
+        w.start { [weak self] in self?.fileChangedOnDisk() }
+        watcher = w
+    }
+
+    private func fileChangedOnDisk() {
+        guard AppSettings.shared.editorReloadOnExternalChange, let path = filePath,
+            FileManager.default.fileExists(atPath: path)
+        else { return }  // Deleted: keep the buffer; saving recreates the file.
+
+        guard isDirty else {
+            debugLog("[Editor] \(fileDisplayName) changed on disk, reloading")
+            reload()
+            return
+        }
+        let banner: [String: Any] = [
+            "id": "external",
+            "message": "\(fileDisplayName) changed on disk.",
+            "actions": [
+                ["id": "reload", "label": "Reload"],
+                ["id": "keep", "label": "Keep My Changes"]
+            ]
+        ]
+        guard let json = jsonString(from: banner) else { return }
+        webView?.evaluateJavaScript("showBanner(\(json))")
+    }
+
+    private func handleBannerAction(id: String, action: String) {
+        guard id == "external" else { return }
+        // "keep": WatchedFile already took this version as seen, so it isn't
+        // reported again; saving overwrites it.
+        if action == "reload" { reload() }
     }
 
     private func updateTitle() {
-        let name = filePath != nil ? (filePath! as NSString).lastPathComponent : "Untitled"
+        let name = fileDisplayName
         let title = isDirty ? "\(name) ●" : name
         if title != currentTitle {
             currentTitle = title
             onTitleChanged?(title)
         }
     }
+}
+
+/// The text `prepareSave` returned and the model version it belongs to.
+private struct SavePayload {
+    let content: String
+    let version: Int
 }
 
 // MARK: - WKScriptMessageHandler
@@ -403,12 +628,18 @@ extension EditorContentView: WKScriptMessageHandler {
             isReady = true
             sendInitialData()
         case "dirty":
-            isDirty = true
+            isDirty = dict["dirty"] as? Bool ?? true
             updateTitle()
         case "changed":
-            if autosave { saveFile() }
+            if autosave || AppSettings.shared.editorAutosave == .afterDelay { autosaveIfNeeded(.delay) }
         case "focused":
             onFocused?()
+        case "blurred":
+            autosaveOnFocusLoss()
+        case "bannerAction":
+            if let id = dict["id"] as? String, let action = dict["action"] as? String {
+                handleBannerAction(id: id, action: action)
+            }
         default:
             break
         }

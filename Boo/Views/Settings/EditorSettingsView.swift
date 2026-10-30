@@ -13,6 +13,18 @@ struct EditorSettingsView: View {
     @State private var linkTarget = AppSettings.shared.defaultLinkTarget
     @State private var editorPreset = AppSettings.shared.externalEditorPreset
     @State private var editorTemplate = AppSettings.shared.externalEditorTemplate
+    @State private var detectIndentation = AppSettings.shared.editorDetectIndentation
+    @State private var renderWhitespace = AppSettings.shared.editorRenderWhitespace
+    @State private var bracketPairColors = AppSettings.shared.editorBracketPairColors
+    @State private var stickyScroll = AppSettings.shared.editorStickyScroll
+    @State private var fontLigatures = AppSettings.shared.editorFontLigatures
+    @State private var showStatusStrip = AppSettings.shared.editorShowStatusStrip
+    @State private var cursorStyle = AppSettings.shared.editorCursorStyle
+    @State private var cursorBlinking = AppSettings.shared.editorCursorBlinking
+    @State private var autosave = AppSettings.shared.editorAutosave
+    @State private var trimTrailingWhitespace = AppSettings.shared.editorTrimTrailingWhitespace
+    @State private var insertFinalNewline = AppSettings.shared.editorInsertFinalNewline
+    @State private var reloadOnExternalChange = AppSettings.shared.editorReloadOnExternalChange
 
     @ObservedObject private var observer = SettingsObserver(topics: [.editor, .links])
 
@@ -36,6 +48,12 @@ struct EditorSettingsView: View {
                     .frame(width: 90)
                     .onChange(of: fontSize) { _, v in AppSettings.shared.editorFontSize = v }
                 }
+                ToggleRow(
+                    label: "Ligatures",
+                    help: "Joins character pairs like -> and != when the font supports it.",
+                    isOn: $fontLigatures
+                )
+                .onChange(of: fontLigatures) { _, v in AppSettings.shared.editorFontLigatures = v }
             }
 
             Section(title: "Editing") {
@@ -52,6 +70,12 @@ struct EditorSettingsView: View {
                 }
                 ToggleRow(label: "Insert spaces", isOn: $insertSpaces)
                     .onChange(of: insertSpaces) { _, v in AppSettings.shared.editorInsertSpaces = v }
+                ToggleRow(
+                    label: "Detect indentation",
+                    help: "Follows the file's own tabs or spaces and width instead of the two settings above.",
+                    isOn: $detectIndentation
+                )
+                .onChange(of: detectIndentation) { _, v in AppSettings.shared.editorDetectIndentation = v }
                 ToggleRow(label: "Word wrap", isOn: $wordWrap)
                     .onChange(of: wordWrap) { _, v in AppSettings.shared.editorWordWrap = v }
             }
@@ -61,6 +85,24 @@ struct EditorSettingsView: View {
                     .onChange(of: lineNumbers) { _, v in AppSettings.shared.editorLineNumbers = v }
                 ToggleRow(label: "Minimap", isOn: $minimap)
                     .onChange(of: minimap) { _, v in AppSettings.shared.editorMinimap = v }
+                SettingRow(label: "Show whitespace") {
+                    menuPicker($renderWhitespace, \.displayName)
+                        .onChange(of: renderWhitespace) { _, v in AppSettings.shared.editorRenderWhitespace = v }
+                }
+                ToggleRow(label: "Colored bracket pairs", isOn: $bracketPairColors)
+                    .onChange(of: bracketPairColors) { _, v in AppSettings.shared.editorBracketPairColors = v }
+                ToggleRow(
+                    label: "Sticky scroll",
+                    help: "Keeps the enclosing function or block headers at the top while scrolling.",
+                    isOn: $stickyScroll
+                )
+                .onChange(of: stickyScroll) { _, v in AppSettings.shared.editorStickyScroll = v }
+                ToggleRow(
+                    label: "Status bar",
+                    help: "Cursor position, indentation, encoding, line endings and language below the editor.",
+                    isOn: $showStatusStrip
+                )
+                .onChange(of: showStatusStrip) { _, v in AppSettings.shared.editorShowStatusStrip = v }
                 SettingRow(
                     label: "Ruler column",
                     help: "Column where the vertical ruler is drawn. 0 disables the ruler."
@@ -71,6 +113,15 @@ struct EditorSettingsView: View {
                         onCommit: { v in AppSettings.shared.editorRulerColumn = max(0, v) }
                     )
                 }
+            }
+
+            Section(title: "Cursor") {
+                SettingRow(label: "Style") {
+                    menuPicker($cursorStyle, \.displayName)
+                        .onChange(of: cursorStyle) { _, v in AppSettings.shared.editorCursorStyle = v }
+                }
+                ToggleRow(label: "Blink", isOn: $cursorBlinking)
+                    .onChange(of: cursorBlinking) { _, v in AppSettings.shared.editorCursorBlinking = v }
             }
 
             Section(title: "Terminal Links") {
@@ -110,14 +161,50 @@ struct EditorSettingsView: View {
                 }
             }
 
-            Section(title: "Formatting") {
+            Section(
+                title: "Saving",
+                footer: "Autosave after a delay leaves the text alone; the edits below run on the next "
+                    + "explicit save or focus change."
+            ) {
+                SettingRow(label: "Autosave") {
+                    menuPicker($autosave, \.displayName)
+                        .onChange(of: autosave) { _, v in AppSettings.shared.editorAutosave = v }
+                }
                 ToggleRow(
                     label: "Format on save",
-                    help: "Uses Monaco's built-in formatters (JSON, TypeScript, CSS, HTML).",
+                    help: "Uses Monaco's built-in formatters (JSON, JavaScript, TypeScript, CSS, HTML). "
+                        + "Other languages are saved as they are.",
                     isOn: $formatOnSave
                 )
                 .onChange(of: formatOnSave) { _, v in AppSettings.shared.editorFormatOnSave = v }
+                ToggleRow(
+                    label: "Trim trailing whitespace",
+                    help: "Skips Markdown, where two trailing spaces are a line break.",
+                    isOn: $trimTrailingWhitespace
+                )
+                .onChange(of: trimTrailingWhitespace) { _, v in AppSettings.shared.editorTrimTrailingWhitespace = v }
+                ToggleRow(label: "Insert final newline", isOn: $insertFinalNewline)
+                    .onChange(of: insertFinalNewline) { _, v in AppSettings.shared.editorInsertFinalNewline = v }
+                ToggleRow(
+                    label: "Reload when changed on disk",
+                    help: "Unedited files reload in place. With unsaved edits you choose which version to keep.",
+                    isOn: $reloadOnExternalChange
+                )
+                .onChange(of: reloadOnExternalChange) { _, v in
+                    AppSettings.shared.editorReloadOnExternalChange = v
+                }
             }
         }
+    }
+
+    private func menuPicker<Choice: CaseIterable & Hashable>(
+        _ selection: Binding<Choice>, _ name: KeyPath<Choice, String>
+    ) -> some View where Choice.AllCases: RandomAccessCollection {
+        Picker("", selection: selection) {
+            ForEach(Array(Choice.allCases), id: \.self) { Text($0[keyPath: name]).tag($0) }
+        }
+        .pickerStyle(.menu)
+        .labelsHidden()
+        .fixedSize()
     }
 }

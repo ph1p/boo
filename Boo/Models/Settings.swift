@@ -366,6 +366,18 @@ final class AppSettings {
         static let editorMinimap = "editorMinimap"
         static let editorFormatOnSave = "editorFormatOnSave"
         static let editorRulerColumn = "editorRulerColumn"
+        static let editorDetectIndentation = "editorDetectIndentation"
+        static let editorRenderWhitespace = "editorRenderWhitespace"
+        static let editorBracketPairColors = "editorBracketPairColors"
+        static let editorStickyScroll = "editorStickyScroll"
+        static let editorFontLigatures = "editorFontLigatures"
+        static let editorCursorStyle = "editorCursorStyle"
+        static let editorCursorBlinking = "editorCursorBlinking"
+        static let editorAutosave = "editorAutosave"
+        static let editorReloadOnExternalChange = "editorReloadOnExternalChange"
+        static let editorShowStatusStrip = "editorShowStatusStrip"
+        static let editorTrimTrailingWhitespace = "editorTrimTrailingWhitespace"
+        static let editorInsertFinalNewline = "editorInsertFinalNewline"
 
         static let activityNotificationsEnabled = "activityNotificationsEnabled"
         static let notifyMinCommandSeconds = "notifyMinCommandSeconds"
@@ -831,6 +843,10 @@ final class AppSettings {
         K.paneControlsVisibility, K.highlightRecordingPane, K.recordingStopAction, K.recordingFileNameTemplate,
         K.recordingIdleTimeLimit, K.editorFontSize, K.editorFontName, K.editorTabSize, K.editorInsertSpaces,
         K.editorWordWrap, K.editorLineNumbers, K.editorMinimap, K.editorFormatOnSave, K.editorRulerColumn,
+        K.editorDetectIndentation, K.editorRenderWhitespace, K.editorBracketPairColors, K.editorStickyScroll,
+        K.editorFontLigatures, K.editorCursorStyle, K.editorCursorBlinking, K.editorAutosave,
+        K.editorReloadOnExternalChange, K.editorShowStatusStrip, K.editorTrimTrailingWhitespace,
+        K.editorInsertFinalNewline,
         K.quickTerminalEnabled, K.quickTerminalHotkey, K.quickTerminalHeight, K.quickTerminalHideOnResign,
         K.defaultProfile, K.terminalShader, K.defaultLinkTarget, K.externalEditorPreset, K.historyEnabled,
         K.historyIgnorePattern, K.historyRetentionDays, K.historySearchShortcutEnabled, K.agentBudgetPerTask,
@@ -1157,6 +1173,71 @@ final class AppSettings {
     var editorRulerColumn: Int {
         get { UserDefaults.standard.integer(forKey: K.editorRulerColumn) }
         set { set(newValue, forKey: K.editorRulerColumn, topic: .editor) }
+    }
+
+    /// Lets a file's own indentation win over tab size and insert spaces.
+    var editorDetectIndentation: Bool {
+        get { bool(K.editorDetectIndentation, default: true) }
+        set { set(newValue, forKey: K.editorDetectIndentation, topic: .editor) }
+    }
+
+    var editorRenderWhitespace: EditorRenderWhitespace {
+        get {
+            UserDefaults.standard.string(forKey: K.editorRenderWhitespace).flatMap(EditorRenderWhitespace.init)
+                ?? .selection
+        }
+        set { set(newValue.rawValue, forKey: K.editorRenderWhitespace, topic: .editor) }
+    }
+
+    var editorBracketPairColors: Bool {
+        get { bool(K.editorBracketPairColors, default: true) }
+        set { set(newValue, forKey: K.editorBracketPairColors, topic: .editor) }
+    }
+
+    var editorStickyScroll: Bool {
+        get { bool(K.editorStickyScroll, default: false) }
+        set { set(newValue, forKey: K.editorStickyScroll, topic: .editor) }
+    }
+
+    var editorFontLigatures: Bool {
+        get { bool(K.editorFontLigatures, default: false) }
+        set { set(newValue, forKey: K.editorFontLigatures, topic: .editor) }
+    }
+
+    var editorCursorStyle: EditorCursorStyle {
+        get { UserDefaults.standard.string(forKey: K.editorCursorStyle).flatMap(EditorCursorStyle.init) ?? .line }
+        set { set(newValue.rawValue, forKey: K.editorCursorStyle, topic: .editor) }
+    }
+
+    var editorCursorBlinking: Bool {
+        get { bool(K.editorCursorBlinking, default: true) }
+        set { set(newValue, forKey: K.editorCursorBlinking, topic: .editor) }
+    }
+
+    var editorAutosave: EditorAutosave {
+        get { UserDefaults.standard.string(forKey: K.editorAutosave).flatMap(EditorAutosave.init) ?? .off }
+        set { set(newValue.rawValue, forKey: K.editorAutosave, topic: .editor) }
+    }
+
+    /// Reload a file changed on disk; asks first when the tab has unsaved edits.
+    var editorReloadOnExternalChange: Bool {
+        get { bool(K.editorReloadOnExternalChange, default: true) }
+        set { set(newValue, forKey: K.editorReloadOnExternalChange, topic: .editor) }
+    }
+
+    var editorShowStatusStrip: Bool {
+        get { bool(K.editorShowStatusStrip, default: true) }
+        set { set(newValue, forKey: K.editorShowStatusStrip, topic: .editor) }
+    }
+
+    var editorTrimTrailingWhitespace: Bool {
+        get { bool(K.editorTrimTrailingWhitespace, default: false) }
+        set { set(newValue, forKey: K.editorTrimTrailingWhitespace, topic: .editor) }
+    }
+
+    var editorInsertFinalNewline: Bool {
+        get { bool(K.editorInsertFinalNewline, default: false) }
+        set { set(newValue, forKey: K.editorInsertFinalNewline, topic: .editor) }
     }
 
     // MARK: - Notifications
@@ -1586,6 +1667,18 @@ final class AppSettings {
             K.editorMinimap: editorMinimap,
             K.editorFormatOnSave: editorFormatOnSave,
             K.editorRulerColumn: editorRulerColumn,
+            K.editorDetectIndentation: editorDetectIndentation,
+            K.editorRenderWhitespace: editorRenderWhitespace.rawValue,
+            K.editorBracketPairColors: editorBracketPairColors,
+            K.editorStickyScroll: editorStickyScroll,
+            K.editorFontLigatures: editorFontLigatures,
+            K.editorCursorStyle: editorCursorStyle.rawValue,
+            K.editorCursorBlinking: editorCursorBlinking,
+            K.editorAutosave: editorAutosave.rawValue,
+            K.editorReloadOnExternalChange: editorReloadOnExternalChange,
+            K.editorShowStatusStrip: editorShowStatusStrip,
+            K.editorTrimTrailingWhitespace: editorTrimTrailingWhitespace,
+            K.editorInsertFinalNewline: editorInsertFinalNewline,
             K.quickTerminalEnabled: quickTerminalEnabled,
             K.quickTerminalHotkey: quickTerminalHotkey,
             K.quickTerminalHeight: quickTerminalHeight,
@@ -1732,6 +1825,48 @@ final class AppSettings {
     deinit {
         if let observer = observer {
             NotificationCenter.default.removeObserver(observer)
+        }
+    }
+}
+
+// MARK: - Editor option values
+
+/// Raw values are Monaco's `renderWhitespace` values.
+enum EditorRenderWhitespace: String, CaseIterable, Sendable {
+    case none, boundary, selection, trailing, all
+
+    var displayName: String {
+        switch self {
+        case .none: return "Never"
+        case .boundary: return "Between words"
+        case .selection: return "In selection"
+        case .trailing: return "Trailing"
+        case .all: return "Always"
+        }
+    }
+}
+
+/// Raw values are Monaco's `cursorStyle` values.
+enum EditorCursorStyle: String, CaseIterable, Sendable {
+    case line, block, underline
+
+    var displayName: String {
+        switch self {
+        case .line: return "Bar"
+        case .block: return "Block"
+        case .underline: return "Underline"
+        }
+    }
+}
+
+enum EditorAutosave: String, CaseIterable, Sendable {
+    case off, afterDelay, onFocusChange
+
+    var displayName: String {
+        switch self {
+        case .off: return "Off"
+        case .afterDelay: return "After a short delay"
+        case .onFocusChange: return "When the editor loses focus"
         }
     }
 }

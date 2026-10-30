@@ -134,7 +134,9 @@ struct SettingsView: View {
             case .recordings: return "record asciinema cast video export markers idle"
             case .permissions:
                 return "privacy full disk access files folders automation developer tools signature prompts tcc"
-            case .editor: return "code font tab size spaces line numbers minimap word wrap format external"
+            case .editor:
+                return "code font tab size spaces line numbers minimap word wrap format external autosave "
+                    + "whitespace cursor ligatures sticky scroll status encoding reload"
             case .browser: return "home page history website data links close"
             case .notifications: return "alerts command duration ports bursts"
             case .plugins: return "extensions installed enable disable"

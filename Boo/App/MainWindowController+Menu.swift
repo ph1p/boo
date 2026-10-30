@@ -50,6 +50,9 @@ extension MainWindowController {
         fileMenu.addItem(browserTab)
         fileMenu.addItem(.separator())
         fileMenu.addItem(withTitle: "Save", action: #selector(saveAction(_:)), keyEquivalent: "s")
+        let saveAs = NSMenuItem(title: "Save As…", action: #selector(saveAsAction(_:)), keyEquivalent: "S")
+        saveAs.keyEquivalentModifierMask = [.command, .shift]
+        fileMenu.addItem(saveAs)
         fileMenu.addItem(.separator())
         fileMenu.addItem(withTitle: "Close", action: #selector(smartCloseAction(_:)), keyEquivalent: "w")
         let reopenClosedTab = NSMenuItem(

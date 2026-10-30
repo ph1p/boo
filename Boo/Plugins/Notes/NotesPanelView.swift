@@ -347,6 +347,7 @@ private struct NotesEditor: NSViewRepresentable {
             "rulers": [Int](),
             "folding": false,
             "glyphMargin": false,
+            "statusStrip": false,
             "placeholder": placeholder
         ]
         if let line = memory.pendingLine {
