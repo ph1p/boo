@@ -1,60 +1,65 @@
 # Windows & Splits
 
-Boo can run several windows, each with its own workspaces, sidebar and plugins; settings, themes and bookmarks are shared. Inside a workspace, panes split the terminal area, and every pane holds its own tabs.
+Each window has its own workspaces, sidebar and plugins. Settings, themes and bookmarks are shared. Inside a workspace, panes split the terminal area, and each pane has its own tabs.
 
 ## Windows
 
-| Action                  | Shortcut / Menu                                   |
-| ----------------------- | ------------------------------------------------- |
-| New window              | ⌘N (**File → New Window**)                        |
-| New workspace           | ⇧⌘N (**File → New Workspace**)                    |
-| Move workspace out      | **Window → Move Workspace to New Window**, or **Move to New Window** in a workspace's context menu |
-| Merge windows           | **Window → Merge All Windows**                    |
+| Action             | Shortcut / Menu                                                                                    |
+| ------------------ | -------------------------------------------------------------------------------------------------- |
+| New window         | ⌘N (**File → New Window**)                                                                         |
+| New workspace      | ⇧⌘N (**File → New Workspace**)                                                                     |
+| Move workspace out | **Window → Move Workspace to New Window**, or **Move to New Window** in a workspace's context menu |
+| Merge windows      | **Window → Merge All Windows**                                                                     |
 
-A new window starts with one workspace in the default folder and opens cascaded from the current one. **Merge All Windows** moves every other window's workspaces into the current window and closes the others. Pinned workspaces, and the only workspace of a window, cannot be moved out.
+**Merge All Windows** moves every workspace into the current window and closes the others. Pinned workspaces, and a window's only workspace, can't be moved out.
 
 ### Dragging between windows
 
-- **Workspaces**: drag a workspace pill onto another Boo window to insert it at that position, or drop it outside any window to open it in a new window at the drop point. A window left without workspaces closes.
-- **Tabs**: drag a tab onto a pane in another window to move it there. Dropping a tab outside every window tears it off into a new window, as a new workspace with the same folder. Moving the last tab of a workspace asks first, since the workspace closes.
-- While dragging, the target window is highlighted. Hovering a workspace pill for half a second switches to that workspace, so you can drop into it.
+- **Workspaces**: drag a workspace pill onto another window to move it there. Drop it outside any window to open it in a new window.
+- **Tabs**: drag a tab onto a pane in another window to move it. Drop it outside every window to open it in a new window.
+- Hover a workspace pill for half a second to switch to it, then drop.
+- A window left without workspaces closes. Moving a workspace's last tab asks first.
 
 ### Session restore
 
-On quit, Boo saves every window: its workspaces, frame, full-screen state and sidebar. On launch all windows come back, and the window that was in front is in front again. Extra windows whose folders no longer exist are dropped. Session files from older versions, which held a single window, still restore.
+On quit, Boo saves every window with its workspaces, frame, full-screen state and sidebar. On launch they all come back. Windows whose folders no longer exist are dropped.
 
 ## Splits
 
-| Action                     | Shortcut | Menu                                   |
-| -------------------------- | -------- | -------------------------------------- |
-| Split right                | ⌘D       | **Terminal → Split Right**             |
-| Split down                 | ⇧⌘D      | **Terminal → Split Down**              |
-| Select pane in a direction | ⌥⌘←/→/↑/↓ | **Terminal → Select Pane**            |
-| Next / previous pane       | ⌘] / ⌘[  | **Terminal → Focus Next / Previous Pane** |
-| Resize pane                | ⌃⌘←/→/↑/↓ | **Terminal → Resize Pane**            |
-| Move (swap) pane           | ⌃⇧⌘←/→/↑/↓ | **Terminal → Move Pane**             |
-| Zoom pane                  | ⇧⌘↩      | **Terminal → Zoom Pane**               |
-| Equalize splits            | ⌃⌘=      | **Terminal → Equalize Splits**         |
-| Close pane                 | ⇧⌘W      | **File → Close Pane**                  |
+| Action                     | Shortcut   | Menu                                      |
+| -------------------------- | ---------- | ----------------------------------------- |
+| Split right                | ⌘D         | **Terminal → Split Right**                |
+| Split down                 | ⇧⌘D        | **Terminal → Split Down**                 |
+| Select pane in a direction | ⌥⌘ arrows  | **Terminal → Select Pane**                |
+| Next / previous pane       | ⌘] / ⌘[    | **Terminal → Focus Next / Previous Pane** |
+| Resize pane                | ⌃⌘ arrows  | **Terminal → Resize Pane**                |
+| Move (swap) pane           | ⌃⇧⌘ arrows | **Terminal → Move Pane**                  |
+| Zoom pane                  | ⇧⌘↩        | **Terminal → Zoom Pane**                  |
+| Equalize splits            | ⌃⌘=        | **Terminal → Equalize Splits**            |
+| Close pane                 | ⇧⌘W        | **File → Close Pane**                     |
 
-The directional shortcuts match Ghostty's defaults. Resizing moves the divider by 10 points per step and stops at the minimum pane size. Moving a pane swaps it with its neighbor in that direction, and focus moves with it.
+The arrow shortcuts match Ghostty's defaults. Resize moves the divider 10 points per step. Move swaps the pane with its neighbor, and focus follows.
 
-**Zoom** fills the workspace with the active pane. A **Zoomed ⇧⌘↩** badge sits in the pane's top-right corner; click it or press ⇧⌘↩ again to show all panes. Selecting a hidden pane also leaves zoom, and resizing is disabled while zoomed.
+**Zoom** fills the workspace with the active pane. While zoomed, an unzoom button sits in the pane's bottom-right corner. Click it or press ⇧⌘↩ again to show all panes. Selecting a hidden pane also ends zoom.
 
 ### Drag to split
 
-Drag a tab over a pane to see where it lands:
+| Drop target                  | Result                                         |
+| ---------------------------- | ---------------------------------------------- |
+| Tab bar                      | Inserts the tab there                          |
+| Middle of a pane             | Adds the tab to that pane                      |
+| Edge of a pane               | Splits that pane; the tab becomes the new pane |
+| Outer edge of the workspace  | New pane along that whole side                 |
+| Middle of a pane, holding ⌥  | Swaps the two panes                            |
 
-| Drop target                        | Result                                                  |
-| ---------------------------------- | ------------------------------------------------------- |
-| Tab bar                            | Inserts the tab at that position                        |
-| Middle of a pane                   | Adds the tab to that pane                               |
-| Edge of a pane                     | Splits that pane; the tab becomes the new pane          |
-| Outer edge of the workspace        | New pane spanning that whole side (with two or more panes) |
-| Middle of a pane, holding ⌥        | Swaps the two panes                                     |
+A pane left without tabs closes.
 
-Press or release ⌥ during the drag to switch between swapping and adding. A pane left without tabs closes.
+## tmux
+
+Run `tmux -CC` (or `tmux -CC attach`) and Boo shows the session natively: each tmux window becomes a workspace, and each tmux pane a Boo pane. Splits and new tabs in such a workspace go through tmux. Quitting Boo leaves the tmux session running.
+
+Turn it off with **Settings → General → Native tmux windows**. The change applies to terminals opened afterwards.
 
 ## Scripting
 
-Every action here is also available over the [IPC socket](/ipc-socket#pane-layout) (`split_pane`, `focus_pane`, `resize_pane`, `swap_pane`, `zoom_pane`, `equalize_splits`, `new_window`, `move_workspace_to_new_window`, `merge_all_windows`) and to agents through the [MCP server](/ipc-socket#mcp-server).
+Every action here is also available over the [IPC socket](/ipc-socket#pane-layout) and to agents through the [MCP server](/ipc-socket#mcp-server).

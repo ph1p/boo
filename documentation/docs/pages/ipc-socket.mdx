@@ -1,165 +1,216 @@
 # IPC Socket
 
-Boo exposes a Unix domain socket at `~/.boo/boo.sock` (also available as `$BOO_SOCK` in terminal sessions) for communication between child processes, plugins, and the app.
+Boo listens on a Unix socket at `~/.boo/boo.sock`. Scripts, plugins and agents use it to read and drive the app.
+
+Every Boo terminal sets these variables:
+
+| Variable      | Value                                         |
+| ------------- | --------------------------------------------- |
+| `BOO_SOCK`    | Socket path                                   |
+| `BOO_TERM`    | `1`                                           |
+| `BOO_PANE_ID` | ID of this pane                               |
+| `BOO_TAB_ID`  | ID of this tab                                |
+| `BOO_TOKEN`   | [Capability token](#capability-tokens) of this terminal |
 
 ## Protocol
 
-Newline-delimited JSON. One request per line, one response per request. Long-lived connections can subscribe to push events.
+Newline-delimited JSON: one request per line, one reply per request. A failed command replies `ok: false` with an `error`. A connection that sends `subscribe` stays open and receives [events](#event-subscriptions) as `{"event": name, "data": {…}}`.
+
+```bash
+echo '{"cmd":"get_context"}' | nc -U "$BOO_SOCK"
+```
+
+## Routing
+
+Most commands act on the frontmost Boo window. With a `pane_id` they go to the window that holds that pane. Commands with a `tab_id` (agents, tasks, `get_screen`) find the tab in any window.
 
 ## Commands
 
-| Category       | Commands                                                                                   |
-| -------------- | ------------------------------------------------------------------------------------------ |
+| Category       | Commands |
+| -------------- | -------- |
 | **Query**      | `get_context`, `get_theme`, `get_settings`, `get_workspaces`, `list_themes`, `get_state`, `get_screen` |
 | **Control**    | `set_theme`, `toggle_sidebar`, `switch_workspace`, `new_tab`, `new_workspace`, `send_text`, `send_key`, `select_pane`, `select_tab` |
 | **Panes**      | `split_pane`, `close_pane`, `focus_pane`, `resize_pane`, `swap_pane`, `zoom_pane`, `equalize_splits`, `get_layout` |
-| **Windows**    | `new_window`, `move_workspace_to_new_window`, `merge_all_windows`                          |
-| **Agents**     | `agent_event`, `agent_idle`, `agent_inbox`, `agent_jump`, `agent_respond`, `agent_timeline`, `new_agent_task`, `review_changes` |
-| **Recipes**    | `run_recipe`, `list_recipes`                                                               |
-| **Process**    | `set_status`, `clear_status`, `list_status`                                                |
-| **Events**     | `subscribe`, `unsubscribe`                                                                 |
-| **Status Bar** | `statusbar.set`, `statusbar.clear`, `statusbar.list`                                       |
-| **Plugin**     | `<namespace>.<action>`                                                                     |
-
-## Examples
-
-```bash
-# Query current terminal context
-echo '{"cmd":"get_context"}' | nc -U "$BOO_SOCK"
-
-# Register as an AI agent
-echo '{"cmd":"set_status","pid":'"$$"',"name":"claude","category":"ai"}' | nc -U "$BOO_SOCK"
-
-# Send a command to the active terminal
-echo '{"cmd":"send_text","text":"echo hello\n"}' | nc -U "$BOO_SOCK"
-
-# Push a status bar segment
-echo '{"cmd":"statusbar.set","id":"ci","text":"CI: passing","icon":"checkmark.circle","tint":"green"}' \
-  | nc -U "$BOO_SOCK"
-```
+| **Windows**    | `new_window`, `move_workspace_to_new_window`, `merge_all_windows` |
+| **Agents**     | `agent_event`, `agent_idle`, `agent_inbox`, `agent_jump`, `agent_respond`, `agent_timeline`, `wait_for_events` |
+| **Tasks**      | `new_agent_task`, `review_changes`, `task_status`, `task_diff`, `merge_task`, `discard_task` |
+| **Recipes**    | `run_recipe`, `list_recipes` |
+| **Process**    | `set_status`, `clear_status`, `list_status` |
+| **Events**     | `subscribe`, `unsubscribe` |
+| **Status Bar** | `statusbar.set`, `statusbar.clear`, `statusbar.list` |
+| **Plugin**     | `<namespace>.<action>` |
 
 ## Workspaces, Tabs and Keys
 
-Without a `pane_id`, commands go to the frontmost Boo window.
-
-| Command            | Arguments                                                                 | Reply                                    |
-| ------------------ | ------------------------------------------------------------------------- | ---------------------------------------- |
-| `get_workspaces`   |                                                                           | `workspaces` (`index`, `id`, `name`, `path`, `is_active`, `pane_count`) |
-| `get_state`        |                                                                           | `workspaces`, `panes` of the active workspace with their `tabs`, `agents`, `theme` |
-| `list_themes`      |                                                                           | `themes` (names)                         |
-| `switch_workspace` | `index` or `id`                                                           |                                          |
-| `new_tab`          | optional `cwd` (default: the workspace folder), `command` (run in the new shell), `env` (object of strings; `BOO_*` keys ignored); opens in the active pane | `tab_id` |
-| `new_workspace`    | optional `path` (default: home)                                           |                                          |
-| `new_window`       |                                                                           | `windows` (count)                        |
-| `select_pane`      | `id` of a pane in the active workspace                                    |                                          |
-| `select_tab`       | `index` of a tab in the active pane                                       |                                          |
-| `send_key`         | `key`: `enter`, `tab`, `escape`, `backspace`, `up`, `down`, `left`, `right`, `ctrl_c`, `ctrl_d`, `ctrl_z` or `ctrl_l`; goes to the active terminal |   |
-| `agent_idle`       | `pane_id`: marks activity on that pane's tab, even when it is in front    |                                          |
-| `run_recipe`       | `name` (file name in `~/.boo/recipes` without `.json`; case-insensitive) or `path`; opens a [recipe](/features#recipes) as a new workspace | `workspace_id`, `name`; an unknown name's `error` lists the recipes |
-| `list_recipes`     |                                                                           | `recipes` (`name`, `path`, `folder`, null when the file is invalid) |
-
-## Event Subscriptions
-
-Keep the connection open after `subscribe` to receive push events:
-
-| Event                    | Data                                |
-| ------------------------ | ----------------------------------- |
-| `cwd_changed`            | `path`, `is_remote`, `pane_id`      |
-| `title_changed`          | `title`, `pane_id`                  |
-| `process_changed`        | `name`, `category`, `pane_id`, `pid`, `metadata` |
-| `remote_session_changed` | `type`, `host`, `active`, `pane_id` |
-| `focus_changed`          | `pane_id`                           |
-| `workspace_switched`     | `workspace_id`                      |
-| `theme_changed`          | `name`, `is_dark`                   |
-| `settings_changed`       | `topic`                             |
-| `cmd_started`            | `command`, `pane_id`                |
-| `cmd_ended`              | `command`, `exit_code`, `duration`, `pane_id` |
-
-Use `"events": ["*"]` to subscribe to all events.
+| Command            | Arguments | Reply |
+| ------------------ | --------- | ----- |
+| `get_workspaces`   | | `workspaces` (`index`, `id`, `name`, `path`, `is_active`, `pane_count`) |
+| `get_state`        | | `workspaces`, `panes` of the active workspace with their `tabs`, `agents`, `theme` |
+| `list_themes`      | | `themes` (names) |
+| `switch_workspace` | `index` or `id` | |
+| `new_tab`          | optional `cwd` (default: workspace folder), `command`, `env` (strings; `BOO_*` keys are ignored). Opens in the active pane. | `tab_id` |
+| `new_workspace`    | optional `path` (default: home) | |
+| `new_window`       | | `windows` (count) |
+| `select_pane`      | `id` of a pane in the active workspace | |
+| `select_tab`       | `index` of a tab in the active pane | |
+| `send_key`         | `key`: `enter`, `tab`, `escape`, `backspace`, `up`, `down`, `left`, `right`, `ctrl_c`, `ctrl_d`, `ctrl_z` or `ctrl_l`. Goes to the active terminal. | |
+| `agent_idle`       | `pane_id`. Marks activity on that pane's tab, even when it is in front. | |
+| `run_recipe`       | `name` (file in `~/.boo/recipes` without `.json`, any case) or `path`. Opens a [recipe](/features#recipes) as a new workspace. | `workspace_id`, `name`. An unknown name lists the recipes in `error`. |
+| `list_recipes`     | | `recipes` (`name`, `path`, `folder`; `folder` is null when the file is invalid) |
 
 ## `send_text` and `get_screen`
 
-`send_text` writes text directly to the active terminal's PTY — identical to typing it. With `pane_id` it targets that pane, in any workspace of its window; with `submit: true` the text is pasted as one input and Return is pressed, which is how to send a prompt to an agent.
+`send_text` writes `text` to a terminal, as if typed.
 
-`get_screen` with `pane_id` and/or `lines` (max 5000) returns that pane's last lines of output, scrollback included, as `text`, plus `title` and `cwd`; with `pane_id` but no `lines`, the visible screen. Without either, it returns the visible screen of the active pane, plus `cols`, `rows` and a styled `vt` snapshot.
+- Without `pane_id`, it goes to the active terminal.
+- With `pane_id`, it goes to that pane, in any workspace of its window.
+- With `submit: true`, the text is pasted as one input and Return is pressed. Use this to send a prompt to an agent.
+
+`get_screen` reads a terminal and returns `text`, `title` and `cwd`.
+
+| Arguments                 | Returns |
+| ------------------------- | ------- |
+| none                      | Visible screen of the active pane, plus `cols`, `rows` and a styled `vt` snapshot |
+| `pane_id`                 | Visible screen of that pane |
+| `tab_id`                  | Visible screen of that tab, in any window |
+| `lines` (max 5000)        | The last `lines` of output, scrollback included. Combines with `pane_id` or `tab_id`. |
 
 ```bash
 echo '{"cmd":"send_text","text":"cd ~/projects/myapp\n"}' | nc -U "$BOO_SOCK"
-echo '{"cmd":"send_text","pane_id":"<id>","text":"npm test","submit":true}' | nc -U "$BOO_SOCK"
+echo '{"cmd":"send_text","pane_id":"<id>","text":"pnpm test","submit":true}' | nc -U "$BOO_SOCK"
 echo '{"cmd":"get_screen","pane_id":"<id>","lines":50}' | nc -U "$BOO_SOCK"
 ```
 
 ## Pane Layout
 
-Commands act on the active workspace of the frontmost Boo window. `split_pane`, `close_pane` and `get_layout` also take a `pane_id`: the command then goes to the window and workspace holding that pane, even in the background. `focus_pane`, `resize_pane`, `swap_pane`, `zoom_pane` and `equalize_splits` take a `pane_id` too, but only for a pane on screen; in a background workspace they fail with `pane is in a background workspace; switch to it first`. `direction` is `left`, `right`, `up` or `down`.
+Pane commands act on the active workspace of the frontmost window. `direction` is `left`, `right`, `up` or `down`.
 
-| Command                        | Arguments                                         | Reply                        |
-| ------------------------------ | ------------------------------------------------- | ---------------------------- |
-| `split_pane`                   | `direction` (default `right`): side of the new pane; `pane_id` to split (default active); `command` to run in it; `cwd`; `focus` (default `true`) | `pane_id`, `started` |
-| `close_pane`                   | `pane_id` (default active); never the only pane   | `active_pane`                |
-| `focus_pane`                   | `direction`, or `next` / `previous`; `pane_id` alone focuses that pane, with a `direction` it moves from there | `active_pane` |
-| `resize_pane`                  | `direction`, `amount` in points (default 10), `pane_id` |                        |
-| `swap_pane`                    | `direction`, `pane_id`                            |                              |
-| `zoom_pane`                    | `zoomed` (`true`/`false`; omit to toggle), `pane_id` | `zoomed`                  |
-| `equalize_splits`              | optional `pane_id`                                |                              |
-| `get_layout`                   | `pane_id`: lay out that pane's workspace          | `tree`, `panes`, `windows`, `workspace_visible` |
-| `move_workspace_to_new_window` | `index` (default active)                          | `windows`                    |
-| `merge_all_windows`            | moves every window's workspaces into the active one | `workspaces`               |
+- `split_pane`, `close_pane` and `get_layout` also accept a `pane_id` in a background workspace.
+- `focus_pane`, `resize_pane`, `swap_pane`, `zoom_pane` and `equalize_splits` need the pane on screen. Otherwise they fail with `pane is in a background workspace; switch to it first`.
 
-`get_layout` returns the split tree with ratios, each pane's on-screen `frame` (top-left origin, points) whether it is `visible` (hidden while another pane is zoomed), its terminal `grid` (columns, rows) and its `tabs` (`id`, `title`, `type`, `active`, `cwd`, `process`). Frames are left out for a background workspace. A pane split into a background workspace (`started: false`) gets its shell, and runs its `command`, when the workspace is next shown.
+| Command                        | Arguments | Reply |
+| ------------------------------ | --------- | ----- |
+| `split_pane`                   | `direction` (default `right`), `pane_id` to split (default active), `command`, `cwd`, `focus` (default `true`) | `pane_id`, `started` |
+| `close_pane`                   | `pane_id` (default active). Never closes the only pane. | `active_pane` |
+| `focus_pane`                   | `direction`, `next` or `previous`. `pane_id` alone focuses that pane; with `direction` it moves from there. | `active_pane` |
+| `resize_pane`                  | `direction`, `amount` in points (default 10), `pane_id` | |
+| `swap_pane`                    | `direction`, `pane_id` | |
+| `zoom_pane`                    | `zoomed` (`true`/`false`, omit to toggle), `pane_id` | `zoomed` |
+| `equalize_splits`              | optional `pane_id` | |
+| `get_layout`                   | `pane_id` for that pane's workspace; `scope: "app"` for every window | `tree`, `panes`, `windows`, `workspace_visible` |
+| `move_workspace_to_new_window` | `index` (default active) | `windows` |
+| `merge_all_windows`            | Moves every window's workspaces into the active one | `workspaces` |
+
+`get_layout` returns the split tree with ratios. Each pane has:
+
+- `frame`: on-screen position in points, top-left origin. Left out for a background workspace.
+- `visible`: false while another pane is zoomed.
+- `grid`: terminal columns and rows.
+- `tabs`: `id`, `title`, `type`, `active`, `cwd`, `process`.
+
+A pane split into a background workspace replies `started: false`. Its shell and `command` start when the workspace is next shown.
 
 ```bash
 echo '{"cmd":"split_pane","direction":"down"}' | nc -U "$BOO_SOCK"
 echo '{"cmd":"get_layout"}' | nc -U "$BOO_SOCK"
 ```
 
+## Event Subscriptions
+
+Send `subscribe` with a list of `events` and keep the connection open. `"events": ["*"]` subscribes to all.
+
+| Event                    | Data |
+| ------------------------ | ---- |
+| `cwd_changed`            | `path`, `is_remote`, `pane_id` |
+| `title_changed`          | `title`, `pane_id` |
+| `process_changed`        | `name`, `category`, `pane_id`, `pid`, `metadata` |
+| `remote_session_changed` | `type`, `host`, `active`, `pane_id` |
+| `focus_changed`          | `pane_id` |
+| `workspace_switched`     | `workspace_id` |
+| `theme_changed`          | `name`, `is_dark` |
+| `settings_changed`       | `topic` |
+| `cmd_started`            | `command`, `pane_id` |
+| `cmd_ended`              | `command`, `exit_code`, `duration`, `pane_id` |
+
+### Reacting to Directory Changes
+
+Subscribe to `cwd_changed`, then act with another command. This script lists each new directory in the same pane:
+
+```bash
+echo '{"cmd":"subscribe","events":["cwd_changed"]}' | nc -U "$BOO_SOCK" | while read -r line; do
+  pane=$(echo "$line" | jq -r '.data.pane_id // empty')
+  [ -n "$pane" ] && echo '{"cmd":"send_text","pane_id":"'"$pane"'","text":"ls\n"}' | nc -U "$BOO_SOCK"
+done
+```
+
 ## Agent Inbox
 
-Boo keeps one list of coding agents across all windows: which are working, which wait for an answer, which finished. The status bar shows it; clicking lists every agent and jumps to its tab.
+The inbox is Boo's list of coding agents across all windows. See [Agents](/agents#agent-inbox) for the UI.
 
-Claude Code feeds it automatically: on launch Boo registers `~/.boo/shell-integration/boo-claude-hook` in `~/.claude/settings.json` for `UserPromptSubmit`, `PostToolUse`, `Notification`, `Stop` and `SessionEnd` (only if that file already exists; your own hooks are kept). For Codex, add to `~/.codex/config.toml`:
+Claude Code reports through a hook that Boo installs. For Codex, add to `~/.codex/config.toml`:
 
 ```toml
 notify = ["~/.boo/shell-integration/boo-claude-hook", "codex"]
 ```
 
-Other agents can report directly:
+Other agents report with `agent_event`:
 
-| Command       | Arguments                                                                                       | Reply                 |
-| ------------- | ----------------------------------------------------------------------------------------------- | --------------------- |
-| `agent_event` | `event`: `working`, `needs-input`, `done`, `error` or `end`; `tab_id` or `pane_id` (`$BOO_TAB_ID` / `$BOO_PANE_ID`); optional `agent`, `message`, `tool`, `session_id`, `cwd` | `state` |
-| `agent_inbox` |                                                                                                 | `attention`, `items`  |
-| `agent_jump`  | `tab_id`, or omit for the next agent waiting                                                    |                       |
-| `agent_respond` | `tab_id`, `response`: `approve` (types Return) or `deny` (types Escape); optional `updated_at` from `agent_inbox` to refuse if the agent asked something newer | |
+| Command         | Arguments | Reply |
+| --------------- | --------- | ----- |
+| `agent_event`   | `event`; `tab_id` or `pane_id` (`$BOO_TAB_ID` / `$BOO_PANE_ID`); optional `agent`, `message`, `tool`, `session_id`, `cwd` | `state` |
+| `agent_inbox`   | | `attention`, `items` |
+| `agent_jump`    | `tab_id`, or none for the next waiting agent | |
+| `agent_respond` | `tab_id` and either `response` or `text` (see below) | |
 
-`needs-input` waits until the agent works again; `done` and `error` wait until you look at the tab. Entering either state sends a notification unless the tab is in front.
+`event` is one of `working`, `needs-input`, `done`, `error` or `end`. Aliases: `prompt`, `tool` and `working` mean working; `permission` and `question` mean needs-input; `stop` means done.
+
+- `needs-input` lasts until the agent works again.
+- `done` and `error` last until you look at the tab.
+- Both send a notification unless the tab is in front.
+- `end` removes the agent from the list.
+
+`agent_respond` answers an agent:
+
+- `response: "approve"` types Return; `"deny"` types Escape. The agent must be in needs-input. Pass `updated_at` from `agent_inbox` to refuse when the agent asked something newer.
+- `text` sends a message to the agent. This fails while the agent is in needs-input.
 
 ```bash
 echo '{"cmd":"agent_event","pane_id":"'"$BOO_PANE_ID"'","event":"needs-input","agent":"aider","message":"Apply edits?"}' | nc -U "$BOO_SOCK"
 ```
 
+### Waiting for Events
+
+`wait_for_events` blocks until something happens: an agent changes state, a task starts or ends, a pane closes or an approval resolves.
+
+- `since`: the `seq` from the last reply. Events after it return at once.
+- `timeout`: seconds (default 300, max 540). On timeout the reply has no events.
+
+Reply: `seq`, `events`, and `missed: true` when older events were dropped.
+
 ## Agent Timeline
 
-**File → Agent Timeline** (or **Show Timeline** in the Agents sidebar and the status bar's agent menu) opens a tab with what a Claude Code session did, read from its transcript in `~/.claude/projects` (`$CLAUDE_CONFIG_DIR` if set): each prompt with its tool calls, duration, tokens and cost, the reply, and the files edited. Calls repeated three or more times in a row fold into one row marked in the warning color, so runaway loops stand out; **Loops & failures only** hides the rest. The tab refreshes every few seconds while the session runs.
+`agent_timeline` returns what a Claude Code session did, read from its transcript in `~/.claude/projects` (or `$CLAUDE_CONFIG_DIR`). See [Agents](/agents#agent-timeline) for the tab.
 
-Cost is exact (Claude Code's own figure) once a session has ended; while it runs, Boo estimates it from token counts and public prices, shown with ≈. Subagent tokens count toward the total.
+| Arguments | Reply |
+| --------- | ----- |
+| `tab_id` (an inbox agent) or `session_id`; optional `turns` (default 10), `open: true` to show the tab | `cost`, `cost_exact`, `tokens`, `prompts`, `tool_calls`, `loops`, `files`, last `turns` |
 
-| Command          | Arguments                                                    | Reply                                                                                   |
-| ---------------- | ------------------------------------------------------------ | --------------------------------------------------------------------------------------- |
-| `agent_timeline` | `tab_id` (an inbox agent) or `session_id`; optional `turns` (default 10), `open: true` to show the tab | `cost`, `cost_exact`, `tokens`, `prompts`, `tool_calls`, `loops`, `files`, last `turns` |
+`cost_exact` is false while the session runs. Boo then estimates cost from token counts.
 
 ## Agent Tasks
 
-**File → New Agent Task…** gives an agent its own checkout: Boo creates branch `boo/<task>` from the HEAD of the repository the active terminal is in (falling back to the workspace folder) in `~/.boo/worktrees/<repo>/<task>`, opens it as a workspace and starts the agent with your first message. Several agents can work on one repository without touching each other.
+An agent task is a git worktree on branch `boo/<task>` in `~/.boo/worktrees/<repo>/<task>`. See [Agents](/agents#agent-tasks).
 
-Right-click a task's workspace for **Merge Worktree…** (`git merge --no-ff` into the branch checked out in the main repository; refuses with uncommitted changes, aborts on conflicts) or **Discard Worktree…**. Both can delete the worktree and branch and close the workspace.
+| Command          | Arguments | Reply |
+| ---------------- | --------- | ----- |
+| `new_agent_task` | `name` and/or `prompt`; optional `agent` (`claude`, `codex`, `opencode`), `model`, `repo` (default: active terminal's repo, else workspace), `base` (ref to branch from) | `path`, `workspace_id` |
+| `review_changes` | optional `workspace_id` or `pane_id` (default: active workspace) | |
+| `task_status`    | `tab_id` of the task's agent | `branch`, `target`, `ahead`, `behind`, `dirty`, `target_dirty`, `conflicts`, `mergeable`, `blocker`, `hint` |
+| `task_diff`      | `tab_id`; `stat_only: true` for the file list only | `base`, `files`, `additions`, `deletions`, `diff` (max 100,000 chars), `truncated` |
+| `merge_task`     | `tab_id`; `cleanup` (default `true`) removes the worktree and closes the workspace | `merged`, `target`, or `error` and `blocker` |
+| `discard_task`   | `tab_id` | |
 
-**File → Review Changes…** (or **Review Changes…** in a task's context menu) opens a diff tab with everything the agent changed: for a task, all commits since it branched off plus uncommitted and untracked files; for any other repository, the changes since the last commit. Click a line to comment, then **Send to Agent** (⌘↩) pastes all comments as one numbered message into the workspace's agent terminal.
-
-| Command          | Arguments                                                                                                     | Reply                         |
-| ---------------- | ------------------------------------------------------------------------------------------------------------- | ----------------------------- |
-| `new_agent_task` | `name` and/or `prompt`; optional `agent` (`claude`, `codex`, `opencode`) and `repo` (default: active terminal's repo, else workspace) | `path`, `workspace_id` |
-| `review_changes` | optional `workspace_id` or `pane_id` (default: active workspace)                                                | —                             |
+`blocker` is one of `no_target`, `dirty`, `target_dirty`, `conflicts` or `nothing_to_merge`. `hint` says what to do about it.
 
 ```bash
 echo '{"cmd":"new_agent_task","name":"fix login","prompt":"The login redirect loops, fix it"}' | nc -U "$BOO_SOCK"
@@ -167,66 +218,75 @@ echo '{"cmd":"new_agent_task","name":"fix login","prompt":"The login redirect lo
 
 ### Handing context to an agent
 
-**Terminal → Send to Agent** (⌥⌘↩) pastes the selection, or else the output of the last command, into the prompt of the nearest agent, without pressing Return, and brings its tab to the front. The agent in the same workspace wins, then the most recently active one. The text arrives fenced, with a header naming the command, its exit code and the directory. Long output keeps its last 60,000 characters, where errors usually are.
-
-Right-click a terminal for **Send Selection to …** and **Send Output of “…” to …**, with a submenu when several agents run. Dropping text or files onto an agent pane pastes them too (files as shell-escaped paths).
-
-Last-command output needs shell integration: Boo cuts it out of the scrollback between the command line and the next prompt.
+**Terminal → Send to Agent** (⌥⌘↩) pastes the selection, or the last command's output, into the nearest agent. See [Agents](/agents#sending-context-to-an-agent). From a script, use `send_text` with the agent's `pane_id`.
 
 ## MCP Server
 
-Boo is also an [MCP](https://modelcontextprotocol.io) server, so an agent running in a Boo terminal can arrange its own workspace: start a dev server or test watcher in a pane beside it and read the output later, type into other panes, start parallel agent tasks, or open the review for you. Boo (the installed app, not a bare development binary) writes a launcher to `~/.boo/shell-integration/boo-mcp` on every start; register it once:
+`Boo --mcp` is an [MCP](https://modelcontextprotocol.io) server over stdio. The installed app writes a launcher to `~/.boo/shell-integration/boo-mcp` on every start. Register it once:
 
 ```bash
 claude mcp add -s user boo -- ~/.boo/shell-integration/boo-mcp
 codex mcp add boo -- ~/.boo/shell-integration/boo-mcp
 ```
 
-| Tool             | What it does                                                                                     |
-| ---------------- | ------------------------------------------------------------------------------------------------ |
-| `get_layout`     | Panes of the agent's workspace with tabs, cwd and running process; `your_pane` is the agent's own |
-| `split_pane`     | New pane beside the agent's (`direction`, `command`, `cwd`, `pane_id`); focus stays with you unless `focus` |
-| `read_pane`      | Last `lines` (default 100) of a pane's output                                                     |
-| `send_text`      | Type into another pane, pressing Return unless `submit` is false                                  |
-| `close_pane`     | Close another pane                                                                                |
-| `list_agents`    | The agent inbox                                                                                   |
-| `new_agent_task` | Worktree task on the agent's repository with a first `prompt`                                     |
-| `run_recipe`     | Open a saved [recipe](/features#recipes) by `name` as a new workspace                            |
-| `open_review`    | Review tab for the agent's workspace                                                              |
-| `wait_for_events` | Blocks until an agent changes state, a task is spawned or finishes, a pane closes or an approval resolves (`since`, `timeout`) |
-| `agent_respond`  | Approve, deny or answer a waiting agent by `tab_id`                                               |
-| `focus_pane`     | Bring an agent's tab to the front                                                                 |
-| `task_status`    | A task's commits, uncommitted changes, merge conflicts, and whether the main checkout is dirty    |
-| `task_diff`      | A task's changes (`stat_only` for the summary)                                                    |
-| `merge_task`     | Merge a task into its main checkout (`cleanup` removes the worktree)                              |
-| `discard_task`   | Delete a task's worktree and branch                                                               |
+The server talks to the running app over `$BOO_SOCK`. It uses `$BOO_PANE_ID` as the agent's own pane and sends `$BOO_TOKEN` for you. It never types into or closes the agent's own pane.
 
-The server (`Boo --mcp`) talks to the running app over `$BOO_SOCK` and defaults to the agent's pane through `$BOO_PANE_ID`, which every Boo terminal sets. It refuses to type into or close the agent's own pane.
+| Tool              | What it does |
+| ----------------- | ------------ |
+| `get_layout`      | Panes of the agent's workspace with tabs, cwd and process. `your_pane` is the agent's own. |
+| `split_pane`      | New pane beside the agent's (`direction`, `command`, `cwd`, `pane_id`). Focus stays unless `focus`. |
+| `read_pane`       | Last `lines` (default 100) of a pane's output |
+| `send_text`       | Type into another pane. Presses Return unless `submit` is false. |
+| `close_pane`      | Close another pane |
+| `list_agents`     | The agent inbox |
+| `new_agent_task`  | Worktree task on the agent's repository with a first `prompt` |
+| `run_recipe`      | Open a [recipe](/features#recipes) by `name` |
+| `open_review`     | Review tab for the agent's workspace |
+| `wait_for_events` | Block until something happens (`since`, `timeout`) |
+| `agent_respond`   | Approve, deny or answer a waiting agent by `tab_id` |
+| `focus_pane`      | Bring an agent's tab to the front |
+| `task_status`     | A task's commits, changes, conflicts and merge blocker |
+| `task_diff`       | A task's changes (`stat_only` for the summary) |
+| `merge_task`      | Merge a task into its main checkout (`cleanup` removes the worktree) |
+| `discard_task`    | Delete a task's worktree and branch |
 
 ## Status Bar Segments
 
-External processes can publish status bar segments. Tint accepts named colors (`red`, `green`, `yellow`, `blue`, `orange`, `purple`, `accent`) or `#hex`. Segments are auto-cleaned on disconnect.
+Processes can add their own status bar segments. They are removed when the connection closes.
+
+```bash
+echo '{"cmd":"statusbar.set","id":"ci","text":"CI: passing","icon":"checkmark.circle","tint":"green"}' \
+  | nc -U "$BOO_SOCK"
+```
+
+`tint` is `red`, `green`, `yellow`, `blue`, `orange`, `purple`, `accent` or a `#rrggbb` hex color.
+
+To mark a process as an agent or tool, use `set_status`:
+
+```bash
+echo '{"cmd":"set_status","pid":'"$$"',"name":"claude","category":"ai"}' | nc -U "$BOO_SOCK"
+```
 
 ## Security
 
-- Socket I/O runs on a dedicated serial queue
-- Connecting processes are verified with `LOCAL_PEERCRED`
-- Registered PIDs are checked as descendants of the shell
-- Dead processes and disconnected clients are cleaned up automatically
+- The socket only accepts processes of the same user (`LOCAL_PEERCRED`).
+- Socket I/O runs on one serial queue.
+- A PID registered with `set_status` only counts for a tab whose shell it descends from.
+- Dead processes and closed connections are cleaned up.
 
 ### Capability tokens
 
-Every Boo terminal gets a random `BOO_TOKEN` next to `BOO_PANE_ID`. A command needs this token when it would give a process power it lacks in its own shell:
+Every Boo terminal gets a random `BOO_TOKEN`. A command needs it when it gives a process power it lacks in its own shell:
 
 - `agent_respond`
 - `send_text` or `send_key` into an agent or a remote session
 - `close_pane` on an agent pane
-- merging or discarding a task
+- `merge_task` and `discard_task`
 
-Send the token as `"token"` in the request. The MCP server does this for you.
+Send the token as `"token"` in the request.
 
 - A normal terminal's token runs these commands directly.
 - The [orchestrator](/agents#orchestrator)'s token puts them on an approval card, except writes to agents it started. Merge and discard always need a card. The reply is `{"status":"pending","approval_id":…}`.
-- Without a token, these commands are rejected. Everything else works without a token, so scripts keep working as long as they do not type into agents or remote sessions.
+- Without a token, these commands are rejected. All other commands work without one.
 
-Tokens are kept in memory and change when Boo restarts. They catch mistakes and overreach by a model. They do not stop an attacker running as the same user, who can read another process's environment.
+Tokens live in memory and change when Boo restarts. They stop mistakes and model overreach. They do not stop an attacker running as the same user, who can read another process's environment.

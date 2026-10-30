@@ -67,14 +67,16 @@ See [Windows & Splits](/windows-and-splits) for the full guide.
 Press **Opt+Space** from any app to drop a terminal down from the top of the screen; press it again to hide it. The shells keep running while it is hidden, and its tabs come back on the next launch.
 
 - **Tabs** — **Cmd+T** opens a tab in the current directory, **Cmd+W** closes it, **Cmd+Opt+1-9** switches. Click a tab to select it, middle-click to close
-- **Hides on focus loss** — Clicking another window hides it; turn this off in Settings
-- **Settings → Keyboard Shortcuts → Quick Terminal** — change the hotkey (like `` ctrl+` ``, `cmd+shift+t` or `f12`), the height, or turn the hotkey off. **Window → Toggle Quick Terminal** works either way
+- **Hides on focus loss** — Clicking another window hides it; turn off **Hide when it loses focus** in Settings → Shortcuts
+- **Settings → Shortcuts → Quick Terminal** — change the hotkey (like `` ctrl+` ``, `cmd+shift+t` or `f12`), the height, or turn the hotkey off. **Window → Toggle Quick Terminal** works either way
 
 The quick terminal has no splits. While the hotkey is on, Opt+Space no longer types a non-breaking space in other apps.
 
 ## Per-Pane Tabs
 
 Each pane has its own tab bar. Create new terminal tabs with **Cmd+T** (browser tabs with **Cmd+Shift+T**), close with **Cmd+W**, and switch with **Cmd+Opt+1-9** or **Cmd+Shift+1-9**. Closed tabs can be reopened with **Cmd+Opt+Z**. Tabs can also host a browser, text editor, image viewer, or markdown preview — see [Multi-Content Tabs](/multi-content-tabs).
+
+Editor tabs have a status strip (line and column, indentation, encoding, line endings, language), **Save As…** (**Cmd+Shift+S**), autosave, and reload a file that changed on disk. With unsaved edits, Boo asks which version to keep. Set these in **Settings → Editor**.
 
 Smart close order: tab → pane → workspace.
 
@@ -92,6 +94,14 @@ Boo's shell integration marks each prompt (OSC 133), so the terminal knows where
 - **Jump** — **Cmd+Up** / **Cmd+Down** scroll to the previous / next prompt
 - **Right-click a command** — Copy Command, Copy Output, Re-run, or send its output to an agent
 - **Copy Last Output** — **Cmd+Opt+C** copies the output of the last command
+
+## tmux
+
+Run `tmux -CC` (or `tmux -CC attach`) in a Boo terminal, and the tmux session opens as native Boo workspaces: each tmux window becomes a workspace, each tmux pane a Boo pane. Splits and new tabs in those workspaces go through tmux. Turn it off with **Settings → General → Startup → Native tmux windows**; the change applies to terminals opened afterwards.
+
+## Images in the terminal
+
+Programs that use the Kitty graphics protocol show images inline. The file explorer can also show images this way (see [File Explorer](#file-explorer)).
 
 ## Quick Select
 
@@ -182,7 +192,7 @@ Toggle the sidebar with **Cmd+B**. The explorer shows a live-updating file tree 
 - **HTML** — Browser tab when `htmlOpenInBrowser` is enabled (off by default)
 - **Other files** — Opens with the default macOS app
 
-Configure all of this in **Settings → Plugins → Files**. See [Multi-Content Tabs](/multi-content-tabs#file-explorer-settings).
+Configure all of this in **Settings → Plugins → Files**. See [Multi-Content Tabs](/multi-content-tabs#file-opening-settings).
 
 ## Themes
 
@@ -261,7 +271,7 @@ Configurable segments displayed at the bottom of the window:
 - **Git branch** — Current branch name with switcher popup
 - **Path** — Current working directory
 - **Running process** — Foreground process (zsh, node, vim, etc.)
-- **Plugin icons** — Toggle icons for Files, Git, Docker, Bookmarks panels
+- **Plugin icons** — Toggle sidebar panels
 - **Pane count** — Number of active panes and tabs
 - **Clock** — Current time
 - **Listening ports** — Ports opened by processes in the workspace's terminals. Click a port to open it in a browser tab or your default browser, copy its URL, go to its pane, or stop the process. Boo notifies you when a new port opens (**Settings → Notifications**)
@@ -293,7 +303,7 @@ Open with **Cmd+,**. The sidebar groups the tabs under **Terminal**, **Appearanc
 
 | Tab               | Options |
 | ----------------- | ------- |
-| **General**       | Default folders, startup, file editor, advanced, agents, [sync](/history-and-sync#sync), [command history](/history-and-sync#history-settings) |
+| **General**       | Default folders, startup (incl. scrollback restore, native tmux windows), file editor, advanced, agents, [sync](/history-and-sync#sync), [command history](/history-and-sync#history-settings) |
 | **Theme**         | 32 color themes with live preview, custom theme editor (whole UI restyles live while editing) |
 | **Appearance**    | Terminal font, font size, cursor style (block/beam/underline/outline), [terminal shader](/rules-and-profiles#shaders); sidebar font and font size |
 | **Status Bar**    | Preview, built-in segments (connection, path, clock, pane & tab count, listening ports), plugin segments |
@@ -301,7 +311,8 @@ Open with **Cmd+,**. The sidebar groups the tabs under **Terminal**, **Appearanc
 | **Profiles**      | [Profiles](/rules-and-profiles#profiles) and the default for new tabs |
 | **Rules**         | [Rules](/rules-and-profiles#settings--rules) editor, regex tester, `sendText` approvals |
 | **Recordings**    | [Recording](#recordings-settings) folder, file names, idle limit, stop action, library |
-| **Editor**        | Font, editing, display, terminal links, formatting |
+| **Permissions**   | Code signature, Full Disk Access status, links to privacy settings ([Installation](/installation#permissions)) |
+| **Editor**        | Font, editing, display, cursor, terminal links, saving (autosave, format on save, reload on disk change) |
 | **Browser**       | Browser tab behavior and history |
 | **Notifications** | Command notifications, new port notifications, minimum duration, grouping bursts, removal |
 | **Plugins**       | Enable/disable plugins, per-plugin settings (file explorer icons/hidden files, git settings) |

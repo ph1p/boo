@@ -1,42 +1,27 @@
 # Remote Sessions
 
-Boo auto-detects remote terminal sessions and adapts the file explorer, status bar, and plugin context.
+When a pane runs a remote shell, Boo notices. The file explorer then lists the remote files, and the status bar and plugins show the remote host and folder.
 
 ## Supported Sessions
 
 | Category   | Tools                                                 |
 | ---------- | ----------------------------------------------------- |
-| SSH-style  | `ssh`, `mosh`                                         |
+| SSH        | `ssh`, `mosh`                                         |
 | Containers | `docker`, `podman`, `nerdctl`, `kubectl`, `oc`, `lxc` |
 | VMs        | `limactl`, `colima`, `vagrant`                        |
 | Toolboxes  | `distrobox`, `toolbox`                                |
 | Devices    | `adb shell`                                           |
 
-Only interactive sessions trigger remote mode. Non-interactive commands (e.g. `docker exec myapp cat /etc/hosts`) don't switch the pane. Neither does an `ssh` whose stdin isn't the terminal, such as one a dev server or deploy tool in the pane starts in the background.
+Only interactive sessions count. `docker exec myapp cat /etc/hosts` doesn't switch the pane, and neither does an `ssh` started in the background by a dev server or deploy tool.
 
-## Detection
+## SSH
 
-Two mechanisms work together:
+The file explorer opens its own SSH connection to the host and reuses it for every listing. It needs key-based auth or an SSH agent. Boo reads `SSH_AUTH_SOCK` from your login shell, so agents like 1Password or Secretive work.
 
-1. **Title heuristics** — `TerminalBridge` checks terminal title changes for `user@host` patterns or known remote commands, combined with checking that the reported CWD doesn't exist locally
-2. **Process tree** — `RemoteExplorer` scans child processes for `ssh`, `mosh`, and container/VM tools via `proc_listchildpids`
+If key auth fails, the explorer shows **Connect…**. It opens the connection and asks for a password, passphrase or 2FA code in a dialog.
 
-When a remote session is detected, the sidebar switches to `RemoteFileTreeView` and runs listing commands appropriate for the session type.
+Coding agents running over `ssh` or `mosh` show up in the [Agent Inbox](/agents#agent-inbox).
 
-## Remote File Browsing
+## Working Directory
 
-Commands are adapted per session type:
-
-| Type                   | Pattern                                       |
-| ---------------------- | --------------------------------------------- |
-| SSH                    | `ssh -n -o BatchMode=yes <host> <cmd>`        |
-| Docker/Podman/nerdctl  | `<tool> exec <target> sh -c <cmd>`            |
-| kubectl/oc/lxc/toolbox | `<tool> <subcommand> <target> -- sh -c <cmd>` |
-| limactl                | `limactl shell <vm> sh -c <cmd>`              |
-| adb                    | `adb shell sh -c <cmd>`                       |
-
-SSH prefers ControlMaster sockets when available for connection reuse.
-
-## CWD Tracking
-
-Since Ghostty's OSC 7 only reports the local shell's CWD, Boo uses title parsing (`user@host:path`), process-tree polling, and container CWD watchers to track the remote working directory.
+Ghostty only reports the local shell's folder. For remote sessions, Boo reads the folder from the terminal title (`user@host:path`) and from the session's processes.

@@ -1,35 +1,39 @@
 # Security
 
-This page collects the features that protect what you type and paste, and the files Boo keeps about you.
+How Boo protects what you type and paste, and the files it keeps about you.
 
 ## The ~/.boo folder
 
-Boo keeps its settings, session, command history, notes and recordings in `~/.boo`. At every launch Boo makes the folder owner-only (`0700`): if the group or other users have any access to it, Boo removes that access. A new `~/.boo` is created that way.
+Boo keeps its settings, session, command history, notes and recordings in `~/.boo`. At every launch Boo makes the folder owner-only (`0700`) and removes any group or other access.
 
-Saved terminal scrollback in `~/.boo/scrollback/` can hold anything that was on screen, so each file is owner-only (`0600`) and deleted once it is replayed. Turn off Settings → General → Startup → **Restore terminal scrollback** to stop saving it; that also deletes what is saved.
+Saved scrollback in `~/.boo/scrollback/` can hold anything that was on screen. Each file is owner-only (`0600`) and deleted once it is replayed. Turn off **Settings → General → Startup → Restore terminal scrollback** to stop saving it; that also deletes what is saved.
 
 ## Secure Keyboard Entry
 
-**Boo → Secure Keyboard Entry** stops other processes, such as event taps and keyloggers, from observing what you type into Boo. The menu item shows a check mark while it is on, and the choice is saved.
+**Boo → Secure Keyboard Entry** stops other processes, such as event taps and keyloggers, from seeing what you type into Boo. The menu item shows a check mark while it is on, and the choice is saved.
 
-Secure input is system-wide while it is held, so Boo only holds it while Boo is the active app, as Terminal and iTerm2 do. Other apps keep features like text expansion while Boo runs in the background.
+Secure input is system-wide while held, so Boo only holds it while Boo is the active app, as Terminal and iTerm2 do.
 
-If you turn it on while another app already holds secure input, Boo says "Secure Keyboard Entry is on, but another app is holding it".
+If another app already holds secure input, Boo says "Secure Keyboard Entry is on, but another app is holding it".
 
 ## Clipboard confirmations
 
-Boo asks before two kinds of clipboard access. Each opens a sheet on the terminal's window, with a preview of the text:
+Boo asks before two kinds of clipboard access. Each opens a sheet with a preview of the text:
 
-- **Risky pastes** — when the text you paste contains line breaks or control characters, it could run commands the moment it lands at a prompt. The sheet asks "Paste this text?". Click **Paste** or **Cancel**.
-- **Clipboard reads by programs (OSC 52)** — a program in the terminal, possibly on a remote host over SSH, asks to read your clipboard. The sheet asks "Allow the program to read the clipboard?". Click **Allow** or **Cancel**.
+- **Risky pastes** — Text with line breaks or control characters could run commands as soon as it lands at a prompt. The sheet asks "Paste this text?".
+- **Clipboard reads (OSC 52)** — A program in the terminal, maybe on a remote host, asks to read your clipboard. The sheet asks "Allow the program to read the clipboard?".
 
-Where the terminal supports it, the sheet has a **Remember for this terminal** checkbox, so the same terminal doesn't ask again.
+Where the terminal supports it, **Remember for this terminal** stops the same terminal from asking again.
 
-Programs can always **write** to the clipboard (OSC 52 write), and selecting text copies it. See [Ghostty Integration](/ghostty-integration#clipboard) for the config behind this.
+Programs can always **write** to the clipboard (OSC 52 write). See [Ghostty Integration](/ghostty-integration#clipboard).
+
+## macOS permissions
+
+**Settings → Permissions** shows the app's signature and Full Disk Access status, with buttons to the matching System Settings panes. See [Installation](/installation#permissions).
 
 ## Remote Control
 
-The [Remote Control](/remote-control) web server is off until you start it. While it runs, the status bar shows **◉ Remote**, and it stops itself after 30 minutes without use. Its connection is plain HTTP: use it only on a network you trust.
+The [Remote Control](/remote-control) server is off until you start it. While it runs, the status bar shows **◉ Remote**. It stops itself after 30 minutes without use. It uses plain HTTP, so use it only on a network you trust.
 
 ## Related
 

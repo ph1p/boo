@@ -1,100 +1,94 @@
 # Agents
 
-Boo is built to run coding agents (Claude Code, Codex, OpenCode) side by side. It tracks their state across all windows, gives each task its own git worktree, lets you review and comment on what they changed, and shows what a session cost.
+Boo runs coding agents (Claude Code, Codex, OpenCode) side by side. It tracks their state across all windows, gives each task its own git worktree, lets you review what they changed, and shows what a session cost.
 
 ## Agents Sidebar
 
-The **Agents** sidebar tab is the agent center for the current workspace:
+The **Agents** sidebar tab covers the current workspace:
 
-| Section       | What it shows                                                                              |
-| ------------- | ------------------------------------------------------------------------------------------ |
-| Open Sessions | Agent sessions; click to focus, or right-click to resume, copy the session ID, open the transcript or show the timeline |
-| Changes       | Files changed while an agent is active, with diff stats; open a file, copy its path, or reference it in the agent's prompt |
-| Worktrees     | The repository's worktrees; click one to open it in a new tab                              |
-| Config, Skills | The agent's configuration files and skills                                                |
+| Section        | What it shows                                                                                           |
+| -------------- | ------------------------------------------------------------------------------------------------------- |
+| Open Sessions  | Agent sessions. Click to focus; right-click to resume, copy the session ID, open the transcript or timeline |
+| Changes        | Files changed while an agent is active, with diff stats                                                 |
+| Worktrees      | The repository's worktrees. Click one to open it in a new tab                                           |
+| Config, Skills | The agent's config files and skills                                                                     |
 
-With no agent in the tab, the sidebar offers **Start** buttons for each installed agent CLI.
+With no agent in the tab, the sidebar shows a **Start** button for each installed agent CLI.
 
 ## Agent Inbox
 
-Boo keeps one list of agents across all windows: which are working, which wait for input, which finished or failed. A status bar segment summarizes it ("Claude needs your input", "2 agents waiting", "3 agents"), colored by state:
+Boo keeps one list of agents across all windows: working, waiting for input, done or failed. A status bar segment sums it up ("Claude needs your input", "2 agents waiting"), colored by state:
 
-| Color   | State                          |
-| ------- | ------------------------------ |
-| Warning | Needs input                    |
-| Error   | Failed                         |
-| Success | Done, not yet looked at        |
-| Accent  | Working                        |
+| Color   | State                   |
+| ------- | ----------------------- |
+| Warning | Needs input             |
+| Error   | Failed                  |
+| Success | Done, not yet looked at |
+| Accent  | Working                 |
 
-Click the segment to list every agent with its workspace and jump to it, or to open its timeline. **Window → Jump to Next Waiting Agent** (⇧⌘J) goes straight to the next agent that needs you. When an agent starts waiting or finishes in a tab you are not looking at, Boo sends a notification.
+Click the segment to list every agent and jump to it or open its timeline. **Window → Jump to Next Waiting Agent** (⇧⌘J) goes to the next agent that needs you. When an agent starts waiting or finishes in a tab you are not looking at, Boo sends a notification.
 
-Claude Code reports to the inbox through hooks: on launch Boo adds `~/.boo/shell-integration/boo-claude-hook` to `~/.claude/settings.json` for `UserPromptSubmit`, `PostToolUse`, `Notification`, `Stop` and `SessionEnd`. Your own hook entries are kept, and the file must already exist (start Claude Code once). The hook never blocks the agent. For Codex and other agents, see [Agent Inbox](/ipc-socket#agent-inbox).
+Claude Code reports through a hook. On launch, Boo adds `~/.boo/shell-integration/boo-claude-hook` to `~/.claude/settings.json` and keeps your own hooks. The file must exist, so start Claude Code once first. Agents running behind `ssh` or `mosh` are tracked from their terminal title and bell. For Codex and other agents, see [Agent Inbox](/ipc-socket#agent-inbox).
 
-From your phone, [Remote Control](/remote-control) can approve or deny an agent that is waiting for permission.
+[Remote Control](/remote-control#answering-agents) can approve or deny a waiting agent from another device.
 
 ## Agent Tasks
 
-**File → New Agent Task…** starts an agent in its own checkout, so several agents can work on one repository without touching each other. Enter a task name, an optional first message and the agent (Claude Code, Codex or OpenCode). Boo creates branch `boo/<task>` in `~/.boo/worktrees/<repo>/<task>`, opens it as a workspace and starts the agent with your message.
+**File → New Agent Task…** starts an agent in its own checkout, so several agents can work on one repository without clashing. Enter a task name, an optional first message and the agent. Boo creates branch `boo/<task>` in `~/.boo/worktrees/<repo>/<task>`, opens it as a workspace and starts the agent with your message.
 
 Right-click the task's workspace:
 
 - **Review Changes…** opens the review (below).
-- **Merge Worktree…** merges the branch with `git merge --no-ff` into the branch checked out in the main repository. It refuses while there are uncommitted changes, and aborts on conflicts. By default it then removes the worktree and closes the workspace.
-- **Discard Worktree…** deletes the worktree and its branch after a warning about unmerged commits or uncommitted changes, and closes the workspace.
+- **Merge Worktree…** runs `git merge --no-ff` into the branch checked out in the main repository. It refuses while there are uncommitted changes and aborts on conflicts. By default it then removes the worktree and closes the workspace.
+- **Discard Worktree…** deletes the worktree and its branch, after a warning about unmerged or uncommitted work.
 
 ## Reviewing Changes
 
-**File → Review Changes…** opens a diff tab for the workspace. For an agent task it shows every commit since the branch was created, plus uncommitted and untracked files. For any other repository it shows the changes since the last commit.
+**File → Review Changes…** opens a diff tab. For an agent task it shows every commit since the branch was created, plus uncommitted and untracked files. Elsewhere it shows changes since the last commit.
 
-Click a line to comment on it, add an optional overall note, then press **Send to Agent** (⌘↩). Boo pastes all comments as one numbered message (`file:line`, the quoted line, your comment) into the workspace's agent terminal and presses Return. For a task, the header also has **Merge…** and **Discard…**.
+Click a line to comment, add an optional overall note, then press **Send to Agent** (⌘↩). Boo pastes all comments as one numbered message into the workspace's agent and presses Return. For a task, the header also has **Merge…** and **Discard…**.
 
 ## Sending Context to an Agent
 
-**Terminal → Send to Agent** (⌥⌘↩) pastes the selection, or else the output of the last command, into the nearest agent's prompt and brings its tab to the front. It does not press Return, so you can add what to do with it. An agent in the same workspace wins, then the most recently active one.
+**Terminal → Send to Agent** (⌥⌘↩) pastes the selection, or else the last command's output, into the nearest agent's prompt and brings its tab to the front. It does not press Return. An agent in the same workspace wins, then the most recently active one.
 
-Right-click a terminal for **Send Selection to …** and **Send Output of “…” to …**. Last-command output needs shell integration. Details: [Handing context to an agent](/ipc-socket#handing-context-to-an-agent).
+Right-click a terminal for **Send Selection to …** and **Send Output of “…” to …**. Last-command output needs shell integration.
 
 ## Agent Timeline
 
 **File → Agent Timeline**, or **Show Timeline** in the sidebar or the status bar menu, opens a tab with what a Claude Code session did: each prompt with its tool calls, duration, tokens and cost, the reply and the edited files. Calls repeated three or more times in a row are folded and highlighted, so loops stand out.
 
-Cost is Claude Code's own figure once the session has ended. While it runs, Boo estimates it from token counts, shown with ≈. See [Agent Timeline](/ipc-socket#agent-timeline).
+Cost is Claude Code's own figure once the session ends. While it runs, Boo estimates it from token counts and marks it with ≈.
 
 ## MCP Server
 
-Boo is also an [MCP](https://modelcontextprotocol.io) server (`Boo --mcp`), so an agent inside Boo can arrange its own workspace. Register the launcher once:
+Boo is also an [MCP](https://modelcontextprotocol.io) server, so an agent inside Boo can arrange its own workspace. Register it once:
 
 ```bash
 claude mcp add -s user boo -- ~/.boo/shell-integration/boo-mcp
 codex mcp add boo -- ~/.boo/shell-integration/boo-mcp
 ```
 
-The agent can then read the layout (`get_layout`), open a pane beside it for a dev server or tests (`split_pane`), read and type into other panes (`read_pane`, `send_text`), close them (`close_pane`), list agents (`list_agents`), start parallel tasks (`new_agent_task`) and open the review for you (`open_review`). It never types into or closes its own pane. Full tool list: [MCP Server](/ipc-socket#mcp-server).
+The agent can then read the layout, open a pane for a dev server or tests, read and type into other panes, start parallel tasks and open the review for you. It never types into or closes its own pane. Tool list: [MCP Server](/ipc-socket#mcp-server).
 
 ## Orchestrator
 
-The orchestrator is one Claude Code session that sees every window, workspace and agent. It **triages** (reads waiting agents and answers them), **dispatches** (splits work into parallel agent tasks) and **integrates** (reviews finished tasks, has their agents rebase on conflicts, and merges them).
+The orchestrator is one Claude Code session that sees every window, workspace and agent. It answers waiting agents, splits work into parallel agent tasks, and reviews and merges finished tasks.
 
-Open it with **Window → Toggle Orchestrator** (⌥⌘O) or the **Orchestrator** status bar segment. It lives in a drawer on the right edge of the front window. The drawer moves with you between windows, and the session keeps running while the drawer is closed. At the top the drawer lists all agents (tagged **owned** when the orchestrator started them), followed by approval cards, then the orchestrator's terminal. Drag the drawer's left edge to resize it.
+Open it with **Window → Toggle Orchestrator** (⌥⌘O) or the **Orchestrator** status bar segment. It opens in a drawer on the right edge of the front window. The drawer lists all agents (tagged **owned** when the orchestrator started them), then approval cards, then the orchestrator's terminal. Drag its left edge to resize. The session keeps running while the drawer is closed.
 
-Boo starts `claude` with its own MCP config (`~/.boo/orchestrator/mcp.json`, Boo's server only) and a bundled system prompt. It needs [Claude Code](https://claude.ai/code) installed; the drawer shows the install command if it is missing. Boo remembers the conversation: after you quit Claude or Boo, **Resume** picks it up again with `claude --resume`, and **New Conversation** starts over. If the old transcript is gone, Boo starts a new conversation and says so.
+It needs [Claude Code](https://claude.ai/code) installed; the drawer shows the install command if it is missing. **Resume** continues the last conversation after you quit, and **New Conversation** starts over.
 
 ### Approvals
 
-The orchestrator can read everything. It writes into panes freely only when it started them (its agent tasks). Any other write needs your approval on a card in the drawer:
+The orchestrator can read everything. It writes freely only into its own agent tasks. Anything else waits on an approval card in the drawer:
 
-- answering an agent (`agent_respond`), or typing or pressing keys into an agent or a remote session (SSH, container, VM)
+- answering an agent, or typing into an agent or a remote session (SSH, container, VM)
 - closing an agent's pane
-- merging or discarding a task (always, even for its own tasks)
+- merging or discarding a task (always, even its own)
 
-Each card shows the action, the target agent and the exact text. Choose **Allow** (⌘↩), **Deny** (⎋) or **Allow for this pane** (for the rest of the session; never offered for merge or discard). If the target changes state before you decide, the card turns stale and nothing is sent. When a card arrives while the drawer is out of sight, Boo sends a notification that opens it. The status bar segment counts waiting cards.
+Each card shows the action, the target and the exact text. Choose **Allow** (⌘↩), **Deny** (Esc) or **Allow for this pane** (for the rest of the session; not offered for merge or discard). If the target changes state before you decide, the card turns stale and nothing is sent. A card that arrives while the drawer is hidden triggers a notification.
 
-Its own tasks are remembered by worktree folder, so they stay its own after Boo restarts.
+If the orchestrator writes to the same agent more than three times without the agent changing state, the next write waits on a **Possible loop** card.
 
-### Loop guard
-
-If the orchestrator writes to the same agent more than three times without the agent changing state, the next write waits on a **Possible loop** card. Allowing it resets the count.
-
-### Merging
-
-Before a merge the orchestrator checks the task with `task_status`. It asks the agent to commit if the worktree is dirty, and to rebase in its own worktree if the merge would conflict. If your main checkout has uncommitted changes, it tells you and waits; it never stashes, resets or checks out anything there. Clean tasks get a diff summary and a merge card.
+Before merging, it asks the agent to commit or rebase if needed. If your main checkout has uncommitted changes, it tells you and waits. It never stashes, resets or checks out anything there.

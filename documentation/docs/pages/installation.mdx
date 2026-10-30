@@ -2,72 +2,71 @@
 
 ## Download
 
-Download the latest release from [GitHub Releases](https://github.com/ph1p/boo/releases).
+Boo needs macOS 15 (Sequoia) or later on Apple Silicon.
 
-1. Download `Boo-x.x.x.zip`
-2. Unzip the archive
+1. Download `Boo-x.x.x.zip` from [GitHub Releases](https://github.com/ph1p/boo/releases)
+2. Unzip it
 3. Move **Boo.app** to **Applications**
-4. Launch Boo
+4. Open Boo
 
 :::note
-On first launch, macOS may show a security prompt. Click "Open" to allow it. Releases are signed and notarized.
+If macOS says Boo cannot be opened, run:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/Boo.app
+```
 :::
 
-Boo checks for updates on launch. See [Updates](/updates).
+Boo checks for updates on its own. See [Updates](/updates).
+
+## Permissions
+
+**Settings → Permissions** shows who signed the running app and whether Boo has Full Disk Access. It has **Open…** buttons for the Full Disk Access, Files and Folders, Developer Tools and Automation panes of System Settings.
+
+Programs you run in Boo inherit its grants. Giving Boo Full Disk Access stops the folder prompts from shells and tools. A grant applies to programs started after it.
+
+Releases keep the same signature, so macOS keeps your grants across updates.
 
 ## Build from Source
 
-**Prerequisites:** macOS 15+, Xcode CLT, Zig 0.17.0 (`brew install zig`), Rust (`rustup`), Metal Toolchain, Node.js + pnpm (Monaco editor bundle)
+**Prerequisites:** Xcode 26 / Swift 6.2 (or the Command Line Tools), Zig 0.17.0 (`brew install zig`), Rust (`rustup`), Node.js + pnpm, and the Metal Toolchain (`xcodebuild -downloadComponent MetalToolchain`).
 
 ```bash
 git clone --recursive https://github.com/ph1p/boo.git
 cd boo
-make setup    # Builds GhosttyKit + ironmark + Monaco bundle + Boo
+make setup    # Builds GhosttyKit, ironmark, Monaco and Boo
 make run      # Build and launch
 ```
 
-`make run` creates a local debug app bundle with Sparkle disabled. That keeps development builds from checking the production update feed while preserving the full Sparkle setup in release bundles.
+If you cloned without `--recursive`, run `git submodule update --init --depth 1`.
 
-If you already cloned without `--recursive`:
+The first build takes a few minutes. Later builds are cached.
 
-```bash
-git submodule update --init --depth 1
-```
+`make run` builds a debug app with Sparkle turned off, so it never checks the release update feed.
 
-:::note
-First build downloads dependencies and compiles Metal shaders. Takes a few minutes. Subsequent builds are cached.
-:::
+### Keep permissions across builds
 
-### Release Build
+A plain build is signed ad hoc, and that signature changes every build. macOS then forgets Boo's privacy grants and asks again. Create a stable signing identity once:
 
 ```bash
-make release      # Optimized build
-make app          # Create .app bundle
-make zip          # Create distributable ZIP
-make dmg          # Create distributable DMG
+scripts/create-signing-cert.sh
 ```
 
-`make app`, `make zip`, `make dmg`, and `make dist` keep the Sparkle feed configuration from `Boo/App/Info.plist`, so those bundles behave like real release candidates.
+It adds a self-signed **Boo Self-Signed** certificate to your login keychain. `make run` signs with it whenever it is there. Keep `~/.boo/signing` backed up: a new certificate resets the grants once.
 
-### Tests
+### Release build and tests
 
 ```bash
-make test
+make app      # Optimized .app bundle
+make zip      # Distributable ZIP
+make dmg      # Distributable DMG
+make test     # Run the tests
 ```
 
-## System Requirements
-
-| Requirement              | Minimum               |
-| ------------------------ | --------------------- |
-| macOS                    | 15.0 (Sequoia)        |
-| Architecture             | Apple Silicon (arm64) |
-| Disk space               | ~200MB                |
-| Zig (build only)         | 0.17.0                |
-| Rust (build only)        | stable                |
-| Node + pnpm (build only) | recent                |
+Release bundles keep the Sparkle feed settings from `Boo/App/Info.plist`.
 
 ## Uninstall
 
 1. Quit Boo
 2. Delete `Boo.app` from Applications
-3. Optionally remove configuration: `rm -rf ~/.boo`
+3. Optionally remove your settings and data: `rm -rf ~/.boo`

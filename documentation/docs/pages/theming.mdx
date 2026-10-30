@@ -2,8 +2,9 @@
 
 ## Theme Structure
 
-`TerminalTheme` (`Boo/Models/Theme.swift`) defines a complete color scheme from
-**21 base color fields**. Everything else in the UI is derived from them.
+`TerminalTheme` (`Boo/Models/Theme.swift`) holds a few base colors: 4 terminal
+colors, 16 ANSI colors and 5 chrome colors. Every other UI color is derived
+from them.
 
 ### Terminal colors
 
@@ -24,15 +25,16 @@
 | `sidebarBg` | Sidebar and every floating panel (find bar, autocomplete, detail panel) |
 | `accentColor` | Selection, focus, activity — anything "active" |
 
-All 21 fields are user-editable in the custom theme editor
-(Settings → Theme → New Theme…).
+You can edit every base color in **Settings → Theme → New Theme…**.
+**Import Theme…** in the same place reads an iTerm2 `.itermcolors` file or a
+Ghostty theme file (`ThemeImporter`).
 
 ## Derived Semantic Tokens
 
-Derived tokens are computed from the base fields — built-in and custom themes
-get them for free. **Always reach for the token that names the role** instead
-of hand-rolling `chromeMuted.withAlphaComponent(…)`; the full table lives as a
-comment in `Theme.swift`.
+Derived tokens are computed from the base colors, so every theme gets them for
+free. **Use the token that names the role.** Do not write
+`chromeMuted.withAlphaComponent(…)` by hand. The full table is a comment in
+`Theme.swift`.
 
 | Token | Derivation | Used for |
 | --- | --- | --- |
@@ -66,16 +68,15 @@ match the terminal colors:
 | `error` | ANSI red | Errors, git deleted |
 | `info` | ANSI blue | Informational badges |
 
-Plugin DSL tints (`.success`/`.warning`/`.error`) resolve to these tokens.
+Plugin DSL tints (`.success`, `.warning`, `.error`) resolve to these tokens.
 
-Theme-*independent* identity hues (a container is always "docker blue") live in
-`Boo/Services/BooPaths.swift` as `NSColor.booRemote` / `.booDocker` /
-`.booLocal` / `.booDeleted` / `.booNeutral`.
+Identity colors that must not change with the theme (Docker is always "docker
+blue") live in `Boo/Services/BooPaths.swift`: `NSColor.booRemote`,
+`.booDocker`, `.booLocal`, `.booDeleted` and `.booNeutral`.
 
 ### Alpha convention
 
-If you must use a raw alpha (state matrices, animations), stay inside the
-established bands so the UI reads as one system:
+If you need a raw alpha (state matrices, animations), stay inside these bands:
 
 - **0.04–0.09** — subtle fills
 - **0.10–0.18** — hover fills
@@ -85,13 +86,29 @@ established bands so the UI reads as one system:
 
 ## SwiftUI
 
-SwiftUI views read the same tokens through the `Tokens` environment value
-(`Boo/Views/SettingsWindow.swift`): `t.text`, `t.textSecondary`,
-`t.textTertiary`, `t.separator`, `t.hoverFill`, `t.controlFill`,
-`t.accentSelectionFill`, `t.focusRing`, `t.cardBg`, `t.success` … — mirrors of
-the `TerminalTheme` properties as `Color`. Any token without a named mirror is
-reachable generically: `t.color(\.subtleFill)`. Prefer these over
-`t.muted.opacity(…)`.
+SwiftUI views use `Tokens` (`Boo/Views/SettingsWindow.swift`). It mirrors the
+theme colors as SwiftUI `Color`:
+
+- Named mirrors: `t.text`, `t.textSecondary`, `t.textTertiary`, `t.separator`,
+  `t.hoverFill`, `t.controlFill`, `t.accentSelectionFill`, `t.focusRing`,
+  `t.cardBg`, `t.success`, …
+- Any other token: `t.color(\.subtleFill)`.
+
+Get a `Tokens` value one of three ways:
+
+```swift
+@Environment(\.tokens) private var t   // settings window tree
+let t = Tokens.current                  // current app theme
+let t = Tokens(theme: theme)            // a theme you already have
+```
+
+Prefer tokens over `t.muted.opacity(…)`.
+
+### Plugins
+
+Built-in plugins use the same tokens. Bookmarks, Snippets and Docker read
+`Tokens`; FileTree reads the `TerminalTheme` tokens directly. New plugin views
+should do the same. See [Plugin Development](/plugin-development).
 
 ## Built-in Themes
 
@@ -119,18 +136,18 @@ Boo ships with 32 themes (`Boo/Models/TerminalTheme+BuiltIn.swift`):
 - **Synthwave '84**
 - **Moonlight**
 
-Because every semantic token is derived, a theme only ever defines the 21 base
-fields — new tokens never require touching the 32 built-ins or migrating
-persisted custom themes.
+A theme only defines the base colors. Adding a new token never means touching
+the built-ins or migrating saved custom themes.
 
 ## How Theming Works
 
 Theme colors are read at draw time from `AppSettings.shared.theme`. When a theme changes:
 
-1. Settings update is saved via `AppSettings.shared`
-2. `NotificationCenter` posts `.settingsChanged`
-3. `SettingsObserver` (ObservableObject) triggers SwiftUI re-renders
-4. AppKit views redraw with new theme colors
+1. `AppSettings.shared` saves the new theme.
+2. `NotificationCenter` posts `.settingsChanged`.
+3. `SettingsObserver` (an `ObservableObject`) re-renders SwiftUI views.
+4. AppKit views redraw with the new colors.
+5. The Ghostty config is rebuilt with the new palette. See [Ghostty Integration](/ghostty-integration#configuration).
 
 `isDark` is not stored — it is computed from the background luminance.
 
@@ -147,6 +164,6 @@ let ns = myColor.nsColor
 // CGFloat(r) / 255.0
 ```
 
-For custom blends, use `TerminalTheme.blend(_:over:alpha:)` — it returns an
-opaque color, so overlapping draws don't double-darken the way
+For custom blends, use `TerminalTheme.blend(_:over:alpha:)`. It returns an
+opaque color, so overlapping draws do not double-darken like
 `withAlphaComponent` fills do.

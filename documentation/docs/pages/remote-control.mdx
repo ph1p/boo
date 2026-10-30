@@ -1,65 +1,49 @@
 # Remote Control
 
-Boo can serve a small web UI to control the terminal from another device on your LAN — a phone, tablet, or second computer.
+Boo can serve a small web page that controls the terminal from a phone, tablet or second computer on your network.
 
 ## Starting the Server
 
-**Terminal → Start Remote Control Server** starts an HTTP server (default port `8899`) and shows a URL like:
+**Terminal → Start Remote Control Server** starts the server on port `8899` and shows a URL like:
 
 ```
 http://192.168.1.20:8899/#<session-token>
 ```
 
-Open the URL on any device in your network. **Terminal → Copy Remote Control URL** copies it again later. If the port is already in use, Boo shows an error and doesn't start the server.
+Open it on any device in your network. **Terminal → Copy Remote Control URL** copies it again. If the port is in use, Boo shows an error.
 
-While the server runs, the status bar shows an orange **◉ Remote** segment. Click it to **Copy Remote Control URL** or **Stop Remote Control Server**. The menu item also reads **Terminal → Stop Remote Control Server** while it runs.
+While the server runs, the status bar shows an orange **◉ Remote** segment. Click it to copy the URL or stop the server. The menu item then reads **Stop Remote Control Server**.
 
-### Idle stop
-
-The server stops by itself after **30 minutes without use**, and a toast says so. Every authorized request from the page counts as use. Start it again from the Terminal menu; it gets a new token, so open the new URL.
+The server stops by itself after **30 minutes without use**, and a toast says so. A restart creates a new token, so open the new URL.
 
 ## What You Can Do
 
-The web UI polls the app over a JSON command API:
-
-| Command            | Effect                                  |
-| ------------------ | --------------------------------------- |
-| `get_state`        | Workspaces, panes, tabs, focus          |
-| `get_screen`       | Current terminal screen contents        |
-| `send_text`        | Type text into the active terminal      |
-| `send_key`         | Send special keys (arrows, Enter, etc.) |
-| `switch_workspace` | Switch workspace                        |
-| `select_pane`      | Focus a pane                            |
-| `select_tab`       | Switch tab                              |
-| `new_tab`          | Open a new tab                          |
-| `agent_respond`    | Approve or deny a waiting agent         |
-| `agent_jump`       | Bring an agent's tab to the front      |
-
-The screen is rendered in the browser by the same terminal core Boo uses — Ghostty's VT parser compiled to WebAssembly — so colors and layout match the app.
+- See the active terminal, in the same colors and layout as the app
+- Type text and send keys (arrows, Return, Tab, Esc, ⌃C, ⌃D…)
+- Switch workspaces, panes and tabs, and open a new tab
+- Answer waiting agents
 
 ## Answering Agents
 
-When a coding agent waits for you (a permission prompt, see [Agent Inbox](/ipc-socket#agent-inbox)), a card appears above the screen with the agent, its workspace and the end of its screen, where the agent shows what it wants to run. The page title counts waiting agents and the phone vibrates on each new request.
+When an agent waits for permission (see [Agent Inbox](/agents#agent-inbox)), a card shows the agent, its workspace and the end of its screen. The page title counts waiting agents, and the phone vibrates on each new request.
 
-- **Approve** types Return into the agent's terminal, picking the dialog's default "Yes".
-- **Deny** types Escape, which cancels the request; Claude then waits for new instructions.
-- **Open** brings the agent's tab to the front, so the screen below shows it.
+- **Approve** presses Return, choosing the prompt's default "Yes".
+- **Deny** presses Esc, which cancels the request.
+- **Open** brings the agent's tab to the front.
 
-The agent's tab does not have to be in front on the Mac. If the agent has asked something new since the card was drawn, the answer is refused instead of landing on the new question.
+The agent's tab doesn't need to be in front on the Mac. If the agent has asked something new since the card appeared, the answer is refused.
 
 ## Add to Home Screen
 
-The page ships a web manifest and icons, so **Share → Add to Home Screen** (iOS) or **Install app** (Android) gives it its own icon and a full-screen window. Add it while the page is open with the `#token` URL; the installed app opens that same URL. The token changes whenever the server restarts, so add it again after a restart.
+Use **Share → Add to Home Screen** (iOS) or **Install app** (Android) while the `#token` URL is open. The page then gets its own icon and a full-screen window. Add it again after the server restarts, since the token changes.
 
 ## Security
 
-- Every API request must carry the session token via `Authorization: Bearer <token>`. Requests without it are rejected.
-- The token is **regenerated on every server start** and delivered in the URL *fragment* (`#...`), which browsers never send over the network.
-- Connections use `Connection: close`; idle connections are dropped, and client count and request sizes are bounded.
-- The server stops after 30 minutes without an authorized request (see [Idle stop](#idle-stop)).
+- Every request must carry the session token. Requests without it are rejected.
+- The token is new on every start and sits in the URL fragment (`#…`), which browsers never send over the network.
 
 :::warning
-Anyone with the URL can control your terminal. Treat the link like a password and stop the server when you're done.
+Anyone with the URL can control your terminal. Treat it like a password and stop the server when you're done.
 
-The connection is **plain HTTP**, not HTTPS. Anyone on the same network can read the token and the terminal contents in transit. Use Remote Control only on a network you trust, never on public Wi-Fi.
+The connection is **plain HTTP**. Anyone on the same network can read the token and the terminal in transit. Use Remote Control only on a network you trust, never on public Wi-Fi.
 :::

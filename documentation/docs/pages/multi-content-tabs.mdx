@@ -1,135 +1,101 @@
 # Multi-Content Tabs
 
-Boo supports multiple content types within tabs — not just terminals. A tab can host a terminal, browser, text editor, image viewer, or markdown preview.
+A tab is not only a terminal. It can also hold a browser, an editor, an image, a markdown preview, a recording or a plugin view. Tabs of any type can sit side by side in one pane.
 
-## Supported Content Types
+## Content Types
 
-| Type              | Description                         | Icon              |
-| ----------------- | ----------------------------------- | ----------------- |
-| `terminal`        | Default. Ghostty terminal emulator  | Terminal icon     |
-| `browser`         | WebKit-based web browser            | Globe icon        |
-| `editor`          | Code editor (Monaco in WKWebView)   | Document icon     |
-| `imageViewer`     | Image preview                       | Image icon        |
-| `markdownPreview` | Rendered markdown                   | Markdown icon     |
-| `pluginView`      | Ephemeral custom SwiftUI view       | Puzzle piece icon |
+| Type              | Shows                                | SF Symbol        |
+| ----------------- | ------------------------------------ | ---------------- |
+| `terminal`        | Ghostty terminal (default)           | `terminal`       |
+| `browser`         | WebKit browser                       | `globe`          |
+| `editor`          | Monaco code editor in a `WKWebView`  | `doc.text`       |
+| `imageViewer`     | Image preview                        | `photo`          |
+| `markdownPreview` | Rendered markdown                    | `doc.richtext`   |
+| `castPlayer`      | Terminal recording (`.cast`) player  | `play.rectangle` |
+| `pluginView`      | A plugin's SwiftUI view (not saved)  | `puzzlepiece`    |
 
-Agent review (diff + comments) and agent timeline tabs are `pluginView` tabs, not separate content types — see [Agents](/agents).
+Agent review and agent timeline tabs are `pluginView` tabs. See [Agents](/agents).
 
-## Creating Tabs
+## Opening Tabs
 
-### Menu
+- **File → New Terminal Tab** (⌘T)
+- **File → New Browser Tab** (⇧⌘T)
+- ⌘-click a URL in a terminal opens a browser tab.
+- Opening a file from the file explorer picks the tab type from the file. See [File Opening Settings](#file-opening-settings).
 
-- **File → New Terminal Tab** (default)
-- **File → New Browser Tab**
+## Plugin API
 
-### Auto-Detection
-
-When opening a file from the file explorer, Boo routes to the correct tab type:
-
-- Image files → Image viewer tab (configurable)
-- Markdown files → Markdown preview tab (configurable)
-- PDF files → Browser tab (configurable)
-- HTML files → Browser tab, if enabled (off by default)
-- Text/code files matching `editorFilePatterns` → Editor tab (configurable)
-- URLs cmd+clicked in terminal → Browser tab
-
-### Plugin API
-
-Plugins can open any tab type using the `openTab` action:
+Open any tab type with `openTab`:
 
 ```swift
-// Open a browser tab
 actions.openTab?(.browser(url: url))
-
-// Open a file in the appropriate viewer
-actions.openTab?(.file(path: "/path/to/file.swift"))
-
-// Open a custom ephemeral SwiftUI view
+actions.openTab?(.file(path: "/path/to/file.swift"))  // picks the right viewer
 actions.openTab?(.customView(title: "My Panel", icon: "star", view: AnyView(MyView())))
 ```
 
-## Plugin Multi-Content Tab API
-
-For persistent, deduplicated custom tabs use the typed registration API:
+For a custom tab that should not open twice, register a factory once and open it by ID:
 
 ```swift
-// In plugin setup — register a factory once
 actions.registerMultiContentTab?("my-diff-view") { ctx in
     AnyView(MyDiffView(context: ctx))
 }
 
-// Open the tab (or focus it if already open)
 let ctx = PluginTabContext(title: "Diff", icon: "doc.badge.plus", key: filePath)
 actions.openMultiContentTab?("my-diff-view", ctx)
 ```
 
-**Deduplication:** two calls with the same type ID and `context.key` focus the existing tab in the active workspace rather than opening a duplicate.
+The same type ID and `context.key` focus the open tab in the active workspace instead of opening a new one. See [Plugin Development](/plugin-development).
 
-## Browser Features
+## Browser
 
-- **Back/Forward:** trackpad swipe gestures (macOS native `allowsBackForwardNavigationGestures`)
-- **URL Autocomplete:** history-based suggestions shown as you type in the address bar
-- **Copy/Paste:** fully functional via standard keyboard shortcuts
-- **History:** configurable in Settings → Browser
+- Swipe to go back and forward.
+- The address bar suggests URLs from your history.
+- History, link handling and close confirmation live in **Settings → Browser**.
 
-## Editor Features
+## Editor
 
-- **Syntax Highlighting:** powered by the [Monaco editor](https://microsoft.github.io/monaco-editor/), bundled and hosted in a `WKWebView`
-- **Theme Integration:** follows the active Boo theme
-- **Save:** Cmd+S writes to disk; new (unsaved) files prompt with a save dialog
-- **File Routing:** files matching Settings → Plugins → Files → "Open in editor (file patterns)" open in the built-in editor tab
+The editor is [Monaco](https://microsoft.github.io/monaco-editor/), bundled into the app (`make monaco`) and shown in a `WKWebView`. It follows the Boo theme.
 
-## File Explorer Settings
+- **Status bar** shows cursor position, indentation, encoding, line endings and language.
+- **Save** is ⌘S. **Save As…** is ⇧⌘S. New files ask for a path.
+- **Autosave** can be off, after a short delay, or when the editor loses focus.
+- **On save** it can trim trailing whitespace, add a final newline and format the file.
+- **Reload**: Boo watches the file on disk. A clean buffer reloads. A buffer with edits shows a Reload prompt instead. This can be turned off.
+- Files keep their encoding, permissions and symlinks when saved.
+- Unreadable or binary files open read-only.
 
-### Image Opening Mode
+Editor options live in **Settings → Editor**.
 
-Settings → Plugins → Files → "Open images as":
+File watching uses `WatchedFile` (`Boo/Services/WatchedFile.swift`). It watches the parent directory, so atomic saves (write temp file, then rename) still count. After Boo writes the file it calls `noteOwnWrite()` so its own save does not trigger a reload.
 
-| Value                   | Behavior                                    |
-| ----------------------- | ------------------------------------------- |
-| `imageViewer` (default) | Opens in a Boo image viewer tab             |
-| `kitty`                 | Displays inline via Kitty Graphics Protocol |
-| `external`              | Opens in the system default image app       |
+## File Opening Settings
 
-### Text File Opening Mode
+**Settings → Plugins → Files** decides what opens where.
 
-Settings → Plugins → Files → "Open text files as":
+| Setting                  | Values                                                                 |
+| ------------------------ | ---------------------------------------------------------------------- |
+| Open images as           | `imageViewer` (default), `kitty` (inline in the terminal), `external`  |
+| Open text files as       | `editor` (default), `terminalEditor` (`$EDITOR`), `external`           |
+| Open markdown files as   | `preview` (default), `builtInEditor`, `editor` (`$EDITOR`), `external` |
+| `editorFilePatterns`     | File patterns that open in the built-in editor                         |
+| `pdfOpenInBrowser`       | `true` (default): PDFs open in a browser tab                           |
+| `htmlOpenInBrowser`      | `false` (default): HTML files open in a browser tab when on            |
 
-| Value              | Behavior                            |
-| ------------------ | ----------------------------------- |
-| `editor` (default) | Opens in the built-in editor tab    |
-| `terminalEditor`   | Opens in a terminal using `$EDITOR` |
-| `external`         | Opens in the system default app     |
+Note that for markdown, `editor` means the terminal editor and `builtInEditor` means Monaco.
 
-### Markdown Opening Mode
+## Closing Tabs
 
-Settings → Plugins → Files → "Open markdown files as":
+Boo asks before it closes:
 
-| Value               | Behavior                            |
-| ------------------- | ----------------------------------- |
-| `preview` (default) | Opens in a markdown preview tab     |
-| `builtInEditor`     | Opens in the built-in editor tab    |
-| `editor`            | Opens in a terminal using `$EDITOR` |
-| `external`          | Opens in the system default app     |
+- an editor tab with unsaved changes,
+- a browser tab, unless you turned that off in **Settings → Browser**.
 
-### Browser Opening
-
-| Setting             | Default | Behavior                                   |
-| ------------------- | ------- | ------------------------------------------ |
-| `pdfOpenInBrowser`  | `true`  | PDFs open in a browser tab (else external) |
-| `htmlOpenInBrowser` | `false` | HTML files open in a browser tab           |
-
-## Mixing Tabs
-
-Tabs of different types can coexist in the same pane. Each tab shows a type-specific icon in the tab bar.
-
-## Sidebar Behavior
-
-- **Terminal tabs**: Full plugin functionality (FileTree, Git, Docker, etc.)
-- **Non-terminal tabs**: Sidebar visible; future: content-type-specific plugins
+Other tabs close at once.
 
 ## Architecture
 
-Tab content type is stored in `TabState.contentType` (`ContentType` enum). The `ContentViewProtocol` abstracts the view layer for each content type. Factories are in `ContentViewFactory`.
-
-Tab close confirmation only appears for terminal tabs — browser, editor, and image viewer tabs close immediately.
+- `TabState.contentType` (`ContentType`) and `TabState.contentState` (`ContentState`) describe a tab. See [Architecture](/architecture#state-model).
+- Each non-terminal view conforms to `ContentViewProtocol` (`Boo/Content/ContentView.swift`): `activate`, `deactivate`, `cleanup`, `saveState`, `restoreState` and `save`.
+- `ContentViewFactory.createView(for:)` builds the view from a `ContentState`.
+- Terminal tabs are the exception. `PaneView.startTerminalSession` hosts a `GhosttyView` directly.
+- Plugin views cannot be restored. After a restart they show a "Panel unavailable" placeholder.

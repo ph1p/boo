@@ -1,6 +1,6 @@
 # Rules & Profiles
 
-A **profile** is a named set of terminal overrides: theme, font, shader, shell, environment. A **rule** picks a profile for a tab based on where it is (host, folder, container, kube context, process), or runs an action when a line of output matches a regex. Both live in plain JSON files under `~/.boo/` that Boo watches and reloads as you save.
+A **profile** is a named set of terminal overrides: theme, font, shader, shell, environment. A **rule** picks a profile for a tab based on where it is (host, folder, container, kube context, process), or runs an action when output matches a regex. Both live in JSON files under `~/.boo/`, and Boo reloads them when you save.
 
 ## Profiles
 
@@ -36,9 +36,9 @@ Profiles are stored in `~/.boo/profiles.json`. Edit them in **Settings → Profi
 | `cwd` | Starting directory for new tabs (`~` is expanded) |
 | `linkTarget` | Where file links open: `"monaco"` (built-in editor) or `"external"` (the editor from **Settings → Editor**) |
 
-Every field you leave out inherits the global setting. `shell`, `env` and `cwd` only affect tabs created with the profile; theme, font and shader also change an open tab when its profile changes.
+Fields you leave out use the global setting. `shell`, `env` and `cwd` affect only new tabs. Theme, font and shader also change an open tab when its profile changes.
 
-A profile with an empty name, a duplicate name or an out-of-range `fontSize` is skipped. If the file doesn't parse, Boo keeps the last good profiles.
+A profile with an empty or duplicate name, or an out-of-range `fontSize`, is skipped. If the file doesn't parse, Boo keeps the last good profiles.
 
 ### Which profile a tab uses
 
@@ -61,7 +61,7 @@ Shaders post-process the whole terminal image through Ghostty's `custom-shader` 
 - **Global** — **Settings → Appearance → Terminal Shader** applies to every terminal
 - **Per profile** — a profile's `shader` replaces the global one; `""` turns it off
 
-Boo bundles three presets: `crt` (CRT), `bloom` (Bloom) and `scanlines` (Scanlines). Use **Choose File…** in the shader picker, or put a path in a profile, to load your own Shadertoy-style GLSL file (a `mainImage` function that samples `iChannel0`). A path that doesn't exist is ignored and logged.
+Boo bundles three presets: `crt`, `bloom` and `scanlines`. To use your own Shadertoy-style GLSL file (a `mainImage` function that samples `iChannel0`), pick it with **Choose File…** or put its path in a profile. A missing file is ignored.
 
 Boo doesn't watch shader files. After editing one, choose **View → Reload Shaders and Ghostty Config**.
 

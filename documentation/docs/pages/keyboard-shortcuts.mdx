@@ -1,85 +1,90 @@
 # Keyboard Shortcuts
 
-All shortcuts are also listed (and searchable) in **Settings → Shortcuts**, along with every menu command that has none.
+**Settings → Shortcuts** lists every menu command, with or without a shortcut, and has a filter.
 
-**Rebinding** — Click a shortcut there and press the new keys; the shortcut needs ⌘, ⌃ or ⌥, or an F key. Delete removes the shortcut, Esc cancels, and the ↩︎ button restores the default. If another command already uses the keys, it loses them and the page says which. Changes are saved in `~/.boo/settings.json` (`shortcutOverrides`) and sync with your other settings. The tables below list the defaults.
+**Rebinding**: click a shortcut and press the new keys. A shortcut needs ⌘, ⌃ or ⌥, or an F key. Delete removes it, Esc cancels, and the ↩ button restores the default. If another command already uses the keys, that command loses them and the page says which. Changes are saved in `~/.boo/settings.json` (`shortcutOverrides`) and sync with your other settings.
+
+The tables below list the defaults.
 
 ## App & Window
 
-| Shortcut         | Action                                |
-| ---------------- | ------------------------------------- |
-| **Cmd+N**        | New window                            |
-| **Cmd+Shift+N**  | New workspace (home directory)        |
-| **Cmd+Shift+O**  | Open folder as workspace              |
-| **Cmd+1-9**      | Switch to workspace N                 |
-| **Cmd+M**        | Minimize window                       |
-| **Opt+Space**    | Toggle quick terminal (from any app)  |
-| **Cmd+Shift+J**  | Jump to next agent waiting for input  |
-| **Cmd+,**        | Settings                              |
-| **Cmd+Q**        | Quit Boo                              |
+| Shortcut        | Action                               |
+| --------------- | ------------------------------------ |
+| **Cmd+N**       | New window                           |
+| **Cmd+Shift+N** | New workspace                        |
+| **Cmd+Shift+O** | Open folder as workspace             |
+| **Cmd+1-9**     | Switch to workspace N                |
+| **Cmd+M**       | Minimize window                      |
+| **Opt+Space**   | Toggle quick terminal (from any app) |
+| **Cmd+,**       | Settings                             |
+| **Cmd+Q**       | Quit Boo                             |
 
-## Tabs
+Change the quick terminal key in **Settings → Shortcuts → Quick Terminal**.
 
-| Shortcut                              | Action                               |
-| ------------------------------------- | ------------------------------------ |
-| **Cmd+T**                             | New terminal tab in active pane      |
-| **Cmd+Shift+T**                       | New browser tab                      |
-| **Cmd+Opt+1-9** or **Cmd+Shift+1-9**  | Switch to tab N in active pane       |
-| **Cmd+W**                             | Smart close (tab → pane → workspace) |
-| **Cmd+Opt+Z**                         | Reopen closed tab/pane               |
-| **Cmd+S**                             | Save (editor tabs)                   |
+## Tabs & Files
+
+| Shortcut                             | Action                               |
+| ------------------------------------ | ------------------------------------ |
+| **Cmd+T**                            | New terminal tab                     |
+| **Cmd+Shift+T**                      | New browser tab                      |
+| **Cmd+Opt+1-9** or **Cmd+Shift+1-9** | Switch to tab N in the active pane   |
+| **Cmd+W**                            | Close (tab, then pane, then workspace) |
+| **Cmd+Opt+Z**                        | Reopen closed tab                    |
+| **Cmd+S**                            | Save (editor)                        |
+| **Cmd+Shift+S**                      | Save As (editor)                     |
 
 ## Panes
 
-| Shortcut                  | Action                                  |
-| ------------------------- | --------------------------------------- |
-| **Cmd+D**                 | Split right                             |
-| **Cmd+Shift+D**           | Split down                              |
-| **Cmd+Shift+W**           | Close pane                              |
-| **Cmd+]** / **Cmd+[**     | Focus next / previous pane              |
-| **Cmd+Opt+Arrows**        | Select pane in that direction           |
-| **Cmd+Ctrl+Arrows**       | Resize pane in that direction           |
-| **Cmd+Ctrl+Shift+Arrows** | Move (swap) pane in that direction      |
-| **Cmd+Shift+Return**      | Zoom pane (toggle)                      |
-| **Cmd+Ctrl+=**            | Equalize splits                         |
+| Shortcut                  | Action                         |
+| ------------------------- | ------------------------------ |
+| **Cmd+D**                 | Split right                    |
+| **Cmd+Shift+D**           | Split down                     |
+| **Cmd+Shift+W**           | Close pane                     |
+| **Cmd+]** / **Cmd+[**     | Focus next / previous pane     |
+| **Cmd+Opt+Arrows**        | Select pane in that direction  |
+| **Cmd+Ctrl+Arrows**       | Resize pane in that direction  |
+| **Cmd+Ctrl+Shift+Arrows** | Move (swap) pane               |
+| **Cmd+Shift+Return**      | Zoom pane (toggle)             |
+| **Cmd+Ctrl+=**            | Equalize splits                |
 
-See [Windows & Splits](/windows-and-splits) for details.
+See [Windows & Splits](/windows-and-splits).
 
 ## Terminal
 
-| Shortcut           | Action                                  |
-| ------------------ | --------------------------------------- |
-| **Cmd+K**          | Clear screen                            |
-| **Cmd+Shift+K**    | Clear scrollback                        |
-| **Cmd+Up**         | Jump to previous prompt                 |
-| **Cmd+Down**       | Jump to next prompt                     |
-| **Cmd+Opt+C**      | Copy the last command's output          |
-| **Cmd+Shift+Space** | Quick select: label and copy on-screen matches |
-| **Cmd+Shift+C**    | Copy mode: keyboard cursor and selection |
-| **Cmd++**          | Increase font size                      |
-| **Cmd+-**          | Decrease font size                      |
-| **Cmd+0**          | Reset font size                         |
-| **Cmd+Opt+Return** | Send selection or last output to agent  |
+| Shortcut                | Action                                     |
+| ----------------------- | ------------------------------------------ |
+| **Cmd+K**               | Clear screen                               |
+| **Cmd+Shift+K**         | Clear scrollback                           |
+| **Cmd+Up** / **Cmd+Down** | Previous / next prompt                   |
+| **Cmd+Opt+C**           | Copy last command's output                 |
+| **Cmd+Shift+Space**     | Quick select                               |
+| **Cmd+Shift+C**         | Copy mode                                  |
+| **Cmd+Shift+M**         | Add recording marker                       |
+| **Cmd++** / **Cmd+-**   | Increase / decrease font size              |
+| **Cmd+0**               | Reset font size                            |
+| **Ctrl+R**              | [History search](/history-and-sync#searching-history) (at a prompt) |
 
-## Edit & Clipboard
+## Edit
 
-| Shortcut        | Action         |
-| --------------- | -------------- |
-| **Cmd+Z**       | Undo           |
-| **Cmd+Shift+Z** | Redo           |
-| **Cmd+C**       | Copy selection |
-| **Cmd+X**       | Cut            |
-| **Cmd+V**       | Paste          |
-| **Cmd+A**       | Select all     |
-| **Cmd+F**       | Find           |
+| Shortcut        | Action     |
+| --------------- | ---------- |
+| **Cmd+Z**       | Undo       |
+| **Cmd+Shift+Z** | Redo       |
+| **Cmd+X**       | Cut        |
+| **Cmd+C**       | Copy       |
+| **Cmd+V**       | Paste      |
+| **Cmd+A**       | Select all |
+| **Cmd+F**       | Find       |
 
 ## View
 
-| Shortcut                          | Action               |
-| --------------------------------- | -------------------- |
-| **Cmd+Shift+P**                   | Open command palette |
-| **Cmd+B**                         | Toggle sidebar       |
-| **Cmd+Return** or **Cmd+Ctrl+F**  | Toggle full screen   |
+| Shortcut                         | Action                         |
+| -------------------------------- | ------------------------------ |
+| **Cmd+Shift+P**                  | Command palette                |
+| **Cmd+B**                        | Toggle sidebar                 |
+| **Cmd+Return** or **Cmd+Ctrl+F** | Toggle full screen             |
+| **Cmd+L**                        | Open location (browser tab)    |
+| **Cmd+R**                        | Reload page (browser tab)      |
 
 ## Bookmarks
 
@@ -88,43 +93,36 @@ See [Windows & Splits](/windows-and-splits) for details.
 | **Cmd+Shift+B** | Bookmark current directory |
 | **Ctrl+1-9**    | Jump to bookmark N         |
 
+## Agents
+
+| Shortcut           | Action                                          |
+| ------------------ | ----------------------------------------------- |
+| **Cmd+Opt+Return** | Send selection or last output to agent          |
+| **Cmd+Shift+J**    | Jump to next waiting agent                      |
+| **Cmd+Opt+O**      | Toggle orchestrator                             |
+| **Cmd+Return**     | Send comments to agent (review tab)             |
+| **Cmd+Return**     | Allow the first approval card (orchestrator drawer focused) |
+| **Esc**            | Deny the first approval card (orchestrator drawer focused)  |
+
+See [Agents](/agents).
+
 ## File Explorer
 
 When the file tree has focus:
 
-| Shortcut                       | Action                                                  |
-| ------------------------------ | ------------------------------------------------------- |
-| **↑** / **↓**                  | Move selection (hold **Shift** to extend)               |
-| **→** / **←**                  | Expand folder / collapse folder or jump to parent       |
-| **Return**                     | Open file or toggle folder (first match while filtering) |
-| **Esc**                        | Clear filter, then selection                            |
-| **Cmd+Delete**                 | Move selection to Trash                                 |
-| **F2**                         | Rename                                                  |
-| **/**                          | Focus filter bar (when enabled)                         |
-| Type letters                   | Jump to matching name (type-ahead)                      |
-| **Cmd+click** / **Shift+click** | Toggle / extend multi-selection                        |
+| Shortcut                        | Action                                              |
+| ------------------------------- | --------------------------------------------------- |
+| **Up** / **Down**               | Move selection (**Shift** extends it)               |
+| **Right** / **Left**            | Expand / collapse folder, or go to parent           |
+| **Return**                      | Open file or toggle folder (first match while filtering) |
+| **Esc**                         | Clear filter, then selection                        |
+| **Cmd+Delete**                  | Move to Trash                                       |
+| **F2**                          | Rename                                              |
+| **/**                           | Focus filter bar (when shown)                       |
+| Type letters                    | Jump to matching name                               |
+| **Cmd+click** / **Shift+click** | Toggle / extend selection                           |
 
-## Agents
-
-| Shortcut           | Action                                            |
-| ------------------ | ------------------------------------------------- |
-| **Cmd+Opt+Return** | Send terminal selection or last output to agent   |
-| **Cmd+Return**     | Send review comments to agent (in a review tab)   |
-| **Cmd+Shift+J**    | Jump to next waiting agent                        |
-| **Cmd+Opt+O**      | Toggle the orchestrator drawer                    |
-| **Cmd+Return**     | Allow the first approval card (drawer focused)    |
-| **Escape**         | Deny the first approval card (drawer focused)     |
-
-See [Agents](/agents) for details.
-
-## Menu-Only Commands
-
-These have no default shortcut:
-
-- **File → New Agent Task…**, **File → Review Changes…**, **File → Agent Timeline**
-- **Window → Move Workspace to New Window**, **Window → Merge All Windows**
-- **Terminal → Start Remote Control Server**, **Terminal → Copy Remote Control URL**
-- **Terminal → Broadcast Input to → All Panes in Workspace / Selected Panes…**
+With the navigation bar shown, **Opt+Up** goes to the parent folder, **Opt+Down** opens the selected folder, **Opt+Left** / **Opt+Right** go back / forward, and **Delete** goes up.
 
 ## Key Tables
 
@@ -149,6 +147,12 @@ Key tables add tmux-style leader keys. They are off until you create `~/.boo/key
 }
 ```
 
-Press the leader, then a key from `root`. The status bar shows the mode (**⌃A …**, or **⌃A → window** in a chained table) and the key goes nowhere else. A value is a menu command named by its menu path joined with `/` (`Terminal/Split Right`; a submenu adds a level, as in `Terminal/Broadcast Input to/All Panes in Workspace`), `send:<text>` to type text into the terminal, or `{ "table": "<name>" }` to wait for a key from another table. Escape, an unbound key or `timeout` seconds (default 2) without a key end the mode; pressing the leader twice types the leader itself.
+Press the leader, then a key from `root`. The status bar shows the mode (**⌃A …**, or **⌃A → window** in a chained table). A value is one of:
 
-Keys are written as `v`, `V` (or `shift+v`), `ctrl+w`, `cmd+opt+left`; named keys are `escape`, `tab`, `return`, `space`, `backspace` and the arrows. Boo reads the file when it becomes active and the file has changed, and lists unknown commands, tables or keys in one alert.
+- a menu command, as its menu path joined with `/` (`Terminal/Broadcast Input to/All Panes in Workspace`)
+- `send:<text>`, which types text into the terminal
+- `{ "table": "<name>" }`, which waits for a key from another table
+
+Esc, an unbound key, or `timeout` seconds (default 2) end the mode. Pressing the leader twice types the leader itself.
+
+Write keys as `v`, `V` (or `shift+v`), `ctrl+w` or `cmd+opt+left`. Named keys are `escape`, `tab`, `return`, `space`, `backspace` and the arrows. When Boo becomes active, it reloads a changed file and lists unknown commands, tables or keys in one alert.

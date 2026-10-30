@@ -1,137 +1,31 @@
 # Plugin Development
 
-This guide covers how to create plugins for Boo — both external JavaScript plugins and built-in Swift plugins.
+You can write a plugin in two ways:
 
-## External Plugins
+- **JavaScript** — two files in `~/.boo/plugins/`. No build step. Boo reloads the plugin when you save. Start here.
+- **Swift** — a built-in plugin compiled into Boo, with full SwiftUI and AppKit access.
 
-External plugins live in `~/.boo/plugins/` and are hot-loaded at runtime. No restart required — save a file and it appears immediately.
+[Plugin System](/plugins) explains how plugins are shown and refreshed.
 
-A plugin can contribute a sidebar tab, a status bar segment, or both. A plugin with only `statusBarSegment: true` lives entirely in the status bar — no sidebar tab required.
+## JavaScript Plugins
 
-Plugins are JavaScript, running in-process via JavaScriptCore — no dependencies, no shell, instant execution.
+### Quick Start
 
-### Directory Structure
+Create a folder with a manifest and a script:
 
-```
-~/.boo/plugins/my-plugin/
-  plugin.json       # Required manifest
-  main.js           # Plugin logic
-```
-
-### Manifest (`plugin.json`)
+**`~/.boo/plugins/hello-world/plugin.json`**
 
 ```json
 {
-  "id": "my-plugin",
-  "name": "My Plugin",
+  "id": "hello-world",
+  "name": "Hello World",
   "version": "1.0.0",
-  "icon": "star",
-  "description": "A custom sidebar plugin",
+  "icon": "hand.wave",
   "runtime": "js"
 }
 ```
 
-That's all you need to get started — external plugins automatically get a sidebar tab. The full set of fields:
-
-#### Manifest Fields
-
-| Field                           | Required | Description                                                                     |
-| ------------------------------- | -------- | ------------------------------------------------------------------------------- |
-| `id`                            | Yes      | Unique plugin identifier                                                        |
-| `name`                          | Yes      | Display name in sidebar and status bar                                          |
-| `version`                       | Yes      | Semver version string                                                           |
-| `icon`                          | Yes      | [SF Symbol](https://developer.apple.com/sf-symbols/) name                       |
-| `description`                   | No       | Human-readable description                                                      |
-| `when`                          | No       | When-clause expression for visibility (null = always visible)                   |
-| `runtime`                       | No       | `"js"` (only supported value)                                                   |
-| `capabilities.statusBarSegment` | No       | Show in status bar (can be the only capability — no sidebar tab required)       |
-| `statusBar.position`            | No       | `"left"` or `"right"`                                                           |
-| `statusBar.priority`            | No       | Lower = closer to edge                                                          |
-| `statusBar.template`            | No       | Template string for status bar text                                             |
-| `statusBar.onClick`             | No       | `"showTab"` — clicking the status bar segment focuses the plugin's sidebar tab  |
-| `menus`                         | No       | Array of menu item declarations (see [Menu Contributions](#menu-contributions)) |
-| `settings`                      | No       | Array of setting declarations (see [Plugin Settings](#plugin-settings))         |
-
-#### Plugin Settings
-
-Plugins can declare their own settings, which appear in the Settings → Plugins UI under an expandable section. Each setting in the `settings` array has:
-
-| Field         | Required | Description                                              |
-| ------------- | -------- | -------------------------------------------------------- |
-| `key`         | Yes      | Setting key (unique within this plugin)                  |
-| `type`        | Yes      | `"bool"`, `"string"`, `"int"`, or `"double"`             |
-| `label`       | Yes      | Human-readable label shown in UI                         |
-| `description` | No       | Help text shown below the control                        |
-| `default`     | No       | Default value                                            |
-| `options`     | No       | UI hint for string settings — see table below            |
-| `group`       | No       | Section header label; settings sharing a group are grouped together |
-| `min`         | No       | Minimum value for `double` sliders                       |
-| `max`         | No       | Maximum value for `double` sliders                       |
-| `step`        | No       | Step increment for `double` sliders                      |
-
-Special `options` values for `string` settings:
-
-| Value                 | Description                                              |
-| --------------------- | -------------------------------------------------------- |
-| `"fontPicker:system"` | System font picker dropdown                              |
-| `"fontPicker:mono"`   | Monospace font picker dropdown                           |
-| `"editorFilePatterns"`| Comma-separated file patterns (e.g. `*.ts, .env*`)       |
-| `"dockerSocket"`      | Socket path with auto-detect fallback                    |
-| `"gitDiffTool"`       | Diff tool command; use `{file}` for the full path        |
-| `"markdownOpenMode"`  | Picker bound to the global markdown open mode setting    |
-| `"imageOpenMode"`     | Picker bound to the global image open mode setting       |
-| `"textOpenMode"`      | Picker bound to the global text open mode setting        |
-
-Example manifest with settings:
-
-```json
-{
-  "id": "my-plugin",
-  "name": "My Plugin",
-  "version": "1.0.0",
-  "icon": "star",
-  "runtime": "js",
-  "settings": [
-    { "key": "enabled", "type": "bool", "label": "Enable feature", "default": true, "description": "Turn the feature on or off" },
-    { "key": "fontSize", "type": "double", "label": "Font size", "default": 12.0, "min": 8, "max": 32, "step": 1, "group": "Appearance" },
-    {
-      "key": "fontName",
-      "type": "string",
-      "label": "Font",
-      "default": "",
-      "options": "fontPicker:system",
-      "group": "Appearance"
-    }
-  ]
-}
-```
-
-Settings are stored per-plugin in `AppSettings` and accessed via:
-
-```swift
-AppSettings.shared.pluginBool("my-plugin", "enabled", default: true)
-AppSettings.shared.pluginDouble("my-plugin", "fontSize", default: 12.0)
-AppSettings.shared.pluginString("my-plugin", "fontName", default: "")
-AppSettings.shared.setPluginSetting("my-plugin", "fontSize", 14.0)
-```
-
-#### Status Bar Templates
-
-Templates substitute values from the terminal context:
-
-| Token                | Value                                           |
-| -------------------- | ----------------------------------------------- |
-| `{cwd}`              | Current working directory                       |
-| `{process.name}`     | Foreground process name                         |
-| `{git.branch}`       | Current git branch                              |
-| `{git.changedCount}` | Number of changed files                         |
-| `{remote.host}`      | Remote host, container, pod, VM, or device name |
-
-### Writing a Plugin
-
-Provide `main.js` with a `render` function. It receives the terminal context and returns DSL elements. Runs in JavaScriptCore — no process spawn, no dependencies.
-
-#### Minimal example
+**`~/.boo/plugins/hello-world/main.js`**
 
 ```javascript
 function render(ctx) {
@@ -146,212 +40,135 @@ function render(ctx) {
 }
 ```
 
-Both `render` and `transform` are accepted as the entry function name. You can return an object or call `JSON.stringify()` — both work.
+A new sidebar tab appears. External plugins always get a sidebar tab.
 
-#### Context object (`ctx`)
+`render(ctx)` runs on every [plugin cycle](/plugins#how-it-works) and returns elements as an object or a JSON string. The entry function can also be named `transform`. Scripts run in JavaScriptCore inside Boo, with no Node.js and no shell.
 
-Font rendering for JS plugins is handled automatically by the DSL renderer — it applies the user's sidebar font scale to all `label`, `list`, and `button` elements. No font configuration is needed in your JS code.
+### Manifest
 
-| Field                      | Type   | Example                                                                        |
-| -------------------------- | ------ | ------------------------------------------------------------------------------ |
-| `ctx.cwd`                  | string | `"/Users/jane/project"`                                                        |
-| `ctx.processName`          | string | `"node"`                                                                       |
-| `ctx.isRemote`             | bool   | `false`                                                                        |
-| `ctx.envType`              | string | `"local"`, `"ssh"`, `"mosh"`, `"docker"`, `"kubectl"`                          |
-| `ctx.remoteHost`           | string | `"server.example.com"`                                                         |
-| `ctx.paneCount`            | number | `2`                                                                            |
-| `ctx.tabCount`             | number | `3`                                                                            |
-| `ctx.git.branch`           | string | `"main"`                                                                       |
-| `ctx.git.repoRoot`         | string | `"/Users/jane/project"`                                                        |
-| `ctx.git.isDirty`          | bool   | `true`                                                                         |
-| `ctx.git.changedFileCount` | number | `5`                                                                            |
-| `ctx.terminalID`           | string | UUID of the active terminal                                                    |
-| `ctx.environmentLabel`     | string | e.g. `"local"`, `"ssh: server.example.com"`                                    |
-| `ctx.remoteCwd`            | string | Remote working directory when in a remote session                              |
-| `ctx.git.stagedCount`      | number | Number of staged files                                                         |
-| `ctx.git.aheadCount`       | number | Commits ahead of remote                                                        |
-| `ctx.git.behindCount`      | number | Commits behind remote                                                          |
-| `ctx.git.lastCommitShort`  | string | Short hash of last commit                                                      |
-| `ctx.enrichedData`         | object | Data from other plugins                                                        |
-| `ctx.settings`             | object | Plugin settings declared in manifest (see [Plugin Settings](#plugin-settings)) |
+| Field          | Required | Description                                                                      |
+| -------------- | -------- | -------------------------------------------------------------------------------- |
+| `id`           | Yes      | Unique identifier                                                                |
+| `name`         | Yes      | Display name                                                                     |
+| `version`      | Yes      | Version string                                                                   |
+| `icon`         | Yes      | [SF Symbol](https://developer.apple.com/sf-symbols/) name                        |
+| `description`  | No       | Shown in Settings → Plugins                                                      |
+| `runtime`      | No       | `"js"` (the only runtime)                                                        |
+| `when`         | No       | [When-clause](#when-clauses) that controls visibility. Omit to always show       |
+| `capabilities` | No       | `{ "statusBarSegment": true }` adds a [status bar segment](#status-bar)          |
+| `statusBar`    | No       | `position` (`"left"`/`"right"`), `priority` (lower = closer to edge), `template`, `onClick` |
+| `settings`     | No       | [Settings](#settings) shown in Settings → Plugins                                |
+| `menus`        | No       | [Menu items](#menu-items) in the Plugins menu                                    |
 
-`ctx.envType` mirrors the remote session's tool label. Common values include `local`, `ssh`, `mosh`, `docker`, `podman`, `kubectl`, `openshift`, `limactl`, `colima`, `distrobox`, `toolbox`, `vagrant`, and `adb`.
+### Context
 
-#### Host functions
+`ctx` holds the state of the focused terminal:
 
-JS plugins have access to these functions provided by the host:
+| Field                                | Description                                                      |
+| ------------------------------------ | ---------------------------------------------------------------- |
+| `cwd`, `remoteCwd`                   | Working directory; remote directory in a remote session          |
+| `processName`                        | Foreground process, e.g. `"node"`                                |
+| `isRemote`, `envType`, `remoteHost`  | Session type: `envType` is `"local"`, `"ssh"`, `"docker"`, `"kubectl"`, … |
+| `environmentLabel`                   | Session label, e.g. `"local"`                                    |
+| `terminalID`, `paneCount`, `tabCount` | Terminal UUID, panes in the workspace, tabs in the pane          |
+| `git`                                | Only in a repo: `branch`, `repoRoot`, `isDirty`, `changedFileCount`, `stagedCount`, `aheadCount`, `behindCount`, `lastCommitShort` |
+| `settings`                           | Your plugin's [settings](#settings)                              |
+| `enrichedData`                       | Data other plugins published                                     |
 
-| Function           | Returns                                       | Description                                                                                                                                       |
-| ------------------ | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `readFile(path)`   | string or null                                | Read a file relative to `ctx.cwd`. Returns null if not found.                                                                                     |
-| `fileExists(path)` | bool                                          | Check if a file exists relative to `ctx.cwd`.                                                                                                     |
-| `listDir(path)`    | `[{name: string, isDirectory: bool}]` or null | List directory contents relative to `ctx.cwd`. Returns null if not found. Sandboxed to cwd, max 500 entries.                                      |
-| `readJSON(path)`   | object or null                                | Shorthand for `JSON.parse(readFile(path))`. Returns null if the file is missing or not valid JSON.                                                |
-| `getEnv(name)`     | string or null                                | Read an environment variable. Restricted to an allowlist: `HOME`, `USER`, `SHELL`, `TERM`, `LANG`, `PATH`, `EDITOR`, `VISUAL`, `XDG_CONFIG_HOME`. |
-| `log(message)`     | void                                          | Write a message to Boo's debug log (visible in Console.app).                                                                                      |
+### Host Functions
 
-Absolute paths are allowed but must be under `ctx.cwd` (security boundary).
+Paths are relative to `ctx.cwd`. Absolute paths must be inside `ctx.cwd`.
 
-#### Example: reading a project file
+| Function           | Returns                                                          |
+| ------------------ | ---------------------------------------------------------------- |
+| `readFile(path)`   | File contents, or `null`                                         |
+| `readJSON(path)`   | Parsed JSON, or `null`                                           |
+| `fileExists(path)` | `true` / `false`                                                 |
+| `listDir(path)`    | `[{ name, isDirectory }]` (max 500), or `null`                   |
+| `getEnv(name)`     | Only `HOME`, `USER`, `SHELL`, `TERM`, `LANG`, `PATH`, `EDITOR`, `VISUAL`, `XDG_CONFIG_HOME` |
+| `log(message)`     | Writes to Boo's log (Console.app)                                |
+
+### Elements
+
+| Type      | Properties                                                                                   |
+| --------- | -------------------------------------------------------------------------------------------- |
+| `vstack`  | `children`                                                                                   |
+| `hstack`  | `children` (alias `row`)                                                                     |
+| `label`   | `text`, `style` (`bold`, `muted`, `mono`), `tint`                                            |
+| `button`  | `label`, `action`, `style` (`primary`, `secondary`, `destructive`), `contextMenu`            |
+| `list`    | `items`: each has `label`, `detail`, `icon`, `tint`, `action`, `contextMenu`                 |
+| `badge`   | `text`, `tint`                                                                               |
+| `divider` | —                                                                                            |
+| `spacer`  | —                                                                                            |
+
+Tints are `success`, `error`, `warning`, `accent` and `muted`. They follow the theme. A `contextMenu` is an array of `{ label, action, icon?, style? }` and opens on right-click.
+
+### Actions
+
+Buttons, list items and menu entries take an `action` object:
+
+| `type`         | Fields            | Effect                                   |
+| -------------- | ----------------- | ---------------------------------------- |
+| `cd`           | `path`            | `cd` in the terminal                     |
+| `exec`         | `command`         | Runs the command in the terminal         |
+| `paste`        | `text`            | Types text at the cursor without running it |
+| `open`         | `path` (absolute) | Opens the file in its default app        |
+| `reveal`       | `path`            | Shows the file in Finder                 |
+| `copy`         | `text` or `path`  | Copies to the clipboard                  |
+| `url`          | `url`             | Opens an `http(s)` URL in the browser    |
+| `newTab`       | `path` (optional) | Opens a terminal tab                     |
+| `newPane`      | `path` (optional) | Opens a split pane                       |
+| `notification` | `text`, `title`   | Shows a macOS notification               |
+
+Example: list the npm scripts of the current project.
 
 ```javascript
 function render(ctx) {
-  var raw = readFile("package.json");
-  if (!raw) return { type: "label", text: "No package.json", style: "muted" };
-
-  var pkg = JSON.parse(raw);
-  var scripts = pkg.scripts || {};
-  var names = Object.keys(scripts);
-  if (!names.length) return { type: "label", text: "No scripts defined", style: "muted" };
-
+  var pkg = readJSON("package.json");
+  var names = pkg && pkg.scripts ? Object.keys(pkg.scripts) : [];
+  if (!names.length) return { type: "label", text: "No npm scripts", style: "muted" };
   return {
     type: "list",
     items: names.map(function (name) {
-      return {
-        label: name,
-        icon: "play.circle",
-        detail: scripts[name],
-        action: { type: "exec", command: "npm run " + name },
-      };
+      return { label: name, detail: pkg.scripts[name], icon: "play.circle",
+               action: { type: "exec", command: "npm run " + name } };
     }),
   };
 }
 ```
 
-### DSL Elements
+### Settings
 
-Your `render` function returns a JSON object or array of elements. Each element has a `type` and type-specific properties:
-
-| Type      | Properties                                  | Description                                                                             |
-| --------- | ------------------------------------------- | --------------------------------------------------------------------------------------- |
-| `label`   | `text`, `style?`, `tint?`                   | Text label. Styles: `"bold"`, `"muted"`, `"mono"`. Alias: `text` (with `content` field) |
-| `button`  | `label`, `action`, `style?`, `contextMenu?` | Clickable button. Styles: `"primary"`, `"secondary"`, `"destructive"`                   |
-| `divider` | —                                           | Horizontal line                                                                         |
-| `spacer`  | —                                           | Vertical spacing                                                                        |
-| `icon`    | `name`, `tint?`                             | SF Symbol icon. Tints: `"success"`, `"error"`, `"warning"`, `"accent"`, `"muted"`       |
-| `list`    | `items`                                     | List of items with `label`, `detail?`, `icon?`, `action?`, `contextMenu?`               |
-| `vstack`  | `children`                                  | Vertical layout of child elements                                                       |
-| `hstack`  | `children`                                  | Horizontal layout of child elements. Alias: `row`                                       |
-| `badge`   | `text`, `tint?`                             | Colored pill badge                                                                      |
-
-### DSL Actions
-
-Actions are attached to interactive elements (buttons, list items):
-
-| Action Type      | Parameters                                    | Effect                                   |
-| ---------------- | --------------------------------------------- | ---------------------------------------- |
-| `"cd"`           | `path`                                        | Changes terminal directory               |
-| `"open"`         | `path`                                        | Opens file in `$EDITOR`                  |
-| `"exec"`         | `command`                                     | Sends command to terminal                |
-| `"copy"`         | `text` or `path`                              | Copies to clipboard                      |
-| `"reveal"`       | `path`                                        | Opens in Finder                          |
-| `"url"`          | `url` or `text`                               | Opens URL in default browser             |
-| `"newTab"`       | `path` (optional)                             | Opens a new terminal tab                 |
-| `"newPane"`      | `path` (optional)                             | Opens a new split pane                   |
-| `"paste"`        | `text`                                        | Inserts text at cursor without executing |
-| `"notification"` | `text`, `title` (optional, defaults to "Boo") | Shows macOS notification                 |
-
-### Context Menus
-
-List items and buttons can have a `contextMenu` array for right-click actions:
-
-```javascript
-{
-  label: "main.js",
-  icon: "doc",
-  action: { type: "open", path: "main.js" },
-  contextMenu: [
-    { label: "Open in editor", icon: "pencil", action: { type: "open", path: "main.js" } },
-    { label: "Copy path", icon: "doc.on.doc", action: { type: "copy", text: "main.js" } },
-    { label: "Delete", style: "destructive", action: { type: "exec", command: "rm main.js" } }
-  ]
-}
-```
-
-Each menu item has `label` (required), `action` (required), and optional `icon` (SF Symbol) and `style` (`"destructive"` for red text).
-
-### When-Clauses
-
-Control when your plugin is visible based on terminal state:
-
-| Expression                         | Meaning                                   |
-| ---------------------------------- | ----------------------------------------- |
-| `null`                             | Always visible                            |
-| `"git.active"`                     | Only in git repos                         |
-| `"!remote"`                        | Only in local sessions                    |
-| `"remote"`                         | Only in remote sessions                   |
-| `"env.ssh"`                        | Only in SSH or Mosh sessions              |
-| `"env.docker"`                     | Only in Docker sessions                   |
-| `"env.container"`                  | Only in any container / VM / device shell |
-| `"env.type == 'kubectl'"`          | Only in kubectl sessions                  |
-| `"git.active && !remote"`          | Git repos, local only                     |
-| `"process.name == 'node'"`         | Only when Node.js is running              |
-| `"process.editor"`                 | Only when an editor is active             |
-| `"process.category == 'database'"` | Only for database clients                 |
-
-Process categories: `editor`, `vcs`, `runtime`, `build`, `package`, `container`, `database`, `monitor`, `filemanager`, `multiplexer`.
-
-Operators: `&&` (and), `||` (or), `!` (not), `==`, `!=`, `()` (grouping).
-
-Use `env.type` for string comparisons and `remote.host` to match the current host or target name.
-
-See [When-Clauses](/plugins#when-clauses) for the full list of variables.
-
-### Responding to directory changes
-
-JS plugins don't have a lifecycle hook — they respond to `cd` through their `render()` function, which is called automatically whenever the working directory changes. `ctx.cwd` always reflects the current directory:
-
-```javascript
-function render(ctx) {
-  // ctx.cwd is already the new directory — render() is called on every cd
-  var hasMakefile = fileExists("Makefile");
-  if (!hasMakefile) return { type: "label", text: "No Makefile", style: "muted" };
-
-  // Offer an action that runs in the new directory
-  return {
-    type: "button",
-    label: "Run make",
-    action: { type: "exec", command: "make" },
-  };
-}
-```
-
-To send a command to the terminal in response to a directory change, use the `"exec"` action on a button or list item — the user clicks it to trigger the command. For fully automatic reactions (no click required), use a [Swift plugin](#built-in-swift-plugins) with `cwdChanged` + `hostActions`, or an IPC socket tool that subscribes to `cwd_changed` and sends `send_text` (see [IPC Socket](/ipc-socket#reacting-to-directory-changes)).
-
-### Menu Contributions
-
-Plugins can add items to a "Plugins" top-level menu in the menu bar by declaring a `menus` array in `plugin.json`:
+Declare settings in the manifest. Boo renders the controls in **Settings → Plugins** and passes the values to `ctx.settings`.
 
 ```json
-{
-  "menus": [
-    {
-      "label": "Run Tests",
-      "action": "runTests",
-      "shortcut": "shift+cmd+t",
-      "icon": "checkmark.circle"
-    },
-    { "separator": true },
-    { "label": "Open Coverage", "action": "openCoverage" }
-  ]
-}
+"settings": [
+  { "key": "showHidden", "type": "bool", "label": "Show hidden files", "default": false },
+  { "key": "limit", "type": "double", "label": "Max items", "default": 20, "min": 5, "max": 100, "step": 5 },
+  { "key": "sort", "type": "string", "label": "Sort", "default": "name",
+    "choices": [{ "value": "name", "label": "Name" }, { "value": "size", "label": "Size" }] }
+]
 ```
 
-#### Menu item fields
+`type` is `bool`, `string`, `int` or `double`. Optional fields:
 
-| Field       | Type   | Required | Description                                                                     |
-| ----------- | ------ | -------- | ------------------------------------------------------------------------------- |
-| `label`     | string | Yes      | Menu item text                                                                  |
-| `action`    | string | Yes      | Name passed to `onAction()` in `main.js`                                        |
-| `shortcut`  | string | No       | Keyboard shortcut in modifier+key format (e.g. `"shift+cmd+t"`, `"ctrl+alt+r"`) |
-| `icon`      | string | No       | SF Symbol name                                                                  |
-| `separator` | bool   | No       | Set to `true` for a separator item (no other fields needed)                     |
+- `description`: help text.
+- `group`: a section header.
+- `min`, `max`, `step`: a slider, for `double` only.
+- `choices`: a picker, for `string` only.
+- `options`: `"fontPicker:system"` or `"fontPicker:mono"` shows a font picker, for `string` only.
 
-Shortcuts use modifier+key format. Conflicts with built-in shortcuts are detected and skipped.
+### Menu Items
 
-#### Handling menu actions
+Add entries to the **Plugins** menu. Handle them in `onAction(name, ctx)` and return an [action](#actions) or `null`:
 
-Implement `onAction(name, ctx)` in `main.js`. It receives the action name from the menu item and the current context, and returns a DSL action object (the same format used by button and list item actions):
+```json
+"menus": [
+  { "label": "Run Tests", "action": "runTests", "shortcut": "shift+cmd+t", "icon": "checkmark.circle" },
+  { "separator": true },
+  { "label": "Open Coverage", "action": "openCoverage" }
+]
+```
 
 ```javascript
 function onAction(name, ctx) {
@@ -361,126 +178,43 @@ function onAction(name, ctx) {
 }
 ```
 
-Returning `null` is safe and means no action is taken. `onAction()` has a 1-second timeout.
+Shortcuts use the format `modifier+key`, with the modifiers `cmd`, `shift`, `ctrl` and `opt`/`alt`.
 
-### Status Bar Click
+### Status Bar
 
-The `statusBar.onClick` field controls what happens when the user clicks an external plugin's status bar segment:
+Set `capabilities.statusBarSegment` to `true` to add a segment that shows the plugin icon and text. The text is `statusBar.template` or, without a template, the plugin name. Clicking the segment opens the plugin's tab.
 
 ```json
-{
-  "statusBar": {
-    "template": "{git.branch} ({git.changedCount})",
-    "onClick": "showTab"
-  }
-}
+"capabilities": { "statusBarSegment": true },
+"statusBar": { "position": "left", "priority": 45, "template": "{git.branch} ({git.changedCount})" }
 ```
 
-Setting `onClick` to `"showTab"` focuses the plugin's sidebar tab when clicked.
+Template tokens: `{cwd}`, `{process.name}`, `{git.branch}`, `{git.changedCount}`, `{remote.host}`.
+
+### When-Clauses
+
+`when` hides the plugin unless the expression is true. For example, `"git.active && !remote"`.
+
+| Kind             | Variables                                                                                     |
+| ---------------- | --------------------------------------------------------------------------------------------- |
+| Boolean          | `remote`, `env.local`, `env.ssh` (SSH or Mosh), `env.mosh`, `env.docker`, `env.container`, `git.active`, `git.dirty`, `process.running`, `process.editor`, `process.vcs`, `process.ai` |
+| String (`==`/`!=`) | `env.type`, `remote.host`, `process.name`, `process.category`, `git.branch`, `cwd`          |
+
+Operators: `!`, `&&`, `||`, `==`, `!=` and `( )`. Quote strings with single quotes: `"env.type == 'kubectl'"`. The process categories are in `Boo/Services/ProcessIcon.swift`.
 
 ### Debugging
 
-A few tools to help when developing plugins:
+- If `render` throws, the tab shows the error. If it runs longer than 1 second, the tab shows a timeout.
+- `onAction` also has a 1-second limit.
+- Use `log()` and watch Console.app.
 
-- `log(message)` writes to Boo's debug log, visible in Console.app. Use it to trace values and execution flow.
-- If `render()` throws an exception, an error view is shown in the sidebar instead of the plugin content.
-- If `render()` takes longer than 1 second, a timeout error is shown.
-- `onAction()` also has a 1-second timeout. Returning `null` is always safe.
+### Examples
 
-### Example: Makefile targets plugin
+[`examples/plugins/`](https://github.com/ph1p/boo/tree/main/examples/plugins) holds working plugins. Start with `hello-world` and `make-targets`. `node-project` and `terminal-inspector` use every element, action and context field.
 
-A JS plugin that reads a Makefile and lists its targets as clickable items:
+## Swift Plugins
 
-**`~/.boo/plugins/make-targets/plugin.json`**
-
-```json
-{
-  "id": "make-targets",
-  "name": "Make Targets",
-  "version": "1.0.0",
-  "icon": "hammer",
-  "description": "Lists Makefile targets. Click to run.",
-  "when": "env.local",
-  "runtime": "js"
-}
-```
-
-**`~/.boo/plugins/make-targets/main.js`**
-
-```javascript
-function render(ctx) {
-  var src = readFile("Makefile");
-  if (!src) return { type: "label", text: "No Makefile", style: "muted" };
-
-  var targets = [];
-  var lines = src.split("\n");
-  for (var i = 0; i < lines.length; i++) {
-    var m = lines[i].match(/^([a-zA-Z][a-zA-Z0-9_-]*)\s*:/);
-    if (m) targets.push(m[1]);
-  }
-  if (!targets.length) return { type: "label", text: "No targets found", style: "muted" };
-
-  return {
-    type: "list",
-    items: targets.map(function (t) {
-      return { label: t, icon: "terminal", action: { type: "exec", command: "make " + t } };
-    }),
-  };
-}
-```
-
-### Example plugins
-
-All example plugins are in the `examples/plugins/` directory:
-
-| Plugin                 | What it demonstrates                                                                                                      |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| **hello-world**        | Minimal starting point — `plugin.json` + 12 lines of JS                                                                   |
-| **make-targets**       | `readFile()`, regex parsing, when-clause, list with actions                                                               |
-| **project-info**       | `fileExists()` for project type detection, list with open actions                                                         |
-| **node-project**       | **Showcase** — every feature: settings, readFile/fileExists, all DSL elements/styles/tints/actions, context menus, badges |
-| **terminal-inspector** | **Showcase** — every ctx field, settings, file detection, all DSL elements/actions, context menus                         |
-
-Start with **hello-world**, then study **node-project** or **terminal-inspector** for the full API.
-
----
-
-## Built-in Swift Plugins
-
-Built-in plugins are Swift classes compiled into the app. They have full access to AppKit, SwiftUI, and all Boo APIs.
-
-### File Organization
-
-All code for a plugin lives in one directory:
-
-```
-Boo/Plugins/YourPlugin/
-  YourPlugin.swift          # Plugin class (BooPluginProtocol)
-  YourPluginDetailView.swift  # SwiftUI detail view (optional)
-  YourService.swift          # Supporting service (optional)
-```
-
-Tests go in the matching directory:
-
-```
-Tests/BooTests/Plugins/YourPlugin/
-  YourPluginTests.swift
-```
-
-No `Package.swift` changes needed — SPM resolves recursively within the target directories.
-
-### Reference Example: SystemInfoPlugin
-
-The `SystemInfoPlugin` (`Boo/Plugins/SystemInfo/SystemInfoPlugin.swift`) is a working example that demonstrates all plugin patterns:
-
-- **Manifest** with `when: "!remote"` (hidden in remote sessions)
-- **Status bar** via `makeStatusBarContent` showing memory usage with color-coded tint
-- **Sidebar panel** via `makeDetailView` with SwiftUI progress bars and action buttons
-- **Dynamic section title** via `sectionTitle` showing live memory percentage
-- **Background refresh** via a 10-second timer calling `onRequestCycleRerun`
-- **Lifecycle callback** (`cwdChanged`) to refresh disk usage on directory change
-- **Host actions** via `DSLActionHandler` to run `df -h` and `top` in the terminal
-- **Tests** in `Tests/BooTests/Plugins/SystemInfo/SystemInfoPluginTests.swift`
+A built-in plugin is a class that conforms to `BooPluginProtocol` (`Boo/Plugin/BooPluginProtocol.swift`). Every method has a default, so you implement only what you need. Put it in `Boo/Plugins/<Name>/`. Put its tests in `Tests/BooTests/Plugins/<Name>/`.
 
 ### Minimal Plugin
 
@@ -488,421 +222,111 @@ The `SystemInfoPlugin` (`Boo/Plugins/SystemInfo/SystemInfoPlugin.swift`) is a wo
 import SwiftUI
 
 @MainActor
-final class MyPlugin: BooPluginProtocol {
+final class HelloPlugin: BooPluginProtocol {
+    // Required: the host injects these.
+    var actions: PluginActions?
+    var services: PluginServices?
     var hostActions: PluginHostActions?
     var onRequestCycleRerun: (() -> Void)?
+    var subscribedEvents: Set<PluginEvent> { [] }
 
     let manifest = PluginManifest(
-        id: "my-plugin",       // Also used as pluginID (derived automatically)
-        name: "My Plugin",
+        id: "hello",
+        name: "Hello",
         version: "1.0.0",
-        icon: "star",
-        description: "Example built-in plugin",
-        when: nil,             // nil = always visible; or use "git.active", "!remote", etc.
+        icon: "hand.wave",
+        description: "Shows the current directory",
+        when: "!remote",
         runtime: nil,
-        capabilities: PluginManifest.Capabilities(statusBarSegment: true, sidebarTab: true),
-        statusBar: PluginManifest.StatusBarManifest(position: "right", priority: 25, template: nil),
-        settings: [
-            PluginManifest.SettingManifest(key: "greeting", type: .string, label: "Greeting text", defaultValue: AnyCodableValue("Hello"), options: nil)
-        ]
+        capabilities: PluginManifest.Capabilities(statusBarSegment: false, sidebarTab: true),
+        statusBar: nil,
+        settings: nil
     )
-
-    // MARK: - Status Bar
-
-    func makeStatusBarContent(context: PluginContext) -> StatusBarContent? {
-        StatusBarContent(
-            text: "Hello",
-            icon: "star",
-            tint: nil,
-            accessibilityLabel: "My Plugin"
-        )
-    }
-
-    // MARK: - Detail View
 
     func makeDetailView(context: PluginContext) -> AnyView? {
-        AnyView(
-            Text("Hello from My Plugin")
-                .font(context.fontScale.font(.base))
-                .foregroundColor(Color(nsColor: context.theme.chromeText))
+        let t = Tokens.current
+        let scale = context.fontScale
+        return AnyView(
+            VStack(alignment: .leading, spacing: 4) {
+                Text((context.terminal.cwd as NSString).lastPathComponent)
+                    .font(scale.font(.base).weight(.semibold))
+                    .foregroundStyle(t.text)
+                Text(context.terminal.cwd)
+                    .font(scale.font(.sm, design: .monospaced))
+                    .foregroundStyle(t.muted)
+                Button("List files") { self.actions?.exec("ls -la") }
+            }
+            .padding(8)
         )
     }
 }
 ```
 
-### PluginContext
-
-Every `makeDetailView` call receives a `PluginContext` — the single source of truth for the current state. Prefer it over reaching into `AppSettings.shared` directly.
-
-| Property            | Type                   | Description                                                        |
-| ------------------- | ---------------------- | ------------------------------------------------------------------ |
-| `context.terminal`  | `TerminalContext`      | CWD, process, git, remote session info                             |
-| `context.theme`     | `ThemeSnapshot`        | Resolved base theme colors (chromeText, chromeMuted, accentColor, etc.) |
-| `context.density`   | `SidebarDensity`       | `.comfortable` or `.compact`                                       |
-| `context.settings`  | `PluginSettingsReader` | Scoped reader for this plugin's settings                           |
-| `context.fontScale` | `SidebarFontScale`     | Tailwind-inspired font scale (see below)                           |
-
-> **Theme colors:** `ThemeSnapshot` currently exposes only the raw base fields (`chromeText`, `chromeMuted`, `accentColor`, `sidebarBg`, `chromeBg`, `foreground`, `background`, `ansiColors`). The derived semantic tokens described in [Theming](/theming#derived-semantic-tokens) (`textSecondary`, `separator`, `hoverFill`, …) live on `TerminalTheme` and the app's `Tokens` environment and are not part of the plugin context yet. Until they are, derive the same role from the base field with the documented alpha, e.g. `chromeMuted.withAlphaComponent(0.7)` for secondary text.
-
-### Font Scale
-
-`context.fontScale` gives every plugin a Tailwind-inspired type scale that automatically reflects the sidebar font size from **Settings → Appearance → Sidebar Font**.
+Register it in `PluginRegistry.registerBuiltins()` (`Boo/Plugin/PluginRegistry.swift`):
 
 ```swift
-func makeDetailView(context: PluginContext) -> AnyView? {
-    let scale = context.fontScale
-
-    return AnyView(
-        VStack(alignment: .leading, spacing: 4) {
-            // Named scale steps
-            Text("File name")  .font(scale.font(.base))   // × 1.0  (default 12 pt)
-            Text("Directory")  .font(scale.font(.sm))     // × 0.875 (default ~10 pt)
-            Text("Status")     .font(scale.font(.xs))     // × 0.75  (default  9 pt)
-            Text("Section")    .font(scale.font(.lg))     // × 1.125 (default ~13 pt)
-            Text("Header")     .font(scale.font(.xl))     // × 1.25  (default 15 pt)
-
-            // Pass a design to override the font family (e.g. for code/paths)
-            Text("abc123").font(scale.font(.sm, design: .monospaced))
-
-            // Apply weight on top of the scale font
-            Text("Bold label").font(scale.font(.base).weight(.semibold))
-
-            // Read the raw point size if you need it (e.g. for image frames)
-            Image(systemName: "star")
-                .font(.system(size: scale.size(.sm)))
-                .frame(width: scale.size(.base))
-        }
-    )
-}
+register(HelloPlugin())
 ```
 
-#### Scale reference (base = 12 pt)
+`Boo/Plugins/Notes/NotesPlugin.swift` and `Boo/Plugins/SystemInfo/SystemInfoPlugin.swift` are short real plugins to copy from.
 
-| Step   | Multiplier | Default pt | Typical use                              |
-| ------ | ---------- | ---------- | ---------------------------------------- |
-| `xs`   | × 0.75     | 9 pt       | Timestamps, badges, secondary icons      |
-| `sm`   | × 0.875    | 10 pt      | Sub-labels, directory paths, detail text |
-| `base` | × 1.0      | 12 pt      | Primary content — file names, list items |
-| `lg`   | × 1.125    | 13 pt      | Section sub-headers                      |
-| `xl`   | × 1.25     | 15 pt      | Emphasis, large labels                   |
+### Lifecycle
 
-Section/panel headers rendered by the sidebar host (the bold title bars with chevrons) are **not** affected by `fontScale` — they always use the system font at a fixed size. Only your plugin's returned view is scaled.
-
-### Registration
-
-Add your plugin to `PluginRegistry.registerBuiltins()`:
+- **Events.** `subscribedEvents` lists the callbacks your plugin receives: `.cwdChanged`, `.processChanged`, `.remoteSessionChanged`, `.focusChanged`, `.terminalCreated`, `.terminalClosed`, `.remoteDirectoryListed`, `.commandStarted` and `.commandEnded`. Each event has a matching method, such as `cwdChanged(newPath:context:)` or `commandEnded(result:context:)`. Boo skips events you do not subscribe to.
+- **Every cycle.** `enrich(context:)` publishes shared data with `context.setData(_:forKey:)`. Prefix keys with your plugin ID. `react(context:)` reads the frozen `TerminalContext`, including `enrichedData`. Both must be fast, under 2 ms each.
+- **Activation.** `pluginDidActivate()` and `pluginDidDeactivate()` run when your tab is selected or deselected. Start and stop timers and watchers there.
+- **Background data.** Call `onRequestCycleRerun?()` on the main thread to rebuild the sidebar and status bar.
+- **Availability.** Return `false` from `checkAvailability() async` to hide the plugin, for example when a required binary is missing.
 
 ```swift
-func registerBuiltins() {
-    register(LocalFileTreePlugin())
-    register(RemoteFileTreePlugin())
-    register(GitPlugin())
-    register(AgentsPlugin())
-    register(DockerPluginNew())
-    register(BookmarksPluginNew())
-    register(SnippetsPlugin())
-    register(SystemInfoPlugin())
-    register(DebugPlugin())
-    register(MyPlugin())  // Add here
-}
-```
+var subscribedEvents: Set<PluginEvent> { [.cwdChanged] }
 
-### Using PluginActions
-
-`PluginActions` is the unified action dispatch, available via the plugin context:
-
-```swift
-// Convenience methods
-pluginActions.exec("ls -la")              // Send command + Enter
-pluginActions.cd(to: "/some/dir")         // cd + Enter
-pluginActions.pastePath("/some/path")     // Insert path without executing
-pluginActions.copy("text")                // Copy to clipboard
-pluginActions.reveal("/some/file")        // Show in Finder
-pluginActions.openInEditor("/some/file")  // Open with default app
-
-// Navigation closures
-pluginActions.openDirectoryInNewTab?("/some/dir")
-pluginActions.openDirectoryInNewPane?("/some/dir")
-pluginActions.sendToTerminal?("raw text\r")
-
-// Multi-content tab (reusable tab type)
-// Register a factory once (e.g. in pluginDidActivate)
-pluginActions.registerMultiContentTab?("my-panel") { ctx in
-    AnyView(MyPanelView(title: ctx.title, key: ctx.key))
-}
-// Open an instance
-pluginActions.openMultiContentTab?("my-panel", PluginTabContext(title: "Output", icon: "terminal", key: "run-1"))
-```
-
-`PluginTabContext` fields: `title` (String), `icon` (SF Symbol name), `key` (String, optional — use to distinguish instances).
-
-For a one-shot custom tab (simpler, non-reusable), use `openTab?(.customView(...))` instead.
-
-#### Agent session ID
-
-Plugins that manage AI agent sessions can store and retrieve a session identifier:
-
-```swift
-pluginActions.setAgentSessionID?("session-abc123")
-let id = pluginActions.getAgentSessionID?()
-```
-
-### Triggering Refreshes
-
-When your plugin's data changes asynchronously (e.g., from a background process, file watcher, or network callback), call `onRequestCycleRerun?()`:
-
-```swift
-// In your async callback
-SomeService.shared.onDataChanged = { [weak self] in
-    DispatchQueue.main.async {
-        self?.onRequestCycleRerun?()
-    }
-}
-```
-
-This triggers a full plugin cycle, which rebuilds the sidebar and status bar.
-
-### Lifecycle Callbacks
-
-Plugins declare which events they handle via `subscribedEvents`. Only declared callbacks fire — undeclared ones are skipped entirely:
-
-```swift
-var subscribedEvents: Set<PluginEvent> {
-    [.cwdChanged, .remoteSessionChanged]
-}
-```
-
-Available `PluginEvent` cases:
-
-| Case                     | Fires when                         |
-| ------------------------ | ---------------------------------- |
-| `.cwdChanged`            | Terminal working directory changed |
-| `.processChanged`        | Foreground process changed         |
-| `.remoteSessionChanged`  | Remote session started or ended    |
-| `.focusChanged`          | Focus moved to a different pane    |
-| `.terminalCreated`       | A new terminal was created         |
-| `.terminalClosed`        | A terminal was closed              |
-| `.remoteDirectoryListed` | Remote directory listing completed |
-| `.commandStarted`        | A shell command started running    |
-| `.commandEnded`          | A shell command finished           |
-
-Override the corresponding methods to respond to terminal state changes:
-
-```swift
-// Terminal changed working directory
 func cwdChanged(newPath: String, context: TerminalContext) {
-    refreshData(for: newPath)
-}
-
-// Remote session started or ended
-func remoteSessionChanged(session: RemoteSessionType?, context: TerminalContext) {
-    if session != nil {
-        // Entering remote session
-    } else {
-        // Back to local
-    }
-}
-
-// Focus moved to a different pane
-func terminalFocusChanged(terminalID: UUID, context: TerminalContext) {
-    // Update cached state for the new pane
-}
-
-// Shell command started / finished (subscribe to .commandStarted / .commandEnded)
-func commandStarted(command: String, context: TerminalContext) {}
-
-func commandEnded(result: CommandResult, context: TerminalContext) {
-    // result.command, result.exitCode, result.duration
-}
-```
-
-#### Tab activation callbacks
-
-`pluginDidActivate()` and `pluginDidDeactivate()` fire when the user switches sidebar tabs. Both have empty default implementations — override only when needed:
-
-```swift
-func pluginDidActivate() {
-    // Tab selected — start watchers, timers, background work
-    startRefreshTimer()
-}
-
-func pluginDidDeactivate() {
-    // Tab deselected — pause background work to save resources
-    stopRefreshTimer()
-}
-```
-
-For statusbar-only plugins (no sidebar tab), these are called when the plugin becomes visible or hidden.
-
-#### Sending commands on directory change
-
-Use `cwdChanged` + `PluginActions` to send a command to the terminal whenever the user `cd`s into a folder:
-
-```swift
-func cwdChanged(newPath: String, context: TerminalContext) {
-    let envFile = (newPath as NSString).appendingPathComponent(".envrc")
-    if FileManager.default.fileExists(atPath: envFile) {
-        pluginActions.exec("direnv allow .")
+    if FileManager.default.fileExists(atPath: newPath + "/.envrc") {
+        actions?.exec("direnv allow .")
     }
 }
 ```
 
-### Enrichment
+### Sidebar Sections
 
-If your plugin contributes data that other plugins need, implement `enrich()`:
+With `sidebarTab: true`, the default `makeSidebarTab(context:)` puts `makeDetailView` in a single section. Override these to change the section:
 
-```swift
-func enrich(context: EnrichmentContext) {
-    // Write data visible to all plugins in Phase 2
-    context.setData(myValue, forKey: "my-plugin.myKey")
-}
-```
+- `sectionTitle(context:)`: a dynamic header. Return `nil` to use `manifest.name`.
+- `prefersOuterScrollView`: return `false` if your view scrolls itself.
+- `sectionGeneration(context:)`: by default the view is rebuilt every cycle. To reuse it, return `SidebarSection.generation(for: [keys])` over the values your view depends on.
+- `sectionIdentity(context:)`: return a new value to reset the view's `@State`, for example on a workspace switch.
 
-Key convention: prefix with your plugin ID to avoid collisions (`"plugin-id.keyName"`).
+For several collapsible sections, override `makeSidebarTab(context:)` and return a `SidebarTab` with more than one `SidebarSection`.
 
-Other plugins read this in their `react()` phase via the frozen `TerminalContext`:
+### Theme and Fonts
 
-```swift
-func react(context: TerminalContext) {
-    if let value = context.enrichedData["my-plugin.myKey"] {
-        // Use the value contributed by the other plugin
-    }
-}
-```
+- **Colors.** Use the semantic tokens from `Tokens.current` in sidebar views, such as `t.text`, `t.muted`, `t.textSecondary`, `t.accent`, `t.success`, `t.error` and `t.hoverFill`. Views opened in a content tab get the same tokens through `@Environment(\.tokens)`. [Theming](/theming#derived-semantic-tokens) lists every token.
+- **Fonts.** `context.fontScale.font(.xs | .sm | .base | .lg | .xl)` follows the sidebar font setting. Do not hardcode point sizes.
 
-JavaScript plugins can access enriched data via `ctx.enrichedData["my-plugin.myKey"]`.
+### Settings
 
-### Conditional Visibility
-
-Set the `when` field in your manifest to control when your plugin appears. The `whenClause` property is automatically derived from `manifest.when` — no override needed:
+Declare settings in the manifest and read them through `context.settings`:
 
 ```swift
-let manifest = PluginManifest(
-    id: "my-plugin",
-    ...
-    when: "git.active && !remote",  // Only visible in local git repos
-    ...
-)
-// whenClause is automatically parsed from manifest.when
+settings: [
+    PluginManifest.SettingManifest(
+        key: "greeting", type: .string, label: "Greeting",
+        defaultValue: AnyCodableValue("Hello"), options: nil)
+]
+
+let greeting = context.settings.string("greeting", default: "Hello")
 ```
 
-### Scroll Behavior
+### Status Bar and Menus
 
-By default, the sidebar wraps your detail view in an `NSScrollView`. If your view handles its own scrolling (like `FileTreeView` does), return `false`:
+- **Status bar.** Set `statusBarSegment: true` and `statusBar: PluginManifest.StatusBarManifest(position: "right", priority: 25, template: nil)`. Then return a `StatusBarContent(text:icon:tint:accessibilityLabel:)` from `makeStatusBarContent(context:)`.
+- **Menus.** Declare `menus` in the manifest and handle them in `handleMenuAction(_:context:)`.
 
-```swift
-var prefersOuterScrollView: Bool { false }
-```
+### Actions
 
-### Dynamic Section Titles
+`actions` (`Boo/Plugin/PluginActions.swift`) sends work to the terminal and the app:
 
-Override `sectionTitle(context:)` to show context-dependent headers:
-
-```swift
-func sectionTitle(context: TerminalContext) -> String? {
-    let dirName = (context.cwd as NSString).lastPathComponent
-    return dirName.isEmpty ? nil : dirName
-}
-```
-
-Return `nil` to use the static `manifest.name`.
-
-## Status Bar Segments
-
-For adding standalone segments to the status bar (not tied to a sidebar plugin), use the `StatusBarPlugin` protocol:
-
-```swift
-final class MySegment: StatusBarPlugin {
-    let id = "my-segment"
-    let position: StatusBarPosition = .left
-    let priority = 25
-
-    func isVisible(settings: AppSettings, state: StatusBarState) -> Bool { true }
-
-    func draw(at x: CGFloat, y: CGFloat, theme: TerminalTheme,
-              settings: AppSettings, state: StatusBarState, ctx: CGContext) -> CGFloat {
-        let attrs: [NSAttributedString.Key: Any] = [
-            .font: NSFont.systemFont(ofSize: 10),
-            .foregroundColor: theme.textSecondary  // semantic token on TerminalTheme
-        ]
-        let str = "Hello" as NSString
-        str.draw(at: NSPoint(x: x, y: y), withAttributes: attrs)
-        return str.size(withAttributes: attrs).width
-    }
-
-    func handleClick(at point: NSPoint, in barView: StatusBarView) -> Bool { false }
-    func update(state: StatusBarState) {}
-
-    // Optional (default nil): hover tooltip and VoiceOver label
-    var tooltipText: String? { "My segment" }
-}
-```
-
-Register in `StatusBarView.registerDefaultPlugins()`.
-
-Sidebar plugins **do not** need to create their own status bar segments — the registry auto-registers `PluginIconSegment` toggle icons for any plugin with `capabilities.sidebarTab = true`.
-
-A plugin can also contribute **only** a status bar segment with no sidebar tab at all. Set `capabilities.statusBarSegment = true` and omit `sidebarTab`. The plugin will still receive lifecycle callbacks (`pluginDidActivate` / `pluginDidDeactivate`) when it becomes visible or hidden.
-
-## Sidebar Tabs
-
-A plugin can contribute a **dedicated sidebar tab** — a button in the tab bar at the top of the sidebar. When the user clicks it, the plugin's content fills the full sidebar height instead of appearing as a collapsible section in the Explorer panel.
-
-### Declaring the capability
-
-Set `sidebarTab: true` in your manifest capabilities:
-
-```swift
-capabilities: PluginManifest.Capabilities(
-    statusBarSegment: true,
-    sidebarTab: true
-)
-```
-
-### Implementing `makeSidebarTab`
-
-Override `makeSidebarTab(context:)` in your plugin class:
-
-```swift
-func makeSidebarTab(context: PluginContext) -> SidebarTab? {
-    SidebarTab(
-        id: SidebarTabID("my-plugin"),
-        icon: "magnifyingglass",
-        label: "My Plugin",
-        sections: [
-            SidebarSection(
-                id: "my-plugin-main",
-                name: "My Plugin",
-                icon: "magnifyingglass",
-                content: makeDetailView(context: context) ?? AnyView(EmptyView()),
-                prefersOuterScrollView: true,
-                generation: 0
-            )
-        ]
-    )
-}
-```
-
-- `id` — use `SidebarTabID("your-plugin-id")` matching your manifest's `id` field.
-- `icon` — SF Symbol name shown in the tab bar button.
-- `label` — accessibility label and tooltip text.
-- `sections` — one or more `SidebarSection` entries; a single section skips the header.
-
-The default implementation returns `nil`, so plugins that don't override this are unaffected.
-
-### Tab lifecycle
-
-- The tab bar is rebuilt on every plugin cycle, so tabs appear and disappear automatically based on plugin visibility and the `when` clause.
-- `pluginDidActivate()` / `pluginDidDeactivate()` are called when the user switches tabs.
-- For plugins **without a sidebar tab** (statusbar-only), `pluginDidActivate()` is called automatically when the plugin becomes visible, and `pluginDidDeactivate()` when it becomes hidden. This ensures background work (watchers, timers) starts and stops correctly even without a sidebar tab.
-
-### Example: Debug plugin
-
-The built-in `DebugPlugin` uses `sidebarTab: true` to show a dedicated ladybug tab:
-
-```swift
-capabilities: PluginManifest.Capabilities(
-    statusBarSegment: true,
-    sidebarTab: true
-)
-```
+- Terminal: `exec`, `cd(to:)`, `pastePath`.
+- Clipboard and Finder: `copy`, `reveal`, `openInEditor`.
+- Tabs and panes: `openDirectoryInNewTab`, `openDirectoryInNewPane`, `openFile`, `openTab`, `registerMultiContentTab` and `openMultiContentTab`.

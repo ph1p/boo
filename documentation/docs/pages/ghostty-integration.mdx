@@ -26,7 +26,7 @@ Ghostty surfaces emit actions through `GhosttyRuntime`'s action callback. Boo ha
 | Action | What Boo does |
 | --- | --- |
 | `GHOSTTY_ACTION_PWD` | Updates the tab's working directory (OSC 7) |
-| `GHOSTTY_ACTION_SET_TITLE` | Updates the tab title. Titles starting with `BOO_LS:` (directory listing) or `BOO_CMD:` (command start/end from Boo's shell hooks) are consumed instead of shown |
+| `GHOSTTY_ACTION_SET_TITLE` | Updates the tab title. Titles starting with `BOO_LS:` (directory listing) or `BOO_CMD:cmd_start` (command start, from Boo's shell hooks) are consumed instead of shown |
 | `GHOSTTY_ACTION_SHOW_CHILD_EXITED` | Marks the shell as exited |
 | `GHOSTTY_ACTION_COMMAND_FINISHED` | Records the exit code and duration of the last command (OSC 133) |
 | `GHOSTTY_ACTION_PROGRESS_REPORT` | Shows OSC 9;4 progress on the tab: set, error, indeterminate, pause, remove |
@@ -53,7 +53,16 @@ When Ghostty allows it, the sheet offers **Remember for this terminal**. Any oth
 
 ### Shell Integration
 
-Ghostty injects shell hooks so the shell emits OSC 7 on `cd`. The Makefile bundles `Vendor/ghostty/zig-out/share/ghostty/` as `ghostty-resources/` next to the executable.
+Two layers work together:
+
+- **Ghostty's hooks** emit OSC 7 on `cd` and OSC 133 around each command. `make build` copies `Vendor/ghostty/zig-out/share/ghostty/` to `ghostty-resources/` next to the executable.
+- **Boo's hooks** (`Resources/shell-integration/boo.{zsh,bash,fish}`) are copied to `~/.boo/shell-integration/` at launch. Boo adds a `source` line to `.zshrc`, `.bashrc`, `.bash_profile` and `config.fish`. They mark command start (`BOO_CMD:cmd_start`) and tell Boo when an agent command goes idle.
+
+Command end comes from OSC 133 (`GHOSTTY_ACTION_COMMAND_FINISHED`), not from Boo's hooks.
+
+### Local Patches
+
+Boo carries a few Ghostty patches in `Vendor/patches/` (command output, output tap, styled text read, tmux control mode). `make ghostty` applies them and rebuilds GhosttyKit when a patch or the submodule commit changes. `make clean-ghostty` forces a full rebuild.
 
 ### Configuration
 
@@ -66,6 +75,7 @@ Instead, `applyBooSettings(to:)` generates `~/.boo/ghostty.conf` from Boo's sett
 - the theme's colors and the 16-color palette, `term = xterm-256color`
 - `scrollback-limit`, `mouse-hide-while-typing`, `cursor-click-to-move`, `unfocused-split-opacity`
 - the clipboard options above
+- `shell-integration-features = no-cursor`, so Boo's cursor style setting wins
 - `custom-shader` and `custom-shader-animation`, when a [shader](/rules-and-profiles#shaders) is set
 
 A tab with a profile gets its own file next to it (`ghostty-profile-<hash>.conf`), built the same way with the profile's font, theme and shader.

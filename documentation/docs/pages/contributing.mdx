@@ -1,85 +1,113 @@
 # Contributing
 
+## Prerequisites
+
+- macOS 15+ and the Xcode command line tools
+- [Zig](https://ziglang.org) 0.17.0 (`brew install zig`). It must match Ghostty's `minimum_zig_version` in `Vendor/ghostty/build.zig.zon`.
+- Rust (`rustup`), for the ironmark markdown parser
+- Node.js and **pnpm**, for the Monaco editor bundle. Use pnpm only, never npm or npx.
+- swift-format (`brew install swift-format`)
+
 ## Setup
 
-1. Fork and clone the repository
-2. `make setup` to build all dependencies
-3. `make test` to verify everything works
-4. Install swift-format: `brew install swift-format`
-5. Install Node.js + pnpm — `make monaco` builds the editor bundle (`Boo/Resources/MonacoBundle`, gitignored) and runs before `make build`, `make test`, and `make release`
+1. Fork and clone the repository.
+2. `make setup` builds GhosttyKit, ironmark and Boo.
+3. `make test` checks that everything works.
+4. `make run` builds and launches a debug app.
+
+## Make Targets
+
+```bash
+make build    # Debug build (runs make monaco first)
+make run      # Build, sign and launch .build/debug/Boo.app
+make test     # swift test --disable-swift-testing
+make monaco   # Build the editor bundle (pnpm + Vite)
+make lint     # Check style; CI runs this
+make format   # Fix style
+```
+
+`make monaco` runs `pnpm install --frozen-lockfile` in `Boo/Resources/MonacoSource` and writes `Boo/Resources/MonacoBundle` (gitignored). `make build`, `make test` and `make release` run it for you.
 
 ## Code Style
 
-Boo uses [swift-format](https://github.com/swiftlang/swift-format) (config in `.swift-format`).
+- [swift-format](https://github.com/swiftlang/swift-format) with the config in `.swift-format`: 4-space indent, 120-char lines.
+- `make lint` runs `swift-format lint --strict` over `Boo/`, `BooApp/` and `Tests/`, plus the Monaco linter. Warnings fail it.
+- `make format` fixes Swift and Monaco files in place.
+- Zero compiler warnings. All UI work on the main thread.
+
+## Making Changes
+
+1. Create a branch from `main`, for example `feat/plugin-name` or `fix/tab-close-crash`.
+2. Make your changes.
+3. Run `make format && make test && make lint`.
+4. Use [conventional commits](https://www.conventionalcommits.org) (`feat(editor): …`, `fix(git): …`). They decide the next version.
+5. Push and open a pull request.
+
+### Adding a Plugin
+
+1. Create `Boo/Plugins/YourPlugin/YourPlugin.swift` that conforms to `BooPluginProtocol`.
+2. Register it in `PluginRegistry.registerBuiltins()`.
+3. Add tests in `Tests/BooTests/Plugins/YourPlugin/`.
+
+See [Plugin Development](/plugin-development).
+
+### Running One Test
 
 ```bash
-make format   # Format all source files (monaco-format + swift-format)
-make lint     # Check for violations (monaco-lint + swift-format; CI runs this)
+swift test --disable-swift-testing --filter SystemInfoPluginTests
 ```
-
-Rules: 4-space indent, 120-char lines, zero compiler warnings, all UI on main thread.
 
 ## Ghostty
 
 ```bash
-make ghostty-patches   # Apply Vendor/patches/*.patch to Vendor/ghostty (idempotent)
-make clean-ghostty     # Force a GhosttyKit rebuild
+make ghostty           # Apply patches, build GhosttyKit if needed, sync ghostty.h
+make ghostty-patches   # Apply Vendor/patches/*.patch (safe to repeat)
+make clean-ghostty     # Force a full GhosttyKit rebuild
 make ghostty-wasm      # Rebuild ghostty-vt.wasm for the Remote Control web UI
 ```
 
-After updating the submodule, re-sync `CGhostty/include/ghostty.h` from `Vendor/ghostty/include/ghostty.h` (`make ghostty` does this) and keep a zig matching Ghostty's `minimum_zig_version`.
+`make ghostty` rebuilds when a patch or the submodule commit changes. It also copies `Vendor/ghostty/include/ghostty.h` to `CGhostty/include/`. See [Ghostty Integration](/ghostty-integration).
 
-## Making Changes
+## Code Signing
 
-1. Create a feature branch from `main` (e.g., `feature/plugin-name`, `fix/tab-close-crash`)
-2. Make changes
-3. `make format && make test && make lint`
-4. Push and open a pull request
+`make run` signs the debug app with the first of these:
 
-### Adding a Plugin
+1. `SIGNING_IDENTITY`, if set
+2. a `Boo Self-Signed` identity in your keychain
+3. ad-hoc
 
-1. Create `Boo/Plugins/YourPlugin/YourPlugin.swift` conforming to `BooPluginProtocol`
-2. Register in `PluginRegistry.registerBuiltins()`
-3. Add tests in `Tests/BooTests/Plugins/YourPlugin/`
-
-See [Plugin Development](/plugin-development) for the full guide.
-
-## Testing
+Ad-hoc builds get a new signature on every build. macOS then forgets privacy grants (Full Disk Access, Automation, …) and asks again. Create a stable identity once:
 
 ```bash
-make test                              # Run all tests
-swift test --filter PluginTests        # Run specific suite
+scripts/create-signing-cert.sh          # or: scripts/create-signing-cert.sh "My Name"
 ```
 
-## Local Development Builds
+It imports a self-signed certificate into your login keychain and stores the `.p12` and its password in `~/.boo/signing`. It also prints the values for the CI secrets `APPLE_CERTIFICATE_P12_BASE64`, `APPLE_CERTIFICATE_PASSWORD` and `SIGNING_IDENTITY`.
 
-- `make run` strips `SUFeedURL` and `SUPublicEDKey` from the temporary debug app bundle in `.build/debug/Boo.app`
-- That disables Sparkle for local development so debug builds never poll the production appcast
-- `make app`, `make zip`, `make dmg`, and `make dist` keep the release Sparkle configuration intact
-- Manual release testing should therefore use `make app`, `make zip`, or `make dmg`, not `make run`
+## Debug vs Release Builds
+
+- `make run` removes `SUFeedURL` and `SUPublicEDKey` from the debug app. Debug builds never poll the production update feed.
+- `make app`, `make zip`, `make dmg` and `make dist` keep the Sparkle config and bundle `Sparkle.framework`.
+- Test update behavior with `make app`, `make zip` or `make dmg`, not `make run`.
 
 ## Release
 
-Releases are automated via GitHub Actions using [semantic-release](https://github.com/semantic-release/semantic-release) with conventional commits.
+On every push to `main`, CI runs [semantic-release](https://github.com/semantic-release/semantic-release) through `pnpm dlx`. It releases only when a commit needs it (`feat`, `fix`, …).
 
-```bash
-make dist   # Manual: release build + sign + notarize + ZIP
-```
+1. semantic-release picks the next version from the commit messages.
+2. `scripts/prepare-release.sh` sets the version in `Boo/App/Info.plist` and builds the release app.
+3. It signs the app (ad-hoc without `SIGNING_IDENTITY`) and notarizes it when `APPLE_ID` is set.
+4. It zips the signed app.
+5. With `SPARKLE_PRIVATE_KEY` set, `scripts/update-appcast.sh` writes the Sparkle appcast.
+6. semantic-release commits the version bump and publishes the GitHub release.
+7. CI adds the appcast to the documentation site and deploys GitHub Pages.
 
-Requires: `SIGNING_IDENTITY`, `APPLE_ID`, `APPLE_TEAM_ID`, `APPLE_PASSWORD` env vars.
-For Sparkle appcast signing in CI, also set `SPARKLE_PRIVATE_KEY`.
-
-Release flow summary:
-
-1. `semantic-release` computes the next version and updates `Boo/App/Info.plist`
-2. `scripts/prepare-release.sh` sets both `CFBundleShortVersionString` and `CFBundleVersion`, builds the release app bundle, signs it, optionally notarizes it, and only then packages the already-signed app into a ZIP archive
-3. `scripts/update-appcast.sh` generates an appcast artifact from the freshly built ZIP archive
-4. `semantic-release` commits the version bump
-5. The release workflow injects the generated appcast into the documentation site artifact and deploys GitHub Pages
+Manual build: `make dist` (release build, sign, notarize, ZIP). It needs `SIGNING_IDENTITY`, `APPLE_ID`, `APPLE_TEAM_ID` and `APPLE_PASSWORD`. Steps with missing values are skipped.
 
 ## Conventions
 
-- `TerminalColor.cgColor`/`.nsColor` for color conversions
-- `AppSettings.shared` with auto-notification for settings
-- `RemoteExplorer.shellEscPath()` for remote paths
-- `AppSettings.shared.pluginBool/pluginString/pluginDouble` for plugin settings
+- `AppSettings.shared` for global settings. It posts `.settingsChanged` on change.
+- `AppSettings.shared.pluginBool` / `pluginString` / `pluginDouble` for plugin settings.
+- `TerminalColor.cgColor` / `.nsColor` for color conversion. Semantic tokens for UI colors (see [Theming](/theming)).
+- `RemoteExplorer.shellEscPath()` for remote paths.
+- Shell scripts must run on bash 3.2 (no associative arrays).

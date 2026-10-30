@@ -2,9 +2,12 @@
 
 ## Stack
 
-- **Swift** (macOS 15+) with **AppKit** for terminal UI and **SwiftUI** for sidebar/settings
-- **GhosttyKit** — Metal GPU-accelerated terminal emulation via C API ([ghostty-org/ghostty](https://github.com/ghostty-org/ghostty))
-- **PTY** — owned by Ghostty: each `GhosttyView` surface spawns and drives its own shell process
+- **Swift** on macOS 15+. **AppKit** for the window and terminals, **SwiftUI** for the sidebar and settings.
+- **GhosttyKit**: terminal emulation with Metal rendering, through its C API. See [Ghostty Integration](/ghostty-integration).
+- **PTY**: owned by Ghostty. Each `GhosttyView` surface spawns and drives its own shell.
+- **Monaco** in a `WKWebView` for the editor. See [Multi-Content Tabs](/multi-content-tabs#editor).
+
+Build commands are in [Contributing](/contributing).
 
 ## Project Structure
 
@@ -12,156 +15,123 @@
 Boo/                Library target (all app code)
   App/              AppDelegate, AppStore, WindowManager, MainWindowController (+extensions),
                     SidebarController, WindowStateCoordinator
-  Content/          Tab content: terminal, browser, editor (Monaco), image viewer, markdown, plugin tabs
-  Ghostty/          GhosttyRuntime (singleton), GhosttyView (Metal surface)
+  Content/          Tab content: browser, editor, image viewer, markdown, cast player, plugin tabs
+  Ghostty/          GhosttyRuntime, GhosttyView, TerminalScrollView, CopyMode, QuickSelect,
+                    TmuxGatewayTap
   Models/           Workspace, Pane (+ TabState), SplitTree, AppSettings (Settings.swift), Theme
-  Plugin/           Core framework (protocol, registry, runtime, ViewDSL)
-  Plugins/          Built-in plugins (Agents, FileTree, RemoteExplorer, Git, Docker, Bookmarks,
-                    Snippets, SystemInfo, Debug)
+  Plugin/           Plugin framework: protocol, registry, runtime, ViewDSL
+  Plugins/          Built-in plugins: Agents, Bookmarks, Debug, Docker, FileTree, Git, Hosts,
+                    Kube, Notes, RemoteExplorer, Snippets, SystemInfo
   Views/            PaneView, SplitContainerView, StatusBarView, ToolbarView, SettingsWindow
-  Services/         TerminalBridge, RemoteExplorer, SessionStore, BooSocketServer, BooMCPServer,
-                    RemoteControlServer, AgentInbox, SparkleUpdater
-  Resources/        MonacoSource → MonacoBundle, RemoteControl web UI (ghostty-vt.wasm)
+  Services/         TerminalBridge, SessionStore, socket server (BooSocketServer, UnixSocket),
+                    BooMCPServer, RemoteControlServer, AgentInbox, Orchestrator*,
+                    CapabilityTokens, ProcessTree, WatchedFile, SparkleUpdater, …
+  Resources/        MonacoSource → MonacoBundle, Remote Control web UI (ghostty-vt.wasm)
 BooApp/             Executable entry point (calls BooMain.run())
 CGhostty/           C module wrapping ghostty.h
+CGhosttyVT/         C module for libghostty-vt (recording video export)
 CIronmark/          C module wrapping ironmark (Rust markdown parser)
 CObjCSafe/          Obj-C shim that catches AppKit exceptions around string drawing
-Vendor/             ghostty + ironmark submodules, patches/ (local Ghostty patches)
+Resources/          Shell integration scripts (boo.zsh, boo.bash, boo.fish)
+Vendor/             ghostty and ironmark submodules, patches/ (local Ghostty patches)
 ```
 
-Plugin code is colocated — all files for a plugin live in one directory under `Boo/Plugins/`. Tests mirror this layout under `Tests/BooTests/Plugins/`.
-
-## State Model
-
-### Global — `AppSettings` (singleton)
-
-Theme, font, layout, status bar toggles, and per-plugin settings. Changes broadcast via `NotificationCenter` (`.settingsChanged`).
-
-### Per-Tab — `TabState`
-
-Each `Pane.Tab` owns a `TabState` — the single source of truth for that tab (excerpt from `Pane.swift`):
-
-```swift
-struct TabState {
-    var contentType: ContentType = .terminal
-    var contentState: ContentState = .terminal(TerminalContentState())
-
-    var workingDirectory: String
-    var remoteSession: RemoteSessionType?
-    var remoteWorkingDirectory: String?
-    var shellPID: pid_t = 0
-    var title: String
-    var foregroundProcess: String = ""
-    var foregroundProcessPID: pid_t?
-    var foregroundProcessCategory: String?
-    var foregroundProcessMetadata: [String: String] = [:]
-    var agentSessionID: String?
-    var hasActivity: Bool = false
-    var isCommandRunning: Bool = false
-
-    // Plugin UI
-    var expandedPluginIDs: Set<String> = []
-    var userCollapsedSectionIDs: Set<String> = []
-    var sidebarSectionHeights: [String: CGFloat] = [:]
-    var sidebarScrollOffsets: [String: CGPoint] = [:]
-    var sidebarSectionOrder: [String: [String]] = [:]
-    var selectedPluginTabID: String? = nil
-}
-```
-
-### Observable — `AppStore`
-
-`AppStore.shared` projects the current `TerminalContext`, theme snapshot, and sidebar visibility for SwiftUI views. Updated at the end of each plugin cycle.
-
-### Data Flow
-
-```
-Ghostty OSC event → PaneView delegate → MainWindowController
-  → TerminalBridge (heuristics, remote detection)
-  → WindowStateCoordinator.syncBridgeToTab() → writes to TabState
-  → runPluginCycle() → TerminalContext (frozen snapshot)
-  → PluginRuntime (enrich → freeze → react) → sidebar/status bar
-```
-
-**Key components:**
-
-- **WindowStateCoordinator** — centralized state manager between bridge, tab model, and plugin registry
-- **TerminalBridge** — event parser and heuristic engine; its `BridgeState` is transient, `TabState` is authoritative
-- **MainWindowController** — delegates state management to the coordinator
+A plugin keeps all its files in one folder under `Boo/Plugins/`. Tests mirror this under `Tests/BooTests/Plugins/`.
 
 ## Hierarchy
 
 ```
-Workspace → SplitTree → Pane[] → Tab[] → TabState
+WindowManager → MainWindowController[] → Workspace[] → SplitTree → Pane[] → Tab[] → TabState
 ```
 
-Each split pane owns its own tab bar and terminal sessions.
+Each split pane has its own tab bar. Each window has its own workspaces, sidebar and plugin registry. Settings, themes and bookmarks are global.
 
-### Windows
+## State Model
 
-`WindowManager` owns every `MainWindowController`. Each window has its own workspaces, sidebar, and plugin registry; settings, themes, and bookmarks stay global. App-wide entry points (Unix socket, remote control, MCP) go through `WindowManager.dispatchCommand`, which routes a command carrying `pane_id` to the window owning that pane, otherwise to the active window.
+| Scope      | Type                     | Holds |
+| ---------- | ------------------------ | ----- |
+| Global     | `AppSettings.shared`     | Theme, font, layout, status bar, plugin settings. Posts `.settingsChanged`. |
+| Per tab    | `TabState`               | Everything about one tab (below) |
+| SwiftUI    | `AppStore.shared`        | Current `TerminalContext`, theme snapshot, sidebar visibility. Updated after each plugin cycle. |
 
-## Build
+`TabState` (in `Models/Pane.swift`) is the source of truth for a tab:
 
-```bash
-make setup         # First time: clone Ghostty + build GhosttyKit + ironmark + Boo
-make run           # Build and launch
-make test          # Run tests
-make clean-ghostty # Rebuild GhosttyKit after updating Vendor/ghostty
+- **Content**: `contentType`, `contentState`
+- **Terminal**: `workingDirectory`, `remoteSession`, `remoteWorkingDirectory`, `shellPID`, `title`
+- **Process**: `foregroundProcess` with its PID, category and metadata; `agentSessionID`
+- **Status**: `hasActivity`, `isCommandRunning`, `progress` (OSC 9;4), `isRecording`, `triggerMark`
+- **Profile**: `profile`, `profileOverride` (see [Rules and Profiles](/rules-and-profiles))
+- **Sidebar UI**: expanded plugins, collapsed sections, section heights, scroll offsets, section order, selected plugin tab
+
+When you add state, decide first: is it global (`AppSettings`) or per tab (`TabState`)?
+
+## Data Flow
+
+```
+Ghostty action → GhosttyView → PaneView delegate → MainWindowController
+  → TerminalBridge (heuristics, remote detection)
+  → WindowStateCoordinator.syncBridgeToTab() → TabState
+  → runPluginCycle(reason:) → TerminalContext (frozen snapshot)
+  → PluginRuntime (enrich → freeze → react) → sidebar and status bar
 ```
 
-Development note: `make run` produces a debug app bundle with Sparkle feed keys removed, so local builds cannot check the production update feed. Release-oriented targets (`make app`, `make zip`, `make dmg`, `make dist`) keep the Sparkle configuration and bundle `Sparkle.framework` inside `Contents/Frameworks`.
+| Component                  | Job |
+| -------------------------- | --- |
+| **WindowManager**          | Owns all windows, routes app-wide commands, saves the session |
+| **MainWindowController**   | Window lifecycle, menu actions, high-level coordination |
+| **WindowStateCoordinator** | Syncs bridge ↔ tab, saves and restores plugin state |
+| **TerminalBridge**         | Parses events, runs heuristics, detects remote sessions. Its `BridgeState` is live but transient. |
+| **SidebarController**      | Panel visibility, tab selection, heights |
+
+## Command Routing
+
+The socket, Remote Control and MCP all go through `WindowManager.dispatchCommand`:
+
+1. Agent commands (`agent_event`, `agent_inbox`, `agent_respond`, `agent_jump`, `agent_timeline`) and `wait_for_events` go to the app-wide agent services.
+2. Commands addressed by `tab_id` (`get_screen`, task commands) and `get_layout` with `scope: "app"` find their tab in any window.
+3. A command with `pane_id` goes to the window that owns the pane.
+4. Anything else goes to the active window.
+
+Before that, `dispatchGated` checks [capability tokens](/ipc-socket#capability-tokens) for sensitive commands. See [IPC Socket](/ipc-socket).
 
 ## State Contracts
 
-### Single Source of Truth
+| Data                  | Source of truth        | Saved in                           | Sync |
+| --------------------- | ---------------------- | ---------------------------------- | ---- |
+| Working directory     | BridgeState (live)     | TabState                           | On tab switch |
+| Remote session        | BridgeState (live)     | Not saved                          | Re-detected on restore from the process tree |
+| Remote CWD            | BridgeState (live)     | TabState                           | On tab switch |
+| Foreground process    | BridgeState (live)     | TabState                           | On tab switch |
+| Terminal title        | BridgeState (live)     | TabState                           | On tab switch |
+| Shell PID             | TabState               | SessionStore                       | Set once when the terminal starts |
+| Agent session ID      | TabState               | SessionStore                       | Set by plugin detection |
+| Expanded plugins      | WindowStateCoordinator | TabState                           | On tab switch |
+| Active plugin tab     | WindowStateCoordinator | TabState                           | On tab switch |
+| Section heights       | SidebarPanelView       | TabState + `AppSettings.__sidebar` | On tab switch and quit |
+| Section order         | WindowStateCoordinator | `AppSettings.__sidebar`            | On reorder and quit |
+| Scroll offsets        | SidebarPanelView       | TabState                           | On tab switch |
+| Theme                 | AppSettings            | UserDefaults + `~/.boo/settings.json` | At once |
+| Sidebar visible       | MainWindowController   | Not saved                          | Runtime only |
 
-| Data                    | Source of Truth        | Persistence             | Sync Rule                               |
-| ----------------------- | ---------------------- | ----------------------- | --------------------------------------- |
-| **Working Directory**   | BridgeState (live)     | TabState                | Sync to TabState on tab switch          |
-| **Remote Session**      | BridgeState (live)     | NOT persisted           | Re-detected on restore via process tree |
-| **Remote CWD**          | BridgeState (live)     | TabState                | Sync to TabState on tab switch          |
-| **Foreground Process**  | BridgeState (live)     | TabState                | Sync to TabState on tab switch          |
-| **Shell PID**           | TabState               | SessionStore            | Set once on terminal creation           |
-| **Terminal Title**      | BridgeState (live)     | TabState                | Sync to TabState on tab switch          |
-| **Agent Session ID**    | TabState               | SessionStore            | Updated by plugin detection             |
-| **Plugin Expanded IDs** | WindowStateCoordinator | TabState                | Sync on tab switch                      |
-| **Section Heights**     | SidebarPanelView       | TabState + AppSettings.`__sidebar` | Sync on tab switch, app quit |
-| **Section Order**       | WindowStateCoordinator | AppSettings.`__sidebar` | Sync on reorder, app quit               |
-| **Scroll Offsets**      | SidebarPanelView       | TabState                | Sync on tab switch                      |
-| **Active Plugin Tab**   | WindowStateCoordinator | TabState                | Sync on tab switch                      |
-| **Theme**               | AppSettings            | UserDefaults + file     | Immediate                               |
-| **Sidebar Visible**     | MainWindowController   | NOT persisted           | Runtime only                            |
+`SidebarPanelView` lives in `Views/DetailPanelView.swift`.
 
-### Key Invariants
+### Rules
 
-1. `BridgeState` must be synced to `TabState` via `syncBridgeToTab()` before any tab switch.
-2. Remote session is intentionally not persisted — always re-detected on restore.
-3. Plugin settings use namespace: `pluginSettings[pluginID][key]`.
-4. Changes to `AppSettings` emit `.settingsChanged` via `NotificationCenter`.
+1. Sync `BridgeState` to `TabState` with `syncBridgeToTab()` before every tab switch.
+2. Never save the remote session. It is always re-detected.
+3. Plugin settings live under `pluginSettings[pluginID][key]`.
+4. Every `AppSettings` change posts `.settingsChanged`.
 
-### Sync Points
+### Tab Switch
 
-**Tab Switch:**
+1. `syncBridgeToTab(pane:tabIndex:)` saves bridge → old tab.
+2. `savePluginState(to:tabIndex:)` saves plugin UI → old tab.
+3. `restorePluginState(from:)` restores plugin UI ← new tab.
+4. `TerminalBridge.restoreTabState` restores bridge ← new tab.
 
-1. `syncBridgeToTab(previousPane, previousTabIndex)` — save bridge → tab
-2. `savePluginState()` — save plugin UI → tab
-3. `restorePluginState(newTab)` — restore plugin UI ← tab
-4. `bridge.restoreTabState(...)` — restore bridge ← tab
-
-**App Quit:**
+### App Quit
 
 `WindowManager.saveSessionForTermination()`:
 
-1. For each window: `coordinator.saveSidebarStateToSettings()` (heights, order, and global sidebar state → `AppSettings.__sidebar`) and `prepareSessionSave()` (persist pane content, sidebar, and plugin state into the model)
-2. `SessionStore.save(snapshot)` — a version 2 `SessionSnapshot` with one `SessionWindow` per window plus `keyWindowIndex`
-
-### Controller Responsibilities
-
-| Controller                 | Responsibility                                          |
-| -------------------------- | ------------------------------------------------------- |
-| **WindowManager**          | All windows, command routing by `pane_id`, session save |
-| **MainWindowController**   | Window lifecycle, menu actions, high-level coordination |
-| **SidebarController**      | Panel visibility, tab selection, heights sync           |
-| **WindowStateCoordinator** | Bridge↔Tab sync, plugin state save/restore              |
-| **TerminalBridge**         | Event parsing, heuristics, remote detection             |
+1. For each window, `saveSidebarStateToSettings()` writes heights, order and global sidebar state to `AppSettings.__sidebar`. `prepareSessionSave()` writes pane content, sidebar and plugin state into the model.
+2. `SessionStore` saves one `SessionSnapshot` with a `SessionWindow` per window and the `keyWindowIndex`.
