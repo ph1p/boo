@@ -33,6 +33,7 @@ final class TmuxControlClientTests: XCTestCase {
         }
         func tmuxRenameWorkspace(_ workspace: UUID, name: String) { renamed.append((workspace, name)) }
         func tmuxCloseWorkspace(_ workspace: UUID) { closed.append(workspace) }
+        func tmuxShowWorkspace(_ workspace: UUID) {}
     }
 
     private var gateway: FakeGateway!
@@ -91,8 +92,8 @@ final class TmuxControlClientTests: XCTestCase {
             XCTAssertTrue(program.contains("--tmux-bridge"), program)
         }
         // Each pane captures its screen before going live.
-        XCTAssertTrue(gateway.commands.contains("capture-pane -p -e -q -J -t %0 -S -1000"))
-        XCTAssertTrue(gateway.commands.contains("capture-pane -p -e -q -J -t %2 -S -1000"))
+        XCTAssertTrue(gateway.commands.contains("capture-pane -p -e -C -q -J -t %0 -S -1000"))
+        XCTAssertTrue(gateway.commands.contains("capture-pane -p -e -C -q -J -t %2 -S -1000"))
         XCTAssertTrue(TmuxControlClient.owning(workspace: first.id) === client)
     }
 

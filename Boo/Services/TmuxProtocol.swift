@@ -72,7 +72,8 @@ enum TmuxProtocol {
         return .output(pane: pane, data: unescape(data))
     }
 
-    /// tmux writes bytes below space and backslash as `\ooo`.
+    /// tmux writes bytes below space and backslash as `\ooo`; `capture-pane -C`
+    /// also writes backslash as `\\`.
     static func unescape<C: Collection>(_ bytes: C) -> [UInt8] where C.Element == UInt8 {
         bytes.withContiguousStorageIfAvailable(unescape) ?? Array(bytes).withUnsafeBufferPointer(unescape)
     }
@@ -82,18 +83,66 @@ enum TmuxProtocol {
         out.reserveCapacity(src.count)
         var i = 0
         while i < src.count {
-            if src[i] == UInt8(ascii: "\\"), i + 3 < src.count {
-                let digits = src[(i + 1)...(i + 3)]
-                if digits.allSatisfy({ (0x30...0x37).contains($0) }) {
-                    out.append(digits.reduce(0) { $0 &* 8 &+ ($1 - 0x30) })
-                    i += 4
+            if src[i] == UInt8(ascii: "\\"), i + 1 < src.count {
+                if src[i + 1] == UInt8(ascii: "\\") {
+                    out.append(src[i])
+                    i += 2
                     continue
+                }
+                if i + 3 < src.count {
+                    let digits = src[(i + 1)...(i + 3)]
+                    if digits.allSatisfy({ (0x30...0x37).contains($0) }) {
+                        out.append(digits.reduce(0) { $0 &* 8 &+ ($1 - 0x30) })
+                        i += 4
+                        continue
+                    }
                 }
             }
             out.append(src[i])
             i += 1
         }
         return out
+    }
+
+    /// Drops screen's window-name sequence (`ESC k name ESC \`), which tmux
+    /// passes through in `%output` but Ghostty would print as text. Keeps
+    /// state, as a sequence can span several `%output` lines.
+    struct NameSequenceFilter {
+        private enum State { case text, escape, name, nameEscape }
+        private var state = State.text
+
+        mutating func filter(_ bytes: [UInt8]) -> [UInt8] {
+            if state == .text, !bytes.contains(0x1B) { return bytes }
+            var out: [UInt8] = []
+            out.reserveCapacity(bytes.count)
+            for byte in bytes {
+                switch (state, byte) {
+                case (.text, 0x1B):
+                    state = .escape
+                case (.text, _):
+                    out.append(byte)
+                case (.escape, UInt8(ascii: "k")):
+                    state = .name
+                case (.escape, 0x1B):
+                    out.append(0x1B)
+                case (.escape, _):
+                    state = .text
+                    out.append(0x1B)
+                    out.append(byte)
+                case (.name, 0x1B):
+                    state = .nameEscape
+                case (.name, _):
+                    break
+                case (.nameEscape, UInt8(ascii: "\\")):
+                    state = .text
+                case (.nameEscape, 0x1B):
+                    break
+                case (.nameEscape, _):
+                    state = .name
+                }
+            }
+            return out
+        }
     }
 
     // MARK: - Layout

@@ -21,6 +21,7 @@ protocol TmuxHost: AnyObject {
     func tmuxApplyLayout(workspace: UUID, tree: SplitTree, programs: [UUID: String])
     func tmuxRenameWorkspace(_ workspace: UUID, name: String)
     func tmuxCloseWorkspace(_ workspace: UUID)
+    func tmuxShowWorkspace(_ workspace: UUID)
 }
 
 /// Drives one tmux control-mode connection (`tmux -CC`). Each tmux window
@@ -44,6 +45,7 @@ final class TmuxControlClient {
         var phase = Phase.capturing
         var screen: [[UInt8]] = []
         var held: [UInt8] = []
+        var names = TmuxProtocol.NameSequenceFilter()
         var connected = false
         /// Output waiting for the bridge to connect.
         var pending: [UInt8] = []
@@ -64,6 +66,7 @@ final class TmuxControlClient {
     private struct WindowLink {
         let workspace: UUID
         var tree: SplitTree
+        var name: String
     }
 
     private struct Block {
@@ -131,6 +134,19 @@ final class TmuxControlClient {
         live.lazy.compactMap(\.client).first { $0.windows.values.contains { $0.workspace == workspace } }
     }
 
+    /// The attached session's name, once tmux reported it.
+    private(set) var session: String?
+    /// Called once per run loop turn in which the session or its windows changed.
+    var onChange: (() -> Void)?
+    private var changePending = false
+
+    /// This session's windows in tmux order, with the workspace showing each.
+    var windowList: [(workspace: UUID, name: String)] {
+        windows.sorted { Self.order($0.key) < Self.order($1.key) }.map { ($0.value.workspace, $0.value.name) }
+    }
+
+    private static func order(_ window: String) -> Int { Int(window.dropFirst()) ?? .max }
+
     // MARK: - Gateway input
 
     func receive(_ raw: [UInt8]) {
@@ -179,12 +195,17 @@ final class TmuxControlClient {
         case .windowClose(let window):
             close(window: window)
         case .windowRenamed(let window, let name):
-            if let link = windows[window] { host?.tmuxRenameWorkspace(link.workspace, name: Self.title(name)) }
-        case .sessionChanged:
+            guard let workspace = windows[window]?.workspace else { return }
+            windows[window]?.name = name
+            host?.tmuxRenameWorkspace(workspace, name: Self.title(name))
+            changed()
+        case .sessionChanged(_, let name):
             if started {
                 for window in Array(windows.keys) { close(window: window) }
             }
+            session = name
             start()
+            changed()
         case .exit, .end, .error, .other:
             break
         }
@@ -224,6 +245,10 @@ final class TmuxControlClient {
 
     func newWindow() {
         send("new-window")
+    }
+
+    func show(workspace: UUID) {
+        host?.tmuxShowWorkspace(workspace)
     }
 
     // MARK: - Commands
@@ -276,8 +301,9 @@ final class TmuxControlClient {
             for pane in panes.values where pane.window == info.id { drop(pane) }
             return
         }
-        windows[info.id] = WindowLink(workspace: workspace, tree: tree)
+        windows[info.id] = WindowLink(workspace: workspace, tree: tree, name: info.name)
         noteSizes(layout)
+        changed()
     }
 
     private func apply(layout text: String, window: String) {
@@ -295,6 +321,18 @@ final class TmuxControlClient {
     private func close(window: String) {
         guard let link = windows.removeValue(forKey: window) else { return }
         closePanes(where: { $0.window == window }) { host?.tmuxCloseWorkspace(link.workspace) }
+        changed()
+    }
+
+    /// Coalesces the windows opened or closed in one batch into one `onChange`.
+    private func changed() {
+        guard !changePending else { return }
+        changePending = true
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.changePending = false
+            self.onChange?()
+        }
     }
 
     /// Links the layout's panes Boo doesn't show yet; returns each new pane's program.
@@ -338,10 +376,11 @@ final class TmuxControlClient {
         let registration = bridges.register { [weak self] event in self?.bridge(event, pane: tmuxID) }
         let pane = PaneLink(id: id, tmuxID: tmuxID, window: window, token: registration.token)
         panes[tmuxID] = pane
-        send("capture-pane -p -e -q -J -t \(tmuxID) -S -1000") { [weak self, weak pane] reply in
+        // -C octal-escapes ESC: a raw ESC in the reply would end the control mode DCS.
+        send("capture-pane -p -e -C -q -J -t \(tmuxID) -S -1000") { [weak self, weak pane] reply in
             guard let self, let pane else { return }
             pane.phase = .awaitingCursor
-            pane.screen = reply.isError ? [] : reply.lines
+            pane.screen = reply.isError ? [] : reply.lines.map { TmuxProtocol.unescape($0) }
             self.send("display -p -t \(tmuxID) \"#{cursor_x} #{cursor_y}\"") { [weak self, weak pane] reply in
                 guard let self, let pane, case .awaitingCursor = pane.phase else { return }
                 pane.phase = .live
@@ -362,6 +401,7 @@ final class TmuxControlClient {
 
     private func output(_ data: [UInt8], to tmuxID: String) {
         guard let pane = panes[tmuxID] else { return }
+        let data = pane.names.filter(data)
         switch pane.phase {
         case .capturing:
             break

@@ -45,7 +45,8 @@ final class TmuxBridgeServer: @unchecked Sendable {
         }
         let exe = Bundle.main.executablePath ?? CommandLine.arguments[0]
         let quote = LinkResolver.shellQuote
-        return (token, "exec \(quote(exe)) --tmux-bridge \(quote(socketPath)) \(token)")
+        // Ghostty already runs the command as `exec -l <command>`.
+        return (token, "\(quote(exe)) --tmux-bridge \(quote(socketPath)) \(token)")
     }
 
     /// Forgets `token` and closes its bridge, which then exits.

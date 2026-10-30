@@ -103,6 +103,7 @@ import Cocoa
     /// Catches `tmux -CC` control mode; the client below drives it while it lasts.
     let tmuxTap = TmuxGatewayTap()
     private(set) var tmuxControl: TmuxControlClient?
+    private var tmuxOverlay: TmuxGatewayOverlay?
     /// Typed text must not reach the shell: input is locked, or tmux control
     /// mode reads its commands from this terminal.
     private var blocksInput: Bool { isInputLocked || tmuxControl != nil }
@@ -1643,7 +1644,9 @@ extension GhosttyView: TmuxGateway {
                     booLog(.warning, .app, "[tmux] control mode started without a window to show it")
                     continue
                 }
-                tmuxControl = TmuxControlClient(gateway: self, host: controller)
+                let tmux = TmuxControlClient(gateway: self, host: controller)
+                tmuxControl = tmux
+                showTmuxOverlay(for: tmux)
             case .exit:
                 endTmuxControl()
             case .line:
@@ -1656,6 +1659,24 @@ extension GhosttyView: TmuxGateway {
     private func endTmuxControl() {
         tmuxControl?.gatewayExited()
         tmuxControl = nil
+        tmuxOverlay?.removeFromSuperview()
+        tmuxOverlay = nil
+    }
+
+    private func showTmuxOverlay(for tmux: TmuxControlClient) {
+        guard tmuxOverlay == nil else { return }
+        let overlay = TmuxGatewayOverlay()
+        overlay.frame = bounds
+        overlay.autoresizingMask = [.width, .height]
+        overlay.onDetach = { [weak tmux] in tmux?.detach() }
+        overlay.onNewWindow = { [weak tmux] in tmux?.newWindow() }
+        overlay.onShowWindow = { [weak tmux] workspace in tmux?.show(workspace: workspace) }
+        tmux.onChange = { [weak overlay, weak tmux] in
+            guard let tmux else { return }
+            overlay?.update(session: tmux.session, windows: tmux.windowList)
+        }
+        addSubview(overlay)
+        tmuxOverlay = overlay
     }
 }
 

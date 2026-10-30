@@ -31,6 +31,19 @@ final class TmuxProtocolTests: XCTestCase {
         XCTAssertEqual(line(#"%extended-output %4 120 : x\033"#), .output(pane: "%4", data: [0x78, 0x1B]))
         // A backslash not followed by three octal digits stays as is.
         XCTAssertEqual(P.unescape(Array(#"a\9b\01"#.utf8)), Array(#"a\9b\01"#.utf8))
+        // capture-pane -C doubles backslashes.
+        XCTAssertEqual(P.unescape(Array(#"\033[31mred\\x\\033"#.utf8)), Array("\u{1b}[31mred\\x\\033".utf8))
+    }
+
+    func testNameSequenceIsDropped() {
+        var filter = P.NameSequenceFilter()
+        XCTAssertEqual(filter.filter(Array("a\u{1b}kvim\u{1b}\\b\u{1b}[1mc".utf8)), Array("ab\u{1b}[1mc".utf8))
+        // Split across output chunks.
+        XCTAssertEqual(filter.filter(Array("x\u{1b}".utf8)), Array("x".utf8))
+        XCTAssertEqual(filter.filter(Array("kna".utf8)), [])
+        XCTAssertEqual(filter.filter(Array("me\u{1b}".utf8)), [])
+        XCTAssertEqual(filter.filter(Array("\\y\u{1b}".utf8)), Array("y".utf8))
+        XCTAssertEqual(filter.filter(Array("]0;t\u{7}".utf8)), Array("\u{1b}]0;t\u{7}".utf8))
     }
 
     func testParsesLayouts() {

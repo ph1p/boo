@@ -56,6 +56,11 @@ extension MainWindowController: TmuxHost {
         forceCloseWorkspace(at: index)
     }
 
+    func tmuxShowWorkspace(_ id: UUID) {
+        guard let index = appState.workspaces.firstIndex(where: { $0.id == id }) else { return }
+        activateWorkspace(index)
+    }
+
     /// One single-tab pane per leaf, each running its bridge program.
     private func tmuxPanes(_ programs: [UUID: String], folder: String) -> [Pane] {
         programs.map { paneID, program in
