@@ -11,12 +11,12 @@
   "dependencies": {
     "react": "latest",
     "react-dom": "latest",
-    "vocs": "^2.10.3"
+    "vocs": "^2.12.0"
   },
   "devDependencies": {
     "@types/react": "latest",
     "typescript": "^7.0.2",
-    "vite": "^8.3.4",
-    "waku": "1.0.0-rc.3"
+    "vite": "^8.3.5",
+    "waku": "1.0.0-rc.4"
   }
 }
