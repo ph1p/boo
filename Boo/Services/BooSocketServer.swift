@@ -182,47 +182,7 @@ final class BooSocketServer: @unchecked Sendable {
 
     func start() {
         queue.async { [self] in
-            unlink(socketPath)
-
-            let serverFD = socket(AF_UNIX, SOCK_STREAM, 0)
-            guard serverFD >= 0 else {
-                booLog(.error, .socket, "Failed to create socket: \(errno)")
-                return
-            }
-
-            // Set non-blocking to avoid hangs on accept
-            var flags = fcntl(serverFD, F_GETFL)
-            flags |= O_NONBLOCK
-            _ = fcntl(serverFD, F_SETFL, flags)
-
-            var addr = sockaddr_un()
-            addr.sun_family = sa_family_t(AF_UNIX)
-            socketPath.withCString { ptr in
-                withUnsafeMutablePointer(to: &addr.sun_path) { sunPath in
-                    _ = sunPath.withMemoryRebound(to: CChar.self, capacity: 104) { dest in
-                        strlcpy(dest, ptr, 104)
-                    }
-                }
-            }
-
-            let bindResult = withUnsafePointer(to: &addr) { ptr in
-                ptr.withMemoryRebound(to: sockaddr.self, capacity: 1) { sockPtr in
-                    bind(serverFD, sockPtr, socklen_t(MemoryLayout<sockaddr_un>.size))
-                }
-            }
-            guard bindResult == 0 else {
-                booLog(.error, .socket, "bind failed: \(errno)")
-                close(serverFD)
-                return
-            }
-
-            chmod(socketPath, 0o600)
-
-            guard listen(serverFD, 8) == 0 else {
-                booLog(.error, .socket, "listen failed: \(errno)")
-                close(serverFD)
-                return
-            }
+            guard let serverFD = UnixSocket.listen(path: socketPath, backlog: 8, label: "BooSocket") else { return }
 
             booLog(.info, .socket, "Listening on \(socketPath)")
 
@@ -505,10 +465,7 @@ extension BooSocketServer: SocketServerCore.Delegate {
 
     /// Only same-user processes may drive the terminal.
     func socketServerShouldAccept(fd: Int32) -> Bool {
-        var cred = xucred()
-        var credLen = socklen_t(MemoryLayout<xucred>.size)
-        guard getsockopt(fd, SOL_LOCAL, LOCAL_PEERCRED, &cred, &credLen) == 0 else { return false }
-        return cred.cr_uid == getuid()
+        UnixSocket.peerIsSameUser(fd: fd)
     }
 
     /// Newline-delimited JSON: consume one line per call. Bad JSON gets an error
