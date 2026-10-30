@@ -256,4 +256,10 @@ final class AgentTimelineTests: XCTestCase {
         AgentInbox.shared.timeline([:]) { reply = $0 }
         XCTAssertEqual(reply?["ok"] as? Bool, false, "missing ids are refused without a transcript read")
     }
+
+    func testCompactDuration() {
+        XCTAssertEqual(DurationFormat.compact(42), "42s")
+        XCTAssertEqual(DurationFormat.compact(125), "2m 5s")
+        XCTAssertEqual(DurationFormat.compact(3720), "1h 2m")
+    }
 }

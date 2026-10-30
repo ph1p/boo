@@ -75,14 +75,8 @@ final class RemoteControlServer: @unchecked Sendable {
 
     /// URL reachable from other devices on the LAN (falls back to localhost).
     var accessURL: String {
-        "\(linkWithoutToken)#\(token)"
-    }
-
-    /// `accessURL` minus the token, for links handed to third parties (phone
-    /// push). The page reuses the token it stored on the last visit.
-    var linkWithoutToken: String {
         let host = Self.lanIPAddress() ?? "127.0.0.1"
-        return "http://\(host):\(port)/"
+        return "http://\(host):\(port)/#\(token)"
     }
 
     private init() {}

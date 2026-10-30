@@ -383,8 +383,6 @@ final class AppSettings {
         static let notifyMinCommandSeconds = "notifyMinCommandSeconds"
         static let notificationGroupBursts = "notificationGroupBursts"
         static let notificationExpiryMinutes = "notificationExpiryMinutes"
-        static let phonePushURL = "phonePushURL"
-        static let phonePushMinCommandSeconds = "phonePushMinCommandSeconds"
 
         static let remoteControlPort = "remoteControlPort"
         static let secureKeyboardEntry = "secureKeyboardEntry"
@@ -1265,19 +1263,6 @@ final class AppSettings {
     var notificationExpiryMinutes: Int {
         get { UserDefaults.standard.object(forKey: K.notificationExpiryMinutes) as? Int ?? 15 }
         set { set(newValue, forKey: K.notificationExpiryMinutes, topic: .notifications) }
-    }
-
-    /// ntfy-style URL that receives "Push to phone" notices. Empty = off.
-    /// Not synced: the topic in it is the only thing guarding the channel.
-    var phonePushURL: String {
-        get { UserDefaults.standard.string(forKey: K.phonePushURL) ?? "" }
-        set { set(newValue.trimmingCharacters(in: .whitespaces), forKey: K.phonePushURL, topic: .notifications) }
-    }
-
-    /// A finished command pushes to the phone only when it ran at least this long.
-    var phonePushMinCommandSeconds: Int {
-        get { UserDefaults.standard.object(forKey: K.phonePushMinCommandSeconds) as? Int ?? 60 }
-        set { set(newValue, forKey: K.phonePushMinCommandSeconds, topic: .notifications) }
     }
 
     // MARK: - Remote Control

@@ -233,4 +233,10 @@ final class RemoteExplorerTests: XCTestCase {
         let session = RemoteSessionType.ssh(host: "fileserv.local")
         XCTAssertEqual(session.sshConnectionTarget, "fileserv.local")
     }
+
+    func testSSHDestinationSkipsOptionsAndTheirValues() {
+        XCTAssertEqual(RemoteExplorer.sshDestination(in: "ssh -p 2222 -A deploy@web1"), "deploy@web1")
+        XCTAssertEqual(RemoteExplorer.sshDestination(in: "ssh -i ~/.ssh/key host"), "host")
+        XCTAssertNil(RemoteExplorer.sshDestination(in: "ssh -v"))
+    }
 }

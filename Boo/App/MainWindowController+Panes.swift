@@ -203,7 +203,6 @@ extension MainWindowController: PaneViewDelegate {
                 workspaceID: workspace.id, paneID: pane.id)
             {
                 CommandLog.shared.publish(finished)
-                PhonePush.shared.commandFinished(finished, workspaceName: workspace.displayName)
                 duration = finished.duration
             }
         }

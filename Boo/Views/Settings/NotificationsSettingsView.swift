@@ -10,13 +10,9 @@ struct NotificationsSettingsView: View {
     @State private var minCommandSeconds = AppSettings.shared.notifyMinCommandSeconds
     @State private var groupBursts = AppSettings.shared.notificationGroupBursts
     @State private var expiryMinutes = AppSettings.shared.notificationExpiryMinutes
-    @State private var pushURL = AppSettings.shared.phonePushURL
-    @State private var pushMinCommandSeconds = AppSettings.shared.phonePushMinCommandSeconds
-    @State private var pushTestResult: Bool?
 
     private static let minCommandChoices = [0, 5, 10, 30, 60]
     private static let expiryChoices = [0, 5, 15, 60]
-    private static let pushMinCommandChoices = [0, 30, 60, 300, 900]
     @ObservedObject private var observer = SettingsObserver(topics: [.notifications])
 
     var body: some View {
@@ -115,86 +111,12 @@ struct NotificationsSettingsView: View {
                     permissionRow
                 }
             }
-
-            pushSection
         }
         .task { await refreshAuthStatus() }
         .onReceive(
             NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
         ) { _ in
             Task { await refreshAuthStatus() }
-        }
-    }
-
-    private var pushSection: some View {
-        let t = tokens
-        return Section(title: "Push to phone") {
-            SettingRow(
-                label: "Push URL",
-                help:
-                    "An ntfy topic URL, such as https://ntfy.sh/<long-random-topic>. Anyone who knows the topic can read it. Empty turns push off."
-            ) {
-                TextField(
-                    "https://ntfy.sh/…",
-                    text: Binding(
-                        get: { pushURL },
-                        set: {
-                            pushURL = $0
-                            pushTestResult = nil
-                            AppSettings.shared.phonePushURL = $0
-                        }
-                    )
-                )
-                .themedTextField()
-                .frame(width: 260)
-            }
-
-            if PhonePush.endpoint(pushURL) != nil {
-                SettingRow(
-                    label: "Long commands",
-                    help: "Push when a command ran at least this long. SSH drops and waiting agents always push."
-                ) {
-                    Picker(
-                        "",
-                        selection: Binding(
-                            get: { pushMinCommandSeconds },
-                            set: {
-                                pushMinCommandSeconds = $0
-                                AppSettings.shared.phonePushMinCommandSeconds = $0
-                            }
-                        )
-                    ) {
-                        ForEach(Self.pushMinCommandChoices, id: \.self) { seconds in
-                            Text(seconds == 0 ? "Never" : seconds < 60 ? "\(seconds) seconds" : "\(seconds / 60) min")
-                                .tag(seconds)
-                        }
-                    }
-                    .labelsHidden()
-                    .fixedSize()
-                }
-
-                HStack(spacing: 8) {
-                    Button("Send Test") {
-                        PhonePush.shared.sendTest { pushTestResult = $0 }
-                    }
-                    .buttonStyle(.themed)
-                    if let ok = pushTestResult {
-                        Image(systemName: ok ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
-                            .foregroundStyle(ok ? t.success : t.warning)
-                            .font(.system(size: 12))
-                        Text(ok ? "Sent." : "Failed. Check the URL.")
-                            .font(.system(size: 11))
-                            .foregroundStyle(t.muted)
-                    }
-                }
-            }
-
-            Text(
-                "Sent: the event, the workspace name, and the agent name or SSH host. Never terminal output, commands or tab titles. Pushes stop while you are using Boo, and repeat at most every 10 seconds per kind."
-            )
-            .font(.system(size: 11))
-            .foregroundStyle(t.muted)
-            .fixedSize(horizontal: false, vertical: true)
         }
     }
 
