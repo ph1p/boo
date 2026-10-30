@@ -19,3 +19,4 @@ Boo/Resources/MonacoSource/node_modules
 .DS_Store
 .swiftpm
 .pnpm-store
+/docs/
