@@ -48,7 +48,7 @@ struct CopyMode {
         var result: [String] = []
         for character in line where character != "\n" && character != "\r" {
             result.append(String(character))
-            if QuickSelect.isWide(character) { result.append("") }
+            if LinkResolver.isWide(character) { result.append("") }
         }
         return result
     }

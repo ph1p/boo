@@ -905,14 +905,12 @@ import Cocoa
 
     private var quickSelectOverlay: QuickSelectOverlay?
 
-    var isQuickSelecting: Bool { quickSelectOverlay != nil }
-
     /// Label the matches on screen; the next keys pick one. Beeps when
     /// there is nothing to pick.
     func startQuickSelect() {
-        guard quickSelectOverlay == nil, let size = gridSize, size.cell_width_px > 0, let cellHeight else { return }
-        let scale = window?.backingScaleFactor ?? layer?.contentsScale ?? 2
-        let lines = (0..<Int(size.rows)).map { viewportLine($0) ?? "" }
+        guard quickSelectOverlay == nil, let rows = gridSize?.rows, let cellWidth, let cellHeight else { return }
+        endCopyMode()
+        let lines = (0..<Int(rows)).map { viewportLine($0) ?? "" }
         let matches = QuickSelect.matches(in: lines)
         guard !matches.isEmpty else {
             NSSound.beep()
@@ -920,7 +918,7 @@ import Cocoa
         }
         let overlay = QuickSelectOverlay(
             frame: bounds, matches: matches,
-            cellSize: CGSize(width: CGFloat(size.cell_width_px) / scale, height: cellHeight),
+            cellSize: CGSize(width: cellWidth, height: cellHeight),
             onPick: { [weak self] text, insert in
                 guard let self else { return }
                 self.endQuickSelect()
@@ -948,16 +946,11 @@ import Cocoa
     /// Viewport top when copy mode started, restored when it ends.
     private var copyModeReturnRow: Int?
 
-    var isInCopyMode: Bool { copyModeOverlay != nil }
-
     /// A keyboard cursor over the scrollback; starts on the shell cursor
     /// when the view is at the bottom, else mid-viewport.
     func startCopyMode() {
-        guard copyModeOverlay == nil, let surface, let size = gridSize, size.cell_width_px > 0, let cellHeight
-        else { return }
+        guard copyModeOverlay == nil, let surface, let size = gridSize, let cellWidth, let cellHeight else { return }
         endQuickSelect()
-        let scale = window?.backingScaleFactor ?? layer?.contentsScale ?? 2
-        let cellWidth = CGFloat(size.cell_width_px) / scale
         let rows = Int(size.rows)
         let bar = scrollbar ?? GhosttyScrollbar(total: rows, offset: 0, len: rows)
 
@@ -1013,13 +1006,18 @@ import Cocoa
     }
 
     private func readScreenText(from start: CopyMode.Point, to end: CopyMode.Point) -> String? {
+        readText(GHOSTTY_POINT_SCREEN, from: start, to: end)
+    }
+
+    /// Text between two exact grid points in the given coordinate space.
+    private func readText(_ tag: ghostty_point_tag_e, from start: CopyMode.Point, to end: CopyMode.Point) -> String? {
         guard let surface else { return nil }
         let selection = ghostty_selection_s(
             top_left: ghostty_point_s(
-                tag: GHOSTTY_POINT_SCREEN, coord: GHOSTTY_POINT_COORD_EXACT,
+                tag: tag, coord: GHOSTTY_POINT_COORD_EXACT,
                 x: UInt32(max(0, start.column)), y: UInt32(max(0, start.row))),
             bottom_right: ghostty_point_s(
-                tag: GHOSTTY_POINT_SCREEN, coord: GHOSTTY_POINT_COORD_EXACT,
+                tag: tag, coord: GHOSTTY_POINT_COORD_EXACT,
                 x: UInt32(max(0, end.column)), y: UInt32(max(0, end.row))),
             rectangle: false)
         var text = ghostty_text_s()
@@ -1197,6 +1195,13 @@ import Cocoa
         return CGFloat(size.cell_height_px) / scale
     }
 
+    /// Width of one grid column in points.
+    var cellWidth: CGFloat? {
+        guard let size = gridSize, size.cell_width_px > 0 else { return nil }
+        let scale = window?.backingScaleFactor ?? layer?.contentsScale ?? 2
+        return CGFloat(size.cell_width_px) / scale
+    }
+
     /// Viewport row under a point in this view's coordinates.
     func viewportRow(at point: NSPoint) -> Int? {
         guard let cellHeight, let rows = gridSize?.rows else { return nil }
@@ -1208,27 +1213,19 @@ import Cocoa
 
     /// Viewport column under a point in this view's coordinates.
     func viewportColumn(at point: NSPoint) -> Int? {
-        guard let size = gridSize, size.cell_width_px > 0 else { return nil }
-        let scale = window?.backingScaleFactor ?? layer?.contentsScale ?? 2
+        guard let cellWidth, let columns = gridSize?.columns else { return nil }
         let x = point.x - Self.gridPadding
         guard x >= 0 else { return nil }
-        let column = Int(x / (CGFloat(size.cell_width_px) / scale))
-        return column < Int(size.columns) ? column : nil
+        let column = Int(x / cellWidth)
+        return column < Int(columns) ? column : nil
     }
 
     /// The text of one viewport row.
     func viewportLine(_ row: Int) -> String? {
-        guard let surface, let columns = gridSize?.columns, columns > 0 else { return nil }
-        let selection = ghostty_selection_s(
-            top_left: ghostty_point_s(
-                tag: GHOSTTY_POINT_VIEWPORT, coord: GHOSTTY_POINT_COORD_EXACT, x: 0, y: UInt32(row)),
-            bottom_right: ghostty_point_s(
-                tag: GHOSTTY_POINT_VIEWPORT, coord: GHOSTTY_POINT_COORD_EXACT, x: UInt32(columns - 1), y: UInt32(row)),
-            rectangle: false)
-        var text = ghostty_text_s()
-        guard ghostty_surface_read_text(surface, selection, &text) else { return nil }
-        defer { ghostty_surface_free_text(surface, &text) }
-        return string(from: text)
+        guard let columns = gridSize?.columns, columns > 0 else { return nil }
+        return readText(
+            GHOSTTY_POINT_VIEWPORT, from: CopyMode.Point(row: row, column: 0),
+            to: CopyMode.Point(row: row, column: Int(columns) - 1))
     }
 
     /// The link or file reference under a point, if any.
