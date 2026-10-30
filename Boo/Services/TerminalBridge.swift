@@ -227,6 +227,7 @@ final class TerminalBridge: @unchecked Sendable {
         let previousRemote = state.remoteSession
         state.paneID = paneID
         state.tabID = tabID
+        ContainerCwdWatcher.setFocusedTab(tabID)
         if !workingDirectory.isEmpty {
             state.workingDirectory = workingDirectory
         }

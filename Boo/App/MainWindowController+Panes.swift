@@ -138,6 +138,7 @@ extension MainWindowController: PaneViewDelegate {
     }
 
     func paneView(_ paneView: PaneView, commandStarted command: String, paneID: UUID, tabID: UUID?) {
+        bridge.monitor.nudge()
         if let workspace = appState.workspaceContainingPane(paneID),
             let pane = workspace.pane(for: paneID)
         {
@@ -160,6 +161,7 @@ extension MainWindowController: PaneViewDelegate {
     }
 
     func paneView(_ paneView: PaneView, commandEnded exitCode: Int32, paneID: UUID, tabID: UUID?) {
+        bridge.monitor.nudge()
         guard let workspace = appState.workspaceContainingPane(paneID) else {
             booLog(
                 .debug, .terminal,

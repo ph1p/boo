@@ -4,7 +4,8 @@ import Foundation
 ///
 /// Strategy:
 /// 1. One hidden `docker exec sh` per container target (not per tab).
-/// 2. Every second, reads all PTY PIDs and their CWDs.
+/// 2. On each tick, reads all PTY PIDs and their CWDs: every second while
+///    the focused tab is one of its tabs, every 5 seconds otherwise.
 /// 3. Maintains a PID→CWD map and detects changes.
 /// 4. Tabs register/unregister and get assigned to specific PIDs.
 /// 5. When a tab registers, it gets the newest unassigned PID.
@@ -37,6 +38,21 @@ final class ContainerCwdWatcher: @unchecked Sendable {
         }
     }
 
+    /// The tab the user last focused in any window (`TerminalBridge.restoreTabState`).
+    private nonisolated(unsafe) static var focusedTab: UUID?
+
+    static let focusedInterval: TimeInterval = 1
+    static let backgroundInterval: TimeInterval = 5
+
+    static func setFocusedTab(_ tabID: UUID?) {
+        lock.withLock { focusedTab = tabID }
+    }
+
+    static func tickInterval(registeredTabs: some Sequence<UUID>, focused: UUID?) -> TimeInterval {
+        guard let focused, registeredTabs.contains(focused) else { return backgroundInterval }
+        return focusedInterval
+    }
+
     let session: RemoteSessionType
     /// Guards `process` and `stopped` — start() writes them from the caller's
     /// thread, the reader launches on readerQueue, stop() may run from
@@ -46,6 +62,10 @@ final class ContainerCwdWatcher: @unchecked Sendable {
     private var stopped = false
     private let watcherQueue = DispatchQueue(label: "com.boo.cwd-watcher", qos: .utility)
     private let readerQueue = DispatchQueue(label: "com.boo.cwd-reader", qos: .utility)
+    /// Each newline written here makes the script scan once. Access on watcherQueue.
+    private var tickPipe: Pipe?
+    private var tickTimer: DispatchSourceTimer?
+    private var tickInterval: TimeInterval = 0
 
     /// Tab registrations: paneID → (assignedPID, callback).
     /// Access only on watcherQueue.
@@ -103,9 +123,10 @@ final class ContainerCwdWatcher: @unchecked Sendable {
         }
     }
 
-    /// The watch script: list all PTY PIDs and their CWDs, one per line, every second.
+    /// The watch script: per line on stdin, list all PTY PIDs and their CWDs,
+    /// one per line. The host paces it, so no in-container sleep.
     private static let watchScript = """
-        while true; do
+        while read _; do
             for p in /proc/[0-9]*; do
                 pid=${p##*/}
                 [ "$pid" = 1 ] || [ "$pid" = $$ ] && continue
@@ -116,7 +137,6 @@ final class ContainerCwdWatcher: @unchecked Sendable {
                 ;; esac
             done
             echo "---"
-            sleep 1
         done
         """
 
@@ -131,11 +151,14 @@ final class ContainerCwdWatcher: @unchecked Sendable {
 
         let proc = Process()
         let stdout = Pipe()
+        let stdin = Pipe()
+        // A tick after the container went away must fail with EPIPE, not kill Boo.
+        _ = fcntl(stdin.fileHandleForWriting.fileDescriptor, F_SETNOSIGPIPE, 1)
         proc.executableURL = URL(fileURLWithPath: binary)
-        proc.arguments = ["exec", target, "sh", "-c", Self.watchScript]
+        proc.arguments = ["exec", "-i", target, "sh", "-c", Self.watchScript]
         proc.standardOutput = stdout
         proc.standardError = FileHandle.nullDevice
-        proc.standardInput = FileHandle.nullDevice
+        proc.standardInput = stdin
         processLock.lock()
         self.process = proc
         processLock.unlock()
@@ -161,6 +184,7 @@ final class ContainerCwdWatcher: @unchecked Sendable {
                     return
                 }
                 self.processLock.unlock()
+                self.watcherQueue.async { self.startTicking(stdin) }
             } else {
                 return
             }
@@ -201,6 +225,46 @@ final class ContainerCwdWatcher: @unchecked Sendable {
             remoteLog("[CwdWatcher] process exited")
         }
     }
+
+    /// Called on watcherQueue once the process runs.
+    private func startTicking(_ pipe: Pipe) {
+        guard !isStopped else { return }
+        tickPipe = pipe
+        tick()
+    }
+
+    /// Asks the script for one scan, then re-paces the timer for the current focus.
+    private func tick() {
+        guard let fd = tickPipe?.fileHandleForWriting.fileDescriptor else { return }
+        var newline = UInt8(ascii: "\n")
+        if write(fd, &newline, 1) < 0 && errno == EPIPE {
+            stopTicking()
+            return
+        }
+        let interval = Self.tickInterval(
+            registeredTabs: tabCallbacks.keys, focused: Self.lock.withLock { Self.focusedTab })
+        guard interval != tickInterval else { return }
+        tickInterval = interval
+        if tickTimer == nil {
+            let timer = DispatchSource.makeTimerSource(queue: watcherQueue)
+            timer.setEventHandler { [weak self] in self?.tick() }
+            timer.schedule(deadline: .now() + interval, repeating: interval)
+            timer.resume()
+            tickTimer = timer
+        } else {
+            tickTimer?.schedule(deadline: .now() + interval, repeating: interval)
+        }
+    }
+
+    private func stopTicking() {
+        tickTimer?.cancel()
+        tickTimer = nil
+        tickInterval = 0
+        try? tickPipe?.fileHandleForWriting.close()
+        tickPipe = nil
+    }
+
+    private var isStopped: Bool { processLock.withLock { stopped } }
 
     /// Process one poll batch: update PID map, assign PIDs to tabs, report changes.
     private func processPollBatch(_ batch: [(pid: String, cwd: String)]) {
@@ -257,6 +321,7 @@ final class ContainerCwdWatcher: @unchecked Sendable {
         processLock.unlock()
         // Safe: the reader launches under processLock and checks `stopped`
         // first, so a non-nil proc here is either launched or never will be.
+        // The next tick then fails with EPIPE and stops the timer.
         if let proc, proc.isRunning { proc.terminate() }
     }
 

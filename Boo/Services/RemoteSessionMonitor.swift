@@ -14,6 +14,19 @@ final class RemoteSessionMonitor: @unchecked Sendable {
 
     private var tracked: [UUID: TrackedPane] = [:]
     private var timer: DispatchSourceTimer?
+    private var timerInterval: TimeInterval = 0
+    /// Last track, command start/end or session transition. Polls run at
+    /// `fastInterval` for `activeWindow` after it, then back off to `idleInterval`:
+    /// an ssh/docker session only starts or ends around a command.
+    private var lastActivity = Date()
+
+    static let fastInterval: TimeInterval = 2
+    static let idleInterval: TimeInterval = 10
+    static let activeWindow: TimeInterval = 60
+
+    static func pollInterval(sinceActivity elapsed: TimeInterval) -> TimeInterval {
+        elapsed < activeWindow ? fastInterval : idleInterval
+    }
     private let queue = DispatchQueue(label: "com.boo.remote-monitor", qos: .utility)
 
     /// Tracks which tabs have registered with a container CWD watcher, keyed by pane.
@@ -34,7 +47,7 @@ final class RemoteSessionMonitor: @unchecked Sendable {
         debugLog("[Monitor] track: paneID=\(paneID) shellPID=\(shellPID)")
         queue.async { [weak self] in
             self?.tracked[paneID] = TrackedPane(shellPID: shellPID, lastSession: nil)
-            self?.ensureTimerRunning()
+            self?.markActive()
             DispatchQueue.main.async { [weak self] in
                 self?.onShellPIDUpdated?(paneID, shellPID, tabID)
             }
@@ -137,6 +150,19 @@ final class RemoteSessionMonitor: @unchecked Sendable {
         }
     }
 
+    /// Back to fast polling: a command just started or ended in some pane.
+    func nudge() {
+        queue.async { [weak self] in
+            guard let self, !self.tracked.isEmpty else { return }
+            self.markActive()
+        }
+    }
+
+    private func markActive() {
+        lastActivity = Date()
+        scheduleTimer(interval: Self.fastInterval)
+    }
+
     /// Live process tree query for a tracked pane. Checks the process tree NOW
     /// (not from the last poll). Runs synchronously on the caller's thread.
     func probeSession(for paneID: UUID) -> RemoteSessionType? {
@@ -145,21 +171,28 @@ final class RemoteSessionMonitor: @unchecked Sendable {
         return RemoteExplorer.detectRemoteSessionFiltered(shellPID: pid)
     }
 
-    private func ensureTimerRunning() {
-        guard timer == nil else { return }
-        let t = DispatchSource.makeTimerSource(queue: queue)
-        t.schedule(deadline: .now() + 2, repeating: 2)
-        t.setEventHandler { [weak self] in self?.poll() }
-        t.resume()
-        timer = t
+    private func scheduleTimer(interval: TimeInterval) {
+        if let timer {
+            guard interval != timerInterval else { return }
+            timer.schedule(deadline: .now() + interval, repeating: interval)
+        } else {
+            let t = DispatchSource.makeTimerSource(queue: queue)
+            t.schedule(deadline: .now() + interval, repeating: interval)
+            t.setEventHandler { [weak self] in self?.poll() }
+            t.resume()
+            timer = t
+        }
+        timerInterval = interval
     }
 
     private func stopTimer() {
         timer?.cancel()
         timer = nil
+        timerInterval = 0
     }
 
     private func poll() {
+        defer { scheduleTimer(interval: Self.pollInterval(sinceActivity: Date().timeIntervalSince(lastActivity))) }
         for paneID in Array(tracked.keys) {
             guard var entry = tracked[paneID] else { continue }
             let session = RemoteExplorer.detectRemoteSessionFiltered(shellPID: entry.shellPID)
@@ -188,6 +221,7 @@ final class RemoteSessionMonitor: @unchecked Sendable {
                 let previous = entry.lastSession
                 entry.lastSession = session
                 tracked[paneID] = entry
+                lastActivity = Date()
 
                 // Manage background SSH connections for SSH-based sessions.
                 // Compare targets rather than branching on nil: an SSH→SSH change
