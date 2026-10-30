@@ -31,6 +31,9 @@ struct ShortcutsSettingsView: View {
         let _ = observer.revision
         let _ = refresh
         let t = tokens
+        // Once per render: each walks the whole menu or bridges the defaults dictionary.
+        let groups = filteredGroups
+        let overrides = AppSettings.shared.shortcutOverrides
 
         SettingsPage(title: "Keyboard Shortcuts") {
             QuickTerminalSettingsSection()
@@ -54,17 +57,17 @@ struct ShortcutsSettingsView: View {
                     .foregroundStyle(t.accent)
             }
 
-            if filteredGroups.isEmpty {
+            if groups.isEmpty {
                 Text("No shortcuts matching \"\(searchText)\"")
                     .font(.system(size: 12))
                     .foregroundStyle(t.muted)
                     .frame(maxWidth: .infinity, alignment: .center)
                     .padding(.top, 24)
             } else {
-                ForEach(filteredGroups, id: \.title) { group in
+                ForEach(groups, id: \.title) { group in
                     Section(title: group.title) {
                         ForEach(Array(group.entries.enumerated()), id: \.offset) { _, item in
-                            shortcutRow(item, t: t)
+                            shortcutRow(item, overridden: item.actionID.map { overrides[$0] != nil } ?? false, t: t)
                         }
                     }
                 }
@@ -73,14 +76,14 @@ struct ShortcutsSettingsView: View {
         .onDisappear { stopRecording() }
     }
 
-    private func shortcutRow(_ item: ActionRegistry.ShortcutEntry, t: Tokens) -> some View {
+    private func shortcutRow(_ item: ActionRegistry.ShortcutEntry, overridden: Bool, t: Tokens) -> some View {
         HStack {
             Text(item.title)
                 .font(.system(size: 12))
                 .foregroundStyle(t.text)
             Spacer()
             if let id = item.actionID {
-                if AppSettings.shared.shortcutOverrides[id] != nil {
+                if overridden {
                     Button {
                         setOverride(nil, for: id)
                     } label: {

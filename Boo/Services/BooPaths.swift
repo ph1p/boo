@@ -58,6 +58,9 @@ func abbreviatePath(_ path: String) -> String {
 
 /// Central path management. All Boo data lives in ~/.boo/
 enum BooPaths {
+    /// The user documentation site (Help menu, welcome window).
+    static let documentationURL = URL(string: "https://ph1p.github.io/boo/")!
+
     /// Base config directory: ~/.boo/
     static let configDir: String = {
         let path = (NSHomeDirectory() as NSString).appendingPathComponent(".boo")

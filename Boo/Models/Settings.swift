@@ -1193,10 +1193,8 @@ final class AppSettings {
         set { set(newValue, forKey: K.remoteControlPort) }
     }
 
-    // MARK: - Secure Keyboard Entry
+    // MARK: - Onboarding
 
-    /// Process-wide, like Terminal's: other apps can't observe keystrokes while Boo is frontmost.
-    /// Save terminal scrollback on quit and replay it into restored tabs.
     /// Set once the first-launch welcome window has had its chance. Local
     /// only: a synced second Mac is still a first launch there.
     var welcomeShown: Bool {
@@ -1204,6 +1202,9 @@ final class AppSettings {
         set { UserDefaults.standard.set(newValue, forKey: K.welcomeShown) }
     }
 
+    // MARK: - Scrollback
+
+    /// Save terminal scrollback on quit and replay it into restored tabs.
     var restoreScrollback: Bool {
         get { bool(K.restoreScrollback, default: true) }
         set { set(newValue, forKey: K.restoreScrollback) }
@@ -1218,6 +1219,9 @@ final class AppSettings {
         set { set(newValue, forKey: K.shortcutOverrides, topic: .shortcuts) }
     }
 
+    // MARK: - Secure Keyboard Entry
+
+    /// Process-wide, like Terminal's: other apps can't observe keystrokes while Boo is frontmost.
     var secureKeyboardEntry: Bool {
         get { bool(K.secureKeyboardEntry, default: false) }
         set { set(newValue, forKey: K.secureKeyboardEntry) }

@@ -17,23 +17,23 @@ final class WelcomeWindowController: NSWindowController {
         )
         window.title = "Welcome to Boo"
         window.isReleasedWhenClosed = false
-        let theme = AppSettings.shared.theme
-        window.backgroundColor = theme.sidebarBg
-        window.appearance = NSAppearance(named: theme.isDark ? .darkAqua : .aqua)
         window.contentView = NSHostingView(rootView: WelcomeView { [weak window] in window?.close() })
         window.center()
         super.init(window: window)
+        applyTheme()
 
         // Picking a theme here restyles the window with it.
         settingsObserver = NotificationCenter.default.addObserver(
             forName: .settingsChanged, object: nil, queue: .main
         ) { [weak self] _ in
-            MainActor.assumeIsolated {
-                let t = AppSettings.shared.theme
-                self?.window?.backgroundColor = t.sidebarBg
-                self?.window?.appearance = NSAppearance(named: t.isDark ? .darkAqua : .aqua)
-            }
+            MainActor.assumeIsolated { self?.applyTheme() }
         }
+    }
+
+    private func applyTheme() {
+        let theme = AppSettings.shared.theme
+        window?.backgroundColor = theme.sidebarBg
+        window?.appearance = NSAppearance(named: theme.isDark ? .darkAqua : .aqua)
     }
 
     required init?(coder: NSCoder) {
@@ -82,6 +82,9 @@ struct WelcomeView: View {
     var body: some View {
         let _ = observer.revision
         let t = Tokens.current
+        let shortcuts = Dictionary(
+            ActionRegistry.actions().compactMap { action in action.shortcut.map { (action.id, $0) } },
+            uniquingKeysWith: { first, _ in first })
         VStack(alignment: .leading, spacing: 20) {
             HStack(spacing: 12) {
                 Image(nsImage: NSApp.applicationIconImage)
@@ -117,7 +120,7 @@ struct WelcomeView: View {
                 heading("Shortcuts", t)
                 ForEach(Self.tips, id: \.id) { tip in
                     HStack(spacing: 10) {
-                        Text(ActionRegistry.action(id: tip.id)?.shortcut ?? "—")
+                        Text(shortcuts[tip.id] ?? "—")
                             .font(.system(size: 12, weight: .medium, design: .rounded))
                             .foregroundStyle(t.text)
                             .frame(width: 64, alignment: .trailing)
@@ -133,7 +136,7 @@ struct WelcomeView: View {
 
             HStack {
                 Button("Documentation") {
-                    if let url = URL(string: "https://ph1p.github.io/boo/") { NSWorkspace.shared.open(url) }
+                    NSWorkspace.shared.open(BooPaths.documentationURL)
                 }
                 .buttonStyle(.themed)
                 Spacer()

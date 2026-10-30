@@ -1506,7 +1506,7 @@ class ThemedSplitView: NSSplitView {
     }
 
     @objc func openDocumentationAction(_ sender: Any?) {
-        if let url = URL(string: "https://ph1p.github.io/boo/") { NSWorkspace.shared.open(url) }
+        NSWorkspace.shared.open(BooPaths.documentationURL)
     }
 
     @objc func checkForUpdatesAction(_ sender: Any?) {

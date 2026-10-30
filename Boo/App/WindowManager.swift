@@ -222,8 +222,6 @@ final class WindowManager {
         }
     }
 
-    /// Final save on quit: flush every window's live state, then write all
-    /// windows synchronously. Windows closing afterwards stay in the session.
     /// Write every terminal tab's screen for the next launch to replay.
     private func saveScrollback() {
         ScrollbackStore.clear()
@@ -237,6 +235,8 @@ final class WindowManager {
         }
     }
 
+    /// Final save on quit: flush every window's live state, then write all
+    /// windows synchronously. Windows closing afterwards stay in the session.
     func saveSessionForTermination() {
         isTerminating = true
         guard let first = controllers.first else { return }

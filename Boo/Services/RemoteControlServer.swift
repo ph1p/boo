@@ -67,7 +67,11 @@ final class RemoteControlServer: @unchecked Sendable {
     /// Called on main after an idle stop.
     var onIdleStop: (() -> Void)?
 
-    var isRunning: Bool { queue.sync { core.isListening } }
+    /// Mirrors `core.isListening` behind a lock: the status bar reads it on
+    /// every draw and mouse move, and must not wait on a busy `queue`.
+    private let runningLock = NSLock()
+    private var running = false
+    var isRunning: Bool { runningLock.withLock { running } }
 
     /// URL reachable from other devices on the LAN (falls back to localhost).
     var accessURL: String {
@@ -124,6 +128,7 @@ final class RemoteControlServer: @unchecked Sendable {
             core.adoptListener(fd: fd)
             lastActivity = booUptime()
             startIdleTimer()
+            runningLock.withLock { running = true }
             Self.postChanged()
 
             booLog(.info, .socket, "RemoteControl: listening on :\(requestedPort)")
@@ -141,6 +146,7 @@ final class RemoteControlServer: @unchecked Sendable {
         idleTimer?.cancel()
         idleTimer = nil
         token = ""
+        runningLock.withLock { running = false }
         booLog(.info, .socket, "RemoteControl: stopped")
         Self.postChanged()
         return core.shutdown()
