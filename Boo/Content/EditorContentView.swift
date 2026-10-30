@@ -100,7 +100,7 @@ final class EditorContentView: NSView, ContentViewProtocol {
         let config = WKWebViewConfiguration()
         config.websiteDataStore = .nonPersistent()
         let contentController = WKUserContentController()
-        contentController.add(self, name: "boo")
+        contentController.add(WeakScriptMessageHandler(self), name: "boo")
         config.userContentController = contentController
 
         // Development settings
@@ -429,5 +429,17 @@ extension EditorContentView: WKNavigationDelegate {
 
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
         debugLog("[Editor] WebView provisional navigation failed: \(error.localizedDescription)")
+    }
+}
+
+/// WKUserContentController retains its handlers, so registering the editor
+/// itself would keep it (and its web view) alive until `cleanup()` runs.
+private final class WeakScriptMessageHandler: NSObject, WKScriptMessageHandler {
+    weak var target: WKScriptMessageHandler?
+
+    init(_ target: WKScriptMessageHandler) { self.target = target }
+
+    func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
+        target?.userContentController(controller, didReceive: message)
     }
 }
