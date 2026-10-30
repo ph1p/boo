@@ -242,16 +242,50 @@ final class PathSegment: StatusBarPlugin {
             && settings.pluginBool("file-tree-local", "showPath", default: true)
     }
 
+    private let font = NSFont.monospacedSystemFont(ofSize: 10, weight: .regular)
+
+    /// The laid-out path, rebuilt only when the path or color changes. CoreText's
+    /// attribute handling once aborted here (an exception inside noexcept frames
+    /// that `@try` can't catch) when the string was laid out on every frame; a
+    /// cached CTLine only touches attributes when the path actually changes.
+    private struct Line {
+        let path: String
+        let color: NSColor
+        let line: CTLine
+        let ascent: CGFloat
+        let width: CGFloat
+    }
+    private var cached: Line?
+
     func draw(
         at x: CGFloat, y: CGFloat, theme: TerminalTheme, settings: AppSettings, state: StatusBarState, ctx: CGContext
     ) -> CGFloat {
-        let attrs: [NSAttributedString.Key: Any] = [
-            .font: NSFont.monospacedSystemFont(ofSize: 10, weight: .regular),
-            .foregroundColor: theme.textSecondary
-        ]
-        let str = abbreviatePath(state.currentDirectory) as NSString
-        str.safeDraw(at: NSPoint(x: x, y: y), withAttributes: attrs)
-        return str.safeSize(withAttributes: attrs).width
+        let line = layout(state.currentDirectory, color: theme.textSecondary)
+        ctx.saveGState()
+        // The bar is flipped; CoreText draws upward from the baseline.
+        ctx.textMatrix = CGAffineTransform(scaleX: 1, y: -1)
+        ctx.textPosition = CGPoint(x: x, y: y + line.ascent)
+        CTLineDraw(line.line, ctx)
+        ctx.restoreGState()
+        return line.width
+    }
+
+    private func layout(_ path: String, color: NSColor) -> Line {
+        if let cached, cached.path == path, cached.color == color { return cached }
+        let attributed = NSAttributedString(
+            string: Self.drawable(abbreviatePath(path)), attributes: [.font: font, .foregroundColor: color])
+        let ctLine = CTLineCreateWithAttributedString(attributed)
+        var ascent: CGFloat = 0
+        let width = CGFloat(CTLineGetTypographicBounds(ctLine, &ascent, nil, nil))
+        let line = Line(path: path, color: color, line: ctLine, ascent: ascent, width: width)
+        cached = line
+        return line
+    }
+
+    /// Control characters (a directory name may hold any byte but `/` and NUL) have
+    /// no glyph; drop them before they reach font fallback.
+    static func drawable(_ text: String) -> String {
+        String(String.UnicodeScalarView(text.unicodeScalars.filter { $0.properties.generalCategory != .control }))
     }
 
     func handleClick(at point: NSPoint, in barView: StatusBarView) -> Bool { false }

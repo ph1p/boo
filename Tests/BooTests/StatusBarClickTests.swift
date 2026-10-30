@@ -206,4 +206,11 @@ final class StatusBarClickTests: XCTestCase {
         XCTAssertEqual(segB.clickCount, 1, "B should receive its own click")
         XCTAssertEqual(toggledIDs, ["plugin-b"])
     }
+
+    // MARK: - Path segment
+
+    func testPathSegmentDropsControlCharacters() {
+        XCTAssertEqual(PathSegment.drawable("~/a\u{1B}[31mb\tc"), "~/a[31mbc")
+        XCTAssertEqual(PathSegment.drawable("~/日本/🧑‍💻"), "~/日本/🧑‍💻")
+    }
 }
