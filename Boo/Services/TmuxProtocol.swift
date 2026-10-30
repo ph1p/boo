@@ -297,7 +297,11 @@ enum TmuxProtocol {
             payload = [UInt8(c >> 8), UInt8(c & 0xFF), UInt8(r >> 8), UInt8(r & 0xFF)]
         }
         let n = UInt32(payload.count)
-        return [kind, UInt8(n >> 24), UInt8(n >> 16 & 0xFF), UInt8(n >> 8 & 0xFF), UInt8(n & 0xFF)] + payload
+        var frame: [UInt8] = []
+        frame.reserveCapacity(5 + payload.count)
+        frame += [kind, UInt8(n >> 24), UInt8(n >> 16 & 0xFF), UInt8(n >> 8 & 0xFF), UInt8(n & 0xFF)]
+        frame += payload
+        return frame
     }
 
     static func decode<C: Collection>(_ buffer: C) -> Decoded where C.Element == UInt8, C.Index == Int {
