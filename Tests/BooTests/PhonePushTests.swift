@@ -73,9 +73,9 @@ final class PhonePushTests: XCTestCase {
         XCTAssertNil(PhonePush.remoteHost(in: "ssh -v"))
     }
 
-    func testDurationFormatting() {
-        XCTAssertEqual(PhonePush.duration(42), "42s")
-        XCTAssertEqual(PhonePush.duration(125), "2m 5s")
-        XCTAssertEqual(PhonePush.duration(3720), "1h 2m")
+    func testCompactDuration() {
+        XCTAssertEqual(DurationFormat.compact(42), "42s")
+        XCTAssertEqual(DurationFormat.compact(125), "2m 5s")
+        XCTAssertEqual(DurationFormat.compact(3720), "1h 2m")
     }
 }

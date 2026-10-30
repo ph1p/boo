@@ -307,7 +307,7 @@ struct AgentTimelineView: View {
     private func meta(_ turn: AgentTimeline.Turn, peak: Double) -> some View {
         var parts: [String] = []
         if turn.toolCount > 0 { parts.append("\(turn.toolCount) tool\(turn.toolCount == 1 ? "" : "s")") }
-        if let duration = turn.duration, duration >= 1 { parts.append(Self.duration(duration)) }
+        if let duration = turn.duration, duration >= 1 { parts.append(DurationFormat.compact(duration)) }
         if turn.usage.output > 0 { parts.append("\(Self.tokens(turn.usage.output)) out") }
         if turn.context > 0 { parts.append("context \(Self.tokens(turn.context))") }
         return HStack(spacing: 6) {
@@ -391,13 +391,6 @@ struct AgentTimelineView: View {
     static func money(_ amount: Double, exact: Bool) -> String {
         let value = String(format: "$%.2f", amount)
         return exact ? value : "≈ \(value)"
-    }
-
-    static func duration(_ seconds: TimeInterval) -> String {
-        let total = Int(seconds)
-        if total < 60 { return "\(total)s" }
-        if total < 3600 { return "\(total / 60)m \(total % 60)s" }
-        return "\(total / 3600)h \(total % 3600 / 60)m"
     }
 
     private static let timeFormatter: DateFormatter = {

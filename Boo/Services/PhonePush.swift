@@ -58,7 +58,7 @@ final class PhonePush {
             .commandFinished,
             Self.message(
                 for: .commandFinished, workspaceName: workspaceName,
-                subject: "\(outcome) after \(Self.duration(command.duration))"))
+                subject: "\(outcome) after \(DurationFormat.compact(command.duration))"))
     }
 
     /// Sends a fixed sample so the user can check the URL from Settings.
@@ -147,13 +147,6 @@ final class PhonePush {
     /// The first non-option argument of an ssh/mosh command line, minus any `user@`.
     nonisolated static func remoteHost(in command: String) -> String? {
         RemoteExplorer.sshDestination(in: command).map { String($0.split(separator: "@").last ?? Substring($0)) }
-    }
-
-    nonisolated static func duration(_ seconds: TimeInterval) -> String {
-        let total = Int(seconds.rounded())
-        if total < 60 { return "\(total)s" }
-        if total < 3600 { return "\(total / 60)m \(total % 60)s" }
-        return "\(total / 3600)h \(total % 3600 / 60)m"
     }
 
     /// HTTP header values must be Latin-1; ntfy accepts RFC 2047 for the rest.
