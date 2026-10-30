@@ -11,7 +11,7 @@ make release app
 if [ -n "${SIGNING_IDENTITY:-}" ]; then
   make sign
 else
-  codesign --force --deep --sign - .build/Boo.app
+  codesign --force --deep --sign - --entitlements Boo/App/Boo.entitlements .build/Boo.app
 fi
 
 if [ -n "${APPLE_ID:-}" ]; then

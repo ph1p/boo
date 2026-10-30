@@ -85,6 +85,7 @@ struct SettingsView: View {
         case profiles
         case rules
         case recordings
+        case permissions
         case editor
         case browser
         case notifications
@@ -102,7 +103,7 @@ struct SettingsView: View {
 
         static var fixed: [Tab] {
             [
-                .general, .profiles, .rules, .shortcuts, .recordings,
+                .general, .profiles, .rules, .shortcuts, .recordings, .permissions,
                 .theme, .appearance, .statusBar, .layout,
                 .editor, .browser, .notifications,
                 .plugins
@@ -111,7 +112,7 @@ struct SettingsView: View {
 
         var group: Group {
             switch self {
-            case .general, .profiles, .rules, .shortcuts, .recordings: return .terminal
+            case .general, .profiles, .rules, .shortcuts, .recordings, .permissions: return .terminal
             case .theme, .appearance, .statusBar, .layout: return .appearance
             case .editor, .browser, .notifications: return .apps
             case .plugins, .pluginSettings: return .plugins
@@ -131,6 +132,8 @@ struct SettingsView: View {
             case .profiles: return "profile shell command environment ssh directory"
             case .rules: return "regex trigger highlight notify confirm confirmation automation"
             case .recordings: return "record asciinema cast video export markers idle"
+            case .permissions:
+                return "privacy full disk access files folders automation developer tools signature prompts tcc"
             case .editor: return "code font tab size spaces line numbers minimap word wrap format external"
             case .browser: return "home page history website data links close"
             case .notifications: return "alerts command duration ports bursts"
@@ -160,6 +163,7 @@ struct SettingsView: View {
             case .profiles: return "Profiles"
             case .rules: return "Rules"
             case .recordings: return "Recordings"
+            case .permissions: return "Permissions"
             case .editor: return "Editor"
             case .browser: return "Browser"
             case .notifications: return "Notifications"
@@ -180,6 +184,7 @@ struct SettingsView: View {
             case .profiles: return "person.crop.rectangle.stack"
             case .rules: return "wand.and.stars"
             case .recordings: return "record.circle"
+            case .permissions: return "lock.shield"
             case .editor: return "curlybraces"
             case .browser: return "globe"
             case .notifications: return "bell"
@@ -331,6 +336,7 @@ struct SettingsView: View {
         case .profiles: ProfilesSettingsView()
         case .rules: RulesSettingsView()
         case .recordings: RecordingsSettingsView()
+        case .permissions: PermissionsSettingsView()
         case .editor: EditorSettingsView()
         case .browser: BrowserSettingsView()
         case .notifications: NotificationsSettingsView()

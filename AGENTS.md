@@ -289,7 +289,7 @@ Settings window (`Boo/Views/SettingsWindow.swift`) uses a left sidebar + content
 
 ```swift
 enum Tab: Hashable {
-    case general, theme, appearance, statusBar, layout, profiles, rules, recordings
+    case general, theme, appearance, statusBar, layout, profiles, rules, recordings, permissions
     case editor, browser, notifications, plugins, shortcuts
     case pluginSettings(pluginID: String)  // per-plugin settings page
     // `group` places each tab in a sidebar section; `keywords` feed the sidebar search.

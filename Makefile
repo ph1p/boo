@@ -17,6 +17,9 @@ SIGNING_IDENTITY ?=
 APPLE_ID         ?=
 APPLE_TEAM_ID    ?=
 APPLE_PASSWORD   ?=
+# Identity `make run` signs with when present (see scripts/create-signing-cert.sh).
+# A stable identity keeps macOS privacy grants across rebuilds; ad-hoc resets them.
+LOCAL_SIGNING_IDENTITY ?= Boo Self-Signed
 
 # ── GhosttyKit (macOS) ──────────────────────────────────────────────────────
 
@@ -191,7 +194,11 @@ run: build
 	done
 	@rsync -a .build/debug/ghostty-resources/ .build/debug/Boo.app/Contents/Resources/ 2>/dev/null || true
 	@rsync -a Resources/shell-integration .build/debug/Boo.app/Contents/Resources/
-	@codesign --force --deep --sign - --entitlements Boo/App/Boo.entitlements .build/debug/Boo.app 2>/dev/null || true
+	@ID="$(SIGNING_IDENTITY)"; \
+	if [ -z "$$ID" ] && security find-identity -p codesigning 2>/dev/null | grep -q "\"$(LOCAL_SIGNING_IDENTITY)\""; then \
+		ID="$(LOCAL_SIGNING_IDENTITY)"; \
+	fi; \
+	codesign --force --deep --sign "$${ID:--}" --entitlements Boo/App/Boo.entitlements .build/debug/Boo.app 2>/dev/null || true
 	@pkill -x Boo 2>/dev/null || true; for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do pkill -0 -x Boo 2>/dev/null || break; sleep 0.02; done
 	open .build/debug/Boo.app
 
