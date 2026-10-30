@@ -23,13 +23,7 @@ extension GitPlugin {
     /// drain-while-running that keeps a >64KB `git status` from deadlocking.
     /// Run `/usr/bin/git` and return stdout, or nil on failure. Shared with the file tree.
     nonisolated static func gitOutput(_ arguments: [String]) -> String? {
-        let task = Process()
-        task.executableURL = URL(fileURLWithPath: "/usr/bin/git")
-        task.arguments = arguments
-        guard let result = RemoteExplorer.runProcessCapturing(task, timeout: 15),
-            result.status == 0
-        else { return nil }
-        return result.stdout
+        Subprocess.output("/usr/bin/git", arguments, timeout: 15)
     }
 
     nonisolated static func detectChangedFiles(repoRoot: String) -> [GitChangedFile] {

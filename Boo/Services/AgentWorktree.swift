@@ -245,14 +245,10 @@ enum AgentWorktree {
     }
 
     /// Runs git, any exit status; nil when it timed out or could not start.
-    private static func run(_ args: [String], in directory: String) -> RemoteExplorer.CommandResult? {
-        let task = Process()
-        task.executableURL = URL(fileURLWithPath: "/usr/bin/git")
-        task.arguments = ["-C", directory] + args
+    private static func run(_ args: [String], in directory: String) -> Subprocess.Result? {
         var env = ProcessInfo.processInfo.environment
         env["GIT_TERMINAL_PROMPT"] = "0"
         env["GIT_EDITOR"] = "true"
-        task.environment = env
-        return RemoteExplorer.runProcessCapturing(task, timeout: 30)
+        return Subprocess.run("/usr/bin/git", ["-C", directory] + args, environment: env, timeout: 30)
     }
 }

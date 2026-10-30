@@ -518,12 +518,8 @@ final class KubeStore: ObservableObject {
 
     nonisolated static func run(
         _ kubectl: String, _ args: [String], timeout: TimeInterval
-    ) -> RemoteExplorer.CommandResult? {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: kubectl)
-        process.arguments = args
-        process.environment = environment()
-        return RemoteExplorer.runProcessCapturing(process, timeout: timeout)
+    ) -> Subprocess.Result? {
+        Subprocess.run(kubectl, args, environment: environment(), timeout: timeout)
     }
 }
 

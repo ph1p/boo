@@ -365,7 +365,7 @@ final class RuleEngine {
         DispatchQueue.global(qos: .utility).async {
             // Bounded drain: a backgrounded grandchild (`cmd &`) keeps the pipe
             // open after the shell exits, which would block an EOF read forever.
-            guard let result = RemoteExplorer.runProcessCapturing(process, timeout: runTimeout) else {
+            guard let result = Subprocess.capture(process, timeout: runTimeout) else {
                 booLog(.warning, .app, "[Rules] \(ruleID): run failed or timed out after \(Int(runTimeout))s")
                 return
             }

@@ -16,19 +16,13 @@ final class HostShellService: ShellService {
             // by a wall-clock timeout, so running it inline would block the caller
             // (often the main actor) for as long as the child takes.
             DispatchQueue.global(qos: .utility).async {
-                let task = Process()
-                task.executableURL = URL(fileURLWithPath: executable)
-                task.arguments = arguments
-                if let cwd = cwd {
-                    task.currentDirectoryURL = URL(fileURLWithPath: cwd)
-                }
                 // Drain-while-running: a plugin command that writes more than the
                 // ~64KB pipe buffer would deadlock the read-after-exit shape,
                 // stranding the child and this continuation forever.
                 //
                 // A non-zero exit still yields its stdout, per the `ShellService`
                 // contract; nil means the command never ran to completion.
-                guard let result = RemoteExplorer.runProcessCapturing(task, timeout: 30) else {
+                guard let result = Subprocess.run(executable, arguments, in: cwd, timeout: 30) else {
                     continuation.resume(throwing: ShellServiceError.commandFailed(executable))
                     return
                 }

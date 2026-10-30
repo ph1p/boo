@@ -513,7 +513,7 @@ final class DockerService: ObservableObject, @unchecked Sendable {
             process.arguments = args
             if let cwd { process.currentDirectoryURL = URL(fileURLWithPath: cwd) }
             // `up` may pull images.
-            let result = RemoteExplorer.runProcessCapturing(process, timeout: action == .up ? 600 : 120)
+            let result = Subprocess.capture(process, timeout: action == .up ? 600 : 120)
             let error: String? =
                 switch result {
                 case nil: "docker compose \(action.rawValue) timed out"
@@ -722,7 +722,7 @@ final class DockerService: ObservableObject, @unchecked Sendable {
     /// deadlocks the `waitUntilExit()`-then-read shape) and bounds the wait, so a
     /// wedged `ssh` can't pin this utility thread forever.
     private static func runSSH(args: [String]) -> String? {
-        guard let result = RemoteExplorer.runProcessCapturing(RemoteExplorer.sshProcess(args), timeout: 10),
+        guard let result = Subprocess.capture(RemoteExplorer.sshProcess(args), timeout: 10),
             result.status == 0
         else { return nil }
         return result.stdout

@@ -165,7 +165,7 @@ final class LoginShellEnvironment: @unchecked Sendable {
         env["TERM"] = "dumb"
         env["BOO_LOGIN_ENV_PROBE"] = "1"
         process.environment = env
-        guard let result = RemoteExplorer.runProcessCapturing(process, timeout: timeout), result.status == 0 else {
+        guard let result = Subprocess.capture(process, timeout: timeout), result.status == 0 else {
             debugLog("[LoginShellEnvironment] \(shell) -ilc failed or timed out")
             return nil
         }

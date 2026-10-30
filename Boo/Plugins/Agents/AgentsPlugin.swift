@@ -811,15 +811,10 @@ func parseAgentSkillDescription(at path: String) -> String {
 
 /// Detect git diff stats for changed files in repo.
 func detectAgentDiffStats(repoRoot: String) -> [AgentsPlugin.DiffStatEntry] {
-    let task = Process()
-    task.executableURL = URL(fileURLWithPath: "/usr/bin/git")
     // --no-optional-locks: a plain `git diff` refreshes .git/index, which fires
     // GitService's index watcher and a full git status refresh every poll.
-    task.arguments = ["-C", repoRoot, "--no-optional-locks", "diff", "--numstat", "-z", "HEAD"]
-
-    // Drain-while-running: `--numstat` on a large working tree easily exceeds the
-    // ~64KB pipe buffer, and the read-after-exit shape would deadlock the child.
-    guard let result = RemoteExplorer.runProcessCapturing(task, timeout: 10) else {
+    let args = ["-C", repoRoot, "--no-optional-locks", "diff", "--numstat", "-z", "HEAD"]
+    guard let result = Subprocess.run("/usr/bin/git", args, timeout: 10) else {
         debugLog("[Agents] git diff task failed or timed out")
         return []
     }

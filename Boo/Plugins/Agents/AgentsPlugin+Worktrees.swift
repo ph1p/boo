@@ -40,18 +40,13 @@ extension AgentsPlugin {
     /// The entry for the main working tree itself is skipped; only linked worktrees
     /// are returned.
     nonisolated static func detectWorktrees(projectRoot: String) -> [ClaudeWorktree] {
-        let task = Process()
-        task.launchPath = "/usr/bin/git"
-        task.arguments = ["-C", projectRoot, "--no-optional-locks", "worktree", "list", "--porcelain"]
-
-        // `runProcessCapturing` owns the pipes and drains them incrementally, so a
-        // child that outruns the 64KB pipe buffer can't deadlock. A local
-        // `worktree list` that needs more than a few seconds is already pathological.
-        guard let result = RemoteExplorer.runProcessCapturing(task, timeout: 5),
-            result.status == 0
+        // A local `worktree list` that needs more than a few seconds is already pathological.
+        guard
+            let output = Subprocess.output(
+                "/usr/bin/git", ["-C", projectRoot, "--no-optional-locks", "worktree", "list", "--porcelain"],
+                timeout: 5)
         else { return [] }
-
-        return parseWorktreePorcelain(result.stdout, projectRoot: projectRoot)
+        return parseWorktreePorcelain(output, projectRoot: projectRoot)
     }
 
     /// Parse `git worktree list --porcelain` output into worktree records.
