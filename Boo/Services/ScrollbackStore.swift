@@ -40,22 +40,38 @@ enum ScrollbackStore {
     /// Drops trailing blank lines (the empty rows below the prompt) and caps
     /// the size, cutting at a newline so no escape sequence is split.
     static func trimmed(_ text: String) -> Data? {
-        var lines = text.components(separatedBy: "\n")
-        while let last = lines.last, isBlank(last) { lines.removeLast() }
-        guard !lines.isEmpty else { return nil }
-        var data = Data(lines.joined(separator: "\n").utf8)
-        if data.count > maxBytes {
-            let tail = data.suffix(maxBytes)
-            let cut = tail.firstIndex(of: UInt8(ascii: "\n")).map { tail.index(after: $0) } ?? tail.startIndex
-            data = Data(tail[cut...])
+        // Works on bytes from the end: the screen can be megabytes, and only
+        // the last `maxBytes` survive.
+        let bytes = Array(text.utf8)
+        let newline = UInt8(ascii: "\n")
+        var end = bytes.count
+        while end > 0 {
+            let start = bytes[..<end].lastIndex(of: newline).map { $0 + 1 } ?? 0
+            guard isBlank(bytes[start..<end]) else { break }
+            end = max(0, start - 1)
         }
-        return data.isEmpty ? nil : data
+        guard end > 0 else { return nil }
+        var start = max(0, end - maxBytes)
+        if start > 0 {
+            guard let cut = bytes[start..<end].firstIndex(of: newline) else { return nil }
+            start = cut + 1
+        }
+        return start < end ? Data(bytes[start..<end]) : nil
     }
 
-    /// Blank once SGR sequences are ignored.
-    private static func isBlank(_ line: String) -> Bool {
-        line.replacingOccurrences(of: "\u{1B}\\[[0-9;:]*m", with: "", options: .regularExpression)
-            .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    /// Blank once SGR sequences (ESC [ params m) are ignored.
+    private static func isBlank(_ line: ArraySlice<UInt8>) -> Bool {
+        var inEscape = false
+        for byte in line {
+            if inEscape {
+                if byte == UInt8(ascii: "m") { inEscape = false }
+            } else if byte == 0x1B {
+                inEscape = true
+            } else if byte != UInt8(ascii: " ") && byte != UInt8(ascii: "\t") && byte != UInt8(ascii: "\r") {
+                return false
+            }
+        }
+        return true
     }
 
     // MARK: - Restore
@@ -74,8 +90,14 @@ enum ScrollbackStore {
         guard let data = FileManager.default.contents(atPath: file), !data.isEmpty else { return nil }
         // Line endings as a pty would send them, then reset attributes and
         // leave the new prompt on a fresh line.
-        let body = String(decoding: data, as: UTF8.self).replacingOccurrences(of: "\n", with: "\r\n")
-        return Array((body + "\u{1B}[0m\r\n").utf8)
+        var bytes: [UInt8] = []
+        bytes.reserveCapacity(data.count + data.count / 32 + 6)
+        for byte in data {
+            if byte == UInt8(ascii: "\n") { bytes.append(UInt8(ascii: "\r")) }
+            bytes.append(byte)
+        }
+        bytes.append(contentsOf: Array("\u{1B}[0m\r\n".utf8))
+        return bytes
     }
 
     /// Delete saved files no restored tab claimed (closed workspaces, missing folders).
