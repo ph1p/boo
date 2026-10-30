@@ -154,33 +154,7 @@ final class DockerService: ObservableObject, @unchecked Sendable {
     /// Connect a Unix domain socket to the given path.
     /// Returns the fd on success, -1 on failure. Caller owns the fd.
     private static func connectSocket(to path: String) -> Int32 {
-        let fd = socket(AF_UNIX, SOCK_STREAM, 0)
-        guard fd >= 0 else { return -1 }
-
-        var addr = sockaddr_un()
-        addr.sun_family = sa_family_t(AF_UNIX)
-        let pathBytes = path.utf8CString
-        guard pathBytes.count <= MemoryLayout.size(ofValue: addr.sun_path) else {
-            close(fd)
-            return -1
-        }
-        withUnsafeMutablePointer(to: &addr.sun_path) { ptr in
-            ptr.withMemoryRebound(to: CChar.self, capacity: pathBytes.count) { dest in
-                pathBytes.withUnsafeBufferPointer { src in
-                    _ = memcpy(dest, src.baseAddress!, src.count)
-                }
-            }
-        }
-
-        let result = withUnsafePointer(to: &addr) { ptr in
-            ptr.withMemoryRebound(to: sockaddr.self, capacity: 1) { sockPtr in
-                connect(fd, sockPtr, socklen_t(MemoryLayout<sockaddr_un>.size))
-            }
-        }
-        guard result == 0 else {
-            close(fd)
-            return -1
-        }
+        guard let fd = UnixSocket.connect(path: path) else { return -1 }
 
         // Don't let writes to a half-open socket raise SIGPIPE and kill the process
         // (e.g. a dangling docker.sock on a host with no running daemon).

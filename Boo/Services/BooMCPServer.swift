@@ -461,32 +461,18 @@ struct BooMCPServer {
 /// Minimal blocking client for the Boo socket: one JSON line out, one back.
 enum BooSocketClient {
     static func request(_ message: [String: Any], socketPath: String, timeout: Int = 10) throws -> [String: Any] {
-        let fd = socket(AF_UNIX, SOCK_STREAM, 0)
-        guard fd >= 0 else { throw BooMCPServer.Failure(message: "socket() failed") }
+        guard UnixSocket.address(socketPath) != nil else {
+            throw BooMCPServer.Failure(message: "socket path too long: \(socketPath)")
+        }
+        guard let fd = UnixSocket.connect(path: socketPath) else {
+            throw BooMCPServer.Failure(message: "Boo is not running (no socket at \(socketPath)).")
+        }
         defer { close(fd) }
         var tv = timeval(tv_sec: timeout, tv_usec: 0)
         setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, socklen_t(MemoryLayout<timeval>.size))
         setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, socklen_t(MemoryLayout<timeval>.size))
         var noSigPipe: Int32 = 1
         setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &noSigPipe, socklen_t(MemoryLayout<Int32>.size))
-
-        var addr = sockaddr_un()
-        addr.sun_family = sa_family_t(AF_UNIX)
-        let pathBytes = Array(socketPath.utf8)
-        guard pathBytes.count < MemoryLayout.size(ofValue: addr.sun_path) else {
-            throw BooMCPServer.Failure(message: "socket path too long: \(socketPath)")
-        }
-        withUnsafeMutableBytes(of: &addr.sun_path) { buffer in
-            buffer.copyBytes(from: pathBytes)
-        }
-        let connected = withUnsafePointer(to: &addr) {
-            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
-                connect(fd, $0, socklen_t(MemoryLayout<sockaddr_un>.size))
-            }
-        }
-        guard connected == 0 else {
-            throw BooMCPServer.Failure(message: "Boo is not running (no socket at \(socketPath)).")
-        }
 
         var payload = try JSONSerialization.data(withJSONObject: message)
         payload.append(UInt8(ascii: "\n"))
