@@ -356,8 +356,7 @@ extension ToolbarView {
         label.frame = NSRect(x: 6, y: 2, width: ghostWidth - 12, height: ghostHeight - 4)
         ghostView.addSubview(label)
 
-        ghostWindow = DragGhostWindow(
-            content: ghostView, center: DragGhostWindow.screenPoint(of: event), alpha: 0.85)
+        ghostWindow = DragGhostWindow(content: ghostView, center: DragGhostWindow.screenPoint(of: event))
     }
 
     private func handleWorkspaceDragMove(_ event: NSEvent) {

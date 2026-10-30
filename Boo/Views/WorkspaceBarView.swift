@@ -626,8 +626,7 @@ class WorkspaceBarView: NSView {
         label.frame = NSRect(x: 0, y: (ghostHeight - 16) / 2, width: ghostWidth, height: 16)
         ghostView.addSubview(label)
 
-        ghostWindow = DragGhostWindow(
-            content: ghostView, center: DragGhostWindow.screenPoint(of: event), alpha: 0.85)
+        ghostWindow = DragGhostWindow(content: ghostView, center: DragGhostWindow.screenPoint(of: event))
     }
 
     private func handleDragMove(_ event: NSEvent) {

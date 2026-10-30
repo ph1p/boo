@@ -213,9 +213,7 @@ enum TabDropZone: Equatable {
     }
 
     private func checkWorkspaceHover(event: NSEvent) {
-        let screenLoc: NSPoint =
-            event.window?.convertPoint(toScreen: event.locationInWindow) ?? NSEvent.mouseLocation
-        updateWorkspaceHover(screenPoint: screenLoc)
+        updateWorkspaceHover(screenPoint: DragGhostWindow.screenPoint(of: event))
     }
 
     /// Called by the event path and exposed for testing.
@@ -571,7 +569,6 @@ enum TabDropZone: Equatable {
         label.lineBreakMode = .byTruncatingTail
         ghostView.addSubview(label)
 
-        ghostWindow = DragGhostWindow(
-            content: ghostView, center: DragGhostWindow.screenPoint(of: event), alpha: 0.85)
+        ghostWindow = DragGhostWindow(content: ghostView, center: DragGhostWindow.screenPoint(of: event))
     }
 }

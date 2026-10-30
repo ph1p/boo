@@ -17,7 +17,7 @@ final class DragGhostWindow: NSWindow {
     private var link: CADisplayLink?
 
     /// Shows `content` centered on `center` (screen coordinates).
-    init(content: NSView, center: NSPoint, alpha: CGFloat = 1) {
+    init(content: NSView, center: NSPoint, alpha: CGFloat = 0.85) {
         let size = content.frame.size
         target = NSPoint(x: center.x - size.width / 2, y: center.y - size.height / 2)
         super.init(

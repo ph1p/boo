@@ -789,7 +789,7 @@ class SidebarPanelView: NSView {
         label.frame = NSRect(x: 6, y: 2, width: ghostWidth - 12, height: ghostHeight - 4)
         ghostView.addSubview(label)
 
-        let win = DragGhostWindow(content: ghostView, center: NSEvent.mouseLocation)
+        let win = DragGhostWindow(content: ghostView, center: NSEvent.mouseLocation, alpha: 1)
 
         sectionDragState = SectionDragState(sourceIndex: sourceIndex, ghostWindow: win)
 
