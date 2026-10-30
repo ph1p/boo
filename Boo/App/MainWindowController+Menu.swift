@@ -345,6 +345,7 @@ extension MainWindowController {
         }
 
         NSApplication.shared.mainMenu = mainMenu
+        ShortcutOverrides.apply(to: mainMenu)
     }
 
     @objc func switchToTabAction(_ sender: NSMenuItem) {
@@ -393,6 +394,7 @@ extension MainWindowController {
         else { return }
 
         pluginsMenu.removeAllItems()
+        defer { ShortcutOverrides.apply(to: mainMenu) }
 
         guard let context = pluginRegistry.lastContext else {
             pluginsMenu.addItem(withTitle: "No Plugin Commands", action: nil, keyEquivalent: "")

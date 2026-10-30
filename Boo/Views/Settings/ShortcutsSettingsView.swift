@@ -1,15 +1,21 @@
+import AppKit
 import SwiftUI
 
 // MARK: - Shortcuts
 
 struct ShortcutsSettingsView: View {
     @Environment(\.tokens) private var tokens
-    @ObservedObject private var observer = SettingsObserver(topics: [.theme])
+    @ObservedObject private var observer = SettingsObserver(topics: [.theme, .shortcuts])
     @State private var searchText: String = ""
+    /// Bumped after the menu is rebuilt with new overrides.
+    @State private var refresh = 0
+    @State private var recordingID: String?
+    @State private var message: String?
+    @State private var monitor: Any?
 
     /// Generated from the live main menu, so it cannot drift from it.
     private var filteredGroups: [ActionRegistry.ShortcutGroup] {
-        let groups = ActionRegistry.shortcutGroups()
+        let groups = ActionRegistry.shortcutGroups(includeUnbound: true)
         let q = searchText.trimmingCharacters(in: .whitespaces).lowercased()
         guard !q.isEmpty else { return groups }
         return groups.compactMap { group in
@@ -23,6 +29,7 @@ struct ShortcutsSettingsView: View {
 
     var body: some View {
         let _ = observer.revision
+        let _ = refresh
         let t = tokens
 
         SettingsPage(title: "Keyboard Shortcuts") {
@@ -35,6 +42,18 @@ struct ShortcutsSettingsView: View {
                 trailingClear: true
             )
 
+            Text(
+                "Click a shortcut to change it, then press the new keys. Delete removes it, Esc cancels."
+            )
+            .font(.system(size: 11))
+            .foregroundStyle(t.muted)
+
+            if let message {
+                Text(message)
+                    .font(.system(size: 11))
+                    .foregroundStyle(t.accent)
+            }
+
             if filteredGroups.isEmpty {
                 Text("No shortcuts matching \"\(searchText)\"")
                     .font(.system(size: 12))
@@ -45,22 +64,118 @@ struct ShortcutsSettingsView: View {
                 ForEach(filteredGroups, id: \.title) { group in
                     Section(title: group.title) {
                         ForEach(Array(group.entries.enumerated()), id: \.offset) { _, item in
-                            shortcutRow(label: item.title, binding: item.shortcut, t: t)
+                            shortcutRow(item, t: t)
                         }
                     }
                 }
             }
         }
+        .onDisappear { stopRecording() }
     }
 
-    private func shortcutRow(label: String, binding: String, t: Tokens) -> some View {
+    private func shortcutRow(_ item: ActionRegistry.ShortcutEntry, t: Tokens) -> some View {
         HStack {
-            Text(label)
+            Text(item.title)
                 .font(.system(size: 12))
                 .foregroundStyle(t.text)
             Spacer()
-            ShortcutPill(text: binding)
+            if let id = item.actionID {
+                if AppSettings.shared.shortcutOverrides[id] != nil {
+                    Button {
+                        setOverride(nil, for: id)
+                    } label: {
+                        Image(systemName: "arrow.uturn.backward")
+                            .font(.system(size: 10))
+                            .foregroundStyle(t.muted)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Reset to the default shortcut")
+                }
+                Button {
+                    recordingID == id ? stopRecording() : startRecording(id)
+                } label: {
+                    if recordingID == id {
+                        ShortcutPill(text: "Type shortcut…")
+                    } else if item.shortcut.isEmpty {
+                        Text("—")
+                            .font(.system(size: 11, design: .monospaced))
+                            .foregroundStyle(t.muted)
+                            .padding(.horizontal, 6)
+                    } else {
+                        ShortcutPill(text: item.shortcut)
+                    }
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Shortcut for \(item.title): \(item.shortcut.isEmpty ? "none" : item.shortcut)")
+                .accessibilityHint("Press to record a new shortcut")
+            } else {
+                ShortcutPill(text: item.shortcut)
+            }
         }
+    }
+
+    // MARK: - Recording
+
+    private func startRecording(_ id: String) {
+        stopRecording()
+        recordingID = id
+        message = nil
+        monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            MainActor.assumeIsolated { handleRecorded(event) }
+            return nil
+        }
+    }
+
+    private func stopRecording() {
+        if let monitor { NSEvent.removeMonitor(monitor) }
+        monitor = nil
+        recordingID = nil
+    }
+
+    private func handleRecorded(_ event: NSEvent) {
+        guard let id = recordingID else { return }
+        let bare = event.modifierFlags.intersection([.command, .option, .control, .shift]).isEmpty
+        if event.keyCode == 53, bare {  // Escape
+            stopRecording()
+            return
+        }
+        if event.keyCode == 51 || event.keyCode == 117, bare {  // Delete, Forward Delete
+            stopRecording()
+            setOverride("", for: id)
+            return
+        }
+        guard let shortcut = ShortcutOverrides.shortcut(for: event) else {
+            message = "Use ⌘, ⌃ or ⌥ with the key, or an F key."
+            NSSound.beep()
+            return
+        }
+        stopRecording()
+        var overrides = AppSettings.shared.shortcutOverrides
+        let actions = ActionRegistry.actions()
+        let taken = ShortcutOverrides.conflicts(with: shortcut, excluding: id, in: actions)
+        for other in taken { overrides[other.id] = "" }
+        overrides[id] = ShortcutOverrides.spec(for: shortcut)
+        if let action = actions.first(where: { $0.id == id }),
+            ShortcutOverrides.defaultShortcut(for: action) == shortcut
+        {
+            overrides[id] = nil
+        }
+        message =
+            taken.isEmpty
+            ? nil : "\(shortcut.display) was removed from \(taken.map { $0.path.dropFirst().joined(separator: " ") }.joined(separator: ", "))."
+        save(overrides)
+    }
+
+    private func setOverride(_ spec: String?, for id: String) {
+        var overrides = AppSettings.shared.shortcutOverrides
+        overrides[id] = spec
+        save(overrides)
+    }
+
+    private func save(_ overrides: [String: String]) {
+        AppSettings.shared.shortcutOverrides = overrides
+        // The menu is rebuilt by the settings broadcast; read it after that.
+        DispatchQueue.main.async { refresh &+= 1 }
     }
 }
 

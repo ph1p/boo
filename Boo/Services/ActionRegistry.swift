@@ -89,23 +89,30 @@ enum ActionRegistry {
     struct ShortcutEntry: Hashable {
         let title: String
         let shortcut: String
+        /// The menu action id when the row can be rebound; nil for collapsed runs.
+        var actionID: String? = nil
     }
 
     /// Every bound shortcut, grouped by top-level menu. Numbered runs bound to
     /// the digit keys ("Tab 1" … "Tab 9" on ⌥⌘1–9) collapse into one "Tab 1-9" row.
-    static func shortcutGroups(in menu: NSMenu? = NSApplication.shared.mainMenu) -> [ShortcutGroup] {
+    /// `includeUnbound` adds commands without a shortcut, so they can be bound.
+    static func shortcutGroups(
+        in menu: NSMenu? = NSApplication.shared.mainMenu, includeUnbound: Bool = false
+    ) -> [ShortcutGroup] {
         var groups: [ShortcutGroup] = []
-        for action in actions(in: menu) where !action.keyEquivalent.isEmpty {
+        for action in actions(in: menu) where includeUnbound ? !action.isAlternate : !action.keyEquivalent.isEmpty {
             let group = action.path[0] == "Boo" ? "General" : action.path[0]
             // Nested items ("Select Pane > Left") read as "Select Pane Left".
             var title = action.path.dropFirst().joined(separator: " ")
             var shortcut = action.shortcut ?? ""
+            var actionID: String? = action.id
             if let run = numberedRun(title: title, key: action.keyEquivalent) {
                 guard run.number == 1 else { continue }
                 title = run.prefix + " 1-9"
                 shortcut = display(key: "", modifiers: action.modifiers) + "1-9"
+                actionID = nil
             }
-            let entry = ShortcutEntry(title: title, shortcut: shortcut)
+            let entry = ShortcutEntry(title: title, shortcut: shortcut, actionID: actionID)
             if let index = groups.firstIndex(where: { $0.title == group }) {
                 if !groups[index].entries.contains(entry) {
                     groups[index] = ShortcutGroup(title: group, entries: groups[index].entries + [entry])

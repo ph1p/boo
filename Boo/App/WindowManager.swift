@@ -298,6 +298,11 @@ final class WindowManager {
                 if let topic {
                     BooSocketServer.shared.emitSettingsChanged(topic: topic.rawValue)
                 }
+                // Rebuild so removed overrides fall back to the built-in shortcuts.
+                if topic == .shortcuts, let owner = WindowManager.shared.menuOwner {
+                    owner.setupMenuItems()
+                    owner.rebuildPluginsMenu()
+                }
                 if topic == nil || topic == .theme {
                     AppStore.shared.refreshTheme()
                     let theme = AppSettings.shared.theme

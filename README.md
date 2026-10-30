@@ -587,7 +587,7 @@ Open with **Cmd+,**. Organized in tabs:
 - **Notifications** — Notification preferences
 - **Plugins** — Enable/disable plugins
 - **Per-plugin pages** — Plugins with settings get their own page in the sidebar
-- **Shortcuts** — Searchable reference of all keyboard shortcuts
+- **Shortcuts** — Searchable list of all menu commands; click a shortcut to rebind it
 
 ## Tests
 

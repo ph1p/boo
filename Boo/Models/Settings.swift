@@ -263,6 +263,7 @@ enum SettingsTopic: String, CaseIterable {
     case history  // command history
     case sync  // sync folder
     case agents  // agent budgets
+    case shortcuts  // menu shortcut overrides
 }
 
 final class AppSettings {
@@ -373,6 +374,7 @@ final class AppSettings {
         static let remoteControlPort = "remoteControlPort"
         static let secureKeyboardEntry = "secureKeyboardEntry"
         static let restoreScrollback = "restoreScrollback"
+        static let shortcutOverrides = "shortcutOverrides"
 
         static let paletteRecents = "paletteRecents"
     }
@@ -829,7 +831,7 @@ final class AppSettings {
         K.defaultProfile, K.terminalShader, K.defaultLinkTarget, K.externalEditorPreset, K.historyEnabled,
         K.historyIgnorePattern, K.historyRetentionDays, K.historySearchShortcutEnabled, K.agentBudgetPerTask,
         K.agentBudgetPerDay, K.portNotificationsEnabled, K.errorAgentButtonEnabled, K.notifyMinCommandSeconds,
-        K.notificationGroupBursts, K.notificationExpiryMinutes
+        K.notificationGroupBursts, K.notificationExpiryMinutes, K.shortcutOverrides
     ]
 
     static let syncedCustomThemesKey = "customThemes"
@@ -1199,6 +1201,15 @@ final class AppSettings {
         set { set(newValue, forKey: K.restoreScrollback) }
     }
 
+    // MARK: - Shortcuts
+
+    /// Menu item id ("Terminal/Split Right") → shortcut spec ("cmd+shift+d");
+    /// an empty spec removes the item's shortcut. See `ShortcutOverrides`.
+    var shortcutOverrides: [String: String] {
+        get { UserDefaults.standard.dictionary(forKey: K.shortcutOverrides) as? [String: String] ?? [:] }
+        set { set(newValue, forKey: K.shortcutOverrides, topic: .shortcuts) }
+    }
+
     var secureKeyboardEntry: Bool {
         get { bool(K.secureKeyboardEntry, default: false) }
         set { set(newValue, forKey: K.secureKeyboardEntry) }
@@ -1560,7 +1571,9 @@ final class AppSettings {
             K.errorAgentButtonEnabled: errorAgentButtonEnabled,
             K.notifyMinCommandSeconds: notifyMinCommandSeconds,
             K.notificationGroupBursts: notificationGroupBursts,
-            K.notificationExpiryMinutes: notificationExpiryMinutes
+            K.notificationExpiryMinutes: notificationExpiryMinutes,
+            K.restoreScrollback: restoreScrollback,
+            K.shortcutOverrides: shortcutOverrides
         ]
         if let sshControlMasterApproved {
             dict[K.sshControlMasterApproved] = sshControlMasterApproved
