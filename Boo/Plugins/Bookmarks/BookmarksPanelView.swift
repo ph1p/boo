@@ -11,28 +11,25 @@ struct BookmarksPanelView: View {
 
     var body: some View {
         let _ = settings.revision
-        let theme = AppSettings.shared.theme
-        let mutedColor = Color(nsColor: theme.chromeMuted)
-        let textColor = Color(nsColor: theme.chromeText)
-        let accentColor = Color(nsColor: theme.accentColor)
+        let t = Tokens.current
 
         VStack(alignment: .leading, spacing: 0) {
             // Header
             HStack {
                 Image(systemName: "bookmark.fill")
                     .font(.system(size: 10))
-                    .foregroundStyle(accentColor)
+                    .foregroundStyle(t.accent)
                 Text("BOOKMARKS")
                     .font(.system(size: 10.5, weight: .semibold))
-                    .foregroundStyle(mutedColor)
+                    .foregroundStyle(t.muted)
                     .tracking(0.8)
                 if namespace != "local" {
                     Text(namespace)
                         .font(.system(size: 9, weight: .medium))
-                        .foregroundStyle(accentColor.opacity(0.7))
+                        .foregroundStyle(t.accentEmphasis)
                         .padding(.horizontal, 4)
                         .padding(.vertical, 1)
-                        .background(accentColor.opacity(0.1))
+                        .background(t.accentSelectionFill)
                         .cornerRadius(3)
                 }
 
@@ -44,7 +41,7 @@ struct BookmarksPanelView: View {
                 }) {
                     Image(systemName: isCurrentBookmarked ? "bookmark.slash" : "plus")
                         .font(.system(size: 10))
-                        .foregroundStyle(mutedColor)
+                        .foregroundStyle(t.muted)
                 }
                 .buttonStyle(.plain)
                 .help(isCurrentBookmarked ? "Remove bookmark" : "Bookmark current directory")
@@ -58,10 +55,10 @@ struct BookmarksPanelView: View {
                     Spacer()
                     Image(systemName: "bookmark")
                         .font(.system(size: 24))
-                        .foregroundStyle(mutedColor.opacity(0.3))
+                        .foregroundStyle(t.textTertiary)
                     Text("No bookmarks yet")
                         .font(fontScale.font(.base))
-                        .foregroundStyle(mutedColor.opacity(0.5))
+                        .foregroundStyle(t.textTertiary)
                     Spacer()
                 }
                 .frame(maxWidth: .infinity)
@@ -73,9 +70,7 @@ struct BookmarksPanelView: View {
                                 bookmark: bookmark,
                                 isCurrent: bookmark.path == currentDirectory,
                                 fontScale: fontScale,
-                                textColor: textColor,
-                                mutedColor: mutedColor,
-                                accentColor: accentColor,
+                                t: t,
                                 onSelect: { onBookmarkSelected?(bookmark.path) },
                                 onRemove: {
                                     BookmarkService.shared.remove(id: bookmark.id)
@@ -88,7 +83,7 @@ struct BookmarksPanelView: View {
                 }
             }
         }
-        .background(Color(nsColor: theme.sidebarBg))
+        .background(t.bg)
         .onAppear { refreshBookmarks() }
     }
 
@@ -105,9 +100,7 @@ struct BookmarkRow: View {
     let bookmark: BookmarkService.Bookmark
     let isCurrent: Bool
     let fontScale: SidebarFontScale
-    let textColor: Color
-    let mutedColor: Color
-    let accentColor: Color
+    let t: Tokens
     let onSelect: () -> Void
     let onRemove: () -> Void
     @State private var isHovered = false
@@ -116,19 +109,19 @@ struct BookmarkRow: View {
         HStack(spacing: 6) {
             Image(systemName: bookmark.icon)
                 .font(.system(size: 10))
-                .foregroundStyle(isCurrent ? accentColor : mutedColor.opacity(0.6))
+                .foregroundStyle(isCurrent ? t.accent : t.textSecondary)
                 .frame(width: 14)
 
             VStack(alignment: .leading, spacing: 1) {
                 let nameWeight: Font.Weight = isCurrent ? .semibold : .medium
                 Text(bookmark.name)
                     .font(fontScale.font(.base).weight(nameWeight))
-                    .foregroundStyle(isCurrent ? accentColor : textColor)
+                    .foregroundStyle(isCurrent ? t.accent : t.text)
                     .lineLimit(1)
 
                 Text(abbreviatePath(bookmark.path))
                     .font(fontScale.font(.xs))
-                    .foregroundStyle(mutedColor.opacity(0.6))
+                    .foregroundStyle(t.textSecondary)
                     .lineLimit(1)
             }
 
@@ -137,14 +130,14 @@ struct BookmarkRow: View {
             if isCurrent {
                 Image(systemName: "checkmark")
                     .font(.system(size: 8, weight: .bold))
-                    .foregroundStyle(accentColor.opacity(0.7))
+                    .foregroundStyle(t.accentEmphasis)
             }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 4)
         .background(
             RoundedRectangle(cornerRadius: 4)
-                .fill(isHovered ? mutedColor.opacity(0.1) : Color.clear)
+                .fill(isHovered ? t.hoverFill : Color.clear)
                 .padding(.horizontal, 4)
         )
         .contentShape(Rectangle())

@@ -12,20 +12,17 @@ struct SnippetsPanelView: View {
 
     var body: some View {
         let _ = settings.revision
-        let theme = AppSettings.shared.theme
-        let mutedColor = Color(nsColor: theme.chromeMuted)
-        let textColor = Color(nsColor: theme.chromeText)
-        let accentColor = Color(nsColor: theme.accentColor)
+        let t = Tokens.current
 
         VStack(alignment: .leading, spacing: 0) {
             // Header
             HStack {
                 Image(systemName: "curlybraces.square.fill")
                     .font(.system(size: 10))
-                    .foregroundStyle(accentColor)
+                    .foregroundStyle(t.accent)
                 Text("SNIPPETS")
                     .font(.system(size: 10.5, weight: .semibold))
-                    .foregroundStyle(mutedColor)
+                    .foregroundStyle(t.muted)
                     .tracking(0.8)
 
                 Spacer()
@@ -33,7 +30,7 @@ struct SnippetsPanelView: View {
                 Button(action: { isAdding = true }) {
                     Image(systemName: "plus")
                         .font(.system(size: 10))
-                        .foregroundStyle(mutedColor)
+                        .foregroundStyle(t.muted)
                 }
                 .buttonStyle(.plain)
                 .help("Add snippet")
@@ -47,13 +44,13 @@ struct SnippetsPanelView: View {
                     Spacer()
                     Image(systemName: "curlybraces.square")
                         .font(.system(size: 24))
-                        .foregroundStyle(mutedColor.opacity(0.3))
+                        .foregroundStyle(t.textTertiary)
                     Text("No snippets yet")
                         .font(fontScale.font(.base))
-                        .foregroundStyle(mutedColor.opacity(0.5))
+                        .foregroundStyle(t.textTertiary)
                     Text("Add commands you use often")
                         .font(fontScale.font(.xs))
-                        .foregroundStyle(mutedColor.opacity(0.35))
+                        .foregroundStyle(t.textTertiary)
                     Spacer()
                 }
                 .frame(maxWidth: .infinity)
@@ -63,9 +60,7 @@ struct SnippetsPanelView: View {
                         if isAdding {
                             SnippetEditRow(
                                 fontScale: fontScale,
-                                textColor: textColor,
-                                mutedColor: mutedColor,
-                                accentColor: accentColor,
+                                t: t,
                                 onSave: { name, command, description in
                                     SnippetService.shared.add(
                                         name: name, command: command,
@@ -81,9 +76,7 @@ struct SnippetsPanelView: View {
                             if editingSnippet?.id == snippet.id {
                                 SnippetEditRow(
                                     fontScale: fontScale,
-                                    textColor: textColor,
-                                    mutedColor: mutedColor,
-                                    accentColor: accentColor,
+                                    t: t,
                                     initialName: snippet.name,
                                     initialCommand: snippet.command,
                                     initialDescription: snippet.description,
@@ -101,9 +94,7 @@ struct SnippetsPanelView: View {
                                 SnippetRow(
                                     snippet: snippet,
                                     fontScale: fontScale,
-                                    textColor: textColor,
-                                    mutedColor: mutedColor,
-                                    accentColor: accentColor,
+                                    t: t,
                                     onRun: { onRun?(snippet.command) },
                                     onPaste: { onPaste?(snippet.command) },
                                     onEdit: { editingSnippet = snippet },
@@ -119,7 +110,7 @@ struct SnippetsPanelView: View {
                 }
             }
         }
-        .background(Color(nsColor: theme.sidebarBg))
+        .background(t.bg)
         .onAppear { refreshSnippets() }
     }
 
@@ -133,9 +124,7 @@ struct SnippetsPanelView: View {
 struct SnippetRow: View {
     let snippet: SnippetService.Snippet
     let fontScale: SidebarFontScale
-    let textColor: Color
-    let mutedColor: Color
-    let accentColor: Color
+    let t: Tokens
     let onRun: () -> Void
     let onPaste: () -> Void
     let onEdit: () -> Void
@@ -146,24 +135,24 @@ struct SnippetRow: View {
         HStack(spacing: 6) {
             Image(systemName: "terminal")
                 .font(.system(size: 10))
-                .foregroundStyle(mutedColor.opacity(0.6))
+                .foregroundStyle(t.textSecondary)
                 .frame(width: 14)
 
             VStack(alignment: .leading, spacing: 1) {
                 Text(snippet.name)
                     .font(fontScale.font(.base).weight(.medium))
-                    .foregroundStyle(textColor)
+                    .foregroundStyle(t.text)
                     .lineLimit(1)
 
                 Text(snippet.command)
                     .font(.system(size: fontScale.size(.xs), design: .monospaced))
-                    .foregroundStyle(accentColor.opacity(0.7))
+                    .foregroundStyle(t.accentEmphasis)
                     .lineLimit(1)
 
                 if !snippet.description.isEmpty {
                     Text(snippet.description)
                         .font(fontScale.font(.xs))
-                        .foregroundStyle(mutedColor.opacity(0.5))
+                        .foregroundStyle(t.textTertiary)
                         .lineLimit(1)
                 }
             }
@@ -174,7 +163,7 @@ struct SnippetRow: View {
                 Button(action: onRun) {
                     Image(systemName: "play.fill")
                         .font(.system(size: 9))
-                        .foregroundStyle(accentColor)
+                        .foregroundStyle(t.accent)
                 }
                 .buttonStyle(.plain)
                 .help("Run in terminal")
@@ -184,7 +173,7 @@ struct SnippetRow: View {
         .padding(.vertical, 4)
         .background(
             RoundedRectangle(cornerRadius: 4)
-                .fill(isHovered ? mutedColor.opacity(0.1) : Color.clear)
+                .fill(isHovered ? t.hoverFill : Color.clear)
                 .padding(.horizontal, 4)
         )
         .contentShape(Rectangle())
@@ -204,9 +193,7 @@ struct SnippetRow: View {
 
 struct SnippetEditRow: View {
     let fontScale: SidebarFontScale
-    let textColor: Color
-    let mutedColor: Color
-    let accentColor: Color
+    let t: Tokens
     var initialName: String = ""
     var initialCommand: String = ""
     var initialDescription: String = ""
@@ -228,10 +215,10 @@ struct SnippetEditRow: View {
             HStack(spacing: 4) {
                 Image(systemName: "pencil")
                     .font(.system(size: 8))
-                    .foregroundStyle(accentColor.opacity(0.7))
+                    .foregroundStyle(t.accentEmphasis)
                 Text(initialName.isEmpty ? "NEW SNIPPET" : "EDIT SNIPPET")
                     .font(.system(size: 9, weight: .medium))
-                    .foregroundStyle(mutedColor.opacity(0.6))
+                    .foregroundStyle(t.textSecondary)
                     .tracking(0.5)
                 Spacer()
             }
@@ -241,16 +228,16 @@ struct SnippetEditRow: View {
             TextField("Name", text: $name)
                 .textFieldStyle(.plain)
                 .font(fontScale.font(.base))
-                .foregroundStyle(textColor)
+                .foregroundStyle(t.text)
                 .padding(.horizontal, 6)
                 .padding(.vertical, 4)
                 .background(
                     RoundedRectangle(cornerRadius: 4)
-                        .fill(mutedColor.opacity(0.08))
+                        .fill(t.subtleFill)
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: 4)
-                        .stroke(mutedColor.opacity(0.12), lineWidth: 0.5)
+                        .stroke(t.separator, lineWidth: 0.5)
                 )
                 .padding(.bottom, 6)
 
@@ -258,16 +245,18 @@ struct SnippetEditRow: View {
             TextField("Command", text: $command)
                 .textFieldStyle(.plain)
                 .font(.system(size: fontScale.size(.xs), design: .monospaced))
-                .foregroundStyle(accentColor)
+                .foregroundStyle(t.accent)
                 .padding(.horizontal, 6)
                 .padding(.vertical, 4)
                 .background(
+                    // Deliberate raw alpha: accent-tinted code field, no token for a 6% accent wash.
                     RoundedRectangle(cornerRadius: 4)
-                        .fill(accentColor.opacity(0.06))
+                        .fill(t.accent.opacity(0.06))
                 )
                 .overlay(
+                    // Deliberate raw alpha: hairline in the code field's accent tint.
                     RoundedRectangle(cornerRadius: 4)
-                        .stroke(accentColor.opacity(0.12), lineWidth: 0.5)
+                        .stroke(t.accent.opacity(0.12), lineWidth: 0.5)
                 )
                 .padding(.bottom, 6)
 
@@ -275,16 +264,16 @@ struct SnippetEditRow: View {
             TextField("Description (optional)", text: $description)
                 .textFieldStyle(.plain)
                 .font(fontScale.font(.xs))
-                .foregroundStyle(mutedColor)
+                .foregroundStyle(t.muted)
                 .padding(.horizontal, 6)
                 .padding(.vertical, 4)
                 .background(
                     RoundedRectangle(cornerRadius: 4)
-                        .fill(mutedColor.opacity(0.06))
+                        .fill(t.subtleFill)
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: 4)
-                        .stroke(mutedColor.opacity(0.1), lineWidth: 0.5)
+                        .stroke(t.separator, lineWidth: 0.5)
                 )
                 .padding(.bottom, 8)
 
@@ -294,7 +283,7 @@ struct SnippetEditRow: View {
                 Button("Cancel") { onCancel() }
                     .buttonStyle(.plain)
                     .font(fontScale.font(.xs))
-                    .foregroundStyle(mutedColor.opacity(0.7))
+                    .foregroundStyle(t.textSecondary)
 
                 Button("Save") {
                     let trimmedName = name.trimmingCharacters(in: .whitespaces)
@@ -306,14 +295,14 @@ struct SnippetEditRow: View {
                 }
                 .buttonStyle(.plain)
                 .font(fontScale.font(.xs).weight(.semibold))
-                .foregroundStyle(canSave ? accentColor : accentColor.opacity(0.3))
+                .foregroundStyle(canSave ? t.accent : t.textTertiary)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 3)
                 .background(
                     RoundedRectangle(cornerRadius: 4)
                         .fill(
                             canSave
-                                ? accentColor.opacity(0.15) : accentColor.opacity(0.05))
+                                ? t.accentSelectionFill : t.subtleFill)
                 )
                 .disabled(!canSave)
             }
@@ -322,12 +311,12 @@ struct SnippetEditRow: View {
         .padding(.vertical, 8)
         .background(
             RoundedRectangle(cornerRadius: 5)
-                .fill(mutedColor.opacity(0.06))
+                .fill(t.subtleFill)
                 .padding(.horizontal, 4)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 5)
-                .stroke(mutedColor.opacity(0.12), lineWidth: 0.5)
+                .stroke(t.separator, lineWidth: 0.5)
                 .padding(.horizontal, 4)
         )
         .onAppear {

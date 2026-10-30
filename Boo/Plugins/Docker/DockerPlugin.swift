@@ -264,6 +264,7 @@ final class DockerPluginNew: BooPluginProtocol {
 private struct DockerConnectionErrorView: View {
     let error: String
     let theme: TerminalTheme
+    private var t: Tokens { Tokens(theme: theme) }
     let fontScale: SidebarFontScale
 
     var body: some View {
@@ -274,14 +275,14 @@ private struct DockerConnectionErrorView: View {
                 .foregroundStyle(.orange)
             Text("Docker Disconnected")
                 .font(fontScale.font(.base).weight(.medium))
-                .foregroundStyle(Color(nsColor: theme.chromeText))
+                .foregroundStyle(t.text)
             Text(error)
                 .font(fontScale.font(.base))
-                .foregroundStyle(Color(nsColor: theme.chromeMuted))
+                .foregroundStyle(t.muted)
                 .multilineTextAlignment(.center)
             Text("Set the socket path in Settings > Plugins > Docker")
                 .font(fontScale.font(.base))
-                .foregroundStyle(Color(nsColor: theme.chromeMuted).opacity(0.7))
+                .foregroundStyle(t.textSecondary)
                 .multilineTextAlignment(.center)
             Spacer()
         }
@@ -558,6 +559,7 @@ private struct DockerEmptyView: View {
     let icon: String
     let label: String
     let theme: TerminalTheme
+    private var t: Tokens { Tokens(theme: theme) }
     let fontScale: SidebarFontScale
 
     var body: some View {
@@ -565,7 +567,7 @@ private struct DockerEmptyView: View {
             Spacer()
             Text(label)
                 .font(fontScale.font(.base))
-                .foregroundStyle(Color(nsColor: theme.chromeMuted).opacity(0.4))
+                .foregroundStyle(t.textTertiary)
             Spacer()
         }
         .padding(.vertical, 12)
@@ -578,6 +580,7 @@ private struct ComposeProjectHeader: View {
     let project: ComposeProject
     let density: SidebarDensity
     let theme: TerminalTheme
+    private var t: Tokens { Tokens(theme: theme) }
     let fontScale: SidebarFontScale
     let isBusy: Bool
     let canRun: Bool
@@ -585,22 +588,22 @@ private struct ComposeProjectHeader: View {
     let onLogs: () -> Void
     @State private var isHovered = false
 
-    private var muted: Color { Color(nsColor: theme.chromeMuted) }
-
     var body: some View {
         HStack(spacing: 6) {
             Image(systemName: project.isPinned ? "pin.fill" : "square.stack.3d.up")
                 .font(.system(size: fontScale.size(.base) - 3))
-                .foregroundStyle(project.runningCount > 0 ? Color.green : muted.opacity(0.7))
+                .foregroundStyle(
+                    project.runningCount > 0 ? t.success : t.textSecondary
+                )
                 .frame(width: 14)
             Text(project.displayName)
                 .font(fontScale.font(.base).weight(.semibold))
-                .foregroundStyle(Color(nsColor: theme.chromeText))
+                .foregroundStyle(t.text)
                 .lineLimit(1)
             if !project.containers.isEmpty {
                 Text("\(project.runningCount)/\(project.containers.count)")
                     .font(fontScale.font(.sm, design: .monospaced))
-                    .foregroundStyle(muted.opacity(0.6))
+                    .foregroundStyle(t.textSecondary)
             }
             Spacer()
             if isBusy {
@@ -643,7 +646,8 @@ private struct ComposeProjectHeader: View {
 
     private func iconButton(_ icon: String, help: String, action: @escaping () -> Void) -> some View {
         SidebarIconButton(
-            systemName: icon, help: help, tint: muted.opacity(0.7), size: fontScale.size(.base) - 3, frame: 20,
+            systemName: icon, help: help, tint: t.textSecondary, size: fontScale.size(.base) - 3,
+            frame: 20,
             action: action)
     }
 }
@@ -652,6 +656,7 @@ private struct DockerContainerRow: View {
     let container: DockerService.Container
     let density: SidebarDensity
     let theme: TerminalTheme
+    private var t: Tokens { Tokens(theme: theme) }
     let fontScale: SidebarFontScale
     let onExec: () -> Void
     let onLogs: () -> Void
@@ -669,11 +674,10 @@ private struct DockerContainerRow: View {
 
     private var stateColor: Color {
         switch container.state {
-        case .running: return .green
-        case .paused: return .yellow
-        case .exited, .dead: return .red
-        case .restarting: return .orange
-        default: return Color(nsColor: theme.chromeMuted)
+        case .running: return t.success
+        case .paused, .restarting: return t.warning
+        case .exited, .dead: return t.error
+        default: return t.muted
         }
     }
 
@@ -709,7 +713,7 @@ private struct DockerContainerRow: View {
             VStack(alignment: .leading, spacing: 1) {
                 Text(container.name)
                     .font(fontScale.font(.base).weight(.medium))
-                    .foregroundStyle(Color(nsColor: theme.chromeText))
+                    .foregroundStyle(t.text)
                     .lineLimit(1)
 
                 HStack(spacing: 4) {
@@ -718,12 +722,12 @@ private struct DockerContainerRow: View {
                         ? String(container.image.prefix(19)) : container.image
                     Text(imageName)
                         .font(fontScale.font(.sm))
-                        .foregroundStyle(Color(nsColor: theme.chromeMuted).opacity(0.7))
+                        .foregroundStyle(t.textSecondary)
                         .lineLimit(1)
                     if !container.ports.isEmpty {
                         Text(container.ports)
                             .font(fontScale.font(.sm, design: .monospaced))
-                            .foregroundStyle(Color(nsColor: theme.chromeMuted).opacity(0.5))
+                            .foregroundStyle(t.textTertiary)
                             .lineLimit(1)
                     }
                 }
@@ -739,10 +743,12 @@ private struct DockerContainerRow: View {
                 {
                     Text(uptime)
                         .font(fontScale.font(.sm, design: .monospaced))
+                        // Deliberate raw alpha: dimmed status hue, no token per status color.
                         .foregroundStyle(stateColor.opacity(0.7))
                 } else if container.state != .running {
                     Text(container.state.rawValue)
                         .font(fontScale.font(.sm, design: .monospaced))
+                        // Deliberate raw alpha: dimmed status hue, no token per status color.
                         .foregroundStyle(stateColor.opacity(0.8))
                         .lineLimit(1)
                 }
@@ -753,7 +759,7 @@ private struct DockerContainerRow: View {
         .padding(.vertical, 3)
         .background(
             RoundedRectangle(cornerRadius: 4)
-                .fill(isHovered ? Color(nsColor: theme.chromeMuted).opacity(0.1) : Color.clear)
+                .fill(isHovered ? t.hoverFill : Color.clear)
                 .padding(.horizontal, 4)
         )
         .contentShape(Rectangle())
@@ -835,7 +841,7 @@ private struct DockerContainerRow: View {
 
     private func iconButton(_ icon: String, help: String, action: @escaping () -> Void) -> some View {
         SidebarIconButton(
-            systemName: icon, help: help, tint: Color(nsColor: theme.chromeMuted).opacity(0.7),
+            systemName: icon, help: help, tint: t.textSecondary,
             size: fontScale.size(.base) - 2, frame: 22, action: action)
     }
 }
@@ -846,6 +852,7 @@ private struct DockerImageRow: View {
     let image: DockerService.DockerImage
     let density: SidebarDensity
     let theme: TerminalTheme
+    private var t: Tokens { Tokens(theme: theme) }
     let fontScale: SidebarFontScale
     let onRemove: () -> Void
     @State private var isHovered = false
@@ -856,23 +863,23 @@ private struct DockerImageRow: View {
         HStack(spacing: 6) {
             Image(systemName: "square.stack")
                 .font(.system(size: fontScale.size(.base) - 2))
-                .foregroundStyle(Color(nsColor: theme.chromeMuted).opacity(0.5))
+                .foregroundStyle(t.textTertiary)
                 .frame(width: 14)
 
             VStack(alignment: .leading, spacing: 1) {
                 Text(image.repoTag)
                     .font(fontScale.font(.base).weight(.medium))
-                    .foregroundStyle(Color(nsColor: theme.chromeText))
+                    .foregroundStyle(t.text)
                     .lineLimit(1)
 
                 HStack(spacing: 4) {
                     Text(image.id)
                         .font(fontScale.font(.sm, design: .monospaced))
-                        .foregroundStyle(Color(nsColor: theme.chromeMuted).opacity(0.5))
+                        .foregroundStyle(t.textTertiary)
                     if let age = relativeUptime(from: image.createdAt) {
                         Text(age)
                             .font(fontScale.font(.sm))
-                            .foregroundStyle(Color(nsColor: theme.chromeMuted).opacity(0.4))
+                            .foregroundStyle(t.textTertiary)
                     }
                 }
             }
@@ -883,7 +890,7 @@ private struct DockerImageRow: View {
                 Button(action: onRemove) {
                     Image(systemName: "trash")
                         .font(.system(size: fontScale.size(.base) - 2))
-                        .foregroundStyle(Color(nsColor: theme.chromeMuted).opacity(0.7))
+                        .foregroundStyle(t.textSecondary)
                         .frame(width: 22, height: 22)
                         .contentShape(Rectangle())
                 }
@@ -892,7 +899,7 @@ private struct DockerImageRow: View {
             } else {
                 Text(formatBytes(image.size))
                     .font(fontScale.font(.sm, design: .monospaced))
-                    .foregroundStyle(Color(nsColor: theme.chromeMuted).opacity(0.4))
+                    .foregroundStyle(t.textTertiary)
             }
         }
         .frame(minHeight: itemHeight)
@@ -900,7 +907,7 @@ private struct DockerImageRow: View {
         .padding(.vertical, 3)
         .background(
             RoundedRectangle(cornerRadius: 4)
-                .fill(isHovered ? Color(nsColor: theme.chromeMuted).opacity(0.1) : Color.clear)
+                .fill(isHovered ? t.hoverFill : Color.clear)
                 .padding(.horizontal, 4)
         )
         .contentShape(Rectangle())
@@ -924,6 +931,7 @@ private struct DockerNetworkRow: View {
     let network: DockerService.DockerNetwork
     let density: SidebarDensity
     let theme: TerminalTheme
+    private var t: Tokens { Tokens(theme: theme) }
     let fontScale: SidebarFontScale
     let onRemove: () -> Void
     @State private var isHovered = false
@@ -934,22 +942,22 @@ private struct DockerNetworkRow: View {
         HStack(spacing: 6) {
             Image(systemName: "network")
                 .font(.system(size: fontScale.size(.base) - 2))
-                .foregroundStyle(Color(nsColor: theme.chromeMuted).opacity(0.5))
+                .foregroundStyle(t.textTertiary)
                 .frame(width: 14)
 
             VStack(alignment: .leading, spacing: 1) {
                 Text(network.name)
                     .font(fontScale.font(.base).weight(.medium))
-                    .foregroundStyle(Color(nsColor: theme.chromeText))
+                    .foregroundStyle(t.text)
                     .lineLimit(1)
 
                 HStack(spacing: 4) {
                     Text(network.driver)
                         .font(fontScale.font(.sm))
-                        .foregroundStyle(Color(nsColor: theme.chromeMuted).opacity(0.6))
+                        .foregroundStyle(t.textSecondary)
                     Text(network.scope)
                         .font(fontScale.font(.sm))
-                        .foregroundStyle(Color(nsColor: theme.chromeMuted).opacity(0.4))
+                        .foregroundStyle(t.textTertiary)
                 }
             }
 
@@ -959,7 +967,7 @@ private struct DockerNetworkRow: View {
                 Button(action: onRemove) {
                     Image(systemName: "trash")
                         .font(.system(size: fontScale.size(.base) - 2))
-                        .foregroundStyle(Color(nsColor: theme.chromeMuted).opacity(0.7))
+                        .foregroundStyle(t.textSecondary)
                         .frame(width: 22, height: 22)
                         .contentShape(Rectangle())
                 }
@@ -972,7 +980,7 @@ private struct DockerNetworkRow: View {
         .padding(.vertical, 3)
         .background(
             RoundedRectangle(cornerRadius: 4)
-                .fill(isHovered ? Color(nsColor: theme.chromeMuted).opacity(0.1) : Color.clear)
+                .fill(isHovered ? t.hoverFill : Color.clear)
                 .padding(.horizontal, 4)
         )
         .contentShape(Rectangle())
@@ -996,6 +1004,7 @@ private struct DockerVolumeRow: View {
     let volume: DockerService.DockerVolume
     let density: SidebarDensity
     let theme: TerminalTheme
+    private var t: Tokens { Tokens(theme: theme) }
     let fontScale: SidebarFontScale
     let onRemove: () -> Void
     @State private var isHovered = false
@@ -1006,18 +1015,18 @@ private struct DockerVolumeRow: View {
         HStack(spacing: 6) {
             Image(systemName: "cylinder")
                 .font(.system(size: fontScale.size(.base) - 2))
-                .foregroundStyle(Color(nsColor: theme.chromeMuted).opacity(0.5))
+                .foregroundStyle(t.textTertiary)
                 .frame(width: 14)
 
             VStack(alignment: .leading, spacing: 1) {
                 Text(volume.name)
                     .font(fontScale.font(.base).weight(.medium))
-                    .foregroundStyle(Color(nsColor: theme.chromeText))
+                    .foregroundStyle(t.text)
                     .lineLimit(1)
 
                 Text(volume.driver)
                     .font(fontScale.font(.sm))
-                    .foregroundStyle(Color(nsColor: theme.chromeMuted).opacity(0.6))
+                    .foregroundStyle(t.textSecondary)
             }
 
             Spacer()
@@ -1026,7 +1035,7 @@ private struct DockerVolumeRow: View {
                 Button(action: onRemove) {
                     Image(systemName: "trash")
                         .font(.system(size: fontScale.size(.base) - 2))
-                        .foregroundStyle(Color(nsColor: theme.chromeMuted).opacity(0.7))
+                        .foregroundStyle(t.textSecondary)
                         .frame(width: 22, height: 22)
                         .contentShape(Rectangle())
                 }
@@ -1039,7 +1048,7 @@ private struct DockerVolumeRow: View {
         .padding(.vertical, 3)
         .background(
             RoundedRectangle(cornerRadius: 4)
-                .fill(isHovered ? Color(nsColor: theme.chromeMuted).opacity(0.1) : Color.clear)
+                .fill(isHovered ? t.hoverFill : Color.clear)
                 .padding(.horizontal, 4)
         )
         .contentShape(Rectangle())
