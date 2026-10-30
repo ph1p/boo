@@ -64,8 +64,7 @@ final class ContainerCwdWatcher: @unchecked Sendable {
     private let readerQueue = DispatchQueue(label: "com.boo.cwd-reader", qos: .utility)
     /// Each newline written here makes the script scan once. Access on watcherQueue.
     private var tickPipe: Pipe?
-    private var tickTimer: DispatchSourceTimer?
-    private var tickInterval: TimeInterval = 0
+    private lazy var tickTimer = AdaptiveTimer(queue: watcherQueue) { [weak self] in self?.tick() }
 
     /// Tab registrations: paneID → (assignedPID, callback).
     /// Access only on watcherQueue.
@@ -243,23 +242,11 @@ final class ContainerCwdWatcher: @unchecked Sendable {
         }
         let interval = Self.tickInterval(
             registeredTabs: tabCallbacks.keys, focused: Self.lock.withLock { Self.focusedTab })
-        guard interval != tickInterval else { return }
-        tickInterval = interval
-        if tickTimer == nil {
-            let timer = DispatchSource.makeTimerSource(queue: watcherQueue)
-            timer.setEventHandler { [weak self] in self?.tick() }
-            timer.schedule(deadline: .now() + interval, repeating: interval)
-            timer.resume()
-            tickTimer = timer
-        } else {
-            tickTimer?.schedule(deadline: .now() + interval, repeating: interval)
-        }
+        tickTimer.schedule(interval: interval)
     }
 
     private func stopTicking() {
-        tickTimer?.cancel()
-        tickTimer = nil
-        tickInterval = 0
+        tickTimer.cancel()
         try? tickPipe?.fileHandleForWriting.close()
         tickPipe = nil
     }

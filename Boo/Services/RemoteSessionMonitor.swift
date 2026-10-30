@@ -13,8 +13,7 @@ final class RemoteSessionMonitor: @unchecked Sendable {
     }
 
     private var tracked: [UUID: TrackedPane] = [:]
-    private var timer: DispatchSourceTimer?
-    private var timerInterval: TimeInterval = 0
+    private lazy var timer = AdaptiveTimer(queue: queue) { [weak self] in self?.poll() }
     /// Last track, command start/end or session transition. Polls run at
     /// `fastInterval` for `activeWindow` after it, then back off to `idleInterval`:
     /// an ssh/docker session only starts or ends around a command.
@@ -74,7 +73,7 @@ final class RemoteSessionMonitor: @unchecked Sendable {
             }
             self.tracked.removeValue(forKey: paneID)
             if self.tracked.isEmpty {
-                self.stopTimer()
+                self.timer.cancel()
             }
         }
     }
@@ -160,7 +159,7 @@ final class RemoteSessionMonitor: @unchecked Sendable {
 
     private func markActive() {
         lastActivity = Date()
-        scheduleTimer(interval: Self.fastInterval)
+        timer.schedule(interval: Self.fastInterval)
     }
 
     /// Live process tree query for a tracked pane. Checks the process tree NOW
@@ -171,28 +170,8 @@ final class RemoteSessionMonitor: @unchecked Sendable {
         return RemoteExplorer.detectRemoteSessionFiltered(shellPID: pid)
     }
 
-    private func scheduleTimer(interval: TimeInterval) {
-        if let timer {
-            guard interval != timerInterval else { return }
-            timer.schedule(deadline: .now() + interval, repeating: interval)
-        } else {
-            let t = DispatchSource.makeTimerSource(queue: queue)
-            t.schedule(deadline: .now() + interval, repeating: interval)
-            t.setEventHandler { [weak self] in self?.poll() }
-            t.resume()
-            timer = t
-        }
-        timerInterval = interval
-    }
-
-    private func stopTimer() {
-        timer?.cancel()
-        timer = nil
-        timerInterval = 0
-    }
-
     private func poll() {
-        defer { scheduleTimer(interval: Self.pollInterval(sinceActivity: Date().timeIntervalSince(lastActivity))) }
+        defer { timer.schedule(interval: Self.pollInterval(sinceActivity: Date().timeIntervalSince(lastActivity))) }
         for paneID in Array(tracked.keys) {
             guard var entry = tracked[paneID] else { continue }
             let session = RemoteExplorer.detectRemoteSessionFiltered(shellPID: entry.shellPID)
@@ -272,8 +251,4 @@ final class RemoteSessionMonitor: @unchecked Sendable {
         "for p in /proc/[0-9]*; do pid=${p##*/}; [ \"$pid\" = 1 ] || [ \"$pid\" = $$ ] && continue; t=$(readlink $p/fd/0 2>/dev/null); case $t in /dev/pts/*) c=$(readlink $p/cwd 2>/dev/null); [ -n \"$c\" ] && echo \"$pid $c\";; esac; done"
 
     static var containerCwdCommandForTesting: String { containerCwdCommand }
-
-    deinit {
-        stopTimer()
-    }
 }
