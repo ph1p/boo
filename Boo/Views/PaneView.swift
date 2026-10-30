@@ -3,6 +3,13 @@ import Cocoa
 import SwiftUI
 
 @MainActor protocol PaneViewDelegate: AnyObject {
+    /// `paneView` shows a tmux pane, which holds only its own tab: open the
+    /// new tab elsewhere and return its ID.
+    func paneView(
+        _ paneView: PaneView, redirectNewTab contentType: ContentType, workingDirectory: String, url: URL?,
+        launch: LaunchSpec?
+    ) -> UUID?
+    func paneView(_ paneView: PaneView, redirectPluginView view: AnyView, title: String, icon: String) -> UUID?
     func paneView(_ paneView: PaneView, didFocus paneID: UUID)
     func paneView(_ paneView: PaneView, didChangeDirectory path: String, paneID: UUID)
     func paneView(_ paneView: PaneView, titleChanged title: String, paneID: UUID)
@@ -58,7 +65,7 @@ class PaneView: NSView {
     /// A terminal tab that isn't displayed. Its `wrapper`, when kept, stays
     /// attached but hidden: a tab switch then unhides the surface instead of
     /// re-attaching it to the window.
-    private struct CachedTerminal {
+    @MainActor private struct CachedTerminal {
         let view: GhosttyView
         let wrapper: TerminalScrollView?
 
@@ -66,6 +73,12 @@ class PaneView: NSView {
         func detach() {
             wrapper?.removeFromSuperview()
             view.removeFromSuperview()
+        }
+
+        /// Close the cached terminal for good.
+        func discard() {
+            wrapper?.removeFromSuperview()
+            view.destroy()
         }
     }
     private var tabViews: [UUID: CachedTerminal] = [:]
@@ -1204,6 +1217,10 @@ class PaneView: NSView {
         contentType: ContentType, workingDirectory: String = "~", url: URL? = nil, launch: LaunchSpec? = nil,
         group: UUID? = nil
     ) -> UUID? {
+        if pane.tmuxOwned, let paneDelegate {
+            return paneDelegate.paneView(
+                self, redirectNewTab: contentType, workingDirectory: workingDirectory, url: url, launch: launch)
+        }
         storeCurrentView()
         lastAutoScrolledTabIndex = -1
 
@@ -1253,6 +1270,9 @@ class PaneView: NSView {
     /// Add a plugin-owned SwiftUI view in a new tab.
     @discardableResult
     func addPluginViewTab(view: AnyView, title: String, icon: String) -> UUID? {
+        if pane.tmuxOwned, let paneDelegate {
+            return paneDelegate.paneView(self, redirectPluginView: view, title: title, icon: icon)
+        }
         storeCurrentView()
         lastAutoScrolledTabIndex = -1
 
@@ -1290,8 +1310,7 @@ class PaneView: NSView {
         // Clean up the appropriate view type
         if tab.contentType == .terminal {
             if let cached = tabViews.removeValue(forKey: tabID) {
-                cached.wrapper?.removeFromSuperview()
-                cached.view.destroy()
+                cached.discard()
             }
             if pane.activeTabIndex == index {
                 ghosttyView?.destroy()
@@ -1455,8 +1474,7 @@ class PaneView: NSView {
     func stopAll() {
         // Clean up terminal views
         for cached in tabViews.values {
-            cached.wrapper?.removeFromSuperview()
-            cached.view.destroy()
+            cached.discard()
         }
         tabViews.removeAll()
         ghosttyView?.destroy()

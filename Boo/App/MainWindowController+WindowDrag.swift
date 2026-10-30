@@ -263,7 +263,7 @@ extension MainWindowController {
     /// another window. Nil when it is the workspace's only tab.
     func detachTabIntoWorkspace(source: PaneView, tabIndex: Int) -> DetachedWorkspace? {
         guard let workspace = appState.workspaceContainingPane(source.paneID),
-            workspace.tmuxWindowID == nil,
+            !source.pane.tmuxOwned,
             workspace.totalTabCount > 1,
             let moved = detachTab(from: source, at: tabIndex)
         else { return nil }

@@ -121,6 +121,9 @@ final class Pane {
     /// Tab groups of this pane; a group sits wherever its tabs are.
     private(set) var groups: [TabGroup] = []
 
+    /// Shows a tmux pane, which holds only its own tab.
+    var tmuxOwned = false
+
     var activeTab: Tab? {
         guard activeTabIndex >= 0, activeTabIndex < tabs.count else { return nil }
         return tabs[activeTabIndex]

@@ -1395,11 +1395,6 @@ class ThemedSplitView: NSSplitView {
     }
 
     @objc func newTabAction(_ sender: Any?) {
-        // A tmux pane holds one tab; a new tab there is a new tmux window.
-        if let workspace = activeWorkspace, let tmux = TmuxControlClient.owning(workspace: workspace.id) {
-            tmux.newWindow()
-            return
-        }
         guard let workspace = activeWorkspace,
             workspace.pane(for: workspace.activePaneID) != nil,
             let pv = paneViews[workspace.activePaneID]

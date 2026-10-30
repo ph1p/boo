@@ -1,4 +1,5 @@
 import Cocoa
+import SwiftUI
 
 /// tmux windows shown as workspaces of this window; see `TmuxControlClient`.
 extension MainWindowController: TmuxHost {
@@ -60,6 +61,7 @@ extension MainWindowController: TmuxHost {
         programs.map { paneID, program in
             let pane = Pane(id: paneID)
             pane.addTab(workingDirectory: folder)
+            pane.tmuxOwned = true
             if let tab = pane.tabs.last { GhosttyView.pendingLaunch[tab.id] = LaunchSpec(program: program) }
             return pane
         }
@@ -67,9 +69,9 @@ extension MainWindowController: TmuxHost {
 }
 
 extension MainWindowController {
-    /// The active workspace, or a regular one when tmux owns it: tmux panes
-    /// only show tmux, so files, browsers and plugin views open elsewhere.
-    func contentWorkspace() -> Workspace? {
+    /// Switches to a regular workspace when tmux owns the active one (its
+    /// panes only show tmux), opening one if needed. Returns the active workspace.
+    func activateContentWorkspace() -> Workspace? {
         guard let active = activeWorkspace else { return nil }
         guard active.tmuxWindowID != nil else { return active }
         if let index = appState.workspaces.lastIndex(where: { $0.tmuxWindowID == nil }) {
@@ -80,10 +82,30 @@ extension MainWindowController {
         return activeWorkspace
     }
 
-    /// `paneView` shows a pane of a tmux window, in any Boo window.
-    func isTmuxPane(_ paneView: PaneView) -> Bool {
-        WindowManager.shared.controllers.contains {
-            $0.appState.workspaceContainingPane(paneView.paneID)?.tmuxWindowID != nil
+    /// Opens a new tmux window when tmux owns `workspace`.
+    func openTmuxWindow(in workspace: Workspace?) -> Bool {
+        guard let workspace, let tmux = TmuxControlClient.owning(workspace: workspace.id) else { return false }
+        tmux.newWindow()
+        return true
+    }
+
+    /// A plain terminal becomes a new tmux window; anything else opens in a
+    /// regular workspace.
+    func paneView(
+        _ paneView: PaneView, redirectNewTab contentType: ContentType, workingDirectory: String, url: URL?,
+        launch: LaunchSpec?
+    ) -> UUID? {
+        if contentType == .terminal, launch == nil,
+            openTmuxWindow(in: appState.workspaceContainingPane(paneView.paneID))
+        {
+            return nil
         }
+        return activateContentWorkspace().flatMap { paneViews[$0.activePaneID] }?
+            .addNewTab(contentType: contentType, workingDirectory: workingDirectory, url: url, launch: launch)
+    }
+
+    func paneView(_ paneView: PaneView, redirectPluginView view: AnyView, title: String, icon: String) -> UUID? {
+        activateContentWorkspace().flatMap { paneViews[$0.activePaneID] }?
+            .addPluginViewTab(view: view, title: title, icon: icon)
     }
 }

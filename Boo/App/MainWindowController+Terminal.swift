@@ -127,7 +127,7 @@ extension MainWindowController {
     }
 
     func openDirectoryInNewTab(_ path: String) {
-        guard let workspace = contentWorkspace(),
+        guard let workspace = activeWorkspace,
             let pv = paneViews[workspace.activePaneID]
         else { return }
         pv.addNewTab(workingDirectory: path)
@@ -136,14 +136,7 @@ extension MainWindowController {
 
     /// Handle opening a tab via plugin API with type-safe payload.
     func handleOpenTab(_ payload: TabPayload) {
-        // A tmux pane holds one tab; a new terminal there is a new tmux window.
-        if case .terminal = payload, let workspace = activeWorkspace,
-            let tmux = TmuxControlClient.owning(workspace: workspace.id)
-        {
-            tmux.newWindow()
-            return
-        }
-        guard let workspace = contentWorkspace(),
+        guard let workspace = activeWorkspace,
             let pv = paneViews[workspace.activePaneID]
         else { return }
 
@@ -198,7 +191,7 @@ extension MainWindowController {
 
     /// Open a file in a new tab with the specified content type.
     private func openFileInTab(path: String, type: ContentType) {
-        guard let workspace = contentWorkspace(),
+        guard let workspace = activateContentWorkspace(),
             let pv = paneViews[workspace.activePaneID]
         else { return }
 
@@ -277,7 +270,7 @@ extension MainWindowController {
     /// it is focused rather than creating a duplicate.
     func handleOpenMultiContentTab(typeID: String, context: PluginTabContext) {
         guard let factory = multiContentTabFactories[typeID] else { return }
-        guard let workspace = contentWorkspace() else { return }
+        guard let workspace = activeWorkspace else { return }
 
         // Search all panes in the active workspace for an existing tab with this typeID+key
         let dedupeKey = "\(typeID):\(context.key)"
@@ -309,7 +302,7 @@ extension MainWindowController {
 
     /// Open a file content tab (editor, image viewer, etc.) in a new split pane.
     func openFileInNewPane(_ path: String) {
-        guard let workspace = contentWorkspace() else { return }
+        guard let workspace = activateContentWorkspace() else { return }
         window?.makeFirstResponder(nil)
 
         guard let newID = workspace.splitPane(workspace.activePaneID, direction: .horizontal) else {
@@ -335,7 +328,7 @@ extension MainWindowController {
     }
 
     func openDirectoryInNewPane(_ path: String) {
-        guard let workspace = contentWorkspace() else { return }
+        guard let workspace = activateContentWorkspace() else { return }
         window?.makeFirstResponder(nil)
 
         guard let newID = workspace.splitPane(workspace.activePaneID, direction: .horizontal) else {
