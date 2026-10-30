@@ -100,6 +100,12 @@ import Cocoa
 
     /// Fans the surface's raw pty output out to the recorder and trigger matcher.
     let outputTap = OutputTapHub()
+    /// Catches `tmux -CC` control mode; the client below drives it while it lasts.
+    let tmuxTap = TmuxGatewayTap()
+    private(set) var tmuxControl: TmuxControlClient?
+    /// Typed text must not reach the shell: input is locked, or tmux control
+    /// mode reads its commands from this terminal.
+    private var blocksInput: Bool { isInputLocked || tmuxControl != nil }
     nonisolated(unsafe) private(set) var recorder: SessionRecorder?
     /// The mouse-down was a link click Ghostty never saw.
     private var swallowMouseUp = false
@@ -200,6 +206,10 @@ import Cocoa
             // Start unfocused — only becomeFirstResponder sets focus
             ghostty_surface_set_focus(s, false)
             if tabID != nil { RuleEngine.shared.register(self) }
+            if AppSettings.shared.tmuxIntegration {
+                tmuxTap.onEvents = { [weak self] in self?.handleTmux($0) }
+                tmuxTap.install(surface: s)
+            }
             // Before the shell's first output, so the old screen sits above the new prompt.
             if let tabID, let saved = ScrollbackStore.take(for: tabID) { feedOutput(saved) }
         }
@@ -507,6 +517,12 @@ import Cocoa
             return
         }
         guard let surface = surface, !isInputLocked else { return }
+        // Control mode reads commands from this terminal: typing would corrupt
+        // it. Esc or q detaches, as in tmux's own control-mode clients.
+        if let tmuxControl {
+            if event.keyCode == 53 || event.charactersIgnoringModifiers == "q" { tmuxControl.detach() }
+            return
+        }
         if KeyTables.shared.intercept(event, in: self) { return }
         if isHistorySearchKey(event) {
             onHistorySearch?(self)
@@ -619,7 +635,7 @@ import Cocoa
     /// Send a synthetic key press to the terminal.
     /// Used for programmatic key simulation (e.g. clear screen via Ctrl+L).
     func sendKey(keyCode: UInt16, mods: ghostty_input_mods_e, text: String? = nil) {
-        guard let surface = surface else { return }
+        guard let surface = surface, tmuxControl == nil else { return }
         let codepoint = text?.unicodeScalars.first.map(\.value) ?? 0
         var key = makeKeyEvent(
             action: GHOSTTY_ACTION_PRESS, keyCode: UInt32(keyCode), mods: mods,
@@ -680,7 +696,7 @@ import Cocoa
     // MARK: - NSTextInputClient
 
     func insertText(_ string: Any, replacementRange: NSRange) {
-        guard !isInputLocked else { return }
+        guard !blocksInput else { return }
         let text: String
         if let str = string as? String {
             text = str
@@ -1072,7 +1088,7 @@ import Cocoa
     }
 
     private func sendText(_ text: String) {
-        guard let surface = surface, !isInputLocked else { return }
+        guard let surface = surface, !blocksInput else { return }
         text.withCString { ghostty_surface_text(surface, $0, UInt(strlen($0))) }
     }
 
@@ -1524,6 +1540,8 @@ import Cocoa
         stopRecording()
         if let tabID { RuleEngine.shared.unregister(tabID: tabID) }
         outputTap.detach(surface: surface)
+        tmuxTap.detach(surface: surface)
+        endTmuxControl()
         self.surface = nil  // nil first to prevent callbacks reaching a freed surface
         GhosttyRuntime.shared.unregisterSurface(surface)
         ghostty_surface_free(surface)
@@ -1576,6 +1594,7 @@ import Cocoa
         let s = surface
         let dc = claimedDirectChild
         outputTap.detach(surface: s)
+        tmuxTap.detach(surface: s)
         recorder?.finish()
         surface = nil
         claimedDirectChild = 0
@@ -1589,11 +1608,63 @@ import Cocoa
     }
 }
 
+// MARK: - tmux control mode
+
+extension GhosttyView: TmuxGateway {
+    func writeTmuxCommand(_ line: String) {
+        guard let surface else { return }
+        let bytes = Array(line.utf8) + [0x0A]
+        bytes.withUnsafeBufferPointer { ghostty_surface_write_pty(surface, $0.baseAddress, UInt($0.count)) }
+    }
+
+    var tmuxGridSize: TmuxProtocol.CellSize? {
+        guard let surface else { return nil }
+        let grid = ghostty_surface_size(surface)
+        return TmuxProtocol.CellSize(columns: Int(grid.columns), rows: Int(grid.rows))
+    }
+
+    fileprivate func handleTmux(_ events: [TmuxGatewayTap.Event]) {
+        var lines: [[UInt8]] = []
+        for event in events {
+            if case .line(let line) = event {
+                lines.append(line)
+                continue
+            }
+            if !lines.isEmpty {
+                tmuxControl?.receive(lines: lines)
+                lines.removeAll()
+            }
+            switch event {
+            case .enter:
+                let controller =
+                    window?.windowController as? MainWindowController
+                    ?? NSApp.keyWindow?.windowController as? MainWindowController
+                guard let controller else {
+                    booLog(.warning, .app, "[tmux] control mode started without a window to show it")
+                    continue
+                }
+                tmuxControl = TmuxControlClient(gateway: self, host: controller)
+            case .exit:
+                endTmuxControl()
+            case .line:
+                break
+            }
+        }
+        if !lines.isEmpty { tmuxControl?.receive(lines: lines) }
+    }
+
+    private func endTmuxControl() {
+        tmuxControl?.gatewayExited()
+        tmuxControl = nil
+    }
+}
+
 // MARK: - Broadcast Input
 
 extension GhosttyView: BroadcastReceiver {
     /// Replays input typed into a peer pane as if typed here.
     func receiveBroadcast(_ input: BroadcastInput) {
+        guard tmuxControl == nil else { return }
         switch input {
         case .text(let text):
             sendText(text)

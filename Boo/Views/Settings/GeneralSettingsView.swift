@@ -12,6 +12,7 @@ struct GeneralSettingsView: View {
     @State private var debugLogging = AppSettings.shared.debugLogging
     @State private var fileEditorCommand = AppSettings.shared.fileEditorCommand
     @State private var restoreScrollback = AppSettings.shared.restoreScrollback
+    @State private var tmuxIntegration = AppSettings.shared.tmuxIntegration
     @ObservedObject private var observer = SettingsObserver(topics: [.theme])
 
     var body: some View {
@@ -99,6 +100,14 @@ struct GeneralSettingsView: View {
                     AppSettings.shared.restoreScrollback = v
                     if !v { ScrollbackStore.clear() }
                 }
+
+                ToggleRow(
+                    label: "Native tmux windows",
+                    help:
+                        "Show `tmux -CC` sessions as workspaces and panes. Takes effect in terminals opened afterwards.",
+                    isOn: $tmuxIntegration
+                )
+                .onChange(of: tmuxIntegration) { _, v in AppSettings.shared.tmuxIntegration = v }
             }
 
             Section(title: "File Editor") {

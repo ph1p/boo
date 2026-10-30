@@ -1,0 +1,151 @@
+--- a/include/ghostty.h
++++ b/include/ghostty.h
+@@ -1232,6 +1232,16 @@
+                                                    ghostty_input_key_s,
+                                                    ghostty_binding_flags_e*);
+ GHOSTTY_API void ghostty_surface_text(ghostty_surface_t, const char*, uintptr_t);
++typedef void (*ghostty_surface_tmux_cb)(void*,
++                                        uint8_t,
++                                        const uint8_t*,
++                                        uintptr_t);
++GHOSTTY_API void ghostty_surface_set_tmux_callback(ghostty_surface_t,
++                                                   ghostty_surface_tmux_cb,
++                                                   void*);
++GHOSTTY_API void ghostty_surface_write_pty(ghostty_surface_t,
++                                           const uint8_t*,
++                                           uintptr_t);
+ GHOSTTY_API void ghostty_surface_paste_text(ghostty_surface_t, const char*, uintptr_t);
+ GHOSTTY_API void ghostty_surface_preedit(ghostty_surface_t, const char*, uintptr_t);
+ GHOSTTY_API bool ghostty_surface_mouse_captured(ghostty_surface_t);
+--- a/src/apprt/embedded.zig
++++ b/src/apprt/embedded.zig
+@@ -16,6 +16,7 @@
+ const internal_os = @import("../os/main.zig");
+ const renderer = @import("../renderer.zig");
+ const terminal = @import("../terminal/main.zig");
++const termio = @import("../termio.zig");
+ const CoreApp = @import("../App.zig");
+ const CoreInspector = @import("../inspector/main.zig").Inspector;
+ const CoreSurface = @import("../Surface.zig");
+@@ -2168,6 +2169,31 @@
+                 surface.app.keyboardLayout().detectOptionAsAlt(),
+         );
+         return @intCast(@as(input.Mods.Backing, @bitCast(result)));
++    }
++
++    /// Route tmux control mode (`tmux -CC`) on this surface to `cb` instead
++    /// of the built-in viewer. Pass null to restore the viewer.
++    export fn ghostty_surface_set_tmux_callback(
++        surface: *Surface,
++        cb: ?*const fn (?*anyopaque, u8, [*]const u8, usize) callconv(.c) void,
++        userdata: ?*anyopaque,
++    ) void {
++        const core_surface = &surface.core_surface;
++        core_surface.renderer_state.mutex.lockUncancelable(global.io());
++        defer core_surface.renderer_state.mutex.unlock(global.io());
++        const handler = &core_surface.io.terminal_stream.handler;
++        handler.tmux_cb = cb;
++        handler.tmux_userdata = userdata;
++    }
++
++    /// Write bytes to the surface's pty as-is (no paste or key encoding).
++    export fn ghostty_surface_write_pty(surface: *Surface, ptr: [*]const u8, len: usize) void {
++        if (surface.core_surface.readonly) return;
++        const msg = termio.Message.writeReq(surface.core_surface.alloc, ptr[0..len]) catch |err| {
++            log.warn("error allocating pty write err={}", .{err});
++            return;
++        };
++        surface.core_surface.io.queueMessage(msg, .unlocked);
+     }
+ 
+     /// Send this for raw keypresses (i.e. the keyDown event on macOS).
+--- a/src/termio/stream_handler.zig
++++ b/src/termio/stream_handler.zig
+@@ -75,6 +75,19 @@
+ 
+     /// The tmux control mode viewer state.
+     tmux_viewer: if (tmux_enabled) ?*terminal.tmux.Viewer else void = if (tmux_enabled) null else {},
++
++    /// Embedder tmux control mode client. When set, entering control mode
++    /// skips the built-in viewer and reports each protocol line instead
++    /// (kind 0 = enter, 1 = line, 2 = exit); the embedder owns the protocol.
++    /// Called on the IO thread with the renderer state mutex held.
++    tmux_cb: ?*const fn (?*anyopaque, u8, [*]const u8, usize) callconv(.c) void = null,
++    tmux_userdata: ?*anyopaque = null,
++
++    /// True while control mode is routed to `tmux_cb`.
++    tmux_raw: bool = false,
++
++    /// The control mode line being collected for `tmux_cb`.
++    tmux_line: std.ArrayList(u8) = .empty,
+ 
+     /// Session password grants for the Kitty clipboard protocol.
+     /// Requests carrying a granted password skip the permission prompt.
+@@ -108,6 +121,7 @@
+         self.dcs.deinit();
+         self.kittyClipboardWriteAbort();
+         self.kitty_clipboard_grants.deinit(self.alloc);
++        self.tmux_line.deinit(self.alloc);
+         if (comptime tmux_enabled) tmux: {
+             const viewer = self.tmux_viewer orelse break :tmux;
+             viewer.deinit();
+@@ -407,17 +421,44 @@
+     }
+ 
+     pub inline fn dcsPut(self: *StreamHandler, byte: u8) !void {
++        if (self.tmux_raw) return self.tmuxRawPut(byte);
+         var cmd = self.dcs.put(byte) orelse return;
+         defer cmd.deinit();
+         try self.dcsCommand(&cmd);
+     }
+ 
+     pub inline fn dcsUnhook(self: *StreamHandler) !void {
++        if (self.tmux_raw) {
++            if (self.tmux_line.items.len > 0) self.tmuxRawEmit(1);
++            self.tmuxRawEmit(2);
++            self.tmux_raw = false;
++        }
+         var cmd = self.dcs.unhook() orelse return;
+         defer cmd.deinit();
+         try self.dcsCommand(&cmd);
+     }
+ 
++    /// The longest control mode line kept; longer lines are truncated
++    /// (tmux octal-escapes output, so a pane line stays well below this).
++    const tmux_line_max = 4 * 1024 * 1024;
++
++    fn tmuxRawPut(self: *StreamHandler, byte: u8) void {
++        switch (byte) {
++            '\r' => {},
++            '\n' => self.tmuxRawEmit(1),
++            else => {
++                if (self.tmux_line.items.len >= tmux_line_max) return;
++                self.tmux_line.append(self.alloc, byte) catch {};
++            },
++        }
++    }
++
++    fn tmuxRawEmit(self: *StreamHandler, kind: u8) void {
++        const line = self.tmux_line.items;
++        if (self.tmux_cb) |cb| cb(self.tmux_userdata, kind, line.ptr, line.len);
++        self.tmux_line.clearRetainingCapacity();
++    }
++
+     fn dcsCommand(self: *StreamHandler, cmd: *terminal.dcs.Command) !void {
+         // log.warn("DCS command: {}", .{cmd});
+         switch (cmd.*) {
+@@ -429,6 +470,14 @@
+ 
+                 switch (tmux) {
+                     .enter => {
++                        // An embedder client takes the raw protocol instead.
++                        if (self.tmux_cb != null) {
++                            self.tmux_raw = true;
++                            self.tmux_line.clearRetainingCapacity();
++                            self.tmuxRawEmit(0);
++                            break :tmux;
++                        }
++
+                         // Setup our viewer state
+                         assert(self.tmux_viewer == null);
+                         const viewer = try self.alloc.create(terminal.tmux.Viewer);

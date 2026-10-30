@@ -75,6 +75,8 @@ final class Workspace {
     var color: WorkspaceColor = .none
     var customColor: NSColor?  // overrides color when set
     var isPinned: Bool = false
+    /// The tmux window (`@N`) this workspace shows; such workspaces aren't saved.
+    var tmuxWindowID: String?
 
     /// Per-workspace sidebar visibility and width overrides.
     var sidebarState: SidebarWorkspaceState = Workspace.defaultSidebarState()
@@ -303,6 +305,22 @@ final class Workspace {
             activePaneID = fromHistory ?? sibling ?? splitTree.leafIDs.first ?? UUID()
         }
         return true
+    }
+
+    /// Lays the workspace out as `tree`: `newPanes` fill its new leaves, and
+    /// panes missing from it stop. Returns the IDs of the panes it dropped.
+    @discardableResult
+    func adopt(tree: SplitTree, newPanes: [Pane]) -> [UUID] {
+        splitTree = tree
+        for pane in newPanes { panes[pane.id] = pane }
+        let leaves = Set(tree.leafIDs)
+        let gone = panes.keys.filter { !leaves.contains($0) }
+        for id in gone { panes.removeValue(forKey: id)?.stopAll() }
+        focusHistory.removeAll { !leaves.contains($0) }
+        if !leaves.contains(activePaneID) {
+            activePaneID = focusHistory.last ?? tree.leafIDs.first ?? activePaneID
+        }
+        return gone
     }
 
     func equalizeSplits() {

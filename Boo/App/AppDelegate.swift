@@ -3,6 +3,9 @@ import Cocoa
 public enum BooMain {
     @MainActor public static func run() {
         if CommandLine.arguments.dropFirst().first == "--mcp" { BooMCPServer.runStdio() }
+        if CommandLine.arguments.dropFirst().first == "--tmux-bridge" {
+            TmuxBridge.run(arguments: Array(CommandLine.arguments.dropFirst(2)))
+        }
         let app = NSApplication.shared
         app.setActivationPolicy(.regular)
         let delegate = AppDelegate()
@@ -95,6 +98,7 @@ public enum BooMain {
         SSHControlManager.shared.teardownAll()
         BooSocketServer.shared.stop()
         RemoteControlServer.shared.stop()
+        TmuxBridgeServer.shared.shutdown()
         FolderBookmarkStore.shared.stopAll()
         // `kubectl get -w` children otherwise outlive the app until the server
         // times the watch out.

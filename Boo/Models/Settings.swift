@@ -377,6 +377,7 @@ final class AppSettings {
         static let remoteControlPort = "remoteControlPort"
         static let secureKeyboardEntry = "secureKeyboardEntry"
         static let restoreScrollback = "restoreScrollback"
+        static let tmuxIntegration = "tmuxIntegration"
         static let shortcutOverrides = "shortcutOverrides"
 
         static let paletteRecents = "paletteRecents"
@@ -1225,6 +1226,13 @@ final class AppSettings {
         set { set(newValue, forKey: K.restoreScrollback) }
     }
 
+    /// Show `tmux -CC` sessions as native workspaces and panes. Off leaves
+    /// Ghostty's own control-mode handling. Applies to terminals opened afterwards.
+    var tmuxIntegration: Bool {
+        get { bool(K.tmuxIntegration, default: true) }
+        set { set(newValue, forKey: K.tmuxIntegration) }
+    }
+
     // MARK: - Shortcuts
 
     /// Menu item id ("Terminal/Split Right") → shortcut spec ("cmd+shift+d");
@@ -1600,6 +1608,7 @@ final class AppSettings {
             K.notificationGroupBursts: notificationGroupBursts,
             K.notificationExpiryMinutes: notificationExpiryMinutes,
             K.restoreScrollback: restoreScrollback,
+            K.tmuxIntegration: tmuxIntegration,
             K.shortcutOverrides: shortcutOverrides
         ]
         if let sshControlMasterApproved {

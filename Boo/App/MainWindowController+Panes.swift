@@ -752,6 +752,11 @@ extension MainWindowController {
         _ oldPaneID: UUID, in workspace: Workspace, toward edge: PaneDirection,
         focus: Bool = true, cwd: String? = nil, command: String? = nil
     ) -> UUID? {
+        // tmux owns the layout of its windows: ask it, and its layout change adds the pane.
+        if let tmux = TmuxControlClient.owning(workspace: workspace.id) {
+            tmux.split(pane: oldPaneID, toward: edge)
+            return nil
+        }
         let isVisible = workspace === activeWorkspace
         booLog(.debug, .sidebar, "splitting pane=\(oldPaneID.uuidString.prefix(8)) edge=\(edge)")
         if isVisible { window?.makeFirstResponder(nil) }

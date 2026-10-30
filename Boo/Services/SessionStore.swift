@@ -201,7 +201,12 @@ enum SessionStore {
 
     /// Build one window's session state from `appState`. Main thread only.
     static func buildWindow(appState: AppState) -> SessionWindow {
-        let workspaces = appState.workspaces.map { ws -> SessionWorkspace in
+        // tmux windows live in tmux; the next attach shows them again.
+        let saved = appState.workspaces.filter { $0.tmuxWindowID == nil }
+        let active =
+            appState.workspaces.indices.contains(appState.activeWorkspaceIndex)
+            ? appState.workspaces[appState.activeWorkspaceIndex] : nil
+        let workspaces = saved.map { ws -> SessionWorkspace in
             ws.normalizePaneState()
             let panes = ws.panes.values.map { pane -> SessionPane in
                 let tabs = pane.tabs.map { tab in
@@ -257,7 +262,8 @@ enum SessionStore {
         }
 
         return SessionWindow(
-            activeWorkspaceIndex: appState.activeWorkspaceIndex,
+            activeWorkspaceIndex: saved.firstIndex { $0 === active }
+                ?? min(appState.activeWorkspaceIndex, saved.count - 1),
             workspaces: workspaces
         )
     }
