@@ -55,10 +55,20 @@ class PaneView: NSView {
 
     private(set) var ghosttyView: GhosttyView?
     private var scrollWrapper: TerminalScrollView?
-    private var tabViews: [UUID: GhosttyView] = [:]
-    /// Wrappers of cached terminal tabs, kept attached but hidden: a tab switch
-    /// then unhides the surface instead of re-attaching it to the window.
-    private var parkedWrappers: [UUID: TerminalScrollView] = [:]
+    /// A terminal tab that isn't displayed. Its `wrapper`, when kept, stays
+    /// attached but hidden: a tab switch then unhides the surface instead of
+    /// re-attaching it to the window.
+    private struct CachedTerminal {
+        let view: GhosttyView
+        let wrapper: TerminalScrollView?
+
+        /// Detach the cached terminal from this pane.
+        func detach() {
+            wrapper?.removeFromSuperview()
+            view.removeFromSuperview()
+        }
+    }
+    private var tabViews: [UUID: CachedTerminal] = [:]
 
     /// Generic content view for non-terminal tabs (browser, editor, etc.)
     private(set) var activeContentView: ContentViewProtocol?
@@ -537,23 +547,17 @@ class PaneView: NSView {
     /// Its `wrapper` is parked (hidden, still attached) along with it.
     private func retire(_ gv: GhosttyView, wrapper: TerminalScrollView?) {
         if let owner = gv.tabID, pane.tabs.contains(where: { $0.id == owner }) {
-            tabViews[owner] = gv
             if let wrapper {
                 wrapper.isHidden = true
-                parkedWrappers[owner] = wrapper
             } else {
                 gv.removeFromSuperview()
             }
+            tabViews[owner] = CachedTerminal(view: gv, wrapper: wrapper)
         } else {
             wrapper?.removeFromSuperview()
             gv.removeFromSuperview()
             gv.destroy()
         }
-    }
-
-    /// Drop the parked wrapper of `tabID`, detaching its terminal from the window.
-    private func unpark(_ tabID: UUID) {
-        parkedWrappers.removeValue(forKey: tabID)?.removeFromSuperview()
     }
 
     /// Hand the displayed terminal and its wrapper to `retire`.
@@ -586,16 +590,15 @@ class PaneView: NSView {
         }
         activeContentView = nil
 
-        if let stored = tabViews.removeValue(forKey: tab.id) {
+        if let cached = tabViews.removeValue(forKey: tab.id) {
+            let stored = cached.view
             retireDisplayedTerminal()
-            if let parked = parkedWrappers.removeValue(forKey: tab.id), parked.ghosttyView === stored,
-                parked.superview === self
-            {
+            if let parked = cached.wrapper, parked.ghosttyView === stored, parked.superview === self {
                 parked.isHidden = false
                 scrollWrapper = parked
                 needsLayout = true
             } else {
-                unpark(tab.id)
+                cached.wrapper?.removeFromSuperview()
                 let wrapper = TerminalScrollView(ghosttyView: stored)
                 addSubview(wrapper)
                 scrollWrapper = wrapper
@@ -683,15 +686,14 @@ class PaneView: NSView {
     /// The terminal of `tabID`, displayed or cached off-screen, without moving it.
     func terminalView(forTab tabID: UUID) -> GhosttyView? {
         if let gv = ghosttyView, gv.tabID == tabID { return gv }
-        return tabViews[tabID]
+        return tabViews[tabID]?.view
     }
 
     func extractGhosttyView(for tabID: UUID) -> GhosttyView? {
         // Check the off-screen cache
-        if let gv = tabViews.removeValue(forKey: tabID) {
-            unpark(tabID)
-            gv.removeFromSuperview()
-            return gv
+        if let cached = tabViews.removeValue(forKey: tabID) {
+            cached.detach()
+            return cached.view
         }
         // The dragged tab was likely the active/displayed one — extractTab already
         // shifted activeTabIndex, so pane.activeTab no longer matches this tabID.
@@ -710,8 +712,8 @@ class PaneView: NSView {
 
     /// Accept a GhosttyView transferred from another pane.
     func insertGhosttyView(_ gv: GhosttyView, for tabID: UUID) {
-        unpark(tabID)
-        tabViews[tabID] = gv
+        tabViews[tabID]?.wrapper?.removeFromSuperview()
+        tabViews[tabID] = CachedTerminal(view: gv, wrapper: nil)
     }
 
     /// Remove and return a ContentView for cross-pane transfer. Does not destroy it.
@@ -1287,8 +1289,10 @@ class PaneView: NSView {
 
         // Clean up the appropriate view type
         if tab.contentType == .terminal {
-            if let gv = tabViews.removeValue(forKey: tabID) { gv.destroy() }
-            unpark(tabID)
+            if let cached = tabViews.removeValue(forKey: tabID) {
+                cached.wrapper?.removeFromSuperview()
+                cached.view.destroy()
+            }
             if pane.activeTabIndex == index {
                 ghosttyView?.destroy()
                 scrollWrapper?.removeFromSuperview()
@@ -1441,7 +1445,7 @@ class PaneView: NSView {
 
     /// Terminal views by tab ID, for saving scrollback on quit.
     var terminalViewsByTab: [UUID: GhosttyView] {
-        var views = tabViews
+        var views = tabViews.mapValues(\.view)
         if let gv = ghosttyView, let id = gv.tabID { views[id] = gv }
         return views
     }
@@ -1450,10 +1454,11 @@ class PaneView: NSView {
 
     func stopAll() {
         // Clean up terminal views
-        for (_, gv) in tabViews { gv.destroy() }
+        for cached in tabViews.values {
+            cached.wrapper?.removeFromSuperview()
+            cached.view.destroy()
+        }
         tabViews.removeAll()
-        for (_, wrapper) in parkedWrappers { wrapper.removeFromSuperview() }
-        parkedWrappers.removeAll()
         ghosttyView?.destroy()
         scrollWrapper?.removeFromSuperview()
         scrollWrapper = nil
