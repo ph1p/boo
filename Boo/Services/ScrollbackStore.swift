@@ -9,7 +9,9 @@ enum ScrollbackStore {
     static let maxBytes = 2 * 1024 * 1024
 
     nonisolated(unsafe) static var _testDirectory: String?
-    static var directory: String { _testDirectory ?? (BooPaths.configDir as NSString).appendingPathComponent("scrollback") }
+    static var directory: String {
+        _testDirectory ?? (BooPaths.configDir as NSString).appendingPathComponent("scrollback")
+    }
 
     /// Restored tab ID → saved scrollback ID, consumed when the surface is created.
     nonisolated(unsafe) private static var pending: [UUID: UUID] = [:]
@@ -30,7 +32,8 @@ enum ScrollbackStore {
     static func save(_ text: String, for id: UUID) {
         guard let data = trimmed(text) else { return }
         let fm = FileManager.default
-        try? fm.createDirectory(atPath: directory, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+        try? fm.createDirectory(
+            atPath: directory, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
         fm.createFile(atPath: path(for: id), contents: data, attributes: [.posixPermissions: 0o600])
     }
 

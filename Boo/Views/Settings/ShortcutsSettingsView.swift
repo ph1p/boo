@@ -162,7 +162,9 @@ struct ShortcutsSettingsView: View {
         }
         message =
             taken.isEmpty
-            ? nil : "\(shortcut.display) was removed from \(taken.map { $0.path.dropFirst().joined(separator: " ") }.joined(separator: ", "))."
+            ? nil
+            : "\(shortcut.display) was removed from "
+                + "\(taken.map { $0.path.dropFirst().joined(separator: " ") }.joined(separator: ", "))."
         save(overrides)
     }
 

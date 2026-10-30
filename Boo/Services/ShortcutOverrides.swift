@@ -51,7 +51,7 @@ enum ShortcutOverrides {
         "left": String(UnicodeScalar(NSLeftArrowFunctionKey)!),
         "right": String(UnicodeScalar(NSRightArrowFunctionKey)!),
         "up": String(UnicodeScalar(NSUpArrowFunctionKey)!),
-        "down": String(UnicodeScalar(NSDownArrowFunctionKey)!),
+        "down": String(UnicodeScalar(NSDownArrowFunctionKey)!)
     ]
 
     /// "cmd+shift+d" → ("d", ⇧⌘). "" → no shortcut. Nil when malformed.

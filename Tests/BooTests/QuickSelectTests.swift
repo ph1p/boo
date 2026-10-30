@@ -23,7 +23,7 @@ final class QuickSelectTests: XCTestCase {
             texts([
                 "M Boo/Ghostty/View.swift ~/dev/boo",
                 "commit 279ee82 from 192.168.1.20:8080",
-                "id 3f2504e0-4f89-11d3-9a0c-0305e82c3301",
+                "id 3f2504e0-4f89-11d3-9a0c-0305e82c3301"
             ]))
         XCTAssertTrue(found.contains("Boo/Ghostty/View.swift"))
         XCTAssertTrue(found.contains("~/dev/boo"))
