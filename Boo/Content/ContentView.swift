@@ -74,8 +74,9 @@ enum ContentViewFactory {
     /// Create a content view for the given state.
     static func createView(for state: ContentState) -> ContentViewProtocol {
         switch state {
-        case .terminal(let terminalState):
-            return TerminalContentView(workingDirectory: terminalState.workingDirectory)
+        case .terminal:
+            // Terminal tabs host a GhosttyView directly (PaneView.startTerminalSession).
+            preconditionFailure("Use startTerminalSession for terminal tabs")
         case .browser(let browserState):
             return BrowserContentView(url: browserState.url)
         case .editor(let editorState):
@@ -93,26 +94,6 @@ enum ContentViewFactory {
                 title: pluginState.title,
                 icon: pluginState.iconSymbol
             )
-        }
-    }
-
-    /// Create a default content view for a content type.
-    static func createDefaultView(for type: ContentType, workingDirectory: String = "~") -> ContentViewProtocol {
-        switch type {
-        case .terminal:
-            return TerminalContentView(workingDirectory: workingDirectory)
-        case .browser:
-            return BrowserContentView(url: ContentType.newTabURL)
-        case .editor:
-            return EditorContentView(filePath: nil)
-        case .imageViewer:
-            return ImageViewerContentView(filePath: nil)
-        case .markdownPreview:
-            return MarkdownPreviewContentView(filePath: nil)
-        case .castPlayer:
-            return CastPlayerContentView(filePath: nil)
-        case .pluginView:
-            return PluginTabContentView(view: AnyView(PluginViewPlaceholder()), title: "Panel")
         }
     }
 }

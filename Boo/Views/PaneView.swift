@@ -601,20 +601,12 @@ class PaneView: NSView {
             stored.activate()
         } else {
             // Create new content view
-            let contentView = createContentView(for: tab)
+            let contentView = ContentViewFactory.createView(for: tab.state.contentState)
             wireContentCallbacks(contentView, tabID: tab.id)
             addSubview(contentView)
             activeContentView = contentView
             contentView.activate()
         }
-    }
-
-    /// Create a content view for the given tab's content type.
-    private func createContentView(for tab: Pane.Tab) -> ContentViewProtocol {
-        guard tab.contentType != .terminal else {
-            fatalError("Use startTerminalSession for terminal tabs")
-        }
-        return ContentViewFactory.createView(for: tab.state.contentState)
     }
 
     /// Wire callbacks for non-terminal content views, and stamp the view with its owning tab.
