@@ -351,6 +351,19 @@ import Cocoa
         applySurfaceFocus()
     }
 
+    // A parked tab's wrapper stays attached but hidden; stop rendering it meanwhile.
+    override func viewDidHide() {
+        super.viewDidHide()
+        if let surface { ghostty_surface_set_occlusion(surface, false) }
+    }
+
+    override func viewDidUnhide() {
+        super.viewDidUnhide()
+        guard let surface else { return }
+        ghostty_surface_set_occlusion(surface, true)
+        refresh()
+    }
+
     override func setFrameSize(_ newSize: NSSize) {
         super.setFrameSize(newSize)
         updateSurfaceSize()

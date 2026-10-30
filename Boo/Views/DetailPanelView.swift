@@ -90,7 +90,7 @@ class SidebarPanelView: NSView {
 
     private struct SectionDragState {
         let sourceIndex: Int
-        let ghostWindow: NSWindow
+        let ghostWindow: DragGhostWindow
         /// Index *before* which to insert the dragged section (nil = no valid target).
         var dropTargetIndex: Int?
         /// Pre-computed Y for the drop indicator line, in panel coordinates.
@@ -789,21 +789,7 @@ class SidebarPanelView: NSView {
         label.frame = NSRect(x: 6, y: 2, width: ghostWidth - 12, height: ghostHeight - 4)
         ghostView.addSubview(label)
 
-        let screenPoint = NSEvent.mouseLocation
-        let win = NSWindow(
-            contentRect: NSRect(
-                x: screenPoint.x - ghostWidth / 2,
-                y: screenPoint.y - ghostHeight / 2,
-                width: ghostWidth, height: ghostHeight),
-            styleMask: .borderless,
-            backing: .buffered,
-            defer: false)
-        win.isOpaque = false
-        win.backgroundColor = .clear
-        win.level = .floating
-        win.ignoresMouseEvents = true
-        win.contentView = ghostView
-        win.orderFront(nil)
+        let win = DragGhostWindow(content: ghostView, center: NSEvent.mouseLocation)
 
         sectionDragState = SectionDragState(sourceIndex: sourceIndex, ghostWindow: win)
 
@@ -825,11 +811,7 @@ class SidebarPanelView: NSView {
     private func updateSectionDrag(event: NSEvent) {
         guard var state = sectionDragState else { return }
 
-        let screenPoint = NSEvent.mouseLocation
-        let origin = NSPoint(
-            x: screenPoint.x - state.ghostWindow.frame.width / 2,
-            y: screenPoint.y - state.ghostWindow.frame.height / 2)
-        state.ghostWindow.setFrameOrigin(origin)
+        state.ghostWindow.move(toCenter: NSEvent.mouseLocation)
 
         let localPoint = convert(event.locationInWindow, from: nil)
         var dropIndex: Int? = nil

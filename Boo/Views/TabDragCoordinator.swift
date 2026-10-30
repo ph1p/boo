@@ -63,7 +63,7 @@ enum TabDropZone: Equatable {
     /// Pane the dragged tab came from (internal for tests).
     var sourcePaneView: PaneView?
     private var sourceTabIndex: Int?
-    private var ghostWindow: NSWindow?
+    private var ghostWindow: DragGhostWindow?
     private var indicator: TabDropIndicatorView?
     private var tabInsertIndicator: TabInsertionIndicatorView?
     private var swapSourceIndicator: TabDropIndicatorView?
@@ -135,8 +135,7 @@ enum TabDropZone: Equatable {
             if let insertIdx {
                 let targetIdx = insertIdx > tabIdx ? insertIdx - 1 : insertIdx
                 if targetIdx != tabIdx {
-                    source.pane.moveTab(from: tabIdx, to: targetIdx)
-                    source.needsDisplay = true
+                    source.moveTabAnimated(from: tabIdx, to: targetIdx)
                 }
                 cleanup()
                 return
@@ -208,7 +207,7 @@ enum TabDropZone: Equatable {
     // MARK: - Drag tracking
 
     private func handleDrag(_ event: NSEvent) {
-        moveGhostWindow(to: event)
+        ghostWindow?.move(toCenter: DragGhostWindow.screenPoint(of: event))
         hitTestPaneViews(event: event)
         checkWorkspaceHover(event: event)
     }
@@ -572,45 +571,7 @@ enum TabDropZone: Equatable {
         label.lineBreakMode = .byTruncatingTail
         ghostView.addSubview(label)
 
-        let screenPoint: NSPoint
-        if let window = event.window {
-            screenPoint = window.convertPoint(toScreen: event.locationInWindow)
-        } else {
-            screenPoint = NSEvent.mouseLocation
-        }
-
-        let win = NSWindow(
-            contentRect: NSRect(
-                x: screenPoint.x - ghostWidth / 2,
-                y: screenPoint.y - ghostHeight / 2,
-                width: ghostWidth, height: ghostHeight),
-            styleMask: .borderless,
-            backing: .buffered,
-            defer: false
-        )
-        win.isOpaque = false
-        win.backgroundColor = .clear
-        win.level = .floating
-        win.ignoresMouseEvents = true
-        win.contentView = ghostView
-        win.alphaValue = 0.85
-        win.orderFront(nil)
-
-        ghostWindow = win
-    }
-
-    private func moveGhostWindow(to event: NSEvent) {
-        guard let win = ghostWindow else { return }
-        let screenPoint: NSPoint
-        if let eventWindow = event.window {
-            screenPoint = eventWindow.convertPoint(toScreen: event.locationInWindow)
-        } else {
-            screenPoint = NSEvent.mouseLocation
-        }
-        let frame = win.frame
-        win.setFrameOrigin(
-            NSPoint(
-                x: screenPoint.x - frame.width / 2,
-                y: screenPoint.y - frame.height / 2))
+        ghostWindow = DragGhostWindow(
+            content: ghostView, center: DragGhostWindow.screenPoint(of: event), alpha: 0.85)
     }
 }

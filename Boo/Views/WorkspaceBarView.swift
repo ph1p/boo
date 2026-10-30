@@ -55,7 +55,7 @@ class WorkspaceBarView: NSView {
     private var dropTargetIndex: Int?
 
     // Ghost drag state
-    private var ghostWindow: NSWindow?
+    private var ghostWindow: DragGhostWindow?
     private var isDragging: Bool = false
 
     // Hover state
@@ -626,48 +626,12 @@ class WorkspaceBarView: NSView {
         label.frame = NSRect(x: 0, y: (ghostHeight - 16) / 2, width: ghostWidth, height: 16)
         ghostView.addSubview(label)
 
-        let screenPoint: NSPoint
-        if let window = event.window {
-            screenPoint = window.convertPoint(toScreen: event.locationInWindow)
-        } else {
-            screenPoint = NSEvent.mouseLocation
-        }
-
-        let win = NSWindow(
-            contentRect: NSRect(
-                x: screenPoint.x - ghostWidth / 2,
-                y: screenPoint.y - ghostHeight / 2,
-                width: ghostWidth, height: ghostHeight),
-            styleMask: .borderless,
-            backing: .buffered,
-            defer: false
-        )
-        win.isOpaque = false
-        win.backgroundColor = .clear
-        win.level = .floating
-        win.ignoresMouseEvents = true
-        win.contentView = ghostView
-        win.alphaValue = 0.85
-        win.orderFront(nil)
-
-        ghostWindow = win
+        ghostWindow = DragGhostWindow(
+            content: ghostView, center: DragGhostWindow.screenPoint(of: event), alpha: 0.85)
     }
 
     private func handleDragMove(_ event: NSEvent) {
-        // Move ghost window
-        if let win = ghostWindow {
-            let screenPoint: NSPoint
-            if let eventWindow = event.window {
-                screenPoint = eventWindow.convertPoint(toScreen: event.locationInWindow)
-            } else {
-                screenPoint = NSEvent.mouseLocation
-            }
-            let frame = win.frame
-            win.setFrameOrigin(
-                NSPoint(
-                    x: screenPoint.x - frame.width / 2,
-                    y: screenPoint.y - frame.height / 2))
-        }
+        ghostWindow?.move(toCenter: DragGhostWindow.screenPoint(of: event))
 
         // Update drop target
         updateDropTarget(event)

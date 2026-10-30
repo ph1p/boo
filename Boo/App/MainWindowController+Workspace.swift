@@ -604,7 +604,7 @@ extension MainWindowController {
                 self.window?.makeFirstResponder(pv.ghosttyView)
             }
 
-            self.refreshAllSurfaces()
+            self.refreshAllSurfaces(force: true)
             self.syncCoordinatorPaneViews()
             self.updatePaneCloseButtons()
             if let w = self.window { TrafficLightPositioner.apply(to: w) }

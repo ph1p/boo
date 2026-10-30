@@ -393,8 +393,10 @@ extension MainWindowController {
         }
     }
 
-    /// Refresh all Ghostty surfaces — call after view hierarchy changes (splits, close, resize).
-    func refreshAllSurfaces() {
+    /// Refresh Ghostty surfaces after view hierarchy changes (splits, close, drop).
+    /// Only panes whose surface, frame or attachment changed are re-synced;
+    /// `force` re-syncs every pane (workspace switch).
+    func refreshAllSurfaces(force: Bool = false) {
         guard let ws = activeWorkspace else { return }
         let activeID = ws.activePaneID
         for (paneID, pv) in paneViews {
@@ -403,9 +405,13 @@ extension MainWindowController {
             pv.ghosttyView?.setFocused(isActive)
             // Panes hidden by zoom are detached; they repaint when re-attached.
             guard window != nil, pv.window === window, let gv = pv.ghosttyView else { continue }
+            let key = PaneView.SurfaceRefreshKey(
+                surface: ObjectIdentifier(gv), frame: pv.convert(pv.bounds, to: nil))
+            guard force || pv.lastSurfaceRefresh != key else { continue }
+            pv.lastSurfaceRefresh = key
             pv.layoutTerminalView()
-            // Re-sync size + force-refresh every surface. Inactive panes do not reliably
-            // repaint via the normal display cycle after being re-attached to the
+            // Re-sync size + force-refresh. Inactive panes do not reliably repaint
+            // via the normal display cycle after being re-attached to the
             // hierarchy (size may be unchanged), leaving them blank until interacted with.
             gv.syncSizeAndRefresh()
         }

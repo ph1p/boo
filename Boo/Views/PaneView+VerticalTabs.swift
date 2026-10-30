@@ -165,8 +165,10 @@ extension PaneView {
                     hovered: hoveredTabIndex == i && isGroupChipHovered)
             }
             guard !pane.isTabHidden(at: i) else { continue }
+            let slide = tabSlideOffset(for: tab.id)
             drawVerticalTab(
-                ctx: ctx, theme: theme, tab: tab, index: i, row: verticalRowRect(inSlot: slot, index: i),
+                ctx: ctx, theme: theme, tab: tab, index: i,
+                row: verticalRowRect(inSlot: slot, index: i).offsetBy(dx: slide.x, dy: slide.y),
                 isActive: i == pane.activeTabIndex)
         }
         if tabScrollOffset < maxScroll {

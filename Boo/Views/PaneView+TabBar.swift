@@ -365,7 +365,9 @@ extension PaneView {
         ctx: CGContext, theme: TerminalTheme, tab: Pane.Tab, index: Int, x: CGFloat, y: CGFloat,
         width: CGFloat, rowH: CGFloat, isActive: Bool
     ) {
-        var x = x
+        let slide = tabSlideOffset(for: tab.id)
+        var x = x + slide.x
+        let y = y + slide.y
         var width = width
         let group = pane.group(id: tab.groupID)
         // The group being dragged by its chip fades while it is in flight.
