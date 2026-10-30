@@ -51,7 +51,7 @@ index 7310159cc..800a5cbd2 100644
 +            return false;
 +        };
 +
-+        const text = global.alloc().dupeZ(u8, aw.written()) catch |err| {
++        const text = global.alloc().dupeSentinel(u8, aw.written(), 0) catch |err| {
 +            log.warn("error allocating styled text err={}", .{err});
 +            return false;
 +        };

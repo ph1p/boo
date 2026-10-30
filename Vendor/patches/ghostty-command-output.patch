@@ -45,10 +45,10 @@ index 9a12b9cad..e5870d3e1 100644
                                                   ghostty_input_mouse_state_e,
                                                   ghostty_input_mouse_button_e,
 diff --git a/src/apprt/embedded.zig b/src/apprt/embedded.zig
-index 3c6b2c1f6..1a00cc330 100644
+index 697f0a786..66f80ac4c 100644
 --- a/src/apprt/embedded.zig
 +++ b/src/apprt/embedded.zig
-@@ -2136,6 +2136,71 @@ pub const CAPI = struct {
+@@ -2138,6 +2138,71 @@ pub const CAPI = struct {
          surface.preeditCallback(if (len == 0) null else ptr[0..len]);
      }
  
@@ -121,10 +121,10 @@ index 3c6b2c1f6..1a00cc330 100644
      /// enabled.
      export fn ghostty_surface_mouse_captured(surface: *Surface) bool {
 diff --git a/src/terminal/Screen.zig b/src/terminal/Screen.zig
-index 820455e64..10c605fec 100644
+index 0fd016774..b37e71b1c 100644
 --- a/src/terminal/Screen.zig
 +++ b/src/terminal/Screen.zig
-@@ -3535,6 +3535,86 @@ pub fn selectOutput(self: *Screen, pin: Pin) ?Selection {
+@@ -3608,6 +3608,86 @@ pub fn selectOutput(self: *Screen, pin: Pin) ?Selection {
      return .init(hl.start, hl.end, false);
  }
  
@@ -211,8 +211,8 @@ index 820455e64..10c605fec 100644
  pub const LineIterator = struct {
      screen: *const Screen,
      current: ?Pin = null,
-@@ -12770,3 +12850,65 @@ test "Screen: selectLine does not join lines across a recycled row" {
-         try testing.expectEqualStrings("world", contents);
+@@ -12935,3 +13015,65 @@ test "Screen: scrollClear cursor page pruned keeps per-page hyperlink id" {
+         try testing.expect(list_cell.cell.hyperlink);
      }
  }
 +
@@ -278,10 +278,10 @@ index 820455e64..10c605fec 100644
 +    try testing.expectEqual(@as(?usize, 2), s.promptIndex(row1));
 +}
 diff --git a/src/terminal/Terminal.zig b/src/terminal/Terminal.zig
-index 2667c51b3..babaa5064 100644
+index 8c31bb641..2cab1129b 100644
 --- a/src/terminal/Terminal.zig
 +++ b/src/terminal/Terminal.zig
-@@ -2236,6 +2236,7 @@ pub fn semanticPrompt(
+@@ -2269,6 +2269,7 @@ pub fn semanticPrompt(
              // its reasonable at this point to reset our semantic content
              // state but the spec doesn't really say what to do.
              self.screens.active.cursorSetSemanticContent(.output);
@@ -290,10 +290,10 @@ index 2667c51b3..babaa5064 100644
      }
  }
 diff --git a/src/terminal/page.zig b/src/terminal/page.zig
-index 82e07583c..08fccf411 100644
+index 48d405b5f..a22a3cf33 100644
 --- a/src/terminal/page.zig
 +++ b/src/terminal/page.zig
-@@ -2071,7 +2071,18 @@ pub const Row = packed struct(u64) {
+@@ -2109,7 +2109,18 @@ pub const Row = packed struct(u64) {
      /// screen.
      dirty: bool = false,
  

@@ -8,7 +8,7 @@ Full documentation: https://ph1p.github.io/boo/
 
 - **Swift** (macOS 15+), **AppKit**, **GhosttyKit** (Metal GPU rendering)
 - Swift Package Manager (`Package.swift`, swift-tools 6.2)
-- Prerequisites: macOS 15+, Xcode CLT, Zig 0.16.0 (`brew install zig`), Rust (`rustup`), Node + pnpm (Monaco editor bundle)
+- Prerequisites: macOS 15+, Xcode CLT, Zig 0.17.0 (`brew install zig`), Rust (`rustup`), Node + pnpm (Monaco editor bundle)
 
 ```bash
 make setup          # First time: clone Ghostty + build GhosttyKit + build ironmark + build Boo

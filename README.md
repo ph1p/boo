@@ -71,7 +71,7 @@ Download the latest release from [GitHub Releases](https://github.com/ph1p/boo/r
 
 - **macOS 15+** (Sequoia or later)
 - **Xcode 26 / Swift 6.2** — or the matching Command Line Tools (`xcode-select --install`)
-- **Zig 0.16.0** — the version pinned by `Vendor/ghostty/build.zig.zon` (`brew install zig`)
+- **Zig 0.17.0** — the version pinned by `Vendor/ghostty/build.zig.zon` (`brew install zig`)
 - **Rust** — `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`
 - **Node.js + pnpm** — `make build`/`make test` build the bundled Monaco editor (`make monaco`)
 - **Metal Toolchain** — `xcodebuild -downloadComponent MetalToolchain` (if not already installed)

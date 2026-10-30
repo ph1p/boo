@@ -67,7 +67,7 @@ jobs:
         # needs bumping whenever the submodule moves to a revision wanting newer Zig.
         uses: mlugg/setup-zig@v2
         with:
-          version: 0.16.0
+          version: 0.17.0
 
       - name: Cache GhosttyKit build
         uses: actions/cache@v6
@@ -139,7 +139,7 @@ jobs:
         # needs bumping whenever the submodule moves to a revision wanting newer Zig.
         uses: mlugg/setup-zig@v2
         with:
-          version: 0.16.0
+          version: 0.17.0
 
       - name: Cache GhosttyKit build
         uses: actions/cache@v6
