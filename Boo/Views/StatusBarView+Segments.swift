@@ -1,22 +1,5 @@
 import Cocoa
 
-// MARK: - Shared Helpers
-
-/// Draw a tinted SF Symbol into a CGContext, flipping coordinates for correct orientation.
-private func drawTintedIcon(_ image: NSImage, color: NSColor, in rect: NSRect, ctx: CGContext) {
-    let tinted = NSImage(size: rect.size, flipped: false) { drawRect in
-        image.draw(in: drawRect)
-        color.set()
-        drawRect.fill(using: .sourceAtop)
-        return true
-    }
-    ctx.saveGState()
-    ctx.translateBy(x: rect.origin.x, y: rect.origin.y + rect.height)
-    ctx.scaleBy(x: 1, y: -1)
-    tinted.draw(in: NSRect(origin: .zero, size: rect.size), from: .zero, operation: .sourceOver, fraction: 1.0)
-    ctx.restoreGState()
-}
-
 // MARK: - Environment Segment
 
 /// Shows the terminal environment type (local/SSH/Docker) with a colored dot and text label.
@@ -25,6 +8,8 @@ final class EnvironmentSegment: StatusBarPlugin {
     let id = "environment"
     let position: StatusBarPosition = .left
     let priority = 0
+    let displayName = "Connection"
+    let collapsePriority = 10
 
     private var cachedSession: RemoteSessionType?
     private var cachedIsRemote: Bool = false
@@ -100,6 +85,9 @@ final class GitBranchSegment: StatusBarPlugin {
     let id = "git-branch"
     let position: StatusBarPosition = .left
     let priority = 10
+    let displayName = "Git branch"
+    let isClickable = true
+    let collapsePriority = 30
     var hitRect: NSRect = .zero
 
     func isVisible(settings: AppSettings, state: StatusBarState) -> Bool {
@@ -126,7 +114,7 @@ final class GitBranchSegment: StatusBarPlugin {
             .font: NSFont.monospacedSystemFont(ofSize: 10, weight: .regular),
             .foregroundColor: theme.accentColor
         ]
-        let maxBranchChars = 20
+        let maxBranchChars = settings.statusBarBranchMaxLength
         let displayBranch =
             branch.count > maxBranchChars
             ? String(branch.prefix(maxBranchChars)) + "\u{2026}"
@@ -236,6 +224,8 @@ final class PathSegment: StatusBarPlugin {
     let id = "path"
     let position: StatusBarPosition = .left
     let priority = 20
+    let displayName = "Current path"
+    let collapsePriority = 20
 
     func isVisible(settings: AppSettings, state: StatusBarState) -> Bool {
         settings.isPluginEnabled("file-tree-local")
@@ -250,6 +240,7 @@ final class PathSegment: StatusBarPlugin {
     /// cached CTLine only touches attributes when the path actually changes.
     private struct Line {
         let path: String
+        let style: StatusBarPathStyle
         let color: NSColor
         let line: CTLine
         let ascent: CGFloat
@@ -260,7 +251,7 @@ final class PathSegment: StatusBarPlugin {
     func draw(
         at x: CGFloat, y: CGFloat, theme: TerminalTheme, settings: AppSettings, state: StatusBarState, ctx: CGContext
     ) -> CGFloat {
-        let line = layout(state.currentDirectory, color: theme.textSecondary)
+        let line = layout(state.currentDirectory, style: settings.statusBarPathStyle, color: theme.textSecondary)
         ctx.saveGState()
         // The bar is flipped; CoreText draws upward from the baseline.
         ctx.textMatrix = CGAffineTransform(scaleX: 1, y: -1)
@@ -270,16 +261,37 @@ final class PathSegment: StatusBarPlugin {
         return line.width
     }
 
-    private func layout(_ path: String, color: NSColor) -> Line {
-        if let cached, cached.path == path, cached.color == color { return cached }
+    private func layout(_ path: String, style: StatusBarPathStyle, color: NSColor) -> Line {
+        if let cached, cached.path == path, cached.style == style, cached.color == color { return cached }
         let attributed = NSAttributedString(
-            string: Self.drawable(abbreviatePath(path)), attributes: [.font: font, .foregroundColor: color])
+            string: Self.drawable(Self.display(path, style: style)), attributes: [.font: font, .foregroundColor: color])
         let ctLine = CTLineCreateWithAttributedString(attributed)
         var ascent: CGFloat = 0
         let width = CGFloat(CTLineGetTypographicBounds(ctLine, &ascent, nil, nil))
-        let line = Line(path: path, color: color, line: ctLine, ascent: ascent, width: width)
+        let line = Line(path: path, style: style, color: color, line: ctLine, ascent: ascent, width: width)
         cached = line
         return line
+    }
+
+    /// The directory as the chosen style shows it.
+    static func display(_ path: String, style: StatusBarPathStyle) -> String {
+        let abbreviated = abbreviatePath(path)
+        switch style {
+        case .abbreviated:
+            return abbreviated
+        case .lastComponent:
+            if abbreviated == "~" || abbreviated == "/" || abbreviated.isEmpty { return abbreviated }
+            return (abbreviated as NSString).lastPathComponent
+        case .compact:
+            // fish-style: every component but the last cut to its first character
+            // (two when it starts with a dot, so `.config` stays recognisable).
+            var parts = abbreviated.split(separator: "/", omittingEmptySubsequences: false).map(String.init)
+            guard parts.count > 1 else { return abbreviated }
+            for i in 0..<(parts.count - 1) where !parts[i].isEmpty && parts[i] != "~" {
+                parts[i] = String(parts[i].prefix(parts[i].hasPrefix(".") ? 2 : 1))
+            }
+            return parts.joined(separator: "/")
+        }
     }
 
     /// Control characters (a directory name may hold any byte but `/` and NUL) have
@@ -302,6 +314,8 @@ final class ProcessSegment: StatusBarPlugin {
     let id = "process"
     let position: StatusBarPosition = .left
     let priority = 30
+    let displayName = "Running process"
+    let collapsePriority = 65
 
     func isVisible(settings: AppSettings, state: StatusBarState) -> Bool {
         !state.runningProcess.isEmpty
@@ -331,7 +345,7 @@ final class ProcessSegment: StatusBarPlugin {
             let imgY = (barH - imgSize.height) / 2
             let imgRect = NSRect(x: cx, y: imgY, width: imgSize.width, height: imgSize.height)
 
-            drawTintedIcon(configured, color: color, in: imgRect, ctx: ctx)
+            drawStatusBarTintedIcon(configured, color: color, in: imgRect, ctx: ctx)
 
             cx += imgSize.width + 3
         }
@@ -366,6 +380,8 @@ final class PaneInfoSegment: StatusBarPlugin {
     let id = "pane-info"
     let position: StatusBarPosition = .right
     let priority = 40
+    let displayName = "Pane & tab count"
+    let collapsePriority = 80
 
     func isVisible(settings: AppSettings, state: StatusBarState) -> Bool {
         settings.statusBarShowPaneInfo
@@ -405,6 +421,8 @@ final class SystemInfoSegment: StatusBarPlugin {
     let id = "system-info-text"
     let position: StatusBarPosition = .left
     let priority = 25
+    let displayName = "System info"
+    let collapsePriority = 75
 
     private var memoryPct: Int = 0
     private var diskFreeGB: Double = 0
@@ -510,12 +528,8 @@ final class TimeSegment: StatusBarPlugin {
     let id = "time"
     let position: StatusBarPosition = .right
     let priority = 50
-
-    private let formatter: DateFormatter = {
-        let f = DateFormatter()
-        f.dateFormat = "HH:mm"
-        return f
-    }()
+    let displayName = "Clock"
+    let collapsePriority = 70
 
     func isVisible(settings: AppSettings, state: StatusBarState) -> Bool {
         settings.statusBarShowTime
@@ -528,7 +542,7 @@ final class TimeSegment: StatusBarPlugin {
             .font: NSFont.systemFont(ofSize: 10, weight: .regular),
             .foregroundColor: theme.textSecondary
         ]
-        let str = formatter.string(from: Date()) as NSString
+        let str = settings.statusBarClockFormat.string(from: Date()) as NSString
         let size = str.safeSize(withAttributes: attrs)
         str.safeDraw(at: NSPoint(x: rx - size.width - 4, y: y), withAttributes: attrs)
         return size.width + 8
@@ -538,7 +552,7 @@ final class TimeSegment: StatusBarPlugin {
     func update(state: StatusBarState) {}
 
     func accessibilitySegmentLabel(state: StatusBarState) -> String? {
-        "Time: \(formatter.string(from: Date()))"
+        "Time: \(AppSettings.shared.statusBarClockFormat.string(from: Date()))"
     }
 }
 
@@ -552,6 +566,11 @@ final class PluginContentSegment: StatusBarPlugin {
     let position: StatusBarPosition
     let priority: Int
     let pluginID: String
+    let isClickable = true
+    let collapsePriority = 60
+    var displayName: String {
+        PluginSettingsView.registeredManifests.first { $0.id == pluginID }?.name ?? pluginID
+    }
 
     private var content: StatusBarContent?
 
@@ -577,34 +596,13 @@ final class PluginContentSegment: StatusBarPlugin {
         at x: CGFloat, y: CGFloat, theme: TerminalTheme, settings: AppSettings, state: StatusBarState, ctx: CGContext
     ) -> CGFloat {
         guard let content else { return 0 }
-        let font = NSFont.systemFont(ofSize: 10, weight: .medium)
-        let textColor = theme.chromeText
-        let tintColor = resolveTint(content.tint, theme: theme) ?? theme.chromeMuted
-        var cx = x
-
-        if let iconName = content.icon,
-            let img = NSImage(systemSymbolName: iconName, accessibilityDescription: nil)
-        {
-            let iconSize: CGFloat = 12
-            let iconY = (DensityMetrics.current.statusBarHeight - iconSize) / 2
-            let imgRect = NSRect(x: cx, y: iconY, width: iconSize, height: iconSize)
-            drawTintedIcon(img, color: tintColor, in: imgRect, ctx: ctx)
-            cx += iconSize + 4
-        }
-
-        let attrs: [NSAttributedString.Key: Any] = [
-            .font: font,
-            .foregroundColor: textColor
-        ]
-        let str = content.text as NSString
-        str.safeDraw(at: NSPoint(x: cx, y: y), withAttributes: attrs)
-        cx += str.safeSize(withAttributes: attrs).width
-
-        return cx - x
+        return drawStatusBarIconLabel(
+            icon: content.icon, text: content.text,
+            tint: resolveTint(content.tint, theme: theme) ?? theme.chromeMuted,
+            textColor: theme.chromeText, at: x, y: y, ctx: ctx)
     }
 
     func handleClick(at point: NSPoint, in barView: StatusBarView) -> Bool {
-        guard let rect = barView.segmentRects[id], rect.contains(point) else { return false }
         onPluginClick?(pluginID)
         return true
     }

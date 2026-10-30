@@ -204,7 +204,8 @@ final class BooSocketQueryTests: BooSocketIntegrationTestCase {
         XCTAssertEqual(payload["status_bar_show_path"] as? Bool, settings.statusBarShowPath)
         XCTAssertEqual(payload["status_bar_show_time"] as? Bool, settings.statusBarShowTime)
         XCTAssertEqual(payload["status_bar_show_pane_info"] as? Bool, settings.statusBarShowPaneInfo)
-        XCTAssertEqual(payload["status_bar_show_shell"] as? Bool, settings.statusBarShowShell)
+        XCTAssertEqual(payload["status_bar_show_ports"] as? Bool, settings.statusBarShowPorts)
+        XCTAssertEqual(payload["status_bar_hidden_segments"] as? [String], settings.statusBarHiddenSegments)
         XCTAssertEqual(payload["status_bar_show_connection"] as? Bool, settings.statusBarShowConnection)
     }
 

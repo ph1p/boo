@@ -50,8 +50,14 @@ import Cocoa
     private(set) var leftPlugins: [StatusBarPlugin] = []
     private(set) var rightPlugins: [StatusBarPlugin] = []
 
-    /// Hit rects for segments, keyed by plugin ID. Updated during draw.
-    var segmentRects: [String: NSRect] = [:]
+    /// Segments drawn in the last pass with their hit rects. Clicks, hover and
+    /// accessibility go through this, so hidden or collapsed segments can never
+    /// claim a point through a stale rect.
+    var drawnSegments: [(plugin: StatusBarPlugin, rect: NSRect)] = []
+    /// Visible segments left out of the last draw because the bar was too narrow.
+    var collapsedSegmentIDs: Set<String> = []
+    /// One-shot timer that repaints the clock when its displayed value changes.
+    nonisolated(unsafe) var clockTimer: Timer?
     /// Hit rect for the sidebar toggle button.
     var sidebarToggleRect: NSRect = .zero
 
@@ -345,37 +351,15 @@ import Cocoa
         }
 
         // Check clickable segments
-        var newHovered: String?
-        if !toggleHover {
-            let settings = AppSettings.shared
-            let state = currentState
-            let allPlugins: [StatusBarPlugin] = leftPlugins + rightPlugins
-            for plugin in allPlugins {
-                guard plugin.isVisible(settings: settings, state: state),
-                    let rect = segmentRects[plugin.id],
-                    rect.contains(point)
-                else { continue }
-                // Only show hover for clickable segments
-                if plugin is GitBranchSegment || plugin is PluginContentSegment {
-                    newHovered = plugin.id
-                }
-                break
-            }
-        }
+        let plugin = toggleHover ? nil : segment(at: point)
+        let newHovered = plugin?.isClickable == true ? plugin?.id : nil
         if newHovered != hoveredSegmentID {
             hoveredSegmentID = newHovered
             changed = true
         }
 
         // Update tooltip based on hovered segment
-        if toggleHover {
-            toolTip = "Toggle Sidebar"
-        } else if let hovered = newHovered {
-            let allPlugins: [StatusBarPlugin] = leftPlugins + rightPlugins
-            toolTip = allPlugins.first(where: { $0.id == hovered })?.tooltipText
-        } else {
-            toolTip = nil
-        }
+        toolTip = toggleHover ? "Toggle Sidebar" : plugin?.tooltipText
 
         if changed { needsDisplay = true }
     }
@@ -389,6 +373,7 @@ import Cocoa
     }
 
     deinit {
+        clockTimer?.invalidate()
         for observer in [settingsObserver, agentInboxObserver].compactMap({ $0 }) + orchestratorObservers {
             NotificationCenter.default.removeObserver(observer)
         }

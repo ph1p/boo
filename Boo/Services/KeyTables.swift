@@ -128,6 +128,8 @@ final class KeyTableSegment: StatusBarPlugin {
     let id = "key-table"
     let position: StatusBarPosition = .left
     let priority = 0
+    let displayName = "Key table"
+    let collapsePriority = 0
     var tooltipText: String? { "Waiting for a key from ~/.boo/keytables.json — ⎋ cancels" }
 
     func isVisible(settings: AppSettings, state: StatusBarState) -> Bool {
@@ -143,8 +145,8 @@ final class KeyTableSegment: StatusBarPlugin {
             .foregroundColor: theme.accentColor
         ]
         let str = indicator as NSString
-        str.safeDraw(at: NSPoint(x: x + 4, y: y), withAttributes: attrs)
-        return str.safeSize(withAttributes: attrs).width + 8
+        str.safeDraw(at: NSPoint(x: x, y: y), withAttributes: attrs)
+        return str.safeSize(withAttributes: attrs).width
     }
 
     func handleClick(at point: NSPoint, in barView: StatusBarView) -> Bool { false }

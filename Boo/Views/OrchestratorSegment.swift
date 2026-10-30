@@ -7,6 +7,9 @@ final class OrchestratorSegment: StatusBarPlugin {
     let id = "orchestrator"
     let position: StatusBarPosition = .right
     let priority = 61
+    let displayName = "Orchestrator"
+    let isClickable = true
+    let collapsePriority = 0
     var hitRect: NSRect = .zero
 
     var tooltipText: String? { "Orchestrator — click to toggle (⌥⌘O)" }

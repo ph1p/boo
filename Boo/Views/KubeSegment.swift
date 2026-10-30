@@ -6,6 +6,9 @@ final class KubeSegment: StatusBarPlugin {
     let id = "kube"
     let position: StatusBarPosition = .right
     let priority = 54
+    let displayName = "Kubernetes context"
+    let isClickable = true
+    let collapsePriority = 50
     var hitRect: NSRect = .zero
     /// Retained while the menu is open (menu items hold their target weakly).
     private var menuTarget: KubeMenuTarget?

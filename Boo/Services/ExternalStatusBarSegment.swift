@@ -20,6 +20,9 @@ final class ExternalStatusBarSegment: StatusBarPlugin {
         self.priority = info.priority
     }
 
+    var displayName: String { "\(text) (external)" }
+    var collapsePriority: Int { 60 }
+
     func isVisible(settings: AppSettings, state: StatusBarState) -> Bool {
         true
     }
@@ -28,46 +31,9 @@ final class ExternalStatusBarSegment: StatusBarPlugin {
         at x: CGFloat, y: CGFloat, theme: TerminalTheme, settings: AppSettings,
         state: StatusBarState, ctx: CGContext
     ) -> CGFloat {
-        let font = NSFont.systemFont(ofSize: 10, weight: .medium)
-        let textColor = theme.chromeText
-        let tintColor = resolveTint(theme: theme) ?? theme.chromeMuted
-        var cx = x
-
-        // Draw icon if present
-        if let iconName = icon,
-            let img = NSImage(systemSymbolName: iconName, accessibilityDescription: nil)
-        {
-            let iconSize: CGFloat = 12
-            let iconY = (DensityMetrics.current.statusBarHeight - iconSize) / 2
-            let iconRect = NSRect(x: cx, y: iconY, width: iconSize, height: iconSize)
-
-            let tinted = NSImage(size: iconRect.size, flipped: false) { drawRect in
-                img.draw(in: drawRect)
-                tintColor.set()
-                drawRect.fill(using: .sourceAtop)
-                return true
-            }
-            ctx.saveGState()
-            ctx.translateBy(x: iconRect.origin.x, y: iconRect.origin.y + iconRect.height)
-            ctx.scaleBy(x: 1, y: -1)
-            tinted.draw(
-                in: NSRect(origin: .zero, size: iconRect.size),
-                from: .zero, operation: .sourceOver, fraction: 1.0)
-            ctx.restoreGState()
-
-            cx += iconSize + 4
-        }
-
-        // Draw text
-        let attrs: [NSAttributedString.Key: Any] = [
-            .font: font,
-            .foregroundColor: textColor
-        ]
-        let str = text as NSString
-        str.safeDraw(at: NSPoint(x: cx, y: y), withAttributes: attrs)
-        cx += str.safeSize(withAttributes: attrs).width
-
-        return cx - x
+        drawStatusBarIconLabel(
+            icon: icon, text: text, tint: resolveTint(theme: theme) ?? theme.chromeMuted,
+            textColor: theme.chromeText, at: x, y: y, ctx: ctx)
     }
 
     func handleClick(at point: NSPoint, in barView: StatusBarView) -> Bool {

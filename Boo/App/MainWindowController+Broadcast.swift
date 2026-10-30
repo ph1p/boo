@@ -85,6 +85,9 @@ final class BroadcastSegment: StatusBarPlugin {
     let id = "broadcast"
     let position: StatusBarPosition = .left
     let priority = 1
+    let displayName = "Broadcast"
+    let isClickable = true
+    let collapsePriority = 0
     var hitRect: NSRect = .zero
     /// nil while not broadcasting.
     var memberCount: Int?
@@ -104,7 +107,7 @@ final class BroadcastSegment: StatusBarPlugin {
     ) -> CGFloat {
         guard let count = memberCount else { return 0 }
         hitRect = Self.drawAlertLabel(Self.label(memberCount: count), color: Self.color, at: x, y: y)
-        return hitRect.width
+        return hitRect.width - 8
     }
 
     func handleClick(at point: NSPoint, in barView: StatusBarView) -> Bool {

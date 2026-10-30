@@ -319,6 +319,9 @@ final class RecordingSegment: StatusBarPlugin {
     let id = "recording"
     let position: StatusBarPosition = .left
     let priority = 1
+    let displayName = "Recording"
+    let isClickable = true
+    let collapsePriority = 0
     var hitRect: NSRect = .zero
     var count = 0
 
@@ -333,7 +336,7 @@ final class RecordingSegment: StatusBarPlugin {
     ) -> CGFloat {
         guard count > 0 else { return 0 }
         hitRect = Self.drawAlertLabel(Self.label(count: count), color: theme.error, at: x, y: y)
-        return hitRect.width
+        return hitRect.width - 8
     }
 
     func handleClick(at point: NSPoint, in barView: StatusBarView) -> Bool {

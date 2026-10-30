@@ -279,7 +279,17 @@ Configurable segments displayed at the bottom of the window:
 - **Sync conflicts** — `⚠ Sync conflict` when a file changed both here and in the [sync folder](/history-and-sync#conflicts)
 - **◉ Remote** — while the [Remote Control](/remote-control) server runs
 
-**Settings → Status Bar** shows a preview, toggles the built-in segments (Connection status, Current path, Clock, Pane & tab count, Listening ports) and lists the segments plugins add.
+**Settings → Status Bar** lists every segment, built-in or added by a plugin or `statusbar.set`, under **Left Side** and **Right Side**. For each one you can:
+
+- show or hide it
+- move it within its side with the arrow buttons
+- send it to the other side
+
+**Reset Layout** restores the built-in order. **Appearance** sets the clock format (24-hour, with seconds, 12-hour, or date and time), the path style (full, folder name only, or compact `~/d/g/boo`), how long a branch name may get, and whether separators show between left-side segments.
+
+Right-click the status bar for the same controls in place: hide the segment under the pointer, move it to the other side, or check segments on and off.
+
+When the window is too narrow for everything, segments step aside in order of importance: the pane count, clock and running process go first, while agents, recording, broadcast and remote control always stay.
 
 ## Rules, Profiles and Shaders
 

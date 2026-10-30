@@ -7,6 +7,9 @@ final class AgentInboxSegment: StatusBarPlugin {
     let id = "agent-inbox"
     let position: StatusBarPosition = .right
     let priority = 60
+    let displayName = "Agents"
+    let isClickable = true
+    let collapsePriority = 0
     var hitRect: NSRect = .zero
     /// Retained while the menu is open (menu items hold their target weakly).
     private var menuTarget: AgentInboxMenuTarget?

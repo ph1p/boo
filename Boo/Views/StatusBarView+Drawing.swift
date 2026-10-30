@@ -8,6 +8,23 @@ extension StatusBarView {
     /// repaints on hover, putting this on the mouse-move path.
     nonisolated(unsafe) static let referenceFont = NSFont.systemFont(ofSize: 10, weight: .regular)
 
+    /// Gap on each side of a left-group separator line.
+    static let separatorGap: CGFloat = 7
+    /// Least empty space kept between the left and right groups.
+    static let minGroupGap: CGFloat = 16
+
+    /// Offscreen 1×1 context segments draw into while being measured. Their
+    /// text goes through `safeDraw`, which targets the current NSGraphicsContext,
+    /// so measuring swaps this in rather than passing a context around.
+    private static let measureContext: NSGraphicsContext? = {
+        guard
+            let cg = CGContext(
+                data: nil, width: 1, height: 1, bitsPerComponent: 8, bytesPerRow: 0,
+                space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+        else { return nil }
+        return NSGraphicsContext(cgContext: cg, flipped: true)
+    }()
+
     override func draw(_ dirtyRect: NSRect) {
         guard let ctx = NSGraphicsContext.current?.cgContext else { return }
         let theme = AppSettings.shared.theme
@@ -25,54 +42,127 @@ extension StatusBarView {
         for plugin in rightPlugins { plugin.update(state: state) }
 
         // Reset tracking
-        segmentRects.removeAll()
+        drawnSegments.removeAll()
 
         // Sidebar toggle sits at the edge the sidebar is on
         let toggleLeading = settings.sidebarPosition == .left
         let sidebarToggleWidth = drawSidebarToggle(ctx: ctx, theme: theme, leading: toggleLeading)
+        let leftStart: CGFloat = toggleLeading ? sidebarToggleWidth : IslandMetrics.contentInset
+        let rightEnd = bounds.width - (toggleLeading ? IslandMetrics.contentInset : sidebarToggleWidth) + 2
 
-        // Draw left plugins left-to-right
-        var x: CGFloat = toggleLeading ? sidebarToggleWidth : IslandMetrics.contentInset
+        // Place: user order and sides, then measure, then drop what doesn't fit.
+        let placed = placedSegments(settings: settings, state: state)
+        var native: [String: CGFloat] = [:]
+        for plugin in placed.left + placed.right {
+            native[plugin.id] = measure(plugin, y: textY, theme: theme, settings: settings, state: state)
+        }
+        // Left-native segments report bare content width; right-native ones
+        // include 4pt padding either side. Convert to the side they sit on.
+        func leftWidth(_ p: StatusBarPlugin) -> CGFloat {
+            let w = native[p.id] ?? 0
+            return p.position == .left ? w : max(0, w - 8)
+        }
+        func rightWidth(_ p: StatusBarPlugin) -> CGFloat {
+            let w = native[p.id] ?? 0
+            return p.position == .right ? w : w + 8
+        }
+        let left = placed.left.filter { (native[$0.id] ?? 0) > 0 }
+        let right = placed.right.filter { (native[$0.id] ?? 0) > 0 }
+        let dropped = StatusBarLayout.overflow(
+            left: left.map { .init(id: $0.id, width: leftWidth($0), collapsePriority: $0.collapsePriority) },
+            right: right.map { .init(id: $0.id, width: rightWidth($0), collapsePriority: $0.collapsePriority) },
+            available: rightEnd - leftStart, separator: Self.separatorGap * 2, minGap: Self.minGroupGap)
+        collapsedSegmentIDs = dropped
+
+        // Right group first, so the left group knows where it has to stop.
+        var rx = rightEnd
+        for plugin in right.reversed() where !dropped.contains(plugin.id) {
+            let width = rightWidth(plugin)
+            let rect = NSRect(x: rx - width, y: 0, width: width, height: barHeight)
+            drawHover(for: plugin, in: rect, theme: theme, ctx: ctx)
+            let anchor = plugin.position == .right ? rx : rect.minX + 4
+            _ = plugin.draw(at: anchor, y: textY, theme: theme, settings: settings, state: state, ctx: ctx)
+            record(plugin, rect: rect)
+            rx -= width
+        }
+
+        // Left group, clipped so a lone segment too wide to fit can't run under
+        // the right group.
+        ctx.saveGState()
+        ctx.clip(to: CGRect(x: 0, y: 0, width: max(0, rx - Self.minGroupGap / 2), height: barHeight))
+        var x = leftStart
         var isFirst = true
-        for plugin in leftPlugins where plugin.isVisible(settings: settings, state: state) {
+        for plugin in left where !dropped.contains(plugin.id) {
             if !isFirst {
-                // Thin vertical separator line
-                let sepInset = round(barHeight * 0.22)
-                x += 7
-                ctx.setFillColor(theme.separator.cgColor)
-                ctx.fill(CGRect(x: x, y: sepInset, width: 0.5, height: barHeight - sepInset * 2))
-                x += 7
-            }
-
-            let startX = x
-            let width = plugin.draw(at: x, y: textY, theme: theme, settings: settings, state: state, ctx: ctx)
-            x += width
-
-            // Track hit rect for this segment
-            let segRect = NSRect(x: startX - 4, y: 0, width: width + 8, height: barHeight)
-            segmentRects[plugin.id] = segRect
-
-            // Hover underline for clickable segments
-            if hoveredSegmentID == plugin.id {
-                let isClickable = plugin is GitBranchSegment || plugin is PluginContentSegment
-                if isClickable {
-                    ctx.setFillColor(theme.hoverFill.cgColor)
-                    let hoverRect = CGRect(x: segRect.minX, y: 1, width: segRect.width, height: barHeight - 2)
-                    WorkspacePillStyle.fillRoundedRect(ctx, rect: hoverRect)
+                x += Self.separatorGap
+                if settings.statusBarSeparators {
+                    let sepInset = round(barHeight * 0.22)
+                    ctx.setFillColor(theme.separator.cgColor)
+                    ctx.fill(CGRect(x: x, y: sepInset, width: 0.5, height: barHeight - sepInset * 2))
                 }
+                x += Self.separatorGap
             }
-
+            let width = leftWidth(plugin)
+            let rect = NSRect(x: x - 4, y: 0, width: width + 8, height: barHeight)
+            drawHover(for: plugin, in: rect, theme: theme, ctx: ctx)
+            let anchor = plugin.position == .left ? x : x + width + 4
+            _ = plugin.draw(at: anchor, y: textY, theme: theme, settings: settings, state: state, ctx: ctx)
+            record(plugin, rect: rect)
+            x += width
             isFirst = false
         }
+        ctx.restoreGState()
 
-        // Draw right plugins right-to-left
-        let visibleRight = rightPlugins.filter { $0.isVisible(settings: settings, state: state) }
-        var rx = bounds.width - (toggleLeading ? IslandMetrics.contentInset : sidebarToggleWidth) + 2
-        for plugin in visibleRight {
-            let width = plugin.draw(at: rx, y: textY, theme: theme, settings: settings, state: state, ctx: ctx)
-            rx -= width
-            segmentRects[plugin.id] = NSRect(x: rx, y: 0, width: width, height: barHeight)
+        updateClockTimer(settings: settings)
+    }
+
+    /// Visible segments per side, in visual left-to-right order.
+    func placedSegments(
+        settings: AppSettings, state: StatusBarState
+    ) -> (
+        left: [StatusBarPlugin], right: [StatusBarPlugin]
+    ) {
+        let arrangement = arrangement(settings: settings)
+        let byID = pluginsByID
+        func shown(_ ids: [String]) -> [StatusBarPlugin] {
+            ids.compactMap { byID[$0] }.filter {
+                $0.isVisible(settings: settings, state: state) && !settings.isStatusBarSegmentHidden($0.id)
+            }
         }
+        return (shown(arrangement.left), shown(arrangement.right))
+    }
+
+    /// Width a segment would draw at, found by drawing it offscreen.
+    private func measure(
+        _ plugin: StatusBarPlugin, y: CGFloat, theme: TerminalTheme, settings: AppSettings, state: StatusBarState
+    ) -> CGFloat {
+        guard let measureContext = Self.measureContext else { return 0 }
+        let previous = NSGraphicsContext.current
+        NSGraphicsContext.current = measureContext
+        defer { NSGraphicsContext.current = previous }
+        let cg = measureContext.cgContext
+        cg.saveGState()
+        defer { cg.restoreGState() }
+        // Right-native segments draw leftwards from their anchor; keep them on
+        // positive x so nothing they compute from it goes negative.
+        let anchor: CGFloat = plugin.position == .right ? 10_000 : 0
+        return plugin.draw(at: anchor, y: y, theme: theme, settings: settings, state: state, ctx: cg)
+    }
+
+    private func drawHover(for plugin: StatusBarPlugin, in rect: NSRect, theme: TerminalTheme, ctx: CGContext) {
+        guard hoveredSegmentID == plugin.id, plugin.isClickable else { return }
+        ctx.setFillColor(theme.hoverFill.cgColor)
+        WorkspacePillStyle.fillRoundedRect(
+            ctx, rect: CGRect(x: rect.minX, y: 1, width: rect.width, height: barHeight - 2))
+    }
+
+    private func record(_ plugin: StatusBarPlugin, rect: NSRect) {
+        drawnSegments.append((plugin, rect))
+    }
+
+    /// The drawn segment under `point`, if any.
+    func segment(at point: NSPoint) -> StatusBarPlugin? {
+        drawnSegments.first { $0.rect.contains(point) }?.plugin
     }
 
     /// Draw the sidebar toggle button at the far left (`leading`) or far right
@@ -151,8 +241,6 @@ extension StatusBarView {
 
     override func mouseDown(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
-        let settings = AppSettings.shared
-        let state = currentState
 
         // Sidebar toggle (edge on the sidebar's side)
         if sidebarToggleRect.contains(point) {
@@ -160,16 +248,10 @@ extension StatusBarView {
             return
         }
 
-        // Check right plugins first (icons at edge), then left.
-        // Only check visible plugins — hidden plugins retain stale hitRects
-        // from previous draws that can intercept clicks meant for shifted
-        // visible segments.
-        for plugin in rightPlugins where plugin.isVisible(settings: settings, state: state) {
-            if plugin.handleClick(at: point, in: self) { return }
-        }
-        for plugin in leftPlugins where plugin.isVisible(settings: settings, state: state) {
-            if plugin.handleClick(at: point, in: self) { return }
-        }
+        // Only the segment drawn under the point gets the click. Hidden and
+        // collapsed segments keep stale hit rects from earlier draws, which
+        // must not intercept clicks meant for whatever shifted into their place.
+        if let plugin = segment(at: point), plugin.handleClick(at: point, in: self) { return }
 
         // Empty space — drag the window, same as the toolbar.
         window?.performDrag(with: event)
@@ -189,14 +271,8 @@ extension StatusBarView {
     internal func rebuildAccessibilityElements() {
         accessibilityElements.removeAll()
         let state = currentState
-        let settings = AppSettings.shared
-        let allPlugins: [StatusBarPlugin] = leftPlugins + rightPlugins
 
-        for plugin in allPlugins {
-            guard plugin.isVisible(settings: settings, state: state),
-                let rect = segmentRects[plugin.id]
-            else { continue }
-
+        for (plugin, rect) in drawnSegments.sorted(by: { $0.rect.minX < $1.rect.minX }) {
             let element = NSAccessibilityElement()
             element.setAccessibilityParent(self)
 
@@ -207,16 +283,9 @@ extension StatusBarView {
             }
 
             // Label
-            let label = plugin.accessibilitySegmentLabel(state: state) ?? plugin.id
-            let isClickable = plugin is GitBranchSegment || plugin is PluginContentSegment
-
-            if isClickable {
-                element.setAccessibilityRole(.button)
-                element.setAccessibilityLabel(label)
-            } else {
-                element.setAccessibilityRole(.staticText)
-                element.setAccessibilityLabel(label)
-            }
+            let label = plugin.accessibilitySegmentLabel(state: state) ?? plugin.displayName
+            element.setAccessibilityRole(plugin.isClickable ? .button : .staticText)
+            element.setAccessibilityLabel(label)
 
             accessibilityElements.append(element)
         }

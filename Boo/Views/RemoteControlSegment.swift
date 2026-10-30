@@ -6,6 +6,9 @@ final class RemoteControlSegment: StatusBarPlugin {
     let id = "remote-control"
     let position: StatusBarPosition = .right
     let priority = 52
+    let displayName = "Remote control"
+    let isClickable = true
+    let collapsePriority = 0
     var hitRect: NSRect = .zero
 
     var tooltipText: String? { "Remote Control is reachable on your network — click to copy the URL or stop it" }

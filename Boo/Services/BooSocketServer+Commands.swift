@@ -108,8 +108,11 @@ extension BooSocketServer {
                     "status_bar_show_path": s.statusBarShowPath,
                     "status_bar_show_time": s.statusBarShowTime,
                     "status_bar_show_pane_info": s.statusBarShowPaneInfo,
-                    "status_bar_show_shell": s.statusBarShowShell,
-                    "status_bar_show_connection": s.statusBarShowConnection
+                    "status_bar_show_connection": s.statusBarShowConnection,
+                    "status_bar_show_ports": s.statusBarShowPorts,
+                    "status_bar_left_order": s.statusBarLeftOrder,
+                    "status_bar_right_order": s.statusBarRightOrder,
+                    "status_bar_hidden_segments": s.statusBarHiddenSegments
                 ] as [String: Any]
             ])
     }
