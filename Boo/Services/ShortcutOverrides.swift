@@ -54,6 +54,15 @@ enum ShortcutOverrides {
         "down": String(UnicodeScalar(NSDownArrowFunctionKey)!)
     ]
 
+    /// Read but never written, so specs use the same words as `HotKeySpec`.
+    private static let keyAliases = ["enter": "return", "esc": "escape"]
+    private static let modifierNames: [String: NSEvent.ModifierFlags] = [
+        "cmd": .command, "command": .command, "⌘": .command,
+        "opt": .option, "option": .option, "alt": .option, "⌥": .option,
+        "ctrl": .control, "control": .control, "⌃": .control,
+        "shift": .shift, "⇧": .shift
+    ]
+
     /// "cmd+shift+d" → ("d", ⇧⌘). "" → no shortcut. Nil when malformed.
     static func parse(_ spec: String) -> Shortcut? {
         if spec.isEmpty { return Shortcut.none }
@@ -63,15 +72,10 @@ enum ShortcutOverrides {
         guard let keyName = parts.popLast(), !keyName.isEmpty else { return nil }
         var modifiers: NSEvent.ModifierFlags = []
         for part in parts {
-            switch part {
-            case "cmd": modifiers.insert(.command)
-            case "shift": modifiers.insert(.shift)
-            case "opt": modifiers.insert(.option)
-            case "ctrl": modifiers.insert(.control)
-            default: return nil
-            }
+            guard let modifier = modifierNames[part] else { return nil }
+            modifiers.insert(modifier)
         }
-        if let named = namedKeys[keyName] { return Shortcut(key: named, modifiers: modifiers) }
+        if let named = namedKeys[keyAliases[keyName] ?? keyName] { return Shortcut(key: named, modifiers: modifiers) }
         if keyName.hasPrefix("f"), let n = Int(keyName.dropFirst()), (1...12).contains(n) {
             return Shortcut(key: String(UnicodeScalar(NSF1FunctionKey + n - 1)!), modifiers: modifiers)
         }
