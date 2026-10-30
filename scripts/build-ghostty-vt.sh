@@ -29,5 +29,7 @@ nm -gU "$TMP"/objs/*.o 2>/dev/null \
 ld -r -arch arm64 -exported_symbols_list "$TMP/exports.txt" "$TMP"/objs/*.o -o "$TMP/ghostty-vt-boo.o"
 mkdir -p "$OUT_DIR"
 rm -f "$OUT_LIB"
-ar rcs "$OUT_LIB" "$TMP/ghostty-vt-boo.o"
+# Apple libtool: GNU ar (Homebrew binutils, often first on PATH) leaves the
+# Mach-O member unaligned and ld then ignores it.
+xcrun libtool -static -o "$OUT_LIB" "$TMP/ghostty-vt-boo.o"
 echo "==> Wrote $OUT_LIB ($(wc -l < "$TMP/exports.txt" | tr -d ' ') symbols)"
