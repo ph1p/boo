@@ -81,6 +81,41 @@ final class KittyImageProtocolTests: XCTestCase {
         XCTAssertTrue(text.contains("r=20"), "payload must contain row count")
     }
 
+    // MARK: - Downsampling
+
+    func testLoadRGBADownsamplesToMaxPixelSize() {
+        let url = writeTinyPNG(width: 400, height: 200)
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        guard let (pixels, w, h) = KittyImageProtocol.loadRGBA(path: url.path, maxPixelSize: 100) else {
+            return XCTFail("loadRGBA returned nil")
+        }
+        XCTAssertEqual(w, 100)
+        XCTAssertEqual(h, 50)
+        XCTAssertEqual(pixels.count, 100 * 50 * 4)
+    }
+
+    func testLoadRGBANeverUpscales() {
+        let url = writeTinyPNG()
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        guard let (_, w, h) = KittyImageProtocol.loadRGBA(path: url.path, maxPixelSize: 100) else {
+            return XCTFail("loadRGBA returned nil")
+        }
+        XCTAssertEqual(w, 4)
+        XCTAssertEqual(h, 4)
+    }
+
+    func testMaxPixelSizeFollowsPaneSize() {
+        XCTAssertEqual(KittyImageProtocol.maxPixelSize(for: nil), KittyImageProtocol.defaultMaxPixelSize)
+        var size = ghostty_surface_size_s()
+        size.width_px = 1200
+        size.height_px = 800
+        XCTAssertEqual(KittyImageProtocol.maxPixelSize(for: size), 1200)
+        size.width_px = 6000
+        XCTAssertEqual(KittyImageProtocol.maxPixelSize(for: size), KittyImageProtocol.defaultMaxPixelSize)
+    }
+
     // MARK: - fitCells
 
     func testFitCellsReturnsNilForNilTerminalSize() {
@@ -173,19 +208,19 @@ final class KittyImageProtocolTests: XCTestCase {
     // MARK: - Helpers
 
     /// Creates a 4×4 red PNG via CoreGraphics and writes it to a temp file.
-    private func writeTinyPNG() -> URL {
+    private func writeTinyPNG(width: Int = 4, height: Int = 4) -> URL {
         let url = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("kitty_test_\(UUID().uuidString).png")
         let colorSpace = CGColorSpaceCreateDeviceRGB()
-        var pixels = [UInt8](repeating: 0, count: 4 * 4 * 4)
+        var pixels = [UInt8](repeating: 0, count: width * height * 4)
         for i in stride(from: 0, to: pixels.count, by: 4) {
             pixels[i] = 255
             pixels[i + 3] = 255  // red, fully opaque
         }
         guard
             let ctx = CGContext(
-                data: &pixels, width: 4, height: 4,
-                bitsPerComponent: 8, bytesPerRow: 16,
+                data: &pixels, width: width, height: height,
+                bitsPerComponent: 8, bytesPerRow: width * 4,
                 space: colorSpace,
                 bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
             ), let cgImage = ctx.makeImage()

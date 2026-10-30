@@ -24,7 +24,8 @@ enum KittyImageProtocol {
         to shellPID: pid_t,
         terminalSize: ghostty_surface_size_s? = nil
     ) -> Bool {
-        guard let (pixels, imgW, imgH) = loadRGBA(path: path) else { return false }
+        guard let (pixels, imgW, imgH) = loadRGBA(path: path, maxPixelSize: maxPixelSize(for: terminalSize))
+        else { return false }
         let (cols, rows) = fitCells(imageWidth: imgW, imageHeight: imgH, terminalSize: terminalSize)
         var payload = buildPayload(pixels: pixels, width: imgW, height: imgH, cols: cols, rows: rows)
         payload += Array("\n\n".utf8)
@@ -68,11 +69,28 @@ enum KittyImageProtocol {
 
     // MARK: - Image loading
 
+    /// Upper bound for a decoded image's longer side when the pane size is unknown.
+    static let defaultMaxPixelSize = 2048
+
+    /// The pane can't show more pixels than it has, so decode no larger than its
+    /// longer side (capped at `defaultMaxPixelSize`).
+    static func maxPixelSize(for terminalSize: ghostty_surface_size_s?) -> Int {
+        guard let size = terminalSize, size.width_px > 0, size.height_px > 0 else { return defaultMaxPixelSize }
+        return min(defaultMaxPixelSize, Int(max(size.width_px, size.height_px)))
+    }
+
     /// Loads an image from disk and returns raw RGBA pixels, width, height.
-    static func loadRGBA(path: String) -> ([UInt8], Int, Int)? {
+    /// Images whose longer side exceeds `maxPixelSize` are downsampled while
+    /// decoding, so a 4K photo doesn't become a ~33 MB pixel buffer.
+    static func loadRGBA(path: String, maxPixelSize: Int = defaultMaxPixelSize) -> ([UInt8], Int, Int)? {
         let url = URL(fileURLWithPath: path)
+        let options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceThumbnailMaxPixelSize: maxPixelSize
+        ]
         guard let src = CGImageSourceCreateWithURL(url as CFURL, nil),
-            let cgImage = CGImageSourceCreateImageAtIndex(src, 0, nil)
+            let cgImage = CGImageSourceCreateThumbnailAtIndex(src, 0, options as CFDictionary)
         else { return nil }
 
         let w = cgImage.width
