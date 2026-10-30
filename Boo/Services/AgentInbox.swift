@@ -296,6 +296,8 @@ extension AgentInbox {
         location.controller.signalAgentAttention(
             workspace: location.workspace, pane: location.pane, tabIndex: location.tabIndex,
             body: Self.summary(of: item))
+        PhonePush.shared.agentWaiting(
+            agent: Self.displayName(of: item.agent), workspaceName: location.workspace.displayName)
     }
 
     /// One line for menus and notifications: "Claude needs your permission to use Bash".

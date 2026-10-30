@@ -125,27 +125,24 @@ final class RemoteExplorer: @unchecked Sendable {
     private static func parseSSHHost(pid: pid_t) -> String? {
         guard let cmdline = ProcessTree.processArgs(pid: pid) else { return nil }
 
-        let args = cmdline.trimmingCharacters(in: .whitespacesAndNewlines).split(separator: " ").map(String.init)
-        var host: String?
-        var skipNext = false
+        return sshDestination(in: cmdline.trimmingCharacters(in: .whitespacesAndNewlines))
+    }
 
-        for (i, arg) in args.enumerated() {
-            if i == 0 { continue }
-            if skipNext {
-                skipNext = false
+    /// The destination (`[user@]host`) of an ssh command line: its first
+    /// argument after the program that is neither an option nor an option's value.
+    static func sshDestination(in command: String) -> String? {
+        var words = command.split(separator: " ").dropFirst()
+        // ssh options that take a value; skip it along with the option.
+        let valued = Set("bcDEeFIiJLlmOopQRSWw")
+        while let word = words.first {
+            words = words.dropFirst()
+            if word.hasPrefix("-") {
+                if word.count == 2, let flag = word.last, valued.contains(flag) { words = words.dropFirst() }
                 continue
             }
-            if arg.hasPrefix("-") {
-                let valueOpts: Set<String> = [
-                    "-p", "-i", "-l", "-o", "-F", "-J", "-L", "-R", "-D", "-b", "-c", "-e", "-m", "-w", "-E"
-                ]
-                if valueOpts.contains(arg) { skipNext = true }
-                continue
-            }
-            host = arg
-            break
+            return String(word)
         }
-        return host
+        return nil
     }
 
     /// Extract the target (container name, pod name, VM name, etc.) from a container tool command line.
