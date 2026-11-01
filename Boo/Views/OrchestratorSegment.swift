@@ -6,7 +6,7 @@ import Cocoa
 final class OrchestratorSegment: StatusBarPlugin {
     let id = "orchestrator"
     let position: StatusBarPosition = .right
-    let priority = 61
+    let priority = 60
     let displayName = "Orchestrator"
     let isClickable = true
     let collapsePriority = 0

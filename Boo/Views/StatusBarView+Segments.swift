@@ -419,8 +419,8 @@ final class PaneInfoSegment: StatusBarPlugin {
 /// Updated by SystemInfoPlugin via `updateValues()`.
 final class SystemInfoSegment: StatusBarPlugin {
     let id = "system-info-text"
-    let position: StatusBarPosition = .left
-    let priority = 25
+    let position: StatusBarPosition = .right
+    let priority = 45
     let displayName = "System info"
     let collapsePriority = 75
 
@@ -527,7 +527,7 @@ final class SystemInfoSegment: StatusBarPlugin {
 final class TimeSegment: StatusBarPlugin {
     let id = "time"
     let position: StatusBarPosition = .right
-    let priority = 50
+    let priority = 38
     let displayName = "Clock"
     let collapsePriority = 70
 

@@ -83,8 +83,8 @@ extension MainWindowController {
 /// "Broadcasting to N panes" in orange while a broadcast group is active.
 final class BroadcastSegment: StatusBarPlugin {
     let id = "broadcast"
-    let position: StatusBarPosition = .left
-    let priority = 1
+    let position: StatusBarPosition = .right
+    let priority = 70
     let displayName = "Broadcast"
     let isClickable = true
     let collapsePriority = 0

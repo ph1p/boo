@@ -5,7 +5,7 @@ import AppKit
 final class SyncSegment: StatusBarPlugin {
     let id = "sync"
     let position: StatusBarPosition = .right
-    let priority = 53
+    let priority = 50
     let displayName = "Settings sync"
     let isClickable = true
     let collapsePriority = 0

@@ -51,6 +51,25 @@ final class StatusBarLayoutTests: XCTestCase {
         XCTAssertEqual(StatusBarLayout.moving("missing", by: 1, in: defaults), defaults)
     }
 
+    func testDragOntoTarget() {
+        // Downwards within a side lands after the target, upwards before it.
+        XCTAssertEqual(StatusBarLayout.moving("env", onto: "path", in: defaults).left, ["path", "env", "git"])
+        XCTAssertEqual(StatusBarLayout.moving("git", onto: "env", in: defaults).left, ["git", "env", "path"])
+        // Across sides takes the target's place.
+        let across = StatusBarLayout.moving("path", onto: "pane", in: defaults)
+        XCTAssertEqual(across.left, ["env", "git"])
+        XCTAssertEqual(across.right, ["ports", "path", "pane", "time"])
+        XCTAssertEqual(StatusBarLayout.moving("env", onto: "env", in: defaults), defaults)
+        XCTAssertEqual(StatusBarLayout.moving("env", onto: "missing", in: defaults), defaults)
+    }
+
+    func testDragToEndOfSide() {
+        let toRight = StatusBarLayout.moving("env", toEndOfLeft: false, in: defaults)
+        XCTAssertEqual(toRight.left, ["path", "git"])
+        XCTAssertEqual(toRight.right, ["ports", "pane", "time", "env"])
+        XCTAssertEqual(StatusBarLayout.moving("env", toEndOfLeft: true, in: defaults).left, ["path", "git", "env"])
+    }
+
     // MARK: - overflow
 
     private func m(_ id: String, _ width: CGFloat, _ priority: Int) -> StatusBarLayout.Measured {

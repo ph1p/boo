@@ -4,7 +4,7 @@ import SwiftUI
 
 struct StatusBarSettingsView: View {
     @Environment(\.tokens) private var tokens
-    @ObservedObject private var observer = SettingsObserver(topics: [.theme, .statusBar, .plugins])
+    @StateObject private var observer = SettingsObserver(topics: [.theme, .statusBar, .plugins])
 
     /// Bar whose registered segments the page lists. Any open window's bar has
     /// the same built-ins plus the plugin segments of that window; with no
@@ -17,6 +17,8 @@ struct StatusBarSettingsView: View {
     }
     private static let fallbackBar = StatusBarView(frame: .zero)
 
+    @State private var draggingID: String?
+
     var body: some View {
         let _ = observer.revision
         let t = tokens
@@ -24,27 +26,36 @@ struct StatusBarSettingsView: View {
         let arrangement = bar.arrangement()
         let catalog = bar.segmentCatalog
         SettingsPage(title: "Status Bar") {
-            Section(
-                title: "Preview",
-                footer: "Right-click the status bar to hide or move a segment. When the window is narrow, "
-                    + "the least important segments step aside until there is room again."
-            ) {
+            Section(title: "Preview", footer: "When the window is narrow, the least important segments step aside.") {
                 statusBarPreview(arrangement, catalog: catalog, t: t)
             }
 
-            Section(title: "Left Side") {
-                segmentList(arrangement.left, arrangement: arrangement, catalog: catalog)
-            }
-
-            Section(title: "Right Side") {
-                segmentList(arrangement.right, arrangement: arrangement, catalog: catalog)
-            }
-
-            HStack {
-                Spacer()
-                Button("Reset Layout") { AppSettings.shared.resetStatusBarLayout() }
-                    .controlSize(.small)
-                    .help("Restore the built-in order and sides. Visibility is kept.")
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text("Segments")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(t.muted)
+                        .textCase(.uppercase)
+                        .tracking(0.4)
+                    Spacer()
+                    Button("Reset Layout") { AppSettings.shared.resetStatusBarLayout() }
+                        .controlSize(.small)
+                        .help("Restore the built-in order and sides. Visibility is kept.")
+                }
+                .padding(.horizontal, 2)
+                HStack(alignment: .top, spacing: 10) {
+                    segmentColumn(left: true, arrangement: arrangement, catalog: catalog, t: t)
+                    segmentColumn(left: false, arrangement: arrangement, catalog: catalog, t: t)
+                }
+                .animation(.easeOut(duration: 0.15), value: arrangement)
+                Text(
+                    "Drag a segment to reorder it or move it to the other side. The eye hides it. "
+                        + "Many segments only appear while they have something to show."
+                )
+                .font(.system(size: 11))
+                .foregroundStyle(t.muted)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 2)
             }
 
             Section(title: "Appearance") {
@@ -85,20 +96,62 @@ struct StatusBarSettingsView: View {
         return "Shown as \(PathSegment.display(sample, style: style))"
     }
 
-    // MARK: - Segment lists
+    // MARK: - Segment columns
 
-    @ViewBuilder
-    private func segmentList(
-        _ ids: [String], arrangement: StatusBarLayout.Arrangement, catalog: [String: StatusBarView.SegmentInfo]
+    /// One side of the bar as a drop zone. Rows reorder live while dragging;
+    /// dropping on the empty space below the rows puts the segment last.
+    private func segmentColumn(
+        left: Bool, arrangement: StatusBarLayout.Arrangement, catalog: [String: StatusBarView.SegmentInfo], t: Tokens
     ) -> some View {
-        let rows = ids.compactMap { catalog[$0] }
-        if rows.isEmpty {
-            DescriptionLabel(text: "No segments. Move one here with its arrow button.")
-        } else {
-            VStack(spacing: 6) {
-                ForEach(rows) { SegmentRow(info: $0, arrangement: arrangement) }
+        let rows = (left ? arrangement.left : arrangement.right).compactMap { catalog[$0] }
+        let current = { sourceBar.arrangement() }
+        return VStack(alignment: .leading, spacing: 4) {
+            Text(left ? "Left" : "Right")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(t.textSecondary)
+                .padding(.horizontal, 6)
+                .padding(.bottom, 2)
+            ForEach(rows) { info in
+                SegmentRow(
+                    info: info, isHidden: AppSettings.shared.isStatusBarSegmentHidden(info.id),
+                    isMoved: info.isLeftByDefault != left
+                )
+                .onDrag {
+                    draggingID = info.id
+                    return NSItemProvider(object: info.id as NSString)
+                }
+                .onDrop(
+                    of: [.plainText],
+                    delegate: SegmentDropDelegate(
+                        dragging: $draggingID, current: current,
+                        move: { StatusBarLayout.moving($0, onto: info.id, in: $1) }))
             }
+            if rows.isEmpty {
+                Text("Drop segments here")
+                    .font(.system(size: 11))
+                    .foregroundStyle(t.textTertiary)
+                    .frame(maxWidth: .infinity, minHeight: 28)
+            }
+            // Room below the rows that takes "put it last" drops.
+            Color.clear
+                .frame(maxWidth: .infinity, minHeight: 24, maxHeight: .infinity)
+                .contentShape(Rectangle())
+                .onDrop(
+                    of: [.plainText],
+                    delegate: SegmentDropDelegate(
+                        dragging: $draggingID, current: current,
+                        move: { id, arrangement in
+                            let side = left ? arrangement.left : arrangement.right
+                            return side.last == id
+                                ? arrangement : StatusBarLayout.moving(id, toEndOfLeft: left, in: arrangement)
+                        }))
         }
+        .padding(6)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(t.cardBg, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .strokeBorder(t.separator, lineWidth: 0.5))
     }
 
     // MARK: - Plugin Segments (dynamic)
@@ -157,14 +210,23 @@ struct StatusBarSettingsView: View {
                     previewChip(info, t: t)
                 }
             }
+            // Like the real bar: the right group keeps its room, the left one is cut.
+            .frame(minWidth: 0, alignment: .leading)
+            .clipped()
             Spacer(minLength: 16)
             HStack(spacing: 10) {
                 ForEach(right) { previewChip($0, t: t) }
             }
+            .layoutPriority(1)
         }
         .lineLimit(1)
         .padding(.horizontal, 8)
         .padding(.vertical, 5)
+        // The chips are fixed-size, so with many segments the row is wider than
+        // the page. Take only the offered width and clip the rest; otherwise the
+        // row widens the whole settings page past the window.
+        .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
+        .clipped()
         .background(t.chromeBg)
         .clipShape(RoundedRectangle(cornerRadius: 5))
         .overlay(
@@ -197,54 +259,78 @@ struct StatusBarSettingsView: View {
 
 // MARK: - Segment Row
 
-/// One segment in a side list: visibility, order within the side, and a
-/// button that moves it to the other side.
+/// One segment in a side column: a drag handle, its name, and an eye button
+/// that shows or hides it.
 private struct SegmentRow: View {
     @Environment(\.tokens) private var tokens
     let info: StatusBarView.SegmentInfo
-    let arrangement: StatusBarLayout.Arrangement
+    /// Passed in rather than read in `body`: SwiftUI only re-renders a row when
+    /// its inputs change, so a value read from AppSettings here would go stale.
+    let isHidden: Bool
+    let isMoved: Bool
+    @State private var hovered = false
 
     var body: some View {
-        let settings = AppSettings.shared
-        let isLeft = arrangement.left.contains(info.id)
-        let side = isLeft ? arrangement.left : arrangement.right
-        let visible = Binding(
-            get: { !settings.isStatusBarSegmentHidden(info.id) },
-            set: { settings.setStatusBarSegment(info.id, hidden: !$0) })
-        HStack(spacing: 8) {
-            Toggle(info.displayName, isOn: visible)
-                .toggleStyle(.themedCheckbox)
+        let t = tokens
+        let id = info.id
+        let hidden = isHidden
+        HStack(spacing: 7) {
+            Image(systemName: "line.3.horizontal")
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundStyle(hovered ? t.textSecondary : t.textTertiary)
+            Text(info.displayName)
                 .font(.system(size: 12))
-                .foregroundStyle(visible.wrappedValue ? tokens.text : tokens.muted)
-            if info.isLeftByDefault != isLeft {
-                Text("moved")
-                    .font(.system(size: 10))
-                    .foregroundStyle(tokens.muted)
+                .foregroundStyle(hidden ? t.textTertiary : t.text)
+                .strikethrough(hidden, color: t.textTertiary)
+                .lineLimit(1)
+                .truncationMode(.tail)
+            if isMoved {
+                Circle().fill(t.accent).frame(width: 4, height: 4)
+                    .help("Moved from its default side")
             }
-            Spacer(minLength: 8)
-            moveButton("chevron.left", help: "Move left", disabled: side.first == info.id) {
-                StatusBarLayout.moving(info.id, by: -1, in: arrangement)
-            }
-            moveButton("chevron.right", help: "Move right", disabled: side.last == info.id) {
-                StatusBarLayout.moving(info.id, by: 1, in: arrangement)
-            }
-            moveButton(
-                isLeft ? "arrow.right.to.line" : "arrow.left.to.line",
-                help: isLeft ? "Move to the right side" : "Move to the left side", disabled: false
+            Spacer(minLength: 4)
+            IconButton(
+                systemName: hidden ? "eye.slash" : "eye", tint: hidden ? t.textTertiary : t.textSecondary, size: 10,
+                frame: 20, fillOpacity: 0, help: hidden ? "Show in the status bar" : "Hide from the status bar"
             ) {
-                StatusBarLayout.moving(info.id, toLeft: !isLeft, in: arrangement)
+                AppSettings.shared.setStatusBarSegment(id, hidden: !hidden)
             }
         }
+        .padding(.leading, 6)
+        .padding(.trailing, 2)
+        .frame(height: 26)
+        .background(
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(hovered ? t.hoverFill : t.subtleFill.opacity(0.5))
+        )
+        .contentShape(Rectangle())
+        .onHover { hovered = $0 }
+    }
+}
+
+// MARK: - Drop Delegate
+
+/// Moves the dragged segment as soon as it enters a target, so the columns
+/// show the result while the drag is still going.
+private struct SegmentDropDelegate: DropDelegate {
+    @Binding var dragging: String?
+    let current: () -> StatusBarLayout.Arrangement
+    let move: (String, StatusBarLayout.Arrangement) -> StatusBarLayout.Arrangement
+
+    func validateDrop(info: DropInfo) -> Bool { dragging != nil }
+
+    func dropEntered(info: DropInfo) {
+        guard let dragging else { return }
+        let before = current()
+        let after = move(dragging, before)
+        if after != before { StatusBarView.save(after) }
     }
 
-    private func moveButton(
-        _ symbol: String, help: String, disabled: Bool, to target: @escaping () -> StatusBarLayout.Arrangement
-    ) -> some View {
-        IconButton(
-            systemName: symbol, tint: disabled ? tokens.textTertiary : tokens.textSecondary, size: 10, frame: 18,
-            fillOpacity: 0, help: help
-        ) { StatusBarView.save(target()) }
-        .disabled(disabled)
+    func dropUpdated(info: DropInfo) -> DropProposal? { DropProposal(operation: .move) }
+
+    func performDrop(info: DropInfo) -> Bool {
+        dragging = nil
+        return true
     }
 }
 

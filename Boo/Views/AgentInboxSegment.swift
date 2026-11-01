@@ -6,7 +6,7 @@ import Cocoa
 final class AgentInboxSegment: StatusBarPlugin {
     let id = "agent-inbox"
     let position: StatusBarPosition = .right
-    let priority = 60
+    let priority = 61
     let displayName = "Agents"
     let isClickable = true
     let collapsePriority = 0

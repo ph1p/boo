@@ -126,8 +126,8 @@ final class KeyTables {
 /// The leader key's mode in the status bar while it waits for a key.
 final class KeyTableSegment: StatusBarPlugin {
     let id = "key-table"
-    let position: StatusBarPosition = .left
-    let priority = 0
+    let position: StatusBarPosition = .right
+    let priority = 72
     let displayName = "Key table"
     let collapsePriority = 0
     var tooltipText: String? { "Waiting for a key from ~/.boo/keytables.json — ⎋ cancels" }

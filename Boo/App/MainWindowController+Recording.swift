@@ -317,8 +317,8 @@ final class ClosureMenuItem: NSMenuItem {
 /// lists them with stop items.
 final class RecordingSegment: StatusBarPlugin {
     let id = "recording"
-    let position: StatusBarPosition = .left
-    let priority = 1
+    let position: StatusBarPosition = .right
+    let priority = 71
     let displayName = "Recording"
     let isClickable = true
     let collapsePriority = 0

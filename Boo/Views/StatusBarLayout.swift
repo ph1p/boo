@@ -62,6 +62,38 @@ enum StatusBarLayout {
         return result
     }
 
+    /// Drag-and-drop move: puts `id` where `target` sits, on `target`'s side.
+    /// Dragging downwards within a side lands after the target, so passing over
+    /// a neighbour swaps the two instead of bouncing back and forth.
+    static func moving(_ id: String, onto target: String, in arrangement: Arrangement) -> Arrangement {
+        guard id != target else { return arrangement }
+        let targetLeft = arrangement.left.contains(target)
+        guard targetLeft || arrangement.right.contains(target) else { return arrangement }
+        let source =
+            arrangement.left.firstIndex(of: id).map { (left: true, index: $0) }
+            ?? arrangement.right.firstIndex(of: id).map { (left: false, index: $0) }
+        let original = targetLeft ? arrangement.left : arrangement.right
+        let downwards = source.map { $0.left == targetLeft && $0.index < (original.firstIndex(of: target) ?? 0) }
+        var result = arrangement
+        result.left.removeAll { $0 == id }
+        result.right.removeAll { $0 == id }
+        func place(_ list: inout [String]) {
+            guard let t = list.firstIndex(of: target) else { return }
+            list.insert(id, at: downwards == true ? t + 1 : t)
+        }
+        if targetLeft { place(&result.left) } else { place(&result.right) }
+        return result
+    }
+
+    /// Drag-and-drop move to the end of one side (an empty side, or below its last row).
+    static func moving(_ id: String, toEndOfLeft left: Bool, in arrangement: Arrangement) -> Arrangement {
+        var result = arrangement
+        result.left.removeAll { $0 == id }
+        result.right.removeAll { $0 == id }
+        if left { result.left.append(id) } else { result.right.append(id) }
+        return result
+    }
+
     /// A segment ready to place: its width on the side it sits on, and how
     /// readily it gives way when space runs out.
     struct Measured {
