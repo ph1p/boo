@@ -24,6 +24,30 @@ extension MainWindowController: ToolbarViewDelegate {
         reorderWorkspace(from: source, to: destination)
     }
 
+    func toolbar(_ toolbar: ToolbarView, stackWorkspaceAt source: Int, onto target: Int) {
+        stackWorkspace(from: source, onto: target)
+    }
+
+    func toolbar(_ toolbar: ToolbarView, moveWorkspaceAt source: Int, intoGroup groupID: String) {
+        moveWorkspace(at: source, intoGroup: groupID)
+    }
+
+    func toolbar(_ toolbar: ToolbarView, moveGroup groupID: String, to destination: Int) {
+        moveWorkspaceGroup(groupID, to: destination)
+    }
+
+    func toolbar(_ toolbar: ToolbarView, dropGroup groupID: String, atScreenPoint point: NSPoint) {
+        dropWorkspaceGroup(groupID, atScreenPoint: point)
+    }
+
+    func toolbar(_ toolbar: ToolbarView, toggleGroup groupID: String) {
+        toggleWorkspaceGroup(groupID)
+    }
+
+    func toolbar(_ toolbar: ToolbarView, menuItemsForGroup groupID: String) -> [NSMenuItem] {
+        workspaceGroupHeaderMenuItems(groupID: groupID)
+    }
+
     func toolbar(_ toolbar: ToolbarView, dropWorkspaceAt index: Int, atScreenPoint point: NSPoint) {
         dropWorkspace(at: index, atScreenPoint: point)
     }
@@ -71,6 +95,14 @@ extension MainWindowController: WorkspaceBarViewDelegate {
         reorderWorkspace(from: source, to: destination)
     }
 
+    func workspaceBar(_ bar: WorkspaceBarView, stackWorkspaceAt source: Int, onto target: Int) {
+        stackWorkspace(from: source, onto: target)
+    }
+
+    func workspaceBar(_ bar: WorkspaceBarView, moveWorkspaceAt source: Int, intoGroup groupID: String) {
+        moveWorkspace(at: source, intoGroup: groupID)
+    }
+
     func workspaceBar(_ bar: WorkspaceBarView, dropWorkspaceAt index: Int, atScreenPoint point: NSPoint) {
         dropWorkspace(at: index, atScreenPoint: point)
     }
@@ -89,6 +121,14 @@ extension MainWindowController: WorkspaceBarViewDelegate {
 
     func workspaceBarDidRequestNewWorkspace(_ bar: WorkspaceBarView) {
         newWorkspaceAction(nil)
+    }
+
+    func workspaceBar(_ bar: WorkspaceBarView, moveGroup groupID: String, to destination: Int) {
+        moveWorkspaceGroup(groupID, to: destination)
+    }
+
+    func workspaceBar(_ bar: WorkspaceBarView, dropGroup groupID: String, atScreenPoint point: NSPoint) {
+        dropWorkspaceGroup(groupID, atScreenPoint: point)
     }
 
     func workspaceBar(_ bar: WorkspaceBarView, toggleGroup groupID: String) {
@@ -294,6 +334,8 @@ extension MainWindowController {
             }
         }
         appState.removeWorkspace(at: index)
+        // A closed workspace's id never comes back, so its group slot goes with it.
+        AppSettings.shared.removeWorkspacesFromGroups([ws.id.uuidString])
         if appState.workspaces.isEmpty {
             saveSession()
             window?.close()

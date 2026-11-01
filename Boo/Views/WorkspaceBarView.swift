@@ -5,6 +5,10 @@ import Cocoa
     func workspaceBar(_ bar: WorkspaceBarView, didCloseAt index: Int)
     func workspaceBar(_ bar: WorkspaceBarView, togglePinForWorkspaceAt index: Int)
     func workspaceBar(_ bar: WorkspaceBarView, moveWorkspaceFrom source: Int, to destination: Int)
+    /// Workspace `source` was dropped onto the pill at `target`: group them.
+    func workspaceBar(_ bar: WorkspaceBarView, stackWorkspaceAt source: Int, onto target: Int)
+    /// Workspace `source` was dropped onto a group header.
+    func workspaceBar(_ bar: WorkspaceBarView, moveWorkspaceAt source: Int, intoGroup groupID: String)
     /// A workspace was dragged out and released outside this window.
     func workspaceBar(_ bar: WorkspaceBarView, dropWorkspaceAt index: Int, atScreenPoint point: NSPoint)
     /// A dragged workspace moved; `point` is the screen point when outside this window, nil otherwise or when the drag ends.
@@ -17,6 +21,10 @@ import Cocoa
     func workspaceBar(_ bar: WorkspaceBarView, editWorkspaceAt index: Int, anchor rect: NSRect)
     /// A workspace-group header (or a collapsed group's pill) was clicked.
     func workspaceBar(_ bar: WorkspaceBarView, toggleGroup groupID: String)
+    /// A group header was dragged to insertion index `destination` (whole group moves).
+    func workspaceBar(_ bar: WorkspaceBarView, moveGroup groupID: String, to destination: Int)
+    /// A group header was dropped outside the window.
+    func workspaceBar(_ bar: WorkspaceBarView, dropGroup groupID: String, atScreenPoint point: NSPoint)
     /// Context menu for a workspace-group header.
     func workspaceBar(_ bar: WorkspaceBarView, menuItemsForGroup groupID: String) -> [NSMenuItem]
 }
@@ -25,6 +33,10 @@ extension WorkspaceBarViewDelegate {
     func workspaceBar(_ bar: WorkspaceBarView, contextMenuItemsForWorkspaceAt index: Int) -> [NSMenuItem] { [] }
     func workspaceBar(_ bar: WorkspaceBarView, editWorkspaceAt index: Int, anchor rect: NSRect) {}
     func workspaceBar(_ bar: WorkspaceBarView, toggleGroup groupID: String) {}
+    func workspaceBar(_ bar: WorkspaceBarView, moveGroup groupID: String, to destination: Int) {}
+    func workspaceBar(_ bar: WorkspaceBarView, dropGroup groupID: String, atScreenPoint point: NSPoint) {}
+    func workspaceBar(_ bar: WorkspaceBarView, stackWorkspaceAt source: Int, onto target: Int) {}
+    func workspaceBar(_ bar: WorkspaceBarView, moveWorkspaceAt source: Int, intoGroup groupID: String) {}
     func workspaceBar(_ bar: WorkspaceBarView, menuItemsForGroup groupID: String) -> [NSMenuItem] { [] }
 }
 
@@ -56,6 +68,7 @@ class WorkspaceBarView: NSView {
         var groupID: String? = nil
         var groupName: String? = nil
         var groupCollapsed: Bool = false
+        var groupColor: NSColor? = nil
     }
 
     /// One workspace group as laid out in the strip. `top`/`height` are in content
@@ -70,6 +83,8 @@ class WorkspaceBarView: NSView {
         let height: CGFloat
         /// Unseen activity in a member hidden by the collapse.
         let hiddenActivity: Bool
+        /// User-picked group color, nil for the neutral default.
+        var color: NSColor? = nil
     }
 
     /// Row layout, rebuilt by `setItems`. `rowTops[i]` is item i's content-space top.
@@ -91,6 +106,12 @@ class WorkspaceBarView: NSView {
     private let barHeight: CGFloat = 28
     private var dragSourceIndex: Int?
     private var dropTargetIndex: Int?
+    /// Pill the drag would stack onto (forming or joining its group).
+    private var dropStackIndex: Int?
+    /// Group header the drag would join.
+    private var dropGroupID: String?
+    /// Group whose header is being dragged (the whole group moves).
+    private var draggedGroupID: String?
 
     // Ghost drag state
     private var ghostWindow: DragGhostWindow?
@@ -341,7 +362,7 @@ class WorkspaceBarView: NSView {
             headers.append(
                 GroupHeader(
                     id: gid, name: items[i].groupName ?? "", collapsed: collapsed, members: i..<end,
-                    top: y, height: height, hiddenActivity: hiddenActivity))
+                    top: y, height: height, hiddenActivity: hiddenActivity, color: items[i].groupColor))
             y += height + Self.verticalItemGap
             for k in i..<end {
                 tops.append(y)
@@ -381,17 +402,21 @@ class WorkspaceBarView: NSView {
         for header in groupHeaders {
             let rect = groupHeaderRect(header)
             if rect.maxY < 0 || rect.minY > verticalScrollViewportHeight { continue }
+            ctx.saveGState()
+            defer { ctx.restoreGState() }
+            if isDragging && draggedGroupID == header.id { ctx.setAlpha(0.3) }
+            let tint = header.color ?? theme.chromeMuted
             if header.collapsed {
                 // A folder-like pill: dashed island border, group initials, member count.
                 WorkspacePillStyle.fill(
-                    ctx, rect: rect, active: false, hovered: false, wsColor: nil, neutral: theme.chromeMuted)
+                    ctx, rect: rect, active: false, hovered: false, wsColor: header.color, neutral: theme.chromeMuted)
                 ctx.saveGState()
                 ctx.setLineDash(phase: 0, lengths: [2, 2])
-                WorkspacePillStyle.strokeIslandBorder(ctx, rect: rect, wsColor: nil, neutral: islandBorder)
+                WorkspacePillStyle.strokeIslandBorder(ctx, rect: rect, wsColor: header.color, neutral: islandBorder)
                 ctx.restoreGState()
                 let label = String(header.name.prefix(2)).uppercased() as NSString
                 let attrs: [NSAttributedString.Key: Any] = [
-                    .font: Self.pillLabelRegular, .foregroundColor: theme.chromeMuted
+                    .font: Self.pillLabelRegular, .foregroundColor: tint
                 ]
                 let size = label.size(withAttributes: attrs)
                 label.draw(
@@ -399,7 +424,7 @@ class WorkspaceBarView: NSView {
                     withAttributes: attrs)
                 let count = "\(header.members.count)" as NSString
                 let countAttrs: [NSAttributedString.Key: Any] = [
-                    .font: Self.groupCountFont, .foregroundColor: theme.chromeMuted.withAlphaComponent(0.8)
+                    .font: Self.groupCountFont, .foregroundColor: tint.withAlphaComponent(0.8)
                 ]
                 let countSize = count.size(withAttributes: countAttrs)
                 count.draw(
@@ -411,7 +436,7 @@ class WorkspaceBarView: NSView {
                 // A short uppercase label between two hairlines, like a section rule.
                 let label = String(header.name.prefix(4)).uppercased() as NSString
                 let attrs: [NSAttributedString.Key: Any] = [
-                    .font: Self.groupLabelFont, .foregroundColor: theme.chromeMuted
+                    .font: Self.groupLabelFont, .foregroundColor: tint
                 ]
                 let size = label.size(withAttributes: attrs)
                 let textW = min(size.width, rect.width)
@@ -419,7 +444,7 @@ class WorkspaceBarView: NSView {
                 label.draw(
                     in: CGRect(x: textX, y: rect.midY - size.height / 2, width: textW, height: size.height),
                     withAttributes: attrs)
-                ctx.setFillColor(islandBorder.cgColor)
+                ctx.setFillColor((header.color?.withAlphaComponent(0.6) ?? islandBorder).cgColor)
                 let lineY = rect.midY - 0.25
                 let gap: CGFloat = 2
                 if textX - gap > rect.minX {
@@ -474,7 +499,8 @@ class WorkspaceBarView: NSView {
             if pillRect.maxY < 0 || pillRect.minY > verticalScrollViewportHeight { continue }
 
             // The dragged pill stays as a faint placeholder; the ghost carries it.
-            let isLifted = isDragging && dragSourceIndex == i
+            let isLifted =
+                isDragging && (dragSourceIndex == i || (item.groupID != nil && item.groupID == draggedGroupID))
             if isLifted {
                 ctx.saveGState()
                 ctx.setAlpha(0.3)
@@ -543,11 +569,26 @@ class WorkspaceBarView: NSView {
 
         // Draw drop insertion indicator
         if let dropIdx = dropTargetIndex {
-            let indicatorY = verticalItemRect(at: dropIdx).minY - 2
+            // At a group's first member the line sits above the group's header.
+            let header = groupHeaders.first { $0.members.lowerBound == dropIdx }
+            let indicatorY = (header.map { groupHeaderRect($0).minY } ?? verticalItemRect(at: dropIdx).minY) - 2
             ctx.setFillColor(theme.accentColor.cgColor)
             ctx.fill(CGRect(x: verticalPillX, y: indicatorY, width: verticalPillWidth, height: 2))
-
         }
+        drawStackHighlight(ctx, theme: theme)
+    }
+
+    /// Accent ring around the stack target pill, or around the group header the drop would join.
+    private func drawStackHighlight(_ ctx: CGContext, theme: TerminalTheme) {
+        let target: CGRect
+        if let gid = dropGroupID, let header = groupHeaders.first(where: { $0.id == gid }) {
+            target = groupHeaderRect(header)
+        } else if let idx = dropStackIndex {
+            target = verticalItemRect(at: idx)
+        } else {
+            return
+        }
+        WorkspacePillStyle.strokeDropRing(ctx, around: target, theme: theme)
     }
 
     /// Dissolve the clipped end of the pill stack into the window backdrop, the
@@ -709,7 +750,7 @@ class WorkspaceBarView: NSView {
     override func mouseDown(with event: NSEvent) {
         let startPoint = convert(event.locationInWindow, from: nil)
         if let header = hitTestGroupHeader(at: startPoint) {
-            delegate?.workspaceBar(self, toggleGroup: header.id)
+            handleGroupHeaderMouseDown(startPoint: startPoint, header: header)
             return
         }
         let hitIdx = hitTestItemIndex(at: startPoint)
@@ -774,6 +815,83 @@ class WorkspaceBarView: NSView {
         }
     }
 
+    // MARK: - Group Drag
+
+    /// Click on a header toggles the group; dragging it moves the whole group
+    /// within the strip or, released outside the window, into another window.
+    private func handleGroupHeaderMouseDown(startPoint: NSPoint, header: GroupHeader) {
+        guard let eventWindow = window else { return }
+        var didStartDrag = false
+        while true {
+            guard let next = eventWindow.nextEvent(matching: [.leftMouseDragged, .leftMouseUp]) else { break }
+            if next.type == .leftMouseUp {
+                if !didStartDrag {
+                    delegate?.workspaceBar(self, toggleGroup: header.id)
+                } else if let point = Self.screenPointOutsideWindow(next) {
+                    delegate?.workspaceBar(self, dropGroup: header.id, atScreenPoint: point)
+                } else if let dest = dropTargetIndex {
+                    delegate?.workspaceBar(self, moveGroup: header.id, to: dest)
+                }
+                break
+            }
+            let point = convert(next.locationInWindow, from: nil)
+            if !didStartDrag {
+                guard hypot(point.x - startPoint.x, point.y - startPoint.y) > 3 else { continue }
+                didStartDrag = true
+                isDragging = true
+                draggedGroupID = header.id
+                createGroupGhostWindow(for: header, event: next)
+            }
+            ghostWindow?.move(toCenter: DragGhostWindow.screenPoint(of: next))
+            let outside = Self.screenPointOutsideWindow(next)
+            let dest =
+                outside != nil
+                ? nil
+                : WorkspaceGroupDrop.insertionIndex(
+                    raw: groupDragRawIndex(contentY: point.y + verticalScrollOffset), moving: header.members,
+                    groups: groupHeaders.map(\.members),
+                    firstUnpinned: items.firstIndex { !$0.isPinned } ?? items.count)
+            setDropTarget(insert: dest, stack: nil, group: nil)
+            delegate?.workspaceBar(self, workspaceDragMovedOutsideTo: outside)
+        }
+        if didStartDrag {
+            delegate?.workspaceBar(self, workspaceDragMovedOutsideTo: nil)
+            draggedGroupID = nil
+            cleanupDrag()
+        }
+    }
+
+    /// Insertion index for a group drag: before the first visible pill or group
+    /// header whose midpoint lies below `contentY`.
+    private func groupDragRawIndex(contentY: CGFloat) -> Int {
+        let size = Self.verticalItemSize
+        var raw = items.count
+        for i in items.indices where !hiddenRows.contains(i) && contentY < rowTops[i] + size / 2 {
+            raw = i
+            break
+        }
+        for header in groupHeaders where contentY < header.top + header.height / 2 {
+            raw = min(raw, header.members.lowerBound)
+            break
+        }
+        return raw
+    }
+
+    private func createGroupGhostWindow(for header: GroupHeader, event: NSEvent) {
+        guard let window else { return }
+        let rect = groupHeaderRect(header)
+        let size = CGSize(width: rect.width, height: max(rect.height, Self.verticalItemSize))
+        let ghost = WorkspaceDragGhostView(
+            size: size, label: String(header.name.prefix(2)).uppercased(), font: Self.pillLabelRegular,
+            centered: true, wsColor: header.color, active: false)
+        let frame = CGRect(origin: rect.origin, size: size)
+        ghostWindow = DragGhostWindow(
+            content: ghost, sourceFrame: window.convertToScreen(convert(frame, to: nil)),
+            cursor: DragGhostWindow.screenPoint(of: event), alpha: 0.95)
+        hoveredIndex = -1
+        needsDisplay = true
+    }
+
     // MARK: - Ghost Drag System
 
     private func createGhostWindow(for index: Int, event: NSEvent) {
@@ -809,10 +927,7 @@ class WorkspaceBarView: NSView {
 
     private func updateDropTarget(_ event: NSEvent) {
         if Self.screenPointOutsideWindow(event) != nil {
-            if dropTargetIndex != nil {
-                dropTargetIndex = nil
-                needsDisplay = true
-            }
+            setDropTarget(insert: nil, stack: nil, group: nil)
             return
         }
         guard let eventWindow = event.window ?? self.window else { return }
@@ -821,22 +936,49 @@ class WorkspaceBarView: NSView {
         let windowPoint = myWindow.convertPoint(fromScreen: screenPoint)
         let point = convert(windowPoint, from: nil)
 
-        // Point is in view space, so undo the scroll before mapping to an index:
-        // the first visible pill whose midpoint lies below the cursor.
+        guard let src = dragSourceIndex else { return }
+        let srcGroup = items[src].groupID
+
+        // Onto a group header: join that group.
+        if let header = hitTestGroupHeader(at: point) {
+            setDropTarget(insert: nil, stack: nil, group: header.id == srcGroup ? nil : header.id)
+            return
+        }
+
+        // Point is in view space, so undo the scroll before mapping to an index.
         let contentY = point.y + verticalScrollOffset
+        let size = Self.verticalItemSize
+
+        // Middle half of another pill: stack onto it.
+        for i in items.indices where i != src && !hiddenRows.contains(i) {
+            let top = rowTops[i]
+            guard contentY >= top + size / 4 && contentY < top + size * 3 / 4 else { continue }
+            let target = items[i]
+            let sameGroup = target.groupID != nil && target.groupID == srcGroup
+            if !target.isPinned && !sameGroup {
+                setDropTarget(insert: nil, stack: i, group: nil)
+                return
+            }
+            break
+        }
+
+        // Otherwise reorder: before the first visible pill whose midpoint lies below the cursor.
         var rawIdx = items.count
         for i in items.indices where !hiddenRows.contains(i) {
-            if contentY < rowTops[i] + Self.verticalItemSize / 2 {
+            if contentY < rowTops[i] + size / 2 {
                 rawIdx = i
                 break
             }
         }
+        setDropTarget(insert: validDropIndex(raw: rawIdx), stack: nil, group: nil)
+    }
 
-        let validIdx = validDropIndex(raw: rawIdx)
-        if validIdx != dropTargetIndex {
-            dropTargetIndex = validIdx
-            needsDisplay = true
-        }
+    private func setDropTarget(insert: Int?, stack: Int?, group: String?) {
+        guard insert != dropTargetIndex || stack != dropStackIndex || group != dropGroupID else { return }
+        dropTargetIndex = insert
+        dropStackIndex = stack
+        dropGroupID = group
+        needsDisplay = true
     }
 
     private func validDropIndex(raw: Int) -> Int? {
@@ -852,8 +994,14 @@ class WorkspaceBarView: NSView {
     }
 
     private func executeDrop() {
-        guard let dropIdx = dropTargetIndex, let sourceIdx = dragSourceIndex else { return }
-        delegate?.workspaceBar(self, moveWorkspaceFrom: sourceIdx, to: dropIdx)
+        guard let sourceIdx = dragSourceIndex else { return }
+        if let gid = dropGroupID {
+            delegate?.workspaceBar(self, moveWorkspaceAt: sourceIdx, intoGroup: gid)
+        } else if let target = dropStackIndex {
+            delegate?.workspaceBar(self, stackWorkspaceAt: sourceIdx, onto: target)
+        } else if let dropIdx = dropTargetIndex {
+            delegate?.workspaceBar(self, moveWorkspaceFrom: sourceIdx, to: dropIdx)
+        }
     }
 
     private func cleanupDrag() {
@@ -862,6 +1010,8 @@ class WorkspaceBarView: NSView {
         isDragging = false
         dragSourceIndex = nil
         dropTargetIndex = nil
+        dropStackIndex = nil
+        dropGroupID = nil
         needsDisplay = true
     }
 

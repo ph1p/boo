@@ -107,6 +107,16 @@ enum WorkspacePillStyle {
         fillRoundedRect(ctx, rect: rect)
     }
 
+    /// Accent ring just outside `rect`: marks the pill or group a dragged workspace would stack into.
+    static func strokeDropRing(_ ctx: CGContext, around rect: CGRect, theme: TerminalTheme) {
+        let ring = rect.insetBy(dx: -2.5, dy: -2.5)
+        let radius = cornerRadius + 2.5
+        ctx.setStrokeColor(theme.accentColor.cgColor)
+        ctx.setLineWidth(2)
+        ctx.addPath(CGPath(roundedRect: ring, cornerWidth: radius, cornerHeight: radius, transform: nil))
+        ctx.strokePath()
+    }
+
     /// Stroke the accent border drawn on the active pill.
     static func strokeBorder(_ ctx: CGContext, rect: CGRect, theme: TerminalTheme) {
         let strokeRect = rect.insetBy(dx: borderInset, dy: borderInset)

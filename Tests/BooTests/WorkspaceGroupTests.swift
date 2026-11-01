@@ -16,11 +16,12 @@ import XCTest
     func testCreateAssignAndDeleteGroup() throws {
         let settings = AppSettings.shared
         settings.workspaceGroups = []
-        XCTAssertNil(settings.createWorkspaceGroup(named: "  ", with: "/tmp/a"))
-        let id = try XCTUnwrap(settings.createWorkspaceGroup(named: " Client ", with: "/tmp/a"))
-        settings.assignWorkspace(path: "/tmp/b", toGroup: id)
-        XCTAssertEqual(settings.workspaceGroup(forPath: "/tmp/a")?.name, "Client")
-        XCTAssertEqual(settings.workspaceGroup(forPath: "/tmp/b")?.id, id)
+        XCTAssertNil(settings.createWorkspaceGroup(named: "  ", with: ["a"]))
+        XCTAssertNil(settings.createWorkspaceGroup(named: "Empty", with: []))
+        let id = try XCTUnwrap(settings.createWorkspaceGroup(named: " Client ", with: ["a"]))
+        settings.assignWorkspace(member: "b", toGroup: id)
+        XCTAssertEqual(settings.workspaceGroup(forMember: "a")?.name, "Client")
+        XCTAssertEqual(settings.workspaceGroup(forMember: "b")?.id, id)
 
         settings.renameWorkspaceGroup(id: id, to: "Work")
         settings.setWorkspaceGroupCollapsed(id: id, true)
@@ -28,22 +29,132 @@ import XCTest
         XCTAssertEqual(settings.workspaceGroups.first?.isCollapsed, true)
 
         settings.deleteWorkspaceGroup(id: id)
-        XCTAssertNil(settings.workspaceGroup(forPath: "/tmp/a"))
+        XCTAssertNil(settings.workspaceGroup(forMember: "a"))
     }
 
-    func testAssigningMovesPathBetweenGroupsAndDropsEmptyOnes() throws {
+    func testAssigningMovesMemberBetweenGroupsAndDropsEmptyOnes() throws {
         let settings = AppSettings.shared
         settings.workspaceGroups = []
-        let first = try XCTUnwrap(settings.createWorkspaceGroup(named: "One", with: "/tmp/a"))
-        let second = try XCTUnwrap(settings.createWorkspaceGroup(named: "Two", with: "/tmp/b"))
-        settings.assignWorkspace(path: "/tmp/a", toGroup: second)
-        XCTAssertEqual(settings.workspaceGroup(forPath: "/tmp/a")?.id, second)
+        let first = try XCTUnwrap(settings.createWorkspaceGroup(named: "One", with: ["a"]))
+        let second = try XCTUnwrap(settings.createWorkspaceGroup(named: "Two", with: ["b"]))
+        settings.assignWorkspace(member: "a", toGroup: second)
+        XCTAssertEqual(settings.workspaceGroup(forMember: "a")?.id, second)
         // "One" lost its only member, so it is gone.
         XCTAssertFalse(settings.workspaceGroups.contains { $0.id == first })
 
-        settings.assignWorkspace(path: "/tmp/a", toGroup: nil)
-        XCTAssertNil(settings.workspaceGroup(forPath: "/tmp/a"))
-        XCTAssertEqual(settings.workspaceGroup(forPath: "/tmp/b")?.id, second)
+        settings.assignWorkspace(member: "a", toGroup: nil)
+        XCTAssertNil(settings.workspaceGroup(forMember: "a"))
+        XCTAssertEqual(settings.workspaceGroup(forMember: "b")?.id, second)
+    }
+
+    /// Members are workspace ids, so two workspaces on the same folder can sit
+    /// in different groups (the path-keyed version merged them).
+    func testSeveralGroupsCoexist() throws {
+        let settings = AppSettings.shared
+        settings.workspaceGroups = []
+        let one = try XCTUnwrap(settings.createWorkspaceGroup(named: "One", with: ["ws-1", "ws-2"]))
+        let two = try XCTUnwrap(settings.createWorkspaceGroup(named: "Two", with: ["ws-3", "ws-4"]))
+        XCTAssertEqual(settings.workspaceGroups.count, 2)
+        XCTAssertEqual(settings.workspaceGroup(forMember: "ws-2")?.id, one)
+        XCTAssertEqual(settings.workspaceGroup(forMember: "ws-3")?.id, two)
+    }
+
+    func testRemoveWorkspacesFromGroups() throws {
+        let settings = AppSettings.shared
+        settings.workspaceGroups = []
+        let id = try XCTUnwrap(settings.createWorkspaceGroup(named: "G", with: ["a", "b"]))
+        settings.removeWorkspacesFromGroups(["a"])
+        XCTAssertNil(settings.workspaceGroup(forMember: "a"))
+        XCTAssertEqual(settings.workspaceGroup(forMember: "b")?.id, id)
+        settings.removeWorkspacesFromGroups(["b"])
+        XCTAssertTrue(settings.workspaceGroups.isEmpty)
+    }
+
+    func testNextGroupNameSkipsTakenNames() throws {
+        let settings = AppSettings.shared
+        settings.workspaceGroups = []
+        XCTAssertEqual(settings.nextWorkspaceGroupName(), "Group")
+        _ = try XCTUnwrap(settings.createWorkspaceGroup(named: settings.nextWorkspaceGroupName(), with: ["a"]))
+        XCTAssertEqual(settings.nextWorkspaceGroupName(), "Group 2")
+        _ = try XCTUnwrap(settings.createWorkspaceGroup(named: settings.nextWorkspaceGroupName(), with: ["b"]))
+        XCTAssertEqual(settings.nextWorkspaceGroupName(), "Group 3")
+    }
+
+    func testGroupColorPersists() throws {
+        let settings = AppSettings.shared
+        settings.workspaceGroups = []
+        let id = try XCTUnwrap(settings.createWorkspaceGroup(named: "G", with: ["a"]))
+        XCTAssertEqual(settings.workspaceGroup(id: id)?.color, WorkspaceColor.none)
+        settings.setWorkspaceGroupColor(id: id, .purple)
+        let group = try XCTUnwrap(settings.workspaceGroup(id: id))
+        XCTAssertEqual(group.color, .purple)
+        XCTAssertEqual(WorkspaceGroup(dictionary: group.dictionary)?.color, .purple)
+
+        // A custom color wins over the preset and survives the round-trip.
+        settings.setWorkspaceGroupCustomColor(id: id, NSColor(srgbRed: 0.2, green: 0.4, blue: 0.6, alpha: 1))
+        let custom = try XCTUnwrap(settings.workspaceGroup(id: id))
+        XCTAssertEqual(custom.customColorHex, "#336699")
+        XCTAssertEqual(WorkspaceGroup(dictionary: custom.dictionary)?.resolvedColor?.hexString, "#336699")
+        // Picking a preset again drops the custom color.
+        settings.setWorkspaceGroupColor(id: id, .green)
+        XCTAssertNil(settings.workspaceGroup(id: id)?.customColorHex)
+    }
+
+    // MARK: - Group drop index
+
+    func testGroupDropSnapsToGroupEdges() {
+        let groups = [1..<3, 4..<7]
+        // Inside the dragged group or right after it: no move.
+        XCTAssertNil(WorkspaceGroupDrop.insertionIndex(raw: 2, moving: 1..<3, groups: groups, firstUnpinned: 0))
+        XCTAssertNil(WorkspaceGroupDrop.insertionIndex(raw: 3, moving: 1..<3, groups: groups, firstUnpinned: 0))
+        // Never splits the other group.
+        XCTAssertEqual(WorkspaceGroupDrop.insertionIndex(raw: 5, moving: 1..<3, groups: groups, firstUnpinned: 0), 4)
+        XCTAssertEqual(WorkspaceGroupDrop.insertionIndex(raw: 6, moving: 1..<3, groups: groups, firstUnpinned: 0), 7)
+        // Stays past pinned workspaces.
+        XCTAssertEqual(WorkspaceGroupDrop.insertionIndex(raw: 0, moving: 4..<7, groups: groups, firstUnpinned: 1), 1)
+    }
+
+    // MARK: - Top bar layout
+
+    private func makeToolbar(_ items: [ToolbarView.WorkspaceItem]) -> ToolbarView {
+        let bar = ToolbarView(frame: NSRect(x: 0, y: 0, width: 1200, height: IslandMetrics.toolbarHeight))
+        bar.update(workspaces: items, sidebarVisible: false)
+        return bar
+    }
+
+    private func pill(
+        _ name: String, group: String? = nil, collapsed: Bool = false, active: Bool = false
+    )
+        -> ToolbarView.WorkspaceItem
+    {
+        var item = ToolbarView.WorkspaceItem(name: name, isActive: active, resolvedColor: nil, isPinned: false)
+        item.groupID = group
+        item.groupName = group.map { "G-\($0)" }
+        item.groupCollapsed = collapsed
+        return item
+    }
+
+    func testToolbarGroupGetsTrayAndChip() {
+        let bar = makeToolbar([pill("a", active: true), pill("b", group: "x"), pill("c", group: "x"), pill("d")])
+        let layout = bar.workspaceLayout
+        XCTAssertEqual(layout.groups.count, 1)
+        let group = layout.groups[0]
+        XCTAssertEqual(group.members, 1..<3)
+        // Chip sits inside the tray, before the first member.
+        XCTAssertLessThan(group.trayMinX, group.chipX)
+        XCTAssertLessThan(group.chipX + group.chipWidth, layout.pillX[1])
+        // Ungrouped pill after the tray starts past its edge.
+        XCTAssertGreaterThan(layout.pillX[3], group.trayMaxX)
+        XCTAssertTrue(layout.hidden.isEmpty)
+    }
+
+    func testToolbarCollapsedGroupHidesAllButActive() {
+        let bar = makeToolbar([
+            pill("a"), pill("b", group: "x", collapsed: true, active: true), pill("c", group: "x", collapsed: true)
+        ])
+        XCTAssertEqual(bar.workspaceLayout.hidden, [2])
+        XCTAssertNotNil(bar.workspacePillRect(at: 1))
+        XCTAssertNil(bar.workspacePillRect(at: 2))
     }
 
     // MARK: - Bar layout

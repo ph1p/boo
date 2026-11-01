@@ -328,17 +328,29 @@ enum SettingsTopic: String, CaseIterable {
 }
 
 /// A named, collapsible group of workspaces. App-wide: every window shows the
-/// same groups. Members are workspace folder paths, the identity that survives
-/// restarts and moving a workspace between windows.
+/// same groups. Members are workspace ids (`Workspace.id.uuidString`): the id is
+/// saved with the session and survives moving a workspace between windows, and
+/// unlike the folder path it tells apart two workspaces open on the same folder.
 struct WorkspaceGroup: Equatable {
     var id = UUID().uuidString
     var name: String
     var isCollapsed = false
     var members: [String] = []
+    /// Tint of the group's tray and header; `.none` keeps the neutral chrome.
+    var color: WorkspaceColor = .none
+    /// User-picked "#RRGGBB" from the color panel; overrides `color` when set.
+    var customColorHex: String?
+
+    /// Custom color first, then the preset, nil for neutral chrome.
+    var resolvedColor: NSColor? { customColorHex.flatMap(NSColor.init(hex:)) ?? color.nsColor }
 
     /// Plist/JSON-safe form, so the value round-trips through UserDefaults and settings.json.
     var dictionary: [String: Any] {
-        ["id": id, "name": name, "collapsed": isCollapsed, "members": members]
+        var d: [String: Any] = [
+            "id": id, "name": name, "collapsed": isCollapsed, "members": members, "color": color.rawValue
+        ]
+        if let customColorHex { d["customColor"] = customColorHex }
+        return d
     }
 }
 
@@ -347,20 +359,22 @@ extension WorkspaceGroup {
         guard let id = d["id"] as? String, let name = d["name"] as? String else { return nil }
         self.init(
             id: id, name: name, isCollapsed: d["collapsed"] as? Bool ?? false,
-            members: d["members"] as? [String] ?? [])
+            members: d["members"] as? [String] ?? [],
+            color: (d["color"] as? String).flatMap(WorkspaceColor.init(rawValue:)) ?? .none,
+            customColorHex: (d["customColor"] as? String).flatMap { NSColor(hex: $0) != nil ? $0 : nil })
     }
 }
 
 extension [WorkspaceGroup] {
-    /// The group a workspace folder belongs to, if any.
-    func group(forPath path: String) -> WorkspaceGroup? {
-        first { $0.members.contains(path) }
+    /// The group a workspace belongs to, if any.
+    func group(forMember member: String) -> WorkspaceGroup? {
+        first { $0.members.contains(member) }
     }
 
-    /// Folder path -> group id, for lookups inside loops.
-    var groupIDByPath: [String: String] {
+    /// Workspace id -> group id, for lookups inside loops.
+    var groupIDByMember: [String: String] {
         var map: [String: String] = [:]
-        for group in self { for path in group.members where map[path] == nil { map[path] = group.id } }
+        for group in self { for member in group.members where map[member] == nil { map[member] = group.id } }
         return map
     }
 }
@@ -1193,9 +1207,9 @@ final class AppSettings {
         }
     }
 
-    /// The group a workspace folder belongs to, if any.
-    func workspaceGroup(forPath path: String) -> WorkspaceGroup? {
-        workspaceGroups.group(forPath: path)
+    /// The group a workspace (by id string) belongs to, if any.
+    func workspaceGroup(forMember member: String) -> WorkspaceGroup? {
+        workspaceGroups.group(forMember: member)
     }
 
     func workspaceGroup(id: String) -> WorkspaceGroup? {
@@ -1209,28 +1223,45 @@ final class AppSettings {
         workspaceGroups = groups
     }
 
-    /// Put a workspace folder into the group `id`, or into no group when nil.
-    /// A folder belongs to at most one group.
-    func assignWorkspace(path: String, toGroup id: String?) {
+    /// Put a workspace into the group `id`, or into no group when nil.
+    /// A workspace belongs to at most one group.
+    func assignWorkspace(member: String, toGroup id: String?) {
         updateWorkspaceGroups { groups in
-            for i in groups.indices { groups[i].members.removeAll { $0 == path } }
+            for i in groups.indices { groups[i].members.removeAll { $0 == member } }
             if let id, let i = groups.firstIndex(where: { $0.id == id }) {
-                groups[i].members.append(path)
+                groups[i].members.append(member)
             }
         }
     }
 
-    /// Create a group holding `path` and return its id (nil for a blank name).
-    @discardableResult
-    func createWorkspaceGroup(named name: String, with path: String) -> String? {
-        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return nil }
-        let group = WorkspaceGroup(name: trimmed, members: [path])
+    /// Drop closed workspaces from their groups (a group left empty goes too).
+    func removeWorkspacesFromGroups(_ members: Set<String>) {
+        guard workspaceGroups.contains(where: { !members.isDisjoint(with: $0.members) }) else { return }
         updateWorkspaceGroups { groups in
-            for i in groups.indices { groups[i].members.removeAll { $0 == path } }
+            for i in groups.indices { groups[i].members.removeAll { members.contains($0) } }
+        }
+    }
+
+    /// Create a group holding `members` (moved out of any group they were in) and
+    /// return its id; nil for a blank name or no members.
+    @discardableResult
+    func createWorkspaceGroup(named name: String, with members: [String]) -> String? {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, !members.isEmpty else { return nil }
+        let group = WorkspaceGroup(name: trimmed, members: members)
+        updateWorkspaceGroups { groups in
+            for i in groups.indices { groups[i].members.removeAll { members.contains($0) } }
             groups.append(group)
         }
         return group.id
+    }
+
+    /// "Group", "Group 2", … — the first default name no existing group uses.
+    func nextWorkspaceGroupName() -> String {
+        let taken = Set(workspaceGroups.map(\.name))
+        var n = 1
+        while taken.contains(n == 1 ? "Group" : "Group \(n)") { n += 1 }
+        return n == 1 ? "Group" : "Group \(n)"
     }
 
     func renameWorkspaceGroup(id: String, to name: String) {
@@ -1245,6 +1276,24 @@ final class AppSettings {
         guard let group = workspaceGroup(id: id), group.isCollapsed != collapsed else { return }
         updateWorkspaceGroups { groups in
             if let i = groups.firstIndex(where: { $0.id == id }) { groups[i].isCollapsed = collapsed }
+        }
+    }
+
+    /// Picking a preset clears any custom color.
+    func setWorkspaceGroupColor(id: String, _ color: WorkspaceColor) {
+        guard let group = workspaceGroup(id: id), group.color != color || group.customColorHex != nil else { return }
+        updateWorkspaceGroups { groups in
+            guard let i = groups.firstIndex(where: { $0.id == id }) else { return }
+            groups[i].color = color
+            groups[i].customColorHex = nil
+        }
+    }
+
+    func setWorkspaceGroupCustomColor(id: String, _ color: NSColor) {
+        let hex = color.hexString
+        guard let group = workspaceGroup(id: id), group.customColorHex != hex else { return }
+        updateWorkspaceGroups { groups in
+            if let i = groups.firstIndex(where: { $0.id == id }) { groups[i].customColorHex = hex }
         }
     }
 

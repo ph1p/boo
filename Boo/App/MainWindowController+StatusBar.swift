@@ -22,24 +22,27 @@ extension MainWindowController {
         // Every path that adds or moves a workspace ends up here, so this keeps
         // group members next to each other no matter how they got out of order.
         if clusterWorkspaceGroups() { saveSession() }
+        let groups = AppSettings.shared.workspaceGroups
+        // Pinned workspaces stay in the pinned section, outside any group.
+        let wsGroups = appState.workspaces.map { $0.isPinned ? nil : groups.group(forMember: $0.id.uuidString) }
         let wsItems = appState.workspaces.enumerated().map { (i, ws) in
             ToolbarView.WorkspaceItem(
                 name: ws.displayName, isActive: i == appState.activeWorkspaceIndex, resolvedColor: ws.resolvedColor,
                 isPinned: ws.isPinned, color: ws.color, hasCustomColor: ws.customColor != nil,
                 hasActivity: ws.hasActivity && i != appState.activeWorkspaceIndex,
-                progress: TerminalProgress.summary(ws.progressReports))
+                progress: TerminalProgress.summary(ws.progressReports), groupID: wsGroups[i]?.id,
+                groupName: wsGroups[i]?.name, groupCollapsed: wsGroups[i]?.isCollapsed ?? false,
+                groupColor: wsGroups[i]?.resolvedColor)
         }
         toolbar.update(workspaces: wsItems, sidebarVisible: sidebarVisible)
         if let sideBar = sideWorkspaceBar {
-            let groups = AppSettings.shared.workspaceGroups
             let barItems = zip(appState.workspaces, wsItems).map { ws, top in
-                // Pinned workspaces stay in the pinned section, outside any group.
-                let group = ws.isPinned ? nil : groups.group(forPath: ws.folderPath)
-                return WorkspaceBarView.Item(
+                WorkspaceBarView.Item(
                     name: ws.displayName, path: ws.folderPath, isPinned: ws.isPinned, color: ws.color,
                     hasCustomColor: ws.customColor != nil, resolvedColor: ws.resolvedColor,
-                    hasActivity: top.hasActivity, progress: top.progress, groupID: group?.id,
-                    groupName: group?.name, groupCollapsed: group?.isCollapsed ?? false)
+                    hasActivity: top.hasActivity, progress: top.progress, groupID: top.groupID,
+                    groupName: top.groupName, groupCollapsed: top.groupCollapsed,
+                    groupColor: top.groupColor)
             }
             sideBar.setItems(barItems, selectedIndex: appState.activeWorkspaceIndex)
         }

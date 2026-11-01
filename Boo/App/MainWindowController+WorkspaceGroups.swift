@@ -2,9 +2,9 @@ import Cocoa
 
 // MARK: - Workspace groups
 //
-// Groups live in `AppSettings` (app-wide, keyed by workspace folder path). This
-// window only keeps its own workspace order tidy: members of a group sit next to
-// each other so the bars can draw one header per group.
+// Groups live in `AppSettings` (app-wide, keyed by workspace id). This window only
+// keeps its own workspace order tidy: members of a group sit next to each other so
+// the bars can draw one header per group.
 
 extension MainWindowController {
     /// "Group" submenu for a workspace's context menu, shared by the top bar and the side strip.
@@ -12,9 +12,8 @@ extension MainWindowController {
         guard index >= 0, index < appState.workspaces.count else { return [] }
         let ws = appState.workspaces[index]
         let wsID = ws.id
-        let path = ws.folderPath
         let settings = AppSettings.shared
-        let current = settings.workspaceGroup(forPath: path)
+        let current = settings.workspaceGroup(forMember: wsID.uuidString)
 
         let menu = NSMenu()
         menu.addItem(
@@ -43,21 +42,62 @@ extension MainWindowController {
         return [parent]
     }
 
-    /// Context menu for a group header in the side strip.
+    /// Context menu for a group header (top-bar chip or side-strip header).
     func workspaceGroupHeaderMenuItems(groupID: String) -> [NSMenuItem] {
         guard let group = AppSettings.shared.workspaceGroup(id: groupID) else { return [] }
-        return [
+        let colorMenu = NSMenu()
+        for color in WorkspaceColor.allCases {
+            let item = ClosureMenuItem(title: color == .none ? "None" : color.label) {
+                AppSettings.shared.setWorkspaceGroupColor(id: groupID, color)
+            }
+            item.state = group.customColorHex == nil && color == group.color ? .on : .off
+            if let swatch = color.nsColor { item.image = Self.colorSwatch(swatch) }
+            colorMenu.addItem(item)
+        }
+        colorMenu.addItem(.separator())
+        let custom = ClosureMenuItem(title: "Custom…") {
+            ColorPanelRelay.shared.begin(initial: AppSettings.shared.workspaceGroup(id: groupID)?.resolvedColor) {
+                AppSettings.shared.setWorkspaceGroupCustomColor(id: groupID, $0)
+            }
+        }
+        if let hex = group.customColorHex, let swatch = NSColor(hex: hex) {
+            custom.state = .on
+            custom.image = Self.colorSwatch(swatch)
+        }
+        colorMenu.addItem(custom)
+        let colorItem = NSMenuItem(title: "Color", action: nil, keyEquivalent: "")
+        colorItem.submenu = colorMenu
+
+        var items: [NSMenuItem] = [
             ClosureMenuItem(title: group.isCollapsed ? "Expand" : "Collapse") { [weak self] in
                 self?.toggleWorkspaceGroup(groupID)
             },
             ClosureMenuItem(title: "Rename Group…") { [weak self] in
                 self?.promptRenameWorkspaceGroup(groupID)
             },
-            .separator(),
+            colorItem
+        ]
+        if canMoveWorkspaceGroupToNewWindow(groupID) {
+            items.append(.separator())
+            items.append(
+                ClosureMenuItem(title: "Move Group to New Window") { [weak self] in
+                    self?.moveWorkspaceGroupToNewWindow(groupID)
+                })
+        }
+        items.append(.separator())
+        items.append(
             ClosureMenuItem(title: "Ungroup") {
                 AppSettings.shared.deleteWorkspaceGroup(id: groupID)
-            }
-        ]
+            })
+        return items
+    }
+
+    private static func colorSwatch(_ color: NSColor) -> NSImage {
+        NSImage(size: NSSize(width: 10, height: 10), flipped: false) { rect in
+            color.setFill()
+            NSBezierPath(ovalIn: rect).fill()
+            return true
+        }
     }
 
     func toggleWorkspaceGroup(_ groupID: String) {
@@ -68,8 +108,55 @@ extension MainWindowController {
     /// Move a workspace into a group (nil = no group). The settings change fans
     /// out to every window, which re-clusters on its next toolbar refresh.
     func assignWorkspace(_ wsID: UUID, toGroup groupID: String?) {
-        guard let ws = appState.workspaces.first(where: { $0.id == wsID }) else { return }
-        AppSettings.shared.assignWorkspace(path: ws.folderPath, toGroup: groupID)
+        AppSettings.shared.assignWorkspace(member: wsID.uuidString, toGroup: groupID)
+    }
+
+    /// Drag-drop of workspace `source` onto the pill at `target`: join the
+    /// target's group, or start a new group holding both. The dragged pill lands
+    /// right after the target.
+    func stackWorkspace(from source: Int, onto target: Int) {
+        let workspaces = appState.workspaces
+        guard source != target, workspaces.indices.contains(source), workspaces.indices.contains(target),
+            !workspaces[source].isPinned, !workspaces[target].isPinned
+        else { return }
+        let moved = workspaces[source].id
+        let anchor = workspaces[target].id
+        let settings = AppSettings.shared
+        if let group = settings.workspaceGroup(forMember: anchor.uuidString) {
+            settings.assignWorkspace(member: moved.uuidString, toGroup: group.id)
+        } else {
+            settings.createWorkspaceGroup(
+                named: settings.nextWorkspaceGroupName(), with: [anchor.uuidString, moved.uuidString])
+        }
+        placeWorkspace(moved, after: anchor)
+    }
+
+    /// Drag-drop of workspace `source` onto a group header: join that group at its end.
+    func moveWorkspace(at source: Int, intoGroup groupID: String) {
+        guard appState.workspaces.indices.contains(source), !appState.workspaces[source].isPinned,
+            let group = AppSettings.shared.workspaceGroup(id: groupID)
+        else { return }
+        let moved = appState.workspaces[source].id
+        let members = Set(group.members)
+        let lastMember = appState.workspaces.last { members.contains($0.id.uuidString) && $0.id != moved }
+        AppSettings.shared.assignWorkspace(member: moved.uuidString, toGroup: groupID)
+        if let lastMember { placeWorkspace(moved, after: lastMember.id) } else { finishGroupChange() }
+    }
+
+    /// Move workspace `id` to sit right after `anchor`, then refresh and save.
+    private func placeWorkspace(_ id: UUID, after anchor: UUID) {
+        if let from = appState.workspaces.firstIndex(where: { $0.id == id }),
+            let anchorIndex = appState.workspaces.firstIndex(where: { $0.id == anchor })
+        {
+            // `moveWorkspace(from:to:)` takes an insertion index in the pre-move list.
+            appState.moveWorkspace(from: from, to: anchorIndex + 1)
+        }
+        finishGroupChange()
+    }
+
+    private func finishGroupChange() {
+        refreshToolbar()
+        saveSession()
     }
 
     /// Drag reorder from either bar: move, then let the drop position decide group membership.
@@ -77,15 +164,17 @@ extension MainWindowController {
         guard appState.workspaces.indices.contains(source) else { return }
         let movedID = appState.workspaces[source].id
         appState.moveWorkspace(from: source, to: destination)
-        syncWorkspaceGroupAfterMove(movedID)
-        refreshToolbar()
-        saveSession()
+        // A drop back on its own spot is not a move, so membership stays.
+        if appState.workspaces.firstIndex(where: { $0.id == movedID }) != source {
+            syncWorkspaceGroupAfterMove(movedID)
+        }
+        finishGroupChange()
     }
 
     /// Group id per workspace index in this window; pinned workspaces count as ungrouped.
     private func workspaceGroupIDs() -> [String?] {
-        let byPath = AppSettings.shared.workspaceGroups.groupIDByPath
-        return appState.workspaces.map { $0.isPinned ? nil : byPath[$0.folderPath] }
+        let byMember = AppSettings.shared.workspaceGroups.groupIDByMember
+        return appState.workspaces.map { $0.isPinned ? nil : byMember[$0.id.uuidString] }
     }
 
     /// Keep each group's members contiguous in this window: later members are
@@ -118,27 +207,119 @@ extension MainWindowController {
     /// dragging a member away from all of its group leaves it.
     func syncWorkspaceGroupAfterMove(_ wsID: UUID) {
         guard let i = appState.workspaces.firstIndex(where: { $0.id == wsID }) else { return }
-        let byPath = AppSettings.shared.workspaceGroups.groupIDByPath
-        let ids = appState.workspaces.map { byPath[$0.folderPath] }
+        let ids = workspaceGroupIDs()
         let groupOf: (Int) -> String? = { ids.indices.contains($0) ? ids[$0] : nil }
         let own = groupOf(i)
         let above = groupOf(i - 1)
         let below = groupOf(i + 1)
-        let path = appState.workspaces[i].folderPath
+        let member = wsID.uuidString
         if let above, above == below, above != own {
-            AppSettings.shared.assignWorkspace(path: path, toGroup: above)
+            AppSettings.shared.assignWorkspace(member: member, toGroup: above)
         } else if let own, above != own, below != own {
-            // Only leave when the rest of the group is actually open here; otherwise
-            // there is nothing to stay next to.
+            // Leave when the rest of the group is open here, or when this is its
+            // last member (the empty group then goes away). A member whose
+            // siblings live in another window has nothing here to stay next to,
+            // so it keeps its group.
             let othersHere = ids.indices.contains { $0 != i && ids[$0] == own }
-            if othersHere { AppSettings.shared.assignWorkspace(path: path, toGroup: nil) }
+            let isLastMember = AppSettings.shared.workspaceGroup(id: own)?.members == [member]
+            if othersHere || isLastMember { AppSettings.shared.assignWorkspace(member: member, toGroup: nil) }
         }
     }
 
+    // MARK: Moving a whole group
+
+    /// Ids of this window's workspaces in `groupID`, in bar order (pinned ones never count).
+    private func workspaceIDs(inGroup groupID: String) -> [UUID] {
+        let ids = workspaceGroupIDs()
+        return appState.workspaces.indices.filter { ids[$0] == groupID }.map { appState.workspaces[$0].id }
+    }
+
+    /// Drag of a group header within the bar: move all members, in order, to
+    /// insertion index `destination` (an index into the current list).
+    func moveWorkspaceGroup(_ groupID: String, to destination: Int) {
+        let members = workspaceIDs(inGroup: groupID)
+        guard !members.isEmpty, destination >= 0, destination <= appState.workspaces.count else { return }
+        let anchor = destination < appState.workspaces.count ? appState.workspaces[destination].id : nil
+        if let anchor, members.contains(anchor) { return }
+        // Insert each member right before the anchor (or at the end), which keeps their order.
+        for id in members {
+            guard let from = appState.workspaces.firstIndex(where: { $0.id == id }) else { continue }
+            let to = anchor.flatMap { a in appState.workspaces.firstIndex { $0.id == a } } ?? appState.workspaces.count
+            appState.moveWorkspace(from: from, to: to)
+        }
+        finishGroupChange()
+    }
+
+    /// A new window only makes sense when the group leaves something behind.
+    func canMoveWorkspaceGroupToNewWindow(_ groupID: String) -> Bool {
+        let count = workspaceIDs(inGroup: groupID).count
+        return count > 0 && count < appState.workspaces.count
+    }
+
+    func moveWorkspaceGroupToNewWindow(_ groupID: String) {
+        guard canMoveWorkspaceGroupToNewWindow(groupID), let frame = window?.frame else { return }
+        // Same cascade as `moveWorkspaceToNewWindow`.
+        let cascade: CGFloat = 24
+        let point = NSPoint(x: frame.minX + 60 + cascade, y: frame.maxY - 12 - cascade)
+        let (detached, activeIndex) = detachWorkspaceGroup(groupID)
+        adoptInNewWindow(detached, activeIndex: activeIndex, at: point, size: frame.size)
+    }
+
+    /// A group header was dropped outside this window: move the whole group into
+    /// the window under the cursor, or into a new window there.
+    func dropWorkspaceGroup(_ groupID: String, atScreenPoint point: NSPoint) {
+        let manager = WindowManager.shared
+        if let target = manager.controller(atScreenPoint: point, excluding: self) {
+            let dropIndex = target.workspaceDropIndex(atScreenPoint: point)
+            let (detached, activeIndex) = detachWorkspaceGroup(groupID)
+            for (k, ws) in detached.enumerated() {
+                target.adoptWorkspace(ws, at: dropIndex + k, activate: k == activeIndex)
+            }
+            target.window?.makeKeyAndOrderFront(nil)
+            if appState.workspaces.isEmpty { window?.close() }
+        } else {
+            guard canMoveWorkspaceGroupToNewWindow(groupID) else { return }
+            let size = window?.frame.size
+            let (detached, activeIndex) = detachWorkspaceGroup(groupID)
+            adoptInNewWindow(detached, activeIndex: activeIndex, at: point, size: size)
+        }
+    }
+
+    /// Detach every member of `groupID` in bar order. `activeIndex` is the
+    /// member to show in the destination: the one active here, else the first.
+    private func detachWorkspaceGroup(_ groupID: String) -> (detached: [DetachedWorkspace], activeIndex: Int) {
+        let members = workspaceIDs(inGroup: groupID)
+        let activeID =
+            appState.workspaces.indices.contains(appState.activeWorkspaceIndex)
+            ? appState.workspaces[appState.activeWorkspaceIndex].id : nil
+        var detached: [DetachedWorkspace] = []
+        for id in members {
+            guard let i = appState.workspaces.firstIndex(where: { $0.id == id }),
+                let ws = detachWorkspace(at: i)
+            else { continue }
+            detached.append(ws)
+        }
+        let activeIndex = detached.firstIndex { $0.workspace.id == activeID } ?? 0
+        return (detached, activeIndex)
+    }
+
+    private func adoptInNewWindow(
+        _ detached: [DetachedWorkspace], activeIndex: Int, at point: NSPoint, size: NSSize?
+    ) {
+        guard let first = detached.first else { return }
+        let controller = WindowManager.shared.newWindow(adopting: first, at: point, size: size)
+        for ws in detached.dropFirst() {
+            controller.adoptWorkspace(ws, activate: false)
+        }
+        if activeIndex > 0 { controller.activateWorkspace(activeIndex) }
+    }
+
     private func promptNewWorkspaceGroup(forWorkspace wsID: UUID) {
-        guard let ws = appState.workspaces.first(where: { $0.id == wsID }) else { return }
-        promptForText(title: "New Workspace Group", placeholder: "Group name", confirm: "Create") { name in
-            AppSettings.shared.createWorkspaceGroup(named: name, with: ws.folderPath)
+        promptForText(
+            title: "New Workspace Group", initial: AppSettings.shared.nextWorkspaceGroupName(),
+            placeholder: "Group name", confirm: "Create"
+        ) { name in
+            AppSettings.shared.createWorkspaceGroup(named: name, with: [wsID.uuidString])
         }
     }
 

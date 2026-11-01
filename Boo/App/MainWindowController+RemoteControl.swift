@@ -17,7 +17,7 @@ extension MainWindowController {
                 "path": ws.folderPath,
                 "active": ws.id == activeID
             ]
-            if let group = groups.group(forPath: ws.folderPath) {
+            if let group = groups.group(forMember: ws.id.uuidString) {
                 entry["group"] = group.name
             }
             if let color = ws.resolvedColor { entry["color"] = color.hexString }

@@ -115,19 +115,19 @@ extension ToolbarView {
             ctx.clip(to: CGRect(x: zoneStart, y: 0, width: zoneEnd - zoneStart, height: barHeight))
         }
 
-        var x = zoneStart - workspaceScrollOffset
+        drawWorkspaceGroups(ctx, theme: theme)
 
         for (wsIndex, ws) in workspaces.enumerated() {
-            let w = measureWorkspace(at: wsIndex)  // cached
-            let pillH = Self.workspacePillHeight
-            let pillY = (barHeight - pillH) / 2
+            // Hidden members of a collapsed group have no pill.
+            guard let rect = workspacePillRect(at: wsIndex) else { continue }
+            let x = rect.minX
             let isWSHovered = hoveredWorkspaceIndex == wsIndex
 
             let wsColor = ws.resolvedColor
 
-            let rect = CGRect(x: x, y: pillY, width: w, height: pillH)
             // The dragged pill stays as a faint placeholder; the ghost carries it.
-            let isLifted = isDragging && dragSourceIndex == wsIndex
+            let isLifted =
+                isDragging && (dragSourceIndex == wsIndex || (ws.groupID != nil && ws.groupID == draggedGroupID))
             if isLifted {
                 ctx.saveGState()
                 ctx.setAlpha(0.3)
@@ -195,17 +195,13 @@ extension ToolbarView {
             // Furthest-along OSC 9;4 progress of the workspace's tabs, and the activity dot.
             WorkspacePillStyle.drawStatus(
                 ctx, rect: rect, hasActivity: ws.hasActivity, progress: ws.progress, theme: theme)
-
-            x += w + Self.workspaceGap
         }
+
+        drawStackHighlight(ctx, theme: theme)
 
         // Draw drop insertion indicator (vertical line between workspace pills)
         if let dropIdx = dropTargetIndex {
-            var indicatorX = zoneStart - workspaceScrollOffset
-            for i in 0..<min(dropIdx, workspaces.count) {
-                indicatorX += measureWorkspace(at: i) + Self.workspaceGap
-            }
-            indicatorX -= 3
+            let indicatorX = insertionIndicatorX(for: dropIdx) - 1
             ctx.setFillColor(theme.accentColor.cgColor)
             ctx.fill(CGRect(x: indicatorX, y: 6, width: 2, height: barHeight - 12))
         }
@@ -260,6 +256,12 @@ extension ToolbarView {
         let startPoint = convert(event.locationInWindow, from: nil)
         mouseDownLocation = startPoint
 
+        // Group header chip — click folds/unfolds, drag moves the whole group
+        if !hideWorkspaces, let chip = hitTestGroupChip(at: startPoint) {
+            handleGroupChipMouseDown(startPoint: startPoint, group: chip)
+            return
+        }
+
         // Workspace zone — use tracking loop for drag reordering
         if !hideWorkspaces, let hitIdx = hitTestWorkspaceIndex(at: startPoint) {
             if event.clickCount == 2 {
@@ -297,14 +299,8 @@ extension ToolbarView {
                 if !didStartDrag {
                     // Plain click — close or select
                     let ws = workspaces[idx]
-                    let w = measureWorkspace(at: idx)
-                    var pillX = trafficLightWidth - workspaceScrollOffset
-                    for i in 0..<idx { pillX += measureWorkspace(at: i) + Self.workspaceGap }
-                    let pillH = Self.workspacePillHeight
-                    let pillY = (barHeight - pillH) / 2
-                    let pillRect = CGRect(x: pillX, y: pillY, width: w, height: pillH)
-                    let closeRect = workspaceCloseButtonRect(in: pillRect)
-                    if !ws.isPinned && hoveredWorkspaceIndex == idx && closeRect.contains(startPoint) {
+                    let closeRect = workspacePillRect(at: idx).map(workspaceCloseButtonRect(in:))
+                    if !ws.isPinned && hoveredWorkspaceIndex == idx && closeRect?.contains(startPoint) == true {
                         delegate?.toolbar(self, didCloseWorkspaceAt: idx)
                     } else {
                         delegate?.toolbar(self, didSelectWorkspaceAt: idx)
@@ -364,45 +360,26 @@ extension ToolbarView {
 
         // Update drop target (none while outside the window: that drop moves windows)
         if WorkspaceBarView.screenPointOutsideWindow(event) != nil {
-            if dropTargetIndex != nil {
+            if dropTargetIndex != nil || dropStackIndex != nil || dropGroupID != nil {
                 dropTargetIndex = nil
+                dropStackIndex = nil
+                dropGroupID = nil
                 needsDisplay = true
             }
             return
         }
-        let point = convert(event.locationInWindow, from: nil)
-        var x = trafficLightWidth - workspaceScrollOffset
-        var rawIdx = workspaces.count
-        for i in workspaces.indices {
-            let w = measureWorkspace(at: i)
-            if point.x < x + (w + Self.workspaceGap) / 2 {
-                rawIdx = i
-                break
-            }
-            x += w + Self.workspaceGap
-        }
-
-        let validIdx = validWorkspaceDropIndex(raw: rawIdx)
-        if validIdx != dropTargetIndex {
-            dropTargetIndex = validIdx
-            needsDisplay = true
-        }
-    }
-
-    private func validWorkspaceDropIndex(raw: Int) -> Int? {
-        guard let src = dragSourceIndex else { return nil }
-        if raw == src || raw == src + 1 { return nil }
-        let lo = min(src, raw)
-        let hi = max(src, raw)
-        for i in lo..<hi where i != src {
-            if workspaces[i].isPinned { return nil }
-        }
-        return raw
+        updateWorkspaceDropTarget(at: convert(event.locationInWindow, from: nil))
     }
 
     private func executeWorkspaceDrop() {
-        guard let dropIdx = dropTargetIndex, let sourceIdx = dragSourceIndex else { return }
-        delegate?.toolbar(self, moveWorkspaceFrom: sourceIdx, to: dropIdx)
+        guard let sourceIdx = dragSourceIndex else { return }
+        if let gid = dropGroupID {
+            delegate?.toolbar(self, moveWorkspaceAt: sourceIdx, intoGroup: gid)
+        } else if let target = dropStackIndex {
+            delegate?.toolbar(self, stackWorkspaceAt: sourceIdx, onto: target)
+        } else if let dropIdx = dropTargetIndex {
+            delegate?.toolbar(self, moveWorkspaceFrom: sourceIdx, to: dropIdx)
+        }
     }
 
     private func cleanupWorkspaceDrag() {
@@ -411,6 +388,8 @@ extension ToolbarView {
         isDragging = false
         dragSourceIndex = nil
         dropTargetIndex = nil
+        dropStackIndex = nil
+        dropGroupID = nil
         needsDisplay = true
     }
 
@@ -425,13 +404,7 @@ extension ToolbarView {
         // stay free so the window can be dragged from there.
         let pillY = (barHeight - Self.workspacePillHeight) / 2
         guard point.y >= pillY && point.y < pillY + Self.workspacePillHeight else { return nil }
-        var x = trafficLightWidth - workspaceScrollOffset
-        for i in workspaces.indices {
-            let w = measureWorkspace(at: i)
-            if point.x >= x && point.x < x + w + Self.workspaceGap { return i }
-            x += w + Self.workspaceGap
-        }
-        return nil
+        return workspaceIndex(atX: point.x)
     }
 
     // MARK: - Right Click Context Menu
@@ -442,15 +415,16 @@ extension ToolbarView {
         // Only show context menu in workspace zone
         guard !hideWorkspaces, point.x >= trafficLightWidth && point.x < workspaceZoneEnd + zoneGap else { return }
 
-        var x = trafficLightWidth - workspaceScrollOffset
-        for i in workspaces.indices {
-            let w = measureWorkspace(at: i)
-            if point.x >= x && point.x < x + w + Self.workspaceGap {
-                showWorkspaceContextMenu(at: i, event: event)
-                return
-            }
-            x += w + Self.workspaceGap
+        if let chip = hitTestGroupChip(at: point) {
+            let items = delegate?.toolbar(self, menuItemsForGroup: chip.id) ?? []
+            guard !items.isEmpty else { return }
+            let menu = NSMenu()
+            items.forEach(menu.addItem)
+            NSMenu.popUpContextMenu(menu, with: event, for: self)
+            return
         }
+
+        if let i = workspaceIndex(atX: point.x) { showWorkspaceContextMenu(at: i, event: event) }
     }
 
     internal func showWorkspaceContextMenu(at index: Int, event: NSEvent) {
@@ -497,15 +471,6 @@ extension ToolbarView {
 
     @objc internal func contextEditWorkspace(_ sender: NSMenuItem) {
         editWorkspace(at: sender.tag)
-    }
-
-    /// Frame of the top-bar pill at `index`, in view coordinates.
-    func workspacePillRect(at index: Int) -> CGRect? {
-        guard index >= 0, index < workspaces.count else { return nil }
-        var x = trafficLightWidth - workspaceScrollOffset
-        for i in 0..<index { x += measureWorkspace(at: i) + Self.workspaceGap }
-        let h = Self.workspacePillHeight
-        return CGRect(x: x, y: (barHeight - h) / 2, width: measureWorkspace(at: index), height: h)
     }
 
     /// Ask the delegate to show the inline editor for the pill at `index`.

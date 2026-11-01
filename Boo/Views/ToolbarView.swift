@@ -6,6 +6,18 @@ import Cocoa
     func toolbarDidToggleSidebar(_ toolbar: ToolbarView)
     func toolbar(_ toolbar: ToolbarView, togglePinForWorkspaceAt index: Int)
     func toolbar(_ toolbar: ToolbarView, moveWorkspaceFrom source: Int, to destination: Int)
+    /// Workspace `source` was dropped onto the pill at `target`: group them.
+    func toolbar(_ toolbar: ToolbarView, stackWorkspaceAt source: Int, onto target: Int)
+    /// Workspace `source` was dropped onto a group's header chip.
+    func toolbar(_ toolbar: ToolbarView, moveWorkspaceAt source: Int, intoGroup groupID: String)
+    /// Click on a group's header chip.
+    func toolbar(_ toolbar: ToolbarView, toggleGroup groupID: String)
+    /// A group header was dragged to insertion index `destination` (whole group moves).
+    func toolbar(_ toolbar: ToolbarView, moveGroup groupID: String, to destination: Int)
+    /// A group header was dropped outside the window.
+    func toolbar(_ toolbar: ToolbarView, dropGroup groupID: String, atScreenPoint point: NSPoint)
+    /// Context menu for a group's header chip.
+    func toolbar(_ toolbar: ToolbarView, menuItemsForGroup groupID: String) -> [NSMenuItem]
     /// A workspace was dragged out and released outside this window.
     func toolbar(_ toolbar: ToolbarView, dropWorkspaceAt index: Int, atScreenPoint point: NSPoint)
     /// A dragged workspace moved; `point` is the screen point when outside this window, nil otherwise or when the drag ends.
@@ -21,6 +33,12 @@ import Cocoa
 extension ToolbarViewDelegate {
     func toolbar(_ toolbar: ToolbarView, contextMenuItemsForWorkspaceAt index: Int) -> [NSMenuItem] { [] }
     func toolbar(_ toolbar: ToolbarView, editWorkspaceAt index: Int, anchor rect: NSRect) {}
+    func toolbar(_ toolbar: ToolbarView, stackWorkspaceAt source: Int, onto target: Int) {}
+    func toolbar(_ toolbar: ToolbarView, moveWorkspaceAt source: Int, intoGroup groupID: String) {}
+    func toolbar(_ toolbar: ToolbarView, toggleGroup groupID: String) {}
+    func toolbar(_ toolbar: ToolbarView, moveGroup groupID: String, to destination: Int) {}
+    func toolbar(_ toolbar: ToolbarView, dropGroup groupID: String, atScreenPoint point: NSPoint) {}
+    func toolbar(_ toolbar: ToolbarView, menuItemsForGroup groupID: String) -> [NSMenuItem] { [] }
 }
 
 class ToolbarView: NSView {
@@ -35,6 +53,11 @@ class ToolbarView: NSView {
         var hasCustomColor: Bool = false
         var hasActivity: Bool = false
         var progress: TerminalProgress?
+        /// Workspace group; members of one group arrive contiguous (the controller clusters them).
+        var groupID: String? = nil
+        var groupName: String? = nil
+        var groupCollapsed: Bool = false
+        var groupColor: NSColor? = nil
     }
 
     // MARK: - Font Cache (avoids NSFont alloc on every draw pass)
@@ -54,7 +77,8 @@ class ToolbarView: NSView {
 
     /// Cached pill widths keyed by workspace index. Cleared on every `update()` call.
     private var _measureCache: [Int: CGFloat] = [:]
-    private var _cachedTotalWorkspaceWidth: CGFloat?
+    /// Pill and group positions, rebuilt lazily after every `update()`.
+    var _cachedLayout: WorkspaceStripLayout?
 
     // MARK: - Traffic Light Width Cache
 
@@ -67,7 +91,14 @@ class ToolbarView: NSView {
     var workspaceScrollOffset: CGFloat = 0
     var mouseDownLocation: NSPoint?
     var dragSourceIndex: Int?
+    /// Insertion index while a drag reorders.
     var dropTargetIndex: Int?
+    /// Pill the dragged workspace would stack onto (form or join a group).
+    var dropStackIndex: Int?
+    /// Group header chip the dragged workspace would join.
+    var dropGroupID: String?
+    /// Group whose header chip is being dragged (the whole group moves).
+    var draggedGroupID: String?
 
     // Ghost drag state
     var ghostWindow: DragGhostWindow?
@@ -75,6 +106,7 @@ class ToolbarView: NSView {
 
     // Hover state
     var hoveredWorkspaceIndex: Int = -1
+    var hoveredGroupID: String?
     var isWorkspacePlusButtonHovered: Bool = false
     private var toolbarTrackingArea: NSTrackingArea?
 
@@ -131,6 +163,11 @@ class ToolbarView: NSView {
             hoveredWorkspaceIndex = newWSHover
             changed = true
         }
+        let newGroupHover = hideWorkspaces ? nil : hitTestGroupChip(at: point)?.id
+        if newGroupHover != hoveredGroupID {
+            hoveredGroupID = newGroupHover
+            changed = true
+        }
 
         // Workspace plus button
         let newWSPlusHover = !hideWorkspaces && workspacePlusButtonRect.contains(point)
@@ -143,8 +180,9 @@ class ToolbarView: NSView {
     }
 
     override func mouseExited(with event: NSEvent) {
-        let changed = hoveredWorkspaceIndex != -1 || isWorkspacePlusButtonHovered
+        let changed = hoveredWorkspaceIndex != -1 || isWorkspacePlusButtonHovered || hoveredGroupID != nil
         hoveredWorkspaceIndex = -1
+        hoveredGroupID = nil
         isWorkspacePlusButtonHovered = false
         if changed { needsDisplay = true }
     }
@@ -164,7 +202,7 @@ class ToolbarView: NSView {
         self.workspaces = workspaces
         self.sidebarVisible = sidebarVisible
         _measureCache.removeAll(keepingCapacity: true)
-        _cachedTotalWorkspaceWidth = nil
+        _cachedLayout = nil
         scrollToActiveWorkspace()
         clampScrollOffset()
         needsDisplay = true
@@ -174,10 +212,7 @@ class ToolbarView: NSView {
     private func scrollToActiveWorkspace() {
         guard bounds.width > 0 else { return }
         guard let activeIndex = workspaces.firstIndex(where: { $0.isActive }) else { return }
-        var x: CGFloat = 0
-        for i in 0..<activeIndex {
-            x += measureWorkspace(at: i) + Self.workspaceGap
-        }
+        let x = workspaceLayout.pillX[activeIndex]
         let activeWidth = measureWorkspace(at: activeIndex) + Self.workspaceGap
         let visibleStart = workspaceScrollOffset
         let visibleEnd = workspaceScrollOffset + workspaceZoneWidth
@@ -213,16 +248,8 @@ class ToolbarView: NSView {
     /// this one separates two runs of content and needs to read as a break.
     let zoneGap: CGFloat = 12
 
-    /// Total content width of all workspace pills (cached until next `update()`).
-    var totalWorkspaceContentWidth: CGFloat {
-        if let cached = _cachedTotalWorkspaceWidth { return cached }
-        var w: CGFloat = 0
-        for (i, _) in workspaces.enumerated() {
-            w += measureWorkspace(at: i) + Self.workspaceGap
-        }
-        _cachedTotalWorkspaceWidth = w
-        return w
-    }
+    /// Total content width of the strip, group trays included (cached until next `update()`).
+    var totalWorkspaceContentWidth: CGFloat { workspaceLayout.totalWidth }
 
     /// Gap between adjacent workspace pills. Matches `plusLeadingGap` so the
     /// spacing is even all the way across the strip, including up to the `+`.
@@ -314,19 +341,10 @@ class ToolbarView: NSView {
     /// Returns the screen-space rect for each workspace pill, used for tab-drag hover detection.
     func workspacePillScreenFrames() -> [(index: Int, screenFrame: NSRect)] {
         guard let window = window, !hideWorkspaces else { return [] }
-        var result: [(Int, NSRect)] = []
-        var x = trafficLightWidth - workspaceScrollOffset
-        for i in workspaces.indices {
-            let w = measureWorkspace(at: i)
-            let pillH = Self.workspacePillHeight
-            let pillY = (barHeight - pillH) / 2
-            let localRect = NSRect(x: x, y: pillY, width: w, height: pillH)
-            let windowRect = convert(localRect, to: nil)
-            let screenRect = window.convertToScreen(windowRect)
-            result.append((i, screenRect))
-            x += w + Self.workspaceGap
+        return workspaces.indices.compactMap { i in
+            guard let localRect = workspacePillRect(at: i) else { return nil }
+            return (i, window.convertToScreen(convert(localRect, to: nil)))
         }
-        return result
     }
 }
 
@@ -354,16 +372,7 @@ extension ToolbarView {
             return []
         }
 
-        var x = trafficLightWidth - workspaceScrollOffset
-        var idx = workspaces.count
-        for i in workspaces.indices {
-            let w = measureWorkspace(at: i)
-            if point.x < x + (w + Self.workspaceGap) / 2 {
-                idx = i
-                break
-            }
-            x += w + Self.workspaceGap
-        }
+        let idx = workspaceInsertionIndex(atX: point.x)
         if idx != dropTargetIndex {
             dropTargetIndex = idx
             needsDisplay = true
