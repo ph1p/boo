@@ -48,6 +48,8 @@ extension MainWindowController {
             } else {
                 remoteGetScreen(reply: reply)
             }
+        case "get_view":
+            remoteGetView(json: json, reply: reply)
         case "send_key":
             remoteSendKey(json: json, reply: reply)
         case "select_pane":

@@ -9,13 +9,19 @@ extension MainWindowController {
 
     func remoteGetState(reply: @escaping ([String: Any]) -> Void) {
         let activeID = activeWorkspace?.id
+        let groups = AppSettings.shared.workspaceGroups
         let workspaces = appState.workspaces.enumerated().map { index, ws in
-            [
+            var entry: [String: Any] = [
                 "index": index,
                 "name": ws.displayName,
                 "path": ws.folderPath,
                 "active": ws.id == activeID
-            ] as [String: Any]
+            ]
+            if let group = groups.group(forPath: ws.folderPath) {
+                entry["group"] = group.name
+            }
+            if let color = ws.resolvedColor { entry["color"] = color.hexString }
+            return entry
         }
 
         var panes: [[String: Any]] = []
@@ -76,6 +82,74 @@ extension MainWindowController {
             response["rows"] = Int(grid.rows)
         }
         reply(response)
+    }
+
+    /// Split layout plus every visible pane's screen, for the web UI's split view.
+    /// `known` maps pane id → the hash the client already shows; such panes come
+    /// back without their (large) VT snapshot.
+    func remoteGetView(json: [String: Any], reply: @escaping ([String: Any]) -> Void) {
+        guard let ws = activeWorkspace else {
+            reply(["ok": true, "layout": NSNull(), "panes": [String: Any](), "active": ""])
+            return
+        }
+        let known = json["known"] as? [String: Any] ?? [:]
+        let tree = ws.displayedTree
+        var panes: [String: Any] = [:]
+        for paneID in tree.leafIDs {
+            guard let pane = ws.pane(for: paneID) else { continue }
+            let key = paneID.uuidString
+            let tab = pane.activeTab
+            var entry: [String: Any] = [
+                "title": tab?.title ?? "",
+                "cwd": tab?.workingDirectory ?? "",
+                "kind": tab?.contentType.rawValue ?? "terminal",
+                "tabs": pane.tabs.count
+            ]
+            if let gv = terminalView(workspace: ws, paneID: paneID),
+                let grid = gv.gridSize, grid.columns > 0, grid.rows > 0
+            {
+                let cols = Int(grid.columns)
+                let rows = Int(grid.rows)
+                // Styled VT for the wasm renderer; plain text only when that fails.
+                let vt = gv.readViewportStyled()
+                let body = vt ?? gv.readViewportText() ?? ""
+                var hasher = Hasher()
+                hasher.combine(cols)
+                hasher.combine(rows)
+                hasher.combine(body)
+                // Hex string: a JS number can't hold all 64 bits exactly.
+                let hash = String(UInt64(bitPattern: Int64(hasher.finalize())), radix: 16)
+                entry["hash"] = hash
+                entry["cols"] = cols
+                entry["rows"] = rows
+                if (known[key] as? String) != hash {
+                    entry[vt != nil ? "vt" : "text"] = body
+                }
+            }
+            panes[key] = entry
+        }
+        reply([
+            "ok": true,
+            "layout": Self.remoteLayout(tree),
+            "panes": panes,
+            "active": ws.activePaneID.uuidString,
+            "zoomed": ws.zoomedPaneID != nil
+        ])
+    }
+
+    /// `SplitTree` as JSON: leaves `{id}`, splits `{dir: "h"|"v", ratio, a, b}`.
+    static func remoteLayout(_ tree: SplitTree) -> [String: Any] {
+        switch tree {
+        case .leaf(let id):
+            return ["id": id.uuidString]
+        case .split(let direction, let first, let second, let ratio):
+            return [
+                "dir": direction == .horizontal ? "h" : "v",
+                "ratio": Double(ratio),
+                "a": remoteLayout(first),
+                "b": remoteLayout(second)
+            ]
+        }
     }
 
     // MARK: - Input

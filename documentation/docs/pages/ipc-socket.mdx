@@ -28,7 +28,7 @@ Most commands act on the frontmost Boo window. With a `pane_id` they go to the w
 
 | Category       | Commands |
 | -------------- | -------- |
-| **Query**      | `get_context`, `get_theme`, `get_settings`, `get_workspaces`, `list_themes`, `get_state`, `get_screen` |
+| **Query**      | `get_context`, `get_theme`, `get_settings`, `get_workspaces`, `list_themes`, `get_state`, `get_view`, `get_screen` |
 | **Control**    | `set_theme`, `toggle_sidebar`, `switch_workspace`, `new_tab`, `new_workspace`, `send_text`, `send_key`, `select_pane`, `select_tab` |
 | **Panes**      | `split_pane`, `close_pane`, `focus_pane`, `resize_pane`, `swap_pane`, `zoom_pane`, `equalize_splits`, `get_layout` |
 | **Windows**    | `new_window`, `move_workspace_to_new_window`, `merge_all_windows` |
@@ -45,7 +45,8 @@ Most commands act on the frontmost Boo window. With a `pane_id` they go to the w
 | Command            | Arguments | Reply |
 | ------------------ | --------- | ----- |
 | `get_workspaces`   | | `workspaces` (`index`, `id`, `name`, `path`, `is_active`, `pane_count`) |
-| `get_state`        | | `workspaces`, `panes` of the active workspace with their `tabs`, `agents`, `theme` |
+| `get_state`        | | `workspaces` (with `group` and `color` when set), `panes` of the active workspace with their `tabs`, `agents`, `theme` |
+| `get_view`         | optional `known` (pane id → last `hash`) | `layout` (split tree: `{id}` or `{dir, ratio, a, b}`), `panes` (id → `title`, `cwd`, `kind`, `tabs`, `cols`, `rows`, `hash`, plus `vt`/`text` only when the hash changed), `active`, `zoomed` |
 | `list_themes`      | | `themes` (names) |
 | `switch_workspace` | `index` or `id` | |
 | `new_tab`          | optional `cwd` (default: workspace folder), `command`, `env` (strings; `BOO_*` keys are ignored). Opens in the active pane. | `tab_id` |

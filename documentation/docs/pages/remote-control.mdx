@@ -19,9 +19,26 @@ The server stops by itself after **30 minutes without use**, and a toast says so
 ## What You Can Do
 
 - See the active terminal, in the same colors and layout as the app
-- Type text and send keys (arrows, Return, Tab, Esc, ⌃C, ⌃D…)
+- See every split pane of the active workspace at once, laid out like on the Mac
+- Type text and send keys (arrows, Return, Tab, Esc, ⌃C, ⌃D, ⌃R, Page Up/Down…)
 - Switch workspaces, panes and tabs, and open a new tab
+- Split, zoom and close panes
 - Answer waiting agents
+
+## Split View and Focus
+
+The page opens in **split view**: all panes of the active workspace, in their real arrangement. The pane you type into has an accent border. Tap a pane to make it active.
+
+- **Double-tap** a pane, or tap the layout button in the top bar, to switch to **focus view**. It shows only the active pane, at a readable size.
+- In focus view, **swipe left or right** to move to the next or previous pane. The small map in the top bar shows where you are.
+- The pane bar above the keys can **split right**, **split down**, **zoom** (like **Cmd+Shift+Enter** on the Mac) and **close** the active pane. Closing asks first.
+- **Fit width** shrinks the text so a whole line fits the screen. Turn it off to keep a fixed size and scroll sideways.
+
+Both choices are remembered on the device.
+
+The page only fetches panes whose content changed. It polls fast right after you type and slows down when the terminal is quiet. It stops while the page is in the background.
+
+Workspaces in a [group](/features#workspaces) appear together in the workspace strip, under the group name.
 
 ## Answering Agents
 
