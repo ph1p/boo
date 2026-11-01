@@ -21,9 +21,7 @@ extension MainWindowController: ToolbarViewDelegate {
     }
 
     func toolbar(_ toolbar: ToolbarView, moveWorkspaceFrom source: Int, to destination: Int) {
-        appState.moveWorkspace(from: source, to: destination)
-        refreshToolbar()
-        saveSession()
+        reorderWorkspace(from: source, to: destination)
     }
 
     func toolbar(_ toolbar: ToolbarView, dropWorkspaceAt index: Int, atScreenPoint point: NSPoint) {
@@ -39,7 +37,7 @@ extension MainWindowController: ToolbarViewDelegate {
     }
 
     func toolbar(_ toolbar: ToolbarView, contextMenuItemsForWorkspaceAt index: Int) -> [NSMenuItem] {
-        agentTaskMenuItems(forWorkspaceAt: index)
+        workspaceGroupMenuItems(forWorkspaceAt: index) + agentTaskMenuItems(forWorkspaceAt: index)
     }
 
     func toolbarDidRequestNewWorkspace(_ toolbar: ToolbarView) {
@@ -70,9 +68,7 @@ extension MainWindowController: WorkspaceBarViewDelegate {
     }
 
     func workspaceBar(_ bar: WorkspaceBarView, moveWorkspaceFrom source: Int, to destination: Int) {
-        appState.moveWorkspace(from: source, to: destination)
-        refreshToolbar()
-        saveSession()
+        reorderWorkspace(from: source, to: destination)
     }
 
     func workspaceBar(_ bar: WorkspaceBarView, dropWorkspaceAt index: Int, atScreenPoint point: NSPoint) {
@@ -88,11 +84,19 @@ extension MainWindowController: WorkspaceBarViewDelegate {
     }
 
     func workspaceBar(_ bar: WorkspaceBarView, contextMenuItemsForWorkspaceAt index: Int) -> [NSMenuItem] {
-        agentTaskMenuItems(forWorkspaceAt: index)
+        workspaceGroupMenuItems(forWorkspaceAt: index) + agentTaskMenuItems(forWorkspaceAt: index)
     }
 
     func workspaceBarDidRequestNewWorkspace(_ bar: WorkspaceBarView) {
         newWorkspaceAction(nil)
+    }
+
+    func workspaceBar(_ bar: WorkspaceBarView, toggleGroup groupID: String) {
+        toggleWorkspaceGroup(groupID)
+    }
+
+    func workspaceBar(_ bar: WorkspaceBarView, menuItemsForGroup groupID: String) -> [NSMenuItem] {
+        workspaceGroupHeaderMenuItems(groupID: groupID)
     }
 
     func workspaceBar(_ bar: WorkspaceBarView, editWorkspaceAt index: Int, anchor rect: NSRect) {

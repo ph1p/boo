@@ -26,4 +26,17 @@ final class DragGhostWindowTests: XCTestCase {
         XCTAssertEqual(origin, target)
         XCTAssertLessThanOrEqual(frames, 12)
     }
+
+    @MainActor func testSourceFrameGhostKeepsGrabOffset() {
+        let content = NSView(frame: NSRect(x: 0, y: 0, width: 40, height: 20))
+        let source = NSRect(x: 100, y: 100, width: 40, height: 20)
+        let ghost = DragGhostWindow(content: content, sourceFrame: source, cursor: NSPoint(x: 110, y: 105))
+        defer { ghost.orderOut(nil) }
+        XCTAssertEqual(ghost.frame.origin, source.origin)
+        // Cursor moves by (+50, -30): the ghost's target moves by the same amount.
+        ghost.move(toCenter: NSPoint(x: 160, y: 75))
+        var origin = ghost.frame.origin
+        for _ in 0..<30 { origin = DragGhostWindow.eased(from: origin, to: NSPoint(x: 150, y: 70)) }
+        XCTAssertEqual(origin, NSPoint(x: 150, y: 70))
+    }
 }

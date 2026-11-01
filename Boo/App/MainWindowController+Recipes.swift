@@ -41,24 +41,15 @@ extension MainWindowController {
     }
 
     @objc func saveWorkspaceAsRecipeAction(_ sender: Any?) {
-        guard let workspace = activeWorkspace, let window else { return }
-        let alert = NSAlert()
-        alert.messageText = "Save Workspace as Recipe"
-        alert.informativeText =
-            "Saves the layout and each tab's folder to ~/.boo/recipes. Commands stay empty: "
-            + "each tab's last command is noted as lastCommand, so copy it into command to run it."
-        alert.addButton(withTitle: "Save")
-        alert.addButton(withTitle: "Cancel")
-        let input = NSTextField(frame: NSRect(x: 0, y: 0, width: 260, height: 24))
-        input.stringValue = workspace.displayName
-        alert.accessoryView = input
-        alert.beginSheetModal(for: window) { [weak self] response in
-            guard let self, response == .alertFirstButtonReturn else { return }
-            let name = input.stringValue.trimmingCharacters(in: .whitespaces)
-            guard !name.isEmpty else { return }
-            self.saveRecipe(of: workspace, as: name)
+        guard let workspace = activeWorkspace else { return }
+        promptForText(
+            title: "Save Workspace as Recipe",
+            informative: "Saves the layout and each tab's folder to ~/.boo/recipes. Commands stay empty: "
+                + "each tab's last command is noted as lastCommand, so copy it into command to run it.",
+            initial: workspace.displayName, confirm: "Save"
+        ) { [weak self] name in
+            self?.saveRecipe(of: workspace, as: name)
         }
-        alert.window.makeFirstResponder(input)
     }
 
     private func saveRecipe(of workspace: Workspace, as name: String) {

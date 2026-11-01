@@ -15,11 +15,17 @@ import Cocoa
     func workspaceBar(_ bar: WorkspaceBarView, contextMenuItemsForWorkspaceAt index: Int) -> [NSMenuItem]
     /// Open the inline name/color editor for a workspace, anchored on `rect` in the bar.
     func workspaceBar(_ bar: WorkspaceBarView, editWorkspaceAt index: Int, anchor rect: NSRect)
+    /// A workspace-group header (or a collapsed group's pill) was clicked.
+    func workspaceBar(_ bar: WorkspaceBarView, toggleGroup groupID: String)
+    /// Context menu for a workspace-group header.
+    func workspaceBar(_ bar: WorkspaceBarView, menuItemsForGroup groupID: String) -> [NSMenuItem]
 }
 
 extension WorkspaceBarViewDelegate {
     func workspaceBar(_ bar: WorkspaceBarView, contextMenuItemsForWorkspaceAt index: Int) -> [NSMenuItem] { [] }
     func workspaceBar(_ bar: WorkspaceBarView, editWorkspaceAt index: Int, anchor rect: NSRect) {}
+    func workspaceBar(_ bar: WorkspaceBarView, toggleGroup groupID: String) {}
+    func workspaceBar(_ bar: WorkspaceBarView, menuItemsForGroup groupID: String) -> [NSMenuItem] { [] }
 }
 
 class WorkspaceBarView: NSView {
@@ -45,7 +51,39 @@ class WorkspaceBarView: NSView {
         /// Unseen activity in a background workspace (same rule as the top bar).
         var hasActivity: Bool = false
         var progress: TerminalProgress?
+        /// Workspace group this item belongs to. Members of one group are expected to
+        /// be contiguous; the controller keeps them that way.
+        var groupID: String? = nil
+        var groupName: String? = nil
+        var groupCollapsed: Bool = false
     }
+
+    /// One workspace group as laid out in the strip. `top`/`height` are in content
+    /// space (before the scroll offset). An expanded group gets a thin labelled
+    /// header row; a collapsed one is drawn as a single pill-sized folder.
+    struct GroupHeader {
+        let id: String
+        let name: String
+        let collapsed: Bool
+        let members: Range<Int>
+        let top: CGFloat
+        let height: CGFloat
+        /// Unseen activity in a member hidden by the collapse.
+        let hiddenActivity: Bool
+    }
+
+    /// Row layout, rebuilt by `setItems`. `rowTops[i]` is item i's content-space top.
+    /// Items hidden in a collapsed group keep the top of the next visible slot so
+    /// drop-index math still has something sane to compare against.
+    private(set) var rowTops: [CGFloat] = []
+    private(set) var hiddenRows: Set<Int> = []
+    private(set) var groupHeaders: [GroupHeader] = []
+
+    /// Height of an expanded group's label row, and the extra space after a group.
+    static let groupHeaderHeight: CGFloat = 12
+    static let groupTrailingGap: CGFloat = 4
+    nonisolated(unsafe) static let groupLabelFont = NSFont.systemFont(ofSize: 8, weight: .semibold)
+    nonisolated(unsafe) static let groupCountFont = NSFont.monospacedDigitSystemFont(ofSize: 8, weight: .medium)
 
     private(set) var items: [Item] = []
     private(set) var selectedIndex: Int = -1
@@ -194,10 +232,7 @@ class WorkspaceBarView: NSView {
     /// Total height of the pill stack, before clamping. The `+` is pinned to the
     /// bottom of the strip rather than riding at the end of the stack, so it is not
     /// counted here.
-    var verticalContentHeight: CGFloat {
-        let step = Self.verticalItemSize + Self.verticalItemGap
-        return CGFloat(items.count) * step
-    }
+    private(set) var verticalContentHeight: CGFloat = 0
 
     /// Height the scrolling pill stack gets: the strip minus the band reserved for
     /// the pinned `+`, so pills scroll *behind* it instead of off the bottom.
@@ -214,8 +249,8 @@ class WorkspaceBarView: NSView {
     /// applied. The single source every draw and hit-test path walks, so the drawn
     /// pill and its click target can't drift apart.
     func verticalItemRect(at index: Int) -> CGRect {
-        let step = Self.verticalItemSize + Self.verticalItemGap
-        let y = CGFloat(index) * step - verticalScrollOffset
+        let top = index >= 0 && index < rowTops.count ? rowTops[index] : verticalContentHeight
+        let y = top - verticalScrollOffset
         return CGRect(
             x: verticalPillX, y: y, width: verticalPillWidth, height: Self.verticalItemSize)
     }
@@ -274,9 +309,128 @@ class WorkspaceBarView: NSView {
         self.items = items
         self.selectedIndex = selectedIndex
         nameWidthCache.removeAll(keepingCapacity: true)
+        rebuildLayout()
+        if hoveredIndex >= 0, hiddenRows.contains(hoveredIndex) { hoveredIndex = -1 }
         clampVerticalScroll()
         scrollToSelectedVertical()
         needsDisplay = true
+    }
+
+    /// Lay out pills and group headers top to bottom. A collapsed group still
+    /// shows its selected member, so the active workspace never disappears.
+    private func rebuildLayout() {
+        let step = Self.verticalItemSize + Self.verticalItemGap
+        var tops: [CGFloat] = []
+        tops.reserveCapacity(items.count)
+        var hidden: Set<Int> = []
+        var headers: [GroupHeader] = []
+        var y: CGFloat = 0
+        var i = 0
+        while i < items.count {
+            guard let gid = items[i].groupID else {
+                tops.append(y)
+                y += step
+                i += 1
+                continue
+            }
+            var end = i
+            while end < items.count, items[end].groupID == gid { end += 1 }
+            let collapsed = items[i].groupCollapsed
+            let height = collapsed ? Self.verticalItemSize : Self.groupHeaderHeight
+            let hiddenActivity = collapsed && (i..<end).contains { $0 != selectedIndex && items[$0].hasActivity }
+            headers.append(
+                GroupHeader(
+                    id: gid, name: items[i].groupName ?? "", collapsed: collapsed, members: i..<end,
+                    top: y, height: height, hiddenActivity: hiddenActivity))
+            y += height + Self.verticalItemGap
+            for k in i..<end {
+                tops.append(y)
+                if collapsed && k != selectedIndex {
+                    hidden.insert(k)
+                } else {
+                    y += step
+                }
+            }
+            if end < items.count { y += Self.groupTrailingGap }
+            i = end
+        }
+        rowTops = tops
+        hiddenRows = hidden
+        groupHeaders = headers
+        verticalContentHeight = y
+    }
+
+    /// Frame of a group header in view coordinates (scroll applied).
+    func groupHeaderRect(_ header: GroupHeader) -> CGRect {
+        CGRect(
+            x: verticalPillX, y: header.top - verticalScrollOffset, width: verticalPillWidth,
+            height: header.height)
+    }
+
+    private func hitTestGroupHeader(at point: NSPoint) -> GroupHeader? {
+        if verticalPlusRect.contains(point) || point.y > verticalScrollViewportHeight { return nil }
+        for header in groupHeaders {
+            let r = groupHeaderRect(header)
+            let strip = CGRect(x: verticalStripX, y: r.minY, width: Self.verticalWidth, height: r.height)
+            if strip.contains(point) { return header }
+        }
+        return nil
+    }
+
+    private func drawGroupHeaders(_ ctx: CGContext, theme: TerminalTheme, islandBorder: NSColor) {
+        for header in groupHeaders {
+            let rect = groupHeaderRect(header)
+            if rect.maxY < 0 || rect.minY > verticalScrollViewportHeight { continue }
+            if header.collapsed {
+                // A folder-like pill: dashed island border, group initials, member count.
+                WorkspacePillStyle.fill(
+                    ctx, rect: rect, active: false, hovered: false, wsColor: nil, neutral: theme.chromeMuted)
+                ctx.saveGState()
+                ctx.setLineDash(phase: 0, lengths: [2, 2])
+                WorkspacePillStyle.strokeIslandBorder(ctx, rect: rect, wsColor: nil, neutral: islandBorder)
+                ctx.restoreGState()
+                let label = String(header.name.prefix(2)).uppercased() as NSString
+                let attrs: [NSAttributedString.Key: Any] = [
+                    .font: Self.pillLabelRegular, .foregroundColor: theme.chromeMuted
+                ]
+                let size = label.size(withAttributes: attrs)
+                label.draw(
+                    at: NSPoint(x: rect.midX - size.width / 2, y: rect.midY - size.height / 2 - 2),
+                    withAttributes: attrs)
+                let count = "\(header.members.count)" as NSString
+                let countAttrs: [NSAttributedString.Key: Any] = [
+                    .font: Self.groupCountFont, .foregroundColor: theme.chromeMuted.withAlphaComponent(0.8)
+                ]
+                let countSize = count.size(withAttributes: countAttrs)
+                count.draw(
+                    at: NSPoint(x: rect.midX - countSize.width / 2, y: rect.maxY - countSize.height - 1),
+                    withAttributes: countAttrs)
+                WorkspacePillStyle.drawStatus(
+                    ctx, rect: rect, hasActivity: header.hiddenActivity, progress: nil, theme: theme, inset: 4)
+            } else {
+                // A short uppercase label between two hairlines, like a section rule.
+                let label = String(header.name.prefix(4)).uppercased() as NSString
+                let attrs: [NSAttributedString.Key: Any] = [
+                    .font: Self.groupLabelFont, .foregroundColor: theme.chromeMuted
+                ]
+                let size = label.size(withAttributes: attrs)
+                let textW = min(size.width, rect.width)
+                let textX = rect.midX - textW / 2
+                label.draw(
+                    in: CGRect(x: textX, y: rect.midY - size.height / 2, width: textW, height: size.height),
+                    withAttributes: attrs)
+                ctx.setFillColor(islandBorder.cgColor)
+                let lineY = rect.midY - 0.25
+                let gap: CGFloat = 2
+                if textX - gap > rect.minX {
+                    ctx.fill(CGRect(x: rect.minX, y: lineY, width: textX - gap - rect.minX, height: 0.5))
+                }
+                let rightStart = textX + textW + gap
+                if rightStart < rect.maxX {
+                    ctx.fill(CGRect(x: rightStart, y: lineY, width: rect.maxX - rightStart, height: 0.5))
+                }
+            }
+        }
     }
 
     override func draw(_ dirtyRect: NSRect) {
@@ -305,17 +459,27 @@ class WorkspaceBarView: NSView {
         ctx.clip(
             to: CGRect(x: 0, y: 0, width: bounds.width, height: verticalScrollViewportHeight))
 
+        drawGroupHeaders(ctx, theme: theme, islandBorder: islandBorder)
+
         for (i, item) in items.enumerated() {
             let isSelected = i == selectedIndex
             // The hovered workspace is painted separately, expanded, after this loop
             // so it floats above its neighbours instead of being overdrawn by them.
-            if i == hoveredIndex { continue }
+            if i == hoveredIndex || hiddenRows.contains(i) { continue }
             let wsColor = item.resolvedColor
 
             let pillRect = verticalItemRect(at: i)
             // Skip pills scrolled out of the stack's viewport — nothing to paint, and
             // it keeps the cost flat as the workspace count grows.
             if pillRect.maxY < 0 || pillRect.minY > verticalScrollViewportHeight { continue }
+
+            // The dragged pill stays as a faint placeholder; the ghost carries it.
+            let isLifted = isDragging && dragSourceIndex == i
+            if isLifted {
+                ctx.saveGState()
+                ctx.setAlpha(0.3)
+            }
+            defer { if isLifted { ctx.restoreGState() } }
 
             // Identical fill + accent border as the top bar, via the shared
             // WorkspacePillStyle. Only the square geometry differs here.
@@ -544,6 +708,10 @@ class WorkspaceBarView: NSView {
 
     override func mouseDown(with event: NSEvent) {
         let startPoint = convert(event.locationInWindow, from: nil)
+        if let header = hitTestGroupHeader(at: startPoint) {
+            delegate?.workspaceBar(self, toggleGroup: header.id)
+            return
+        }
         let hitIdx = hitTestItemIndex(at: startPoint)
 
         // If click is not on any item, check for plus button or start a window drag
@@ -609,24 +777,20 @@ class WorkspaceBarView: NSView {
     // MARK: - Ghost Drag System
 
     private func createGhostWindow(for index: Int, event: NSEvent) {
+        guard let window else { return }
         let item = items[index]
-        let ghostSize: CGFloat = 36
-        let ghostWidth = ghostSize
-        let ghostHeight = ghostSize
-        let ghostView = NSView(frame: NSRect(x: 0, y: 0, width: ghostWidth, height: ghostHeight))
-        // Same rounding treatment as every other island, via the shared helper so the
-        // ghost picks up `cornerCurve = .continuous` instead of a bare corner radius.
-        IslandMetrics.round(ghostView, radius: IslandMetrics.innerRadius)
-        ghostView.layer?.backgroundColor = AppSettings.shared.theme.dragGhostBg.cgColor
-
-        let label = NSTextField(labelWithString: String(item.name.prefix(2)).uppercased())
-        label.font = NSFont.systemFont(ofSize: 11, weight: .semibold)
-        label.textColor = NSColor.labelColor
-        label.alignment = .center
-        label.frame = NSRect(x: 0, y: (ghostHeight - 16) / 2, width: ghostWidth, height: 16)
-        ghostView.addSubview(label)
-
-        ghostWindow = DragGhostWindow(content: ghostView, center: DragGhostWindow.screenPoint(of: event))
+        let rect = verticalItemRect(at: index)
+        let active = index == selectedIndex
+        let ghost = WorkspaceDragGhostView(
+            size: rect.size, label: String(item.name.prefix(2)).uppercased(),
+            font: active ? Self.pillLabelSelected : Self.pillLabelRegular, centered: true,
+            wsColor: item.resolvedColor, active: active)
+        ghostWindow = DragGhostWindow(
+            content: ghost, sourceFrame: window.convertToScreen(convert(rect, to: nil)),
+            cursor: DragGhostWindow.screenPoint(of: event), alpha: 0.95)
+        // The expanded hover pill would cover the faded placeholder.
+        hoveredIndex = -1
+        needsDisplay = true
     }
 
     private func handleDragMove(_ event: NSEvent) {
@@ -657,10 +821,16 @@ class WorkspaceBarView: NSView {
         let windowPoint = myWindow.convertPoint(fromScreen: screenPoint)
         let point = convert(windowPoint, from: nil)
 
-        let step = Self.verticalItemSize + Self.verticalItemGap
-        // Point is in view space, so undo the scroll before mapping to an index.
+        // Point is in view space, so undo the scroll before mapping to an index:
+        // the first visible pill whose midpoint lies below the cursor.
         let contentY = point.y + verticalScrollOffset
-        let rawIdx = max(0, min(Int((contentY + Self.verticalItemGap / 2) / step), items.count))
+        var rawIdx = items.count
+        for i in items.indices where !hiddenRows.contains(i) {
+            if contentY < rowTops[i] + Self.verticalItemSize / 2 {
+                rawIdx = i
+                break
+            }
+        }
 
         let validIdx = validDropIndex(raw: rawIdx)
         if validIdx != dropTargetIndex {
@@ -687,7 +857,7 @@ class WorkspaceBarView: NSView {
     }
 
     private func cleanupDrag() {
-        ghostWindow?.orderOut(nil)
+        ghostWindow?.fadeOut()
         ghostWindow = nil
         isDragging = false
         dragSourceIndex = nil
@@ -699,7 +869,7 @@ class WorkspaceBarView: NSView {
     func workspacePillScreenFrames() -> [(index: Int, screenFrame: NSRect)] {
         guard let window = window else { return [] }
         var result: [(Int, NSRect)] = []
-        for (i, _) in items.enumerated() {
+        for (i, _) in items.enumerated() where !hiddenRows.contains(i) {
             let windowRect = convert(verticalItemRect(at: i), to: nil)
             result.append((i, window.convertToScreen(windowRect)))
         }
@@ -710,6 +880,14 @@ class WorkspaceBarView: NSView {
 
     override func rightMouseDown(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
+        if let header = hitTestGroupHeader(at: point) {
+            let entries = delegate?.workspaceBar(self, menuItemsForGroup: header.id) ?? []
+            guard !entries.isEmpty else { return }
+            let menu = NSMenu()
+            entries.forEach(menu.addItem)
+            NSMenu.popUpContextMenu(menu, with: event, for: self)
+            return
+        }
         guard let idx = hitTestItemIndex(at: point), idx >= 0, idx < items.count else { return }
         showContextMenu(at: idx, event: event)
     }
@@ -870,8 +1048,11 @@ class WorkspaceBarView: NSView {
         else {
             return
         }
-        let step = Self.verticalItemSize + Self.verticalItemGap
-        let top = CGFloat(selectedIndex) * step
+        var top = selectedIndex < rowTops.count ? rowTops[selectedIndex] : 0
+        // Bring the group header into view with its first member.
+        if let header = groupHeaders.first(where: { $0.members.first == selectedIndex }) {
+            top = header.top
+        }
         if top < verticalScrollOffset {
             verticalScrollOffset = top
         } else if top + Self.verticalItemSize > verticalScrollOffset + verticalScrollViewportHeight {
@@ -893,7 +1074,7 @@ class WorkspaceBarView: NSView {
         {
             return hoveredIndex
         }
-        for (i, _) in items.enumerated() {
+        for (i, _) in items.enumerated() where !hiddenRows.contains(i) {
             // Full strip width so the padding either side of the pill still hovers
             // the workspace it belongs to.
             let r = verticalItemRect(at: i)
@@ -912,7 +1093,7 @@ class WorkspaceBarView: NSView {
         // The pinned `+` overlays the bottom of the stack; it is handled by
         // `isPlusButtonHit` before we get here, so a pill behind it never matches.
         if verticalPlusRect.contains(point) { return }
-        for (i, item) in items.enumerated() {
+        for (i, item) in items.enumerated() where !hiddenRows.contains(i) {
             // The hovered workspace is expanded, so its click target is the wide pill
             // the user can actually see, not the resting strip footprint.
             let pillRect =
@@ -942,7 +1123,19 @@ extension WorkspaceBarView {
 
     override func accessibilityChildren() -> [Any]? {
         var elements: [Any] = []
-        for (index, item) in items.enumerated() {
+        for header in groupHeaders {
+            let state = header.collapsed ? "collapsed" : "expanded"
+            let id = header.id
+            elements.append(
+                AccessibleElement(
+                    parent: self, role: .button, label: "Group \(header.name), \(state)",
+                    localRect: groupHeaderRect(header)
+                ) { [weak self] in
+                    guard let self else { return }
+                    self.delegate?.workspaceBar(self, toggleGroup: id)
+                })
+        }
+        for (index, item) in items.enumerated() where !hiddenRows.contains(index) {
             let label = item.isPinned ? "Workspace \(item.name), pinned" : "Workspace \(item.name)"
             elements.append(
                 AccessibleElement(

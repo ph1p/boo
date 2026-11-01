@@ -126,6 +126,13 @@ extension ToolbarView {
             let wsColor = ws.resolvedColor
 
             let rect = CGRect(x: x, y: pillY, width: w, height: pillH)
+            // The dragged pill stays as a faint placeholder; the ghost carries it.
+            let isLifted = isDragging && dragSourceIndex == wsIndex
+            if isLifted {
+                ctx.saveGState()
+                ctx.setAlpha(0.3)
+            }
+            defer { if isLifted { ctx.restoreGState() } }
             WorkspacePillStyle.fill(
                 ctx, rect: rect, active: ws.isActive, hovered: isWSHovered,
                 wsColor: wsColor, neutral: theme.chromeMuted)
@@ -338,25 +345,17 @@ extension ToolbarView {
     }
 
     private func createWorkspaceGhostWindow(for index: Int, event: NSEvent) {
+        guard let rect = workspacePillRect(at: index), let window else { return }
         let ws = workspaces[index]
-        let ghostWidth = min(measureWorkspace(at: index) + 8, 140)
-        let ghostHeight = Self.workspacePillHeight
-
-        let ghostView = NSView(frame: NSRect(x: 0, y: 0, width: ghostWidth, height: ghostHeight))
-        ghostView.wantsLayer = true
-        ghostView.layer?.backgroundColor = AppSettings.shared.theme.dragGhostBg.cgColor
-        ghostView.layer?.cornerRadius = 6
-        ghostView.layer?.borderColor = NSColor.separatorColor.cgColor
-        ghostView.layer?.borderWidth = 1
-
-        let label = NSTextField(labelWithString: ws.name)
-        label.font = NSFont.systemFont(ofSize: 11, weight: .medium)
-        label.textColor = NSColor.labelColor
-        label.lineBreakMode = .byTruncatingTail
-        label.frame = NSRect(x: 6, y: 2, width: ghostWidth - 12, height: ghostHeight - 4)
-        ghostView.addSubview(label)
-
-        ghostWindow = DragGhostWindow(content: ghostView, center: DragGhostWindow.screenPoint(of: event))
+        let ghost = WorkspaceDragGhostView(
+            size: rect.size, label: ws.name, font: ws.isActive ? Fonts.ws11Medium : Fonts.ws11Regular,
+            centered: false, wsColor: ws.resolvedColor, active: ws.isActive)
+        ghostWindow = DragGhostWindow(
+            content: ghost, sourceFrame: window.convertToScreen(convert(rect, to: nil)),
+            cursor: DragGhostWindow.screenPoint(of: event), alpha: 0.95)
+        // No close button or hover fill on the faded placeholder.
+        hoveredWorkspaceIndex = -1
+        needsDisplay = true
     }
 
     private func handleWorkspaceDragMove(_ event: NSEvent) {
@@ -407,7 +406,7 @@ extension ToolbarView {
     }
 
     private func cleanupWorkspaceDrag() {
-        ghostWindow?.orderOut(nil)
+        ghostWindow?.fadeOut()
         ghostWindow = nil
         isDragging = false
         dragSourceIndex = nil

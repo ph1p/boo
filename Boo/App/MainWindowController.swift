@@ -712,6 +712,11 @@ class ThemedSplitView: NSSplitView {
                     }
                 }
 
+                // Group changes reorder this window via the refresh's clustering pass.
+                if topic == .workspaceGroups {
+                    self.refreshToolbar()
+                }
+
                 // Status bar changes
                 if topic == nil || topic == .statusBar {
                     self.statusBar.needsDisplay = true

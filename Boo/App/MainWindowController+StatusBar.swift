@@ -19,6 +19,9 @@ extension MainWindowController {
     }
 
     @objc private func _doRefreshToolbar() {
+        // Every path that adds or moves a workspace ends up here, so this keeps
+        // group members next to each other no matter how they got out of order.
+        if clusterWorkspaceGroups() { saveSession() }
         let wsItems = appState.workspaces.enumerated().map { (i, ws) in
             ToolbarView.WorkspaceItem(
                 name: ws.displayName, isActive: i == appState.activeWorkspaceIndex, resolvedColor: ws.resolvedColor,
@@ -28,11 +31,15 @@ extension MainWindowController {
         }
         toolbar.update(workspaces: wsItems, sidebarVisible: sidebarVisible)
         if let sideBar = sideWorkspaceBar {
+            let groups = AppSettings.shared.workspaceGroups
             let barItems = zip(appState.workspaces, wsItems).map { ws, top in
-                WorkspaceBarView.Item(
+                // Pinned workspaces stay in the pinned section, outside any group.
+                let group = ws.isPinned ? nil : groups.group(forPath: ws.folderPath)
+                return WorkspaceBarView.Item(
                     name: ws.displayName, path: ws.folderPath, isPinned: ws.isPinned, color: ws.color,
                     hasCustomColor: ws.customColor != nil, resolvedColor: ws.resolvedColor,
-                    hasActivity: top.hasActivity, progress: top.progress)
+                    hasActivity: top.hasActivity, progress: top.progress, groupID: group?.id,
+                    groupName: group?.name, groupCollapsed: group?.isCollapsed ?? false)
             }
             sideBar.setItems(barItems, selectedIndex: appState.activeWorkspaceIndex)
         }

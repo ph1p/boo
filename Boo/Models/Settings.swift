@@ -324,6 +324,45 @@ enum SettingsTopic: String, CaseIterable {
     case sync  // sync folder
     case agents  // agent budgets
     case shortcuts  // menu shortcut overrides
+    case workspaceGroups  // named, collapsible groups of workspaces
+}
+
+/// A named, collapsible group of workspaces. App-wide: every window shows the
+/// same groups. Members are workspace folder paths, the identity that survives
+/// restarts and moving a workspace between windows.
+struct WorkspaceGroup: Equatable {
+    var id = UUID().uuidString
+    var name: String
+    var isCollapsed = false
+    var members: [String] = []
+
+    /// Plist/JSON-safe form, so the value round-trips through UserDefaults and settings.json.
+    var dictionary: [String: Any] {
+        ["id": id, "name": name, "collapsed": isCollapsed, "members": members]
+    }
+}
+
+extension WorkspaceGroup {
+    init?(dictionary d: [String: Any]) {
+        guard let id = d["id"] as? String, let name = d["name"] as? String else { return nil }
+        self.init(
+            id: id, name: name, isCollapsed: d["collapsed"] as? Bool ?? false,
+            members: d["members"] as? [String] ?? [])
+    }
+}
+
+extension [WorkspaceGroup] {
+    /// The group a workspace folder belongs to, if any.
+    func group(forPath path: String) -> WorkspaceGroup? {
+        first { $0.members.contains(path) }
+    }
+
+    /// Folder path -> group id, for lookups inside loops.
+    var groupIDByPath: [String: String] {
+        var map: [String: String] = [:]
+        for group in self { for path in group.members where map[path] == nil { map[path] = group.id } }
+        return map
+    }
 }
 
 final class AppSettings {
@@ -404,6 +443,7 @@ final class AppSettings {
         static let sidebarGlobalState = "sidebarGlobalState"
         static let sidebarPerWorkspaceState = "sidebarPerWorkspaceState"
         static let autoColorWorkspaces = "autoColorWorkspaces"
+        static let workspaceGroups = "workspaceGroups"
         static let openWorkspaceEditorOnCreate = "openWorkspaceEditorOnCreate"
         static let openGroupEditorOnCreate = "openGroupEditorOnCreate"
         static let newTabsJoinActiveGroup = "newTabsJoinActiveGroup"
@@ -1139,6 +1179,80 @@ final class AppSettings {
         set { set(newValue, forKey: K.autoColorWorkspaces, topic: .layout) }
     }
 
+    // MARK: - Workspace groups
+
+    var workspaceGroups: [WorkspaceGroup] {
+        get {
+            let raw = UserDefaults.standard.array(forKey: K.workspaceGroups) as? [[String: Any]] ?? []
+            return raw.compactMap(WorkspaceGroup.init(dictionary:))
+        }
+        set {
+            // Drop groups that lost their last member: an empty group has nothing to show.
+            let kept = newValue.filter { !$0.members.isEmpty }
+            set(kept.map(\.dictionary), forKey: K.workspaceGroups, topic: .workspaceGroups)
+        }
+    }
+
+    /// The group a workspace folder belongs to, if any.
+    func workspaceGroup(forPath path: String) -> WorkspaceGroup? {
+        workspaceGroups.group(forPath: path)
+    }
+
+    func workspaceGroup(id: String) -> WorkspaceGroup? {
+        workspaceGroups.first { $0.id == id }
+    }
+
+    /// Read, mutate and write back the group list in one step.
+    private func updateWorkspaceGroups(_ body: (inout [WorkspaceGroup]) -> Void) {
+        var groups = workspaceGroups
+        body(&groups)
+        workspaceGroups = groups
+    }
+
+    /// Put a workspace folder into the group `id`, or into no group when nil.
+    /// A folder belongs to at most one group.
+    func assignWorkspace(path: String, toGroup id: String?) {
+        updateWorkspaceGroups { groups in
+            for i in groups.indices { groups[i].members.removeAll { $0 == path } }
+            if let id, let i = groups.firstIndex(where: { $0.id == id }) {
+                groups[i].members.append(path)
+            }
+        }
+    }
+
+    /// Create a group holding `path` and return its id (nil for a blank name).
+    @discardableResult
+    func createWorkspaceGroup(named name: String, with path: String) -> String? {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        let group = WorkspaceGroup(name: trimmed, members: [path])
+        updateWorkspaceGroups { groups in
+            for i in groups.indices { groups[i].members.removeAll { $0 == path } }
+            groups.append(group)
+        }
+        return group.id
+    }
+
+    func renameWorkspaceGroup(id: String, to name: String) {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        updateWorkspaceGroups { groups in
+            if let i = groups.firstIndex(where: { $0.id == id }) { groups[i].name = trimmed }
+        }
+    }
+
+    func setWorkspaceGroupCollapsed(id: String, _ collapsed: Bool) {
+        guard let group = workspaceGroup(id: id), group.isCollapsed != collapsed else { return }
+        updateWorkspaceGroups { groups in
+            if let i = groups.firstIndex(where: { $0.id == id }) { groups[i].isCollapsed = collapsed }
+        }
+    }
+
+    /// Remove the group; its workspaces stay open, just ungrouped.
+    func deleteWorkspaceGroup(id: String) {
+        updateWorkspaceGroups { $0.removeAll { $0.id == id } }
+    }
+
     /// When true, a workspace created from the + button or menu opens its
     /// name/color editor right away.
     var openWorkspaceEditorOnCreate: Bool {
@@ -1853,7 +1967,8 @@ final class AppSettings {
             K.notificationExpiryMinutes: notificationExpiryMinutes,
             K.restoreScrollback: restoreScrollback,
             K.tmuxIntegration: tmuxIntegration,
-            K.shortcutOverrides: shortcutOverrides
+            K.shortcutOverrides: shortcutOverrides,
+            K.workspaceGroups: workspaceGroups.map(\.dictionary)
         ]
         if let sshControlMasterApproved {
             dict[K.sshControlMasterApproved] = sshControlMasterApproved
