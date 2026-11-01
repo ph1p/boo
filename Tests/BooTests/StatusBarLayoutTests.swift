@@ -44,13 +44,6 @@ final class StatusBarLayoutTests: XCTestCase {
         XCTAssertEqual(toRight.right, ["path", "ports", "pane", "time"])
     }
 
-    func testMoveWithinSideClamps() {
-        XCTAssertEqual(StatusBarLayout.moving("path", by: -1, in: defaults).left, ["path", "env", "git"])
-        XCTAssertEqual(StatusBarLayout.moving("env", by: -1, in: defaults).left, ["env", "path", "git"])
-        XCTAssertEqual(StatusBarLayout.moving("pane", by: 5, in: defaults).right, ["ports", "time", "pane"])
-        XCTAssertEqual(StatusBarLayout.moving("missing", by: 1, in: defaults), defaults)
-    }
-
     func testDragOntoTarget() {
         // Downwards within a side lands after the target, upwards before it.
         XCTAssertEqual(StatusBarLayout.moving("env", onto: "path", in: defaults).left, ["path", "env", "git"])
@@ -64,10 +57,11 @@ final class StatusBarLayoutTests: XCTestCase {
     }
 
     func testDragToEndOfSide() {
-        let toRight = StatusBarLayout.moving("env", toEndOfLeft: false, in: defaults)
+        let toRight = StatusBarLayout.moving("env", toLeft: false, atEnd: true, in: defaults)
         XCTAssertEqual(toRight.left, ["path", "git"])
         XCTAssertEqual(toRight.right, ["ports", "pane", "time", "env"])
-        XCTAssertEqual(StatusBarLayout.moving("env", toEndOfLeft: true, in: defaults).left, ["path", "git", "env"])
+        XCTAssertEqual(
+            StatusBarLayout.moving("env", toLeft: true, atEnd: true, in: defaults).left, ["path", "git", "env"])
     }
 
     // MARK: - overflow

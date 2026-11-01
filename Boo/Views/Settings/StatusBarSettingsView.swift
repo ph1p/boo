@@ -39,7 +39,7 @@ struct StatusBarSettingsView: View {
                         .tracking(0.4)
                     Spacer()
                     Button("Reset Layout") { AppSettings.shared.resetStatusBarLayout() }
-                        .controlSize(.small)
+                        .buttonStyle(.themed)
                         .help("Restore the built-in order and sides. Visibility is kept.")
                 }
                 .padding(.horizontal, 2)
@@ -86,8 +86,6 @@ struct StatusBarSettingsView: View {
                     isOn: LayoutSettingsBindings.binding(\.statusBarSeparators)
                 )
             }
-
-            pluginSegmentsSection(t)
         }
     }
 
@@ -140,11 +138,7 @@ struct StatusBarSettingsView: View {
                     of: [.plainText],
                     delegate: SegmentDropDelegate(
                         dragging: $draggingID, current: current,
-                        move: { id, arrangement in
-                            let side = left ? arrangement.left : arrangement.right
-                            return side.last == id
-                                ? arrangement : StatusBarLayout.moving(id, toEndOfLeft: left, in: arrangement)
-                        }))
+                        move: { StatusBarLayout.moving($0, toLeft: left, atEnd: true, in: $1) }))
         }
         .padding(6)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -152,42 +146,6 @@ struct StatusBarSettingsView: View {
         .overlay(
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .strokeBorder(t.separator, lineWidth: 0.5))
-    }
-
-    // MARK: - Plugin Segments (dynamic)
-
-    @ViewBuilder
-    private func pluginSegmentsSection(_ t: Tokens) -> some View {
-        let manifests = PluginSettingsView.registeredManifests
-            .filter { $0.capabilities?.statusBarSegment == true }
-            .sorted { ($0.statusBar?.priority ?? 50) < ($1.statusBar?.priority ?? 50) }
-
-        if !manifests.isEmpty {
-            Section(title: "Plugin Segments") {
-                VStack(alignment: .leading, spacing: 14) {
-                    ForEach(manifests, id: \.id) { manifest in
-                        pluginSettingsRows(for: manifest, t: t)
-                    }
-                }
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func pluginSettingsRows(for manifest: PluginManifest, t: Tokens) -> some View {
-        let statusBarSettings = (manifest.settings ?? []).filter { $0.type == .bool }
-
-        PluginSegmentGroup(icon: manifest.icon, name: manifest.name) {
-            if statusBarSettings.isEmpty {
-                Text("Visible when active")
-                    .font(.system(size: 11))
-                    .foregroundStyle(t.muted)
-            } else {
-                ForEach(statusBarSettings, id: \.key) { setting in
-                    PluginStatusBarToggle(pluginID: manifest.id, setting: setting)
-                }
-            }
-        }
     }
 
     // MARK: - Preview
@@ -272,16 +230,14 @@ private struct SegmentRow: View {
 
     var body: some View {
         let t = tokens
-        let id = info.id
-        let hidden = isHidden
         HStack(spacing: 7) {
             Image(systemName: "line.3.horizontal")
                 .font(.system(size: 9, weight: .semibold))
                 .foregroundStyle(hovered ? t.textSecondary : t.textTertiary)
             Text(info.displayName)
                 .font(.system(size: 12))
-                .foregroundStyle(hidden ? t.textTertiary : t.text)
-                .strikethrough(hidden, color: t.textTertiary)
+                .foregroundStyle(isHidden ? t.textTertiary : t.text)
+                .strikethrough(isHidden, color: t.textTertiary)
                 .lineLimit(1)
                 .truncationMode(.tail)
             if isMoved {
@@ -290,10 +246,10 @@ private struct SegmentRow: View {
             }
             Spacer(minLength: 4)
             IconButton(
-                systemName: hidden ? "eye.slash" : "eye", tint: hidden ? t.textTertiary : t.textSecondary, size: 10,
-                frame: 20, fillOpacity: 0, help: hidden ? "Show in the status bar" : "Hide from the status bar"
+                systemName: isHidden ? "eye.slash" : "eye", tint: isHidden ? t.textTertiary : t.textSecondary, size: 10,
+                frame: 20, fillOpacity: 0, help: isHidden ? "Show in the status bar" : "Hide from the status bar"
             ) {
-                AppSettings.shared.setStatusBarSegment(id, hidden: !hidden)
+                AppSettings.shared.setStatusBarSegment(info.id, hidden: !isHidden)
             }
         }
         .padding(.leading, 6)
@@ -331,25 +287,5 @@ private struct SegmentDropDelegate: DropDelegate {
     func performDrop(info: DropInfo) -> Bool {
         dragging = nil
         return true
-    }
-}
-
-// MARK: - Plugin Status Bar Toggle
-
-private struct PluginStatusBarToggle: View {
-    let pluginID: String
-    let setting: PluginManifest.SettingManifest
-    @ObservedObject private var observer = SettingsObserver(topics: [.theme, .statusBar, .plugins])
-
-    var body: some View {
-        let _ = observer.revision
-        let value = AppSettings.shared.pluginBool(
-            pluginID, setting.key, default: setting.defaultValue?.value as? Bool ?? false)
-        ToggleRow(
-            label: setting.label,
-            isOn: Binding(
-                get: { value },
-                set: { AppSettings.shared.setPluginSetting(pluginID, setting.key, $0, topic: .statusBar) }
-            ))
     }
 }

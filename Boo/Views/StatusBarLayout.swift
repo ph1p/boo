@@ -35,30 +35,20 @@ enum StatusBarLayout {
         return result
     }
 
-    /// Moves `id` to the other side: onto the inner end of the right group, or
-    /// the outer end of the left group, where it is easiest to spot.
-    static func moving(_ id: String, toLeft: Bool, in arrangement: Arrangement) -> Arrangement {
+    /// Moves `id` to one side. By default it lands on the inner end of the
+    /// right group, or the outer end of the left group, where it is easiest to
+    /// spot; `atEnd` puts it last on either side (a drop below the last row).
+    static func moving(_ id: String, toLeft: Bool, atEnd: Bool = false, in arrangement: Arrangement) -> Arrangement {
         var result = arrangement
         result.left.removeAll { $0 == id }
         result.right.removeAll { $0 == id }
         if toLeft {
             result.left.append(id)
+        } else if atEnd {
+            result.right.append(id)
         } else {
             result.right.insert(id, at: 0)
         }
-        return result
-    }
-
-    /// Moves `id` by `offset` places within its side; clamps at either end.
-    static func moving(_ id: String, by offset: Int, in arrangement: Arrangement) -> Arrangement {
-        func shift(_ list: inout [String]) -> Bool {
-            guard let i = list.firstIndex(of: id) else { return false }
-            list.remove(at: i)
-            list.insert(id, at: max(0, min(list.count, i + offset)))
-            return true
-        }
-        var result = arrangement
-        if !shift(&result.left) { _ = shift(&result.right) }
         return result
     }
 
@@ -82,15 +72,6 @@ enum StatusBarLayout {
             list.insert(id, at: downwards == true ? t + 1 : t)
         }
         if targetLeft { place(&result.left) } else { place(&result.right) }
-        return result
-    }
-
-    /// Drag-and-drop move to the end of one side (an empty side, or below its last row).
-    static func moving(_ id: String, toEndOfLeft left: Bool, in arrangement: Arrangement) -> Arrangement {
-        var result = arrangement
-        result.left.removeAll { $0 == id }
-        result.right.removeAll { $0 == id }
-        if left { result.left.append(id) } else { result.right.append(id) }
         return result
     }
 

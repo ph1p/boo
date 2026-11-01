@@ -771,35 +771,6 @@ struct ShortcutPill: View {
     }
 }
 
-// MARK: - Plugin Segment Group
-
-/// Plugin header + indented toggle list used in Status Bar plugin segments and similar nested groups.
-struct PluginSegmentGroup<Content: View>: View {
-    @Environment(\.tokens) private var tokens
-    let icon: String
-    let name: String
-    @ViewBuilder let content: () -> Content
-
-    var body: some View {
-        let t = tokens
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 6) {
-                Image(systemName: icon)
-                    .font(.system(size: 10))
-                    .foregroundStyle(t.accent)
-                    .frame(width: 14)
-                Text(name)
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(t.text)
-            }
-            VStack(alignment: .leading, spacing: 6) {
-                content()
-            }
-            .padding(.leading, 20)
-        }
-    }
-}
-
 // MARK: - Hosting View (no safe area)
 
 private class NoSafeAreaHostingView<Root: View>: NSHostingView<Root> {
