@@ -21,8 +21,6 @@ struct WorkspaceStripGroup {
     let trayMaxX: CGFloat
     let chipX: CGFloat
     let chipWidth: CGFloat
-    /// Members hidden by the collapse.
-    let hiddenCount: Int
     /// Unseen activity in a hidden member.
     let hiddenActivity: Bool
     let color: NSColor?
@@ -95,7 +93,6 @@ extension ToolbarView {
             let chipX = x
             let chipW = chipWidth(name: name, collapsed: collapsed, count: end - i)
             x += chipW + gap
-            var hiddenCount = 0
             var hiddenActivity = false
             for k in i..<end {
                 layout.pillX.append(x)
@@ -103,7 +100,6 @@ extension ToolbarView {
                 // current workspace never disappears from the bar.
                 if collapsed && !workspaces[k].isActive {
                     layout.hidden.insert(k)
-                    hiddenCount += 1
                     hiddenActivity = hiddenActivity || workspaces[k].hasActivity
                 } else {
                     x += measureWorkspace(at: k) + gap
@@ -113,7 +109,7 @@ extension ToolbarView {
             layout.groups.append(
                 WorkspaceStripGroup(
                     id: gid, name: name, collapsed: collapsed, members: i..<end, trayMinX: trayMinX,
-                    trayMaxX: x, chipX: chipX, chipWidth: chipW, hiddenCount: hiddenCount,
+                    trayMaxX: x, chipX: chipX, chipWidth: chipW,
                     hiddenActivity: hiddenActivity, color: first.groupColor))
             x += gap
             i = end
@@ -360,12 +356,8 @@ extension ToolbarView {
         }
         if didStartDrag {
             delegate?.toolbar(self, workspaceDragMovedOutsideTo: nil)
-            ghostWindow?.fadeOut()
-            ghostWindow = nil
-            isDragging = false
             draggedGroupID = nil
-            dropTargetIndex = nil
-            needsDisplay = true
+            cleanupWorkspaceDrag()
         }
         mouseDownLocation = nil
     }

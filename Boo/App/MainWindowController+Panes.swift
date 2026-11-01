@@ -1098,7 +1098,7 @@ extension MainWindowController {
                 if let views = workspacePaneViews.removeValue(forKey: sourceWorkspace.id) {
                     for (_, pv) in views { pv.stopAll() }
                 }
-                appState.removeWorkspace(at: idx)
+                destroyWorkspace(at: idx)
                 refreshToolbar()
             }
         } else if sourcePane.tabs.isEmpty {

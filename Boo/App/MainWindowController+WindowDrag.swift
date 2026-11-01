@@ -30,10 +30,14 @@ extension MainWindowController {
             appState.workspaces.count > 1, let frame = window?.frame
         else { return }
         guard let detached = detachWorkspace(at: index) else { return }
-        // `newWindow` puts the top-left corner 60pt left of and 12pt above the point.
+        WindowManager.shared.newWindow(adopting: detached, at: Self.cascadePoint(from: frame), size: frame.size)
+    }
+
+    /// Point for `newWindow` that cascades a new window from `frame`. `newWindow`
+    /// puts the top-left corner 60pt left of and 12pt above the point.
+    static func cascadePoint(from frame: NSRect) -> NSPoint {
         let cascade: CGFloat = 24
-        let point = NSPoint(x: frame.minX + 60 + cascade, y: frame.maxY - 12 - cascade)
-        WindowManager.shared.newWindow(adopting: detached, at: point, size: frame.size)
+        return NSPoint(x: frame.minX + 60 + cascade, y: frame.maxY - 12 - cascade)
     }
 
     @objc func moveWorkspaceToNewWindowAction(_ sender: Any?) {

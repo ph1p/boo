@@ -216,13 +216,12 @@ extension MainWindowController {
         if let above, above == below, above != own {
             AppSettings.shared.assignWorkspace(member: member, toGroup: above)
         } else if let own, above != own, below != own {
-            // Leave when the rest of the group is open here, or when this is its
-            // last member (the empty group then goes away). A member whose
-            // siblings live in another window has nothing here to stay next to,
-            // so it keeps its group.
+            // Leave the group, unless all its other members live in another
+            // window: then there is nothing here to stay next to. A last member
+            // leaves too, and the empty group goes away.
             let othersHere = ids.indices.contains { $0 != i && ids[$0] == own }
-            let isLastMember = AppSettings.shared.workspaceGroup(id: own)?.members == [member]
-            if othersHere || isLastMember { AppSettings.shared.assignWorkspace(member: member, toGroup: nil) }
+            let othersAnywhere = AppSettings.shared.workspaceGroup(id: own)?.members.contains { $0 != member } ?? false
+            if othersHere || !othersAnywhere { AppSettings.shared.assignWorkspace(member: member, toGroup: nil) }
         }
     }
 
@@ -258,11 +257,8 @@ extension MainWindowController {
 
     func moveWorkspaceGroupToNewWindow(_ groupID: String) {
         guard canMoveWorkspaceGroupToNewWindow(groupID), let frame = window?.frame else { return }
-        // Same cascade as `moveWorkspaceToNewWindow`.
-        let cascade: CGFloat = 24
-        let point = NSPoint(x: frame.minX + 60 + cascade, y: frame.maxY - 12 - cascade)
         let (detached, activeIndex) = detachWorkspaceGroup(groupID)
-        adoptInNewWindow(detached, activeIndex: activeIndex, at: point, size: frame.size)
+        adoptInNewWindow(detached, activeIndex: activeIndex, at: Self.cascadePoint(from: frame), size: frame.size)
     }
 
     /// A group header was dropped outside this window: move the whole group into

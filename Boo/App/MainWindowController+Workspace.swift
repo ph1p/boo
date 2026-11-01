@@ -333,9 +333,7 @@ extension MainWindowController {
                 pv.stopAll()
             }
         }
-        appState.removeWorkspace(at: index)
-        // A closed workspace's id never comes back, so its group slot goes with it.
-        AppSettings.shared.removeWorkspacesFromGroups([ws.id.uuidString])
+        destroyWorkspace(at: index)
         if appState.workspaces.isEmpty {
             saveSession()
             window?.close()
@@ -655,5 +653,17 @@ extension MainWindowController {
             self.updatePaneCloseButtons()
             if let w = self.window { TrafficLightPositioner.apply(to: w) }
         }
+    }
+}
+
+extension MainWindowController {
+    /// Removes a workspace for good (closed, or emptied by dragging its last tab
+    /// away). Its id never comes back, so its group slot goes with it; moving a
+    /// workspace to another window keeps the id and must not come through here.
+    func destroyWorkspace(at index: Int) {
+        guard appState.workspaces.indices.contains(index) else { return }
+        let id = appState.workspaces[index].id
+        appState.removeWorkspace(at: index)
+        AppSettings.shared.removeWorkspacesFromGroups([id.uuidString])
     }
 }

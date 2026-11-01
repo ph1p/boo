@@ -382,7 +382,7 @@ extension ToolbarView {
         }
     }
 
-    private func cleanupWorkspaceDrag() {
+    func cleanupWorkspaceDrag() {
         ghostWindow?.fadeOut()
         ghostWindow = nil
         isDragging = false

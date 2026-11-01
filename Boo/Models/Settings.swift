@@ -1217,10 +1217,13 @@ final class AppSettings {
     }
 
     /// Read, mutate and write back the group list in one step.
+    /// Applies `body` and saves only when it changed something, so callers need
+    /// no "already like that" guard of their own.
     private func updateWorkspaceGroups(_ body: (inout [WorkspaceGroup]) -> Void) {
-        var groups = workspaceGroups
+        let current = workspaceGroups
+        var groups = current
         body(&groups)
-        workspaceGroups = groups
+        if groups != current { workspaceGroups = groups }
     }
 
     /// Put a workspace into the group `id`, or into no group when nil.
@@ -1236,7 +1239,6 @@ final class AppSettings {
 
     /// Drop closed workspaces from their groups (a group left empty goes too).
     func removeWorkspacesFromGroups(_ members: Set<String>) {
-        guard workspaceGroups.contains(where: { !members.isDisjoint(with: $0.members) }) else { return }
         updateWorkspaceGroups { groups in
             for i in groups.indices { groups[i].members.removeAll { members.contains($0) } }
         }
@@ -1259,9 +1261,10 @@ final class AppSettings {
     /// "Group", "Group 2", … — the first default name no existing group uses.
     func nextWorkspaceGroupName() -> String {
         let taken = Set(workspaceGroups.map(\.name))
+        func name(_ n: Int) -> String { n == 1 ? "Group" : "Group \(n)" }
         var n = 1
-        while taken.contains(n == 1 ? "Group" : "Group \(n)") { n += 1 }
-        return n == 1 ? "Group" : "Group \(n)"
+        while taken.contains(name(n)) { n += 1 }
+        return name(n)
     }
 
     func renameWorkspaceGroup(id: String, to name: String) {
@@ -1281,7 +1284,6 @@ final class AppSettings {
 
     /// Picking a preset clears any custom color.
     func setWorkspaceGroupColor(id: String, _ color: WorkspaceColor) {
-        guard let group = workspaceGroup(id: id), group.color != color || group.customColorHex != nil else { return }
         updateWorkspaceGroups { groups in
             guard let i = groups.firstIndex(where: { $0.id == id }) else { return }
             groups[i].color = color
@@ -1291,7 +1293,6 @@ final class AppSettings {
 
     func setWorkspaceGroupCustomColor(id: String, _ color: NSColor) {
         let hex = color.hexString
-        guard let group = workspaceGroup(id: id), group.customColorHex != hex else { return }
         updateWorkspaceGroups { groups in
             if let i = groups.firstIndex(where: { $0.id == id }) { groups[i].customColorHex = hex }
         }
