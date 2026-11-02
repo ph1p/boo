@@ -255,7 +255,8 @@ extension ToolbarView {
         x += chevronSize + 5
 
         let countWidth =
-            group.collapsed ? WorkspacePillStyle.groupCountBadgeWidth(group.members.count, font: Self.groupCountFont) : 0
+            group.collapsed
+            ? WorkspacePillStyle.groupCountBadgeWidth(group.members.count, font: Self.groupCountFont) : 0
 
         let para = NSMutableParagraphStyle()
         para.lineBreakMode = .byTruncatingTail
