@@ -107,6 +107,99 @@ enum WorkspacePillStyle {
         fillRoundedRect(ctx, rect: rect)
     }
 
+    /// Corner radius of a workspace group tray: a step rounder than the pills it holds.
+    static let groupTrayRadius: CGFloat = cornerRadius + 3
+    /// Space between a group tray's edge and the header / pills inside it.
+    static let groupTrayPadding: CGFloat = 3
+
+    /// Colour of a group's header text and chevron: the group colour (or muted
+    /// chrome), brightened while the header is hovered.
+    static func groupTint(color: NSColor?, hovered: Bool, theme: TerminalTheme) -> NSColor {
+        (color ?? theme.chromeMuted).withAlphaComponent(hovered ? 1 : 0.85)
+    }
+
+    /// Soft fill behind a hovered group header.
+    static func fillGroupHeaderHover(
+        _ ctx: CGContext, rect: CGRect, radius: CGFloat = cornerRadius, theme: TerminalTheme
+    ) {
+        ctx.setFillColor(theme.chromeMuted.withAlphaComponent(0.14).cgColor)
+        fillRoundedRect(ctx, rect: rect, radius: radius)
+    }
+
+    /// Width of a collapsed group's member-count badge for `count` in `font`.
+    static func groupCountBadgeWidth(_ count: Int, font: NSFont) -> CGFloat {
+        ("\(count)" as NSString).size(withAttributes: [.font: font]).width + 8
+    }
+
+    /// Member count of a collapsed group in a small capsule, like a badge on a
+    /// folder. Brighter when a hidden member has unseen activity.
+    static func drawGroupCountBadge(
+        _ ctx: CGContext, count: Int, center: CGPoint, height: CGFloat, font: NSFont, hiddenActivity: Bool,
+        theme: TerminalTheme
+    ) {
+        let width = groupCountBadgeWidth(count, font: font)
+        let badge = CGRect(x: center.x - width / 2, y: center.y - height / 2, width: width, height: height)
+        ctx.setFillColor(theme.chromeMuted.withAlphaComponent(hiddenActivity ? 0.32 : 0.16).cgColor)
+        fillRoundedRect(ctx, rect: badge, radius: height / 2)
+        let text = "\(count)" as NSString
+        let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: theme.chromeMuted]
+        let size = text.size(withAttributes: attrs)
+        text.draw(at: NSPoint(x: badge.midX - size.width / 2, y: badge.midY - size.height / 2), withAttributes: attrs)
+    }
+
+    /// The tinted container drawn behind a workspace group's header and members.
+    /// Shared by the top bar and the side strips so a group reads the same on every
+    /// surface. `highlighted` marks it as the target of a drop.
+    static func drawGroupTray(
+        _ ctx: CGContext, rect: CGRect, color: NSColor?, highlighted: Bool, theme: TerminalTheme
+    ) {
+        let tint = color ?? theme.chromeMuted
+        let fillAlpha: CGFloat = color == nil ? 0.07 : 0.14
+        ctx.setFillColor(tint.withAlphaComponent(highlighted ? fillAlpha + 0.09 : fillAlpha).cgColor)
+        fillRoundedRect(ctx, rect: rect, radius: groupTrayRadius)
+        let stroke = highlighted ? theme.accentColor : tint.withAlphaComponent(color == nil ? 0.22 : 0.5)
+        ctx.setStrokeColor(stroke.cgColor)
+        ctx.setLineWidth(highlighted ? 1.5 : IslandMetrics.borderWidth)
+        ctx.addPath(
+            CGPath(
+                roundedRect: rect.insetBy(dx: 0.5, dy: 0.5), cornerWidth: groupTrayRadius,
+                cornerHeight: groupTrayRadius, transform: nil))
+        ctx.strokePath()
+    }
+
+    private static func chevron(_ name: String) -> NSImage? {
+        guard let img = NSImage(systemSymbolName: name, accessibilityDescription: nil) else { return nil }
+        let sized = img.withSymbolConfiguration(.init(pointSize: 7, weight: .bold)) ?? img
+        sized.isTemplate = true
+        return sized
+    }
+    nonisolated(unsafe) private static let chevronDown = chevron("chevron.down")
+    nonisolated(unsafe) private static let chevronRight = chevron("chevron.right")
+
+    /// Tinted chevrons by (collapsed, colour, size). Tints come from a small set —
+    /// group colours or muted chrome at two alphas — so the cache stays tiny and a
+    /// redraw doesn't build a fresh offscreen image per header.
+    nonisolated(unsafe) private static var tintedChevrons: [String: NSImage] = [:]
+
+    /// Group disclosure chevron (down when expanded, right when collapsed), tinted `color`.
+    static func drawGroupChevron(collapsed: Bool, in rect: CGRect, color: NSColor) {
+        guard let icon = collapsed ? chevronRight : chevronDown else { return }
+        let key = "\(collapsed)|\(color)|\(rect.width)x\(rect.height)"
+        let tinted: NSImage
+        if let cached = tintedChevrons[key] {
+            tinted = cached
+        } else {
+            tinted = NSImage(size: rect.size, flipped: false) { r in
+                color.set()
+                icon.draw(in: r, from: .zero, operation: .sourceOver, fraction: 1)
+                r.fill(using: .sourceAtop)
+                return true
+            }
+            tintedChevrons[key] = tinted
+        }
+        tinted.draw(in: rect)
+    }
+
     /// Accent ring just outside `rect`: marks the pill or group a dragged workspace would stack into.
     static func strokeDropRing(_ ctx: CGContext, around rect: CGRect, theme: TerminalTheme) {
         let ring = rect.insetBy(dx: -2.5, dy: -2.5)

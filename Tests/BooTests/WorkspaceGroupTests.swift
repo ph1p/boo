@@ -189,15 +189,21 @@ import XCTest
         XCTAssertFalse(header.collapsed)
         XCTAssertGreaterThanOrEqual(bar.verticalItemRect(at: 1).minY, bar.groupHeaderRect(header).maxY)
         XCTAssertTrue(bar.hiddenRows.isEmpty)
+        // The tray wraps the header and both members, with padding to spare.
+        let tray = bar.groupTrayRect(header)
+        XCTAssertLessThan(tray.minY, bar.groupHeaderRect(header).minY)
+        XCTAssertGreaterThan(tray.maxY, bar.verticalItemRect(at: 2).maxY)
+        XCTAssertLessThan(tray.maxY, bar.verticalItemRect(at: 3).minY)
     }
 
     func testCollapsedGroupHidesMembersExceptSelected() {
         let items = [item("a"), item("b", group: "x", collapsed: true), item("c", group: "x", collapsed: true)]
         let collapsedNoneSelected = makeBar(items, selected: 0)
         XCTAssertEqual(collapsedNoneSelected.hiddenRows, [1, 2])
-        // One row for "a", one folder pill for the group.
+        // One row for "a", one folder pill for the group inside its padded tray.
         let step = WorkspaceBarView.verticalItemSize + WorkspaceBarView.verticalItemGap
-        XCTAssertEqual(collapsedNoneSelected.verticalContentHeight, 2 * step)
+        XCTAssertEqual(
+            collapsedNoneSelected.verticalContentHeight, 2 * step + 2 * WorkspacePillStyle.groupTrayPadding)
 
         let selectedInside = makeBar(items, selected: 2)
         XCTAssertEqual(selectedInside.hiddenRows, [1])

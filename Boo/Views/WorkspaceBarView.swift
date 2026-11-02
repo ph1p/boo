@@ -71,9 +71,11 @@ class WorkspaceBarView: NSView {
         var groupColor: NSColor? = nil
     }
 
-    /// One workspace group as laid out in the strip. `top`/`height` are in content
-    /// space (before the scroll offset). An expanded group gets a thin labelled
-    /// header row; a collapsed one is drawn as a single pill-sized folder.
+    /// One workspace group as laid out in the strip. `top`/`height` (the header) and
+    /// `trayHeight` (the tinted container around header and visible members, starting
+    /// `groupTrayPadding` above the header) are in content space, before the scroll offset. An expanded group
+    /// gets a short chevron + name header row; a collapsed one is drawn as a single
+    /// pill-sized folder.
     struct GroupHeader {
         let id: String
         let name: String
@@ -81,6 +83,7 @@ class WorkspaceBarView: NSView {
         let members: Range<Int>
         let top: CGFloat
         let height: CGFloat
+        let trayHeight: CGFloat
         /// Unseen activity in a member hidden by the collapse.
         let hiddenActivity: Bool
         /// User-picked group color, nil for the neutral default.
@@ -94,11 +97,10 @@ class WorkspaceBarView: NSView {
     private(set) var hiddenRows: Set<Int> = []
     private(set) var groupHeaders: [GroupHeader] = []
 
-    /// Height of an expanded group's label row, and the extra space after a group.
-    static let groupHeaderHeight: CGFloat = 12
-    static let groupTrailingGap: CGFloat = 4
-    nonisolated(unsafe) static let groupLabelFont = NSFont.systemFont(ofSize: 8, weight: .semibold)
-    nonisolated(unsafe) static let groupCountFont = NSFont.monospacedDigitSystemFont(ofSize: 8, weight: .medium)
+    /// Height of an expanded group's header row (chevron + short name).
+    static let groupHeaderHeight: CGFloat = 16
+    nonisolated(unsafe) static let groupLabelFont = NSFont.systemFont(ofSize: 8.5, weight: .semibold)
+    nonisolated(unsafe) static let groupCountFont = NSFont.monospacedDigitSystemFont(ofSize: 8, weight: .semibold)
 
     private(set) var items: [Item] = []
     private(set) var selectedIndex: Int = -1
@@ -119,6 +121,8 @@ class WorkspaceBarView: NSView {
 
     // Hover state
     var hoveredIndex: Int = -1
+    /// Group whose header (or collapsed folder) is under the cursor.
+    private(set) var hoveredGroupID: String?
     private var isPlusButtonHovered: Bool = false
     private var wsBarTrackingArea: NSTrackingArea?
 
@@ -337,8 +341,9 @@ class WorkspaceBarView: NSView {
         needsDisplay = true
     }
 
-    /// Lay out pills and group headers top to bottom. A collapsed group still
-    /// shows its selected member, so the active workspace never disappears.
+    /// Lay out pills and group headers top to bottom. Each group sits in a tray
+    /// padded `WorkspacePillStyle.groupTrayPadding` around its header and visible members. A collapsed
+    /// group still shows its selected member, so the active workspace never disappears.
     private func rebuildLayout() {
         let step = Self.verticalItemSize + Self.verticalItemGap
         var tops: [CGFloat] = []
@@ -359,10 +364,9 @@ class WorkspaceBarView: NSView {
             let collapsed = items[i].groupCollapsed
             let height = collapsed ? Self.verticalItemSize : Self.groupHeaderHeight
             let hiddenActivity = collapsed && (i..<end).contains { $0 != selectedIndex && items[$0].hasActivity }
-            headers.append(
-                GroupHeader(
-                    id: gid, name: items[i].groupName ?? "", collapsed: collapsed, members: i..<end,
-                    top: y, height: height, hiddenActivity: hiddenActivity, color: items[i].groupColor))
+            let pad = WorkspacePillStyle.groupTrayPadding
+            y += pad
+            let headerTop = y
             y += height + Self.verticalItemGap
             for k in i..<end {
                 tops.append(y)
@@ -372,7 +376,13 @@ class WorkspaceBarView: NSView {
                     y += step
                 }
             }
-            if end < items.count { y += Self.groupTrailingGap }
+            y += pad
+            let trayHeight = y - Self.verticalItemGap - (headerTop - pad)
+            headers.append(
+                GroupHeader(
+                    id: gid, name: items[i].groupName ?? "", collapsed: collapsed, members: i..<end,
+                    top: headerTop, height: height, trayHeight: trayHeight,
+                    hiddenActivity: hiddenActivity, color: items[i].groupColor))
             i = end
         }
         rowTops = tops
@@ -388,6 +398,14 @@ class WorkspaceBarView: NSView {
             height: header.height)
     }
 
+    /// Frame of a group's tray in view coordinates (scroll applied).
+    func groupTrayRect(_ header: GroupHeader) -> CGRect {
+        let pad = WorkspacePillStyle.groupTrayPadding
+        return CGRect(
+            x: verticalPillX - pad, y: header.top - pad - verticalScrollOffset,
+            width: verticalPillWidth + pad * 2, height: header.trayHeight)
+    }
+
     private func hitTestGroupHeader(at point: NSPoint) -> GroupHeader? {
         if verticalPlusRect.contains(point) || point.y > verticalScrollViewportHeight { return nil }
         for header in groupHeaders {
@@ -398,64 +416,70 @@ class WorkspaceBarView: NSView {
         return nil
     }
 
-    private func drawGroupHeaders(_ ctx: CGContext, theme: TerminalTheme, islandBorder: NSColor) {
+    /// Trays plus header rows (or collapsed folders), drawn under the pills.
+    private func drawGroupHeaders(_ ctx: CGContext, theme: TerminalTheme) {
         for header in groupHeaders {
+            let tray = groupTrayRect(header)
+            if tray.maxY < 0 || tray.minY > verticalScrollViewportHeight { continue }
             let rect = groupHeaderRect(header)
-            if rect.maxY < 0 || rect.minY > verticalScrollViewportHeight { continue }
             ctx.saveGState()
             defer { ctx.restoreGState() }
             if isDragging && draggedGroupID == header.id { ctx.setAlpha(0.3) }
-            let tint = header.color ?? theme.chromeMuted
+            let highlighted =
+                dropGroupID == header.id || dropStackIndex.map { header.members.contains($0) } == true
+            WorkspacePillStyle.drawGroupTray(
+                ctx, rect: tray, color: header.color, highlighted: highlighted, theme: theme)
+            let hovered = hoveredGroupID == header.id
+            let tint = WorkspacePillStyle.groupTint(color: header.color, hovered: hovered, theme: theme)
             if header.collapsed {
-                // A folder-like pill: dashed island border, group initials, member count.
-                WorkspacePillStyle.fill(
-                    ctx, rect: rect, active: false, hovered: false, wsColor: header.color, neutral: theme.chromeMuted)
-                ctx.saveGState()
-                ctx.setLineDash(phase: 0, lengths: [2, 2])
-                WorkspacePillStyle.strokeIslandBorder(ctx, rect: rect, wsColor: header.color, neutral: islandBorder)
-                ctx.restoreGState()
-                let label = String(header.name.prefix(2)).uppercased() as NSString
-                let attrs: [NSAttributedString.Key: Any] = [
-                    .font: Self.pillLabelRegular, .foregroundColor: tint
-                ]
-                let size = label.size(withAttributes: attrs)
-                label.draw(
-                    at: NSPoint(x: rect.midX - size.width / 2, y: rect.midY - size.height / 2 - 2),
-                    withAttributes: attrs)
-                let count = "\(header.members.count)" as NSString
-                let countAttrs: [NSAttributedString.Key: Any] = [
-                    .font: Self.groupCountFont, .foregroundColor: tint.withAlphaComponent(0.8)
-                ]
-                let countSize = count.size(withAttributes: countAttrs)
-                count.draw(
-                    at: NSPoint(x: rect.midX - countSize.width / 2, y: rect.maxY - countSize.height - 1),
-                    withAttributes: countAttrs)
-                WorkspacePillStyle.drawStatus(
-                    ctx, rect: rect, hasActivity: header.hiddenActivity, progress: nil, theme: theme, inset: 4)
+                drawCollapsedGroup(ctx, header, in: rect, tint: tint, hovered: hovered, theme: theme)
             } else {
-                // A short uppercase label between two hairlines, like a section rule.
-                let label = String(header.name.prefix(4)).uppercased() as NSString
-                let attrs: [NSAttributedString.Key: Any] = [
-                    .font: Self.groupLabelFont, .foregroundColor: tint
-                ]
-                let size = label.size(withAttributes: attrs)
-                let textW = min(size.width, rect.width)
-                let textX = rect.midX - textW / 2
-                label.draw(
-                    in: CGRect(x: textX, y: rect.midY - size.height / 2, width: textW, height: size.height),
-                    withAttributes: attrs)
-                ctx.setFillColor((header.color?.withAlphaComponent(0.6) ?? islandBorder).cgColor)
-                let lineY = rect.midY - 0.25
-                let gap: CGFloat = 2
-                if textX - gap > rect.minX {
-                    ctx.fill(CGRect(x: rect.minX, y: lineY, width: textX - gap - rect.minX, height: 0.5))
-                }
-                let rightStart = textX + textW + gap
-                if rightStart < rect.maxX {
-                    ctx.fill(CGRect(x: rightStart, y: lineY, width: rect.maxX - rightStart, height: 0.5))
-                }
+                drawGroupHeaderRow(ctx, header, in: rect, tint: tint, hovered: hovered, theme: theme)
             }
         }
+    }
+
+    /// Expanded group: chevron plus the first letters of the name, centred in the row.
+    private func drawGroupHeaderRow(
+        _ ctx: CGContext, _ header: GroupHeader, in rect: CGRect, tint: NSColor, hovered: Bool,
+        theme: TerminalTheme
+    ) {
+        if hovered {
+            WorkspacePillStyle.fillGroupHeaderHover(ctx, rect: rect, radius: rect.height / 2, theme: theme)
+        }
+        let chevron: CGFloat = 6
+        let gap: CGFloat = 2
+        let label = String(header.name.prefix(3)).uppercased() as NSString
+        let attrs: [NSAttributedString.Key: Any] = [.font: Self.groupLabelFont, .foregroundColor: tint]
+        let size = label.size(withAttributes: attrs)
+        let textW = min(size.width, rect.width - chevron - gap - 4)
+        let x = rect.midX - (chevron + gap + textW) / 2
+        WorkspacePillStyle.drawGroupChevron(
+            collapsed: false, in: CGRect(x: x, y: rect.midY - chevron / 2, width: chevron, height: chevron),
+            color: tint)
+        label.draw(
+            in: CGRect(x: x + chevron + gap, y: rect.midY - size.height / 2, width: textW, height: size.height),
+            withAttributes: attrs)
+    }
+
+    /// Collapsed group: a folder pill with the group's initials and a member-count badge.
+    private func drawCollapsedGroup(
+        _ ctx: CGContext, _ header: GroupHeader, in rect: CGRect, tint: NSColor, hovered: Bool,
+        theme: TerminalTheme
+    ) {
+        WorkspacePillStyle.fill(
+            ctx, rect: rect, active: false, hovered: hovered, wsColor: header.color, neutral: theme.chromeMuted)
+        let label = String(header.name.prefix(2)).uppercased() as NSString
+        let attrs: [NSAttributedString.Key: Any] = [.font: Self.pillLabelRegular, .foregroundColor: tint]
+        let size = label.size(withAttributes: attrs)
+        label.draw(
+            at: NSPoint(x: rect.midX - size.width / 2, y: rect.minY + 4), withAttributes: attrs)
+
+        WorkspacePillStyle.drawGroupCountBadge(
+            ctx, count: header.members.count, center: CGPoint(x: rect.midX, y: rect.maxY - 8), height: 10,
+            font: Self.groupCountFont, hiddenActivity: header.hiddenActivity, theme: theme)
+        WorkspacePillStyle.drawStatus(
+            ctx, rect: rect, hasActivity: header.hiddenActivity, progress: nil, theme: theme, inset: 4)
     }
 
     override func draw(_ dirtyRect: NSRect) {
@@ -484,7 +508,7 @@ class WorkspaceBarView: NSView {
         ctx.clip(
             to: CGRect(x: 0, y: 0, width: bounds.width, height: verticalScrollViewportHeight))
 
-        drawGroupHeaders(ctx, theme: theme, islandBorder: islandBorder)
+        drawGroupHeaders(ctx, theme: theme)
 
         for (i, item) in items.enumerated() {
             let isSelected = i == selectedIndex
@@ -569,26 +593,20 @@ class WorkspaceBarView: NSView {
 
         // Draw drop insertion indicator
         if let dropIdx = dropTargetIndex {
-            // At a group's first member the line sits above the group's header.
+            // At a group's first member the line sits above the group's tray.
             let header = groupHeaders.first { $0.members.lowerBound == dropIdx }
-            let indicatorY = (header.map { groupHeaderRect($0).minY } ?? verticalItemRect(at: dropIdx).minY) - 2
+            let indicatorY = (header.map { groupTrayRect($0).minY } ?? verticalItemRect(at: dropIdx).minY) - 3
             ctx.setFillColor(theme.accentColor.cgColor)
             ctx.fill(CGRect(x: verticalPillX, y: indicatorY, width: verticalPillWidth, height: 2))
         }
         drawStackHighlight(ctx, theme: theme)
     }
 
-    /// Accent ring around the stack target pill, or around the group header the drop would join.
+    /// Accent ring around an ungrouped stack-target pill. A grouped target, or a
+    /// group header the drop would join, highlights its whole tray instead.
     private func drawStackHighlight(_ ctx: CGContext, theme: TerminalTheme) {
-        let target: CGRect
-        if let gid = dropGroupID, let header = groupHeaders.first(where: { $0.id == gid }) {
-            target = groupHeaderRect(header)
-        } else if let idx = dropStackIndex {
-            target = verticalItemRect(at: idx)
-        } else {
-            return
-        }
-        WorkspacePillStyle.strokeDropRing(ctx, around: target, theme: theme)
+        guard let idx = dropStackIndex, items.indices.contains(idx), items[idx].groupID == nil else { return }
+        WorkspacePillStyle.strokeDropRing(ctx, around: verticalItemRect(at: idx), theme: theme)
     }
 
     /// Dissolve the clipped end of the pill stack into the window backdrop, the
@@ -1150,6 +1168,13 @@ class WorkspaceBarView: NSView {
     private func updateVerticalHover(at point: NSPoint) {
         let newHover = hitTestItemIndex(at: point) ?? -1
         let newPlusHover = isPlusButtonHit(at: point)
+        let newGroup = newHover >= 0 ? nil : hitTestGroupHeader(at: point)
+        if newGroup?.id != hoveredGroupID {
+            hoveredGroupID = newGroup?.id
+            // Only a few letters fit in the strip; the tooltip carries the full name.
+            toolTip = newGroup.map { "\($0.name) (\($0.members.count))" }
+            needsDisplay = true
+        }
         if newHover != hoveredIndex || newPlusHover != isPlusButtonHovered {
             hoveredIndex = newHover
             isPlusButtonHovered = newPlusHover
@@ -1165,6 +1190,11 @@ class WorkspaceBarView: NSView {
         }
         if isPlusButtonHovered {
             isPlusButtonHovered = false
+            changed = true
+        }
+        if hoveredGroupID != nil {
+            hoveredGroupID = nil
+            toolTip = nil
             changed = true
         }
         if changed { needsDisplay = true }

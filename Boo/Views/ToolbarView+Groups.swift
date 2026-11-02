@@ -36,23 +36,12 @@ struct WorkspaceStripLayout {
 }
 
 extension ToolbarView {
-    /// Padding between a group tray's edge and its chip / last pill.
-    static let groupTrayPadding: CGFloat = 3
     /// Tray height: a few points taller than a pill so it reads as a container.
     static let groupTrayHeight: CGFloat = workspacePillHeight + 6
     static let groupChipHeight: CGFloat = workspacePillHeight - 4
 
     nonisolated(unsafe) static let groupChipFont = NSFont.systemFont(ofSize: 10.5, weight: .semibold)
     nonisolated(unsafe) static let groupCountFont = NSFont.monospacedDigitSystemFont(ofSize: 9.5, weight: .medium)
-
-    private static func chevron(_ name: String) -> NSImage? {
-        guard let img = NSImage(systemSymbolName: name, accessibilityDescription: nil) else { return nil }
-        let sized = img.withSymbolConfiguration(.init(pointSize: 7, weight: .bold)) ?? img
-        sized.isTemplate = true
-        return sized
-    }
-    private static let chevronDown = chevron("chevron.down")
-    private static let chevronRight = chevron("chevron.right")
 
     var workspaceLayout: WorkspaceStripLayout {
         if let cached = _cachedLayout { return cached }
@@ -71,7 +60,7 @@ extension ToolbarView {
 
     private func buildWorkspaceLayout() -> WorkspaceStripLayout {
         let gap = Self.workspaceGap
-        let pad = Self.groupTrayPadding
+        let pad = WorkspacePillStyle.groupTrayPadding
         var layout = WorkspaceStripLayout()
         layout.pillX.reserveCapacity(workspaces.count)
         var x: CGFloat = 0
@@ -242,24 +231,12 @@ extension ToolbarView {
             ctx.saveGState()
             defer { ctx.restoreGState() }
             if lifted { ctx.setAlpha(0.3) }
-            let tint = group.color ?? theme.chromeMuted
-            let fillAlpha: CGFloat = group.color == nil ? 0.07 : 0.14
-            ctx.setFillColor(tint.withAlphaComponent(highlighted ? fillAlpha + 0.09 : fillAlpha).cgColor)
-            WorkspacePillStyle.fillRoundedRect(ctx, rect: tray, radius: WorkspacePillStyle.cornerRadius + 3)
-            let strokeColor = highlighted ? theme.accentColor : tint.withAlphaComponent(group.color == nil ? 0.22 : 0.5)
-            ctx.setStrokeColor(strokeColor.cgColor)
-            ctx.setLineWidth(highlighted ? 1.5 : IslandMetrics.borderWidth)
-            let radius = WorkspacePillStyle.cornerRadius + 3
-            ctx.addPath(
-                CGPath(
-                    roundedRect: tray.insetBy(dx: 0.5, dy: 0.5), cornerWidth: radius, cornerHeight: radius,
-                    transform: nil))
-            ctx.strokePath()
+            WorkspacePillStyle.drawGroupTray(
+                ctx, rect: tray, color: group.color, highlighted: highlighted, theme: theme)
 
             let chip = groupChipRect(group)
             if hoveredGroupID == group.id {
-                ctx.setFillColor(theme.chromeMuted.withAlphaComponent(0.14).cgColor)
-                WorkspacePillStyle.fillRoundedRect(ctx, rect: chip)
+                WorkspacePillStyle.fillGroupHeaderHover(ctx, rect: chip, theme: theme)
             }
             drawGroupChipContent(ctx, group, in: chip, theme: theme)
         }
@@ -268,28 +245,17 @@ extension ToolbarView {
     private func drawGroupChipContent(
         _ ctx: CGContext, _ group: WorkspaceStripGroup, in chip: CGRect, theme: TerminalTheme
     ) {
-        let color = (group.color ?? theme.chromeMuted).withAlphaComponent(hoveredGroupID == group.id ? 1 : 0.85)
+        let color = WorkspacePillStyle.groupTint(
+            color: group.color, hovered: hoveredGroupID == group.id, theme: theme)
         var x = chip.minX + 8
-        if let icon = group.collapsed ? Self.chevronRight : Self.chevronDown {
-            let size: CGFloat = 7
-            let iconRect = NSRect(x: x, y: chip.midY - size / 2, width: size, height: size)
-            let tinted = NSImage(size: iconRect.size, flipped: false) { r in
-                color.set()
-                icon.draw(in: r, from: .zero, operation: .sourceOver, fraction: 1)
-                r.fill(using: .sourceAtop)
-                return true
-            }
-            tinted.draw(in: iconRect)
-            x += size + 5
-        }
+        let chevronSize: CGFloat = 7
+        WorkspacePillStyle.drawGroupChevron(
+            collapsed: group.collapsed,
+            in: NSRect(x: x, y: chip.midY - chevronSize / 2, width: chevronSize, height: chevronSize), color: color)
+        x += chevronSize + 5
 
-        var countWidth: CGFloat = 0
-        var countAttrs: [NSAttributedString.Key: Any] = [:]
-        let count = "\(group.members.count)" as NSString
-        if group.collapsed {
-            countAttrs = [.font: Self.groupCountFont, .foregroundColor: theme.chromeMuted]
-            countWidth = count.size(withAttributes: countAttrs).width + 8
-        }
+        let countWidth =
+            group.collapsed ? WorkspacePillStyle.groupCountBadgeWidth(group.members.count, font: Self.groupCountFont) : 0
 
         let para = NSMutableParagraphStyle()
         para.lineBreakMode = .byTruncatingTail
@@ -302,14 +268,9 @@ extension ToolbarView {
             in: NSRect(x: x, y: chip.midY - nameH / 2, width: nameW, height: nameH), withAttributes: nameAttrs)
 
         guard group.collapsed else { return }
-        // Member count in a small capsule, like a badge on a folder.
-        let badge = CGRect(x: chip.maxX - 6 - countWidth, y: chip.midY - 7, width: countWidth, height: 14)
-        ctx.setFillColor(theme.chromeMuted.withAlphaComponent(group.hiddenActivity ? 0.32 : 0.16).cgColor)
-        WorkspacePillStyle.fillRoundedRect(ctx, rect: badge, radius: badge.height / 2)
-        let countSize = count.size(withAttributes: countAttrs)
-        count.draw(
-            at: NSPoint(x: badge.midX - countSize.width / 2, y: badge.midY - countSize.height / 2),
-            withAttributes: countAttrs)
+        WorkspacePillStyle.drawGroupCountBadge(
+            ctx, count: group.members.count, center: CGPoint(x: chip.maxX - 6 - countWidth / 2, y: chip.midY),
+            height: 14, font: Self.groupCountFont, hiddenActivity: group.hiddenActivity, theme: theme)
     }
 
     // MARK: Dragging a whole group
