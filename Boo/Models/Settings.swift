@@ -85,7 +85,7 @@ enum StatusBarClockFormat: Int, CaseIterable {
 
     /// One formatter per format, built once; the clock redraws often.
     /// DateFormatter is thread-safe for formatting.
-    nonisolated(unsafe) private static let formatters: [StatusBarClockFormat: DateFormatter] = Dictionary(
+    private static let formatters: [StatusBarClockFormat: DateFormatter] = Dictionary(
         uniqueKeysWithValues: allCases.map { format in
             let formatter = DateFormatter()
             formatter.dateFormat = format.dateFormat

@@ -143,7 +143,7 @@ enum NotesStore {
 
     // MARK: - Appending
 
-    nonisolated(unsafe) private static let stampFormatter: DateFormatter = {
+    private static let stampFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.dateFormat = "yyyy-MM-dd HH:mm"

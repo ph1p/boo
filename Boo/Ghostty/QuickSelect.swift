@@ -15,7 +15,7 @@ enum QuickSelect {
 
     /// Ordered by precedence: an earlier pattern wins an overlap, so a URL
     /// is never also offered as a path or hash.
-    nonisolated(unsafe) static let patterns: [NSRegularExpression] = [
+    static let patterns: [NSRegularExpression] = [
         #"\b(?:https?|ftp|file|ssh)://[^\s<>"'`]+[^\s<>"'`.,;:!?)\]}]"#,
         #"\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b"#,
         #"(?:~|\.{1,2})?(?:/[\w.@+-]+)+/?|\b[\w.@+-]+(?:/[\w.@+-]+)+/?"#,

@@ -173,8 +173,8 @@ enum WorkspacePillStyle {
         sized.isTemplate = true
         return sized
     }
-    nonisolated(unsafe) private static let chevronDown = chevron("chevron.down")
-    nonisolated(unsafe) private static let chevronRight = chevron("chevron.right")
+    private static let chevronDown = chevron("chevron.down")
+    private static let chevronRight = chevron("chevron.right")
 
     /// Tinted chevrons by (collapsed, colour, size). Tints come from a small set —
     /// group colours or muted chrome at two alphas — so the cache stays tiny and a
