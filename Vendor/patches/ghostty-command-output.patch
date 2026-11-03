@@ -1,8 +1,8 @@
 diff --git a/include/ghostty.h b/include/ghostty.h
-index 9a12b9cad..e5870d3e1 100644
+index 674d6d089..5d0c9c379 100644
 --- a/include/ghostty.h
 +++ b/include/ghostty.h
-@@ -455,6 +455,26 @@ typedef struct {
+@@ -471,6 +471,26 @@ typedef struct {
    uintptr_t text_len;
  } ghostty_text_s;
  
@@ -29,9 +29,9 @@ index 9a12b9cad..e5870d3e1 100644
  typedef enum {
    GHOSTTY_POINT_ACTIVE,
    GHOSTTY_POINT_VIEWPORT,
-@@ -1205,6 +1225,14 @@ GHOSTTY_API void ghostty_surface_text(ghostty_surface_t, const char*, uintptr_t)
+@@ -1221,6 +1241,14 @@ GHOSTTY_API void ghostty_surface_text(ghostty_surface_t, const char*, uintptr_t)
  GHOSTTY_API void ghostty_surface_paste_text(ghostty_surface_t, const char*, uintptr_t);
- GHOSTTY_API void ghostty_surface_preedit(ghostty_surface_t, const char*, uintptr_t);
+ GHOSTTY_API void ghostty_surface_preedit(ghostty_surface_t, const char* GHOSTTY_NULLABLE, uintptr_t);
  GHOSTTY_API bool ghostty_surface_mouse_captured(ghostty_surface_t);
 +GHOSTTY_API uintptr_t ghostty_surface_prompt_marks(ghostty_surface_t,
 +                                                   ghostty_prompt_mark_s*,
@@ -45,11 +45,11 @@ index 9a12b9cad..e5870d3e1 100644
                                                   ghostty_input_mouse_state_e,
                                                   ghostty_input_mouse_button_e,
 diff --git a/src/apprt/embedded.zig b/src/apprt/embedded.zig
-index 697f0a786..66f80ac4c 100644
+index 548169bc1..1cb8925fe 100644
 --- a/src/apprt/embedded.zig
 +++ b/src/apprt/embedded.zig
-@@ -2138,6 +2138,71 @@ pub const CAPI = struct {
-         surface.preeditCallback(if (len == 0) null else ptr[0..len]);
+@@ -2140,6 +2140,71 @@ pub const CAPI = struct {
+         surface.preeditCallback(if (len == 0) null else text[0..len]);
      }
  
 +    pub const PromptMark = extern struct {
@@ -121,10 +121,10 @@ index 697f0a786..66f80ac4c 100644
      /// enabled.
      export fn ghostty_surface_mouse_captured(surface: *Surface) bool {
 diff --git a/src/terminal/Screen.zig b/src/terminal/Screen.zig
-index 0fd016774..b37e71b1c 100644
+index 29d630f10..0fbf4aa03 100644
 --- a/src/terminal/Screen.zig
 +++ b/src/terminal/Screen.zig
-@@ -3608,6 +3608,86 @@ pub fn selectOutput(self: *Screen, pin: Pin) ?Selection {
+@@ -3600,6 +3600,86 @@ pub fn selectOutput(self: *Screen, pin: Pin) ?Selection {
      return .init(hl.start, hl.end, false);
  }
  
@@ -211,7 +211,7 @@ index 0fd016774..b37e71b1c 100644
  pub const LineIterator = struct {
      screen: *const Screen,
      current: ?Pin = null,
-@@ -12935,3 +13015,65 @@ test "Screen: scrollClear cursor page pruned keeps per-page hyperlink id" {
+@@ -13021,3 +13101,65 @@ test "Screen: scrollClear cursor page pruned keeps per-page hyperlink id" {
          try testing.expect(list_cell.cell.hyperlink);
      }
  }
@@ -278,10 +278,10 @@ index 0fd016774..b37e71b1c 100644
 +    try testing.expectEqual(@as(?usize, 2), s.promptIndex(row1));
 +}
 diff --git a/src/terminal/Terminal.zig b/src/terminal/Terminal.zig
-index 8c31bb641..2cab1129b 100644
+index 3f311d2bc..4fe9f062d 100644
 --- a/src/terminal/Terminal.zig
 +++ b/src/terminal/Terminal.zig
-@@ -2269,6 +2269,7 @@ pub fn semanticPrompt(
+@@ -2897,6 +2897,7 @@ pub fn semanticPrompt(
              // its reasonable at this point to reset our semantic content
              // state but the spec doesn't really say what to do.
              self.screens.active.cursorSetSemanticContent(.output);
@@ -290,19 +290,19 @@ index 8c31bb641..2cab1129b 100644
      }
  }
 diff --git a/src/terminal/page.zig b/src/terminal/page.zig
-index 48d405b5f..a22a3cf33 100644
+index 4d452fdcd..be6cc343f 100644
 --- a/src/terminal/page.zig
 +++ b/src/terminal/page.zig
-@@ -2109,7 +2109,18 @@ pub const Row = packed struct(u64) {
-     /// screen.
-     dirty: bool = false,
+@@ -2297,7 +2297,18 @@ pub const Row = packed struct(u64) {
+     /// `PageList.trimTrailingBlankRows` don't read them.
+     blank: bool = false,
  
--    _padding: u23 = 0,
+-    _padding: u22 = 0,
 +    /// How the command started at this prompt row ended (OSC 133 D).
 +    /// Only meaningful on a row whose semantic_prompt is `.prompt`.
 +    command_status: CommandStatus = .none,
 +
-+    _padding: u21 = 0,
++    _padding: u20 = 0,
 +
 +    pub const CommandStatus = enum(u2) {
 +        /// No command finished here yet (or the prompt was never ended).

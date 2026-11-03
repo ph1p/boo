@@ -1,25 +1,29 @@
+diff --git a/include/ghostty.h b/include/ghostty.h
+index e91847816..7cc0d46b0 100644
 --- a/include/ghostty.h
 +++ b/include/ghostty.h
-@@ -1232,6 +1232,16 @@
+@@ -1248,6 +1248,16 @@ GHOSTTY_API bool ghostty_surface_key_is_binding(ghostty_surface_t,
                                                     ghostty_input_key_s,
-                                                    ghostty_binding_flags_e*);
+                                                    ghostty_binding_flags_e* GHOSTTY_NULLABLE);
  GHOSTTY_API void ghostty_surface_text(ghostty_surface_t, const char*, uintptr_t);
-+typedef void (*ghostty_surface_tmux_cb)(void*,
++typedef void (*ghostty_surface_tmux_cb)(void* GHOSTTY_NULLABLE,
 +                                        uint8_t,
-+                                        const uint8_t*,
++                                        const uint8_t* GHOSTTY_NULLABLE,
 +                                        uintptr_t);
 +GHOSTTY_API void ghostty_surface_set_tmux_callback(ghostty_surface_t,
-+                                                   ghostty_surface_tmux_cb,
-+                                                   void*);
++                                                   ghostty_surface_tmux_cb GHOSTTY_NULLABLE,
++                                                   void* GHOSTTY_NULLABLE);
 +GHOSTTY_API void ghostty_surface_write_pty(ghostty_surface_t,
 +                                           const uint8_t*,
 +                                           uintptr_t);
  GHOSTTY_API void ghostty_surface_paste_text(ghostty_surface_t, const char*, uintptr_t);
- GHOSTTY_API void ghostty_surface_preedit(ghostty_surface_t, const char*, uintptr_t);
+ GHOSTTY_API void ghostty_surface_preedit(ghostty_surface_t, const char* GHOSTTY_NULLABLE, uintptr_t);
  GHOSTTY_API bool ghostty_surface_mouse_captured(ghostty_surface_t);
+diff --git a/src/apprt/embedded.zig b/src/apprt/embedded.zig
+index d4d3e5238..f13d8edd1 100644
 --- a/src/apprt/embedded.zig
 +++ b/src/apprt/embedded.zig
-@@ -16,6 +16,7 @@
+@@ -16,6 +16,7 @@ const input = @import("../input.zig");
  const internal_os = @import("../os/main.zig");
  const renderer = @import("../renderer.zig");
  const terminal = @import("../terminal/main.zig");
@@ -27,12 +31,10 @@
  const CoreApp = @import("../App.zig");
  const CoreInspector = @import("../inspector/main.zig").Inspector;
  const CoreSurface = @import("../Surface.zig");
-@@ -2168,6 +2169,31 @@
-                 surface.app.keyboardLayout().detectOptionAsAlt(),
-         );
+@@ -2170,6 +2171,31 @@ pub const CAPI = struct {
          return @intCast(@as(input.Mods.Backing, @bitCast(result)));
-+    }
-+
+     }
+ 
 +    /// Route tmux control mode (`tmux -CC`) on this surface to `cb` instead
 +    /// of the built-in viewer. Pass null to restore the viewer.
 +    export fn ghostty_surface_set_tmux_callback(
@@ -56,16 +58,19 @@
 +            return;
 +        };
 +        surface.core_surface.io.queueMessage(msg, .unlocked);
-     }
- 
++    }
++
      /// Send this for raw keypresses (i.e. the keyDown event on macOS).
+     /// This will handle the keymap translation and send the appropriate
+     /// key and char events.
+diff --git a/src/termio/stream_handler.zig b/src/termio/stream_handler.zig
+index 60804e9da..4c33f31ca 100644
 --- a/src/termio/stream_handler.zig
 +++ b/src/termio/stream_handler.zig
-@@ -75,6 +75,19 @@
- 
+@@ -76,6 +76,19 @@ pub const StreamHandler = struct {
      /// The tmux control mode viewer state.
      tmux_viewer: if (tmux_enabled) ?*terminal.tmux.Viewer else void = if (tmux_enabled) null else {},
-+
+ 
 +    /// Embedder tmux control mode client. When set, entering control mode
 +    /// skips the built-in viewer and reports each protocol line instead
 +    /// (kind 0 = enter, 1 = line, 2 = exit); the embedder owns the protocol.
@@ -78,10 +83,11 @@
 +
 +    /// The control mode line being collected for `tmux_cb`.
 +    tmux_line: std.ArrayList(u8) = .empty,
- 
++
      /// Session password grants for the Kitty clipboard protocol.
      /// Requests carrying a granted password skip the permission prompt.
-@@ -108,6 +121,7 @@
+     kitty_clipboard_grants: terminal.kitty.clipboard.Grants = .{},
+@@ -108,6 +121,7 @@ pub const StreamHandler = struct {
          self.dcs.deinit();
          self.kittyClipboardWriteAbort();
          self.kitty_clipboard_grants.deinit(self.alloc);
@@ -89,7 +95,7 @@
          if (comptime tmux_enabled) tmux: {
              const viewer = self.tmux_viewer orelse break :tmux;
              viewer.deinit();
-@@ -407,17 +421,44 @@
+@@ -403,17 +417,44 @@ pub const StreamHandler = struct {
      }
  
      pub inline fn dcsPut(self: *StreamHandler, byte: u8) !void {
@@ -134,7 +140,7 @@
      fn dcsCommand(self: *StreamHandler, cmd: *terminal.dcs.Command) !void {
          // log.warn("DCS command: {}", .{cmd});
          switch (cmd.*) {
-@@ -429,6 +470,14 @@
+@@ -425,6 +466,14 @@ pub const StreamHandler = struct {
  
                  switch (tmux) {
                      .enter => {

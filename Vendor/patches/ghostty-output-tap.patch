@@ -1,17 +1,17 @@
 diff --git a/include/ghostty.h b/include/ghostty.h
-index e5870d3e1..035f74fb4 100644
+index 5d0c9c379..74180f889 100644
 --- a/include/ghostty.h
 +++ b/include/ghostty.h
-@@ -1209,6 +1209,16 @@ GHOSTTY_API void ghostty_surface_draw(ghostty_surface_t);
+@@ -1225,6 +1225,16 @@ GHOSTTY_API void ghostty_surface_draw(ghostty_surface_t);
  GHOSTTY_API void ghostty_surface_set_content_scale(ghostty_surface_t, double, double);
  GHOSTTY_API void ghostty_surface_set_focus(ghostty_surface_t, bool);
  GHOSTTY_API void ghostty_surface_set_occlusion(ghostty_surface_t, bool);
-+typedef void (*ghostty_surface_output_cb)(void*, const uint8_t*, uintptr_t);
-+typedef void (*ghostty_surface_resize_cb)(void*, uint16_t, uint16_t);
++typedef void (*ghostty_surface_output_cb)(void* GHOSTTY_NULLABLE, const uint8_t* GHOSTTY_NULLABLE, uintptr_t);
++typedef void (*ghostty_surface_resize_cb)(void* GHOSTTY_NULLABLE, uint16_t, uint16_t);
 +GHOSTTY_API void ghostty_surface_set_output_callback(ghostty_surface_t,
-+                                                     ghostty_surface_output_cb,
-+                                                     ghostty_surface_resize_cb,
-+                                                     void*,
++                                                     ghostty_surface_output_cb GHOSTTY_NULLABLE,
++                                                     ghostty_surface_resize_cb GHOSTTY_NULLABLE,
++                                                     void* GHOSTTY_NULLABLE,
 +                                                     bool);
 +GHOSTTY_API void ghostty_surface_feed_output(ghostty_surface_t,
 +                                             const uint8_t*,
@@ -20,10 +20,10 @@ index e5870d3e1..035f74fb4 100644
  GHOSTTY_API ghostty_surface_size_s ghostty_surface_size(ghostty_surface_t);
  GHOSTTY_API uint64_t ghostty_surface_foreground_pid(ghostty_surface_t);
 diff --git a/src/apprt/embedded.zig b/src/apprt/embedded.zig
-index 1a00cc330..f83107e57 100644
+index 1cb8925fe..3d4c2169a 100644
 --- a/src/apprt/embedded.zig
 +++ b/src/apprt/embedded.zig
-@@ -2046,6 +2046,61 @@ pub const CAPI = struct {
+@@ -2048,6 +2048,61 @@ pub const CAPI = struct {
          surface.occlusionCallback(visible);
      }
  
@@ -86,7 +86,7 @@ index 1a00cc330..f83107e57 100644
      /// `macos-option-as-alt`. The filtered mods should be used for
      /// key translation but should NOT be sent back via the `_key`
 diff --git a/src/termio/Termio.zig b/src/termio/Termio.zig
-index 0a0549c12..24bbbb69d 100644
+index 49bd6e0cd..1822fd8aa 100644
 --- a/src/termio/Termio.zig
 +++ b/src/termio/Termio.zig
 @@ -58,6 +58,13 @@ surface_mailbox: apprt.surface.Mailbox,
@@ -103,7 +103,7 @@ index 0a0549c12..24bbbb69d 100644
  /// The mailbox implementation to use.
  mailbox: termio.Mailbox,
  
-@@ -544,6 +551,8 @@ pub fn resize(
+@@ -552,6 +559,8 @@ pub fn resize(
              },
          );
  
@@ -112,7 +112,7 @@ index 0a0549c12..24bbbb69d 100644
          // If we have size reporting enabled we need to send a report.
          if (self.terminal.modes.get(.in_band_size_reports)) {
              try self.sizeReportLocked(td, .mode_2048);
-@@ -702,8 +711,21 @@ pub fn processOutput(self: *Termio, buf: []const u8) void {
+@@ -710,8 +719,21 @@ pub fn processOutput(self: *Termio, buf: []const u8) void {
      self.processOutputLocked(buf);
  }
  
@@ -135,7 +135,7 @@ index 0a0549c12..24bbbb69d 100644
      self.terminal_stream.handler.queueRender() catch unreachable;
  
 diff --git a/src/termio/stream_handler.zig b/src/termio/stream_handler.zig
-index 2fdd9baa9..dd6d7ef75 100644
+index 6cc7010f2..60804e9da 100644
 --- a/src/termio/stream_handler.zig
 +++ b/src/termio/stream_handler.zig
 @@ -93,6 +93,11 @@ pub const StreamHandler = struct {
@@ -150,7 +150,7 @@ index 2fdd9baa9..dd6d7ef75 100644
      pub const Stream = terminal.Stream(StreamHandler);
  
      /// True if we have tmux control mode built in.
-@@ -140,6 +145,7 @@ pub const StreamHandler = struct {
+@@ -142,6 +147,7 @@ pub const StreamHandler = struct {
          // See messageWriter which has similar logic and explains why
          // we may have to do this.
          if (self.surface_mailbox.push(msg, .{ .instant = {} }) == 0) {

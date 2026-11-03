@@ -447,7 +447,8 @@ import Cocoa
     func feedOutput(_ bytes: [UInt8]) {
         guard let surface, !bytes.isEmpty else { return }
         bytes.withUnsafeBufferPointer { buf in
-            ghostty_surface_feed_output(surface, buf.baseAddress, UInt(buf.count))
+            guard let base = buf.baseAddress else { return }
+            ghostty_surface_feed_output(surface, base, UInt(buf.count))
         }
     }
 
@@ -1615,7 +1616,10 @@ extension GhosttyView: TmuxGateway {
     func writeTmuxCommand(_ line: String) {
         guard let surface else { return }
         let bytes = Array(line.utf8) + [0x0A]
-        bytes.withUnsafeBufferPointer { ghostty_surface_write_pty(surface, $0.baseAddress, UInt($0.count)) }
+        bytes.withUnsafeBufferPointer { buf in
+            guard let base = buf.baseAddress else { return }
+            ghostty_surface_write_pty(surface, base, UInt(buf.count))
+        }
     }
 
     var tmuxGridSize: TmuxProtocol.CellSize? {

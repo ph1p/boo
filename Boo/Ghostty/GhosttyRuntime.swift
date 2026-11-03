@@ -25,7 +25,7 @@ private func postWindowAction(from view: GhosttyView?, _ userInfo: [String: Stri
     }
 }
 
-private func ghosttyAction(_ app: ghostty_app_t?, _ target: ghostty_target_s, _ action: ghostty_action_s) -> Bool {
+private func ghosttyAction(_ app: ghostty_app_t, _ target: ghostty_target_s, _ action: ghostty_action_s) -> Bool {
     // Get the GhosttyView from the surface's userdata
     func viewFromTarget() -> GhosttyView? {
         guard target.tag == GHOSTTY_TARGET_SURFACE,
@@ -37,8 +37,7 @@ private func ghosttyAction(_ app: ghostty_app_t?, _ target: ghostty_target_s, _ 
 
     switch action.tag {
     case GHOSTTY_ACTION_PWD:
-        guard let pwdPtr = action.action.pwd.pwd else { return false }
-        let path = String(cString: pwdPtr)
+        let path = String(cString: action.action.pwd.pwd)
         guard let view = viewFromTarget() else { return false }
         DispatchQueue.main.async { [weak view] in
             view?.onPwdChanged?(path)
@@ -46,8 +45,7 @@ private func ghosttyAction(_ app: ghostty_app_t?, _ target: ghostty_target_s, _ 
         return true
 
     case GHOSTTY_ACTION_SET_TITLE:
-        guard let titlePtr = action.action.set_title.title else { return false }
-        let title = String(cString: titlePtr)
+        let title = String(cString: action.action.set_title.title)
         guard let view = viewFromTarget() else { return false }
         // Intercept BOO_LS: prefixed titles — directory listings, not real titles.
         if title.hasPrefix("BOO_LS:") {
@@ -134,8 +132,8 @@ private func ghosttyAction(_ app: ghostty_app_t?, _ target: ghostty_target_s, _ 
 
     case GHOSTTY_ACTION_DESKTOP_NOTIFICATION:
         guard let view = viewFromTarget() else { return false }
-        let notifTitle = action.action.desktop_notification.title.map { String(cString: $0) } ?? ""
-        let notifBody = action.action.desktop_notification.body.map { String(cString: $0) } ?? ""
+        let notifTitle = String(cString: action.action.desktop_notification.title)
+        let notifBody = String(cString: action.action.desktop_notification.body)
         DispatchQueue.main.async { [weak view] in
             view?.onDesktopNotification?(notifTitle, notifBody)
         }
@@ -227,7 +225,7 @@ private func ghosttyAction(_ app: ghostty_app_t?, _ target: ghostty_target_s, _ 
 
     case GHOSTTY_ACTION_OPEN_URL:
         let openURL = action.action.open_url
-        guard let urlPtr = openURL.url else { return false }
+        let urlPtr = openURL.url
         let urlString: String
         if openURL.len > 0 {
             urlString = urlPtr.withMemoryRebound(to: UInt8.self, capacity: Int(openURL.len)) {
@@ -260,7 +258,7 @@ private func ghosttyAction(_ app: ghostty_app_t?, _ target: ghostty_target_s, _ 
         return true
 
     case GHOSTTY_ACTION_START_SEARCH:
-        let needle = action.action.start_search.needle.map { String(cString: $0) } ?? ""
+        let needle = String(cString: action.action.start_search.needle)
         guard let view = viewFromTarget() else { return false }
         DispatchQueue.main.async { [weak view] in
             view?.onSearchRequested?(needle)
@@ -296,8 +294,8 @@ private func ghosttyAction(_ app: ghostty_app_t?, _ target: ghostty_target_s, _ 
 }
 
 private func ghosttyReadClipboard(
-    _ userdata: UnsafeMutableRawPointer?, _ clipboard: ghostty_clipboard_e, _ state: UnsafeMutableRawPointer?,
-    _ mimes: UnsafePointer<UnsafePointer<CChar>?>?, _ mimesLen: Int, _ list: Bool
+    _ userdata: UnsafeMutableRawPointer?, _ clipboard: ghostty_clipboard_e, _ state: UnsafeMutableRawPointer,
+    _ mimes: UnsafePointer<UnsafePointer<CChar>>, _ mimesLen: Int, _ list: Bool
 ) -> ghostty_clipboard_read_result_e {
     guard clipboard == GHOSTTY_CLIPBOARD_STANDARD else { return GHOSTTY_CLIPBOARD_READ_UNSUPPORTED }
     guard let surface = userdata.flatMap({ Unmanaged<GhosttyView>.fromOpaque($0).takeUnretainedValue().surface })
@@ -306,7 +304,7 @@ private func ghosttyReadClipboard(
     // Boo only serves text. Ghostty normalizes text-like MIME requests to
     // "text/plain", so anything else (e.g. Kitty image reads) is unavailable.
     let wantsText = (0..<mimesLen).contains { i in
-        mimes?[i].map { String(cString: $0) == "text/plain" } ?? false
+        String(cString: mimes[i]) == "text/plain"
     }
     let str = NSPasteboard.general.ghosttyStringContents
     let text = wantsText ? str : nil
@@ -314,12 +312,12 @@ private func ghosttyReadClipboard(
 
     // Ghostty slices `data[0..<len]` without a nil check, so even an empty
     // string needs a real (NUL-terminated) buffer.
-    let data = strdup(text ?? "")
+    guard let data = strdup(text ?? "") else { return GHOSTTY_CLIPBOARD_READ_UNAVAILABLE }
     defer { free(data) }
     let available: [String] = list && str != nil ? ["text/plain"] : []
     "text/plain".withCString { mime in
         let contents =
-            text == nil ? [] : [ghostty_clipboard_content_s(mime: mime, data: data, len: strlen(data!))]
+            text == nil ? [] : [ghostty_clipboard_content_s(mime: mime, data: data, len: strlen(data))]
         withCStringArray(available) { avail in
             contents.withUnsafeBufferPointer { contentsBuf in
                 var complete = ghostty_clipboard_complete_s(
@@ -335,7 +333,7 @@ private func ghosttyReadClipboard(
 
 /// Calls `body` with a temporary C array of NUL-terminated copies of `strings`.
 private func withCStringArray<R>(
-    _ strings: [String], _ body: (UnsafeBufferPointer<UnsafePointer<CChar>?>) -> R
+    _ strings: [String], _ body: (UnsafeBufferPointer<UnsafePointer<CChar>>) -> R
 ) -> R {
     let copies = strings.compactMap { strdup($0) }
     defer { for copy in copies { free(copy) } }
@@ -343,8 +341,8 @@ private func withCStringArray<R>(
 }
 
 private func ghosttyConfirmReadClipboard(
-    _ userdata: UnsafeMutableRawPointer?, _ confirm: UnsafePointer<ghostty_clipboard_confirm_s>?,
-    _ state: UnsafeMutableRawPointer?, _ request: ghostty_clipboard_request_e
+    _ userdata: UnsafeMutableRawPointer?, _ confirm: UnsafePointer<ghostty_clipboard_confirm_s>,
+    _ state: UnsafeMutableRawPointer, _ request: ghostty_clipboard_request_e
 ) {
     // Reached for pastes that paste protection flags and for OSC 52 reads
     // (clipboard-read = ask). Every path must complete or deny `state`, or the
@@ -352,8 +350,7 @@ private func ghosttyConfirmReadClipboard(
     guard let userdata else { return }
     let view = Unmanaged<GhosttyView>.fromOpaque(userdata).takeUnretainedValue()
     guard let surface = view.surface else { return }
-    guard let confirm,
-        request == GHOSTTY_CLIPBOARD_REQUEST_PASTE || request == GHOSTTY_CLIPBOARD_REQUEST_OSC_52_READ
+    guard request == GHOSTTY_CLIPBOARD_REQUEST_PASTE || request == GHOSTTY_CLIPBOARD_REQUEST_OSC_52_READ
     else {
         ghostty_surface_deny_clipboard_request(surface, state)
         return
@@ -362,8 +359,9 @@ private func ghosttyConfirmReadClipboard(
     let c = confirm.pointee
     var contents: [(mime: String, data: Data)] = []
     for i in 0..<c.contents_len {
-        guard let content = c.contents?[i], let mime = content.mime else { continue }
-        let data = content.len > 0 && content.data != nil ? Data(bytes: content.data, count: content.len) : Data()
+        guard let content = c.contents?[i] else { continue }
+        let mime = content.mime
+        let data = content.len > 0 ? Data(bytes: content.data, count: content.len) : Data()
         contents.append((String(cString: mime), data))
     }
     var available: [String] = []
@@ -380,7 +378,7 @@ private func ghosttyConfirmReadClipboard(
             ClipboardConfirmation.ask(isPaste: isPaste, text: text ?? "", canRemember: canRemember, in: view) {
                 allowed, remember in
                 guard let surface = view.surface else { return }
-                let state = UnsafeMutableRawPointer(bitPattern: state)
+                guard let state = UnsafeMutableRawPointer(bitPattern: state) else { return }
                 guard allowed else {
                     ghostty_surface_deny_clipboard_request(surface, state)
                     return
@@ -415,17 +413,16 @@ private func ghosttyConfirmReadClipboard(
 
 private func ghosttyWriteClipboard(
     _ userdata: UnsafeMutableRawPointer?, _ clipboard: ghostty_clipboard_e,
-    _ content: UnsafePointer<ghostty_clipboard_content_s>?, _ count: Int, _ confirmed: Bool
+    _ content: UnsafePointer<ghostty_clipboard_content_s>, _ count: Int, _ confirmed: Bool
 ) {
     guard clipboard == GHOSTTY_CLIPBOARD_STANDARD else { return }
-    guard let content = content, count > 0 else { return }
+    guard count > 0 else { return }
     // Contents are length-delimited and not necessarily NUL-terminated.
     func text(_ c: ghostty_clipboard_content_s) -> String? {
-        guard let data = c.data else { return nil }
-        return String(decoding: UnsafeRawBufferPointer(start: data, count: c.len), as: UTF8.self)
+        String(decoding: UnsafeRawBufferPointer(start: c.data, count: c.len), as: UTF8.self)
     }
     let entries = (0..<count).map { content[$0] }
-    let plain = entries.first { $0.mime.map { String(cString: $0) == "text/plain" } ?? false }
+    let plain = entries.first { String(cString: $0.mime) == "text/plain" }
     guard let str = text(plain ?? entries[0]) else { return }
     let pb = NSPasteboard.general
     pb.clearContents()
@@ -591,16 +588,20 @@ private func ghosttyCloseSurface(_ userdata: UnsafeMutableRawPointer?, _ process
 
         config = buildConfig()
 
-        var rtConfig = ghostty_runtime_config_s()
-        rtConfig.userdata = nil
-        rtConfig.supports_selection_clipboard = false
-        rtConfig.wakeup_cb = ghosttyWakeup
-        rtConfig.action_cb = ghosttyAction
-        rtConfig.read_clipboard_cb = ghosttyReadClipboard
-        rtConfig.confirm_read_clipboard_cb = ghosttyConfirmReadClipboard
-        rtConfig.write_clipboard_cb = ghosttyWriteClipboard
-        rtConfig.close_surface_cb = ghosttyCloseSurface
+        var rtConfig = ghostty_runtime_config_s(
+            userdata: nil,
+            supports_selection_clipboard: false,
+            wakeup_cb: ghosttyWakeup,
+            action_cb: ghosttyAction,
+            read_clipboard_cb: ghosttyReadClipboard,
+            confirm_read_clipboard_cb: ghosttyConfirmReadClipboard,
+            write_clipboard_cb: ghosttyWriteClipboard,
+            close_surface_cb: ghosttyCloseSurface)
 
+        guard let config else {
+            booLog(.error, .app, "Failed to build Ghostty config")
+            return
+        }
         app = ghostty_app_new(&rtConfig, config)
         if app == nil {
             booLog(.error, .app, "Failed to create Ghostty app")
