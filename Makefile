@@ -1,4 +1,4 @@
-.PHONY: build run clean ghostty ironmark monaco setup release test app sign notarize zip zip-from-app dmg dmg-from-app dist lint format
+.PHONY: build run stop clean ghostty ironmark monaco setup release test app sign notarize zip zip-from-app dmg dmg-from-app dist lint format
 
 # ── Configuration ────────────────────────────────────────────────────────────
 
@@ -199,8 +199,15 @@ run: build
 		ID="$(LOCAL_SIGNING_IDENTITY)"; \
 	fi; \
 	codesign --force --deep --sign "$${ID:--}" --entitlements Boo/App/Boo.entitlements .build/debug/Boo.app 2>/dev/null || true
-	@pkill -x Boo 2>/dev/null || true; for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do pkill -0 -x Boo 2>/dev/null || break; sleep 0.02; done
+	@$(MAKE) --no-print-directory stop
 	open .build/debug/Boo.app
+
+# Quit the dev build only. Matches this checkout's .build path: `pkill -x Boo` or a bare
+# `Boo.app/Contents/MacOS/Boo` pattern also kills the installed /Applications/Boo.app.
+DEV_BOO_PATTERN = $(CURDIR)/\.build/.*/Boo\.app/Contents/MacOS/Boo
+stop:
+	@pkill -f '$(DEV_BOO_PATTERN)' 2>/dev/null || true; \
+	for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do pkill -0 -f '$(DEV_BOO_PATTERN)' 2>/dev/null || break; sleep 0.02; done
 
 # Release build
 release: monaco

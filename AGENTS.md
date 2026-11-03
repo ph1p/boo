@@ -14,6 +14,7 @@ Full documentation: https://ph1p.github.io/boo/
 make setup          # First time: clone Ghostty + build GhosttyKit + build ironmark + build Boo
 make build          # monaco + swift build + bundle Ghostty resources
 make run            # Build and launch (debug .app, Sparkle disabled)
+make stop           # Quit the dev build only (never the installed /Applications/Boo.app)
 make test           # Run tests (builds monaco first)
 swift build         # Build only (requires GhosttyKit + Boo/Resources/MonacoBundle already built)
 make monaco         # Build the Monaco editor bundle (pnpm + Vite) into Boo/Resources/MonacoBundle
@@ -27,6 +28,11 @@ make dist           # Full release: app + sign + notarize + ZIP
 make clean-ghostty  # Rebuild GhosttyKit after updating Vendor/ghostty
 make ghostty-wasm   # Rebuild ghostty-vt.wasm for the Remote Control web UI
 ```
+
+**Never kill Boo by name.** The installed `/Applications/Boo.app` is often the terminal hosting
+this session, and it shares the process name and bundle path suffix with the dev build. Use
+`make stop` / `make run`. Do not use `pkill -x Boo`, `killall Boo`, or
+`pkill -f "Boo.app/Contents/MacOS/Boo"`.
 
 `Boo/Resources/MonacoBundle` is gitignored and is a `.copy` resource of the Boo target, so a bare
 `swift build` on a fresh checkout fails until `make monaco` (or any of `make build/test/release`) has run.
