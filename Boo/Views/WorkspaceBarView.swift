@@ -177,7 +177,7 @@ class WorkspaceBarView: NSView {
 
     /// Narrowest the expanded hover pill gets. Short names still read as a pill
     /// rather than collapsing to the width of their own text.
-    static let verticalHoveredPillMinWidth: CGFloat = 110
+    static let verticalHoveredPillMinWidth: CGFloat = 72
 
     /// Widest it may grow, so a long workspace name truncates instead of running
     /// most of the way across the panes.
@@ -187,10 +187,19 @@ class WorkspaceBarView: NSView {
     /// Horizontal padding inside the expanded pill, either side of its contents.
     static let verticalHoveredPillPadding: CGFloat = 12
 
+    /// Gap between the close button and the pill's trailing edge. Tighter than
+    /// the text padding: the button's own hover circle supplies the visual air.
+    static let verticalHoveredPillCloseInset: CGFloat = 5
+
+    /// Trailing column the close button claims: inset, button, and a gap before
+    /// the name. Mirrors the toolbar pill so both bars read the same.
+    static let verticalHoveredPillCloseSlot: CGFloat =
+        WorkspacePillStyle.closeButtonSize + verticalHoveredPillCloseInset + 5
+
     /// Font the expanded pill's name is drawn in. Shared by the measure and the draw
     /// so the pill can't be sized against different metrics than it paints with.
     static func verticalHoveredPillFont(selected: Bool) -> NSFont {
-        NSFont.systemFont(ofSize: 12.5, weight: selected ? .semibold : .regular)
+        selected ? pillLabelSelected : pillLabelRegular
     }
 
     /// Frame of the expanded pill for the hovered workspace: same top and height as
@@ -217,12 +226,12 @@ class WorkspaceBarView: NSView {
         // Padding either side, plus room for the close button (pinned items show a
         // pin inside the pill instead, which needs no reserved column).
         let trailing =
-            item.isPinned ? 0 : WorkspacePillStyle.closeButtonSize + Self.verticalHoveredPillPadding
+            item.isPinned ? Self.verticalHoveredPillPadding : Self.verticalHoveredPillCloseSlot
         let w = min(
             Self.verticalHoveredPillMaxWidth,
             max(
                 Self.verticalHoveredPillMinWidth,
-                ceil(textW) + Self.verticalHoveredPillPadding * 2 + trailing))
+                ceil(textW) + Self.verticalHoveredPillPadding + trailing))
 
         // Grows toward the panes: rightward on a left bar, leftward on a right bar,
         // so it never runs off the window edge.
@@ -243,10 +252,11 @@ class WorkspaceBarView: NSView {
 
     /// Fonts used per pill on every draw pass — built once rather than per pill.
     nonisolated(unsafe) static let plusGlyphFont = NSFont.systemFont(ofSize: 18, weight: .light)
+    // Same weights as the top bar's pills (`ToolbarView.Fonts.ws11*`).
     nonisolated(unsafe) static let pillLabelSelected = NSFont.systemFont(
-        ofSize: 12, weight: .semibold)
+        ofSize: 13, weight: .semibold)
     nonisolated(unsafe) static let pillLabelRegular = NSFont.systemFont(
-        ofSize: 12, weight: .regular)
+        ofSize: 13, weight: .medium)
 
     /// How far the vertical strip is scrolled, in points. The mirror of the top
     /// bar's `workspaceScrollOffset`, only along Y.
@@ -538,13 +548,9 @@ class WorkspaceBarView: NSView {
             WorkspacePillStyle.fill(
                 ctx, rect: pillRect, active: isSelected, hovered: false,
                 wsColor: wsColor, neutral: theme.chromeMuted)
+            // Like the top bar: only the active workspace carries a border.
             if isSelected {
                 WorkspacePillStyle.strokeBorder(ctx, rect: pillRect, theme: theme, color: wsColor)
-            } else {
-                // Every pill is an island, so every pill carries the island hairline —
-                // tinted by the workspace's own colour when it has one.
-                WorkspacePillStyle.strokeIslandBorder(
-                    ctx, rect: pillRect, wsColor: wsColor, neutral: islandBorder)
             }
 
             // Draw first character(s) as label. Same text-color model as the top bar.
@@ -668,13 +674,13 @@ class WorkspaceBarView: NSView {
             wsColor: wsColor, active: isSelected, text: theme.chromeText,
             muted: theme.chromeText)
 
-        let closeSize = WorkspacePillStyle.closeButtonSize
         let sidePad = Self.verticalHoveredPillPadding
-        // Text runs from the strip side toward the panes, stopping short of the close
-        // button so a long workspace name truncates instead of colliding with it.
-        let textInset = item.isPinned ? sidePad : sidePad + closeSize
-        let textX = isRightAligned ? rect.minX + textInset : rect.minX + sidePad
-        let textW = rect.width - sidePad - textInset
+        // The close button takes the end facing the panes: trailing on a left bar,
+        // leading on a right bar. The name stops short of its column so a long one
+        // truncates instead of colliding with it.
+        let closeCol = item.isPinned ? sidePad : Self.verticalHoveredPillCloseSlot
+        let textX = isRightAligned ? rect.minX + closeCol : rect.minX + sidePad
+        let textW = rect.width - sidePad - closeCol
 
         let para = NSMutableParagraphStyle()
         para.lineBreakMode = .byTruncatingTail
@@ -736,7 +742,7 @@ class WorkspaceBarView: NSView {
         // Lives inside the *expanded* hover pill, at the end facing the panes. The
         // resting pill is only as wide as its two-letter label, so there is nowhere
         // to put it there without covering the text.
-        let inset = Self.verticalHoveredPillPadding
+        let inset = Self.verticalHoveredPillCloseInset
         let circleX =
             isRightAligned ? pillRect.minX + inset : pillRect.maxX - circleSize - inset
         return CGRect(

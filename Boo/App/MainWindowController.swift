@@ -134,6 +134,7 @@ class ThemedSplitView: NSSplitView {
     let toolbar = ToolbarView(frame: .zero)
     let statusBar = StatusBarView(frame: .zero)
     var statusBarHeightConstraint: NSLayoutConstraint?
+    var toolbarHeightConstraint: NSLayoutConstraint?
     var splitContainer: SplitContainerView!
     var mainSplitView: NSSplitView!
 
@@ -738,6 +739,13 @@ class ThemedSplitView: NSSplitView {
                     if newWsBarPos != self.currentWorkspaceBarPosition {
                         self.currentWorkspaceBarPosition = newWsBarPos
                         self.rebuildWorkspaceBarLayout()
+                        let headerHeight = IslandMetrics.toolbarHeight(for: newWsBarPos)
+                        self.toolbarHeightConstraint?.constant = headerHeight
+                        if let w = self.window {
+                            w.contentView?.layoutSubtreeIfNeeded()
+                            TrafficLightPositioner.setHeaderHeight(headerHeight, for: w)
+                        }
+                        self.toolbar.needsDisplay = true
                     }
                     let newTabOverflow = AppSettings.shared.tabOverflowMode
                     if newTabOverflow != self.currentTabOverflowMode {
@@ -1028,11 +1036,15 @@ class ThemedSplitView: NSSplitView {
         mainSplitLeadingConstraint = mainSplitLeading
         mainSplitTrailingConstraint = mainSplitTrailing
 
+        let headerHeight = IslandMetrics.toolbarHeight(for: currentWorkspaceBarPosition)
+        let toolbarHeight = toolbar.heightAnchor.constraint(equalToConstant: headerHeight)
+        toolbarHeightConstraint = toolbarHeight
+
         NSLayoutConstraint.activate([
             toolbar.topAnchor.constraint(equalTo: contentView.topAnchor, constant: barGap),
             toolbarLeading,
             toolbarTrailing,
-            toolbar.heightAnchor.constraint(equalToConstant: IslandMetrics.toolbarHeight),
+            toolbarHeight,
 
             mainSplitView.topAnchor.constraint(
                 equalTo: toolbar.bottomAnchor, constant: IslandMetrics.headerBottomGap),
@@ -1055,7 +1067,7 @@ class ThemedSplitView: NSSplitView {
         heightConstraint.isActive = true
         statusBarHeightConstraint = heightConstraint
 
-        TrafficLightPositioner.attach(to: window)
+        TrafficLightPositioner.attach(to: window, headerHeight: headerHeight)
 
     }
 
@@ -1543,7 +1555,14 @@ class ThemedSplitView: NSSplitView {
         // Quitting or closing the last window: the session keeps this window.
         if manager.isTerminating || manager.controllers.count == 1 {
             manager.writeSession(from: self, sync: true)
-            if !manager.isTerminating { manager.remove(self) }
+            if !manager.isTerminating {
+                manager.remove(self)
+                // Settings is an auxiliary window: left open it would keep the app
+                // alive with no terminal window. Closing it lets the app quit.
+                for w in NSApp.windows where w.windowController is SettingsWindowController {
+                    w.close()
+                }
+            }
             return
         }
         // The app keeps running when other windows remain: stop this window's

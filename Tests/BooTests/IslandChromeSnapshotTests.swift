@@ -441,9 +441,12 @@ import XCTest
         // Once a pill is expanded, the part of the overhang it covers is ours again.
         bar.hoveredIndex = 0
         let expanded = bar.verticalHoveredPillRect(at: 0)
-        XCTAssertNotNil(hit(NSPoint(x: expanded.midX, y: expanded.midY)))
+        // Probe the slice of the pill that lies out in the overhang, past the strip.
+        let overhangPillX = (WorkspaceBarView.verticalWidth + expanded.maxX) / 2
+        XCTAssertGreaterThan(expanded.maxX, WorkspaceBarView.verticalWidth)
+        XCTAssertNotNil(hit(NSPoint(x: overhangPillX, y: expanded.midY)))
         // ...but the rest of the band still isn't.
-        XCTAssertNil(hit(NSPoint(x: expanded.midX, y: 380)))
+        XCTAssertNil(hit(NSPoint(x: overhangPillX, y: 380)))
     }
 
     /// The `+` is pill-sized and pinned to the bottom of the strip, so overflowing

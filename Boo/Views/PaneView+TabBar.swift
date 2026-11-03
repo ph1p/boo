@@ -543,9 +543,13 @@ extension PaneView {
         // Pill button matching the workspace bar's `+` — inset inside its zone so
         // the gap to the last tab pill matches the gap between tab pills.
         let pillRect = Self.tabPillRect(inSlot: CGRect(x: x, y: y, width: width, height: rowH))
-        WorkspacePillStyle.fill(
-            ctx, rect: pillRect, active: false, hovered: isPlusButtonHovered,
-            wsColor: nil, neutral: theme.chromeMuted)
+        // Transparent at rest so it reads as part of the bar, not as a tab; the
+        // pill only appears under the pointer.
+        if isPlusButtonHovered {
+            WorkspacePillStyle.fill(
+                ctx, rect: pillRect, active: false, hovered: true,
+                wsColor: nil, neutral: theme.chromeMuted)
+        }
 
         // "+" centered — adjust for descender so the visible glyph is vertically centered
         let font = TabFonts.plus15Light

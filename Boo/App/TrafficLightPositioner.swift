@@ -9,24 +9,29 @@ enum TrafficLightPositioner {
     /// edge equals its gap to the island's top, so the cluster reads as centred in
     /// the island corner whatever the toolbar height. Zero until laid out.
     /// Gap between the close button and the toolbar island's top and leading edge.
-    static func edgeInset(buttonHeight: CGFloat) -> CGFloat {
-        (IslandMetrics.toolbarHeight - buttonHeight) / 2
+    static func edgeInset(
+        buttonHeight: CGFloat, headerHeight: CGFloat = IslandMetrics.toolbarHeight
+    ) -> CGFloat {
+        (headerHeight - buttonHeight) / 2
     }
 
     private static func offset(for window: NSWindow, entry: Entry) -> NSPoint {
         guard let close = window.standardWindowButton(.closeButton),
-            let superview = close.superview,
-            let content = window.contentView
+            let superview = close.superview
         else { return .zero }
         let nativeOrigin = entry.nativeOrigins[ObjectIdentifier(close)] ?? close.frame.origin
         guard nativeOrigin.x != 0 || nativeOrigin.y != 0 else { return .zero }
         let native = superview.convert(nativeOrigin, to: nil)
         let size = close.frame.size
-        let inset = edgeInset(buttonHeight: size.height)
-        let toolbarTop = content.convert(NSPoint(x: 0, y: content.bounds.maxY), to: nil).y - IslandMetrics.barGap
+        let header = entry.headerHeight
+        let inset = edgeInset(buttonHeight: size.height, headerHeight: header)
+        // Window frame, not contentView bounds: with a full-size content view both
+        // share the top edge, but a SwiftUI hosting view can report zero height
+        // mid-layout, which would bake a wildly wrong offset into the buttons.
+        let toolbarTop = window.frame.height - IslandMetrics.barGap
         let target = NSPoint(
             x: IslandMetrics.gap + inset,
-            y: toolbarTop - IslandMetrics.toolbarHeight / 2 - size.height / 2)
+            y: toolbarTop - header / 2 - size.height / 2)
         return NSPoint(x: (target.x - native.x).rounded(), y: (target.y - native.y).rounded())
     }
 
@@ -37,6 +42,7 @@ enum TrafficLightPositioner {
     private final class Entry {
         var closeObserver: NSObjectProtocol?
         var nativeOrigins: [ObjectIdentifier: NSPoint] = [:]
+        var headerHeight: CGFloat = IslandMetrics.toolbarHeight
         weak var window: NSWindow?
     }
 
@@ -46,13 +52,16 @@ enum TrafficLightPositioner {
 
     // MARK: – Public API
 
-    static func attach(to window: NSWindow) {
+    static func attach(
+        to window: NSWindow, headerHeight: CGFloat = IslandMetrics.toolbarHeight
+    ) {
         NSButtonSwizzle.install()
         let key = ObjectIdentifier(window)
         guard entries[key] == nil else { return }
 
         let entry = Entry()
         entry.window = window
+        entry.headerHeight = headerHeight
         entries[key] = entry
 
         // Seed buttonToEntry immediately so the swizzle can early-exit non-traffic-light buttons.
@@ -72,6 +81,15 @@ enum TrafficLightPositioner {
         }
         entry.closeObserver = obs
 
+        apply(to: window)
+    }
+
+    /// Re-centres the buttons on a header that changed height (e.g. the compact
+    /// header used while the workspaces sit in a side strip).
+    static func setHeaderHeight(_ height: CGFloat, for window: NSWindow) {
+        guard let entry = entries[ObjectIdentifier(window)], entry.headerHeight != height
+        else { return }
+        entry.headerHeight = height
         apply(to: window)
     }
 

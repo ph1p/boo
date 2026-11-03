@@ -247,9 +247,11 @@ extension ToolbarView {
 
         // Workspace plus button (drawn outside scroll clip)
         let plusRect = workspacePlusButtonRect
-        let plusBgAlpha: CGFloat = isWorkspacePlusButtonHovered ? 0.12 : 0.06
-        ctx.setFillColor(theme.chromeMuted.withAlphaComponent(plusBgAlpha).cgColor)
-        WorkspacePillStyle.fillRoundedRect(ctx, rect: plusRect)
+        // Transparent at rest; the pill only appears under the pointer.
+        if isWorkspacePlusButtonHovered {
+            ctx.setFillColor(theme.chromeMuted.withAlphaComponent(0.12).cgColor)
+            WorkspacePillStyle.fillRoundedRect(ctx, rect: plusRect)
+        }
         let wsPlusAlpha: CGFloat = isWorkspacePlusButtonHovered ? 0.9 : 0.45
         let wsPlusAttrs: [NSAttributedString.Key: Any] = [
             .font: Fonts.plus15Light,

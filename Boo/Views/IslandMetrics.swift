@@ -40,6 +40,14 @@ enum IslandMetrics {
     /// number to land the buttons on the header's midline.
     static let toolbarHeight: CGFloat = 44
 
+    /// Header height when the workspaces live in a side strip: the header then
+    /// only carries the traffic lights and title, so the full height is wasted.
+    static let compactToolbarHeight: CGFloat = 36
+
+    static func toolbarHeight(for position: WorkspaceBarPosition) -> CGFloat {
+        position == .top ? toolbarHeight : compactToolbarHeight
+    }
+
     /// Extra breathing room between the sidebar tab strip and the sidebar island's
     /// own edge, applied on whichever side the strip docks to (top or bottom). The
     /// pills fill the strip's full height, so without this they touch the island's

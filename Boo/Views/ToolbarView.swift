@@ -111,9 +111,10 @@ class ToolbarView: NSView {
     var isWorkspaceCloseHovered: Bool = false
     private var toolbarTrackingArea: NSTrackingArea?
 
-    /// The layout constrains the toolbar to `IslandMetrics.toolbarHeight`; drawing
-    /// and hit-testing must centre on the same number or the chrome misaligns.
-    let barHeight: CGFloat = IslandMetrics.toolbarHeight
+    /// The layout constrains the toolbar to `IslandMetrics.toolbarHeight(for:)`;
+    /// drawing and hit-testing centre on the laid-out height so the chrome follows
+    /// the compact header too. Falls back to the full height before layout.
+    var barHeight: CGFloat { bounds.height > 0 ? bounds.height : IslandMetrics.toolbarHeight }
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -252,7 +253,8 @@ class ToolbarView: NSView {
             // From the positioner's geometry rather than the buttons' live frames:
             // those may still be at their native spot when this is first cached.
             // The cluster keeps the same gap on its right as on its left.
-            let inset = TrafficLightPositioner.edgeInset(buttonHeight: close.frame.height)
+            let inset = TrafficLightPositioner.edgeInset(
+                buttonHeight: close.frame.height, headerHeight: barHeight)
             let cluster = zoom.frame.maxX - close.frame.minX
             value = max(trafficLightMinWidth, ceil(inset + cluster + inset))
         } else {
