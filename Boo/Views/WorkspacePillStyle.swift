@@ -7,19 +7,22 @@ import Cocoa
 /// per surface; fill, accent border, and close button are identical and live here.
 enum WorkspacePillStyle {
     static let cornerRadius: CGFloat = IslandMetrics.controlRadius
-    // Active-pill stroke is twice the island hairline so the current workspace
-    // reads at a glance next to the hairline every inactive pill carries.
-    static let borderWidth: CGFloat = IslandMetrics.borderWidth * 2
+    // A shade heavier than the island hairline so the active pill reads at a
+    // glance, but drawn at reduced alpha so it does not look outlined.
+    static let borderWidth: CGFloat = IslandMetrics.borderWidth * 1.5
     static let borderInset: CGFloat = borderWidth / 2
 
     /// Diameter of the hover close-button circle, shared by every surface so the
     /// drawn glyph and its click hit-test can never diverge in size.
     static let closeButtonSize: CGFloat = 16
 
-    /// The "✕" glyph and its measured size — constant, so computed once.
-    nonisolated(unsafe) static let closeGlyph = "\u{2715}" as NSString
-    static let closeGlyphSize =
-        ("\u{2715}" as NSString).size(withAttributes: [.font: ToolbarView.Fonts.closeSmall])
+    /// Close "✕": half-span of each stroke and its width. Stroked rather than an
+    /// SF Symbol — at this size even `.bold` xmark renders too thin to read.
+    static let closeGlyphHalfSpan: CGFloat = 3.5
+    static let closeGlyphLineWidth: CGFloat = 1.75
+
+    /// Activity dot diameter; it sits in the close slot, so the two never overlap.
+    static let activityDotSize: CGFloat = 6
 
     /// Fill `rect` as a rounded rect at the shared control radius. The
     /// `setFillColor` / `addPath(CGPath(roundedRect:…))` / `fillPath` incantation
@@ -92,9 +95,9 @@ enum WorkspacePillStyle {
     /// (`chromeMuted`) fill so the tint stays legible.
     static func fillAlpha(active: Bool, hovered: Bool, colored: Bool) -> CGFloat {
         if colored {
-            return active ? 0.25 : (hovered ? 0.18 : 0.12)
+            return active ? 0.22 : (hovered ? 0.12 : 0.06)
         }
-        return active ? 0.25 : (hovered ? 0.12 : 0.06)
+        return active ? 0.18 : (hovered ? 0.11 : 0.06)
     }
 
     /// Fill the pill background for the given state.
@@ -102,15 +105,18 @@ enum WorkspacePillStyle {
         _ ctx: CGContext, rect: CGRect, active: Bool, hovered: Bool,
         wsColor: NSColor?, neutral: NSColor
     ) {
-        let alpha = fillAlpha(active: active, hovered: hovered, colored: wsColor != nil)
-        ctx.setFillColor((wsColor ?? neutral).withAlphaComponent(alpha).cgColor)
+        // At rest every pill shares the neutral fill and a colour shows only in
+        // its label; a row of tinted boxes read as noise.
+        let tint = active || hovered ? (wsColor ?? neutral) : neutral
+        let alpha = fillAlpha(active: active, hovered: hovered, colored: tint !== neutral)
+        ctx.setFillColor(tint.withAlphaComponent(alpha).cgColor)
         fillRoundedRect(ctx, rect: rect)
     }
 
     /// Corner radius of a workspace group tray: a step rounder than the pills it holds.
     static let groupTrayRadius: CGFloat = cornerRadius + 3
     /// Space between a group tray's edge and the header / pills inside it.
-    static let groupTrayPadding: CGFloat = 3
+    static let groupTrayPadding: CGFloat = 4
 
     /// Colour of a group's header text and chevron: the group colour (or muted
     /// chrome), brightened while the header is hovered.
@@ -128,21 +134,22 @@ enum WorkspacePillStyle {
 
     /// Width of a collapsed group's member-count badge for `count` in `font`.
     static func groupCountBadgeWidth(_ count: Int, font: NSFont) -> CGFloat {
-        ("\(count)" as NSString).size(withAttributes: [.font: font]).width + 8
+        ceil(("\(count)" as NSString).size(withAttributes: [.font: font]).width) + 10
     }
 
     /// Member count of a collapsed group in a small capsule, like a badge on a
     /// folder. Brighter when a hidden member has unseen activity.
     static func drawGroupCountBadge(
         _ ctx: CGContext, count: Int, center: CGPoint, height: CGFloat, font: NSFont, hiddenActivity: Bool,
-        theme: TerminalTheme
+        theme: TerminalTheme, tint: NSColor? = nil
     ) {
         let width = groupCountBadgeWidth(count, font: font)
         let badge = CGRect(x: center.x - width / 2, y: center.y - height / 2, width: width, height: height)
-        ctx.setFillColor(theme.chromeMuted.withAlphaComponent(hiddenActivity ? 0.32 : 0.16).cgColor)
+        let color = tint ?? theme.chromeMuted
+        ctx.setFillColor(color.withAlphaComponent(hiddenActivity ? 0.38 : 0.22).cgColor)
         fillRoundedRect(ctx, rect: badge, radius: height / 2)
         let text = "\(count)" as NSString
-        let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: theme.chromeMuted]
+        let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: tint ?? theme.chromeMuted]
         let size = text.size(withAttributes: attrs)
         text.draw(at: NSPoint(x: badge.midX - size.width / 2, y: badge.midY - size.height / 2), withAttributes: attrs)
     }
@@ -153,13 +160,15 @@ enum WorkspacePillStyle {
     static func drawGroupTray(
         _ ctx: CGContext, rect: CGRect, color: NSColor?, highlighted: Bool, theme: TerminalTheme
     ) {
+        // A soft tinted well, no outline: a hard border boxed the group off from
+        // the strip. The outline only appears as the drop-target highlight.
         let tint = color ?? theme.chromeMuted
-        let fillAlpha: CGFloat = color == nil ? 0.07 : 0.14
+        let fillAlpha: CGFloat = color == nil ? 0.09 : 0.12
         ctx.setFillColor(tint.withAlphaComponent(highlighted ? fillAlpha + 0.09 : fillAlpha).cgColor)
         fillRoundedRect(ctx, rect: rect, radius: groupTrayRadius)
-        let stroke = highlighted ? theme.accentColor : tint.withAlphaComponent(color == nil ? 0.22 : 0.5)
-        ctx.setStrokeColor(stroke.cgColor)
-        ctx.setLineWidth(highlighted ? 1.5 : IslandMetrics.borderWidth)
+        guard highlighted else { return }
+        ctx.setStrokeColor(theme.accentColor.cgColor)
+        ctx.setLineWidth(1.5)
         ctx.addPath(
             CGPath(
                 roundedRect: rect.insetBy(dx: 0.5, dy: 0.5), cornerWidth: groupTrayRadius,
@@ -169,7 +178,7 @@ enum WorkspacePillStyle {
 
     private static func chevron(_ name: String) -> NSImage? {
         guard let img = NSImage(systemSymbolName: name, accessibilityDescription: nil) else { return nil }
-        let sized = img.withSymbolConfiguration(.init(pointSize: 7, weight: .bold)) ?? img
+        let sized = img.withSymbolConfiguration(.init(pointSize: 9, weight: .bold)) ?? img
         sized.isTemplate = true
         return sized
     }
@@ -189,9 +198,16 @@ enum WorkspacePillStyle {
         if let cached = tintedChevrons[key] {
             tinted = cached
         } else {
+            // Aspect-fit: stretching the narrow glyph into a square box made it
+            // read heavy and blunt.
+            let scale = min(rect.width / icon.size.width, rect.height / icon.size.height, 1)
+            let glyph = NSSize(width: icon.size.width * scale, height: icon.size.height * scale)
             tinted = NSImage(size: rect.size, flipped: false) { r in
+                let g = NSRect(
+                    x: (r.width - glyph.width) / 2, y: (r.height - glyph.height) / 2,
+                    width: glyph.width, height: glyph.height)
                 color.set()
-                icon.draw(in: r, from: .zero, operation: .sourceOver, fraction: 1)
+                icon.draw(in: g, from: .zero, operation: .sourceOver, fraction: 1)
                 r.fill(using: .sourceAtop)
                 return true
             }
@@ -211,11 +227,12 @@ enum WorkspacePillStyle {
     }
 
     /// Stroke the accent border drawn on the active pill.
-    static func strokeBorder(_ ctx: CGContext, rect: CGRect, theme: TerminalTheme) {
+    static func strokeBorder(_ ctx: CGContext, rect: CGRect, theme: TerminalTheme, color: NSColor? = nil) {
         let strokeRect = rect.insetBy(dx: borderInset, dy: borderInset)
         // accentEmphasis, not focusBorder: the 0.45 island border disappears
         // against tinted pill fills.
-        ctx.setStrokeColor(theme.accentEmphasis.cgColor)
+        // A coloured workspace outlines in its own colour, not the theme accent.
+        ctx.setStrokeColor((color ?? theme.accentEmphasis).withAlphaComponent(0.85).cgColor)
         ctx.setLineWidth(borderWidth)
         ctx.addPath(
             CGPath(
@@ -259,20 +276,29 @@ enum WorkspacePillStyle {
     }
 
     /// Draw the hover close button: opaque background circle, tinted overlay, "✕" glyph.
-    static func drawCloseButton(_ ctx: CGContext, in circleRect: CGRect, tint: NSColor, bg: NSColor) {
-        ctx.setFillColor(bg.cgColor)
-        ctx.fillEllipse(in: circleRect)
-        ctx.setFillColor(tint.withAlphaComponent(0.15).cgColor)
-        ctx.fillEllipse(in: circleRect)
-        let size = closeGlyphSize
-        closeGlyph.draw(
-            at: NSPoint(
-                x: circleRect.midX - size.width / 2,
-                y: circleRect.midY - size.height / 2),
-            withAttributes: [
-                .font: ToolbarView.Fonts.closeSmall,
-                .foregroundColor: tint.withAlphaComponent(0.8)
-            ])
+    static func drawCloseButton(_ ctx: CGContext, in rect: CGRect, tint: NSColor, hovered: Bool) {
+        // Glyph only at rest; the circle appears when the button itself is hovered.
+        if hovered {
+            ctx.setFillColor(tint.withAlphaComponent(0.16).cgColor)
+            ctx.fillEllipse(in: rect)
+        }
+        drawCloseGlyph(ctx, in: rect, color: tint.withAlphaComponent(hovered ? 1 : 0.8))
+    }
+
+    /// Strokes the "✕" centred in `rect` with round caps.
+    static func drawCloseGlyph(_ ctx: CGContext, in rect: CGRect, color: NSColor) {
+        let c = CGPoint(x: rect.midX, y: rect.midY)
+        let h = closeGlyphHalfSpan
+        ctx.saveGState()
+        ctx.setStrokeColor(color.cgColor)
+        ctx.setLineWidth(closeGlyphLineWidth)
+        ctx.setLineCap(.round)
+        ctx.move(to: CGPoint(x: c.x - h, y: c.y - h))
+        ctx.addLine(to: CGPoint(x: c.x + h, y: c.y + h))
+        ctx.move(to: CGPoint(x: c.x - h, y: c.y + h))
+        ctx.addLine(to: CGPoint(x: c.x + h, y: c.y - h))
+        ctx.strokePath()
+        ctx.restoreGState()
     }
 
     /// The workspace's furthest-along OSC 9;4 progress along the pill's bottom edge, and
@@ -280,7 +306,7 @@ enum WorkspacePillStyle {
     /// side bars so both read the same; `inset` keeps the bar clear of the rounded ends.
     static func drawStatus(
         _ ctx: CGContext, rect: CGRect, hasActivity: Bool, progress: TerminalProgress?,
-        theme: TerminalTheme, inset: CGFloat = 8
+        theme: TerminalTheme, inset: CGFloat = 8, dotCenter: CGPoint? = nil
     ) {
         if let progress {
             let bar = CGRect(
@@ -289,10 +315,13 @@ enum WorkspacePillStyle {
             ProgressBarStyle.draw(ctx, progress: progress, in: bar, theme: theme)
         }
         if hasActivity {
-            let dotSize: CGFloat = 5
+            // `dotCenter` puts the dot in the close slot; narrow pills without
+            // one keep it in the top-right corner.
+            let size = dotCenter == nil ? 5 : activityDotSize
+            let center = dotCenter ?? CGPoint(x: rect.maxX - size / 2 - 3, y: rect.minY + 3 + size / 2)
             ctx.setFillColor(theme.accentColor.cgColor)
             ctx.fillEllipse(
-                in: CGRect(x: rect.maxX - dotSize - 3, y: rect.minY + 3, width: dotSize, height: dotSize))
+                in: CGRect(x: center.x - size / 2, y: center.y - size / 2, width: size, height: size))
         }
     }
 }

@@ -133,21 +133,49 @@ extension ToolbarView {
                 ctx.setAlpha(0.3)
             }
             defer { if isLifted { ctx.restoreGState() } }
-            WorkspacePillStyle.fill(
-                ctx, rect: rect, active: ws.isActive, hovered: isWSHovered,
-                wsColor: wsColor, neutral: theme.chromeMuted)
+            // Inside a group the tray is the surface: members take the group's
+            // colour unless they carry their own, and only fill when active or hovered,
+            // so member tints never stack on top of the tray tint.
+            let groupColor = ws.groupID != nil ? ws.groupColor : nil
+            let labelTint = wsColor ?? groupColor
+            if ws.groupID == nil {
+                WorkspacePillStyle.fill(
+                    ctx, rect: rect, active: ws.isActive, hovered: isWSHovered,
+                    wsColor: wsColor, neutral: theme.chromeMuted)
+            } else if ws.isActive || isWSHovered {
+                WorkspacePillStyle.fill(
+                    ctx, rect: rect, active: ws.isActive, hovered: true,
+                    wsColor: labelTint, neutral: theme.chromeMuted)
+            }
 
             // Accent-color border on the active workspace pill
             if ws.isActive {
-                WorkspacePillStyle.strokeBorder(ctx, rect: rect, theme: theme)
+                WorkspacePillStyle.strokeBorder(ctx, rect: rect, theme: theme, color: labelTint)
             }
 
-            var contentX = x + 10
+            // Centre the content: short names in a min-width pill otherwise leave
+            // a ragged hole on the right that reads as uneven spacing.
+            let pinWidth: CGFloat = ws.isPinned && Self.pinIcon != nil ? 13 : 0
+            let measuredName = (ws.name as NSString).size(withAttributes: [
+                .font: ws.isActive ? Fonts.ws11Medium : Fonts.ws11Regular
+            ]).width
+            let contentWidth = pinWidth + ceil(measuredName)
+            let closeRect = workspaceCloseButtonRect(in: rect)
+            // Active unpinned pill: label leads, ✕ trails right after it. Otherwise
+            // centre the label across the same total padding (pill width stays put).
+            let contentStart = x + Self.workspaceLeadIn
+            let contentEnd = rect.maxX - (ws.isPinned ? Self.workspaceLeadIn : Self.workspaceCloseSlot)
+            var contentX: CGFloat
+            if !ws.isPinned && ws.isActive {
+                contentX = contentStart
+            } else {
+                contentX = max(contentStart, (rect.midX - contentWidth / 2).rounded())
+            }
 
             if ws.isPinned, let pinImg = Self.pinIcon {
                 let pinColor =
                     ws.isActive ? theme.chromeText.withAlphaComponent(0.5) : theme.chromeMuted.withAlphaComponent(0.5)
-                let iconSize: CGFloat = 8
+                let iconSize: CGFloat = 9
                 let iconY = (barHeight - iconSize) / 2
                 let iconRect = NSRect(x: contentX, y: iconY, width: iconSize, height: iconSize)
                 let tinted = NSImage(size: iconRect.size, flipped: false) { drawRect in
@@ -157,44 +185,40 @@ extension ToolbarView {
                     return true
                 }
                 tinted.draw(in: iconRect)
-                contentX += 12
+                contentX += 13
             }
 
-            let textColor: NSColor
-            if let c = wsColor, ws.isActive {
-                textColor = NSColor(
-                    red: c.redComponent * 0.6 + 0.4, green: c.greenComponent * 0.6 + 0.4,
-                    blue: c.blueComponent * 0.6 + 0.4, alpha: 1)
-            } else if ws.isActive {
-                textColor = theme.chromeText
-            } else if let c = wsColor {
-                textColor = NSColor(
-                    red: c.redComponent * 0.5 + 0.2, green: c.greenComponent * 0.5 + 0.2,
-                    blue: c.blueComponent * 0.5 + 0.2, alpha: 1)
-            } else {
-                textColor = theme.chromeMuted
-            }
+            let textColor = WorkspacePillStyle.labelColor(
+                wsColor: labelTint, active: ws.isActive, text: theme.chromeText, muted: theme.chromeMuted)
 
-            // Keep the name fully readable on hover — the close button draws its
-            // own opaque circle over the right edge, so no global text fade is needed.
+            let showClose = !ws.isPinned && ws.isActive
+            // Inactive labels are centred, so they may use the slot's spare width.
+            let textEnd = showClose ? contentEnd : rect.maxX - Self.workspaceLeadIn
             let nameFont = ws.isActive ? Fonts.ws11Medium : Fonts.ws11Regular
-            let nameAttrs: [NSAttributedString.Key: Any] = [.font: nameFont, .foregroundColor: textColor]
-            let nameSize = (ws.name as NSString).size(withAttributes: nameAttrs)
+            let para = NSMutableParagraphStyle()
+            para.lineBreakMode = .byTruncatingTail
+            let nameAttrs: [NSAttributedString.Key: Any] = [
+                .font: nameFont, .foregroundColor: textColor, .paragraphStyle: para
+            ]
+            let nameHeight = (ws.name as NSString).size(withAttributes: nameAttrs).height
             (ws.name as NSString).draw(
-                at: NSPoint(x: contentX, y: (barHeight - nameSize.height) / 2),
-                withAttributes: nameAttrs
-            )
+                in: CGRect(
+                    x: contentX, y: IslandMetrics.capCenteredTitleY(font: nameFont, barHeight: barHeight),
+                    width: max(0, textEnd - contentX), height: nameHeight),
+                withAttributes: nameAttrs)
 
-            // Close button — overlays text on hover, no extra pill space reserved
-            if !ws.isPinned && isWSHovered {
+            if showClose {
                 WorkspacePillStyle.drawCloseButton(
-                    ctx, in: workspaceCloseButtonRect(in: rect),
-                    tint: wsColor ?? theme.chromeMuted, bg: theme.chromeBg)
+                    ctx, in: closeRect, tint: labelTint ?? theme.chromeMuted,
+                    hovered: isWorkspaceCloseHovered && isMouseInside(closeRect))
             }
 
             // Furthest-along OSC 9;4 progress of the workspace's tabs, and the activity dot.
+            // Activity dot sits in the corner (centred labels leave no clean slot);
+            // the active pill shows its ✕ instead.
             WorkspacePillStyle.drawStatus(
-                ctx, rect: rect, hasActivity: ws.hasActivity, progress: ws.progress, theme: theme)
+                ctx, rect: rect, hasActivity: ws.hasActivity && !showClose, progress: ws.progress,
+                theme: theme)
         }
 
         drawStackHighlight(ctx, theme: theme)
@@ -300,7 +324,7 @@ extension ToolbarView {
                     // Plain click — close or select
                     let ws = workspaces[idx]
                     let closeRect = workspacePillRect(at: idx).map(workspaceCloseButtonRect(in:))
-                    if !ws.isPinned && hoveredWorkspaceIndex == idx && closeRect?.contains(startPoint) == true {
+                    if !ws.isPinned && ws.isActive && closeRect?.contains(startPoint) == true {
                         delegate?.toolbar(self, didCloseWorkspaceAt: idx)
                     } else {
                         delegate?.toolbar(self, didSelectWorkspaceAt: idx)

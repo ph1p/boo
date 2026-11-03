@@ -805,11 +805,9 @@ class SettingsWindowController: NSWindowController {
         window.contentView = hostingView
         super.init(window: window)
 
-        // Attached like the main window: this window's 32pt `NSTitlebarView`
-        // centres the buttons natively at 16pt from the top (measured), while the
-        // header midline sits at `barGap + toolbarHeight / 2` = 23pt — exactly the
-        // shared `offsetY` (-3 - barGap) lower, so the one positioner serves both
-        // windows.
+        // Attached like the main window: the header island has the same geometry
+        // (`gap` leading, `barGap` top, `toolbarHeight` tall), and the positioner
+        // derives its shift from that geometry, so the one positioner serves both.
         TrafficLightPositioner.attach(to: window)
 
         settingsObserver = NotificationCenter.default.addObserver(

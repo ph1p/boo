@@ -5,19 +5,19 @@ extension PaneView {
     // MARK: - Font Cache
 
     private enum TabFonts {
-        nonisolated(unsafe) static let title10Regular = NSFont.systemFont(ofSize: 10.5, weight: .regular)
-        nonisolated(unsafe) static let title10Medium = NSFont.systemFont(ofSize: 10.5, weight: .medium)
-        nonisolated(unsafe) static let close8Bold = NSFont.systemFont(ofSize: 8, weight: .bold)
-        nonisolated(unsafe) static let plus15Light = NSFont.systemFont(ofSize: 15, weight: .light)
-        nonisolated(unsafe) static let groupChip = NSFont.systemFont(ofSize: 10, weight: .semibold)
-        nonisolated(unsafe) static let groupBadge = NSFont.monospacedDigitSystemFont(ofSize: 9, weight: .bold)
+        nonisolated(unsafe) static let title10Regular = NSFont.systemFont(ofSize: 12, weight: .medium)
+        nonisolated(unsafe) static let title10Medium = NSFont.systemFont(ofSize: 12, weight: .semibold)
+        nonisolated(unsafe) static let subtitle = NSFont.systemFont(ofSize: 12, weight: .regular)
+        nonisolated(unsafe) static let plus15Light = NSFont.systemFont(ofSize: 17, weight: .light)
+        nonisolated(unsafe) static let groupChip = NSFont.systemFont(ofSize: 11.5, weight: .semibold)
+        nonisolated(unsafe) static let groupBadge = NSFont.monospacedDigitSystemFont(ofSize: 10, weight: .bold)
     }
 
     // MARK: - Tab Groups
 
-    private static let groupChipPadX: CGFloat = 8
-    private static let groupDotSize: CGFloat = 6
-    private static let groupDotGap: CGFloat = 5
+    private static let groupChipPadX: CGFloat = 10
+    private static let groupDotSize: CGFloat = 7
+    private static let groupDotGap: CGFloat = 6
 
     /// Chip content: a dot and the name while expanded; the name and a tab
     /// count badge while collapsed. An unnamed group drops the name.
@@ -33,7 +33,7 @@ extension PaneView {
 
     private func groupBadgeWidth(_ group: TabGroup) -> CGFloat {
         let count = "\(pane.tabIndices(inGroup: group.id).count)" as NSString
-        return max(14, ceil(count.size(withAttributes: [.font: TabFonts.groupBadge]).width) + 8)
+        return max(16, ceil(count.size(withAttributes: [.font: TabFonts.groupBadge]).width) + 10)
     }
 
     /// Width of the group chip at the start of tab `index`'s slot; 0 unless
@@ -184,9 +184,9 @@ extension PaneView {
         if badgeW > 0 {
             let badge = CGRect(
                 x: group.name.isEmpty ? pill.midX - badgeW / 2 : pill.maxX - Self.groupChipPadX - badgeW,
-                y: pill.midY - 7, width: badgeW, height: 14)
+                y: pill.midY - 8, width: badgeW, height: 16)
             ctx.setFillColor(text.withAlphaComponent(0.2).cgColor)
-            WorkspacePillStyle.fillRoundedRect(ctx, rect: badge, radius: 7)
+            WorkspacePillStyle.fillRoundedRect(ctx, rect: badge, radius: 8)
             let attrs: [NSAttributedString.Key: Any] = [.font: TabFonts.groupBadge, .foregroundColor: text]
             let count = "\(pane.tabIndices(inGroup: group.id).count)" as NSString
             let size = count.size(withAttributes: attrs)
@@ -216,19 +216,26 @@ extension PaneView {
 
     /// Horizontal inset of the pill inside its tab slot — two adjacent slots yield
     /// a `2 × tabPillInsetX` gap between pills.
-    static let tabPillInsetX: CGFloat = 3
+    static let tabPillInsetX: CGFloat = 4
     /// Height of a tab pill, vertically centred in the tab row.
-    static let tabPillHeight: CGFloat = 22
+    static let tabPillHeight: CGFloat = 28
     /// Inset of the first/last tab slot from the pane edge. Together with
     /// `tabPillInsetX` the outermost pills sit `tabBarSideInset + tabPillInsetX`
     /// from the pane edge — the same 6pt the pills keep between each other.
-    static let tabBarSideInset: CGFloat = 3
+    static let tabBarSideInset: CGFloat = 4
     /// Lead-in from the pill's left edge to its first content (icon or title).
-    static let tabTextLeadIn: CGFloat = 10
-    /// Width a leading icon advances the title by (12pt glyph + 3pt gap).
-    static let tabIconAdvance: CGFloat = 15
+    static let tabTextLeadIn: CGFloat = 12
+    /// Width a leading icon advances the title by. The icon sits on a tile that
+    /// starts `tabIconTileInset` from the pill edge (closer than `tabTextLeadIn`),
+    /// so the title lands `tabIconTileGap` past the tile.
+    static let tabIconAdvance: CGFloat = 20
+    /// Rounded tile behind a tab's leading icon, inset from the pill's left edge
+    /// by the same amount as from its top and bottom.
+    static let tabIconTileSize: CGFloat = 20
+    static let tabIconTileInset: CGFloat = (tabPillHeight - tabIconTileSize) / 2
+    static let tabIconTileGap: CGFloat = tabTextLeadIn + tabIconAdvance - tabIconTileInset - tabIconTileSize
     /// Trailing gap between the close circle and the pill's right edge.
-    static let tabCloseTrailingGap: CGFloat = 4
+    static let tabCloseTrailingGap: CGFloat = 6
     /// Slot-relative width of the close-button hit zone at the tab's right edge —
     /// derived from the drawn circle so draw, hover, and click can't diverge.
     static let tabCloseHitZone: CGFloat =
@@ -404,7 +411,10 @@ extension PaneView {
 
         // Close button visible on hover or active tab (when closeable)
         let showClose = showTabClose && (isActive || isHovered)
-        let closeZone: CGFloat = showClose ? 18 : 8
+        // The activity dot sits in the close slot, so either one reserves it.
+        let showDot = tab.state.hasActivity && !isActive && !showClose
+        let closeZone: CGFloat =
+            (showClose || showDot) ? WorkspacePillStyle.closeButtonSize + Self.tabCloseTrailingGap + 4 : 10
 
         textX += drawLeadingIcon(tab: tab, theme: theme, x: textX, midY: midY, isActive: isActive)
 
@@ -417,20 +427,29 @@ extension PaneView {
                 ? theme.chromeText : (isHovered ? theme.chromeText.withAlphaComponent(0.8) : theme.chromeMuted),
             .paragraphStyle: para
         ]
-        let title = Self.tabDisplayTitle(tab: tab) as NSString
-        let titleSize = title.size(withAttributes: attrs)
+        let title = NSMutableAttributedString(string: Self.tabDisplayTitle(tab: tab), attributes: attrs)
+        if let subtitle = Self.tabDisplaySubtitle(tab: tab) {
+            title.append(
+                NSAttributedString(
+                    string: "  " + subtitle,
+                    attributes: [
+                        .font: TabFonts.subtitle,
+                        .foregroundColor: theme.chromeMuted.withAlphaComponent(isActive ? 0.75 : 0.55),
+                        .paragraphStyle: para
+                    ]))
+        }
+        let titleSize = title.size()
         let maxTitleW = max(0, pillRect.maxX - textX - closeZone)
         title.draw(
             in: CGRect(
                 x: textX, y: midY - titleSize.height / 2,
-                width: min(titleSize.width, maxTitleW), height: titleSize.height),
-            withAttributes: attrs)
+                width: min(titleSize.width, maxTitleW), height: titleSize.height))
 
         // OSC 9;4 progress along the pill's bottom edge.
         if let progress = tab.state.progress {
             let bar = CGRect(
-                x: pillRect.minX + 6, y: pillRect.maxY - ProgressBarStyle.height - 1,
-                width: pillRect.width - 12, height: ProgressBarStyle.height)
+                x: pillRect.minX + 8, y: pillRect.maxY - ProgressBarStyle.height - 1,
+                width: pillRect.width - 16, height: ProgressBarStyle.height)
             ProgressBarStyle.draw(ctx, progress: progress, in: bar, theme: theme)
         }
 
@@ -446,43 +465,27 @@ extension PaneView {
 
         if tab.state.isRecording { Self.drawRecordingDot(ctx, in: pillRect) }
 
+        let closeSize = WorkspacePillStyle.closeButtonSize
+        let closeRect = CGRect(
+            x: pillRect.maxX - closeSize - Self.tabCloseTrailingGap, y: midY - closeSize / 2,
+            width: closeSize, height: closeSize)
+
         // Activity dot — shown on inactive tabs when a command finished in
-        // background; a trigger's mark shows in the warning color.
-        if tab.state.hasActivity && !isActive {
-            let dotSize: CGFloat = 5
+        // background; a trigger's mark shows in the warning color. It shares
+        // the close slot, and the ✕ replaces it on hover.
+        if showDot {
+            let dotSize = WorkspacePillStyle.activityDotSize
             ctx.setFillColor((tab.state.triggerMark != nil ? theme.warning : theme.accentEmphasis).cgColor)
             ctx.fillEllipse(
                 in: CGRect(
-                    x: pillRect.maxX - closeZone - dotSize - 2,
-                    y: midY - dotSize / 2,
+                    x: closeRect.midX - dotSize / 2, y: closeRect.midY - dotSize / 2,
                     width: dotSize, height: dotSize))
         }
 
         // Close button — only show on active or hovered tab
         if showClose {
-            let closeHovered = isHovered && isCloseButtonHovered
-            let closeAlpha: CGFloat = closeHovered ? 0.9 : (isActive ? 0.7 : 0.5)
-
-            let circleSize = WorkspacePillStyle.closeButtonSize
-            let circleCenterX = pillRect.maxX - circleSize / 2 - Self.tabCloseTrailingGap
-            let circleCenterY = midY
-
-            // Subtle circular background on close-button hover
-            if closeHovered {
-                let circleX = circleCenterX - circleSize / 2
-                let circleY = circleCenterY - circleSize / 2
-                ctx.setFillColor(theme.controlFill.cgColor)
-                ctx.fillEllipse(in: CGRect(x: circleX, y: circleY, width: circleSize, height: circleSize))
-            }
-
-            let ca: [NSAttributedString.Key: Any] = [
-                .font: TabFonts.close8Bold,
-                .foregroundColor: theme.chromeMuted.withAlphaComponent(closeAlpha)
-            ]
-            let cs = "\u{2715}" as NSString
-            let csz = cs.size(withAttributes: ca)
-            cs.draw(
-                at: NSPoint(x: circleCenterX - csz.width / 2, y: circleCenterY - csz.height / 2), withAttributes: ca)
+            WorkspacePillStyle.drawCloseButton(
+                ctx, in: closeRect, tint: theme.chromeMuted, hovered: isHovered && isCloseButtonHovered)
         }
     }
 
@@ -496,9 +499,16 @@ extension PaneView {
     }
 
     func drawLeadingIcon(tab: Pane.Tab, theme: TerminalTheme, x: CGFloat, midY: CGFloat, isActive: Bool) -> CGFloat {
+        // The tile starts closer to the pill edge than the title would; `x` is
+        // where the title would start without an icon.
+        let tile = CGRect(
+            x: x - Self.tabTextLeadIn + Self.tabIconTileInset, y: midY - Self.tabIconTileSize / 2,
+            width: Self.tabIconTileSize, height: Self.tabIconTileSize)
+        let x = tile.midX - 7
         // Content type icon for non-terminal tabs
         if tab.contentType != .terminal {
             let iconColor = isActive ? theme.chromeText : theme.chromeMuted
+            Self.drawIconTile(tile, color: iconColor, isActive: isActive)
             guard
                 let drawn = Self.drawTabIcon(
                     symbolName: tab.contentType.symbolName, color: iconColor, x: x, midY: midY, isActive: isActive)
@@ -512,8 +522,9 @@ extension PaneView {
         guard tabHasLeadingIcon(tab) else { return 0 }
         let process = tab.state.foregroundProcess
         let iconColor = ProcessIcon.themeColor(for: process, theme: theme, isActive: isActive)
-        let iconSize: CGFloat = 12
+        let iconSize: CGFloat = 14
         let opacity: CGFloat = isActive ? 1.0 : 0.7
+        Self.drawIconTile(tile, color: iconColor, isActive: isActive)
         if let customImg = ProcessIcon.customImage(for: process, color: iconColor, size: iconSize) {
             let iconRect = CGRect(x: x, y: midY - iconSize / 2, width: iconSize, height: iconSize)
             customImg.draw(in: iconRect, from: .zero, operation: .sourceOver, fraction: opacity)
@@ -584,17 +595,7 @@ extension PaneView {
             return "\(host):\(path)"
         }
         // Local tab: show tilde-contracted CWD
-        let dir = tab.workingDirectory
-        if !dir.isEmpty {
-            let home = FileManager.default.homeDirectoryForCurrentUser.path
-            if dir == home {
-                return "~"
-            } else if dir.hasPrefix(home + "/") {
-                return "~" + dir.dropFirst(home.count)
-            }
-            return dir
-        }
-        return "shell"
+        return localDisplayPath(tab.workingDirectory) ?? "shell"
     }
 
     static func tildeContractRemotePath(_ path: String, tab: Pane.Tab) -> String {
@@ -615,6 +616,30 @@ extension PaneView {
 
     // MARK: - Icon Drawing Helper
 
+    /// Rounded square behind a tab icon, tinted with the icon's own colour.
+    static func drawIconTile(_ rect: CGRect, color: NSColor, isActive: Bool) {
+        color.withAlphaComponent(isActive ? 0.22 : 0.14).setFill()
+        NSBezierPath(roundedRect: rect, xRadius: 6, yRadius: 6).fill()
+    }
+
+    /// Dimmed text after the title: the working directory when the title shows
+    /// a running process, so the tab says what runs and where. Nil otherwise.
+    static func tabDisplaySubtitle(tab: Pane.Tab) -> String? {
+        guard tab.contentType == .terminal, tab.remoteSession == nil else { return nil }
+        let process = tab.state.foregroundProcess
+        guard !process.isEmpty, !ProcessIcon.isShell(process) else { return nil }
+        return localDisplayPath(tab.workingDirectory)
+    }
+
+    /// Tilde-contracted local path, nil when empty.
+    static func localDisplayPath(_ dir: String) -> String? {
+        guard !dir.isEmpty else { return nil }
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        if dir == home { return "~" }
+        if dir.hasPrefix(home + "/") { return "~" + dir.dropFirst(home.count) }
+        return dir
+    }
+
     /// Result of preparing a tab icon for drawing.
     struct TabIconDraw {
         let image: NSImage
@@ -634,9 +659,9 @@ extension PaneView {
         guard let iconImage = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil) else {
             return nil
         }
-        let config = NSImage.SymbolConfiguration(pointSize: 9, weight: .medium)
+        let config = NSImage.SymbolConfiguration(pointSize: 11, weight: .medium)
         let configured = iconImage.withSymbolConfiguration(config) ?? iconImage
-        let iconSize: CGFloat = 12
+        let iconSize: CGFloat = 14
         let iconRect = CGRect(x: x, y: midY - iconSize / 2, width: iconSize, height: iconSize)
 
         let tinted = NSImage(size: configured.size)

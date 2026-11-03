@@ -98,14 +98,14 @@ class WorkspaceBarView: NSView {
     private(set) var groupHeaders: [GroupHeader] = []
 
     /// Height of an expanded group's header row (chevron + short name).
-    static let groupHeaderHeight: CGFloat = 16
-    nonisolated(unsafe) static let groupLabelFont = NSFont.systemFont(ofSize: 8.5, weight: .semibold)
-    nonisolated(unsafe) static let groupCountFont = NSFont.monospacedDigitSystemFont(ofSize: 8, weight: .semibold)
+    static let groupHeaderHeight: CGFloat = 20
+    nonisolated(unsafe) static let groupLabelFont = NSFont.systemFont(ofSize: 10, weight: .semibold)
+    nonisolated(unsafe) static let groupCountFont = NSFont.monospacedDigitSystemFont(ofSize: 9.5, weight: .semibold)
 
     private(set) var items: [Item] = []
     private(set) var selectedIndex: Int = -1
 
-    private let barHeight: CGFloat = 28
+    private let barHeight: CGFloat = 32
     private var dragSourceIndex: Int?
     private var dropTargetIndex: Int?
     /// Pill the drag would stack onto (forming or joining its group).
@@ -124,6 +124,8 @@ class WorkspaceBarView: NSView {
     /// Group whose header (or collapsed folder) is under the cursor.
     private(set) var hoveredGroupID: String?
     private var isPlusButtonHovered: Bool = false
+    /// Pointer is over the expanded pill's close button (draws its hover circle).
+    private var isCloseButtonHovered: Bool = false
     private var wsBarTrackingArea: NSTrackingArea?
 
     override var mouseDownCanMoveWindow: Bool { false }
@@ -143,11 +145,11 @@ class WorkspaceBarView: NSView {
     }
 
     /// Horizontal inset of a pill inside the vertical strip.
-    static let verticalPadding: CGFloat = 4
+    static let verticalPadding: CGFloat = 5
 
     /// Width the strip *claims* in the window layout — what the panes sit clear of.
     /// One number, shared with the layout code in `MainWindowController`.
-    static let verticalWidth: CGFloat = 40
+    static let verticalWidth: CGFloat = 46
 
     /// Extra width the view's frame carries beyond `verticalWidth`, used only as
     /// scratch space for the expanded hover pill. The panes are laid out against
@@ -183,12 +185,12 @@ class WorkspaceBarView: NSView {
         verticalWidth + verticalHoverOverhang - verticalPadding
 
     /// Horizontal padding inside the expanded pill, either side of its contents.
-    static let verticalHoveredPillPadding: CGFloat = 10
+    static let verticalHoveredPillPadding: CGFloat = 12
 
     /// Font the expanded pill's name is drawn in. Shared by the measure and the draw
     /// so the pill can't be sized against different metrics than it paints with.
     static func verticalHoveredPillFont(selected: Bool) -> NSFont {
-        NSFont.systemFont(ofSize: 11.5, weight: selected ? .semibold : .regular)
+        NSFont.systemFont(ofSize: 12.5, weight: selected ? .semibold : .regular)
     }
 
     /// Frame of the expanded pill for the hovered workspace: same top and height as
@@ -229,10 +231,10 @@ class WorkspaceBarView: NSView {
     }
 
     /// Height of one pill in the vertical strip.
-    static let verticalItemSize: CGFloat = 32
+    static let verticalItemSize: CGFloat = 36
 
     /// Gap between stacked pills.
-    static let verticalItemGap: CGFloat = 4
+    static let verticalItemGap: CGFloat = 6
 
     /// Depth of the scroll fade at each end of the pill stack. Deep enough that a
     /// clipped pill has fully dissolved before it reaches the edge, matching the
@@ -240,11 +242,11 @@ class WorkspaceBarView: NSView {
     static let verticalFadeHeight: CGFloat = 24
 
     /// Fonts used per pill on every draw pass — built once rather than per pill.
-    nonisolated(unsafe) static let plusGlyphFont = NSFont.systemFont(ofSize: 17, weight: .light)
+    nonisolated(unsafe) static let plusGlyphFont = NSFont.systemFont(ofSize: 18, weight: .light)
     nonisolated(unsafe) static let pillLabelSelected = NSFont.systemFont(
-        ofSize: 11, weight: .semibold)
+        ofSize: 12, weight: .semibold)
     nonisolated(unsafe) static let pillLabelRegular = NSFont.systemFont(
-        ofSize: 11, weight: .regular)
+        ofSize: 12, weight: .regular)
 
     /// How far the vertical strip is scrolled, in points. The mirror of the top
     /// bar's `workspaceScrollOffset`, only along Y.
@@ -447,8 +449,8 @@ class WorkspaceBarView: NSView {
         if hovered {
             WorkspacePillStyle.fillGroupHeaderHover(ctx, rect: rect, radius: rect.height / 2, theme: theme)
         }
-        let chevron: CGFloat = 6
-        let gap: CGFloat = 2
+        let chevron: CGFloat = 7
+        let gap: CGFloat = 3
         let label = String(header.name.prefix(3)).uppercased() as NSString
         let attrs: [NSAttributedString.Key: Any] = [.font: Self.groupLabelFont, .foregroundColor: tint]
         let size = label.size(withAttributes: attrs)
@@ -473,11 +475,11 @@ class WorkspaceBarView: NSView {
         let attrs: [NSAttributedString.Key: Any] = [.font: Self.pillLabelRegular, .foregroundColor: tint]
         let size = label.size(withAttributes: attrs)
         label.draw(
-            at: NSPoint(x: rect.midX - size.width / 2, y: rect.minY + 4), withAttributes: attrs)
+            at: NSPoint(x: rect.midX - size.width / 2, y: rect.minY + 3), withAttributes: attrs)
 
         WorkspacePillStyle.drawGroupCountBadge(
-            ctx, count: header.members.count, center: CGPoint(x: rect.midX, y: rect.maxY - 8), height: 10,
-            font: Self.groupCountFont, hiddenActivity: header.hiddenActivity, theme: theme)
+            ctx, count: header.members.count, center: CGPoint(x: rect.midX, y: rect.maxY - 9), height: 12,
+            font: Self.groupCountFont, hiddenActivity: header.hiddenActivity, theme: theme, tint: header.color)
         WorkspacePillStyle.drawStatus(
             ctx, rect: rect, hasActivity: header.hiddenActivity, progress: nil, theme: theme, inset: 4)
     }
@@ -537,7 +539,7 @@ class WorkspaceBarView: NSView {
                 ctx, rect: pillRect, active: isSelected, hovered: false,
                 wsColor: wsColor, neutral: theme.chromeMuted)
             if isSelected {
-                WorkspacePillStyle.strokeBorder(ctx, rect: pillRect, theme: theme)
+                WorkspacePillStyle.strokeBorder(ctx, rect: pillRect, theme: theme, color: wsColor)
             } else {
                 // Every pill is an island, so every pill carries the island hairline —
                 // tinted by the workspace's own colour when it has one.
@@ -654,7 +656,7 @@ class WorkspaceBarView: NSView {
         // the floating pill from the terminal content behind it. The active
         // workspace keeps its accent stroke instead.
         if isSelected {
-            WorkspacePillStyle.strokeBorder(ctx, rect: rect, theme: theme)
+            WorkspacePillStyle.strokeBorder(ctx, rect: rect, theme: theme, color: wsColor)
         } else {
             WorkspacePillStyle.strokeIslandBorder(
                 ctx, rect: rect, wsColor: wsColor, neutral: islandBorder)
@@ -693,11 +695,12 @@ class WorkspaceBarView: NSView {
         } else {
             WorkspacePillStyle.drawCloseButton(
                 ctx, in: verticalCloseButtonRect(in: rect),
-                tint: wsColor ?? theme.chromeMuted, bg: theme.chromeBg)
+                tint: wsColor ?? theme.chromeMuted, hovered: isCloseButtonHovered)
         }
-        // Clear of the close button: that sits vertically centred, 10pt in from the edge.
+        // The close button owns its slot on hover, so the dot only shows on pinned pills.
         WorkspacePillStyle.drawStatus(
-            ctx, rect: rect, hasActivity: item.hasActivity, progress: item.progress, theme: theme)
+            ctx, rect: rect, hasActivity: item.hasActivity && item.isPinned, progress: item.progress,
+            theme: theme)
     }
 
     // MARK: - Pin Icon
@@ -1175,9 +1178,16 @@ class WorkspaceBarView: NSView {
             toolTip = newGroup.map { "\($0.name) (\($0.members.count))" }
             needsDisplay = true
         }
-        if newHover != hoveredIndex || newPlusHover != isPlusButtonHovered {
+        var newCloseHover = false
+        if newHover >= 0, newHover < items.count, !items[newHover].isPinned {
+            newCloseHover = verticalCloseButtonRect(in: verticalHoveredPillRect(at: newHover)).contains(point)
+        }
+        if newHover != hoveredIndex || newPlusHover != isPlusButtonHovered
+            || newCloseHover != isCloseButtonHovered
+        {
             hoveredIndex = newHover
             isPlusButtonHovered = newPlusHover
+            isCloseButtonHovered = newCloseHover
             needsDisplay = true
         }
     }
@@ -1192,6 +1202,7 @@ class WorkspaceBarView: NSView {
             isPlusButtonHovered = false
             changed = true
         }
+        isCloseButtonHovered = false
         if hoveredGroupID != nil {
             hoveredGroupID = nil
             toolTip = nil

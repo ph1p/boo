@@ -37,7 +37,7 @@ final class WorkspaceDragGhostView: NSView {
         WorkspacePillStyle.fill(
             ctx, rect: rect, active: active, hovered: true, wsColor: wsColor, neutral: theme.chromeMuted)
         if active {
-            WorkspacePillStyle.strokeBorder(ctx, rect: rect, theme: theme)
+            WorkspacePillStyle.strokeBorder(ctx, rect: rect, theme: theme, color: wsColor)
         } else {
             WorkspacePillStyle.strokeIslandBorder(
                 ctx, rect: rect, wsColor: wsColor, neutral: IslandMetrics.borderColor)

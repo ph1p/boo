@@ -343,6 +343,10 @@ struct WorkspaceGroup: Equatable {
 
     /// Custom color first, then the preset, nil for neutral chrome.
     var resolvedColor: NSColor? { customColorHex.flatMap(NSColor.init(hex:)) ?? color.nsColor }
+    /// Chrome colour: a custom colour as picked, a preset from the theme palette.
+    func resolvedColor(theme: TerminalTheme) -> NSColor? {
+        customColorHex.flatMap(NSColor.init(hex:)) ?? color.themed(theme)
+    }
 
     /// Plist/JSON-safe form, so the value round-trips through UserDefaults and settings.json.
     var dictionary: [String: Any] {

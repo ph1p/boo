@@ -36,12 +36,28 @@ struct WorkspaceStripLayout {
 }
 
 extension ToolbarView {
-    /// Tray height: a few points taller than a pill so it reads as a container.
-    static let groupTrayHeight: CGFloat = workspacePillHeight + 6
-    static let groupChipHeight: CGFloat = workspacePillHeight - 4
+    /// Inset of the chip and member pills from the tray edge, the same on all
+    /// four sides; members sit the same distance apart, like segments.
+    static let groupInnerPad: CGFloat = 2
+    /// Tray height: one pill plus the inner padding above and below.
+    static let groupTrayHeight: CGFloat = workspacePillHeight + groupInnerPad * 2
+    /// The chip is a full-height segment, so its hover fill lines up with the members.
+    static let groupChipHeight: CGFloat = workspacePillHeight
 
-    nonisolated(unsafe) static let groupChipFont = NSFont.systemFont(ofSize: 10.5, weight: .semibold)
-    nonisolated(unsafe) static let groupCountFont = NSFont.monospacedDigitSystemFont(ofSize: 9.5, weight: .medium)
+    nonisolated(unsafe) static let groupChipFont = NSFont.systemFont(ofSize: 12, weight: .medium)
+    nonisolated(unsafe) static let groupCountFont = NSFont.monospacedDigitSystemFont(ofSize: 10, weight: .semibold)
+
+    /// Chip spacing, shared by `chipWidth` and `drawGroupChipContent` so the
+    /// measured and drawn chip can't drift apart.
+    static let groupChipPadX: CGFloat = 10
+    /// Trailing inset of the count badge: tray padding plus this equals the gap
+    /// above and below the badge, so the capsule sits evenly in the tray corner.
+    static var groupBadgeInset: CGFloat {
+        (groupTrayHeight - groupCountHeight) / 2 - groupInnerPad
+    }
+    static let groupChevronSize: CGFloat = 8
+    static let groupChipGap: CGFloat = 6
+    static let groupCountHeight: CGFloat = 16
 
     var workspaceLayout: WorkspaceStripLayout {
         if let cached = _cachedLayout { return cached }
@@ -51,16 +67,19 @@ extension ToolbarView {
     }
 
     private func chipWidth(name: String, collapsed: Bool, count: Int) -> CGFloat {
-        var w = 8 + 7 + 5 + (name as NSString).size(withAttributes: [.font: Self.groupChipFont]).width + 8
+        let nameW = ceil((name as NSString).size(withAttributes: [.font: Self.groupChipFont]).width)
+        var w = Self.groupChipPadX + Self.groupChevronSize + Self.groupChipGap + nameW + Self.groupChipPadX
         if collapsed {
-            w += 5 + ("\(count)" as NSString).size(withAttributes: [.font: Self.groupCountFont]).width + 8
+            w +=
+                Self.groupChipGap + WorkspacePillStyle.groupCountBadgeWidth(count, font: Self.groupCountFont)
+                + Self.groupBadgeInset - Self.groupChipPadX
         }
-        return ceil(min(w, 160))
+        return ceil(min(w, 180))
     }
 
     private func buildWorkspaceLayout() -> WorkspaceStripLayout {
         let gap = Self.workspaceGap
-        let pad = WorkspacePillStyle.groupTrayPadding
+        let pad = Self.groupInnerPad
         var layout = WorkspaceStripLayout()
         layout.pillX.reserveCapacity(workspaces.count)
         var x: CGFloat = 0
@@ -81,7 +100,7 @@ extension ToolbarView {
             x += pad
             let chipX = x
             let chipW = chipWidth(name: name, collapsed: collapsed, count: end - i)
-            x += chipW + gap
+            x += chipW + pad
             var hiddenActivity = false
             for k in i..<end {
                 layout.pillX.append(x)
@@ -91,10 +110,10 @@ extension ToolbarView {
                     layout.hidden.insert(k)
                     hiddenActivity = hiddenActivity || workspaces[k].hasActivity
                 } else {
-                    x += measureWorkspace(at: k) + gap
+                    x += measureWorkspace(at: k) + pad
                 }
             }
-            x = x - gap + pad
+            x += pad
             layout.groups.append(
                 WorkspaceStripGroup(
                     id: gid, name: name, collapsed: collapsed, members: i..<end, trayMinX: trayMinX,
@@ -137,8 +156,18 @@ extension ToolbarView {
     func workspaceIndex(atX x: CGFloat) -> Int? {
         workspaces.indices.first { i in
             guard let r = workspacePillRect(at: i) else { return false }
-            return x >= r.minX && x < r.maxX + Self.workspaceGap
+            return x >= r.minX && x < r.maxX + gapAfterWorkspace(i)
         }
+    }
+
+    /// Space after pill `i`: the inner padding between members of one group,
+    /// the strip gap everywhere else.
+    func gapAfterWorkspace(_ i: Int) -> CGFloat {
+        let next = workspaces.indices.dropFirst(i + 1).first { !workspaceLayout.hidden.contains($0) }
+        guard let gid = workspaces[i].groupID, let next, workspaces[next].groupID == gid else {
+            return Self.workspaceGap
+        }
+        return Self.groupInnerPad
     }
 
     /// The group whose header chip is under `point`.
@@ -165,7 +194,9 @@ extension ToolbarView {
             return viewX(group.trayMinX) - Self.workspaceGap / 2
         }
         if index < workspaces.count {
-            return viewX(layout.pillX[index]) - Self.workspaceGap / 2
+            // Between two members of a group the gap is the tray's inner padding.
+            let gap = workspaces[index].groupID != nil ? Self.groupInnerPad : Self.workspaceGap
+            return viewX(layout.pillX[index]) - gap / 2
         }
         return viewX(layout.totalWidth) - Self.workspaceGap / 2
     }
@@ -247,12 +278,12 @@ extension ToolbarView {
     ) {
         let color = WorkspacePillStyle.groupTint(
             color: group.color, hovered: hoveredGroupID == group.id, theme: theme)
-        var x = chip.minX + 8
-        let chevronSize: CGFloat = 7
+        var x = chip.minX + Self.groupChipPadX
+        let chevronSize = Self.groupChevronSize
         WorkspacePillStyle.drawGroupChevron(
             collapsed: group.collapsed,
             in: NSRect(x: x, y: chip.midY - chevronSize / 2, width: chevronSize, height: chevronSize), color: color)
-        x += chevronSize + 5
+        x += chevronSize + Self.groupChipGap
 
         let countWidth =
             group.collapsed
@@ -264,14 +295,18 @@ extension ToolbarView {
             .font: Self.groupChipFont, .foregroundColor: color, .paragraphStyle: para
         ]
         let nameH = (group.name as NSString).size(withAttributes: nameAttrs).height
-        let nameW = max(0, chip.maxX - 8 - (countWidth > 0 ? countWidth + 5 : 0) - x)
+        let badgeInset = Self.groupBadgeInset
+        let nameW = max(
+            0, chip.maxX - (countWidth > 0 ? badgeInset + countWidth + Self.groupChipGap : Self.groupChipPadX) - x)
         (group.name as NSString).draw(
             in: NSRect(x: x, y: chip.midY - nameH / 2, width: nameW, height: nameH), withAttributes: nameAttrs)
 
         guard group.collapsed else { return }
         WorkspacePillStyle.drawGroupCountBadge(
-            ctx, count: group.members.count, center: CGPoint(x: chip.maxX - 6 - countWidth / 2, y: chip.midY),
-            height: 14, font: Self.groupCountFont, hiddenActivity: group.hiddenActivity, theme: theme)
+            ctx, count: group.members.count, center: CGPoint(x: chip.maxX - badgeInset - countWidth / 2, y: chip.midY),
+            height: Self.groupCountHeight, font: Self.groupCountFont, hiddenActivity: group.hiddenActivity,
+            theme: theme,
+            tint: group.color)
     }
 
     // MARK: Dragging a whole group

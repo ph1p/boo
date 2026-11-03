@@ -687,7 +687,9 @@ class ThemedSplitView: NSSplitView {
                     self.sidebarContainer.layer?.backgroundColor = theme.sidebarBg.cgColor
                     // splitContainer stays clear — panes are the islands (see SplitContainerView.init)
                     self.mainSplitView.needsDisplay = true
-                    self.toolbar.needsDisplay = true
+                    // A refresh, not just a redraw: workspace colours resolve
+                    // against the theme palette.
+                    self.refreshToolbar()
                     self.statusBar.needsDisplay = true
                     // Island borders are layer strokes, not drawn in `draw(_:)`,
                     // so they need an explicit refresh on theme change.

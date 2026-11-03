@@ -22,9 +22,9 @@ import XCTest
         let pv = PaneView(paneID: pane.id, pane: pane)
         pv.frame = NSRect(x: 0, y: 0, width: 600, height: 300)
         let w = pv.measuredTabWidth(for: pane.tabs[0])
-        // Short title stays near tabMinWidth (60) — no dead space padding
-        XCTAssertGreaterThanOrEqual(w, 60)
-        XCTAssertLessThanOrEqual(w, 70)
+        // Short title stays near tabMinWidth (72) — no dead space padding
+        XCTAssertGreaterThanOrEqual(w, 72)
+        XCTAssertLessThanOrEqual(w, 82)
     }
 
     func testMeasuredTabWidth_longTitle() {
@@ -39,8 +39,8 @@ import XCTest
         let pv = PaneView(paneID: pane.id, pane: pane)
         pv.frame = NSRect(x: 0, y: 0, width: 600, height: 300)
         let w = pv.measuredTabWidth(for: pane.tabs[0])
-        // Long title should clamp to tabMaxWidth (180)
-        XCTAssertEqual(w, 180)
+        // Long title should clamp to tabMaxWidth (220)
+        XCTAssertEqual(w, 220)
     }
 
     func testMeasuredTabWidth_mediumTitle() {
@@ -49,7 +49,7 @@ import XCTest
         let pv = PaneView(paneID: pane.id, pane: pane)
         pv.frame = NSRect(x: 0, y: 0, width: 600, height: 300)
         let w = pv.measuredTabWidth(for: pane.tabs[0])
-        XCTAssertGreaterThanOrEqual(w, 60)
+        XCTAssertGreaterThanOrEqual(w, 72)
         XCTAssertLessThanOrEqual(w, 180)
     }
 
@@ -217,9 +217,9 @@ import XCTest
     }
 
     func testWrapLayout_plusButtonPosition_overflowsToNewRow() {
-        // 2 tabs at ~62px = 124px in 150px leaves 20px of row — the 32px plus
+        // 2 tabs at ~72px = 144px in 170px leaves ~18px of row — the plus
         // can't fit and must drop to a new row.
-        let pv = makePaneView(tabTitles: ["~", "~"], width: 150)
+        let pv = makePaneView(tabTitles: ["~", "~"], width: 170)
         UserDefaults.standard.set(TabOverflowMode.wrap.rawValue, forKey: "tabOverflowMode")
         defer { UserDefaults.standard.removeObject(forKey: "tabOverflowMode") }
 

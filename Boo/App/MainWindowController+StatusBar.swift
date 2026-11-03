@@ -23,23 +23,25 @@ extension MainWindowController {
         // group members next to each other no matter how they got out of order.
         if clusterWorkspaceGroups() { saveSession() }
         let groups = AppSettings.shared.workspaceGroups
+        let theme = AppSettings.shared.theme
         // Pinned workspaces stay in the pinned section, outside any group.
         let wsGroups = appState.workspaces.map { $0.isPinned ? nil : groups.group(forMember: $0.id.uuidString) }
         let wsItems = appState.workspaces.enumerated().map { (i, ws) in
             ToolbarView.WorkspaceItem(
-                name: ws.displayName, isActive: i == appState.activeWorkspaceIndex, resolvedColor: ws.resolvedColor,
+                name: ws.displayName, isActive: i == appState.activeWorkspaceIndex,
+                resolvedColor: ws.resolvedColor(theme: theme),
                 isPinned: ws.isPinned, color: ws.color, hasCustomColor: ws.customColor != nil,
                 hasActivity: ws.hasActivity && i != appState.activeWorkspaceIndex,
                 progress: TerminalProgress.summary(ws.progressReports), groupID: wsGroups[i]?.id,
                 groupName: wsGroups[i]?.name, groupCollapsed: wsGroups[i]?.isCollapsed ?? false,
-                groupColor: wsGroups[i]?.resolvedColor)
+                groupColor: wsGroups[i]?.resolvedColor(theme: theme))
         }
         toolbar.update(workspaces: wsItems, sidebarVisible: sidebarVisible)
         if let sideBar = sideWorkspaceBar {
             let barItems = zip(appState.workspaces, wsItems).map { ws, top in
                 WorkspaceBarView.Item(
                     name: ws.displayName, path: ws.folderPath, isPinned: ws.isPinned, color: ws.color,
-                    hasCustomColor: ws.customColor != nil, resolvedColor: ws.resolvedColor,
+                    hasCustomColor: ws.customColor != nil, resolvedColor: top.resolvedColor,
                     hasActivity: top.hasActivity, progress: top.progress, groupID: top.groupID,
                     groupName: top.groupName, groupCollapsed: top.groupCollapsed,
                     groupColor: top.groupColor)

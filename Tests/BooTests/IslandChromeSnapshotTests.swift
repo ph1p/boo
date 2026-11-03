@@ -404,7 +404,7 @@ import XCTest
 
         // The strip the panes are laid out against stays narrow — the overhang is
         // scratch space, not claimed width.
-        XCTAssertEqual(WorkspaceBarView.verticalWidth, 40)
+        XCTAssertEqual(WorkspaceBarView.verticalWidth, 46)
         XCTAssertEqual(
             bar.verticalPillWidth,
             WorkspaceBarView.verticalWidth - WorkspaceBarView.verticalPadding * 2,

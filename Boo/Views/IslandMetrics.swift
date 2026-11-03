@@ -38,7 +38,7 @@ enum IslandMetrics {
     /// Height of the header strip. Read by the layout constraint *and* by
     /// `TrafficLightPositioner`, which has no view to measure and needs the same
     /// number to land the buttons on the header's midline.
-    static let toolbarHeight: CGFloat = 38
+    static let toolbarHeight: CGFloat = 44
 
     /// Extra breathing room between the sidebar tab strip and the sidebar island's
     /// own edge, applied on whichever side the strip docks to (top or bottom). The
@@ -53,7 +53,7 @@ enum IslandMetrics {
     ///
     /// Smaller than `gap`: the region already sits a `gap` from its neighbour, and
     /// stacking a second full gap inside it reads as too much air.
-    static let contentInset: CGFloat = 6
+    static let contentInset: CGFloat = 7
 
     /// Top `y` (flipped coords) that centres a title's *cap band* — not its line
     /// box — on the midline of a bar `barHeight` tall. A font's ascender reaches
@@ -76,17 +76,17 @@ enum IslandMetrics {
     }
 
     /// Corner radius for top-level islands (toolbar, sidebar, status bar, panes).
-    static let radius: CGFloat = 7
+    static let radius: CGFloat = 10
 
     /// Corner radius for islands nested inside another island (e.g. a pane inside
     /// a split). Slightly tighter so concentric corners look right.
-    static let innerRadius: CGFloat = 6
+    static let innerRadius: CGFloat = 8
 
     /// Corner radius for controls drawn *inside* chrome — workspace pills, sidebar
     /// tab pills, toolbar and status-bar hover backgrounds. One value so every
     /// small rounded rect in the chrome shares the island's curvature family
     /// rather than each drawing site picking its own 3/4/5/6.
-    static let controlRadius: CGFloat = 5
+    static let controlRadius: CGFloat = 7
 
     /// Hairline around every island — the same weight as the rules panes draw
     /// inside themselves, so nothing outranks the content.

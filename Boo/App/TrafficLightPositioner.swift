@@ -3,12 +3,32 @@ import ObjectiveC
 
 @MainActor
 enum TrafficLightPositioner {
-    static let offsetX: CGFloat = 4
-    /// Negative is downward — window coordinates are unflipped. The base `-3` was
-    /// tuned when the toolbar sat flush against the window top; the header now sits
-    /// `barGap` lower, so the buttons follow it by the same amount or they ride
-    /// above the pills and title beside them.
-    static let offsetY: CGFloat = -3 - IslandMetrics.barGap
+    /// Shift from the native traffic-light origins to their place in the toolbar
+    /// island. Derived from the close button rather than hand-tuned: its centre
+    /// sits on the island's vertical centre, and its gap to the island's leading
+    /// edge equals its gap to the island's top, so the cluster reads as centred in
+    /// the island corner whatever the toolbar height. Zero until laid out.
+    /// Gap between the close button and the toolbar island's top and leading edge.
+    static func edgeInset(buttonHeight: CGFloat) -> CGFloat {
+        (IslandMetrics.toolbarHeight - buttonHeight) / 2
+    }
+
+    private static func offset(for window: NSWindow, entry: Entry) -> NSPoint {
+        guard let close = window.standardWindowButton(.closeButton),
+            let superview = close.superview,
+            let content = window.contentView
+        else { return .zero }
+        let nativeOrigin = entry.nativeOrigins[ObjectIdentifier(close)] ?? close.frame.origin
+        guard nativeOrigin.x != 0 || nativeOrigin.y != 0 else { return .zero }
+        let native = superview.convert(nativeOrigin, to: nil)
+        let size = close.frame.size
+        let inset = edgeInset(buttonHeight: size.height)
+        let toolbarTop = content.convert(NSPoint(x: 0, y: content.bounds.maxY), to: nil).y - IslandMetrics.barGap
+        let target = NSPoint(
+            x: IslandMetrics.gap + inset,
+            y: toolbarTop - IslandMetrics.toolbarHeight / 2 - size.height / 2)
+        return NSPoint(x: (target.x - native.x).rounded(), y: (target.y - native.y).rounded())
+    }
 
     private static let buttonTypes: [NSWindow.ButtonType] = [
         .closeButton, .miniaturizeButton, .zoomButton
@@ -86,13 +106,15 @@ enum TrafficLightPositioner {
         // A set to the already-shifted origin is our own `shift()` (or AppKit
         // echoing the current frame), not a fresh native layout — treating it as
         // native would stack the offset once per pass.
+        let off = offset(for: window, entry: entry)
         if let native = entry.nativeOrigins[id],
-            proposed == NSPoint(x: native.x + offsetX, y: native.y + offsetY)
+            proposed == NSPoint(x: native.x + off.x, y: native.y + off.y)
         {
             return nil
         }
         entry.nativeOrigins[id] = proposed
-        return NSPoint(x: proposed.x + offsetX, y: proposed.y + offsetY)
+        let next = offset(for: window, entry: entry)
+        return NSPoint(x: proposed.x + next.x, y: proposed.y + next.y)
     }
 
     // MARK: – Helpers
@@ -109,7 +131,9 @@ enum TrafficLightPositioner {
             native = origin
             entry.nativeOrigins[id] = native
         }
-        let target = NSPoint(x: native.x + offsetX, y: native.y + offsetY)
+        guard let window = entry.window else { return }
+        let off = offset(for: window, entry: entry)
+        let target = NSPoint(x: native.x + off.x, y: native.y + off.y)
         guard btn.frame.origin != target else { return }
         CATransaction.begin()
         CATransaction.setDisableActions(true)

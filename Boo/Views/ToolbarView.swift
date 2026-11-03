@@ -63,10 +63,9 @@ class ToolbarView: NSView {
     // MARK: - Font Cache (avoids NSFont alloc on every draw pass)
 
     enum Fonts {
-        nonisolated(unsafe) static let ws11Regular = NSFont.systemFont(ofSize: 11, weight: .regular)
-        nonisolated(unsafe) static let ws11Medium = NSFont.systemFont(ofSize: 11, weight: .medium)
-        nonisolated(unsafe) static let closeSmall = NSFont.systemFont(ofSize: 8, weight: .bold)
-        nonisolated(unsafe) static let plus15Light = NSFont.systemFont(ofSize: 15, weight: .light)
+        nonisolated(unsafe) static let ws11Regular = NSFont.systemFont(ofSize: 13, weight: .medium)
+        nonisolated(unsafe) static let ws11Medium = NSFont.systemFont(ofSize: 13, weight: .semibold)
+        nonisolated(unsafe) static let plus15Light = NSFont.systemFont(ofSize: 17, weight: .light)
 
         /// The centred header title (active workspace name). Larger than the pill
         /// labels beside it — it names the window, they are navigation.
@@ -108,6 +107,8 @@ class ToolbarView: NSView {
     var hoveredWorkspaceIndex: Int = -1
     var hoveredGroupID: String?
     var isWorkspacePlusButtonHovered: Bool = false
+    /// Pointer is over the hovered pill's close button (draws its hover circle).
+    var isWorkspaceCloseHovered: Bool = false
     private var toolbarTrackingArea: NSTrackingArea?
 
     /// The layout constrains the toolbar to `IslandMetrics.toolbarHeight`; drawing
@@ -163,6 +164,17 @@ class ToolbarView: NSView {
             hoveredWorkspaceIndex = newWSHover
             changed = true
         }
+        var newCloseHover = false
+        if newWSHover >= 0, newWSHover < workspaces.count, !workspaces[newWSHover].isPinned,
+            workspaces[newWSHover].isActive,
+            let pill = workspacePillRect(at: newWSHover)
+        {
+            newCloseHover = workspaceCloseButtonRect(in: pill).contains(point)
+        }
+        if newCloseHover != isWorkspaceCloseHovered {
+            isWorkspaceCloseHovered = newCloseHover
+            changed = true
+        }
         let newGroupHover = hideWorkspaces ? nil : hitTestGroupChip(at: point)?.id
         if newGroupHover != hoveredGroupID {
             hoveredGroupID = newGroupHover
@@ -184,6 +196,7 @@ class ToolbarView: NSView {
         hoveredWorkspaceIndex = -1
         hoveredGroupID = nil
         isWorkspacePlusButtonHovered = false
+        isWorkspaceCloseHovered = false
         if changed { needsDisplay = true }
     }
 
@@ -233,10 +246,15 @@ class ToolbarView: NSView {
     var trafficLightWidth: CGFloat {
         if let cached = _cachedTrafficLightWidth { return cached }
         let value: CGFloat
-        if let window = window, let zoom = window.standardWindowButton(.zoomButton) {
-            let frame = zoom.convert(zoom.bounds, to: nil)
-            let inContentView = convert(frame, from: nil)
-            value = max(trafficLightMinWidth, inContentView.maxX + 12)
+        if let window = window, let close = window.standardWindowButton(.closeButton),
+            let zoom = window.standardWindowButton(.zoomButton)
+        {
+            // From the positioner's geometry rather than the buttons' live frames:
+            // those may still be at their native spot when this is first cached.
+            // The cluster keeps the same gap on its right as on its left.
+            let inset = TrafficLightPositioner.edgeInset(buttonHeight: close.frame.height)
+            let cluster = zoom.frame.maxX - close.frame.minX
+            value = max(trafficLightMinWidth, ceil(inset + cluster + inset))
         } else {
             value = trafficLightMinWidth
         }
@@ -253,14 +271,14 @@ class ToolbarView: NSView {
 
     /// Gap between adjacent workspace pills. Matches `plusLeadingGap` so the
     /// spacing is even all the way across the strip, including up to the `+`.
-    static let workspaceGap: CGFloat = 6
+    static let workspaceGap: CGFloat = 8
 
     /// Size of the pinned `+` button.
-    static let plusButtonSize: CGFloat = 24
+    static let plusButtonSize: CGFloat = 28
 
     /// Height of a workspace pill — also the vertical extent of its click/hover
     /// zone, so the bar above and below the pills stays draggable window chrome.
-    static let workspacePillHeight: CGFloat = 24
+    static let workspacePillHeight: CGFloat = 28
 
     /// The workspace zone fills all space after the traffic lights, up to the
     /// pinned `+` button at the bar's right end.
@@ -299,9 +317,26 @@ class ToolbarView: NSView {
     /// Hover close-button rect for a top-bar pill, right-aligned and vertically
     /// centred. Shared by draw and hit-test so the drawn circle and click target
     /// can't diverge.
+    /// Leading padding of a pill's label (and trailing padding of a pinned pill).
+    static let workspaceLeadIn: CGFloat = 12
+    /// Close circle inset from the pill's trailing edge.
+    static let workspaceCloseInset: CGFloat = 5
+    /// Trailing slot of an unpinned pill: the close button (or the activity dot
+    /// sharing its spot) plus a small gap to the label. The pill keeps this width
+    /// whether active or not, so switching workspaces never reflows the bar —
+    /// inactive pills just centre the label across lead-in + slot.
+    static let workspaceCloseSlot: CGFloat = WorkspacePillStyle.closeButtonSize + workspaceCloseInset + 5
+
+    /// Live pointer test: hover flags can go stale when a pill becomes active
+    /// under a still mouse, so the close circle double-checks at draw time.
+    func isMouseInside(_ rect: CGRect) -> Bool {
+        guard let window else { return false }
+        return rect.contains(convert(window.mouseLocationOutsideOfEventStream, from: nil))
+    }
+
     func workspaceCloseButtonRect(in pillRect: CGRect) -> CGRect {
         let size = WorkspacePillStyle.closeButtonSize
-        let inset: CGFloat = 6
+        let inset = Self.workspaceCloseInset
         return CGRect(
             x: pillRect.maxX - size - inset,
             y: pillRect.midY - size / 2,
@@ -313,9 +348,9 @@ class ToolbarView: NSView {
         if let cached = _measureCache[index] { return cached }
         let ws = workspaces[index]
         let font = ws.isActive ? Fonts.ws11Medium : Fonts.ws11Regular
-        var w = (ws.name as NSString).size(withAttributes: [.font: font]).width + 20
-        if ws.isPinned { w += 12 }
-        w = max(w, 80)
+        var w = (ws.name as NSString).size(withAttributes: [.font: font]).width
+        w += ws.isPinned ? Self.workspaceLeadIn * 2 + 13 : Self.workspaceLeadIn + Self.workspaceCloseSlot
+        w = max(w, 56)
         _measureCache[index] = w
         return w
     }
@@ -328,9 +363,9 @@ class ToolbarView: NSView {
             return measureWorkspace(at: i)
         }
         let font = ws.isActive ? Fonts.ws11Medium : Fonts.ws11Regular
-        var w = (ws.name as NSString).size(withAttributes: [.font: font]).width + 20
-        if ws.isPinned { w += 12 }
-        w = max(w, 80)
+        var w = (ws.name as NSString).size(withAttributes: [.font: font]).width
+        w += ws.isPinned ? Self.workspaceLeadIn * 2 + 13 : Self.workspaceLeadIn + Self.workspaceCloseSlot
+        w = max(w, 56)
         return w
     }
 

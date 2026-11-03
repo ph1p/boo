@@ -119,8 +119,8 @@ class PaneView: NSView {
     var tabScrollOffset: CGFloat = 0
 
     // MARK: - Tab Size Constants
-    private let tabMinWidth: CGFloat = 60
-    let tabMaxWidth: CGFloat = 180
+    private let tabMinWidth: CGFloat = 72
+    let tabMaxWidth: CGFloat = 220
     let plusButtonWidth: CGFloat = 32
 
     /// Tracks last active tab index that triggered auto-scroll, to avoid fighting manual scroll.
@@ -137,7 +137,8 @@ class PaneView: NSView {
     /// Whether tabs should display a close button.
     var showTabClose: Bool { pane.tabs.count > 1 || showCloseOnSingleTab }
 
-    private static let tabMeasureFont = NSFont.systemFont(ofSize: 10.5, weight: .medium)
+    private static let tabMeasureFont = NSFont.systemFont(ofSize: 12, weight: .semibold)
+    private static let tabSubtitleMeasureFont = NSFont.systemFont(ofSize: 12, weight: .regular)
 
     /// Whether the tab draws a leading icon (content-type icon or process icon)
     /// before its title — `drawSingleTab` gates on the same predicate, so the
@@ -152,7 +153,11 @@ class PaneView: NSView {
     /// lead-in + optional icon + title + close/dot zone + pill insets.
     func measuredTabWidth(for tab: Pane.Tab) -> CGFloat {
         let title = Self.tabDisplayTitle(tab: tab) as NSString
-        let textW = ceil(title.size(withAttributes: [.font: Self.tabMeasureFont]).width)
+        var textW = ceil(title.size(withAttributes: [.font: Self.tabMeasureFont]).width)
+        if let subtitle = Self.tabDisplaySubtitle(tab: tab) {
+            textW += ceil(
+                ("  " + subtitle as NSString).size(withAttributes: [.font: Self.tabSubtitleMeasureFont]).width)
+        }
         var natural = textW + Self.tabTextLeadIn + Self.tabCloseHitZone + Self.tabPillInsetX * 2
         if tabHasLeadingIcon(tab) { natural += Self.tabIconAdvance }
         return min(tabMaxWidth, max(tabMinWidth, natural))
@@ -170,7 +175,8 @@ class PaneView: NSView {
     func allTabWidths() -> [CGFloat] {
         let key = pane.tabs.indices.map { i -> String in
             let tab = pane.tabs[i]
-            var k = "\(Self.tabDisplayTitle(tab: tab))|\(tabHasLeadingIcon(tab))"
+            var k =
+                "\(Self.tabDisplayTitle(tab: tab))|\(Self.tabDisplaySubtitle(tab: tab) ?? "")|\(tabHasLeadingIcon(tab))"
             if let group = pane.group(id: tab.groupID) {
                 k += "|\(group.id)|\(group.isCollapsed)|\(pane.isFirstTabOfGroup(at: i) ? group.name : "")"
             }

@@ -14,7 +14,6 @@ extension PaneView {
         nonisolated(unsafe) static let title = NSFont.systemFont(ofSize: 11, weight: .regular)
         nonisolated(unsafe) static let titleActive = NSFont.systemFont(ofSize: 11, weight: .medium)
         nonisolated(unsafe) static let detail = NSFont.systemFont(ofSize: 9.5, weight: .regular)
-        nonisolated(unsafe) static let close = NSFont.systemFont(ofSize: 8, weight: .bold)
         nonisolated(unsafe) static let groupName = NSFont.systemFont(ofSize: 10.5, weight: .semibold)
         nonisolated(unsafe) static let groupCount = NSFont.monospacedDigitSystemFont(ofSize: 9.5, weight: .medium)
     }
@@ -361,21 +360,13 @@ extension PaneView {
         }
 
         if showClose {
-            let closeHovered = isHovered && isCloseButtonHovered
             let size = WorkspacePillStyle.closeButtonSize
-            let center = CGPoint(x: pill.maxX - size / 2 - Self.tabCloseTrailingGap, y: titleMidY)
-            if closeHovered {
-                ctx.setFillColor(theme.controlFill.cgColor)
-                ctx.fillEllipse(in: CGRect(x: center.x - size / 2, y: center.y - size / 2, width: size, height: size))
-            }
-            let attrs: [NSAttributedString.Key: Any] = [
-                .font: VerticalFonts.close,
-                .foregroundColor: theme.chromeMuted.withAlphaComponent(closeHovered ? 0.9 : (isActive ? 0.7 : 0.5))
-            ]
-            let mark = "\u{2715}" as NSString
-            let markSize = mark.size(withAttributes: attrs)
-            mark.draw(
-                at: NSPoint(x: center.x - markSize.width / 2, y: center.y - markSize.height / 2), withAttributes: attrs)
+            WorkspacePillStyle.drawCloseButton(
+                ctx,
+                in: CGRect(
+                    x: pill.maxX - size - Self.tabCloseTrailingGap, y: titleMidY - size / 2, width: size,
+                    height: size),
+                tint: theme.chromeMuted, hovered: isHovered && isCloseButtonHovered)
         }
     }
 

@@ -23,6 +23,25 @@ enum WorkspaceColor: String, CaseIterable {
         }
     }
 
+    /// The preset drawn from the theme's ANSI palette, so workspace colours sit
+    /// in the same family as the terminal they frame. Orange and pink have no
+    /// ANSI slot and mix their two neighbours.
+    func themed(_ theme: TerminalTheme) -> NSColor? {
+        func mix(_ a: TerminalColor, _ b: TerminalColor) -> NSColor {
+            a.nsColor.blended(withFraction: 0.5, of: b.nsColor) ?? a.nsColor
+        }
+        switch self {
+        case .none: return nil
+        case .blue: return theme.ansiBlue.nsColor
+        case .purple: return theme.ansiMagenta.nsColor
+        case .green: return theme.ansiGreen.nsColor
+        case .orange: return mix(theme.ansiRed, theme.ansiYellow)
+        case .red: return theme.ansiRed.nsColor
+        case .yellow: return theme.ansiYellow.nsColor
+        case .pink: return mix(theme.ansiRed, theme.ansiMagenta)
+        }
+    }
+
     var label: String { rawValue.capitalized }
 
     /// A color that stays the same for a project across launches and machines:
@@ -84,6 +103,11 @@ final class Workspace {
     /// Resolved color: custom color takes precedence, then preset, then nil.
     var resolvedColor: NSColor? {
         customColor ?? color.nsColor
+    }
+
+    /// Chrome colour: a custom colour as picked, a preset from the theme palette.
+    func resolvedColor(theme: TerminalTheme) -> NSColor? {
+        customColor ?? color.themed(theme)
     }
 
     var displayName: String {
