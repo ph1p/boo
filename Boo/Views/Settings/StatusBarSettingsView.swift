@@ -26,10 +26,6 @@ struct StatusBarSettingsView: View {
         let arrangement = bar.arrangement()
         let catalog = bar.segmentCatalog
         SettingsPage(title: "Status Bar") {
-            Section(title: "Preview", footer: "When the window is narrow, the least important segments step aside.") {
-                statusBarPreview(arrangement, catalog: catalog, t: t)
-            }
-
             VStack(alignment: .leading, spacing: 6) {
                 HStack(alignment: .firstTextBaseline) {
                     Text("Segments")
@@ -50,7 +46,8 @@ struct StatusBarSettingsView: View {
                 .animation(.easeOut(duration: 0.15), value: arrangement)
                 Text(
                     "Drag a segment to reorder it or move it to the other side. The eye hides it. "
-                        + "Many segments only appear while they have something to show."
+                        + "Many segments only appear while they have something to show. "
+                        + "When the window is narrow, the least important segments step aside."
                 )
                 .font(.system(size: 11))
                 .foregroundStyle(t.muted)
@@ -146,72 +143,6 @@ struct StatusBarSettingsView: View {
         .overlay(
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .strokeBorder(t.separator, lineWidth: 0.5))
-    }
-
-    // MARK: - Preview
-
-    private func statusBarPreview(
-        _ arrangement: StatusBarLayout.Arrangement, catalog: [String: StatusBarView.SegmentInfo], t: Tokens
-    ) -> some View {
-        let settings = AppSettings.shared
-        func shown(_ ids: [String]) -> [StatusBarView.SegmentInfo] {
-            ids.compactMap { catalog[$0] }.filter { !settings.isStatusBarSegmentHidden($0.id) }
-        }
-        let left = shown(arrangement.left)
-        let right = shown(arrangement.right)
-        return HStack(spacing: 0) {
-            HStack(spacing: 7) {
-                ForEach(Array(left.enumerated()), id: \.element.id) { index, info in
-                    if index > 0 && settings.statusBarSeparators {
-                        Rectangle().fill(t.separator).frame(width: 0.5, height: 10)
-                    }
-                    previewChip(info, t: t)
-                }
-            }
-            // Like the real bar: the right group keeps its room, the left one is cut.
-            .frame(minWidth: 0, alignment: .leading)
-            .clipped()
-            Spacer(minLength: 16)
-            HStack(spacing: 10) {
-                ForEach(right) { previewChip($0, t: t) }
-            }
-            .layoutPriority(1)
-        }
-        .lineLimit(1)
-        .padding(.horizontal, 8)
-        .padding(.vertical, 5)
-        // The chips are fixed-size, so with many segments the row is wider than
-        // the page. Take only the offered width and clip the rest; otherwise the
-        // row widens the whole settings page past the window.
-        .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
-        .clipped()
-        .background(t.chromeBg)
-        .clipShape(RoundedRectangle(cornerRadius: 5))
-        .overlay(
-            RoundedRectangle(cornerRadius: 5)
-                .strokeBorder(t.border.opacity(0.5), lineWidth: 0.5)
-        )
-    }
-
-    private func previewChip(_ info: StatusBarView.SegmentInfo, t: Tokens) -> some View {
-        Text(Self.sampleText(for: info))
-            .font(.system(size: 10))
-            .foregroundStyle(t.muted)
-            .fixedSize()
-    }
-
-    /// Representative content for built-ins, the segment name otherwise.
-    private static func sampleText(for info: StatusBarView.SegmentInfo) -> String {
-        let settings = AppSettings.shared
-        switch info.id {
-        case "environment": return "\u{25CF} local"
-        case "path":
-            return PathSegment.display(NSHomeDirectory() + "/projects/boo", style: settings.statusBarPathStyle)
-        case "git-branch": return "main"
-        case "pane-info": return "2 panes \u{00B7} 3 tabs"
-        case "time": return settings.statusBarClockFormat.string(from: Date())
-        default: return info.displayName
-        }
     }
 }
 
