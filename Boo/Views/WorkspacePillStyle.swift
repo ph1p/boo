@@ -114,7 +114,8 @@ enum WorkspacePillStyle {
     }
 
     /// Corner radius of a workspace group tray: a step rounder than the pills it holds.
-    static let groupTrayRadius: CGFloat = cornerRadius + 3
+    /// Concentric with the pills it holds (they sit 2pt inside the tray).
+    static let groupTrayRadius: CGFloat = cornerRadius + 2
     /// Space between a group tray's edge and the header / pills inside it.
     static let groupTrayPadding: CGFloat = 4
 
@@ -125,6 +126,15 @@ enum WorkspacePillStyle {
     }
 
     /// Soft fill behind a hovered group header.
+    /// Group header chip in the horizontal strip: a filled tag in the group
+    /// colour, so the header reads as a label rather than another workspace.
+    static func fillGroupChip(_ ctx: CGContext, rect: CGRect, color: NSColor?, hovered: Bool, theme: TerminalTheme) {
+        let tint = color ?? theme.chromeMuted
+        let alpha: CGFloat = color == nil ? (hovered ? 0.2 : 0.12) : (hovered ? 0.3 : 0.2)
+        ctx.setFillColor(tint.withAlphaComponent(alpha).cgColor)
+        fillRoundedRect(ctx, rect: rect, radius: cornerRadius)
+    }
+
     static func fillGroupHeaderHover(
         _ ctx: CGContext, rect: CGRect, radius: CGFloat = cornerRadius, theme: TerminalTheme
     ) {
@@ -160,12 +170,16 @@ enum WorkspacePillStyle {
     static func drawGroupTray(
         _ ctx: CGContext, rect: CGRect, color: NSColor?, highlighted: Bool, theme: TerminalTheme
     ) {
-        // A soft tinted well, no outline: a hard border boxed the group off from
-        // the strip. The outline only appears as the drop-target highlight.
+        // A faint tinted well with a hairline in the group colour: enough edge to
+        // read as one unit without boxing the group off from the strip.
         let tint = color ?? theme.chromeMuted
-        let fillAlpha: CGFloat = color == nil ? 0.09 : 0.12
+        let fillAlpha: CGFloat = color == nil ? 0.06 : 0.08
         ctx.setFillColor(tint.withAlphaComponent(highlighted ? fillAlpha + 0.09 : fillAlpha).cgColor)
         fillRoundedRect(ctx, rect: rect, radius: groupTrayRadius)
+        if !highlighted {
+            strokeHairline(
+                ctx, rect: rect, radius: groupTrayRadius, color: tint.withAlphaComponent(color == nil ? 0.18 : 0.28))
+        }
         guard highlighted else { return }
         ctx.setStrokeColor(theme.accentColor.cgColor)
         ctx.setLineWidth(1.5)
@@ -244,7 +258,7 @@ enum WorkspacePillStyle {
     /// Hairline variant of `strokeBorder` at the shared island border weight (1px),
     /// used by the floating hover pill in the side workspace strip — the accent
     /// stroke above is deliberately heavier because it marks the active workspace.
-    static func strokeHairline(_ ctx: CGContext, rect: CGRect, color: NSColor) {
+    static func strokeHairline(_ ctx: CGContext, rect: CGRect, radius: CGFloat = cornerRadius, color: NSColor) {
         let w = IslandMetrics.borderWidth
         let inset = w / 2
         let strokeRect = rect.insetBy(dx: inset, dy: inset)
@@ -252,8 +266,8 @@ enum WorkspacePillStyle {
         ctx.setLineWidth(w)
         ctx.addPath(
             CGPath(
-                roundedRect: strokeRect, cornerWidth: cornerRadius - inset,
-                cornerHeight: cornerRadius - inset, transform: nil))
+                roundedRect: strokeRect, cornerWidth: radius - inset,
+                cornerHeight: radius - inset, transform: nil))
         ctx.strokePath()
     }
 

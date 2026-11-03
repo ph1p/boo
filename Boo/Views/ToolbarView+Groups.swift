@@ -113,7 +113,7 @@ extension ToolbarView {
                     x += measureWorkspace(at: k) + pad
                 }
             }
-            x += pad
+            // Each member already added its trailing pad, which closes the tray.
             layout.groups.append(
                 WorkspaceStripGroup(
                     id: gid, name: name, collapsed: collapsed, members: i..<end, trayMinX: trayMinX,
@@ -266,9 +266,8 @@ extension ToolbarView {
                 ctx, rect: tray, color: group.color, highlighted: highlighted, theme: theme)
 
             let chip = groupChipRect(group)
-            if hoveredGroupID == group.id {
-                WorkspacePillStyle.fillGroupHeaderHover(ctx, rect: chip, theme: theme)
-            }
+            WorkspacePillStyle.fillGroupChip(
+                ctx, rect: chip, color: group.color, hovered: hoveredGroupID == group.id, theme: theme)
             drawGroupChipContent(ctx, group, in: chip, theme: theme)
         }
     }
