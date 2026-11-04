@@ -178,13 +178,7 @@ extension ToolbarView {
                 let iconSize: CGFloat = 9
                 let iconY = (barHeight - iconSize) / 2
                 let iconRect = NSRect(x: contentX, y: iconY, width: iconSize, height: iconSize)
-                let tinted = NSImage(size: iconRect.size, flipped: false) { drawRect in
-                    pinColor.set()
-                    pinImg.draw(in: drawRect, from: .zero, operation: .sourceOver, fraction: 1)
-                    NSRect(origin: .zero, size: drawRect.size).fill(using: .sourceAtop)
-                    return true
-                }
-                tinted.draw(in: iconRect)
+                pinImg.tinted(with: pinColor, size: iconRect.size).draw(in: iconRect)
                 contentX += 13
             }
 
@@ -265,11 +259,8 @@ extension ToolbarView {
     }
 
     internal func drawFadeEdge(_ ctx: CGContext, at x: CGFloat, width: CGFloat, leftToRight: Bool) {
-        // The toolbar paints no fill of its own in the island style — it is a
-        // transparent strip over the window backdrop, so the scroll fade must
-        // dissolve into the backdrop, not into the (now unused) chrome fill.
-        // Full height: the -1 inset used to spare the old bottom separator, which
-        // the island gap replaced.
+        // The toolbar is a transparent strip over the window backdrop, so the
+        // scroll fade dissolves into the backdrop, full height.
         WorkspacePillStyle.drawBackdropFade(
             ctx, in: CGRect(x: x, y: 0, width: width, height: barHeight),
             from: CGPoint(x: leftToRight ? x : x + width, y: 0),
@@ -454,44 +445,14 @@ extension ToolbarView {
     }
 
     internal func showWorkspaceContextMenu(at index: Int, event: NSEvent) {
-        let menu = NSMenu()
         let ws = workspaces[index]
-
-        let editItem = NSMenuItem(
-            title: "Edit Workspace…", action: #selector(contextEditWorkspace(_:)), keyEquivalent: "")
-        editItem.target = self
-        editItem.tag = index
-        menu.addItem(editItem)
-
-        let pinTitle = ws.isPinned ? "Unpin" : "Pin"
-        let pinItem = NSMenuItem(title: pinTitle, action: #selector(contextTogglePin(_:)), keyEquivalent: "")
-        pinItem.target = self
-        pinItem.tag = index
-        menu.addItem(pinItem)
-
-        menu.addItem(.separator())
-
-        if !ws.isPinned && workspaces.count > 1 {
-            let moveItem = NSMenuItem(
-                title: "Move to New Window", action: #selector(contextMoveToNewWindow(_:)), keyEquivalent: "")
-            moveItem.target = self
-            moveItem.tag = index
-            menu.addItem(moveItem)
-        }
-        let extra = delegate?.toolbar(self, contextMenuItemsForWorkspaceAt: index) ?? []
-        if !extra.isEmpty {
-            extra.forEach(menu.addItem)
-            menu.addItem(.separator())
-        }
-
-        // Close
-        if !ws.isPinned {
-            let closeItem = NSMenuItem(title: "Close", action: #selector(contextClose(_:)), keyEquivalent: "")
-            closeItem.target = self
-            closeItem.tag = index
-            menu.addItem(closeItem)
-        }
-
+        let menu = WorkspaceContextMenu.make(
+            index: index, isPinned: ws.isPinned, canMoveToNewWindow: workspaces.count > 1,
+            extraItems: delegate?.toolbar(self, contextMenuItemsForWorkspaceAt: index) ?? [],
+            target: self,
+            actions: .init(
+                edit: #selector(contextEditWorkspace(_:)), togglePin: #selector(contextTogglePin(_:)),
+                moveToNewWindow: #selector(contextMoveToNewWindow(_:)), close: #selector(contextClose(_:))))
         NSMenu.popUpContextMenu(menu, with: event, for: self)
     }
 

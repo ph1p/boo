@@ -312,11 +312,8 @@ class SidebarTabBarView: NSView {
         let theme = AppSettings.shared.theme
         let iconSize: CGFloat = 18
 
-        // No fill and no separator rule: the sidebar is an island and this strip
-        // sits inside it, so it paints nothing of its own — the same treatment the
-        // toolbar and status bar already get. The rule used to double up with the
-        // island edge and, being drawn on the side facing the content, made the
-        // top and bottom placements look unlike each other.
+        // No fill and no separator rule: the strip sits inside the sidebar island,
+        // whose edge already frames it.
 
         // Compute drop index for indicator while dragging
         let dropIndex: Int? = isDragging ? dropIndexFor(x: dragCurrentX) : nil
@@ -508,50 +505,6 @@ class SidebarTabBarView: NSView {
         attrStr.draw(at: NSPoint(x: textX, y: textY))
 
         img.unlockFocus()
-        return img
-    }
-
-    private func drawBadge(_ count: Int, at rect: NSRect, ctx: CGContext, theme: TerminalTheme) {
-        let badgeSize: CGFloat = 12
-        let badgeX = rect.maxX - badgeSize - 2
-        let badgeY = rect.minY + 2
-        let badgeRect = CGRect(x: badgeX, y: badgeY, width: badgeSize, height: badgeSize)
-
-        // Draw badge background
-        ctx.setFillColor(theme.accentColor.cgColor)
-        ctx.fillEllipse(in: badgeRect)
-
-        // Draw badge text
-        let text = count > 9 ? "9+" : "\(count)"
-        let font = NSFont.systemFont(ofSize: 8, weight: .bold)
-        let attrs: [NSAttributedString.Key: Any] = [
-            .font: font,
-            .foregroundColor: NSColor.white
-        ]
-        let attrStr = NSAttributedString(string: text, attributes: attrs)
-        let textSize = attrStr.size()
-        let textX = badgeRect.midX - textSize.width / 2
-        let textY = badgeRect.midY - textSize.height / 2
-        attrStr.draw(at: NSPoint(x: textX, y: textY))
-    }
-}
-
-// MARK: - NSImage Tinting Extension
-
-extension NSImage {
-    /// Create a tinted copy of a template image at the specified size.
-    fileprivate func tinted(with color: NSColor, size: NSSize) -> NSImage {
-        let img = NSImage(size: size, flipped: false) { rect in
-            // Draw the original image
-            self.draw(
-                in: rect, from: NSRect(origin: .zero, size: self.size),
-                operation: .sourceOver, fraction: 1.0)
-            // Apply tint color using sourceAtop to color only opaque pixels
-            color.setFill()
-            rect.fill(using: .sourceAtop)
-            return true
-        }
-        img.isTemplate = false
         return img
     }
 }

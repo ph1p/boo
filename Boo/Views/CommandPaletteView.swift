@@ -44,14 +44,7 @@ final class CommandPaletteController: NSObject, NSTextFieldDelegate, NSWindowDel
         model.onAccept = { [weak self] index in self?.accept(index) }
         model.onSelectionChanged = { [weak self] in self?.previewSelection() }
 
-        let panel = CommandPalettePanel(
-            contentRect: NSRect(x: 0, y: 0, width: Self.width, height: Self.fieldHeight),
-            styleMask: [.borderless], backing: .buffered, defer: false)
-        panel.isReleasedWhenClosed = false
-        panel.backgroundColor = .clear
-        panel.isOpaque = false
-        panel.hasShadow = true
-        panel.delegate = self
+        let panel = CommandPalettePanel(width: Self.width, height: Self.fieldHeight, delegate: self)
         panel.contentView = makeContent()
         self.panel = panel
 
@@ -206,6 +199,18 @@ final class CommandPaletteController: NSObject, NSTextFieldDelegate, NSWindowDel
 final class CommandPalettePanel: NSPanel {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
+
+    /// Transparent, shadowed floating panel; the SwiftUI content draws the chrome.
+    convenience init(width: CGFloat, height: CGFloat, delegate: NSWindowDelegate) {
+        self.init(
+            contentRect: NSRect(x: 0, y: 0, width: width, height: height),
+            styleMask: [.borderless], backing: .buffered, defer: false)
+        isReleasedWhenClosed = false
+        backgroundColor = .clear
+        isOpaque = false
+        hasShadow = true
+        self.delegate = delegate
+    }
 }
 
 @MainActor

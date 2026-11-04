@@ -74,8 +74,7 @@ enum WorkspacePillStyle {
     }
 
     /// Label colour for a pill, lightened out of the workspace's own tint so the
-    /// text stays legible against the fill. Copied by hand at three draw sites
-    /// before this, and the copies had already drifted apart.
+    /// text stays legible against the fill.
     ///
     /// `usingColorSpace(.sRGB)` is load-bearing: `redComponent` and friends *trap*
     /// on a catalog colour (`.systemGreen` and the like), so the conversion is what

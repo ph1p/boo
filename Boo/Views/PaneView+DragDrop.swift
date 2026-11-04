@@ -258,17 +258,7 @@ extension PaneView {
 
         // New tab options
         menu.addItem(.separator())
-        for type in ContentType.creatableTypes {
-            let item = NSMenuItem(
-                title: "New \(type.displayName) Tab",
-                action: #selector(contextNewTab(_:)),
-                keyEquivalent: ""
-            )
-            item.target = self
-            item.image = type.icon
-            item.representedObject = type
-            menu.addItem(item)
-        }
+        addNewTabItems(to: menu)
 
         NSMenu.popUpContextMenu(menu, with: event, for: self)
     }
@@ -546,11 +536,6 @@ extension PaneView {
         popoverRef = popover
         groupEditorPopover = popover
         popover.show(relativeTo: anchor, of: self, preferredEdge: isVerticalTabs ? .maxX : .maxY)
-    }
-
-    @objc private func contextNewTab(_ sender: NSMenuItem) {
-        guard let type = sender.representedObject as? ContentType else { return }
-        addNewTab(contentType: type, workingDirectory: pane.activeTab?.workingDirectory ?? "~", group: activeGroupID)
     }
 
     /// Returns true when closing any tab would leave the workspace empty.
