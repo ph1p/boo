@@ -24,7 +24,7 @@ enum OrchestratorGate {
     }
 
     /// Always sensitive, whatever the target.
-    static let tabCommands: Set<String> = ["agent_respond", "merge_task", "discard_task"]
+    static let tabCommands: Set<String> = ["agent_respond", "agent_send", "merge_task", "discard_task"]
     /// Sensitive when the pane's tab runs an agent or a remote session.
     static let typingCommands: Set<String> = ["send_text", "send_key"]
     /// Sensitive when any tab of the pane runs an agent.

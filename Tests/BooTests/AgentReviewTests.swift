@@ -127,4 +127,87 @@ final class AgentReviewTests: XCTestCase {
         XCTAssertEqual(changes.files[1].status, .added)
         XCTAssertEqual(changes.files[1].hunks.first?.lines.map(\.text), ["fresh"])
     }
+
+    func testUnstagedAndStagedSourcesAndContext() throws {
+        let base = URL(fileURLWithPath: NSTemporaryDirectory()).resolvingSymlinksInPath().path
+        let repo = (base as NSString).appendingPathComponent("boo-diff-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(atPath: repo) }
+        try FileManager.default.createDirectory(atPath: repo, withIntermediateDirectories: true)
+        func git(_ args: String...) throws {
+            try AgentWorktree.git(
+                ["-c", "user.email=t@example.com", "-c", "user.name=T", "-c", "commit.gpgsign=false"] + args, in: repo)
+        }
+        func write(_ file: String, _ text: String) throws {
+            try text.write(toFile: (repo as NSString).appendingPathComponent(file), atomically: true, encoding: .utf8)
+        }
+        try git("init", "-q", "-b", "main")
+        try write("a.txt", (1...9).map { "line \($0)\n" }.joined())
+        try write("s.txt", "old\n")
+        try git("add", ".")
+        try git("commit", "-q", "-m", "init")
+
+        try write("a.txt", (1...9).map { $0 == 5 ? "five\n" : "line \($0)\n" }.joined())
+        try write("s.txt", "new\n")
+        try git("add", "s.txt")
+        try write("u.txt", "untracked\n")
+
+        let unstaged = try AgentReview.changes(in: repo, source: .unstaged)
+        XCTAssertEqual(unstaged.files.map(\.path), ["a.txt", "u.txt"], "work tree changes and untracked files")
+        XCTAssertNil(unstaged.branch)
+        XCTAssertEqual(unstaged.files[0].hunks.first?.lines.count, 8, "three lines of context by default")
+
+        let staged = try AgentReview.changes(in: repo, source: .staged)
+        XCTAssertEqual(staged.files.map(\.path), ["s.txt"], "only the index, no untracked files")
+        XCTAssertEqual(staged.files[0].hunks.first?.lines.map(\.text), ["old", "new"])
+
+        let tight = try AgentReview.changes(in: repo, source: .unstaged, context: 0)
+        XCTAssertEqual(tight.files[0].hunks.first?.lines.map(\.text), ["line 5", "five"])
+        let wide = try AgentReview.changes(in: repo, source: .unstaged, context: 20)
+        XCTAssertEqual(wide.files[0].hunks.first?.lines.count, 10, "the whole file")
+    }
+
+    func testStagedOnUnbornBranch() throws {
+        let base = URL(fileURLWithPath: NSTemporaryDirectory()).resolvingSymlinksInPath().path
+        let repo = (base as NSString).appendingPathComponent("boo-diff-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(atPath: repo) }
+        try FileManager.default.createDirectory(atPath: repo, withIntermediateDirectories: true)
+        try AgentWorktree.git(["init", "-q", "-b", "main"], in: repo)
+        try "hi\n".write(toFile: (repo as NSString).appendingPathComponent("x.txt"), atomically: true, encoding: .utf8)
+        try AgentWorktree.git(["add", "x.txt"], in: repo)
+        let staged = try AgentReview.changes(in: repo, source: .staged)
+        XCTAssertEqual(staged.files.map(\.path), ["x.txt"])
+        XCTAssertEqual(staged.files[0].status, .added)
+    }
+
+    func testSplitRowsPairChangesAndKeepContextOnBothSides() {
+        func line(_ kind: AgentReview.DiffLine.Kind, _ text: String, _ old: Int?, _ new: Int?) -> AgentReview.DiffLine {
+            AgentReview.DiffLine(kind: kind, oldLine: old, newLine: new, text: text)
+        }
+        let ctx = line(.context, "c", 1, 1)
+        let r1 = line(.removed, "r1", 2, nil)
+        let r2 = line(.removed, "r2", 3, nil)
+        let a1 = line(.added, "a1", nil, 2)
+        let a2 = line(.added, "a2", nil, 3)
+        let a3 = line(.added, "a3", nil, 4)
+        let r3 = line(.removed, "r3", 4, nil)
+        let rows = AgentReview.splitRows([ctx, r1, r2, a1, a2, a3, ctx, a1, r3])
+        XCTAssertEqual(
+            rows,
+            [
+                .init(left: ctx, right: ctx),
+                .init(left: r1, right: a1), .init(left: r2, right: a2), .init(left: nil, right: a3),
+                .init(left: ctx, right: ctx),
+                // An addition then a removal are two changes, not one pair.
+                .init(left: nil, right: a1), .init(left: r3, right: nil),
+            ])
+        XCTAssertEqual(AgentReview.splitRows([]), [])
+    }
+
+    func testDiffContextSettingIsClamped() {
+        XCTAssertEqual(DiffSettings.clampedContext(3), 3)
+        XCTAssertEqual(DiffSettings.clampedContext(-4), 0)
+        XCTAssertEqual(DiffSettings.clampedContext(99), DiffSettings.maxContext)
+        XCTAssertEqual(DiffSettings.clampedContext(2.6), 3)
+        XCTAssertEqual(DiffSettings.clampedContext(.nan), AgentReview.defaultContext)
+    }
 }

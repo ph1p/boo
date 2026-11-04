@@ -428,6 +428,7 @@ final class AppSettings {
         static let orchestratorDrawerWidth = "orchestratorDrawerWidth"
         static let quickTerminalEnabled = "quickTerminalEnabled"
         static let quickTerminalHotkey = "quickTerminalHotkey"
+        static let agentJumpHotkey = "agentJumpHotkey"
         static let quickTerminalHeight = "quickTerminalHeight"
         static let quickTerminalHideOnResign = "quickTerminalHideOnResign"
         static let defaultProfile = "defaultProfile"
@@ -954,6 +955,12 @@ final class AppSettings {
         set { set(newValue, forKey: K.quickTerminalHotkey) }
     }
 
+    /// The global hotkey that jumps to the next agent needing the user; empty is off.
+    var agentJumpHotkey: String {
+        get { UserDefaults.standard.string(forKey: K.agentJumpHotkey) ?? "" }
+        set { set(newValue, forKey: K.agentJumpHotkey) }
+    }
+
     /// The quick terminal's height as a fraction of the screen.
     var quickTerminalHeight: Double {
         get {
@@ -1064,6 +1071,7 @@ final class AppSettings {
         K.editorReloadOnExternalChange, K.editorShowStatusStrip, K.editorTrimTrailingWhitespace,
         K.editorInsertFinalNewline,
         K.quickTerminalEnabled, K.quickTerminalHotkey, K.quickTerminalHeight, K.quickTerminalHideOnResign,
+        K.agentJumpHotkey,
         K.defaultProfile, K.terminalShader, K.defaultLinkTarget, K.externalEditorPreset, K.historyEnabled,
         K.historyIgnorePattern, K.historyRetentionDays, K.historySearchShortcutEnabled, K.agentBudgetPerTask,
         K.agentBudgetPerDay, K.portNotificationsEnabled, K.errorAgentButtonEnabled, K.notifyMinCommandSeconds,
@@ -2000,6 +2008,7 @@ final class AppSettings {
             K.editorInsertFinalNewline: editorInsertFinalNewline,
             K.quickTerminalEnabled: quickTerminalEnabled,
             K.quickTerminalHotkey: quickTerminalHotkey,
+            K.agentJumpHotkey: agentJumpHotkey,
             K.quickTerminalHeight: quickTerminalHeight,
             K.quickTerminalHideOnResign: quickTerminalHideOnResign,
             K.defaultProfile: defaultProfile ?? "",

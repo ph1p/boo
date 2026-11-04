@@ -577,6 +577,12 @@ private func ghosttyCloseSurface(_ userdata: UnsafeMutableRawPointer?, _ process
         // BOO_TERM is set only via Ghostty env (below) so the shell integration guard
         // works even when BOO_SOCK propagates to child processes outside Boo.
         setenv("BOO_SOCK", BooSocketServer.shared.socketPath, 1)
+        // Launched from another Boo terminal (`open`, `make run`): that tab's
+        // variables would leak into every shell here. BOO_SHELL_INTEGRATION
+        // alone makes the integration skip itself, so `boo` is not on PATH.
+        for key in ["BOO_SHELL_INTEGRATION", "BOO_TERM", "BOO_PANE_ID", "BOO_TAB_ID", "BOO_TOKEN", "BOO_AGENT"] {
+            unsetenv(key)
+        }
 
         let argc = CommandLine.argc
         let argv = CommandLine.unsafeArgv

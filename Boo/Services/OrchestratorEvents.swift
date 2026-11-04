@@ -131,7 +131,8 @@ final class OrchestratorEvents {
             if let tool = item.tool { data["tool"] = tool }
             post("state_changed", data)
             BooSocketServer.shared.emitEvent(name: "agent_state_changed", data: data)
-            if owned && (item.state == .done || item.state == .error) {
+            // A session that just started (first seen done) has not finished anything.
+            if owned && (item.state == .done && previous != nil || item.state == .error) {
                 post("task_finished", ["tab_id": tabID.uuidString, "state": item.state.rawValue])
             }
         }
@@ -163,6 +164,8 @@ final class OrchestratorEvents {
         OrchestratorLoopGuard.shared.reset(tabID)
         ApprovalCenter.shared.revokeGrants(tab: tabID)
         post("pane_closed", ["tab_id": tabID.uuidString, "owned": owned])
+        // Before the inbox update, which would drop the links to its helpers.
+        AgentCrew.shared.tabClosed(tabID)
         AgentInbox.shared.remove(tabID: tabID)
         RemoteAgentTracker.shared.forget(tabID: tabID)
     }

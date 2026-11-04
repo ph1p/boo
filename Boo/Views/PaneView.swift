@@ -521,8 +521,8 @@ class PaneView: NSView {
             forName: .agentInboxChanged, object: nil, queue: .main
         ) { [weak self] _ in
             MainActor.assumeIsolated {
-                guard let self, self.isVerticalTabs else { return }
-                self.needsDisplay = true
+                // Vertical rows show the agent's status line; horizontal tabs badge it.
+                self?.needsDisplay = true
             }
         }
     }
@@ -1275,14 +1275,18 @@ class PaneView: NSView {
 
     /// Add a plugin-owned SwiftUI view in a new tab.
     @discardableResult
-    func addPluginViewTab(view: AnyView, title: String, icon: String) -> UUID? {
+    func addPluginViewTab(view: AnyView, title: String, icon: String, workingDirectory: String = "~") -> UUID? {
         if pane.tmuxOwned, let paneDelegate {
             return paneDelegate.paneView(self, redirectPluginView: view, title: title, icon: icon)
         }
         storeCurrentView()
         lastAutoScrolledTabIndex = -1
 
-        _ = pane.addTab(contentType: .pluginView, workingDirectory: "~", title: title)
+        // A tab about a folder (review, diff) keeps it as its cwd, so the
+        // sidebar's Git and Files panels stay on that repository.
+        _ = pane.addTab(contentType: .pluginView, workingDirectory: workingDirectory, title: title)
+        pane.updateContentState(
+            at: pane.tabs.count - 1, .pluginView(PluginViewContentState(title: title, iconSymbol: icon)))
 
         startActiveSession()
         needsLayout = true

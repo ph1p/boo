@@ -34,6 +34,36 @@ final class AgentInboxTests: XCTestCase {
         XCTAssertEqual(inbox.attentionCount, 0)
     }
 
+    /// SessionStart lists an idle agent (a resumed task) without asking for
+    /// attention, and never resets one that is already listed.
+    func testAStartedSessionIsListedIdleOnce() {
+        let inbox = AgentInbox()
+        let tab = UUID()
+        XCTAssertNil(inbox.apply(event: "start", tabID: tab, cwd: "/src/api"))
+        XCTAssertEqual(inbox.items[tab]?.state, .done)
+        XCTAssertEqual(inbox.items[tab]?.needsAttention, false)
+        XCTAssertEqual(inbox.items[tab]?.cwd, "/src/api")
+        inbox.apply(event: "working", tabID: tab)
+        inbox.apply(event: "start", tabID: tab)
+        XCTAssertEqual(inbox.items[tab]?.state, .working, "/clear and compaction also start a session")
+    }
+
+    func testAQuestionKeepsItsTextWhenThePermissionNoticeFollows() {
+        let inbox = makeInbox()
+        let tab = UUID()
+        inbox.apply(event: "prompt", tabID: tab)
+        inbox.apply(event: "question", tabID: tab, message: "Red or blue?", tool: "AskUserQuestion")
+        inbox.apply(event: "permission", tabID: tab, message: "Claude needs your permission")
+        XCTAssertEqual(inbox.items[tab]?.state, .needsInput)
+        XCTAssertEqual(inbox.items[tab]?.message, "Red or blue?")
+        XCTAssertEqual(inbox.items[tab]?.asksQuestion, true, "no Allow / Deny: Return would pick option 1")
+
+        inbox.apply(event: "tool", tabID: tab, tool: "AskUserQuestion")
+        inbox.apply(event: "permission", tabID: tab, message: "Claude needs your permission to use Bash")
+        XCTAssertEqual(inbox.items[tab]?.message, "Claude needs your permission to use Bash", "a new prompt has its own text")
+        XCTAssertEqual(inbox.items[tab]?.asksQuestion, false, "a permission prompt takes Allow / Deny")
+    }
+
     func testDoneWaitsUntilSeenAndEndRemoves() {
         let inbox = makeInbox()
         let tab = UUID()
@@ -160,6 +190,11 @@ final class AgentInboxTests: XCTestCase {
             XCTAssertEqual(ours.count, 1, event)
         }
         XCTAssertEqual((hooks["PostToolUse"] as? [[String: Any]])?.first?["matcher"] as? String, "Bash")
+        XCTAssertEqual((hooks["PreToolUse"] as? [[String: Any]])?.last?["matcher"] as? String, "AskUserQuestion")
+        let start = (hooks["SessionStart"] as? [[String: Any]])?.last?["hooks"] as? [[String: Any]]
+        XCTAssertNil(start?.first?["async"], "Claude ignores the context of async hooks")
+        let stop = (hooks["Stop"] as? [[String: Any]])?.last?["hooks"] as? [[String: Any]]
+        XCTAssertEqual(stop?.first?["async"] as? Bool, true)
         XCTAssertNil(BooPaths.mergingClaudeHook(command: command, into: merged), "second run changes nothing")
     }
 }

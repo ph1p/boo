@@ -33,6 +33,17 @@ enum AgentKind: String, CaseIterable, Equatable, Hashable {
         }
     }
 
+    /// The agents a task or helper can start, in picker order.
+    static let taskKinds: [AgentKind] = [.claudeCode, .codex, .openCode]
+
+    /// The name the socket, `boo run --agent` and inbox rows use ("claude" for Claude Code).
+    var ipcName: String { self == .claudeCode ? "claude" : rawValue }
+
+    init?(ipcName: String) {
+        guard let kind = Self.taskKinds.first(where: { $0.ipcName == ipcName }) else { return nil }
+        self = kind
+    }
+
     static func infer(processName: String, metadata: [String: String]) -> AgentKind? {
         if let raw = metadata["agent_kind"]?.lowercased() {
             switch raw {

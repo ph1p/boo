@@ -5,8 +5,16 @@ import SwiftUI
 /// with the agent already running. Merge or discard from the workspace's
 /// context menu once the agent is done.
 extension MainWindowController {
-    /// Agents a task can start with.
-    static let agentTaskKinds: [AgentKind] = [.claudeCode, .codex, .openCode]
+    /// The Agents setting "Setup command" (e.g. `pnpm install`) runs in a new task's
+    /// worktree before its agent, in the same terminal so its output stays visible.
+    /// `;`, not `&&`: a failed install still starts the agent, which can fix it.
+    static func withTaskSetup(
+        _ command: String,
+        setup: String = AppSettings.shared.pluginString("agents", "taskSetup", default: "")
+    ) -> String {
+        let setup = setup.trimmingCharacters(in: .whitespacesAndNewlines)
+        return setup.isEmpty ? command : "\(setup); \(command)"
+    }
 
     /// Shell command that starts `kind`, passing `prompt` as the first message.
     static func agentTaskCommand(kind: AgentKind, prompt: String, model: String? = nil) -> String {
@@ -88,7 +96,7 @@ extension MainWindowController {
         let promptField = NSTextField(string: "")
         promptField.placeholderString = "First message to the agent (optional)"
         let agentPopup = NSPopUpButton()
-        for kind in Self.agentTaskKinds { agentPopup.addItem(withTitle: kind.displayName) }
+        for kind in AgentKind.taskKinds { agentPopup.addItem(withTitle: kind.displayName) }
         for field in [nameField, promptField] { field.widthAnchor.constraint(equalToConstant: 320).isActive = true }
 
         let stack = NSStackView(views: [nameField, promptField, agentPopup])
@@ -105,8 +113,8 @@ extension MainWindowController {
             guard response == .alertFirstButtonReturn, let self else { return }
             let prompt = promptField.stringValue
             var name = nameField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-            if name.isEmpty { name = String(prompt.prefix(40)) }
-            let kind = Self.agentTaskKinds[max(0, agentPopup.indexOfSelectedItem)]
+            if name.isEmpty { name = AgentCrew.shortName(prompt) }
+            let kind = AgentKind.taskKinds[max(0, agentPopup.indexOfSelectedItem)]
             self.startAgentTask(repo: repo, name: name, kind: kind, prompt: prompt) { result in
                 if case .failure(let error) = result {
                     self.showAgentTaskError(error.localizedDescription, title: "Can't Start Agent Task")
@@ -126,17 +134,31 @@ extension MainWindowController {
             DispatchQueue.main.async { [weak self] in
                 switch result {
                 case .success(let info):
+                    NotificationCenter.default.post(name: .agentWorktreesChanged, object: nil)
                     guard let self else { return }
                     let title = name.isEmpty ? (info.path as NSString).lastPathComponent : name
                     let workspace = self.openWorkspace(
                         path: info.path, name: title,
-                        initialCommand: Self.agentTaskCommand(kind: kind, prompt: prompt, model: model))
+                        initialCommand: Self.withTaskSetup(Self.agentTaskCommand(kind: kind, prompt: prompt, model: model)))
                     let tabID = workspace.pane(for: workspace.activePaneID)?.tabs.last?.id
                     completion(.success(AgentTaskLaunch(info: info, workspaceID: workspace.id, tabID: tabID)))
                 case .failure(let error):
                     completion(.failure(error))
                 }
             }
+        }
+    }
+
+    /// An agent that starts a task keeps the user's attention: once the task's
+    /// terminal has started, the window goes back to the caller's workspace,
+    /// unless the user moved elsewhere meanwhile. The crew sidebar shows the task.
+    private func returnToCaller(_ callerTab: UUID, from taskWorkspace: UUID) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+            guard let self, self.activeWorkspace?.id == taskWorkspace,
+                let home = AgentInbox.locateInWindows(callerTab), home.controller === self,
+                let index = self.appState.workspaces.firstIndex(where: { $0.id == home.workspace.id })
+            else { return }
+            self.activateWorkspace(index)
         }
     }
 
@@ -150,9 +172,13 @@ extension MainWindowController {
             reply(["ok": false, "error": "missing name or prompt"])
             return
         }
-        let kinds: [String: AgentKind] = ["claude": .claudeCode, "codex": .codex, "opencode": .openCode]
-        guard let kind = kinds[(json["agent"] as? String) ?? "claude"] else {
+        guard let kind = AgentKind(ipcName: (json["agent"] as? String) ?? "claude") else {
             reply(["ok": false, "error": "agent must be claude, codex or opencode"])
+            return
+        }
+        let caller = CapabilityTokens.shared.resolve(json["token"] as? String)
+        if json["worktree"] as? Bool == false {
+            ipcNewHelperAgent(json: json, kind: kind, name: name, prompt: prompt, caller: caller, reply: reply)
             return
         }
         let explicitRepo = (json["repo"] as? String).map { ($0 as NSString).expandingTildeInPath }
@@ -163,10 +189,9 @@ extension MainWindowController {
         // An explicit repo is passed through so create() reports its own error;
         // otherwise pick the first candidate folder that is in a repository.
         let folders = agentTaskCandidateFolders
-        let title = name.isEmpty ? String(prompt.prefix(40)) : name
+        let title = name.isEmpty ? AgentCrew.shortName(prompt) : name
         let base = json["base"] as? String
         let model = json["model"] as? String
-        let caller = CapabilityTokens.shared.resolve(json["token"] as? String)
         Task { @MainActor [weak self] in
             let repo =
                 if let explicitRepo { explicitRepo } else {
@@ -183,12 +208,15 @@ extension MainWindowController {
                     // Owned before the reply, so the caller's next write needs no approval.
                     if let caller, let tabID = launch.tabID {
                         CapabilityTokens.shared.markOwned(tabID, by: caller.tabID)
+                        AgentCrew.shared.link(child: tabID, parent: caller.tabID, name: title)
                         if caller.tabID == OrchestratorController.shared.tabID {
                             OrchestratorController.shared.recordOwnedWorktree(launch.info.path)
                         }
+                        self?.returnToCaller(caller.tabID, from: launch.workspaceID)
                     }
                     let task: [String: Any] = [
                         "tab_id": launch.tabID?.uuidString ?? NSNull(),
+                        "handle": launch.tabID.map { AgentCrew.shared.handle(for: $0) } ?? NSNull(),
                         "workspace_id": launch.workspaceID.uuidString,
                         "path": launch.info.path, "branch": launch.info.branch ?? NSNull(),
                         "name": title, "agent": json["agent"] as? String ?? "claude"
@@ -198,6 +226,82 @@ extension MainWindowController {
                 }
             }
         }
+    }
+
+    /// `new_agent_task {worktree: false}`: a helper agent in a pane beside the
+    /// caller, in the caller's folder (or `cwd`), for work that needs no branch
+    /// of its own: reviews, test runs, questions. Focus stays with the caller.
+    func ipcNewHelperAgent(
+        json: [String: Any], kind: AgentKind, name: String, prompt: String,
+        caller: CapabilityTokens.Caller?, reply: @escaping ([String: Any]) -> Void
+    ) {
+        let location = caller.flatMap { AgentInbox.locateInWindows($0.tabID) }
+        guard let workspace = location?.workspace ?? activeWorkspace else {
+            reply(["ok": false, "error": "no workspace"])
+            return
+        }
+        let anchor = location?.pane.id ?? workspace.activePaneID
+        let cwd =
+            (json["cwd"] as? String).map { ($0 as NSString).expandingTildeInPath }
+            ?? location.map { $0.pane.tabs[$0.tabIndex].workingDirectory } ?? workspace.folderPath
+        let command = Self.agentTaskCommand(kind: kind, prompt: prompt, model: json["model"] as? String)
+        guard
+            let paneID = splitPane(anchor, in: workspace, toward: .right, focus: false, cwd: cwd, command: command),
+            let tabID = workspace.pane(for: paneID)?.activeTab?.id
+        else {
+            reply(["ok": false, "error": "could not open a pane for the helper"])
+            return
+        }
+        let title = name.isEmpty ? AgentCrew.shortName(prompt) : name
+        if let caller {
+            CapabilityTokens.shared.markOwned(tabID, by: caller.tabID)
+            AgentCrew.shared.link(child: tabID, parent: caller.tabID, name: title)
+        }
+        let task: [String: Any] = [
+            "tab_id": tabID.uuidString, "handle": AgentCrew.shared.handle(for: tabID),
+            "pane_id": paneID.uuidString, "workspace_id": workspace.id.uuidString, "path": cwd,
+            "name": title, "agent": json["agent"] as? String ?? "claude"
+        ]
+        OrchestratorEvents.shared.post("task_spawned", task)
+        reply(task.merging(["ok": true]) { $1 })
+    }
+
+    /// Closes a helper agent's tab without asking, because the tab that started
+    /// it closed. The last tab takes its pane, the last pane its workspace; a
+    /// worktree stays on disk either way.
+    func closeHelperTab(_ tabID: UUID) {
+        guard let location = AgentInbox.locateInWindows(tabID), location.controller === self,
+            let workspaceIndex = appState.workspaces.firstIndex(where: { $0 === location.workspace })
+        else { return }
+        let workspace = location.workspace
+        let pane = location.pane
+        let index = location.tabIndex
+        let isActive = workspace === activeWorkspace
+        if pane.tabs.count > 1 {
+            notifyTerminalClosed(for: tabID)
+            if let pv = workspacePaneViews[workspace.id]?[pane.id] {
+                pv.closeTab(at: index)
+            } else {
+                pane.removeTab(at: index)
+            }
+        } else if workspace.splitTree.leafCount > 1 {
+            if isActive {
+                let focused = workspace.activePaneID
+                workspace.activePaneID = pane.id
+                closePaneAction(nil)
+                if focused != pane.id, workspace.pane(for: focused) != nil { workspace.activePaneID = focused }
+            } else {
+                notifyTerminalClosed(for: pane.tabs)
+                bridge.monitor.untrack(paneID: pane.id)
+                workspacePaneViews[workspace.id]?.removeValue(forKey: pane.id)?.stopAll()
+                _ = workspace.closePane(pane.id)
+            }
+        } else {
+            forceCloseWorkspace(at: workspaceIndex)
+            return
+        }
+        refreshStatusBar()
+        saveSession()
     }
 
     // MARK: - Merge / discard
@@ -312,21 +416,44 @@ extension MainWindowController {
         }
     }
 
-    private func confirmDiscard(workspace: Workspace, info: AgentWorktree.Info, status: AgentWorktree.Status) {
-        guard let window else { return }
+    /// What discarding a task does and loses, e.g. "Closes the workspace and
+    /// deletes the worktree and branch x, losing 2 unmerged commits."
+    static func discardSummary(info: AgentWorktree.Info, status: AgentWorktree.Status) -> (text: String, losesWork: Bool) {
         var losses: [String] = []
         if status.ahead > 0 { losses.append("\(status.ahead) unmerged commit\(status.ahead == 1 ? "" : "s")") }
         if status.isDirty { losses.append("uncommitted changes") }
-        let alert = NSAlert()
-        alert.messageText = "Discard \(workspace.displayName)?"
-        alert.informativeText =
+        let text =
             "Closes the workspace and deletes the worktree"
             + (info.branch.map { " and branch \($0)" } ?? "")
             + (losses.isEmpty ? "." : ", losing \(losses.joined(separator: " and ")).")
-        alert.alertStyle = losses.isEmpty ? .informational : .warning
+        return (text, !losses.isEmpty)
+    }
+
+    /// The discard summary for an inline confirmation (the crew sidebar).
+    func agentTaskDiscardSummary(workspaceID: UUID, completion: @escaping @MainActor (String, Bool) -> Void) {
+        withAgentTask(workspaceID: workspaceID) { _, info, status in
+            let summary = Self.discardSummary(info: info, status: status)
+            completion(summary.text, summary.losesWork)
+        }
+    }
+
+    /// Discards without asking: the caller already confirmed.
+    func discardAgentTaskConfirmed(workspaceID: UUID) {
+        withAgentTask(workspaceID: workspaceID) { [weak self] _, info, _ in
+            self?.closeAndRemoveAgentTask(workspaceID: workspaceID, info: info)
+        }
+    }
+
+    private func confirmDiscard(workspace: Workspace, info: AgentWorktree.Info, status: AgentWorktree.Status) {
+        guard let window else { return }
+        let summary = Self.discardSummary(info: info, status: status)
+        let alert = NSAlert()
+        alert.messageText = "Discard \(workspace.displayName)?"
+        alert.informativeText = summary.text
+        alert.alertStyle = summary.losesWork ? .warning : .informational
         alert.addButton(withTitle: "Discard")
         alert.addButton(withTitle: "Cancel")
-        if !losses.isEmpty { alert.buttons.first?.hasDestructiveAction = true }
+        alert.buttons.first?.hasDestructiveAction = summary.losesWork
         let workspaceID = workspace.id
         alert.beginSheetModal(for: window) { [weak self] response in
             guard response == .alertFirstButtonReturn else { return }
@@ -341,7 +468,9 @@ extension MainWindowController {
             forceCloseWorkspace(at: index)
         }
         DispatchQueue.global(qos: .utility).async {
-            if case .failure(let error) = Result(catching: { try AgentWorktree.remove(info, deleteBranch: true) }) {
+            let result = Result(catching: { try AgentWorktree.remove(info, deleteBranch: true) })
+            DispatchQueue.main.async { NotificationCenter.default.post(name: .agentWorktreesChanged, object: nil) }
+            if case .failure(let error) = result {
                 DispatchQueue.main.async {
                     // The window may be gone when this was its last workspace.
                     let controller = WindowManager.shared.activeController
@@ -381,7 +510,36 @@ extension MainWindowController {
         }
         guard let paneView = paneViews[workspace.activePaneID] else { return false }
         let model = AgentReviewModel(workspaceID: workspaceID, folder: workspace.folderPath)
-        paneView.addPluginViewTab(view: AnyView(AgentReviewView(model: model)), title: title, icon: "checklist")
+        paneView.addPluginViewTab(view: AnyView(AgentReviewView(model: model)), title: title, icon: "checklist",
+            workingDirectory: workspace.folderPath)
+        model.reload()
+        return true
+    }
+
+    /// Opens the diff viewer on a repository's unstaged or staged changes with
+    /// `path` (relative to the repository root) selected. A tab already showing
+    /// them in the active workspace is reused and reloaded.
+    @discardableResult
+    func openDiff(repoRoot: String, source: AgentReview.Source, path: String?) -> Bool {
+        guard let workspace = appState.activeWorkspace else { return false }
+        let repo = (repoRoot as NSString).lastPathComponent
+        let title = source == .staged ? "Staged: \(repo)" : "Changes: \(repo)"
+        if let model = AgentReviewModel.existing(folder: repoRoot, source: source),
+            model.workspaceID == workspace.id,
+            let pane = workspace.panes.values.first(where: { pane in
+                pane.tabs.contains { $0.contentType == .pluginView && $0.title == title }
+            }),
+            let tabIndex = pane.tabs.firstIndex(where: { $0.contentType == .pluginView && $0.title == title })
+        {
+            if let path { model.selectedPath = path }
+            model.reload()
+            focusActivity(workspaceID: workspace.id, paneID: pane.id, tabIndex: tabIndex)
+            return true
+        }
+        guard let paneView = paneViews[workspace.activePaneID] else { return false }
+        let model = AgentReviewModel(workspaceID: workspace.id, folder: repoRoot, source: source, selectedPath: path)
+        paneView.addPluginViewTab(view: AnyView(AgentReviewView(model: model)), title: title, icon: "plus.forwardslash.minus",
+            workingDirectory: repoRoot)
         model.reload()
         return true
     }
@@ -406,14 +564,40 @@ extension MainWindowController {
         return nil
     }
 
-    /// Switches to the agent's tab and submits `text` as its next prompt.
+    /// Switches to the agent's tab and submits `text` as its next prompt. With
+    /// no agent running there (a stopped task after a quit or restart), the tab
+    /// is a plain shell: it resumes the agent with `text` instead of running
+    /// the text as shell commands.
     @discardableResult
     func sendToAgent(workspaceID: UUID, text: String) -> Bool {
         guard let target = agentTab(inWorkspace: workspaceID) else { return false }
         focusActivity(workspaceID: workspaceID, paneID: target.paneID, tabIndex: target.tabIndex)
         guard let view = ghosttyView(for: target.paneID) else { return false }
-        view.paste(text, submit: true)
+        view.paste(hasLiveAgent(inWorkspace: workspaceID) ? text : Self.resumeCommand(text: text), submit: true)
         return true
+    }
+
+    /// Restarts a stopped task's agent in its tab, on its last conversation.
+    @discardableResult
+    func resumeAgentTask(workspaceID: UUID) -> Bool {
+        guard !hasLiveAgent(inWorkspace: workspaceID), let target = agentTab(inWorkspace: workspaceID) else {
+            return false
+        }
+        focusActivity(workspaceID: workspaceID, paneID: target.paneID, tabIndex: target.tabIndex)
+        guard let view = ghosttyView(for: target.paneID) else { return false }
+        view.paste(Self.resumeCommand(text: nil), submit: true)
+        return true
+    }
+
+    /// `claude --continue` picks up the newest conversation in the worktree's
+    /// folder, so the agent keeps what it did before it stopped.
+    static func resumeCommand(text: String?) -> String {
+        let text = text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return text.isEmpty ? "claude --continue" : "claude --continue " + shellQuoted(text)
+    }
+
+    private func hasLiveAgent(inWorkspace workspaceID: UUID) -> Bool {
+        AgentInbox.shared.sortedItems.contains { AgentInbox.shared.locate($0.tabID)?.workspace.id == workspaceID }
     }
 
     @objc func jumpToNextWaitingAgentAction(_ sender: Any?) {

@@ -160,11 +160,27 @@ struct BooMCPServer {
         case "new_agent_task":
             let repo = (args["repo"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? cwd
             var message: [String: Any] = ["cmd": "new_agent_task", "repo": repo]
-            for key in ["name", "prompt", "agent", "base", "model"] { message[key] = args[key] }
+            for key in ["name", "prompt", "agent", "base", "model", "worktree"] { message[key] = args[key] }
+            if args["worktree"] as? Bool == false { message["cwd"] = args["cwd"] as? String ?? cwd }
             let reply = try boo(message, pane: nil)
             var out: [String: Any] = [:]
-            for key in ["tab_id", "workspace_id", "path", "branch"] { out[key] = reply[key] ?? NSNull() }
+            for key in ["handle", "tab_id", "workspace_id", "path", "branch"] { out[key] = reply[key] ?? NSNull() }
+            out["note"] =
+                "You hear back automatically: its final answer, questions and exit arrive in your prompt as <boo from=\"\(reply["handle"] as? String ?? "")…\"> messages."
             return Self.json(out)
+        case "send_message":
+            guard let to = args["to"] as? String, !to.isEmpty else {
+                throw Failure(message: "to is required: a handle like t3, parent, or a tab_id")
+            }
+            guard let text = args["text"] as? String else { throw Failure(message: "text is required") }
+            let reply = try boo(["cmd": "agent_send", "to": to, "text": text], pane: ownPaneID)
+            if let pending = Self.pending(reply) { return pending }
+            let label = reply["to"] as? String ?? to
+            return reply["status"] as? String == "queued"
+                ? "queued for \(label); it is delivered when that agent finishes its current turn"
+                : "delivered to \(label)"
+        case "read_messages":
+            return Self.json(try boo(["cmd": "agent_messages"], pane: ownPaneID))
         case "run_recipe":
             var message: [String: Any] = ["cmd": "run_recipe"]
             for key in ["name", "path"] { message[key] = args[key] }
@@ -268,7 +284,13 @@ struct BooMCPServer {
         later, instead of blocking your own shell. New panes leave focus with the user. \
         get_layout shows every pane, its tabs and running processes; your_pane is yours; \
         scope app covers every window. new_agent_task hands independent work to another agent \
-        on its own worktree; wait_for_events blocks until agents change state, so loop on it \
+        on its own worktree (or, with worktree false, in a pane beside yours for reviews, tests or \
+        questions). Every agent has a short handle like t3; tools that take tab_id accept it. \
+        Agents you start report back on their own: when one finishes, gets stuck on a question or \
+        exits, Boo types <boo from="t3 name" state="done">its answer</boo> into your prompt, so \
+        do not poll them. Messages from other agents and the user arrive the same way. Reply or \
+        steer with send_message (to: a handle, or parent for the agent that started you); it waits \
+        until the receiver finishes its turn. wait_for_events blocks until agents change state, so loop on it \
         (pass the last seq as since) instead of polling. task_status says whether a task can \
         merge and why not; merge_task and discard_task always wait for the user's approval. \
         run_recipe opens one of the user's saved workspace layouts.
@@ -283,7 +305,7 @@ struct BooMCPServer {
     }
 
     private static var tabProperty: [String: Any] {
-        ["type": "string", "description": "Tab id of an agent, from get_layout (scope app) or list_agents"]
+        ["type": "string", "description": "An agent's handle (t3) or tab id, from list_agents or get_layout (scope app)"]
     }
 
     static var tools: [[String: Any]] {
@@ -346,14 +368,14 @@ struct BooMCPServer {
             ],
             [
                 "name": "list_agents",
-                "description": "Coding agents running in any Boo window and their state (working, needs input, done).",
+                "description": "Coding agents running in any Boo window: handle (t3), name, state (working, needs input, done), the agent that started it (parent), the ones it started (children) and how many messages wait for it (queued).",
                 "inputSchema": object([:]),
                 "annotations": ["readOnlyHint": true]
             ],
             [
                 "name": "new_agent_task",
                 "description":
-                    "Starts another coding agent on its own git worktree and branch (boo/<name>) of a repository, in a new Boo workspace, with prompt as its first message. For independent work that can run in parallel. Returns the agent's tab_id.",
+                    "Starts another coding agent with prompt as its first message and returns its handle (t3). By default it gets its own git worktree and branch (boo/<name>) in a new Boo workspace, for independent work that runs in parallel. With worktree false it opens in a pane beside yours, in your folder, for reviews, test runs or questions that change no code. It reports back to you when it finishes, needs input or exits.",
                 "inputSchema": object(
                     [
                         "name": ["type": "string", "description": "Short task name, used for the branch"],
@@ -367,8 +389,29 @@ struct BooMCPServer {
                             "type": "string", "enum": ["claude", "codex", "opencode"],
                             "description": "Which agent (default claude)"
                         ],
-                        "model": ["type": "string", "description": "Model for the agent (default: its own)"]
+                        "model": ["type": "string", "description": "Model for the agent (default: its own)"],
+                        "worktree": [
+                            "type": "boolean",
+                            "description": "Own worktree and workspace (default true); false opens a helper pane beside you"
+                        ],
+                        "cwd": ["type": "string", "description": "Folder for a helper (worktree false; default: yours)"]
                     ], required: ["prompt"])
+            ],
+            [
+                "name": "send_message",
+                "description":
+                    "Sends a message to another agent: an answer to its question, a follow-up or a correction. It arrives in that agent's prompt as <boo from=\"your handle\">text</boo> once the agent finishes its current turn, so it never interrupts work. to parent reaches the agent that started you.",
+                "inputSchema": object(
+                    [
+                        "to": ["type": "string", "description": "Handle (t3), parent, or tab id"],
+                        "text": ["type": "string"]
+                    ], required: ["to", "text"])
+            ],
+            [
+                "name": "read_messages",
+                "description":
+                    "Reads and clears messages waiting for you. Only needed when you are not a coding agent Boo knows (agents get theirs typed into the prompt).",
+                "inputSchema": object([:])
             ],
             [
                 "name": "run_recipe",

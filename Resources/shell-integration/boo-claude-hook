@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 # Boo agent hook: reports what a coding agent is doing to Boo's agent inbox.
 #
-# Claude Code: registered for UserPromptSubmit, PostToolUse, Notification,
-# Stop and SessionEnd; the event comes from the JSON payload on stdin.
+# Claude Code: registered for SessionStart, UserPromptSubmit, PostToolUse,
+# Notification, Stop and SessionEnd; the event comes from the JSON payload on
+# stdin. On SessionStart it prints context that teaches the agent the `boo` CLI.
 # Codex: notify = ["~/.boo/shell-integration/boo-claude-hook", "codex"]
 # (Codex appends its JSON payload as the last argument).
 #
 # BOO_PANE_ID / BOO_TAB_ID are set per surface by Boo. Never blocks the agent:
-# no output, always exits 0.
+# no output except that context, always exits 0.
 
 [[ -z "$BOO_SOCK" || -z "$BOO_PANE_ID" ]] && exit 0
 
@@ -23,6 +24,10 @@ def event_for_claude(p):
     tool = p.get("tool_name")
     if name == "UserPromptSubmit":
         return "prompt", None, None
+    if name == "PreToolUse" and tool == "AskUserQuestion":
+        # The question itself, instead of the generic notification that follows.
+        questions = (p.get("tool_input") or {}).get("questions") or [{}]
+        return "question", questions[0].get("question") or "has a question", tool
     if name in ("PreToolUse", "PostToolUse"):
         return "tool", None, tool
     if name == "Notification":
@@ -36,6 +41,52 @@ def event_for_claude(p):
     if name == "SessionEnd":
         return "end", None, None
     return None, None, None
+
+CREW_CONTEXT = """You run in a tab of Boo, a terminal app for coding agents. When the user \
+wants another agent (a helper beside you, parallel work, a second opinion), start a real \
+one with the `boo` CLI instead of an in-process subagent, so the user can watch and talk to it:
+- boo run --here "<prompt>": helper in a split beside you, same folder.
+- boo run "<prompt>": helper on its own git worktree and branch (for code changes).
+- boo agents: every agent with its handle (t1, t2...) and state; "(you)" marks your own tab.
+- boo wait <handle>: blocks until it finishes its turn, prints its answer (exit 3: it asks a question).
+- boo send <handle> <text>: message it; delivered when it finishes its turn.
+- boo read <handle>: its screen.
+- boo diff / boo merge / boo discard <handle>: review a `boo run` task, merge its branch into the main checkout (closes it), or throw it away. Use these instead of git merge; ask the user before merging or discarding.
+Helpers report back to you on their own in a <boo from=... state=...> message, and close when \
+your tab closes. `boo help` lists the rest."""
+
+def last_reply(p):
+    """The agent's last answer: reported to the agent that started it."""
+    text = p.get("last_assistant_message") or p.get("last-assistant-message")
+    path = p.get("transcript_path")
+    if not text and path:
+        try:
+            with open(path, "rb") as f:
+                f.seek(0, 2)
+                f.seek(max(0, f.tell() - 262144))
+                lines = f.read().decode("utf-8", "replace").splitlines()
+            for line in reversed(lines):
+                try:
+                    entry = json.loads(line)
+                except Exception:
+                    continue
+                if entry.get("type") != "assistant":
+                    continue
+                content = (entry.get("message") or {}).get("content")
+                if isinstance(content, str):
+                    text = content
+                elif isinstance(content, list):
+                    text = "\n".join(c.get("text", "") for c in content
+                                     if isinstance(c, dict) and c.get("type") == "text")
+                if text and text.strip():
+                    break
+                text = None
+        except Exception:
+            text = None
+    if not isinstance(text, str) or not text.strip():
+        return None
+    text = text.strip()
+    return text if len(text) <= 4000 else text[:4000] + "\n..."
 
 agent = "claude"
 if args and args[0] == "codex":
@@ -52,7 +103,14 @@ else:
         payload = json.load(sys.stdin)
     except Exception:
         payload = {}
-    event, message, tool = event_for_claude(payload)
+    if payload.get("hook_event_name") == "SessionStart":
+        print(json.dumps({"hookSpecificOutput": {
+            "hookEventName": "SessionStart", "additionalContext": CREW_CONTEXT}}))
+        sys.stdout.flush()
+        # Also lists the idle agent in Boo before its first prompt (a resumed task).
+        event, message, tool = "start", None, None
+    else:
+        event, message, tool = event_for_claude(payload)
     if event is None and not payload:
         event = "stop"  # old registrations without a payload were Stop hooks
     if event is None:
@@ -61,7 +119,9 @@ else:
 msg = {"cmd": "agent_event", "pane_id": pane_id, "event": event, "agent": agent}
 if tab_id:
     msg["tab_id"] = tab_id
-for key, value in (("message", message), ("tool", tool),
+if event == "stop":
+    msg["reply"] = last_reply(payload)
+for key, value in (("message", message), ("tool", tool), ("reply", msg.pop("reply", None)),
                    ("session_id", payload.get("session_id")), ("cwd", payload.get("cwd"))):
     if value:
         msg[key] = value

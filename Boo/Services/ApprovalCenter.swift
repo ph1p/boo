@@ -169,6 +169,7 @@ final class ApprovalCenter {
         case "agent_respond":
             return (json["response"] as? String) == "deny" ? "Deny permission prompt" : "Approve permission prompt"
         case "send_text": return "Type into pane"
+        case "agent_send": return "Message agent"
         case "send_key": return "Press a key in pane"
         case "close_pane": return "Close agent pane"
         case "merge_task": return "Merge task"
@@ -180,6 +181,7 @@ final class ApprovalCenter {
     static func payload(cmd: String, json: [String: Any]) -> String {
         switch cmd {
         case "agent_respond": return json["response"] as? String ?? ""
+        case "agent_send": return json["text"] as? String ?? ""
         case "send_text":
             let text = json["text"] as? String ?? ""
             return (json["submit"] as? Bool ?? false) ? text + " ⏎" : text

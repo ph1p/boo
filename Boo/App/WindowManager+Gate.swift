@@ -6,6 +6,16 @@ extension WindowManager {
     /// Socket entry point: checks the caller's `BOO_TOKEN` before dispatching.
     func dispatchGated(cmd: String, json: [String: Any], reply: @escaping ([String: Any]) -> Void) {
         let caller = CapabilityTokens.shared.resolve(json["token"] as? String)
+        // Handles (`t3`) and `parent` become tab UUIDs before the gate looks at the target.
+        var json = json
+        if cmd == "agent_send", json["tab_id"] == nil, let to = json["to"] { json["tab_id"] = to }
+        if let reference = json["tab_id"] as? String, UUID(uuidString: reference) == nil {
+            guard let tabID = AgentCrew.shared.resolve(reference, caller: callerTab(caller, json)) else {
+                reply(["ok": false, "error": "no agent \(reference) (list_agents shows handles)"])
+                return
+            }
+            json["tab_id"] = tabID.uuidString
+        }
         let target = OrchestratorGate.needsTarget(cmd) ? gateTarget(cmd: cmd, json: json) : nil
         let decision = OrchestratorGate.decide(
             cmd: cmd, caller: caller, target: target,
@@ -76,6 +86,11 @@ extension WindowManager {
             tabIDs: tabs.map(\.id),
             isAgent: tabs.contains { inbox.items[$0.id] != nil },
             isRemote: tabs.contains { $0.remoteSession != nil })
+    }
+
+    /// The tab a command comes from: its token's, else the active tab of its pane.
+    func callerTab(_ caller: CapabilityTokens.Caller?, _ json: [String: Any]) -> UUID? {
+        caller?.tabID ?? resolvedPane(json)?.activeTab?.id
     }
 
     /// The pane named by `pane_id`, else the active pane of the active window

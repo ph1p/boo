@@ -47,7 +47,15 @@ final class AgentsPlugin: BooPluginProtocol {
                 label: "Settings Page",
                 defaultValue: AnyCodableValue("custom"),
                 options: nil,
-                group: "Agents")
+                group: "Agents"),
+            PluginManifest.SettingManifest(
+                key: "taskSetup", type: .string, label: "Setup command",
+                description: "Runs in each new task's worktree before its agent starts.",
+                defaultValue: AnyCodableValue(""), options: "agentTaskSetup", group: "Tasks"),
+            PluginManifest.SettingManifest(
+                key: "worktreeFolder", type: .string, label: "Worktree folder",
+                description: "Where new task worktrees go, one folder per repository.",
+                defaultValue: AnyCodableValue(""), options: "agentWorktreeFolder", group: "Tasks"),
         ]
     )
 
@@ -77,6 +85,8 @@ final class AgentsPlugin: BooPluginProtocol {
     private(set) var activeSessionID: String?
 
     private var lastDiffRepoRoot: String?
+    /// `.agentInboxChanged` / `.agentCrewChanged` observers for the Crew section.
+    var crewObservers: [NSObjectProtocol] = []
     var configScan = ScanStamp()
     var worktreeScan = ScanStamp()
     static let scanTTL: TimeInterval = 15
@@ -258,6 +268,12 @@ final class AgentsPlugin: BooPluginProtocol {
         let accentColor = Color(nsColor: context.theme.accentColor)
 
         var sections: [SidebarSection] = []
+
+        if let crew = makeCrewSection(
+            fontScale: fontScale, textColor: textColor, mutedColor: mutedColor, accentColor: accentColor)
+        {
+            sections.append(crew)
+        }
 
         let openSessions = actions?.workspaceAgentSessions?() ?? []
         if !openSessions.isEmpty {
@@ -480,7 +496,7 @@ final class AgentsPlugin: BooPluginProtocol {
     /// Launch an agent CLI in a new tab. When `resumeSessionID` is set, resume that
     /// session instead of starting a fresh one — the "Resume" affordance in Open
     /// Sessions was previously starting a brand-new session and losing the history.
-    private func startAgent(kind: AgentKind, cwd: String? = nil, resumeSessionID: String? = nil) {
+    func startAgent(kind: AgentKind, cwd: String? = nil, resumeSessionID: String? = nil) {
         let cwd = cwd ?? currentCwd ?? activeAgent?.cwd ?? "~"
         var command: String
         switch kind {

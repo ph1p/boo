@@ -263,9 +263,9 @@ struct SidebarIconButton: View {
     let help: String
     let tint: Color
     var enabled = true
-    var size: CGFloat = 11
+    var size: CGFloat = 12
     var weight: Font.Weight = .regular
-    var frame: CGFloat = 18
+    var frame: CGFloat = 20
     let action: () -> Void
 
     var body: some View {

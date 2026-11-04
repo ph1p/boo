@@ -1,5 +1,11 @@
 import Foundation
 
+extension Notification.Name {
+    /// A task worktree was created or removed (posted on main), so worktree lists rescan
+    /// instead of waiting for the next focus or folder change.
+    static let agentWorktreesChanged = Notification.Name("BooAgentWorktreesChanged")
+}
+
 /// Git worktrees that give each agent task its own checkout and branch, so
 /// several agents can work on one repository without touching each other.
 ///
@@ -35,7 +41,20 @@ enum AgentWorktree {
 
     /// `~/.boo/worktrees`: task checkouts live outside the repository so they
     /// never show up as untracked files in it.
-    static var defaultRoot: String { (BooPaths.configDir as NSString).appendingPathComponent("worktrees") }
+    static var builtInRoot: String { (BooPaths.configDir as NSString).appendingPathComponent("worktrees") }
+
+    /// Where new task worktrees go: the Agents setting "Worktree folder", else `builtInRoot`.
+    static var defaultRoot: String {
+        let folder = AppSettings.shared.pluginString("agents", "worktreeFolder", default: "")
+            .trimmingCharacters(in: .whitespaces)
+        return folder.isEmpty ? builtInRoot : standardized((folder as NSString).expandingTildeInPath)
+    }
+
+    /// A task worktree lives under the configured folder or the built-in one
+    /// (tasks made before the folder setting changed).
+    static func isUnderTaskRoot(_ path: String) -> Bool {
+        [defaultRoot, builtInRoot].contains { path.hasPrefix($0 + "/") }
+    }
 
     // MARK: - Queries
 
@@ -153,7 +172,7 @@ enum AgentWorktree {
         }
         let start = base.flatMap { $0.isEmpty ? nil : $0 } ?? "HEAD"
         let stem = slug(name)
-        let parent = (root as NSString).appendingPathComponent((repoRoot as NSString).lastPathComponent)
+        let parent = parentFolder(for: repoRoot, in: root)
         try FileManager.default.createDirectory(atPath: parent, withIntermediateDirectories: true)
 
         for attempt in 1...50 {
@@ -162,6 +181,7 @@ enum AgentWorktree {
             let branch = branchPrefix + candidate
             guard !FileManager.default.fileExists(atPath: path), !branchExists(branch, in: repoRoot) else { continue }
             try git(["worktree", "add", "-b", branch, path, start], in: repoRoot)
+            copyIncludedFiles(from: repoRoot, to: path)
             return Info(path: path, mainRoot: repoRoot, branch: branch)
         }
         throw GitError(message: "No free worktree name for \"\(stem)\".")
@@ -229,8 +249,40 @@ enum AgentWorktree {
         return String(cString: resolved)
     }
 
-    /// Runs git and returns trimmed stdout; throws with git's message on failure.
+    /// `<root>/<repo folder name>`, unless a worktree of another repository with the
+    /// same folder name is already there: then `<name>-<hash of the repo path>`, so
+    /// two `api` repositories don't mix their tasks.
+    static func parentFolder(for repoRoot: String, in root: String) -> String {
+        let name = (repoRoot as NSString).lastPathComponent
+        let plain = (root as NSString).appendingPathComponent(name)
+        let children = (try? FileManager.default.contentsOfDirectory(atPath: plain)) ?? []
+        let owners = children.lazy.compactMap { mainRoot(of: (plain as NSString).appendingPathComponent($0)) }
+        guard let owner = owners.first, owner != standardized(repoRoot) else { return plain }
+        // FNV-1a: stable across launches, unlike `hashValue`.
+        let hash = RuleSet.hash(standardized(repoRoot)).prefix(6)
+        return (root as NSString).appendingPathComponent("\(name)-\(hash)")
+    }
+
+    /// Copies the untracked files the repository's `.worktreeinclude` lists
+    /// (gitignore syntax, as Claude Code reads it), such as `.env`, into a new
+    /// worktree: a fresh checkout lacks them and often can't run without them.
+    static func copyIncludedFiles(from repoRoot: String, to worktree: String) {
+        let list = (repoRoot as NSString).appendingPathComponent(".worktreeinclude")
+        guard FileManager.default.fileExists(atPath: list),
+            let files = try? git(["ls-files", "--others", "--ignored", "--exclude-from=.worktreeinclude"], in: repoRoot)
+        else { return }
+        for file in files.split(separator: "\n").map(String.init) where !file.isEmpty {
+            let source = (repoRoot as NSString).appendingPathComponent(file)
+            let target = (worktree as NSString).appendingPathComponent(file)
+            guard !FileManager.default.fileExists(atPath: target) else { continue }
+            try? FileManager.default.createDirectory(
+                atPath: (target as NSString).deletingLastPathComponent, withIntermediateDirectories: true)
+            try? FileManager.default.copyItem(atPath: source, toPath: target)
+        }
+    }
+
     @discardableResult
+    /// Runs git and returns trimmed stdout; throws with git's message on failure.
     static func git(_ args: [String], in directory: String) throws -> String {
         guard let result = run(args, in: directory) else {
             throw GitError(message: "git \(args.first ?? "") timed out.")

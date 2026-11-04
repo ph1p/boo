@@ -199,3 +199,18 @@ final class SidebarTabOrderingTests: XCTestCase {
             "Local file explorer should remain at front after remote reorder")
     }
 }
+
+/// Sections the user's saved order doesn't know yet take the plugin's place
+/// for them, instead of sinking to the bottom.
+@MainActor
+final class SidebarSectionOrderTests: XCTestCase {
+    func testNewSectionsKeepTheirDeclaredPlace() {
+        let order = { MainWindowController.sectionOrder(declared: $0, saved: $1) }
+        XCTAssertEqual(order(["crew", "skills", "config"], ["config", "skills"]), ["crew", "config", "skills"])
+        XCTAssertEqual(order(["skills", "crew", "config"], ["config", "skills"]), ["config", "skills", "crew"])
+        XCTAssertEqual(order(["skills", "config", "crew"], ["config", "skills"]), ["config", "crew", "skills"])
+        XCTAssertEqual(order(["a", "b", "c"], ["c"]), ["a", "b", "c"])
+        XCTAssertEqual(order(["a", "b"], []), ["a", "b"])
+        XCTAssertEqual(order(["a", "b"], ["b", "gone", "a"]), ["b", "a"])
+    }
+}

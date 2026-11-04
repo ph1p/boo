@@ -10,6 +10,13 @@ if set -q BOO_SHELL_INTEGRATION
     return
 end
 set -gx BOO_SHELL_INTEGRATION fish
+# `boo` (agents, run, send, inbox, status) for this shell and the agents it starts.
+# Checked again before each prompt: config that runs later may rebuild PATH, and
+# on a case-insensitive disk the app's own `Boo` binary would answer to `boo`.
+function __boo_path --on-event fish_prompt
+    test "$PATH[1]" = $HOME/.boo/bin; or set -gx PATH $HOME/.boo/bin (string match -v -- $HOME/.boo/bin $PATH)
+end
+__boo_path
 
 set -g _BOO_AGENT_CMDS claude codex opencode aider
 set -g _BOO_LAST_WAS_AGENT 0

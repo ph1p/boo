@@ -409,14 +409,26 @@ extension PaneView {
         let midY = y + rowH / 2
         var textX = pillRect.minX + Self.tabTextLeadIn
 
-        // Close button visible on hover or active tab (when closeable)
-        let showClose = showTabClose && (isActive || isHovered)
+        // An agent's state badges its icon tile; a tab without one shows it in the
+        // close slot, on the active tab too.
+        let agentColor = Self.agentBadgeColor(for: AgentInbox.shared.items[tab.id], theme: theme)
+        let agentOnTile = agentColor != nil && tabHasLeadingIcon(tab)
+        let agentInSlot = agentColor != nil && !agentOnTile
+        // Close button visible on hover or active tab (when closeable); an agent
+        // badge in the slot gives way to it on hover only.
+        let showClose = showTabClose && (isHovered || isActive && !agentInSlot)
         // The activity dot sits in the close slot, so either one reserves it.
-        let showDot = tab.state.hasActivity && !isActive && !showClose
+        let showDot = (agentInSlot || tab.state.hasActivity && !isActive) && !showClose
         let closeZone: CGFloat =
             (showClose || showDot) ? WorkspacePillStyle.closeButtonSize + Self.tabCloseTrailingGap + 4 : 10
 
+        let iconX = textX
         textX += drawLeadingIcon(tab: tab, theme: theme, x: textX, midY: midY, isActive: isActive)
+        if agentOnTile, let agentColor {
+            Self.drawAgentBadge(ctx, color: agentColor, theme: theme, tileCorner: CGPoint(
+                x: iconX - Self.tabTextLeadIn + Self.tabIconTileInset + Self.tabIconTileSize,
+                y: midY - Self.tabIconTileSize / 2))
+        }
 
         // Title — use truncating tail paragraph style for automatic ellipsis
         let para = NSMutableParagraphStyle()
@@ -475,7 +487,8 @@ extension PaneView {
         // the close slot, and the ✕ replaces it on hover.
         if showDot {
             let dotSize = WorkspacePillStyle.activityDotSize
-            ctx.setFillColor((tab.state.triggerMark != nil ? theme.warning : theme.accentEmphasis).cgColor)
+            let dotColor = agentInSlot ? agentColor : tab.state.triggerMark != nil ? theme.warning : theme.accentEmphasis
+            ctx.setFillColor((dotColor ?? theme.accentEmphasis).cgColor)
             ctx.fillEllipse(
                 in: CGRect(
                     x: closeRect.midX - dotSize / 2, y: closeRect.midY - dotSize / 2,
@@ -491,11 +504,36 @@ extension PaneView {
 
     /// Draws the tab's content-type or process icon at `x`; returns how far
     /// the title moves right (0 without an icon).
+    /// The agent's state color while it works or waits for the user (a question,
+    /// an error, an unread answer); nil for a read answer or no agent, so a
+    /// finished tab stays quiet. Same colors as the vertical tabs and status bar.
+    static func agentBadgeColor(for item: AgentInbox.Item?, theme: TerminalTheme) -> NSColor? {
+        guard let item, item.state == .working || item.needsAttention else { return nil }
+        return AgentInboxSegment.color(for: item, theme: theme)
+    }
+
+    /// A dot on the icon tile's top-right corner, ringed in the bar color so it
+    /// reads over the tile.
+    static func drawAgentBadge(_ ctx: CGContext, color: NSColor, theme: TerminalTheme, tileCorner: CGPoint) {
+        let size: CGFloat = 7
+        let rect = CGRect(x: tileCorner.x - size + 1.5, y: tileCorner.y - 1.5, width: size, height: size)
+        ctx.setFillColor(theme.chromeBg.cgColor)
+        ctx.fillEllipse(in: rect.insetBy(dx: -1.5, dy: -1.5))
+        ctx.setFillColor(color.cgColor)
+        ctx.fillEllipse(in: rect)
+    }
+
     /// Red dot on the pill's top-left corner while the tab records.
     static func drawRecordingDot(_ ctx: CGContext, in pill: CGRect) {
         let size: CGFloat = 6
         ctx.setFillColor(AppSettings.shared.theme.error.cgColor)
         ctx.fillEllipse(in: CGRect(x: pill.minX + 3, y: pill.minY + 3, width: size, height: size))
+    }
+
+    /// A plugin tab's own icon (review, diff, timeline), else its content type's.
+    static func tabSymbolName(_ tab: Pane.Tab) -> String {
+        if case .pluginView(let state) = tab.state.contentState { return state.iconSymbol }
+        return tab.contentType.symbolName
     }
 
     func drawLeadingIcon(tab: Pane.Tab, theme: TerminalTheme, x: CGFloat, midY: CGFloat, isActive: Bool) -> CGFloat {
@@ -511,7 +549,7 @@ extension PaneView {
             Self.drawIconTile(tile, color: iconColor, isActive: isActive)
             guard
                 let drawn = Self.drawTabIcon(
-                    symbolName: tab.contentType.symbolName, color: iconColor, x: x, midY: midY, isActive: isActive)
+                    symbolName: Self.tabSymbolName(tab), color: iconColor, x: x, midY: midY, isActive: isActive)
             else { return 0 }
             drawn.draw()
             return drawn.width

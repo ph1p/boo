@@ -658,7 +658,7 @@ struct FileTreeFilterBar: View {
         HStack(spacing: 6) {
             HStack(spacing: 4) {
                 Image(systemName: "line.3.horizontal.decrease")
-                    .font(.system(size: 10, weight: .medium))
+                    .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(style.mutedColor)
                 TextField("Filter files", text: $filter.query)
                     .textFieldStyle(.plain)
@@ -682,7 +682,7 @@ struct FileTreeFilterBar: View {
                         filter.clear()
                     } label: {
                         Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 10))
+                            .font(.system(size: 12))
                             .foregroundStyle(style.mutedColor)
                     }
                     .buttonStyle(.plain)
@@ -700,9 +700,9 @@ struct FileTreeFilterBar: View {
             if let onRefresh {
                 Button(action: onRefresh) {
                     Image(systemName: "arrow.clockwise")
-                        .font(.system(size: 10, weight: .medium))
+                        .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(style.mutedColor)
-                        .frame(width: 16, height: 16)
+                        .frame(width: 20, height: 20)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
@@ -711,9 +711,9 @@ struct FileTreeFilterBar: View {
 
             Button(action: onCollapseAll) {
                 Image(systemName: "rectangle.compress.vertical")
-                    .font(.system(size: 10, weight: .medium))
+                    .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(style.mutedColor)
-                    .frame(width: 16, height: 16)
+                    .frame(width: 20, height: 20)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -785,9 +785,9 @@ struct FileTreeNavigationBar: View {
                     action: navigation.attach)
             } else {
                 Image(systemName: "link")
-                    .font(.system(size: 10, weight: .medium))
+                    .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(style.mutedColor.opacity(0.7))
-                    .frame(width: 18, height: 18)
+                    .frame(width: 20, height: 20)
                     .help("Following the terminal's folder")
             }
         }
@@ -800,7 +800,7 @@ struct FileTreeNavigationBar: View {
     ) -> some View {
         SidebarIconButton(
             systemName: icon, help: help, tint: enabled ? (tint ?? style.textColor) : style.mutedColor,
-            enabled: enabled, size: 10, weight: .semibold, action: action)
+            enabled: enabled, size: 12, weight: .semibold, action: action)
     }
 }
 

@@ -62,7 +62,7 @@ extension AgentInbox {
     /// `agent_respond`: `tab_id`, `response` (`approve` or `deny`) and the
     /// `updated_at` the page showed, so an answer never lands on a newer prompt;
     /// or `tab_id` and `text`, a message for the agent.
-    func respond(_ json: [String: Any]) -> [String: Any] {
+    func respond(_ json: [String: Any], deniedFrom source: String = "remote control") -> [String: Any] {
         guard let tabID = (json["tab_id"] as? String).flatMap(UUID.init(uuidString:)) else {
             return ["ok": false, "error": "missing tab_id"]
         }
@@ -87,7 +87,7 @@ extension AgentInbox {
             _ = apply(event: "working", tabID: tabID, agent: item.agent)
         case .deny:
             // Claude waits for new instructions after a denial, without a Stop hook.
-            _ = apply(event: "done", tabID: tabID, agent: item.agent, message: "Denied from remote control")
+            _ = apply(event: "done", tabID: tabID, agent: item.agent, message: "Denied from \(source)")
             markSeen(tabID: tabID)
         }
         return ["ok": true]

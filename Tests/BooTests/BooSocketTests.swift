@@ -192,6 +192,14 @@ final class BooSocketProtocolTests: BooSocketIntegrationTestCase {
         XCTAssertTrue((response["error"] as? String)?.contains("unknown command") ?? false)
     }
 
+    /// The crew commands live in AgentCrew; the socket must hand them on.
+    func testCrewCommandsReachTheApp() throws {
+        for cmd in ["agent_send", "agent_messages", "agent_collected"] {
+            let error = try roundTrip(["cmd": cmd])["error"] as? String ?? ""
+            XCTAssertFalse(error.contains("unknown command"), cmd)
+        }
+    }
+
     func testDefaultCategoryIsUnknown() throws {
         let pid = getpid()
         let response = try roundTrip(["cmd": "set_status", "pid": pid, "name": "myprocess"])

@@ -48,7 +48,7 @@ final class BooMCPServerTests: XCTestCase {
             tools.compactMap { $0["name"] as? String },
             [
                 "get_layout", "split_pane", "read_pane", "send_text", "close_pane", "list_agents", "new_agent_task",
-                "run_recipe", "open_review", "wait_for_events", "agent_respond", "focus_pane", "task_status",
+                "send_message", "read_messages", "run_recipe", "open_review", "wait_for_events", "agent_respond", "focus_pane", "task_status",
                 "task_diff",
                 "merge_task", "discard_task"
             ])
@@ -203,6 +203,31 @@ final class BooMCPServerTests: XCTestCase {
         XCTAssertEqual(task["repo"] as? String, "/work/repo")
         XCTAssertEqual(task["prompt"] as? String, "fix the flaky test")
         XCTAssertNil(task["pane_id"])
+    }
+
+    func testSendMessageReportsQueuedOrDelivered() {
+        var status = "queued"
+        let (server, sent) = makeServer { _ in ["ok": true, "status": status, "to": "t3 fix-tests"] }
+        let queued = text(call(server, "send_message", ["to": "t3", "text": "also run lint"]))
+        let message = sent().last ?? [:]
+        XCTAssertEqual(message["cmd"] as? String, "agent_send")
+        XCTAssertEqual(message["to"] as? String, "t3")
+        XCTAssertEqual(message["text"] as? String, "also run lint")
+        XCTAssertEqual(message["pane_id"] as? String, ownPane, "the sender is this agent's tab")
+        XCTAssertTrue(queued.hasPrefix("queued for t3 fix-tests"))
+        status = "delivered"
+        XCTAssertEqual(text(call(server, "send_message", ["to": "parent", "text": "done"])), "delivered to t3 fix-tests")
+        XCTAssertEqual(call(server, "send_message", ["text": "x"])["isError"] as? Bool, true, "to is required")
+    }
+
+    func testHelperAgentStartsBesideWithoutWorktree() {
+        let (server, sent) = makeServer { _ in ["ok": true, "tab_id": "u", "handle": "t4"] }
+        let output = text(call(server, "new_agent_task", ["prompt": "check the docs", "worktree": false]))
+        let message = sent().last ?? [:]
+        XCTAssertEqual(message["worktree"] as? Bool, false)
+        XCTAssertEqual(message["cwd"] as? String, "/work/repo")
+        XCTAssertTrue(output.contains("\"handle\" : \"t4\""))
+        XCTAssertTrue(output.contains("<boo from"))
     }
 
     func testSocketClientReportsMissingSocket() {

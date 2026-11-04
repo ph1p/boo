@@ -103,13 +103,21 @@ documentation/        Vocs documentation site
 - `BooSocketServer.processCommand` handles built-ins (`set_status`, `clear_status`, `list_status`, …)
   and plugin-namespaced handlers; control commands reach `WindowManager.dispatchCommand` via
   `onControlCommand` (installed in `WindowManager.installSharedHandlers`).
-- `dispatchCommand` first offers agent commands to `AgentInbox.handleSocketCommand` (`agent_event`,
-  `agent_inbox`, `agent_respond`, `agent_jump`), then routes by `pane_id` to the window owning that
+- `WindowManager.dispatchGated` resolves crew handles (`t3`, `parent`) in `tab_id` / `to` to tab UUIDs
+  before the approval gate.
+- `BooSocketServer.processCommand` only hands allow-listed control commands to the app; a new command
+  must be added to its `case` list, or the socket answers "unknown command" (unit tests that call a
+  handler directly won't notice; `BooSocketProtocolTests.testCrewCommandsReachTheApp` checks the crew ones).
+- `dispatchCommand` first offers `agent_send` / `agent_messages` / `agent_collected` to `AgentCrew.handleSocketCommand`,
+  then agent commands to `AgentInbox.handleSocketCommand` (`agent_event`, `agent_inbox`,
+  `agent_respond`, `agent_jump`), then routes by `pane_id` to the window owning that
   pane (even in the background), falling back to the active window.
 - Per-window handlers: `MainWindowController+IPC.swift` (`handleIPCCommand`: theme, tabs, workspaces,
   send/read text) and `+IPCLayout.swift` (split/close/focus/resize/swap/zoom panes).
 - **MCP**: `Boo --mcp` (`BooMCPServer`) is a stdio JSON-RPC server that forwards tool calls to the
   socket; pane arguments default to the caller's `BOO_PANE_ID`.
+- **CLI**: `Boo --cli` (`BooCLI`, launcher `~/.boo/bin/boo`, put on `PATH` by shell integration):
+  `boo agents | run [--here] | send | inbox | wait | read | status | diff | merge | discard`. Testable through `BooCLI.run(_:env:cwd:send:)`.
 - `RemoteControlServer` (HTTP, web UI) feeds its `onCommand` into the same `dispatchCommand`.
 
 ## Plugin System
@@ -204,7 +212,8 @@ Special `options` values for string settings:
 - `"fontPicker:system"` / `"fontPicker:mono"` — font picker dropdown
 - `"editorFilePatterns"` — comma-separated file patterns (e.g. `*.ts, .env*`)
 - `"dockerSocket"` — socket path with auto-detect fallback
-- `"gitDiffTool"` — diff tool command with `{file}` placeholder
+- `"gitDiffTool"` — diff tool command with `{file}` placeholder; when empty, a Git panel file click opens
+  Boo's diff viewer instead
 - `"markdownOpenMode"` — picker bound to global markdown open mode setting
 - `"imageOpenMode"` — picker bound to global image open mode setting
 - `"textOpenMode"` — picker bound to global text open mode setting
@@ -277,15 +286,110 @@ Wraps `AgentSession` with `paneID`, `tabID`, `tabTitle`, and `isFocused` so the 
 - **Inbox** (`Services/AgentInbox.swift`) — cross-window agent state keyed by terminal tab ID, fed by
   `Resources/shell-integration/boo-claude-hook` via `agent_event`. Shown in the status bar by `AgentInboxSegment`.
 - **Worktree tasks** (`AgentWorktree`, `MainWindowController+AgentTasks.swift`) — one git worktree per
-  agent task; merge/discard from the task menu.
+  agent task; merge/discard from the task menu. Lives at `~/.boo/worktrees/<repo>/<task>` (branch `boo/<task>`);
+  a same-named repo that finds the folder taken by another repository's tasks uses `<repo>-<hash>`.
+  Untracked files the repo's `.worktreeinclude` lists (gitignore syntax, as Claude Code reads it; e.g. `.env`)
+  are copied into each new worktree. Agents settings, "Tasks" group (app-wide): "Worktree folder"
+  (`worktreeFolder`, replaces `~/.boo/worktrees` as `AgentWorktree.defaultRoot`; `builtInRoot` still counts
+  for stopped rows) and "Setup command" (`taskSetup`, run before the agent in the task's terminal as
+  `<setup>; <agent>` via `MainWindowController.withTaskSetup`, so a failed install still starts the agent).
 - **Review mode** (`AgentReview`, `AgentReviewView`) — diff of the agent's changes with inline comments
   sent back to the agent.
+- **Diff viewer** — the same view serves the Git panel: `AgentReview.changes(in:source:context:)` reads
+  `.branch` (review), `.unstaged` or `.staged`; `MainWindowController.openDiff(repoRoot:source:path:)`
+  opens or reuses a "Changes:" / "Staged:" tab (`AgentReviewModel.existing`, a weak registry). Comments,
+  Merge/Discard and the footer show only for `.branch`. Layout (unified / side by side via
+  `AgentReview.splitRows`), wrap and context lines are Git plugin settings (`DiffSettings`, "Diff Viewer"
+  group); the toolbar flips layout and wrap per tab without saving. Review and diff tabs pass their
+  folder as the tab cwd (`PaneView.addPluginViewTab(workingDirectory:)`), so the sidebar stays on that repo.
 - **Timeline** (`AgentTimeline`, `AgentTimelineView`) — transcript replay with token usage and an
   estimated cost (`AgentTimeline.estimatedCost`).
 - **Handoff** (`AgentHandoff`) — ⌥⌘↩ "Send to Agent" pastes the selection or last command output into
   the nearest agent's prompt.
 - **Remote approve** (`AgentInbox+Remote.swift`) — `agent_respond` approves/denies a waiting agent from
   the Remote Control page; a mismatched `updated_at` is rejected as stale.
+- **Crew** (`Services/AgentCrew.swift`) — agents working together. Every agent tab gets a handle
+  (`t1`, `t2`, …). `new_agent_task` / `boo run` link the new agent to the caller as its parent; when
+  the child finishes a turn (with its last answer from the Stop hook's `reply`), asks a question,
+  errors or exits, a `<boo from="t3 name" state="done">…</boo>` report goes to the parent.
+  `send_message` / `boo send` queue messages in an outbox. Delivery is typed into the receiver's
+  prompt only when it is a known agent (claude/codex/opencode) in `done`/`error` state, so it never
+  interrupts work, answers a permission prompt, or reaches a plain shell. Other tabs read their
+  outbox with `read_messages` / `boo inbox`. The orchestrator gets `agent_message` events instead.
+  Two agents may send each other at most `AgentCrew.maxMessages` (8) messages per 10 minutes; more is
+  refused as a likely loop. Reports and messages from the user are not capped.
+  `new_agent_task` with `worktree: false` starts a helper in a split beside the caller (same cwd).
+  Closing a tab closes its helpers without asking (`AgentCrew.tabClosed` from
+  `OrchestratorEvents.tabGone`, `MainWindowController.closeHelperTab`); worktrees and branches stay.
+  `boo` comes from `~/.boo/bin`; the shell integrations move it to the front of PATH before every
+  prompt, because rc files may rebuild PATH and on a case-insensitive disk the app's own `Boo`
+  binary (Ghostty appends `Contents/MacOS` to PATH) answers to `boo` and kills the tab.
+  `GhosttyRuntime` clears inherited `BOO_*` tab variables, so a Boo started from a Boo terminal
+  still loads the integration.
+  Claude finds the CLI on its own: `boo-claude-hook` answers `SessionStart` with `additionalContext`
+  describing `boo run/agents/wait/send/read`. That hook is registered without `async` (Claude ignores
+  an async hook's output); the other events stay async.
+  `boo wait` returns the child's answer and then sends `agent_collected`, which drops the child's
+  queued reports (not plain messages) from the caller's outbox, so the parent isn't told twice.
+  A report the parent took (typed into its prompt, or collected by `boo wait`) marks the helper's
+  inbox item seen, so only the parent is left asking for the user's attention.
+  A task an agent starts (`new_agent_task` with a caller) opens its workspace, then the window goes
+  back to the caller's workspace (`returnToCaller`), unless the user moved meanwhile. Tasks started
+  from the UI keep the new workspace in front.
+  `boo agents` marks the caller's own row `(you)`: an agent doesn't know its tab's title.
+  Helper names (and task branches) default to `AgentCrew.shortName(prompt)` (first sentence, cut at a word);
+  `AgentCrew.displayName` strips the agent's status glyph from tab titles. `AgentCrew.name(for:)` picks
+  a tab's name: its link name, else its task workspace's name (`taskName`, so the crew row matches the
+  workspace pill rather than the title Claude writes), else the title; a non-agent tab (a shell running
+  `boo send`) is "shell", since its title is just its last command.
+- **Crew sidebar** (`AgentCrewView`, `AgentsPlugin+Crew.swift`) — app-wide agent list grouped into
+  Needs you / Working / Done / Stopped, with handles, parent links, queued counts and actions (show, message,
+  review, merge, discard, new task). Rows for tabs in no Boo window (another Boo instance or app sharing
+  the socket) show "not in a Boo window" and can't be shown, but stay listed. The section sizes to its
+  rows (`prefersOuterScrollView: false`), so every agent shows without scrolling; a row's detail is
+  the first line of the answer without backticks. An agent with no name (its tab is in no Boo window)
+  reads "claude in <folder>", as in `boo agents`. Buttons go through `AgentsPlugin.perform(CrewAction, on:)`.
+  No pop-up dialogs: Message, New task and the Discard confirmation are inline fields driven by the shared
+  `AgentCrewUIState` (selection + one open composer). The list takes focus like a source list: click or ↑/↓ select,
+  double-click or Return shows the agent, Space messages (or resumes a stopped task), Delete asks to discard, Esc closes.
+  New task has an agent picker (installed Claude/Codex/OpenCode; last pick kept in `AgentCrewUIState.taskAgent`,
+  UserDefaults `crewTaskAgent`). The section stays with no agents: it then offers "Start <agent>" in the active tab.
+  Row actions are always laid out and only faded in on hover, so the row never shifts under the pointer.
+  A question (`AskUserQuestion`) shows its text, not "needs your permission": the hook sends a
+  `question` event from `PreToolUse` (registered with `BooPaths.claudeHookMatchers`, so no other tool
+  pays for it), and `AgentInbox` keeps that text when Claude's permission notice follows.
+  `AgentInbox.Item.asksQuestion` tells the two apart: a permission prompt row gets inline Allow / Deny
+  (`AgentInbox.respond(_:deniedFrom:)`, guarded by `updated_at` like Remote approve); a question row
+  doesn't, since Return would pick its first option.
+  Creating or removing a task worktree posts `.agentWorktreesChanged`; the Worktrees section rescans
+  (its scan is otherwise throttled), so a discarded task's row goes away at once.
+  A task workspace under `~/.boo/worktrees` with no live agent in any tab (after a restart, or once the
+  agent quit) lists under Stopped (`AgentsPlugin.stoppedTaskRows`, `AgentCrewRow.isStopped`): no handle
+  or Message, but Show, Resume, Review, Merge and Discard. The header counts only the Needs you group.
+  Resume (`MainWindowController.resumeAgentTask`) runs `claude --continue` in the task's tab. Review's
+  "Send to Agent" (`sendToAgent`) on a task with no live agent sends `claude --continue '<notes>'`
+  (`resumeCommand`) instead of pasting the notes into the bare shell.
+  Task rows carry a third line from `AgentTaskStatus` ("2 commits · 5 files · merges into main", or the
+  blocker: conflicts, dirty checkouts, no commits). Git runs off the main thread on `mergeCheck` plus
+  `git diff --name-only`; answers are cached per worktree for 20s or until the agent's state changes, and
+  a changed answer posts `.agentCrewChanged` so the section reruns.
+- **Tab badges** (`PaneView.agentBadgeColor` / `drawAgentBadge`) — horizontal tabs show the agent's state
+  while it works or waits for the user (colors from `AgentInboxSegment.color`, as in the status bar and
+  vertical tabs): a dot on the icon tile's corner, or in the close slot for tabs without an icon (close
+  wins there only on hover). A read answer stays quiet. PaneView redraws on `.agentInboxChanged`.
+- **Global agent jump** (`AgentJumpHotKey`) — optional system-wide hotkey (`AppSettings.agentJumpHotkey`,
+  empty = off; Settings → Keyboard Shortcuts → Agents) running `AgentInbox.jumpToNextAttention`, beeping
+  when nothing waits. Same `GlobalHotKey` (Carbon, no Accessibility permission) as the Quick Terminal.
+  In-app the Window menu's Jump to Next Waiting Agent (⇧⌘J) does the same.
+- Sidebar section order: `MainWindowController.sectionOrder` keeps the user's saved order and puts a
+  section it doesn't know (new, or shown only sometimes) right after the section declared before it,
+  or first. The first section auto-expands, so a new first section is visible to existing users.
+- `debug_snapshot` (DEBUG builds only, socket): `{"cmd":"debug_snapshot","path":"/x.png","sidebar_tab":"agents"}`
+  draws the first window, terminals included, to a PNG without screen-recording permission;
+  `"dialog": true` draws the open sheet or modal alert instead; `"settings_plugin": "<id>"` draws Settings open on that plugin. `debug_key {key, chars?}` sends a key press (key code) to the key view; it lands in a terminal if one has focus. `debug_crew_action {action, handle?|name?, text?}` (name picks a Stopped row)
+  presses a crew button (`message` / `new_task` open their inline field, or send `text` at once); `debug_close_workspace {id}` closes a workspace unasked; `debug_review_send {id, text}` runs the review tab's Send to Agent; `debug_click {x, y, count?}` sends a real left click (`count: 2` double-clicks) at a snapshot point (hit-testing runs, no Accessibility permission needed); `debug_dialog {button, text?}` fills and presses a button in the open
+  dialog. Both run their work as run-loop blocks: a modal started inside a main-queue GCD block
+  would starve every later socket command (`WindowManager+Debug.swift`).
 
 ## Settings Architecture
 

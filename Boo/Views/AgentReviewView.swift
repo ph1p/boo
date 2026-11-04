@@ -1,11 +1,17 @@
+import AppKit
 import SwiftUI
 
-/// State behind a review tab: the workspace's changes and the comments being
-/// collected for the agent.
+/// State behind a diff tab: an agent review (the workspace's changes and the
+/// comments being collected for the agent), or the Git panel's staged or
+/// unstaged changes, read only.
 @MainActor
 final class AgentReviewModel: ObservableObject {
     let workspaceID: UUID
     let folder: String
+    let source: AgentReview.Source
+    /// This tab's layout and wrap: start from the Git settings, flipped per tab.
+    @Published var layout = DiffSettings.layout
+    @Published var wrap = DiffSettings.wrap
 
     @Published private(set) var changes: AgentReview.Changes?
     @Published private(set) var error: String?
@@ -35,9 +41,31 @@ final class AgentReviewModel: ObservableObject {
         let snippet: String
     }
 
-    init(workspaceID: UUID, folder: String) {
+    init(workspaceID: UUID, folder: String, source: AgentReview.Source = .branch, selectedPath: String? = nil) {
         self.workspaceID = workspaceID
         self.folder = folder
+        self.source = source
+        self.selectedPath = selectedPath
+        Self.open.setObject(self, forKey: Self.key(folder: folder, source: source) as NSString)
+    }
+
+    /// Comments and "Send to Agent" apply to an agent review only.
+    var isReview: Bool { source == .branch }
+
+    /// Open git diff tabs, so a second click selects the file in the same tab.
+    private static let open = NSMapTable<NSString, AgentReviewModel>.strongToWeakObjects()
+
+    static func key(folder: String, source: AgentReview.Source) -> String { "\(source)|\(folder)" }
+
+    static func existing(folder: String, source: AgentReview.Source) -> AgentReviewModel? {
+        open.object(forKey: key(folder: folder, source: source) as NSString)
+    }
+
+    /// Moves the selection by `offset` files (arrow keys in the file list).
+    func selectAdjacent(_ offset: Int) {
+        guard let files = changes?.files, !files.isEmpty else { return }
+        let current = files.firstIndex { $0.path == selectedFile?.path } ?? 0
+        selectedPath = files[min(files.count - 1, max(0, current + offset))].path
     }
 
     /// Looked up per action: the workspace may have moved to another window.
@@ -52,10 +80,12 @@ final class AgentReviewModel: ObservableObject {
     func reload() {
         isLoading = true
         let folder = folder
-        DispatchQueue.global(qos: .userInitiated).async {
-            let result = Result { try AgentReview.changes(in: folder) }
+        let source = source
+        let context = DiffSettings.context
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let result = Result { try AgentReview.changes(in: folder, source: source, context: context) }
             let isWorktree = (try? result.get())?.branch != nil && AgentWorktree.looksLikeWorktree(folder)
-            DispatchQueue.main.async { [weak self] in
+            DispatchQueue.main.async {
                 guard let self else { return }
                 self.isLoading = false
                 switch result {
@@ -128,17 +158,26 @@ final class AgentReviewModel: ObservableObject {
     func discard() { controller?.discardAgentTask(workspaceID: workspaceID) }
 }
 
-/// Review tab: changed files on the left, the selected file's diff on the right.
-/// Click a line to comment; "Send to Agent" pastes every comment into the
-/// agent's prompt.
+/// Diff tab: changed files on the left, the selected file's diff on the right,
+/// unified or side by side. In an agent review, click a line to comment;
+/// "Send to Agent" pastes every comment into the agent's prompt.
 struct AgentReviewView: View {
     @ObservedObject var model: AgentReviewModel
     /// Repaints on editor-font changes; the theme comes from the tab host.
     @StateObject private var settings = SettingsObserver(topics: [.editor])
     @Environment(\.tokens) private var t
-    private var mono: Font {
-        .custom(AppSettings.shared.editorFontName, size: max(10, CGFloat(AppSettings.shared.editorFontSize) - 1))
+    @FocusState private var fileListFocused: Bool
+
+    private var fontSize: CGFloat { max(10, CGFloat(AppSettings.shared.editorFontSize) - 1) }
+    private var mono: Font { .custom(AppSettings.shared.editorFontName, size: fontSize) }
+    /// One character of the editor font, to size unwrapped side-by-side columns.
+    private var charWidth: CGFloat {
+        let font = NSFont(name: AppSettings.shared.editorFontName, size: fontSize)
+            ?? .monospacedSystemFont(ofSize: fontSize, weight: .regular)
+        return ("M" as NSString).size(withAttributes: [.font: font]).width
     }
+    /// Line number and marker columns in front of a line's text.
+    private static let gutter: CGFloat = 58
 
     var body: some View {
         let _ = settings.revision
@@ -148,7 +187,7 @@ struct AgentReviewView: View {
             if let error = model.error {
                 placeholder(error)
             } else if let changes = model.changes, changes.files.isEmpty {
-                placeholder("No changes against \(changes.base).")
+                placeholder(emptyText(changes))
             } else if model.changes == nil {
                 placeholder("Loading changes…")
             } else {
@@ -158,18 +197,37 @@ struct AgentReviewView: View {
                     diffPane
                 }
             }
-            Rectangle().fill(t.separator).frame(height: 1)
-            footer
+            if model.isReview {
+                Rectangle().fill(t.separator).frame(height: 1)
+                footer
+            }
         }
         .background(t.termBg)
     }
 
+    private func emptyText(_ changes: AgentReview.Changes) -> String {
+        switch model.source {
+        case .branch: return "No changes against \(changes.base)."
+        case .unstaged: return "No unstaged changes."
+        case .staged: return "Nothing staged."
+        }
+    }
+
     // MARK: Header / footer
+
+    private var title: String {
+        let repo = (model.folder as NSString).lastPathComponent
+        switch model.source {
+        case .branch: return model.changes?.branch ?? repo
+        case .unstaged: return "Unstaged changes in \(repo)"
+        case .staged: return "Staged changes in \(repo)"
+        }
+    }
 
     private var header: some View {
         HStack(spacing: 10) {
             VStack(alignment: .leading, spacing: 2) {
-                Text(model.changes?.branch ?? (model.folder as NSString).lastPathComponent)
+                Text(title)
                     .font(.system(size: 13, weight: .semibold)).foregroundStyle(t.text)
                 if let changes = model.changes {
                     let adds = changes.files.reduce(0) { $0 + $1.additions }
@@ -182,7 +240,21 @@ struct AgentReviewView: View {
             }
             Spacer()
             if model.isLoading { ProgressView().controlSize(.small).tint(t.textSecondary) }
+            Picker("Layout", selection: $model.layout) {
+                Image(systemName: "rectangle").help("Unified").tag(DiffLayout.unified)
+                Image(systemName: "rectangle.split.2x1").help("Side by side").tag(DiffLayout.split)
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .fixedSize()
+            .help("Unified or side by side, for this tab (default in Settings › Git)")
+            Toggle(isOn: $model.wrap) {
+                Image(systemName: "arrow.turn.down.left")
+            }
+            .toggleStyle(.button)
+            .help("Wrap long lines, for this tab (default in Settings › Git)")
             Button("Refresh") { model.reload() }.buttonStyle(.themed)
+                .keyboardShortcut("r", modifiers: .command)
             if model.isWorktree {
                 Button("Merge…") { model.merge() }.buttonStyle(.themed)
                 Button("Discard…") { model.discard() }.buttonStyle(.themed)
@@ -233,13 +305,33 @@ struct AgentReviewView: View {
     // MARK: File list
 
     private var fileList: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: 0) {
-                ForEach(model.changes?.files ?? []) { file in
-                    fileRow(file)
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 0) {
+                    ForEach(model.changes?.files ?? []) { file in
+                        fileRow(file).id(file.path)
+                    }
+                }
+                .padding(.vertical, 4)
+            }
+            // ↑/↓ walk the files like a source list.
+            .focusable()
+            .focused($fileListFocused)
+            .focusEffectDisabled()
+            .onMoveCommand { direction in
+                switch direction {
+                case .up: model.selectAdjacent(-1)
+                case .down: model.selectAdjacent(1)
+                default: break
                 }
             }
-            .padding(.vertical, 4)
+            .onChange(of: model.selectedFile?.path) { _, path in
+                if let path { proxy.scrollTo(path) }
+            }
+            .onAppear {
+                fileListFocused = true
+                if let path = model.selectedFile?.path { proxy.scrollTo(path, anchor: .center) }
+            }
         }
     }
 
@@ -248,6 +340,7 @@ struct AgentReviewView: View {
         let commentCount = model.commentCount(file: file.path)
         return Button {
             model.selectedPath = file.path
+            fileListFocused = true
         } label: {
             HStack(spacing: 6) {
                 Text(statusLetter(file.status))
@@ -303,28 +396,52 @@ struct AgentReviewView: View {
     private var diffPane: some View {
         Group {
             if let file = model.selectedFile {
-                ScrollView([.vertical, .horizontal]) {
-                    LazyVStack(alignment: .leading, spacing: 0) {
-                        if let old = file.oldPath {
-                            Text("Renamed from \(old)").font(.system(size: 11)).foregroundStyle(t.textSecondary)
-                                .padding(8)
-                        }
-                        if file.isBinary {
-                            Text("Binary file").font(.system(size: 11)).foregroundStyle(t.textSecondary).padding(8)
-                        }
-                        ForEach(file.hunks.indices, id: \.self) { h in
-                            let hunk = file.hunks[h]
-                            Text(hunk.header)
-                                .font(mono).foregroundStyle(t.textTertiary)
-                                .padding(.horizontal, 8).padding(.vertical, 3)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .background(t.subtleFill)
-                            ForEach(hunk.lines.indices, id: \.self) { i in
-                                lineRow(hunk.lines[i], file: file.path)
+                GeometryReader { geometry in
+                    let split = model.layout == .split
+                    // Unwrapped, each side is as wide as the file's longest line.
+                    let longest = file.hunks.lazy.flatMap(\.lines).map(\.text.count).max() ?? 0
+                    let sideWidth = max(
+                        (geometry.size.width - 1) / 2, CGFloat(longest) * charWidth + Self.gutter + 8)
+                    ScrollView(model.wrap ? .vertical : [.vertical, .horizontal]) {
+                        LazyVStack(alignment: .leading, spacing: 0) {
+                            if let old = file.oldPath {
+                                Text("Renamed from \(old)").font(.system(size: 11)).foregroundStyle(t.textSecondary)
+                                    .padding(8)
+                            }
+                            if file.isBinary {
+                                Text("Binary file").font(.system(size: 11)).foregroundStyle(t.textSecondary).padding(8)
+                            }
+                            // One lazy child per hunk: flattening header and lines into the
+                            // lazy stack gave them colliding index ids, and line 1 vanished.
+                            ForEach(file.hunks.indices, id: \.self) { h in
+                                let hunk = file.hunks[h]
+                                VStack(alignment: .leading, spacing: 0) {
+                                    Text(hunk.header)
+                                        .font(mono).foregroundStyle(t.textTertiary)
+                                        .lineLimit(1)
+                                        .padding(.horizontal, 8).padding(.vertical, 3)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                        .background(t.subtleFill)
+                                    if split {
+                                        let rows = AgentReview.splitRows(hunk.lines)
+                                        ForEach(rows.indices, id: \.self) { i in
+                                            splitRow(rows[i], file: file.path, sideWidth: model.wrap ? nil : sideWidth)
+                                        }
+                                    } else {
+                                        ForEach(hunk.lines.indices, id: \.self) { i in
+                                            lineRow(hunk.lines[i], file: file.path)
+                                        }
+                                    }
+                                }
                             }
                         }
+                        .frame(
+                            minWidth: geometry.size.width,
+                            maxWidth: model.wrap ? geometry.size.width : nil,
+                            alignment: .leading)
                     }
-                    .frame(minWidth: 600, alignment: .leading)
+                    // A short diff otherwise floats in the middle of the pane.
+                    .defaultScrollAnchor(.topLeading)
                 }
                 .id(file.path)
             } else {
@@ -333,16 +450,20 @@ struct AgentReviewView: View {
         }
     }
 
+    private func lineText(_ line: AgentReview.DiffLine) -> some View {
+        Text(line.text.isEmpty ? " " : line.text)
+            .foregroundStyle(t.text)
+            .fixedSize(horizontal: !model.wrap, vertical: true)
+            .frame(maxWidth: model.wrap ? .infinity : nil, alignment: .leading)
+    }
+
     @ViewBuilder
     private func lineRow(_ line: AgentReview.DiffLine, file: String) -> some View {
-        let number = line.newLine ?? line.oldLine ?? 0
-        HStack(spacing: 0) {
+        HStack(alignment: .top, spacing: 0) {
             Text(line.oldLine.map(String.init) ?? "").frame(width: 40, alignment: .trailing)
             Text(line.newLine.map(String.init) ?? "").frame(width: 40, alignment: .trailing)
             Text(marker(line.kind)).frame(width: 18)
-            Text(line.text.isEmpty ? " " : line.text)
-                .foregroundStyle(t.text)
-                .fixedSize(horizontal: true, vertical: false)
+            lineText(line)
             Spacer(minLength: 0)
         }
         .font(mono)
@@ -350,16 +471,60 @@ struct AgentReviewView: View {
         .padding(.vertical, 0.5)
         .background(lineBackground(line.kind))
         .contentShape(Rectangle())
-        .onTapGesture { model.beginComment(file: file, line: line) }
-        .help("Click to comment on this line")
+        .onTapGesture { if model.isReview { model.beginComment(file: file, line: line) } }
+        .help(model.isReview ? "Click to comment on this line" : "")
+        annotations(line, file: file)
+    }
 
-        ForEach(model.comments(file: file, line: number)) { comment in
-            commentBubble(comment)
+    /// Old line left, new line right; `sideWidth` nil wraps each side to half the pane.
+    @ViewBuilder
+    private func splitRow(_ row: AgentReview.SplitRow, file: String, sideWidth: CGFloat?) -> some View {
+        HStack(alignment: .top, spacing: 0) {
+            splitSide(row.left, number: row.left?.oldLine, file: file, width: sideWidth)
+            Rectangle().fill(t.separator).frame(width: 1)
+            splitSide(row.right, number: row.right?.newLine, file: file, width: sideWidth)
         }
-        if let anchor = model.draftAnchor, anchor.file == file, anchor.line == number,
-            anchor.snippet == line.text
-        {
-            draftEditor
+        // Both sides as tall as the taller one, so the tints line up when wrapped.
+        .fixedSize(horizontal: false, vertical: true)
+        if let left = row.left { annotations(left, file: file) }
+        if let right = row.right, right != row.left { annotations(right, file: file) }
+    }
+
+    private func splitSide(
+        _ line: AgentReview.DiffLine?, number: Int?, file: String, width: CGFloat?
+    ) -> some View {
+        HStack(alignment: .top, spacing: 0) {
+            Text(number.map(String.init) ?? "").frame(width: 40, alignment: .trailing)
+            Text(line.map { marker($0.kind) } ?? "").frame(width: 18)
+            if let line { lineText(line) }
+            Spacer(minLength: 0)
+        }
+        .font(mono)
+        .foregroundStyle(t.textTertiary)
+        .padding(.vertical, 0.5)
+        .frame(width: width, alignment: .leading)
+        .frame(maxWidth: width == nil ? .infinity : nil, maxHeight: .infinity, alignment: .topLeading)
+        .background(line.map { lineBackground($0.kind) } ?? t.subtleFill)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            if model.isReview, let line { model.beginComment(file: file, line: line) }
+        }
+        .help(model.isReview && line != nil ? "Click to comment on this line" : "")
+    }
+
+    /// Comments on a line and the comment being written there.
+    @ViewBuilder
+    private func annotations(_ line: AgentReview.DiffLine, file: String) -> some View {
+        if model.isReview {
+            let number = line.newLine ?? line.oldLine ?? 0
+            ForEach(model.comments(file: file, line: number)) { comment in
+                commentBubble(comment)
+            }
+            if let anchor = model.draftAnchor, anchor.file == file, anchor.line == number,
+                anchor.snippet == line.text
+            {
+                draftEditor
+            }
         }
     }
 

@@ -270,7 +270,7 @@ final class BooSocketServer: @unchecked Sendable {
         case "split_pane", "close_pane", "focus_pane", "resize_pane", "swap_pane", "zoom_pane",
             "equalize_splits", "get_layout", "move_workspace_to_new_window", "merge_all_windows",
             "agent_event", "agent_inbox", "agent_jump", "agent_respond", "agent_timeline", "wait_for_events",
-            "new_agent_task",
+            "new_agent_task", "agent_send", "agent_messages", "agent_collected",
             "review_changes", "task_status", "task_diff", "merge_task", "discard_task", "run_recipe", "list_recipes":
             handleControlCommand(cmd: cmd, json: json, clientFD: clientFD)
             return
@@ -286,6 +286,14 @@ final class BooSocketServer: @unchecked Sendable {
         default:
             break
         }
+
+        // Dev builds: `debug_*` commands (WindowManager+Debug.swift).
+        #if DEBUG
+            if cmd.hasPrefix("debug_") {
+                handleControlCommand(cmd: cmd, json: json, clientFD: clientFD)
+                return
+            }
+        #endif
 
         // Status bar namespace
         if cmd.hasPrefix("statusbar.") {

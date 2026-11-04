@@ -366,6 +366,18 @@ extension MainWindowController {
         showPluginTabContent(id: id, context: context)
     }
 
+    /// The user's saved order, with sections it doesn't know yet (new in this
+    /// version, or shown only some of the time) placed where the plugin
+    /// declares them: right after the section declared before it, or first.
+    static func sectionOrder(declared: [String], saved: [String]) -> [String] {
+        var result = saved.filter { declared.contains($0) }
+        for (index, sectionID) in declared.enumerated() where !result.contains(sectionID) {
+            let previous = index == 0 ? nil : declared[index - 1]
+            result.insert(sectionID, at: previous.flatMap { result.firstIndex(of: $0) }.map { $0 + 1 } ?? 0)
+        }
+        return result
+    }
+
     /// Show content for the given plugin tab ID in the sidebar container.
     /// Always calls makeSidebarTab() to get fresh data, but reuses view when context and generations match.
     /// Single section → full-height content (with scroll view if prefersOuterScrollView).
@@ -385,12 +397,8 @@ extension MainWindowController {
         // Ensure at least one section always shows
         let filteredSections = visibleSections.isEmpty ? allSections : visibleSections
         // Apply saved section order
-        let sectionOrder = savedSidebarSectionOrder[id] ?? []
-        let sections = filteredSections.sorted { a, b in
-            let ia = sectionOrder.firstIndex(of: a.id) ?? Int.max
-            let ib = sectionOrder.firstIndex(of: b.id) ?? Int.max
-            return ia < ib
-        }
+        let order = Self.sectionOrder(declared: filteredSections.map(\.id), saved: savedSidebarSectionOrder[id] ?? [])
+        let sections = order.compactMap { sectionID in filteredSections.first { $0.id == sectionID } }
         guard !sections.isEmpty else { return }
 
         // Check if we can reuse the cached panel (same context AND same generations)

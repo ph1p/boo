@@ -176,13 +176,23 @@ enum BooPaths {
         (shellIntegrationDir as NSString).appendingPathComponent("boo-mcp")
     }
 
+    /// `boo`: the agent crew CLI (`Boo --cli`); shell integration puts its
+    /// folder on PATH inside Boo terminals.
+    static var cliLauncherPath: String {
+        ((configDir as NSString).appendingPathComponent("bin") as NSString).appendingPathComponent("boo")
+    }
+
     private static func installMCPLauncher() {
         // Only from a bundled app: a `swift run` binary moves with every build.
         guard Bundle.main.bundlePath.hasSuffix(".app"), let binary = Bundle.main.executablePath else { return }
         let quoted = "'" + binary.replacingOccurrences(of: "'", with: "'\\''") + "'"
-        let script = "#!/bin/sh\n# Written by Boo on every launch.\nexec \(quoted) --mcp \"$@\"\n"
-        try? script.write(toFile: mcpLauncherPath, atomically: true, encoding: .utf8)
-        try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: mcpLauncherPath)
+        for (path, flag) in [(mcpLauncherPath, "--mcp"), (cliLauncherPath, "--cli")] {
+            try? FileManager.default.createDirectory(
+                atPath: (path as NSString).deletingLastPathComponent, withIntermediateDirectories: true)
+            let script = "#!/bin/sh\n# Written by Boo on every launch.\nexec \(quoted) \(flag) \"$@\"\n"
+            try? script.write(toFile: path, atomically: true, encoding: .utf8)
+            try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: path)
+        }
     }
 
     /// Append a source line to each shell RC file that doesn't already have it.
@@ -213,8 +223,15 @@ enum BooPaths {
         }
     }
 
-    /// Claude Code events the agent hook reports to Boo's agent inbox.
-    static let claudeHookEvents = ["UserPromptSubmit", "PostToolUse", "Notification", "Stop", "SessionEnd"]
+    /// Claude Code events the agent hook reports to Boo's agent inbox, plus
+    /// SessionStart, where it tells the agent about the `boo` CLI.
+    static let claudeHookEvents = [
+        "SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "Notification", "Stop", "SessionEnd"
+    ]
+
+    /// Events the hook needs only for some tools: PreToolUse just to read the
+    /// question an agent asks (Claude's own notice says "needs your permission").
+    static let claudeHookMatchers = ["PreToolUse": "AskUserQuestion"]
 
     /// Register the agent hook in ~/.claude/settings.json so Boo sees when Claude
     /// works, waits for permission and finishes. Merges safely with existing
@@ -242,7 +259,12 @@ enum BooPaths {
                 (entry["hooks"] as? [[String: Any]])?.contains { ($0["command"] as? String) == command } ?? false
             }
             guard !present else { continue }
-            entries.append(["hooks": [["type": "command", "command": command, "timeout": 5, "async": true]]])
+            var hook: [String: Any] = ["type": "command", "command": command, "timeout": 5]
+            // Claude reads a hook's context only when it waits for the hook.
+            if event != "SessionStart" { hook["async"] = true }
+            var entry: [String: Any] = ["hooks": [hook]]
+            if let matcher = claudeHookMatchers[event] { entry["matcher"] = matcher }
+            entries.append(entry)
             hooks[event] = entries
             changed = true
         }

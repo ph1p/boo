@@ -422,10 +422,12 @@ struct ClaudeWorktreesView: View {
                         .font(fontScale.font(.sm))
                         .foregroundStyle(accentColor)
 
-                    Text(worktree.id)
+                    // Full paths share a long prefix and truncate to the same text.
+                    Text((worktree.path as NSString).lastPathComponent)
                         .font(fontScale.font(.base).weight(.medium))
                         .foregroundStyle(accentColor)
                         .lineLimit(1)
+                        .help(worktree.path)
 
                     Spacer()
 

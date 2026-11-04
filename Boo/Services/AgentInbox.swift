@@ -27,11 +27,17 @@ final class AgentInbox {
         var state: State
         var message: String?
         var tool: String?
+        /// The agent's last answer when it finished a turn (from its Stop hook);
+        /// what a helper reports back to the agent that started it.
+        var reply: String?
         var sessionID: String?
         var cwd: String?
         var updatedAt: Date
         /// The user looked at the tab since the agent stopped.
         var seen: Bool
+        /// Waits on a question (`AskUserQuestion`), not a permission prompt:
+        /// Return would pick its first option, so it is answered in its tab.
+        var asksQuestion = false
 
         var id: UUID { tabID }
 
@@ -101,17 +107,29 @@ final class AgentInbox {
     @discardableResult
     func apply(
         event: String, tabID: UUID, agent: String = "claude", message: String? = nil,
-        tool: String? = nil, sessionID: String? = nil, cwd: String? = nil, now: Date = Date()
+        tool: String? = nil, reply: String? = nil, sessionID: String? = nil, cwd: String? = nil,
+        now: Date = Date()
     ) -> State? {
         if event == "end" {
             remove(tabID: tabID)
+            return nil
+        }
+        if event == "start" {
+            // A new or resumed session idles at its prompt: list it (with a handle)
+            // before its first turn, so a resumed task leaves Stopped at once.
+            guard items[tabID] == nil else { return nil }
+            var item = Item(tabID: tabID, agent: agent, state: .done, updatedAt: now, seen: true)
+            item.sessionID = sessionID
+            item.cwd = cwd
+            items[tabID] = item
+            changed()
             return nil
         }
         let previous = items[tabID]?.state
         guard
             let item = Self.updated(
                 items[tabID], event: event, tabID: tabID, agent: agent, message: message, tool: tool,
-                sessionID: sessionID, cwd: cwd, now: now)
+                reply: reply, sessionID: sessionID, cwd: cwd, now: now)
         else { return nil }
         items[tabID] = item
         changed()
@@ -132,7 +150,7 @@ final class AgentInbox {
             guard
                 let item = Self.updated(
                     orchestrator, event: event, tabID: tabID, agent: "claude", message: message, tool: tool,
-                    sessionID: sessionID, cwd: cwd, now: now)
+                    reply: nil, sessionID: sessionID, cwd: cwd, now: now)
             else { return }
             orchestrator = item
         }
@@ -142,7 +160,7 @@ final class AgentInbox {
     /// `existing` after one hook event; nil for events that change nothing.
     private static func updated(
         _ existing: Item?, event: String, tabID: UUID, agent: String, message: String?,
-        tool: String?, sessionID: String?, cwd: String?, now: Date
+        tool: String?, reply: String?, sessionID: String?, cwd: String?, now: Date
     ) -> Item? {
         let state: State
         switch event {
@@ -164,9 +182,14 @@ final class AgentInbox {
             item.tool = tool ?? item.tool
             item.message = nil
         case .needsInput, .done, .error:
-            item.message = message
+            // Claude's generic "needs your permission" notice follows a question;
+            // keep the question it is about.
+            let followsQuestion = previous == .needsInput && event == "permission" && item.message != nil
+            if !followsQuestion { item.message = message }
+            item.asksQuestion = event == "question" || (followsQuestion && item.asksQuestion)
             if state != previous { item.seen = false }
         }
+        if state == .done { item.reply = reply }
         return item
     }
 
@@ -253,6 +276,7 @@ extension AgentInbox {
             event: event, tabID: tabID,
             agent: (json["agent"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "claude",
             message: Self.nonEmpty(json["message"]), tool: Self.nonEmpty(json["tool"]),
+            reply: Self.nonEmpty(json["reply"]),
             sessionID: Self.nonEmpty(json["session_id"]), cwd: Self.nonEmpty(json["cwd"]))
         if newState != nil { signalAttention(tabID: tabID) }
         return ["ok": true, "state": items[tabID]?.state.rawValue ?? NSNull()]
@@ -333,7 +357,9 @@ extension AgentInbox {
             return handleSocketEvent(json)
         case "agent_inbox":
             prune()
-            return ["ok": true, "attention": attentionCount, "items": sortedItems.map(Self.serialize)]
+            let crew = AgentCrew.shared
+            let rows = sortedItems.map { Self.serialize($0).merging(crew.fields(for: $0.tabID)) { $1 } }
+            return ["ok": true, "attention": attentionCount, "items": rows]
         case "agent_respond":
             return respond(json)
         case "agent_jump":
@@ -353,6 +379,7 @@ extension AgentInbox {
             "state": item.state.rawValue,
             "attention": item.needsAttention,
             "message": item.message ?? NSNull(),
+            "reply": item.reply ?? NSNull(),
             "tool": item.tool ?? NSNull(),
             "session_id": item.sessionID ?? NSNull(),
             "cwd": item.cwd ?? NSNull(),

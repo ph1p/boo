@@ -157,6 +157,36 @@ final class AgentWorktreeTests: XCTestCase {
         XCTAssertEqual(C.agentTaskCommand(kind: .openCode, prompt: "", model: " "), "opencode")
     }
 
+    /// The "Setup command" setting runs first; `;` so a failed setup still starts the agent.
+    @MainActor func testTaskSetupPrefix() {
+        typealias C = MainWindowController
+        XCTAssertEqual(C.withTaskSetup("claude 'go'", setup: ""), "claude 'go'")
+        XCTAssertEqual(C.withTaskSetup("claude 'go'", setup: "  \n"), "claude 'go'")
+        XCTAssertEqual(C.withTaskSetup("claude 'go'", setup: " pnpm install "), "pnpm install; claude 'go'")
+    }
+
+    /// "Worktree folder" moves new tasks; the built-in folder still counts as a task root.
+    @MainActor func testWorktreeFolderSetting() {
+        withPluginSettings("agents", ["worktreeFolder": "~/boo-tasks"]) {
+            let custom = (NSHomeDirectory() as NSString).appendingPathComponent("boo-tasks")
+            XCTAssertEqual(AgentWorktree.defaultRoot, custom)
+            XCTAssertTrue(AgentWorktree.isUnderTaskRoot(custom + "/api/fix"))
+            XCTAssertTrue(AgentWorktree.isUnderTaskRoot(AgentWorktree.builtInRoot + "/api/fix"))
+            XCTAssertFalse(AgentWorktree.isUnderTaskRoot(custom + "-other/api/fix"))
+        }
+        withPluginSettings("agents", ["worktreeFolder": " "]) {
+            XCTAssertEqual(AgentWorktree.defaultRoot, AgentWorktree.builtInRoot)
+        }
+    }
+
+    /// A stopped task resumes its last conversation; review notes become its prompt.
+    @MainActor func testResumeCommand() {
+        typealias C = MainWindowController
+        XCTAssertEqual(C.resumeCommand(text: nil), "claude --continue")
+        XCTAssertEqual(C.resumeCommand(text: " \n"), "claude --continue")
+        XCTAssertEqual(C.resumeCommand(text: "rm -rf is wrong"), "claude --continue 'rm -rf is wrong'")
+    }
+
     func testTaskDiffTextAndBlockerHints() {
         typealias C = MainWindowController
         var file = AgentReview.FileDiff(path: "a.txt")
@@ -179,5 +209,32 @@ final class AgentWorktreeTests: XCTestCase {
         let ready = AgentWorktree.MergeCheck(
             status: .init(isDirty: false, ahead: 2, target: "main"), behind: 0, targetDirty: false, conflicts: [])
         XCTAssertNil(C.blockerMessage(ready, info))
+    }
+
+    func testWorktreeIncludeCopiesListedUntrackedFiles() throws {
+        try write(".worktreeinclude", ".env\n", in: repo)
+        try write(".env", "SECRET=1\n", in: repo)
+        try write("other.log", "x\n", in: repo)
+        let info = try AgentWorktree.create(repo: repo, name: "env", root: root)
+        XCTAssertEqual(try String(contentsOfFile: "\(info.path)/.env", encoding: .utf8), "SECRET=1\n")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: "\(info.path)/other.log"), "only listed files")
+    }
+
+    func testSameNamedReposGetSeparateFolders() throws {
+        let first = try AgentWorktree.create(repo: repo, name: "one", root: root)
+        let again = try AgentWorktree.create(repo: repo, name: "two", root: root)
+        XCTAssertEqual((first.path as NSString).deletingLastPathComponent, (again.path as NSString).deletingLastPathComponent)
+
+        let other = (sandbox as NSString).appendingPathComponent("elsewhere/myrepo")
+        try FileManager.default.createDirectory(atPath: other, withIntermediateDirectories: true)
+        try git("init", "-q", "-b", "main", in: other)
+        try git("config", "user.email", "test@example.com", in: other)
+        try git("config", "user.name", "Test", in: other)
+        try git("config", "commit.gpgsign", "false", in: other)
+        try commit("b.txt", "b\n", in: other)
+        let clash = try AgentWorktree.create(repo: other, name: "one", root: root)
+        let parent = (clash.path as NSString).deletingLastPathComponent
+        XCTAssertTrue((parent as NSString).lastPathComponent.hasPrefix("myrepo-"), parent)
+        XCTAssertEqual(AgentWorktree.parentFolder(for: other, in: root), parent, "stable across calls")
     }
 }

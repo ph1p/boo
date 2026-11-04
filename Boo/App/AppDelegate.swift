@@ -3,6 +3,9 @@ import Cocoa
 public enum BooMain {
     @MainActor public static func run() {
         if CommandLine.arguments.dropFirst().first == "--mcp" { BooMCPServer.runStdio() }
+        if CommandLine.arguments.dropFirst().first == "--cli" {
+            BooCLI.runAndExit(arguments: Array(CommandLine.arguments.dropFirst(2)))
+        }
         if CommandLine.arguments.dropFirst().first == "--tmux-bridge" {
             TmuxBridge.run(arguments: Array(CommandLine.arguments.dropFirst(2)))
         }
@@ -76,6 +79,7 @@ public enum BooMain {
             DispatchQueue.main.async { self.openFiles(urls) }
         }
         QuickTerminalController.shared.start()
+        AgentJumpHotKey.shared.start()
         KeyTables.shared.start()
         RuleEngine.shared.start()
         HistoryRecorder.shared.start()

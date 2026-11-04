@@ -10,6 +10,16 @@
 [[ -n "$BOO_SHELL_INTEGRATION" ]] && return
 [[ -z "$BOO_TERM" ]] && return
 export BOO_SHELL_INTEGRATION=bash
+# `boo` (agents, run, send, inbox, status) for this shell and the agents it starts.
+# Checked again before each prompt: rc files that run later may rebuild PATH, and
+# on a case-insensitive disk the app's own `Boo` binary would answer to `boo`.
+__boo_path() {
+    case "$PATH" in
+    "$HOME/.boo/bin:"*) ;;
+    *) export PATH="$HOME/.boo/bin:${PATH//$HOME\/.boo\/bin:/}" ;;
+    esac
+}
+__boo_path
 _BOO_INTEGRATION_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Command tracking via OSC 2 (SET_TITLE) with BOO_CMD: prefix.
@@ -38,6 +48,7 @@ __boo_preexec() {
 __boo_precmd() {
     local code=$?
     __boo_osc "cmd_end;$code"
+    __boo_path
     if [[ "$_BOO_LAST_WAS_AGENT" == "1" && -n "$BOO_SOCK" && -n "$BOO_PANE_ID" ]]; then
         _BOO_LAST_WAS_AGENT=0
         python3 -c "import socket,json,os;s=socket.socket(socket.AF_UNIX,socket.SOCK_STREAM);s.settimeout(2);s.connect('$BOO_SOCK');s.sendall(json.dumps({'cmd':'agent_idle','pane_id':'$BOO_PANE_ID'}).encode()+b'\n');s.recv(64);s.close()" 2>/dev/null &

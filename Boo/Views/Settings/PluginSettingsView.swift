@@ -93,6 +93,14 @@ struct PluginDetailSettingsView: View {
         SettingsPage(title: manifest.name) {
             if manifest.id == "agents" {
                 AgentCenterSettingsView()
+                // Its manifest settings below the custom page (not the page switch itself).
+                ForEach(groupedSettings.filter { $0.title == "Tasks" }, id: \.title) { group in
+                    Section(title: group.title) {
+                        ForEach(group.settings, id: \.key) { setting in
+                            PluginSettingControl(pluginID: manifest.id, setting: setting)
+                        }
+                    }
+                }
             } else if manifest.visibleSettings.isEmpty {
                 Text("No configurable settings for this plugin.")
                     .font(.system(size: 12))
@@ -309,6 +317,8 @@ private struct PluginSettingControl: View {
         switch setting.options {
         case "dockerSocket": return DockerService.shared.socketPath ?? "/var/run/docker.sock"
         case "gitDiffTool": return "e.g. code --diff {file}"
+        case "agentTaskSetup": return "e.g. pnpm install"
+        case "agentWorktreeFolder": return (AgentWorktree.builtInRoot as NSString).abbreviatingWithTildeInPath
         case "editorFilePatterns": return ContentType.builtInEditorFilePatterns
         default: return ""
         }

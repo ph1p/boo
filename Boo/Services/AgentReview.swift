@@ -60,33 +60,58 @@ enum AgentReview {
 
     // MARK: - Loading
 
+    /// What a diff compares.
+    enum Source: Equatable {
+        /// Everything since the agent's branch left its target (or since HEAD),
+        /// committed or not, untracked files included: the agent review.
+        case branch
+        /// The working tree against the index (`git diff`), untracked files included.
+        case unstaged
+        /// The index against HEAD (`git diff --cached`).
+        case staged
+    }
+
+    /// Default lines of context around each change, like `git diff`.
+    static let defaultContext = 3
+
     /// Blocks; call off the main thread.
-    static func changes(in folder: String) throws -> Changes {
+    static func changes(in folder: String, source: Source = .branch, context: Int = defaultContext) throws -> Changes {
         guard let root = AgentWorktree.repoRoot(of: folder) else {
             throw AgentWorktree.GitError(
                 message: "\((folder as NSString).abbreviatingWithTildeInPath) is not a git repository.")
         }
-        var base = "HEAD"
-        var baseLabel = "HEAD"
         let info = AgentWorktree.info(for: root)
-        if let info, let target = AgentWorktree.status(of: info).target,
-            let mergeBase = try? AgentWorktree.git(["merge-base", target, "HEAD"], in: root), !mergeBase.isEmpty
-        {
-            base = mergeBase
-            baseLabel = target
-        }
-        // An unborn branch has no HEAD: diff against the empty tree.
-        if base == "HEAD", (try? AgentWorktree.git(["rev-parse", "--verify", "-q", "HEAD"], in: root)) == nil {
-            base = emptyTree
+        // Only the HEAD and staged diffs ask; the unstaged one skips the git call.
+        lazy var hasHead = (try? AgentWorktree.git(["rev-parse", "--verify", "-q", "HEAD"], in: root)) != nil
+        var revision: [String] = []
+        var baseLabel = "HEAD"
+        switch source {
+        case .branch:
+            var base = "HEAD"
+            if let info, let target = AgentWorktree.status(of: info).target,
+                let mergeBase = try? AgentWorktree.git(["merge-base", target, "HEAD"], in: root), !mergeBase.isEmpty
+            {
+                base = mergeBase
+                baseLabel = target
+            }
+            // An unborn branch has no HEAD: diff against the empty tree.
+            revision = [base == "HEAD" && !hasHead ? emptyTree : base]
+        case .unstaged:
+            baseLabel = "index"
+        case .staged:
+            revision = hasHead ? ["--cached"] : ["--cached", emptyTree]
         }
         let diff = try AgentWorktree.git(
-            ["-c", "core.quotePath=false", "diff", "--no-color", "--no-ext-diff", "-M", base], in: root)
+            ["-c", "core.quotePath=false", "diff", "--no-color", "--no-ext-diff", "-M", "-U\(max(0, context))"]
+                + revision, in: root)
         var files = parse(diff)
-        let untracked = (try? AgentWorktree.git(["ls-files", "--others", "--exclude-standard", "-z"], in: root)) ?? ""
-        for path in untracked.split(separator: "\0").map(String.init).sorted() {
-            files.append(untrackedFile(path, root: root))
+        if source != .staged {
+            let untracked = (try? AgentWorktree.git(["ls-files", "--others", "--exclude-standard", "-z"], in: root)) ?? ""
+            for path in untracked.split(separator: "\0").map(String.init).sorted() {
+                files.append(untrackedFile(path, root: root))
+            }
         }
-        return Changes(files: files, base: baseLabel, branch: info?.branch)
+        return Changes(files: files, base: baseLabel, branch: source == .branch ? info?.branch : nil)
     }
 
     private static let emptyTree = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
@@ -197,6 +222,46 @@ enum AgentReview {
             return Int(part.dropFirst().split(separator: ",").first ?? "") ?? 0
         }
         return (start("-"), start("+"))
+    }
+
+    // MARK: - Side by side
+
+    /// One row of a side-by-side diff: the old line left, the new line right.
+    /// A context line sits on both sides; a change pairs each removed line with
+    /// the added line at the same position of its run, the rest face a blank.
+    struct SplitRow: Equatable {
+        let left: DiffLine?
+        let right: DiffLine?
+    }
+
+    static func splitRows(_ lines: [DiffLine]) -> [SplitRow] {
+        var rows: [SplitRow] = []
+        var removed: [DiffLine] = []
+        var added: [DiffLine] = []
+        func flush() {
+            for index in 0..<max(removed.count, added.count) {
+                rows.append(
+                    SplitRow(
+                        left: index < removed.count ? removed[index] : nil,
+                        right: index < added.count ? added[index] : nil))
+            }
+            removed = []
+            added = []
+        }
+        for line in lines {
+            switch line.kind {
+            case .removed:
+                // A removal after additions starts a new change.
+                if !added.isEmpty { flush() }
+                removed.append(line)
+            case .added: added.append(line)
+            case .context:
+                flush()
+                rows.append(SplitRow(left: line, right: line))
+            }
+        }
+        flush()
+        return rows
     }
 
     // MARK: - Feedback
