@@ -39,14 +39,7 @@ final class HistorySearchController: NSObject, NSTextFieldDelegate, NSWindowDele
         model.onLayout = { [weak self] in self?.layout() }
         model.onAccept = { [weak self] index, run in self?.accept(index, run: run) }
 
-        let panel = CommandPalettePanel(
-            contentRect: NSRect(x: 0, y: 0, width: Self.maxWidth, height: Self.fieldHeight),
-            styleMask: [.borderless], backing: .buffered, defer: false)
-        panel.isReleasedWhenClosed = false
-        panel.backgroundColor = .clear
-        panel.isOpaque = false
-        panel.hasShadow = true
-        panel.delegate = self
+        let panel = CommandPalettePanel(width: Self.maxWidth, height: Self.fieldHeight, delegate: self)
         panel.contentView = makeContent()
         self.panel = panel
 
