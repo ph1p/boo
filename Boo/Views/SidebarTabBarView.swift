@@ -510,28 +510,4 @@ class SidebarTabBarView: NSView {
         img.unlockFocus()
         return img
     }
-
-    private func drawBadge(_ count: Int, at rect: NSRect, ctx: CGContext, theme: TerminalTheme) {
-        let badgeSize: CGFloat = 12
-        let badgeX = rect.maxX - badgeSize - 2
-        let badgeY = rect.minY + 2
-        let badgeRect = CGRect(x: badgeX, y: badgeY, width: badgeSize, height: badgeSize)
-
-        // Draw badge background
-        ctx.setFillColor(theme.accentColor.cgColor)
-        ctx.fillEllipse(in: badgeRect)
-
-        // Draw badge text
-        let text = count > 9 ? "9+" : "\(count)"
-        let font = NSFont.systemFont(ofSize: 8, weight: .bold)
-        let attrs: [NSAttributedString.Key: Any] = [
-            .font: font,
-            .foregroundColor: NSColor.white
-        ]
-        let attrStr = NSAttributedString(string: text, attributes: attrs)
-        let textSize = attrStr.size()
-        let textX = badgeRect.midX - textSize.width / 2
-        let textY = badgeRect.midY - textSize.height / 2
-        attrStr.draw(at: NSPoint(x: textX, y: textY))
-    }
 }

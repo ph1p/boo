@@ -405,14 +405,6 @@ class PaneView: NSView {
 
     var currentTerminalView: NSView? { scrollWrapper ?? ghosttyView }
 
-    /// The currently active content view (terminal or other content type).
-    var currentContentView: NSView? {
-        if let contentView = activeContentView {
-            return contentView
-        }
-        return scrollWrapper ?? ghosttyView
-    }
-
     // MARK: - Layout
 
     func layoutTerminalView() {

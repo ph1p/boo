@@ -27,14 +27,12 @@ extension PaneView {
     /// Lead-in from the pill's left edge to its first content (icon or title).
     static let tabTextLeadIn: CGFloat = 12
     /// Width a leading icon advances the title by. The icon sits on a tile that
-    /// starts `tabIconTileInset` from the pill edge (closer than `tabTextLeadIn`),
-    /// so the title lands `tabIconTileGap` past the tile.
+    /// starts `tabIconTileInset` from the pill edge (closer than `tabTextLeadIn`).
     static let tabIconAdvance: CGFloat = 20
     /// Rounded tile behind a tab's leading icon, inset from the pill's left edge
     /// by the same amount as from its top and bottom.
     static let tabIconTileSize: CGFloat = 20
     static let tabIconTileInset: CGFloat = (tabPillHeight - tabIconTileSize) / 2
-    static let tabIconTileGap: CGFloat = tabTextLeadIn + tabIconAdvance - tabIconTileInset - tabIconTileSize
     /// Trailing gap between the close circle and the pill's right edge.
     static let tabCloseTrailingGap: CGFloat = 6
     /// Slot-relative width of the close-button hit zone at the tab's right edge —
