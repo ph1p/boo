@@ -3,7 +3,7 @@ import SwiftUI
 
 /// Built-in local file tree plugin. Shows the file explorer for local directories.
 @MainActor
-final class LocalFileTreePlugin: BooPluginProtocol {
+final class LocalFileTreePlugin: BooPluginProtocol, FileTreeBrowsing {
     let manifest = PluginManifest(
         id: "file-tree-local",
         name: "Files",
@@ -110,12 +110,12 @@ final class LocalFileTreePlugin: BooPluginProtocol {
     private var shownRoot: [UUID: String] = [:]
     /// Each terminal's cwd as of the last cycle. Navigation closures read it at call time,
     /// so a tree view kept across cycles never acts on a stale cwd.
-    private var latestCwd: [UUID: String] = [:]
+    private(set) var latestCwd: [UUID: String] = [:]
     /// Set when the watcher reports its root deleted/renamed: the next cycle re-checks that
     /// the browsed folder still exists instead of stat-ing it every cycle.
     private var rootMaybeGone = false
     /// Explorer navigation per terminal — lets the tree browse away from the shell's cwd.
-    private var browseStates: [UUID: FileTreeBrowseState] = [:]
+    private(set) var browseStates: [UUID: FileTreeBrowseState] = [:]
     /// The last terminal ID we rendered for, so we can save state on switch.
     private var lastTerminalID: UUID?
 
@@ -173,21 +173,7 @@ final class LocalFileTreePlugin: BooPluginProtocol {
         open(path, terminalID: terminal.terminalID, terminalCwd: terminal.cwd, canSendToTerminal: canSendToTerminal)
     }
 
-    private func open(_ path: String, terminalID: UUID, terminalCwd: String, canSendToTerminal: Bool) {
-        if AppSettings.shared.explorerNavigationMode == .terminal && canSendToTerminal {
-            cdTerminal(to: path, terminalID: terminalID, terminalCwd: terminalCwd)
-        } else {
-            updateBrowseState(terminalID, terminalCwd: terminalCwd) { $0.browse(to: path, terminalCwd: $1) }
-        }
-    }
-
-    /// Type `cd` into the terminal and re-link the explorer, which then follows the shell there.
-    private func cdTerminal(to path: String, terminalID: UUID, terminalCwd: String) {
-        actions?.sendToTerminal?(Self.cdCommand(path))
-        updateBrowseState(terminalID, terminalCwd: terminalCwd) { $0.attach(terminalCwd: $1) }
-    }
-
-    private static func cdCommand(_ path: String) -> String { "cd \(shellEscape(path))\r" }
+    static func cdCommand(_ path: String) -> String { "cd \(shellEscape(path))\r" }
 
     /// The bar's path label: relative to the terminal folder when inside it, else
     /// `~`-abbreviated. Also part of the navigation generation key.
@@ -197,41 +183,9 @@ final class LocalFileTreePlugin: BooPluginProtocol {
         return abbreviatePath(root)
     }
 
-    /// Closures capture only the terminal's ID and read its cwd/root at call time, so a view
-    /// kept across cycles (same generation) still navigates from where the shell is now.
-    private func makeNavigation(context: PluginContext, canSendToTerminal canSend: Bool) -> FileTreeNavigation {
-        let tid = context.terminal.terminalID
-        let cwd = context.terminal.cwd
-        let state = browseStates[tid] ?? FileTreeBrowseState()
-        let step: (@escaping (inout FileTreeBrowseState, String) -> Void) -> @MainActor () -> Void = { change in
-            { [weak self] in self?.withLiveCwd(tid) { $0.updateBrowseState(tid, terminalCwd: $1, change) } }
-        }
-        return FileTreeNavigation(
-            mode: AppSettings.shared.explorerNavigationMode,
-            displayPath: Self.displayPath(root: state.root(terminalCwd: cwd), terminalCwd: cwd),
-            isDetached: state.isDetached,
-            canGoBack: state.canGoBack,
-            canGoForward: state.canGoForward,
-            canSendToTerminal: canSend,
-            open: { [weak self] path in
-                self?.withLiveCwd(tid) { $0.open(path, terminalID: tid, terminalCwd: $1, canSendToTerminal: canSend) }
-            },
-            browse: { path in step { $0.browse(to: path, terminalCwd: $1) }() },
-            goBack: step { $0.goBack(terminalCwd: $1) },
-            goForward: step { $0.goForward(terminalCwd: $1) },
-            attach: step { $0.attach(terminalCwd: $1) },
-            cdTerminalHere: { [weak self] in
-                self?.withLiveCwd(tid) { plugin, cwd in
-                    let root = plugin.browseStates[tid]?.root(terminalCwd: cwd) ?? cwd
-                    plugin.cdTerminal(to: root, terminalID: tid, terminalCwd: cwd)
-                }
-            }
-        )
-    }
-
-    private func withLiveCwd(_ tid: UUID, _ body: (LocalFileTreePlugin, String) -> Void) {
-        guard let cwd = latestCwd[tid] else { return }
-        body(self, cwd)
+    /// The navigation bar's path label for the terminal's current root.
+    private func navigationPath(_ terminal: TerminalContext) -> String {
+        Self.displayPath(root: rootPath(for: terminal), terminalCwd: terminal.cwd)
     }
 
     // MARK: - Sidebar Tab (two sections: file tree + folder info)
@@ -276,11 +230,7 @@ final class LocalFileTreePlugin: BooPluginProtocol {
     /// indicator change without the root moving (e.g. re-linking to the same folder).
     /// Only what the bar draws — a shell `cd` that leaves the bar unchanged keeps the view.
     private func navigationKey(_ context: PluginContext) -> String {
-        let cwd = context.terminal.cwd
-        let state = browseStates[context.terminal.terminalID] ?? FileTreeBrowseState()
-        let path = Self.displayPath(root: state.root(terminalCwd: cwd), terminalCwd: cwd)
-        let mode = AppSettings.shared.explorerNavigationMode.rawValue
-        return "\(state.isDetached)|\(state.canGoBack)|\(state.canGoForward)|\(path)|\(mode)"
+        navigationKey(terminalID: context.terminal.terminalID, displayPath: navigationPath(context.terminal))
     }
 
     // MARK: - Detail View
@@ -335,7 +285,8 @@ final class LocalFileTreePlugin: BooPluginProtocol {
         lastTerminalID = tid
         shownRoot[tid] = cwd
 
-        let navigation = makeNavigation(context: context, canSendToTerminal: !isAIAgent)
+        let navigation = makeNavigation(
+            terminalID: tid, displayPath: navigationPath(context.terminal), canSendToTerminal: !isAIAgent)
         return AnyView(FileTreeView(root: root, actions: treeActions, navigation: navigation))
     }
 

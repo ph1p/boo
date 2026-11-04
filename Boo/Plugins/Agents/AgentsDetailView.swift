@@ -1,15 +1,6 @@
 import AppKit
 import SwiftUI
 
-private func formatTokenCount(_ tokens: Int) -> String {
-    if tokens >= 1_000_000 {
-        return String(format: "%.1fM", Double(tokens) / 1_000_000)
-    } else if tokens >= 1_000 {
-        return String(format: "%.1fK", Double(tokens) / 1_000)
-    }
-    return "\(tokens)"
-}
-
 // MARK: - Agent Center Views
 
 struct AgentOpenSessionsView: View {
