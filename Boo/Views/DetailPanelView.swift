@@ -770,8 +770,9 @@ class SidebarPanelView: NSView {
         guard let sourceIndex = sectionStates.firstIndex(where: { $0.id == sectionID }) else { return }
         let sectionName = sectionStates[sourceIndex].name
 
-        let titleWidth = (sectionName.uppercased() as NSString).size(withAttributes: [
-            .font: NSFont.systemFont(ofSize: 10.5, weight: .semibold)
+        let ghostTitle = SidebarSectionHeaderView.splitCount(sectionName).title
+        let titleWidth = (ghostTitle as NSString).size(withAttributes: [
+            .font: SidebarSectionHeaderView.titleFont
         ]).width
         let ghostWidth = min(titleWidth + 24, 160)
         let ghostHeight: CGFloat = 22
@@ -783,8 +784,8 @@ class SidebarPanelView: NSView {
         ghostView.layer?.borderColor = NSColor.separatorColor.cgColor
         ghostView.layer?.borderWidth = 1
 
-        let label = NSTextField(labelWithString: sectionName.uppercased())
-        label.font = NSFont.systemFont(ofSize: 10.5, weight: .semibold)
+        let label = NSTextField(labelWithString: ghostTitle)
+        label.font = SidebarSectionHeaderView.titleFont
         label.textColor = AppSettings.shared.theme.chromeMuted
         label.frame = NSRect(x: 6, y: 2, width: ghostWidth - 12, height: ghostHeight - 4)
         ghostView.addSubview(label)
@@ -889,8 +890,13 @@ class SidebarPanelView: NSView {
         var y: CGFloat = 0
         for (i, state) in sectionStates.enumerated() {
             if i > 0 {
-                ctx.setFillColor(theme.separator.cgColor)
-                ctx.fill(CGRect(x: 0, y: y, width: w, height: SidebarLayout.separatorHeight))
+                // Inset hairline, not a full-bleed bar: matches the island chrome.
+                let inset: CGFloat = AppSettings.shared.sidebarDensity == .comfortable ? 12 : 8
+                ctx.setFillColor(theme.sidebarBorder.withAlphaComponent(0.6).cgColor)
+                ctx.fill(
+                    CGRect(
+                        x: inset, y: y, width: max(0, w - 2 * inset),
+                        height: SidebarLayout.separatorHeight))
                 y += SidebarLayout.separatorHeight
             }
             y += SidebarLayout.headerHeight
