@@ -124,11 +124,6 @@ extension AppSettings {
         set { set(newValue, forKey: K.editorFontName, topic: .editor) }
     }
 
-    func resolvedEditorFont() -> NSFont {
-        if let font = NSFont(name: editorFontName, size: editorFontSize) { return font }
-        return NSFont.monospacedSystemFont(ofSize: editorFontSize, weight: .regular)
-    }
-
     var editorTabSize: Int {
         get {
             let v = UserDefaults.standard.integer(forKey: K.editorTabSize)

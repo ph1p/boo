@@ -516,11 +516,6 @@ import Cocoa
         return ghostty_surface_size(surface)
     }
 
-    var processExited: Bool {
-        guard let surface = surface else { return true }
-        return ghostty_surface_process_exited(surface)
-    }
-
     func destroy() {
         if claimedDirectChild != 0 {
             ClaimedDirectChildren.release(claimedDirectChild)

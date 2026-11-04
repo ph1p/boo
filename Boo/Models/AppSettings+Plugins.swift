@@ -168,14 +168,6 @@ extension AppSettings {
         pluginSettingsDict[pluginID] ?? [:]
     }
 
-    /// Replaces the full settings dictionary for a given plugin ID.
-    func setPluginSettingsDict(_ dict: [String: Any], for pluginID: String) {
-        var all = pluginSettingsDict
-        all[pluginID] = dict
-        pluginSettingsDict = all
-        saveToFile()
-    }
-
     func migratePluginIdentity(from oldID: String, to newID: String) {
         guard oldID != newID else { return }
         var didChange = false
