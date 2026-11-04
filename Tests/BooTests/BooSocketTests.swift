@@ -387,53 +387,6 @@ final class BooSocketPluginHandlerTests: BooSocketIntegrationTestCase {
         }
     }
 
-    func testCustomPluginHandler() throws {
-        nonisolated(unsafe) var received: [String: Any]?
-        BooSocketServer.shared.registerHandler(namespace: "myplugin") { json in
-            received = json
-            return ["ok": true, "echo": json["data"] ?? "none"]
-        }
-
-        let resp = try roundTrip(
-            rawJSON: """
-                {"cmd":"myplugin.refresh","data":"hello"}
-                """)
-
-        XCTAssertEqual(resp["ok"] as? Bool, true)
-        BooSocketTestSupport.waitUntil { received != nil }
-        XCTAssertEqual(received?["cmd"] as? String, "myplugin.refresh")
-        XCTAssertEqual(received?["data"] as? String, "hello")
-    }
-
-    func testNamespacedCommandRouting() throws {
-        nonisolated(unsafe) var gitHandled = false
-        nonisolated(unsafe) var dockerHandled = false
-
-        BooSocketServer.shared.registerHandler(namespace: "git") { _ in
-            gitHandled = true
-            return ["ok": true]
-        }
-        BooSocketServer.shared.registerHandler(namespace: "docker") { _ in
-            dockerHandled = true
-            return ["ok": true]
-        }
-
-        _ = try roundTrip(
-            rawJSON: """
-                {"cmd":"git.status"}
-                """)
-        BooSocketTestSupport.waitUntil { gitHandled }
-        XCTAssertTrue(gitHandled)
-        XCTAssertFalse(dockerHandled)
-
-        _ = try roundTrip(
-            rawJSON: """
-                {"cmd":"docker.list"}
-                """)
-        BooSocketTestSupport.waitUntil { dockerHandled }
-        XCTAssertTrue(dockerHandled)
-    }
-
     func testUnregisteredNamespaceReturnsError() throws {
         let resp = try roundTrip(
             rawJSON: """

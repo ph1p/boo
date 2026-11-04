@@ -97,7 +97,7 @@ final class SessionStoreTests: XCTestCase {
         let sp = snapshot.workspaces[0].panes.first!
         // Original tab + the one we added
         XCTAssertEqual(sp.tabs.count, 2)
-        XCTAssertTrue(sp.tabs.contains(where: { $0.contentState?.asTerminal?.workingDirectory == "/tmp/foo" }))
+        XCTAssertTrue(sp.tabs.contains(where: { $0.contentState.flatMap(terminalCWD) == "/tmp/foo" }))
     }
 
     func testRemoteSessionNotPersisted() {
@@ -115,7 +115,7 @@ final class SessionStoreTests: XCTestCase {
         for tab in tabs {
             // SessionTab has no remoteSession field — the type itself enforces this.
             // Verify the working directory was still captured via contentState.
-            XCTAssertFalse(tab.contentState?.asTerminal?.workingDirectory.isEmpty ?? true)
+            XCTAssertFalse(tab.contentState.flatMap(terminalCWD)?.isEmpty ?? true)
         }
     }
 
@@ -841,7 +841,7 @@ final class SessionStoreTests: XCTestCase {
         let savedPane = snapshot.workspaces[0].panes.first(where: { $0.id == secondID })
         XCTAssertNotNil(savedPane)
         XCTAssertEqual(savedPane?.tabs.count, 1)
-        XCTAssertEqual(savedPane?.tabs.first?.contentState?.asTerminal?.workingDirectory, "/tmp")
+        XCTAssertEqual(savedPane?.tabs.first?.contentState.flatMap(terminalCWD), "/tmp")
     }
 
     // MARK: - Multi-window (version 2)
@@ -921,4 +921,9 @@ final class SessionStoreTests: XCTestCase {
         window.frame = [1, 2]
         XCTAssertNil(window.frameRect)
     }
+}
+
+private func terminalCWD(_ state: ContentState) -> String? {
+    if case .terminal(let terminal) = state { return terminal.workingDirectory }
+    return nil
 }

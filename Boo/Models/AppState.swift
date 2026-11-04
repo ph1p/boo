@@ -24,10 +24,6 @@ final class AppState {
         workspaces.first(where: { $0.pane(for: paneID) != nil })
     }
 
-    func indexOfWorkspace(containingPane paneID: UUID) -> Int? {
-        workspaces.firstIndex(where: { $0.pane(for: paneID) != nil })
-    }
-
     static func ensureUniquePaneIDsAcrossWorkspaces(_ workspaces: [Workspace]) {
         var seenPaneIDs = Set<UUID>()
 

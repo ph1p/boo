@@ -221,21 +221,10 @@ final class DebugPluginE2ETests: XCTestCase {
 
     // MARK: - Terminal Lifecycle E2E
 
-    func testTerminalCreatedLogged() {
-        let termID = UUID()
-        registry.notifyTerminalCreated(terminalID: termID)
-
-        let createEvents = waitForEvents(named: "terminalCreated", count: 1)
-        XCTAssertEqual(createEvents.count, 1)
-        XCTAssertTrue(createEvents[0].detail.contains(termID.uuidString.prefix(8)))
-    }
-
     func testTerminalClosedLogged() {
         let termID = UUID()
-        registry.notifyTerminalCreated(terminalID: termID)
         registry.notifyTerminalClosed(terminalID: termID)
 
-        XCTAssertEqual(events(named: "terminalCreated").count, 1)
         XCTAssertEqual(events(named: "terminalClosed").count, 1)
     }
 

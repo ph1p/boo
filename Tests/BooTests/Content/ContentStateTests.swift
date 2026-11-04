@@ -109,17 +109,6 @@ final class ContentStateTests: XCTestCase {
         XCTAssertEqual(state.title, "updated")
     }
 
-    func testContentStateAsTerminal() {
-        let terminalState = TerminalContentState(title: "zsh", workingDirectory: "/tmp")
-        let state = ContentState.terminal(terminalState)
-
-        XCTAssertNotNil(state.asTerminal)
-        XCTAssertEqual(state.asTerminal?.workingDirectory, "/tmp")
-
-        let browserState = ContentState.browser(BrowserContentState())
-        XCTAssertNil(browserState.asTerminal)
-    }
-
     func testContentStateUpdateTerminal() {
         var state = ContentState.terminal(TerminalContentState(workingDirectory: "/original"))
 
@@ -127,7 +116,8 @@ final class ContentStateTests: XCTestCase {
             s.workingDirectory = "/updated"
         }
 
-        XCTAssertEqual(state.asTerminal?.workingDirectory, "/updated")
+        guard case .terminal(let updated) = state else { return XCTFail("not a terminal") }
+        XCTAssertEqual(updated.workingDirectory, "/updated")
     }
 
     func testContentStateUpdateTerminalNoOpForNonTerminal() {
@@ -178,7 +168,8 @@ final class ContentStateTests: XCTestCase {
 
         // Essential fields survive roundtrip
         let terminalDecoded = try decoder.decode(ContentState.self, from: encoder.encode(terminal))
-        XCTAssertEqual(terminalDecoded.asTerminal?.workingDirectory, "/tmp")
+        guard case .terminal(let t) = terminalDecoded else { return XCTFail("not a terminal") }
+        XCTAssertEqual(t.workingDirectory, "/tmp")
 
         let browserDecoded = try decoder.decode(ContentState.self, from: encoder.encode(browser))
         if case .browser(let b) = browserDecoded {

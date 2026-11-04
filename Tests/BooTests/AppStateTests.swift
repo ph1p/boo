@@ -180,19 +180,6 @@ final class AppStateTests: XCTestCase {
         XCTAssertNil(state.workspaceContainingPane(UUID()))
     }
 
-    func testIndexOfWorkspaceContainingPaneReturnsCorrectIndex() {
-        let state = AppState()
-        let ws1 = Workspace(folderPath: "/a")
-        let ws2 = Workspace(folderPath: "/b")
-        let ws2SecondPane = ws2.splitPane(ws2.activePaneID, direction: .vertical)!
-        state.addWorkspace(ws1)
-        state.addWorkspace(ws2)
-
-        XCTAssertEqual(state.indexOfWorkspace(containingPane: ws1.activePaneID), 0)
-        XCTAssertEqual(state.indexOfWorkspace(containingPane: ws2SecondPane), 1)
-        XCTAssertNil(state.indexOfWorkspace(containingPane: UUID()))
-    }
-
     func testEnsureUniquePaneIDsAcrossWorkspacesRemapsConflictsAndPreservesState() {
         let sharedPaneID = UUID()
 

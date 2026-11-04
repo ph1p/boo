@@ -42,15 +42,6 @@ enum ContentType: String, Codable, CaseIterable {
         }
     }
 
-    /// Whether this content type supports the plugin sidebar.
-    /// Terminal has full plugin support; others show placeholder for now.
-    var supportsPlugins: Bool {
-        switch self {
-        case .terminal: return true
-        default: return false
-        }
-    }
-
     /// Whether this content type's state can be persisted across sessions.
     var isPersistable: Bool {
         switch self {

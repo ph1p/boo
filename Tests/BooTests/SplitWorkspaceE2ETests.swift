@@ -180,18 +180,6 @@ final class SplitWorkspaceE2ETests: XCTestCase {
         XCTAssertTrue(cwdEvents[1].detail.contains("/project-b"))
     }
 
-    func testNewWorkspaceTriggersTerminalCreated() {
-        let termID = UUID()
-        registry.notifyTerminalCreated(terminalID: termID)
-
-        let createEvents = events(named: "terminalCreated")
-        XCTAssertEqual(createEvents.count, 1)
-
-        // Close it
-        registry.notifyTerminalClosed(terminalID: termID)
-        XCTAssertEqual(events(named: "terminalClosed").count, 1)
-    }
-
     func testWorkspaceRemovalDoesNotCrashPlugins() {
         let state = AppState()
         state.addWorkspace(Workspace(folderPath: "/a"))
@@ -524,8 +512,6 @@ final class SplitWorkspaceE2ETests: XCTestCase {
         let ws = Workspace(folderPath: "/home/dev")
         state.addWorkspace(ws)
         XCTAssertEqual(state.workspaces.count, 1)
-        registry.notifyTerminalCreated(terminalID: ws.activePaneID)
-
         // Cmd+D: Split right
         let id1 = ws.activePaneID
         let id2 = ws.splitPane(id1, direction: .horizontal)!
@@ -567,7 +553,6 @@ final class SplitWorkspaceE2ETests: XCTestCase {
         XCTAssertEqual(ws.activePaneID, id1)
 
         // Verify plugin received events throughout
-        XCTAssertFalse(events(named: "terminalCreated").isEmpty)
         XCTAssertFalse(events(named: "focusChanged").isEmpty)
         XCTAssertFalse(events(named: "enrich").isEmpty)
     }

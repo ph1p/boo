@@ -135,7 +135,6 @@ final class PluginSubscriptionTests: XCTestCase {
         registry.notifyProcessChanged(name: "vim", context: ctx)
         registry.notifyRemoteSessionChanged(session: .ssh(host: "h"), context: ctx)
         registry.notifyFocusChanged(terminalID: UUID(), context: ctx)
-        registry.notifyTerminalCreated(terminalID: UUID())
         registry.notifyTerminalClosed(terminalID: UUID())
         registry.notifyRemoteDirectoryListed(path: "/", entries: [])
 
@@ -152,11 +151,10 @@ final class PluginSubscriptionTests: XCTestCase {
         registry.notifyProcessChanged(name: "vim", context: ctx)
         registry.notifyRemoteSessionChanged(session: nil, context: ctx)
         registry.notifyFocusChanged(terminalID: UUID(), context: ctx)
-        registry.notifyTerminalCreated(terminalID: UUID())
         registry.notifyTerminalClosed(terminalID: UUID())
         registry.notifyRemoteDirectoryListed(path: "/", entries: [])
 
-        XCTAssertEqual(plugin.events, ["cwd", "process", "remote", "focus", "created", "closed", "listing"])
+        XCTAssertEqual(plugin.events, ["cwd", "process", "remote", "focus", "closed", "listing"])
     }
 
     func testProcessAndRemotePluginFiltersCorrectly() {

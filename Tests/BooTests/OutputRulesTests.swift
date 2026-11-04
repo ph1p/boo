@@ -132,6 +132,5 @@ final class OutputRuleMatcherTests: XCTestCase {
         chunk.withUnsafeBufferPointer { m.tapOutput($0) }
         chunk.withUnsafeBufferPointer { m.tapOutput($0) }
         m.waitUntilIdle()
-        XCTAssertGreaterThanOrEqual(m.droppedBytes, 0)
     }
 }

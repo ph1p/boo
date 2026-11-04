@@ -28,7 +28,6 @@ final class OutputRuleMatcher: OutputTapSubscriber, @unchecked Sendable {
     private var dropping = false
     private var discardPartial = false
     private var scheduled = false
-    private var droppedBytesTotal = 0
     private var rulesInbox: [CompiledRule]?
     private var contextValue = RuleContext.empty
 
@@ -48,8 +47,6 @@ final class OutputRuleMatcher: OutputTapSubscriber, @unchecked Sendable {
         self.contextValue = context
         self.rules = Self.compile(rules)
     }
-
-    var droppedBytes: Int { lock.withLock { droppedBytesTotal } }
 
     static func compile(_ rules: [Rule]) -> [CompiledRule] {
         rules.compactMap { rule in
@@ -78,17 +75,14 @@ final class OutputRuleMatcher: OutputTapSubscriber, @unchecked Sendable {
                 // Over budget: drop through the next newline so matching
                 // resumes on a whole line.
                 guard let nl = bytes.firstIndex(of: 0x0A) else {
-                    droppedBytesTotal += bytes.count
                     dropping = true
                     discardPartial = true
                     return false
                 }
-                droppedBytesTotal += nl + 1
                 start = nl + 1
                 dropping = false
                 discardPartial = true
                 if pending.count + (bytes.count - start) > Self.queueLimit {
-                    droppedBytesTotal += bytes.count - start
                     dropping = true
                     return false
                 }

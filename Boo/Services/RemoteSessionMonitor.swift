@@ -95,14 +95,6 @@ final class RemoteSessionMonitor: @unchecked Sendable {
         return pid
     }
 
-    /// Returns all tracked PIDs except the one for `excludingPane`.
-    /// Used to avoid sending images to the wrong pane's shell.
-    func otherTrackedPIDs(excluding paneID: UUID) -> Set<pid_t> {
-        queue.sync {
-            Set(tracked.compactMap { $0.key != paneID ? $0.value.shellPID : nil })
-        }
-    }
-
     func startContainerCwdPolling(paneID: UUID, tabID: UUID, session: RemoteSessionType) {
         queue.async { [weak self] in
             guard let self else { return }

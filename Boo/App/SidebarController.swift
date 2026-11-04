@@ -98,12 +98,6 @@ final class SidebarController {
         set { coordinator.sidebarScrollOffsets = newValue }
     }
 
-    /// Persisted sidebar section order per plugin.
-    var savedSectionOrder: [String: [String]] {
-        get { coordinator.sidebarSectionOrder }
-        set { coordinator.sidebarSectionOrder = newValue }
-    }
-
     // MARK: - Initialization
 
     init(windowController: MainWindowController) {

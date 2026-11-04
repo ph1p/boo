@@ -294,24 +294,6 @@ class SidebarSectionHeaderView: NSView {
 
 // MARK: - SwiftUI Bridge
 
-struct SidebarPluginStackView: NSViewRepresentable {
-    let sections: [SidebarSection]
-    let expandedIDs: Set<String>
-    let onToggleExpand: (String) -> Void
-
-    func makeNSView(context: Context) -> SidebarPanelView {
-        let view = SidebarPanelView(frame: .zero)
-        view.onToggleExpand = onToggleExpand
-        view.updateSections(sections, expandedIDs: expandedIDs)
-        return view
-    }
-
-    func updateNSView(_ nsView: SidebarPanelView, context: Context) {
-        nsView.onToggleExpand = onToggleExpand
-        nsView.updateSections(sections, expandedIDs: expandedIDs)
-    }
-}
-
 // MARK: - Sidebar Icon Button
 
 /// Small borderless glyph button for sidebar and drawer chrome. Unlike `IconButton` it

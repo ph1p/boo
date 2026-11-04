@@ -64,10 +64,6 @@ final class BooSocketServer: @unchecked Sendable {
     /// Called on main thread when the process set changes.
     var onStatusChanged: (() -> Void)?
 
-    /// Plugin command handlers. Key is the namespace prefix (e.g. "git", "docker").
-    /// Handler receives the full JSON dict and returns a response dict.
-    private var commandHandlers: [String: @Sendable ([String: Any]) -> [String: Any]?] = [:]
-
     private var sweepTimer: DispatchSourceTimer?
     let queue = DispatchQueue(label: "com.boo.socket", qos: .utility)
 
@@ -156,22 +152,6 @@ final class BooSocketServer: @unchecked Sendable {
     /// Set by MainWindowController on init.
     var onControlCommand: ((_ cmd: String, _ json: [String: Any], _ reply: @escaping ([String: Any]) -> Void) -> Void)?
 
-    // MARK: - Plugin Command Registration
-
-    /// Register a handler for a command namespace. Commands matching "namespace.action"
-    /// or just "namespace" will be routed to this handler.
-    func registerHandler(namespace: String, handler: @escaping @Sendable ([String: Any]) -> [String: Any]?) {
-        queue.async { [self] in
-            commandHandlers[namespace] = handler
-        }
-    }
-
-    func unregisterHandler(namespace: String) {
-        queue.async { [self] in
-            commandHandlers.removeValue(forKey: namespace)
-        }
-    }
-
     // MARK: - Process Queries
 
     /// Returns the status of a registered process that is a descendant of `shellPID`.
@@ -218,7 +198,6 @@ final class BooSocketServer: @unchecked Sendable {
             core.shutdown()
             subscriptions.removeAll()
             externalSegments.removeAll()
-            commandHandlers.removeAll()
             var info = stat()
             if let inode = boundInode, stat(socketPath, &info) == 0, info.st_ino == inode {
                 unlink(socketPath)
@@ -317,15 +296,6 @@ final class BooSocketServer: @unchecked Sendable {
         // Status bar namespace
         if cmd.hasPrefix("statusbar.") {
             handleStatusBarCommand(cmd: cmd, json: json, clientFD: clientFD)
-            return
-        }
-
-        // Plugin namespace routing: "namespace.action" or "namespace"
-        let namespace = cmd.split(separator: ".", maxSplits: 1).first.map(String.init) ?? cmd
-        if let handler = commandHandlers[namespace] {
-            if let response = handler(json) {
-                sendJSON(fd: clientFD, dict: response)
-            }
             return
         }
 

@@ -610,24 +610,6 @@ extension MainWindowController {
         )
     }
 
-    /// True if the when-clause positively requires a process condition (e.g. "process.ai"),
-    /// false if it only negates one (e.g. "!process.ai") or has no process clause.
-    static func isProcessGated(when clause: String?) -> Bool {
-        guard let clause else { return false }
-        var search = clause[clause.startIndex...]
-        while let range = search.range(of: "process.") {
-            let before =
-                range.lowerBound > clause.startIndex
-                ? clause[clause.index(before: range.lowerBound)]
-                : Character(" ")
-            if before != "!" {
-                return true
-            }
-            search = clause[range.upperBound...]
-        }
-        return false
-    }
-
     /// Find the pane containing a tab with the given ID across all workspaces.
     func findPaneContainingTab(_ tabID: UUID) -> Pane? {
         guard let ws = activeWorkspace else { return nil }

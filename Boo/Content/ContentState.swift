@@ -70,12 +70,6 @@ enum ContentState: Codable, Sendable {
         }
     }
 
-    /// Access terminal-specific state. Returns nil for non-terminal content.
-    var asTerminal: TerminalContentState? {
-        if case .terminal(let s) = self { return s }
-        return nil
-    }
-
     /// Mutate terminal-specific state. No-op for non-terminal content.
     mutating func updateTerminal(_ transform: (inout TerminalContentState) -> Void) {
         if case .terminal(var s) = self {

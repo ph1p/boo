@@ -200,7 +200,6 @@ final class RemoteExplorerTests: XCTestCase {
     // MARK: - Tilde Resolution
 
     func testResolveTildeWithoutCacheReturnsNil() {
-        RemoteExplorer.clearAllHomeCache()
         let result = RemoteExplorer.resolveTilde("~/project", session: .ssh(host: "unknown-host-xyz"))
         XCTAssertNil(result)
     }
@@ -208,8 +207,6 @@ final class RemoteExplorerTests: XCTestCase {
     // MARK: - sshConnectionTarget for home cache
 
     func testResolveTildeUsesConnectionTarget() {
-        RemoteExplorer.clearAllHomeCache()
-
         // Two sessions with same alias but different display hosts
         let session1 = RemoteSessionType.ssh(host: "devbox", alias: "devbox")
         let session2 = RemoteSessionType.ssh(host: "root@ubuntu-server", alias: "devbox")

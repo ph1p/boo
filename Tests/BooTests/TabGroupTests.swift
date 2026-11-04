@@ -265,8 +265,6 @@ final class TabGroupTests: XCTestCase {
         p.addTab(at: 3, toGroup: gid)
         XCTAssertEqual(dirs(p), ["a", "b", "d", "c"])
         XCTAssertEqual(p.tabIndices(inGroup: gid), [0, 1, 2])
-        XCTAssertEqual(p.groupEndIndex(forTabAt: 0), 3)
-        XCTAssertNil(p.groupEndIndex(forTabAt: 3))
     }
 
     func testMovingTabBetweenGroupsDropsEmptiedGroup() throws {

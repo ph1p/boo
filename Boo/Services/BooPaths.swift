@@ -17,10 +17,6 @@ extension NSColor {
     static let booDocker = NSColor(calibratedRed: 0.13, green: 0.59, blue: 0.95, alpha: 1.0)
     /// Local / success / added indicator (green).
     static let booLocal = NSColor(calibratedRed: 0.25, green: 0.72, blue: 0.31, alpha: 1.0)
-    /// Deleted / destructive (red).
-    static let booDeleted = NSColor(calibratedRed: 0.97, green: 0.32, blue: 0.29, alpha: 1.0)
-    /// Neutral / unknown state (gray).
-    static let booNeutral = NSColor(calibratedRed: 0.5, green: 0.5, blue: 0.5, alpha: 1.0)
 }
 
 // MARK: - String Path Helpers

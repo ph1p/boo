@@ -310,19 +310,9 @@ final class RemoteExplorer: @unchecked Sendable {
     }
 
     #if DEBUG
-        static func clearAllHomeCache() {
-            homePathCache.removeAll()
-        }
     #endif
 
     // MARK: - Remote Commands
-
-    /// Run a command on the remote target. Public API for plugins that need custom commands.
-    static func runPublicRemoteCommand(
-        session: RemoteSessionType, command: String, completion: @escaping @Sendable (String?) -> Void
-    ) {
-        runRemoteCommand(session: session, command: command, completion: completion)
-    }
 
     // MARK: - Command Execution
 

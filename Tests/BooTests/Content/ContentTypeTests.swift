@@ -31,14 +31,6 @@ final class ContentTypeTests: XCTestCase {
         XCTAssertEqual(ContentType.markdownPreview.displayName, "Markdown")
     }
 
-    func testSupportsPlugins() {
-        XCTAssertTrue(ContentType.terminal.supportsPlugins)
-        XCTAssertFalse(ContentType.browser.supportsPlugins)
-        XCTAssertFalse(ContentType.editor.supportsPlugins)
-        XCTAssertFalse(ContentType.imageViewer.supportsPlugins)
-        XCTAssertFalse(ContentType.markdownPreview.supportsPlugins)
-    }
-
     func testCodable() throws {
         let encoder = JSONEncoder()
         let decoder = JSONDecoder()

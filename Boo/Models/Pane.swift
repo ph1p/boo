@@ -334,15 +334,6 @@ final class Pane {
         pruneGroups()
     }
 
-    /// Index a new tab started from tab `index` lands at: the end of that
-    /// tab's group, or nil when it isn't grouped.
-    func groupEndIndex(forTabAt index: Int) -> Int? {
-        guard let gid = tabAt(index)?.groupID, let last = tabs.lastIndex(where: { $0.groupID == gid }) else {
-            return nil
-        }
-        return last + 1
-    }
-
     /// Takes the tab out of its group, moving it past the group's end.
     func removeTabFromGroup(at index: Int) {
         guard let gid = tabAt(index)?.groupID else { return }

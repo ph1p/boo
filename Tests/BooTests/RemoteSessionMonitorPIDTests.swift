@@ -2,88 +2,8 @@ import XCTest
 
 @testable import Boo
 
-/// Tests that RemoteSessionMonitor correctly tracks per-pane shell PIDs
-/// and that otherTrackedPIDs(excluding:) returns only PIDs from other panes.
+/// Tests that RemoteSessionMonitor reports per-pane shell PIDs.
 final class RemoteSessionMonitorPIDTests: XCTestCase {
-
-    // MARK: - otherTrackedPIDs
-
-    func testOtherTrackedPIDsEmptyWhenNoPanesTracked() {
-        let monitor = RemoteSessionMonitor()
-        XCTAssertTrue(monitor.otherTrackedPIDs(excluding: UUID()).isEmpty)
-    }
-
-    func testOtherTrackedPIDsExcludesRequestingPane() {
-        let monitor = RemoteSessionMonitor()
-        let pane = UUID()
-        let exp = expectation(description: "track")
-        monitor.onShellPIDUpdated = { _, _, _ in exp.fulfill() }
-        monitor.track(paneID: pane, shellPID: 1001)
-        wait(for: [exp], timeout: 1)
-
-        XCTAssertTrue(monitor.otherTrackedPIDs(excluding: pane).isEmpty)
-    }
-
-    func testOtherTrackedPIDsIncludesOtherPanes() {
-        let monitor = RemoteSessionMonitor()
-        let paneA = UUID()
-        let paneB = UUID()
-        let paneC = UUID()
-        let exp = expectation(description: "tracked 3")
-        exp.expectedFulfillmentCount = 3
-        monitor.onShellPIDUpdated = { _, _, _ in exp.fulfill() }
-        monitor.track(paneID: paneA, shellPID: 1001)
-        monitor.track(paneID: paneB, shellPID: 1002)
-        monitor.track(paneID: paneC, shellPID: 1003)
-        wait(for: [exp], timeout: 1)
-
-        let excludingA = monitor.otherTrackedPIDs(excluding: paneA)
-        XCTAssertFalse(excludingA.contains(1001))
-        XCTAssertTrue(excludingA.contains(1002))
-        XCTAssertTrue(excludingA.contains(1003))
-        XCTAssertEqual(excludingA.count, 2)
-    }
-
-    func testOtherTrackedPIDsAfterPIDUpdate() {
-        let monitor = RemoteSessionMonitor()
-        let paneA = UUID()
-        let paneB = UUID()
-        let exp = expectation(description: "tracked 2")
-        exp.expectedFulfillmentCount = 2
-        monitor.onShellPIDUpdated = { _, _, _ in exp.fulfill() }
-        monitor.track(paneID: paneA, shellPID: 1001)
-        monitor.track(paneID: paneB, shellPID: 1002)
-        wait(for: [exp], timeout: 1)
-
-        monitor.updateShellPID(paneID: paneA, shellPID: 9999)
-        let settle = expectation(description: "settle")
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { settle.fulfill() }
-        wait(for: [settle], timeout: 1)
-
-        let excludingB = monitor.otherTrackedPIDs(excluding: paneB)
-        XCTAssertTrue(excludingB.contains(9999))
-        XCTAssertFalse(excludingB.contains(1001))
-        XCTAssertFalse(excludingB.contains(1002))
-    }
-
-    func testOtherTrackedPIDsAfterUntrack() {
-        let monitor = RemoteSessionMonitor()
-        let paneA = UUID()
-        let paneB = UUID()
-        let exp = expectation(description: "tracked 2")
-        exp.expectedFulfillmentCount = 2
-        monitor.onShellPIDUpdated = { _, _, _ in exp.fulfill() }
-        monitor.track(paneID: paneA, shellPID: 1001)
-        monitor.track(paneID: paneB, shellPID: 1002)
-        wait(for: [exp], timeout: 1)
-
-        monitor.untrack(paneID: paneA)
-        let settle = expectation(description: "settle")
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { settle.fulfill() }
-        wait(for: [settle], timeout: 1)
-
-        XCTAssertTrue(monitor.otherTrackedPIDs(excluding: paneB).isEmpty)
-    }
 
     // MARK: - onShellPIDUpdated callback
 

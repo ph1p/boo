@@ -52,7 +52,7 @@ Boo/                  Library target (all app code)
                       +WindowDrag, +AgentTasks, +AgentTimeline, +RemoteControl), SidebarController,
                       WindowStateCoordinator, TrafficLightPositioner
   Content/            Tab content views: Terminal, Browser, Editor (CodeMirror), ImageViewer,
-                      MarkdownPreview, PluginTab; ContentType + ContentTypeDetector
+                      MarkdownPreview, PluginTab; ContentType
   Ghostty/            GhosttyRuntime, GhosttyView (Metal surface), TerminalScrollView
   Models/             Settings.swift (AppSettings), Theme + TerminalTheme+BuiltIn, Workspace,
                       Pane (+ TabState), SplitTree (+Layout), AppState
@@ -70,7 +70,6 @@ Boo/                  Library target (all app code)
                       TabDragCoordinator, ZoomBadgeView, DetailPanelView (SidebarPanelView),
                       AgentReviewView, AgentTimelineView, AgentInboxSegment, SettingsWindow
     Settings/         One SwiftUI view per settings page
-    SwiftUI/          AppContentView, SidebarView, PaneSplitRepresentable
   Resources/          Images, EditorSource (pnpm/Vite) → EditorBundle (generated),
                       RemoteControl (index.html + ghostty-vt.wasm)
 BooApp/               Executable entry point (just calls BooMain.run())
@@ -424,7 +423,7 @@ Fixed tabs are listed in `Tab.fixed`, ordered by `Tab.Group` (Terminal, Appearan
 - Only `terminal` tabs support the plugin sidebar (`supportsPlugins = true`).
 - PDF files resolve to `.browser` — WKWebView renders them natively without a plugin.
 
-`ContentType` exposes static extension sets used for routing: `imageExtensions`, `markdownExtensions`, `htmlExtensions`, `pdfExtensions`. Add new extension groups here and wire routing in `ContentType.forFile`, `ContentTypeDetector.detect`, and the file tree plugin.
+`ContentType` exposes static extension sets used for routing: `imageExtensions`, `markdownExtensions`, `htmlExtensions`, `pdfExtensions`. Add new extension groups here and wire routing in `ContentType.forFile` and the file tree plugin.
 
 ### Editor Theme
 

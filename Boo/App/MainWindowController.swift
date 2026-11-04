@@ -34,7 +34,6 @@ import SwiftUI
         get { sidebarController?.isUserHidden ?? AppSettings.shared.sidebarDefaultHidden }
         set { sidebarController?.isUserHidden = newValue }
     }
-    var isRemoteSidebar: Bool { coordinator?.isRemote ?? false }
     var currentSidebarPosition: SidebarPosition {
         get { sidebarController?.position ?? .right }
         set { sidebarController?.position = newValue }

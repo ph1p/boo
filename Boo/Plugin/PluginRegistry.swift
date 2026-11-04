@@ -227,12 +227,6 @@ final class PluginRegistry {
         }
     }
 
-    func notifyTerminalCreated(terminalID: UUID) {
-        for plugin in activePlugins where plugin.subscribedEvents.contains(.terminalCreated) {
-            plugin.terminalCreated(terminalID: terminalID)
-        }
-    }
-
     func notifyTerminalClosed(terminalID: UUID) {
         for plugin in activePlugins where plugin.subscribedEvents.contains(.terminalClosed) {
             plugin.terminalClosed(terminalID: terminalID)
