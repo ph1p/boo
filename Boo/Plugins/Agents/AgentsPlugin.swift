@@ -107,9 +107,9 @@ final class AgentsPlugin: BooPluginProtocol {
             return
         }
         let markers = Self.projectMarkers
-        DispatchQueue.global(qos: .utility).async {
+        DispatchQueue.global(qos: .utility).async { [weak self] in
             let root = findAgentProjectRoot(from: cwd, markers: markers) ?? cwd
-            DispatchQueue.main.async { [weak self] in
+            DispatchQueue.main.async {
                 guard let self else { return }
                 self.projectRootCache = (cwd, root)
                 body(root)

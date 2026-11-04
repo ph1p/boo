@@ -69,9 +69,9 @@ extension MainWindowController {
 
     @objc func newAgentTaskAction(_ sender: Any?) {
         let folders = agentTaskCandidateFolders
-        DispatchQueue.global(qos: .userInitiated).async {
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             let root = Self.agentTaskRepo(in: folders)
-            DispatchQueue.main.async { [weak self] in
+            DispatchQueue.main.async {
                 guard let self else { return }
                 guard let root else {
                     self.showAgentTaskError(
@@ -129,9 +129,9 @@ extension MainWindowController {
         repo: String, name: String, kind: AgentKind, prompt: String, base: String? = nil, model: String? = nil,
         completion: @escaping @MainActor (Result<AgentTaskLaunch, Error>) -> Void = { _ in }
     ) {
-        DispatchQueue.global(qos: .userInitiated).async {
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             let result = Result { try AgentWorktree.create(repo: repo, name: name, base: base) }
-            DispatchQueue.main.async { [weak self] in
+            DispatchQueue.main.async {
                 switch result {
                 case .success(let info):
                     NotificationCenter.default.post(name: .agentWorktreesChanged, object: nil)
@@ -358,10 +358,10 @@ extension MainWindowController {
     ) {
         guard let workspace = appState.workspaces.first(where: { $0.id == workspaceID }) else { return }
         let folder = workspace.folderPath
-        DispatchQueue.global(qos: .userInitiated).async {
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             let info = AgentWorktree.info(for: folder)
             let status = info.map(AgentWorktree.status(of:))
-            DispatchQueue.main.async { [weak self] in
+            DispatchQueue.main.async {
                 guard let self,
                     let workspace = self.appState.workspaces.first(where: { $0.id == workspaceID })
                 else { return }

@@ -61,7 +61,7 @@
                 // A run-loop block, not GCD: merge asks in a modal alert, and one
                 // inside a main-queue block would starve the next socket command.
                 let text = json["text"] as? String
-                RunLoop.main.perform(inModes: [.common]) { AgentsPlugin.perform(action, on: row, text: text) }
+                Self.onMainRunLoop { AgentsPlugin.perform(action, on: row, text: text) }
             case "debug_close_workspace":
                 // No confirmation, like a confirmed close: tidies up after a test run.
                 let id = (json["id"] as? String).flatMap(UUID.init(uuidString:))
@@ -94,14 +94,15 @@
                 let point = NSPoint(x: x, y: window.frame.height - y)
                 let count = max(1, json["count"] as? Int ?? 1)
                 reply(["ok": true])
-                RunLoop.main.perform(inModes: [.common]) {
-                    let clicks = (1...count).flatMap { n in [(NSEvent.EventType.leftMouseDown, n), (.leftMouseUp, n)] }
+                let clicks = (1...count).flatMap { n in [(NSEvent.EventType.leftMouseDown, n), (.leftMouseUp, n)] }
+                Self.onMainRunLoop {
                     for (type, clickCount) in [(NSEvent.EventType.mouseMoved, 1)] + clicks {
                         guard
                             let event = NSEvent.mouseEvent(
                                 with: type, location: point, modifierFlags: [],
                                 timestamp: ProcessInfo.processInfo.systemUptime,
-                                windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: clickCount,
+                                windowNumber: window.windowNumber, context: nil, eventNumber: 0,
+                                clickCount: clickCount,
                                 pressure: type == .leftMouseDown ? 1 : 0)
                         else { continue }
                         window.sendEvent(event)
@@ -114,7 +115,7 @@
                 }
                 let chars = json["chars"] as? String ?? ""
                 reply(["ok": true])
-                RunLoop.main.perform(inModes: [.common]) {
+                Self.onMainRunLoop {
                     for type in [NSEvent.EventType.keyDown, .keyUp] {
                         guard
                             let event = NSEvent.keyEvent(
@@ -142,7 +143,7 @@
                     return true
                 }
                 reply(["ok": true])
-                RunLoop.main.perform(inModes: [.common]) { button.performClick(nil) }
+                Self.onMainRunLoop { button.performClick(nil) }
             default:
                 return false
             }
@@ -151,6 +152,12 @@
 
         private func openDialog() -> NSWindow? {
             NSApp.modalWindow ?? controllers.lazy.compactMap { $0.window?.attachedSheet }.first
+        }
+
+        /// Runs `body` as a run-loop block on the main thread. Not GCD: a modal alert
+        /// inside a main-queue block would starve the next socket command.
+        private static func onMainRunLoop(_ body: @escaping @MainActor () -> Void) {
+            RunLoop.main.perform(inModes: [.common]) { MainActor.assumeIsolated(body) }
         }
 
         private static func subviews(of view: NSView?) -> [NSView] {
