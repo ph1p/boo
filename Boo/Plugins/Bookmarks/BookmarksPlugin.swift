@@ -15,7 +15,7 @@ final class BookmarksPluginNew: BooPluginProtocol {
         version: "1.0.0",
         icon: "bookmark",
         description: "Saved directory bookmarks",
-        when: "!process.ai",
+        when: nil,
         runtime: nil,
         capabilities: PluginManifest.Capabilities(statusBarSegment: false, sidebarTab: true),
         statusBar: nil,

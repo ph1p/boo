@@ -15,7 +15,7 @@ final class HostsPlugin: BooPluginProtocol {
         version: "1.0.0",
         icon: "server.rack",
         description: "SSH hosts from ~/.ssh/config",
-        when: "!process.ai",
+        when: nil,
         runtime: nil,
         capabilities: PluginManifest.Capabilities(statusBarSegment: false, sidebarTab: true),
         statusBar: nil,

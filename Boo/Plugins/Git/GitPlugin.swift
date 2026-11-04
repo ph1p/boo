@@ -10,7 +10,7 @@ final class GitPlugin: BooPluginProtocol {
         version: "1.0.0",
         icon: "arrow.triangle.branch",
         description: "Git branch, status, and changed files",
-        when: "git.active && !remote && !process.ai",
+        when: "git.active && !remote",
         runtime: nil,
         capabilities: PluginManifest.Capabilities(statusBarSegment: true, sidebarTab: true),
         statusBar: PluginManifest.StatusBarManifest(position: "left", priority: 15, template: nil),

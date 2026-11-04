@@ -16,7 +16,7 @@ final class KubePlugin: BooPluginProtocol {
         version: "1.0.0",
         icon: "helm",
         description: "Pods, workloads, jobs, services and ingresses of the current kube context",
-        when: "!process.ai",
+        when: nil,
         runtime: nil,
         capabilities: PluginManifest.Capabilities(statusBarSegment: false, sidebarTab: true),
         statusBar: nil,

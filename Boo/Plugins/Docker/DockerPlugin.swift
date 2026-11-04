@@ -66,7 +66,7 @@ final class DockerPluginNew: BooPluginProtocol {
         version: "1.0.0",
         icon: "shippingbox",
         description: "Running Docker containers",
-        when: "!remote && !process.ai",
+        when: "!remote",
         runtime: nil,
         capabilities: PluginManifest.Capabilities(statusBarSegment: true, sidebarTab: true),
         statusBar: PluginManifest.StatusBarManifest(position: "right", priority: 10, template: nil),
