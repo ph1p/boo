@@ -260,16 +260,7 @@ extension WorkspaceBarView {
             isPlusButtonHovered
             ? theme.textSecondary
             : theme.textTertiary
-        let attrs: [NSAttributedString.Key: Any] = [
-            // The `+` sits in a full pill-sized footprint, so it carries a heavier
-            // glyph than a plain toolbar button would.
-            .font: Self.plusGlyphFont,
-            .foregroundColor: plusColor
-        ]
-        let str = "+" as NSString
-        let strSize = str.size(withAttributes: attrs)
-        str.draw(
-            at: NSPoint(x: rect.midX - strSize.width / 2, y: rect.midY - strSize.height / 2),
-            withAttributes: attrs)
+        // The `+` fills a full pill-sized footprint, so it is larger than the tab bar's.
+        WorkspacePillStyle.drawPlusGlyph(ctx, in: rect, halfSpan: 5, color: plusColor)
     }
 }

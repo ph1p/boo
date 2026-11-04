@@ -65,7 +65,6 @@ class ToolbarView: NSView {
     enum Fonts {
         nonisolated(unsafe) static let ws11Regular = NSFont.systemFont(ofSize: 13, weight: .medium)
         nonisolated(unsafe) static let ws11Medium = NSFont.systemFont(ofSize: 13, weight: .semibold)
-        nonisolated(unsafe) static let plus15Light = NSFont.systemFont(ofSize: 17, weight: .light)
 
         /// The centred header title (active workspace name). Larger than the pill
         /// labels beside it — it names the window, they are navigation.

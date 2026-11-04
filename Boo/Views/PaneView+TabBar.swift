@@ -8,7 +8,6 @@ extension PaneView {
         nonisolated(unsafe) static let title10Regular = NSFont.systemFont(ofSize: 12, weight: .medium)
         nonisolated(unsafe) static let title10Medium = NSFont.systemFont(ofSize: 12, weight: .semibold)
         nonisolated(unsafe) static let subtitle = NSFont.systemFont(ofSize: 12, weight: .regular)
-        nonisolated(unsafe) static let plus15Light = NSFont.systemFont(ofSize: 17, weight: .light)
         nonisolated(unsafe) static let groupChip = NSFont.systemFont(ofSize: 11.5, weight: .semibold)
         nonisolated(unsafe) static let groupBadge = NSFont.monospacedDigitSystemFont(ofSize: 10, weight: .bold)
     }
@@ -389,19 +388,8 @@ extension PaneView {
                 wsColor: nil, neutral: theme.chromeMuted)
         }
 
-        // "+" centered — adjust for descender so the visible glyph is vertically centered
-        let font = TabFonts.plus15Light
-        let color = theme.chromeMuted.withAlphaComponent(isPlusButtonHovered ? 0.9 : 0.6)
-        let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: color]
-        let plusStr = "+" as NSString
-        let plusSize = plusStr.size(withAttributes: attrs)
-        let midY = y + rowH / 2
-        // In flipped view, draw(at:) y is top of text box. Text box = ascender + descender.
-        // Visual center of "+" is at ascender/2 from top. We want that at midY.
-        let drawY = midY - font.ascender / 2 - 4
-        plusStr.draw(
-            at: NSPoint(x: pillRect.midX - plusSize.width / 2, y: drawY),
-            withAttributes: attrs)
+        let color = theme.chromeMuted.withAlphaComponent(isPlusButtonHovered ? 0.9 : 0.65)
+        WorkspacePillStyle.drawPlusGlyph(ctx, in: pillRect, halfSpan: 4.5, color: color)
     }
 
     // MARK: - Tab Display Helpers

@@ -246,16 +246,9 @@ extension ToolbarView {
             ctx.setFillColor(theme.chromeMuted.withAlphaComponent(0.12).cgColor)
             WorkspacePillStyle.fillRoundedRect(ctx, rect: plusRect)
         }
-        let wsPlusAlpha: CGFloat = isWorkspacePlusButtonHovered ? 0.9 : 0.45
-        let wsPlusAttrs: [NSAttributedString.Key: Any] = [
-            .font: Fonts.plus15Light,
-            .foregroundColor: theme.chromeMuted.withAlphaComponent(wsPlusAlpha)
-        ]
-        let wsPlusStr = "+" as NSString
-        let wsPlusSize = wsPlusStr.size(withAttributes: wsPlusAttrs)
-        wsPlusStr.draw(
-            at: NSPoint(x: plusRect.midX - wsPlusSize.width / 2, y: plusRect.midY - 1 - wsPlusSize.height / 2),
-            withAttributes: wsPlusAttrs)
+        let wsPlusAlpha: CGFloat = isWorkspacePlusButtonHovered ? 0.9 : 0.6
+        WorkspacePillStyle.drawPlusGlyph(
+            ctx, in: plusRect, halfSpan: 5, color: theme.chromeMuted.withAlphaComponent(wsPlusAlpha))
     }
 
     internal func drawFadeEdge(_ ctx: CGContext, at x: CGFloat, width: CGFloat, leftToRight: Bool) {

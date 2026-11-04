@@ -298,18 +298,39 @@ enum WorkspacePillStyle {
         drawCloseGlyph(ctx, in: rect, color: tint.withAlphaComponent(hovered ? 1 : 0.8))
     }
 
+    /// A `+` drawn like the close glyph (round caps, same stroke), centered in `rect`.
+    /// `halfSpan` sets its size: the tab bar's is smaller than the workspace bar's.
+    static func drawPlusGlyph(_ ctx: CGContext, in rect: CGRect, halfSpan h: CGFloat, color: NSColor) {
+        let c = CGPoint(x: rect.midX, y: rect.midY)
+        strokeGlyph(
+            ctx, color: color,
+            segments: [
+                (CGPoint(x: c.x - h, y: c.y), CGPoint(x: c.x + h, y: c.y)),
+                (CGPoint(x: c.x, y: c.y - h), CGPoint(x: c.x, y: c.y + h))
+            ])
+    }
+
     /// Strokes the "✕" centred in `rect` with round caps.
     static func drawCloseGlyph(_ ctx: CGContext, in rect: CGRect, color: NSColor) {
         let c = CGPoint(x: rect.midX, y: rect.midY)
         let h = closeGlyphHalfSpan
+        strokeGlyph(
+            ctx, color: color,
+            segments: [
+                (CGPoint(x: c.x - h, y: c.y - h), CGPoint(x: c.x + h, y: c.y + h)),
+                (CGPoint(x: c.x - h, y: c.y + h), CGPoint(x: c.x + h, y: c.y - h))
+            ])
+    }
+
+    private static func strokeGlyph(_ ctx: CGContext, color: NSColor, segments: [(CGPoint, CGPoint)]) {
         ctx.saveGState()
         ctx.setStrokeColor(color.cgColor)
         ctx.setLineWidth(closeGlyphLineWidth)
         ctx.setLineCap(.round)
-        ctx.move(to: CGPoint(x: c.x - h, y: c.y - h))
-        ctx.addLine(to: CGPoint(x: c.x + h, y: c.y + h))
-        ctx.move(to: CGPoint(x: c.x - h, y: c.y + h))
-        ctx.addLine(to: CGPoint(x: c.x + h, y: c.y - h))
+        for (from, to) in segments {
+            ctx.move(to: from)
+            ctx.addLine(to: to)
+        }
         ctx.strokePath()
         ctx.restoreGState()
     }

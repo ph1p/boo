@@ -251,7 +251,6 @@ class WorkspaceBarView: NSView {
     static let verticalFadeHeight: CGFloat = 24
 
     /// Fonts used per pill on every draw pass — built once rather than per pill.
-    nonisolated(unsafe) static let plusGlyphFont = NSFont.systemFont(ofSize: 18, weight: .light)
     // Same weights as the top bar's pills (`ToolbarView.Fonts.ws11*`).
     nonisolated(unsafe) static let pillLabelSelected = NSFont.systemFont(
         ofSize: 13, weight: .semibold)

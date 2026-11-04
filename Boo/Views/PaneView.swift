@@ -121,7 +121,8 @@ class PaneView: NSView {
     // MARK: - Tab Size Constants
     let tabMinWidth: CGFloat = 72
     let tabMaxWidth: CGFloat = 220
-    let plusButtonWidth: CGFloat = 40
+    /// Slot for the `+`: its pill is as wide as it is tall.
+    let plusButtonWidth: CGFloat = PaneView.tabPillHeight + 2 * PaneView.tabPillInsetX
 
     /// Tracks last active tab index that triggered auto-scroll, to avoid fighting manual scroll.
     var lastAutoScrolledTabIndex: Int = -1

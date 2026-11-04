@@ -129,16 +129,10 @@ final class QuickTerminalTabStrip: NSView {
                     x: rect.minX + 8, y: (bounds.height - size.height) / 2, width: rect.width - 16, height: size.height),
                 withAttributes: attrs)
         }
-        let plus = "+" as NSString
-        let attrs: [NSAttributedString.Key: Any] = [
-            .font: NSFont.systemFont(ofSize: 14), .foregroundColor: theme.textSecondary
-        ]
-        let size = plus.size(withAttributes: attrs)
-        plus.draw(
-            at: NSPoint(
-                x: width * CGFloat(titles.count) + (Self.plusWidth - size.width) / 2,
-                y: (bounds.height - size.height) / 2),
-            withAttributes: attrs)
+        if let ctx = NSGraphicsContext.current?.cgContext {
+            let slot = NSRect(x: width * CGFloat(titles.count), y: 0, width: Self.plusWidth, height: bounds.height)
+            WorkspacePillStyle.drawPlusGlyph(ctx, in: slot, halfSpan: 4.5, color: theme.textSecondary)
+        }
         theme.separator.setFill()
         NSRect(x: 0, y: bounds.height - 1, width: bounds.width, height: 1).fill()
     }
