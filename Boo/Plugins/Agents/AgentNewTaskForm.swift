@@ -181,7 +181,8 @@ struct AgentNewTaskForm: View {
 /// Shows `AgentNewTaskForm` in a transient popover, like the workspace editor.
 @MainActor
 enum AgentNewTaskPopover {
-    private static weak var current: NSPopover?
+    /// Held strongly while it shows: nothing else keeps the popover alive.
+    private static var current: NSPopover?
     private static let delegate = Delegate()
 
     /// Opens the form under `rect` of `view` (the section header's "+").
@@ -207,9 +208,15 @@ enum AgentNewTaskPopover {
         popover.show(relativeTo: rect, of: view, preferredEdge: view.isFlipped ? .maxY : .minY)
     }
 
+    /// Closes the popover if it shows.
+    static func dismiss() { current?.close() }
+
     private final class Delegate: NSObject, NSPopoverDelegate {
         func popoverDidClose(_ notification: Notification) {
             MainActor.assumeIsolated {
+                if let popover = notification.object as? NSPopover, popover === AgentNewTaskPopover.current {
+                    AgentNewTaskPopover.current = nil
+                }
                 let state = AgentCrewUIState.shared
                 state.newTaskInPopover = false
                 if state.composer == .newTask { state.close() }

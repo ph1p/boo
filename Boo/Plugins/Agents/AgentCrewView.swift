@@ -130,6 +130,19 @@ final class AgentCrewUIState: ObservableObject {
         text = ""
         note = nil
         isBusy = false
+        // Closing from elsewhere (a keypress, another composer) takes the popover too.
+        if newTaskInPopover, self === Self.shared { AgentNewTaskPopover.dismiss() }
+    }
+
+    /// Folds or unfolds a workspace group; a folded group drops the selection
+    /// it hides, so the keys never act on a row that isn't shown.
+    func setCollapsed(_ group: CrewGroup, _ collapsed: Bool) {
+        if collapsed {
+            collapsedGroups.insert(group.id)
+            if group.rows.contains(where: { $0.id == selection }) { selection = nil }
+        } else {
+            collapsedGroups.remove(group.id)
+        }
     }
 
     /// The row after (or before) the selected one, wrapping at neither end.
@@ -216,9 +229,10 @@ struct AgentCrewView: View {
 
     // MARK: Grouping
 
-    /// Waits on the user: a prompt, a question or an error.
+    /// Waits on the user: a prompt, a question or an error. An agent without
+    /// hooks is left out: its state is a guess from its process.
     nonisolated static func needsYou(_ row: AgentCrewRow) -> Bool {
-        !row.isStopped && (row.state == .needsInput || row.state == .error)
+        !row.isStopped && row.hasHooks && (row.state == .needsInput || row.state == .error)
     }
 
     /// Rows by workspace: the active one first, then by `order`, then agents
@@ -410,14 +424,7 @@ struct AgentCrewView: View {
     private func groupHeader(_ group: CrewGroup, first: Bool) -> some View {
         let collapsed = state.collapsedGroups.contains(group.id)
         let hovered = hoveredGroup == group.id
-        return Button(action: {
-            if collapsed {
-                state.collapsedGroups.remove(group.id)
-            } else {
-                state.collapsedGroups.insert(group.id)
-                if group.rows.contains(where: { $0.id == state.selection }) { state.selection = nil }
-            }
-        }) {
+        return Button(action: { state.setCollapsed(group, !collapsed) }) {
             HStack(spacing: 8) {
                 groupIcon(group).frame(width: badgeSide)
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
@@ -453,9 +460,7 @@ struct AgentCrewView: View {
         .help(collapsed ? "Show \(group.title)'s agents" : "Hide \(group.title)'s agents")
         .accessibilityLabel("\(group.title), \(group.rows.count) agents, \(collapsed ? "collapsed" : "expanded")")
         .contextMenu {
-            Button(collapsed ? "Expand" : "Collapse") {
-                if collapsed { state.collapsedGroups.remove(group.id) } else { state.collapsedGroups.insert(group.id) }
-            }
+            Button(collapsed ? "Expand" : "Collapse") { state.setCollapsed(group, !collapsed) }
             Divider()
             if activeOnly {
                 Button("Show All Workspaces", action: onShowAll)
@@ -575,7 +580,8 @@ struct AgentCrewView: View {
     private var inlineNewTask: some View {
         AgentNewTaskForm(
             agents: agents, workspaceName: activeWorkspaceName, onStartHere: onStartHere, onStartTask: onStartTask,
-            onDone: { state.close() }
+            // A worktree start finishes later: close only the form it came from.
+            onDone: { if state.composer == .newTask { state.close() } }
         )
         .frame(maxWidth: .infinity)
         .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(textColor.opacity(0.05)))

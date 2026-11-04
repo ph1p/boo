@@ -77,7 +77,7 @@ extension AgentsPlugin {
     /// as stopped rows: after a restart the workspaces come back but the agents
     /// don't, and the work still needs a Review, Merge or Discard.
     static func stoppedTaskRows(
-        workspaces: [Workspace], live: Set<UUID>,
+        workspaces: [Workspace], live: Set<UUID>, order: [UUID: Int] = workspaceOrder(),
         isTask: (String) -> Bool = { path in
             AgentWorktree.isUnderTaskRoot(path) && AgentWorktree.looksLikeWorktree(path)
         },
@@ -92,7 +92,7 @@ extension AgentsPlugin {
                 id: tab.id, handle: "", name: workspace.displayName, agent: "agent", state: .done,
                 detail: "agent not running", parent: nil, queued: 0, needsAttention: false, isTask: true,
                 isStopped: true, taskStatus: taskStatus(workspace.folderPath),
-                workspace: crewWorkspace(of: tab.id))
+                workspace: crewWorkspace(workspace, order: order[workspace.id] ?? 0))
         }
     }
 
@@ -120,9 +120,9 @@ extension AgentsPlugin {
     }
 
     /// Where a tab is, as the crew list groups it; nil outside Boo's windows.
-    static func crewWorkspace(of tabID: UUID) -> CrewWorkspace? {
+    static func crewWorkspace(of tabID: UUID, order: [UUID: Int]? = nil) -> CrewWorkspace? {
         guard let location = AgentInbox.locateInWindows(tabID) else { return nil }
-        return crewWorkspace(location.workspace, order: workspaceOrder()[location.workspace.id] ?? 0)
+        return crewWorkspace(location.workspace, order: (order ?? workspaceOrder())[location.workspace.id] ?? 0)
     }
 
     static func crewWorkspace(_ workspace: Workspace, order: Int) -> CrewWorkspace {
@@ -143,9 +143,10 @@ extension AgentsPlugin {
     }
 
     /// Agent sessions found by process in every workspace of every window.
-    static func allAgentSessions() -> [(session: WorkspaceAgentSession, workspace: CrewWorkspace?)] {
-        let order = workspaceOrder()
-        return WindowManager.shared.controllers.flatMap { controller in
+    static func allAgentSessions(
+        order: [UUID: Int] = workspaceOrder()
+    ) -> [(session: WorkspaceAgentSession, workspace: CrewWorkspace?)] {
+        WindowManager.shared.controllers.flatMap { controller in
             controller.appState.workspaces.flatMap { workspace in
                 let crew = crewWorkspace(workspace, order: order[workspace.id] ?? 0)
                 return controller.agentSessions(in: workspace).map { (session: $0, workspace: Optional(crew)) }
@@ -156,15 +157,17 @@ extension AgentsPlugin {
     /// Live agents (with Boo's hooks or found by process), then stopped task
     /// workspaces, across every window.
     static func allCrewRows(
-        sessions: [(session: WorkspaceAgentSession, workspace: CrewWorkspace?)] = allAgentSessions()
+        order: [UUID: Int] = workspaceOrder(),
+        sessions: [(session: WorkspaceAgentSession, workspace: CrewWorkspace?)]? = nil
     ) -> [AgentCrewRow] {
         let items = Array(AgentInbox.shared.items.values)
         let hooked = Set(items.map(\.tabID))
-        let unhooked = unhookedRows(sessions: sessions, hooked: hooked)
-        return crewRows(items: items, crew: AgentCrew.shared) + unhooked
+        let unhooked = unhookedRows(sessions: sessions ?? allAgentSessions(order: order), hooked: hooked)
+        return crewRows(
+            items: items, crew: AgentCrew.shared, workspace: { crewWorkspace(of: $0, order: order) }) + unhooked
             + stoppedTaskRows(
                 workspaces: WindowManager.shared.controllers.flatMap(\.appState.workspaces),
-                live: hooked.union(unhooked.map(\.id)))
+                live: hooked.union(unhooked.map(\.id)), order: order)
     }
 
     /// The setting that lists only the active workspace's agents.
@@ -177,8 +180,10 @@ extension AgentsPlugin {
         startCrewObserving()
         // Shown with no agents too: it is where one is started. Without an
         // agent CLI the tab's own empty state says what to install.
-        let agentSessions = Self.allAgentSessions()
-        let rows = Self.allCrewRows(sessions: agentSessions)
+        // One pass over the windows' workspaces per refresh, shared by every row.
+        let order = Self.workspaceOrder()
+        let agentSessions = Self.allAgentSessions(order: order)
+        let rows = Self.allCrewRows(order: order, sessions: agentSessions)
         let activeID = actions?.activeWorkspaceID?()
         let activeOnly = Self.crewActiveOnly
         let agents = AgentKind.taskKinds.filter { installedAgents.contains($0) }
@@ -188,7 +193,7 @@ extension AgentsPlugin {
         for entry in agentSessions { sessions[entry.session.tabID] = entry.session.agent }
         // Counts what needs the user everywhere, also in strict mode: a question
         // in another workspace still waits. An unread answer is not waiting.
-        let waiting = rows.filter { !$0.isStopped && ($0.state == .needsInput || $0.state == .error) }.count
+        let waiting = rows.filter(AgentCrewView.needsYou).count
         let shown = activeOnly ? rows.filter { $0.workspace?.id == activeID }.count : rows.count
         let activeName = activeID.flatMap { id in
             WindowManager.shared.controllers.lazy.flatMap(\.appState.workspaces).first { $0.id == id }?.displayName
