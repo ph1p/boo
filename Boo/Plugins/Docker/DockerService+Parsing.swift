@@ -127,28 +127,4 @@ extension DockerService {
         }
         return parts.joined(separator: ", ")
     }
-
-    /// Parse CLI tab-separated output (used for remote containers via SSH).
-    static func parseCLIContainers(
-        _ output: String?
-    ) -> [Container] {
-        guard let output = output, !output.isEmpty else { return [] }
-        return output.split(separator: "\n").compactMap { line in
-            let parts = line.split(separator: "\t", maxSplits: 5)
-                .map(String.init)
-            guard parts.count >= 5 else { return nil }
-            let stateStr = parts[4].lowercased()
-            let state =
-                Container.ContainerState(rawValue: stateStr) ?? .unknown
-            return Container(
-                id: String(parts[0].prefix(12)),
-                name: parts[1],
-                image: parts[2],
-                status: parts[3],
-                state: state,
-                ports: parts.count > 5 ? parts[5] : "",
-                createdAt: nil
-            )
-        }
-    }
 }

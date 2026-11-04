@@ -35,9 +35,4 @@ struct DensityMetrics {
             fontSize = 12
         }
     }
-
-    /// Whether animations should be used (respects reduced motion preference).
-    static var shouldAnimate: Bool {
-        !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
-    }
 }

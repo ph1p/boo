@@ -507,44 +507,6 @@ final class DockerService: ObservableObject, @unchecked Sendable {
         "docker exec -it \(shellEscape(container.name)) sh\r"
     }
 
-    // MARK: - Remote Docker
-
-    /// List containers on a remote host via SSH.
-    static func remoteContainers(
-        host: String, completion: @escaping @Sendable ([Container]) -> Void
-    ) {
-        DispatchQueue.global(qos: .utility).async {
-            let fmt =
-                "{{.ID}}\\t{{.Names}}\\t{{.Image}}"
-                + "\\t{{.Status}}\\t{{.State}}\\t{{.Ports}}"
-            let output = runSSH(
-                args: [
-                    "-o", "ConnectTimeout=3",
-                    "-o", "BatchMode=yes",
-                    host,
-                    "docker ps -a --format '\(fmt)'"
-                ])
-            let containers = parseCLIContainers(output)
-            DispatchQueue.main.async { completion(containers) }
-        }
-    }
-
-    /// Run a Docker command on a remote host.
-    static func remoteDockerCommand(
-        host: String, args: [String], completion: (@Sendable () -> Void)? = nil
-    ) {
-        let cmd = "docker " + args.joined(separator: " ")
-        DispatchQueue.global(qos: .utility).async {
-            _ = runSSH(
-                args: [
-                    "-o", "ConnectTimeout=3",
-                    "-o", "BatchMode=yes",
-                    host, cmd
-                ])
-            DispatchQueue.main.async { completion?() }
-        }
-    }
-
     // MARK: - Private
 
     private func postAction(
@@ -561,18 +523,4 @@ final class DockerService: ObservableObject, @unchecked Sendable {
             }
         }
     }
-
-    // MARK: - CLI Process (for remote only)
-
-    /// Runs via the shared capture helper: it drains stdout while the child runs
-    /// (a `docker ps` on a busy host can exceed the ~64KB pipe buffer, which
-    /// deadlocks the `waitUntilExit()`-then-read shape) and bounds the wait, so a
-    /// wedged `ssh` can't pin this utility thread forever.
-    private static func runSSH(args: [String]) -> String? {
-        guard let result = Subprocess.capture(RemoteExplorer.sshProcess(args), timeout: 10),
-            result.status == 0
-        else { return nil }
-        return result.stdout
-    }
-
 }

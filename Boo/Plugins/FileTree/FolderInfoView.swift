@@ -94,12 +94,6 @@ final class FolderInfoCache: ObservableObject {
         insertionOrder.removeAll { $0 == path }
         generation &+= 1
     }
-
-    func invalidateAll() {
-        cache.removeAll()
-        insertionOrder.removeAll()
-        generation &+= 1
-    }
 }
 
 // MARK: - Folder Info View
