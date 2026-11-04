@@ -225,9 +225,6 @@ import SwiftUI
     }
     var undoStack: [ClosedItem] = []
 
-    /// Keep closed sessions alive briefly so undo can restore them
-    private var sessionCacheTimer: Timer?
-
     var activeRemoteSession: RemoteSessionType? {
         coordinator?.activeRemoteSession
     }

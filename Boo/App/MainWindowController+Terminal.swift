@@ -317,21 +317,9 @@ extension MainWindowController {
             booLog(.debug, .terminal, "openFileInNewPane: splitPane returned nil — skipped")
             return
         }
-        workspace.activePaneID = newID
-        updateSplits(workspace.splitTree, fadingIn: newID)
-        saveSession()
-
-        DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
-            if let pv = self.paneViews[newID] {
-                pv.startActiveSession()
-                self.window?.makeFirstResponder(pv.ghosttyView)
-            }
-            self.refreshAllSurfaces()
-            self.syncCoordinatorPaneViews()
-            self.updatePaneCloseButtons()
+        activateNewSplitPane(newID, in: workspace) { [weak self] in
             // Now open the file in the new pane (which is now active)
-            self.handleOpenTab(.file(path: path))
+            self?.handleOpenTab(.file(path: path))
         }
     }
 
@@ -349,6 +337,14 @@ extension MainWindowController {
             // Re-init with the chosen directory
             _ = pane.addTab(workingDirectory: path)
         }
+        activateNewSplitPane(newID, in: workspace) { [weak self] in
+            self?.refreshStatusBar()
+        }
+    }
+
+    /// Focus a freshly split pane, then start its session on the next runloop turn
+    /// (its PaneView exists only after `updateSplits`) and run `then`.
+    private func activateNewSplitPane(_ newID: UUID, in workspace: Workspace, then: @escaping () -> Void) {
         workspace.activePaneID = newID
         updateSplits(workspace.splitTree, fadingIn: newID)
         saveSession()
@@ -362,7 +358,7 @@ extension MainWindowController {
             self.refreshAllSurfaces()
             self.syncCoordinatorPaneViews()
             self.updatePaneCloseButtons()
-            self.refreshStatusBar()
+            then()
         }
     }
 
