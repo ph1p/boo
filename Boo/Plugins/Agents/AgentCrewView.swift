@@ -100,8 +100,8 @@ final class AgentCrewUIState: ObservableObject {
 /// a question or error first, then the ones at work, then finished turns.
 /// Behaves like a source list: click or ↑/↓ selects, double-click or Return shows the agent,
 /// Space writes it a message, Delete offers to discard a task, Escape closes
-/// the open field. Messages, new
-/// tasks and discards are typed or confirmed in place, not in dialogs.
+/// the open field. Messages, new tasks and discards are typed or confirmed in place,
+/// not in dialogs.
 struct AgentCrewView: View {
     let rows: [AgentCrewRow]
     let fontScale: SidebarFontScale

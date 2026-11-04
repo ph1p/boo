@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 
 /// The Crew section: every agent in every window with its handle, grouped by
-/// what it needs from the user, plus the actions that used to hide in menus.
+/// what it needs from the user, plus its actions.
 extension AgentsPlugin {
     func startCrewObserving() {
         guard crewObservers.isEmpty else { return }

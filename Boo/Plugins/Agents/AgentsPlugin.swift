@@ -92,11 +92,7 @@ final class AgentsPlugin: BooPluginProtocol {
     static let scanTTL: TimeInterval = 15
 
     /// Memoized `findAgentProjectRoot` result, keyed on the cwd that produced it.
-    ///
-    /// The config and worktree scans run back-to-back from the same three call sites
-    /// and each used to dispatch its own 20-level x 4-marker `fileExists` walk for the
-    /// identical cwd. One resolution now feeds both, and a cwd cycling through focus
-    /// repeatedly — the common case — pays for none.
+    /// Config and worktree scans share it, so a repeated cwd skips the `fileExists` walk.
     private var projectRootCache: (cwd: String, root: String)?
 
     /// Resolve the project root for `cwd` and hand it to `body` on the main actor.
@@ -214,15 +210,13 @@ final class AgentsPlugin: BooPluginProtocol {
         guard let start = agentStartTime else { return }
         context.setData(AnyHashable(activeAgent?.kind.rawValue ?? "ai"), forKey: "ai-agent.kind")
         context.setData(AnyHashable(activeAgent?.displayName ?? "Agent"), forKey: "ai-agent.name")
-        // Publish the start time, not elapsed seconds: enriched data is part of
-        // TerminalContext equality, so a ticking value forced a full sidebar
-        // rebuild on every cycle. Consumers derive the runtime from this.
+        // Start time, not elapsed seconds: enriched data is part of TerminalContext
+        // equality, so a ticking value would rebuild the sidebar every cycle.
         context.setData(AnyHashable(Int(start.timeIntervalSince1970)), forKey: "ai-agent.startedAt")
     }
 
     /// Launch an agent CLI in a new tab. When `resumeSessionID` is set, resume that
-    /// session instead of starting a fresh one — the "Resume" affordance in Open
-    /// Sessions was previously starting a brand-new session and losing the history.
+    /// session instead of starting a fresh one.
     func startAgent(kind: AgentKind, cwd: String? = nil, resumeSessionID: String? = nil) {
         let cwd = cwd ?? currentCwd ?? activeAgent?.cwd ?? "~"
         var command: String
