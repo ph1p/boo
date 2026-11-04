@@ -255,8 +255,8 @@ struct AgentReviewView: View {
             Button("Refresh") { model.reload() }.buttonStyle(.themed)
                 .keyboardShortcut("r", modifiers: .command)
             if model.isWorktree {
-                Button("Merge…") { model.merge() }.buttonStyle(.themed)
-                Button("Discard…") { model.discard() }.buttonStyle(.themed)
+                Button("Merge…") { model.merge() }.buttonStyle(.themed(.primary))
+                Button("Discard…") { model.discard() }.buttonStyle(.themed(.destructive))
             }
         }
         .padding(.horizontal, 14).padding(.vertical, 8)

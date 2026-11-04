@@ -4,43 +4,69 @@ import SwiftUI
 // with the system accent and grey bezels regardless of the terminal theme.
 // They read `\.tokens`, so they repaint with the host's theme switches.
 
-/// Compact bezel button: a control-fill capsule that brightens on hover.
-/// `prominent` marks the primary action with the theme accent.
+/// Boo's button: one look for every action, tinted by the theme.
+/// - `primary`: accent text on an accent wash, the main action ("New Agent", "Start", "Merge").
+/// - `secondary`: a quiet bezel for the rest ("Cancel", "Refresh").
+/// - `subtle`: no fill until hovered, for icon and row actions.
+/// - `destructive`: the error tint, for actions that throw work away.
+/// `small` fits inline rows and forms, `large` is a full call to action.
+/// A label's own font wins, so a sidebar can keep its scaled font.
 struct ThemedButtonStyle: ButtonStyle {
-    var prominent = false
+    enum Variant { case primary, secondary, subtle, destructive }
+    enum Size { case small, large }
+
+    var variant: Variant = .secondary
+    var size: Size = .small
+    /// Stretch to the available width, label centred.
+    var fullWidth = false
 
     func makeBody(configuration: Configuration) -> some View {
-        StyledButton(configuration: configuration, prominent: prominent)
+        StyledButton(configuration: configuration, variant: variant, size: size, fullWidth: fullWidth)
     }
 
     private struct StyledButton: View {
         let configuration: Configuration
-        let prominent: Bool
+        let variant: Variant
+        let size: Size
+        let fullWidth: Bool
         @Environment(\.tokens) private var t
         @Environment(\.isEnabled) private var isEnabled
         @State private var hovered = false
 
         var body: some View {
+            let shape = RoundedRectangle(cornerRadius: size == .large ? 9 : 6, style: .continuous)
             configuration.label
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(prominent ? t.accent : t.text)
-                .padding(.horizontal, 9)
-                .frame(height: 22)
-                .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(fill))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(t.separator, lineWidth: 0.5)
-                )
+                .font(.system(size: size == .large ? 12 : 11, weight: .medium))
+                .lineLimit(1)
+                .foregroundStyle(foreground)
+                .padding(.horizontal, size == .large ? 12 : 9)
+                .frame(maxWidth: fullWidth ? .infinity : nil)
+                .frame(minHeight: size == .large ? 32 : 22)
+                .background(shape.fill(fill))
+                .overlay(shape.strokeBorder(variant == .secondary ? t.separator : .clear, lineWidth: 0.5))
                 .opacity(isEnabled ? 1 : 0.45)
-                .contentShape(Rectangle())
+                .contentShape(shape)
                 .onHover { hovered = $0 && isEnabled }
         }
 
-        private var fill: Color {
-            if prominent {
-                // Deliberate raw alpha: accent fill stepping through the hover band.
-                return t.accent.opacity(configuration.isPressed ? 0.3 : hovered ? 0.22 : 0.15)
+        private var foreground: Color {
+            switch variant {
+            case .primary: return t.accent
+            case .destructive: return t.error
+            case .secondary: return t.text
+            case .subtle: return hovered ? t.text : t.textSecondary
             }
-            return configuration.isPressed ? t.controlFill : hovered ? t.hoverFill : t.subtleFill
+        }
+
+        private var fill: Color {
+            let pressed = configuration.isPressed
+            switch variant {
+            // Deliberate raw alpha: a tinted wash stepping through the hover band.
+            case .primary: return t.accent.opacity(pressed ? 0.3 : hovered ? 0.22 : 0.14)
+            case .destructive: return t.error.opacity(pressed ? 0.3 : hovered ? 0.22 : 0.12)
+            case .secondary: return pressed ? t.controlFill : hovered ? t.hoverFill : t.subtleFill
+            case .subtle: return pressed ? t.controlFill : hovered ? t.hoverFill : .clear
+            }
         }
     }
 }
@@ -139,7 +165,12 @@ struct ThemedFieldChrome: ViewModifier {
 
 extension ButtonStyle where Self == ThemedButtonStyle {
     static var themed: ThemedButtonStyle { ThemedButtonStyle() }
-    static var themedProminent: ThemedButtonStyle { ThemedButtonStyle(prominent: true) }
+    static var themedProminent: ThemedButtonStyle { ThemedButtonStyle(variant: .primary) }
+    static func themed(
+        _ variant: ThemedButtonStyle.Variant, size: ThemedButtonStyle.Size = .small, fullWidth: Bool = false
+    ) -> ThemedButtonStyle {
+        ThemedButtonStyle(variant: variant, size: size, fullWidth: fullWidth)
+    }
 }
 
 extension ButtonStyle where Self == ThemedLinkButtonStyle {

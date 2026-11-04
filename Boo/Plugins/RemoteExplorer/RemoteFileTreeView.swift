@@ -85,8 +85,7 @@ struct RemoteConnectionFailedView: View {
                     }
                     Button("Retry") { connect(interactive: false) }
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
+                .buttonStyle(.themed(.secondary))
             }
 
             Spacer()

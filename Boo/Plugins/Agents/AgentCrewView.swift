@@ -27,9 +27,11 @@ struct AgentCrewRow: Identifiable, Equatable {
     var updatedAt: Double = 0
     /// A task's commits, changed files and whether it merges.
     var taskStatus: AgentTaskStatus.Summary?
+    /// The agent's working folder, for the line under the name.
+    var folder: String?
 
     var key: String {
-        "\(id)|\(handle)|\(name)|\(state.rawValue)|\(detail ?? "")|\(parent ?? "")|\(queued)|\(needsAttention)|\(isTask)|\(isReachable)|\(isStopped)|\(asksQuestion)|\(updatedAt)|\(taskStatus?.text ?? "")"
+        "\(id)|\(handle)|\(name)|\(state.rawValue)|\(detail ?? "")|\(parent ?? "")|\(queued)|\(needsAttention)|\(isTask)|\(isReachable)|\(isStopped)|\(asksQuestion)|\(updatedAt)|\(taskStatus?.text ?? "")|\(folder ?? "")"
     }
 }
 
@@ -67,6 +69,21 @@ final class AgentCrewUIState: ObservableObject {
         UserDefaults.standard.string(forKey: "crewTaskAgent").flatMap(AgentKind.init(rawValue:)) ?? .claudeCode
     {
         didSet { UserDefaults.standard.set(taskAgent.rawValue, forKey: "crewTaskAgent") }
+    }
+
+    /// Where a new agent starts.
+    enum Place: String {
+        /// A new terminal tab in the active workspace; the prompt is optional.
+        case tab
+        /// Its own worktree and branch of the active repository.
+        case worktree
+    }
+
+    /// Where the next new agent starts: the last one picked, app-wide.
+    @Published var taskPlace: Place =
+        UserDefaults.standard.string(forKey: "crewTaskPlace").flatMap(Place.init(rawValue:)) ?? .tab
+    {
+        didSet { UserDefaults.standard.set(taskPlace.rawValue, forKey: "crewTaskPlace") }
     }
 
     func open(_ composer: Composer) {
@@ -121,12 +138,16 @@ struct AgentCrewView: View {
     var onStartTask: (String, AgentKind, @escaping @MainActor (String?) -> Void) -> Void = { _, _, _ in }
     /// The agents installed on this Mac, in picker order: a new task can start any of them.
     var agents: [AgentKind] = [.claudeCode]
-    /// Starts an agent in the active terminal tab (the list is empty).
-    var onStartHere: (AgentKind) -> Void = { _ in }
+    /// Starts an agent in a new terminal tab, with the prompt when one was typed.
+    var onStartHere: (AgentKind, String) -> Void = { _, _ in }
     /// Allow (Return) or Deny (Escape) a permission prompt without opening the tab.
     var onRespond: (AgentCrewRow, AgentInbox.Response) -> Void = { _, _ in }
     /// Restarts a stopped task's agent on its last conversation (`claude --continue`).
     var onResume: (AgentCrewRow) -> Void = { _ in }
+    /// Agent sessions by tab, for the Timeline, Transcript and Session ID menu items.
+    var sessions: [UUID: AgentSession] = [:]
+    var onShowTimeline: (AgentCrewRow, AgentSession) -> Void = { _, _ in }
+    var onOpenTranscript: (String) -> Void = { _ in }
 
     @ObservedObject private var state = AgentCrewUIState.shared
     @State private var hoveredID: UUID?
@@ -195,8 +216,15 @@ struct AgentCrewView: View {
                     if state.composer == .discard(row.id) { discardConfirm(row) }
                 }
             }
-            if rows.isEmpty && !agents.isEmpty { startHere }
-            newTask
+            if rows.isEmpty {
+                Text("No agents running")
+                    .font(fontScale.font(.sm))
+                    .foregroundStyle(mutedColor)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 12)
+                    .padding(.top, 8)
+            }
+            if !agents.isEmpty { newTask }
         }
         .focusable()
         .focused($listFocused)
@@ -299,79 +327,54 @@ struct AgentCrewView: View {
         }
     }
 
-    /// No agent runs anywhere: start one in this tab, or a task below.
-    private var startHere: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("No agents running")
-                .font(fontScale.font(.sm))
-                .foregroundStyle(mutedColor)
-            HStack(spacing: 6) {
-                ForEach(agents, id: \.self) { kind in
-                    Button("Start \(kind.shortName)") { onStartHere(kind) }
-                        .help("Start \(kind.displayName) in the active terminal tab")
-                }
-            }
-            .controlSize(.small)
-        }
-        .padding(.horizontal, 12)
-        .padding(.top, 8)
-    }
-
     // MARK: Inline fields
 
+    /// The one way to start an agent, the same with or without agents running:
+    /// a button that opens the form in place.
     private var newTask: some View {
         Group {
             if state.composer == .newTask {
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack(spacing: 6) {
-                        Text("New agent task")
-                            .font(fontScale.font(.xs).weight(.semibold))
-                            .foregroundStyle(mutedColor)
-                        Spacer(minLength: 4)
-                        if agents.count > 1 { agentPicker }
+                VStack(alignment: .leading, spacing: 6) {
+                    if agents.count > 1 { agentPicker }
+                    placePicker
+                }
+                .padding(.horizontal, 12)
+                .padding(.top, 8)
+                composerField(
+                    placeholder: state.taskPlace == .tab
+                        ? "What should \(startAgent.shortName) do? (optional)"
+                        : "What should \(startAgent.shortName) do?",
+                    hint: "↩ start · esc cancel",
+                    button: "Start",
+                    allowsEmpty: state.taskPlace == .tab
+                ) { prompt in
+                    if state.taskPlace == .tab {
+                        onStartHere(startAgent, prompt)
+                        state.close()
+                        return
                     }
-                    .padding(.leading, 25)
-                    .padding(.trailing, 12)
-                    .padding(.top, 8)
-                    composerField(
-                        placeholder: "What should \(startAgent.shortName) do?",
-                        hint: "Own worktree and branch of the active repository · ↩ start",
-                        button: "Start"
-                    ) { prompt in
-                        state.isBusy = true
-                        state.note = nil
-                        onStartTask(prompt, startAgent) { error in
-                            state.isBusy = false
-                            if let error {
-                                state.note = error
-                                state.noteIsWarning = true
-                            } else {
-                                state.close()
-                            }
+                    state.isBusy = true
+                    state.note = nil
+                    onStartTask(prompt, startAgent) { error in
+                        state.isBusy = false
+                        if let error {
+                            state.note = error
+                            state.noteIsWarning = true
+                        } else {
+                            state.close()
                         }
                     }
                 }
             } else {
                 Button(action: { state.open(.newTask) }) {
-                    HStack(spacing: 8) {
-                        Image(systemName: "plus")
-                            .font(.system(size: fontScale.size(.sm), weight: .semibold))
-                        Text("New Agent Task")
-                            .font(fontScale.font(.sm).weight(.medium))
-                    }
-                    .foregroundStyle(accentColor)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 8)
-                    .background(
-                        RoundedRectangle(cornerRadius: 10, style: .continuous).fill(accentColor.opacity(0.12))
-                    )
-                    .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    Label("New Agent", systemImage: "plus")
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.themed(.primary, size: .large, fullWidth: true))
+                .font(fontScale.font(.sm).weight(.medium))
                 .padding(.horizontal, 8)
                 .padding(.top, 6)
                 .padding(.bottom, 8)
-                .help("Start an agent on its own worktree of the active workspace's repository")
+                .help("Start an agent in a new tab or on its own worktree")
             }
         }
     }
@@ -388,19 +391,32 @@ struct AgentCrewView: View {
         }
         .pickerStyle(.segmented)
         .labelsHidden()
-        .controlSize(.mini)
-        .fixedSize()
-        .help("The agent this task starts")
+        .controlSize(.small)
+        .frame(maxWidth: .infinity)
+        .help("The agent to start")
+    }
+
+    /// A new tab right away, or a worktree and branch of its own.
+    private var placePicker: some View {
+        Picker("Where", selection: $state.taskPlace) {
+            Text("New tab").tag(AgentCrewUIState.Place.tab)
+            Text("Worktree").tag(AgentCrewUIState.Place.worktree)
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .controlSize(.small)
+        .frame(maxWidth: .infinity)
+        .help("New tab: starts in the active folder. Worktree: its own branch of the active repository.")
     }
 
     /// A text field in place of a dialog: Return submits, Escape cancels.
     private func composerField(
-        placeholder: String, hint: String, button: String, submit: @escaping (String) -> Void
+        placeholder: String, hint: String, button: String, allowsEmpty: Bool = false,
+        submit: @escaping (String) -> Void
     ) -> some View {
-        let send = {
-            let text = state.text.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !text.isEmpty && !state.isBusy { submit(text) }
-        }
+        let text = state.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let canSend = (allowsEmpty || !text.isEmpty) && !state.isBusy
+        let send = { if canSend { submit(text) } }
         return VStack(alignment: .leading, spacing: 4) {
             // A plain field in its own box, like the file filter: the bezeled
             // style draws a square system border that clashes with the sidebar.
@@ -435,18 +451,20 @@ struct AgentCrewView: View {
                 Text(hint)
                     .font(fontScale.font(.xs))
                     .foregroundStyle(mutedColor.opacity(0.8))
-                    .lineLimit(2)
+                    .lineLimit(1)
+                    .layoutPriority(-1)
                 Spacer(minLength: 4)
                 if state.isBusy { ProgressView().controlSize(.mini) }
                 Button("Cancel") { state.close() }
+                    .buttonStyle(.themed(.secondary))
                 Button(button, action: send)
-                    .buttonStyle(.borderedProminent)
-                    .disabled(state.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || state.isBusy)
+                    .buttonStyle(.themed(.primary))
+                    .disabled(!canSend)
             }
-            .controlSize(.small)
+            .font(fontScale.font(.sm))
+            .fixedSize(horizontal: false, vertical: true)
         }
         .padding(.horizontal, 12)
-        .padding(.leading, 13)
         .padding(.vertical, 4)
     }
 
@@ -460,16 +478,17 @@ struct AgentCrewView: View {
                 Spacer(minLength: 0)
                 Button("Cancel") { state.close() }
                     .keyboardShortcut(.cancelAction)
+                    .buttonStyle(.themed(.secondary))
                 Button("Discard", role: .destructive) {
                     state.close()
                     onDiscard(row)
                 }
+                .buttonStyle(.themed(.destructive))
                 .disabled(state.note == nil)
             }
-            .controlSize(.small)
+            .font(fontScale.font(.sm))
         }
         .padding(.horizontal, 12)
-        .padding(.leading, 13)
         .padding(.vertical, 4)
         .onAppear {
             onDiscardSummary(row) { text, losesWork in
@@ -506,6 +525,14 @@ struct AgentCrewView: View {
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
+    /// Shown when nothing else is: the state and the folder, so every row has
+    /// two lines and the name never sits alone.
+    static func fallbackSubtitle(_ row: AgentCrewRow) -> String {
+        let state = row.isStopped ? "Stopped" : stateLabel(row.state)
+        guard let folder = row.folder, !folder.isEmpty else { return state }
+        return "\(state) · \((folder as NSString).lastPathComponent)"
+    }
+
     private static func rowHelp(_ row: AgentCrewRow) -> String {
         if !row.isReachable {
             return "Runs in a tab outside Boo's windows, so Boo can't show it. Messages still reach it."
@@ -526,12 +553,18 @@ struct AgentCrewView: View {
         let badge = badgeSide
         // A helper sits one step in, its guide line under the parent's badge.
         let indent = badge + 10
-        // A click selects the row and shows the agent's tab, like a sidebar;
-        // ↑/↓ and ↩ do the same from the keyboard.
+        // A click selects the row and shows the agent with the keyboard in its
+        // terminal; a stopped task has no terminal, so it opens the review.
+        // Focusing the list here would take the keyboard back from the terminal.
         return Button(action: {
             state.selection = row.id
-            listFocused = true
-            if row.isReachable { onJump(row) }
+            if row.isStopped && row.isTask && row.isReachable {
+                onReview(row)
+            } else if row.isReachable {
+                onJump(row)
+            } else {
+                listFocused = true
+            }
         }) {
             HStack(alignment: .top, spacing: 10) {
                 stateIcon(row)
@@ -564,8 +597,8 @@ struct AgentCrewView: View {
                         // so nothing shifts under the pointer.
                         .opacity(showsActions ? 0 : 1)
                     }
-                    if let subtitle = Self.subtitle(row, nested: depth > 0) {
-                        Text(subtitle)
+                    do {
+                        Text(Self.subtitle(row, nested: depth > 0) ?? Self.fallbackSubtitle(row))
                             .font(fontScale.font(.sm))
                             .foregroundStyle(mutedColor)
                             .lineLimit(2)
@@ -582,12 +615,13 @@ struct AgentCrewView: View {
                     if row.state == .needsInput && row.isReachable && !row.asksQuestion {
                         HStack(spacing: 6) {
                             Button("Allow") { onRespond(row, .approve) }
-                                .buttonStyle(.borderedProminent)
+                                .buttonStyle(.themed(.primary))
                                 .help("Answer the prompt with its default (Return), without opening the tab")
                             Button("Deny") { onRespond(row, .deny) }
+                                .buttonStyle(.themed(.secondary))
                                 .help("Decline the prompt (Escape); the agent waits for new instructions")
                         }
-                        .controlSize(.small)
+                        .font(fontScale.font(.sm))
                         .padding(.top, 3)
                     }
                 }
@@ -652,13 +686,27 @@ struct AgentCrewView: View {
                 Button("Merge Worktree…") { onMerge(row) }
                 Button("Discard Worktree…") { state.open(.discard(row.id)) }
             }
+            if let session = sessions[row.id] {
+                Divider()
+                if session.sessionID != nil {
+                    Button("Show Timeline") { onShowTimeline(row, session) }
+                }
+                if let transcript = session.transcriptPath {
+                    Button("Open Transcript") { onOpenTranscript(transcript) }
+                }
+            }
             if !row.isStopped {
                 Divider()
-                Button("Copy Handle") {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(row.handle, forType: .string)
+                Button("Copy Handle") { Self.copy(row.handle) }
+                if let id = sessions[row.id]?.sessionID {
+                    Button("Copy Session ID") { Self.copy(id) }
                 }
             }
         }
+    }
+
+    private static func copy(_ text: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
     }
 }

@@ -60,7 +60,7 @@ extension AgentsPlugin {
                 parent: fields["parent"] as? String, queued: fields["queued"] as? Int ?? 0,
                 needsAttention: item.needsAttention, isTask: isTask(item.tabID),
                 isReachable: isReachable(item.tabID), asksQuestion: item.asksQuestion,
-                updatedAt: item.updatedAt.timeIntervalSince1970, taskStatus: taskStatus(item))
+                updatedAt: item.updatedAt.timeIntervalSince1970, taskStatus: taskStatus(item), folder: item.cwd)
         }.sorted { lhs, rhs in
             // Parents first, each helper right below the agent that started it.
             func order(_ row: AgentCrewRow) -> (Int, Int) {
@@ -112,6 +112,9 @@ extension AgentsPlugin {
         let agents = AgentKind.taskKinds.filter { installedAgents.contains($0) }
         guard !rows.isEmpty || !agents.isEmpty else { return nil }
         // Counts the "Needs you" group only: an unread answer is bold under Done, not waiting.
+        // The active workspace's agent sessions by tab, for Timeline and Transcript.
+        var sessions: [UUID: AgentSession] = [:]
+        for session in actions?.workspaceAgentSessions?() ?? [] { sessions[session.tabID] = session.agent }
         let waiting = rows.filter { !$0.isStopped && ($0.state == .needsInput || $0.state == .error) }.count
         return SidebarSection(
             id: "agents.crew",
@@ -139,12 +142,23 @@ extension AgentsPlugin {
                         Self.startTask(prompt: prompt, agent: agent, completion: completion)
                     },
                     agents: agents,
-                    onStartHere: { [weak self] kind in self?.startAgent(kind: kind) },
+                    onStartHere: { [weak self] kind, prompt in self?.startAgent(kind: kind, prompt: prompt) },
                     onRespond: { row, response in Self.perform(response == .approve ? .allow : .deny, on: row) },
-                    onResume: { Self.perform(.resume, on: $0) })),
+                    onResume: { Self.perform(.resume, on: $0) },
+                    sessions: sessions,
+                    onShowTimeline: { [weak self] _, session in
+                        guard let id = session.sessionID else { return }
+                        let folder = (session.cwd as NSString).lastPathComponent
+                        self?.actions?.openAgentTimeline?(id, "\(session.kind.shortName) — \(folder)")
+                    },
+                    onOpenTranscript: { [weak self] path in
+                        self?.actions?.handle(DSLAction(type: "open", path: path, command: nil, text: nil))
+                    })),
             // Sized to its rows, so every agent shows without scrolling.
             prefersOuterScrollView: false,
-            generation: SidebarSection.generation(for: rows.map(\.key) + installedAgents.map(\.rawValue).sorted()))
+            generation: SidebarSection.generation(
+                for: rows.map(\.key) + installedAgents.map(\.rawValue).sorted()
+                    + sessions.map { "\($0.key)=\($0.value.sessionID ?? "")" }.sorted()))
     }
 
     enum CrewAction: String {

@@ -1,70 +1,6 @@
 import AppKit
 import SwiftUI
 
-// MARK: - Agent Center Views
-
-struct AgentOpenSessionsView: View {
-    let sessions: [WorkspaceAgentSession]
-    let fontScale: SidebarFontScale
-    let textColor: Color
-    let mutedColor: Color
-    let accentColor: Color
-    let onSessionClicked: (WorkspaceAgentSession) -> Void
-    let onResume: (WorkspaceAgentSession) -> Void
-    let onCopySessionID: (WorkspaceAgentSession) -> Void
-    let onOpenTranscript: (WorkspaceAgentSession) -> Void
-    let onShowTimeline: (WorkspaceAgentSession) -> Void
-
-    @State private var hoveredSessionID: UUID?
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            ForEach(sessions) { session in
-                sessionRow(session)
-            }
-        }
-    }
-
-    private func sessionRow(_ session: WorkspaceAgentSession) -> some View {
-        let isHovered = hoveredSessionID == session.id
-        return Button(action: { onSessionClicked(session) }) {
-            HStack(spacing: 6) {
-                Circle()
-                    .fill(session.isFocused ? Tokens.current.success : accentColor.opacity(0.65))
-                    .frame(width: 7, height: 7)
-                Text(session.agent.kind.shortName)
-                    .font(fontScale.font(.base).weight(.semibold))
-                    .foregroundStyle(textColor)
-                    .lineLimit(1)
-                Text(session.agent.cwd)
-                    .font(fontScale.font(.xs))
-                    .foregroundStyle(mutedColor)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 7)
-            .background(isHovered ? accentColor.opacity(0.08) : Color.clear)
-        }
-        .buttonStyle(.plain)
-        .onHover { hovered in
-            hoveredSessionID = hovered ? session.id : nil
-        }
-        .contextMenu {
-            Button("Focus") { onSessionClicked(session) }
-            Button("Resume") { onResume(session) }
-            Divider()
-            Button("Copy Session ID") { onCopySessionID(session) }
-                .disabled(session.agent.sessionID == nil)
-            Button("Open Transcript") { onOpenTranscript(session) }
-                .disabled(session.agent.transcriptPath == nil)
-            Button("Show Timeline") { onShowTimeline(session) }
-                .disabled(session.agent.sessionID == nil || session.agent.kind != .claudeCode)
-        }
-    }
-}
-
 // MARK: - Config Section View
 
 struct ClaudeConfigView: View {
@@ -242,8 +178,7 @@ struct AgentCenterSettingsView: View {
                             Button("Open") {
                                 NSWorkspace.shared.open(URL(fileURLWithPath: file.path))
                             }
-                            .buttonStyle(.bordered)
-                            .controlSize(.mini)
+                            .buttonStyle(.themed(.secondary))
                         }
                     }
                 }
@@ -258,128 +193,6 @@ struct AgentCenterSettingsView: View {
         .clipShape(RoundedRectangle(cornerRadius: 7))
     }
 
-}
-
-// MARK: - Skills Section View
-
-struct ClaudeSkillsView: View {
-    let skills: [AgentsPlugin.AgentConfig.SkillEntry]
-    let fontScale: SidebarFontScale
-    let textColor: Color
-    let mutedColor: Color
-    let accentColor: Color
-    let onFileClicked: (String) -> Void
-    let onCopyPath: (String) -> Void
-    let onPasteSkill: (String) -> Void
-
-    @State private var hoveredItemID: UUID?
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            ForEach(skills) { skill in
-                skillRow(skill: skill)
-            }
-        }
-    }
-
-    private func skillRow(skill: AgentsPlugin.AgentConfig.SkillEntry) -> some View {
-        let isHovered = hoveredItemID == skill.id
-
-        return Button(action: { onPasteSkill(skill.name) }) {
-            HStack(spacing: 6) {
-                Text("/\(skill.name)")
-                    .font(fontScale.font(.base).weight(.medium))
-                    .foregroundStyle(accentColor)
-                    .lineLimit(1)
-
-                if !skill.description.isEmpty {
-                    Text(skill.description)
-                        .font(fontScale.font(.sm))
-                        .foregroundStyle(mutedColor)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                }
-
-                Spacer()
-            }
-            .frame(minHeight: 24)
-            .padding(.horizontal, 12)
-            .padding(.leading, 4)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .onHover { hovering in
-            hoveredItemID = hovering ? skill.id : nil
-        }
-        .background(isHovered ? mutedColor.opacity(0.08) : Color.clear)
-        .contextMenu {
-            Button("Open Skill") { onFileClicked(skill.path) }
-            Divider()
-            Button("Copy Path") { onCopyPath(skill.path) }
-            Button("Reveal in Finder") {
-                NSWorkspace.shared.selectFile(skill.path, inFileViewerRootedAtPath: "")
-            }
-        }
-    }
-}
-
-// MARK: - Changes Section View
-
-struct ClaudeChangesView: View {
-    let diffStats: [AgentsPlugin.DiffStatEntry]
-    let fontScale: SidebarFontScale
-    let textColor: Color
-    let mutedColor: Color
-    let onFileClicked: (String) -> Void
-    let onCopyPath: (String) -> Void
-    let onReferenceInAI: (String) -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            ForEach(diffStats) { entry in
-                fileRow(entry: entry)
-            }
-        }
-    }
-
-    private func fileRow(entry: AgentsPlugin.DiffStatEntry) -> some View {
-        Button(action: { onFileClicked(entry.fullPath) }) {
-            HStack(spacing: 6) {
-                HStack(spacing: 2) {
-                    Text("+\(entry.insertions)")
-                        .font(fontScale.font(.xs, design: .monospaced))
-                        .foregroundStyle(Tokens.current.success)
-                    Text("-\(entry.deletions)")
-                        .font(fontScale.font(.xs, design: .monospaced))
-                        .foregroundStyle(Tokens.current.error)
-                }
-                .frame(width: 56, alignment: .leading)
-
-                Text(entry.path)
-                    .font(fontScale.font(.base))
-                    .foregroundStyle(textColor)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-
-                Spacer()
-            }
-            .frame(height: 24)
-            .padding(.horizontal, 12)
-            .padding(.leading, 4)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .contextMenu {
-            Button("Reference in AI (@)") { onReferenceInAI(entry.path) }
-            Button("Open in Editor") { onFileClicked(entry.fullPath) }
-            Divider()
-            Button("Copy Path") { onCopyPath(entry.path) }
-            Button("Reveal in Finder") {
-                NSWorkspace.shared.selectFile(entry.fullPath, inFileViewerRootedAtPath: "")
-            }
-        }
-        .accessibilityLabel("\(entry.path): \(entry.insertions) insertions, \(entry.deletions) deletions")
-    }
 }
 
 // MARK: - Worktrees Section View

@@ -215,10 +215,15 @@ final class AgentsPlugin: BooPluginProtocol {
         context.setData(AnyHashable(Int(start.timeIntervalSince1970)), forKey: "ai-agent.startedAt")
     }
 
-    /// Launch an agent CLI in a new tab. When `resumeSessionID` is set, resume that
-    /// session instead of starting a fresh one.
-    func startAgent(kind: AgentKind, cwd: String? = nil, resumeSessionID: String? = nil) {
+    /// Launch an agent CLI in a new tab, with `prompt` as its first message when
+    /// given. When `resumeSessionID` is set, resume that session instead.
+    func startAgent(kind: AgentKind, cwd: String? = nil, resumeSessionID: String? = nil, prompt: String? = nil) {
         let cwd = cwd ?? currentCwd ?? activeAgent?.cwd ?? "~"
+        if resumeSessionID == nil, kind != .custom {
+            let command = MainWindowController.agentTaskCommand(kind: kind, prompt: prompt ?? "")
+            actions?.openTab?(.terminalWithCommand(workingDirectory: cwd, command: command))
+            return
+        }
         var command: String
         switch kind {
         case .claudeCode:
