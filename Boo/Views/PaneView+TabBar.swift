@@ -304,8 +304,6 @@ extension PaneView {
         }
     }
 
-    /// Draws the tab's content-type or process icon at `x`; returns how far
-    /// the title moves right (0 without an icon).
     /// The agent's state color while it works or waits for the user (a question,
     /// an error, an unread answer); nil for a read answer or no agent, so a
     /// finished tab stays quiet. Same colors as the vertical tabs and status bar.

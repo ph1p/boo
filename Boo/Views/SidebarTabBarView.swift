@@ -312,11 +312,8 @@ class SidebarTabBarView: NSView {
         let theme = AppSettings.shared.theme
         let iconSize: CGFloat = 18
 
-        // No fill and no separator rule: the sidebar is an island and this strip
-        // sits inside it, so it paints nothing of its own — the same treatment the
-        // toolbar and status bar already get. The rule used to double up with the
-        // island edge and, being drawn on the side facing the content, made the
-        // top and bottom placements look unlike each other.
+        // No fill and no separator rule: the strip sits inside the sidebar island,
+        // whose edge already frames it.
 
         // Compute drop index for indicator while dragging
         let dropIndex: Int? = isDragging ? dropIndexFor(x: dragCurrentX) : nil

@@ -259,11 +259,8 @@ extension ToolbarView {
     }
 
     internal func drawFadeEdge(_ ctx: CGContext, at x: CGFloat, width: CGFloat, leftToRight: Bool) {
-        // The toolbar paints no fill of its own in the island style — it is a
-        // transparent strip over the window backdrop, so the scroll fade must
-        // dissolve into the backdrop, not into the (now unused) chrome fill.
-        // Full height: the -1 inset used to spare the old bottom separator, which
-        // the island gap replaced.
+        // The toolbar is a transparent strip over the window backdrop, so the
+        // scroll fade dissolves into the backdrop, full height.
         WorkspacePillStyle.drawBackdropFade(
             ctx, in: CGRect(x: x, y: 0, width: width, height: barHeight),
             from: CGPoint(x: leftToRight ? x : x + width, y: 0),
