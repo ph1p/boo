@@ -24,7 +24,7 @@ struct AppearanceSettingsView: View {
             Section(title: "Cursor") {
                 SettingStack(label: "Style") {
                     ThemedSegmentedPicker(selection: $cursorStyle) { $0.label }
-                    .onChange(of: cursorStyle) { _, v in AppSettings.shared.cursorStyle = v }
+                        .onChange(of: cursorStyle) { _, v in AppSettings.shared.cursorStyle = v }
                 }
             }
 

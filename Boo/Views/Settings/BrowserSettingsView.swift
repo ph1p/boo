@@ -61,7 +61,7 @@ struct BrowserSettingsView: View {
 
                 SettingRow(label: "Terminal links") {
                     ThemedMenuPicker(selection: $linkOpenMode) { $0.displayName }
-                    .onChange(of: linkOpenMode) { _, v in AppSettings.shared.linkOpenMode = v }
+                        .onChange(of: linkOpenMode) { _, v in AppSettings.shared.linkOpenMode = v }
                 }
             }
 

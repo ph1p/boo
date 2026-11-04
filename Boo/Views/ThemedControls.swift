@@ -34,7 +34,8 @@ struct ThemedButtonStyle: ButtonStyle {
         @State private var hovered = false
 
         var body: some View {
-            let shape = RoundedRectangle(cornerRadius: size == .large ? BooStyle.Radius.large : BooStyle.Radius.control, style: .continuous)
+            let shape = RoundedRectangle(
+                cornerRadius: size == .large ? BooStyle.Radius.large : BooStyle.Radius.control, style: .continuous)
             configuration.label
                 .font(.system(size: size == .large ? 12 : 11, weight: .medium))
                 .lineLimit(1)

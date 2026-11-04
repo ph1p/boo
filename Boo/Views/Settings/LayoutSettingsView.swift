@@ -27,7 +27,9 @@ struct LayoutSettingsView: View {
                 }
 
                 SettingStack(label: "Tab bar") {
-                    ThemedSegmentedPicker(selection: LayoutSettingsBindings.binding(\.sidebarTabBarPosition)) { $0.label }
+                    ThemedSegmentedPicker(selection: LayoutSettingsBindings.binding(\.sidebarTabBarPosition)) {
+                        $0.label
+                    }
                 }
 
                 ToggleRow(
@@ -51,7 +53,9 @@ struct LayoutSettingsView: View {
 
             Section(title: "Workspace Bar") {
                 SettingStack(label: "Position", help: "Position of the workspace switcher bar.") {
-                    ThemedSegmentedPicker(selection: LayoutSettingsBindings.binding(\.workspaceBarPosition)) { $0.label }
+                    ThemedSegmentedPicker(selection: LayoutSettingsBindings.binding(\.workspaceBarPosition)) {
+                        $0.label
+                    }
                 }
                 ToggleRow(
                     label: "Color new workspaces by project",
@@ -86,7 +90,9 @@ struct LayoutSettingsView: View {
                     help:
                         "A ⋯ tab carved into a pane's bottom-right corner, with record, split, zoom and close in its menu. A running recording's timer and the unzoom button always show."
                 ) {
-                    ThemedSegmentedPicker(selection: LayoutSettingsBindings.binding(\.paneControlsVisibility)) { $0.label }
+                    ThemedSegmentedPicker(selection: LayoutSettingsBindings.binding(\.paneControlsVisibility)) {
+                        $0.label
+                    }
                 }
             }
 

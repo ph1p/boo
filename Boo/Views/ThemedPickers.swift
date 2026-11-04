@@ -57,7 +57,8 @@ struct ThemedSegmentedPicker<Value: Hashable>: View {
         }
         .padding(2)
         .background(
-            RoundedRectangle(cornerRadius: BooStyle.Radius.control, style: .continuous).fill(t.hoverFill))
+            RoundedRectangle(cornerRadius: BooStyle.Radius.control, style: .continuous).fill(t.hoverFill)
+        )
         .animation(.easeOut(duration: 0.15), value: selection)
     }
 }

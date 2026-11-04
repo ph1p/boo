@@ -57,7 +57,7 @@ struct EditorSettingsView: View {
             Section(title: "Editing") {
                 SettingRow(label: "Tab size") {
                     ThemedSegmentedPicker(selection: $tabSize, options: [2, 4, 8]) { "\($0)" }
-                    .onChange(of: tabSize) { _, v in AppSettings.shared.editorTabSize = v }
+                        .onChange(of: tabSize) { _, v in AppSettings.shared.editorTabSize = v }
                 }
                 ToggleRow(label: "Insert spaces", isOn: $insertSpaces)
                     .onChange(of: insertSpaces) { _, v in AppSettings.shared.editorInsertSpaces = v }
@@ -122,11 +122,11 @@ struct EditorSettingsView: View {
                         + "Remote panes always use the built-in editor."
                 ) {
                     ThemedMenuPicker(selection: $linkTarget) { $0.displayName }
-                    .onChange(of: linkTarget) { _, v in AppSettings.shared.defaultLinkTarget = v }
+                        .onChange(of: linkTarget) { _, v in AppSettings.shared.defaultLinkTarget = v }
                 }
                 SettingRow(label: "External editor") {
                     ThemedMenuPicker(selection: $editorPreset) { $0.displayName }
-                    .onChange(of: editorPreset) { _, v in AppSettings.shared.externalEditorPreset = v }
+                        .onChange(of: editorPreset) { _, v in AppSettings.shared.externalEditorPreset = v }
                 }
                 if editorPreset == .custom {
                     SettingRow(

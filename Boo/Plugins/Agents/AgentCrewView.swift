@@ -783,10 +783,13 @@ struct AgentCrewView: View {
         Button(action: action) {
             Image(systemName: symbol)
                 .font(.system(size: fontScale.size(.xs), weight: .semibold))
-                .foregroundStyle(textColor.opacity(0.85))
+                .foregroundStyle(mutedColor.opacity(0.7))
                 .frame(width: 22, height: 22)
-                .background(Circle().fill(textColor.opacity(0.1)))
-                .contentShape(Circle())
+                .background(
+                    RoundedRectangle(cornerRadius: BooStyle.Radius.control, style: .continuous)
+                        .fill(mutedColor.opacity(0.1))
+                )
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .help(help)
@@ -831,11 +834,10 @@ struct AgentCrewView: View {
         // moves on (a click into the terminal), the row looks like any other.
         let isSelected = state.selection == row.id && (listFocused || state.composer != nil)
         let showsActions = isHovered || isSelected
-        let card = RoundedRectangle(cornerRadius: 8, style: .continuous)
+        let card = RoundedRectangle(cornerRadius: BooStyle.Radius.large, style: .continuous)
         let badge = badgeSide
         // A helper sits one step in, its guide line under the parent's badge.
         let indent = badge + 8
-        let canMessage = !row.isStopped && row.hasHooks
         // A click selects the row and shows the agent with the keyboard in its
         // terminal; a stopped task has no terminal, so it opens the review.
         // Focusing the list here would take the keyboard back from the terminal.
@@ -875,7 +877,7 @@ struct AgentCrewView: View {
                                     .foregroundStyle(mutedColor)
                                     .padding(.horizontal, 5)
                                     .padding(.vertical, 1)
-                                    .background(Capsule().fill(mutedColor.opacity(0.12)))
+                                    .background(Capsule().fill(mutedColor.opacity(0.1)))
                             }
                         }
                         // The actions take this spot on hover; both are always laid out,
@@ -915,16 +917,12 @@ struct AgentCrewView: View {
             .background(
                 card.fill(
                     isSelected
-                        ? accentColor.opacity(0.16)
-                        : isHovered ? textColor.opacity(0.05) : Color.clear)
+                        ? accentColor.opacity(0.15)
+                        : isHovered ? mutedColor.opacity(0.1) : Color.clear)
             )
             .overlay(alignment: .topTrailing) {
+                // Messaging is on Space and the context menu, not a hover button.
                 HStack(spacing: 4) {
-                    if canMessage {
-                        rowButton("text.bubble", help: "Message \(row.handle) (Space)") {
-                            state.open(.message(row.id))
-                        }
-                    }
                     if row.isStopped && row.isReachable {
                         rowButton("play.fill", help: "Resume the agent on its last conversation (Space)") {
                             onResume(row)
@@ -946,7 +944,7 @@ struct AgentCrewView: View {
         .overlay(alignment: .leading) {
             // A guide line ties a helper to the agent that started it.
             if depth > 0 {
-                Rectangle().fill(mutedColor.opacity(0.22)).frame(width: 1)
+                Rectangle().fill(mutedColor.opacity(0.2)).frame(width: 1)
                     .padding(.vertical, 2)
                     .offset(x: CGFloat(depth - 1) * indent + 8 + badge / 2)
             }

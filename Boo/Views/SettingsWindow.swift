@@ -217,7 +217,8 @@ struct SettingsView: View {
         // Resizable, never below the default size the pages are laid out for.
         .frame(
             minWidth: SettingsWindowController.defaultSize.width, maxWidth: .infinity,
-            minHeight: SettingsWindowController.defaultSize.height, maxHeight: .infinity)
+            minHeight: SettingsWindowController.defaultSize.height, maxHeight: .infinity
+        )
         // One tokens snapshot per render for the whole tree — and the environment
         // change is what forces otherwise-unchanged rows to repaint on theme switch.
         .environment(\.tokens, t)

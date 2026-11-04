@@ -47,7 +47,7 @@ struct GeneralSettingsView: View {
                     help: "The active tab's current directory, or the workspace default folder."
                 ) {
                     ThemedSegmentedPicker(selection: $newTabCwdMode) { $0.label }
-                    .onChange(of: newTabCwdMode) { _, v in AppSettings.shared.newTabCwdMode = v }
+                        .onChange(of: newTabCwdMode) { _, v in AppSettings.shared.newTabCwdMode = v }
                 }
             }
 
