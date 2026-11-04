@@ -109,14 +109,23 @@ final class BooSocketServer: @unchecked Sendable {
         queue.setSpecific(key: BooSocketServer.queueKey, value: true)
     }
 
-    /// Socket path: ~/.boo/boo.sock. Tests get a per-process temp socket: they
-    /// start and stop (unlink) the server, which would cut off a running Boo.
-    let socketPath: String = {
-        if NSClassFromString("XCTestCase") != nil {
+    /// Socket path: ~/.boo/boo.sock. Binding unlinks whatever is there, so
+    /// anything that can run beside the installed Boo gets its own path: tests
+    /// a per-process temp socket, `make run` builds ~/.boo/boo-dev.sock.
+    let socketPath = BooSocketServer.socketPath(
+        bundlePath: Bundle.main.bundlePath, underTests: NSClassFromString("XCTestCase") != nil)
+
+    static func socketPath(bundlePath: String, underTests: Bool) -> String {
+        if underTests {
             return (NSTemporaryDirectory() as NSString).appendingPathComponent("boo-test-\(getpid()).sock")
         }
-        return (BooPaths.configDir as NSString).appendingPathComponent("boo.sock")
-    }()
+        let name = bundlePath.contains("/.build/") ? "boo-dev.sock" : "boo.sock"
+        return (BooPaths.configDir as NSString).appendingPathComponent(name)
+    }
+
+    /// Inode of the socket file this process bound; stop() leaves a file that
+    /// another Boo has since bound at the same path alone.
+    private var boundInode: ino_t?
 
     // MARK: - Event Subscriptions
 
@@ -187,6 +196,8 @@ final class BooSocketServer: @unchecked Sendable {
     func start() {
         queue.async { [self] in
             guard let serverFD = UnixSocket.listen(path: socketPath, backlog: 8, label: "BooSocket") else { return }
+            var info = stat()
+            boundInode = stat(socketPath, &info) == 0 ? info.st_ino : nil
 
             booLog(.info, .socket, "Listening on \(socketPath)")
 
@@ -208,7 +219,11 @@ final class BooSocketServer: @unchecked Sendable {
             subscriptions.removeAll()
             externalSegments.removeAll()
             commandHandlers.removeAll()
-            unlink(socketPath)
+            var info = stat()
+            if let inode = boundInode, stat(socketPath, &info) == 0, info.st_ino == inode {
+                unlink(socketPath)
+            }
+            boundInode = nil
             _processes.removeAll()
             ancestorCache.removeAll()
         }

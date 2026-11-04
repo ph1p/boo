@@ -15,6 +15,14 @@ final class BooSocketServerTests: XCTestCase {
         XCTAssertLessThan(server.socketPath.utf8.count, 104)
     }
 
+    func testDevBuildGetsOwnSocket() {
+        let dev = BooSocketServer.socketPath(
+            bundlePath: "/Users/x/boo/.build/debug/Boo.app", underTests: false)
+        let installed = BooSocketServer.socketPath(bundlePath: "/Applications/Boo.app", underTests: false)
+        XCTAssertTrue(dev.hasSuffix("/boo-dev.sock"))
+        XCTAssertTrue(installed.hasSuffix("/boo.sock"))
+    }
+
     func testDirectProcessRegistration() {
         let server = BooSocketServer.shared
         let pid = getpid()
