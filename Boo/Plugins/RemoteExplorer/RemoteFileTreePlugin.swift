@@ -8,7 +8,7 @@ import SwiftUI
 /// as remote shell commands. Display, navigation and file-opening settings are the
 /// local plugin's — one explorer configuration for both trees.
 @MainActor
-final class RemoteFileTreePlugin: BooPluginProtocol {
+final class RemoteFileTreePlugin: BooPluginProtocol, FileTreeBrowsing {
     let manifest = PluginManifest(
         id: "file-tree-remote",
         name: "Files (Remote)",
@@ -38,10 +38,10 @@ final class RemoteFileTreePlugin: BooPluginProtocol {
     /// Cache key shown per terminal on the last cycle, to detect a context switch.
     private var shownKey: [UUID: String] = [:]
     /// Explorer navigation per terminal — lets the tree browse away from the shell's cwd.
-    private var browseStates: [UUID: FileTreeBrowseState] = [:]
+    private(set) var browseStates: [UUID: FileTreeBrowseState] = [:]
     /// Each terminal's (tilde-resolved) cwd as of the last cycle. Closures read it at
     /// call time, so a view kept across cycles never acts on stale values.
-    private var latestCwd: [UUID: String] = [:]
+    private(set) var latestCwd: [UUID: String] = [:]
     /// The last terminal ID we rendered for. Row actions act on its session — the
     /// sidebar only ever shows the focused terminal's tree.
     private var lastTerminalID: UUID?
@@ -106,7 +106,7 @@ final class RemoteFileTreePlugin: BooPluginProtocol {
         return browseStates[terminal.terminalID]?.root(terminalCwd: cwd) ?? cwd
     }
 
-    private func updateBrowseState(
+    func updateBrowseState(
         _ terminalID: UUID, terminalCwd: String, _ change: (inout FileTreeBrowseState, String) -> Void
     ) {
         var state = browseStates[terminalID] ?? FileTreeBrowseState()
@@ -117,20 +117,7 @@ final class RemoteFileTreePlugin: BooPluginProtocol {
         onRequestCycleRerun?()
     }
 
-    private func open(_ path: String, terminalID: UUID, terminalCwd: String, canSendToTerminal: Bool) {
-        if AppSettings.shared.explorerNavigationMode == .terminal && canSendToTerminal {
-            cdTerminal(to: path, terminalID: terminalID, terminalCwd: terminalCwd)
-        } else {
-            updateBrowseState(terminalID, terminalCwd: terminalCwd) { $0.browse(to: path, terminalCwd: $1) }
-        }
-    }
-
-    private func cdTerminal(to path: String, terminalID: UUID, terminalCwd: String) {
-        actions?.sendToTerminal?(Self.cdCommand(path))
-        updateBrowseState(terminalID, terminalCwd: terminalCwd) { $0.attach(terminalCwd: $1) }
-    }
-
-    private static func cdCommand(_ path: String) -> String { "cd \(RemoteExplorer.shellEscPath(path))\r" }
+    static func cdCommand(_ path: String) -> String { "cd \(RemoteExplorer.shellEscPath(path))\r" }
 
     /// The bar's path label: relative to the terminal folder when inside it, else
     /// abbreviated against the remote home.
@@ -147,50 +134,15 @@ final class RemoteFileTreePlugin: BooPluginProtocol {
             root: root, terminalCwd: terminalCwd, home: RemoteExplorer.resolveTilde("~", session: session))
     }
 
+    /// The navigation bar's path label for the terminal's current root.
+    private func navigationPath(_ terminal: TerminalContext, session: RemoteSessionType) -> String {
+        displayPath(root: rootPath(for: terminal), terminalCwd: terminalCwd(for: terminal), session: session)
+    }
+
     private func navigationKey(_ context: PluginContext) -> String {
         guard let session = context.terminal.remoteSession else { return "" }
-        let cwd = terminalCwd(for: context.terminal)
-        let state = browseStates[context.terminal.terminalID] ?? FileTreeBrowseState()
-        let path = displayPath(root: state.root(terminalCwd: cwd), terminalCwd: cwd, session: session)
-        let mode = AppSettings.shared.explorerNavigationMode.rawValue
-        return "\(state.isDetached)|\(state.canGoBack)|\(state.canGoForward)|\(path)|\(mode)"
-    }
-
-    private func makeNavigation(
-        context: PluginContext, session: RemoteSessionType, canSendToTerminal canSend: Bool
-    ) -> FileTreeNavigation {
-        let tid = context.terminal.terminalID
-        let cwd = terminalCwd(for: context.terminal)
-        let state = browseStates[tid] ?? FileTreeBrowseState()
-        let step: (@escaping (inout FileTreeBrowseState, String) -> Void) -> @MainActor () -> Void = { change in
-            { [weak self] in self?.withLiveCwd(tid) { $0.updateBrowseState(tid, terminalCwd: $1, change) } }
-        }
-        return FileTreeNavigation(
-            mode: AppSettings.shared.explorerNavigationMode,
-            displayPath: displayPath(root: state.root(terminalCwd: cwd), terminalCwd: cwd, session: session),
-            isDetached: state.isDetached,
-            canGoBack: state.canGoBack,
-            canGoForward: state.canGoForward,
-            canSendToTerminal: canSend,
-            open: { [weak self] path in
-                self?.withLiveCwd(tid) { $0.open(path, terminalID: tid, terminalCwd: $1, canSendToTerminal: canSend) }
-            },
-            browse: { path in step { $0.browse(to: path, terminalCwd: $1) }() },
-            goBack: step { $0.goBack(terminalCwd: $1) },
-            goForward: step { $0.goForward(terminalCwd: $1) },
-            attach: step { $0.attach(terminalCwd: $1) },
-            cdTerminalHere: { [weak self] in
-                self?.withLiveCwd(tid) { plugin, cwd in
-                    let root = plugin.browseStates[tid]?.root(terminalCwd: cwd) ?? cwd
-                    plugin.cdTerminal(to: root, terminalID: tid, terminalCwd: cwd)
-                }
-            }
-        )
-    }
-
-    private func withLiveCwd(_ tid: UUID, _ body: (RemoteFileTreePlugin, String) -> Void) {
-        guard let cwd = latestCwd[tid] else { return }
-        body(self, cwd)
+        return navigationKey(
+            terminalID: context.terminal.terminalID, displayPath: navigationPath(context.terminal, session: session))
     }
 
     // MARK: - Detail View
@@ -235,7 +187,9 @@ final class RemoteFileTreePlugin: BooPluginProtocol {
         shownKey[tid] = key
         lastTerminalID = tid
 
-        let navigation = makeNavigation(context: context, session: session, canSendToTerminal: !isAIAgent)
+        let navigation = makeNavigation(
+            terminalID: tid, displayPath: navigationPath(context.terminal, session: session),
+            canSendToTerminal: !isAIAgent)
         return AnyView(
             RemoteFileTreeContainer(
                 root: root, source: source(for: session), actions: treeActions, navigation: navigation))
