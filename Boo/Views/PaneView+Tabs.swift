@@ -53,8 +53,11 @@ extension PaneView {
     }
 
     @discardableResult
-    func addNewTab(workingDirectory: String, launch: LaunchSpec? = nil, group: UUID? = nil) -> UUID? {
-        addNewTab(contentType: .terminal, workingDirectory: workingDirectory, launch: launch, group: group)
+    func addNewTab(
+        workingDirectory: String, launch: LaunchSpec? = nil, group: UUID? = nil, focus: Bool = true
+    ) -> UUID? {
+        addNewTab(
+            contentType: .terminal, workingDirectory: workingDirectory, launch: launch, group: group, focus: focus)
     }
 
     /// Add a new tab with a specific content type. With `group`, it joins
@@ -62,7 +65,7 @@ extension PaneView {
     @discardableResult
     func addNewTab(
         contentType: ContentType, workingDirectory: String = "~", url: URL? = nil, launch: LaunchSpec? = nil,
-        group: UUID? = nil
+        group: UUID? = nil, focus: Bool = true
     ) -> UUID? {
         if pane.tmuxOwned, let paneDelegate {
             return paneDelegate.paneView(
@@ -101,6 +104,9 @@ extension PaneView {
         if contentType == .browser, let url = url, let browserView = activeContentView as? BrowserContentView {
             browserView.navigate(to: url)
         }
+        // `focus: false` shows the tab in this pane but leaves keyboard focus
+        // (and the workspace's active pane) where it is.
+        guard focus else { return pane.activeTab?.id }
         DispatchQueue.main.async { [weak self] in
             self?.focusActiveView()
         }

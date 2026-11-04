@@ -155,31 +155,53 @@ extension MainWindowController {
         }
     }
 
-    /// An agent that starts a task keeps the user's attention: once the task's
-    /// terminal has started, the window goes back to the caller's workspace,
-    /// unless the user moved elsewhere meanwhile. The crew sidebar shows the task.
-    /// Opens a task as a background tab next to the tab that started it, grouped
-    /// with it, so a crew stays in the caller's workspace instead of a new one.
+    /// Opens a task in the caller's workspace, in the caller's helper pane
+    /// (see `openHelperTab`), so a crew stays together instead of a new workspace.
     /// Nil when the caller is gone or its pane belongs to tmux.
     private func openTaskBesideCaller(
         _ callerTab: UUID, info: AgentWorktree.Info, command: String
     ) -> AgentTaskLaunch? {
-        guard let home = AgentInbox.locateInWindows(callerTab), home.controller === self,
-            !home.pane.tmuxOwned,
-            let paneView = workspacePaneViews[home.workspace.id]?[home.pane.id]
+        guard let home = AgentInbox.locateInWindows(callerTab), home.controller === self, !home.pane.tmuxOwned,
+            let opened = openHelperTab(
+                caller: callerTab, in: home.workspace, callerPane: home.pane.id, cwd: info.path, command: command)
         else { return nil }
-        let pane = home.pane
-        guard let index = pane.tabs.firstIndex(where: { $0.id == callerTab }),
-            let group = pane.tabs[index].groupID ?? pane.createGroup(withTabsAt: [index]),
-            let tabID = paneView.addNewTab(
-                workingDirectory: info.path, launch: LaunchSpec(command: command), group: group)
-        else { return nil }
-        // addNewTab focuses the new tab; hand focus back so the caller keeps working.
-        if let back = pane.tabs.firstIndex(where: { $0.id == callerTab }) { paneView.activateTab(back) }
-        saveSession()
-        return AgentTaskLaunch(info: info, workspaceID: home.workspace.id, tabID: tabID)
+        return AgentTaskLaunch(info: info, workspaceID: home.workspace.id, tabID: opened.tabID)
     }
 
+    /// The first helper of a caller splits the caller's pane to the right; later
+    /// helpers join that pane as tabs, so one split holds the whole crew.
+    /// Focus stays with the caller.
+    func openHelperTab(
+        caller: UUID, in workspace: Workspace, callerPane: UUID, cwd: String, command: String
+    ) -> (paneID: UUID, tabID: UUID)? {
+        let helpers = Set(AgentCrew.shared.children(of: caller))
+        let existing = workspace.splitTree.leafIDs.lazy.compactMap { workspace.pane(for: $0) }.first { pane in
+            pane.id != callerPane && !pane.tmuxOwned && pane.tabs.contains { helpers.contains($0.id) }
+        }
+        guard let existing, let paneView = workspacePaneViews[workspace.id]?[existing.id] else {
+            return splitHelperPane(callerPane, in: workspace, cwd: cwd, command: command)
+        }
+        guard
+            let tabID = paneView.addNewTab(
+                workingDirectory: cwd, launch: LaunchSpec(command: command), focus: false)
+        else { return nil }
+        saveSession()
+        return (existing.id, tabID)
+    }
+
+    /// Splits `anchor` to the right for a helper, leaving focus where it is.
+    private func splitHelperPane(
+        _ anchor: UUID, in workspace: Workspace, cwd: String, command: String
+    ) -> (paneID: UUID, tabID: UUID)? {
+        guard let paneID = splitPane(anchor, in: workspace, toward: .right, focus: false, cwd: cwd, command: command),
+            let tabID = workspace.pane(for: paneID)?.activeTab?.id
+        else { return nil }
+        return (paneID, tabID)
+    }
+
+    /// An agent that starts a task keeps the user's attention: once the task's
+    /// terminal has started, the window goes back to the caller's workspace,
+    /// unless the user moved elsewhere meanwhile. The crew sidebar shows the task.
     private func returnToCaller(_ callerTab: UUID, from taskWorkspace: UUID) {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
             guard let self, self.activeWorkspace?.id == taskWorkspace,
@@ -275,10 +297,13 @@ extension MainWindowController {
             (json["cwd"] as? String).map { ($0 as NSString).expandingTildeInPath }
             ?? location.map { $0.pane.tabs[$0.tabIndex].workingDirectory } ?? workspace.folderPath
         let command = Self.agentTaskCommand(kind: kind, prompt: prompt, model: json["model"] as? String)
-        guard
-            let paneID = splitPane(anchor, in: workspace, toward: .right, focus: false, cwd: cwd, command: command),
-            let tabID = workspace.pane(for: paneID)?.activeTab?.id
-        else {
+        let opened =
+            if let caller, location != nil {
+                openHelperTab(caller: caller.tabID, in: workspace, callerPane: anchor, cwd: cwd, command: command)
+            } else {
+                splitHelperPane(anchor, in: workspace, cwd: cwd, command: command)
+            }
+        guard let (paneID, tabID) = opened else {
             reply(["ok": false, "error": "could not open a pane for the helper"])
             return
         }

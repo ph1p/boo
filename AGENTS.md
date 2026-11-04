@@ -333,8 +333,9 @@ Wraps `AgentSession` with `paneID`, `tabID`, `tabTitle`, and `isFocused` so the 
   queued reports (not plain messages) from the caller's outbox, so the parent isn't told twice.
   A report the parent took (typed into its prompt, or collected by `boo wait`) marks the helper's
   inbox item seen, so only the parent is left asking for the user's attention.
-  A task an agent starts (`new_agent_task` with a caller) opens as a background tab in the caller's
-  pane, grouped with the caller tab (`openTaskBesideCaller`); task commands then resolve the worktree
+  A task an agent starts (`new_agent_task` with a caller) opens in the caller's workspace: its
+  first helper splits the caller's pane to the right, later helpers (tasks and `--here`) join that
+  pane as tabs (`openHelperTab`); task commands then resolve the worktree
   from the tab's directory and `closeAndRemoveAgentTask` closes only that tab. Without a caller (UI),
   or when the caller's pane is tmux-owned, the task opens its own workspace.
   `boo agents` marks the caller's own row `(you)`: an agent doesn't know its tab's title.
