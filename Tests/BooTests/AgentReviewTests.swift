@@ -198,7 +198,7 @@ final class AgentReviewTests: XCTestCase {
                 .init(left: r1, right: a1), .init(left: r2, right: a2), .init(left: nil, right: a3),
                 .init(left: ctx, right: ctx),
                 // An addition then a removal are two changes, not one pair.
-                .init(left: nil, right: a1), .init(left: r3, right: nil),
+                .init(left: nil, right: a1), .init(left: r3, right: nil)
             ])
         XCTAssertEqual(AgentReview.splitRows([]), [])
     }

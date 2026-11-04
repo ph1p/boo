@@ -50,7 +50,9 @@
                 }
                 // Stopped task rows have no handle; they are picked by name.
                 let handle = json["handle"] as? String ?? json["name"] as? String
-                let row = AgentsPlugin.allCrewRows().first { $0.handle == handle || ($0.isStopped && $0.name == handle) }
+                let row = AgentsPlugin.allCrewRows().first {
+                    $0.handle == handle || ($0.isStopped && $0.name == handle)
+                }
                 guard action == .newTask || row != nil else {
                     reply(["ok": false, "error": "no agent \(handle ?? "")"])
                     return true
@@ -73,7 +75,8 @@
                 reply(["ok": true])
             case "debug_review_send":
                 guard let id = (json["id"] as? String).flatMap(UUID.init(uuidString:)),
-                    let folder = controllers.lazy.flatMap(\.appState.workspaces).first(where: { $0.id == id })?.folderPath
+                    let folder = controllers.lazy.flatMap(\.appState.workspaces).first(where: { $0.id == id })?
+                        .folderPath
                 else {
                     reply(["ok": false, "error": "no workspace"])
                     return true
@@ -94,10 +97,12 @@
                 RunLoop.main.perform(inModes: [.common]) {
                     let clicks = (1...count).flatMap { n in [(NSEvent.EventType.leftMouseDown, n), (.leftMouseUp, n)] }
                     for (type, clickCount) in [(NSEvent.EventType.mouseMoved, 1)] + clicks {
-                        guard let event = NSEvent.mouseEvent(
-                            with: type, location: point, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
-                            windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: clickCount,
-                            pressure: type == .leftMouseDown ? 1 : 0)
+                        guard
+                            let event = NSEvent.mouseEvent(
+                                with: type, location: point, modifierFlags: [],
+                                timestamp: ProcessInfo.processInfo.systemUptime,
+                                windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: clickCount,
+                                pressure: type == .leftMouseDown ? 1 : 0)
                         else { continue }
                         window.sendEvent(event)
                     }
@@ -111,10 +116,12 @@
                 reply(["ok": true])
                 RunLoop.main.perform(inModes: [.common]) {
                     for type in [NSEvent.EventType.keyDown, .keyUp] {
-                        guard let event = NSEvent.keyEvent(
-                            with: type, location: .zero, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
-                            windowNumber: window.windowNumber, context: nil, characters: chars,
-                            charactersIgnoringModifiers: chars, isARepeat: false, keyCode: UInt16(code))
+                        guard
+                            let event = NSEvent.keyEvent(
+                                with: type, location: .zero, modifierFlags: [],
+                                timestamp: ProcessInfo.processInfo.systemUptime,
+                                windowNumber: window.windowNumber, context: nil, characters: chars,
+                                charactersIgnoringModifiers: chars, isARepeat: false, keyCode: UInt16(code))
                         else { continue }
                         window.sendEvent(event)
                     }

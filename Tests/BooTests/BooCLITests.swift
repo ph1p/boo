@@ -55,7 +55,8 @@ final class BooCLITests: XCTestCase {
     }
 
     func testSendReportsQueuedAndRefusals() {
-        let (queued, sent) = run(["send", "t3", "also", "lint"], reply: ["ok": true, "status": "queued", "to": "t3 docs"])
+        let (queued, sent) = run(
+            ["send", "t3", "also", "lint"], reply: ["ok": true, "status": "queued", "to": "t3 docs"])
         XCTAssertEqual(queued.text, "queued for t3 docs (delivered when it finishes its turn)")
         XCTAssertEqual(sent.first?["cmd"] as? String, "agent_send")
         XCTAssertEqual(sent.first?["to"] as? String, "t3")
@@ -100,10 +101,13 @@ final class BooCLITests: XCTestCase {
             "t1   done         main\nt2   working      docs  (from t1)  [2 queued]")
         XCTAssertEqual(BooCLI.agentsTable(["items": []]), "no agents")
         XCTAssertEqual(
-            BooCLI.agentsTable(["items": [["handle": "t2", "state": "done", "name": "poem", "tab_id": "A"]]], you: "A"),
+            BooCLI.agentsTable(
+                ["items": [["handle": "t2", "state": "done", "name": "poem", "tab_id": "A"]]], you: "A"),
             "t2   done         poem  (you)")
         XCTAssertEqual(
-            BooCLI.agentsTable(["items": [["handle": "t1", "state": "working", "name": "", "agent": "claude", "cwd": "/w/boo"]]]),
+            BooCLI.agentsTable([
+                "items": [["handle": "t1", "state": "working", "name": "", "agent": "claude", "cwd": "/w/boo"]]
+            ]),
             "t1   working      claude in boo")
     }
 
@@ -168,7 +172,11 @@ final class BooCLITests: XCTestCase {
 
         let (diff, diffSent) = run(
             ["diff", "t5"],
-            reply: ["ok": true, "files": [["path": "calc.py", "additions": 1, "deletions": 1]], "diff": "--- calc.py\n"])
+            reply: [
+                "ok": true, "files": [["path": "calc.py", "additions": 1, "deletions": 1]],
+                "diff": "--- calc.py\n"
+            ]
+        )
         XCTAssertEqual(diff.text, "+1 -1 calc.py\n\n--- calc.py")
         XCTAssertEqual(diffSent.first?["stat_only"] as? Bool, false)
         XCTAssertEqual(run(["diff", "t5"], reply: ["ok": true, "files": []]).0.text, "no changes")

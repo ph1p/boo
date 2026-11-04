@@ -106,7 +106,8 @@ enum AgentReview {
                 + revision, in: root)
         var files = parse(diff)
         if source != .staged {
-            let untracked = (try? AgentWorktree.git(["ls-files", "--others", "--exclude-standard", "-z"], in: root)) ?? ""
+            let untracked =
+                (try? AgentWorktree.git(["ls-files", "--others", "--exclude-standard", "-z"], in: root)) ?? ""
             for path in untracked.split(separator: "\0").map(String.init).sorted() {
                 files.append(untrackedFile(path, root: root))
             }

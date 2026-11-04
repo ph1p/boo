@@ -223,7 +223,8 @@ final class AgentWorktreeTests: XCTestCase {
     func testSameNamedReposGetSeparateFolders() throws {
         let first = try AgentWorktree.create(repo: repo, name: "one", root: root)
         let again = try AgentWorktree.create(repo: repo, name: "two", root: root)
-        XCTAssertEqual((first.path as NSString).deletingLastPathComponent, (again.path as NSString).deletingLastPathComponent)
+        XCTAssertEqual(
+            (first.path as NSString).deletingLastPathComponent, (again.path as NSString).deletingLastPathComponent)
 
         let other = (sandbox as NSString).appendingPathComponent("elsewhere/myrepo")
         try FileManager.default.createDirectory(atPath: other, withIntermediateDirectories: true)

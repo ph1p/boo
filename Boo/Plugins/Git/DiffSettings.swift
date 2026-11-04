@@ -31,7 +31,8 @@ enum DiffSettings {
 
     /// Lines of context around each change (`git diff -U<n>`).
     static var context: Int {
-        clampedContext(AppSettings.shared.pluginDouble(pluginID, "diffContext", default: Double(AgentReview.defaultContext)))
+        clampedContext(
+            AppSettings.shared.pluginDouble(pluginID, "diffContext", default: Double(AgentReview.defaultContext)))
     }
 
     static func clampedContext(_ value: Double) -> Int {

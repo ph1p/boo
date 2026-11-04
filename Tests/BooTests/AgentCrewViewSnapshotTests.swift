@@ -19,7 +19,9 @@ final class AgentCrewViewSnapshotTests: XCTestCase {
     func testRendersGroupsAndLinks() throws {
         let rows = [
             row("t1", "main", .working, detail: "using Bash"),
-            row("t2", "fix-tests", .needsInput, detail: "Allow Bash: pnpm test?", parent: "t1", attention: true, task: true),
+            row(
+                "t2", "fix-tests", .needsInput, detail: "Allow Bash: pnpm test?", parent: "t1", attention: true,
+                task: true),
             row("t3", "docs", .working, detail: "using Edit", parent: "t1", queued: 1, task: true),
             row("t4", "review", .done, detail: "Looks good; two nits in AgentCrew.swift.", parent: "t1"),
             row("t5", "api", .error, detail: "Stopped with an error.", attention: true),

@@ -48,7 +48,8 @@ final class BooMCPServerTests: XCTestCase {
             tools.compactMap { $0["name"] as? String },
             [
                 "get_layout", "split_pane", "read_pane", "send_text", "close_pane", "list_agents", "new_agent_task",
-                "send_message", "read_messages", "run_recipe", "open_review", "wait_for_events", "agent_respond", "focus_pane", "task_status",
+                "send_message", "read_messages", "run_recipe", "open_review", "wait_for_events", "agent_respond",
+                "focus_pane", "task_status",
                 "task_diff",
                 "merge_task", "discard_task"
             ])
@@ -216,7 +217,8 @@ final class BooMCPServerTests: XCTestCase {
         XCTAssertEqual(message["pane_id"] as? String, ownPane, "the sender is this agent's tab")
         XCTAssertTrue(queued.hasPrefix("queued for t3 fix-tests"))
         status = "delivered"
-        XCTAssertEqual(text(call(server, "send_message", ["to": "parent", "text": "done"])), "delivered to t3 fix-tests")
+        XCTAssertEqual(
+            text(call(server, "send_message", ["to": "parent", "text": "done"])), "delivered to t3 fix-tests")
         XCTAssertEqual(call(server, "send_message", ["text": "x"])["isError"] as? Bool, true, "to is required")
     }
 

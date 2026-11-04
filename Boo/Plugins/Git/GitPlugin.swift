@@ -35,7 +35,7 @@ final class GitPlugin: BooPluginProtocol {
                 key: "diffContext", type: .double, label: "Context lines",
                 description: "Unchanged lines shown around each change.",
                 defaultValue: AnyCodableValue(Double(AgentReview.defaultContext)), options: nil,
-                group: "Diff Viewer", min: 0, max: Double(DiffSettings.maxContext), step: 1),
+                group: "Diff Viewer", min: 0, max: Double(DiffSettings.maxContext), step: 1)
         ]
     )
 

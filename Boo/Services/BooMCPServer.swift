@@ -305,7 +305,10 @@ struct BooMCPServer {
     }
 
     private static var tabProperty: [String: Any] {
-        ["type": "string", "description": "An agent's handle (t3) or tab id, from list_agents or get_layout (scope app)"]
+        [
+            "type": "string",
+            "description": "An agent's handle (t3) or tab id, from list_agents or get_layout (scope app)"
+        ]
     }
 
     static var tools: [[String: Any]] {
@@ -368,7 +371,8 @@ struct BooMCPServer {
             ],
             [
                 "name": "list_agents",
-                "description": "Coding agents running in any Boo window: handle (t3), name, state (working, needs input, done), the agent that started it (parent), the ones it started (children) and how many messages wait for it (queued).",
+                "description":
+                    "Coding agents running in any Boo window: handle (t3), name, state (working, needs input, done), the agent that started it (parent), the ones it started (children) and how many messages wait for it (queued).",
                 "inputSchema": object([:]),
                 "annotations": ["readOnlyHint": true]
             ],
@@ -392,9 +396,13 @@ struct BooMCPServer {
                         "model": ["type": "string", "description": "Model for the agent (default: its own)"],
                         "worktree": [
                             "type": "boolean",
-                            "description": "Own worktree and workspace (default true); false opens a helper pane beside you"
+                            "description":
+                                "Own worktree and workspace (default true); false opens a helper pane beside you"
                         ],
-                        "cwd": ["type": "string", "description": "Folder for a helper (worktree false; default: yours)"]
+                        "cwd": [
+                            "type": "string",
+                            "description": "Folder for a helper (worktree false; default: yours)"
+                        ]
                     ], required: ["prompt"])
             ],
             [

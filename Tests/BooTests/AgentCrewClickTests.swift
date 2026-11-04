@@ -26,8 +26,9 @@ final class AgentCrewClickTests: XCTestCase {
         let view = AgentCrewView(
             rows: [row], fontScale: SidebarFontScale(base: 13, fontName: ""),
             textColor: .white, mutedColor: .gray, accentColor: .blue,
-            onJump: { _ in jumps += 1 }, onReview: { _ in }, onMerge: { _ in }, onDiscard: { _ in })
-            .frame(width: 260, height: 300, alignment: .top)
+            onJump: { _ in jumps += 1 }, onReview: { _ in }, onMerge: { _ in }, onDiscard: { _ in }
+        )
+        .frame(width: 260, height: 300, alignment: .top)
         let hosting = NSHostingView(rootView: view)
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 260, height: 300), styleMask: [.borderless],

@@ -172,7 +172,8 @@ struct AgentReviewView: View {
     private var mono: Font { .custom(AppSettings.shared.editorFontName, size: fontSize) }
     /// One character of the editor font, to size unwrapped side-by-side columns.
     private var charWidth: CGFloat {
-        let font = NSFont(name: AppSettings.shared.editorFontName, size: fontSize)
+        let font =
+            NSFont(name: AppSettings.shared.editorFontName, size: fontSize)
             ?? .monospacedSystemFont(ofSize: fontSize, weight: .regular)
         return ("M" as NSString).size(withAttributes: [.font: font]).width
     }

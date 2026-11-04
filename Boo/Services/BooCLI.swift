@@ -132,7 +132,9 @@ enum BooCLI {
                 }
                 return Output(text: AgentCrew.envelope(messages), status: 0)
             case "wait":
-                guard let target = rest.first else { return Output(text: "usage: boo wait <agent> [--timeout S]", status: 2) }
+                guard let target = rest.first else {
+                    return Output(text: "usage: boo wait <agent> [--timeout S]", status: 2)
+                }
                 var timeout: TimeInterval?
                 if rest.count >= 3, rest[1] == "--timeout" {
                     guard let seconds = TimeInterval(rest[2]) else {
@@ -146,10 +148,14 @@ enum BooCLI {
                 if output.status != 124 { _ = try? request(["cmd": "agent_collected", "tab_id": target]) }
                 return output
             case "read":
-                guard let target = rest.first else { return Output(text: "usage: boo read <agent> [--lines N]", status: 2) }
+                guard let target = rest.first else {
+                    return Output(text: "usage: boo read <agent> [--lines N]", status: 2)
+                }
                 var lines = 60
                 if rest.count >= 3, rest[1] == "--lines" {
-                    guard let count = Int(rest[2]), count > 0 else { return Output(text: "--lines needs a number", status: 2) }
+                    guard let count = Int(rest[2]), count > 0 else {
+                        return Output(text: "--lines needs a number", status: 2)
+                    }
                     lines = count
                 }
                 let reply = try request(["cmd": "get_screen", "tab_id": target, "lines": lines], fromPane: false)
@@ -169,12 +175,16 @@ enum BooCLI {
                 _ = try request(message)
                 return Output(text: "", status: 0)
             case "diff":
-                guard let target = rest.first else { return Output(text: "usage: boo diff <agent> [--stat]", status: 2) }
+                guard let target = rest.first else {
+                    return Output(text: "usage: boo diff <agent> [--stat]", status: 2)
+                }
                 let stat = rest.dropFirst().contains("--stat")
                 let reply = try request(["cmd": "task_diff", "tab_id": target, "stat_only": stat], fromPane: false)
                 return Output(text: diffText(reply), status: 0)
             case "merge":
-                guard let target = rest.first else { return Output(text: "usage: boo merge <agent> [--keep]", status: 2) }
+                guard let target = rest.first else {
+                    return Output(text: "usage: boo merge <agent> [--keep]", status: 2)
+                }
                 let keep = rest.dropFirst().contains("--keep")
                 let reply = try request(["cmd": "merge_task", "tab_id": target, "cleanup": !keep], fromPane: false)
                 let commits = reply["merged"] as? Int ?? 0

@@ -80,7 +80,8 @@ final class AgentCrewTests: XCTestCase {
             .init(from: "t3 docs", state: "done", text: "All good."),
             .init(from: "user", state: nil, text: "hi")
         ])
-        XCTAssertEqual(text, "<boo from=\"t3 docs\" state=\"done\">\nAll good.\n</boo>\n\n<boo from=\"user\">\nhi\n</boo>")
+        XCTAssertEqual(
+            text, "<boo from=\"t3 docs\" state=\"done\">\nAll good.\n</boo>\n\n<boo from=\"user\">\nhi\n</boo>")
     }
 
     func testQueuesWhileWorkingAndDeliversWhenTurnEnds() {
@@ -209,7 +210,8 @@ final class AgentCrewTests: XCTestCase {
         XCTAssertEqual(send(["tab_id": other.uuidString, "text": "  "]), "text is empty")
         XCTAssertNotNil(send(["tab_id": UUID().uuidString, "text": "x"]), "closed tab")
         XCTAssertNotNil(send(["text": "x"]), "missing target")
-        let ok = crew.handleSocketCommand(cmd: "agent_send", json: ["tab_id": other.uuidString, "text": "x"], caller: caller)
+        let ok = crew.handleSocketCommand(
+            cmd: "agent_send", json: ["tab_id": other.uuidString, "text": "x"], caller: caller)
         XCTAssertEqual(ok?["ok"] as? Bool, true)
         XCTAssertEqual(ok?["status"] as? String, "queued")
         XCTAssertNil(crew.handleSocketCommand(cmd: "agent_inbox", json: [:], caller: caller))
@@ -221,10 +223,13 @@ final class AgentCrewTests: XCTestCase {
         var clock = Date(timeIntervalSince1970: 0)
         crew.now = { clock }
         func send(_ from: UUID, _ to: UUID) -> Bool {
-            crew.handleSocketCommand(cmd: "agent_send", json: ["tab_id": to.uuidString, "text": "x"], caller: from)?["ok"]
+            crew.handleSocketCommand(cmd: "agent_send", json: ["tab_id": to.uuidString, "text": "x"], caller: from)?[
+                "ok"]
                 as? Bool == true
         }
-        for i in 0..<AgentCrew.maxMessages { XCTAssertTrue(send(i.isMultiple(of: 2) ? a : b, i.isMultiple(of: 2) ? b : a)) }
+        for i in 0..<AgentCrew.maxMessages {
+            XCTAssertTrue(send(i.isMultiple(of: 2) ? a : b, i.isMultiple(of: 2) ? b : a))
+        }
         XCTAssertFalse(send(a, b), "both directions count toward one limit")
         XCTAssertTrue(send(a, tab()), "other pairs are not affected")
         XCTAssertEqual(crew.send(to: b, from: nil, text: "from the user"), .queued, "the user is never capped")
@@ -295,7 +300,8 @@ final class AgentCrewTests: XCTestCase {
         XCTAssertEqual(reply?["dropped"] as? Int, 1)
         XCTAssertFalse(inbox.items[child]?.needsAttention ?? true, "collected answers don't wait for the user")
         event("stop", parent)
-        XCTAssertEqual(typed.map(\.1), ["<boo from=\"t2 poem\">\nalso: a note\n</boo>"], "only the message sent on purpose")
+        XCTAssertEqual(
+            typed.map(\.1), ["<boo from=\"t2 poem\">\nalso: a note\n</boo>"], "only the message sent on purpose")
     }
 
     func testHelperNamesAreTheFirstSentenceCutAtAWord() {
@@ -316,7 +322,9 @@ final class AgentCrewTests: XCTestCase {
     /// still calls it what its workspace is called, not what Claude titles its tab.
     /// A plain shell that sends a message reads "shell", not its last command.
     func testNamesFollowTheTaskWorkspaceAndShellsReadShell() {
-        let task = UUID(), shell = UUID(), agent = UUID()
+        let task = UUID()
+        let shell = UUID()
+        let agent = UUID()
         open = [task, shell, agent]
         inbox.apply(event: "working", tabID: task)
         inbox.apply(event: "working", tabID: agent)
@@ -368,7 +376,8 @@ final class AgentCrewTests: XCTestCase {
 
     func testCrewListArrowKeysStopAtTheEnds() {
         let ids = [UUID(), UUID(), UUID()]
-        XCTAssertEqual(AgentCrewUIState.adjacent(to: nil, offset: 1, in: ids), ids[0], "↓ with nothing selected picks the first")
+        XCTAssertEqual(
+            AgentCrewUIState.adjacent(to: nil, offset: 1, in: ids), ids[0], "↓ with nothing selected picks the first")
         XCTAssertEqual(AgentCrewUIState.adjacent(to: nil, offset: -1, in: ids), ids[2], "↑ picks the last")
         XCTAssertEqual(AgentCrewUIState.adjacent(to: ids[0], offset: 1, in: ids), ids[1])
         XCTAssertEqual(AgentCrewUIState.adjacent(to: ids[2], offset: 1, in: ids), ids[2])
@@ -395,4 +404,3 @@ final class AgentCrewTests: XCTestCase {
         XCTAssertEqual(ui.selection, id, "closing keeps the selection")
     }
 }
-

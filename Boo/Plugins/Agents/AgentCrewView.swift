@@ -423,10 +423,15 @@ struct AgentCrewView: View {
     }
 
     private static func rowHelp(_ row: AgentCrewRow) -> String {
-        if !row.isReachable { return "Runs in a tab outside Boo's windows, so Boo can't show it. Messages still reach it." }
-        if row.isStopped { return "The agent no longer runs. Resume it, or right-click to review, merge or discard its worktree." }
+        if !row.isReachable {
+            return "Runs in a tab outside Boo's windows, so Boo can't show it. Messages still reach it."
+        }
+        if row.isStopped {
+            return "The agent no longer runs. Resume it, or right-click to review, merge or discard its worktree."
+        }
         guard row.state == .needsInput else { return "" }
-        return row.asksQuestion ? "Double-click to answer its question in its tab." : "Double-click to see the prompt in its tab."
+        return row.asksQuestion
+            ? "Double-click to answer its question in its tab." : "Double-click to see the prompt in its tab."
     }
 
     private func crewRow(_ row: AgentCrewRow) -> some View {
@@ -445,7 +450,8 @@ struct AgentCrewView: View {
                         .fill(
                             row.isStopped
                                 ? mutedColor.opacity(0.5)
-                                : stateColor(row.state).opacity(row.needsAttention || row.state == .working ? 1 : 0.5))
+                                : stateColor(row.state).opacity(row.needsAttention || row.state == .working ? 1 : 0.5)
+                        )
                         .frame(width: 7, height: 7)
                     Text(row.handle)
                         .font(fontScale.font(.sm).monospaced().weight(.semibold))

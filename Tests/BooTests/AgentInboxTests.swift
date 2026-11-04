@@ -60,7 +60,8 @@ final class AgentInboxTests: XCTestCase {
 
         inbox.apply(event: "tool", tabID: tab, tool: "AskUserQuestion")
         inbox.apply(event: "permission", tabID: tab, message: "Claude needs your permission to use Bash")
-        XCTAssertEqual(inbox.items[tab]?.message, "Claude needs your permission to use Bash", "a new prompt has its own text")
+        XCTAssertEqual(
+            inbox.items[tab]?.message, "Claude needs your permission to use Bash", "a new prompt has its own text")
         XCTAssertEqual(inbox.items[tab]?.asksQuestion, false, "a permission prompt takes Allow / Deny")
     }
 

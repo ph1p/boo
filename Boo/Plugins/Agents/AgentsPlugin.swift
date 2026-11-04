@@ -55,7 +55,7 @@ final class AgentsPlugin: BooPluginProtocol {
             PluginManifest.SettingManifest(
                 key: "worktreeFolder", type: .string, label: "Worktree folder",
                 description: "Where new task worktrees go, one folder per repository.",
-                defaultValue: AnyCodableValue(""), options: "agentWorktreeFolder", group: "Tasks"),
+                defaultValue: AnyCodableValue(""), options: "agentWorktreeFolder", group: "Tasks")
         ]
     )
 

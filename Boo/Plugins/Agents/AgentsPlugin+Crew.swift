@@ -13,7 +13,8 @@ extension AgentsPlugin {
                 })
         }
         crewObservers.append(
-            NotificationCenter.default.addObserver(forName: .agentWorktreesChanged, object: nil, queue: .main) { [weak self] _ in
+            NotificationCenter.default.addObserver(forName: .agentWorktreesChanged, object: nil, queue: .main) {
+                [weak self] _ in
                 MainActor.assumeIsolated {
                     guard let self else { return }
                     self.worktreeScan.invalidate()
@@ -53,7 +54,8 @@ extension AgentsPlugin {
                 agent: item.agent, state: item.state,
                 // One plain line: the first line of the answer, without markdown code ticks.
                 detail: detail.map {
-                    ($0.split(whereSeparator: \.isNewline).first.map(String.init) ?? $0).replacingOccurrences(of: "`", with: "")
+                    ($0.split(whereSeparator: \.isNewline).first.map(String.init) ?? $0).replacingOccurrences(
+                        of: "`", with: "")
                 },
                 parent: fields["parent"] as? String, queued: fields["queued"] as? Int ?? 0,
                 needsAttention: item.needsAttention, isTask: isTask(item.tabID),
@@ -146,7 +148,8 @@ extension AgentsPlugin {
     }
 
     enum CrewAction: String {
-        case show, message, resume, review, merge, discard, allow, deny, newTask = "new_task"
+        case show, message, resume, review, merge, discard, allow, deny
+        case newTask = "new_task"
     }
 
     /// What the crew section's buttons and context menu do (also `debug_crew_action`).
@@ -157,7 +160,9 @@ extension AgentsPlugin {
         switch (action, row) {
         case (.newTask, _):
             if let text {
-                startTask(prompt: text, agent: ui.taskAgent) { error in if let error { booLog(.info, .sidebar, "crew start failed: \(error)") } }
+                startTask(prompt: text, agent: ui.taskAgent) { error in
+                    if let error { booLog(.info, .sidebar, "crew start failed: \(error)") }
+                }
             } else {
                 ui.open(.newTask)
             }
@@ -166,9 +171,12 @@ extension AgentsPlugin {
             AgentInbox.shared.jump(to: row.id)
         case (.message, let row?):
             if let text { AgentCrew.shared.send(to: row.id, from: nil, text: text) } else { ui.open(.message(row.id)) }
-        case (.resume, let row?): withTask(row) { controller, workspaceID in controller.resumeAgentTask(workspaceID: workspaceID) }
-        case (.review, let row?): withTask(row) { controller, workspaceID in _ = controller.openReview(workspaceID: workspaceID) }
-        case (.merge, let row?): withTask(row) { controller, workspaceID in controller.mergeAgentTask(workspaceID: workspaceID) }
+        case (.resume, let row?):
+            withTask(row) { controller, workspaceID in controller.resumeAgentTask(workspaceID: workspaceID) }
+        case (.review, let row?):
+            withTask(row) { controller, workspaceID in _ = controller.openReview(workspaceID: workspaceID) }
+        case (.merge, let row?):
+            withTask(row) { controller, workspaceID in controller.mergeAgentTask(workspaceID: workspaceID) }
         case (.discard, let row?): ui.open(.discard(row.id))
         case (.allow, let row?): respond(.approve, to: row)
         case (.deny, let row?): respond(.deny, to: row)

@@ -425,9 +425,11 @@ extension PaneView {
         let iconX = textX
         textX += drawLeadingIcon(tab: tab, theme: theme, x: textX, midY: midY, isActive: isActive)
         if agentOnTile, let agentColor {
-            Self.drawAgentBadge(ctx, color: agentColor, theme: theme, tileCorner: CGPoint(
-                x: iconX - Self.tabTextLeadIn + Self.tabIconTileInset + Self.tabIconTileSize,
-                y: midY - Self.tabIconTileSize / 2))
+            Self.drawAgentBadge(
+                ctx, color: agentColor, theme: theme,
+                tileCorner: CGPoint(
+                    x: iconX - Self.tabTextLeadIn + Self.tabIconTileInset + Self.tabIconTileSize,
+                    y: midY - Self.tabIconTileSize / 2))
         }
 
         // Title — use truncating tail paragraph style for automatic ellipsis
@@ -487,7 +489,8 @@ extension PaneView {
         // the close slot, and the ✕ replaces it on hover.
         if showDot {
             let dotSize = WorkspacePillStyle.activityDotSize
-            let dotColor = agentInSlot ? agentColor : tab.state.triggerMark != nil ? theme.warning : theme.accentEmphasis
+            let dotColor =
+                agentInSlot ? agentColor : tab.state.triggerMark != nil ? theme.warning : theme.accentEmphasis
             ctx.setFillColor((dotColor ?? theme.accentEmphasis).cgColor)
             ctx.fillEllipse(
                 in: CGRect(

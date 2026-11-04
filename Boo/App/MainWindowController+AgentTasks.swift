@@ -139,7 +139,8 @@ extension MainWindowController {
                     let title = name.isEmpty ? (info.path as NSString).lastPathComponent : name
                     let workspace = self.openWorkspace(
                         path: info.path, name: title,
-                        initialCommand: Self.withTaskSetup(Self.agentTaskCommand(kind: kind, prompt: prompt, model: model)))
+                        initialCommand: Self.withTaskSetup(
+                            Self.agentTaskCommand(kind: kind, prompt: prompt, model: model)))
                     let tabID = workspace.pane(for: workspace.activePaneID)?.tabs.last?.id
                     completion(.success(AgentTaskLaunch(info: info, workspaceID: workspace.id, tabID: tabID)))
                 case .failure(let error):
@@ -418,7 +419,9 @@ extension MainWindowController {
 
     /// What discarding a task does and loses, e.g. "Closes the workspace and
     /// deletes the worktree and branch x, losing 2 unmerged commits."
-    static func discardSummary(info: AgentWorktree.Info, status: AgentWorktree.Status) -> (text: String, losesWork: Bool) {
+    static func discardSummary(
+        info: AgentWorktree.Info, status: AgentWorktree.Status
+    ) -> (text: String, losesWork: Bool) {
         var losses: [String] = []
         if status.ahead > 0 { losses.append("\(status.ahead) unmerged commit\(status.ahead == 1 ? "" : "s")") }
         if status.isDirty { losses.append("uncommitted changes") }
@@ -510,7 +513,8 @@ extension MainWindowController {
         }
         guard let paneView = paneViews[workspace.activePaneID] else { return false }
         let model = AgentReviewModel(workspaceID: workspaceID, folder: workspace.folderPath)
-        paneView.addPluginViewTab(view: AnyView(AgentReviewView(model: model)), title: title, icon: "checklist",
+        paneView.addPluginViewTab(
+            view: AnyView(AgentReviewView(model: model)), title: title, icon: "checklist",
             workingDirectory: workspace.folderPath)
         model.reload()
         return true
@@ -538,7 +542,8 @@ extension MainWindowController {
         }
         guard let paneView = paneViews[workspace.activePaneID] else { return false }
         let model = AgentReviewModel(workspaceID: workspace.id, folder: repoRoot, source: source, selectedPath: path)
-        paneView.addPluginViewTab(view: AnyView(AgentReviewView(model: model)), title: title, icon: "plus.forwardslash.minus",
+        paneView.addPluginViewTab(
+            view: AnyView(AgentReviewView(model: model)), title: title, icon: "plus.forwardslash.minus",
             workingDirectory: repoRoot)
         model.reload()
         return true
