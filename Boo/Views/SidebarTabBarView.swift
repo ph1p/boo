@@ -535,23 +535,3 @@ class SidebarTabBarView: NSView {
         attrStr.draw(at: NSPoint(x: textX, y: textY))
     }
 }
-
-// MARK: - NSImage Tinting Extension
-
-extension NSImage {
-    /// Create a tinted copy of a template image at the specified size.
-    fileprivate func tinted(with color: NSColor, size: NSSize) -> NSImage {
-        let img = NSImage(size: size, flipped: false) { rect in
-            // Draw the original image
-            self.draw(
-                in: rect, from: NSRect(origin: .zero, size: self.size),
-                operation: .sourceOver, fraction: 1.0)
-            // Apply tint color using sourceAtop to color only opaque pixels
-            color.setFill()
-            rect.fill(using: .sourceAtop)
-            return true
-        }
-        img.isTemplate = false
-        return img
-    }
-}

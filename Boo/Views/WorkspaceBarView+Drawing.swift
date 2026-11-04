@@ -226,15 +226,7 @@ extension WorkspaceBarView {
         if let pinImage = NSImage(systemSymbolName: "pin.fill", accessibilityDescription: nil) {
             let sized = pinImage.withSymbolConfiguration(.init(pointSize: iconSize, weight: .regular)) ?? pinImage
             sized.isTemplate = true
-            let tintColor = color.withAlphaComponent(0.5)
-
-            let tinted = NSImage(size: iconRect.size, flipped: false) { drawRect in
-                tintColor.set()
-                sized.draw(in: drawRect, from: .zero, operation: .sourceOver, fraction: 1)
-                NSRect(origin: .zero, size: drawRect.size).fill(using: .sourceAtop)
-                return true
-            }
-            tinted.draw(in: iconRect)
+            sized.tinted(with: color.withAlphaComponent(0.5), size: iconRect.size).draw(in: iconRect)
         } else {
             ctx.setFillColor(color.withAlphaComponent(0.5).cgColor)
             ctx.fillEllipse(in: CGRect(x: origin.x + 1, y: origin.y + 1, width: 5, height: 5))

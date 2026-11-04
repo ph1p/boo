@@ -178,13 +178,7 @@ extension ToolbarView {
                 let iconSize: CGFloat = 9
                 let iconY = (barHeight - iconSize) / 2
                 let iconRect = NSRect(x: contentX, y: iconY, width: iconSize, height: iconSize)
-                let tinted = NSImage(size: iconRect.size, flipped: false) { drawRect in
-                    pinColor.set()
-                    pinImg.draw(in: drawRect, from: .zero, operation: .sourceOver, fraction: 1)
-                    NSRect(origin: .zero, size: drawRect.size).fill(using: .sourceAtop)
-                    return true
-                }
-                tinted.draw(in: iconRect)
+                pinImg.tinted(with: pinColor, size: iconRect.size).draw(in: iconRect)
                 contentX += 13
             }
 
