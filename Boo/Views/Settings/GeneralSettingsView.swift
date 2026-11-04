@@ -46,26 +46,17 @@ struct GeneralSettingsView: View {
                     label: "New tabs and panes open in",
                     help: "The active tab's current directory, or the workspace default folder."
                 ) {
-                    Picker("", selection: $newTabCwdMode) {
-                        ForEach(NewTabCwdMode.allCases, id: \.self) { Text($0.label).tag($0) }
-                    }
-                    .labelsHidden()
-                    .pickerStyle(.segmented)
+                    ThemedSegmentedPicker(selection: $newTabCwdMode) { $0.label }
                     .onChange(of: newTabCwdMode) { _, v in AppSettings.shared.newTabCwdMode = v }
                 }
             }
 
             Section(title: "Startup") {
                 SettingRow(label: "Initial tab") {
-                    Picker("", selection: $defaultTabType) {
-                        Text(ContentType.terminal.displayName).tag(ContentType.terminal)
-                        Text(ContentType.browser.displayName).tag(ContentType.browser)
-                        Text(ContentType.editor.displayName).tag(ContentType.editor)
-                        Text(ContentType.imageViewer.displayName).tag(ContentType.imageViewer)
-                        Text(ContentType.markdownPreview.displayName).tag(ContentType.markdownPreview)
-                    }
-                    .labelsHidden()
-                    .fixedSize()
+                    ThemedMenuPicker(
+                        selection: $defaultTabType,
+                        options: [.terminal, .browser, .editor, .imageViewer, .markdownPreview]
+                    ) { $0.displayName }
                     .onChange(of: defaultTabType) { _, v in
                         AppSettings.shared.defaultTabType = v
                     }
@@ -312,11 +303,9 @@ private struct CommandHistorySection: View {
             }
 
             SettingRow(label: "Keep for", help: "Older commands are removed at launch. 0 keeps them forever.") {
-                Stepper(value: $retentionDays, in: 0...3650, step: 30) {
-                    Text(retentionDays == 0 ? "Forever" : "\(retentionDays) days")
-                        .font(.system(size: 12).monospacedDigit())
+                ThemedStepper(value: $retentionDays, in: 0...3650, step: 30) {
+                    $0 == 0 ? "Forever" : "\($0) days"
                 }
-                .controlSize(.small)
                 .onChange(of: retentionDays) { _, v in AppSettings.shared.historyRetentionDays = v }
             }
 

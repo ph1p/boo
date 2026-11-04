@@ -52,22 +52,16 @@ struct NotificationsSettingsView: View {
                         label: "Minimum command duration",
                         help: "Only commands that ran at least this long notify. Shorter ones still mark the tab."
                     ) {
-                        Picker(
-                            "",
+                        ThemedMenuPicker(
                             selection: Binding(
                                 get: { minCommandSeconds },
                                 set: {
                                     minCommandSeconds = $0
                                     AppSettings.shared.notifyMinCommandSeconds = $0
                                 }
-                            )
-                        ) {
-                            ForEach(Self.minCommandChoices, id: \.self) { seconds in
-                                Text(seconds == 0 ? "Any" : "\(seconds) seconds").tag(seconds)
-                            }
-                        }
-                        .labelsHidden()
-                        .fixedSize()
+                            ),
+                            options: Self.minCommandChoices
+                        ) { $0 == 0 ? "Any" : "\($0) seconds" }
                     }
                 }
 
@@ -90,22 +84,16 @@ struct NotificationsSettingsView: View {
                         help:
                             "Clear notifications from Notification Center after this long. Focusing the tab always clears its notification."
                     ) {
-                        Picker(
-                            "",
+                        ThemedMenuPicker(
                             selection: Binding(
                                 get: { expiryMinutes },
                                 set: {
                                     expiryMinutes = $0
                                     AppSettings.shared.notificationExpiryMinutes = $0
                                 }
-                            )
-                        ) {
-                            ForEach(Self.expiryChoices, id: \.self) { minutes in
-                                Text(minutes == 0 ? "Never" : minutes < 60 ? "\(minutes) min" : "1 hour").tag(minutes)
-                            }
-                        }
-                        .labelsHidden()
-                        .fixedSize()
+                            ),
+                            options: Self.expiryChoices
+                        ) { $0 == 0 ? "Never" : $0 < 60 ? "\($0) min" : "1 hour" }
                     }
 
                     permissionRow

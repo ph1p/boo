@@ -173,13 +173,13 @@ struct CrewGroup: Identifiable {
     var needsYou: Bool { rows.contains(where: AgentCrewView.needsYou) }
 }
 
-/// Every agent in every window, grouped by workspace: the active one first,
-/// then the others in workspace-bar order, then agents outside Boo. In a group,
+/// Every agent in every window, grouped by workspace in workspace-bar order,
+/// then agents outside Boo. In a group,
 /// each helper sits under the agent that started it, stopped tasks last.
 /// Behaves like a sidebar: a click selects and shows the agent, ↑/↓ selects, Return shows it,
 /// Space writes it a message, Delete offers to discard a task, Escape closes
 /// the open field. Messages and discards are typed or confirmed in place; a new
-/// agent starts from the section header's "+" popover (`AgentNewTaskPopover`).
+/// agent starts from the list header's "+" popover (`AgentNewTaskPopover`).
 struct AgentCrewView: View {
     let rows: [AgentCrewRow]
     let fontScale: SidebarFontScale
@@ -235,8 +235,8 @@ struct AgentCrewView: View {
         !row.isStopped && row.hasHooks && (row.state == .needsInput || row.state == .error)
     }
 
-    /// Rows by workspace: the active one first, then by `order`, then agents
-    /// outside Boo. Each group lists its live agents as a tree, then stopped ones.
+    /// Rows by workspace in workspace-bar `order`, then agents outside Boo; the
+    /// active workspace keeps its place. Each group lists its live agents as a tree, then stopped ones.
     static func groups(_ rows: [AgentCrewRow], activeWorkspaceID: UUID?) -> [CrewGroup] {
         var byID: [String: [AgentCrewRow]] = [:]
         var workspaces: [String: CrewWorkspace] = [:]
@@ -247,9 +247,10 @@ struct AgentCrewView: View {
             byID[id, default: []].append(row)
             if let workspace = row.workspace { workspaces[id] = workspace }
         }
+        // Workspace-bar order only: switching workspaces must not reshuffle the list.
         func rank(_ id: String) -> (Int, Int, Int) {
-            guard let workspace = workspaces[id] else { return (2, 0, 0) }
-            return (workspace.id == activeWorkspaceID ? 0 : 1, workspace.order, firstSeen.firstIndex(of: id) ?? 0)
+            guard let workspace = workspaces[id] else { return (1, 0, 0) }
+            return (0, workspace.order, firstSeen.firstIndex(of: id) ?? 0)
         }
         return firstSeen.sorted { rank($0) < rank($1) }.map { id in
             let rows = byID[id] ?? []
@@ -308,6 +309,7 @@ struct AgentCrewView: View {
         let hidden = hiddenRows
         VStack(alignment: .leading, spacing: 0) {
             let formInList = state.composer == .newTask && !state.newTaskInPopover && !agents.isEmpty
+            if !groups.isEmpty { crewHeader(groups.flatMap(\.rows)) }
             if formInList { inlineNewTask }
             if groups.isEmpty && !formInList {
                 emptyState(othersRunning: !hidden.isEmpty)
@@ -334,7 +336,6 @@ struct AgentCrewView: View {
                 }
             }
             if !hidden.isEmpty { otherWorkspacesFooter(hidden) }
-            if !groups.isEmpty && !agents.isEmpty && !formInList { newAgentButton }
         }
         .padding(.bottom, 8)
         .frame(maxWidth: .infinity, alignment: .topLeading)
@@ -541,10 +542,10 @@ struct AgentCrewView: View {
                 Button(action: { state.open(.newTask) }) {
                     Label("New Agent", systemImage: "plus")
                 }
-                .buttonStyle(.themed(.primary))
+                .buttonStyle(.themed(.primary, size: .large))
                 .font(fontScale.font(.sm).weight(.medium))
                 .background(newTaskAnchor)
-                .padding(.top, 6)
+                .padding(.top, 8)
                 .help("Start an agent in a new tab or on its own worktree")
             }
         }
@@ -554,20 +555,48 @@ struct AgentCrewView: View {
         .padding(.bottom, 10)
     }
 
-    /// Below the list: opens the new-agent popover under itself.
-    private var newAgentButton: some View {
-        Button(action: { state.open(.newTask) }) {
-            Label("New Agent", systemImage: "plus")
+    /// Bar over the list, like the file explorer's: what the crew is doing on
+    /// the left, "+" (New Agent) on the right. Only shows while agents are
+    /// listed; with none, the empty state carries the large button instead.
+    private func crewHeader(_ rows: [AgentCrewRow]) -> some View {
+        let live = rows.filter { !$0.isStopped }
+        let working = live.filter { $0.state == .working }.count
+        let waiting = rows.filter(Self.needsYou).count
+        let stopped = rows.count - live.count
+        var parts: [String] = []
+        if working > 0 { parts.append("\(working) running") }
+        if stopped > 0 { parts.append("\(stopped) stopped") }
+        if parts.isEmpty { parts.append("\(rows.count) \(rows.count == 1 ? "agent" : "agents")") }
+        return HStack(spacing: 6) {
+            HStack(spacing: 5) {
+                Text(parts.joined(separator: " · "))
+                    .foregroundStyle(mutedColor)
+                if waiting > 0 {
+                    Text("·").foregroundStyle(mutedColor.opacity(0.6))
+                    Text("\(waiting) \(waiting == 1 ? "needs" : "need") you")
+                        .fontWeight(.medium)
+                        .foregroundStyle(Tokens.current.warning)
+                }
+            }
+            .font(fontScale.font(.xs))
+            .lineLimit(1)
+            .truncationMode(.tail)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.leading, 4)
+            if !agents.isEmpty {
+                SidebarIconButton(
+                    systemName: "plus", help: "New Agent: start one in a new tab or on its own worktree",
+                    tint: textColor, size: 12, weight: .semibold
+                ) { state.open(.newTask) }
+                .background(newTaskAnchor)
+            }
         }
-        .buttonStyle(.themed(.secondary, size: .large, fullWidth: true))
-        .font(fontScale.font(.sm).weight(.medium))
-        .background(newTaskAnchor)
-        .padding(.horizontal, 8)
-        .padding(.top, 10)
-        .help("Start an agent in a new tab or on its own worktree")
+        .padding(.horizontal, 6)
+        .padding(.top, 2)
+        .padding(.bottom, 4)
+        .accessibilityElement(children: .contain)
     }
 
-    /// Where the new-agent popover points.
     private var newTaskAnchor: some View {
         AgentNewTaskAnchor { view in
             AgentNewTaskPopover.present(

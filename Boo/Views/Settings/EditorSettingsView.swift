@@ -37,7 +37,6 @@ struct EditorSettingsView: View {
             Section(title: "Font") {
                 SettingRow(label: "Family") {
                     FontChooser(selectedFont: $fontName, fonts: monoFonts)
-                        .frame(width: 220)
                         .onChange(of: fontName) { _, v in AppSettings.shared.editorFontName = v }
                 }
                 SettingRow(label: "Size") {
@@ -45,7 +44,6 @@ struct EditorSettingsView: View {
                         value: Binding(get: { Double(fontSize) }, set: { fontSize = CGFloat($0) }),
                         range: 9...24
                     )
-                    .frame(width: 90)
                     .onChange(of: fontSize) { _, v in AppSettings.shared.editorFontSize = v }
                 }
                 ToggleRow(
@@ -58,14 +56,7 @@ struct EditorSettingsView: View {
 
             Section(title: "Editing") {
                 SettingRow(label: "Tab size") {
-                    Picker("", selection: $tabSize) {
-                        Text("2").tag(2)
-                        Text("4").tag(4)
-                        Text("8").tag(8)
-                    }
-                    .pickerStyle(.menu)
-                    .labelsHidden()
-                    .fixedSize()
+                    ThemedSegmentedPicker(selection: $tabSize, options: [2, 4, 8]) { "\($0)" }
                     .onChange(of: tabSize) { _, v in AppSettings.shared.editorTabSize = v }
                 }
                 ToggleRow(label: "Insert spaces", isOn: $insertSpaces)
@@ -86,7 +77,7 @@ struct EditorSettingsView: View {
                 ToggleRow(label: "Minimap", isOn: $minimap)
                     .onChange(of: minimap) { _, v in AppSettings.shared.editorMinimap = v }
                 SettingRow(label: "Show whitespace") {
-                    menuPicker($renderWhitespace, \.displayName)
+                    ThemedMenuPicker(selection: $renderWhitespace) { $0.displayName }
                         .onChange(of: renderWhitespace) { _, v in AppSettings.shared.editorRenderWhitespace = v }
                 }
                 ToggleRow(label: "Colored bracket pairs", isOn: $bracketPairColors)
@@ -117,7 +108,7 @@ struct EditorSettingsView: View {
 
             Section(title: "Cursor") {
                 SettingRow(label: "Style") {
-                    menuPicker($cursorStyle, \.displayName)
+                    ThemedMenuPicker(selection: $cursorStyle) { $0.displayName }
                         .onChange(of: cursorStyle) { _, v in AppSettings.shared.editorCursorStyle = v }
                 }
                 ToggleRow(label: "Blink", isOn: $cursorBlinking)
@@ -130,21 +121,11 @@ struct EditorSettingsView: View {
                     help: "file:line links in terminal output. ⌘⌥-click opens the other one. "
                         + "Remote panes always use the built-in editor."
                 ) {
-                    Picker("", selection: $linkTarget) {
-                        ForEach(LinkTarget.allCases, id: \.self) { Text($0.displayName).tag($0) }
-                    }
-                    .labelsHidden()
-                    .pickerStyle(.menu)
-                    .fixedSize()
+                    ThemedMenuPicker(selection: $linkTarget) { $0.displayName }
                     .onChange(of: linkTarget) { _, v in AppSettings.shared.defaultLinkTarget = v }
                 }
                 SettingRow(label: "External editor") {
-                    Picker("", selection: $editorPreset) {
-                        ForEach(ExternalEditorPreset.allCases, id: \.self) { Text($0.displayName).tag($0) }
-                    }
-                    .labelsHidden()
-                    .pickerStyle(.menu)
-                    .fixedSize()
+                    ThemedMenuPicker(selection: $editorPreset) { $0.displayName }
                     .onChange(of: editorPreset) { _, v in AppSettings.shared.externalEditorPreset = v }
                 }
                 if editorPreset == .custom {
@@ -167,7 +148,7 @@ struct EditorSettingsView: View {
                     + "explicit save or focus change."
             ) {
                 SettingRow(label: "Autosave") {
-                    menuPicker($autosave, \.displayName)
+                    ThemedMenuPicker(selection: $autosave) { $0.displayName }
                         .onChange(of: autosave) { _, v in AppSettings.shared.editorAutosave = v }
                 }
                 ToggleRow(
@@ -197,14 +178,4 @@ struct EditorSettingsView: View {
         }
     }
 
-    private func menuPicker<Choice: CaseIterable & Hashable>(
-        _ selection: Binding<Choice>, _ name: KeyPath<Choice, String>
-    ) -> some View where Choice.AllCases: RandomAccessCollection {
-        Picker("", selection: selection) {
-            ForEach(Array(Choice.allCases), id: \.self) { Text($0[keyPath: name]).tag($0) }
-        }
-        .pickerStyle(.menu)
-        .labelsHidden()
-        .fixedSize()
-    }
 }

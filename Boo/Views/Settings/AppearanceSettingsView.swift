@@ -23,11 +23,7 @@ struct AppearanceSettingsView: View {
         SettingsPage(title: "Appearance") {
             Section(title: "Cursor") {
                 SettingStack(label: "Style") {
-                    Picker("", selection: $cursorStyle) {
-                        ForEach(CursorStyle.allCases, id: \.self) { Text($0.label).tag($0) }
-                    }
-                    .labelsHidden()
-                    .pickerStyle(.segmented)
+                    ThemedSegmentedPicker(selection: $cursorStyle) { $0.label }
                     .onChange(of: cursorStyle) { _, v in AppSettings.shared.cursorStyle = v }
                 }
             }
@@ -35,12 +31,10 @@ struct AppearanceSettingsView: View {
             Section(title: "Terminal Font") {
                 SettingRow(label: "Family") {
                     FontChooser(selectedFont: $termSelectedFont, fonts: monoFonts)
-                        .frame(width: 220)
                         .onChange(of: termSelectedFont) { _, v in AppSettings.shared.fontName = v }
                 }
                 SettingRow(label: "Size") {
                     FontSizePicker(value: $termFontSize, range: 10...28)
-                        .frame(width: 90)
                         .onChange(of: termFontSize) { _, v in AppSettings.shared.fontSize = CGFloat(v) }
                 }
                 Text("$ echo \"Hello, Boo\"")
@@ -65,7 +59,6 @@ struct AppearanceSettingsView: View {
             Section(title: "Sidebar Font") {
                 SettingRow(label: "Family") {
                     FontChooser(selectedFont: $sidebarSelectedFont, fonts: systemFonts)
-                        .frame(width: 220)
                         .onChange(of: sidebarSelectedFont) { _, v in
                             AppSettings.shared.sidebarFontName = v == "System Default" ? "" : v
                         }
@@ -75,7 +68,6 @@ struct AppearanceSettingsView: View {
                     help: "Applied to file trees and content only — not to section headers."
                 ) {
                     FontSizePicker(value: $sidebarFontSize, range: 10...20)
-                        .frame(width: 90)
                         .onChange(of: sidebarFontSize) { _, v in AppSettings.shared.sidebarFontSize = CGFloat(v) }
                 }
                 VStack(alignment: .leading, spacing: 4) {

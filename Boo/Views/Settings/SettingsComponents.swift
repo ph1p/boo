@@ -92,81 +92,32 @@ struct SettingsRowDivider: View {
 
 // MARK: - Reusable Controls
 
-struct FontSizePicker: NSViewRepresentable {
+/// Point-size menu over a whole-number range.
+struct FontSizePicker: View {
     @Binding var value: Double
     let range: ClosedRange<Double>
+    var width: CGFloat = 90
 
-    func makeNSView(context: Context) -> NSPopUpButton {
-        let popup = NSPopUpButton(frame: .zero, pullsDown: false)
-        popup.bezelStyle = .push
-        popup.controlSize = .regular
-        let sizes = Array(stride(from: range.lowerBound, through: range.upperBound, by: 1))
-        for size in sizes {
-            popup.addItem(withTitle: "\(Int(size)) pt")
-            popup.lastItem?.tag = Int(size)
-        }
-        popup.target = context.coordinator
-        popup.action = #selector(Coordinator.selectionChanged(_:))
-        return popup
-    }
-
-    func updateNSView(_ popup: NSPopUpButton, context: Context) {
-        let tag = Int(value)
-        if popup.selectedTag() != tag {
-            popup.selectItem(withTag: tag)
-        }
-    }
-
-    func makeCoordinator() -> Coordinator { Coordinator(value: $value) }
-
-    @MainActor final class Coordinator: NSObject {
-        var value: Binding<Double>
-        init(value: Binding<Double>) { self.value = value }
-
-        @objc func selectionChanged(_ sender: NSPopUpButton) {
-            value.wrappedValue = Double(sender.selectedTag())
-        }
+    var body: some View {
+        ThemedMenuPicker(
+            selection: $value,
+            options: Array(stride(from: range.lowerBound, through: range.upperBound, by: 1)),
+            width: width
+        ) { "\(Int($0)) pt" }
     }
 }
 
-struct FontChooser: NSViewRepresentable {
+/// Font-family menu; each item is drawn in its own face.
+struct FontChooser: View {
     @Binding var selectedFont: String
     let fonts: [String]
+    var width: CGFloat = 220
 
-    func makeNSView(context: Context) -> NSPopUpButton {
-        let popup = NSPopUpButton(frame: .zero, pullsDown: false)
-        popup.bezelStyle = .push
-        popup.controlSize = .regular
-        for name in fonts {
-            popup.addItem(withTitle: name)
-            guard let item = popup.lastItem else { continue }
-            item.attributedTitle = NSAttributedString(
-                string: name,
-                attributes: [.font: NSFont(name: name, size: 13) ?? NSFont.systemFont(ofSize: 13)]
-            )
-        }
-        popup.target = context.coordinator
-        popup.action = #selector(Coordinator.selectionChanged(_:))
-        return popup
-    }
-
-    func updateNSView(_ popup: NSPopUpButton, context: Context) {
-        if popup.titleOfSelectedItem != selectedFont {
-            popup.selectItem(withTitle: selectedFont)
-        }
-    }
-
-    func makeCoordinator() -> Coordinator { Coordinator(selectedFont: $selectedFont) }
-
-    @MainActor final class Coordinator: NSObject {
-        var selectedFont: Binding<String>
-        init(selectedFont: Binding<String>) { self.selectedFont = selectedFont }
-
-        @objc func selectionChanged(_ sender: NSPopUpButton) {
-            if let title = sender.titleOfSelectedItem {
-                selectedFont.wrappedValue = title
-            }
-        }
+    var body: some View {
+        ThemedMenuPicker(
+            selection: $selectedFont, options: fonts, width: width,
+            itemFont: { NSFont(name: $0, size: 13) }
+        ) { $0 }
     }
 }
 
@@ -180,8 +131,7 @@ struct ToggleRow: View {
         SettingRow(label: label, help: help, alignment: .center) {
             Toggle("", isOn: $isOn)
                 .labelsHidden()
-                .toggleStyle(.switch)
-                .controlSize(.small)
+                .toggleStyle(.themedSwitch)
         }
     }
 }

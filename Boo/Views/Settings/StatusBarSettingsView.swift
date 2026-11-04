@@ -57,25 +57,15 @@ struct StatusBarSettingsView: View {
 
             Section(title: "Appearance") {
                 SettingStack(label: "Clock") {
-                    Picker("", selection: LayoutSettingsBindings.binding(\.statusBarClockFormat)) {
-                        ForEach(StatusBarClockFormat.allCases, id: \.self) { Text($0.label).tag($0) }
-                    }
-                    .labelsHidden()
-                    .pickerStyle(.segmented)
+                    ThemedSegmentedPicker(selection: LayoutSettingsBindings.binding(\.statusBarClockFormat)) { $0.label }
                 }
                 SettingStack(label: "Path", help: Self.pathHelp(AppSettings.shared.statusBarPathStyle)) {
-                    Picker("", selection: LayoutSettingsBindings.binding(\.statusBarPathStyle)) {
-                        ForEach(StatusBarPathStyle.allCases, id: \.self) { Text($0.label).tag($0) }
-                    }
-                    .labelsHidden()
-                    .pickerStyle(.segmented)
+                    ThemedSegmentedPicker(selection: LayoutSettingsBindings.binding(\.statusBarPathStyle)) { $0.label }
                 }
                 SettingRow(label: "Branch name length", help: "Longer branch names are cut off with an ellipsis.") {
-                    Stepper(value: LayoutSettingsBindings.binding(\.statusBarBranchMaxLength), in: 4...80, step: 2) {
-                        Text("\(AppSettings.shared.statusBarBranchMaxLength) characters")
-                            .font(.system(size: 12).monospacedDigit())
+                    ThemedStepper(value: LayoutSettingsBindings.binding(\.statusBarBranchMaxLength), in: 4...80, step: 2) {
+                        "\($0) characters"
                     }
-                    .controlSize(.small)
                 }
                 ToggleRow(
                     label: "Separators",

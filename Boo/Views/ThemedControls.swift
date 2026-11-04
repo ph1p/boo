@@ -34,19 +34,21 @@ struct ThemedButtonStyle: ButtonStyle {
         @State private var hovered = false
 
         var body: some View {
-            let shape = RoundedRectangle(cornerRadius: size == .large ? 9 : 6, style: .continuous)
+            let shape = RoundedRectangle(cornerRadius: size == .large ? BooStyle.Radius.large : BooStyle.Radius.control, style: .continuous)
             configuration.label
                 .font(.system(size: size == .large ? 12 : 11, weight: .medium))
                 .lineLimit(1)
                 .foregroundStyle(foreground)
                 .padding(.horizontal, size == .large ? 12 : 9)
                 .frame(maxWidth: fullWidth ? .infinity : nil)
-                .frame(minHeight: size == .large ? 32 : 22)
+                .frame(minHeight: size == .large ? BooStyle.Height.large : BooStyle.Height.control)
+                // Fill only, no stroke: a translucent hairline over a translucent
+                // fill read as a dark ring around the button on most themes.
                 .background(shape.fill(fill))
-                .overlay(shape.strokeBorder(variant == .secondary ? t.separator : .clear, lineWidth: 0.5))
                 .opacity(isEnabled ? 1 : 0.45)
                 .contentShape(shape)
                 .onHover { hovered = $0 && isEnabled }
+                .animation(.easeOut(duration: 0.12), value: hovered)
         }
 
         private var foreground: Color {
@@ -64,7 +66,7 @@ struct ThemedButtonStyle: ButtonStyle {
             // Deliberate raw alpha: a tinted wash stepping through the hover band.
             case .primary: return t.accent.opacity(pressed ? 0.3 : hovered ? 0.22 : 0.14)
             case .destructive: return t.error.opacity(pressed ? 0.3 : hovered ? 0.22 : 0.12)
-            case .secondary: return pressed ? t.controlFill : hovered ? t.hoverFill : t.subtleFill
+            case .secondary: return pressed ? t.separator : hovered ? t.controlFill : t.hoverFill
             case .subtle: return pressed ? t.controlFill : hovered ? t.hoverFill : .clear
             }
         }
@@ -107,10 +109,10 @@ struct ThemedCheckboxStyle: ToggleStyle {
                 configuration.isOn.toggle()
             } label: {
                 HStack(spacing: 5) {
-                    RoundedRectangle(cornerRadius: 3.5, style: .continuous)
+                    RoundedRectangle(cornerRadius: BooStyle.Radius.tiny, style: .continuous)
                         .fill(configuration.isOn ? t.accent : t.subtleFill)
                         .overlay(
-                            RoundedRectangle(cornerRadius: 3.5, style: .continuous)
+                            RoundedRectangle(cornerRadius: BooStyle.Radius.tiny, style: .continuous)
                                 .strokeBorder(configuration.isOn ? .clear : t.textTertiary, lineWidth: 0.5)
                         )
                         .overlay {
@@ -138,7 +140,7 @@ struct ThemedTextFieldModifier: ViewModifier {
     func body(content: Content) -> some View {
         content
             .textFieldStyle(.plain)
-            .font(.system(size: 12))
+            .font(BooStyle.Font.body)
             .foregroundStyle(t.text)
             .focused($focused)
             .themedFieldChrome(focused: focused)
@@ -149,17 +151,30 @@ struct ThemedTextFieldModifier: ViewModifier {
 /// clear button) that track focus themselves.
 struct ThemedFieldChrome: ViewModifier {
     @Environment(\.tokens) private var t
+    @Environment(\.displayScale) private var scale
+    @State private var hovered = false
     let focused: Bool
 
     func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: BooStyle.Radius.control, style: .continuous)
         content
-            .padding(.horizontal, 7)
-            .frame(minHeight: 24)
-            .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(t.subtleFill))
+            .padding(.horizontal, 8)
+            .frame(minHeight: BooStyle.Height.control)
+            .background(shape.fill(t.subtleFill))
             .overlay(
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .strokeBorder(focused ? t.focusRing : t.separator, lineWidth: focused ? 1 : 0.5)
+                shape.strokeBorder(
+                    focused ? t.focusRing : hovered ? t.textTertiary.opacity(0.6) : t.separator,
+                    lineWidth: focused ? 1 : 1 / scale)
             )
+            // Soft halo outside the edge while editing, like the system focus ring.
+            .overlay(
+                RoundedRectangle(cornerRadius: BooStyle.Radius.control + 2, style: .continuous)
+                    .strokeBorder(t.accent.opacity(focused ? 0.22 : 0), lineWidth: 3)
+                    .padding(-3)
+                    .allowsHitTesting(false)
+            )
+            .onHover { hovered = $0 }
+            .animation(.easeOut(duration: 0.12), value: focused)
     }
 }
 

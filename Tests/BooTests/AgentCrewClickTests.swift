@@ -49,8 +49,9 @@ final class AgentCrewClickTests: XCTestCase {
         defer { AgentCrewUIState.shared.selection = saved }
         AgentCrewUIState.shared.selection = nil
 
-        // The "Outside Boo" group header takes the top 27pt; click the row's name line under it.
-        click(window, at: NSPoint(x: 120, y: height - 42), count: 1)
+        // The crew summary header (~22pt) and the "Outside Boo" group header (27pt)
+        // sit on top; click the row's name line under them.
+        click(window, at: NSPoint(x: 120, y: height - 64), count: 1)
         XCTAssertEqual(AgentCrewUIState.shared.selection, row.id, "a click selects")
         XCTAssertEqual(jumps, 1, "a click shows the agent")
     }

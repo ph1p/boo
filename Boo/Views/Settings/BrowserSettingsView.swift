@@ -60,13 +60,7 @@ struct BrowserSettingsView: View {
                 }
 
                 SettingRow(label: "Terminal links") {
-                    Picker("", selection: $linkOpenMode) {
-                        ForEach(LinkOpenMode.allCases, id: \.self) {
-                            Text($0.displayName).tag($0)
-                        }
-                    }
-                    .labelsHidden()
-                    .fixedSize()
+                    ThemedMenuPicker(selection: $linkOpenMode) { $0.displayName }
                     .onChange(of: linkOpenMode) { _, v in AppSettings.shared.linkOpenMode = v }
                 }
             }

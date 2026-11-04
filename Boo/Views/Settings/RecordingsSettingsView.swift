@@ -109,13 +109,9 @@ struct RecordingsSettingsView: View {
                     HStack(spacing: 10) {
                         Toggle("Shorten pauses", isOn: idleEnabled).toggleStyle(.themedCheckbox)
                         if settings.recordingIdleTimeLimit > 0 {
-                            Stepper(
+                            ThemedStepper(
                                 value: LayoutSettingsBindings.binding(\.recordingIdleTimeLimit), in: 0.5...60, step: 0.5
-                            ) {
-                                Text("\(Self.seconds(settings.recordingIdleTimeLimit))")
-                                    .font(.system(size: 12).monospacedDigit())
-                            }
-                            .controlSize(.small)
+                            ) { Self.seconds($0) }
                         }
                     }
                 }
@@ -132,11 +128,7 @@ struct RecordingsSettingsView: View {
                     isOn: LayoutSettingsBindings.binding(\.highlightRecordingPane)
                 )
                 SettingStack(label: "When a recording stops") {
-                    Picker("", selection: LayoutSettingsBindings.binding(\.recordingStopAction)) {
-                        ForEach(RecordingStopAction.allCases, id: \.self) { Text($0.label).tag($0) }
-                    }
-                    .labelsHidden()
-                    .pickerStyle(.segmented)
+                    ThemedSegmentedPicker(selection: LayoutSettingsBindings.binding(\.recordingStopAction)) { $0.label }
                 }
             }
 

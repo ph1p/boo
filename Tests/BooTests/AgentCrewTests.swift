@@ -420,7 +420,7 @@ final class AgentCrewTests: XCTestCase {
         XCTAssertEqual(loop.count, 2)
     }
 
-    func testGroupsPutActiveWorkspaceFirstAndOutsideLast() {
+    func testGroupsKeepBarOrderAndOutsideLast() {
         let active = CrewWorkspace(id: UUID(), name: "boo", order: 2)
         let first = CrewWorkspace(id: UUID(), name: "api", order: 0)
         let second = CrewWorkspace(id: UUID(), name: "site", order: 1)
@@ -441,17 +441,19 @@ final class AgentCrewTests: XCTestCase {
             row("t5", first), row("t1", active)
         ]
         let groups = AgentCrewView.groups(rows, activeWorkspaceID: active.id)
-        XCTAssertEqual(groups.map(\.title), ["boo", "api", "site", "Outside Boo"])
-        XCTAssertEqual(groups.map(\.isActive), [true, false, false, false])
-        XCTAssertEqual(groups[0].rows.map(\.handle), ["t1", "t2", "t3"], "a tree of live agents, stopped ones last")
-        XCTAssertEqual(groups[0].entries.map(\.depth), [0, 1, 0])
+        XCTAssertEqual(
+            groups.map(\.title), ["api", "site", "boo", "Outside Boo"], "the active workspace keeps its place")
+        XCTAssertEqual(groups.map(\.isActive), [false, false, true, false])
+        XCTAssertEqual(groups[2].rows.map(\.handle), ["t1", "t2", "t3"], "a tree of live agents, stopped ones last")
+        XCTAssertEqual(groups[2].entries.map(\.depth), [0, 1, 0])
 
         let none = AgentCrewView.groups(rows, activeWorkspaceID: nil)
-        XCTAssertEqual(none.map(\.title), ["api", "site", "boo", "Outside Boo"], "no active workspace: bar order")
+        XCTAssertEqual(none.map(\.title), groups.map(\.title), "the active workspace never changes the order")
+        XCTAssertFalse(none.contains(where: \.isActive), "no active workspace: none marked")
 
         XCTAssertEqual(
             AgentCrewView.navigationOrder(groups, collapsed: [first.id.uuidString, CrewGroup.outsideID]),
-            groups[0].rows.map(\.id) + groups[2].rows.map(\.id), "the arrow keys skip folded groups")
+            groups[1].rows.map(\.id) + groups[2].rows.map(\.id), "the arrow keys skip folded groups")
     }
 
     @MainActor

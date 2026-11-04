@@ -23,19 +23,11 @@ struct LayoutSettingsView: View {
         SettingsPage(title: "Layout") {
             Section(title: "Sidebar") {
                 SettingStack(label: "Position") {
-                    Picker("", selection: LayoutSettingsBindings.binding(\.sidebarPosition)) {
-                        ForEach(SidebarPosition.allCases, id: \.self) { Text($0.label).tag($0) }
-                    }
-                    .labelsHidden()
-                    .pickerStyle(.segmented)
+                    ThemedSegmentedPicker(selection: LayoutSettingsBindings.binding(\.sidebarPosition)) { $0.label }
                 }
 
                 SettingStack(label: "Tab bar") {
-                    Picker("", selection: LayoutSettingsBindings.binding(\.sidebarTabBarPosition)) {
-                        ForEach(SidebarTabBarPosition.allCases, id: \.self) { Text($0.label).tag($0) }
-                    }
-                    .labelsHidden()
-                    .pickerStyle(.segmented)
+                    ThemedSegmentedPicker(selection: LayoutSettingsBindings.binding(\.sidebarTabBarPosition)) { $0.label }
                 }
 
                 ToggleRow(
@@ -59,11 +51,7 @@ struct LayoutSettingsView: View {
 
             Section(title: "Workspace Bar") {
                 SettingStack(label: "Position", help: "Position of the workspace switcher bar.") {
-                    Picker("", selection: LayoutSettingsBindings.binding(\.workspaceBarPosition)) {
-                        ForEach(WorkspaceBarPosition.allCases, id: \.self) { Text($0.label).tag($0) }
-                    }
-                    .labelsHidden()
-                    .pickerStyle(.segmented)
+                    ThemedSegmentedPicker(selection: LayoutSettingsBindings.binding(\.workspaceBarPosition)) { $0.label }
                 }
                 ToggleRow(
                     label: "Color new workspaces by project",
@@ -98,21 +86,13 @@ struct LayoutSettingsView: View {
                     help:
                         "A ⋯ tab carved into a pane's bottom-right corner, with record, split, zoom and close in its menu. A running recording's timer and the unzoom button always show."
                 ) {
-                    Picker("", selection: LayoutSettingsBindings.binding(\.paneControlsVisibility)) {
-                        ForEach(PaneControlsVisibility.allCases, id: \.self) { Text($0.label).tag($0) }
-                    }
-                    .labelsHidden()
-                    .pickerStyle(.segmented)
+                    ThemedSegmentedPicker(selection: LayoutSettingsBindings.binding(\.paneControlsVisibility)) { $0.label }
                 }
             }
 
             Section(title: "Tab Overflow") {
                 SettingStack(label: "Behavior", help: "How tabs behave when they exceed the available bar width.") {
-                    Picker("", selection: LayoutSettingsBindings.binding(\.tabOverflowMode)) {
-                        ForEach(TabOverflowMode.allCases, id: \.self) { Text($0.label).tag($0) }
-                    }
-                    .labelsHidden()
-                    .pickerStyle(.segmented)
+                    ThemedSegmentedPicker(selection: LayoutSettingsBindings.binding(\.tabOverflowMode)) { $0.label }
                 }
             }
         }

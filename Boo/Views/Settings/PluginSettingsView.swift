@@ -184,8 +184,8 @@ private struct PluginRow: View {
                 }
 
                 Toggle("", isOn: $isEnabled)
-                    .toggleStyle(.switch)
-                    .controlSize(.small)
+                    .labelsHidden()
+                    .toggleStyle(.themedSwitch)
                     .onChange(of: isEnabled) { _, enabled in
                         var disabled = AppSettings.shared.disabledPluginIDs
                         if enabled {
@@ -339,27 +339,20 @@ private struct PluginSettingControl: View {
         let fallback = setting.defaultValue?.value as? String ?? choices.first?.value ?? ""
         let selected = choices.contains { $0.value == current } ? current : fallback
         return SettingRow(label: setting.label, help: setting.description) {
-            Picker("", selection: Binding(get: { selected }, set: set)) {
-                ForEach(choices, id: \.value) { Text($0.label).tag($0.value) }
+            ThemedMenuPicker(selection: Binding(get: { selected }, set: set), options: choices.map(\.value)) {
+                value in choices.first { $0.value == value }?.label ?? value
             }
-            .pickerStyle(.menu)
-            .labelsHidden()
             .frame(maxWidth: 200, alignment: .leading)
         }
     }
 
     private func fontPicker(value: String, fonts: [String]) -> some View {
         let displayValue = value.isEmpty ? "System Default" : value
-        return Picker(
-            "",
-            selection: Binding(
+        return FontChooser(
+            selectedFont: Binding(
                 get: { displayValue },
                 set: { AppSettings.shared.setPluginSetting(pluginID, setting.key, $0 == "System Default" ? "" : $0) }
-            )
-        ) {
-            ForEach(fonts, id: \.self) { Text($0).tag($0) }
-        }
-        .labelsHidden()
-        .frame(maxWidth: 200, alignment: .leading)
+            ),
+            fonts: fonts, width: 200)
     }
 }

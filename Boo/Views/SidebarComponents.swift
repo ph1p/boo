@@ -70,10 +70,13 @@ class SidebarDragHandleView: NSView {
 
     override func draw(_ dirtyRect: NSRect) {
         guard isActive else { return }
-        // Centre the bar on the section border, not on this view's own centre —
+        // Centre the bar on the separator hairline, not on this view's own centre —
         // the grab strip reaches asymmetrically into the header below.
         let barH: CGFloat = 2
-        let r = CGRect(x: 0, y: Self.reachAbove - barH / 2, width: bounds.width, height: barH)
+        // The handle's top edge reaches `reachAbove` over the header; the
+        // hairline sits half a separator band above that header.
+        let lineY = Self.reachAbove - SidebarLayout.separatorHeight / 2
+        let r = CGRect(x: 0, y: lineY - barH / 2, width: bounds.width, height: barH)
         AppSettings.shared.theme.accentEmphasis.setFill()
         NSBezierPath(rect: r).fill()
     }

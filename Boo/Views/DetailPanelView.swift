@@ -5,7 +5,10 @@ import SwiftUI
 
 enum SidebarLayout {
     static let headerHeight: CGFloat = 26
-    static let separatorHeight: CGFloat = 1
+    /// Band between two sections: a hairline centred in it, so headers get
+    /// breathing room above and below the rule.
+    static let separatorHeight: CGFloat = 9
+    static let separatorLineWidth: CGFloat = 1
     static let minSectionHeight: CGFloat = 50
     /// Narrowest the sidebar may be dragged or persisted at.
     static let minSidebarWidth: CGFloat = 140
@@ -893,10 +896,11 @@ class SidebarPanelView: NSView {
                 // Inset hairline, not a full-bleed bar: matches the island chrome.
                 let inset: CGFloat = AppSettings.shared.sidebarDensity == .comfortable ? 12 : 8
                 ctx.setFillColor(theme.sidebarBorder.withAlphaComponent(0.6).cgColor)
+                let line = SidebarLayout.separatorLineWidth
                 ctx.fill(
                     CGRect(
-                        x: inset, y: y, width: max(0, w - 2 * inset),
-                        height: SidebarLayout.separatorHeight))
+                        x: inset, y: y + (SidebarLayout.separatorHeight - line) / 2,
+                        width: max(0, w - 2 * inset), height: line))
                 y += SidebarLayout.separatorHeight
             }
             y += SidebarLayout.headerHeight

@@ -28,17 +28,12 @@ struct ShaderPicker: View {
 
     var body: some View {
         HStack(spacing: 6) {
-            Picker("", selection: $value) {
-                Text("Off").tag("")
-                ForEach(ShaderLibrary.presets, id: \.self) { Text(ShaderLibrary.displayName($0)).tag($0) }
-                if isCustom {
-                    Divider()
-                    Text((value as NSString).lastPathComponent).tag(value)
-                }
+            ThemedMenuPicker(selection: $value, options: [""] + ShaderLibrary.presets + (isCustom ? [value] : [])) {
+                $0.isEmpty
+                    ? "Off"
+                    : ShaderLibrary.presets.contains($0)
+                        ? ShaderLibrary.displayName($0) : ($0 as NSString).lastPathComponent
             }
-            .labelsHidden()
-            .pickerStyle(.menu)
-            .fixedSize()
             Button("Choose File…") { choose() }
                 .buttonStyle(.themed)
         }
@@ -84,18 +79,12 @@ struct ProfilesSettingsView: View {
 
             Section(title: "Default") {
                 SettingRow(label: "New tabs use", help: "Used when no rule matches.") {
-                    Picker(
-                        "",
+                    ThemedMenuPicker(
                         selection: Binding(
                             get: { AppSettings.shared.defaultProfile ?? "" },
-                            set: { AppSettings.shared.defaultProfile = $0.isEmpty ? nil : $0 })
-                    ) {
-                        Text("None").tag("")
-                        ForEach(profiles, id: \.name) { Text($0.name).tag($0.name) }
-                    }
-                    .labelsHidden()
-                    .pickerStyle(.menu)
-                    .fixedSize()
+                            set: { AppSettings.shared.defaultProfile = $0.isEmpty ? nil : $0 }),
+                        options: [""] + profiles.map(\.name)
+                    ) { $0.isEmpty ? "None" : $0 }
                 }
             }
 
@@ -269,32 +258,20 @@ private struct ProfileEditor: View {
             }
 
             field("Theme", value: $profile.theme, fallback: AppSettings.shared.themeName) { binding in
-                Picker("", selection: binding) {
-                    ForEach(AppSettings.shared.allThemes, id: \.name) { Text($0.name).tag($0.name) }
-                }
-                .labelsHidden()
-                .pickerStyle(.menu)
-                .fixedSize()
+                ThemedMenuPicker(selection: binding, options: AppSettings.shared.allThemes.map(\.name)) { $0 }
             }
             field("Font", value: $profile.fontFamily, fallback: AppSettings.shared.fontName) { binding in
                 FontChooser(selectedFont: binding, fonts: monoFonts)
-                    .frame(width: 220)
             }
             field("Font size", value: $profile.fontSize, fallback: Double(AppSettings.shared.fontSize)) { binding in
                 FontSizePicker(value: binding, range: 8...36)
-                    .frame(width: 90)
             }
             field("Shader", value: $profile.shader, fallback: AppSettings.shared.terminalShader) { binding in
                 ShaderPicker(value: binding)
             }
             field("Link target", value: $profile.linkTarget, fallback: AppSettings.shared.defaultLinkTarget) {
                 binding in
-                Picker("", selection: binding) {
-                    ForEach(LinkTarget.allCases, id: \.self) { Text($0.displayName).tag($0) }
-                }
-                .labelsHidden()
-                .pickerStyle(.menu)
-                .fixedSize()
+                ThemedMenuPicker(selection: binding) { $0.displayName }
             }
 
             Text("New tabs only")

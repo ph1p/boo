@@ -119,10 +119,7 @@ struct ThemeSettingsView: View {
                 Image(systemName: icon).font(.system(size: 9)).foregroundStyle(t.muted)
                 Text(label).font(.system(size: 10, weight: .medium)).foregroundStyle(t.muted)
             }
-            Picker("", selection: selection) {
-                ForEach(options, id: \.name) { Text($0.name).tag($0.name) }
-            }
-            .labelsHidden()
+            ThemedMenuPicker(selection: selection, options: options.map(\.name), width: 160) { $0 }
         }
     }
 
