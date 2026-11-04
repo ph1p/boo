@@ -38,11 +38,8 @@ class ThemedSplitView: NSSplitView {
                 userInfo: nil))
     }
 
-    /// The primary divider's full strip (it is `dividerThickness` wide, starting
-    /// at the first subview's trailing edge), padded by the same 2pt slop the
-    /// double-click hit test uses. The old hover test centred a ±4 zone on the
-    /// strip's *leading edge*, so the trailing half of the 8pt divider resized
-    /// without ever showing the indicator.
+    /// The primary divider's full strip (`dividerThickness` wide, from the first
+    /// subview's trailing edge), padded by the 2pt slop the double-click hit test uses.
     private func primaryDividerStrip() -> CGRect? {
         guard subviews.count >= 2 else { return nil }
         if isVertical {

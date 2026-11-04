@@ -561,15 +561,9 @@ import SwiftUI
         currentWorkspaceBarPosition = AppSettings.shared.workspaceBarPosition
         currentTabOverflowMode = AppSettings.shared.tabOverflowMode
 
-        // Create leading/trailing constraints that can be adjusted for side workspace bar.
-        //
-        // Every region — toolbar, panes, status bar — sits the same `gap` from the
-        // window's *side* edges. The toolbar and status bar draw no fill or border,
-        // but they share that inset so their content lines up with the panes between
-        // them instead of each bar hand-picking its own padding to fake the alignment.
-        //
-        // Vertically the two bars use the tighter `barGap`: they are thin strips, so
-        // a full gap above and below them is height spent on nothing.
+        // Toolbar, panes and status bar share one `gap` side inset so their content
+        // lines up; the side workspace bar adjusts the leading/trailing constraints.
+        // The thin bars use the tighter `barGap` vertically.
         let gap = IslandMetrics.gap
         let barGap = IslandMetrics.barGap
         let toolbarLeading = toolbar.leadingAnchor.constraint(
@@ -657,9 +651,8 @@ import SwiftUI
 
     // MARK: - Termination save
 
-    /// Synchronous final save on window close (fires before `applicationWillTerminate` returns).
-    /// Because `saveSession()` now uses a background write queue, we flush a synchronous
-    /// snapshot here so the final state is guaranteed on disk before the process exits.
+    /// Synchronous final save on window close (fires before `applicationWillTerminate` returns):
+    /// `saveSession()` writes in the background, so this flush guarantees the final state on disk.
     func windowWillClose(_ notification: Notification) {
         if hasOrchestratorDrawer { OrchestratorController.shared.closeDrawer() }
         coordinator?.saveSidebarStateToSettings()

@@ -123,8 +123,7 @@ extension MainWindowController {
     }
 
     func syncRemoteSidebarState() {
-        // isRemoteSidebar and activeRemoteSession are now derived from bridge state.
-        // Just trigger a plugin cycle if remote state is relevant.
+        // Remote sidebar state derives from bridge state; a plugin cycle picks it up.
         let session = bridge.state.remoteSession
         schedulePluginCycle(reason: session != nil ? .remoteSessionChanged : .cwdChanged)
     }

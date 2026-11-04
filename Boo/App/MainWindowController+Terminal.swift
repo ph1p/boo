@@ -366,11 +366,8 @@ extension MainWindowController {
         }
     }
 
-    /// Flush a pending image send for `paneID` if a shell PID is available.
-    /// Called from both `onShellPIDUpdated` (new PID registered) and `didFocus`
-    /// (pane becomes active — shell must be running if user can interact with it).
-    /// Flush a pending image send keyed by `tabID`.
-    /// `shellPID` is the PID to send to; if nil, look up the current pane PID (for didFocus path).
+    /// Flush a pending image send keyed by `tabID`. Called from `onShellPIDUpdated`
+    /// and `didFocus`; with a nil `shellPID` the pane's current shell PID is used.
     func flushPendingImageSend(for tabID: UUID, shellPID: pid_t? = nil, paneID: UUID? = nil) {
         guard let pending = pendingImageSends[tabID] else { return }
         let pid: pid_t?

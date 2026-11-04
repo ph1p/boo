@@ -34,8 +34,8 @@ extension MainWindowController {
         ]
 
         // Content clears only the *visible* strip plus one more gap — not the frame,
-        // whose overhang deliberately overlaps the panes. The toolbar and split view
-        // share one baseline now, so both take the same constant.
+        // whose overhang deliberately overlaps the panes. Toolbar and split view share
+        // one baseline, so both take the same constant.
         let claimed = gap + WorkspaceBarView.verticalWidth + gap
         if position == .left {
             constraints.append(
