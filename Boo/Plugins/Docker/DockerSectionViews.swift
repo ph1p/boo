@@ -65,34 +65,14 @@ struct DockerContainersView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
-        .alert(
-            "Remove container \"\(deleteTarget?.name ?? "")\"?",
-            isPresented: Binding(
-                get: { deleteTarget != nil },
-                set: { if !$0 { deleteTarget = nil } })
-        ) {
-            Button("Remove", role: .destructive) {
-                if let c = deleteTarget { onRemove?(c) }
-                deleteTarget = nil
-            }
-            Button("Cancel", role: .cancel) { deleteTarget = nil }
-        } message: {
-            Text("This will permanently delete the container.")
-        }
-        .alert(
-            "Take down \"\(downTarget?.displayName ?? "")\"?",
-            isPresented: Binding(
-                get: { downTarget != nil },
-                set: { if !$0 { downTarget = nil } })
-        ) {
-            Button("Down", role: .destructive) {
-                if let project = downTarget { run(.down, project) }
-                downTarget = nil
-            }
-            Button("Cancel", role: .cancel) { downTarget = nil }
-        } message: {
-            Text("Stops and removes the project's containers and networks. Volumes are kept.")
-        }
+        .destructiveConfirmation(
+            "Remove container \"\(deleteTarget?.name ?? "")\"?", item: $deleteTarget,
+            message: "This will permanently delete the container."
+        ) { onRemove?($0) }
+        .destructiveConfirmation(
+            "Take down \"\(downTarget?.displayName ?? "")\"?", item: $downTarget, button: "Down",
+            message: "Stops and removes the project's containers and networks. Volumes are kept."
+        ) { run(.down, $0) }
     }
 
     private func run(_ action: ComposeProject.Action, _ project: ComposeProject) {
@@ -145,20 +125,10 @@ struct DockerImagesView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
-        .alert(
-            "Remove image \"\(deleteTarget?.repoTag ?? "")\"?",
-            isPresented: Binding(
-                get: { deleteTarget != nil },
-                set: { if !$0 { deleteTarget = nil } })
-        ) {
-            Button("Remove", role: .destructive) {
-                if let i = deleteTarget { onRemove?(i) }
-                deleteTarget = nil
-            }
-            Button("Cancel", role: .cancel) { deleteTarget = nil }
-        } message: {
-            Text("This will permanently delete the image.")
-        }
+        .destructiveConfirmation(
+            "Remove image \"\(deleteTarget?.repoTag ?? "")\"?", item: $deleteTarget,
+            message: "This will permanently delete the image."
+        ) { onRemove?($0) }
     }
 }
 
@@ -186,20 +156,10 @@ struct DockerNetworksView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
-        .alert(
-            "Remove network \"\(deleteTarget?.name ?? "")\"?",
-            isPresented: Binding(
-                get: { deleteTarget != nil },
-                set: { if !$0 { deleteTarget = nil } })
-        ) {
-            Button("Remove", role: .destructive) {
-                if let n = deleteTarget { onRemove?(n) }
-                deleteTarget = nil
-            }
-            Button("Cancel", role: .cancel) { deleteTarget = nil }
-        } message: {
-            Text("This will permanently delete the network.")
-        }
+        .destructiveConfirmation(
+            "Remove network \"\(deleteTarget?.name ?? "")\"?", item: $deleteTarget,
+            message: "This will permanently delete the network."
+        ) { onRemove?($0) }
     }
 }
 
@@ -227,20 +187,10 @@ struct DockerVolumesView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
-        .alert(
-            "Remove volume \"\(deleteTarget?.name ?? "")\"?",
-            isPresented: Binding(
-                get: { deleteTarget != nil },
-                set: { if !$0 { deleteTarget = nil } })
-        ) {
-            Button("Remove", role: .destructive) {
-                if let v = deleteTarget { onRemove?(v) }
-                deleteTarget = nil
-            }
-            Button("Cancel", role: .cancel) { deleteTarget = nil }
-        } message: {
-            Text("This will permanently delete the volume and all its data.")
-        }
+        .destructiveConfirmation(
+            "Remove volume \"\(deleteTarget?.name ?? "")\"?", item: $deleteTarget,
+            message: "This will permanently delete the volume and all its data."
+        ) { onRemove?($0) }
     }
 }
 
@@ -262,5 +212,28 @@ private struct DockerEmptyView: View {
             Spacer()
         }
         .padding(.vertical, 12)
+    }
+}
+
+extension View {
+    /// Destructive confirmation alert shown while `item` is non-nil; clears it on dismiss.
+    fileprivate func destructiveConfirmation<Item>(
+        _ title: String, item: Binding<Item?>, button: String = "Remove", message: String,
+        perform: @escaping (Item) -> Void
+    ) -> some View {
+        alert(
+            title,
+            isPresented: Binding(
+                get: { item.wrappedValue != nil },
+                set: { if !$0 { item.wrappedValue = nil } })
+        ) {
+            Button(button, role: .destructive) {
+                if let value = item.wrappedValue { perform(value) }
+                item.wrappedValue = nil
+            }
+            Button("Cancel", role: .cancel) { item.wrappedValue = nil }
+        } message: {
+            Text(message)
+        }
     }
 }

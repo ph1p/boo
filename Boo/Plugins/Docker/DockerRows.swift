@@ -290,42 +290,40 @@ struct DockerContainerRow: View {
     }
 }
 
-// MARK: - Image Row
+// MARK: - Resource Rows
 
-struct DockerImageRow: View {
-    let image: DockerService.DockerImage
+/// Shared layout for image, network and volume rows: icon, name, a detail line, a
+/// trash button on hover (in place of `trailing`), and copy/remove context menu items.
+private struct DockerResourceRow<Detail: View>: View {
+    let icon: String
+    let name: String
+    let removeHelp: String
+    let copyItems: [(label: String, value: String)]
+    var trailing: String?
     let density: SidebarDensity
     let theme: TerminalTheme
-    private var t: Tokens { Tokens(theme: theme) }
     let fontScale: SidebarFontScale
     let onRemove: () -> Void
+    @ViewBuilder let detail: () -> Detail
     @State private var isHovered = false
 
+    private var t: Tokens { Tokens(theme: theme) }
     private var itemHeight: CGFloat { density == .comfortable ? 28 : 22 }
 
     var body: some View {
         HStack(spacing: 6) {
-            Image(systemName: "square.stack")
+            Image(systemName: icon)
                 .font(.system(size: fontScale.size(.base) - 2))
                 .foregroundStyle(t.textTertiary)
                 .frame(width: 14)
 
             VStack(alignment: .leading, spacing: 1) {
-                Text(image.repoTag)
+                Text(name)
                     .font(fontScale.font(.base).weight(.medium))
                     .foregroundStyle(t.text)
                     .lineLimit(1)
 
-                HStack(spacing: 4) {
-                    Text(image.id)
-                        .font(fontScale.font(.sm, design: .monospaced))
-                        .foregroundStyle(t.textTertiary)
-                    if let age = relativeUptime(from: image.createdAt) {
-                        Text(age)
-                            .font(fontScale.font(.sm))
-                            .foregroundStyle(t.textTertiary)
-                    }
-                }
+                detail()
             }
 
             Spacer()
@@ -339,9 +337,9 @@ struct DockerImageRow: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .help("Remove image")
-            } else {
-                Text(formatBytes(image.size))
+                .help(removeHelp)
+            } else if let trailing {
+                Text(trailing)
                     .font(fontScale.font(.sm, design: .monospaced))
                     .foregroundStyle(t.textTertiary)
             }
@@ -357,11 +355,8 @@ struct DockerImageRow: View {
         .contentShape(Rectangle())
         .onHover { isHovered = $0 }
         .contextMenu {
-            Button("Copy ID") {
-                copyToClipboard(image.id)
-            }
-            Button("Copy Tag") {
-                copyToClipboard(image.repoTag)
+            ForEach(copyItems, id: \.label) { item in
+                Button(item.label) { copyToClipboard(item.value) }
             }
             Divider()
             Button("Remove", role: .destructive) { onRemove() }
@@ -369,143 +364,77 @@ struct DockerImageRow: View {
     }
 }
 
-// MARK: - Network Row
+struct DockerImageRow: View {
+    let image: DockerService.DockerImage
+    let density: SidebarDensity
+    let theme: TerminalTheme
+    let fontScale: SidebarFontScale
+    let onRemove: () -> Void
+
+    var body: some View {
+        let t = Tokens(theme: theme)
+        DockerResourceRow(
+            icon: "square.stack", name: image.repoTag, removeHelp: "Remove image",
+            copyItems: [("Copy ID", image.id), ("Copy Tag", image.repoTag)],
+            trailing: formatBytes(image.size),
+            density: density, theme: theme, fontScale: fontScale, onRemove: onRemove
+        ) {
+            HStack(spacing: 4) {
+                Text(image.id)
+                    .font(fontScale.font(.sm, design: .monospaced))
+                    .foregroundStyle(t.textTertiary)
+                if let age = relativeUptime(from: image.createdAt) {
+                    Text(age)
+                        .font(fontScale.font(.sm))
+                        .foregroundStyle(t.textTertiary)
+                }
+            }
+        }
+    }
+}
 
 struct DockerNetworkRow: View {
     let network: DockerService.DockerNetwork
     let density: SidebarDensity
     let theme: TerminalTheme
-    private var t: Tokens { Tokens(theme: theme) }
     let fontScale: SidebarFontScale
     let onRemove: () -> Void
-    @State private var isHovered = false
-
-    private var itemHeight: CGFloat { density == .comfortable ? 28 : 22 }
 
     var body: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "network")
-                .font(.system(size: fontScale.size(.base) - 2))
-                .foregroundStyle(t.textTertiary)
-                .frame(width: 14)
-
-            VStack(alignment: .leading, spacing: 1) {
-                Text(network.name)
-                    .font(fontScale.font(.base).weight(.medium))
-                    .foregroundStyle(t.text)
-                    .lineLimit(1)
-
-                HStack(spacing: 4) {
-                    Text(network.driver)
-                        .font(fontScale.font(.sm))
-                        .foregroundStyle(t.textSecondary)
-                    Text(network.scope)
-                        .font(fontScale.font(.sm))
-                        .foregroundStyle(t.textTertiary)
-                }
+        let t = Tokens(theme: theme)
+        DockerResourceRow(
+            icon: "network", name: network.name, removeHelp: "Remove network",
+            copyItems: [("Copy ID", network.id), ("Copy Name", network.name)],
+            density: density, theme: theme, fontScale: fontScale, onRemove: onRemove
+        ) {
+            HStack(spacing: 4) {
+                Text(network.driver)
+                    .font(fontScale.font(.sm))
+                    .foregroundStyle(t.textSecondary)
+                Text(network.scope)
+                    .font(fontScale.font(.sm))
+                    .foregroundStyle(t.textTertiary)
             }
-
-            Spacer()
-
-            if isHovered {
-                Button(action: onRemove) {
-                    Image(systemName: "trash")
-                        .font(.system(size: fontScale.size(.base) - 2))
-                        .foregroundStyle(t.textSecondary)
-                        .frame(width: 22, height: 22)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .help("Remove network")
-            }
-        }
-        .frame(minHeight: itemHeight)
-        .padding(.horizontal, density == .comfortable ? 12 : 8)
-        .padding(.vertical, 3)
-        .background(
-            RoundedRectangle(cornerRadius: 4)
-                .fill(isHovered ? t.hoverFill : Color.clear)
-                .padding(.horizontal, 4)
-        )
-        .contentShape(Rectangle())
-        .onHover { isHovered = $0 }
-        .contextMenu {
-            Button("Copy ID") {
-                copyToClipboard(network.id)
-            }
-            Button("Copy Name") {
-                copyToClipboard(network.name)
-            }
-            Divider()
-            Button("Remove", role: .destructive) { onRemove() }
         }
     }
 }
-
-// MARK: - Volume Row
 
 struct DockerVolumeRow: View {
     let volume: DockerService.DockerVolume
     let density: SidebarDensity
     let theme: TerminalTheme
-    private var t: Tokens { Tokens(theme: theme) }
     let fontScale: SidebarFontScale
     let onRemove: () -> Void
-    @State private var isHovered = false
-
-    private var itemHeight: CGFloat { density == .comfortable ? 28 : 22 }
 
     var body: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "cylinder")
-                .font(.system(size: fontScale.size(.base) - 2))
-                .foregroundStyle(t.textTertiary)
-                .frame(width: 14)
-
-            VStack(alignment: .leading, spacing: 1) {
-                Text(volume.name)
-                    .font(fontScale.font(.base).weight(.medium))
-                    .foregroundStyle(t.text)
-                    .lineLimit(1)
-
-                Text(volume.driver)
-                    .font(fontScale.font(.sm))
-                    .foregroundStyle(t.textSecondary)
-            }
-
-            Spacer()
-
-            if isHovered {
-                Button(action: onRemove) {
-                    Image(systemName: "trash")
-                        .font(.system(size: fontScale.size(.base) - 2))
-                        .foregroundStyle(t.textSecondary)
-                        .frame(width: 22, height: 22)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .help("Remove volume")
-            }
-        }
-        .frame(minHeight: itemHeight)
-        .padding(.horizontal, density == .comfortable ? 12 : 8)
-        .padding(.vertical, 3)
-        .background(
-            RoundedRectangle(cornerRadius: 4)
-                .fill(isHovered ? t.hoverFill : Color.clear)
-                .padding(.horizontal, 4)
-        )
-        .contentShape(Rectangle())
-        .onHover { isHovered = $0 }
-        .contextMenu {
-            Button("Copy Name") {
-                copyToClipboard(volume.name)
-            }
-            Button("Copy Mountpoint") {
-                copyToClipboard(volume.mountpoint)
-            }
-            Divider()
-            Button("Remove", role: .destructive) { onRemove() }
+        DockerResourceRow(
+            icon: "cylinder", name: volume.name, removeHelp: "Remove volume",
+            copyItems: [("Copy Name", volume.name), ("Copy Mountpoint", volume.mountpoint)],
+            density: density, theme: theme, fontScale: fontScale, onRemove: onRemove
+        ) {
+            Text(volume.driver)
+                .font(fontScale.font(.sm))
+                .foregroundStyle(Tokens(theme: theme).textSecondary)
         }
     }
 }
