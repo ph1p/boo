@@ -109,9 +109,13 @@ final class BooSocketServer: @unchecked Sendable {
         queue.setSpecific(key: BooSocketServer.queueKey, value: true)
     }
 
-    /// Socket path: ~/.boo/boo.sock
+    /// Socket path: ~/.boo/boo.sock. Tests get a per-process temp socket: they
+    /// start and stop (unlink) the server, which would cut off a running Boo.
     let socketPath: String = {
-        (BooPaths.configDir as NSString).appendingPathComponent("boo.sock")
+        if NSClassFromString("XCTestCase") != nil {
+            return (NSTemporaryDirectory() as NSString).appendingPathComponent("boo-test-\(getpid()).sock")
+        }
+        return (BooPaths.configDir as NSString).appendingPathComponent("boo.sock")
     }()
 
     // MARK: - Event Subscriptions

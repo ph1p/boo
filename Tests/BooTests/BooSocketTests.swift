@@ -8,10 +8,11 @@ import XCTest
 @MainActor
 final class BooSocketServerTests: XCTestCase {
 
-    func testSocketPathInBooDir() {
+    func testSocketPathIsolatedUnderTests() {
         let server = BooSocketServer.shared
-        XCTAssertTrue(server.socketPath.hasPrefix(BooPaths.configDir))
-        XCTAssertTrue(server.socketPath.hasSuffix("boo.sock"))
+        XCTAssertFalse(server.socketPath.hasPrefix(BooPaths.configDir))
+        XCTAssertTrue(server.socketPath.hasSuffix(".sock"))
+        XCTAssertLessThan(server.socketPath.utf8.count, 104)
     }
 
     func testDirectProcessRegistration() {
