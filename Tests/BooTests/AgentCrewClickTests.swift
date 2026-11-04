@@ -3,7 +3,7 @@ import XCTest
 
 @testable import Boo
 
-/// Crew rows behave like a source list: a click selects, a double-click jumps.
+/// Crew rows behave like a sidebar: a click selects the row and shows the agent.
 /// Real mouse events through a hosting window, so SwiftUI's gestures run.
 @MainActor
 final class AgentCrewClickTests: XCTestCase {
@@ -18,7 +18,7 @@ final class AgentCrewClickTests: XCTestCase {
         RunLoop.main.run(until: Date().addingTimeInterval(0.1))
     }
 
-    func testClickSelectsDoubleClickJumps() {
+    func testClickSelectsAndJumps() {
         let row = AgentCrewRow(
             id: UUID(), handle: "t1", name: "main", agent: "claude", state: .working, detail: "using Bash",
             parent: nil, queued: 0, needsAttention: false, isTask: false)
@@ -41,13 +41,9 @@ final class AgentCrewClickTests: XCTestCase {
         defer { AgentCrewUIState.shared.selection = saved }
         AgentCrewUIState.shared.selection = nil
 
-        // The row sits below the "Working" group header; click its name line.
-        let point = NSPoint(x: 120, y: 300 - 40)
-        click(window, at: point, count: 1)
+        // The first row has no header above it; click its name line.
+        click(window, at: NSPoint(x: 120, y: 300 - 20), count: 1)
         XCTAssertEqual(AgentCrewUIState.shared.selection, row.id, "a click selects")
-        XCTAssertEqual(jumps, 0, "a click does not jump")
-
-        click(window, at: point, count: 2)
-        XCTAssertEqual(jumps, 1, "a double-click jumps")
+        XCTAssertEqual(jumps, 1, "a click shows the agent")
     }
 }

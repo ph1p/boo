@@ -93,7 +93,8 @@ final class AgentInboxSegment: StatusBarPlugin {
         case .needsInput: return theme.warning
         case .error: return theme.error
         case .done: return item.seen ? theme.textTertiary : theme.success
-        case .working: return theme.accentColor
+        // Neutral, not the accent: blue read as "selected", not "busy".
+        case .working: return theme.textSecondary
         }
     }
 

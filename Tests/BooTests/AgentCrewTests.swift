@@ -403,4 +403,20 @@ final class AgentCrewTests: XCTestCase {
         XCTAssertFalse(ui.isBusy)
         XCTAssertEqual(ui.selection, id, "closing keeps the selection")
     }
+
+    func testTreeNestsHelpersUnderParent() {
+        func row(_ handle: String, parent: String? = nil) -> AgentCrewRow {
+            AgentCrewRow(
+                id: UUID(), handle: handle, name: handle, agent: "claude", state: .working, detail: nil,
+                parent: parent, queued: 0, needsAttention: false, isTask: parent != nil)
+        }
+        let rows = [row("t5", parent: "t9"), row("t3", parent: "t1"), row("t1"), row("t2", parent: "t1")]
+        let tree = AgentCrewView.tree(rows)
+        XCTAssertEqual(tree.map(\.row.handle), ["t1", "t2", "t3", "t5"])
+        XCTAssertEqual(tree.map(\.depth), [0, 1, 1, 0], "an unknown parent makes a root")
+
+        let loop = AgentCrewView.tree([row("t1", parent: "t2"), row("t2", parent: "t1")])
+        XCTAssertEqual(Set(loop.map(\.row.handle)), ["t1", "t2"], "a parent loop still lists every row once")
+        XCTAssertEqual(loop.count, 2)
+    }
 }

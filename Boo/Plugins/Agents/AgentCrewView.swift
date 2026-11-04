@@ -96,9 +96,9 @@ final class AgentCrewUIState: ObservableObject {
     }
 }
 
-/// Every agent in every window, grouped by what it needs from the user:
-/// a question or error first, then the ones at work, then finished turns.
-/// Behaves like a source list: click or ↑/↓ selects, double-click or Return shows the agent,
+/// Every agent in every window, as a tree: each helper under the agent that
+/// started it, stopped tasks last.
+/// Behaves like a sidebar: a click selects and shows the agent, ↑/↓ selects, Return shows it,
 /// Space writes it a message, Delete offers to discard a task, Escape closes
 /// the open field. Messages, new tasks and discards are typed or confirmed in place,
 /// not in dialogs.
@@ -133,32 +133,56 @@ struct AgentCrewView: View {
     @FocusState private var listFocused: Bool
     @FocusState private var fieldFocused: Bool
 
-    private var groups: [(title: String, rows: [AgentCrewRow])] {
-        let live = rows.filter { !$0.isStopped }
-        let needsYou = live.filter { $0.state == .needsInput || $0.state == .error }
-        let working = live.filter { $0.state == .working }
-        let done = live.filter { $0.state == .done }
-        let stopped = rows.filter(\.isStopped)
-        return [("Needs you", needsYou), ("Working", working), ("Done", done), ("Stopped", stopped)]
-            .filter { !$0.1.isEmpty }
+    /// Running agents as a tree (each helper under the agent that started it),
+    /// then stopped tasks.
+    private var groups: [(title: String?, rows: [(row: AgentCrewRow, depth: Int)])] {
+        let live = Self.tree(rows.filter { !$0.isStopped })
+        let stopped = rows.filter(\.isStopped).map { (row: $0, depth: 0) }
+        return [(nil, live), ("Stopped", stopped)].filter { !$0.1.isEmpty }
+    }
+
+    /// Orders rows depth-first: roots by handle, each followed by the helpers it
+    /// started. A helper whose parent isn't listed is a root.
+    static func tree(_ rows: [AgentCrewRow]) -> [(row: AgentCrewRow, depth: Int)] {
+        func number(_ handle: String) -> Int { Int(handle.dropFirst()) ?? .max }
+        let handles = Set(rows.map(\.handle))
+        let children = Dictionary(grouping: rows.filter { $0.parent.map(handles.contains) == true }) { $0.parent! }
+        var out: [(row: AgentCrewRow, depth: Int)] = []
+        var seen = Set<UUID>()
+        func visit(_ row: AgentCrewRow, _ depth: Int) {
+            // A parent loop (t1 from t2, t2 from t1) must not recurse forever.
+            guard seen.insert(row.id).inserted else { return }
+            out.append((row, depth))
+            for child in (children[row.handle] ?? []).sorted(by: { number($0.handle) < number($1.handle) }) {
+                visit(child, depth + 1)
+            }
+        }
+        let roots = rows.filter { $0.parent.map(handles.contains) != true }
+        for root in roots.sorted(by: { number($0.handle) < number($1.handle) }) { visit(root, 0) }
+        // Rows only reachable through a loop still show, as roots.
+        for row in rows where !seen.contains(row.id) { out.append((row, 0)) }
+        return out
     }
 
     /// Rows in the order they show, for the arrow keys.
-    private var orderedIDs: [UUID] { groups.flatMap { $0.rows.map(\.id) } }
+    private var orderedIDs: [UUID] { groups.flatMap { $0.rows.map(\.row.id) } }
 
     private var selectedRow: AgentCrewRow? { rows.first { $0.id == state.selection } }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        VStack(alignment: .leading, spacing: 2) {
             ForEach(groups, id: \.title) { group in
-                Text("\(group.title) (\(group.rows.count))")
-                    .font(fontScale.font(.xs).weight(.semibold))
-                    .foregroundStyle(mutedColor)
-                    .padding(.horizontal, 12)
-                    .padding(.top, 8)
-                    .padding(.bottom, 2)
-                ForEach(group.rows) { row in
-                    crewRow(row)
+                if let title = group.title {
+                    Text("\(title) · \(group.rows.count)")
+                        .font(fontScale.font(.xs).weight(.semibold))
+                        .foregroundStyle(mutedColor)
+                        .padding(.horizontal, 14)
+                        .padding(.top, 10)
+                        .padding(.bottom, 2)
+                }
+                ForEach(group.rows, id: \.row.id) { entry in
+                    let row = entry.row
+                    crewRow(row, depth: entry.depth)
                     if state.composer == .message(row.id) {
                         composerField(
                             placeholder: "Message \(row.handle)", hint: "↩ send · esc cancel",
@@ -227,12 +251,51 @@ struct AgentCrewView: View {
         }
     }
 
-    private func stateColor(_ state: AgentInbox.State) -> Color {
-        switch state {
+    /// The state's tint: neutral while working, so only rows that want
+    /// something from the user carry color.
+    private func stateTint(_ row: AgentCrewRow) -> Color {
+        if row.isStopped { return mutedColor }
+        switch row.state {
+        case .working: return textColor
         case .needsInput: return Tokens.current.warning
         case .error: return Tokens.current.error
-        case .working: return accentColor
         case .done: return Tokens.current.success
+        }
+    }
+
+    /// The state badge's diameter; helper rows indent by it.
+    private var badgeSide: CGFloat { fontScale.size(.base) + 11 }
+
+    /// A round badge in the state's tint, one shape per state so it reads
+    /// without color: a spinner while working, a symbol otherwise.
+    private func stateIcon(_ row: AgentCrewRow) -> some View {
+        let tint = stateTint(row)
+        let side = badgeSide
+        return ZStack {
+            Circle().fill(tint.opacity(row.state == .working && !row.isStopped ? 0.08 : 0.16))
+            if row.isStopped {
+                Image(systemName: "pause.fill").foregroundStyle(tint)
+            } else {
+                switch row.state {
+                case .working: ProgressView().controlSize(.small).scaleEffect(0.6)
+                case .needsInput: Image(systemName: "hand.raised.fill").foregroundStyle(tint)
+                case .error: Image(systemName: "exclamationmark").foregroundStyle(tint)
+                case .done: Image(systemName: "checkmark").foregroundStyle(tint)
+                }
+            }
+        }
+        .font(.system(size: fontScale.size(.xs), weight: .bold))
+        .frame(width: side, height: side)
+        .opacity(row.isReachable ? 1 : 0.6)
+        .help(row.isStopped ? "Stopped" : Self.stateLabel(row.state))
+    }
+
+    static func stateLabel(_ state: AgentInbox.State) -> String {
+        switch state {
+        case .working: return "Working"
+        case .needsInput: return "Needs you"
+        case .error: return "Error"
+        case .done: return "Done"
         }
     }
 
@@ -290,15 +353,24 @@ struct AgentCrewView: View {
                 }
             } else {
                 Button(action: { state.open(.newTask) }) {
-                    Label("New agent task…", systemImage: "plus")
-                        .font(fontScale.font(.sm))
-                        .foregroundStyle(accentColor)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .contentShape(Rectangle())
+                    HStack(spacing: 8) {
+                        Image(systemName: "plus")
+                            .font(.system(size: fontScale.size(.sm), weight: .semibold))
+                        Text("New Agent Task")
+                            .font(fontScale.font(.sm).weight(.medium))
+                    }
+                    .foregroundStyle(accentColor)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 8)
+                    .background(
+                        RoundedRectangle(cornerRadius: 10, style: .continuous).fill(accentColor.opacity(0.12))
+                    )
+                    .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                 }
                 .buttonStyle(.plain)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
+                .padding(.horizontal, 8)
+                .padding(.top, 6)
+                .padding(.bottom, 8)
                 .help("Start an agent on its own worktree of the active workspace's repository")
             }
         }
@@ -414,12 +486,24 @@ struct AgentCrewView: View {
     private func rowButton(_ symbol: String, help: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: symbol)
-                .font(fontScale.font(.sm))
-                .frame(width: 22, height: 20)
-                .contentShape(Rectangle())
+                .font(.system(size: fontScale.size(.sm), weight: .medium))
+                .foregroundStyle(textColor.opacity(0.8))
+                .frame(width: 26, height: 26)
+                .background(Circle().fill(textColor.opacity(0.08)))
+                .contentShape(Circle())
         }
-        .buttonStyle(.borderless)
+        .buttonStyle(.plain)
         .help(help)
+    }
+
+    /// The line under the name: where the agent is and what it does.
+    /// A nested helper skips "from tX": the tree already shows its parent.
+    static func subtitle(_ row: AgentCrewRow, nested: Bool) -> String? {
+        var parts: [String] = []
+        if !row.isReachable { parts.append("not in a Boo window") }
+        if let parent = row.parent, !nested { parts.append("from \(parent)") }
+        if let detail = row.detail, !detail.isEmpty { parts.append(detail) }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
     private static func rowHelp(_ row: AgentCrewRow) -> String {
@@ -431,122 +515,127 @@ struct AgentCrewView: View {
         }
         guard row.state == .needsInput else { return "" }
         return row.asksQuestion
-            ? "Double-click to answer its question in its tab." : "Double-click to see the prompt in its tab."
+            ? "Click to answer its question in its tab." : "Click to see the prompt in its tab."
     }
 
-    private func crewRow(_ row: AgentCrewRow) -> some View {
+    private func crewRow(_ row: AgentCrewRow, depth: Int = 0) -> some View {
         let isHovered = hoveredID == row.id
         let isSelected = state.selection == row.id
         let showsActions = isHovered || isSelected
-        // Click selects (row actions show, arrows and ↩ work); double-click or ↩ jumps,
-        // like a Finder or Mail list.
+        let card = RoundedRectangle(cornerRadius: 10, style: .continuous)
+        let badge = badgeSide
+        // A helper sits one step in, its guide line under the parent's badge.
+        let indent = badge + 10
+        // A click selects the row and shows the agent's tab, like a sidebar;
+        // ↑/↓ and ↩ do the same from the keyboard.
         return Button(action: {
             state.selection = row.id
             listFocused = true
+            if row.isReachable { onJump(row) }
         }) {
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 6) {
-                    Circle()
-                        .fill(
-                            row.isStopped
-                                ? mutedColor.opacity(0.5)
-                                : stateColor(row.state).opacity(row.needsAttention || row.state == .working ? 1 : 0.5)
-                        )
-                        .frame(width: 7, height: 7)
-                    Text(row.handle)
-                        .font(fontScale.font(.sm).monospaced().weight(.semibold))
-                        .foregroundStyle(mutedColor)
-                    Text(row.name.isEmpty ? row.agent : row.name)
-                        .font(fontScale.font(.base).weight(row.needsAttention ? .semibold : .regular))
-                        .foregroundStyle(row.isReachable ? textColor : mutedColor)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                    Spacer(minLength: 4)
-                    if row.queued > 0 {
-                        Text("\(row.queued) queued")
-                            .font(fontScale.font(.xs))
-                            .foregroundStyle(mutedColor)
-                            .help("Messages delivered when this agent finishes its turn")
-                    }
-                    // Always laid out, only faded in: buttons that appear on hover
-                    // would shift the name and the row height under the pointer.
-                    Group {
-                        if !row.isStopped {
-                            rowButton("text.bubble", help: "Message \(row.handle) (Space)") {
-                                state.open(.message(row.id))
-                            }
-                        }
-                        if row.isStopped && row.isReachable {
-                            rowButton("play.circle", help: "Resume the agent on its last conversation (Space)") {
-                                onResume(row)
-                            }
-                        }
-                        if row.isTask {
-                            rowButton("plus.forwardslash.minus", help: "Review its changes") { onReview(row) }
-                        }
-                    }
-                    .opacity(showsActions ? 1 : 0)
-                    .allowsHitTesting(showsActions)
-                    .accessibilityHidden(!showsActions)
-                }
-                HStack(spacing: 4) {
-                    if !row.isReachable {
-                        Text("not in a Boo window ·")
-                            .font(fontScale.font(.xs))
-                            .foregroundStyle(mutedColor.opacity(0.8))
-                    }
-                    if let parent = row.parent {
-                        Text(row.detail?.isEmpty == false ? "from \(parent) ·" : "from \(parent)")
-                            .font(fontScale.font(.xs))
-                            .foregroundStyle(mutedColor.opacity(0.8))
-                    }
-                    if let detail = row.detail, !detail.isEmpty {
-                        Text(detail)
-                            .font(fontScale.font(.xs))
-                            .foregroundStyle(mutedColor)
+            HStack(alignment: .top, spacing: 10) {
+                stateIcon(row)
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Text(row.name.isEmpty ? row.agent : row.name)
+                            .font(fontScale.font(.base).weight(row.needsAttention ? .semibold : .medium))
+                            .foregroundStyle(row.isReachable ? textColor : mutedColor)
                             .lineLimit(1)
                             .truncationMode(.tail)
+                        Spacer(minLength: 4)
+                        Group {
+                            if row.queued > 0 {
+                                Text("\(row.queued) queued")
+                                    .font(fontScale.font(.xs).weight(.medium))
+                                    .foregroundStyle(accentColor)
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 1)
+                                    .background(Capsule().fill(accentColor.opacity(0.15)))
+                                    .help("Messages delivered when this agent finishes its turn")
+                            }
+                            Text(row.handle)
+                                .font(fontScale.font(.xs, design: .monospaced).weight(.medium))
+                                .foregroundStyle(mutedColor)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 1)
+                                .background(Capsule().fill(mutedColor.opacity(0.15)))
+                        }
+                        // The actions take this spot on hover; both are always laid out,
+                        // so nothing shifts under the pointer.
+                        .opacity(showsActions ? 0 : 1)
                     }
-                }
-                .padding(.leading, 13)
-                if let status = row.taskStatus, !status.text.isEmpty {
-                    Text(status.text)
-                        .font(fontScale.font(.xs))
-                        .foregroundStyle(taskStatusColor(status.tone))
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                        .padding(.leading, 13)
-                        .help(status.branch.map { "Branch \($0)" } ?? "")
-                }
-                if row.state == .needsInput && row.isReachable && !row.asksQuestion {
-                    HStack(spacing: 6) {
-                        Button("Allow") { onRespond(row, .approve) }
-                            .help("Answer the prompt with its default (Return), without opening the tab")
-                        Button("Deny") { onRespond(row, .deny) }
-                            .help("Decline the prompt (Escape); the agent waits for new instructions")
+                    if let subtitle = Self.subtitle(row, nested: depth > 0) {
+                        Text(subtitle)
+                            .font(fontScale.font(.sm))
+                            .foregroundStyle(mutedColor)
+                            .lineLimit(2)
+                            .truncationMode(.tail)
                     }
-                    .controlSize(.small)
-                    .padding(.leading, 13)
-                    .padding(.top, 2)
+                    if let status = row.taskStatus, !status.text.isEmpty {
+                        Label(status.text, systemImage: "arrow.triangle.branch")
+                            .font(fontScale.font(.xs))
+                            .foregroundStyle(taskStatusColor(status.tone))
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                            .help(status.branch.map { "Branch \($0)" } ?? "")
+                    }
+                    if row.state == .needsInput && row.isReachable && !row.asksQuestion {
+                        HStack(spacing: 6) {
+                            Button("Allow") { onRespond(row, .approve) }
+                                .buttonStyle(.borderedProminent)
+                                .help("Answer the prompt with its default (Return), without opening the tab")
+                            Button("Deny") { onRespond(row, .deny) }
+                                .help("Decline the prompt (Escape); the agent waits for new instructions")
+                        }
+                        .controlSize(.small)
+                        .padding(.top, 3)
+                    }
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.leading, 8)
-            .padding(.trailing, 6)
-            .padding(.vertical, 5)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
             .background(
-                RoundedRectangle(cornerRadius: 6)
-                    .fill(
-                        isSelected
-                            ? accentColor.opacity(listFocused ? 0.28 : 0.16)
-                            : isHovered ? accentColor.opacity(0.08) : Color.clear)
+                card.fill(
+                    isSelected
+                        ? accentColor.opacity(listFocused ? 0.2 : 0.12)
+                        : isHovered ? textColor.opacity(0.05) : Color.clear)
             )
-            .padding(.horizontal, 4)
-            .contentShape(Rectangle())
+            .overlay(card.strokeBorder(accentColor.opacity(isSelected ? 0.35 : 0), lineWidth: 1))
+            .overlay(alignment: .topTrailing) {
+                HStack(spacing: 4) {
+                    if !row.isStopped {
+                        rowButton("text.bubble", help: "Message \(row.handle) (Space)") {
+                            state.open(.message(row.id))
+                        }
+                    }
+                    if row.isStopped && row.isReachable {
+                        rowButton("play.fill", help: "Resume the agent on its last conversation (Space)") {
+                            onResume(row)
+                        }
+                    }
+                    if row.isTask {
+                        rowButton("plus.forwardslash.minus", help: "Review its changes") { onReview(row) }
+                    }
+                }
+                .padding(5)
+                .opacity(showsActions ? 1 : 0)
+                .allowsHitTesting(showsActions)
+                .accessibilityHidden(!showsActions)
+            }
+            .contentShape(card)
         }
         .buttonStyle(.plain)
+        .padding(.leading, CGFloat(depth) * indent)
+        .overlay(alignment: .leading) {
+            // A guide line ties a helper to the agent that started it.
+            if depth > 0 {
+                Rectangle().fill(mutedColor.opacity(0.25)).frame(width: 1.5)
+                    .offset(x: CGFloat(depth - 1) * indent + 10 + badge / 2)
+            }
+        }
+        .padding(.horizontal, 8)
         .help(Self.rowHelp(row))
-        .simultaneousGesture(TapGesture(count: 2).onEnded { if row.isReachable { onJump(row) } })
         .onHover { hoveredID = $0 ? row.id : (hoveredID == row.id ? nil : hoveredID) }
         .accessibilityLabel("\(row.handle) \(row.name), \(row.isStopped ? "stopped" : row.state.rawValue)")
         .accessibilityAddTraits(isSelected ? .isSelected : [])
