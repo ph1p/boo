@@ -1,4 +1,4 @@
-.PHONY: build run stop clean ghostty ironmark monaco setup release test app sign notarize zip zip-from-app dmg dmg-from-app dist lint format
+.PHONY: build run stop clean ghostty ironmark editor setup release test app sign notarize zip zip-from-app dmg dmg-from-app dist lint format
 
 # ── Configuration ────────────────────────────────────────────────────────────
 
@@ -140,15 +140,15 @@ ironmark:
 		mkdir -p macos-arm64 && \
 		cp target-macos15/aarch64-apple-darwin/release/libironmark.a macos-arm64/
 
-# Build bundled Monaco editor assets with Vite
-monaco:
-	cd Boo/Resources/MonacoSource && CI=true pnpm install --frozen-lockfile && pnpm build
+# Build the bundled CodeMirror editor assets with Vite
+editor:
+	cd Boo/Resources/EditorSource && CI=true pnpm install --frozen-lockfile && pnpm build
 
-monaco-lint:
-	cd Boo/Resources/MonacoSource && CI=true pnpm install --frozen-lockfile && pnpm lint
+editor-lint:
+	cd Boo/Resources/EditorSource && CI=true pnpm install --frozen-lockfile && pnpm lint
 
-monaco-format:
-	cd Boo/Resources/MonacoSource && CI=true pnpm install --frozen-lockfile && pnpm format
+editor-format:
+	cd Boo/Resources/EditorSource && CI=true pnpm install --frozen-lockfile && pnpm format
 
 # ── Build ────────────────────────────────────────────────────────────────────
 
@@ -156,7 +156,7 @@ monaco-format:
 setup: ghostty ironmark build
 
 # Build Boo (macOS — requires GhosttyKit)
-build: monaco
+build: editor
 	swift build
 	@# Bundle Ghostty resources next to the executable so shell integration works
 	@for dir in .build/debug .build/arm64-apple-macosx/debug; do \
@@ -210,7 +210,7 @@ stop:
 	for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do pkill -0 -f '$(DEV_BOO_PATTERN)' 2>/dev/null || break; sleep 0.02; done
 
 # Release build
-release: monaco
+release: editor
 	swift build -c release
 	@for dir in .build/release .build/arm64-apple-macosx/release; do \
 		if [ -d "$$dir" ]; then \
@@ -222,7 +222,7 @@ release: monaco
 	@echo "==> Release build complete"
 
 # Run tests (macOS only — tests depend on AppKit types)
-test: monaco
+test: editor
 	swift test --disable-swift-testing
 
 # ── App Bundle (macOS) ───────────────────────────────────────────────────────
@@ -348,11 +348,11 @@ dist: app
 # ── Lint & Format ────────────────────────────────────────────────────────────
 
 lint:
-	$(MAKE) monaco-lint
+	$(MAKE) editor-lint
 	swift-format lint --strict --recursive Boo/ BooApp/ Tests/
 
 format:
-	$(MAKE) monaco-format
+	$(MAKE) editor-format
 	swift-format format --in-place --recursive Boo/ BooApp/ Tests/
 
 # ── Cleanup ──────────────────────────────────────────────────────────────────

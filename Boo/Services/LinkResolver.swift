@@ -3,19 +3,29 @@ import Foundation
 
 /// Where a file link opens.
 enum LinkTarget: String, Codable, CaseIterable, Sendable {
-    /// Boo's built-in Monaco editor tab.
-    case monaco
+    /// Boo's built-in editor tab.
+    case editor
     /// The external editor from Settings → Editor.
     case external
 
+    /// Also accepts "monaco", the built-in editor's name before CodeMirror,
+    /// so older settings and profiles still load.
+    init?(rawValue: String) {
+        switch rawValue {
+        case "editor", "monaco": self = .editor
+        case "external": self = .external
+        default: return nil
+        }
+    }
+
     var displayName: String {
         switch self {
-        case .monaco: return "Built-in Editor"
+        case .editor: return "Built-in Editor"
         case .external: return "External Editor"
         }
     }
 
-    var other: LinkTarget { self == .monaco ? .external : .monaco }
+    var other: LinkTarget { self == .editor ? .external : .editor }
 }
 
 /// External editors a file link can open in. Each preset is a template with
@@ -298,7 +308,7 @@ enum LinkOpener {
             }
         case .file(let path, let line, let column):
             if let remote = origin.remote {
-                // Remote files only open in Monaco; there's no local path for an
+                // Remote files only open in the built-in editor; there's no local path for an
                 // external editor.
                 openRemote(path: path, line: line, column: column, session: remote, origin: origin)
                 return
@@ -308,7 +318,7 @@ enum LinkOpener {
                 return
             }
             switch target ?? AppSettings.shared.defaultLinkTarget {
-            case .monaco:
+            case .editor:
                 origin.controller?.openFileInEditor(path: resolved, line: line, column: column)
             case .external:
                 openExternally(path: resolved, line: line, column: column, origin: origin)
@@ -371,7 +381,7 @@ enum LinkOpener {
         }
     }
 
-    /// Copies a remote file to a temp file and opens it in Monaco (read-only
+    /// Copies a remote file to a temp file and opens it in the built-in editor (read-only
     /// copy; saving writes the temp file).
     private static func openRemote(path: String, line: Int?, column: Int?, session: RemoteSessionType, origin: Origin) {
         let remotePath: String

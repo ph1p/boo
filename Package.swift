@@ -12,7 +12,7 @@ let booExclude: [String] = [
     "App/Info.plist",
     "App/Boo.entitlements",
     "App/main.swift",
-    "Resources/MonacoSource"
+    "Resources/EditorSource"
 ]
 // Library search path — needed by every target that links against GhosttyKit.
 let booLibrarySearchFlags: [String] = [
@@ -107,7 +107,7 @@ let allTargets: [Target] = [
         exclude: booExclude,
         resources: [
             .copy("Resources/Images"),
-            .copy("Resources/MonacoBundle"),
+            .copy("Resources/EditorBundle"),
             .copy("Resources/Orchestrator"),
             .copy("Resources/RemoteControl"),
             .copy("Resources/Shaders")

@@ -303,7 +303,7 @@ struct SidebarTabID: Hashable, Codable, CustomStringConvertible {
 
 // MARK: - Editor option values
 
-/// Raw values are Monaco's `renderWhitespace` values.
+/// Raw values are stored in settings and sent to the editor page.
 enum EditorRenderWhitespace: String, CaseIterable, Sendable {
     case none, boundary, selection, trailing, all
 
@@ -318,7 +318,7 @@ enum EditorRenderWhitespace: String, CaseIterable, Sendable {
     }
 }
 
-/// Raw values are Monaco's `cursorStyle` values.
+/// Raw values are stored in settings and sent to the editor page.
 enum EditorCursorStyle: String, CaseIterable, Sendable {
     case line, block, underline
 

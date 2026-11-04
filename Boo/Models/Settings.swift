@@ -374,7 +374,7 @@ final class AppSettings {
 
     /// Where ⌘-clicked `file:line` links open; ⌘⌥-click uses the other one.
     var defaultLinkTarget: LinkTarget {
-        get { UserDefaults.standard.string(forKey: K.defaultLinkTarget).flatMap(LinkTarget.init) ?? .monaco }
+        get { UserDefaults.standard.string(forKey: K.defaultLinkTarget).flatMap(LinkTarget.init) ?? .editor }
         set { set(newValue.rawValue, forKey: K.defaultLinkTarget, topic: .links) }
     }
 

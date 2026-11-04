@@ -13,8 +13,8 @@ _bmad-output
 documentation/dist
 documentation/node_modules
 documentation/public/updates/appcast.xml
-Boo/Resources/MonacoBundle
-Boo/Resources/MonacoSource/node_modules
+Boo/Resources/EditorBundle
+Boo/Resources/EditorSource/node_modules
 *.dmg
 .DS_Store
 .swiftpm

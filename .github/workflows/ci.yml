@@ -33,7 +33,7 @@ jobs:
         with:
           node-version: 24
           cache: pnpm
-          cache-dependency-path: Boo/Resources/MonacoSource/pnpm-lock.yaml
+          cache-dependency-path: Boo/Resources/EditorSource/pnpm-lock.yaml
 
       - name: Install swift-format
         run: brew install swift-format
@@ -59,7 +59,7 @@ jobs:
         with:
           node-version: 24
           cache: pnpm
-          cache-dependency-path: Boo/Resources/MonacoSource/pnpm-lock.yaml
+          cache-dependency-path: Boo/Resources/EditorSource/pnpm-lock.yaml
 
       - name: Install Zig
         # Keep in sync with `minimum_zig_version` in Vendor/ghostty/build.zig.zon:
@@ -131,7 +131,7 @@ jobs:
         with:
           node-version: 24
           cache: pnpm
-          cache-dependency-path: Boo/Resources/MonacoSource/pnpm-lock.yaml
+          cache-dependency-path: Boo/Resources/EditorSource/pnpm-lock.yaml
 
       - name: Install Zig
         # Keep in sync with `minimum_zig_version` in Vendor/ghostty/build.zig.zon:

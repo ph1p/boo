@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Boo Monaco</title>
+    <title>Boo Editor</title>
     <style>
       :root {
         --boo-bg: #1e1e1e;
@@ -40,9 +40,15 @@
       }
 
       #container {
+        position: relative;
         flex: 1;
         min-height: 0;
         width: 100%;
+      }
+
+      #container > .cm-editor {
+        position: absolute;
+        inset: 0;
       }
 
       [hidden] {

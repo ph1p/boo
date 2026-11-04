@@ -3,11 +3,11 @@ import WebKit
 
 // MARK: - EditorContentView
 
-/// ContentViewProtocol implementation for text editor tabs using Monaco Editor via WKWebView.
+/// ContentViewProtocol implementation for text editor tabs: CodeMirror in a WKWebView.
 final class EditorContentView: NSView, ContentViewProtocol {
     let contentType: ContentType = .editor
 
-    /// Monaco gets unusably slow well before this; such files belong in a pager.
+    /// The web view gets unusably slow well before this; such files belong in a pager.
     private static let maxFileSize = 50 * 1024 * 1024
 
     private var webView: WKWebView?
@@ -45,7 +45,7 @@ final class EditorContentView: NSView, ContentViewProtocol {
     var onCloseRequested: (() -> Void)?
     /// Save on every (debounced) edit regardless of the autosave setting.
     var autosave = false
-    /// Monaco options that win over the editor settings (e.g. a compact sidebar
+    /// Editor options that win over the editor settings (e.g. a compact sidebar
     /// editor without line numbers). Set before the editor loads.
     var optionOverrides: [String: Any] = [:]
 
@@ -162,7 +162,7 @@ final class EditorContentView: NSView, ContentViewProtocol {
         // Development settings
         config.preferences.setValue(true, forKey: "developerExtrasEnabled")
 
-        // Enable local file access for bundled Monaco assets and workers.
+        // Enable local file access for the bundled editor assets and lazily loaded chunks.
         config.setValue(true, forKey: "allowUniversalAccessFromFileURLs")
 
         let wv = WKWebView(frame: bounds, configuration: config)
@@ -179,26 +179,26 @@ final class EditorContentView: NSView, ContentViewProtocol {
         ])
         webView = wv
 
-        loadMonaco()
+        loadEditor()
     }
 
-    private func loadMonaco() {
+    private func loadEditor() {
         guard let bundleRoot = BooResourceBundle.bundle.resourceURL else {
-            debugLog("[Editor] CRITICAL: MonacoBundle/index.html NOT FOUND in bundle")
+            debugLog("[Editor] CRITICAL: EditorBundle/index.html NOT FOUND in bundle")
             return
         }
         let bundleURL =
             bundleRoot
-            .appendingPathComponent("MonacoBundle", isDirectory: true)
+            .appendingPathComponent("EditorBundle", isDirectory: true)
             .appendingPathComponent("index.html", isDirectory: false)
             .standardizedFileURL
 
         guard FileManager.default.fileExists(atPath: bundleURL.path) else {
-            debugLog("[Editor] CRITICAL: MonacoBundle/index.html NOT FOUND in bundle")
+            debugLog("[Editor] CRITICAL: EditorBundle/index.html NOT FOUND in bundle")
             return
         }
 
-        debugLog("[Editor] Monaco bundle found at \(bundleURL.path)")
+        debugLog("[Editor] Editor bundle found at \(bundleURL.path)")
         webView?.loadFileURL(bundleURL, allowingReadAccessTo: bundleURL.deletingLastPathComponent())
     }
 
@@ -215,7 +215,7 @@ final class EditorContentView: NSView, ContentViewProtocol {
             "content": initialContent,
             "encoding": Self.displayName(of: encoding),
             "readOnly": loadError != nil,
-            "themeData": buildMonacoTheme(),
+            "themeData": buildEditorTheme(),
             "options": buildEditorOptions()
         ]
         if let fileName { initData["fileName"] = fileName }
@@ -254,35 +254,33 @@ final class EditorContentView: NSView, ContentViewProtocol {
     }
 
     private func applyEditorAppearance() {
-        guard let themeStr = jsonString(from: buildMonacoTheme()),
+        guard let themeStr = jsonString(from: buildEditorTheme()),
             let optionsStr = jsonString(from: buildEditorOptions())
         else { return }
         webView?.evaluateJavaScript("setAppearance(\(themeStr), \(optionsStr))")
     }
 
-    private func buildMonacoTheme() -> [String: Any] {
+    /// The editor's colors (see `ThemeData` in EditorSource/src/theme.ts): chrome
+    /// from the app theme, syntax from its ANSI palette.
+    private func buildEditorTheme() -> [String: Any] {
         let theme = AppSettings.shared.theme
-        let isDark = theme.isDark
-
         return [
-            "base": isDark ? "vs-dark" : "vs",
-            "inherit": true,
-            "rules": [
-                ["token": "", "foreground": theme.foreground.hexString],
-                ["token": "comment", "foreground": theme.ansiBlue.hexString, "fontStyle": "italic"],
-                ["token": "keyword", "foreground": theme.ansiMagenta.hexString, "fontStyle": "bold"],
-                ["token": "string", "foreground": theme.ansiGreen.hexString],
-                ["token": "number", "foreground": theme.ansiYellow.hexString],
-                ["token": "type", "foreground": theme.ansiCyan.hexString],
-                ["token": "function", "foreground": theme.ansiBlue.hexString]
-            ],
-            "colors": [
-                "editor.background": theme.background.hexString,
-                "editor.foreground": theme.foreground.hexString,
-                "editorCursor.foreground": theme.cursor.hexString,
-                "editor.lineHighlightBackground": theme.background.highlight(0.05).hexString,
-                "editor.selectionBackground": theme.selection.hexString,
-                "editorIndentGuide.background": theme.chromeBorder.hexString
+            "dark": theme.isDark,
+            "background": theme.background.hexString,
+            "foreground": theme.foreground.hexString,
+            "cursor": theme.cursor.hexString,
+            "selection": theme.selection.hexString,
+            "lineHighlight": theme.background.highlight(0.05).hexString,
+            "border": theme.chromeBorder.hexString,
+            "syntax": [
+                "comment": theme.ansiBlue.hexString,
+                "keyword": theme.ansiMagenta.hexString,
+                "string": theme.ansiGreen.hexString,
+                "number": theme.ansiYellow.hexString,
+                "type": theme.ansiCyan.hexString,
+                "function": theme.ansiBlue.hexString,
+                "tag": theme.ansiRed.hexString,
+                "invalid": theme.ansiRed.hexString
             ]
         ]
     }
@@ -624,7 +622,7 @@ extension EditorContentView: WKScriptMessageHandler {
         case "error":
             if let msg = dict["message"] as? String { debugLog("[Editor JS ERROR] \(msg)") }
         case "ready":
-            debugLog("[Editor JS] Monaco is ready to receive data")
+            debugLog("[Editor JS] Editor is ready to receive data")
             isReady = true
             sendInitialData()
         case "dirty":
