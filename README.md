@@ -50,13 +50,13 @@ Prerequisites:
 - macOS 15+ and Xcode 26 / Swift 6.2 (or the matching Command Line Tools)
 - Zig 0.17.0, the version pinned by `Vendor/ghostty/build.zig.zon` (`brew install zig`)
 - Rust (`rustup`)
-- Node.js + pnpm, for the bundled Monaco editor
+- Node.js + pnpm, for the bundled CodeMirror editor
 - Metal Toolchain: `xcodebuild -downloadComponent MetalToolchain`
 
 ```bash
 git clone --recursive https://github.com/ph1p/boo.git
 cd boo
-make setup    # Builds GhosttyKit, ironmark, Monaco and Boo
+make setup    # Builds GhosttyKit, ironmark, the editor bundle and Boo
 make run      # Build and launch
 ```
 

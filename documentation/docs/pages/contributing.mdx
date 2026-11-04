@@ -5,7 +5,7 @@
 - macOS 15+ and the Xcode command line tools
 - [Zig](https://ziglang.org) 0.17.0 (`brew install zig`). It must match Ghostty's `minimum_zig_version` in `Vendor/ghostty/build.zig.zon`.
 - Rust (`rustup`), for the ironmark markdown parser
-- Node.js and **pnpm**, for the Monaco editor bundle. Use pnpm only, never npm or npx.
+- Node.js and **pnpm**, for the CodeMirror editor bundle. Use pnpm only, never npm or npx.
 - swift-format (`brew install swift-format`)
 
 ## Setup
@@ -18,21 +18,21 @@
 ## Make Targets
 
 ```bash
-make build    # Debug build (runs make monaco first)
+make build    # Debug build (runs make editor first)
 make run      # Build, sign and launch .build/debug/Boo.app
 make test     # swift test --disable-swift-testing
-make monaco   # Build the editor bundle (pnpm + Vite)
+make editor   # Build the editor bundle (pnpm + Vite)
 make lint     # Check style; CI runs this
 make format   # Fix style
 ```
 
-`make monaco` runs `pnpm install --frozen-lockfile` in `Boo/Resources/MonacoSource` and writes `Boo/Resources/MonacoBundle` (gitignored). `make build`, `make test` and `make release` run it for you.
+`make editor` runs `pnpm install --frozen-lockfile` in `Boo/Resources/EditorSource` and writes `Boo/Resources/EditorBundle` (gitignored). `make build`, `make test` and `make release` run it for you.
 
 ## Code Style
 
 - [swift-format](https://github.com/swiftlang/swift-format) with the config in `.swift-format`: 4-space indent, 120-char lines.
-- `make lint` runs `swift-format lint --strict` over `Boo/`, `BooApp/` and `Tests/`, plus the Monaco linter. Warnings fail it.
-- `make format` fixes Swift and Monaco files in place.
+- `make lint` runs `swift-format lint --strict` over `Boo/`, `BooApp/` and `Tests/`, plus the editor linter. Warnings fail it.
+- `make format` fixes Swift and editor files in place.
 - Zero compiler warnings. All UI work on the main thread.
 
 ## Making Changes

@@ -172,8 +172,8 @@ struct EditorSettingsView: View {
                 }
                 ToggleRow(
                     label: "Format on save",
-                    help: "Uses Monaco's built-in formatters (JSON, JavaScript, TypeScript, CSS, HTML). "
-                        + "Other languages are saved as they are.",
+                    help: "Formats JSON, JavaScript, CSS and HTML. TypeScript and others "
+                        + "need a language server; without one they are saved as they are.",
                     isOn: $formatOnSave
                 )
                 .onChange(of: formatOnSave) { _, v in AppSettings.shared.editorFormatOnSave = v }

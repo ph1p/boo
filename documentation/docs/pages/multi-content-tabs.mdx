@@ -8,7 +8,7 @@ A tab is not only a terminal. It can also hold a browser, an editor, an image, a
 | ----------------- | ------------------------------------ | ---------------- |
 | `terminal`        | Ghostty terminal (default)           | `terminal`       |
 | `browser`         | WebKit browser                       | `globe`          |
-| `editor`          | Monaco code editor in a `WKWebView`  | `doc.text`       |
+| `editor`          | CodeMirror editor in a `WKWebView`  | `doc.text`       |
 | `imageViewer`     | Image preview                        | `photo`          |
 | `markdownPreview` | Rendered markdown                    | `doc.richtext`   |
 | `castPlayer`      | Terminal recording (`.cast`) player  | `play.rectangle` |
@@ -54,7 +54,7 @@ The same type ID and `context.key` focus the open tab in the active workspace in
 
 ## Editor
 
-The editor is [Monaco](https://microsoft.github.io/monaco-editor/), bundled into the app (`make monaco`) and shown in a `WKWebView`. It follows the Boo theme.
+The editor is [CodeMirror 6](https://codemirror.net/), bundled into the app (`make editor`) and shown in a `WKWebView`. It follows the Boo theme.
 
 - **Status bar** shows cursor position, indentation, encoding, line endings and language.
 - **Save** is ⌘S. **Save As…** is ⇧⌘S. New files ask for a path.
@@ -63,6 +63,33 @@ The editor is [Monaco](https://microsoft.github.io/monaco-editor/), bundled into
 - **Reload**: Boo watches the file on disk. A clean buffer reloads. A buffer with edits shows a Reload prompt instead. This can be turned off.
 - Files keep their encoding, permissions and symlinks when saved.
 - Unreadable or binary files open read-only.
+- **Format on save** uses js-beautify for JSON, JavaScript, CSS and HTML. Strict `.json` files are linted.
+- **Language servers**: when a language server is on your PATH, the editor gets completion, hover, signature help, diagnostics, go to definition (F12) and find references (⇧F12). Format on save uses the server for languages Boo can't format itself. One server runs per project and stops when its last tab closes. Without a server nothing changes.
+
+| Language                     | Server (first one found runs)                                  |
+| ---------------------------- | -------------------------------------------------------------- |
+| TypeScript, JavaScript       | `typescript-language-server`                                   |
+| CSS, SCSS, LESS, HTML, JSON  | `vscode-css/html/json-language-server`                         |
+| Python                       | `basedpyright-langserver`, `pyright-langserver`, `pylsp`       |
+| Rust                         | `rust-analyzer`                                                |
+| Go                           | `gopls`                                                        |
+| C, C++, Objective-C          | `clangd`                                                       |
+| Swift                        | `sourcekit-lsp`                                                |
+| Shell                        | `bash-language-server`                                         |
+| YAML                         | `yaml-language-server`                                         |
+| Lua                          | `lua-language-server`                                          |
+| Ruby                         | `ruby-lsp`, `solargraph`                                       |
+| PHP                          | `intelephense`, `phpactor`                                     |
+| Java                         | `jdtls`                                                        |
+| Kotlin                       | `kotlin-language-server`                                       |
+| C#                           | `csharp-ls`                                                    |
+| Dart                         | `dart language-server`                                         |
+| Haskell                      | `haskell-language-server-wrapper`                              |
+| Dockerfile                   | `docker-langserver`                                            |
+| TOML                         | `taplo`                                                        |
+| Markdown                     | `marksman`                                                     |
+
+The web servers install with `pnpm add -g typescript typescript-language-server vscode-langservers-extracted`.
 
 Editor options live in **Settings → Editor**.
 
@@ -81,7 +108,7 @@ File watching uses `WatchedFile` (`Boo/Services/WatchedFile.swift`). It watches 
 | `pdfOpenInBrowser`       | `true` (default): PDFs open in a browser tab                           |
 | `htmlOpenInBrowser`      | `false` (default): HTML files open in a browser tab when on            |
 
-Note that for markdown, `editor` means the terminal editor and `builtInEditor` means Monaco.
+Note that for markdown, `editor` means the terminal editor and `builtInEditor` means Boo's editor.
 
 ## Closing Tabs
 

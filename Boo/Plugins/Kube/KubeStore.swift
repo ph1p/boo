@@ -322,10 +322,7 @@ final class KubeStore: ObservableObject {
     /// `wait: false` on the main thread: uses the login-shell PATH only once resolved.
     nonisolated static func findKubectl(wait: Bool = true) -> String? {
         let path = environment(wait: wait)["PATH"] ?? ""
-        let candidates =
-            path.split(separator: ":").map { "\($0)/kubectl" }
-            + ["/opt/homebrew/bin/kubectl", "/usr/local/bin/kubectl", "/usr/bin/kubectl"]
-        return candidates.first { FileManager.default.isExecutableFile(atPath: $0) }
+        return BinaryScanner.path(of: "kubectl", in: path + ":/opt/homebrew/bin:/usr/local/bin:/usr/bin")
     }
 
     /// KUBECONFIG as the login shell exports it (falls back to Boo's own environment).
@@ -343,7 +340,6 @@ final class KubeStore: ObservableObject {
     /// login shell, plus the usual install dirs of kubectl and its credential plugins
     /// (gke-gcloud-auth-plugin, aws, kubelogin).
     nonisolated static func environment(wait: Bool = true) -> [String: String] {
-        var env = LoginShellEnvironment.shared.environment(wait: wait)
         let home = NSHomeDirectory()
         let extra = [
             "/opt/homebrew/bin", "/usr/local/bin", home + "/.local/bin", home + "/google-cloud-sdk/bin",
@@ -351,9 +347,7 @@ final class KubeStore: ObservableObject {
             "/Applications/Docker.app/Contents/Resources/bin", home + "/.nix-profile/bin", "/run/current-system/sw/bin",
             home + "/.local/share/mise/shims", home + "/.asdf/shims"
         ]
-        env["PATH"] = LoginShellEnvironment.mergePath(
-            env["PATH"] ?? "/usr/bin:/bin:/usr/sbin:/sbin", extra.joined(separator: ":"))
-        return env
+        return LoginShellEnvironment.shared.environment(wait: wait, extraPaths: extra)
     }
 
     nonisolated static func lastLine(_ text: String) -> String? {

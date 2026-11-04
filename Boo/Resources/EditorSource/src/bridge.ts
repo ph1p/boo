@@ -1,5 +1,6 @@
 // Types and messages shared with Swift (Boo/Content/EditorContentView.swift).
 
+import type { LspTarget } from "./lsp";
 import type { ThemeData } from "./theme";
 
 declare global {
@@ -19,6 +20,9 @@ declare global {
     setAppearance: (themeData: ThemeData, options: EditorOptions) => void;
     focusEditor: () => void;
     revealPosition: (line: number, column: number) => void;
+    lspConnect: (target: LspTarget) => void;
+    lspDisconnect: () => void;
+    lspReceive: (message: string) => void;
     webkit?: {
       messageHandlers?: {
         boo?: BooMessageHandler;
@@ -96,7 +100,13 @@ export type BooMessage =
   | { type: "changed" }
   | { type: "focused" }
   | { type: "blurred" }
-  | { type: "bannerAction"; id: string; action: string };
+  | { type: "bannerAction"; id: string; action: string }
+  /** The language changed; Swift starts or stops a language server. */
+  | { type: "lspLanguage"; language: string | null }
+  /** A JSON-RPC message for the language server. */
+  | { type: "lsp"; message: string }
+  /** Opens another file in a Boo editor tab (go to definition). */
+  | { type: "openFile"; uri: string; line: number; column: number };
 
 export function postMessage(message: BooMessage): void {
   window.webkit?.messageHandlers?.boo?.postMessage(message);

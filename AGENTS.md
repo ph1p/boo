@@ -8,18 +8,18 @@ Full documentation: https://ph1p.github.io/boo/
 
 - **Swift** (macOS 15+), **AppKit**, **GhosttyKit** (Metal GPU rendering)
 - Swift Package Manager (`Package.swift`, swift-tools 6.2)
-- Prerequisites: macOS 15+, Xcode CLT, Zig 0.17.0 (`brew install zig`), Rust (`rustup`), Node + pnpm (Monaco editor bundle)
+- Prerequisites: macOS 15+, Xcode CLT, Zig 0.17.0 (`brew install zig`), Rust (`rustup`), Node + pnpm (CodeMirror editor bundle)
 
 ```bash
 make setup          # First time: clone Ghostty + build GhosttyKit + build ironmark + build Boo
-make build          # monaco + swift build + bundle Ghostty resources
+make build          # editor + swift build + bundle Ghostty resources
 make run            # Build and launch (debug .app, Sparkle disabled)
 make stop           # Quit the dev build only (never the installed /Applications/Boo.app)
-make test           # Run tests (builds monaco first)
-swift build         # Build only (requires GhosttyKit + Boo/Resources/MonacoBundle already built)
-make monaco         # Build the Monaco editor bundle (pnpm + Vite) into Boo/Resources/MonacoBundle
-make lint           # monaco-lint + swift-format lint
-make format         # monaco-format + swift-format format
+make test           # Run tests (builds editor first)
+swift build         # Build only (requires GhosttyKit + Boo/Resources/EditorBundle already built)
+make editor         # Build the CodeMirror editor bundle (pnpm + Vite) into Boo/Resources/EditorBundle
+make lint           # editor-lint + swift-format lint
+make format         # editor-format + swift-format format
 make release        # Optimized build
 make app            # Create .app bundle (runs make release)
 make zip            # Create distributable ZIP (+ dSYM ZIP)
@@ -34,8 +34,8 @@ this session, and it shares the process name and bundle path suffix with the dev
 `make stop` / `make run`. Do not use `pkill -x Boo`, `killall Boo`, or
 `pkill -f "Boo.app/Contents/MacOS/Boo"`.
 
-`Boo/Resources/MonacoBundle` is gitignored and is a `.copy` resource of the Boo target, so a bare
-`swift build` on a fresh checkout fails until `make monaco` (or any of `make build/test/release`) has run.
+`Boo/Resources/EditorBundle` is gitignored and is a `.copy` resource of the Boo target, so a bare
+`swift build` on a fresh checkout fails until `make editor` (or any of `make build/test/release`) has run.
 
 Ghostty carries local patches (`Vendor/patches/*.patch`), applied idempotently by
 `make ghostty` / `make ghostty-wasm`. After updating the submodule, re-apply via
@@ -51,7 +51,7 @@ Boo/                  Library target (all app code)
                       +Terminal, +Plugins, +Workspace, +Menu, +IPC, +IPCLayout, +SplitLayout,
                       +WindowDrag, +AgentTasks, +AgentTimeline, +RemoteControl), SidebarController,
                       WindowStateCoordinator, TrafficLightPositioner
-  Content/            Tab content views: Terminal, Browser, Editor (Monaco), ImageViewer,
+  Content/            Tab content views: Terminal, Browser, Editor (CodeMirror), ImageViewer,
                       MarkdownPreview, PluginTab; ContentType + ContentTypeDetector
   Ghostty/            GhosttyRuntime, GhosttyView (Metal surface), TerminalScrollView
   Models/             Settings.swift (AppSettings), Theme + TerminalTheme+BuiltIn, Workspace,
@@ -71,7 +71,7 @@ Boo/                  Library target (all app code)
                       AgentReviewView, AgentTimelineView, AgentInboxSegment, SettingsWindow
     Settings/         One SwiftUI view per settings page
     SwiftUI/          AppContentView, SidebarView, PaneSplitRepresentable
-  Resources/          Images, MonacoSource (pnpm/Vite) → MonacoBundle (generated),
+  Resources/          Images, EditorSource (pnpm/Vite) → EditorBundle (generated),
                       RemoteControl (index.html + ghostty-vt.wasm)
 BooApp/               Executable entry point (just calls BooMain.run())
 CGhostty/             C module wrapping ghostty.h
@@ -428,7 +428,13 @@ Fixed tabs are listed in `Tab.fixed`, ordered by `Tab.Group` (Terminal, Appearan
 
 ### Editor Theme
 
-The editor tab is Monaco (bundled from `Boo/Resources/MonacoSource` by `make monaco`) hosted in `Boo/Content/EditorContentView.swift`. There is no separate editor theme library: `buildMonacoTheme()` derives a Monaco theme from the app theme (`vs`/`vs-dark` base, token colors from the ANSI palette, editor colors from background/foreground/cursor/selection) and re-applies it on theme change.
+The editor tab is CodeMirror 6 (bundled from `Boo/Resources/EditorSource` by `make editor`) hosted in `Boo/Content/EditorContentView.swift`. There is no separate editor theme library: `buildEditorTheme()` passes the app theme to the page (dark or light base, token colors from the ANSI palette, editor colors from background/foreground/cursor/selection), and `src/theme.ts` turns it into a CodeMirror theme and highlight style. It is re-applied on theme change.
+
+Languages load lazily. JSON, JavaScript, CSS and HTML format with js-beautify; strict `.json` files are linted.
+
+### Editor Language Servers
+
+`Boo/Content/EditorLanguageServer.swift` runs a language server when one is on the login shell's PATH; without one the editor works as before. `LanguageServerSpec.candidates(for:)` maps editor language names (from `@codemirror/language-data`) to servers in order of preference: TypeScript, CSS/HTML/JSON, Python, Rust, Go, clangd, sourcekit-lsp, Shell, YAML, Lua, Ruby, PHP, Java, Kotlin, C#, Dart, Haskell, Dockerfile, TOML and Markdown. Add a language there. `LanguageServerHub` keeps one server per binary and project root (nearest marker such as `tsconfig.json`, else the git checkout, else the file's directory) and stops it when its last tab closes. Each page runs `@codemirror/lsp-client` (`src/lsp.ts`), so the Swift relay initializes the server once, renumbers request ids, routes replies and per-document notifications to the owning tab, and answers server requests itself. Logs go to the debug log with an `[LSP]` prefix.
 
 ## Browser Tab
 

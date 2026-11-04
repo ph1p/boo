@@ -36,9 +36,15 @@ enum BinaryScanner {
 
     /// Returns true if `binary` is found as an executable in any of `searchPaths`.
     static func isInstalled(_ binary: String) -> Bool {
-        let fm = FileManager.default
-        return searchPaths.contains { dir in
-            fm.isExecutableFile(atPath: (dir as NSString).appendingPathComponent(binary))
+        path(of: binary, in: searchPaths.joined(separator: ":")) != nil
+    }
+
+    /// The full path of the first executable `binary` on the colon-separated `path`.
+    static func path(of binary: String, in path: String, fileManager: FileManager = .default) -> String? {
+        for dir in path.split(separator: ":") {
+            let candidate = (String(dir) as NSString).appendingPathComponent(binary)
+            if fileManager.isExecutableFile(atPath: candidate) { return candidate }
         }
+        return nil
     }
 }

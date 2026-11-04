@@ -28,6 +28,10 @@ final class EditorContentView: NSView, ContentViewProtocol {
     private var isReady = false  // Set when JS signals 'ready'
     /// A line to jump to once the editor holds the file.
     private var pendingReveal: (line: Int, column: Int)?
+    /// The language server link, while one serves the file's language.
+    private var languageServer: LanguageServerConnection?
+    /// The language and path the server was last requested for.
+    private var languageServerRequest: String?
 
     private enum SaveReason {
         /// ⌘S, Save As, or saving before close: runs the on-save edits and reports errors.
@@ -332,6 +336,9 @@ final class EditorContentView: NSView, ContentViewProtocol {
     }
 
     func cleanup() {
+        languageServerRequest = nil
+        languageServer?.close()
+        languageServer = nil
         watcher?.stop()
         watcher = nil
         webView?.configuration.userContentController.removeScriptMessageHandler(forName: "boo")
@@ -592,6 +599,51 @@ final class EditorContentView: NSView, ContentViewProtocol {
         if action == "reload" { reload() }
     }
 
+    // MARK: - Language server
+
+    /// Connects the page to a language server for `language`, replacing the
+    /// previous one. Without an installed server the editor works as before.
+    private func updateLanguageServer(language: String?) {
+        let request = language.flatMap { lang in filePath.map { lang + "\u{0}" + $0 } }
+        // Same file and language: keep the link, or the pending request. Only a
+        // server that died is asked for again.
+        if request == languageServerRequest, languageServer?.isAlive ?? true { return }
+        languageServerRequest = request
+        if languageServer != nil {
+            languageServer?.close()
+            languageServer = nil
+            webView?.evaluateJavaScript("lspDisconnect()")
+        }
+        guard let language, let filePath, loadError == nil else { return }
+        LanguageServerHub.shared.connect(
+            language: language, path: filePath,
+            deliver: { [weak self] message in
+                // Passed as an argument: no escaping pass and no script to compile per message.
+                self?.webView?.callAsyncJavaScript(
+                    "lspReceive(m)", arguments: ["m": message], in: nil, in: .page, completionHandler: nil)
+            },
+            completion: { [weak self] connection in
+                guard let connection else { return }
+                guard let self, self.webView != nil, self.languageServerRequest == request else {
+                    connection.close()
+                    return
+                }
+                self.languageServer = connection
+                // A server that dies stays dead for this file and language;
+                // the page falls back to editing without it.
+                connection.onExit = { [weak self, weak connection] in
+                    guard let self, let connection, self.languageServer === connection else { return }
+                    self.languageServer = nil
+                    self.webView?.evaluateJavaScript("lspDisconnect()")
+                }
+                let target = [
+                    "uri": connection.uri, "rootUri": connection.rootUri, "languageId": connection.languageId
+                ]
+                guard let literal = self.jsonString(from: target) else { return }
+                self.webView?.evaluateJavaScript("lspConnect(\(literal))")
+            })
+    }
+
     private func updateTitle() {
         let name = fileDisplayName
         let title = isDirty ? "\(name) ●" : name
@@ -638,6 +690,14 @@ extension EditorContentView: WKScriptMessageHandler {
             if let id = dict["id"] as? String, let action = dict["action"] as? String {
                 handleBannerAction(id: id, action: action)
             }
+        case "lspLanguage":
+            updateLanguageServer(language: dict["language"] as? String)
+        case "lsp":
+            if let message = dict["message"] as? String { languageServer?.send(message) }
+        case "openFile":
+            guard let uri = dict["uri"] as? String, let url = URL(string: uri), url.isFileURL else { break }
+            WindowManager.shared.activeController?.openFileInEditor(
+                path: url.path, line: dict["line"] as? Int, column: dict["column"] as? Int)
         default:
             break
         }

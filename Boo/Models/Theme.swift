@@ -137,7 +137,7 @@ struct TerminalTheme {
     /// Whether this theme was created by the user (not a built-in).
     var isCustom: Bool = false
 
-    // MARK: - Monaco Helpers
+    // MARK: - Editor Helpers
 
     var ansiRed: TerminalColor { ansiColors[1] }
     var ansiGreen: TerminalColor { ansiColors[2] }

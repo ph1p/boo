@@ -122,6 +122,15 @@ final class LoginShellEnvironment: @unchecked Sendable {
         return env
     }
 
+    /// The login shell's environment with `extraPaths` appended to PATH, for
+    /// finding tools installed outside it (Homebrew, version managers).
+    func environment(wait: Bool = true, extraPaths: [String]) -> [String: String] {
+        var env = environment(wait: wait)
+        env["PATH"] = Self.mergePath(
+            env["PATH"] ?? "/usr/bin:/bin:/usr/sbin:/sbin", extraPaths.joined(separator: ":"))
+        return env
+    }
+
     static func mergePath(_ first: String, _ second: String) -> String {
         var seen = Set<String>()
         return (first.split(separator: ":") + second.split(separator: ":"))

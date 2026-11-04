@@ -263,7 +263,7 @@ extension MainWindowController {
         }
     }
 
-    /// Opens `path` in a Monaco editor tab with the cursor at `line`:`column`.
+    /// Opens `path` in an editor tab with the cursor at `line`:`column`.
     func openFileInEditor(path: String, line: Int?, column: Int?) {
         openFileInTab(path: path, type: .editor)
         guard let line,

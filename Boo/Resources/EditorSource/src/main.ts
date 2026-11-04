@@ -44,6 +44,7 @@ import {
   reportError,
 } from "./bridge";
 import { formatText, jsonLint } from "./format";
+import * as lsp from "./lsp";
 import { type Indent, currentIndent, detectIndent, indentExtension, tabBinding } from "./indent";
 import {
   PLAIN_TEXT,
@@ -52,6 +53,7 @@ import {
   languageNames,
   loadLanguage,
 } from "./languages";
+import type { LspTarget } from "./lsp";
 import { type ResolvedOptions, optionsExtension, resolveOptions } from "./options";
 import { type ThemeData, themeExtension } from "./theme";
 
@@ -90,6 +92,7 @@ const compartments = {
   options: new Compartment(),
   indent: new Compartment(),
   readOnly: new Compartment(),
+  lsp: new Compartment(),
 };
 
 window.addEventListener("error", (event) => {
@@ -142,11 +145,14 @@ function setStatusVisible(): void {
 function setLanguage(desc: LanguageDescription | null): void {
   language = desc;
   scheduleStatusUpdate();
+  postMessage({ type: "lspLanguage", language: desc?.name ?? null });
   if (!desc) {
     view?.dispatch({ effects: compartments.language.reconfigure([]) });
     return;
   }
-  const lint = desc.name === "JSON" ? jsonLint(fileName) : Promise.resolve([]);
+  // A JSON language server reports its own diagnostics.
+  const lint =
+    desc.name === "JSON" && !lsp.isConnected() ? jsonLint(fileName) : Promise.resolve([]);
   Promise.all([loadLanguage(desc), lint]).then(
     ([support, lintExtension]) => {
       if (language !== desc) return;
@@ -352,7 +358,11 @@ const FORMAT_TIMEOUT_MS = 2000;
 async function formatDocument(): Promise<void> {
   if (!view || view.state.readOnly) return;
   const before = view.state.doc;
-  const run = formatText(language?.name, before.toString(), currentIndent(view.state));
+  const indent = currentIndent(view.state);
+  const editor = view;
+  const run = formatText(language?.name, before.toString(), indent).then(
+    (text) => text ?? lsp.formatWithServer(editor, indent),
+  );
   const timeout = new Promise<null>((resolve) =>
     setTimeout(() => resolve(null), FORMAT_TIMEOUT_MS),
   );
@@ -506,6 +516,7 @@ window.initEditorFromJSON = (data: EditorInitData): void => {
         compartments.options.of(optionsExtension(options)),
         compartments.indent.of(indentExtension(resolvedIndent())),
         compartments.readOnly.of(EditorState.readOnly.of(data.readOnly ?? false)),
+        compartments.lsp.of(lsp.lspExtension()),
       ],
     });
     view = new EditorView({ state, parent: element("container") });
@@ -594,6 +605,26 @@ window.revealPosition = (line: number, column: number): void => {
     effects: EditorView.scrollIntoView(pos, { y: "center" }),
   });
   view.focus();
+};
+
+// MARK: - Language server
+
+window.lspConnect = (target: LspTarget): void => {
+  lsp.connect(target);
+  view?.dispatch({ effects: compartments.lsp.reconfigure(lsp.lspExtension()) });
+  // Drops the built-in JSON linter in favor of the server's diagnostics.
+  if (language?.name === "JSON") setLanguage(language);
+};
+
+window.lspDisconnect = (): void => {
+  if (!lsp.isConnected()) return;
+  view?.dispatch({ effects: compartments.lsp.reconfigure([]) });
+  lsp.disconnect();
+  if (language?.name === "JSON") setLanguage(language);
+};
+
+window.lspReceive = (message: string): void => {
+  lsp.receive(message);
 };
 
 setupStatusStrip();

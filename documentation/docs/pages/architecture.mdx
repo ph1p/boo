@@ -5,7 +5,7 @@
 - **Swift** on macOS 15+. **AppKit** for the window and terminals, **SwiftUI** for the sidebar and settings.
 - **GhosttyKit**: terminal emulation with Metal rendering, through its C API. See [Ghostty Integration](/ghostty-integration).
 - **PTY**: owned by Ghostty. Each `GhosttyView` surface spawns and drives its own shell.
-- **Monaco** in a `WKWebView` for the editor. See [Multi-Content Tabs](/multi-content-tabs#editor).
+- **CodeMirror 6** in a `WKWebView` for the editor. See [Multi-Content Tabs](/multi-content-tabs#editor).
 
 Build commands are in [Contributing](/contributing).
 
@@ -26,7 +26,7 @@ Boo/                Library target (all app code)
   Services/         TerminalBridge, SessionStore, socket server (BooSocketServer, UnixSocket),
                     BooMCPServer, RemoteControlServer, AgentInbox, Orchestrator*,
                     CapabilityTokens, ProcessTree, WatchedFile, SparkleUpdater, …
-  Resources/        MonacoSource → MonacoBundle, Remote Control web UI (ghostty-vt.wasm)
+  Resources/        EditorSource → EditorBundle, Remote Control web UI (ghostty-vt.wasm)
 BooApp/             Executable entry point (calls BooMain.run())
 CGhostty/           C module wrapping ghostty.h
 CGhosttyVT/         C module for libghostty-vt (recording video export)

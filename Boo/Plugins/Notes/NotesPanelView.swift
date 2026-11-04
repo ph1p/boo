@@ -329,7 +329,7 @@ private enum NoteKind {
     }
 }
 
-/// Compact Monaco editor on the note file, autosaving. The panel reloads it
+/// Compact editor on the note file, autosaving. The panel reloads it
 /// when text is appended from elsewhere (palette "Append Selection to Note");
 /// the append saves its pending edits first via `NotesStore.flush`.
 private struct NotesEditor: NSViewRepresentable {
