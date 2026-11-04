@@ -366,19 +366,10 @@ extension MainWindowController {
         openWorkspace(path: AppSettings.shared.defaultFolder)
     }
 
-    /// Session save — used by `AppDelegate.applicationWillTerminate` and all general hot paths.
-    ///
-    /// Pre-work (content-state persistence, normalization, sidebar state) always runs
-    /// synchronously on the main thread — models are not thread-safe.
-    ///
-    /// The encode + atomic write is dispatched to a private serial background queue so the
-    /// main thread is never blocked by JSONEncoder or disk I/O on the hot path.
-    ///
-    /// Termination safety: macOS drains serial dispatch queues owned by the app before the
-    /// process exits after `applicationWillTerminate` returns, so the queued write will
-    /// complete. The `buildSnapshot` call here captures the full in-memory state
-    /// synchronously before returning to the caller, ensuring no state is missed even if
-    /// the caller (AppDelegate) returns immediately after this call.
+    /// Session save. Model pre-work and the snapshot run synchronously on the main
+    /// thread (models are not thread-safe); only the encode + atomic write goes to a
+    /// background serial queue, which macOS drains before exit after
+    /// `applicationWillTerminate` returns.
     func saveSession(persistSidebarState: Bool = true) {
         prepareSessionSave(persistSidebarState: persistSidebarState)
         for (i, ws) in appState.workspaces.enumerated() {
@@ -605,8 +596,7 @@ extension MainWindowController {
         sidebarController.applyRestoredState(restoredSidebarState)
 
         refreshToolbar()
-        // isRemoteSidebar/activeRemoteSession are now derived from bridge state,
-        // which was just cleared by switchContext above.
+        // Remote sidebar state derives from bridge state, just cleared by switchContext.
         runPluginCycle(reason: .workspaceSwitched)
 
         // Rebuild split container with the workspace's tree

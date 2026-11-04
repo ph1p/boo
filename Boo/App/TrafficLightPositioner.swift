@@ -3,11 +3,6 @@ import ObjectiveC
 
 @MainActor
 enum TrafficLightPositioner {
-    /// Shift from the native traffic-light origins to their place in the toolbar
-    /// island. Derived from the close button rather than hand-tuned: its centre
-    /// sits on the island's vertical centre, and its gap to the island's leading
-    /// edge equals its gap to the island's top, so the cluster reads as centred in
-    /// the island corner whatever the toolbar height. Zero until laid out.
     /// Gap between the close button and the toolbar island's top and leading edge.
     static func edgeInset(
         buttonHeight: CGFloat, headerHeight: CGFloat = IslandMetrics.toolbarHeight
@@ -15,6 +10,11 @@ enum TrafficLightPositioner {
         (headerHeight - buttonHeight) / 2
     }
 
+    /// Shift from the native traffic-light origins to their place in the toolbar
+    /// island. Derived from the close button rather than hand-tuned: its centre
+    /// sits on the island's vertical centre, and its gap to the island's leading
+    /// edge equals its gap to the island's top, so the cluster reads as centred in
+    /// the island corner whatever the toolbar height. Zero until laid out.
     private static func offset(for window: NSWindow, entry: Entry) -> NSPoint {
         guard let close = window.standardWindowButton(.closeButton),
             let superview = close.superview

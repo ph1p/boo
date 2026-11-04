@@ -130,10 +130,7 @@ final class WindowManager {
             let topLeft = NSPoint(x: anchor.frame.minX, y: anchor.frame.maxY)
             window.setFrameTopLeftPoint(window.cascadeTopLeft(from: topLeft))
         }
-        register(controller)
-        controller.showWindow(nil)
-        controller.window?.makeKeyAndOrderFront(nil)
-        writeSession(from: controller, sync: false)
+        present(controller)
         return controller
     }
 
@@ -153,11 +150,15 @@ final class WindowManager {
             if let screen { frame = window.constrainFrameRect(frame, to: screen) }
             window.setFrame(frame, display: false)
         }
+        present(controller)
+        return controller
+    }
+
+    private func present(_ controller: MainWindowController) {
         register(controller)
         controller.showWindow(nil)
         controller.window?.makeKeyAndOrderFront(nil)
         writeSession(from: controller, sync: false)
-        return controller
     }
 
     /// Frontmost managed window containing `point` (screen coordinates).

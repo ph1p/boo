@@ -434,12 +434,8 @@ extension MainWindowController {
             }
         }
 
-        // In-place update path: the panel already on screen has the layout this plugin
-        // wants (single scroll view vs. stacked sections), so swap content into it
-        // instead of tearing it down. A rebuild throws away scroll position and every
-        // SwiftUI @StateObject in the section (file-tree expansion, rename/drag state),
-        // which is why the explorer used to jump to the top whenever an unrelated
-        // context field (foreground process, git status) changed.
+        // In-place update when the on-screen panel already has the wanted layout:
+        // a rebuild would lose scroll position and every SwiftUI @StateObject in it.
         switch (pluginPanelViews[id], sections.count) {
         case (let scrollView as PluginScrollView, 1) where sections[0].prefersOuterScrollView:
             scrollView.setContent(sections[0].content)
