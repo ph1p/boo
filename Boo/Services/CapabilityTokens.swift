@@ -69,10 +69,6 @@ final class CapabilityTokens {
         owned[caller]?.contains(tabID) == true
     }
 
-    func ownedTabs(of caller: UUID) -> Set<UUID> {
-        owned[caller] ?? []
-    }
-
     private static func randomToken() -> String {
         var generator = SystemRandomNumberGenerator()
         return (0..<32).map { _ in String(format: "%02x", UInt8.random(in: 0...255, using: &generator)) }

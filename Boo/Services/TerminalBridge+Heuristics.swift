@@ -68,19 +68,9 @@ extension TerminalBridge {
             return .container(target: hexContainerID, tool: .docker)
         }
 
-        // SSH detection: require the shell-prompt pattern "user@host:path".
-        // Real SSH (and container) shell prompts always include a colon after the hostname
-        // followed by a path, e.g. "user@host:~$", "user@host: ~/dir", "user@host:/app#".
-        // This PS1 pattern is the definitive marker — it is absent from:
-        //   - npm version specifiers  ("npx pkg@latest", "bunx @scope/tool")
-        //   - bare command arguments  ("cmd user@host")
-        //   - git remote URLs         ("git@github.com:org/repo") ← also caught by gitForgeHosts
-        // Without the colon we cannot reliably distinguish `word@word` from SSH.
-        //
-        // Matching strategy: find the first occurrence of "@" in the title and check
-        // that a ":" appears immediately after the host token (before any space).
-        // "user@host: ~/dir" (space after colon) is handled by requiring ":" anywhere
-        // between the "@" and the next space boundary of the host portion.
+        // SSH detection requires the prompt pattern "user@host:path" ("user@host:~$",
+        // "user@host: ~/dir"). The colon after the host separates real prompts from
+        // `word@word` in npm specifiers ("npx pkg@latest") or bare args ("cmd user@host").
         if let atRange = trimmed.range(of: "@") {
             let user = String(trimmed[..<atRange.lowerBound])
             let afterAt = String(trimmed[atRange.upperBound...])
@@ -164,18 +154,10 @@ extension TerminalBridge {
             detected = previous
         }
 
-        // Preserve alias from previous session when the new detection doesn't have one.
-        // This keeps the SSH config alias (e.g. "devbox") available for connection reuse
-        // even as the title changes to "root@ubuntu-server:~".
-        // CRITICAL: We must keep the *previous host* as the display name to avoid
-        // breaking Equatable (which compares hosts). A host change would cause a
-        // false session transition on every cd, tearing down and rebuilding the tree.
-        // Stabilize SSH session host when the prompt shows a different hostname than
-        // the original command target. E.g., "ssh devbox" → "root@ubuntu-server:~" or
-        // "ssh root@1.2.3.4" → "root@hostname:~". The alias (set when detected from
-        // a command title) marks sessions that should be stabilized. Prompt-to-prompt
-        // transitions (no alias) like "user@host1:~" → "user@host2:~" are genuine
-        // host switches and should NOT be stabilized.
+        // Keep the previous host and alias when the prompt shows a different hostname
+        // than the command target ("ssh devbox" → "root@ubuntu-server:~"). Equatable
+        // compares hosts, so a changed host would fake a session transition on every cd.
+        // Only alias-bearing sessions are stabilized; prompt-to-prompt host changes are real.
         if case .ssh(let prevHost, let prevAlias) = previous, let alias = prevAlias,
             case .ssh = detected,
             heuristic != nil, processDetection == nil
@@ -271,47 +253,26 @@ extension TerminalBridge {
         let cmdBase = cmd.lastPathComponent.lowercased()
 
         // SSH: title starts with "ssh" followed by a host
-        if cmdBase == "ssh" {
-            var skipNext = false
-            let valueOpts: Set<String> = [
-                "-p", "-i", "-l", "-o", "-F", "-J", "-L", "-R", "-D", "-b", "-c", "-e", "-m", "-w", "-E"
-            ]
-            for arg in parts.dropFirst() {
-                if skipNext {
-                    skipNext = false
-                    continue
-                }
-                if arg.hasPrefix("-") {
-                    if valueOpts.contains(arg) { skipNext = true }
-                    continue
-                }
-                // Skip git transport targets: "git@host" is a non-interactive git SSH user
-                let isGitUser = arg.lowercased().hasPrefix("git@")
-                if arg != "localhost" && arg != "127.0.0.1" && !isGitForgeHost(arg) && !isGitUser {
-                    return .ssh(host: arg)
-                }
-                break
+        if cmdBase == "ssh",
+            let arg = RemoteExplorer.positionalArguments(
+                parts.dropFirst(), valueOptions: RemoteExplorer.sshValueOptions
+            ).first
+        {
+            // Skip git transport targets: "git@host" is a non-interactive git SSH user
+            let isGitUser = arg.lowercased().hasPrefix("git@")
+            if arg != "localhost" && arg != "127.0.0.1" && !isGitForgeHost(arg) && !isGitUser {
+                return .ssh(host: arg)
             }
         }
 
         // Mosh: title starts with "mosh" followed by a host
-        if cmdBase == "mosh" || cmdBase == "mosh-client" {
-            var skipNext = false
-            let valueOpts: Set<String> = ["-p", "--port", "--ssh", "--predict", "--predict-overwrite"]
-            for arg in parts.dropFirst() {
-                if skipNext {
-                    skipNext = false
-                    continue
-                }
-                if arg.hasPrefix("-") {
-                    if valueOpts.contains(arg) { skipNext = true }
-                    continue
-                }
-                if arg != "localhost" && arg != "127.0.0.1" {
-                    return .mosh(host: arg)
-                }
-                break
-            }
+        if cmdBase == "mosh" || cmdBase == "mosh-client",
+            let arg = RemoteExplorer.positionalArguments(
+                parts.dropFirst(), valueOptions: RemoteExplorer.moshValueOptions
+            ).first,
+            arg != "localhost" && arg != "127.0.0.1"
+        {
+            return .mosh(host: arg)
         }
 
         // Container/VM tools: title starts with tool name followed by an interactive subcommand

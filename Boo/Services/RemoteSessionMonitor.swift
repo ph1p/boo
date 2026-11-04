@@ -87,11 +87,6 @@ final class RemoteSessionMonitor: @unchecked Sendable {
         }
     }
 
-    /// Synchronous query for the last known session state.
-    func currentSession(for paneID: UUID) -> RemoteSessionType? {
-        queue.sync { tracked[paneID]?.lastSession }
-    }
-
     /// Synchronous query for the shell PID of a tracked pane.
     func shellPID(for paneID: UUID) -> pid_t? {
         guard let pid: pid_t = queue.sync(execute: { tracked[paneID]?.shellPID }),
@@ -105,24 +100,6 @@ final class RemoteSessionMonitor: @unchecked Sendable {
     func otherTrackedPIDs(excluding paneID: UUID) -> Set<pid_t> {
         queue.sync {
             Set(tracked.compactMap { $0.key != paneID ? $0.value.shellPID : nil })
-        }
-    }
-
-    /// Stop container CWD polling for a specific tab on a pane.
-    /// Safe to call even if the session has already been cleared from `tracked`.
-    func stopContainerCwdWatcher(paneID: UUID, tabID: UUID) {
-        queue.async { [weak self] in
-            guard let self else { return }
-            // Unregister from the watcher when the session is still known.
-            if let session = self.tracked[paneID]?.lastSession {
-                ContainerCwdWatcher.shared(for: session)?.unregisterTab(paneID: tabID)
-                ContainerCwdWatcher.releaseIfUnused(for: session)
-            }
-            // Always clean up the local tracking set, even if session was already nil.
-            self.containerWatcherTabs[paneID]?.remove(tabID)
-            if self.containerWatcherTabs[paneID]?.isEmpty == true {
-                self.containerWatcherTabs.removeValue(forKey: paneID)
-            }
         }
     }
 
@@ -160,14 +137,6 @@ final class RemoteSessionMonitor: @unchecked Sendable {
     private func markActive() {
         lastActivity = Date()
         timer.schedule(interval: Self.fastInterval)
-    }
-
-    /// Live process tree query for a tracked pane. Checks the process tree NOW
-    /// (not from the last poll). Runs synchronously on the caller's thread.
-    func probeSession(for paneID: UUID) -> RemoteSessionType? {
-        let shellPID: pid_t? = queue.sync { tracked[paneID]?.shellPID }
-        guard let pid = shellPID, pid > 0 else { return nil }
-        return RemoteExplorer.detectRemoteSessionFiltered(shellPID: pid)
     }
 
     private func poll() {
@@ -243,12 +212,4 @@ final class RemoteSessionMonitor: @unchecked Sendable {
             // Container CWD is handled by persistent watchers, not the poll loop.
         }
     }
-
-    // MARK: - Container CWD Command (for testing)
-
-    /// Shell command to list PID and CWD of all PTY processes inside the container.
-    static let containerCwdCommand =
-        "for p in /proc/[0-9]*; do pid=${p##*/}; [ \"$pid\" = 1 ] || [ \"$pid\" = $$ ] && continue; t=$(readlink $p/fd/0 2>/dev/null); case $t in /dev/pts/*) c=$(readlink $p/cwd 2>/dev/null); [ -n \"$c\" ] && echo \"$pid $c\";; esac; done"
-
-    static var containerCwdCommandForTesting: String { containerCwdCommand }
 }

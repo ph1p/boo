@@ -16,20 +16,6 @@ final class RemoteExplorer: @unchecked Sendable {
 
     // MARK: - Detection
 
-    /// Detect if the shell has a remote child process.
-    static func detectRemoteSession(shellPID: pid_t) -> RemoteSessionType? {
-        if let host = detectSSH(shellPID: shellPID) {
-            return .ssh(host: host)
-        }
-        if let host = detectMosh(shellPID: shellPID) {
-            return .mosh(host: host)
-        }
-        if let result = detectContainer(shellPID: shellPID) {
-            return result
-        }
-        return nil
-    }
-
     private static func detectSSH(shellPID: pid_t) -> String? {
         guard let pid = findChildProcess(parentPID: shellPID, name: "ssh", matching: isInteractiveSSH) else {
             return nil
@@ -162,26 +148,33 @@ final class RemoteExplorer: @unchecked Sendable {
     private static func parseMoshHost(pid: pid_t) -> String? {
         guard let cmdline = ProcessTree.processArgs(pid: pid) else { return nil }
         let args = cmdline.trimmingCharacters(in: .whitespacesAndNewlines).split(separator: " ").map(String.init)
+        return positionalArguments(args.dropFirst(), valueOptions: moshValueOptions).first
+    }
+
+    /// ssh options followed by a value, as matched by `positionalArguments`.
+    static let sshValueOptions: Set<String> = [
+        "-p", "-i", "-l", "-o", "-F", "-J", "-L", "-R", "-D", "-b", "-c", "-e", "-m", "-w", "-E"
+    ]
+    /// mosh options followed by a value.
+    static let moshValueOptions: Set<String> = ["-p", "--port", "--ssh", "--predict", "--predict-overwrite"]
+
+    /// The non-option words of an argument list (program name already dropped),
+    /// skipping the value after each option in `valueOptions`.
+    static func positionalArguments(_ args: some Sequence<String>, valueOptions: Set<String>) -> [String] {
+        var result: [String] = []
         var skipNext = false
-
-        let valueOpts: Set<String> = [
-            "-p", "--port", "--ssh", "--predict", "--predict-overwrite"
-        ]
-
-        for (i, arg) in args.enumerated() {
-            if i == 0 { continue }
+        for arg in args {
             if skipNext {
                 skipNext = false
                 continue
             }
             if arg.hasPrefix("-") {
-                if valueOpts.contains(arg) { skipNext = true }
+                if valueOptions.contains(arg) { skipNext = true }
                 continue
             }
-            // First non-option is the host
-            return arg
+            result.append(arg)
         }
-        return nil
+        return result
     }
 
     /// Check if an SSH process is just a tunnel (not an interactive session).
@@ -201,78 +194,7 @@ final class RemoteExplorer: @unchecked Sendable {
 
     /// Check if ssh args contain a remote command after the host argument.
     private static func hasRemoteCommand(args: [String]) -> Bool {
-        var skipNext = false
-        var foundHost = false
-        for (i, arg) in args.enumerated() {
-            if i == 0 { continue }
-            if skipNext {
-                skipNext = false
-                continue
-            }
-            if arg.hasPrefix("-") {
-                let valueOpts: Set<String> = [
-                    "-p", "-i", "-l", "-o", "-F", "-J", "-L", "-R", "-D", "-b", "-c", "-e", "-m", "-w", "-E"
-                ]
-                if valueOpts.contains(arg) { skipNext = true }
-                continue
-            }
-            if !foundHost {
-                foundHost = true
-                continue
-            }
-            // Found an arg after the host — it's a remote command
-            return true
-        }
-        return false
-    }
-
-    /// Resolve a container hostname (truncated container ID) to a container name.
-    /// Tries docker, podman, and nerdctl. Returns nil if not a container ID.
-    /// Guarded by `containerHostnameCacheLock` — callers may run on background
-    /// queues (session detection), so unsynchronized access would be a data race.
-    private nonisolated(unsafe) static var containerHostnameCache: [String: (name: String?, expires: Date)] = [:]
-    private static let containerHostnameCacheLock = NSLock()
-
-    static func resolveDockerHostname(_ hostname: String) -> String? {
-        resolveContainerHostname(hostname)
-    }
-
-    static func resolveContainerHostname(_ hostname: String) -> String? {
-        // Container hostnames are typically 12-char hex prefixes
-        let cleaned = hostname.lowercased()
-        guard cleaned.count == 12, cleaned.allSatisfy({ $0.isHexDigit }) else { return nil }
-
-        // Check cache
-        let now = Date()
-        containerHostnameCacheLock.lock()
-        if let cached = containerHostnameCache[cleaned], now < cached.expires {
-            let name = cached.name
-            containerHostnameCacheLock.unlock()
-            return name
-        }
-
-        // Cache miss — drop any expired entries so this write-only TTL cache
-        // doesn't accumulate one dead entry per container ID ever queried.
-        containerHostnameCache = containerHostnameCache.filter { now < $0.value.expires }
-        containerHostnameCacheLock.unlock()
-
-        // Try docker, podman, nerdctl
-        for toolName in ["docker", "podman", "nerdctl"] {
-            guard let binary = findBinary(toolName) else { continue }
-            let result = runLocalCommand(binary, args: ["ps", "--filter", "id=\(cleaned)", "--format", "{{.Names}}"])
-            let name = result?.trimmingCharacters(in: .whitespacesAndNewlines)
-            if let name, !name.isEmpty {
-                containerHostnameCacheLock.lock()
-                containerHostnameCache[cleaned] = (name: name, expires: Date().addingTimeInterval(30))
-                containerHostnameCacheLock.unlock()
-                return name
-            }
-        }
-
-        containerHostnameCacheLock.lock()
-        containerHostnameCache[cleaned] = (name: nil, expires: Date().addingTimeInterval(30))
-        containerHostnameCacheLock.unlock()
-        return nil
+        positionalArguments(args.dropFirst(), valueOptions: sshValueOptions).count > 1
     }
 
     // MARK: - Detection (enhanced)
@@ -387,11 +309,6 @@ final class RemoteExplorer: @unchecked Sendable {
         return path
     }
 
-    /// Clear cached home path for a session (call on session end).
-    static func clearHomeCache(for session: RemoteSessionType) {
-        homePathCache.removeValue(forKey: session.sshConnectionTarget)
-    }
-
     #if DEBUG
         static func clearAllHomeCache() {
             homePathCache.removeAll()
@@ -405,13 +322,6 @@ final class RemoteExplorer: @unchecked Sendable {
         session: RemoteSessionType, command: String, completion: @escaping @Sendable (String?) -> Void
     ) {
         runRemoteCommand(session: session, command: command, completion: completion)
-    }
-
-    /// Get the remote working directory.
-    static func getRemoteCwd(session: RemoteSessionType, completion: @escaping @Sendable (String?) -> Void) {
-        runRemoteCommand(session: session, command: "pwd") { output in
-            completion(output?.trimmingCharacters(in: .whitespacesAndNewlines))
-        }
     }
 
     // MARK: - Command Execution
@@ -647,10 +557,6 @@ final class RemoteExplorer: @unchecked Sendable {
             }
         }
         return nil
-    }
-
-    private static func runLocalCommand(_ path: String, args: [String]) -> String? {
-        Subprocess.output(path, args)
     }
 
     static func shellEscPath(_ path: String) -> String {

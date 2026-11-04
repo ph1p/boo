@@ -178,8 +178,6 @@ struct TerminalColor: Codable, Equatable, Hashable {
         return TerminalColor(r: UInt8(rf * 255), g: UInt8(gf * 255), b: UInt8(bf * 255))
     }
 
-    static let defaultFG = TerminalColor(r: 228, g: 228, b: 232)
-    static let defaultBG = TerminalColor(r: 21, g: 21, b: 23)
     static let black = TerminalColor(r: 0, g: 0, b: 0)
     static let white = TerminalColor(r: 255, g: 255, b: 255)
 

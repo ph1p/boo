@@ -58,24 +58,10 @@ extension TerminalBridge {
         return names
     }()
 
-    /// Current username (lowercased), cached once at launch.
-    static let localUsername: String = {
-        NSUserName().lowercased()
-    }()
-
     /// True when `host` matches any known local hostname.
     static func isLocalHost(_ host: String) -> Bool {
         let variants = normalizedHostVariants(host)
         return variants.contains { localHostnames.contains($0) }
     }
 
-    /// True when `user@host` looks like the local machine.
-    /// Matches if host is any known local hostname, OR if both user and host
-    /// match local identity (covers cases where the hostname source differs).
-    static func isLocalUserAtHost(user: String, host: String) -> Bool {
-        if isLocalHost(host) { return true }
-        // user matches local user AND host appears in local names
-        // (already covered above, but explicit for clarity)
-        return false
-    }
 }

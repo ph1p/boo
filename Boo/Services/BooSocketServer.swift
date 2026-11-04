@@ -445,29 +445,9 @@ final class BooSocketServer: @unchecked Sendable {
     private func isDescendantCached(_ pid: pid_t, of ancestor: pid_t) -> Bool {
         let key = UInt64(UInt32(bitPattern: pid)) << 32 | UInt64(UInt32(bitPattern: ancestor))
         if let cached = ancestorCache[key] { return cached }
-        let result = isDescendant(pid, of: ancestor)
+        let result = ProcessTree.isDescendant(pid, of: ancestor)
         ancestorCache[key] = result
         return result
-    }
-
-    private func isDescendant(_ pid: pid_t, of ancestor: pid_t) -> Bool {
-        var current = pid
-        for _ in 0..<64 {
-            if current == ancestor { return true }
-            if current <= 1 { return false }
-            let parent = parentPID(of: current)
-            if parent == current || parent <= 0 { return false }
-            current = parent
-        }
-        return false
-    }
-
-    private func parentPID(of pid: pid_t) -> pid_t {
-        var info = kinfo_proc()
-        var size = MemoryLayout<kinfo_proc>.size
-        var mib: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_PID, pid]
-        guard sysctl(&mib, 4, &info, &size, nil, 0) == 0 else { return -1 }
-        return info.kp_eproc.e_ppid
     }
 }
 

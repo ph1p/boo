@@ -269,7 +269,8 @@ enum AgentWorktree {
     static func copyIncludedFiles(from repoRoot: String, to worktree: String) {
         let list = (repoRoot as NSString).appendingPathComponent(".worktreeinclude")
         guard FileManager.default.fileExists(atPath: list),
-            let files = try? git(["ls-files", "--others", "--ignored", "--exclude-from=.worktreeinclude"], in: repoRoot)
+            let files = try? git(
+                ["ls-files", "--others", "--ignored", "--exclude-from=.worktreeinclude"], in: repoRoot)
         else { return }
         for file in files.split(separator: "\n").map(String.init) where !file.isEmpty {
             let source = (repoRoot as NSString).appendingPathComponent(file)
