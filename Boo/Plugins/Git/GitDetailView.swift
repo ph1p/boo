@@ -19,6 +19,9 @@ struct GitDetailView: View {
     /// Optional external diff tool command. Supports `{file}` placeholder for the full path.
     /// When nil, falls back to `git diff`.
     var diffTool: String? = nil
+    /// Opens Boo's diff viewer on a file (path relative to the repository root),
+    /// staged or not. Used unless `diffTool` is set.
+    var onOpenDiff: ((_ path: String, _ staged: Bool) -> Void)?
     var onCopyPath: ((String) -> Void)?
     var onReveal: ((String) -> Void)?
     var fontScale: SidebarFontScale = SidebarFontScale(base: AppSettings.shared.sidebarFontSize)
@@ -151,6 +154,20 @@ struct GitDetailView: View {
     }
 
     // MARK: - Diff Command
+
+    /// The diff viewer, or the custom diff tool when one is set (untracked
+    /// files then open in the editor: a diff tool has nothing to compare).
+    private func showDiff(_ file: GitPlugin.GitChangedFile, section: FileSection) {
+        if diffTool?.isEmpty == false || onOpenDiff == nil {
+            if section == .untracked {
+                onFileClicked?(file.fullPath)
+            } else {
+                onTerminalAction?(diffCommand(for: file, section: section))
+            }
+        } else {
+            onOpenDiff?(file.path, section == .staged)
+        }
+    }
 
     /// Returns the shell command to show a diff for `file`.
     /// If a custom `diffTool` is set, uses it (substituting `{file}` with the full path).
@@ -345,16 +362,12 @@ struct GitDetailView: View {
     ) -> some View {
         let itemHeight: CGFloat = density == .comfortable ? 26 : 20
         let isHovered = hoveredFileID == file.id
-        let cmd = diffCommand(for: file, section: section)
 
         HStack(spacing: 0) {
             // Left area as a Button — Spacer inside label so hit area fills available
             // width; right-group buttons are siblings so they take gesture priority.
             Button {
-                switch section {
-                case .staged, .unstaged: onTerminalAction?(cmd)
-                case .untracked: onFileClicked?(file.fullPath)
-                }
+                showDiff(file, section: section)
             } label: {
                 HStack(spacing: 6) {
                     Text(file.status)
@@ -383,7 +396,7 @@ struct GitDetailView: View {
             HStack(spacing: 8) {
                 if section != .untracked {
                     Button {
-                        onTerminalAction?(cmd)
+                        showDiff(file, section: section)
                     } label: {
                         Image(systemName: "doc.text.magnifyingglass")
                             .font(fontScale.font(.sm))
@@ -466,10 +479,8 @@ struct GitDetailView: View {
 
         Divider()
 
-        if section == .staged || section == .unstaged {
-            Button(section == .staged ? "Diff (staged)" : "Diff") {
-                onTerminalAction?(diffCommand(for: file, section: section))
-            }
+        Button(section == .staged ? "Show Diff (staged)" : "Show Diff") {
+            showDiff(file, section: section)
         }
 
         Button("Open File") {

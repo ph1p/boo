@@ -124,6 +124,7 @@ extension GitPlugin {
     // MARK: - Refresh & Watcher
 
     internal func refreshGitStatus(cwd: String, repoRoot: String?) {
+        requestedRepoRoot = repoRoot
         guard let root = repoRoot else {
             let hadData = !cachedFiles.isEmpty || cachedLastCommit != nil || cachedBranch != nil
             let hadBranch = cachedBranch != nil

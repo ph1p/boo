@@ -17,11 +17,25 @@ final class GitPlugin: BooPluginProtocol {
         settings: [
             PluginManifest.SettingManifest(
                 key: "showBranch", type: .bool, label: "Show git branch in status bar",
-                defaultValue: AnyCodableValue(true), options: nil),
+                defaultValue: AnyCodableValue(true), options: nil, group: "Status Bar"),
             PluginManifest.SettingManifest(
                 key: "diffTool", type: .string,
                 label: "Diff tool",
-                defaultValue: AnyCodableValue(""), options: "gitDiffTool")
+                description: "Opens changed files in this command instead of Boo's diff viewer.",
+                defaultValue: AnyCodableValue(""), options: "gitDiffTool", group: "Diff Viewer"),
+            PluginManifest.SettingManifest(
+                key: "diffLayout", type: .string, label: "Layout",
+                description: "The viewer's toolbar flips it for one tab.",
+                defaultValue: AnyCodableValue(DiffLayout.unified.rawValue),
+                options: nil, group: "Diff Viewer", choices: DiffLayout.choices),
+            PluginManifest.SettingManifest(
+                key: "diffWrap", type: .bool, label: "Wrap long lines",
+                defaultValue: AnyCodableValue(false), options: nil, group: "Diff Viewer"),
+            PluginManifest.SettingManifest(
+                key: "diffContext", type: .double, label: "Context lines",
+                description: "Unchanged lines shown around each change.",
+                defaultValue: AnyCodableValue(Double(AgentReview.defaultContext)), options: nil,
+                group: "Diff Viewer", min: 0, max: Double(DiffSettings.maxContext), step: 1),
         ]
     )
 
@@ -49,6 +63,9 @@ final class GitPlugin: BooPluginProtocol {
     /// Watches CWD when no repo is active, to detect `git init`.
     var cwdWatcher: FileSystemWatcher?
     var watchedRepoRoot: String?
+    /// The repo the last status refresh was asked for (nil after a refresh with no repo).
+    /// Lets the panel catch up when the host learns the repo after the plugin's last refresh.
+    var requestedRepoRoot: String?
     /// One debouncer for both watchers, so a `.git/` event and a working-tree event in the
     /// same burst collapse into a single status refresh. Each call site picks its own delay:
     /// `.git/` changes are user-visible (branch switch, stage) and refresh fast, while
@@ -176,6 +193,12 @@ final class GitPlugin: BooPluginProtocol {
     func makeDetailView(context: PluginContext) -> AnyView? {
         guard let git = context.terminal.gitContext else { return nil }
         let repoRoot = git.repoRoot
+        if requestedRepoRoot != repoRoot {
+            // The terminal's cwd event ran before its repo was known: load it now,
+            // or the panel shows the repo's branch over a "clean" file list.
+            requestedRepoRoot = repoRoot
+            DispatchQueue.main.async { [weak self] in self?.refreshGitStatus(cwd: repoRoot, repoRoot: repoRoot) }
+        }
         let act = actions
         let diffTool = AppSettings.shared.pluginString("git-panel", "diffTool", default: "")
         return AnyView(
@@ -210,6 +233,10 @@ final class GitPlugin: BooPluginProtocol {
                     act?.handle(DSLAction(type: "exec", path: nil, command: command, text: nil))
                 },
                 diffTool: diffTool.isEmpty ? nil : diffTool,
+                onOpenDiff: { path, staged in
+                    WindowManager.shared.activeController?.openDiff(
+                        repoRoot: repoRoot, source: staged ? .staged : .unstaged, path: path)
+                },
                 onCopyPath: { path in
                     act?.handle(DSLAction(type: "copy", path: path, command: nil, text: nil))
                 },
