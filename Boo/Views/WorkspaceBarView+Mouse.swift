@@ -88,44 +88,14 @@ extension WorkspaceBarView {
     }
 
     private func showContextMenu(at index: Int, event: NSEvent) {
-        let menu = NSMenu()
         let item = items[index]
-
-        let editItem = NSMenuItem(
-            title: "Edit Workspace…", action: #selector(contextEditWorkspace(_:)), keyEquivalent: "")
-        editItem.target = self
-        editItem.tag = index
-        menu.addItem(editItem)
-
-        let pinTitle = item.isPinned ? "Unpin" : "Pin"
-        let pinItem = NSMenuItem(title: pinTitle, action: #selector(contextTogglePin(_:)), keyEquivalent: "")
-        pinItem.target = self
-        pinItem.tag = index
-        menu.addItem(pinItem)
-
-        menu.addItem(.separator())
-
-        if !item.isPinned && items.count > 1 {
-            let moveItem = NSMenuItem(
-                title: "Move to New Window", action: #selector(contextMoveToNewWindow(_:)), keyEquivalent: "")
-            moveItem.target = self
-            moveItem.tag = index
-            menu.addItem(moveItem)
-        }
-        let extra = delegate?.workspaceBar(self, contextMenuItemsForWorkspaceAt: index) ?? []
-        if !extra.isEmpty {
-            extra.forEach(menu.addItem)
-            menu.addItem(.separator())
-        }
-
-        // Close
-        if !item.isPinned {
-            let closeItem = NSMenuItem(title: "Close", action: #selector(contextClose(_:)), keyEquivalent: "")
-            closeItem.target = self
-            closeItem.tag = index
-            menu.addItem(closeItem)
-        }
-
+        let menu = WorkspaceContextMenu.make(
+            index: index, isPinned: item.isPinned, canMoveToNewWindow: items.count > 1,
+            extraItems: delegate?.workspaceBar(self, contextMenuItemsForWorkspaceAt: index) ?? [],
+            target: self,
+            actions: .init(
+                edit: #selector(contextEditWorkspace(_:)), togglePin: #selector(contextTogglePin(_:)),
+                moveToNewWindow: #selector(contextMoveToNewWindow(_:)), close: #selector(contextClose(_:))))
         NSMenu.popUpContextMenu(menu, with: event, for: self)
     }
 
