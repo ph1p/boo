@@ -1125,6 +1125,17 @@ extension BrowserContentView: WKNavigationDelegate {
 
 // MARK: - WKUIDelegate
 
+// WebKit marks these handlers @MainActor only from the macOS 27 SDK (Swift 6.4).
+// A mismatched type is a "near miss": the method is never called, so JS
+// alert()/confirm() silently break. Match whichever SDK we build against.
+#if compiler(>=6.4)
+    typealias JSAlertCompletion = @MainActor @Sendable () -> Void
+    typealias JSConfirmCompletion = @MainActor @Sendable (Bool) -> Void
+#else
+    typealias JSAlertCompletion = @Sendable () -> Void
+    typealias JSConfirmCompletion = @Sendable (Bool) -> Void
+#endif
+
 @MainActor
 extension BrowserContentView: WKUIDelegate {
     func webView(
@@ -1146,7 +1157,7 @@ extension BrowserContentView: WKUIDelegate {
         _ webView: WKWebView,
         runJavaScriptAlertPanelWithMessage message: String,
         initiatedByFrame frame: WKFrameInfo,
-        completionHandler: @escaping @MainActor @Sendable () -> Void
+        completionHandler: @escaping JSAlertCompletion
     ) {
         guard let window else { return completionHandler() }
         let alert = Self.pageAlert(message: message, frame: frame)
@@ -1157,7 +1168,7 @@ extension BrowserContentView: WKUIDelegate {
         _ webView: WKWebView,
         runJavaScriptConfirmPanelWithMessage message: String,
         initiatedByFrame frame: WKFrameInfo,
-        completionHandler: @escaping @MainActor @Sendable (Bool) -> Void
+        completionHandler: @escaping JSConfirmCompletion
     ) {
         guard let window else { return completionHandler(false) }
         let alert = Self.pageAlert(message: message, frame: frame)

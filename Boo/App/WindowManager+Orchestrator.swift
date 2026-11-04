@@ -68,7 +68,7 @@ extension WindowManager {
                                 "agent": item.agent, "state": item.state.rawValue,
                                 "message": item.message ?? NSNull(), "tool": item.tool ?? NSNull(),
                                 "updated_at": item.updatedAt.timeIntervalSince1970,
-                                "owned": caller.map { CapabilityTokens.shared.owns($0, tab.id) } ?? false
+                                "owned": caller.map { CapabilityTokens.shared.owns($0, tab.id) } == true
                             ]
                         }
                         return info
@@ -90,8 +90,8 @@ extension WindowManager {
             "attention": inbox.items.values.filter(\.needsAttention).count,
             "orchestrator": [
                 "running": orchestrator.isRunning,
-                "pane_id": orchestrator.paneID?.uuidString ?? NSNull(),
-                "tab_id": orchestrator.tabID?.uuidString ?? NSNull()
+                "pane_id": orchestrator.paneID.map { $0.uuidString as Any } ?? NSNull(),
+                "tab_id": orchestrator.tabID.map { $0.uuidString as Any } ?? NSNull()
             ]
         ]
     }

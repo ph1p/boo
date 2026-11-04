@@ -97,7 +97,7 @@ final class DragGhostWindow: NSWindow {
             ctx.duration = Self.fadeDuration
             animator().alphaValue = 0
         } completionHandler: {
-            self.orderOut(nil)
+            MainActor.assumeIsolated { self.orderOut(nil) }
         }
     }
 

@@ -6,6 +6,7 @@ import AppKit
 final class AccessibleElement: NSAccessibilityElement {
     private let onPress: (() -> Void)?
 
+    @MainActor
     init(
         parent: NSView, role: NSAccessibility.Role, label: String, localRect: NSRect,
         selected: Bool? = nil, onPress: (() -> Void)? = nil
