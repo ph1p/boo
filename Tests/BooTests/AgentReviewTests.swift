@@ -64,6 +64,32 @@ final class AgentReviewTests: XCTestCase {
         XCTAssertTrue(AgentReview.parse("").isEmpty)
     }
 
+    func testTypeChangeIsOneModifiedFile() {
+        // A submodule replaced by a symlink: git lists a deletion and an addition.
+        let diff = """
+            diff --git a/Vendor/sub b/Vendor/sub
+            deleted file mode 160000
+            index 8527237..0000000
+            --- a/Vendor/sub
+            +++ /dev/null
+            @@ -1 +0,0 @@
+            -Subproject commit 8527237
+            diff --git a/Vendor/sub b/Vendor/sub
+            new file mode 120000
+            index 0000000..cad2309
+            --- /dev/null
+            +++ b/Vendor/sub
+            @@ -0,0 +1 @@
+            +../../sub
+            \\ No newline at end of file
+            """
+        let files = AgentReview.parse(diff)
+        XCTAssertEqual(files.map(\.path), ["Vendor/sub"])
+        XCTAssertEqual(files.first?.status, .modified)
+        XCTAssertEqual(files.first?.additions, 1)
+        XCTAssertEqual(files.first?.deletions, 1)
+    }
+
     func testComposeSortsAndIndents() {
         let comments: [AgentReview.Comment] = [
             .init(file: "b.swift", line: 9, snippet: "  return x", text: "Handle nil.\nAlso log it."),

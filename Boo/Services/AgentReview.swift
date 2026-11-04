@@ -151,8 +151,17 @@ enum AgentReview {
         }
         func flushFile() {
             flushHunk()
-            if let f = file { files.append(f) }
+            guard let f = file else { return }
             file = nil
+            // A type change (submodule or file to symlink) is two entries for one
+            // path, a deletion then an addition. List it once, as a modification.
+            if let last = files.last, last.path == f.path, last.status == .deleted, f.status == .added {
+                files[files.count - 1].status = .modified
+                files[files.count - 1].isBinary = last.isBinary || f.isBinary
+                files[files.count - 1].hunks += f.hunks
+            } else {
+                files.append(f)
+            }
         }
 
         for raw in diff.split(separator: "\n", omittingEmptySubsequences: false) {

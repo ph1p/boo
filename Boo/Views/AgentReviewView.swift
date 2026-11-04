@@ -177,8 +177,6 @@ struct AgentReviewView: View {
             ?? .monospacedSystemFont(ofSize: fontSize, weight: .regular)
         return ("M" as NSString).size(withAttributes: [.font: font]).width
     }
-    /// Line number and marker columns in front of a line's text.
-    private static let gutter: CGFloat = 58
 
     var body: some View {
         let _ = settings.revision
@@ -361,10 +359,7 @@ struct AgentReviewView: View {
                 if commentCount > 0 {
                     Image(systemName: "text.bubble").font(.system(size: 10)).foregroundStyle(t.accent)
                 }
-                if !file.isBinary {
-                    Text("+\(file.additions)").foregroundStyle(t.success)
-                    Text("−\(file.deletions)").foregroundStyle(t.error)
-                }
+                diffStat(file)
             }
             .font(.system(size: 10, design: .monospaced))
             .padding(.horizontal, 10).padding(.vertical, 4)
@@ -394,55 +389,38 @@ struct AgentReviewView: View {
 
     // MARK: Diff
 
+    private static let markerWidth: CGFloat = 18
+
+    /// Line-number columns: an added file has no old side, a deleted one no new side.
+    private struct Columns {
+        var old = true
+        var new = true
+        /// One number column, wide enough for the file's largest line number.
+        var number: CGFloat
+        /// Numbers plus marker: where a line's text starts.
+        var inset: CGFloat { (old ? number : 0) + (new ? number : 0) + AgentReviewView.markerWidth }
+    }
+
+    private func columns(for file: AgentReview.FileDiff, charWidth: CGFloat) -> Columns {
+        let largest = file.hunks.lazy.flatMap(\.lines).map { max($0.oldLine ?? 0, $0.newLine ?? 0) }.max() ?? 0
+        return Columns(
+            old: file.status != .added, new: file.status != .deleted,
+            number: CGFloat(max(3, String(largest).count)) * charWidth + 12)
+    }
+
     private var diffPane: some View {
         Group {
             if let file = model.selectedFile {
-                GeometryReader { geometry in
-                    let split = model.layout == .split
-                    // Unwrapped, each side is as wide as the file's longest line.
-                    let longest = file.hunks.lazy.flatMap(\.lines).map(\.text.count).max() ?? 0
-                    let sideWidth = max(
-                        (geometry.size.width - 1) / 2, CGFloat(longest) * charWidth + Self.gutter + 8)
-                    ScrollView(model.wrap ? .vertical : [.vertical, .horizontal]) {
-                        LazyVStack(alignment: .leading, spacing: 0) {
-                            if let old = file.oldPath {
-                                Text("Renamed from \(old)").font(.system(size: 11)).foregroundStyle(t.textSecondary)
-                                    .padding(8)
-                            }
-                            if file.isBinary {
-                                Text("Binary file").font(.system(size: 11)).foregroundStyle(t.textSecondary).padding(8)
-                            }
-                            // One lazy child per hunk: flattening header and lines into the
-                            // lazy stack gave them colliding index ids, and line 1 vanished.
-                            ForEach(file.hunks.indices, id: \.self) { h in
-                                let hunk = file.hunks[h]
-                                VStack(alignment: .leading, spacing: 0) {
-                                    Text(hunk.header)
-                                        .font(mono).foregroundStyle(t.textTertiary)
-                                        .lineLimit(1)
-                                        .padding(.horizontal, 8).padding(.vertical, 3)
-                                        .frame(maxWidth: .infinity, alignment: .leading)
-                                        .background(t.subtleFill)
-                                    if split {
-                                        let rows = AgentReview.splitRows(hunk.lines)
-                                        ForEach(rows.indices, id: \.self) { i in
-                                            splitRow(rows[i], file: file.path, sideWidth: model.wrap ? nil : sideWidth)
-                                        }
-                                    } else {
-                                        ForEach(hunk.lines.indices, id: \.self) { i in
-                                            lineRow(hunk.lines[i], file: file.path)
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        .frame(
-                            minWidth: geometry.size.width,
-                            maxWidth: model.wrap ? geometry.size.width : nil,
-                            alignment: .leading)
+                VStack(spacing: 0) {
+                    fileHeader(file)
+                    Rectangle().fill(t.separator).frame(height: 1)
+                    if file.isBinary {
+                        placeholder("Binary file, not shown")
+                    } else if file.hunks.isEmpty {
+                        placeholder("No content changes")
+                    } else {
+                        diffBody(file)
                     }
-                    // A short diff otherwise floats in the middle of the pane.
-                    .defaultScrollAnchor(.topLeading)
                 }
                 .id(file.path)
             } else {
@@ -451,58 +429,173 @@ struct AgentReviewView: View {
         }
     }
 
+    private func fileHeader(_ file: AgentReview.FileDiff) -> some View {
+        HStack(spacing: 8) {
+            Text(statusLetter(file.status))
+                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                .foregroundStyle(statusColor(file.status))
+            Text(file.path)
+                .font(.system(size: 12, weight: .medium)).foregroundStyle(t.text)
+                .lineLimit(1).truncationMode(.middle)
+                .textSelection(.enabled)
+            if let old = file.oldPath {
+                Text("from \(old)")
+                    .font(.system(size: 11)).foregroundStyle(t.textSecondary)
+                    .lineLimit(1).truncationMode(.middle)
+            }
+            Spacer(minLength: 8)
+            HStack(spacing: 6) { diffStat(file) }
+                .font(.system(size: 11, design: .monospaced))
+        }
+        .padding(.horizontal, 12)
+        .frame(height: 30)
+    }
+
+    /// "+12 −3", zeros dimmed.
+    @ViewBuilder
+    private func diffStat(_ file: AgentReview.FileDiff) -> some View {
+        if !file.isBinary {
+            Text("+\(file.additions)").foregroundStyle(file.additions == 0 ? t.textTertiary : t.success)
+            Text("−\(file.deletions)").foregroundStyle(file.deletions == 0 ? t.textTertiary : t.error)
+        }
+    }
+
+    private func diffBody(_ file: AgentReview.FileDiff) -> some View {
+        // A whole added or deleted file has nothing to stand beside.
+        let oneSided = file.status == .added || file.status == .deleted
+        let split = model.layout == .split && !oneSided
+        let charWidth = charWidth
+        let columns = columns(for: file, charWidth: charWidth)
+        // Each side of a split shows one number column.
+        let side = Columns(old: false, new: true, number: columns.number)
+        // A whole file's one hunk header says nothing the file header doesn't.
+        let showHunkHeaders = !(oneSided && file.hunks.count == 1)
+        return GeometryReader { geometry in
+            // Unwrapped, each side is as wide as the file's longest line.
+            let longest = file.hunks.lazy.flatMap(\.lines).map(\.text.count).max() ?? 0
+            let sideWidth = max((geometry.size.width - 1) / 2, CGFloat(longest) * charWidth + side.inset + 8)
+            ScrollView(model.wrap ? .vertical : [.vertical, .horizontal]) {
+                LazyVStack(alignment: .leading, spacing: 0) {
+                    // One lazy child per hunk: flattening header and lines into the
+                    // lazy stack gave them colliding index ids, and line 1 vanished.
+                    ForEach(file.hunks.indices, id: \.self) { h in
+                        let hunk = file.hunks[h]
+                        VStack(alignment: .leading, spacing: 0) {
+                            if showHunkHeaders { hunkHeader(hunk.header) }
+                            if split {
+                                let rows = AgentReview.splitRows(hunk.lines)
+                                ForEach(rows.indices, id: \.self) { i in
+                                    splitRow(
+                                        rows[i], file: file.path, side: side,
+                                        sideWidth: model.wrap ? nil : sideWidth)
+                                }
+                            } else {
+                                ForEach(hunk.lines.indices, id: \.self) { i in
+                                    lineRow(hunk.lines[i], file: file.path, columns: columns)
+                                }
+                            }
+                        }
+                    }
+                }
+                .padding(.bottom, 8)
+                .frame(
+                    minWidth: geometry.size.width,
+                    maxWidth: model.wrap ? geometry.size.width : nil,
+                    alignment: .leading)
+            }
+            // A short diff otherwise floats in the middle of the pane.
+            .defaultScrollAnchor(.topLeading)
+        }
+    }
+
+    /// "@@ -12,5 +14,7 @@ func name()": the range dimmed, the enclosing scope readable.
+    private func hunkHeader(_ header: String) -> some View {
+        var range = header
+        var scope = ""
+        if let end = header.range(of: "@@", range: header.index(header.startIndex, offsetBy: 2)..<header.endIndex) {
+            range = String(header[..<end.upperBound])
+            scope = header[end.upperBound...].trimmingCharacters(in: .whitespaces)
+        }
+        return HStack(spacing: 12) {
+            Text(range).foregroundStyle(t.textTertiary)
+            Text(scope).foregroundStyle(t.textSecondary)
+        }
+        .font(mono)
+        .lineLimit(1)
+        .padding(.horizontal, 10).padding(.vertical, 4)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(t.accent.opacity(0.08))
+    }
+
     private func lineText(_ line: AgentReview.DiffLine) -> some View {
         Text(line.text.isEmpty ? " " : line.text)
             .foregroundStyle(t.text)
             .fixedSize(horizontal: !model.wrap, vertical: true)
             .frame(maxWidth: model.wrap ? .infinity : nil, alignment: .leading)
+            .padding(.leading, 4)
+    }
+
+    /// Line numbers and the +/− marker, tinted a shade deeper than the line.
+    private func gutter(_ numbers: [Int?], kind: AgentReview.DiffLine.Kind?, width: CGFloat) -> some View {
+        HStack(spacing: 0) {
+            ForEach(numbers.indices, id: \.self) { i in
+                Text(numbers[i].map(String.init) ?? "")
+                    .padding(.trailing, 6)
+                    .frame(width: width, alignment: .trailing)
+            }
+            Text(kind.map(marker) ?? "")
+                .foregroundStyle(markerColor(kind))
+                .frame(width: Self.markerWidth)
+        }
+        .foregroundStyle(t.textTertiary)
+        .frame(maxHeight: .infinity, alignment: .top)
+        // Over the line's own tint, so a changed line's numbers read a shade deeper.
+        .background(kind.map(lineBackground) ?? .clear)
     }
 
     @ViewBuilder
-    private func lineRow(_ line: AgentReview.DiffLine, file: String) -> some View {
+    private func lineRow(_ line: AgentReview.DiffLine, file: String, columns: Columns) -> some View {
         HStack(alignment: .top, spacing: 0) {
-            Text(line.oldLine.map(String.init) ?? "").frame(width: 40, alignment: .trailing)
-            Text(line.newLine.map(String.init) ?? "").frame(width: 40, alignment: .trailing)
-            Text(marker(line.kind)).frame(width: 18)
+            gutter(
+                (columns.old ? [line.oldLine] : []) + (columns.new ? [line.newLine] : []),
+                kind: line.kind, width: columns.number)
             lineText(line)
             Spacer(minLength: 0)
         }
         .font(mono)
-        .foregroundStyle(t.textTertiary)
-        .padding(.vertical, 0.5)
+        .fixedSize(horizontal: false, vertical: true)
         .background(lineBackground(line.kind))
         .contentShape(Rectangle())
         .onTapGesture { if model.isReview { model.beginComment(file: file, line: line) } }
         .help(model.isReview ? "Click to comment on this line" : "")
-        annotations(line, file: file)
+        annotations(line, file: file, inset: columns.inset)
     }
 
     /// Old line left, new line right; `sideWidth` nil wraps each side to half the pane.
     @ViewBuilder
-    private func splitRow(_ row: AgentReview.SplitRow, file: String, sideWidth: CGFloat?) -> some View {
+    private func splitRow(
+        _ row: AgentReview.SplitRow, file: String, side: Columns, sideWidth: CGFloat?
+    ) -> some View {
         HStack(alignment: .top, spacing: 0) {
-            splitSide(row.left, number: row.left?.oldLine, file: file, width: sideWidth)
+            splitSide(row.left, number: row.left?.oldLine, file: file, side: side, width: sideWidth)
             Rectangle().fill(t.separator).frame(width: 1)
-            splitSide(row.right, number: row.right?.newLine, file: file, width: sideWidth)
+            splitSide(row.right, number: row.right?.newLine, file: file, side: side, width: sideWidth)
         }
         // Both sides as tall as the taller one, so the tints line up when wrapped.
         .fixedSize(horizontal: false, vertical: true)
-        if let left = row.left { annotations(left, file: file) }
-        if let right = row.right, right != row.left { annotations(right, file: file) }
+        if let left = row.left { annotations(left, file: file, inset: side.inset) }
+        if let right = row.right, right != row.left { annotations(right, file: file, inset: side.inset) }
     }
 
     private func splitSide(
-        _ line: AgentReview.DiffLine?, number: Int?, file: String, width: CGFloat?
+        _ line: AgentReview.DiffLine?, number: Int?, file: String, side: Columns, width: CGFloat?
     ) -> some View {
         HStack(alignment: .top, spacing: 0) {
-            Text(number.map(String.init) ?? "").frame(width: 40, alignment: .trailing)
-            Text(line.map { marker($0.kind) } ?? "").frame(width: 18)
+            gutter([number], kind: line?.kind, width: side.number)
             if let line { lineText(line) }
             Spacer(minLength: 0)
         }
         .font(mono)
-        .foregroundStyle(t.textTertiary)
-        .padding(.vertical, 0.5)
         .frame(width: width, alignment: .leading)
         .frame(maxWidth: width == nil ? .infinity : nil, maxHeight: .infinity, alignment: .topLeading)
         .background(line.map { lineBackground($0.kind) } ?? t.subtleFill)
@@ -515,16 +608,16 @@ struct AgentReviewView: View {
 
     /// Comments on a line and the comment being written there.
     @ViewBuilder
-    private func annotations(_ line: AgentReview.DiffLine, file: String) -> some View {
+    private func annotations(_ line: AgentReview.DiffLine, file: String, inset: CGFloat) -> some View {
         if model.isReview {
             let number = line.newLine ?? line.oldLine ?? 0
             ForEach(model.comments(file: file, line: number)) { comment in
-                commentBubble(comment)
+                commentBubble(comment, inset: inset)
             }
             if let anchor = model.draftAnchor, anchor.file == file, anchor.line == number,
                 anchor.snippet == line.text
             {
-                draftEditor
+                draftEditor(inset: inset)
             }
         }
     }
@@ -537,6 +630,14 @@ struct AgentReviewView: View {
         }
     }
 
+    private func markerColor(_ kind: AgentReview.DiffLine.Kind?) -> Color {
+        switch kind {
+        case .added: return t.success
+        case .removed: return t.error
+        case .context, nil: return t.textTertiary
+        }
+    }
+
     private func lineBackground(_ kind: AgentReview.DiffLine.Kind) -> Color {
         switch kind {
         // Deliberate raw alpha: diff tints sit between subtle and hover bands.
@@ -546,7 +647,7 @@ struct AgentReviewView: View {
         }
     }
 
-    private func commentBubble(_ comment: AgentReview.Comment) -> some View {
+    private func commentBubble(_ comment: AgentReview.Comment, inset: CGFloat) -> some View {
         HStack(alignment: .top, spacing: 8) {
             Image(systemName: "text.bubble.fill").foregroundStyle(t.accent)
             Text(comment.text).font(.system(size: 12)).foregroundStyle(t.text)
@@ -562,10 +663,10 @@ struct AgentReviewView: View {
         .padding(8)
         .frame(maxWidth: 560, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: 6).fill(t.cardBg))
-        .padding(.leading, 98).padding(.vertical, 3)
+        .padding(.leading, inset + 4).padding(.vertical, 3)
     }
 
-    private var draftEditor: some View {
+    private func draftEditor(inset: CGFloat) -> some View {
         VStack(alignment: .trailing, spacing: 6) {
             DraftField(draft: model.draft) { model.commitDraft() }
             HStack {
@@ -579,7 +680,7 @@ struct AgentReviewView: View {
         .padding(8)
         .frame(maxWidth: 560)
         .background(RoundedRectangle(cornerRadius: 6).fill(t.cardBg))
-        .padding(.leading, 98).padding(.vertical, 3)
+        .padding(.leading, inset + 4).padding(.vertical, 3)
     }
 
     /// Only this field observes the draft text.
