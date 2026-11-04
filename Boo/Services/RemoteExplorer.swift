@@ -162,26 +162,33 @@ final class RemoteExplorer: @unchecked Sendable {
     private static func parseMoshHost(pid: pid_t) -> String? {
         guard let cmdline = ProcessTree.processArgs(pid: pid) else { return nil }
         let args = cmdline.trimmingCharacters(in: .whitespacesAndNewlines).split(separator: " ").map(String.init)
+        return positionalArguments(args.dropFirst(), valueOptions: moshValueOptions).first
+    }
+
+    /// ssh options followed by a value, as matched by `positionalArguments`.
+    static let sshValueOptions: Set<String> = [
+        "-p", "-i", "-l", "-o", "-F", "-J", "-L", "-R", "-D", "-b", "-c", "-e", "-m", "-w", "-E"
+    ]
+    /// mosh options followed by a value.
+    static let moshValueOptions: Set<String> = ["-p", "--port", "--ssh", "--predict", "--predict-overwrite"]
+
+    /// The non-option words of an argument list (program name already dropped),
+    /// skipping the value after each option in `valueOptions`.
+    static func positionalArguments(_ args: some Sequence<String>, valueOptions: Set<String>) -> [String] {
+        var result: [String] = []
         var skipNext = false
-
-        let valueOpts: Set<String> = [
-            "-p", "--port", "--ssh", "--predict", "--predict-overwrite"
-        ]
-
-        for (i, arg) in args.enumerated() {
-            if i == 0 { continue }
+        for arg in args {
             if skipNext {
                 skipNext = false
                 continue
             }
             if arg.hasPrefix("-") {
-                if valueOpts.contains(arg) { skipNext = true }
+                if valueOptions.contains(arg) { skipNext = true }
                 continue
             }
-            // First non-option is the host
-            return arg
+            result.append(arg)
         }
-        return nil
+        return result
     }
 
     /// Check if an SSH process is just a tunnel (not an interactive session).
@@ -201,29 +208,7 @@ final class RemoteExplorer: @unchecked Sendable {
 
     /// Check if ssh args contain a remote command after the host argument.
     private static func hasRemoteCommand(args: [String]) -> Bool {
-        var skipNext = false
-        var foundHost = false
-        for (i, arg) in args.enumerated() {
-            if i == 0 { continue }
-            if skipNext {
-                skipNext = false
-                continue
-            }
-            if arg.hasPrefix("-") {
-                let valueOpts: Set<String> = [
-                    "-p", "-i", "-l", "-o", "-F", "-J", "-L", "-R", "-D", "-b", "-c", "-e", "-m", "-w", "-E"
-                ]
-                if valueOpts.contains(arg) { skipNext = true }
-                continue
-            }
-            if !foundHost {
-                foundHost = true
-                continue
-            }
-            // Found an arg after the host — it's a remote command
-            return true
-        }
-        return false
+        positionalArguments(args.dropFirst(), valueOptions: sshValueOptions).count > 1
     }
 
     /// Resolve a container hostname (truncated container ID) to a container name.

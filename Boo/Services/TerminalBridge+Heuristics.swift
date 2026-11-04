@@ -271,47 +271,26 @@ extension TerminalBridge {
         let cmdBase = cmd.lastPathComponent.lowercased()
 
         // SSH: title starts with "ssh" followed by a host
-        if cmdBase == "ssh" {
-            var skipNext = false
-            let valueOpts: Set<String> = [
-                "-p", "-i", "-l", "-o", "-F", "-J", "-L", "-R", "-D", "-b", "-c", "-e", "-m", "-w", "-E"
-            ]
-            for arg in parts.dropFirst() {
-                if skipNext {
-                    skipNext = false
-                    continue
-                }
-                if arg.hasPrefix("-") {
-                    if valueOpts.contains(arg) { skipNext = true }
-                    continue
-                }
-                // Skip git transport targets: "git@host" is a non-interactive git SSH user
-                let isGitUser = arg.lowercased().hasPrefix("git@")
-                if arg != "localhost" && arg != "127.0.0.1" && !isGitForgeHost(arg) && !isGitUser {
-                    return .ssh(host: arg)
-                }
-                break
+        if cmdBase == "ssh",
+            let arg = RemoteExplorer.positionalArguments(
+                parts.dropFirst(), valueOptions: RemoteExplorer.sshValueOptions
+            ).first
+        {
+            // Skip git transport targets: "git@host" is a non-interactive git SSH user
+            let isGitUser = arg.lowercased().hasPrefix("git@")
+            if arg != "localhost" && arg != "127.0.0.1" && !isGitForgeHost(arg) && !isGitUser {
+                return .ssh(host: arg)
             }
         }
 
         // Mosh: title starts with "mosh" followed by a host
-        if cmdBase == "mosh" || cmdBase == "mosh-client" {
-            var skipNext = false
-            let valueOpts: Set<String> = ["-p", "--port", "--ssh", "--predict", "--predict-overwrite"]
-            for arg in parts.dropFirst() {
-                if skipNext {
-                    skipNext = false
-                    continue
-                }
-                if arg.hasPrefix("-") {
-                    if valueOpts.contains(arg) { skipNext = true }
-                    continue
-                }
-                if arg != "localhost" && arg != "127.0.0.1" {
-                    return .mosh(host: arg)
-                }
-                break
-            }
+        if cmdBase == "mosh" || cmdBase == "mosh-client",
+            let arg = RemoteExplorer.positionalArguments(
+                parts.dropFirst(), valueOptions: RemoteExplorer.moshValueOptions
+            ).first,
+            arg != "localhost" && arg != "127.0.0.1"
+        {
+            return .mosh(host: arg)
         }
 
         // Container/VM tools: title starts with tool name followed by an interactive subcommand
