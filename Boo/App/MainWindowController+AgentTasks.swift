@@ -127,6 +127,7 @@ extension MainWindowController {
     /// HEAD), then opens its workspace with the agent running.
     func startAgentTask(
         repo: String, name: String, kind: AgentKind, prompt: String, base: String? = nil, model: String? = nil,
+        caller: UUID? = nil,
         completion: @escaping @MainActor (Result<AgentTaskLaunch, Error>) -> Void = { _ in }
     ) {
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
@@ -137,10 +138,14 @@ extension MainWindowController {
                     NotificationCenter.default.post(name: .agentWorktreesChanged, object: nil)
                     guard let self else { return }
                     let title = name.isEmpty ? (info.path as NSString).lastPathComponent : name
+                    let command = Self.withTaskSetup(Self.agentTaskCommand(kind: kind, prompt: prompt, model: model))
+                    if let caller, let launch = self.openTaskBesideCaller(caller, info: info, command: command) {
+                        completion(.success(launch))
+                        return
+                    }
                     let workspace = self.openWorkspace(
                         path: info.path, name: title,
-                        initialCommand: Self.withTaskSetup(
-                            Self.agentTaskCommand(kind: kind, prompt: prompt, model: model)))
+                        initialCommand: command)
                     let tabID = workspace.pane(for: workspace.activePaneID)?.tabs.last?.id
                     completion(.success(AgentTaskLaunch(info: info, workspaceID: workspace.id, tabID: tabID)))
                 case .failure(let error):
@@ -153,10 +158,33 @@ extension MainWindowController {
     /// An agent that starts a task keeps the user's attention: once the task's
     /// terminal has started, the window goes back to the caller's workspace,
     /// unless the user moved elsewhere meanwhile. The crew sidebar shows the task.
+    /// Opens a task as a background tab next to the tab that started it, grouped
+    /// with it, so a crew stays in the caller's workspace instead of a new one.
+    /// Nil when the caller is gone or its pane belongs to tmux.
+    private func openTaskBesideCaller(
+        _ callerTab: UUID, info: AgentWorktree.Info, command: String
+    ) -> AgentTaskLaunch? {
+        guard let home = AgentInbox.locateInWindows(callerTab), home.controller === self,
+            !home.pane.tmuxOwned,
+            let paneView = workspacePaneViews[home.workspace.id]?[home.pane.id]
+        else { return nil }
+        let pane = home.pane
+        guard let index = pane.tabs.firstIndex(where: { $0.id == callerTab }),
+            let group = pane.tabs[index].groupID ?? pane.createGroup(withTabsAt: [index]),
+            let tabID = paneView.addNewTab(
+                workingDirectory: info.path, launch: LaunchSpec(command: command), group: group)
+        else { return nil }
+        // addNewTab focuses the new tab; hand focus back so the caller keeps working.
+        if let back = pane.tabs.firstIndex(where: { $0.id == callerTab }) { paneView.activateTab(back) }
+        saveSession()
+        return AgentTaskLaunch(info: info, workspaceID: home.workspace.id, tabID: tabID)
+    }
+
     private func returnToCaller(_ callerTab: UUID, from taskWorkspace: UUID) {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
             guard let self, self.activeWorkspace?.id == taskWorkspace,
                 let home = AgentInbox.locateInWindows(callerTab), home.controller === self,
+                home.workspace.id != taskWorkspace,
                 let index = self.appState.workspaces.firstIndex(where: { $0.id == home.workspace.id })
             else { return }
             self.activateWorkspace(index)
@@ -200,7 +228,8 @@ extension MainWindowController {
                         ?? folders[0]
                 }
             self?.startAgentTask(
-                repo: repo, name: title, kind: kind, prompt: prompt, base: base, model: model
+                repo: repo, name: title, kind: kind, prompt: prompt, base: base, model: model,
+                caller: caller?.tabID
             ) { result in
                 switch result {
                 case .failure(let error):
@@ -466,9 +495,16 @@ extension MainWindowController {
 
     /// Closes the workspace first (its shells hold the folder), then deletes
     /// the worktree and branch.
-    func closeAndRemoveAgentTask(workspaceID: UUID, info: AgentWorktree.Info) {
+    /// Closes the task's UI and deletes its worktree. A task opened beside its
+    /// caller lives in a tab (`tabID`) of a shared workspace: close only that tab.
+    func closeAndRemoveAgentTask(workspaceID: UUID, info: AgentWorktree.Info, tabID: UUID? = nil) {
         if let index = appState.workspaces.firstIndex(where: { $0.id == workspaceID }) {
-            forceCloseWorkspace(at: index)
+            let ownsWorkspace = AgentWorktree.standardized(appState.workspaces[index].folderPath) == info.path
+            if let tabID, !ownsWorkspace {
+                closeHelperTab(tabID)
+            } else {
+                forceCloseWorkspace(at: index)
+            }
         }
         DispatchQueue.global(qos: .utility).async {
             let result = Result(catching: { try AgentWorktree.remove(info, deleteBranch: true) })

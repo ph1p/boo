@@ -13,18 +13,21 @@ extension MainWindowController {
         cmd: String, workspace: Workspace, tabID: UUID, json: [String: Any],
         reply: @escaping ([String: Any]) -> Void
     ) {
-        let folder = workspace.folderPath
+        // A task opened beside its caller shares the caller's workspace, so its
+        // worktree is the tab's directory, not the workspace folder.
+        let tabDir = AgentInbox.locateInWindows(tabID).map { $0.pane.tabs[$0.tabIndex].workingDirectory }
+        let folders = [tabDir, workspace.folderPath].compactMap { $0 }
         let workspaceID = workspace.id
         let ids: [String: Any] = ["tab_id": tabID.uuidString, "workspace_id": workspaceID.uuidString]
         let statOnly = json["stat_only"] as? Bool ?? false
         let cleanup = json["cleanup"] as? Bool ?? true
         Task { @MainActor [weak self] in
-            let outcome = await Task.detached(priority: .userInitiated) { Self.runTaskCommand(cmd, folder: folder) }
+            let outcome = await Task.detached(priority: .userInitiated) { Self.runTaskCommand(cmd, folders: folders) }
                 .value
             var response: [String: Any]
             switch outcome {
             case .notTask:
-                let path = (folder as NSString).abbreviatingWithTildeInPath
+                let path = (folders[0] as NSString).abbreviatingWithTildeInPath
                 response = ["ok": false, "error": "\(path) is not an agent task worktree"]
             case .failed(let message):
                 response = ["ok": false, "error": message]
@@ -38,10 +41,10 @@ extension MainWindowController {
                 response = Self.serialize(changes, statOnly: statOnly)
             case .merged(let check, let info):
                 response = ["ok": true, "merged": check.status.ahead, "target": check.status.target ?? NSNull()]
-                if cleanup { self?.closeAndRemoveAgentTask(workspaceID: workspaceID, info: info) }
+                if cleanup { self?.closeAndRemoveAgentTask(workspaceID: workspaceID, info: info, tabID: tabID) }
             case .discard(let info):
                 response = ["ok": true]
-                self?.closeAndRemoveAgentTask(workspaceID: workspaceID, info: info)
+                self?.closeAndRemoveAgentTask(workspaceID: workspaceID, info: info, tabID: tabID)
             }
             reply(response.merging(ids) { current, _ in current })
         }
@@ -58,8 +61,8 @@ extension MainWindowController {
     }
 
     /// The git side of a task command; blocks.
-    nonisolated private static func runTaskCommand(_ cmd: String, folder: String) -> TaskOutcome {
-        guard let info = AgentWorktree.info(for: folder) else { return .notTask }
+    nonisolated private static func runTaskCommand(_ cmd: String, folders: [String]) -> TaskOutcome {
+        guard let info = folders.lazy.compactMap(AgentWorktree.info(for:)).first else { return .notTask }
         switch cmd {
         case "task_status":
             return .status(AgentWorktree.mergeCheck(of: info), info)

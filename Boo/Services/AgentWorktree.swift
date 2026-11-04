@@ -243,7 +243,7 @@ enum AgentWorktree {
     }
 
     /// realpath(3): unlike `resolvingSymlinksInPath` it keeps `/private`, matching git's own paths.
-    private static func standardized(_ path: String) -> String {
+    static func standardized(_ path: String) -> String {
         guard let resolved = realpath(path, nil) else { return path }
         defer { free(resolved) }
         return String(cString: resolved)
