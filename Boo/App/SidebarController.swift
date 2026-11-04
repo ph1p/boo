@@ -3,8 +3,6 @@ import SwiftUI
 
 /// Controller responsible for sidebar panel management, plugin tab selection,
 /// section heights, and scroll offset persistence.
-///
-/// Extracted from MainWindowController to achieve single-responsibility.
 /// Coordinates with WindowStateCoordinator for state persistence.
 @MainActor
 final class SidebarController {
@@ -150,24 +148,6 @@ final class SidebarController {
             ]
         }
         NSLayoutConstraint.activate(sidebarTabBarPositionConstraints)
-    }
-
-    // MARK: - Content Anchors
-
-    /// Top anchor for sidebar content views.
-    var contentTopAnchor: NSLayoutYAxisAnchor {
-        guard let container = sidebarContainer else { return sidebarContainer.topAnchor }
-        return AppSettings.shared.sidebarTabBarPosition == .bottom
-            ? container.topAnchor
-            : (sidebarTabBarView?.bottomAnchor ?? container.topAnchor)
-    }
-
-    /// Bottom anchor for sidebar content views.
-    var contentBottomAnchor: NSLayoutYAxisAnchor {
-        guard let container = sidebarContainer else { return sidebarContainer.bottomAnchor }
-        return AppSettings.shared.sidebarTabBarPosition == .bottom
-            ? (sidebarTabBarView?.topAnchor ?? container.bottomAnchor)
-            : container.bottomAnchor
     }
 
     // MARK: - Visibility
