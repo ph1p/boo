@@ -531,6 +531,12 @@ extension PaneView {
     /// Show dropdown menu for creating new tabs of different types.
     func showNewTabMenu(event: NSEvent) {
         let menu = NSMenu()
+        addNewTabItems(to: menu)
+        NSMenu.popUpContextMenu(menu, with: event, for: self)
+    }
+
+    /// One "New <Type> Tab" item per creatable content type.
+    func addNewTabItems(to menu: NSMenu) {
         for type in ContentType.creatableTypes {
             let item = NSMenuItem(
                 title: "New \(type.displayName) Tab",
@@ -542,7 +548,6 @@ extension PaneView {
             item.representedObject = type
             menu.addItem(item)
         }
-        NSMenu.popUpContextMenu(menu, with: event, for: self)
     }
 
     @objc private func newTabMenuAction(_ sender: NSMenuItem) {
