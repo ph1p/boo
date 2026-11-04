@@ -55,7 +55,11 @@ final class AgentsPlugin: BooPluginProtocol {
             PluginManifest.SettingManifest(
                 key: "worktreeFolder", type: .string, label: "Worktree folder",
                 description: "Where new task worktrees go, one folder per repository.",
-                defaultValue: AnyCodableValue(""), options: "agentWorktreeFolder", group: "Tasks")
+                defaultValue: AnyCodableValue(""), options: "agentWorktreeFolder", group: "Tasks"),
+            PluginManifest.SettingManifest(
+                key: "crewActiveWorkspaceOnly", type: .bool, label: "Only list the active workspace's agents",
+                description: "Off: every workspace's agents, grouped by workspace, the active one first.",
+                defaultValue: AnyCodableValue(false), options: nil, group: "Agents List")
         ]
     )
 

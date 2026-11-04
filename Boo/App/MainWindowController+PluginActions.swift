@@ -36,50 +36,9 @@ extension MainWindowController {
         }
         pluginActions.workspaceAgentSessions = { [weak self] in
             guard let self, let workspace = self.activeWorkspace else { return [] }
-            return workspace.panes.values.flatMap { pane -> [WorkspaceAgentSession] in
-                pane.tabs.compactMap { tab in
-                    let isFocused = workspace.activePaneID == pane.id && pane.activeTab?.id == tab.id
-                    var processName = isFocused ? self.bridge.state.foregroundProcess : tab.state.foregroundProcess
-                    let processPID = isFocused ? self.bridge.state.foregroundProcessPID : tab.state.foregroundProcessPID
-                    var processCategory =
-                        isFocused ? self.bridge.state.foregroundProcessCategory : tab.state.foregroundProcessCategory
-                    let processMetadata =
-                        isFocused ? self.bridge.state.foregroundProcessMetadata : tab.state.foregroundProcessMetadata
-                    // For background tabs where process category is unknown, re-resolve via
-                    // the live process tree so runtimes like node/bun (used by codex) are
-                    // remapped to their canonical agent name.
-                    if !isFocused && processCategory == nil {
-                        let shellPID = tab.state.shellPID
-                        if shellPID > 0, let resolved = ProcessTree.foregroundProcess(shellPID: shellPID) {
-                            processName = resolved
-                            processCategory = ProcessIcon.category(for: resolved)
-                        }
-                    }
-                    let context = TerminalContext(
-                        terminalID: tab.id,
-                        cwd: tab.workingDirectory,
-                        remoteSession: isFocused ? self.bridge.state.remoteSession : tab.remoteSession,
-                        remoteCwd: isFocused ? self.bridge.state.remoteCwd : tab.remoteWorkingDirectory,
-                        gitContext: nil,
-                        processName: processName,
-                        processPID: processPID,
-                        processCategory: processCategory,
-                        processMetadata: processMetadata,
-                        paneCount: workspace.panes.count,
-                        tabCount: pane.tabs.count
-                    )
-                    guard let agent = AgentsPlugin.agentSession(from: context, existingStart: nil) else { return nil }
-                    return WorkspaceAgentSession(
-                        id: tab.id,
-                        paneID: pane.id,
-                        tabID: tab.id,
-                        tabTitle: tab.title,
-                        isFocused: isFocused,
-                        agent: agent
-                    )
-                }
-            }
+            return self.agentSessions(in: workspace)
         }
+        pluginActions.activeWorkspaceID = { [weak self] in self?.activeWorkspace?.id }
         pluginActions.focusAgentSession = { [weak self] sessionID in
             guard let self, let workspace = self.activeWorkspace else { return }
             for pane in workspace.panes.values {
@@ -163,5 +122,58 @@ extension MainWindowController {
                 self.saveSession()
             }
         )
+    }
+}
+
+extension MainWindowController {
+    /// Agents running in the workspace's terminal tabs, found by process
+    /// detection (with or without Boo's hooks). Only the active workspace has
+    /// a focused tab, whose state the bridge holds live.
+    func agentSessions(in workspace: Workspace) -> [WorkspaceAgentSession] {
+        let isActive = workspace.id == activeWorkspace?.id
+        let bridge: TerminalBridge = self.bridge
+        return workspace.panes.values.flatMap { pane -> [WorkspaceAgentSession] in
+            pane.tabs.compactMap { tab in
+                let isFocused = isActive && workspace.activePaneID == pane.id && pane.activeTab?.id == tab.id
+                var processName = isFocused ? bridge.state.foregroundProcess : tab.state.foregroundProcess
+                let processPID = isFocused ? bridge.state.foregroundProcessPID : tab.state.foregroundProcessPID
+                var processCategory =
+                    isFocused ? bridge.state.foregroundProcessCategory : tab.state.foregroundProcessCategory
+                let processMetadata =
+                    isFocused ? bridge.state.foregroundProcessMetadata : tab.state.foregroundProcessMetadata
+                // For background tabs where process category is unknown, re-resolve via
+                // the live process tree so runtimes like node/bun (used by codex) are
+                // remapped to their canonical agent name.
+                if !isFocused && processCategory == nil {
+                    let shellPID = tab.state.shellPID
+                    if shellPID > 0, let resolved = ProcessTree.foregroundProcess(shellPID: shellPID) {
+                        processName = resolved
+                        processCategory = ProcessIcon.category(for: resolved)
+                    }
+                }
+                let context = TerminalContext(
+                    terminalID: tab.id,
+                    cwd: tab.workingDirectory,
+                    remoteSession: isFocused ? bridge.state.remoteSession : tab.remoteSession,
+                    remoteCwd: isFocused ? bridge.state.remoteCwd : tab.remoteWorkingDirectory,
+                    gitContext: nil,
+                    processName: processName,
+                    processPID: processPID,
+                    processCategory: processCategory,
+                    processMetadata: processMetadata,
+                    paneCount: workspace.panes.count,
+                    tabCount: pane.tabs.count
+                )
+                guard let agent = AgentsPlugin.agentSession(from: context, existingStart: nil) else { return nil }
+                return WorkspaceAgentSession(
+                    id: tab.id,
+                    paneID: pane.id,
+                    tabID: tab.id,
+                    tabTitle: tab.title,
+                    isFocused: isFocused,
+                    agent: agent
+                )
+            }
+        }
     }
 }

@@ -419,4 +419,55 @@ final class AgentCrewTests: XCTestCase {
         XCTAssertEqual(Set(loop.map(\.row.handle)), ["t1", "t2"], "a parent loop still lists every row once")
         XCTAssertEqual(loop.count, 2)
     }
+
+    func testGroupsPutActiveWorkspaceFirstAndOutsideLast() {
+        let active = CrewWorkspace(id: UUID(), name: "boo", order: 2)
+        let first = CrewWorkspace(id: UUID(), name: "api", order: 0)
+        let second = CrewWorkspace(id: UUID(), name: "site", order: 1)
+        func row(
+            _ handle: String, _ workspace: CrewWorkspace?, parent: String? = nil, stopped: Bool = false
+        )
+            -> AgentCrewRow
+        {
+            var row = AgentCrewRow(
+                id: UUID(), handle: handle, name: handle, agent: "claude", state: .working, detail: nil,
+                parent: parent, queued: 0, needsAttention: false, isTask: false)
+            row.workspace = workspace
+            row.isStopped = stopped
+            return row
+        }
+        let rows = [
+            row("t9", nil), row("t4", second), row("t3", active, stopped: true), row("t2", active, parent: "t1"),
+            row("t5", first), row("t1", active)
+        ]
+        let groups = AgentCrewView.groups(rows, activeWorkspaceID: active.id)
+        XCTAssertEqual(groups.map(\.title), ["boo", "api", "site", "Outside Boo"])
+        XCTAssertEqual(groups.map(\.isActive), [true, false, false, false])
+        XCTAssertEqual(groups[0].rows.map(\.handle), ["t1", "t2", "t3"], "a tree of live agents, stopped ones last")
+        XCTAssertEqual(groups[0].entries.map(\.depth), [0, 1, 0])
+
+        let none = AgentCrewView.groups(rows, activeWorkspaceID: nil)
+        XCTAssertEqual(none.map(\.title), ["api", "site", "boo", "Outside Boo"], "no active workspace: bar order")
+
+        XCTAssertEqual(
+            AgentCrewView.navigationOrder(groups, collapsed: [first.id.uuidString, CrewGroup.outsideID]),
+            groups[0].rows.map(\.id) + groups[2].rows.map(\.id), "the arrow keys skip folded groups")
+    }
+
+    @MainActor
+    func testNewTaskOutsideSharedStateOpensNoPopover() {
+        let saved = AgentCrewUIState.presentNewTask
+        defer { AgentCrewUIState.presentNewTask = saved }
+        var presented = 0
+        AgentCrewUIState.presentNewTask = {
+            presented += 1
+            return true
+        }
+        AgentCrewUIState().open(.newTask)
+        XCTAssertEqual(presented, 0, "only the app-wide state shows the header popover")
+        let shared = AgentCrewUIState.shared
+        shared.open(.newTask)
+        defer { shared.close() }
+        XCTAssertEqual(presented, 1, "perform(.newTask) opens the header's popover")
+    }
 }

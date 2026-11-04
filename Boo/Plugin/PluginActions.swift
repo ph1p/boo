@@ -37,6 +37,8 @@ final class PluginActions {
     var getAgentSessionID: (() -> String?)?
     /// Running agent sessions in terminal tabs of the active workspace.
     var workspaceAgentSessions: (() -> [WorkspaceAgentSession])?
+    /// The window's active workspace.
+    var activeWorkspaceID: (() -> UUID?)?
     /// Focus a terminal tab that owns a workspace-scoped agent session.
     var focusAgentSession: ((WorkspaceAgentSession.ID) -> Void)?
     /// Open the timeline of a Claude Code session (session ID, label).

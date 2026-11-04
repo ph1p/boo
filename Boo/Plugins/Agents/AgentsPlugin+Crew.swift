@@ -29,6 +29,7 @@ extension AgentsPlugin {
             AgentInbox.locateInWindows(tabID).map { AgentWorktree.looksLikeWorktree($0.workspace.folderPath) } ?? false
         },
         isReachable: (UUID) -> Bool = { AgentInbox.locateInWindows($0) != nil },
+        workspace: (UUID) -> CrewWorkspace? = { crewWorkspace(of: $0) },
         taskStatus: (AgentInbox.Item) -> AgentTaskStatus.Summary? = { item in
             AgentInbox.locateInWindows(item.tabID).flatMap { location in
                 let folder = location.workspace.folderPath
@@ -60,7 +61,8 @@ extension AgentsPlugin {
                 parent: fields["parent"] as? String, queued: fields["queued"] as? Int ?? 0,
                 needsAttention: item.needsAttention, isTask: isTask(item.tabID),
                 isReachable: isReachable(item.tabID), asksQuestion: item.asksQuestion,
-                updatedAt: item.updatedAt.timeIntervalSince1970, taskStatus: taskStatus(item), folder: item.cwd)
+                updatedAt: item.updatedAt.timeIntervalSince1970, taskStatus: taskStatus(item), folder: item.cwd,
+                workspace: workspace(item.tabID))
         }.sorted { lhs, rhs in
             // Parents first, each helper right below the agent that started it.
             func order(_ row: AgentCrewRow) -> (Int, Int) {
@@ -89,18 +91,85 @@ extension AgentsPlugin {
             return AgentCrewRow(
                 id: tab.id, handle: "", name: workspace.displayName, agent: "agent", state: .done,
                 detail: "agent not running", parent: nil, queued: 0, needsAttention: false, isTask: true,
-                isStopped: true, taskStatus: taskStatus(workspace.folderPath))
+                isStopped: true, taskStatus: taskStatus(workspace.folderPath),
+                workspace: crewWorkspace(of: tab.id))
         }
     }
 
-    /// Live agents, then stopped task workspaces, across every window.
-    static func allCrewRows() -> [AgentCrewRow] {
+    /// Agents found by their process in a tab with no hooks reporting to Boo's
+    /// inbox (started before the hooks were installed, or a CLI without them).
+    static func unhookedRows(
+        sessions: [(session: WorkspaceAgentSession, workspace: CrewWorkspace?)], hooked: Set<UUID>
+    ) -> [AgentCrewRow] {
+        sessions.filter { !hooked.contains($0.session.tabID) }.map { entry in
+            let agent = entry.session.agent
+            let state: AgentInbox.State =
+                switch agent.state {
+                case .running, .unknown: .working
+                case .needsInput: .needsInput
+                case .idle: .done
+                }
+            return AgentCrewRow(
+                id: entry.session.tabID, handle: "",
+                name: "\(agent.kind.displayName) in \((agent.cwd as NSString).lastPathComponent)",
+                agent: agent.kind.ipcName, state: state, detail: nil, parent: nil, queued: 0,
+                needsAttention: false, isTask: entry.workspace?.isTask == true,
+                // No hook carries its prompt, so no Allow / Deny: the tab answers it.
+                asksQuestion: true, folder: agent.cwd, workspace: entry.workspace, hasHooks: false)
+        }
+    }
+
+    /// Where a tab is, as the crew list groups it; nil outside Boo's windows.
+    static func crewWorkspace(of tabID: UUID) -> CrewWorkspace? {
+        guard let location = AgentInbox.locateInWindows(tabID) else { return nil }
+        return crewWorkspace(location.workspace, order: workspaceOrder()[location.workspace.id] ?? 0)
+    }
+
+    static func crewWorkspace(_ workspace: Workspace, order: Int) -> CrewWorkspace {
+        CrewWorkspace(
+            id: workspace.id, name: workspace.displayName,
+            isTask: AgentWorktree.isUnderTaskRoot(workspace.folderPath), order: order,
+            color: workspace.resolvedColor(theme: AppSettings.shared.theme))
+    }
+
+    /// Every workspace's position: windows in order, then each window's workspace bar.
+    static func workspaceOrder() -> [UUID: Int] {
+        var order: [UUID: Int] = [:]
+        for workspace in WindowManager.shared.controllers.flatMap(\.appState.workspaces)
+        where order[workspace.id] == nil {
+            order[workspace.id] = order.count
+        }
+        return order
+    }
+
+    /// Agent sessions found by process in every workspace of every window.
+    static func allAgentSessions() -> [(session: WorkspaceAgentSession, workspace: CrewWorkspace?)] {
+        let order = workspaceOrder()
+        return WindowManager.shared.controllers.flatMap { controller in
+            controller.appState.workspaces.flatMap { workspace in
+                let crew = crewWorkspace(workspace, order: order[workspace.id] ?? 0)
+                return controller.agentSessions(in: workspace).map { (session: $0, workspace: Optional(crew)) }
+            }
+        }
+    }
+
+    /// Live agents (with Boo's hooks or found by process), then stopped task
+    /// workspaces, across every window.
+    static func allCrewRows(
+        sessions: [(session: WorkspaceAgentSession, workspace: CrewWorkspace?)] = allAgentSessions()
+    ) -> [AgentCrewRow] {
         let items = Array(AgentInbox.shared.items.values)
-        return crewRows(items: items, crew: AgentCrew.shared)
+        let hooked = Set(items.map(\.tabID))
+        let unhooked = unhookedRows(sessions: sessions, hooked: hooked)
+        return crewRows(items: items, crew: AgentCrew.shared) + unhooked
             + stoppedTaskRows(
                 workspaces: WindowManager.shared.controllers.flatMap(\.appState.workspaces),
-                live: Set(items.map(\.tabID)))
+                live: hooked.union(unhooked.map(\.id)))
     }
+
+    /// The setting that lists only the active workspace's agents.
+    static let activeOnlyKey = "crewActiveWorkspaceOnly"
+    static var crewActiveOnly: Bool { AppSettings.shared.pluginBool("agents", activeOnlyKey, default: false) }
 
     func makeCrewSection(
         fontScale: SidebarFontScale, textColor: Color, mutedColor: Color, accentColor: Color
@@ -108,17 +177,32 @@ extension AgentsPlugin {
         startCrewObserving()
         // Shown with no agents too: it is where one is started. Without an
         // agent CLI the tab's own empty state says what to install.
-        let rows = Self.allCrewRows()
+        let agentSessions = Self.allAgentSessions()
+        let rows = Self.allCrewRows(sessions: agentSessions)
+        let activeID = actions?.activeWorkspaceID?()
+        let activeOnly = Self.crewActiveOnly
         let agents = AgentKind.taskKinds.filter { installedAgents.contains($0) }
         guard !rows.isEmpty || !agents.isEmpty else { return nil }
-        // Counts the "Needs you" group only: an unread answer is bold under Done, not waiting.
-        // The active workspace's agent sessions by tab, for Timeline and Transcript.
+        // Agent sessions by tab, for Timeline and Transcript.
         var sessions: [UUID: AgentSession] = [:]
-        for session in actions?.workspaceAgentSessions?() ?? [] { sessions[session.tabID] = session.agent }
+        for entry in agentSessions { sessions[entry.session.tabID] = entry.session.agent }
+        // Counts what needs the user everywhere, also in strict mode: a question
+        // in another workspace still waits. An unread answer is not waiting.
         let waiting = rows.filter { !$0.isStopped && ($0.state == .needsInput || $0.state == .error) }.count
+        let shown = activeOnly ? rows.filter { $0.workspace?.id == activeID }.count : rows.count
+        let activeName = activeID.flatMap { id in
+            WindowManager.shared.controllers.lazy.flatMap(\.appState.workspaces).first { $0.id == id }?.displayName
+        }
+        let startHere: (AgentKind, String) -> Void = { [weak self] kind, prompt in
+            self?.startAgent(kind: kind, prompt: prompt)
+        }
+        let startTask: (String, AgentKind, @escaping @MainActor (String?) -> Void) -> Void = {
+            prompt, agent, completion in Self.startTask(prompt: prompt, agent: agent, completion: completion)
+        }
+        let setActiveOnly: (Bool) -> Void = { AppSettings.shared.setPluginSetting("agents", Self.activeOnlyKey, $0) }
         return SidebarSection(
             id: "agents.crew",
-            name: waiting > 0 ? "Agents (\(waiting) need you)" : rows.isEmpty ? "Agents" : "Agents (\(rows.count))",
+            name: waiting > 0 ? "Agents (\(waiting) need you)" : shown == 0 ? "Agents" : "Agents (\(shown))",
             icon: "person.3",
             content: AnyView(
                 AgentCrewView(
@@ -138,11 +222,9 @@ extension AgentsPlugin {
                             controller.discardAgentTaskConfirmed(workspaceID: workspaceID)
                         }
                     },
-                    onStartTask: { prompt, agent, completion in
-                        Self.startTask(prompt: prompt, agent: agent, completion: completion)
-                    },
+                    onStartTask: startTask,
                     agents: agents,
-                    onStartHere: { [weak self] kind, prompt in self?.startAgent(kind: kind, prompt: prompt) },
+                    onStartHere: startHere,
                     onRespond: { row, response in Self.perform(response == .approve ? .allow : .deny, on: row) },
                     onResume: { Self.perform(.resume, on: $0) },
                     sessions: sessions,
@@ -153,11 +235,15 @@ extension AgentsPlugin {
                     },
                     onOpenTranscript: { [weak self] path in
                         self?.actions?.handle(DSLAction(type: "open", path: path, command: nil, text: nil))
-                    })),
+                    },
+                    activeWorkspaceID: activeID, activeWorkspaceName: activeName, activeOnly: activeOnly,
+                    onShowAll: { setActiveOnly(false) },
+                    onShowActiveOnly: { setActiveOnly(true) })),
             // Sized to its rows, so every agent shows without scrolling.
             prefersOuterScrollView: false,
             generation: SidebarSection.generation(
                 for: rows.map(\.key) + installedAgents.map(\.rawValue).sorted()
+                    + ["\(activeID?.uuidString ?? "")|\(activeName ?? "")|\(activeOnly)"]
                     + sessions.map { "\($0.key)=\($0.value.sessionID ?? "")" }.sorted()))
     }
 
@@ -182,8 +268,13 @@ extension AgentsPlugin {
             }
         case (.show, let row?):
             ui.selection = row.id
-            AgentInbox.shared.jump(to: row.id)
-        case (.message, let row?):
+            if row.hasHooks {
+                AgentInbox.shared.jump(to: row.id)
+            } else if let location = AgentInbox.locateInWindows(row.id) {
+                // Not in the inbox: jump(to:) would find nothing.
+                AgentInbox.focus(location)
+            }
+        case (.message, let row?) where row.hasHooks:
             if let text { AgentCrew.shared.send(to: row.id, from: nil, text: text) } else { ui.open(.message(row.id)) }
         case (.resume, let row?):
             withTask(row) { controller, workspaceID in controller.resumeAgentTask(workspaceID: workspaceID) }
