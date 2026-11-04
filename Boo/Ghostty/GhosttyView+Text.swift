@@ -447,14 +447,18 @@ extension GhosttyView {
 
     private func readText(_ tag: ghostty_point_tag_e) -> String? {
         guard let surface = surface else { return nil }
-        let topLeft = ghostty_point_s(tag: tag, coord: GHOSTTY_POINT_COORD_TOP_LEFT, x: 0, y: 0)
-        let bottomRight = ghostty_point_s(tag: tag, coord: GHOSTTY_POINT_COORD_BOTTOM_RIGHT, x: 0, y: 0)
-        let selection = ghostty_selection_s(
-            top_left: topLeft, bottom_right: bottomRight, rectangle: false)
         var text = ghostty_text_s()
-        guard ghostty_surface_read_text(surface, selection, &text) else { return nil }
+        guard ghostty_surface_read_text(surface, Self.wholeArea(tag), &text) else { return nil }
         defer { ghostty_surface_free_text(surface, &text) }
         return string(from: text)
+    }
+
+    /// Selection spanning the whole viewport or screen.
+    private static func wholeArea(_ tag: ghostty_point_tag_e) -> ghostty_selection_s {
+        ghostty_selection_s(
+            top_left: ghostty_point_s(tag: tag, coord: GHOSTTY_POINT_COORD_TOP_LEFT, x: 0, y: 0),
+            bottom_right: ghostty_point_s(tag: tag, coord: GHOSTTY_POINT_COORD_BOTTOM_RIGHT, x: 0, y: 0),
+            rectangle: false)
     }
 
     private func string(from text: ghostty_text_s) -> String? {
@@ -481,21 +485,10 @@ extension GhosttyView {
 
     private func readStyled(_ tag: ghostty_point_tag_e) -> String? {
         guard let surface = surface else { return nil }
-        let topLeft = ghostty_point_s(
-            tag: tag, coord: GHOSTTY_POINT_COORD_TOP_LEFT, x: 0, y: 0)
-        let bottomRight = ghostty_point_s(
-            tag: tag, coord: GHOSTTY_POINT_COORD_BOTTOM_RIGHT, x: 0, y: 0)
-        let selection = ghostty_selection_s(
-            top_left: topLeft, bottom_right: bottomRight, rectangle: false)
         var text = ghostty_text_s()
-        guard ghostty_surface_read_text_styled(surface, selection, &text) else { return nil }
+        guard ghostty_surface_read_text_styled(surface, Self.wholeArea(tag), &text) else { return nil }
         defer { ghostty_surface_free_text(surface, &text) }
-        guard let ptr = text.text else { return nil }
-        return String(
-            decoding: UnsafeBufferPointer(
-                start: UnsafeRawPointer(ptr).assumingMemoryBound(to: UInt8.self),
-                count: Int(text.text_len)),
-            as: UTF8.self)
+        return string(from: text)
     }
 
     @objc func paste(_ sender: Any?) {

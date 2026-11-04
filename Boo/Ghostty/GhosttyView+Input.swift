@@ -29,7 +29,7 @@ extension GhosttyView {
         let action: ghostty_input_action_e = event.isARepeat ? GHOSTTY_ACTION_REPEAT : GHOSTTY_ACTION_PRESS
         let translatedMods = ghostty_surface_key_translation_mods(surface, translateMods(event.modifierFlags))
         let params = eventKeyParams(event)
-        var key = makeKeyEvent(
+        let key = makeKeyEvent(
             action: action, keyCode: UInt32(event.keyCode), mods: translatedMods,
             consumedMods: params.consumedMods, unshiftedCodepoint: params.unshiftedCodepoint)
 
@@ -57,14 +57,7 @@ extension GhosttyView {
             textToSend = event.characters(byApplyingModifiers: event.modifierFlags.subtracting(.control))
         }
 
-        if let text = textToSend {
-            text.withCString { cstr in
-                key.text = cstr
-                _ = ghostty_surface_key(surface, key)
-            }
-        } else {
-            _ = ghostty_surface_key(surface, key)
-        }
+        Self.sendKey(key, text: textToSend, to: surface)
 
         // Mirror to broadcast peers: an IME commit as text, a plain key as
         // the same key event; keys still composing stay local.
@@ -138,19 +131,25 @@ extension GhosttyView {
             action: GHOSTTY_ACTION_PRESS, keyCode: UInt32(keyCode), mods: mods,
             unshiftedCodepoint: codepoint)
 
-        if let text = text {
-            text.withCString { cstr in
-                key.text = cstr
-                _ = ghostty_surface_key(surface, key)
-            }
-        } else {
-            _ = ghostty_surface_key(surface, key)
-        }
+        Self.sendKey(key, text: text, to: surface)
 
         // Send release
         key.action = GHOSTTY_ACTION_RELEASE
         key.text = nil
         _ = ghostty_surface_key(surface, key)
+    }
+
+    /// Deliver a key event, with `text` attached for the duration of the call.
+    private static func sendKey(_ key: ghostty_input_key_s, text: String?, to surface: ghostty_surface_t) {
+        guard let text else {
+            _ = ghostty_surface_key(surface, key)
+            return
+        }
+        var key = key
+        text.withCString { cstr in
+            key.text = cstr
+            _ = ghostty_surface_key(surface, key)
+        }
     }
 
     /// ⌃R at a prompt of a shell with Boo integration, when the setting allows.
