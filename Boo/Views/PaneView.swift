@@ -177,29 +177,26 @@ class PaneView: NSView {
         override func hitTest(_ point: NSPoint) -> NSView? { nil }
     }
 
-    let activityBorder: ActivityBorderOverlay = {
+    /// Hidden, click-through frame that follows the pane's island corner
+    /// (else the frame squares off the rounding).
+    private static func makeBorderOverlay() -> ActivityBorderOverlay {
         let v = ActivityBorderOverlay()
         v.wantsLayer = true
         v.autoresizingMask = [.width, .height]
         v.isHidden = true
         v.layer?.borderWidth = PaneView.activityBorderWidth
-        // Follow the pane's island corner, else the frame squares off the rounding.
         v.layer?.cornerRadius = IslandMetrics.innerRadius
         v.layer?.cornerCurve = .continuous
         return v
-    }()
+    }
+
+    let activityBorder = PaneView.makeBorderOverlay()
 
     /// Orange frame on every pane that receives broadcast input; shown even
     /// on the focused pane, since typing into the wrong host is the accident.
     let broadcastBorder: ActivityBorderOverlay = {
-        let v = ActivityBorderOverlay()
-        v.wantsLayer = true
-        v.autoresizingMask = [.width, .height]
-        v.isHidden = true
-        v.layer?.borderWidth = PaneView.activityBorderWidth
+        let v = PaneView.makeBorderOverlay()
         v.layer?.borderColor = BroadcastSegment.color.cgColor
-        v.layer?.cornerRadius = IslandMetrics.innerRadius
-        v.layer?.cornerCurve = .continuous
         return v
     }()
 
@@ -209,16 +206,7 @@ class PaneView: NSView {
     }
 
     /// Red frame while the front tab records, so it's clear which split is captured.
-    let recordingBorder: ActivityBorderOverlay = {
-        let v = ActivityBorderOverlay()
-        v.wantsLayer = true
-        v.autoresizingMask = [.width, .height]
-        v.isHidden = true
-        v.layer?.borderWidth = PaneView.activityBorderWidth
-        v.layer?.cornerRadius = IslandMetrics.innerRadius
-        v.layer?.cornerCurve = .continuous
-        return v
-    }()
+    let recordingBorder = PaneView.makeBorderOverlay()
 
     /// ⋯ notch with record / split / zoom / close in the pane's bottom-right corner.
     let paneControls = PaneControlsView()
