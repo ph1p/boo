@@ -214,7 +214,10 @@ struct SettingsView: View {
         .padding(.horizontal, IslandMetrics.gap)
         .padding(.bottom, IslandMetrics.gap)
         .background(t.backdrop)
-        .frame(width: 780, height: 560)
+        // Resizable, never below the default size the pages are laid out for.
+        .frame(
+            minWidth: SettingsWindowController.defaultSize.width, maxWidth: .infinity,
+            minHeight: SettingsWindowController.defaultSize.height, maxHeight: .infinity)
         // One tokens snapshot per render for the whole tree — and the environment
         // change is what forces otherwise-unchanged rows to repaint on theme switch.
         .environment(\.tokens, t)
@@ -292,20 +295,25 @@ private class NoSafeAreaHostingView<Root: View>: NSHostingView<Root> {
 
 class SettingsWindowController: NSWindowController {
     static let shared = SettingsWindowController()
+    /// Opening size, and the smallest the window may be resized to.
+    static let defaultSize = NSSize(width: 780, height: 560)
 
     private var settingsObserver: NSObjectProtocol?
 
     private init() {
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 780, height: 560),
-            styleMask: [.titled, .closable, .fullSizeContentView],
+            contentRect: NSRect(origin: .zero, size: Self.defaultSize),
+            styleMask: [.titled, .closable, .resizable, .fullSizeContentView],
             backing: .buffered,
             defer: false
         )
         window.title = "Settings"
         window.titlebarAppearsTransparent = true
         window.titleVisibility = .hidden
+        window.contentMinSize = Self.defaultSize
         window.center()
+        // Remembers a resized frame across launches (applied over the centred default).
+        window.setFrameAutosaveName("BooSettingsWindow")
         window.autorecalculatesKeyViewLoop = false
         let theme = AppSettings.shared.theme
         // Behind the islands, so it is the backdrop rather than the chrome fill —
