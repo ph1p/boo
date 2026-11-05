@@ -83,6 +83,35 @@ final class AgentInboxTests: XCTestCase {
         XCTAssertTrue(inbox.items.isEmpty)
     }
 
+    /// A `claude -p` the agent runs in its tab inherits the tab's ID: its
+    /// events must not end or overwrite the working agent's row.
+    func testNestedSessionLeavesTheWorkingAgentAlone() {
+        let inbox = makeInbox()
+        let tab = UUID()
+        inbox.apply(event: "prompt", tabID: tab, sessionID: "outer")
+        inbox.apply(event: "prompt", tabID: tab, sessionID: "inner")
+        inbox.apply(event: "stop", tabID: tab, sessionID: "inner")
+        inbox.apply(event: "end", tabID: tab, sessionID: "inner")
+        XCTAssertEqual(inbox.items[tab]?.state, .working)
+        XCTAssertEqual(inbox.items[tab]?.sessionID, "outer")
+
+        inbox.apply(event: "stop", tabID: tab, sessionID: "outer")
+        inbox.apply(event: "prompt", tabID: tab, sessionID: "cleared")
+        XCTAssertEqual(inbox.items[tab]?.sessionID, "cleared", "after its turn a new session takes the tab")
+        inbox.apply(event: "end", tabID: tab, sessionID: "cleared")
+        XCTAssertNil(inbox.items[tab])
+    }
+
+    /// A hook for a closed tab must not land on the pane's other active tab.
+    func testEventForAGoneTabIsDropped() {
+        let inbox = makeInbox()
+        let result = inbox.handleSocketEvent([
+            "tab_id": UUID().uuidString, "pane_id": UUID().uuidString, "event": "stop"
+        ])
+        XCTAssertEqual(result["ok"] as? Bool, false)
+        XCTAssertTrue(inbox.items.isEmpty)
+    }
+
     func testSortsWaitingAgentsFirst() {
         let inbox = makeInbox()
         let working = UUID()

@@ -420,6 +420,19 @@ final class AgentCrewTests: XCTestCase {
         XCTAssertEqual(loop.count, 2)
     }
 
+    /// Rows without a handle keep their place whatever order they arrive in.
+    func testTreeOrderIgnoresInputOrder() {
+        func row(_ handle: String, _ name: String) -> AgentCrewRow {
+            AgentCrewRow(
+                id: UUID(), handle: handle, name: name, agent: "claude", state: .working, detail: nil,
+                parent: nil, queued: 0, needsAttention: false, isTask: false)
+        }
+        let rows = [row("", "zeta"), row("t2", "b"), row("", "alpha"), row("t1", "a")]
+        let expected = ["a", "b", "alpha", "zeta"]
+        XCTAssertEqual(AgentCrewView.tree(rows).map(\.row.name), expected)
+        XCTAssertEqual(AgentCrewView.tree(rows.reversed()).map(\.row.name), expected)
+    }
+
     func testGroupsKeepBarOrderAndOutsideLast() {
         let active = CrewWorkspace(id: UUID(), name: "boo", order: 2)
         let first = CrewWorkspace(id: UUID(), name: "api", order: 0)

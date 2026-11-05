@@ -39,7 +39,9 @@ extension AgentsPlugin {
             }
         }
     ) -> [AgentCrewRow] {
-        items.map { item in
+        // Oldest change first: a handle first issued here follows when the agent
+        // showed up, not the inbox's dictionary order.
+        items.sorted { ($0.updatedAt, $0.tabID.uuidString) < ($1.updatedAt, $1.tabID.uuidString) }.map { item in
             let fields = crew.fields(for: item.tabID)
             let detail: String? =
                 switch item.state {
@@ -65,9 +67,11 @@ extension AgentsPlugin {
                 workspace: workspace(item.tabID))
         }.sorted { lhs, rhs in
             // Parents first, each helper right below the agent that started it.
-            func order(_ row: AgentCrewRow) -> (Int, Int) {
+            func order(_ row: AgentCrewRow) -> (Int, Int, String) {
                 let own = Int(row.handle.dropFirst()) ?? 0
-                return (row.parent.flatMap { Int($0.dropFirst()) } ?? own, row.parent == nil ? 0 : own)
+                return (
+                    row.parent.flatMap { Int($0.dropFirst()) } ?? own, row.parent == nil ? 0 : own, row.id.uuidString
+                )
             }
             return order(lhs) < order(rhs)
         }
@@ -162,7 +166,9 @@ extension AgentsPlugin {
     ) -> [AgentCrewRow] {
         let items = Array(AgentInbox.shared.items.values)
         let hooked = Set(items.map(\.tabID))
-        let unhooked = unhookedRows(sessions: sessions ?? allAgentSessions(order: order), hooked: hooked)
+        // The orchestrator's tab reports through hooks too but is not a crew agent.
+        let reported = hooked.union(AgentInbox.shared.orchestratorTabID().map { [$0] } ?? [])
+        let unhooked = unhookedRows(sessions: sessions ?? allAgentSessions(order: order), hooked: reported)
         return crewRows(
             items: items, crew: AgentCrew.shared, workspace: { crewWorkspace(of: $0, order: order) }) + unhooked
             + stoppedTaskRows(

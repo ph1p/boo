@@ -248,15 +248,18 @@ struct AgentCrewView: View {
             if let workspace = row.workspace { workspaces[id] = workspace }
         }
         // Workspace-bar order only: switching workspaces must not reshuffle the list.
-        func rank(_ id: String) -> (Int, Int, Int) {
-            guard let workspace = workspaces[id] else { return (1, 0, 0) }
-            return (0, workspace.order, firstSeen.firstIndex(of: id) ?? 0)
+        // Ties break on the ID, not on `rows`' order, which follows dictionaries.
+        func rank(_ id: String) -> (Int, Int, String) {
+            guard let workspace = workspaces[id] else { return (1, 0, id) }
+            return (0, workspace.order, id)
         }
         return firstSeen.sorted { rank($0) < rank($1) }.map { id in
             let rows = byID[id] ?? []
             return CrewGroup(
                 id: id, workspace: workspaces[id], isActive: workspaces[id].map { $0.id == activeWorkspaceID } ?? false,
-                entries: tree(rows.filter { !$0.isStopped }) + rows.filter(\.isStopped).map { (row: $0, depth: 0) })
+                entries: tree(rows.filter { !$0.isStopped })
+                    + rows.filter(\.isStopped).sorted { ($0.name, $0.id.uuidString) < ($1.name, $1.id.uuidString) }
+                    .map { (row: $0, depth: 0) })
         }
     }
 
@@ -268,7 +271,12 @@ struct AgentCrewView: View {
     /// Orders rows depth-first: roots by handle, each followed by the helpers it
     /// started. A helper whose parent isn't listed is a root.
     static func tree(_ rows: [AgentCrewRow]) -> [(row: AgentCrewRow, depth: Int)] {
-        func number(_ handle: String) -> Int { Int(handle.dropFirst()) ?? .max }
+        // Rows without a handle (found by process) tie on it: name and tab ID
+        // keep them in place, since `rows` arrives in dictionary order.
+        func before(_ lhs: AgentCrewRow, _ rhs: AgentCrewRow) -> Bool {
+            func number(_ handle: String) -> Int { Int(handle.dropFirst()) ?? .max }
+            return (number(lhs.handle), lhs.name, lhs.id.uuidString) < (number(rhs.handle), rhs.name, rhs.id.uuidString)
+        }
         let handles = Set(rows.map(\.handle))
         let children = Dictionary(grouping: rows.filter { $0.parent.map(handles.contains) == true }) { $0.parent! }
         var out: [(row: AgentCrewRow, depth: Int)] = []
@@ -277,14 +285,14 @@ struct AgentCrewView: View {
             // A parent loop (t1 from t2, t2 from t1) must not recurse forever.
             guard seen.insert(row.id).inserted else { return }
             out.append((row, depth))
-            for child in (children[row.handle] ?? []).sorted(by: { number($0.handle) < number($1.handle) }) {
+            for child in (children[row.handle] ?? []).sorted(by: before) {
                 visit(child, depth + 1)
             }
         }
         let roots = rows.filter { $0.parent.map(handles.contains) != true }
-        for root in roots.sorted(by: { number($0.handle) < number($1.handle) }) { visit(root, 0) }
+        for root in roots.sorted(by: before) { visit(root, 0) }
         // Rows only reachable through a loop still show, as roots.
-        for row in rows where !seen.contains(row.id) { out.append((row, 0)) }
+        for row in rows.sorted(by: before) where !seen.contains(row.id) { out.append((row, 0)) }
         return out
     }
 

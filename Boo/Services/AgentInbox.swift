@@ -110,6 +110,9 @@ final class AgentInbox {
         tool: String? = nil, reply: String? = nil, sessionID: String? = nil, cwd: String? = nil,
         now: Date = Date()
     ) -> State? {
+        if let existing = items[tabID], Self.isNestedSession(existing, event: event, sessionID: sessionID, now: now) {
+            return nil
+        }
         if event == "end" {
             remove(tabID: tabID)
             return nil
@@ -134,6 +137,22 @@ final class AgentInbox {
         items[tabID] = item
         changed()
         return item.needsAttention && item.state != previous ? item.state : nil
+    }
+
+    /// How long a working agent's session holds its tab against another session's
+    /// events; after that the other session is taken as a new agent in the tab
+    /// (the first one quit without a SessionEnd).
+    static let nestedSessionWindow: TimeInterval = 30 * 60
+
+    /// An event from another session than the tab's agent, sent while that agent
+    /// works: a `claude -p` it runs in a tool inherits the tab's `BOO_TAB_ID`.
+    /// It must not end the agent's row or change its state. A different session
+    /// after the agent's turn is a new agent in the tab (`/clear`, a restart);
+    /// the agent's own SessionEnd, not another's, ends its row.
+    static func isNestedSession(_ existing: Item, event: String, sessionID: String?, now: Date) -> Bool {
+        guard let own = existing.sessionID, let sessionID, sessionID != own else { return false }
+        if event == "end" { return true }
+        return existing.state == .working && now.timeIntervalSince(existing.updatedAt) < nestedSessionWindow
     }
 
     /// Applies a hook event from the orchestrator's own session. Kept out of
@@ -295,8 +314,10 @@ extension AgentInbox {
     }
 
     private func resolveTabID(_ json: [String: Any]) -> UUID? {
-        if let id = (json["tab_id"] as? String).flatMap(UUID.init(uuidString:)), locate(id) != nil {
-            return id
+        if let id = (json["tab_id"] as? String).flatMap(UUID.init(uuidString:)) {
+            // A hook that names its tab is never moved to another one: when the
+            // tab closed, the pane's active tab is a different agent (or none).
+            return locate(id) != nil ? id : nil
         }
         guard let paneID = (json["pane_id"] as? String).flatMap(UUID.init(uuidString:)) else { return nil }
         for controller in WindowManager.shared.controllers {
