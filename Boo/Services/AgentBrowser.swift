@@ -238,12 +238,12 @@ final class AgentBrowser {
             throw Failure(message: "no browser tab \(id.uuidString)")
         }
         guard location.pane.tabs.count > 1 else { throw Failure(message: "the last tab of a pane stays open") }
+        // Same teardown as a tab the user closes: ownership, grants, pane_closed.
+        location.controller.notifyTerminalClosed(for: id)
         paneView.closeTab(at: location.tabIndex)
         paneView.groupsChanged()
         location.controller.refreshStatusBar()
         location.controller.saveSession()
-        CapabilityTokens.shared.disown(id)
-        ApprovalCenter.shared.revokeGrants(tab: id)
     }
 
     // MARK: - Page
