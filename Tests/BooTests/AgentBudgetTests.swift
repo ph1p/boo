@@ -31,25 +31,6 @@ final class AgentBudgetTests: XCTestCase {
         XCTAssertTrue(crossings.update("day", cost: 30, budget: 20), "new day notifies again")
     }
 
-    func testCostSinceDayStart() {
-        let dayStart = Date(timeIntervalSince1970: 1_000_000)
-        var timeline = AgentTimeline()
-        timeline.start = dayStart.addingTimeInterval(-3600)
-        timeline.cost = 5
-        var old = AgentTimeline.Turn(id: 0, kind: .prompt, prompt: "a")
-        old.start = dayStart.addingTimeInterval(-60)
-        old.cost = 2
-        var new = AgentTimeline.Turn(id: 1, kind: .prompt, prompt: "b")
-        new.start = dayStart.addingTimeInterval(60)
-        new.cost = 3
-        timeline.turns = [old, new]
-        XCTAssertEqual(AgentBudget.cost(of: timeline, since: dayStart), 3, accuracy: 0.001)
-
-        timeline.start = dayStart
-        XCTAssertEqual(
-            AgentBudget.cost(of: timeline, since: dayStart), 5, accuracy: 0.001, "whole session started today")
-    }
-
     func testFormat() {
         XCTAssertEqual(AgentBudget.format(1.234), "$1.23")
         XCTAssertEqual(AgentBudget.format(12.6), "$13")

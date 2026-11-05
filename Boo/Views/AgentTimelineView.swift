@@ -129,6 +129,9 @@ struct AgentTimelineView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
+    /// Costs are shown only with `agentCostTracking` on.
+    private var showsCost: Bool { AppSettings.shared.agentCostTracking }
+
     // MARK: Header
 
     private func header(_ timeline: AgentTimeline) -> some View {
@@ -141,13 +144,15 @@ struct AgentTimelineView: View {
                 }
                 Spacer()
                 VStack(alignment: .trailing, spacing: 2) {
-                    Text(Self.money(timeline.cost, exact: timeline.costIsExact))
-                        .font(.system(size: 15, weight: .semibold, design: .rounded)).foregroundStyle(t.text)
-                        .help(
-                            timeline.costIsExact
-                                ? "Cost reported by Claude Code when the session ended"
-                                : "Estimated from token counts at list prices; Claude Code reports the exact cost when the session ends"
-                        )
+                    if showsCost {
+                        Text(Self.money(timeline.cost, exact: timeline.costIsExact))
+                            .font(.system(size: 15, weight: .semibold, design: .rounded)).foregroundStyle(t.text)
+                            .help(
+                                timeline.costIsExact
+                                    ? "Cost reported by Claude Code when the session ended"
+                                    : "Estimated from token counts at list prices; Claude Code reports the exact cost when the session ends"
+                            )
+                    }
                     Text(tokenSummary(timeline)).font(.system(size: 10)).foregroundStyle(t.textTertiary)
                         .help(tokenDetail(timeline))
                 }
@@ -214,9 +219,9 @@ struct AgentTimelineView: View {
             "Cache read: \(Self.tokens(u.cacheRead))", "Cache write: \(Self.tokens(u.cacheWrite))"
         ]
         if timeline.subagentUsage.total > 0 {
-            lines.append(
-                "Subagents: \(Self.tokens(timeline.subagentUsage.total)) tokens, \(Self.money(timeline.subagentCost, exact: false))"
-            )
+            var line = "Subagents: \(Self.tokens(timeline.subagentUsage.total)) tokens"
+            if showsCost { line += ", \(Self.money(timeline.subagentCost, exact: false))" }
+            lines.append(line)
         }
         return lines.joined(separator: "\n")
     }
@@ -316,7 +321,7 @@ struct AgentTimelineView: View {
                 Text("interrupted").font(.system(size: 10)).foregroundStyle(t.warning)
             }
             Spacer()
-            if turn.cost > 0 {
+            if showsCost, turn.cost > 0 {
                 // Bar: share of the most expensive prompt, to spot the costly ones.
                 RoundedRectangle(cornerRadius: 2).fill(t.accentEmphasis)
                     .frame(width: max(2, 60 * CGFloat(peak > 0 ? turn.cost / peak : 0)), height: 4)

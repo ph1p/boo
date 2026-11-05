@@ -32,7 +32,8 @@ extension AppSettings {
         K.quickTerminalEnabled, K.quickTerminalHotkey, K.quickTerminalHeight, K.quickTerminalHideOnResign,
         K.agentJumpHotkey,
         K.defaultProfile, K.terminalShader, K.defaultLinkTarget, K.externalEditorPreset, K.historyEnabled,
-        K.historyIgnorePattern, K.historyRetentionDays, K.historySearchShortcutEnabled, K.agentBudgetPerTask,
+        K.historyIgnorePattern, K.historyRetentionDays, K.historySearchShortcutEnabled, K.agentCostTracking,
+        K.agentBudgetPerTask,
         K.agentBudgetPerDay, K.portNotificationsEnabled, K.errorAgentButtonEnabled, K.notifyMinCommandSeconds,
         K.notificationGroupBursts, K.notificationExpiryMinutes, K.shortcutOverrides
     ]
@@ -162,6 +163,7 @@ extension AppSettings {
             K.historyRetentionDays: historyRetentionDays,
             K.historySearchShortcutEnabled: historySearchShortcutEnabled,
             K.syncFolder: syncFolder,
+            K.agentCostTracking: agentCostTracking,
             K.agentBudgetPerTask: agentBudgetPerTask ?? 0,
             K.agentBudgetPerDay: agentBudgetPerDay ?? 0,
             K.portNotificationsEnabled: portNotificationsEnabled,

@@ -36,25 +36,24 @@ struct BudgetCrossings {
     mutating func reset() { levels = [:] }
 }
 
-/// Estimated agent spend against `agentBudgetPerTask` / `agentBudgetPerDay`,
-/// from the transcripts of the agents in the inbox. Warn only: amber at 80 %,
-/// red plus one notification when a budget is passed.
+/// Estimated agent spend against `agentBudgetPerTask` / `agentBudgetPerDay`:
+/// per task from the transcripts of the agents in the inbox, per day from
+/// every Claude Code session (`AgentCostLedger`). Warn only: amber at 80 %,
+/// red plus one notification when a budget is passed. Idle while
+/// `agentCostTracking` is off.
 @MainActor
 final class AgentBudget {
     static let shared = AgentBudget()
 
     /// Estimated cost of each agent's session, by tab.
     private(set) var taskCosts: [UUID: Double] = [:]
-    /// Today's estimated cost of every session seen today, by session ID
-    /// (kept after the agent's tab closes).
-    private var todayBySession: [String: Double] = [:]
+    /// Today's estimated cost of every Claude Code session.
+    private(set) var todayTotal = 0.0
     private var day = Calendar.current.startOfDay(for: Date())
     private var crossings = BudgetCrossings()
     private var observers: [NSObjectProtocol] = []
     private let refreshDebouncer = Debouncer(delay: 3)
     private var refreshing = false
-
-    var todayTotal: Double { todayBySession.values.reduce(0, +) }
 
     var dayLevel: BudgetLevel { BudgetLevel.of(cost: todayTotal, budget: AppSettings.shared.agentBudgetPerDay) }
 
@@ -88,6 +87,10 @@ final class AgentBudget {
     }
 
     private func refresh() {
+        guard AppSettings.shared.agentCostTracking else {
+            stop()
+            return
+        }
         guard !refreshing else {
             scheduleRefresh()
             return
@@ -98,39 +101,58 @@ final class AgentBudget {
         let dayStart = Calendar.current.startOfDay(for: Date())
         refreshing = true
         DispatchQueue.global(qos: .utility).async {
-            let costs = sessions.compactMap { entry -> (UUID, String, Double, Double)? in
+            let costs = sessions.compactMap { entry -> (UUID, String, Double)? in
                 guard let url = AgentTimeline.transcriptURL(sessionID: entry.sessionID),
                     let timeline = AgentTimelineStore.shared.load(url)
                 else { return nil }
-                return (entry.tabID, entry.sessionID, timeline.cost, Self.cost(of: timeline, since: dayStart))
+                return (entry.tabID, entry.sessionID, timeline.cost)
             }
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
                     let budget = AgentBudget.shared
-                    budget.refreshing = false
-                    budget.apply(costs, dayStart: dayStart)
+                    budget.applyTasks(costs, dayStart: dayStart)
+                    AgentCostLedger.shared.refresh {
+                        let budget = AgentBudget.shared
+                        budget.refreshing = false
+                        budget.applyDay(AgentCostLedger.shared.total(since: dayStart))
+                    }
                 }
             }
         }
     }
 
-    private func apply(_ costs: [(tabID: UUID, sessionID: String, total: Double, today: Double)], dayStart: Date) {
+    /// Tracking was turned off: forget every cost.
+    private func stop() {
+        AgentCostLedger.shared.unload()
+        guard !taskCosts.isEmpty || todayTotal > 0 else { return }
+        taskCosts = [:]
+        todayTotal = 0
+        crossings.reset()
+        NotificationCenter.default.post(name: .agentBudgetChanged, object: self)
+    }
+
+    private func applyTasks(_ costs: [(tabID: UUID, sessionID: String, total: Double)], dayStart: Date) {
         if dayStart != day {
             day = dayStart
-            todayBySession = [:]
+            todayTotal = 0
             crossings.reset()
         }
         let settings = AppSettings.shared
         taskCosts = [:]
         for entry in costs {
             taskCosts[entry.tabID] = entry.total
-            if entry.today > 0 { todayBySession[entry.sessionID] = entry.today }
             if crossings.update("task:" + entry.sessionID, cost: entry.total, budget: settings.agentBudgetPerTask),
                 let budget = settings.agentBudgetPerTask
             {
                 notifyTask(entry.tabID, cost: entry.total, budget: budget)
             }
         }
+        NotificationCenter.default.post(name: .agentBudgetChanged, object: self)
+    }
+
+    private func applyDay(_ total: Double) {
+        todayTotal = total
+        let settings = AppSettings.shared
         if crossings.update("day", cost: todayTotal, budget: settings.agentBudgetPerDay),
             let budget = settings.agentBudgetPerDay
         {
@@ -148,13 +170,6 @@ final class AgentBudget {
         ActivityNotifier.shared.notifyBudget(
             title: "\(name) passed its budget", body: "≈ \(Self.format(cost)) of \(Self.format(budget))",
             workspaceID: location?.workspace.id, paneID: location?.pane.id, tabIndex: location?.tabIndex ?? 0)
-    }
-
-    /// What `timeline` cost since `dayStart`: all of it when it started today,
-    /// else the turns that started today (subagent cost is not split by turn).
-    nonisolated static func cost(of timeline: AgentTimeline, since dayStart: Date) -> Double {
-        if let start = timeline.start, start >= dayStart { return timeline.cost }
-        return timeline.turns.filter { ($0.start ?? .distantPast) >= dayStart }.reduce(0) { $0 + $1.cost }
     }
 
     nonisolated static func format(_ cost: Double) -> String {

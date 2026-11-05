@@ -439,7 +439,7 @@ extension AgentTimeline {
 
         // MARK: Helpers
 
-        private static func usage(_ values: [String: Any]) -> Usage {
+        static func usage(_ values: [String: Any]) -> Usage {
             func int(_ value: Any?) -> Int { (value as? NSNumber)?.intValue ?? 0 }
             var usage = Usage(
                 input: int(values["input_tokens"]), output: int(values["output_tokens"]),
@@ -640,7 +640,7 @@ final class AgentTimelineStore: @unchecked Sendable {
     /// Feeds `path` from `offset` up to `size` to `consume` in chunks, so a
     /// first read of a large transcript never holds it in memory whole.
     /// Returns the offset read up to.
-    private static func read(_ path: String, from offset: UInt64, to size: UInt64, consume: (Data) -> Void) -> UInt64 {
+    static func read(_ path: String, from offset: UInt64, to size: UInt64, consume: (Data) -> Void) -> UInt64 {
         guard size > offset, let handle = FileHandle(forReadingAtPath: path) else { return offset }
         defer { try? handle.close() }
         var offset = offset

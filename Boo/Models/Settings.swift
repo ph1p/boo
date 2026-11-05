@@ -83,6 +83,7 @@ final class AppSettings {
         static let historyRetentionDays = "historyRetentionDays"
         static let historySearchShortcutEnabled = "historySearchShortcutEnabled"
         static let syncFolder = "syncFolder"
+        static let agentCostTracking = "agentCostTracking"
         static let agentBudgetPerTask = "agentBudgetPerTask"
         static let agentBudgetPerDay = "agentBudgetPerDay"
         static let portNotificationsEnabled = "portNotificationsEnabled"
@@ -423,6 +424,14 @@ final class AppSettings {
     }
 
     // MARK: - Agents
+
+    /// Read Claude Code transcripts for cost estimates (status, timeline, the
+    /// summary in Settings and budgets). Off by default: the first scan reads
+    /// every transcript of the last 30 days.
+    var agentCostTracking: Bool {
+        get { bool(K.agentCostTracking, default: false) }
+        set { set(newValue, forKey: K.agentCostTracking, topic: .agents) }
+    }
 
     /// Warn when one agent task's estimated cost passes this (USD); nil = off.
     var agentBudgetPerTask: Double? {
