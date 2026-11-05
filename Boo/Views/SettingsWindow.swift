@@ -6,8 +6,8 @@ import SwiftUI
 struct SettingsView: View {
     enum Tab: Hashable {
         case general
+        case terminal
         case theme
-        case appearance
         case statusBar
         case layout
         case profiles
@@ -23,6 +23,7 @@ struct SettingsView: View {
 
         /// Sidebar sections, in display order.
         enum Group: String, CaseIterable {
+            case general = "General"
             case terminal = "Terminal"
             case appearance = "Appearance"
             case apps = "Apps"
@@ -31,18 +32,20 @@ struct SettingsView: View {
 
         static var fixed: [Tab] {
             [
-                .general, .profiles, .rules, .shortcuts, .recordings, .permissions,
-                .theme, .appearance, .statusBar, .layout,
-                .editor, .browser, .notifications,
+                .general, .shortcuts, .notifications, .permissions,
+                .terminal, .profiles, .rules, .recordings,
+                .theme, .layout, .statusBar,
+                .editor, .browser,
                 .plugins
             ]
         }
 
         var group: Group {
             switch self {
-            case .general, .profiles, .rules, .shortcuts, .recordings, .permissions: return .terminal
-            case .theme, .appearance, .statusBar, .layout: return .appearance
-            case .editor, .browser, .notifications: return .apps
+            case .general, .shortcuts, .notifications, .permissions: return .general
+            case .terminal, .profiles, .rules, .recordings: return .terminal
+            case .theme, .statusBar, .layout: return .appearance
+            case .editor, .browser: return .apps
             case .plugins, .pluginSettings: return .plugins
             }
         }
@@ -52,11 +55,14 @@ struct SettingsView: View {
         var keywords: String {
             switch self {
             case .general:
-                return "folder startup sync history scrollback restore budget agent debug logging ignore"
+                return "folder startup workspace first tab main page sync file tree editor debug logging"
             case .theme: return "colors dark light system mode custom import iterm2 ghostty palette"
-            case .appearance: return "font size cursor shader sidebar font terminal font"
+            case .terminal:
+                return "font size cursor shader directory cwd new tab scrollback restore tmux links "
+                    + "external editor click history command ignore quick terminal hotkey"
             case .statusBar: return "segments git clock battery status"
-            case .layout: return "sidebar workspace bar tab groups pane controls tab overflow vertical tabs"
+            case .layout:
+                return "sidebar font workspace bar tab groups pane controls tab overflow vertical tabs"
             case .profiles: return "profile shell command environment ssh directory"
             case .rules: return "regex trigger highlight notify confirm confirmation automation"
             case .recordings: return "record asciinema cast video export markers idle"
@@ -65,11 +71,12 @@ struct SettingsView: View {
             case .editor:
                 return "code font tab size spaces line numbers minimap word wrap format external autosave "
                     + "whitespace cursor ligatures sticky scroll status encoding reload"
-            case .browser: return "home page history website data links close"
-            case .notifications: return "alerts command duration ports bursts"
+            case .browser: return "home page history website data close"
+            case .notifications: return "alerts command duration ports bursts agent"
             case .plugins: return "extensions installed enable disable"
-            case .shortcuts: return "keyboard keys bindings rebind hotkey quick terminal"
-            case .pluginSettings(let id): return id
+            case .shortcuts: return "keyboard keys bindings rebind"
+            case .pluginSettings(let id):
+                return id == "agents" ? "agents budget failed command jump hotkey tasks worktree" : id
             }
         }
 
@@ -87,7 +94,7 @@ struct SettingsView: View {
             switch self {
             case .general: return "General"
             case .theme: return "Theme"
-            case .appearance: return "Appearance"
+            case .terminal: return "Terminal"
             case .statusBar: return "Status Bar"
             case .layout: return "Layout"
             case .profiles: return "Profiles"
@@ -108,7 +115,7 @@ struct SettingsView: View {
             switch self {
             case .general: return "gearshape"
             case .theme: return "paintpalette"
-            case .appearance: return "textformat.size"
+            case .terminal: return "terminal"
             case .statusBar: return "rectangle.bottomthird.inset.filled"
             case .layout: return "square.grid.2x2"
             case .profiles: return "person.crop.rectangle.stack"
@@ -137,14 +144,9 @@ struct SettingsView: View {
         PluginSettingsView.registeredManifests
             .filter { manifest in
                 let isEnabled = !AppSettings.shared.disabledPluginIDs.contains(manifest.id)
-                let hasSettings: Bool = {
-                    guard let settings = manifest.settings, !settings.isEmpty else { return false }
-                    if manifest.capabilities?.statusBarSegment == true {
-                        return settings.contains { $0.type != .bool }
-                    }
-                    return true
-                }()
-                return isEnabled && hasSettings
+                // The agents page also holds the jump hotkey, failed-command button
+                // and budgets, which work without the plugin.
+                return (isEnabled || manifest.id == "agents") && !manifest.visibleSettings.isEmpty
             }
             .map { .pluginSettings(pluginID: $0.id) }
     }
@@ -264,7 +266,7 @@ struct SettingsView: View {
         switch selectedTab {
         case .general: GeneralSettingsView()
         case .theme: ThemeSettingsView()
-        case .appearance: AppearanceSettingsView()
+        case .terminal: TerminalSettingsView()
         case .statusBar: StatusBarSettingsView()
         case .layout: LayoutSettingsView()
         case .profiles: ProfilesSettingsView()

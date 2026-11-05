@@ -14,7 +14,7 @@ enum LayoutSettingsBindings {
 
 struct LayoutSettingsView: View {
     @Environment(\.tokens) private var tokens
-    @ObservedObject private var observer = SettingsObserver(topics: [.theme, .layout])
+    @ObservedObject private var observer = SettingsObserver(topics: [.theme, .layout, .sidebarFont])
 
     var body: some View {
         let _ = observer.revision
@@ -50,6 +50,8 @@ struct LayoutSettingsView: View {
                     isOn: LayoutSettingsBindings.binding(\.sidebarPerWorkspaceState)
                 )
             }
+
+            SidebarFontSection()
 
             Section(title: "Workspace Bar") {
                 SettingStack(label: "Position", help: "Position of the workspace switcher bar.") {
@@ -103,5 +105,51 @@ struct LayoutSettingsView: View {
             }
         }
         .foregroundStyle(t.text)
+    }
+}
+
+// MARK: - Sidebar Font
+
+private struct SidebarFontSection: View {
+    @Environment(\.tokens) private var tokens
+    @State private var fontSize = Double(AppSettings.shared.sidebarFontSize)
+    @State private var fontName =
+        AppSettings.shared.sidebarFontName.isEmpty ? "System Default" : AppSettings.shared.sidebarFontName
+
+    private let systemFonts = AppSettings.availableSystemFonts
+
+    var body: some View {
+        let t = tokens
+        Section(title: "Sidebar Font") {
+            SettingRow(label: "Family") {
+                FontChooser(selectedFont: $fontName, fonts: systemFonts)
+                    .onChange(of: fontName) { _, v in
+                        AppSettings.shared.sidebarFontName = v == "System Default" ? "" : v
+                    }
+            }
+            SettingRow(
+                label: "Size",
+                help: "Applied to file trees and content only — not to section headers."
+            ) {
+                FontSizePicker(value: $fontSize, range: 10...20)
+                    .onChange(of: fontSize) { _, v in AppSettings.shared.sidebarFontSize = CGFloat(v) }
+            }
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Section Header")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(t.muted)
+                let previewFont: Font = {
+                    let name = fontName == "System Default" ? "" : fontName
+                    if name.isEmpty { return .system(size: CGFloat(fontSize)) }
+                    return .custom(name, size: CGFloat(fontSize))
+                }()
+                Text("  Documents").font(previewFont).foregroundStyle(t.text)
+                Text("  Projects").font(previewFont).foregroundStyle(t.text)
+                Text("  README.md").font(previewFont).foregroundStyle(t.muted)
+            }
+            .padding(8)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: 6).fill(t.chromeBg))
+        }
     }
 }

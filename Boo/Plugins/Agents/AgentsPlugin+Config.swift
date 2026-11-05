@@ -97,7 +97,6 @@ extension AgentsPlugin {
 
         scanCodexConfig(fm: fm, root: projectRoot, home: home, into: &config)
         scanOpenCodeConfig(fm: fm, root: projectRoot, home: home, into: &config)
-        populateAgentSetup(projectRoot: projectRoot, config: &config)
 
         return config
     }
@@ -166,57 +165,6 @@ extension AgentsPlugin {
                 }
             }
         }
-    }
-
-    nonisolated private static func populateAgentSetup(projectRoot: String, config: inout AgentConfig) {
-        let claudeConfigCount = config.configFiles.filter { $0.provider == .claudeCode }.count
-        let codexConfigCount = config.configFiles.filter { $0.provider == .codex }.count
-        let openCodeConfigCount = config.configFiles.filter { $0.provider == .openCode }.count
-
-        config.toolSummaries = [
-            AgentToolSummary(
-                kind: .claudeCode,
-                status: claudeConfigCount > 0 ? .detected : .missing,
-                configCount: claudeConfigCount,
-                detail: claudeConfigCount > 0 ? "Claude project or user config found" : "No Claude Code config found"),
-            AgentToolSummary(
-                kind: .codex,
-                status: codexConfigCount > 0 ? .detected : .missing,
-                configCount: codexConfigCount,
-                detail: codexConfigCount > 0 ? "Codex config visible" : "No Codex config found"),
-            AgentToolSummary(
-                kind: .openCode,
-                status: openCodeConfigCount > 0 ? .detected : .missing,
-                configCount: openCodeConfigCount,
-                detail: openCodeConfigCount > 0 ? "OpenCode config/plugins visible" : "No OpenCode config found")
-        ]
-
-        config.setupRecommendations = [
-            AgentSetupRecommendation(
-                kind: .claudeCode,
-                status: claudeConfigCount > 0 ? .detected : .missing,
-                title: "Claude Code",
-                detail: claudeConfigCount > 0
-                    ? "Boo detects Claude by process."
-                    : "No Claude Code config found.",
-                primaryAction: claudeConfigCount > 0 ? "Open config" : nil),
-            AgentSetupRecommendation(
-                kind: .codex,
-                status: codexConfigCount > 0 ? .detected : .missing,
-                title: "Codex",
-                detail: codexConfigCount > 0
-                    ? "Boo detects Codex by process."
-                    : "No Codex config found.",
-                primaryAction: codexConfigCount > 0 ? "Open config" : nil),
-            AgentSetupRecommendation(
-                kind: .openCode,
-                status: openCodeConfigCount > 0 ? .detected : .missing,
-                title: "OpenCode",
-                detail: openCodeConfigCount > 0
-                    ? "Boo detects OpenCode by process."
-                    : "No OpenCode config found.",
-                primaryAction: openCodeConfigCount > 0 ? "Open config" : nil)
-        ]
     }
 
 }

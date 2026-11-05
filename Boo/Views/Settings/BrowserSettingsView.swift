@@ -6,7 +6,6 @@ struct BrowserSettingsView: View {
     @State private var persistentWebsiteDataEnabled = AppSettings.shared.browserPersistentWebsiteDataEnabled
     @State private var historyEnabled = AppSettings.shared.browserHistoryEnabled
     @State private var historyLimit = AppSettings.shared.browserHistoryLimit
-    @State private var linkOpenMode = AppSettings.shared.linkOpenMode
     @State private var confirmClose = AppSettings.shared.browserConfirmClose
     @State private var showClearConfirm = false
     @State private var historyEntries: [BrowserHistoryEntry] = []
@@ -57,11 +56,6 @@ struct BrowserSettingsView: View {
                 )
                 .onChange(of: confirmClose) { _, value in
                     AppSettings.shared.browserConfirmClose = value
-                }
-
-                SettingRow(label: "Terminal links") {
-                    ThemedMenuPicker(selection: $linkOpenMode) { $0.displayName }
-                        .onChange(of: linkOpenMode) { _, v in AppSettings.shared.linkOpenMode = v }
                 }
             }
 

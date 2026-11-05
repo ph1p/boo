@@ -15,7 +15,7 @@ import XCTest
         let pages: [(String, AnyView)] = [
             ("general", AnyView(GeneralSettingsView())),
             ("theme", AnyView(ThemeSettingsView())),
-            ("appearance", AnyView(AppearanceSettingsView())),
+            ("terminal", AnyView(TerminalSettingsView())),
             ("statusbar", AnyView(StatusBarSettingsView())),
             ("layout", AnyView(LayoutSettingsView())),
             ("profiles", AnyView(ProfilesSettingsView())),

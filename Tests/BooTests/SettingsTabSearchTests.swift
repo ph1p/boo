@@ -12,7 +12,8 @@ final class SettingsTabSearchTests: XCTestCase {
 
     func testMatchesLabelsAndKeywords() {
         XCTAssertEqual(Tab.matching("shortcuts", in: Tab.fixed), [.shortcuts])
-        XCTAssertTrue(Tab.matching("font", in: Tab.fixed).contains(.appearance))
+        XCTAssertTrue(Tab.matching("font", in: Tab.fixed).contains(.terminal))
+        XCTAssertTrue(Tab.matching("tmux", in: Tab.fixed).contains(.terminal))
         XCTAssertTrue(Tab.matching("ITERM2", in: Tab.fixed).contains(.theme))
     }
 

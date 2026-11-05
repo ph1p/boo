@@ -8,11 +8,8 @@ struct GeneralSettingsView: View {
     @State private var defaultFolder = AppSettings.shared.defaultFolder
     @State private var defaultMainPage = AppSettings.shared.defaultMainPage
     @State private var defaultTabType = AppSettings.shared.defaultTabType
-    @State private var newTabCwdMode = AppSettings.shared.newTabCwdMode
     @State private var debugLogging = AppSettings.shared.debugLogging
     @State private var fileEditorCommand = AppSettings.shared.fileEditorCommand
-    @State private var restoreScrollback = AppSettings.shared.restoreScrollback
-    @State private var tmuxIntegration = AppSettings.shared.tmuxIntegration
     @ObservedObject private var observer = SettingsObserver(topics: [.theme])
 
     var body: some View {
@@ -20,7 +17,7 @@ struct GeneralSettingsView: View {
         let t = tokens
 
         SettingsPage(title: "General") {
-            Section(title: "Folders") {
+            Section(title: "New Workspaces") {
                 PathRow(label: "Default folder", path: defaultFolder, help: "Where new workspaces open.") {
                     Button("Choose…") {
                         let panel = NSOpenPanel()
@@ -42,17 +39,7 @@ struct GeneralSettingsView: View {
                     }
                     .disabled(defaultFolder == FileManager.default.homeDirectoryForCurrentUser.path)
                 }
-                SettingStack(
-                    label: "New tabs and panes open in",
-                    help: "The active tab's current directory, or the workspace default folder."
-                ) {
-                    ThemedSegmentedPicker(selection: $newTabCwdMode) { $0.label }
-                        .onChange(of: newTabCwdMode) { _, v in AppSettings.shared.newTabCwdMode = v }
-                }
-            }
-
-            Section(title: "Startup") {
-                SettingRow(label: "Initial tab") {
+                SettingRow(label: "First tab") {
                     ThemedMenuPicker(
                         selection: $defaultTabType,
                         options: [.terminal, .browser, .editor, .imageViewer, .markdownPreview]
@@ -80,31 +67,12 @@ struct GeneralSettingsView: View {
                         AppSettings.shared.defaultMainPage = v.trimmingCharacters(in: .whitespaces)
                     }
                 }
-
-                ToggleRow(
-                    label: "Restore terminal scrollback",
-                    help:
-                        "On quit, save each terminal's output to ~/.boo/scrollback (owner-only) and show it again when the session is restored.",
-                    isOn: $restoreScrollback
-                )
-                .onChange(of: restoreScrollback) { _, v in
-                    AppSettings.shared.restoreScrollback = v
-                    if !v { ScrollbackStore.clear() }
-                }
-
-                ToggleRow(
-                    label: "Native tmux windows",
-                    help:
-                        "Show `tmux -CC` sessions as workspaces and panes. Takes effect in terminals opened afterwards.",
-                    isOn: $tmuxIntegration
-                )
-                .onChange(of: tmuxIntegration) { _, v in AppSettings.shared.tmuxIntegration = v }
             }
 
-            Section(title: "File Editor") {
+            Section(title: "File Tree") {
                 SettingRow(
-                    label: "Command",
-                    help: "Command run when clicking a file in the explorer. Leave empty to use $EDITOR."
+                    label: "Edit files with",
+                    help: "Terminal editor run when a file in the file tree opens in a terminal. Empty uses $EDITOR."
                 ) {
                     SettingTextField(
                         placeholder: "vim, nvim, nano… (empty = $EDITOR)",
@@ -122,11 +90,7 @@ struct GeneralSettingsView: View {
                 }
             }
 
-            CommandHistorySection()
-
             SyncFolderSection()
-
-            AgentsSection()
 
             Section(title: "Advanced") {
                 ToggleRow(
@@ -141,52 +105,6 @@ struct GeneralSettingsView: View {
             }
         }
         .foregroundStyle(t.text)
-    }
-}
-
-// MARK: - Agents
-
-private struct AgentsSection: View {
-    @State private var errorButton = AppSettings.shared.errorAgentButtonEnabled
-    @State private var perTask = Self.text(AppSettings.shared.agentBudgetPerTask)
-    @State private var perDay = Self.text(AppSettings.shared.agentBudgetPerDay)
-
-    var body: some View {
-        Section(
-            title: "Agents",
-            footer:
-                "Budgets only warn: the agent status shows the cost in amber at 80 % and red with a notification once a budget is passed."
-        ) {
-            ToggleRow(
-                label: "Send failed commands to agent",
-                help: "Show a button on failed command blocks that sends the command and its output to an agent.",
-                isOn: Binding(
-                    get: { errorButton },
-                    set: {
-                        errorButton = $0
-                        AppSettings.shared.errorAgentButtonEnabled = $0
-                    }
-                )
-            )
-            SettingRow(label: "Budget per task", help: "USD, estimated from the transcript. Empty = off.") {
-                SettingTextField(placeholder: "Off", text: $perTask, monospaced: true, width: 90)
-                    .onChange(of: perTask) { _, value in AppSettings.shared.agentBudgetPerTask = Self.amount(value) }
-            }
-            SettingRow(label: "Budget per day", help: "USD across all agents today. Empty = off.") {
-                SettingTextField(placeholder: "Off", text: $perDay, monospaced: true, width: 90)
-                    .onChange(of: perDay) { _, value in AppSettings.shared.agentBudgetPerDay = Self.amount(value) }
-            }
-        }
-    }
-
-    private static func text(_ value: Double?) -> String {
-        value.map { $0 == $0.rounded() ? String(Int($0)) : String($0) } ?? ""
-    }
-
-    static func amount(_ text: String) -> Double? {
-        let cleaned = text.trimmingCharacters(in: .whitespaces)
-            .replacingOccurrences(of: "$", with: "").replacingOccurrences(of: ",", with: ".")
-        return Double(cleaned).flatMap { $0 > 0 ? $0 : nil }
     }
 }
 
@@ -242,92 +160,6 @@ private struct SyncFolderSection: View {
             status = "Last synced \(last.formatted(date: .omitted, time: .shortened))"
         } else {
             status = ""
-        }
-    }
-}
-
-// MARK: - Command History
-
-/// Settings for the shell command history behind ⌃R and the palette's `!`.
-private struct CommandHistorySection: View {
-    @Environment(\.tokens) private var tokens
-    @State private var enabled = AppSettings.shared.historyEnabled
-    @State private var shortcut = AppSettings.shared.historySearchShortcutEnabled
-    @State private var ignorePattern = AppSettings.shared.historyIgnorePattern
-    @State private var retentionDays = AppSettings.shared.historyRetentionDays
-    @State private var entryCount: Int?
-    @State private var confirmClear = false
-
-    private var patternError: String? {
-        guard !ignorePattern.isEmpty, (try? NSRegularExpression(pattern: ignorePattern)) == nil else { return nil }
-        return "Invalid regex; the default pattern is used instead."
-    }
-
-    var body: some View {
-        let t = tokens
-        Section(title: "Command History") {
-            ToggleRow(
-                label: "Record commands",
-                help: "Saves finished commands with their folder, exit code and duration to ~/.boo/history.db.",
-                isOn: $enabled
-            )
-            .onChange(of: enabled) { _, v in AppSettings.shared.historyEnabled = v }
-
-            ToggleRow(
-                label: "⌃R opens history search",
-                help: "At a shell prompt with Boo's shell integration. Off leaves ⌃R to the shell.",
-                isOn: $shortcut
-            )
-            .onChange(of: shortcut) { _, v in AppSettings.shared.historySearchShortcutEnabled = v }
-
-            SettingRow(
-                label: "Ignore pattern",
-                help: "Commands matching this regex are never saved. Empty saves everything."
-            ) {
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack(spacing: 6) {
-                        SettingTextField(
-                            placeholder: "regex", text: $ignorePattern, monospaced: true)
-                        Button("Default") {
-                            ignorePattern = AppSettings.defaultHistoryIgnorePattern
-                        }
-                        .buttonStyle(.themed)
-                        .disabled(ignorePattern == AppSettings.defaultHistoryIgnorePattern)
-                    }
-                    if let patternError {
-                        Text(patternError).font(.system(size: 11)).foregroundStyle(t.error)
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .trailing)
-                .onChange(of: ignorePattern) { _, v in AppSettings.shared.historyIgnorePattern = v }
-            }
-
-            SettingRow(label: "Keep for", help: "Older commands are removed at launch. 0 keeps them forever.") {
-                ThemedStepper(value: $retentionDays, in: 0...3650, step: 30) {
-                    $0 == 0 ? "Forever" : "\($0) days"
-                }
-                .onChange(of: retentionDays) { _, v in AppSettings.shared.historyRetentionDays = v }
-            }
-
-            HStack {
-                Text(entryCount.map { "\($0) commands saved" } ?? " ")
-                    .font(.system(size: 11))
-                    .foregroundStyle(t.muted)
-                Spacer()
-                Button("Clear History…") { confirmClear = true }
-                    .buttonStyle(.themed)
-                    .disabled(entryCount == 0)
-            }
-        }
-        .task { entryCount = await HistoryStore.shared.count() }
-        .confirmationDialog("Clear all command history?", isPresented: $confirmClear) {
-            Button("Clear History", role: .destructive) {
-                HistoryStore.shared.clear {
-                    Task { @MainActor in entryCount = 0 }
-                }
-            }
-        } message: {
-            Text("This can't be undone.")
         }
     }
 }

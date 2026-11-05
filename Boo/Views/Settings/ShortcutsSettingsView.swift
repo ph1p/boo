@@ -36,9 +36,6 @@ struct ShortcutsSettingsView: View {
         let overrides = AppSettings.shared.shortcutOverrides
 
         SettingsPage(title: "Keyboard Shortcuts") {
-            QuickTerminalSettingsSection()
-            AgentJumpSettingsSection()
-
             SettingTextField(
                 placeholder: "Filter shortcuts",
                 text: $searchText,
@@ -182,41 +179,6 @@ struct ShortcutsSettingsView: View {
         AppSettings.shared.shortcutOverrides = overrides
         // The menu is rebuilt by the settings broadcast; read it after that.
         DispatchQueue.main.async { refresh &+= 1 }
-    }
-}
-
-// MARK: - Agents
-
-/// The global "next agent that needs you" hotkey.
-struct AgentJumpSettingsSection: View {
-    @ObservedObject private var observer = SettingsObserver()
-    @State private var hotkey = AppSettings.shared.agentJumpHotkey
-
-    var body: some View {
-        let _ = observer.revision
-        let settings = AppSettings.shared
-
-        Section(title: "Agents") {
-            SettingRow(
-                label: "Jump to waiting agent",
-                help: "From any app, brings Boo forward on the next agent that needs you. "
-                    + "Like ctrl+opt+j; empty is off. Inside Boo, ⇧⌘J does the same."
-            ) {
-                HStack(spacing: 8) {
-                    SettingTextField(
-                        placeholder: "off", text: $hotkey, monospaced: true, width: 160,
-                        onCommit: { settings.agentJumpHotkey = hotkey.trimmingCharacters(in: .whitespaces) })
-                    if let spec = HotKeySpec.parse(settings.agentJumpHotkey) {
-                        ShortcutPill(text: spec.display)
-                    }
-                }
-            }
-            if let problem = AgentJumpHotKey.shared.problem {
-                Text(problem)
-                    .font(.system(size: 11))
-                    .foregroundStyle(Color(nsColor: settings.theme.error))
-            }
-        }
     }
 }
 

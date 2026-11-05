@@ -93,6 +93,8 @@ struct PluginDetailSettingsView: View {
         SettingsPage(title: manifest.name) {
             if manifest.id == "agents" {
                 AgentCenterSettingsView()
+                AgentQuickAccessSettingsSection()
+                AgentBudgetSettingsSection()
                 // Its manifest settings below the custom page (not the page switch itself).
                 ForEach(groupedSettings.filter { $0.title == "Tasks" || $0.title == "Agents List" }, id: \.title) {
                     group in

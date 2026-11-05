@@ -10,9 +10,6 @@ struct EditorSettingsView: View {
     @State private var minimap = AppSettings.shared.editorMinimap
     @State private var formatOnSave = AppSettings.shared.editorFormatOnSave
     @State private var rulerColumn = AppSettings.shared.editorRulerColumn
-    @State private var linkTarget = AppSettings.shared.defaultLinkTarget
-    @State private var editorPreset = AppSettings.shared.externalEditorPreset
-    @State private var editorTemplate = AppSettings.shared.externalEditorTemplate
     @State private var detectIndentation = AppSettings.shared.editorDetectIndentation
     @State private var renderWhitespace = AppSettings.shared.editorRenderWhitespace
     @State private var bracketPairColors = AppSettings.shared.editorBracketPairColors
@@ -26,7 +23,7 @@ struct EditorSettingsView: View {
     @State private var insertFinalNewline = AppSettings.shared.editorInsertFinalNewline
     @State private var reloadOnExternalChange = AppSettings.shared.editorReloadOnExternalChange
 
-    @ObservedObject private var observer = SettingsObserver(topics: [.editor, .links])
+    @ObservedObject private var observer = SettingsObserver(topics: [.editor])
 
     private let monoFonts = AppSettings.availableMonospaceFonts
 
@@ -113,33 +110,6 @@ struct EditorSettingsView: View {
                 }
                 ToggleRow(label: "Blink", isOn: $cursorBlinking)
                     .onChange(of: cursorBlinking) { _, v in AppSettings.shared.editorCursorBlinking = v }
-            }
-
-            Section(title: "Terminal Links") {
-                SettingRow(
-                    label: "⌘-click opens",
-                    help: "file:line links in terminal output. ⌘⌥-click opens the other one. "
-                        + "Remote panes always use the built-in editor."
-                ) {
-                    ThemedMenuPicker(selection: $linkTarget) { $0.displayName }
-                        .onChange(of: linkTarget) { _, v in AppSettings.shared.defaultLinkTarget = v }
-                }
-                SettingRow(label: "External editor") {
-                    ThemedMenuPicker(selection: $editorPreset) { $0.displayName }
-                        .onChange(of: editorPreset) { _, v in AppSettings.shared.externalEditorPreset = v }
-                }
-                if editorPreset == .custom {
-                    SettingRow(
-                        label: "Command",
-                        help: "A URL or shell command. {path}, {line} and {col} are filled in; "
-                            + "paths are quoted for you."
-                    ) {
-                        SettingTextField(
-                            placeholder: "nvim +{line} {path}", text: $editorTemplate, monospaced: true
-                        )
-                        .onChange(of: editorTemplate) { _, v in AppSettings.shared.externalEditorTemplate = v }
-                    }
-                }
             }
 
             Section(

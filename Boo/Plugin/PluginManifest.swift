@@ -87,14 +87,14 @@ struct PluginManifest: Codable {
 }
 
 extension PluginManifest {
-    /// Settings to show on the plugin's settings page. Bool settings are excluded for
-    /// statusBarSegment plugins because they appear in Status Bar settings instead.
+    /// Settings whose only control is a status bar segment's eye toggle
+    /// (`AppSettings.isStatusBarSegmentHidden`), so the plugin page leaves them out.
+    static let statusBarOwnedSettings: Set<String> = ["git-panel.showBranch"]
+
+    /// Settings to show on the plugin's settings page.
     var visibleSettings: [SettingManifest] {
         guard let settings else { return [] }
-        if capabilities?.statusBarSegment == true {
-            return settings.filter { $0.type != .bool }
-        }
-        return settings
+        return settings.filter { !Self.statusBarOwnedSettings.contains("\(id).\($0.key)") }
     }
 }
 
