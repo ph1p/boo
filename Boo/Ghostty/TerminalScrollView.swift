@@ -18,6 +18,9 @@ class TerminalScrollView: NSView {
     private let agentButton = FailedBlockButton()
     /// Prompt index of the block `agentButton` belongs to.
     private var agentButtonBlock: Int?
+    /// Test failures parsed from a block's output; reading the output is
+    /// slow, so the last parse is kept per block and latest command.
+    private var failureCache: (key: String, report: TestFailureReport?)?
     private var currentScrollbar: GhosttyView.GhosttyScrollbar?
 
     /// True while the user is actively dragging the scrollbar knob.
@@ -256,6 +259,7 @@ class TerminalScrollView: NSView {
         else { return hideAgentButton() }
         guard block != agentButtonBlock || agentButton.isHidden else { return }
         agentButtonBlock = block
+        agentButton.failures = testFailures(inBlock: block)
         let size = agentButton.fittingSize
         let top = GhosttyView.gridPadding + CGFloat(max(0, mark.row)) * cellHeight
         let scroller = NSScroller.scrollerWidth(for: .regular, scrollerStyle: .overlay)
@@ -268,6 +272,15 @@ class TerminalScrollView: NSView {
         agentButton.isHidden = false
     }
 
+    private func testFailures(inBlock block: Int) -> TestFailureReport? {
+        guard let command = ghosttyView.blockCommand(at: block) else { return nil }
+        let key = "\(block)\u{0}\(ghosttyView.commandHistory.last?.startedAt.timeIntervalSince1970 ?? 0)\u{0}\(command)"
+        if let failureCache, failureCache.key == key { return failureCache.report }
+        let report = ghosttyView.readCommand(index: block, part: .output).flatMap(TestFailureParser.parse)
+        failureCache = (key, report)
+        return report
+    }
+
     private func hideAgentButton() {
         agentButton.isHidden = true
         agentButtonBlock = nil
@@ -275,7 +288,8 @@ class TerminalScrollView: NSView {
 
     @objc private func agentButtonClicked(_ sender: NSButton) {
         guard let block = agentButtonBlock,
-            let menu = AgentHandoffMenuTarget.shared.failedBlockMenu(for: ghosttyView, block: block)
+            let menu = AgentHandoffMenuTarget.shared.failedBlockMenu(
+                for: ghosttyView, block: block, failures: agentButton.failures)
         else { return NSSound.beep() }
         menu.popUp(positioning: nil, at: NSPoint(x: 0, y: sender.bounds.height + 4), in: sender)
     }
@@ -283,6 +297,17 @@ class TerminalScrollView: NSView {
 
 /// Small themed pill: "✦ Ask agent".
 private final class FailedBlockButton: NSButton {
+    /// Parsed test failures of the block: the pill then reads "3 tests failed".
+    var failures: TestFailureReport? {
+        didSet {
+            toolTip =
+                failures == nil
+                ? "Send this failed command and its output to an agent"
+                : "Open a failed test, or send only the failures to an agent"
+            applyTheme()
+        }
+    }
+
     init() {
         super.init(frame: .zero)
         isBordered = false
@@ -320,7 +345,7 @@ private final class FailedBlockButton: NSButton {
         layer?.borderColor = theme.error.withAlphaComponent(0.6).cgColor
         contentTintColor = theme.error
         attributedTitle = NSAttributedString(
-            string: "Ask agent",
+            string: failures?.summary ?? "Ask agent",
             attributes: [.foregroundColor: theme.chromeText, .font: NSFont.systemFont(ofSize: 11, weight: .medium)])
     }
 }

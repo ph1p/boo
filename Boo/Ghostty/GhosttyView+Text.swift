@@ -362,6 +362,14 @@ extension GhosttyView {
     /// Opens the link under `point`; false when there is none.
     func openLink(at point: NSPoint, otherTarget: Bool) -> Bool {
         guard let link = link(at: point) else { return false }
+        openLink(link.kind, otherTarget: otherTarget)
+        return true
+    }
+
+    /// Opens a link from this terminal: relative paths resolve against its
+    /// folder, remote files open over its session, and its profile picks the
+    /// target.
+    func openLink(_ link: TerminalLink.Kind, otherTarget: Bool = false) {
         let location = tabID.flatMap { AgentInbox.locateInWindows($0) }
         let tab = location.map { $0.pane.tabs[$0.tabIndex] }
         let cwd = tab.map { $0.remoteSession != nil ? ($0.remoteWorkingDirectory ?? "") : $0.workingDirectory }
@@ -370,8 +378,7 @@ extension GhosttyView {
             controller: location?.controller ?? window?.windowController as? MainWindowController)
         let profile = ProfileStore.shared.profile(named: tab?.state.profile)
         let target = profile?.linkTarget ?? AppSettings.shared.defaultLinkTarget
-        LinkOpener.open(link.kind, from: origin, target: otherTarget ? target.other : target)
-        return true
+        LinkOpener.open(link, from: origin, target: otherTarget ? target.other : target)
     }
 
     /// The command typed at a prompt, or nil for an empty prompt.

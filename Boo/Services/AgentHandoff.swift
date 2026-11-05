@@ -82,6 +82,24 @@ enum AgentHandoff {
         "This command failed. Find out why and fix it.\n\n" + composed
     }
 
+    /// Only the failed tests of a test run: name, location and message each,
+    /// instead of the whole log.
+    static func compose(failures report: TestFailureReport, command: String, exitCode: Int32?, cwd: String?) -> String {
+        let firstLine = command.components(separatedBy: "\n").first ?? command
+        let status = exitCode.map { $0 == 0 ? "" : " (exit code \($0))" } ?? ""
+        let place = cwd.map { " in \(($0 as NSString).abbreviatingWithTildeInPath)" } ?? ""
+        let list = report.failures.map { failure in
+            var entry = "- \(failure.name)"
+            if let location = failure.location { entry += " at \(location)" }
+            if !failure.message.isEmpty {
+                entry += "\n" + failure.message.components(separatedBy: "\n").map { "  " + $0 }.joined(separator: "\n")
+            }
+            return entry
+        }.joined(separator: "\n")
+        let body = list.count > maxCharacters ? String(list.prefix(maxCharacters)) : list
+        return "\(report.summary) (\(report.framework)) in `\(firstLine)`\(status)\(place):\n\(fenced(body))"
+    }
+
     // MARK: - Composing
 
     /// The block pasted into the agent: a one-line header and the text fenced.
@@ -243,29 +261,104 @@ enum AgentHandoff {
     }
 
     /// The menu of a failed block's hover button: each agent, then a new one.
-    func failedBlockMenu(for view: GhosttyView, block: Int) -> NSMenu? {
+    /// With parsed test failures the menu lists them (click opens the
+    /// location) and sends only the failures; the full output moves into a
+    /// submenu.
+    func failedBlockMenu(for view: GhosttyView, block: Int, failures: TestFailureReport? = nil) -> NSMenu? {
         guard let tabID = view.tabID, let command = view.blockCommand(at: block) else { return nil }
         let menu = NSMenu()
-        let header = NSMenuItem(title: "Send “\(Self.short(command))” to", action: nil, keyEquivalent: "")
-        header.isEnabled = false
-        menu.addItem(header)
-        let text = blockText(view, block: block, command: command)
-        for target in AgentHandoff.targets(excluding: tabID) {
-            menu.addItem(item(AgentHandoff.label(for: target), text, target.tabID))
+        let output = blockText(view, block: block, command: command)
+        guard let failures else {
+            addSendItems(to: menu, title: "Send “\(Self.short(command))” to", text: output, tabID: tabID)
+            if let start = startAgentItem(for: view, block: block, text: output) { menu.addItem(start) }
+            return menu
         }
-        if menu.items.count > 1 { menu.addItem(.separator()) }
-        if let start = startAgentItem(for: view, block: block) { menu.addItem(start) }
+
+        menu.addItem(Self.header("\(failures.summary) · \(failures.framework)"))
+        for failure in failures.failures.prefix(Self.maxFailureItems) {
+            menu.addItem(failureItem(failure, view: view))
+        }
+        if failures.failures.count > Self.maxFailureItems {
+            menu.addItem(Self.header("\(failures.failures.count - Self.maxFailureItems) more"))
+        }
+        menu.addItem(.separator())
+
+        let cwd = AgentHandoff.workingDirectory(ofTab: tabID)
+        let exitCode = view.exitCode(ofBlock: block, command: command)
+        let text: @MainActor () -> String? = {
+            AgentHandoff.compose(failures: failures, command: command, exitCode: exitCode, cwd: cwd)
+        }
+        addSendItems(to: menu, title: "Send failures to", text: text, tabID: tabID)
+        if let start = startAgentItem(for: view, block: block, text: text) { menu.addItem(start) }
+
+        let full = NSMenu()
+        addSendItems(to: full, title: "Send full output to", text: output, tabID: tabID)
+        if let start = startAgentItem(for: view, block: block, text: output) { full.addItem(start) }
+        let fullItem = NSMenuItem(title: "Full Output", action: nil, keyEquivalent: "")
+        fullItem.submenu = full
+        menu.addItem(.separator())
+        menu.addItem(fullItem)
         return menu
     }
 
+    static let maxFailureItems = 20
+
+    private func addSendItems(to menu: NSMenu, title: String, text: @escaping @MainActor () -> String?, tabID: UUID) {
+        menu.addItem(Self.header(title))
+        let before = menu.items.count
+        for target in AgentHandoff.targets(excluding: tabID) {
+            menu.addItem(item(AgentHandoff.label(for: target), text, target.tabID))
+        }
+        if menu.items.count > before { menu.addItem(.separator()) }
+    }
+
+    private static func header(_ title: String) -> NSMenuItem {
+        let header = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+        header.isEnabled = false
+        return header
+    }
+
+    final class FailurePayload: NSObject {
+        let failure: TestFailure
+        weak var view: GhosttyView?
+        init(failure: TestFailure, view: GhosttyView) {
+            self.failure = failure
+            self.view = view
+        }
+    }
+
+    private func failureItem(_ failure: TestFailure, view: GhosttyView) -> NSMenuItem {
+        let place = failure.file.map { file in
+            let name = (file as NSString).lastPathComponent
+            return " — " + (failure.line.map { "\(name):\($0)" } ?? name)
+        }
+        let item = NSMenuItem(
+            title: failure.name + (place ?? ""), action: failure.file == nil ? nil : #selector(openFailure(_:)),
+            keyEquivalent: "")
+        item.target = self
+        item.image = NSImage(systemSymbolName: "xmark.circle", accessibilityDescription: nil)
+        item.toolTip = failure.message.isEmpty ? nil : failure.message
+        item.representedObject = FailurePayload(failure: failure, view: view)
+        return item
+    }
+
+    @objc private func openFailure(_ sender: NSMenuItem) {
+        guard let payload = sender.representedObject as? FailurePayload, let file = payload.failure.file,
+            let view = payload.view
+        else { return }
+        view.openLink(.file(path: file, line: payload.failure.line, column: nil))
+    }
+
     /// "Fix with New Agent": only for failed blocks.
-    private func startAgentItem(for view: GhosttyView, block: Int) -> NSMenuItem? {
+    private func startAgentItem(
+        for view: GhosttyView, block: Int, text: (@MainActor () -> String?)? = nil
+    ) -> NSMenuItem? {
         guard let tabID = view.tabID, let command = view.blockCommand(at: block),
             let code = view.exitCode(ofBlock: block, command: command), code != 0
         else { return nil }
         let item = NSMenuItem(title: "Fix with New Claude Code Agent", action: #selector(start(_:)), keyEquivalent: "")
         item.target = self
-        item.representedObject = Payload(text: blockText(view, block: block, command: command), tabID: tabID)
+        item.representedObject = Payload(text: text ?? blockText(view, block: block, command: command), tabID: tabID)
         return item
     }
 
