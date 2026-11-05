@@ -86,6 +86,37 @@ enum AgentWorktree {
         return Info(path: top, mainRoot: mainRoot, branch: branch.flatMap { $0.isEmpty ? nil : $0 })
     }
 
+    /// The worktree's private git directory, read from its `.git` file
+    /// (`gitdir: <path>`) without running git. Nil for a main checkout.
+    static func privateGitDir(of path: String) -> String? {
+        let gitFile = (path as NSString).appendingPathComponent(".git")
+        guard let text = try? String(contentsOfFile: gitFile, encoding: .utf8),
+            let line = text.split(separator: "\n").first, line.hasPrefix("gitdir:")
+        else { return nil }
+        let dir = line.dropFirst("gitdir:".count).trimmingCharacters(in: .whitespaces)
+        guard !dir.isEmpty else { return nil }
+        return dir.hasPrefix("/") ? dir : standardized((path as NSString).appendingPathComponent(dir))
+    }
+
+    /// Remembers which agent a task started with, in the worktree's private git
+    /// directory (gone with the worktree), so a resume restarts the same CLI.
+    static func recordAgentKind(_ kind: AgentKind, in path: String) {
+        guard let dir = privateGitDir(of: path) else { return }
+        try? kind.ipcName.write(
+            toFile: (dir as NSString).appendingPathComponent(agentKindFile), atomically: true, encoding: .utf8)
+    }
+
+    /// The agent a task started with; nil for tasks made before it was recorded.
+    static func agentKind(in path: String) -> AgentKind? {
+        guard let dir = privateGitDir(of: path),
+            let raw = try? String(
+                contentsOfFile: (dir as NSString).appendingPathComponent(agentKindFile), encoding: .utf8)
+        else { return nil }
+        return AgentKind(ipcName: raw.trimmingCharacters(in: .whitespacesAndNewlines))
+    }
+
+    static let agentKindFile = "boo-agent"
+
     /// Cheap check for menus: linked worktrees have a `.git` file, not a directory.
     static func looksLikeWorktree(_ path: String) -> Bool {
         var isDir: ObjCBool = false
@@ -116,7 +147,6 @@ enum AgentWorktree {
         let targetDirty: Bool
         /// Files a merge would conflict on; nil when git could not tell.
         let conflicts: [String]?
-
         /// Why the task cannot merge now, nil when it can.
         var blocker: String? {
             if status.target == nil { return "no_target" }
@@ -128,8 +158,10 @@ enum AgentWorktree {
         }
     }
 
+    /// A detached HEAD has nothing to merge into a target, so it reports none.
     static func mergeCheck(of info: Info) -> MergeCheck {
-        let status = status(of: info)
+        let found = status(of: info)
+        let status = info.branch == nil ? Status(isDirty: found.isDirty, ahead: found.ahead, target: nil) : found
         var behind = 0
         var conflicts: [String]?
         if let branch = info.branch, let target = status.target {

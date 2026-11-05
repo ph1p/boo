@@ -57,6 +57,10 @@ final class AgentInboxRemoteTests: XCTestCase {
         reply = inbox.respond(["response": "approve"])
         XCTAssertEqual(reply["ok"] as? Bool, false)
 
+        inbox.apply(event: "question", tabID: tab, message: "Red or blue?")
+        reply = inbox.respond(["tab_id": tab.uuidString, "response": "approve"])
+        XCTAssertEqual(reply["ok"] as? Bool, false, "Return would pick a question's first option")
+
         inbox.apply(event: "tool", tabID: tab)
         reply = inbox.respond(["tab_id": tab.uuidString, "response": "approve"])
         XCTAssertEqual(reply["ok"] as? Bool, false, "a working agent is not typed into")

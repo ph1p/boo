@@ -32,6 +32,7 @@ final class RemoteAgentTrackerTests: XCTestCase {
         tracker.attentionRequested(tabID: tab, message: "Claude needs your permission")
         XCTAssertEqual(inbox.items[tab]?.state, .needsInput)
         XCTAssertEqual(inbox.items[tab]?.message, "Claude needs your permission")
+        XCTAssertEqual(inbox.items[tab]?.asksQuestion, true, "a bell could be a question: no Allow / Deny")
 
         tracker.titleChanged(tabID: tab, title: "⠐ Fix the login bug", shellPID: 1)
         XCTAssertEqual(inbox.items[tab]?.state, .working)

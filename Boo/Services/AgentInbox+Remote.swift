@@ -23,6 +23,8 @@ extension AgentInbox {
                 "label": AgentHandoff.label(for: item, inbox: self),
                 "state": item.state.rawValue,
                 "summary": Self.summary(of: item),
+                // A question is answered in its tab: no Approve / Deny.
+                "asks_question": item.asksQuestion,
                 "updated_at": item.updatedAt.timeIntervalSince1970
             ]
             if item.state == .needsInput, let screen = readScreen(item.tabID) {
@@ -74,6 +76,9 @@ extension AgentInbox {
         }
         guard let item = items[tabID], item.state == .needsInput else {
             return ["ok": false, "error": "the agent is not waiting for an answer"]
+        }
+        guard !item.asksQuestion else {
+            return ["ok": false, "error": "the agent asks a question; answer it in its tab"]
         }
         if let shown = json["updated_at"] as? Double, abs(shown - item.updatedAt.timeIntervalSince1970) > 0.001 {
             return ["ok": false, "error": "the agent asked something new, look again"]

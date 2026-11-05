@@ -5,7 +5,7 @@ import Foundation
 enum LinkTarget: String, Codable, CaseIterable, Sendable {
     /// Boo's built-in editor tab.
     case editor
-    /// The external editor from Settings → Editor.
+    /// The external editor from Settings → Terminal → Links.
     case external
 
     /// Also accepts "monaco", the built-in editor's name before CodeMirror,
@@ -335,7 +335,7 @@ enum LinkOpener {
         }
         let template = preset == .custom ? settings.externalEditorTemplate : (preset.template ?? "")
         guard !template.trimmingCharacters(in: .whitespaces).isEmpty else {
-            BooAlert.showTransient("Set an external editor in Settings → Editor")
+            BooAlert.showTransient("Set an external editor in Settings → Terminal → Links")
             return
         }
         let command = LinkResolver.expandTemplate(template, path: path, line: line, column: column)

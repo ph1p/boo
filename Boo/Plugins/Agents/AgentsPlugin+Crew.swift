@@ -31,12 +31,7 @@ extension AgentsPlugin {
         isReachable: (UUID) -> Bool = { AgentInbox.locateInWindows($0) != nil },
         workspace: (UUID) -> CrewWorkspace? = { crewWorkspace(of: $0) },
         taskStatus: (AgentInbox.Item) -> AgentTaskStatus.Summary? = { item in
-            AgentInbox.locateInWindows(item.tabID).flatMap { location in
-                let folder = location.workspace.folderPath
-                guard AgentWorktree.looksLikeWorktree(folder) else { return nil }
-                // A new state (a finished turn, a commit) asks git again.
-                return AgentTaskStatus.shared.summary(for: folder, stamp: "\(item.state.rawValue)|\(item.updatedAt)")
-            }
+            AgentInbox.locateInWindows(item.tabID).flatMap { taskSummary(folder: $0.workspace.folderPath, of: item) }
         }
     ) -> [AgentCrewRow] {
         // Oldest change first: a handle first issued here follows when the agent
@@ -75,6 +70,13 @@ extension AgentsPlugin {
             }
             return order(lhs) < order(rhs)
         }
+    }
+
+    /// Commits, files and merge target of the task in `folder`; nil outside a worktree.
+    /// Only a new state (a finished turn) asks git again, not every tool event.
+    static func taskSummary(folder: String, of item: AgentInbox.Item) -> AgentTaskStatus.Summary? {
+        guard AgentWorktree.looksLikeWorktree(folder) else { return nil }
+        return AgentTaskStatus.shared.summary(for: folder, stamp: item.state.rawValue)
     }
 
     /// Task workspaces under `~/.boo/worktrees` with no live agent in any tab,
@@ -124,9 +126,9 @@ extension AgentsPlugin {
     }
 
     /// Where a tab is, as the crew list groups it; nil outside Boo's windows.
-    static func crewWorkspace(of tabID: UUID, order: [UUID: Int]? = nil) -> CrewWorkspace? {
+    static func crewWorkspace(of tabID: UUID) -> CrewWorkspace? {
         guard let location = AgentInbox.locateInWindows(tabID) else { return nil }
-        return crewWorkspace(location.workspace, order: (order ?? workspaceOrder())[location.workspace.id] ?? 0)
+        return crewWorkspace(location.workspace, order: workspaceOrder()[location.workspace.id] ?? 0)
     }
 
     static func crewWorkspace(_ workspace: Workspace, order: Int) -> CrewWorkspace {
@@ -171,8 +173,19 @@ extension AgentsPlugin {
         let unhooked = unhookedRows(sessions: sessions ?? allAgentSessions(order: order), hooked: reported)
         let settled = settledUnhooked(unhooked, seen: &unhookedFirstSeen)
         if let recheck = settled.recheckAt { scheduleUnhookedRecheck(at: recheck) }
+        // One window walk per agent for the whole pass, not one per column.
+        var locations: [UUID: AgentInbox.Location] = [:]
+        for item in items { locations[item.tabID] = AgentInbox.locateInWindows(item.tabID) }
         return crewRows(
-            items: items, crew: AgentCrew.shared, workspace: { crewWorkspace(of: $0, order: order) })
+            items: items, crew: AgentCrew.shared,
+            isTask: { locations[$0].map { AgentWorktree.looksLikeWorktree($0.workspace.folderPath) } ?? false },
+            isReachable: { locations[$0] != nil },
+            workspace: { id in
+                locations[id].map { crewWorkspace($0.workspace, order: order[$0.workspace.id] ?? 0) }
+            },
+            taskStatus: { item in
+                locations[item.tabID].flatMap { taskSummary(folder: $0.workspace.folderPath, of: item) }
+            })
             + settled.rows
             + stoppedTaskRows(
                 workspaces: WindowManager.shared.controllers.flatMap(\.appState.workspaces),
@@ -349,8 +362,10 @@ extension AgentsPlugin {
             ["tab_id": row.id.uuidString, "response": response.rawValue, "updated_at": row.updatedAt],
             deniedFrom: "the sidebar")
         if result["ok"] as? Bool != true {
-            booLog(.info, .sidebar, "crew \(response.rawValue) failed: \(result["error"] ?? "")")
+            let reason = result["error"] as? String ?? "the agent did not take the answer"
+            booLog(.info, .sidebar, "crew \(response.rawValue) failed: \(reason)")
             NSSound.beep()
+            BooAlert.showTransient("Couldn't \(response == .approve ? "allow" : "deny"): \(reason)")
         }
     }
 

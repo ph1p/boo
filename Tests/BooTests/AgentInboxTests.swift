@@ -43,7 +43,9 @@ final class AgentInboxTests: XCTestCase {
         XCTAssertEqual(inbox.items[tab]?.state, .done)
         XCTAssertEqual(inbox.items[tab]?.needsAttention, false)
         XCTAssertEqual(inbox.items[tab]?.cwd, "/src/api")
+        XCTAssertEqual(inbox.items[tab]?.fresh, true, "no turn yet")
         inbox.apply(event: "working", tabID: tab)
+        XCTAssertEqual(inbox.items[tab]?.fresh, false)
         inbox.apply(event: "start", tabID: tab)
         XCTAssertEqual(inbox.items[tab]?.state, .working, "/clear and compaction also start a session")
     }

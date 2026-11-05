@@ -8,7 +8,7 @@ import Foundation
 /// desktop notifications, so this reads those:
 /// - title starting with a spinner glyph (Braille, ◐…) → working
 /// - title starting with ✳ (Claude's idle mark) → done
-/// - bell or OSC 9/777 notification while tracked → needs-input
+/// - bell or OSC 9/777 notification while tracked → needs-input (as a question: no Allow / Deny)
 /// - title no longer an agent's → the item is removed
 ///
 /// Tabs with a hook-fed inbox item are left alone: the hooks are the better source.
@@ -66,16 +66,24 @@ final class RemoteAgentTracker {
         } else if tracked[tabID] == state {
             return
         }
+        let wasWorking = tracked[tabID] == .working
         tracked[tabID] = state
         // The idle mark also shows while a prompt waits: keep needs-input until work resumes.
         if state == .idle, inbox.items[tabID]?.state == .needsInput { return }
-        inbox.apply(event: state.rawValue, tabID: tabID, agent: parsed.agent)
+        // A finished turn gets the tab dot and notification hooked agents get;
+        // the bell path below already has its own. An agent first seen idle
+        // (ssh attach, launch) finished nothing.
+        if inbox.apply(event: state.rawValue, tabID: tabID, agent: parsed.agent) == .done, wasWorking {
+            inbox.signalAttention(tabID: tabID)
+        }
     }
 
     /// A bell or desktop notification from the tab: the agent asks for the user.
+    /// Sent as a question: nothing tells a permission prompt from a question
+    /// here, and Allow (Return) would pick a question's first option.
     func attentionRequested(tabID: UUID, message: String? = nil) {
         guard tracked[tabID] != nil, let item = inbox.items[tabID] else { return }
-        inbox.apply(event: "needs-input", tabID: tabID, agent: item.agent, message: message)
+        inbox.apply(event: "question", tabID: tabID, agent: item.agent, message: message)
     }
 
     func end(tabID: UUID) {

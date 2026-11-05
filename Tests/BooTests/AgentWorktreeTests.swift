@@ -65,6 +65,17 @@ final class AgentWorktreeTests: XCTestCase {
         XCTAssertEqual(second.mainRoot, repo, "a task started from a task hangs off the main checkout")
     }
 
+    func testRecordsTheAgentKindPerTask() throws {
+        let info = try AgentWorktree.create(repo: repo, name: "kind", root: root)
+        XCTAssertNil(AgentWorktree.agentKind(in: info.path), "older tasks have none")
+        AgentWorktree.recordAgentKind(.codex, in: info.path)
+        XCTAssertEqual(AgentWorktree.agentKind(in: info.path), .codex)
+        AgentWorktree.recordAgentKind(.codex, in: repo)
+        XCTAssertNil(AgentWorktree.agentKind(in: repo), "a main checkout records nothing")
+        let status = try XCTUnwrap(try? AgentWorktree.git(["status", "--porcelain"], in: info.path))
+        XCTAssertEqual(status, "", "the file stays out of the checkout")
+    }
+
     func testStatusAndMerge() throws {
         let info = try AgentWorktree.create(repo: repo, name: "feature", root: root)
         XCTAssertEqual(AgentWorktree.status(of: info), .init(isDirty: false, ahead: 0, target: "main"))
@@ -185,6 +196,10 @@ final class AgentWorktreeTests: XCTestCase {
         XCTAssertEqual(C.resumeCommand(text: nil), "claude --continue")
         XCTAssertEqual(C.resumeCommand(text: " \n"), "claude --continue")
         XCTAssertEqual(C.resumeCommand(text: "rm -rf is wrong"), "claude --continue 'rm -rf is wrong'")
+        XCTAssertEqual(C.resumeCommand(kind: .codex, text: nil), "codex resume --last")
+        XCTAssertEqual(C.resumeCommand(kind: .codex, text: "fix it"), "codex resume --last 'fix it'")
+        XCTAssertEqual(C.resumeCommand(kind: .openCode, text: nil), "opencode --continue")
+        XCTAssertEqual(C.resumeCommand(kind: .openCode, text: "fix it"), "opencode --continue --prompt 'fix it'")
     }
 
     func testTaskDiffTextAndBlockerHints() {

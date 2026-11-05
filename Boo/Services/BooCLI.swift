@@ -23,15 +23,17 @@ enum BooCLI {
 
           agents                       Agents in every Boo window, with handles (t1, t2, ...)
           run [options] <prompt>       Start an agent that reports back to this tab
-              --here                   In a pane beside this one instead of its own worktree
+              --here                   In a tab next to this one instead of its own worktree
               --agent claude|codex|opencode
               --name <name>            Task name (branch boo/<name>)
               --model <model>
+              --base <branch>          Branch the worktree starts from (default: HEAD)
           send <to> <text>             Message an agent: a handle (t3), parent, or tab id.
                                        Delivered when it finishes its current turn.
           inbox                        Read and clear messages waiting for this tab
           wait <agent> [--timeout S]   Block until the agent finishes its turn, asks or exits;
-                                       prints its answer. Exit 0 done, 1 error/exited, 3 asks
+                                       prints its answer. Exit 0 done, 1 error/exited, 3 asks,
+                                       124 timed out
           read <agent> [--lines N]     Print the agent's screen (default 60 lines)
           status <state> [message]     Report this tab's state: working, blocked, done, error
 
@@ -109,7 +111,7 @@ enum BooCLI {
                     return Output(text: "waiting for your approval in Boo", status: 0)
                 }
                 let handle = reply["handle"] as? String ?? "?"
-                let place = (reply["branch"] as? String).map { " on \($0)" } ?? " beside this pane"
+                let place = (reply["branch"] as? String).map { " on \($0)" } ?? " next to this tab"
                 return Output(text: "started \(handle)\(place); it reports back here when done", status: 0)
             case "send":
                 guard rest.count >= 2 else { return Output(text: "usage: boo send <to> <text>", status: 2) }
@@ -132,31 +134,40 @@ enum BooCLI {
                 }
                 return Output(text: AgentCrew.envelope(messages), status: 0)
             case "wait":
-                guard let target = rest.first else {
+                var args = rest
+                guard let seconds = takeValue("--timeout", from: &args) else {
+                    return Output(text: "--timeout needs seconds", status: 2)
+                }
+                guard let target = args.first else {
                     return Output(text: "usage: boo wait <agent> [--timeout S]", status: 2)
                 }
                 var timeout: TimeInterval?
-                if rest.count >= 3, rest[1] == "--timeout" {
-                    guard let seconds = TimeInterval(rest[2]) else {
+                if let seconds {
+                    guard let value = TimeInterval(seconds), value >= 0 else {
                         return Output(text: "--timeout needs seconds", status: 2)
                     }
-                    timeout = seconds
+                    timeout = value
                 }
                 let output = try wait(
-                    for: target, timeout: timeout, poll: { try request(["cmd": "agent_inbox"]) }, sleep: sleep)
+                    for: target, caller: tab, timeout: timeout, poll: { try request(["cmd": "agent_inbox"]) },
+                    sleep: sleep)
                 // The caller has the answer now; its queued report would repeat it.
                 if output.status != 124 { _ = try? request(["cmd": "agent_collected", "tab_id": target]) }
                 return output
             case "read":
-                guard let target = rest.first else {
+                var args = rest
+                guard let count = takeValue("--lines", from: &args) else {
+                    return Output(text: "--lines needs a number", status: 2)
+                }
+                guard let target = args.first else {
                     return Output(text: "usage: boo read <agent> [--lines N]", status: 2)
                 }
                 var lines = 60
-                if rest.count >= 3, rest[1] == "--lines" {
-                    guard let count = Int(rest[2]), count > 0 else {
+                if let count {
+                    guard let value = Int(count), value > 0 else {
                         return Output(text: "--lines needs a number", status: 2)
                     }
-                    lines = count
+                    lines = value
                 }
                 let reply = try request(["cmd": "get_screen", "tab_id": target, "lines": lines], fromPane: false)
                 return Output(text: reply["text"] as? String ?? "", status: 0)
@@ -211,24 +222,46 @@ enum BooCLI {
     /// the agent was seen working counts once it stays idle for `settle` seconds,
     /// so `boo run` then `boo wait` does not return the previous turn's state.
     static func wait(
-        for target: String, timeout: TimeInterval?, poll: () throws -> [String: Any],
-        sleep: (TimeInterval) -> Void, interval: TimeInterval = 1, settle: TimeInterval = 3
+        for target: String, caller: String? = nil, timeout: TimeInterval?, poll: () throws -> [String: Any],
+        sleep: (TimeInterval) -> Void, interval: TimeInterval = 1, settle: TimeInterval = 3,
+        freshSettle: TimeInterval = 60
     ) throws -> Output {
-        let wanted = target.lowercased().hasPrefix("t") ? target.lowercased() : "t\(target)"
+        let reference = target.lowercased()
+        var wanted = target
+        if Int(reference) != nil {
+            wanted = "t" + reference
+        } else if reference.hasPrefix("t"), Int(reference.dropFirst()) != nil {
+            wanted = reference
+        }
         var waited: TimeInterval = 0
         var sawWorking = false
         var sawAgent = false
         while true {
             let rows = (try poll())["items"] as? [[String: Any]] ?? []
+            if reference == "parent" {
+                // The caller's row names its parent's handle; once found, a parent
+                // that disappears has exited.
+                if let caller, let own = rows.first(where: { ($0["tab_id"] as? String) == caller }),
+                    let parent = own["parent"] as? String
+                {
+                    wanted = parent
+                } else if !sawAgent {
+                    return Output(text: "this tab has no parent agent", status: 1)
+                }
+            }
             let row = rows.first { ($0["handle"] as? String) == wanted || ($0["tab_id"] as? String) == target }
             if let row {
                 sawAgent = true
+                if let handle = row["handle"] as? String { wanted = handle }
                 let state = row["state"] as? String ?? ""
+                // A fresh row has not had a turn yet: a new helper still starting up.
+                let fresh = row["fresh"] as? Bool == true
                 if state == "working" {
                     sawWorking = true
-                } else if sawWorking || waited >= settle {
+                } else if sawWorking || waited >= (fresh ? freshSettle : settle) {
                     func text(_ key: String) -> String { row[key] as? String ?? "" }
                     switch state {
+                    case "done" where fresh: return Output(text: "\(wanted) idles at its prompt", status: 0)
                     case "done": return Output(text: text("reply").isEmpty ? text("message") : text("reply"), status: 0)
                     case "needs-input": return Output(text: "\(wanted) asks: \(text("message"))", status: 3)
                     default: return Output(text: "\(wanted) stopped: \(text("message"))", status: 1)
@@ -243,6 +276,20 @@ enum BooCLI {
             sleep(interval)
             waited += interval
         }
+    }
+
+    /// Removes `name value` from `args` wherever it appears. Returns `.some(nil)`
+    /// when the option is absent and nil when it has no value.
+    static func takeValue(_ name: String, from args: inout [String]) -> String?? {
+        if let index = args.firstIndex(where: { $0.hasPrefix(name + "=") }) {
+            let value = String(args.remove(at: index).dropFirst(name.count + 1))
+            return value.isEmpty ? nil : .some(value)
+        }
+        guard let index = args.firstIndex(of: name) else { return .some(nil) }
+        guard index + 1 < args.count else { return nil }
+        let value = args[index + 1]
+        args.removeSubrange(index...(index + 1))
+        return .some(value)
     }
 
     /// `+3 -1 calc.py` per file, then the diff unless it was `--stat`.

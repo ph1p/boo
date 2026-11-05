@@ -103,29 +103,6 @@ struct WorkspaceAgentSession: Identifiable, Equatable {
     let agent: AgentSession
 }
 
-struct AgentSetupRecommendation: Identifiable, Equatable {
-    enum Status: String {
-        case detected = "Detected"
-        case enhanced = "Enhanced"
-        case missing = "Missing setup"
-    }
-
-    let id = UUID()
-    let kind: AgentKind
-    let status: Status
-    let title: String
-    let detail: String
-    let primaryAction: String?
-}
-
-struct AgentToolSummary: Identifiable, Equatable {
-    let id = UUID()
-    let kind: AgentKind
-    let status: AgentSetupRecommendation.Status
-    let configCount: Int
-    let detail: String
-}
-
 // MARK: - Agent Binary Detection
 
 enum AgentBinaryScanner {

@@ -36,7 +36,7 @@ final class BooCLITests: XCTestCase {
 
     func testRunHereStartsHelperBeside() {
         let (output, sent) = run(["run", "--here", "--", "--not-a-flag"], reply: ["ok": true, "handle": "t5"])
-        XCTAssertEqual(output.text, "started t5 beside this pane; it reports back here when done")
+        XCTAssertEqual(output.text, "started t5 next to this tab; it reports back here when done")
         XCTAssertEqual(sent.first?["worktree"] as? Bool, false)
         XCTAssertEqual(sent.first?["cwd"] as? String, "/work/repo")
         XCTAssertEqual(sent.first?["prompt"] as? String, "--not-a-flag")
@@ -140,11 +140,68 @@ final class BooCLITests: XCTestCase {
         XCTAssertEqual(waitOutput(["done", "working", "done"]).1, 3, "a new turn ends the wait right away")
     }
 
+    /// SessionStart lists a new helper as idle before it reads its prompt:
+    /// that is no answer yet.
+    func testWaitGivesANewHelperTimeToStart() throws {
+        var polls = 0
+        func row(_ state: String, fresh: Bool) -> [String: Any] {
+            ["ok": true, "items": [["handle": "t4", "state": state, "fresh": fresh, "reply": "Tests pass."]]]
+        }
+        let output = try BooCLI.wait(
+            for: "t4", timeout: nil,
+            poll: {
+                polls += 1
+                return polls <= 10
+                    ? row("done", fresh: true) : polls == 11 ? row("working", fresh: false) : row("done", fresh: false)
+            }, sleep: { _ in })
+        XCTAssertEqual(output, BooCLI.Output(text: "Tests pass.", status: 0))
+        polls = 0
+        let idle = try BooCLI.wait(
+            for: "t4", timeout: nil,
+            poll: {
+                polls += 1
+                return row("done", fresh: true)
+            }, sleep: { _ in })
+        XCTAssertEqual(idle, BooCLI.Output(text: "t4 idles at its prompt", status: 0))
+        XCTAssertEqual(polls, 61, "a helper that never starts gives up after a minute")
+    }
+
     func testWaitReportsQuestionsExitAndTimeout() {
         XCTAssertEqual(waitOutput(["working", "needs-input"]).0, BooCLI.Output(text: "t4 asks: Which DB?", status: 3))
         XCTAssertEqual(waitOutput(["working", nil]).0, BooCLI.Output(text: "t4 exited", status: 1))
         XCTAssertEqual(waitOutput(["working"], timeout: 5).0.status, 124)
         XCTAssertEqual(waitOutput([nil]).0.status, 1, "unknown agent gives up")
+    }
+
+    /// `parent` is not a handle: the caller's own row names it.
+    func testWaitForParentFollowsTheCallersRow() throws {
+        let me = "22222222-2222-2222-2222-222222222222"
+        let rows: [[String: Any]] = [
+            ["handle": "t2", "tab_id": me, "state": "working", "parent": "t1"],
+            ["handle": "t1", "tab_id": "p", "state": "done", "reply": "merged"]
+        ]
+        var polls = 0
+        let output = try BooCLI.wait(
+            for: "parent", caller: me, timeout: nil,
+            poll: {
+                polls += 1
+                return [
+                    "ok": true, "items": polls == 1 ? [rows[0], rows[1].merging(["state": "working"]) { $1 }] : rows
+                ]
+            }, sleep: { _ in })
+        XCTAssertEqual(output, BooCLI.Output(text: "merged", status: 0))
+        let orphan = try BooCLI.wait(
+            for: "parent", caller: "nobody", timeout: nil, poll: { ["ok": true, "items": rows] }, sleep: { _ in })
+        XCTAssertEqual(orphan.status, 1)
+    }
+
+    func testOptionsGoAnywhere() {
+        let (_, sent) = run(["read", "--lines", "5", "t3"], reply: ["ok": true, "text": ""])
+        XCTAssertEqual(sent.first?["tab_id"] as? String, "t3")
+        XCTAssertEqual(sent.first?["lines"] as? Int, 5)
+        XCTAssertEqual(run(["read", "t3", "--lines"]).0.status, 2)
+        XCTAssertEqual(run(["read", "t3", "--lines=7"], reply: ["ok": true, "text": ""]).1.first?["lines"] as? Int, 7)
+        XCTAssertEqual(run(["wait", "t3", "--timeout", "soon"]).0.status, 2)
     }
 
     func testReadTargetsTheOtherTabNotThisPane() {

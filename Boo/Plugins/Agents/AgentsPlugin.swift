@@ -171,8 +171,6 @@ final class AgentsPlugin: BooPluginProtocol {
     struct AgentConfig {
         var configFiles: [ConfigFile] = []
         var skills: [SkillEntry] = []
-        var setupRecommendations: [AgentSetupRecommendation] = []
-        var toolSummaries: [AgentToolSummary] = []
 
         struct ConfigFile: Identifiable {
             let id = UUID()

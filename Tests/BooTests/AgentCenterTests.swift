@@ -134,7 +134,6 @@ final class AgentCenterTests: XCTestCase {
         XCTAssertTrue(config.configFiles.contains { $0.provider == .codex })
         XCTAssertTrue(config.configFiles.contains { $0.provider == .openCode })
         XCTAssertTrue(config.skills.contains { $0.provider == .openCode && $0.name == "@plan" })
-        XCTAssertTrue(config.setupRecommendations.contains { $0.kind == .claudeCode && $0.status == .detected })
     }
 
     private func makeTempProject() throws -> String {

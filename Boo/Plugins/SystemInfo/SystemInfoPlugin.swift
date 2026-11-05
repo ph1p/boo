@@ -20,17 +20,18 @@ final class SystemInfoPlugin: BooPluginProtocol {
         statusBar: PluginManifest.StatusBarManifest(position: "right", priority: 35, template: nil),
         settings: [
             PluginManifest.SettingManifest(
-                key: "statusBarMemory", type: .bool, label: "Show memory in status bar",
-                defaultValue: AnyCodableValue(false), options: nil),
+                key: "statusBarCPU", type: .bool, label: "CPU",
+                defaultValue: AnyCodableValue(false), options: nil, group: "Status Bar"),
             PluginManifest.SettingManifest(
-                key: "statusBarDisk", type: .bool, label: "Show disk in status bar",
-                defaultValue: AnyCodableValue(false), options: nil),
+                key: "statusBarMemory", type: .bool, label: "Memory",
+                defaultValue: AnyCodableValue(false), options: nil, group: "Status Bar"),
             PluginManifest.SettingManifest(
-                key: "statusBarCPU", type: .bool, label: "Show CPU in status bar",
-                defaultValue: AnyCodableValue(false), options: nil),
+                key: "statusBarDisk", type: .bool, label: "Disk",
+                defaultValue: AnyCodableValue(false), options: nil, group: "Status Bar"),
             PluginManifest.SettingManifest(
-                key: "statusBarBattery", type: .bool, label: "Show battery in status bar",
-                defaultValue: AnyCodableValue(false), options: nil)
+                key: "statusBarBattery", type: .bool, label: "Battery",
+                description: "The segment appears once one of these is on.",
+                defaultValue: AnyCodableValue(false), options: nil, group: "Status Bar")
         ]
     )
 

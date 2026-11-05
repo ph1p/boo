@@ -38,6 +38,9 @@ final class AgentInbox {
         /// Waits on a question (`AskUserQuestion`), not a permission prompt:
         /// Return would pick its first option, so it is answered in its tab.
         var asksQuestion = false
+        /// Listed by SessionStart and no turn yet: a new helper still reading
+        /// its prompt, not one that finished.
+        var fresh = false
 
         var id: UUID { tabID }
 
@@ -124,6 +127,7 @@ final class AgentInbox {
             var item = Item(tabID: tabID, agent: agent, state: .done, updatedAt: now, seen: true)
             item.sessionID = sessionID
             item.cwd = cwd
+            item.fresh = true
             items[tabID] = item
             changed()
             return nil
@@ -193,6 +197,7 @@ final class AgentInbox {
         let previous = existing?.state
         item.agent = agent
         item.state = state
+        item.fresh = false
         item.updatedAt = now
         item.sessionID = sessionID ?? item.sessionID
         item.cwd = cwd ?? item.cwd
@@ -329,7 +334,7 @@ extension AgentInbox {
     }
 
     /// Tab dot and desktop notification, skipped when the tab is in front.
-    private func signalAttention(tabID: UUID) {
+    func signalAttention(tabID: UUID) {
         guard let location = locate(tabID) else { return }
         if location.controller.isTabFocused(
             workspace: location.workspace, pane: location.pane, tabIndex: location.tabIndex)
@@ -404,6 +409,7 @@ extension AgentInbox {
             "tool": item.tool ?? NSNull(),
             "session_id": item.sessionID ?? NSNull(),
             "cwd": item.cwd ?? NSNull(),
+            "fresh": item.fresh,
             "updated_at": item.updatedAt.timeIntervalSince1970
         ]
     }

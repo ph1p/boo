@@ -965,7 +965,7 @@
         requestAnimationFrame(() => { pre.scrollTop = pre.scrollHeight; });
       }
       const actions = el("div", "agent-actions");
-      if (waiting) {
+      if (waiting && !agent.asks_question) {
         actions.append(
           agentButton("Approve", "var(--green)", () => respond(agent, "approve")),
           agentButton("Deny", "var(--red)", () => respond(agent, "deny")));
