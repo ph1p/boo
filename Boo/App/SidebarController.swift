@@ -35,6 +35,11 @@ final class SidebarController {
     /// Currently active plugin tab ID.
     var activePluginTabID: String?
 
+    /// Tab the user had open before it was hidden (e.g. a when-clause like `!remote`
+    /// turned false during an ssh session). Shown again once it is back, unless the
+    /// user picked another tab meanwhile.
+    var displacedPluginTabID: String?
+
     /// Last context + section generations rendered per plugin. When both match, the
     /// on-screen panel is already current and the cycle is a no-op. Deliberately does
     /// not retain the view: an `AnyView` keeps the whole plugin closure set alive.

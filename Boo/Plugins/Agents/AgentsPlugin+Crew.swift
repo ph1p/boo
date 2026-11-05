@@ -169,11 +169,52 @@ extension AgentsPlugin {
         // The orchestrator's tab reports through hooks too but is not a crew agent.
         let reported = hooked.union(AgentInbox.shared.orchestratorTabID().map { [$0] } ?? [])
         let unhooked = unhookedRows(sessions: sessions ?? allAgentSessions(order: order), hooked: reported)
+        let settled = settledUnhooked(unhooked, seen: &unhookedFirstSeen)
+        if let recheck = settled.recheckAt { scheduleUnhookedRecheck(at: recheck) }
         return crewRows(
-            items: items, crew: AgentCrew.shared, workspace: { crewWorkspace(of: $0, order: order) }) + unhooked
+            items: items, crew: AgentCrew.shared, workspace: { crewWorkspace(of: $0, order: order) })
+            + settled.rows
             + stoppedTaskRows(
                 workspaces: WindowManager.shared.controllers.flatMap(\.appState.workspaces),
                 live: hooked.union(unhooked.map(\.id)), order: order)
+    }
+
+    /// When each agent tab without hook events was first seen by process.
+    static var unhookedFirstSeen: [UUID: Date] = [:]
+    private static var unhookedRecheckPending = false
+
+    /// How long an agent found by process waits for its hook's first event before it is
+    /// listed as unhooked. A hooked agent's SessionStart arrives well within this, so it
+    /// shows up once, with its handle, instead of as "Claude Code in …" that then jumps.
+    static let unhookedGrace: TimeInterval = 3
+
+    /// Unhooked rows seen for at least `unhookedGrace`, and when to look again for the
+    /// rest. Forgets tabs that no longer run an unhooked agent.
+    static func settledUnhooked(
+        _ rows: [AgentCrewRow], now: Date = Date(), seen: inout [UUID: Date]
+    ) -> (rows: [AgentCrewRow], recheckAt: Date?) {
+        seen = seen.filter { id, _ in rows.contains { $0.id == id } }
+        var recheckAt: Date?
+        let settled = rows.filter { row in
+            let first = seen[row.id] ?? now
+            seen[row.id] = first
+            let due = first.addingTimeInterval(unhookedGrace)
+            guard due > now else { return true }
+            recheckAt = min(recheckAt ?? due, due)
+            return false
+        }
+        return (settled, recheckAt)
+    }
+
+    private static func scheduleUnhookedRecheck(at date: Date) {
+        guard !unhookedRecheckPending else { return }
+        unhookedRecheckPending = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + max(0.1, date.timeIntervalSinceNow)) {
+            MainActor.assumeIsolated {
+                unhookedRecheckPending = false
+                NotificationCenter.default.post(name: .agentCrewChanged, object: nil)
+            }
+        }
     }
 
     /// The setting that lists only the active workspace's agents.

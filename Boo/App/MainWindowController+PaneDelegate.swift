@@ -79,6 +79,7 @@ extension MainWindowController: PaneViewDelegate {
             // Skip when sidebar global state is on — the sidebar is independent of tabs.
             if !AppSettings.shared.sidebarGlobalState {
                 activePluginTabID = coordinator.selectedPluginTabID
+                displacedPluginTabID = nil
             }
         } else {
             bridge.handleFocus(paneID: paneID, workingDirectory: cwd)

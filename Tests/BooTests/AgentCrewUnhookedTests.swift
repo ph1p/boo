@@ -55,4 +55,24 @@ final class AgentCrewUnhookedTests: XCTestCase {
         AgentsPlugin.perform(.message, on: row)
         XCTAssertNil(ui.composer, "nothing would deliver the message")
     }
+    func testUnhookedRowWaitsForTheHook() {
+        let id = UUID()
+        let row = AgentCrewRow(
+            id: id, handle: "", name: "Claude Code in api", agent: "claude", state: .working, detail: nil,
+            parent: nil, queued: 0, needsAttention: false, isTask: false, hasHooks: false)
+        var seen: [UUID: Date] = [:]
+        let start = Date()
+
+        let early = AgentsPlugin.settledUnhooked([row], now: start, seen: &seen)
+        XCTAssertTrue(early.rows.isEmpty, "a starting agent is not listed before its hook can report")
+        XCTAssertEqual(early.recheckAt, start.addingTimeInterval(AgentsPlugin.unhookedGrace))
+
+        let late = AgentsPlugin.settledUnhooked(
+            [row], now: start.addingTimeInterval(AgentsPlugin.unhookedGrace + 0.1), seen: &seen)
+        XCTAssertEqual(late.rows.map(\.id), [id], "no hook after the grace period: listed by process")
+        XCTAssertNil(late.recheckAt)
+
+        _ = AgentsPlugin.settledUnhooked([], now: start, seen: &seen)
+        XCTAssertTrue(seen.isEmpty, "a gone agent is forgotten")
+    }
 }

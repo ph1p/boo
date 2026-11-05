@@ -575,6 +575,7 @@ extension MainWindowController {
             previousFocusedTabID = activeTab.id
             if !AppSettings.shared.sidebarGlobalState {
                 activePluginTabID = coordinator.selectedPluginTabID
+                displacedPluginTabID = nil
             }
         } else {
             previousFocusedTabID = nil

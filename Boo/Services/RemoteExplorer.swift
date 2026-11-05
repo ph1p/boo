@@ -202,6 +202,13 @@ final class RemoteExplorer: @unchecked Sendable {
     /// Detect remote session with SSH tunnel filtering.
     static func detectRemoteSessionFiltered(shellPID: pid_t) -> RemoteSessionType? {
         remoteLog("[RemoteExplorer] detectRemoteSessionFiltered: shellPID=\(shellPID)")
+        // An agent's tool calls (ssh deploy, docker exec…) are not the user's session:
+        // switching the sidebar to a remote tree for them only flickers.
+        if let foreground = ProcessTree.foregroundProcess(shellPID: shellPID),
+            ProcessIcon.category(for: foreground) == "ai"
+        {
+            return nil
+        }
         // Check SSH first
         if let host = detectSSH(shellPID: shellPID) {
             return .ssh(host: host)

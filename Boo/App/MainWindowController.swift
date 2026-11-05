@@ -186,6 +186,11 @@ import SwiftUI
         get { sidebarController?.activePluginTabID }
         set { sidebarController?.activePluginTabID = newValue }
     }
+
+    var displacedPluginTabID: String? {
+        get { sidebarController?.displacedPluginTabID }
+        set { sidebarController?.displacedPluginTabID = newValue }
+    }
     var sidebarTabBarView: SidebarTabBarView? {
         get { sidebarController?.sidebarTabBarView }
         set { sidebarController?.sidebarTabBarView = newValue }
@@ -496,6 +501,7 @@ import SwiftUI
         tabBar.translatesAutoresizingMaskIntoConstraints = false
         tabBar.onTabSelected = { [weak self] tab in
             guard let self, let ctx = self.pluginRegistry.lastContext else { return }
+            self.displacedPluginTabID = nil
             self.activatePluginTab(tab, context: ctx)
         }
         tabBar.onTabDisabled = { tab in
@@ -549,6 +555,7 @@ import SwiftUI
         }
         statusBar.onPluginSegmentClick = { [weak self] pluginID in
             guard let self, let ctx = self.pluginRegistry.lastContext else { return }
+            self.displacedPluginTabID = nil
             self.activatePluginTab(SidebarTabID(pluginID), context: ctx)
         }
         // Not an island: no fill, no border, no rounding — a bare strip over the backdrop.

@@ -311,6 +311,16 @@ extension MainWindowController {
             activePluginTabID = nil
             removeAllPluginContent()
             if sidebarVisible { toggleSidebar(userInitiated: false) }
+        } else if let choice = Self.sidebarTabSelection(
+            active: activePluginTabID, displaced: displacedPluginTabID,
+            remembered: coordinator.selectedPluginTabID, available: sorted.map(\.id.id)),
+            choice.show != activePluginTabID
+        {
+            // The active tab disappeared, or the one it replaced is back.
+            displacedPluginTabID = choice.displaced
+            if let tab = sorted.first(where: { $0.id.id == choice.show }) {
+                activatePluginTab(tab.id, context: context)
+            }
         } else if let activeID = activePluginTabID,
             let activeTab = sorted.first(where: { $0.id.id == activeID })
         {
@@ -328,19 +338,20 @@ extension MainWindowController {
                     toggleSidebar(userInitiated: false)
                 }
             }
-        } else {
-            // No active tab or active tab disappeared — activate the first available,
-            // preferring the last-selected tab restored from session state.
-            let target =
-                activePluginTabID.flatMap { id in sorted.first(where: { $0.id.id == id }) }
-                ?? coordinator.selectedPluginTabID.flatMap { id in
-                    sorted.first(where: { $0.id.id == id })
-                }
-                ?? sorted.first
-            if let tab = target {
-                activatePluginTab(tab.id, context: context)
-            }
         }
+    }
+
+    /// Which sidebar tab to show after the visible tabs changed. A tab hidden by its
+    /// when-clause (Agents during an ssh session) is remembered as displaced and comes
+    /// back once visible again, instead of leaving the user on the fallback tab.
+    static func sidebarTabSelection(
+        active: String?, displaced: String?, remembered: String?, available: [String]
+    ) -> (show: String, displaced: String?)? {
+        if let displaced, available.contains(displaced) { return (displaced, nil) }
+        if let active, available.contains(active) { return (active, displaced) }
+        let fallback = remembered.flatMap { available.contains($0) ? $0 : nil } ?? available.first
+        guard let fallback else { return nil }
+        return (fallback, displaced ?? active)
     }
 
     /// Activate a plugin tab: deactivate old, show content, activate new.
