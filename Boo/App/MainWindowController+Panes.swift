@@ -112,7 +112,15 @@ extension MainWindowController {
         if let command, let newTab = workspace.pane(for: newID)?.activeTab {
             GhosttyView.pendingLaunch[newTab.id] = LaunchSpec(command: command)
         }
-        if focus { workspace.activePaneID = newID }
+        if focus {
+            workspace.activePaneID = newID
+            // Mirror the new tab in the live sidebar state, or the next save writes the
+            // parent's state (offsets keyed by the parent tab) over the inherited copy.
+            if isVisible, let newTab = workspace.pane(for: newID)?.activeTab {
+                coordinator.restorePluginState(from: newTab)
+                previousFocusedTabID = newTab.id
+            }
+        }
         guard isVisible else {
             saveSession()
             return newID

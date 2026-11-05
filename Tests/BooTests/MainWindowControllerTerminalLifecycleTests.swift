@@ -69,6 +69,11 @@ final class MainWindowControllerTerminalLifecycleTests: XCTestCase {
     }
 
     func testSplitPaneRemapsSidebarScrollOffsetsToNewTerminal() throws {
+        // Per-tab sidebar state is only written to tabs when global state is off (the default).
+        let settings = AppSettings.shared
+        let originalGlobal = settings.sidebarGlobalState
+        settings.sidebarGlobalState = false
+        defer { settings.sidebarGlobalState = originalGlobal }
         let windowController = MainWindowController()
         defer { windowController.window?.close() }
 
