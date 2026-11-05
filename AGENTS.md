@@ -317,7 +317,7 @@ Wraps `AgentSession` with `paneID`, `tabID`, `tabTitle`, and `isFocused` so the 
   outbox with `read_messages` / `boo inbox`. The orchestrator gets `agent_message` events instead.
   Two agents may send each other at most `AgentCrew.maxMessages` (8) messages per 10 minutes; more is
   refused as a likely loop. Reports and messages from the user are not capped.
-  `new_agent_task` with `worktree: false` starts a helper in a split beside the caller (same cwd).
+  `new_agent_task` with `worktree: false` starts a helper tab in the caller's crew (same cwd).
   Closing a tab closes its helpers without asking (`AgentCrew.tabClosed` from
   `OrchestratorEvents.tabGone`, `MainWindowController.closeHelperTab`); worktrees and branches stay.
   `boo` comes from `~/.boo/bin`; the shell integrations move it to the front of PATH before every
@@ -332,9 +332,14 @@ Wraps `AgentSession` with `paneID`, `tabID`, `tabTitle`, and `isFocused` so the 
   queued reports (not plain messages) from the caller's outbox, so the parent isn't told twice.
   A report the parent took (typed into its prompt, or collected by `boo wait`) marks the helper's
   inbox item seen, so only the parent is left asking for the user's attention.
-  A task an agent starts (`new_agent_task` with a caller) opens in the caller's workspace: its
-  first helper splits the caller's pane to the right, later helpers (tasks and `--here`) join that
-  pane as tabs (`openHelperTab`); task commands then resolve the worktree
+  A task an agent starts (`new_agent_task` with a caller) opens in the caller's workspace: every
+  helper (tasks and `--here`) opens as a tab in the caller's pane, in the caller's crew group
+  (`openHelperTab`, `Pane.joinCrew`), and the caller's tab stays shown. A crew is a `TabGroup` with
+  `crewParent`: the parent first, then its helpers; only helpers join it (no drop, menu or move
+  puts another tab inside), it can't be renamed or recolored, and `pruneGroups` dissolves it once
+  the parent or the last helper leaves. Its chip shows ✦ and the most urgent state of its agents
+  (collapsed: "✦ boo · 1 waiting"). A parent already in a plain group keeps it; helpers join that.
+  A tmux-owned caller pane gets a split instead. Task commands then resolve the worktree
   from the tab's directory and `closeAndRemoveAgentTask` closes only that tab. Without a caller (UI),
   or when the caller's pane is tmux-owned, the task opens its own workspace.
   `boo agents` marks the caller's own row `(you)`: an agent doesn't know its tab's title.
@@ -367,9 +372,11 @@ Wraps `AgentSession` with `paneID`, `tabID`, `tabTitle`, and `isFocused` so the 
   A task workspace under `~/.boo/worktrees` with no live agent in any tab (after a restart, or once the
   agent quit) lists under Stopped (`AgentsPlugin.stoppedTaskRows`, `AgentCrewRow.isStopped`): no handle
   or Message, but Show, Resume, Review, Merge and Discard. The header counts only the Needs you group.
-  Resume (`MainWindowController.resumeAgentTask`) runs `claude --continue` in the task's tab. Review's
-  "Send to Agent" (`sendToAgent`) on a task with no live agent sends `claude --continue '<notes>'`
-  (`resumeCommand`) instead of pasting the notes into the bare shell.
+  Resume (`MainWindowController.resumeAgentTask`) continues the task's last conversation in its tab with
+  the agent it started with (`claude --continue`, `codex resume --last`, `opencode --continue`; the kind
+  is in `<worktree git dir>/boo-agent`, `AgentWorktree.recordAgentKind`). Review's "Send to Agent"
+  (`sendToAgent`) on a task with no live agent sends the notes as that resume's prompt
+  (`resumeCommand`) instead of pasting them into the bare shell.
   Task rows carry a third line from `AgentTaskStatus` ("2 commits · 5 files · merges into main", or the
   blocker: conflicts, dirty checkouts, no commits). Git runs off the main thread on `mergeCheck` plus
   `git diff --name-only`; answers are cached per worktree for 20s or until the agent's state changes, and

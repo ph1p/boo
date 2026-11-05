@@ -224,7 +224,7 @@ extension PaneView {
         }
         var x = pill.minX + 7
         if !group.isCollapsed {
-            ctx.setFillColor(tint.cgColor)
+            ctx.setFillColor(groupDotColor(group, theme: theme).cgColor)
             ctx.fillEllipse(in: CGRect(x: x, y: pill.midY - 3, width: 6, height: 6))
             x += 11
         }
@@ -243,7 +243,8 @@ extension PaneView {
         let nameAttrs: [NSAttributedString.Key: Any] = [
             .font: VerticalFonts.groupName, .foregroundColor: text, .paragraphStyle: para
         ]
-        let name = (group.name.isEmpty ? "Group" : group.name) as NSString
+        let label = groupLabel(group)
+        let name = (label.isEmpty ? "Group" : label) as NSString
         let nameSize = name.size(withAttributes: nameAttrs)
         let nameW = max(0, min(nameSize.width, chevronX - 6 - countSize.width - 5 - x))
         name.draw(

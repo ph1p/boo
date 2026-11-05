@@ -304,7 +304,9 @@ enum TabDropZone: Equatable {
         // PaneView is flipped (isFlipped = true), so y=0 is top.
         // Tab bar region: show insertion indicator between tabs.
         if paneView.isInTabBar(point) {
+            // A crew takes no tabs by drop: only its agent's helpers join it.
             if paneView === sourcePaneView, let target = paneView.tabIndex(at: point), target != sourceTabIndex,
+                paneView.pane.group(id: paneView.pane.tabs[target].groupID)?.isCrew != true,
                 let pill = paneView.visibleTabPillRect(at: target),
                 paneView.isVerticalTabs
                     ? point.y > pill.minY + pill.height / 3 && point.y < pill.maxY - pill.height / 3

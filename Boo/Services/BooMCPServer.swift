@@ -397,7 +397,7 @@ struct BooMCPServer {
                         "worktree": [
                             "type": "boolean",
                             "description":
-                                "Own worktree and workspace (default true); false opens a helper pane beside you"
+                                "Own worktree and workspace (default true); false opens a helper tab in your crew"
                         ],
                         "cwd": [
                             "type": "string",

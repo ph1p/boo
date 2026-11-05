@@ -19,7 +19,8 @@ extension PaneView {
         }
     }
 
-    func activateTab(_ index: Int) {
+    /// `focus: false` shows the tab but leaves keyboard focus where it is.
+    func activateTab(_ index: Int, focus: Bool = true) {
         guard index != pane.activeTabIndex else { return }
         dismissFindBarIfNeeded(forTabAt: index)
         storeCurrentView()
@@ -29,6 +30,7 @@ extension PaneView {
         startActiveSession()
         layoutTerminalView()
         needsDisplay = true
+        guard focus else { return }
         focusActiveView()
         if let tab = pane.activeTab {
             debugLog(

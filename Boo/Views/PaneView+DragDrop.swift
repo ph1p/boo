@@ -295,11 +295,12 @@ extension PaneView {
         group.name.isEmpty ? "Unnamed Group" : group.name
     }
 
-    /// "New Group" plus one item per group other than `excluded`.
+    /// "New Group" plus one item per group other than `excluded`. Crews are
+    /// left out: only their agent's helpers join them.
     private func addToGroupSubmenu(tabIDs: [UUID], excluding excluded: UUID?) -> NSMenu {
         let sub = NSMenu()
         sub.addItem(groupMenuItem("New Group", #selector(contextNewGroup(_:)), GroupMenuAction(tabIDs: tabIDs)))
-        let others = pane.groups.filter { $0.id != excluded }
+        let others = pane.groups.filter { $0.id != excluded && !$0.isCrew }
         if !others.isEmpty { sub.addItem(.separator()) }
         for group in others {
             let item = groupMenuItem(
@@ -341,7 +342,9 @@ extension PaneView {
             return
         }
         let target = GroupMenuAction(tabIDs: [tab.id], groupID: group.id)
-        menu.addItem(groupMenuItem("Edit Group…", #selector(contextEditGroup(_:)), target))
+        if !group.isCrew {
+            menu.addItem(groupMenuItem("Edit Group…", #selector(contextEditGroup(_:)), target))
+        }
         let move = NSMenuItem(title: "Move Tab to Group", action: nil, keyEquivalent: "")
         move.submenu = addToGroupSubmenu(tabIDs: [tab.id], excluding: group.id)
         menu.addItem(move)
@@ -354,8 +357,11 @@ extension PaneView {
         clearTabSelection()
         let target = GroupMenuAction(groupID: id)
         let menu = NSMenu()
-        menu.addItem(groupMenuItem("Edit Group…", #selector(contextEditGroup(_:)), target))
-        menu.addItem(groupMenuItem("New Tab in Group", #selector(contextNewTabInGroup(_:)), target))
+        // A crew is named and filled by its agent.
+        if !group.isCrew {
+            menu.addItem(groupMenuItem("Edit Group…", #selector(contextEditGroup(_:)), target))
+            menu.addItem(groupMenuItem("New Tab in Group", #selector(contextNewTabInGroup(_:)), target))
+        }
         menu.addItem(
             groupMenuItem(
                 group.isCollapsed ? "Expand Group" : "Collapse Group", #selector(contextToggleGroup(_:)), target))
@@ -486,6 +492,7 @@ extension PaneView {
 
     /// Opens a terminal in the group's folder (its first tab's) and adds it to the group.
     func newTab(inGroup id: UUID) {
+        guard pane.group(id: id)?.isCrew != true else { return }
         let cwd = pane.tabs.first { $0.groupID == id }?.workingDirectory ?? pane.activeTab?.workingDirectory ?? "~"
         addNewTab(workingDirectory: cwd, group: id)
     }
@@ -495,7 +502,7 @@ extension PaneView {
     /// Inline editor for a group's name and color, anchored on its chip.
     func showGroupEditor(_ id: UUID) {
         groupEditorPopover?.close()
-        guard let group = pane.group(id: id) else { return }
+        guard let group = pane.group(id: id), !group.isCrew else { return }
         // The chip may be scrolled out of view; anchor on the visible bar then.
         guard var anchor = groupChipRect(for: id) else { return }
         if !visibleRect.intersects(anchor) {

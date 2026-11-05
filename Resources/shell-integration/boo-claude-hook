@@ -45,7 +45,7 @@ def event_for_claude(p):
 CREW_CONTEXT = """You run in a tab of Boo, a terminal app for coding agents. When the user \
 wants another agent (a helper beside you, parallel work, a second opinion), start a real \
 one with the `boo` CLI instead of an in-process subagent, so the user can watch and talk to it:
-- boo run --here "<prompt>": helper in a split beside you, same folder.
+- boo run --here "<prompt>": helper in a tab next to yours (your crew group), same folder.
 - boo run "<prompt>": helper on its own git worktree and branch (for code changes).
 - boo agents: every agent with its handle (t1, t2...) and state; "(you)" marks your own tab.
 - boo wait <handle>: blocks until it finishes its turn, prints its answer (exit 3: it asks a question).

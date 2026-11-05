@@ -45,16 +45,21 @@ struct SessionTabGroup: Codable, Sendable, Equatable {
     let name: String
     let color: String
     let collapsed: Bool
+    /// Optional so sessions saved before crews decode.
+    var crewParent: UUID? = nil
 
     init(_ group: TabGroup) {
         id = group.id
         name = group.name
         color = group.color.rawValue
         collapsed = group.isCollapsed
+        crewParent = group.crewParent
     }
 
     var tabGroup: TabGroup {
-        TabGroup(id: id, name: name, color: WorkspaceColor(rawValue: color) ?? .blue, isCollapsed: collapsed)
+        TabGroup(
+            id: id, name: name, color: WorkspaceColor(rawValue: color) ?? .blue, isCollapsed: collapsed,
+            crewParent: crewParent)
     }
 }
 

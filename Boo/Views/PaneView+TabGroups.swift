@@ -7,12 +7,54 @@ extension PaneView {
     private static let groupDotSize: CGFloat = 7
     private static let groupDotGap: CGFloat = 6
 
+    /// The chip's text. A crew's starts with the agent glyph and, collapsed,
+    /// ends with its most urgent state ("✦ boo · 1 waiting").
+    func groupLabel(_ group: TabGroup) -> String {
+        guard group.isCrew else { return group.name }
+        let name = "\u{2726} " + group.name
+        guard group.isCollapsed, let state = crewSummary(group) else { return name }
+        return "\(name) · \(state)"
+    }
+
+    private func crewItems(_ group: TabGroup) -> [AgentInbox.Item] {
+        pane.tabIndices(inGroup: group.id).compactMap { AgentInbox.shared.items[pane.tabs[$0].id] }
+    }
+
+    /// The crew's most urgent agent (waiting beats failed beats working beats
+    /// done) and how many share its state.
+    private func crewTop(_ group: TabGroup) -> (item: AgentInbox.Item, count: Int)? {
+        let rank: [AgentInbox.State: Int] = [.needsInput: 0, .error: 1, .working: 2, .done: 3]
+        let items = crewItems(group)
+        guard let top = items.min(by: { rank[$0.state, default: 4] < rank[$1.state, default: 4] }) else { return nil }
+        return (top, items.filter { $0.state == top.state }.count)
+    }
+
+    /// "1 waiting", "2 working", or "done" once every agent is.
+    func crewSummary(_ group: TabGroup) -> String? {
+        guard let (top, count) = crewTop(group) else { return nil }
+        let word: String? =
+            switch top.state {
+            case .needsInput: "waiting"
+            case .error: "failed"
+            case .working: "working"
+            case .done: nil
+            }
+        return word.map { "\(count) \($0)" } ?? "done"
+    }
+
+    /// The dot's color: the group color, or for a crew its most urgent state's.
+    func groupDotColor(_ group: TabGroup, theme: TerminalTheme) -> NSColor {
+        guard group.isCrew, let top = crewTop(group)?.item else { return groupTint(group, theme: theme) }
+        return AgentInboxSegment.color(for: top, theme: theme)
+    }
+
     /// Chip content: a dot and the name while expanded; the name and a tab
     /// count badge while collapsed. An unnamed group drops the name.
     private func groupChipContentWidth(_ group: TabGroup) -> CGFloat {
+        let label = groupLabel(group)
         let nameW =
-            group.name.isEmpty
-            ? 0 : ceil((group.name as NSString).size(withAttributes: [.font: TabFonts.groupChip]).width)
+            label.isEmpty
+            ? 0 : ceil((label as NSString).size(withAttributes: [.font: TabFonts.groupChip]).width)
         if group.isCollapsed {
             return (nameW > 0 ? nameW + Self.groupDotGap : 0) + groupBadgeWidth(group)
         }
@@ -145,23 +187,24 @@ extension PaneView {
         }
         WorkspacePillStyle.fillRoundedRect(ctx, rect: pill)
 
+        let labelText = groupLabel(group)
         var cx = pill.minX + Self.groupChipPadX
         if !group.isCollapsed {
-            if group.name.isEmpty { cx = pill.midX - Self.groupDotSize / 2 }
-            ctx.setFillColor(tint.cgColor)
+            if labelText.isEmpty { cx = pill.midX - Self.groupDotSize / 2 }
+            ctx.setFillColor(groupDotColor(group, theme: theme).cgColor)
             ctx.fillEllipse(
                 in: CGRect(
                     x: cx, y: pill.midY - Self.groupDotSize / 2, width: Self.groupDotSize, height: Self.groupDotSize))
             cx += Self.groupDotSize + Self.groupDotGap
         }
         let badgeW = group.isCollapsed ? groupBadgeWidth(group) : 0
-        if !group.isCollapsed || !group.name.isEmpty {
+        if !group.isCollapsed || !labelText.isEmpty {
             let para = NSMutableParagraphStyle()
             para.lineBreakMode = .byTruncatingTail
             let attrs: [NSAttributedString.Key: Any] = [
                 .font: TabFonts.groupChip, .foregroundColor: text, .paragraphStyle: para
             ]
-            let label = group.name as NSString
+            let label = labelText as NSString
             let size = label.size(withAttributes: attrs)
             let room = pill.maxX - Self.groupChipPadX - cx - (badgeW > 0 ? badgeW + Self.groupDotGap : 0)
             label.draw(
@@ -171,7 +214,7 @@ extension PaneView {
         }
         if badgeW > 0 {
             let badge = CGRect(
-                x: group.name.isEmpty ? pill.midX - badgeW / 2 : pill.maxX - Self.groupChipPadX - badgeW,
+                x: labelText.isEmpty ? pill.midX - badgeW / 2 : pill.maxX - Self.groupChipPadX - badgeW,
                 y: pill.midY - 8, width: badgeW, height: 16)
             ctx.setFillColor(text.withAlphaComponent(0.2).cgColor)
             WorkspacePillStyle.fillRoundedRect(ctx, rect: badge, radius: 8)

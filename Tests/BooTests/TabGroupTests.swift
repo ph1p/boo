@@ -310,4 +310,72 @@ final class TabGroupTests: XCTestCase {
         XCTAssertEqual(dst.group(id: gid)?.isCollapsed, false, "arrives expanded")
         XCTAssertEqual(dst.activeTabIndex, 2)
     }
+
+    // MARK: - Crews
+
+    func testHelpersFormACrewRightAfterTheirParent() throws {
+        let p = pane(3)
+        let parent = p.tabs[1].id
+        _ = p.addTab(workingDirectory: "/tmp/h1")
+        let gid = try XCTUnwrap(p.joinCrew(helper: p.tabs[3].id, parent: parent))
+        _ = p.addTab(workingDirectory: "/tmp/h2")
+        XCTAssertEqual(p.joinCrew(helper: p.tabs[4].id, parent: parent), gid)
+        XCTAssertEqual(dirs(p), ["a", "b", "h1", "h2", "c"])
+        XCTAssertEqual(p.tabIndices(inGroup: gid), [1, 2, 3])
+        XCTAssertEqual(p.group(id: gid)?.crewParent, parent)
+        XCTAssertEqual(p.group(id: gid)?.name, "b", "named after the parent's folder")
+    }
+
+    func testCrewDissolvesWithItsLastHelperOrItsParent() throws {
+        let p = pane(2)
+        _ = p.addTab(workingDirectory: "/tmp/h1")
+        let gid = try XCTUnwrap(p.joinCrew(helper: p.tabs[2].id, parent: p.tabs[0].id))
+        p.removeTab(at: 1)
+        XCTAssertNil(p.group(id: gid), "parent alone is no crew")
+        XCTAssertTrue(p.tabs.allSatisfy { $0.groupID == nil })
+
+        _ = p.addTab(workingDirectory: "/tmp/h2")
+        let again = try XCTUnwrap(p.joinCrew(helper: p.tabs[2].id, parent: p.tabs[0].id))
+        p.removeTab(at: 0)
+        XCTAssertNil(p.group(id: again), "helpers alone are no crew")
+    }
+
+    func testCrewTakesNoOtherTabs() throws {
+        let p = pane(3)
+        _ = p.addTab(workingDirectory: "/tmp/h1")
+        _ = p.addTab(workingDirectory: "/tmp/h2")
+        let gid = try XCTUnwrap(p.joinCrew(helper: p.tabs[3].id, parent: p.tabs[0].id))
+        p.joinCrew(helper: p.tabs[4].id, parent: p.tabs[0].id)
+        XCTAssertEqual(dirs(p), ["a", "h1", "h2", "b", "c"])
+
+        XCTAssertNil(p.groupTab(at: 4, with: 1), "no drop onto a crew tab")
+        p.moveTab(from: 4, to: 2)
+        XCTAssertEqual(dirs(p), ["a", "h1", "h2", "c", "b"], "a tab dropped inside lands past the crew")
+        XCTAssertEqual(p.tabIndices(inGroup: gid), [0, 1, 2])
+        XCTAssertNil(p.tabs[3].groupID)
+
+        p.moveTab(from: 2, to: 1)
+        XCTAssertEqual(dirs(p), ["a", "h2", "h1", "c", "b"], "helpers reorder inside it")
+        XCTAssertEqual(p.tabIndices(inGroup: gid), [0, 1, 2])
+    }
+
+    func testParentInAPlainGroupKeepsIt() throws {
+        let p = pane(3)
+        let gid = try XCTUnwrap(p.groupTab(at: 1, with: 0))
+        _ = p.addTab(workingDirectory: "/tmp/h1")
+        XCTAssertEqual(p.joinCrew(helper: p.tabs[3].id, parent: p.tabs[0].id), gid)
+        XCTAssertEqual(dirs(p), ["a", "b", "h1", "c"])
+        XCTAssertFalse(try XCTUnwrap(p.group(id: gid)).isCrew)
+    }
+
+    func testCrewSurvivesSessionRoundTrip() throws {
+        let group = TabGroup(id: UUID(), name: "boo", color: .blue, crewParent: UUID())
+        let decoded = try JSONDecoder().decode(
+            SessionTabGroup.self, from: JSONEncoder().encode(SessionTabGroup(group)))
+        XCTAssertEqual(decoded.tabGroup, group)
+        let old = try JSONDecoder().decode(
+            SessionTabGroup.self,
+            from: Data(#"{"id":"\#(UUID().uuidString)","name":"x","color":"blue","collapsed":false}"#.utf8))
+        XCTAssertNil(old.crewParent, "sessions from before crews decode")
+    }
 }

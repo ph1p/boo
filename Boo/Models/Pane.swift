@@ -55,6 +55,11 @@ struct TabGroup: Equatable {
     var name: String
     var color: WorkspaceColor
     var isCollapsed = false
+    /// Set for a crew: an agent's tab (first) and the helpers it started.
+    /// Only helpers join it; it dissolves once the parent or the last helper leaves.
+    var crewParent: UUID? = nil
+
+    var isCrew: Bool { crewParent != nil }
 }
 
 /// A pane is a leaf in the split tree. It has its own tab bar with multiple terminal tabs.
@@ -187,6 +192,7 @@ final class Pane {
             sourceIndex != destinationIndex
         else { return }
         let tab = tabs.remove(at: sourceIndex)
+        let destinationIndex = indexOutsideForeignCrew(destinationIndex, own: tab.groupID)
         tabs.insert(tab, at: destinationIndex)
         tabs[destinationIndex].groupID = Self.groupAfterMove(
             tab.groupID, left: tabAt(destinationIndex - 1)?.groupID,
@@ -242,10 +248,38 @@ final class Pane {
     /// group of both. The source moves next to the group so it stays one run.
     @discardableResult
     func groupTab(at source: Int, with target: Int) -> UUID? {
-        guard source != target, tabs.indices.contains(source), tabs.indices.contains(target) else { return nil }
+        guard source != target, tabs.indices.contains(source), tabs.indices.contains(target),
+            group(id: tabs[target].groupID)?.isCrew != true
+        else { return nil }
         guard let gid = tabs[target].groupID ?? createGroup(withTabsAt: [target]) else { return nil }
         addTab(at: source, toGroup: gid)
         return gid
+    }
+
+    /// Puts `helper` in its parent's crew, right after the parent and the
+    /// helpers before it; the first helper makes the crew. A parent already in
+    /// a plain group keeps it, and the helper joins that group.
+    @discardableResult
+    func joinCrew(helper: UUID, parent: UUID) -> UUID? {
+        guard let p = tabs.firstIndex(where: { $0.id == parent }), let h = tabs.firstIndex(where: { $0.id == helper }),
+            p != h
+        else { return nil }
+        if let gid = tabs[p].groupID {
+            moveIntoGroup(h, gid)
+            return gid
+        }
+        guard let gid = createGroup(withTabsAt: [p, h]) else { return nil }
+        updateGroup(gid) { $0.crewParent = parent }
+        return gid
+    }
+
+    /// Where a tab moved to `index` lands: past the end of a crew it would
+    /// otherwise land inside, since only the crew's helpers belong there.
+    private func indexOutsideForeignCrew(_ index: Int, own: UUID?) -> Int {
+        guard let left = tabAt(index - 1)?.groupID, left == tabAt(index)?.groupID, left != own,
+            group(id: left)?.isCrew == true, let last = tabs.lastIndex(where: { $0.groupID == left })
+        else { return index }
+        return last + 1
     }
 
     /// Makes a new group of the given tabs, gathered into one run where the
@@ -268,8 +302,14 @@ final class Pane {
         return gid
     }
 
-    /// Moves the tab to the end of group `id` and makes it a member.
+    /// Moves the tab to the end of group `id` and makes it a member. A crew
+    /// takes only its agent's helpers, through `joinCrew`.
     func addTab(at index: Int, toGroup id: UUID) {
+        guard group(id: id)?.isCrew == false else { return }
+        moveIntoGroup(index, id)
+    }
+
+    private func moveIntoGroup(_ index: Int, _ id: UUID) {
         guard tabs.indices.contains(index), group(id: id) != nil, tabs[index].groupID != id else { return }
         let activeID = activeTabID
         var tab = tabs.remove(at: index)
@@ -404,7 +444,8 @@ final class Pane {
     }
 
     /// Drops groups that lost their tabs, and splits a group whose tabs are no
-    /// longer one run, keeping the first run.
+    /// longer one run, keeping the first run. A crew without its parent or
+    /// without a helper dissolves.
     private func pruneGroups() {
         var seenEnded = Set<UUID>()
         var previous: UUID?
@@ -413,6 +454,11 @@ final class Pane {
             if let gid, gid != previous, seenEnded.contains(gid) { tabs[i].groupID = nil }
             if let previous, previous != tabs[i].groupID { seenEnded.insert(previous) }
             previous = tabs[i].groupID
+        }
+        for crew in groups where crew.isCrew {
+            let members = tabs.indices.filter { tabs[$0].groupID == crew.id }
+            guard members.count < 2 || !members.contains(where: { tabs[$0].id == crew.crewParent }) else { continue }
+            for i in members { tabs[i].groupID = nil }
         }
         let live = Set(tabs.compactMap(\.groupID))
         groups.removeAll { !live.contains($0.id) }
@@ -622,10 +668,11 @@ final class Pane {
 
     /// Insert an existing tab at a specific index. Used for cross-pane drag.
     func insertTab(_ tab: Tab, at index: Int) {
-        let clampedIndex = min(max(index, 0), tabs.count)
+        let wantedIndex = min(max(index, 0), tabs.count)
         var tab = tab
         // Groups belong to a pane; a tab from another pane arrives ungrouped.
         if group(id: tab.groupID) == nil { tab.groupID = nil }
+        let clampedIndex = indexOutsideForeignCrew(wantedIndex, own: tab.groupID)
         tabs.insert(tab, at: clampedIndex)
         activeTabIndex = clampedIndex
         tabs[clampedIndex].groupID = Self.groupAfterMove(

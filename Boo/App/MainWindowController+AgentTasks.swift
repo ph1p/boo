@@ -135,6 +135,7 @@ extension MainWindowController {
             DispatchQueue.main.async {
                 switch result {
                 case .success(let info):
+                    AgentWorktree.recordAgentKind(kind, in: info.path)
                     NotificationCenter.default.post(name: .agentWorktreesChanged, object: nil)
                     guard let self else { return }
                     let title = name.isEmpty ? (info.path as NSString).lastPathComponent : name
@@ -155,7 +156,7 @@ extension MainWindowController {
         }
     }
 
-    /// Opens a task in the caller's workspace, in the caller's helper pane
+    /// Opens a task in the caller's workspace, as a tab in the caller's crew
     /// (see `openHelperTab`), so a crew stays together instead of a new workspace.
     /// Nil when the caller is gone or its pane belongs to tmux.
     private func openTaskBesideCaller(
@@ -168,25 +169,30 @@ extension MainWindowController {
         return AgentTaskLaunch(info: info, workspaceID: home.workspace.id, tabID: opened.tabID)
     }
 
-    /// The first helper of a caller splits the caller's pane to the right; later
-    /// helpers join that pane as tabs, so one split holds the whole crew.
-    /// Focus stays with the caller.
+    /// A helper opens as a tab in the caller's pane, in the caller's crew group
+    /// (right after the caller and earlier helpers). The tab shown before stays
+    /// shown and focus stays where it is. A tmux pane can't hold it: split instead.
     func openHelperTab(
         caller: UUID, in workspace: Workspace, callerPane: UUID, cwd: String, command: String
     ) -> (paneID: UUID, tabID: UUID)? {
-        let helpers = Set(AgentCrew.shared.children(of: caller))
-        let existing = workspace.splitTree.leafIDs.lazy.compactMap { workspace.pane(for: $0) }.first { pane in
-            pane.id != callerPane && !pane.tmuxOwned && pane.tabs.contains { helpers.contains($0.id) }
-        }
-        guard let existing, let paneView = workspacePaneViews[workspace.id]?[existing.id] else {
+        guard let pane = workspace.pane(for: callerPane), !pane.tmuxOwned,
+            let paneView = workspacePaneViews[workspace.id]?[callerPane]
+        else {
             return splitHelperPane(callerPane, in: workspace, cwd: cwd, command: command)
         }
+        let shown = pane.activeTab?.id
+        // The new tab starts its terminal as the active tab, then steps back.
         guard
             let tabID = paneView.addNewTab(
                 workingDirectory: cwd, launch: LaunchSpec(command: command), focus: false)
         else { return nil }
+        pane.joinCrew(helper: tabID, parent: caller)
+        if let shown, let index = pane.tabs.firstIndex(where: { $0.id == shown }) {
+            paneView.activateTab(index, focus: false)
+        }
+        paneView.groupsChanged()
         saveSession()
-        return (existing.id, tabID)
+        return (callerPane, tabID)
     }
 
     /// Splits `anchor` to the right for a helper, leaving focus where it is.
@@ -395,8 +401,20 @@ extension MainWindowController {
     }
 
     func mergeAgentTask(workspaceID: UUID) {
-        withAgentTask(workspaceID: workspaceID) { [weak self] workspace, info, status in
-            self?.confirmMerge(workspace: workspace, info: info, status: status)
+        guard let folder = appState.workspace(withID: workspaceID)?.folderPath else { return }
+        // The full check (conflicts, a dirty main checkout) before asking, like `boo merge`.
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let info = AgentWorktree.info(for: folder)
+            let check = info.map(AgentWorktree.mergeCheck(of:))
+            DispatchQueue.main.async {
+                guard let self, let workspace = self.appState.workspace(withID: workspaceID)
+                else { return }
+                guard let info, let check else {
+                    self.showAgentTaskError("\(workspace.displayName) is not a git worktree.", title: "Not a Worktree")
+                    return
+                }
+                self.confirmMerge(workspace: workspace, info: info, check: check)
+            }
         }
     }
 
@@ -410,14 +428,14 @@ extension MainWindowController {
     private func withAgentTask(
         workspaceID: UUID, _ body: @escaping @MainActor (Workspace, AgentWorktree.Info, AgentWorktree.Status) -> Void
     ) {
-        guard let workspace = appState.workspaces.first(where: { $0.id == workspaceID }) else { return }
+        guard let workspace = appState.workspace(withID: workspaceID) else { return }
         let folder = workspace.folderPath
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             let info = AgentWorktree.info(for: folder)
             let status = info.map(AgentWorktree.status(of:))
             DispatchQueue.main.async {
                 guard let self,
-                    let workspace = self.appState.workspaces.first(where: { $0.id == workspaceID })
+                    let workspace = self.appState.workspace(withID: workspaceID)
                 else { return }
                 guard let info, let status else {
                     self.showAgentTaskError("\(workspace.displayName) is not a git worktree.", title: "Not a Worktree")
@@ -428,28 +446,46 @@ extension MainWindowController {
         }
     }
 
-    private func confirmMerge(workspace: Workspace, info: AgentWorktree.Info, status: AgentWorktree.Status) {
-        guard let window, let branch = info.branch, let target = status.target else {
-            showAgentTaskError(
-                "The worktree or the main checkout is not on a branch.", title: "Can't Merge \(workspace.displayName)")
-            return
-        }
-        if status.isDirty {
-            showAgentTaskError(
-                "\(branch) has uncommitted changes. Commit them first (or ask the agent to).",
-                title: "Can't Merge \(workspace.displayName)")
-            return
-        }
-        guard status.ahead > 0 else {
-            showAgentTaskError("\(branch) has no commits that \(target) lacks.", title: "Nothing to Merge")
+    private func confirmMerge(workspace: Workspace, info: AgentWorktree.Info, check: AgentWorktree.MergeCheck) {
+        guard let window else { return }
+        let status = check.status
+        let branch = info.branch ?? "The worktree"
+        let target = status.target ?? "the main checkout"
+        let cantMerge = "Can't Merge \(workspace.displayName)"
+        let refusal: (message: String, title: String)? =
+            switch check.blocker {
+            case "no_target": ("The worktree or the main checkout is not on a branch.", cantMerge)
+            case "dirty": ("\(branch) has uncommitted changes. Commit them first (or ask the agent to).", cantMerge)
+            case "target_dirty":
+                (
+                    "\((info.mainRoot as NSString).abbreviatingWithTildeInPath) has uncommitted changes. "
+                        + "Commit or stash them first.", cantMerge
+                )
+            case "conflicts":
+                (
+                    "\(branch) conflicts with \(target) in \((check.conflicts ?? []).joined(separator: ", ")). "
+                        + "Ask the agent to rebase onto \(target).", cantMerge
+                )
+            case "nothing_to_merge": ("\(branch) has no commits that \(target) lacks.", "Nothing to Merge")
+            default: nil
+            }
+        if let refusal {
+            showAgentTaskError(refusal.message, title: refusal.title)
             return
         }
         let alert = NSAlert()
         alert.messageText = "Merge \(status.ahead) commit\(status.ahead == 1 ? "" : "s") from \(branch) into \(target)?"
-        alert.informativeText = "Runs git merge --no-ff in \((info.mainRoot as NSString).abbreviatingWithTildeInPath)."
+        var details = "Runs git merge --no-ff in \((info.mainRoot as NSString).abbreviatingWithTildeInPath)."
+        let working = isAgentWorking(inWorkspace: workspace.id)
+        if working {
+            details = "The agent is still working: commits it makes after this are not merged.\n\n" + details
+            alert.alertStyle = .warning
+        }
+        alert.informativeText = details
         let cleanup = NSButton(
             checkboxWithTitle: "Then remove the worktree and close the workspace", target: nil, action: nil)
-        cleanup.state = .on
+        // Closing would stop a working agent and delete what it has not committed yet.
+        cleanup.state = working ? .off : .on
         alert.accessoryView = cleanup
         alert.addButton(withTitle: "Merge")
         alert.addButton(withTitle: "Cancel")
@@ -613,7 +649,7 @@ extension MainWindowController {
     /// The tab the workspace's agent runs in: one the inbox knows about, else
     /// the first terminal tab (agent tasks start the agent there).
     func agentTab(inWorkspace workspaceID: UUID) -> (paneID: UUID, tabIndex: Int)? {
-        guard let workspace = appState.workspaces.first(where: { $0.id == workspaceID }) else { return nil }
+        guard let workspace = appState.workspace(withID: workspaceID) else { return nil }
         for item in AgentInbox.shared.sortedItems {
             if let location = AgentInbox.shared.locate(item.tabID), location.workspace.id == workspaceID {
                 return (location.pane.id, location.tabIndex)
@@ -639,7 +675,9 @@ extension MainWindowController {
         guard let target = agentTab(inWorkspace: workspaceID) else { return false }
         focusActivity(workspaceID: workspaceID, paneID: target.paneID, tabIndex: target.tabIndex)
         guard let view = ghosttyView(for: target.paneID) else { return false }
-        view.paste(hasLiveAgent(inWorkspace: workspaceID) ? text : Self.resumeCommand(text: text), submit: true)
+        view.paste(
+            hasLiveAgent(inWorkspace: workspaceID)
+                ? text : Self.resumeCommand(kind: taskAgentKind(workspaceID), text: text), submit: true)
         return true
     }
 
@@ -651,19 +689,40 @@ extension MainWindowController {
         }
         focusActivity(workspaceID: workspaceID, paneID: target.paneID, tabIndex: target.tabIndex)
         guard let view = ghosttyView(for: target.paneID) else { return false }
-        view.paste(Self.resumeCommand(text: nil), submit: true)
+        view.paste(Self.resumeCommand(kind: taskAgentKind(workspaceID), text: nil), submit: true)
         return true
+    }
+
+    /// The agent the workspace's task started with (Claude Code for tasks made
+    /// before Boo recorded it).
+    private func taskAgentKind(_ workspaceID: UUID) -> AgentKind {
+        guard let workspace = appState.workspace(withID: workspaceID) else { return .claudeCode }
+        return AgentWorktree.agentKind(in: workspace.folderPath) ?? .claudeCode
     }
 
     /// `claude --continue` picks up the newest conversation in the worktree's
     /// folder, so the agent keeps what it did before it stopped.
-    static func resumeCommand(text: String?) -> String {
+    static func resumeCommand(kind: AgentKind = .claudeCode, text: String?) -> String {
         let text = text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return text.isEmpty ? "claude --continue" : "claude --continue " + shellQuoted(text)
+        let base: String
+        switch kind {
+        case .claudeCode, .custom: base = "claude --continue"
+        case .codex: base = "codex resume --last"
+        case .openCode: base = text.isEmpty ? "opencode --continue" : "opencode --continue --prompt"
+        }
+        return text.isEmpty ? base : base + " " + shellQuoted(text)
     }
 
-    private func hasLiveAgent(inWorkspace workspaceID: UUID) -> Bool {
-        AgentInbox.shared.sortedItems.contains { AgentInbox.shared.locate($0.tabID)?.workspace.id == workspaceID }
+    private func isAgentWorking(inWorkspace workspaceID: UUID) -> Bool {
+        hasLiveAgent(inWorkspace: workspaceID) { $0.state == .working }
+    }
+
+    private func hasLiveAgent(
+        inWorkspace workspaceID: UUID, where match: (AgentInbox.Item) -> Bool = { _ in true }
+    ) -> Bool {
+        AgentInbox.shared.sortedItems.contains {
+            match($0) && AgentInbox.shared.locate($0.tabID)?.workspace.id == workspaceID
+        }
     }
 
     @objc func jumpToNextWaitingAgentAction(_ sender: Any?) {
