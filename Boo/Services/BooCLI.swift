@@ -247,21 +247,16 @@ enum BooCLI {
         guard !args.isEmpty else { return Output(text: usage, status: 2) }
         let action = args.removeFirst()
         var message: [String: Any] = [:]
-        for (option, key) in [
-            ("--tab", "tab_id"), ("--selector", "selector"), ("--text", "text"), ("--max", "max_chars")
-        ] {
+        for (option, key) in [("--tab", "tab_id"), ("--selector", "selector"), ("--text", "text")] {
             guard let value = takeValue(option, from: &args) else {
                 return Output(text: "\(option) needs a value", status: 2)
             }
-            guard let value else { continue }
-            if key == "max_chars" {
-                guard let number = Int(value), number > 0 else {
-                    return Output(text: "--max needs a number", status: 2)
-                }
-                message[key] = number
-            } else {
-                message[key] = value
-            }
+            if let value { message[key] = value }
+        }
+        guard let max = takeValue("--max", from: &args) else { return Output(text: "--max needs a value", status: 2) }
+        if let max {
+            guard let number = Int(max), number > 0 else { return Output(text: "--max needs a number", status: 2) }
+            message["max_chars"] = number
         }
         func flag(_ name: String) -> Bool {
             guard let index = args.firstIndex(of: name) else { return false }
@@ -326,8 +321,11 @@ enum BooCLI {
 
         let reply = try request(message)
         if reply["status"] as? String == "pending" { return Output(text: browserPending, status: 0) }
+        func shortID(_ row: [String: Any]) -> String {
+            String((row["tab_id"] as? String ?? "").prefix(8)).lowercased()
+        }
         func page() -> String {
-            let id = String((reply["tab_id"] as? String ?? "").prefix(8)).lowercased()
+            let id = shortID(reply)
             let title = reply["title"] as? String ?? ""
             return [id, title.isEmpty ? nil : title, reply["url"] as? String].compactMap { $0 }.joined(separator: "  ")
         }
@@ -351,7 +349,7 @@ enum BooCLI {
             guard !tabs.isEmpty else { return Output(text: "no browser tabs", status: 0) }
             return Output(
                 text: tabs.map { tab in
-                    let id = String((tab["tab_id"] as? String ?? "").prefix(8)).lowercased()
+                    let id = shortID(tab)
                     let mark = tab["owned"] as? Bool == true ? "*" : " "
                     return "\(id) \(mark) \(tab["title"] as? String ?? "")  \(tab["url"] as? String ?? "")"
                 }.joined(separator: "\n"),

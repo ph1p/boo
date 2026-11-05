@@ -11,6 +11,8 @@ final class AgentBrowserTests: XCTestCase {
         XCTAssertEqual(try AgentBrowser.url("http://a.test/").absoluteString, "http://a.test/")
         XCTAssertEqual(try AgentBrowser.url("about:blank").absoluteString, "about:blank")
         XCTAssertTrue(try AgentBrowser.url("/tmp/a.html").isFileURL)
+        XCTAssertEqual(try AgentBrowser.url(":3000").absoluteString, "http://localhost:3000")
+        XCTAssertThrowsError(try AgentBrowser.url("not a url"), "the address bar would search for it")
     }
 
     func testApprovalCardNamesBrowserActions() {

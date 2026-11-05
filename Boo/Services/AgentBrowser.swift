@@ -27,7 +27,7 @@ final class AgentBrowser {
         return window
     }()
 
-    static let loadTimeout: TimeInterval = 10
+    nonisolated static let loadTimeout: TimeInterval = 10
     static let readLimit = 20000
 
     // MARK: - Targets
@@ -123,12 +123,13 @@ final class AgentBrowser {
                 let html = string("format") == "html"
                 let limit = max(1, json["max_chars"] as? Int ?? Self.readLimit)
                 guard
-                    let text = try await self.evaluate(
-                        Self.readScript, ["selector": string("selector") ?? "", "html": html], in: view) as? String
+                    let read = try await self.evaluate(
+                        Self.readScript, ["selector": string("selector") ?? "", "html": html, "limit": limit],
+                        in: view) as? [String: Any]
                 else { throw Failure(message: "no element matches \(string("selector") ?? "the page")") }
                 var result = self.page(id, view)
-                result["text"] = String(text.prefix(limit))
-                result["truncated"] = text.count > limit
+                result["text"] = read["text"] as? String ?? ""
+                result["truncated"] = read["truncated"] as? Bool ?? false
                 return result
             case "browser_screenshot":
                 var result = self.page(id, view)
@@ -273,7 +274,7 @@ final class AgentBrowser {
 
     /// After a click or input: wait for a navigation it may have started.
     private func settle(_ view: BrowserContentView) async {
-        await waitForLoad(view, timeout: Self.loadTimeout)
+        await waitForLoad(view)
         try? await Task.sleep(for: .milliseconds(100))
     }
 
@@ -309,8 +310,8 @@ final class AgentBrowser {
                 }
             }
         }
-        guard let tiff = image.tiffRepresentation,
-            let png = NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:])
+        guard let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil),
+            let png = NSBitmapImageRep(cgImage: cgImage).representation(using: .png, properties: [:])
         else { throw Failure(message: "could not encode the screenshot") }
         let file: URL
         if let path {
@@ -326,20 +327,12 @@ final class AgentBrowser {
 
     // MARK: - Helpers
 
-    /// `localhost:3000` and `example.com` get a scheme like the address bar gives them.
+    /// Resolved like the address bar does (`:3000`, `localhost:3000`, `example.com`),
+    /// except that text the address bar would search for is an error.
     static func url(_ text: String) throws -> URL {
-        let text = text.trimmingCharacters(in: .whitespaces)
-        if text.hasPrefix("/") || text.hasPrefix("~") {
-            return URL(fileURLWithPath: (text as NSString).expandingTildeInPath)
-        }
-        if text.contains("://") || text.hasPrefix("about:") || text.hasPrefix("data:") {
-            guard let url = URL(string: text) else { throw Failure(message: "bad url \(text)") }
-            return url
-        }
-        let local = ["localhost", "127.", "0.0.0.0", "[::1]"].contains { text.hasPrefix($0) }
-        guard let url = URL(string: (local ? "http://" : "https://") + text), url.host != nil else {
-            throw Failure(message: "bad url \(text)")
-        }
+        guard let url = BrowserContentView.resolveInput(text),
+            url != BrowserContentView.searchURL(for: text.trimmingCharacters(in: .whitespacesAndNewlines))
+        else { throw Failure(message: "bad url \(text)") }
         return url
     }
 
@@ -382,7 +375,8 @@ final class AgentBrowser {
     static let readScript = """
         const root = selector ? document.querySelector(selector) : (html ? document.documentElement : document.body);
         if (!root) return null;
-        return html ? root.outerHTML : root.innerText;
+        const text = html ? root.outerHTML : root.innerText;
+        return { text: text.slice(0, limit), truncated: text.length > limit };
         """
 
     static let consoleScript = """
@@ -400,8 +394,8 @@ final class AgentBrowser {
           const candidates = document.querySelectorAll(
             'a, button, [role=button], [role=link], [role=tab], [role=menuitem], input[type=submit], input[type=button], label, summary');
           const label = (c) => (c.innerText || c.value || c.getAttribute('aria-label') || '').trim().toLowerCase();
-          el = Array.from(candidates).find((c) => label(c) === wanted)
-            || Array.from(candidates).find((c) => label(c).includes(wanted));
+          const labeled = Array.from(candidates, (c) => [c, label(c)]);
+          el = (labeled.find(([, l]) => l === wanted) || labeled.find(([, l]) => l.includes(wanted)) || [])[0];
         }
         if (!el) return null;
         el.scrollIntoView({ block: 'center' });

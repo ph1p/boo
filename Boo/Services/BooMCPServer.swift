@@ -30,8 +30,8 @@ struct BooMCPServer {
     /// to its own `timeout`, everything else answers at once.
     static func clientTimeout(for message: [String: Any]) -> Int {
         let cmd = message["cmd"] as? String ?? ""
-        // Browser commands wait up to `AgentBrowser.loadTimeout` for a page.
-        if OrchestratorGate.browserCommands.contains(cmd) { return 30 }
+        // A browser command can wait for a page twice (load, then settle).
+        if OrchestratorGate.browserCommands.contains(cmd) { return Int(AgentBrowser.loadTimeout) * 2 + 10 }
         guard cmd == "wait_for_events" else { return 10 }
         let held = (message["timeout"] as? Double) ?? (message["timeout"] as? Int).map(Double.init)
         return Int(min(max(held ?? OrchestratorEvents.defaultTimeout, 0), OrchestratorEvents.maxTimeout)) + 15
@@ -308,19 +308,17 @@ struct BooMCPServer {
         need the user's approval.
         """
 
-    static let browserKeys = [
-        "tab_id", "url", "show", "action", "selector", "text", "format", "max_chars", "path", "clear", "submit", "js"
-    ]
+    /// Every parameter the browser tools declare, forwarded as is.
+    static let browserKeys: Set<String> = Set(
+        browserTools.flatMap { tool in
+            ((tool["inputSchema"] as? [String: Any])?["properties"] as? [String: Any])?.keys.map { $0 } ?? []
+        })
 
-    private static var browserTabProperty: [String: Any] {
-        [
+    private static var browserTools: [[String: Any]] {
+        let tab: [String: Any] = [
             "type": "string",
             "description": "Browser tab id or its first characters, from browser_list (default: the tab you used last)"
         ]
-    }
-
-    private static var browserTools: [[String: Any]] {
-        let tab = browserTabProperty
         return [
             [
                 "name": "browser_open",

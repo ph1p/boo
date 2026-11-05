@@ -189,16 +189,13 @@ final class ApprovalCenter {
         switch cmd {
         case "agent_respond": return json["response"] as? String ?? ""
         case "agent_send": return json["text"] as? String ?? ""
-        case "send_text":
+        case "send_text", "browser_type":
             let text = json["text"] as? String ?? ""
             return (json["submit"] as? Bool ?? false) ? text + " ⏎" : text
         case "send_key": return json["key"] as? String ?? ""
         case "merge_task", "discard_task": return json["summary"] as? String ?? ""
         case "browser_navigate": return json["url"] as? String ?? json["action"] as? String ?? ""
         case "browser_read", "browser_click": return json["selector"] as? String ?? json["text"] as? String ?? ""
-        case "browser_type":
-            let text = json["text"] as? String ?? ""
-            return (json["submit"] as? Bool ?? false) ? text + " ⏎" : text
         case "browser_eval": return json["js"] as? String ?? ""
         default: return ""
         }
