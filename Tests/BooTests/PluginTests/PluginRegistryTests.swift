@@ -44,6 +44,7 @@ final class PluginRegistryTests: XCTestCase {
             "kube",
             "notes",
             "snippets",
+            "tasks",
             "system-info",
             "debug"
         ]

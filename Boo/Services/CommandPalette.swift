@@ -4,7 +4,7 @@ import Cocoa
 @MainActor
 struct PaletteItem: Identifiable {
     enum Kind: Int, CaseIterable {
-        case action, workspace, tab, bookmark, host, theme, profile, recipe, history
+        case action, workspace, tab, bookmark, host, theme, profile, recipe, task, history
 
         var title: String {
             switch self {
@@ -16,6 +16,7 @@ struct PaletteItem: Identifiable {
             case .theme: return "Themes"
             case .profile: return "Profiles"
             case .recipe: return "Recipes"
+            case .task: return "Tasks"
             case .history: return "History"
             }
         }
@@ -154,7 +155,7 @@ enum PaletteSources {
     static func items(menu: NSMenu? = NSApplication.shared.mainMenu) -> [PaletteItem] {
         let places = workspaces() + tabs() + bookmarks() + hosts()
         let looks = themes() + profiles()
-        return actions(menu: menu) + places + looks + RecipesMenu.paletteItems()
+        return actions(menu: menu) + places + looks + RecipesMenu.paletteItems() + projectTasks()
     }
 
     static func actions(menu: NSMenu?) -> [PaletteItem] {
@@ -269,6 +270,26 @@ enum PaletteSources {
                 id: "host:\(host.alias)", kind: .host, title: host.alias,
                 subtitle: host.address == host.alias ? "" : host.address,
                 perform: { store.connect(host, split: false) })
+        }
+    }
+
+    /// Tasks of the focused local terminal's project; picking one runs it in a new tab.
+    static func projectTasks() -> [PaletteItem] {
+        guard let controller = WindowManager.shared.activeController,
+            let workspace = controller.activeWorkspace,
+            let tab = workspace.pane(for: workspace.activePaneID)?.activeTab,
+            tab.contentType == .terminal, tab.remoteSession == nil
+        else { return [] }
+        let store = TaskRunStore.shared
+        return ProjectTaskScanner.groups(cwd: tab.workingDirectory).flatMap { group in
+            store.ordered(group).map { task in
+                PaletteItem(
+                    id: "task:\(group.root)/\(task.id)", kind: .task, title: task.name,
+                    subtitle: "\(task.command) · \(abbreviate(group.root))",
+                    perform: { [weak controller] in
+                        controller?.handleOpenTab(store.start(task, in: group.root))
+                    })
+            }
         }
     }
 

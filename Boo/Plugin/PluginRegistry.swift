@@ -276,6 +276,7 @@ final class PluginRegistry {
         register(KubePlugin())
         register(NotesPlugin())
         register(SnippetsPlugin())
+        register(TasksPlugin())
         register(SystemInfoPlugin())
         register(DebugPlugin())
     }
