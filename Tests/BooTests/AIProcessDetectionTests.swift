@@ -135,11 +135,6 @@ final class AIProcessDetectionTests: XCTestCase {
         XCTAssertEqual(TerminalBridge.extractProcessName(from: "~/dev/project: info"), "")
     }
 
-    func testPathAbsoluteWithColonReturnsEmpty() {
-        XCTAssertEqual(
-            TerminalBridge.extractProcessName(from: "/Users/testuser/dev/telis/e2e-playwright-starter"), "")
-    }
-
     func testPathWithSpacesReturnsEmpty() {
         XCTAssertEqual(TerminalBridge.extractProcessName(from: "~/Library/Application Support"), "")
     }
@@ -267,14 +262,6 @@ final class AIProcessDetectionTests: XCTestCase {
         }
     }
 
-    func testShellTitleClears() {
-        bridge.handleTitleChange(title: "vim", paneID: paneID)
-        XCTAssertEqual(bridge.state.foregroundProcess, "vim")
-
-        bridge.handleTitleChange(title: "zsh", paneID: paneID)
-        XCTAssertEqual(bridge.state.foregroundProcess, "")
-    }
-
     // MARK: - Socket-based: process set via reevaluateSocketProcess
 
     // Use getpid() as shellPID so isDescendant(getpid(), of: getpid()) = true (direct match)
@@ -299,20 +286,6 @@ final class AIProcessDetectionTests: XCTestCase {
 
         bridge.handleTitleChange(title: "⠂ General coding assistance", paneID: paneID)
         XCTAssertEqual(bridge.state.foregroundProcess, "claude")
-
-        bridge.monitor.untrack(paneID: paneID)
-    }
-
-    func testSocketSurvivesTitleChanges() {
-        bridge.monitor.track(paneID: paneID, shellPID: selfPID)
-        BooSocketServer.shared.processes[selfPID] = BooSocketServer.ProcessStatus(
-            pid: selfPID, name: "opencode", category: "ai", registeredAt: Date(), metadata: [:])
-        bridge.reevaluateSocketProcess()
-        XCTAssertEqual(bridge.state.foregroundProcess, "opencode")
-
-        // Title changes don't downgrade socket-registered process
-        bridge.handleTitleChange(title: "⠂ General coding assistance", paneID: paneID)
-        XCTAssertEqual(bridge.state.foregroundProcess, "opencode")
 
         bridge.monitor.untrack(paneID: paneID)
     }

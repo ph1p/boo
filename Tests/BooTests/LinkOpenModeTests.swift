@@ -6,17 +6,6 @@ final class LinkOpenModeTests: XCTestCase {
 
     // MARK: - Enum cases
 
-    func testLinkOpenModeAllCases() {
-        XCTAssertEqual(LinkOpenMode.allCases.count, 2)
-        XCTAssertTrue(LinkOpenMode.allCases.contains(.browserTab))
-        XCTAssertTrue(LinkOpenMode.allCases.contains(.externalBrowser))
-    }
-
-    func testLinkOpenModeDisplayNames() {
-        XCTAssertEqual(LinkOpenMode.browserTab.displayName, "Browser Tab")
-        XCTAssertEqual(LinkOpenMode.externalBrowser.displayName, "External Browser")
-    }
-
     func testLinkOpenModeRawValues() {
         XCTAssertEqual(LinkOpenMode.browserTab.rawValue, "browserTab")
         XCTAssertEqual(LinkOpenMode.externalBrowser.rawValue, "externalBrowser")

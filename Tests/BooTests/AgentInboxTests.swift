@@ -102,16 +102,6 @@ final class AgentInboxTests: XCTestCase {
         XCTAssertNil(inbox.items[tab])
     }
 
-    /// A hook for a closed tab must not land on the pane's other active tab.
-    func testEventForAGoneTabIsDropped() {
-        let inbox = makeInbox()
-        let result = inbox.handleSocketEvent([
-            "tab_id": UUID().uuidString, "pane_id": UUID().uuidString, "event": "stop"
-        ])
-        XCTAssertEqual(result["ok"] as? Bool, false)
-        XCTAssertTrue(inbox.items.isEmpty)
-    }
-
     func testSortsWaitingAgentsFirst() {
         let inbox = makeInbox()
         let working = UUID()

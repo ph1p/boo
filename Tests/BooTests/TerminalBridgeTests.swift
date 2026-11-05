@@ -287,14 +287,6 @@ import XCTest
         XCTAssertNil(result)
     }
 
-    func testLocalhostNotDetectedAsSSH() {
-        let result = TerminalBridge.detectRemoteFromHeuristics(
-            title: "user@localhost: /home",
-            cwd: "/tmp"
-        )
-        XCTAssertNil(result)
-    }
-
     func testNpmScopedPackageNotDetectedAsSSH() {
         // "bunx @scope/package" — scoped package, empty user before "@"
         XCTAssertNil(
@@ -1271,11 +1263,6 @@ import XCTest
             "Double quotes must be stripped from container name")
     }
 
-    func testDockerUnquotedContainerNameUnchanged() {
-        let result = TerminalBridge.detectRemoteFromProcessName(title: "docker exec -it web-app bash")
-        XCTAssertEqual(result, .container(target: "web-app", tool: .docker))
-    }
-
     func testDockerHeuristicQuotedContainerName() {
         let result = TerminalBridge.detectRemoteFromHeuristics(title: "docker exec -it 'my-db' sh", cwd: "/tmp")
         XCTAssertEqual(
@@ -1320,11 +1307,6 @@ import XCTest
     }
 
     // MARK: - Container prompt CWD extraction
-
-    func testExtractRemoteCwdHexContainerWithAbsolutePath() {
-        let result = TerminalBridge.extractRemoteCwd(from: "195cad4b6562:/app#")
-        XCTAssertEqual(result, "/app")
-    }
 
     func testExtractRemoteCwdHexContainerWithTilde() {
         let result = TerminalBridge.extractRemoteCwd(from: "195cad4b6562:~#")

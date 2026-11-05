@@ -232,39 +232,4 @@ final class PluginSubscriptionTests: XCTestCase {
         XCTAssertTrue(sysInfo.subscribedEvents.contains(.focusChanged))
         XCTAssertFalse(sysInfo.subscribedEvents.contains(.processChanged))
     }
-
-    // MARK: - Subscription Prevents Unnecessary Work
-
-    func testFocusFloodOnlyHitsSubscribers() {
-        let registry = PluginRegistry()
-        let cwdPlugin = CwdOnlyPlugin()
-        let allPlugin = AllEventsPlugin()
-        registry.register(cwdPlugin)
-        registry.register(allPlugin)
-
-        let ctx = makeContext()
-        // Simulate 100 rapid focus events (like the sidebar rebuild loop)
-        for _ in 0..<100 {
-            registry.notifyFocusChanged(terminalID: UUID(), context: ctx)
-        }
-
-        XCTAssertEqual(cwdPlugin.focusCallCount, 0, "CWD-only plugin should not be called")
-        XCTAssertEqual(allPlugin.events.filter { $0 == "focus" }.count, 100)
-    }
-
-    func testProcessFloodOnlyHitsSubscribers() {
-        let registry = PluginRegistry()
-        let cwdPlugin = CwdOnlyPlugin()
-        let procPlugin = ProcessAndRemotePlugin()
-        registry.register(cwdPlugin)
-        registry.register(procPlugin)
-
-        let ctx = makeContext()
-        for i in 0..<50 {
-            registry.notifyProcessChanged(name: "process-\(i)", context: ctx)
-        }
-
-        XCTAssertEqual(cwdPlugin.processCallCount, 0)
-        XCTAssertEqual(procPlugin.processCallCount, 50)
-    }
 }

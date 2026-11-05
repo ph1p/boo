@@ -33,16 +33,6 @@ import XCTest
         XCTAssertEqual(gainCount, 0)
     }
 
-    func testGainCallbackFiresSynchronously() {
-        // onFocusGained must fire synchronously inside becomeFirstResponder,
-        // before the async selectAll dispatch.
-        let (field, window) = makeFieldInWindow()
-        var gainFired = false
-        field.onFocusGained = { gainFired = true }
-        window.makeFirstResponder(field)
-        XCTAssertTrue(gainFired)
-    }
-
     func testIsFieldActiveSetAfterFocus() {
         let (field, window) = makeFieldInWindow()
         window.makeFirstResponder(field)
@@ -61,13 +51,6 @@ import XCTest
         XCTAssertTrue(
             field.isFieldActive,
             "isFieldActive must stay true while the field editor owns focus")
-    }
-
-    func testNilCallbacksDoNotCrash() {
-        let (field, window) = makeFieldInWindow()
-        field.onFocusGained = nil
-        field.onFocusLost = nil
-        window.makeFirstResponder(field)
     }
 
     func testJustBecameFirstResponderSetOnFocus() {
@@ -102,29 +85,6 @@ import XCTest
         window.makeFirstResponder(field)  // cycle 3
 
         XCTAssertEqual(gainCount, 3, "Each focus cycle must fire onFocusGained exactly once")
-    }
-
-    // MARK: - URLBarPillView
-
-    func testPillIsFocusedDefaultsFalse() {
-        XCTAssertFalse(URLBarPillView().isFocused)
-    }
-
-    func testPillIsFocusedOnFocusGained() {
-        let (field, window) = makeFieldInWindow()
-        let pill = URLBarPillView()
-        field.onFocusGained = { [weak pill] in pill?.isFocused = true }
-        field.onFocusLost = { [weak pill] in pill?.isFocused = false }
-
-        window.makeFirstResponder(field)
-        XCTAssertTrue(pill.isFocused)
-    }
-
-    func testPillThemeAssignment() {
-        let pill = URLBarPillView()
-        XCTAssertNil(pill.theme)
-        pill.theme = TerminalTheme.themes.first!
-        XCTAssertNotNil(pill.theme)
     }
 
     // MARK: - Helpers

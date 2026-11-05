@@ -103,24 +103,6 @@ final class SystemInfoPluginTests: XCTestCase {
         XCTAssertEqual(content!.icon, "memorychip")
     }
 
-    func testSectionTitle() {
-        let plugin = SystemInfoPlugin()
-        let terminal = TerminalContext(
-            terminalID: UUID(),
-            cwd: "/tmp",
-            remoteSession: nil,
-            gitContext: nil,
-            processName: "",
-            paneCount: 1,
-            tabCount: 1
-        )
-        let ctx = makePluginContext(terminal: terminal)
-
-        let title = plugin.sectionTitle(context: ctx)
-        XCTAssertNotNil(title)
-        XCTAssertTrue(title!.hasPrefix("System ("))
-    }
-
     func testCwdChangeRefreshesDisplayedMetrics() {
         let plugin = SystemInfoPlugin()
         plugin.services = StubPluginServices(system: StubSystemInfoService())
@@ -150,23 +132,6 @@ final class SystemInfoPluginTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(plugin.memoryUsedGB, 0)
         // Uptime should be positive
         XCTAssertGreaterThan(plugin.uptimeSeconds, 0)
-    }
-
-    func testSectionTitleIncludesCPU() {
-        let plugin = SystemInfoPlugin()
-        let terminal = TerminalContext(
-            terminalID: UUID(),
-            cwd: "/tmp",
-            remoteSession: nil,
-            gitContext: nil,
-            processName: "",
-            paneCount: 1,
-            tabCount: 1
-        )
-        let ctx = makePluginContext(terminal: terminal)
-        let title = plugin.sectionTitle(context: ctx)!
-        XCTAssertTrue(title.contains("CPU"), "Section title should include CPU info")
-        XCTAssertTrue(title.contains("Mem"), "Section title should include Mem info")
     }
 
     func testManifestHasNewSettings() {

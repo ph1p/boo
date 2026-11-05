@@ -37,11 +37,6 @@ final class ClaimedDirectChildrenTests: XCTestCase {
         ClaimedDirectChildren.release(9003)
     }
 
-    func testClaimSucceedsForUnclaimedPID() {
-        XCTAssertTrue(ClaimedDirectChildren.claim(9001))
-        ClaimedDirectChildren.release(9001)
-    }
-
     func testClaimFailsForAlreadyClaimedPID() {
         XCTAssertTrue(ClaimedDirectChildren.claim(9001))
         XCTAssertFalse(ClaimedDirectChildren.claim(9001), "Second claim must fail")
@@ -53,22 +48,6 @@ final class ClaimedDirectChildrenTests: XCTestCase {
         ClaimedDirectChildren.release(9001)
         XCTAssertTrue(ClaimedDirectChildren.claim(9001), "After release, claim must succeed again")
         ClaimedDirectChildren.release(9001)
-    }
-
-    /// Simulates two panes racing to discover the same direct child PID.
-    /// Only the first claim should win; the second must be rejected.
-    func testTwoPanesRacingForSameDirectChild() {
-        let sharedDirectChild: pid_t = 9001
-
-        // Pane A claims first
-        let paneAClaimed = ClaimedDirectChildren.claim(sharedDirectChild)
-        // Pane B tries to claim the same PID
-        let paneBClaimed = ClaimedDirectChildren.claim(sharedDirectChild)
-
-        XCTAssertTrue(paneAClaimed, "First claimer must win")
-        XCTAssertFalse(paneBClaimed, "Second claimer must be rejected")
-
-        ClaimedDirectChildren.release(sharedDirectChild)
     }
 
     func testDistinctPIDsCanBothBeClaimed() {

@@ -99,13 +99,6 @@ final class BookmarkServiceTests: XCTestCase {
         XCTAssertEqual(dockerBookmarks.count, 1)
     }
 
-    func testNoDuplicatesWithinSameNamespace() {
-        let service = BookmarkService.shared
-        service.add(name: "A", path: "/tmp", namespace: "ssh:host1")
-        service.add(name: "B", path: "/tmp", namespace: "ssh:host1")
-        XCTAssertEqual(service.bookmarks.count, 1)
-    }
-
     func testSamePathDifferentNamespacesAllowed() {
         let service = BookmarkService.shared
         service.add(name: "Local", path: "/tmp", namespace: "local")

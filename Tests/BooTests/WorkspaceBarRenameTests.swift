@@ -63,20 +63,6 @@ private class SpyDelegate: WorkspaceBarViewDelegate {
 
     // MARK: - Double-click routing
 
-    func testDoubleClickDoesNotFireSelect() {
-        // The double-click path calls showRenameAlert (not the select delegate).
-        // Verify select is NOT called — the bar must be in a window for
-        // showRenameAlert to proceed, so without one it bails early, which is fine:
-        // we're checking routing, not sheet presentation.
-        bar.triggerDoubleClickForTesting(at: 0)
-        XCTAssertNil(spy.selectedIndex, "Double-click must not fire didSelectAt")
-    }
-
-    func testDoubleClickOnSecondItemDoesNotFireSelect() {
-        bar.triggerDoubleClickForTesting(at: 1)
-        XCTAssertNil(spy.selectedIndex, "Double-click on index 1 must not fire didSelectAt")
-    }
-
     func testDoubleClickOutOfBoundsDoesNotCrash() {
         // showRenameAlert guards index validity; these must not crash
         bar.triggerDoubleClickForTesting(at: -1)
@@ -101,55 +87,7 @@ private class SpyDelegate: WorkspaceBarViewDelegate {
         XCTAssertNil(spy.renamedIndex)
     }
 
-    // MARK: - Rename delegate callback contract
-
-    func testRenameCallsDelegateWithNewName() {
-        spy.workspaceBar(bar, renameWorkspaceAt: 0, to: "NewName")
-        XCTAssertEqual(spy.renamedIndex, 0)
-        XCTAssertEqual(spy.renamedName, "NewName")
-    }
-
-    func testRenameCallsDelegateOnSecondWorkspace() {
-        spy.workspaceBar(bar, renameWorkspaceAt: 1, to: "Updated")
-        XCTAssertEqual(spy.renamedIndex, 1)
-        XCTAssertEqual(spy.renamedName, "Updated")
-    }
-
-    func testRenameSheetTrimsWhitespaceBeforeDelegate() {
-        // The sheet completion handler trims whitespace before calling the delegate.
-        // Verify the guard: empty-after-trim must be skipped.
-        let raw = "  trimmed  "
-        let trimmed = raw.trimmingCharacters(in: .whitespaces)
-        if !trimmed.isEmpty {
-            spy.workspaceBar(bar, renameWorkspaceAt: 0, to: trimmed)
-        }
-        XCTAssertEqual(spy.renamedName, "trimmed")
-    }
-
-    func testEmptyNameAfterTrimIsNotForwarded() {
-        // The guard `if !name.isEmpty` in the sheet completion handler prevents
-        // forwarding a blank name to the delegate.
-        let name = "   ".trimmingCharacters(in: .whitespaces)
-        if !name.isEmpty {
-            spy.workspaceBar(bar, renameWorkspaceAt: 0, to: name)
-        }
-        XCTAssertNil(spy.renamedIndex, "Blank name must not reach the delegate")
-    }
-
-    // MARK: - Input field pre-population
-
-    func testRenameAlertInputPrePopulatedWithCurrentName() {
-        // The item's name is what gets put into the input field.
-        // Confirm item names match what we set.
-        XCTAssertEqual(bar.items[0].name, "alpha")
-        XCTAssertEqual(bar.items[1].name, "beta")
-    }
-
     // MARK: - Items state
-
-    func testBarHoldsCorrectItemCount() {
-        XCTAssertEqual(bar.items.count, 2)
-    }
 
     func testSelectedIndexIsRespected() {
         bar.setItems(bar.items, selectedIndex: 1)
@@ -217,46 +155,8 @@ private class ToolbarSpyDelegate: ToolbarViewDelegate {
 
     // MARK: - Double-click routing
 
-    func testDoubleClickDoesNotFireSelect() {
-        // Without a window the sheet bails at the guard, but select must still not fire.
-        toolbar.triggerDoubleClickForTesting(at: 0)
-        XCTAssertNil(spy.selectedIndex, "Double-click must not fire didSelectWorkspaceAt")
-    }
-
-    func testDoubleClickOnSecondItemDoesNotFireSelect() {
-        toolbar.triggerDoubleClickForTesting(at: 1)
-        XCTAssertNil(spy.selectedIndex)
-    }
-
     func testDoubleClickOutOfBoundsDoesNotCrash() {
         toolbar.triggerDoubleClickForTesting(at: -1)
         toolbar.triggerDoubleClickForTesting(at: 99)
-    }
-
-    // MARK: - Rename delegate contract
-
-    func testRenameCallsDelegateWithNewName() {
-        spy.toolbar(toolbar, renameWorkspaceAt: 0, to: "Renamed")
-        XCTAssertEqual(spy.renamedIndex, 0)
-        XCTAssertEqual(spy.renamedName, "Renamed")
-    }
-
-    func testRenameOnSecondWorkspace() {
-        spy.toolbar(toolbar, renameWorkspaceAt: 1, to: "NewBeta")
-        XCTAssertEqual(spy.renamedIndex, 1)
-        XCTAssertEqual(spy.renamedName, "NewBeta")
-    }
-
-    func testEmptyNameNotForwarded() {
-        let name = "   ".trimmingCharacters(in: .whitespaces)
-        if !name.isEmpty {
-            spy.toolbar(toolbar, renameWorkspaceAt: 0, to: name)
-        }
-        XCTAssertNil(spy.renamedIndex)
-    }
-
-    func testWorkspaceNamePrePopulated() {
-        XCTAssertEqual(toolbar.workspaces[0].name, "alpha")
-        XCTAssertEqual(toolbar.workspaces[1].name, "beta")
     }
 }

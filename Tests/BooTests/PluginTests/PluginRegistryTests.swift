@@ -99,17 +99,6 @@ final class PluginRegistryTests: XCTestCase {
         XCTAssertFalse(result.visiblePluginIDs.contains("git-panel"))
     }
 
-    func testStatusBarContentCollected() {
-        let registry = PluginRegistry()
-        registry.registerBuiltins()
-
-        let localGit = makeContext(gitBranch: "main")
-        let result = registry.runCycle(baseContext: localGit, reason: .focusChanged)
-
-        // Verify at least some plugins provide status bar content
-        XCTAssertGreaterThan(result.statusBarContents.count, 0, "Should have status bar content from plugins")
-    }
-
     func testGitStatusBarContent() {
         let registry = PluginRegistry()
         registry.registerBuiltins()

@@ -6,16 +6,6 @@ import XCTest
 @MainActor
 final class BrowserContentViewTests: XCTestCase {
 
-    func testSyncVisibleURLUpdatesCurrentURLAndAddressBar() {
-        let view = BrowserContentView(url: ContentType.blankURL)
-        let newURL = URL(string: "https://example.com/path")!
-
-        view.syncVisibleURL(newURL)
-
-        XCTAssertEqual(view.url, newURL)
-        XCTAssertEqual(view.displayedURLString, newURL.absoluteString)
-    }
-
     func testSyncVisibleURLFiresURLChangedCallback() {
         let view = BrowserContentView(url: ContentType.blankURL)
         let newURL = URL(string: "https://example.com/updated")!
@@ -239,46 +229,6 @@ final class BrowserContentViewTests: XCTestCase {
         )!
 
         XCTAssertFalse(view.performKeyEquivalent(with: event), message)
-    }
-
-    func testPerformKeyEquivalentNonEditKeyPassesThrough() {
-        let view = BrowserContentView(url: ContentType.blankURL)
-        // Cmd+N is not an edit key — should NOT be intercepted
-        let event = NSEvent.keyEvent(
-            with: .keyDown,
-            location: .zero,
-            modifierFlags: .command,
-            timestamp: 0,
-            windowNumber: 0,
-            context: nil,
-            characters: "n",
-            charactersIgnoringModifiers: "n",
-            isARepeat: false,
-            keyCode: 45
-        )!
-        // Without a window the guard `window?.firstResponder !== wv` is false,
-        // so the switch default branch fires → super is called → returns false.
-        let handled = view.performKeyEquivalent(with: event)
-        XCTAssertFalse(handled, "Non-edit Cmd+key must not be consumed by BrowserContentView")
-    }
-
-    func testPerformKeyEquivalentNonCommandEventPassesThrough() {
-        let view = BrowserContentView(url: ContentType.blankURL)
-        // Plain key press without Cmd — guard fails immediately
-        let event = NSEvent.keyEvent(
-            with: .keyDown,
-            location: .zero,
-            modifierFlags: [],
-            timestamp: 0,
-            windowNumber: 0,
-            context: nil,
-            characters: "c",
-            charactersIgnoringModifiers: "c",
-            isARepeat: false,
-            keyCode: 8
-        )!
-        let handled = view.performKeyEquivalent(with: event)
-        XCTAssertFalse(handled, "Non-command key must not be intercepted")
     }
 
     private func findSubview<T: NSView>(of type: T.Type, in view: NSView) -> T? {

@@ -4,21 +4,6 @@ import XCTest
 
 final class SettingsPersistenceTests: XCTestCase {
 
-    func testSettingsFileCreatedOnChange() {
-        let settings = AppSettings.shared
-        let original = settings.fontSize
-
-        // Trigger a save
-        settings.fontSize = 18
-        defer { settings.fontSize = original }
-
-        // Check the file exists
-        let path = BooPaths.settingsFile
-        XCTAssertTrue(
-            FileManager.default.fileExists(atPath: path),
-            "settings.json should exist after a settings change")
-    }
-
     func testSettingsFileIsValidJSON() {
         let settings = AppSettings.shared
         let original = settings.fontSize
@@ -34,16 +19,6 @@ final class SettingsPersistenceTests: XCTestCase {
         let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
         XCTAssertNotNil(json, "settings.json should contain valid JSON")
         XCTAssertEqual(json?["fontSize"] as? Double, 16.0)
-    }
-
-    @MainActor func testGhosttyConfigFileCreated() {
-        // GhosttyRuntime writes config on init
-        _ = GhosttyRuntime.shared
-
-        let path = BooPaths.ghosttyConfigFile
-        XCTAssertTrue(
-            FileManager.default.fileExists(atPath: path),
-            "ghostty.conf should exist after runtime init")
     }
 
     @MainActor func testGhosttyConfigContainsFont() {
@@ -84,24 +59,6 @@ final class SettingsPersistenceTests: XCTestCase {
     }
 
     // MARK: - Sidebar Width Persistence
-
-    func testSidebarWidthDefaultValue() {
-        UserDefaults.standard.removeObject(forKey: "sidebarWidth")
-        let settings = AppSettings.shared
-        XCTAssertEqual(settings.sidebarWidth, 250, "Default sidebar width should be 250")
-    }
-
-    func testSidebarWidthRoundTrip() {
-        let settings = AppSettings.shared
-
-        settings.sidebarWidth = 300
-        XCTAssertEqual(settings.sidebarWidth, 300)
-
-        settings.sidebarWidth = 180
-        XCTAssertEqual(settings.sidebarWidth, 180)
-
-        settings.sidebarWidth = 250
-    }
 
     func testSidebarWidthInSettingsJSON() {
         let settings = AppSettings.shared

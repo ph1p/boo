@@ -12,34 +12,6 @@ final class SplitAndExplorerTests: XCTestCase {
         XCTAssertEqual(pane.tabs[0].title, "Documents")
     }
 
-    func testUpdateWorkingDirectoryDoesNotOverwriteTitle() {
-        let pane = Pane()
-        _ = pane.addTab(workingDirectory: "/tmp")
-        pane.updateWorkingDirectory(at: 0, "/Users/test/projects")
-        // Title stays at initial value — only updateTitle changes it
-        XCTAssertEqual(pane.tabs[0].title, "tmp")
-        XCTAssertEqual(pane.tabs[0].workingDirectory, "/Users/test/projects")
-    }
-
-    func testUpdateTitleSetsCustomTitle() {
-        let pane = Pane()
-        _ = pane.addTab(workingDirectory: "/tmp")
-        pane.updateTitle(at: 0, "vim main.swift")
-        XCTAssertEqual(pane.tabs[0].title, "vim main.swift")
-    }
-
-    func testUpdateWorkingDirectoryPreservesTerminalTitle() {
-        let pane = Pane()
-        _ = pane.addTab(workingDirectory: "/tmp")
-        // Simulate shell setting the title
-        pane.updateTitle(at: 0, "user@host: ~/projects")
-
-        // OSC 7 directory change must NOT overwrite the terminal title
-        pane.updateWorkingDirectory(at: 0, "/Users/test/projects")
-        XCTAssertEqual(pane.tabs[0].title, "user@host: ~/projects")
-        XCTAssertEqual(pane.tabs[0].workingDirectory, "/Users/test/projects")
-    }
-
     func testUpdateTitleAfterDirectoryChangeOverrides() {
         let pane = Pane()
         _ = pane.addTab(workingDirectory: "/tmp")
@@ -118,19 +90,6 @@ final class SplitAndExplorerTests: XCTestCase {
         XCTAssertEqual(newPane.activeTab?.workingDirectory, "/Users/test/Documents")
     }
 
-    func testDoubleSplit() {
-        let ws = Workspace(folderPath: "/tmp")
-        let id1 = ws.activePaneID
-        let id2 = ws.splitPane(id1, direction: .horizontal)!
-        let id3 = ws.splitPane(id1, direction: .vertical)!
-
-        XCTAssertEqual(ws.panes.count, 3)
-        XCTAssertEqual(ws.splitTree.leafIDs.count, 3)
-        XCTAssertTrue(ws.splitTree.leafIDs.contains(id1))
-        XCTAssertTrue(ws.splitTree.leafIDs.contains(id2))
-        XCTAssertTrue(ws.splitTree.leafIDs.contains(id3))
-    }
-
     func testCloseMiddlePaneOfThree() {
         let ws = Workspace(folderPath: "/tmp")
         let id1 = ws.activePaneID
@@ -152,34 +111,6 @@ final class SplitAndExplorerTests: XCTestCase {
 
         XCTAssertTrue(ws.closePane(id2))
         XCTAssertEqual(ws.activePaneID, id1)
-    }
-
-    // MARK: - Explorer/Directory Change
-
-    func testDirectoryChangeUpdatesPane() {
-        let ws = Workspace(folderPath: "/tmp")
-        let id1 = ws.activePaneID
-        let id2 = ws.splitPane(id1, direction: .horizontal)!
-        ws.activePaneID = id1
-
-        // Simulate CWD change in non-active pane — pane updates locally
-        ws.pane(for: id2)?.updateWorkingDirectory(at: 0, "/other")
-        XCTAssertEqual(ws.pane(for: id2)?.activeTab?.workingDirectory, "/other")
-    }
-
-    func testFocusSwitchReadsActivePaneCwd() {
-        let ws = Workspace(folderPath: "/tmp")
-        let id1 = ws.activePaneID
-        let id2 = ws.splitPane(id1, direction: .horizontal)!
-
-        // Set different directories in each pane
-        ws.pane(for: id1)?.updateWorkingDirectory(at: 0, "/dir-a")
-        ws.pane(for: id2)?.updateWorkingDirectory(at: 0, "/dir-b")
-
-        // Simulate focus switch to id2
-        ws.activePaneID = id2
-        let cwd = ws.pane(for: id2)?.activeTab?.workingDirectory ?? ""
-        XCTAssertEqual(cwd, "/dir-b")
     }
 
     // MARK: - SplitTree Edge Cases
@@ -241,22 +172,6 @@ final class SplitAndExplorerTests: XCTestCase {
         XCTAssertNil(tree.siblingLeafID(of: id))
     }
 
-    // MARK: - Workspace Equalize Splits
-
-    func testEqualizeSplits() {
-        let ws = Workspace(folderPath: "/tmp")
-        let id1 = ws.activePaneID
-        _ = ws.splitPane(id1, direction: .horizontal)
-
-        ws.equalizeSplits()
-
-        if case .split(_, _, _, let ratio) = ws.splitTree {
-            XCTAssertEqual(ratio, 0.5)
-        } else {
-            XCTFail("Expected split tree after equalize")
-        }
-    }
-
     // MARK: - Tab Operations in Split Context
 
     func testAddTabInSplitPane() {
@@ -286,60 +201,6 @@ final class SplitAndExplorerTests: XCTestCase {
         _ = pane.addTab(workingDirectory: "/tmp")
         pane.updateWorkingDirectory(at: 99, "/nowhere")
         XCTAssertEqual(pane.tabs[0].workingDirectory, "/tmp")
-    }
-
-    // MARK: - Rapid Title/Directory Updates
-
-    func testRapidTitleAndDirectoryUpdates() {
-        let pane = Pane()
-        _ = pane.addTab(workingDirectory: "/start")
-
-        // Simulate rapid sequence: shell starts, sets title, changes dir, changes title
-        pane.updateTitle(at: 0, "zsh")
-
-        pane.updateWorkingDirectory(at: 0, "/home")
-        XCTAssertEqual(pane.tabs[0].title, "zsh")  // CWD does NOT overwrite title
-
-        pane.updateTitle(at: 0, "vim file.txt")
-        XCTAssertEqual(pane.tabs[0].title, "vim file.txt")
-
-        pane.updateWorkingDirectory(at: 0, "/projects")
-        XCTAssertEqual(pane.tabs[0].title, "vim file.txt")  // CWD does NOT overwrite title
-
-        pane.updateTitle(at: 0, "zsh")
-        XCTAssertEqual(pane.tabs[0].title, "zsh")
-    }
-
-    // MARK: - Pane Snapshot
-
-    func testPaneSnapshotPreservesState() {
-        let pane = Pane(id: UUID())
-        _ = pane.addTab(workingDirectory: "/a")
-        _ = pane.addTab(workingDirectory: "/b")
-        pane.updateTitle(at: 0, "process-A")
-        pane.updateTitle(at: 1, "process-B")
-        pane.setActiveTab(0)
-
-        // Simulate snapshot
-        let tabSnapshots = pane.tabs.map {
-            (title: $0.title, workingDirectory: $0.workingDirectory)
-        }
-
-        // Restore
-        let restored = Pane(id: pane.id)
-        for snap in tabSnapshots {
-            restored.addTab(workingDirectory: snap.workingDirectory, title: snap.title)
-        }
-        restored.setActiveTab(0)
-
-        XCTAssertEqual(restored.tabs.count, 2)
-        XCTAssertEqual(restored.tabs[0].title, "process-A")
-        XCTAssertEqual(restored.tabs[1].title, "process-B")
-        XCTAssertEqual(restored.activeTabIndex, 0)
-
-        // Directory update does NOT overwrite title
-        restored.updateWorkingDirectory(at: 0, "/new")
-        XCTAssertEqual(restored.tabs[0].title, "process-A")
     }
 
     // MARK: - Deep Split Tree

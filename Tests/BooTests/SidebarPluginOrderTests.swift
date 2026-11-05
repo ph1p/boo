@@ -24,17 +24,6 @@ final class SidebarPluginOrderTests: XCTestCase {
 
     // MARK: - Round-trip persistence
 
-    func testSidebarTabOrderRoundTrip() {
-        let order = ["git-panel", "file-tree-local", "bookmarks", "docker"]
-        AppSettings.shared.sidebarTabOrder = order
-        XCTAssertEqual(AppSettings.shared.sidebarTabOrder, order)
-    }
-
-    func testSidebarTabOrderDefaultsToEmpty() {
-        UserDefaults.standard.removeObject(forKey: "sidebarPluginOrder")
-        XCTAssertEqual(AppSettings.shared.sidebarTabOrder, [])
-    }
-
     func testSidebarTabOrderPersistedToSettingsJSON() {
         let order = ["bookmarks", "git-panel", "file-tree-local"]
         AppSettings.shared.sidebarTabOrder = order

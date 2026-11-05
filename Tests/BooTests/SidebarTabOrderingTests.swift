@@ -34,14 +34,6 @@ final class SidebarTabOrderingTests: XCTestCase {
         XCTAssertEqual(ids(result), ["x", "y", "z"])
     }
 
-    func testApplied_unknownTabsKeepRegistrationOrder() {
-        // "b" is the only one in saved order; "a" and "c" are unknown.
-        let tabs = [tab("a"), tab("b"), tab("c")]
-        let result = SidebarTabOrdering.applied(tabs: tabs, savedOrder: ["b"])
-        // "b" is known → comes first; "a","c" unknown → keep their relative registration order
-        XCTAssertEqual(ids(result), ["b", "a", "c"])
-    }
-
     func testApplied_savedOrderContainsHiddenTabs() {
         // Saved order references tabs not currently visible — they're skipped.
         let tabs = [tab("a"), tab("c")]

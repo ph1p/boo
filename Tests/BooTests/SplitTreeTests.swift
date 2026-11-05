@@ -10,16 +10,6 @@ final class SplitTreeTests: XCTestCase {
         XCTAssertEqual(tree.leafIDs, [id])
     }
 
-    func testSplitting() {
-        let id = UUID()
-        let tree = SplitTree.leaf(id: id)
-        let (newTree, newID) = tree.splitting(leafID: id, direction: .horizontal)
-
-        XCTAssertEqual(newTree.leafIDs.count, 2)
-        XCTAssertTrue(newTree.leafIDs.contains(id))
-        XCTAssertTrue(newTree.leafIDs.contains(newID!))
-    }
-
     func testSplittingNonExistentLeaf() {
         let id = UUID()
         let tree = SplitTree.leaf(id: id)

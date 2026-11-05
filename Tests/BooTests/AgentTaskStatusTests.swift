@@ -68,9 +68,4 @@ final class AgentTaskStatusTests: XCTestCase {
         inbox.markSeen(tabID: tab)
         XCTAssertNil(PaneView.agentBadgeColor(for: inbox.items[tab], theme: theme), "a read answer stays quiet")
     }
-
-    func testAgentJumpHotkeyIsOffByDefaultAndParses() {
-        XCTAssertNil(HotKeySpec.parse(""), "empty is off")
-        XCTAssertNotNil(HotKeySpec.parse("ctrl+opt+j"))
-    }
 }

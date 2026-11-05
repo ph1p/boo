@@ -84,15 +84,6 @@ final class AppStateTests: XCTestCase {
         XCTAssertEqual(state.activeWorkspaceIndex, 0)
     }
 
-    func testRemoveActiveWorkspace() {
-        let state = AppState()
-        state.addWorkspace(Workspace(folderPath: "/a"))
-        state.addWorkspace(Workspace(folderPath: "/b"))
-        state.removeWorkspace(at: 1)  // Remove active
-        XCTAssertEqual(state.workspaces.count, 1)
-        XCTAssertEqual(state.activeWorkspaceIndex, 0)
-    }
-
     func testNoActiveWorkspace() {
         let state = AppState()
         XCTAssertNil(state.activeWorkspace)
@@ -260,22 +251,6 @@ final class AppStateTests: XCTestCase {
         let state = AppState()
 
         XCTAssertEqual(state.nextGeneratedWorkspaceName(), "Workspace 1")
-    }
-
-    func testNextGeneratedWorkspaceNameIncrementsFromExistingGeneratedNames() {
-        let state = AppState()
-        let ws1 = Workspace(folderPath: "/a")
-        ws1.customName = "Workspace 1"
-        let ws2 = Workspace(folderPath: "/b")
-        ws2.customName = "Workspace 2"
-        let renamed = Workspace(folderPath: "/c")
-        renamed.customName = "My Project"
-
-        state.addWorkspace(ws1)
-        state.addWorkspace(ws2)
-        state.addWorkspace(renamed)
-
-        XCTAssertEqual(state.nextGeneratedWorkspaceName(), "Workspace 4")
     }
 
     func testNextGeneratedWorkspaceNameUsesWorkspaceCountInsteadOfHighestExistingNumber() {

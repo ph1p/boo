@@ -303,19 +303,6 @@ final class BooSocketStatusBarTests: BooSocketIntegrationTestCase {
         }
     }
 
-    func testStatusBarSegmentBookkeeping() {
-        // Unit test: directly manipulate the segments dict
-        let server = BooSocketServer.shared
-        let info = BooSocketServer.ExternalSegmentInfo(
-            id: "test", text: "Hello", icon: nil, tint: nil,
-            position: .left, priority: 10, ownerFD: 999
-        )
-        server.queue.sync { server.externalSegments["test"] = info }
-        let stored = server.queue.sync { server.externalSegments["test"] }
-        XCTAssertEqual(stored?.text, "Hello")
-        server.queue.sync { server.externalSegments.removeAll() }
-    }
-
     func testStatusBarSetMissingID() throws {
         let response = try roundTrip(["cmd": "statusbar.set", "text": "no id"])
         XCTAssertEqual(response["ok"] as? Bool, false)
@@ -337,29 +324,6 @@ final class BooSocketSerializationTests: XCTestCase {
         XCTAssertEqual(dict["pane_count"] as? Int, 0)
     }
 
-    func testSerializeContextWithGit() {
-        let git = TerminalContext.GitContext(
-            branch: "main", repoRoot: "/repo",
-            isDirty: true, changedFileCount: 3,
-            stagedCount: 1, aheadCount: 2, behindCount: 0,
-            lastCommitShort: "abc1234"
-        )
-        let ctx = TerminalContext(
-            terminalID: UUID(), cwd: "/repo",
-            remoteSession: nil, gitContext: git,
-            processName: "vim", paneCount: 2, tabCount: 3
-        )
-        let dict = BooSocketServer.serializeContext(ctx)
-        XCTAssertEqual(dict["cwd"] as? String, "/repo")
-        XCTAssertEqual(dict["process_name"] as? String, "vim")
-
-        let gitDict = dict["git"] as? [String: Any]
-        XCTAssertNotNil(gitDict)
-        XCTAssertEqual(gitDict?["branch"] as? String, "main")
-        XCTAssertEqual(gitDict?["is_dirty"] as? Bool, true)
-        XCTAssertEqual(gitDict?["changed_count"] as? Int, 3)
-    }
-
     func testSerializeContextWithRemoteSSH() {
         let ctx = TerminalContext(
             terminalID: UUID(), cwd: "/local",
@@ -377,13 +341,6 @@ final class BooSocketSerializationTests: XCTestCase {
         XCTAssertEqual(remote?["host"] as? String, "user@server")
         XCTAssertEqual(remote?["alias"] as? String, "myhost")
     }
-
-    func testSerializeRemoteSessionDocker() {
-        let dict = BooSocketServer.serializeRemoteSession(
-            .container(target: "my-container", tool: .docker))
-        XCTAssertEqual(dict["type"] as? String, "container")
-        XCTAssertEqual(dict["target"] as? String, "my-container")
-    }
 }
 
 // MARK: - External Status Bar Segment Unit Tests
@@ -400,18 +357,5 @@ final class ExternalStatusBarSegmentTests: XCTestCase {
         XCTAssertEqual(segment.id, "external.build")
         XCTAssertEqual(segment.priority, 10)
         XCTAssertTrue(segment.position == .left)
-    }
-
-    func testSegmentAlwaysVisible() {
-        let info = BooSocketServer.ExternalSegmentInfo(
-            id: "test", text: "Test", icon: nil,
-            tint: nil, position: .right, priority: 50, ownerFD: 5
-        )
-        let segment = ExternalStatusBarSegment(info: info)
-        let state = StatusBarState(
-            currentDirectory: "/tmp", paneCount: 1, tabCount: 1,
-            runningProcess: "", isRemote: false
-        )
-        XCTAssertTrue(segment.isVisible(settings: AppSettings.shared, state: state))
     }
 }

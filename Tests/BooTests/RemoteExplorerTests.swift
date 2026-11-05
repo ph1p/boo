@@ -51,8 +51,6 @@ final class RemoteExplorerTests: XCTestCase {
         XCTAssertNil(wrong, "findControlSocket must not match serverA socket when looking for serverB")
     }
 
-    // MARK: - ControlMaster Config
-
     // MARK: - Session Type Properties
 
     func testSSHSessionConnectingHint() {
@@ -195,13 +193,6 @@ final class RemoteExplorerTests: XCTestCase {
     func testShellEscPathAbsolutePathWithSpaces() {
         let result = RemoteExplorer.shellEscPath("/home/user/My Documents")
         XCTAssertEqual(result, "'/home/user/My Documents'")
-    }
-
-    // MARK: - Tilde Resolution
-
-    func testResolveTildeWithoutCacheReturnsNil() {
-        let result = RemoteExplorer.resolveTilde("~/project", session: .ssh(host: "unknown-host-xyz"))
-        XCTAssertNil(result)
     }
 
     // MARK: - sshConnectionTarget for home cache

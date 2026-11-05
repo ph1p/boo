@@ -7,31 +7,6 @@ final class SidebarFontScaleTests: XCTestCase {
 
     // MARK: - Scale math
 
-    func testBaseStepEqualsBase() {
-        let scale = SidebarFontScale(base: 12)
-        XCTAssertEqual(scale.size(.base), 12)
-    }
-
-    func testXsIsThreeQuartersOfBase() {
-        let scale = SidebarFontScale(base: 12)
-        XCTAssertEqual(scale.size(.xs), (12 * 0.75).rounded())
-    }
-
-    func testSmIsSevenEighthsOfBase() {
-        let scale = SidebarFontScale(base: 12)
-        XCTAssertEqual(scale.size(.sm), (12 * 0.875).rounded())
-    }
-
-    func testLgIsOneTwentyFiveOfBase() {
-        let scale = SidebarFontScale(base: 12)
-        XCTAssertEqual(scale.size(.lg), (12 * 1.125).rounded())
-    }
-
-    func testXlIsOneAndQuarterOfBase() {
-        let scale = SidebarFontScale(base: 12)
-        XCTAssertEqual(scale.size(.xl), (12 * 1.25).rounded())
-    }
-
     func testAllStepsScaleProportionally() {
         // At base=16, verify all steps scale from their multiplier.
         let scale = SidebarFontScale(base: 16)

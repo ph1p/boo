@@ -168,43 +168,6 @@ final class KittyImageProtocolTests: XCTestCase {
         XCTAssertLessThanOrEqual(rows!, 40)
     }
 
-    // MARK: - PluginActions wiring
-
-    @MainActor
-    func testDisplayImageInTerminalNilHandlerIsNoOp() {
-        let actions = PluginActions()
-        actions.displayImageInTerminal?("/some/image.png", true)  // must not crash
-        actions.displayImageInTerminal?("/some/image.png", false)  // must not crash
-    }
-
-    @MainActor
-    func testDisplayImageInTerminalCallsHandlerWithNewTab() {
-        let actions = PluginActions()
-        var receivedPath: String?
-        var receivedNewTab: Bool?
-        actions.displayImageInTerminal = { path, newTab in
-            receivedPath = path
-            receivedNewTab = newTab
-        }
-        actions.displayImageInTerminal?("/tmp/test.png", true)
-        XCTAssertEqual(receivedPath, "/tmp/test.png")
-        XCTAssertEqual(receivedNewTab, true)
-    }
-
-    @MainActor
-    func testDisplayImageInTerminalCallsHandlerWithoutNewTab() {
-        let actions = PluginActions()
-        var receivedPath: String?
-        var receivedNewTab: Bool?
-        actions.displayImageInTerminal = { path, newTab in
-            receivedPath = path
-            receivedNewTab = newTab
-        }
-        actions.displayImageInTerminal?("/tmp/test.png", false)
-        XCTAssertEqual(receivedPath, "/tmp/test.png")
-        XCTAssertEqual(receivedNewTab, false)
-    }
-
     // MARK: - Helpers
 
     /// Creates a 4×4 red PNG via CoreGraphics and writes it to a temp file.

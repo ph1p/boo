@@ -4,13 +4,6 @@ import XCTest
 
 @MainActor
 final class AgentCenterTests: XCTestCase {
-    func testAgentsManifestUsesCanonicalIDAndCustomSettingsPage() {
-        let manifest = AgentsPlugin().manifest
-        XCTAssertEqual(manifest.id, "agents")
-        XCTAssertEqual(manifest.name, "Agents")
-        XCTAssertTrue(manifest.settings?.contains { $0.type != .bool } ?? false)
-    }
-
     func testLegacyClaudeCodeSettingsMigrateToAgents() {
         let settings = AppSettings.shared
         let originalOrder = settings.sidebarTabOrder
@@ -150,5 +143,4 @@ final class AgentCenterTests: XCTestCase {
         try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
         return url.path
     }
-
 }

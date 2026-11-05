@@ -125,12 +125,23 @@ final class OutputRuleMatcherTests: XCTestCase {
         XCTAssertEqual(count, 1)
     }
 
+    /// Past the queue budget the rest of the line is dropped; matching resumes
+    /// on the next whole line.
+    @MainActor
     func testOverflowDropsBytes() {
-        let m = OutputRuleMatcher(rules: [rule("t", "never")], context: .empty) { _ in }
-        // Hold the queue so nothing drains while we overflow.
-        let chunk = [UInt8](repeating: 0x61, count: OutputRuleMatcher.queueLimit)
+        var lines: [String] = []
+        let done = expectation(description: "match")
+        done.assertForOverFulfill = false
+        let m = OutputRuleMatcher(rules: [rule("t", "hit")], context: .empty) {
+            lines.append($0.line)
+            done.fulfill()
+        }
+        let chunk = [UInt8](repeating: 0x61, count: OutputRuleMatcher.queueLimit + 1)
         chunk.withUnsafeBufferPointer { m.tapOutput($0) }
-        chunk.withUnsafeBufferPointer { m.tapOutput($0) }
+        feed(m, "hit dropped\n")
+        feed(m, "hit kept\n")
+        wait(for: [done], timeout: 2)
         m.waitUntilIdle()
+        XCTAssertEqual(lines, ["hit kept"])
     }
 }

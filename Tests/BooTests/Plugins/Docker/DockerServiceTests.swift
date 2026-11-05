@@ -50,17 +50,6 @@ final class DockerServiceTests: XCTestCase {
         docker.detectDocker()
     }
 
-    func testExplicitSocketPathEmpty() {
-        let docker = DockerService.shared
-        // Empty string should fall back to auto-detect
-        docker.detectDocker(explicitPath: "")
-        if docker.isAvailable {
-            XCTAssertNil(docker.connectionError)
-        }
-        // Restore
-        docker.detectDocker()
-    }
-
     func testContainerStateEnum() {
         XCTAssertEqual(DockerService.Container.ContainerState(rawValue: "running"), .running)
         XCTAssertEqual(DockerService.Container.ContainerState(rawValue: "exited"), .exited)
@@ -81,28 +70,6 @@ final class DockerServiceTests: XCTestCase {
         )
         let cmd = DockerService.shared.execCommand(for: container)
         XCTAssertEqual(cmd, "docker exec -it myapp sh\r")
-    }
-
-    func testContainerEquatable() {
-        let a = DockerService.Container(
-            id: "abc", name: "x", image: "y", status: "Up",
-            state: .running, ports: "", createdAt: nil)
-        let b = DockerService.Container(
-            id: "abc", name: "x", image: "y", status: "Up",
-            state: .running, ports: "", createdAt: nil)
-        let c = DockerService.Container(
-            id: "def", name: "x", image: "y", status: "Up",
-            state: .running, ports: "", createdAt: nil)
-        XCTAssertEqual(a, b)
-        XCTAssertNotEqual(a, c)
-    }
-
-    func testStartStopWatching() {
-        let docker = DockerService.shared
-        // Should not crash even if Docker is not available
-        let owner = NSObject()
-        docker.startWatching(owner)
-        docker.stopWatching(owner)
     }
 
     func testContainerStateValues() {

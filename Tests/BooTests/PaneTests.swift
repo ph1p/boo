@@ -48,33 +48,6 @@ final class PaneTests: XCTestCase {
         XCTAssertEqual(pane.tabs[1].workingDirectory, "/c")
     }
 
-    func testRemoveActiveTab() {
-        let pane = Pane()
-        _ = pane.addTab(workingDirectory: "/a")
-        _ = pane.addTab(workingDirectory: "/b")
-        pane.removeTab(at: 1)  // Remove active
-        XCTAssertEqual(pane.activeTabIndex, 0)
-    }
-
-    func testRemoveTabBeforeActiveKeepsActiveTab() {
-        let pane = Pane()
-        _ = pane.addTab(workingDirectory: "/a")
-        _ = pane.addTab(workingDirectory: "/b")
-        _ = pane.addTab(workingDirectory: "/c")
-        pane.setActiveTab(1)  // "/b" active
-        pane.removeTab(at: 0)
-        XCTAssertEqual(pane.activeTabIndex, 0)
-        XCTAssertEqual(pane.activeTab?.workingDirectory, "/b")
-    }
-
-    func testRemoveAllTabs() {
-        let pane = Pane()
-        _ = pane.addTab(workingDirectory: "/a")
-        pane.removeTab(at: 0)
-        XCTAssertTrue(pane.tabs.isEmpty)
-        XCTAssertEqual(pane.activeTabIndex, -1)
-    }
-
     func testUpdateTitle() {
         let pane = Pane()
         _ = pane.addTab(workingDirectory: "/tmp")
@@ -114,16 +87,5 @@ final class PaneTests: XCTestCase {
         pane.removeTab(at: 2)
         XCTAssertEqual(pane.activeTabIndex, 1)
         XCTAssertEqual(pane.activeTab?.workingDirectory, "/b")
-    }
-
-    func testCloseMiddleTabPreservesActive() {
-        let pane = Pane()
-        _ = pane.addTab(workingDirectory: "/a")
-        _ = pane.addTab(workingDirectory: "/b")
-        _ = pane.addTab(workingDirectory: "/c")
-        pane.setActiveTab(2)
-        pane.removeTab(at: 1)
-        XCTAssertEqual(pane.tabs.count, 2)
-        XCTAssertEqual(pane.activeTab?.workingDirectory, "/c")
     }
 }

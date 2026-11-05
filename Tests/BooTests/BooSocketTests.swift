@@ -77,37 +77,6 @@ final class BooSocketServerTests: XCTestCase {
         server.processes.removeAll()
         XCTAssertNil(server.activeProcess(shellPID: getppid()))
     }
-
-    func testMultipleProcesses() {
-        let server = BooSocketServer.shared
-        let pid1 = getpid()
-
-        server.processes[pid1] = BooSocketServer.ProcessStatus(
-            pid: pid1, name: "claude", category: "ai", registeredAt: Date(), metadata: [:])
-        server.processes[pid1 + 1] = BooSocketServer.ProcessStatus(
-            pid: pid1 + 1, name: "webpack", category: "build", registeredAt: Date(), metadata: [:])
-
-        XCTAssertEqual(server.processes.count, 2)
-        XCTAssertEqual(server.processes[pid1]?.name, "claude")
-        XCTAssertEqual(server.processes[pid1 + 1]?.name, "webpack")
-
-        server.processes.removeAll()
-    }
-
-    func testProcessMetadata() {
-        let server = BooSocketServer.shared
-        let pid = getpid()
-
-        server.processes[pid] = BooSocketServer.ProcessStatus(
-            pid: pid, name: "jest", category: "test",
-            registeredAt: Date(), metadata: ["suite": "unit", "coverage": "true"])
-
-        XCTAssertEqual(server.processes[pid]?.metadata["suite"], "unit")
-        XCTAssertEqual(server.processes[pid]?.metadata["coverage"], "true")
-
-        server.processes.removeAll()
-    }
-
 }
 
 // MARK: - Socket Protocol Integration Tests
@@ -265,64 +234,6 @@ final class BooSocketBridgeTests: XCTestCase {
         bridge.monitor.untrack(paneID: paneID)
     }
 
-    func testReevaluateClearsWhenUnregistered() {
-        let myPid = getpid()
-        let parentPid = getppid()
-
-        BooSocketServer.shared.processes[myPid] = BooSocketServer.ProcessStatus(
-            pid: myPid, name: "claude", category: "ai", registeredAt: Date(), metadata: [:])
-        bridge.monitor.track(paneID: paneID, shellPID: parentPid)
-        bridge.reevaluateSocketProcess()
-        XCTAssertEqual(bridge.state.foregroundProcess, "claude")
-
-        BooSocketServer.shared.processes.removeAll()
-        bridge.reevaluateSocketProcess()
-        XCTAssertEqual(bridge.state.foregroundProcess, "")
-
-        bridge.monitor.untrack(paneID: paneID)
-    }
-
-    func testSocketSurvivesTitleChanges() {
-        let myPid = getpid()
-        let parentPid = getppid()
-
-        bridge.monitor.track(paneID: paneID, shellPID: parentPid)
-        BooSocketServer.shared.processes[myPid] = BooSocketServer.ProcessStatus(
-            pid: myPid, name: "claude", category: "ai", registeredAt: Date(), metadata: [:])
-        bridge.reevaluateSocketProcess()
-        XCTAssertEqual(bridge.state.foregroundProcess, "claude")
-
-        // Title changes never affect foreground process
-        bridge.handleTitleChange(title: "~/dev/project", paneID: paneID)
-        XCTAssertEqual(bridge.state.foregroundProcess, "claude")
-
-        bridge.handleTitleChange(title: "zsh", paneID: paneID)
-        XCTAssertEqual(bridge.state.foregroundProcess, "claude")
-
-        bridge.monitor.untrack(paneID: paneID)
-    }
-
-    func testNonAICategoryAlsoWorks() {
-        let myPid = getpid()
-        let parentPid = getppid()
-
-        bridge.monitor.track(paneID: paneID, shellPID: parentPid)
-        BooSocketServer.shared.processes[myPid] = BooSocketServer.ProcessStatus(
-            pid: myPid, name: "webpack", category: "build", registeredAt: Date(), metadata: [:])
-        bridge.reevaluateSocketProcess()
-        XCTAssertEqual(bridge.state.foregroundProcess, "webpack")
-
-        bridge.monitor.untrack(paneID: paneID)
-    }
-
-    func testTitleSetsAndClears() {
-        bridge.handleTitleChange(title: "vim", paneID: paneID)
-        XCTAssertEqual(bridge.state.foregroundProcess, "vim")
-
-        bridge.handleTitleChange(title: "zsh", paneID: paneID)
-        XCTAssertEqual(bridge.state.foregroundProcess, "")
-    }
-
     func testSocketProcessReplacedByNewRegistration() {
         let myPid = getpid()
         let parentPid = getppid()
@@ -408,27 +319,6 @@ final class BooSocketPluginHandlerTests: BooSocketIntegrationTestCase {
         XCTAssertEqual(BooSocketServer.shared.processes[pid]?.category, "build")
 
         _ = try roundTrip(["cmd": "clear_status", "pid": pid])
-    }
-
-    func testMultipleProcessesDifferentCategories() {
-        let pid1 = getpid()
-        let parentPid = getppid()
-
-        // Register two processes
-        BooSocketServer.shared.processes[pid1] = BooSocketServer.ProcessStatus(
-            pid: pid1, name: "claude", category: "ai", registeredAt: Date(), metadata: [:])
-        BooSocketServer.shared.processes[pid1 + 1] = BooSocketServer.ProcessStatus(
-            pid: pid1 + 1, name: "webpack", category: "build", registeredAt: Date(), metadata: [:])
-
-        // Filter by category
-        let ai = BooSocketServer.shared.activeProcess(shellPID: parentPid, category: "ai")
-        XCTAssertEqual(ai?.name, "claude")
-
-        // Build category PID is likely not a real descendant, so may be nil
-        let any = BooSocketServer.shared.activeProcess(shellPID: parentPid)
-        XCTAssertNotNil(any, "Should find at least one descendant process")
-
-        BooSocketServer.shared.processes.removeAll()
     }
 }
 

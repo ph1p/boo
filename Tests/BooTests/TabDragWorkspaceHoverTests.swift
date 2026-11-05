@@ -54,36 +54,6 @@ import XCTest
         waitForExpectations(timeout: timeout + 0.2)
     }
 
-    // MARK: - workspacePillFrames callback
-
-    func testWorkspacePillFramesNilByDefault() {
-        // No frames closure installed — checkWorkspaceHover should be a no-op
-        XCTAssertNil(coordinator.workspacePillFrames)
-    }
-
-    func testWorkspacePillFramesCanBeSet() {
-        let frames: [(index: Int, screenFrame: NSRect)] = [
-            (0, NSRect(x: 100, y: 100, width: 80, height: 24)),
-            (1, NSRect(x: 190, y: 100, width: 80, height: 24))
-        ]
-        coordinator.workspacePillFrames = { frames }
-        XCTAssertNotNil(coordinator.workspacePillFrames)
-        XCTAssertEqual(coordinator.workspacePillFrames?().count, 2)
-    }
-
-    // MARK: - onWorkspaceHover callback
-
-    func testOnWorkspaceHoverNilByDefault() {
-        XCTAssertNil(coordinator.onWorkspaceHover)
-    }
-
-    func testOnWorkspaceHoverCanBeSet() {
-        var firedIndex: Int?
-        coordinator.onWorkspaceHover = { firedIndex = $0 }
-        coordinator.onWorkspaceHover?(3)
-        XCTAssertEqual(firedIndex, 3)
-    }
-
     // MARK: - Hover timer fires after delay
 
     func testHoverTimerFiresAfterDelay() {

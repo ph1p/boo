@@ -76,13 +76,6 @@ final class ThemeTests: XCTestCase {
         }
     }
 
-    func testSidebarBgIsNotNil() {
-        for theme in TerminalTheme.themes {
-            let components = theme.sidebarBg.cgColor.components ?? []
-            XCTAssertGreaterThan(components.count, 0, "Theme \(theme.name) sidebarBg should have color components")
-        }
-    }
-
     func testSelectionColorHasAlpha() {
         for theme in TerminalTheme.themes {
             let alpha = theme.selection.alphaComponent

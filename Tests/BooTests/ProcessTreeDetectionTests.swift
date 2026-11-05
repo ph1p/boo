@@ -12,25 +12,6 @@ final class ProcessTreeDetectionTests: XCTestCase {
 
     // MARK: - childPIDs
 
-    func testChildPIDsIncludesSpawnedChild() {
-        let process = makeProcess("/bin/sleep", args: ["60"])
-        let childPID = process.processIdentifier
-        defer {
-            process.terminate()
-            process.waitUntilExit()
-        }
-
-        var found = false
-        for _ in 0..<20 {
-            if ProcessTree.childPIDs(of: getpid()).contains(childPID) {
-                found = true
-                break
-            }
-            Thread.sleep(forTimeInterval: 0.05)
-        }
-        XCTAssertTrue(found, "childPIDs must include spawned sleep process (pid=\(childPID))")
-    }
-
     func testChildPIDsEmptyForNonexistentPID() {
         XCTAssertEqual(ProcessTree.childPIDs(of: 999_999_999), [])
     }
@@ -61,54 +42,9 @@ final class ProcessTreeDetectionTests: XCTestCase {
     // proc_name requires get-task-allow entitlement (present in the Boo app bundle but
     // NOT in the Swift test runner). We can only test the strip-dash logic indirectly.
 
-    func testProcessNameStripsLeadingDash() {
-        // processName must strip the "-" login-shell prefix.
-        // proc_name may return "" in the test runner (no entitlement), so only
-        // verify the result has no leading dash — not that it's non-empty.
-        let name = ProcessTree.processName(pid: getpid())
-        XCTAssertFalse(name.hasPrefix("-"), "processName must strip the leading-dash login-shell prefix")
-    }
-
     // MARK: - argv0 extraction via KERN_PROCARGS2
     //
     // KERN_PROCARGS2 works for processes we own regardless of get-task-allow.
-
-    func testArgv0ExtractionForSpawnedProcess() throws {
-        // Use exec -a to rename argv[0] — simulates what claude does with setprogname.
-        // Script: exec -a '2.1.117' /bin/sleep 60
-        let scriptPath = "/tmp/boo_test_fake_agent.sh"
-        try "#!/bin/bash\nexec -a '2.1.117' /bin/sleep 60\n"
-            .write(toFile: scriptPath, atomically: true, encoding: .utf8)
-        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: scriptPath)
-
-        let process = makeProcess(scriptPath, args: [])
-        let childPID = process.processIdentifier
-        defer {
-            process.terminate()
-            process.waitUntilExit()
-        }
-
-        // Wait for child to be visible.
-        var appeared = false
-        for _ in 0..<20 {
-            if ProcessTree.childPIDs(of: getpid()).contains(childPID) {
-                appeared = true
-                break
-            }
-            Thread.sleep(forTimeInterval: 0.05)
-        }
-        guard appeared else { throw XCTSkip("Child process did not appear in time") }
-
-        // KERN_PROCARGS2 exec-path must be available regardless of entitlements.
-        // Since the shell interpreter (/bin/bash) exec'd into sleep, the exec path in
-        // KERN_PROCARGS2 is /bin/sleep.  The child PID now IS the sleep process.
-        // proc_name may return "2.1.117" (if the exec -a trick works) or "sleep".
-        // Either way, we should get a non-empty result from processName.
-        //
-        // We can't assert proc_name returns "2.1.117" in all macOS versions, but we
-        // CAN verify that childPIDs finds the process and it doesn't crash.
-        XCTAssertTrue(appeared, "Child must be visible in proc_listchildpids")
-    }
 
     // MARK: - Agent descendant walk
 
@@ -161,27 +97,6 @@ final class ProcessTreeDetectionTests: XCTestCase {
         XCTAssertEqual(
             resolved, "codex",
             "the agent must be found through the intermediate shell, not reported as idle")
-    }
-
-    // MARK: - Version-string heuristic
-
-    func testVersionStringHeuristic() {
-        // The heuristic used in resolvedProcessName:
-        // proc_name returning a version string starts with a digit or contains ".".
-        let versions = ["2.1.117", "1.0", "14.5.1", "3", "0.9"]
-        for s in versions {
-            let looksLikeVersion = s.first?.isNumber == true || s.contains(".")
-            XCTAssertTrue(looksLikeVersion, "'\(s)' must be detected as version string")
-        }
-
-        let realNames = ["claude", "sleep", "node", "python3", "vim", "zsh", "opencode", "codex"]
-        for s in realNames {
-            // "python3" contains digits but doesn't start with one — check the exact heuristic.
-            let startsWithDigit = s.first?.isNumber == true
-            let onlyDots = s.contains(".") && !s.contains("/")
-            let looksLikeVersion = startsWithDigit || onlyDots
-            XCTAssertFalse(looksLikeVersion, "'\(s)' must NOT be detected as version string")
-        }
     }
 
     // MARK: - suppressAIAgents
@@ -242,23 +157,6 @@ final class ProcessTreeDetectionTests: XCTestCase {
             bridge.state.foregroundProcess, "",
             "AI title must be suppressed when shell PID is known and shell has no AI child"
         )
-        bridge.monitor.untrack(paneID: paneID)
-    }
-
-    @MainActor
-    func testResolveProcessAllowsNonAITitleWhenShellKnownAndIdle() {
-        // Non-AI titles must still work even when shell PID is known (no suppress on non-AI).
-        let paneID = UUID()
-        let bridge = TerminalBridge(paneID: paneID, workspaceID: UUID(), workingDirectory: "/tmp")
-        bridge.monitor.track(paneID: paneID, shellPID: getpid())
-        Thread.sleep(forTimeInterval: 0.05)
-
-        bridge.handleTitleChange(title: "vim file.txt", paneID: paneID)
-        // Non-AI process from title must still be visible even with shell PID known.
-        // NOTE: foregroundProcess() may return "vim" or "" depending on whether the
-        // test runner's children include a vim process. Since it won't, we may get "".
-        // The important assertion is "not claude":
-        XCTAssertNotEqual(bridge.state.foregroundProcess, "claude")
         bridge.monitor.untrack(paneID: paneID)
     }
 

@@ -128,7 +128,11 @@ final class DebugPluginE2ETests: XCTestCase {
 
     func testDuplicateCwdIgnored() {
         bridge.handleDirectoryChange(path: "/tmp", paneID: paneID)  // same as initial
-        XCTAssertTrue(events(named: "cwdChanged").isEmpty)
+        bridge.handleDirectoryChange(path: "/sentinel", paneID: paneID)
+
+        let cwdEvents = waitForEvents(named: "cwdChanged", count: 1)
+        XCTAssertEqual(cwdEvents.count, 1)
+        XCTAssertTrue(cwdEvents[0].detail.contains("/sentinel"))
     }
 
     func testMultipleCwdChanges() {
@@ -186,8 +190,10 @@ final class DebugPluginE2ETests: XCTestCase {
     func testSameTitleNoRepeatedEvent() {
         bridge.handleTitleChange(title: "vim", paneID: paneID)
         bridge.handleTitleChange(title: "vim", paneID: paneID)
+        bridge.handleDirectoryChange(path: "/sentinel", paneID: paneID)
 
-        let procEvents = waitForEvents(named: "processChanged", count: 1)
+        _ = waitForEvents(named: "cwdChanged", count: 1)
+        let procEvents = events(named: "processChanged")
         XCTAssertEqual(procEvents.count, 1, "Duplicate title should not emit duplicate processChanged")
     }
 
@@ -257,17 +263,6 @@ final class DebugPluginE2ETests: XCTestCase {
     }
 
     // MARK: - Enrich/React Cycle E2E
-
-    func testCycleLogsEnrichAndReact() {
-        let ctx = currentContext()
-        registry.runCycle(baseContext: ctx, reason: .focusChanged)
-
-        waitUntil {
-            !self.events(named: "enrich").isEmpty && !self.events(named: "react").isEmpty
-        }
-        XCTAssertFalse(events(named: "enrich").isEmpty, "enrich should be logged")
-        XCTAssertFalse(events(named: "react").isEmpty, "react should be logged")
-    }
 
     func testEnrichRunsBeforeReact() {
         let ctx = currentContext()
@@ -347,6 +342,8 @@ final class DebugPluginE2ETests: XCTestCase {
             bridge.handleDirectoryChange(path: "/path/\(i)", paneID: paneID)
         }
 
+        waitUntil { self.debug.entries.contains { $0.detail.contains("/path/19") } }
+        XCTAssertTrue(debug.entries.contains { $0.detail.contains("/path/19") }, "last event arrived")
         XCTAssertLessThanOrEqual(debug.entries.count, 5, "Log should be capped")
     }
 
@@ -356,9 +353,12 @@ final class DebugPluginE2ETests: XCTestCase {
         let otherPane = UUID()
         bridge.handleTitleChange(title: "vim", paneID: otherPane)
         bridge.handleDirectoryChange(path: "/other", paneID: otherPane)
+        bridge.handleDirectoryChange(path: "/sentinel", paneID: paneID)
 
-        // No lifecycle events should reach the debug plugin
-        XCTAssertTrue(events(named: "cwdChanged").isEmpty)
+        // Only the sentinel from our own pane reaches the debug plugin
+        let cwdEvents = waitForEvents(named: "cwdChanged", count: 1)
+        XCTAssertEqual(cwdEvents.count, 1)
+        XCTAssertTrue(cwdEvents[0].detail.contains("/sentinel"))
         XCTAssertTrue(events(named: "processChanged").isEmpty)
     }
 }

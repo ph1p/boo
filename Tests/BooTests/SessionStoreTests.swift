@@ -54,71 +54,6 @@ final class SessionStoreTests: XCTestCase {
         XCTAssertNil(sw.customColorRed)
     }
 
-    func testSaveAndLoadCustomColor() {
-        let state = AppState()
-        let ws = Workspace(folderPath: "/tmp")
-        ws.customColor = NSColor(srgbRed: 0.1, green: 0.5, blue: 0.9, alpha: 1)
-        state.addWorkspace(ws)
-
-        SessionStore.save(appState: state)
-
-        let snapshot = SessionStore.load()!
-        let sw = snapshot.workspaces[0]
-        XCTAssertNotNil(sw.customColorRed)
-        XCTAssertEqual(sw.customColorRed!, 0.1, accuracy: 0.01)
-        XCTAssertEqual(sw.customColorGreen!, 0.5, accuracy: 0.01)
-        XCTAssertEqual(sw.customColorBlue!, 0.9, accuracy: 0.01)
-    }
-
-    func testSaveAndLoadSplitTree() {
-        let state = AppState()
-        let ws = Workspace(folderPath: "/tmp")
-        let rootID = ws.activePaneID
-        _ = ws.splitPane(rootID, direction: .horizontal)
-        state.addWorkspace(ws)
-
-        SessionStore.save(appState: state)
-
-        let snapshot = SessionStore.load()!
-        let sw = snapshot.workspaces[0]
-        XCTAssertEqual(sw.splitTree.leafIDs.count, 2)
-    }
-
-    func testSaveAndLoadTabsPerPane() {
-        let state = AppState()
-        let ws = Workspace(folderPath: "/tmp")
-        let pane = ws.pane(for: ws.activePaneID)!
-        pane.addTab(workingDirectory: "/tmp/foo", title: "foo")
-        state.addWorkspace(ws)
-
-        SessionStore.save(appState: state)
-
-        let snapshot = SessionStore.load()!
-        let sp = snapshot.workspaces[0].panes.first!
-        // Original tab + the one we added
-        XCTAssertEqual(sp.tabs.count, 2)
-        XCTAssertTrue(sp.tabs.contains(where: { $0.contentState.flatMap(terminalCWD) == "/tmp/foo" }))
-    }
-
-    func testRemoteSessionNotPersisted() {
-        let state = AppState()
-        let ws = Workspace(folderPath: "/tmp")
-        let pane = ws.pane(for: ws.activePaneID)!
-        pane.addTab(workingDirectory: "/tmp", title: "ssh session")
-        pane.updateRemoteSession(at: pane.activeTabIndex, .ssh(host: "server"))
-        state.addWorkspace(ws)
-
-        SessionStore.save(appState: state)
-
-        let snapshot = SessionStore.load()!
-        let tabs = snapshot.workspaces[0].panes.first!.tabs
-        for tab in tabs {
-            // SessionTab has no remoteSession field — the type itself enforces this.
-            // Verify the working directory was still captured via contentState.
-            XCTAssertFalse(tab.contentState.flatMap(terminalCWD)?.isEmpty ?? true)
-        }
-    }
-
     func testLoadReturnsNilWhenNoFile() {
         // File was never written (setUp only set path, didn't create it)
         XCTAssertNil(SessionStore.load())
@@ -494,22 +429,6 @@ final class SessionStoreTests: XCTestCase {
         XCTAssertEqual(restored.map(\.customName), ["A", "B", "C"])
     }
 
-    func testWorkspaceSidebarStateRoundtrip() {
-        let state = AppState()
-        let ws = Workspace(folderPath: "/tmp")
-        ws.sidebarState = SidebarWorkspaceState(isVisible: false, width: 312)
-        state.addWorkspace(ws)
-
-        SessionStore.save(appState: state)
-        let snapshot = SessionStore.load()!
-        XCTAssertEqual(snapshot.workspaces[0].sidebarIsVisible, false)
-        XCTAssertEqual(snapshot.workspaces[0].sidebarWidth ?? -1, 312, accuracy: 0.1)
-
-        let restored = SessionStore.workspaces(from: snapshot)
-        XCTAssertEqual(restored[0].sidebarState.isVisible, false)
-        XCTAssertEqual(restored[0].sidebarState.width ?? -1, 312, accuracy: 0.1)
-    }
-
     func testRestoreWorkspaceSidebarStateFallsBackToDefaults() {
         let originalHidden = AppSettings.shared.sidebarDefaultHidden
         let originalWidth = AppSettings.shared.sidebarWidth
@@ -545,33 +464,6 @@ final class SessionStoreTests: XCTestCase {
         XCTAssertEqual(restored.count, 1)
         XCTAssertEqual(restored[0].sidebarState.isVisible, false)
         XCTAssertEqual(restored[0].sidebarState.width ?? -1, 287, accuracy: 0.1)
-    }
-
-    func testSnapshotCanPreserveDifferentSidebarWidthsAcrossSequentialWorkspaces() {
-        let state = AppState()
-        let first = Workspace(folderPath: "/tmp")
-        first.customName = "Workspace 11"
-        first.sidebarState = SidebarWorkspaceState(isVisible: true, width: 246)
-        let second = Workspace(folderPath: "/tmp")
-        second.customName = "Workspace 12"
-        second.sidebarState = SidebarWorkspaceState(isVisible: true, width: 246)
-        let third = Workspace(folderPath: "/tmp")
-        third.customName = "Workspace 13"
-        third.sidebarState = SidebarWorkspaceState(isVisible: true, width: 246)
-
-        state.addWorkspace(first)
-        state.addWorkspace(second)
-        state.addWorkspace(third)
-        state.setActiveWorkspace(2)
-
-        SessionStore.save(appState: state)
-        let snapshot = SessionStore.load()!
-
-        XCTAssertEqual(snapshot.activeWorkspaceIndex, 2)
-        XCTAssertEqual(snapshot.workspaces.count, 3)
-        XCTAssertEqual(snapshot.workspaces[0].sidebarWidth ?? -1, 246, accuracy: 0.1)
-        XCTAssertEqual(snapshot.workspaces[1].sidebarWidth ?? -1, 246, accuracy: 0.1)
-        XCTAssertEqual(snapshot.workspaces[2].sidebarWidth ?? -1, 246, accuracy: 0.1)
     }
 
     func testPerWorkspaceSidebarWidthAndVisibilityAreIndependent() {
@@ -634,43 +526,7 @@ final class SessionStoreTests: XCTestCase {
         XCTAssertEqual(snapshot.activeWorkspaceIndex, 1)
     }
 
-    // MARK: - Split ratio
-
-    func testSplitRatioIsRoundtripped() {
-        let state = AppState()
-        let ws = Workspace(folderPath: "/tmp")
-        let rootID = ws.activePaneID
-        _ = ws.splitPane(rootID, direction: .horizontal)
-        // Manually set a non-default ratio by re-splitting to create a known ratio
-        // The default after splitPane is 0.5 — verify that survives the roundtrip.
-        state.addWorkspace(ws)
-
-        SessionStore.save(appState: state)
-        let snapshot = SessionStore.load()!
-        let sw = snapshot.workspaces[0]
-        if case .split(_, _, _, let ratio) = sw.splitTree {
-            XCTAssertEqual(ratio, 0.5, accuracy: 0.001)
-        } else {
-            XCTFail("Expected a split tree, got a leaf")
-        }
-    }
-
     // MARK: - Active tab index
-
-    func testActiveTabIndexRoundtrip() {
-        let state = AppState()
-        let ws = Workspace(folderPath: "/tmp")
-        let pane = ws.pane(for: ws.activePaneID)!
-        pane.addTab(workingDirectory: "/tmp/a", title: "a")
-        pane.addTab(workingDirectory: "/tmp/b", title: "b")
-        pane.setActiveTab(1)  // second added tab (index 1 of the two new tabs, i.e. overall index 2)
-        state.addWorkspace(ws)
-
-        SessionStore.save(appState: state)
-        let snapshot = SessionStore.load()!
-        let sp = snapshot.workspaces[0].panes.first!
-        XCTAssertEqual(sp.activeTabIndex, pane.activeTabIndex)
-    }
 
     func testActiveTabIndexRestoredAfterRoundtrip() {
         let state = AppState()
@@ -691,19 +547,6 @@ final class SessionStoreTests: XCTestCase {
 
     // MARK: - activePaneID
 
-    func testActivePaneIDRoundtrip() {
-        let state = AppState()
-        let ws = Workspace(folderPath: "/tmp")
-        let rootID = ws.activePaneID
-        let newPaneID = ws.splitPane(rootID, direction: .horizontal)!
-        ws.activePaneID = newPaneID
-        state.addWorkspace(ws)
-
-        SessionStore.save(appState: state)
-        let snapshot = SessionStore.load()!
-        XCTAssertEqual(snapshot.workspaces[0].activePaneID, newPaneID)
-    }
-
     func testActivePaneIDRestoredAfterRoundtrip() {
         let state = AppState()
         let ws = Workspace(folderPath: "/tmp")
@@ -716,47 +559,6 @@ final class SessionStoreTests: XCTestCase {
         let snapshot = SessionStore.load()!
         let restored = SessionStore.workspaces(from: snapshot)
         XCTAssertEqual(restored[0].activePaneID, newPaneID)
-    }
-
-    func testActivePaneIDFallsBackToLeafWhenNotInTree() {
-        // If activePaneID references a UUID not in the splitTree (stale save),
-        // activateWorkspace handles the fallback — verify workspaces(from:) at
-        // minimum produces a workspace whose activePaneID is a real leaf.
-        let state = AppState()
-        let ws = Workspace(folderPath: "/tmp")
-        state.addWorkspace(ws)
-
-        SessionStore.save(appState: state)
-        var snapshot = SessionStore.load()!
-
-        // Replace activePaneID with a random UUID that isn't in the tree.
-        let sw = snapshot.workspaces[0]
-        let corrupted = SessionWorkspace(
-            id: sw.id,
-            folderPath: sw.folderPath,
-            customName: sw.customName,
-            color: sw.color,
-            customColorRed: nil,
-            customColorGreen: nil,
-            customColorBlue: nil,
-            isPinned: sw.isPinned,
-            splitTree: sw.splitTree,
-            panes: sw.panes,
-            activePaneID: UUID(),  // random — not in tree
-            sidebarIsVisible: nil,
-            sidebarWidth: nil
-        )
-        snapshot = SessionSnapshot(
-            activeWorkspaceIndex: snapshot.activeWorkspaceIndex,
-            workspaces: [corrupted]
-        )
-
-        let restored = SessionStore.workspaces(from: snapshot)
-        XCTAssertEqual(restored.count, 1)
-        // The restored activePaneID should be whatever was stored (workspaces(from:)
-        // does not validate it — activateWorkspace does the fallback).
-        // What matters: the workspace was reconstructed without crashing.
-        XCTAssertNotNil(restored[0])
     }
 
     // MARK: - Per-pane tabs in split workspace

@@ -87,47 +87,6 @@ struct TerminalContext: Equatable, @unchecked Sendable {
 // MARK: - Builder
 
 extension TerminalContext {
-    /// Build a TerminalContext from existing BridgeState and StatusBarState.
-    /// Bridges the current state system into the new structured format.
-    static func build(
-        from terminalState: BridgeState,
-        gitBranch: String? = nil,
-        gitRepoRoot: String? = nil,
-        paneCount: Int = 1,
-        tabCount: Int = 1
-    ) -> TerminalContext {
-        let gitContext: GitContext?
-        if let branch = gitBranch, let repoRoot = gitRepoRoot {
-            gitContext = GitContext(
-                branch: branch,
-                repoRoot: repoRoot,
-                isDirty: false,
-                changedFileCount: 0,
-                stagedCount: 0,
-
-                aheadCount: 0,
-                behindCount: 0,
-                lastCommitShort: nil
-            )
-        } else {
-            gitContext = nil
-        }
-
-        return TerminalContext(
-            terminalID: terminalState.paneID,
-            cwd: terminalState.workingDirectory,
-            remoteSession: terminalState.remoteSession,
-            remoteCwd: terminalState.remoteCwd,
-            gitContext: gitContext,
-            processName: terminalState.foregroundProcess,
-            processPID: terminalState.foregroundProcessPID,
-            processCategory: terminalState.foregroundProcessCategory,
-            processMetadata: terminalState.foregroundProcessMetadata,
-            paneCount: paneCount,
-            tabCount: tabCount
-        )
-    }
-
     /// Build a TerminalContext directly from per-tab state (source of truth).
     static func build(
         tabState: TabState,

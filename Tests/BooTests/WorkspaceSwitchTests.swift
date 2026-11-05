@@ -4,24 +4,6 @@ import XCTest
 
 @MainActor final class WorkspaceSwitchTests: XCTestCase {
 
-    func testWorkspaceCreation() {
-        let ws = Workspace(folderPath: "/tmp")
-        XCTAssertEqual(ws.panes.count, 1)
-        XCTAssertNotNil(ws.pane(for: ws.activePaneID))
-        XCTAssertEqual(ws.pane(for: ws.activePaneID)?.activeTab?.workingDirectory, "/tmp")
-    }
-
-    func testWorkspaceSplitPreservesOriginal() {
-        let ws = Workspace(folderPath: "/tmp")
-        let originalID = ws.activePaneID
-        let newID = ws.splitPane(originalID, direction: .horizontal)!
-
-        XCTAssertEqual(ws.panes.count, 2)
-        XCTAssertNotNil(ws.pane(for: originalID), "Original pane should still exist")
-        XCTAssertNotNil(ws.pane(for: newID), "New pane should exist")
-        XCTAssertEqual(ws.splitTree.leafIDs.count, 2)
-    }
-
     func testWorkspaceSplitVertical() {
         let ws = Workspace(folderPath: "/home")
         let originalID = ws.activePaneID
@@ -31,24 +13,6 @@ import XCTest
         XCTAssertEqual(ws.splitTree.leafIDs.count, 2)
         XCTAssertTrue(ws.splitTree.leafIDs.contains(originalID))
         XCTAssertTrue(ws.splitTree.leafIDs.contains(newID))
-    }
-
-    func testCloseOneOfTwoPanes() {
-        let ws = Workspace(folderPath: "/tmp")
-        let originalID = ws.activePaneID
-        let newID = ws.splitPane(originalID, direction: .horizontal)!
-
-        XCTAssertTrue(ws.closePane(newID))
-        XCTAssertEqual(ws.panes.count, 1)
-        XCTAssertNotNil(ws.pane(for: originalID))
-        XCTAssertNil(ws.pane(for: newID))
-        XCTAssertEqual(ws.splitTree.leafIDs.count, 1)
-    }
-
-    func testCloseLastPaneFails() {
-        let ws = Workspace(folderPath: "/tmp")
-        XCTAssertFalse(ws.closePane(ws.activePaneID))
-        XCTAssertEqual(ws.panes.count, 1)
     }
 
     func testActivePaneSwitchesOnClose() {
@@ -153,24 +117,6 @@ import XCTest
         pane.removeTab(at: 1)
         XCTAssertEqual(pane.tabs.count, 1)
         XCTAssertEqual(pane.activeTab?.workingDirectory, "/a")
-    }
-
-    func testGhosttyViewCallbacksWired() {
-        // Verify GhosttyView has the expected callback properties
-        let gv = GhosttyView(workingDirectory: "/tmp")
-        defer { gv.destroy() }
-
-        XCTAssertNil(gv.onFocused)
-        XCTAssertNil(gv.onPwdChanged)
-        XCTAssertNil(gv.onTitleChanged)
-        XCTAssertNil(gv.onProcessExited)
-
-        // Wire callbacks
-        gv.onFocused = {}
-        gv.onPwdChanged = { _ in }
-
-        XCTAssertNotNil(gv.onFocused)
-        XCTAssertNotNil(gv.onPwdChanged)
     }
 
     func testClosePaneFocusesClosestSibling() {

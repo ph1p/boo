@@ -31,16 +31,6 @@ final class JSCRuntimeTests: XCTestCase {
         )
     }
 
-    func testBasicTransform() throws {
-        let source = """
-            function transform(ctx) {
-                return JSON.stringify({ type: "label", text: "Hello from " + ctx.cwd });
-            }
-            """
-        let result = try runtime.execute(source: source, context: makeContext(cwd: "/home/user"))
-        XCTAssertTrue(result.contains("Hello from /home/user"), "Got: \(result)")
-    }
-
     func testContextAccess() throws {
         let source = """
             function transform(ctx) {

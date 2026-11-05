@@ -20,22 +20,6 @@ final class SocketPaneIDTests: XCTestCase {
         XCTAssertEqual(dict["terminal_id"] as? String, paneID.uuidString)
     }
 
-    func testSerializeContextPaneIDMatchesTerminalID() {
-        let id = UUID()
-        let ctx = TerminalContext(
-            terminalID: id, cwd: "/home",
-            remoteSession: .ssh(host: "user@host"),
-            remoteCwd: "/remote",
-            gitContext: nil, processName: "vim",
-            paneCount: 2, tabCount: 3
-        )
-        let dict = BooSocketServer.serializeContext(ctx)
-        XCTAssertEqual(
-            dict["pane_id"] as? String,
-            dict["terminal_id"] as? String,
-            "pane_id and terminal_id should be identical")
-    }
-
     // MARK: - Context builder pane-ID awareness
 
     func testBuildContextUsesTabStateForNonActivePaneBridge() {

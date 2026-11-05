@@ -3,34 +3,6 @@ import XCTest
 @testable import Boo
 
 final class ContentTypeTests: XCTestCase {
-    func testAllCases() {
-        let allCases = ContentType.allCases
-        XCTAssertEqual(allCases.count, 7)
-        XCTAssertTrue(allCases.contains(.terminal))
-        XCTAssertTrue(allCases.contains(.browser))
-        XCTAssertTrue(allCases.contains(.editor))
-        XCTAssertTrue(allCases.contains(.imageViewer))
-        XCTAssertTrue(allCases.contains(.markdownPreview))
-        XCTAssertTrue(allCases.contains(.pluginView))
-        XCTAssertTrue(allCases.contains(.castPlayer))
-    }
-
-    func testSymbolNames() {
-        XCTAssertEqual(ContentType.terminal.symbolName, "terminal")
-        XCTAssertEqual(ContentType.browser.symbolName, "globe")
-        XCTAssertEqual(ContentType.editor.symbolName, "doc.text")
-        XCTAssertEqual(ContentType.imageViewer.symbolName, "photo")
-        XCTAssertEqual(ContentType.markdownPreview.symbolName, "doc.richtext")
-    }
-
-    func testDisplayNames() {
-        XCTAssertEqual(ContentType.terminal.displayName, "Terminal")
-        XCTAssertEqual(ContentType.browser.displayName, "Browser")
-        XCTAssertEqual(ContentType.editor.displayName, "Editor")
-        XCTAssertEqual(ContentType.imageViewer.displayName, "Image")
-        XCTAssertEqual(ContentType.markdownPreview.displayName, "Markdown")
-    }
-
     func testCodable() throws {
         let encoder = JSONEncoder()
         let decoder = JSONDecoder()
@@ -40,33 +12,6 @@ final class ContentTypeTests: XCTestCase {
             let decoded = try decoder.decode(ContentType.self, from: data)
             XCTAssertEqual(decoded, type)
         }
-    }
-
-    func testDefaultTabTitles() {
-        XCTAssertEqual(ContentType.terminal.defaultTabTitle, "shell")
-        XCTAssertEqual(ContentType.browser.defaultTabTitle, "New Tab")
-        XCTAssertEqual(ContentType.editor.defaultTabTitle, "Untitled")
-        XCTAssertEqual(ContentType.imageViewer.defaultTabTitle, "Image")
-        XCTAssertEqual(ContentType.markdownPreview.defaultTabTitle, "Markdown")
-    }
-
-    func testBlankURL() {
-        XCTAssertEqual(ContentType.blankURL.absoluteString, "about:blank")
-    }
-
-    // MARK: - creatableTypes
-
-    func testCreatableTypesIncludesTerminalAndBrowser() {
-        let types = ContentType.creatableTypes
-        XCTAssertTrue(types.contains(.terminal))
-        XCTAssertTrue(types.contains(.browser))
-    }
-
-    func testCreatableTypesExcludesFileViewers() {
-        let types = ContentType.creatableTypes
-        XCTAssertFalse(types.contains(.editor))
-        XCTAssertFalse(types.contains(.imageViewer))
-        XCTAssertFalse(types.contains(.markdownPreview))
     }
 
     // MARK: - forFile

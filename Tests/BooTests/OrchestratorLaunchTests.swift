@@ -61,8 +61,4 @@ final class OrchestratorLaunchTests: XCTestCase {
         XCTAssertEqual(controller.session?.ownedWorktrees, [existing])
         XCTAssertTrue(controller.canResume)
     }
-
-    func testNothingToKeepWithoutSessionOrWorktrees() {
-        XCTAssertNil(OrchestratorController().session)
-    }
 }

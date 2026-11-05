@@ -10,11 +10,6 @@ final class BooPathsTests: XCTestCase {
         XCTAssertTrue(path.hasSuffix(".boo"))
     }
 
-    func testConfigDirIsInHome() {
-        let home = NSHomeDirectory()
-        XCTAssertTrue(BooPaths.configDir.hasPrefix(home))
-    }
-
     func testThemesDirExists() {
         let path = BooPaths.themesDir
         XCTAssertTrue(FileManager.default.fileExists(atPath: path))

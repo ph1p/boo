@@ -29,20 +29,6 @@ import XCTest
 
     // MARK: Settings
 
-    func testNewSettingDefaults() {
-        for key in keys { UserDefaults.standard.removeObject(forKey: key) }
-        let s = AppSettings.shared
-        XCTAssertTrue(s.openWorkspaceEditorOnCreate)
-        XCTAssertTrue(s.openGroupEditorOnCreate)
-        XCTAssertTrue(s.newTabsJoinActiveGroup)
-        XCTAssertEqual(s.paneControlsVisibility, .hover)
-        XCTAssertTrue(s.highlightRecordingPane)
-        XCTAssertEqual(s.recordingStopAction, .toast)
-        XCTAssertEqual(s.recordingsFolder, "")
-        XCTAssertEqual(s.recordingFileNameTemplate, SessionRecorder.defaultTemplate)
-        XCTAssertEqual(s.recordingIdleTimeLimit, 2)
-    }
-
     func testBlankTemplateFallsBackAndIdleLimitClamps() {
         AppSettings.shared.recordingFileNameTemplate = "   "
         XCTAssertEqual(AppSettings.shared.recordingFileNameTemplate, SessionRecorder.defaultTemplate)

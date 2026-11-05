@@ -92,16 +92,13 @@ final class LocalFileTreePluginTests: XCTestCase {
 
         let plugin = LocalFileTreePlugin()
         let ctx = makeContext(cwd: tmpDir.path)
-        let view = plugin.makeDetailView(context: ctx)
+        XCTAssertNotNil(plugin.makeDetailView(context: ctx))
 
-        XCTAssertNotNil(view, "makeDetailView must return a view for a local context")
+        let root = try XCTUnwrap(plugin.cachedRoot(for: tmpDir.path))
+        XCTAssertEqual(Set(root.children?.map(\.name) ?? []), ["alpha.txt", "beta.swift"])
 
-        // The file tree root for tmpDir must have children loaded
-        // Verify by calling makeDetailView again with the same context — if the root
-        // was properly loaded, a second call with isSameTerminalAndCwd=true must
-        // not clear children (i.e., the root object is stable).
-        let view2 = plugin.makeDetailView(context: ctx)
-        XCTAssertNotNil(view2)
+        _ = plugin.makeDetailView(context: ctx)
+        XCTAssertTrue(plugin.cachedRoot(for: tmpDir.path) === root, "same context keeps the root object")
     }
 
     /// Switching to a different tab pointing to the same directory must reload the
@@ -112,26 +109,24 @@ final class LocalFileTreePluginTests: XCTestCase {
         try createFile("file2.swift")
 
         let plugin = LocalFileTreePlugin()
-        let tabA = UUID()
-        let tabB = UUID()
-
-        // First call — tab A
-        let ctxA = makeContext(cwd: tmpDir.path, tabID: tabA)
-        _ = plugin.makeDetailView(context: ctxA)
+        _ = plugin.makeDetailView(context: makeContext(cwd: tmpDir.path, tabID: UUID()))
 
         // Add a new file between the two calls to prove the reload actually ran
         try createFile("file3.md")
 
-        // Second call — different tab B, same directory (simulates new tab in same dir)
-        let ctxB = makeContext(cwd: tmpDir.path, tabID: tabB)
-        let viewB = plugin.makeDetailView(context: ctxB)
-        XCTAssertNotNil(viewB, "makeDetailView must not return nil on context switch")
+        // Different tab, same directory (simulates new tab in same dir)
+        XCTAssertNotNil(plugin.makeDetailView(context: makeContext(cwd: tmpDir.path, tabID: UUID())))
+        let root = try XCTUnwrap(plugin.cachedRoot(for: tmpDir.path))
+        let hasFile3 = { root.children?.contains { $0.name == "file3.md" } ?? false }
+        // The switch reloads via loadChildrenAsync.
+        let deadline = Date().addingTimeInterval(2)
+        while !hasFile3() && Date() < deadline { RunLoop.main.run(until: Date().addingTimeInterval(0.01)) }
+        XCTAssertTrue(hasFile3(), "new tab reloads the listing")
     }
 
-    /// Switching to a new directory (new tab, different CWD) must produce a valid
-    /// view with children loaded for the new path.
+    /// Switching to a new directory (new tab, different CWD) must load children
+    /// for the new path.
     func testMakeDetailViewHandlesCwdChangeToNewDirectory() throws {
-        // Create two separate directories
         let dirA = tmpDir.appendingPathComponent("dirA")
         let dirB = tmpDir.appendingPathComponent("dirB")
         try FileManager.default.createDirectory(at: dirA, withIntermediateDirectories: true)
@@ -140,31 +135,11 @@ final class LocalFileTreePluginTests: XCTestCase {
         try Data().write(to: dirB.appendingPathComponent("b.txt"))
 
         let plugin = LocalFileTreePlugin()
+        _ = plugin.makeDetailView(context: makeContext(cwd: dirA.path, tabID: UUID()))
+        XCTAssertEqual(plugin.cachedRoot(for: dirA.path)?.children?.map(\.name), ["a.txt"])
 
-        // Tab A — dirA
-        let ctxA = makeContext(cwd: dirA.path, tabID: UUID())
-        let viewA = plugin.makeDetailView(context: ctxA)
-        XCTAssertNotNil(viewA, "must return view for dirA")
-
-        // Tab B — dirB (different CWD)
-        let ctxB = makeContext(cwd: dirB.path, tabID: UUID())
-        let viewB = plugin.makeDetailView(context: ctxB)
-        XCTAssertNotNil(viewB, "must return view for dirB")
-    }
-
-    /// Switching back to a previously-visited tab (same tab ID, same CWD) must NOT
-    /// re-trigger a loadChildren — isSameTerminalAndCwd=true should be a no-op.
-    func testMakeDetailViewDoesNotReloadOnSameContext() throws {
-        try createFile("only.txt")
-
-        let plugin = LocalFileTreePlugin()
-        let tabID = UUID()
-        let ctx = makeContext(cwd: tmpDir.path, tabID: tabID)
-
-        _ = plugin.makeDetailView(context: ctx)
-        // Second call with identical context — must not crash
-        let view2 = plugin.makeDetailView(context: ctx)
-        XCTAssertNotNil(view2)
+        _ = plugin.makeDetailView(context: makeContext(cwd: dirB.path, tabID: UUID()))
+        XCTAssertEqual(plugin.cachedRoot(for: dirB.path)?.children?.map(\.name), ["b.txt"])
     }
 
     // MARK: - Detached browsing
