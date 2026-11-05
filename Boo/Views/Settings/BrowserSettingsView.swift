@@ -7,6 +7,7 @@ struct BrowserSettingsView: View {
     @State private var historyEnabled = AppSettings.shared.browserHistoryEnabled
     @State private var historyLimit = AppSettings.shared.browserHistoryLimit
     @State private var confirmClose = AppSettings.shared.browserConfirmClose
+    @State private var agentAccess = AppSettings.shared.agentBrowserAccessEnabled
     @State private var showClearConfirm = false
     @State private var historyEntries: [BrowserHistoryEntry] = []
     @State private var searchText = ""
@@ -56,6 +57,18 @@ struct BrowserSettingsView: View {
                 )
                 .onChange(of: confirmClose) { _, value in
                     AppSettings.shared.browserConfirmClose = value
+                }
+            }
+
+            Section(title: "Agents") {
+                ToggleRow(
+                    label: "Let agents use the browser",
+                    help:
+                        "Agents in Boo terminals can open, read, click and script browser tabs with `boo browser`. They control the tabs they open; any other tab needs your approval, because pages share your logins.",
+                    isOn: $agentAccess
+                )
+                .onChange(of: agentAccess) { _, value in
+                    AppSettings.shared.agentBrowserAccessEnabled = value
                 }
             }
 

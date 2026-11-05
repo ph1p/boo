@@ -29,6 +29,9 @@ extension WindowManager {
                 "title": tab?.title ?? "", "cwd": tab?.workingDirectory ?? ""
             ])
             return true
+        case _ where OrchestratorGate.browserCommands.contains(cmd):
+            AgentBrowser.shared.handle(cmd: cmd, json: json, reply: reply)
+            return true
         case _ where MainWindowController.taskCommands.contains(cmd):
             guard let tabID else {
                 reply(["ok": false, "error": "missing tab_id"])

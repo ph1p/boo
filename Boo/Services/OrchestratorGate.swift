@@ -59,6 +59,31 @@ enum OrchestratorGate {
         return .approve
     }
 
+    // MARK: - Browser
+
+    /// `boo browser`: agents drive the built-in browser.
+    static let browserCommands: Set<String> = [
+        "browser_open", "browser_navigate", "browser_read", "browser_screenshot", "browser_console",
+        "browser_click", "browser_type", "browser_eval", "browser_list", "browser_close"
+    ]
+    /// Act on no existing tab.
+    static let browserFreeCommands: Set<String> = ["browser_open", "browser_list"]
+
+    /// Browser tabs share cookies and logins, so every caller, full grade too,
+    /// needs a card for a tab it did not open, unless the user granted it.
+    static func decideBrowser(
+        cmd: String, caller: CapabilityTokens.Caller?, tab: UUID?, enabled: Bool,
+        owns: (UUID) -> Bool, granted: (UUID) -> Bool
+    ) -> Decision {
+        guard enabled else { return .reject("agent browser access is off (Settings › Browser)") }
+        guard caller != nil else { return .reject("\(cmd) needs the BOO_TOKEN of a Boo terminal") }
+        if browserFreeCommands.contains(cmd) { return .allow }
+        // Unresolved tab: the command fails on its own.
+        guard let tab else { return .allow }
+        if cmd == "browser_close" && !owns(tab) { return .reject("browser_close closes only tabs you opened") }
+        return owns(tab) || granted(tab) ? .allow : .approve
+    }
+
     /// The tab or pane field names the command uses for its target.
     static func needsTarget(_ cmd: String) -> Bool {
         tabCommands.contains(cmd) || typingCommands.contains(cmd) || closeCommands.contains(cmd)

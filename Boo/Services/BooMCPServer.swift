@@ -29,7 +29,10 @@ struct BooMCPServer {
     /// Seconds to wait for Boo's reply: `wait_for_events` is held by Boo for up
     /// to its own `timeout`, everything else answers at once.
     static func clientTimeout(for message: [String: Any]) -> Int {
-        guard message["cmd"] as? String == "wait_for_events" else { return 10 }
+        let cmd = message["cmd"] as? String ?? ""
+        // Browser commands wait up to `AgentBrowser.loadTimeout` for a page.
+        if OrchestratorGate.browserCommands.contains(cmd) { return 30 }
+        guard cmd == "wait_for_events" else { return 10 }
         let held = (message["timeout"] as? Double) ?? (message["timeout"] as? Int).map(Double.init)
         return Int(min(max(held ?? OrchestratorEvents.defaultTimeout, 0), OrchestratorEvents.maxTimeout)) + 15
     }
@@ -215,6 +218,11 @@ struct BooMCPServer {
                 "cmd": "task_diff", "tab_id": try requiredTab(args), "stat_only": args["stat_only"] as? Bool ?? false
             ]
             return Self.json(try boo(message, pane: nil))
+        case _ where OrchestratorGate.browserCommands.contains(name):
+            var message: [String: Any] = ["cmd": name]
+            for key in Self.browserKeys where args[key] != nil { message[key] = args[key] }
+            let reply = try boo(message, pane: ownPaneID)
+            return Self.pending(reply) ?? Self.json(reply)
         case "merge_task", "discard_task":
             var message: [String: Any] = ["cmd": name, "tab_id": try requiredTab(args)]
             if name == "merge_task" {
@@ -293,8 +301,115 @@ struct BooMCPServer {
         until the receiver finishes its turn. wait_for_events blocks until agents change state, so loop on it \
         (pass the last seq as since) instead of polling. task_status says whether a task can \
         merge and why not; merge_task and discard_task always wait for the user's approval. \
-        run_recipe opens one of the user's saved workspace layouts.
+        run_recipe opens one of the user's saved workspace layouts. \
+        browser_open opens a page (your dev server: localhost:3000) in a Boo browser tab behind \
+        yours; browser_read, browser_screenshot, browser_console, browser_click, browser_type and \
+        browser_eval then act on it, so you can check the web app you build. Tabs you did not open \
+        need the user's approval.
         """
+
+    static let browserKeys = [
+        "tab_id", "url", "show", "action", "selector", "text", "format", "max_chars", "path", "clear", "submit", "js"
+    ]
+
+    private static var browserTabProperty: [String: Any] {
+        [
+            "type": "string",
+            "description": "Browser tab id or its first characters, from browser_list (default: the tab you used last)"
+        ]
+    }
+
+    private static var browserTools: [[String: Any]] {
+        let tab = browserTabProperty
+        return [
+            [
+                "name": "browser_open",
+                "description":
+                    "Opens a page in a new Boo browser tab behind your terminal tab (show: true brings it to the front) and waits for it to load. Returns tab_id, url and title. You control tabs you open without asking.",
+                "inputSchema": object(
+                    [
+                        "url": ["type": "string", "description": "http://localhost:3000, example.com, or a file path"],
+                        "show": ["type": "boolean", "description": "Show the tab to the user (default false)"]
+                    ], required: ["url"])
+            ],
+            [
+                "name": "browser_navigate",
+                "description":
+                    "Loads a URL in a browser tab, or goes back, forward or reloads, and waits for the page.",
+                "inputSchema": object([
+                    "tab_id": tab, "url": ["type": "string"],
+                    "action": [
+                        "type": "string", "enum": ["back", "forward", "reload"], "description": "Instead of url"
+                    ]
+                ])
+            ],
+            [
+                "name": "browser_read",
+                "description":
+                    "The visible text of a browser tab's page (or of the element matching selector), or its HTML with format html.",
+                "inputSchema": object([
+                    "tab_id": tab, "selector": ["type": "string", "description": "CSS selector (default: the body)"],
+                    "format": ["type": "string", "enum": ["text", "html"]],
+                    "max_chars": ["type": "integer", "description": "Default 20000"]
+                ]),
+                "annotations": ["readOnlyHint": true]
+            ],
+            [
+                "name": "browser_screenshot",
+                "description":
+                    "Saves a PNG of the browser tab's viewport and returns its path; read the file to see it.",
+                "inputSchema": object([
+                    "tab_id": tab, "path": ["type": "string", "description": "Where to save (default: a temp file)"]
+                ]),
+                "annotations": ["readOnlyHint": true]
+            ],
+            [
+                "name": "browser_console",
+                "description":
+                    "Console messages and uncaught errors the page logged since it loaded (last 500), oldest first.",
+                "inputSchema": object([
+                    "tab_id": tab, "clear": ["type": "boolean", "description": "Empty the log after reading"]
+                ]),
+                "annotations": ["readOnlyHint": true]
+            ],
+            [
+                "name": "browser_click",
+                "description":
+                    "Clicks the element matching a CSS selector, or the link or button whose text is text, then waits for any navigation.",
+                "inputSchema": object([
+                    "tab_id": tab, "selector": ["type": "string"],
+                    "text": ["type": "string", "description": "Visible text of a link or button, instead of selector"]
+                ])
+            ],
+            [
+                "name": "browser_type",
+                "description":
+                    "Sets the value of the input matching selector (default: the focused one) the way typing does; submit presses Enter.",
+                "inputSchema": object(
+                    [
+                        "tab_id": tab, "selector": ["type": "string"], "text": ["type": "string"],
+                        "submit": ["type": "boolean", "description": "Press Enter after (default false)"]
+                    ], required: ["text"])
+            ],
+            [
+                "name": "browser_eval",
+                "description":
+                    "Evaluates JavaScript in the page like the console does and returns the value as text (JSON for objects; promises are awaited).",
+                "inputSchema": object(["tab_id": tab, "js": ["type": "string"]], required: ["js"])
+            ],
+            [
+                "name": "browser_list",
+                "description": "Every Boo browser tab with tab_id, url, title and whether you opened it (owned).",
+                "inputSchema": object([:]),
+                "annotations": ["readOnlyHint": true]
+            ],
+            [
+                "name": "browser_close",
+                "description": "Closes a browser tab you opened.",
+                "inputSchema": object(["tab_id": tab])
+            ]
+        ]
+    }
 
     private static func object(_ properties: [String: Any], required: [String] = []) -> [String: Any] {
         ["type": "object", "properties": properties, "required": required]
@@ -505,7 +620,7 @@ struct BooMCPServer {
                 "inputSchema": object(["tab_id": tabProperty], required: ["tab_id"]),
                 "annotations": ["destructiveHint": true]
             ]
-        ]
+        ] + browserTools
     }
 }
 

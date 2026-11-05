@@ -106,4 +106,37 @@ final class OrchestratorGateTests: XCTestCase {
         tokens.revoke(tabID: tab)
         XCTAssertNil(tokens.resolve(token))
     }
+
+    // MARK: - Browser
+
+    private func browser(
+        _ cmd: String, _ caller: CapabilityTokens.Caller?, tab: UUID? = UUID(), enabled: Bool = true,
+        owned: Bool = false, granted: Bool = false
+    ) -> OrchestratorGate.Decision {
+        OrchestratorGate.decideBrowser(
+            cmd: cmd, caller: caller, tab: tab, enabled: enabled, owns: { _ in owned }, granted: { _ in granted })
+    }
+
+    func testBrowserNeedsSettingAndToken() {
+        XCTAssertEqual(
+            browser("browser_open", full, enabled: false), .reject("agent browser access is off (Settings › Browser)"))
+        XCTAssertEqual(browser("browser_list", nil), .reject("browser_list needs the BOO_TOKEN of a Boo terminal"))
+        XCTAssertEqual(browser("browser_open", gated, tab: nil), .allow)
+        XCTAssertEqual(browser("browser_list", gated), .allow)
+    }
+
+    func testBrowserForeignTabNeedsCardEvenForFullCaller() {
+        for caller in [full, gated] {
+            XCTAssertEqual(browser("browser_read", caller), .approve)
+            XCTAssertEqual(browser("browser_eval", caller, owned: true), .allow)
+            XCTAssertEqual(browser("browser_click", caller, granted: true), .allow)
+        }
+        XCTAssertEqual(browser("browser_read", gated, tab: nil), .allow, "unresolved tab fails on its own")
+    }
+
+    func testBrowserClosesOnlyOwnTabs() {
+        XCTAssertEqual(
+            browser("browser_close", full, granted: true), .reject("browser_close closes only tabs you opened"))
+        XCTAssertEqual(browser("browser_close", gated, owned: true), .allow)
+    }
 }

@@ -6,6 +6,10 @@ extension WindowManager {
     /// Socket entry point: checks the caller's `BOO_TOKEN` before dispatching.
     func dispatchGated(cmd: String, json: [String: Any], reply: @escaping ([String: Any]) -> Void) {
         let caller = CapabilityTokens.shared.resolve(json["token"] as? String)
+        if OrchestratorGate.browserCommands.contains(cmd) {
+            dispatchBrowser(cmd: cmd, json: json, caller: caller, reply: reply)
+            return
+        }
         // Handles (`t3`) and `parent` become tab UUIDs before the gate looks at the target.
         var json = json
         if cmd == "agent_send", json["tab_id"] == nil, let to = json["to"] { json["tab_id"] = to }
@@ -38,6 +42,36 @@ extension WindowManager {
                 reply(["ok": false, "error": "missing token"])
                 return
             }
+            enqueueCard(cmd: cmd, json: json, caller: caller, target: target, loop: false, reply: reply)
+        }
+    }
+
+    /// `boo browser`: resolves the tab (id, id prefix, or the caller's last
+    /// one) and asks the user before touching a tab the caller did not open.
+    private func dispatchBrowser(
+        cmd: String, json: [String: Any], caller: CapabilityTokens.Caller?,
+        reply: @escaping ([String: Any]) -> Void
+    ) {
+        var json = json
+        let reference = json["tab_id"] as? String
+        let tab = AgentBrowser.shared.tab(matching: reference, caller: caller?.tabID)
+        if let reference, !reference.isEmpty, tab == nil {
+            reply(["ok": false, "error": "no browser tab \(reference) (boo browser ls lists them)"])
+            return
+        }
+        if let tab { json["tab_id"] = tab.uuidString }
+        let decision = OrchestratorGate.decideBrowser(
+            cmd: cmd, caller: caller, tab: tab, enabled: AppSettings.shared.agentBrowserAccessEnabled,
+            owns: { tab in caller.map { CapabilityTokens.shared.owns($0.tabID, tab) } ?? false },
+            granted: { tab in caller.map { ApprovalCenter.shared.isGranted(caller: $0.tabID, tab: tab) } ?? false })
+        switch decision {
+        case .allow:
+            dispatchCommand(cmd: cmd, json: json, reply: reply)
+        case .reject(let error):
+            reply(["ok": false, "error": error])
+        case .approve:
+            guard let caller, let tab else { return reply(["ok": false, "error": "missing token"]) }
+            let target = OrchestratorGate.Target(tabIDs: [tab], isAgent: false, isRemote: false)
             enqueueCard(cmd: cmd, json: json, caller: caller, target: target, loop: false, reply: reply)
         }
     }

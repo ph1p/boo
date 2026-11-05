@@ -222,6 +222,14 @@ extension PaneView {
         contentViews[tabID] = cv
     }
 
+    /// The browser view of a tab in this pane, shown or cached; nil before its first showing.
+    func browserView(for tabID: UUID) -> BrowserContentView? {
+        if let browser = activeContentView as? BrowserContentView, browser.tabID == tabID {
+            return browser
+        }
+        return contentViews[tabID] as? BrowserContentView
+    }
+
     func editorView(for tabID: UUID) -> EditorContentView? {
         // Key on the view's own tab, not `pane.activeTab` — after a cross-pane drop those
         // disagree, and this feeds editor lookup/save.

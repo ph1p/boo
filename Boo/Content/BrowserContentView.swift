@@ -275,6 +275,12 @@ final class BrowserContentView: NSView, ContentViewProtocol, NSTextFieldDelegate
         let config = WKWebViewConfiguration()
         config.websiteDataStore =
             AppSettings.shared.browserPersistentWebsiteDataEnabled ? .default() : .nonPersistent()
+        if AppSettings.shared.agentBrowserAccessEnabled {
+            // `boo browser console` reads what the page logged.
+            config.userContentController.addUserScript(
+                WKUserScript(
+                    source: AgentBrowser.consoleCapture, injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        }
         let wv = WKWebView(frame: bounds, configuration: config)
         wv.navigationDelegate = self
         wv.uiDelegate = self

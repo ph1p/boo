@@ -51,7 +51,9 @@ final class BooMCPServerTests: XCTestCase {
                 "send_message", "read_messages", "run_recipe", "open_review", "wait_for_events", "agent_respond",
                 "focus_pane", "task_status",
                 "task_diff",
-                "merge_task", "discard_task"
+                "merge_task", "discard_task", "browser_open", "browser_navigate", "browser_read",
+                "browser_screenshot", "browser_console", "browser_click", "browser_type", "browser_eval",
+                "browser_list", "browser_close"
             ])
         for tool in tools {
             XCTAssertEqual((tool["inputSchema"] as? [String: Any])?["type"] as? String, "object")

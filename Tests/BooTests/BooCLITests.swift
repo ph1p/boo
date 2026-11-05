@@ -256,4 +256,55 @@ final class BooCLITests: XCTestCase {
         XCTAssertEqual(sent.last?["cmd"] as? String, "agent_collected")
         XCTAssertEqual(sent.last?["tab_id"] as? String, "t4")
     }
+
+    func testBrowserCommands() {
+        var (output, sent) = run(
+            ["browser", "open", "localhost:3000", "--show"],
+            reply: [
+                "ok": true, "tab_id": "ABCDEF12-0000-0000-0000-000000000000", "url": "http://localhost:3000/",
+                "title": "App"
+            ])
+        XCTAssertEqual(output.text, "abcdef12  App  http://localhost:3000/")
+        XCTAssertEqual(sent.first?["cmd"] as? String, "browser_open")
+        XCTAssertEqual(sent.first?["url"] as? String, "localhost:3000")
+        XCTAssertEqual(sent.first?["show"] as? Bool, true)
+        XCTAssertEqual(sent.first?["token"] as? String, "tok")
+
+        (_, sent) = run(["browser", "back", "--tab", "abc"])
+        XCTAssertEqual(sent.first?["cmd"] as? String, "browser_navigate")
+        XCTAssertEqual(sent.first?["action"] as? String, "back")
+        XCTAssertEqual(sent.first?["tab_id"] as? String, "abc")
+
+        (output, sent) = run(
+            ["browser", "read", "main", "--max", "50"], reply: ["ok": true, "text": "hi", "truncated": true])
+        XCTAssertEqual(output.text, "hi\n[truncated]")
+        XCTAssertEqual(sent.first?["selector"] as? String, "main")
+        XCTAssertEqual(sent.first?["max_chars"] as? Int, 50)
+
+        (output, sent) = run(["browser", "shot", "out.png"], reply: ["ok": true, "path": "/work/repo/out.png"])
+        XCTAssertEqual(sent.first?["path"] as? String, "/work/repo/out.png")
+        XCTAssertEqual(output.text, "/work/repo/out.png")
+
+        (_, sent) = run(["browser", "type", "--selector", "#q", "--submit", "hello", "world"])
+        XCTAssertEqual(sent.first?["text"] as? String, "hello world")
+        XCTAssertEqual(sent.first?["selector"] as? String, "#q")
+        XCTAssertEqual(sent.first?["submit"] as? Bool, true)
+
+        (output, _) = run(
+            ["browser", "console"],
+            reply: ["ok": true, "entries": [["level": "error", "text": "boom"], ["level": "log", "text": "hi"]]])
+        XCTAssertEqual(output.text, "[error] boom\n[log] hi")
+
+        (output, _) = run(["browser", "eval", "1+1"], reply: ["ok": true, "status": "pending", "approval_id": "x"])
+        XCTAssertEqual(output.text, BooCLI.browserPending)
+    }
+
+    func testBrowserUsageErrors() {
+        XCTAssertEqual(run(["browser"]).0.status, 2)
+        XCTAssertEqual(run(["browser", "open"]).0.status, 2)
+        XCTAssertEqual(run(["browser", "click"]).0.status, 2)
+        XCTAssertEqual(run(["browser", "read", "--max", "x"]).0.status, 2)
+        XCTAssertEqual(run(["browser", "fly"]).0.status, 2)
+        XCTAssertTrue(run(["browser", "eval"]).1.isEmpty)
+    }
 }

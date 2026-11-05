@@ -42,6 +42,22 @@ enum BooCLI {
           merge <agent> [--keep]       Merge its branch into the main checkout's branch and close
                                        it (--keep leaves the tab and worktree)
           discard <agent>              Close it and delete its worktree and branch
+
+        The built-in browser (on in Settings › Browser), to check a web app you build:
+          browser open <url> [--show]  Open a page in a tab behind this one and wait for it
+          browser go <url>|back|forward|reload
+          browser read [selector] [--html] [--max N]
+                                       The page's text (or HTML)
+          browser shot [file.png]      Save a screenshot; prints its path
+          browser console [--clear]    Console output and uncaught errors since the page loaded
+          browser click <selector>     Click an element; --text <label> clicks a link or button
+          browser type [--selector S] [--submit] <text>
+                                       Fill an input (default: the focused one)
+          browser eval <js>            Run JavaScript in the page; prints the value
+          browser ls                   Browser tabs; * marks the ones you opened
+          browser close                Close a tab you opened
+          Each takes --tab <id> (default: the tab you used last). Tabs you did not open
+          need your approval in Boo.
         """
 
     /// Entry point for `Boo --cli`; never returns.
@@ -206,6 +222,8 @@ enum BooCLI {
                 guard let target = rest.first else { return Output(text: "usage: boo discard <agent>", status: 2) }
                 _ = try request(["cmd": "discard_task", "tab_id": target], fromPane: false)
                 return Output(text: "discarded \(target): its worktree and branch are deleted", status: 0)
+            case "browser":
+                return try browser(rest, cwd: cwd) { try request($0) }
             case "help", "-h", "--help":
                 return Output(text: usage, status: 0)
             default:
@@ -215,6 +233,135 @@ enum BooCLI {
             return Output(text: "boo: \(failure.message)", status: 1)
         } catch {
             return Output(text: "boo: \(error.localizedDescription)", status: 1)
+        }
+    }
+
+    static let browserPending =
+        "waiting for your approval in Boo; it runs once allowed (“Allow for this tab” skips the card next time)"
+
+    /// `boo browser <action>`: one socket command per action.
+    static func browser(
+        _ arguments: [String], cwd: String, request: ([String: Any]) throws -> [String: Any]
+    ) throws -> Output {
+        var args = arguments
+        guard !args.isEmpty else { return Output(text: usage, status: 2) }
+        let action = args.removeFirst()
+        var message: [String: Any] = [:]
+        for (option, key) in [
+            ("--tab", "tab_id"), ("--selector", "selector"), ("--text", "text"), ("--max", "max_chars")
+        ] {
+            guard let value = takeValue(option, from: &args) else {
+                return Output(text: "\(option) needs a value", status: 2)
+            }
+            guard let value else { continue }
+            if key == "max_chars" {
+                guard let number = Int(value), number > 0 else {
+                    return Output(text: "--max needs a number", status: 2)
+                }
+                message[key] = number
+            } else {
+                message[key] = value
+            }
+        }
+        func flag(_ name: String) -> Bool {
+            guard let index = args.firstIndex(of: name) else { return false }
+            args.remove(at: index)
+            return true
+        }
+        func usageError(_ text: String) -> Output { Output(text: "usage: boo browser \(text)", status: 2) }
+
+        switch action {
+        case "open":
+            message["show"] = flag("--show")
+            guard let url = args.first else { return usageError("open <url> [--show]") }
+            message["cmd"] = "browser_open"
+            message["url"] = url
+        case "go", "back", "forward", "reload":
+            message["cmd"] = "browser_navigate"
+            if action == "go" {
+                guard let url = args.first else { return usageError("go <url>") }
+                message["url"] = url
+            } else {
+                message["action"] = action
+            }
+        case "read":
+            message["cmd"] = "browser_read"
+            if flag("--html") { message["format"] = "html" }
+            if let selector = args.first { message["selector"] = selector }
+        case "shot", "screenshot":
+            message["cmd"] = "browser_screenshot"
+            if let path = args.first {
+                message["path"] =
+                    (path as NSString).isAbsolutePath
+                    ? path : (cwd as NSString).appendingPathComponent(path)
+            }
+        case "console":
+            message["cmd"] = "browser_console"
+            message["clear"] = flag("--clear")
+        case "click":
+            message["cmd"] = "browser_click"
+            if let selector = args.first { message["selector"] = selector }
+            guard message["selector"] != nil || message["text"] != nil else {
+                return usageError("click <selector> | --text <label>")
+            }
+        case "type":
+            message["cmd"] = "browser_type"
+            message["submit"] = flag("--submit")
+            if message["text"] == nil {
+                guard !args.isEmpty else { return usageError("type [--selector S] [--submit] <text>") }
+                message["text"] = args.joined(separator: " ")
+            }
+        case "eval":
+            guard !args.isEmpty else { return usageError("eval <js>") }
+            message["cmd"] = "browser_eval"
+            message["js"] = args.joined(separator: " ")
+        case "ls", "list":
+            message["cmd"] = "browser_list"
+        case "close":
+            message["cmd"] = "browser_close"
+            if let tab = args.first { message["tab_id"] = tab }
+        default:
+            return Output(text: "unknown browser command \(action)\n\n\(usage)", status: 2)
+        }
+
+        let reply = try request(message)
+        if reply["status"] as? String == "pending" { return Output(text: browserPending, status: 0) }
+        func page() -> String {
+            let id = String((reply["tab_id"] as? String ?? "").prefix(8)).lowercased()
+            let title = reply["title"] as? String ?? ""
+            return [id, title.isEmpty ? nil : title, reply["url"] as? String].compactMap { $0 }.joined(separator: "  ")
+        }
+        switch message["cmd"] as? String {
+        case "browser_read":
+            let text = reply["text"] as? String ?? ""
+            return Output(text: reply["truncated"] as? Bool == true ? text + "\n[truncated]" : text, status: 0)
+        case "browser_screenshot":
+            return Output(text: reply["path"] as? String ?? "", status: 0)
+        case "browser_console":
+            let entries = reply["entries"] as? [[String: Any]] ?? []
+            guard !entries.isEmpty else { return Output(text: "no console messages", status: 0) }
+            return Output(
+                text: entries.map { "[\($0["level"] as? String ?? "log")] \($0["text"] as? String ?? "")" }
+                    .joined(separator: "\n"),
+                status: 0)
+        case "browser_eval":
+            return Output(text: reply["result"] as? String ?? "", status: 0)
+        case "browser_list":
+            let tabs = reply["tabs"] as? [[String: Any]] ?? []
+            guard !tabs.isEmpty else { return Output(text: "no browser tabs", status: 0) }
+            return Output(
+                text: tabs.map { tab in
+                    let id = String((tab["tab_id"] as? String ?? "").prefix(8)).lowercased()
+                    let mark = tab["owned"] as? Bool == true ? "*" : " "
+                    return "\(id) \(mark) \(tab["title"] as? String ?? "")  \(tab["url"] as? String ?? "")"
+                }.joined(separator: "\n"),
+                status: 0)
+        case "browser_close":
+            return Output(text: "closed", status: 0)
+        case "browser_click":
+            return Output(text: "clicked \(reply["clicked"] as? String ?? "")\n\(page())", status: 0)
+        default:
+            return Output(text: page(), status: 0)
         }
     }
 

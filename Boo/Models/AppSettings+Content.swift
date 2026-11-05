@@ -89,6 +89,12 @@ extension AppSettings {
         set { set(newValue, forKey: K.browserPersistentWebsiteDataEnabled, topic: .layout) }
     }
 
+    /// When true, agents in Boo terminals can drive browser tabs (`boo browser`).
+    var agentBrowserAccessEnabled: Bool {
+        get { bool(K.agentBrowserAccessEnabled, default: true) }
+        set { set(newValue, forKey: K.agentBrowserAccessEnabled, topic: .layout) }
+    }
+
     /// When true, closing a browser tab asks first (a page can hold unsent form input).
     var browserConfirmClose: Bool {
         get { bool(K.browserConfirmClose, default: true) }

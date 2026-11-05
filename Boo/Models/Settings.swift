@@ -124,6 +124,7 @@ final class AppSettings {
         static let browserHistoryEnabled = "browserHistoryEnabled"
         static let browserHistoryLimit = "browserHistoryLimit"
         static let browserConfirmClose = "browserConfirmClose"
+        static let agentBrowserAccessEnabled = "agentBrowserAccessEnabled"
 
         static let editorFontSize = "editorFontSize"
         static let editorFontName = "editorFontName"

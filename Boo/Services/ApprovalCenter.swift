@@ -174,6 +174,13 @@ final class ApprovalCenter {
         case "close_pane": return "Close agent pane"
         case "merge_task": return "Merge task"
         case "discard_task": return "Discard task"
+        case "browser_navigate": return "Navigate browser tab"
+        case "browser_read": return "Read browser tab"
+        case "browser_screenshot": return "Screenshot browser tab"
+        case "browser_console": return "Read browser console"
+        case "browser_click": return "Click in browser tab"
+        case "browser_type": return "Type in browser tab"
+        case "browser_eval": return "Run JavaScript in browser tab"
         default: return cmd
         }
     }
@@ -187,6 +194,12 @@ final class ApprovalCenter {
             return (json["submit"] as? Bool ?? false) ? text + " ⏎" : text
         case "send_key": return json["key"] as? String ?? ""
         case "merge_task", "discard_task": return json["summary"] as? String ?? ""
+        case "browser_navigate": return json["url"] as? String ?? json["action"] as? String ?? ""
+        case "browser_read", "browser_click": return json["selector"] as? String ?? json["text"] as? String ?? ""
+        case "browser_type":
+            let text = json["text"] as? String ?? ""
+            return (json["submit"] as? Bool ?? false) ? text + " ⏎" : text
+        case "browser_eval": return json["js"] as? String ?? ""
         default: return ""
         }
     }

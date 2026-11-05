@@ -269,7 +269,9 @@ final class BooSocketServer: @unchecked Sendable {
             "equalize_splits", "get_layout", "move_workspace_to_new_window", "merge_all_windows",
             "agent_event", "agent_inbox", "agent_jump", "agent_respond", "agent_timeline", "wait_for_events",
             "new_agent_task", "agent_send", "agent_messages", "agent_collected",
-            "review_changes", "task_status", "task_diff", "merge_task", "discard_task", "run_recipe", "list_recipes":
+            "review_changes", "task_status", "task_diff", "merge_task", "discard_task", "run_recipe", "list_recipes",
+            "browser_open", "browser_navigate", "browser_read", "browser_screenshot", "browser_console",
+            "browser_click", "browser_type", "browser_eval", "browser_list", "browser_close":
             handleControlCommand(cmd: cmd, json: json, clientFD: clientFD)
             return
 
