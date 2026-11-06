@@ -52,9 +52,9 @@ extension PaneView {
         let widths = allTabWidths()
         let maxScroll = scrollMaxOffset(widths: widths)
         let isOverflowing = maxScroll > 0
-        // When overflowing, the plus pins in front of the right side inset and
-        // the scrollable strip clips just before it.
-        let pinnedPlusX = bounds.width - plusButtonWidth - inset
+        // When overflowing, the buttons pin in front of the right side inset and
+        // the scrollable strip clips just before them.
+        let pinnedButtonsX = bounds.width - tabBarButtonsWidth - inset
 
         // Clamp and auto-scroll to active tab only when active tab changes
         tabScrollOffset = min(max(0, tabScrollOffset), maxScroll)
@@ -64,8 +64,8 @@ extension PaneView {
             let activeEnd = activeStart + widths[pane.activeTabIndex]
             if activeStart < inset {
                 tabScrollOffset += activeStart - inset
-            } else if activeEnd > pinnedPlusX {
-                tabScrollOffset += activeEnd - pinnedPlusX
+            } else if activeEnd > pinnedButtonsX {
+                tabScrollOffset += activeEnd - pinnedButtonsX
             }
             tabScrollOffset = min(max(0, tabScrollOffset), maxScroll)
         } else if !isOverflowing {
@@ -74,7 +74,7 @@ extension PaneView {
 
         // Clip scrollable tabs so they don't draw over the pinned plus button
         ctx.saveGState()
-        ctx.clip(to: CGRect(x: 0, y: 0, width: pinnedPlusX, height: barH + 1))
+        ctx.clip(to: CGRect(x: 0, y: 0, width: pinnedButtonsX, height: barH + 1))
 
         drawGroupContainers(ctx: ctx, theme: theme)
         var x: CGFloat = inset - tabScrollOffset
@@ -100,8 +100,8 @@ extension PaneView {
             if tabScrollOffset < maxScroll {
                 let fadeW: CGFloat = 32
                 WorkspacePillStyle.drawFade(
-                    ctx, in: CGRect(x: pinnedPlusX - fadeW, y: 0, width: fadeW, height: barH),
-                    from: CGPoint(x: pinnedPlusX, y: 0), to: CGPoint(x: pinnedPlusX - fadeW, y: 0),
+                    ctx, in: CGRect(x: pinnedButtonsX - fadeW, y: 0, width: fadeW, height: barH),
+                    from: CGPoint(x: pinnedButtonsX, y: 0), to: CGPoint(x: pinnedButtonsX - fadeW, y: 0),
                     color: theme.background.nsColor)
             }
         }
@@ -109,9 +109,7 @@ extension PaneView {
 
         ctx.restoreGState()
 
-        let plusSlot = plusButtonSlot(widths: widths)
-        drawPlusButton(
-            ctx: ctx, theme: theme, x: plusSlot.minX, y: plusSlot.minY, width: plusSlot.width, rowH: plusSlot.height)
+        drawTabBarButtons(ctx: ctx, theme: theme, cluster: tabBarButtonsSlot(widths: widths))
     }
 
     func drawTabsWrapped(ctx: CGContext, theme: TerminalTheme) {
@@ -130,40 +128,39 @@ extension PaneView {
         }
         drawGroupDropIndicator(ctx: ctx, theme: theme)
 
-        let plusSlot = plusButtonSlot(layouts: layouts)
-        drawPlusButton(
-            ctx: ctx, theme: theme, x: plusSlot.minX, y: plusSlot.minY, width: plusSlot.width, rowH: plusSlot.height)
+        drawTabBarButtons(ctx: ctx, theme: theme, cluster: tabBarButtonsSlot(layouts: layouts))
     }
 
-    /// Slot rect of the `+` button in the current overflow mode — the ONE place
-    /// that knows where the plus sits. Draw and hit-test both read it.
+    /// Rect of the `+` / ⋯ / unzoom buttons in the current overflow mode — the
+    /// ONE place that knows where they sit. Draw and hit-test both read it.
     /// Scroll mode: follows the last tab while everything fits, pins in front of
     /// the right side inset once the strip overflows. Wrap mode: after the last
-    /// tab, or on a row of its own when it doesn't fit.
-    func plusButtonSlot(widths: [CGFloat]? = nil) -> CGRect {
+    /// tab, or on a row of its own when they don't fit. Vertical: under the
+    /// last tab, sticking to the column's bottom once the tabs overflow.
+    func tabBarButtonsSlot(widths: [CGFloat]? = nil) -> CGRect {
         let inset = Self.tabBarSideInset
-        if isVerticalTabs { return verticalPlusSlot }
+        if isVerticalTabs { return verticalFooterSlot() }
         let w = widths ?? allTabWidths()
         if AppSettings.shared.tabOverflowMode == .wrap {
-            return plusButtonSlot(layouts: wrapLayout(widths: w))
+            return tabBarButtonsSlot(layouts: wrapLayout(widths: w))
         }
         let isOverflowing = scrollMaxOffset(widths: w) > 0
-        let x = isOverflowing ? bounds.width - plusButtonWidth - inset : inset + w.reduce(0, +)
-        return CGRect(x: x, y: 0, width: plusButtonWidth, height: tabBarHeight)
+        let x = isOverflowing ? bounds.width - tabBarButtonsWidth - inset : inset + w.reduce(0, +)
+        return CGRect(x: x, y: 0, width: tabBarButtonsWidth, height: tabBarHeight)
     }
 
-    /// Wrap-mode plus slot for callers that already computed the layouts.
-    func plusButtonSlot(layouts: [TabLayout]) -> CGRect {
+    /// Wrap-mode button rect for callers that already computed the layouts.
+    func tabBarButtonsSlot(layouts: [TabLayout]) -> CGRect {
         let inset = Self.tabBarSideInset
         let lastLay = layouts.last
         if plusFitsOnLastRow(layouts) {
             return CGRect(
                 x: (lastLay?.x ?? inset) + (lastLay?.width ?? 0), y: lastLay?.y ?? inset,
-                width: plusButtonWidth, height: singleRowTabHeight)
+                width: tabBarButtonsWidth, height: singleRowTabHeight)
         }
         return CGRect(
             x: inset, y: (lastLay?.y ?? inset) + singleRowTabHeight,
-            width: plusButtonWidth, height: singleRowTabHeight)
+            width: tabBarButtonsWidth, height: singleRowTabHeight)
     }
 
     func drawSingleTab(
@@ -338,9 +335,7 @@ extension PaneView {
     func drawLeadingIcon(tab: Pane.Tab, theme: TerminalTheme, x: CGFloat, midY: CGFloat, isActive: Bool) -> CGFloat {
         // The tile starts closer to the pill edge than the title would; `x` is
         // where the title would start without an icon.
-        let tile = CGRect(
-            x: x - Self.tabTextLeadIn + Self.tabIconTileInset, y: midY - Self.tabIconTileSize / 2,
-            width: Self.tabIconTileSize, height: Self.tabIconTileSize)
+        let tile = Self.iconTileRect(pillMinX: x - Self.tabTextLeadIn, midY: midY)
         let x = tile.midX - 7
         // Content type icon for non-terminal tabs
         if tab.contentType != .terminal {
@@ -374,22 +369,6 @@ extension PaneView {
             return drawn.width
         }
         return 0
-    }
-
-    func drawPlusButton(ctx: CGContext, theme: TerminalTheme, x: CGFloat, y: CGFloat, width: CGFloat, rowH: CGFloat) {
-        // Pill button matching the workspace bar's `+` — inset inside its zone so
-        // the gap to the last tab pill matches the gap between tab pills.
-        let pillRect = Self.tabPillRect(inSlot: CGRect(x: x, y: y, width: width, height: rowH))
-        // Transparent at rest so it reads as part of the bar, not as a tab; the
-        // pill only appears under the pointer.
-        if isPlusButtonHovered {
-            WorkspacePillStyle.fill(
-                ctx, rect: pillRect, active: false, hovered: true,
-                wsColor: nil, neutral: theme.chromeMuted)
-        }
-
-        let color = theme.chromeMuted.withAlphaComponent(isPlusButtonHovered ? 0.9 : 0.65)
-        WorkspacePillStyle.drawPlusGlyph(ctx, in: pillRect, halfSpan: 4.5, color: color)
     }
 
     // MARK: - Tab Display Helpers
@@ -447,6 +426,13 @@ extension PaneView {
     // MARK: - Icon Drawing Helper
 
     /// Rounded square behind a tab icon, tinted with the icon's own colour.
+    /// The leading icon tile of a tab pill starting at `pillMinX`.
+    static func iconTileRect(pillMinX: CGFloat, midY: CGFloat) -> CGRect {
+        CGRect(
+            x: pillMinX + tabIconTileInset, y: midY - tabIconTileSize / 2, width: tabIconTileSize,
+            height: tabIconTileSize)
+    }
+
     static func drawIconTile(_ rect: CGRect, color: NSColor, isActive: Bool) {
         color.withAlphaComponent(isActive ? 0.22 : 0.14).setFill()
         NSBezierPath(roundedRect: rect, xRadius: 6, yRadius: 6).fill()

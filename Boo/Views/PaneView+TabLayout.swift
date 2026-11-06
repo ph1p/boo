@@ -107,7 +107,7 @@ extension PaneView {
     /// has to drop onto a row of its own. Shared by draw, hit-test, and row count.
     func plusFitsOnLastRow(_ layouts: [TabLayout]) -> Bool {
         guard let last = layouts.last else { return true }
-        return last.x + last.width + plusButtonWidth <= bounds.width - Self.tabBarSideInset
+        return last.x + last.width + tabBarButtonsWidth <= bounds.width - Self.tabBarSideInset
     }
 
     /// Number of rows needed in wrap mode.

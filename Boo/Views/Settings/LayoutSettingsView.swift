@@ -90,7 +90,7 @@ struct LayoutSettingsView: View {
                 SettingStack(
                     label: "Show",
                     help:
-                        "A ⋯ tab carved into a pane's bottom-right corner, with record, split, zoom and close in its menu. A running recording's timer and the unzoom button always show."
+                        "A ⋯ button next to the tab bar's +, with record, split, zoom, profile and close in its menu. The unzoom button always shows while a pane is zoomed."
                 ) {
                     ThemedSegmentedPicker(selection: LayoutSettingsBindings.binding(\.paneControlsVisibility)) {
                         $0.label

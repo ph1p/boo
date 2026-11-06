@@ -142,22 +142,21 @@ final class ZoomBadgeTests: XCTestCase {
     /// Pane views must outlive the suite: deallocating one can hang teardown.
     private static var kept: [PaneView] = []
 
-    func testZoomShowsUnzoomInNotchAndClickRequestsUnzoom() {
+    func testZoomShowsUnzoomInTabBarAndClickRequestsUnzoom() {
         let pane = PaneView(paneID: UUID(), pane: Pane())
         Self.kept.append(pane)
         pane.frame = NSRect(x: 0, y: 0, width: 600, height: 400)
-        XCTAssertFalse(pane.paneControls.isZoomed)
+        XCTAssertFalse(pane.tabBarButtons.contains(.unzoom))
 
         pane.isZoomed = true
-        XCTAssertTrue(pane.paneControls.isZoomed)
-        XCTAssertTrue(pane.paneControlsShown)
+        XCTAssertEqual(pane.tabBarButtons.last, .unzoom)
 
         var unzoomRequests = 0
         pane.onUnzoomRequested = { unzoomRequests += 1 }
-        pane.paneControls.onUnzoom?()
+        pane.pressTabBarButton(.unzoom, event: nil)
         XCTAssertEqual(unzoomRequests, 1)
 
         pane.isZoomed = false
-        XCTAssertFalse(pane.paneControls.isZoomed)
+        XCTAssertFalse(pane.tabBarButtons.contains(.unzoom))
     }
 }

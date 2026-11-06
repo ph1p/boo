@@ -53,7 +53,15 @@ final class VerticalTabsTests: XCTestCase {
         XCTAssertEqual(s1.minY, s0.maxY)
         XCTAssertEqual(pv.tabIndex(at: NSPoint(x: 20, y: s1.midY)), 1)
         XCTAssertNil(pv.tabIndex(at: NSPoint(x: 400, y: s1.midY)), "terminal area is not a tab")
-        XCTAssertNil(pv.tabIndex(at: NSPoint(x: 20, y: pv.verticalPlusSlot.midY)), "plus is not a tab")
+        let footer = pv.verticalFooterSlot()
+        XCTAssertNil(pv.tabIndex(at: NSPoint(x: 20, y: footer.midY)), "plus is not a tab")
+        XCTAssertEqual(footer.minY, try XCTUnwrap(pv.tabSlotRect(at: 2)).maxY + PaneView.verticalFooterGap)
+        XCTAssertEqual(pv.tabBarButton(at: NSPoint(x: footer.minX + 10, y: footer.midY)), .plus)
+    }
+
+    func testFooterPinsToBottomWhenRowsOverflow() {
+        let (_, pv) = paneView(30)
+        XCTAssertEqual(pv.verticalFooterSlot().minY, pv.verticalPinnedFooterY)
     }
 
     func testGroupHeaderAndCollapse() throws {

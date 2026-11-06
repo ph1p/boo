@@ -204,70 +204,55 @@ extension MainWindowController {
         return true
     }
 
-    /// Handles a click in a pane's corner controls: focus that pane, then act on it.
-    func handlePaneControl(_ action: PaneControlAction, in pv: PaneView) {
-        guard focusControlsOwner(pv) else { return }
-        switch action {
-        case .toggleRecording: toggleRecordingAction(nil)
-        case .addMarker: addRecordingMarkerAction(nil)
-        case .splitRight: splitVerticalAction(nil)
-        case .splitDown: splitHorizontalAction(nil)
-        case .toggleZoom: toggleZoomPaneAction(nil)
-        case .closePane: closePaneAction(nil)
-        }
-    }
-
-    /// The corner notch's ⋯ menu: the pane's own actions first, then the
-    /// window-wide extras. Built per click, after the pane took focus, so the
-    /// selector items act on it and validate against current state.
+    /// The tab bar's ⋯ menu: the pane's own actions, then the window-wide
+    /// ones that need splits, then Close Pane. Built per click, after the
+    /// pane took focus, so the selector items act on it and validate against
+    /// current state. New Tab, Find and the recordings folder stay in the
+    /// main menu; the `+` sits right next to this button.
     func paneControlsMenu(for pv: PaneView) -> NSMenu {
         focusControlsOwner(pv)
         let menu = NSMenu()
+        func add(_ title: String, _ action: Selector, _ symbol: String) {
+            let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
+            item.target = self
+            item.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)
+            if let shortcut = Self.mainMenuItem(for: action) {
+                item.keyEquivalent = shortcut.keyEquivalent
+                item.keyEquivalentModifierMask = shortcut.keyEquivalentModifierMask
+            }
+            menu.addItem(item)
+        }
         let gv = activeGhosttyView
-        let entries = PaneControlsView.primaryEntries(
+        let multiPane = pv.showCloseOnSingleTab
+        let entries = PaneControls.primaryEntries(
             canRecord: pv.pane.activeTab?.contentType == .terminal && gv?.isInputLocked == false,
             isRecording: gv?.isRecording == true,
-            multiPane: pv.showCloseOnSingleTab,
+            multiPane: multiPane,
             isZoomed: pv.isZoomed)
         for entry in entries {
             guard let entry else {
                 menu.addItem(.separator())
                 continue
             }
-            let item = ClosureMenuItem(title: entry.title) { [weak self, weak pv] in
-                guard let self, let pv else { return }
-                self.handlePaneControl(entry.action, in: pv)
-            }
-            item.image = NSImage(systemSymbolName: entry.symbol, accessibilityDescription: nil)
-            if let shortcut = Self.mainMenuItem(for: Self.selector(for: entry.action)) {
-                item.keyEquivalent = shortcut.keyEquivalent
-                item.keyEquivalentModifierMask = shortcut.keyEquivalentModifierMask
-            }
-            menu.addItem(item)
+            add(entry.title, Self.selector(for: entry.action), entry.symbol)
         }
-        menu.addItem(.separator())
-        func add(_ title: String, _ action: Selector, _ symbol: String) {
-            let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
-            item.target = self
-            item.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)
-            menu.addItem(item)
+        if let tab = pv.pane.activeTab, let profile = RuleEngine.shared.profileMenuItem(for: tab) {
+            menu.addItem(profile)
         }
-        add("New Tab", #selector(newTabAction(_:)), "plus")
-        add("Find…", #selector(findAction(_:)), "magnifyingglass")
-        add("Clear Scrollback", #selector(clearScrollbackAction(_:)), "eraser")
+        if pv.pane.activeTab?.contentType == .terminal {
+            add("Clear Scrollback", #selector(clearScrollbackAction(_:)), "eraser")
+        }
+        guard multiPane else { return menu }
         menu.addItem(.separator())
-        let recording = hasActiveRecordings
-        if !recording || !recordablePanes.isEmpty {
+        if hasActiveRecordings {
+            add("Stop All Recordings", #selector(stopAllRecordingsAction(_:)), "stop.circle")
+        } else if !recordablePanes.isEmpty {
             add("Record All Panes", #selector(recordAllPanesAction(_:)), "record.circle")
         }
-        if recording {
-            add("Stop All Recordings", #selector(stopAllRecordingsAction(_:)), "stop.circle")
-        }
-        add("Open Recording…", #selector(openRecordingAction(_:)), "play.rectangle")
-        add("Show Recordings Folder", #selector(revealRecordingsFolderAction(_:)), "folder")
-        menu.addItem(.separator())
         add("Broadcast Input to All Panes", #selector(broadcastToAllPanesAction(_:)), "dot.radiowaves.left.and.right")
         add("Equalize Splits", #selector(equalizeSplitsAction(_:)), "square.split.2x2")
+        menu.addItem(.separator())
+        add("Close Pane", #selector(closePaneAction(_:)), "xmark.square")
         return menu
     }
 
@@ -279,11 +264,10 @@ extension MainWindowController {
         case .splitRight: return #selector(splitVerticalAction(_:))
         case .splitDown: return #selector(splitHorizontalAction(_:))
         case .toggleZoom: return #selector(toggleZoomPaneAction(_:))
-        case .closePane: return #selector(closePaneAction(_:))
         }
     }
 
-    /// The main-menu item for `action`, whose shortcut the notch menu shows.
+    /// The main-menu item for `action`, whose shortcut the ⋯ menu shows.
     private static func mainMenuItem(for action: Selector) -> NSMenuItem? {
         func search(_ menu: NSMenu) -> NSMenuItem? {
             for item in menu.items {

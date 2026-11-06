@@ -3,25 +3,34 @@ import Cocoa
 /// Vertical tabs: the pane's tabs as a list in a column on its left instead of
 /// a bar on top. Each tab is a two-line row (title, then agent status or the
 /// folder of a running program); a group opens with a header row holding its
-/// chip. The `+` pins to the column's bottom and the rows scroll above it.
+/// chip. The `+` / ⋯ / unzoom footer follows the last row and sticks to the
+/// column's bottom once the rows overflow and scroll above it.
 ///
 /// Geometry reuses the bar's slot model: `tabSlotRect` returns a row (header
 /// included for a group's first tab), so hit-testing, hover, drag and the
 /// context menu run through the same code as the horizontal modes.
 extension PaneView {
 
-    private enum VerticalFonts {
+    enum VerticalFonts {
         nonisolated(unsafe) static let title = NSFont.systemFont(ofSize: 11, weight: .regular)
         nonisolated(unsafe) static let titleActive = NSFont.systemFont(ofSize: 11, weight: .medium)
-        nonisolated(unsafe) static let detail = NSFont.systemFont(ofSize: 9.5, weight: .regular)
+        nonisolated(unsafe) static let detail = NSFont.systemFont(ofSize: 10, weight: .regular)
         nonisolated(unsafe) static let groupName = NSFont.systemFont(ofSize: 10.5, weight: .semibold)
         nonisolated(unsafe) static let groupCount = NSFont.monospacedDigitSystemFont(ofSize: 9.5, weight: .medium)
     }
 
     static let verticalTabColumnMaxWidth: CGFloat = 168
+    /// Row of a tab with only a title.
     static let verticalTabRowHeight: CGFloat = 36
+    /// Row of a tab with a second (status / folder) line.
+    static let verticalTabDetailRowHeight: CGFloat = 46
     static let verticalGroupHeaderHeight: CGFloat = 24
-    static let verticalPlusHeight: CGFloat = 28
+    /// Footer row holding `+` / ⋯ / unzoom.
+    static let verticalFooterHeight: CGFloat = 32
+    /// Above the first row, so its pill sits 8pt below the pane's top edge.
+    static let verticalTopInset: CGFloat = 6
+    /// Between the last row and the footer.
+    static let verticalFooterGap: CGFloat = 2
 
     var isVerticalTabs: Bool { AppSettings.shared.tabOverflowMode == .vertical }
 
@@ -41,20 +50,31 @@ extension PaneView {
     func isInTabBar(_ point: NSPoint) -> Bool { tabBarRect.contains(point) }
 
     /// Row height per tab: its group's header for a group's first tab, plus
-    /// the tab row unless the group is collapsed.
+    /// the tab row unless the group is collapsed. Rows with a second line
+    /// are taller so neither line crowds the pill's edges.
     func verticalSlotHeights() -> [CGFloat] {
         pane.tabs.indices.map { i in
-            (pane.isFirstTabOfGroup(at: i) ? Self.verticalGroupHeaderHeight : 0)
-                + (pane.isTabHidden(at: i) ? 0 : Self.verticalTabRowHeight)
+            let header = pane.isFirstTabOfGroup(at: i) ? Self.verticalGroupHeaderHeight : 0
+            guard !pane.isTabHidden(at: i) else { return header }
+            return header
+                + (hasVerticalTabDetail(pane.tabs[i]) ? Self.verticalTabDetailRowHeight : Self.verticalTabRowHeight)
         }
     }
 
     func verticalSlotRect(at index: Int, heights: [CGFloat]? = nil) -> CGRect? {
         let h = heights ?? verticalSlotHeights()
         guard index < h.count else { return nil }
-        let inset = Self.tabBarSideInset
-        let y = inset + h.prefix(index).reduce(0, +) - tabScrollOffset
-        return CGRect(x: inset, y: y, width: verticalTabColumnWidth - inset * 2, height: h[index])
+        let y = Self.verticalTopInset + h.prefix(index).reduce(0, +) - tabScrollOffset
+        return CGRect(x: Self.tabBarSideInset, y: y, width: verticalRowWidth, height: h[index])
+    }
+
+    /// Width of a row or the footer; `- 1` keeps the pills clear of the
+    /// column's divider.
+    var verticalRowWidth: CGFloat { verticalTabColumnWidth - Self.tabBarSideInset * 2 - 1 }
+
+    /// Where the footer starts below the rows, before scrolling.
+    func verticalRowsEnd(heights: [CGFloat]? = nil) -> CGFloat {
+        Self.verticalTopInset + (heights ?? verticalSlotHeights()).reduce(0, +) + Self.verticalFooterGap
     }
 
     /// Tab row of a slot, below its group header.
@@ -67,21 +87,28 @@ extension PaneView {
         row.insetBy(dx: Self.tabPillInsetX, dy: 2)
     }
 
-    var verticalPlusSlot: CGRect {
-        let inset = Self.tabBarSideInset
+    /// Top of the footer when it sticks to the column's bottom; the rows
+    /// scroll above this line once they overflow.
+    var verticalPinnedFooterY: CGFloat {
+        bounds.height - Self.verticalFooterHeight - Self.tabBarSideInset
+    }
+
+    /// The `+` / ⋯ / unzoom footer: right under the last row, or pinned to
+    /// the bottom when the rows don't fit.
+    func verticalFooterSlot(heights: [CGFloat]? = nil) -> CGRect {
+        let y = min(verticalRowsEnd(heights: heights) - tabScrollOffset, verticalPinnedFooterY)
         return CGRect(
-            x: inset, y: bounds.height - Self.verticalPlusHeight - inset,
-            width: verticalTabColumnWidth - inset * 2, height: Self.verticalPlusHeight)
+            x: Self.tabBarSideInset, y: y, width: verticalRowWidth, height: Self.verticalFooterHeight)
     }
 
     func verticalScrollMaxOffset(heights: [CGFloat]? = nil) -> CGFloat {
-        let total = Self.tabBarSideInset + (heights ?? verticalSlotHeights()).reduce(0, +)
-        return max(0, total - verticalPlusSlot.minY)
+        max(0, verticalRowsEnd(heights: heights) - verticalPinnedFooterY)
     }
 
     func verticalTabIndex(at point: NSPoint) -> Int? {
-        guard point.x < verticalTabColumnWidth, point.y < verticalPlusSlot.minY else { return nil }
+        guard point.x < verticalTabColumnWidth else { return nil }
         let heights = verticalSlotHeights()
+        guard point.y < verticalFooterSlot(heights: heights).minY else { return nil }
         for i in heights.indices {
             guard let slot = verticalSlotRect(at: i, heights: heights), slot.height > 0 else { continue }
             if point.y >= slot.minY && point.y < slot.maxY { return i }
@@ -105,7 +132,7 @@ extension PaneView {
         let heights = verticalSlotHeights()
         if index < heights.count, let slot = verticalSlotRect(at: index, heights: heights) { return slot.minY }
         if let last = verticalSlotRect(at: heights.count - 1, heights: heights) { return last.maxY }
-        return Self.tabBarSideInset
+        return Self.verticalTopInset
     }
 
     func autoscrollVerticalTabs(localY: CGFloat) {
@@ -116,7 +143,7 @@ extension PaneView {
         if localY < edgeZone {
             tabScrollOffset = max(0, tabScrollOffset - step)
             needsDisplay = true
-        } else if localY > verticalPlusSlot.minY - edgeZone {
+        } else if localY > verticalPinnedFooterY - edgeZone {
             tabScrollOffset = min(maxScroll, tabScrollOffset + step)
             needsDisplay = true
         }
@@ -133,7 +160,7 @@ extension PaneView {
         ctx.fill(CGRect(x: colW - 1, y: 0, width: 1, height: bounds.height))
 
         let heights = verticalSlotHeights()
-        let plusSlot = verticalPlusSlot
+        let pinnedY = verticalPinnedFooterY
         let maxScroll = verticalScrollMaxOffset(heights: heights)
         tabScrollOffset = min(max(0, tabScrollOffset), maxScroll)
         // Keep the active row in view when the active tab changes.
@@ -141,20 +168,21 @@ extension PaneView {
             let slot = verticalSlotRect(at: pane.activeTabIndex, heights: heights)
         {
             lastAutoScrolledTabIndex = pane.activeTabIndex
-            if slot.minY < Self.tabBarSideInset {
-                tabScrollOffset += slot.minY - Self.tabBarSideInset
-            } else if slot.maxY > plusSlot.minY {
-                tabScrollOffset += slot.maxY - plusSlot.minY
+            if slot.minY < Self.verticalTopInset {
+                tabScrollOffset += slot.minY - Self.verticalTopInset
+            } else if slot.maxY > pinnedY {
+                tabScrollOffset += slot.maxY - pinnedY
             }
             tabScrollOffset = min(max(0, tabScrollOffset), maxScroll)
         }
+        let footer = verticalFooterSlot(heights: heights)
 
         ctx.saveGState()
-        ctx.clip(to: CGRect(x: 0, y: 0, width: colW - 1, height: plusSlot.minY))
+        ctx.clip(to: CGRect(x: 0, y: 0, width: colW - 1, height: footer.minY))
         drawVerticalGroupContainers(ctx: ctx, theme: theme, heights: heights)
         for (i, tab) in pane.tabs.enumerated() {
             guard let slot = verticalSlotRect(at: i, heights: heights), slot.height > 0,
-                slot.maxY > 0, slot.minY < plusSlot.minY
+                slot.maxY > 0, slot.minY < footer.minY
             else { continue }
             if pane.isFirstTabOfGroup(at: i), let group = pane.group(id: tab.groupID) {
                 drawVerticalGroupHeader(
@@ -172,16 +200,14 @@ extension PaneView {
         }
         if tabScrollOffset < maxScroll {
             WorkspacePillStyle.drawFade(
-                ctx, in: CGRect(x: 0, y: plusSlot.minY - 24, width: colW - 1, height: 24),
-                from: CGPoint(x: 0, y: plusSlot.minY), to: CGPoint(x: 0, y: plusSlot.minY - 24),
+                ctx, in: CGRect(x: 0, y: footer.minY - 24, width: colW - 1, height: 24),
+                from: CGPoint(x: 0, y: footer.minY), to: CGPoint(x: 0, y: footer.minY - 24),
                 color: theme.background.nsColor)
         }
         drawGroupDropIndicator(ctx: ctx, theme: theme)
         ctx.restoreGState()
 
-        drawPlusButton(
-            ctx: ctx, theme: theme, x: plusSlot.minX, y: plusSlot.minY, width: plusSlot.width,
-            rowH: plusSlot.height)
+        drawTabBarButtons(ctx: ctx, theme: theme, cluster: footer)
     }
 
     /// Tinted backdrop spanning an expanded group's header and rows.
@@ -222,7 +248,8 @@ extension PaneView {
             }
             text = theme.chromeText
         }
-        var x = pill.minX + 7
+        // Lines the name up with the tab titles below it.
+        var x = pill.minX + 11
         if !group.isCollapsed {
             ctx.setFillColor(groupDotColor(group, theme: theme).cgColor)
             ctx.fillEllipse(in: CGRect(x: x, y: pill.midY - 3, width: 6, height: 6))
@@ -255,8 +282,30 @@ extension PaneView {
     }
 
     /// Second line of a row: agent status, else the folder of a running program.
+    /// The footer's `+` reads as a row: glyph in the tabs' icon column,
+    /// "New Tab" in their title column, so it doesn't float in a wide slot.
+    func drawNewTabRow(ctx: CGContext, pill: CGRect, color: NSColor) {
+        let tile = Self.iconTileRect(pillMinX: pill.minX, midY: pill.midY)
+        WorkspacePillStyle.drawPlusGlyph(ctx, in: tile, halfSpan: 4.5, color: color)
+        let attrs: [NSAttributedString.Key: Any] = [.font: VerticalFonts.title, .foregroundColor: color]
+        let label = "New Tab" as NSString
+        let size = label.size(withAttributes: attrs)
+        let x = pill.minX + Self.tabTextLeadIn + Self.tabIconAdvance
+        guard x + size.width <= pill.maxX - 4 else { return }
+        label.draw(at: NSPoint(x: x, y: pill.midY - size.height / 2), withAttributes: attrs)
+    }
+
+    /// Whether `verticalTabDetail` has a line for `tab`, without building it;
+    /// row heights ask this on every pointer move.
+    func hasVerticalTabDetail(_ tab: Pane.Tab) -> Bool {
+        if AgentInbox.shared.items[tab.id] != nil { return true }
+        let process = tab.state.foregroundProcess
+        return tab.contentType == .terminal && !process.isEmpty && !ProcessIcon.isShell(process)
+            && !tab.workingDirectory.isEmpty
+    }
+
     func verticalTabDetail(_ tab: Pane.Tab) -> (text: String, dot: NSColor?)? {
-        let theme = AppSettings.shared.theme
+        guard hasVerticalTabDetail(tab) else { return nil }
         if let item = AgentInbox.shared.items[tab.id] {
             let status: String
             switch item.state {
@@ -265,12 +314,8 @@ extension PaneView {
             case .done: status = "Done"
             case .error: status = "Error"
             }
-            return (status, AgentInboxSegment.color(for: item, theme: theme))
+            return (status, AgentInboxSegment.color(for: item, theme: AppSettings.shared.theme))
         }
-        let process = tab.state.foregroundProcess
-        guard tab.contentType == .terminal, !process.isEmpty, !ProcessIcon.isShell(process),
-            !tab.workingDirectory.isEmpty
-        else { return nil }
         return ((tab.workingDirectory as NSString).lastPathComponent, nil)
     }
 
@@ -293,11 +338,12 @@ extension PaneView {
         }
 
         let showClose = showTabClose && (isActive || isHovered)
-        let closeZone: CGFloat = showClose ? 18 : 8
+        let closeZone: CGFloat = showClose ? 26 : 10
         let detail = verticalTabDetail(tab)
-        let titleMidY = detail == nil ? pill.midY : pill.minY + 11
+        let titleMidY = detail == nil ? pill.midY : pill.minY + 14
         var textX = pill.minX + Self.tabTextLeadIn
-        textX += drawLeadingIcon(tab: tab, theme: theme, x: textX, midY: titleMidY, isActive: isActive)
+        // The icon centers on the row, so a two-line row reads as one item.
+        textX += drawLeadingIcon(tab: tab, theme: theme, x: textX, midY: pill.midY, isActive: isActive)
         let maxW = max(0, pill.maxX - textX - closeZone)
 
         let para = NSMutableParagraphStyle()
@@ -317,8 +363,8 @@ extension PaneView {
             withAttributes: titleAttrs)
 
         if let detail {
-            var x = pill.minX + Self.tabTextLeadIn
-            let midY = pill.maxY - 10
+            var x = textX
+            let midY = pill.minY + 28
             if let dot = detail.dot {
                 ctx.setFillColor(dot.cgColor)
                 ctx.fillEllipse(in: CGRect(x: x, y: midY - 3, width: 6, height: 6))
@@ -331,7 +377,7 @@ extension PaneView {
             let size = text.size(withAttributes: attrs)
             text.draw(
                 in: CGRect(
-                    x: x, y: midY - size.height / 2, width: min(size.width, max(0, pill.maxX - x - 8)),
+                    x: x, y: midY - size.height / 2, width: min(size.width, max(0, pill.maxX - x - closeZone)),
                     height: size.height),
                 withAttributes: attrs)
         }
@@ -356,7 +402,7 @@ extension PaneView {
             ctx.setFillColor((tab.state.triggerMark != nil ? theme.warning : theme.accentEmphasis).cgColor)
             ctx.fillEllipse(
                 in: CGRect(
-                    x: pill.maxX - closeZone - dotSize - 2, y: titleMidY - dotSize / 2, width: dotSize,
+                    x: pill.maxX - closeZone - dotSize - 2, y: pill.midY - dotSize / 2, width: dotSize,
                     height: dotSize))
         }
 
@@ -365,13 +411,13 @@ extension PaneView {
             WorkspacePillStyle.drawCloseButton(
                 ctx,
                 in: CGRect(
-                    x: pill.maxX - size - Self.tabCloseTrailingGap, y: titleMidY - size / 2, width: size,
+                    x: pill.maxX - size - Self.tabCloseTrailingGap, y: pill.midY - size / 2, width: size,
                     height: size),
                 tint: theme.chromeMuted, hovered: isHovered && isCloseButtonHovered)
         }
     }
 
-    /// Close circle of a vertical row, next to the title.
+    /// Close circle of a vertical row, centered on its right edge.
     func isOverVerticalCloseButton(point: NSPoint, tabIndex idx: Int) -> Bool {
         guard let slot = verticalSlotRect(at: idx) else { return false }
         let pill = verticalPillRect(inRow: verticalRowRect(inSlot: slot, index: idx))

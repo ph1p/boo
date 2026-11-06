@@ -6,7 +6,8 @@ import XCTest
 
     private let keys = [
         "openWorkspaceEditorOnCreate", "openGroupEditorOnCreate", "newTabsJoinActiveGroup",
-        "paneControlsVisibility", "highlightRecordingPane", "recordingStopAction", "recordingsFolder",
+        "paneControlsVisibility", "tabOverflowMode", "highlightRecordingPane", "recordingStopAction",
+        "recordingsFolder",
         "recordingFileNameTemplate", "recordingIdleTimeLimit"
     ]
 
@@ -53,101 +54,60 @@ import XCTest
         XCTAssertFalse(PaneView.paneControlsExpanded(.never, pointerInside: true, isFocused: true))
     }
 
-    func testHiddenUntilHovered() {
+    func testMoreButtonShowsOnHoverNextToPlus() throws {
         AppSettings.shared.paneControlsVisibility = .hover
+        AppSettings.shared.tabOverflowMode = .scroll
         let pv = makePaneView()
         pv.updatePaneControls()
-        XCTAssertFalse(pv.paneControlsShown)
+        XCTAssertFalse(pv.isMoreButtonShown)
+        XCTAssertEqual(pv.tabBarButtons, [.plus, .more], "⋯ keeps its slot while hidden")
+        let plus = try XCTUnwrap(pv.tabBarButtonSlot(.plus))
+        let more = try XCTUnwrap(pv.tabBarButtonSlot(.more))
+        XCTAssertEqual(more.minX, plus.maxX)
+        XCTAssertNil(pv.tabBarButton(at: NSPoint(x: more.midX, y: more.midY)), "hidden ⋯ takes no clicks")
+        XCTAssertEqual(pv.tabBarButton(at: NSPoint(x: plus.midX, y: plus.midY)), .plus)
+
         pv.isPointerInPane = true
         pv.updatePaneControls()
-        XCTAssertTrue(pv.paneControlsShown)
-        XCTAssertFalse(pv.paneControls.isHidden)
+        XCTAssertTrue(pv.isMoreButtonShown)
+        XCTAssertEqual(pv.tabBarButton(at: NSPoint(x: more.midX, y: more.midY)), .more)
     }
 
-    func testNotchSitsInBottomRightCorner() {
+    func testNeverVisibilityDropsMoreButton() {
+        AppSettings.shared.paneControlsVisibility = .never
         let pv = makePaneView()
-        pv.isPointerInPane = true
-        pv.updatePaneControls()
-        let frame = pv.paneControls.frame
-        XCTAssertEqual(frame.maxX, pv.bounds.width, accuracy: 0.5)
-        XCTAssertEqual(frame.maxY, pv.bounds.height, accuracy: 0.5)
-        XCTAssertEqual(frame.height, PaneControlsView.height)
+        XCTAssertEqual(pv.tabBarButtons, [.plus])
+        XCTAssertEqual(pv.tabBarButtonsWidth, pv.plusButtonWidth)
     }
 
-    func testNotchOnlyTakesClicksInItsBody() {
+    func testMoreButtonOpensPaneMenuProvider() {
         let pv = makePaneView()
-        pv.isPointerInPane = true
-        pv.updatePaneControls()
-        let controls = pv.paneControls
-        let body = controls.convert(controls.bodyRect, to: pv)
-        XCTAssertNotNil(controls.hitTest(NSPoint(x: body.midX, y: body.midY)))
-        XCTAssertGreaterThan(body.minY, controls.frame.minY)
-        XCTAssertEqual(body.maxY, controls.frame.maxY, accuracy: 0.5)
-        // The fillets above the body and left of it belong to the content.
-        XCTAssertNil(controls.hitTest(NSPoint(x: controls.frame.maxX - 1, y: controls.frame.minY + 1)))
-        XCTAssertNil(controls.hitTest(NSPoint(x: controls.frame.minX + 1, y: controls.frame.maxY - 1)))
-    }
-
-    func testIslandEdgeRunsAroundTheCut() {
-        let pv = makePaneView()
-        XCTAssertEqual(pv.layer?.borderWidth, IslandMetrics.borderWidth)
-        XCTAssertTrue(pv.islandCutStroke.isHidden)
-        pv.isPointerInPane = true
-        pv.updatePaneControls()
-        XCTAssertEqual(pv.layer?.borderWidth, 0)
-        XCTAssertFalse(pv.islandCutStroke.isHidden)
-        XCTAssertNotNil(pv.islandCutStroke.path)
-        XCTAssertEqual(pv.islandCutStroke.color.cgColor, pv.layer?.borderColor)
-    }
-
-    func testIslandOutlineSkirtsTheNotch() {
-        let path = PaneControlsView.islandOutline(
-            paneSize: NSSize(width: 300, height: 200), notchWidth: 40, radius: 6)
-        XCTAssertEqual(path.boundingBox.minX, 0.5, accuracy: 0.01)
-        XCTAssertEqual(path.boundingBox.maxY, 199.5, accuracy: 0.01)
-        // Inside the pane, but not inside the cut corner.
-        XCTAssertTrue(path.contains(CGPoint(x: 150, y: 100)))
-        XCTAssertFalse(path.contains(CGPoint(x: 290, y: 195)))
-        XCTAssertTrue(path.contains(CGPoint(x: 250, y: 195)))
-    }
-
-    func testCollapsedNotchKeepsZoomButton() {
-        AppSettings.shared.paneControlsVisibility = .hover
-        let pv = makePaneView()
-        pv.updatePaneControls()
-        XCTAssertFalse(pv.paneControlsShown)
-        pv.isZoomed = true
-        XCTAssertTrue(pv.paneControlsShown)
-        XCTAssertFalse(pv.paneControls.isExpanded)
-        pv.isZoomed = false
-        XCTAssertFalse(pv.paneControlsShown)
+        var built = 0
+        pv.paneMenuProvider = {
+            built += 1
+            return nil
+        }
+        pv.pressTabBarButton(.more, event: nil)
+        XCTAssertEqual(built, 1)
     }
 
     func testMenuEntriesFollowPaneState() {
         let actions = { (entries: [PaneControlEntry?]) in entries.map { $0?.action } }
         XCTAssertEqual(
             actions(
-                PaneControlsView.primaryEntries(canRecord: true, isRecording: false, multiPane: false, isZoomed: false)),
+                PaneControls.primaryEntries(canRecord: true, isRecording: false, multiPane: false, isZoomed: false)),
             [.toggleRecording, nil, .splitRight, .splitDown])
         XCTAssertEqual(
             actions(
-                PaneControlsView.primaryEntries(canRecord: false, isRecording: false, multiPane: true, isZoomed: false)),
-            [.splitRight, .splitDown, .toggleZoom, nil, .closePane])
-        let recording = PaneControlsView.primaryEntries(
+                PaneControls.primaryEntries(canRecord: false, isRecording: false, multiPane: true, isZoomed: false)),
+            [.splitRight, .splitDown, .toggleZoom])
+        let recording = PaneControls.primaryEntries(
             canRecord: true, isRecording: true, multiPane: true, isZoomed: true)
         XCTAssertEqual(
             actions(recording),
-            [.toggleRecording, .addMarker, nil, .splitRight, .splitDown, .toggleZoom, nil, .closePane])
+            [.toggleRecording, .addMarker, nil, .splitRight, .splitDown, .toggleZoom])
         XCTAssertEqual(recording.first??.title, "Stop Recording")
         XCTAssertEqual(recording.compactMap { $0 }.first { $0.action == .toggleZoom }?.title, "Show All Panes")
-    }
-
-    func testNarrowPaneHidesControls() {
-        let pv = makePaneView()
-        pv.frame.size.width = 50
-        pv.isPointerInPane = true
-        pv.updatePaneControls()
-        XCTAssertFalse(pv.paneControlsShown)
     }
 
     func testRecordingBorderHiddenWithoutRecording() {

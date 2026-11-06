@@ -17,17 +17,9 @@ extension MainWindowController {
                 guard let self, let workspace = self.activeWorkspace else { return }
                 self.setZoomedPane(nil, in: workspace)
             }
-            pv.paneControls.onAction = { [weak self, weak pv] action in
-                guard let self, let pv else { return }
-                self.handlePaneControl(action, in: pv)
-            }
-            pv.paneControls.menuProvider = { [weak self, weak pv] in
+            pv.paneMenuProvider = { [weak self, weak pv] in
                 guard let self, let pv else { return nil }
                 return self.paneControlsMenu(for: pv)
-            }
-            pv.paneControls.profileMenuProvider = { [weak pv] in
-                guard let tabID = pv?.pane.activeTab?.id else { return nil }
-                return RuleEngine.shared.profileMenu(tabID: tabID)
             }
         }
     }

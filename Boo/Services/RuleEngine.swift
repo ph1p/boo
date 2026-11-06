@@ -94,6 +94,16 @@ final class RuleEngine {
     /// Pins a tab to `name` (nil: back to the rules and the default).
     /// "Auto" plus every profile, checking the one in effect; picking one
     /// pins it to the tab until "Auto".
+    /// "Profile: <name>" with the profile submenu, for terminal tabs only.
+    func profileMenuItem(for tab: Pane.Tab) -> NSMenuItem? {
+        guard tab.contentType == .terminal else { return nil }
+        let item = NSMenuItem(
+            title: tab.state.profile.map { "Profile: \($0)" } ?? "Profile", action: nil, keyEquivalent: "")
+        item.image = NSImage(systemSymbolName: "person.crop.circle", accessibilityDescription: nil)
+        item.submenu = profileMenu(tabID: tab.id)
+        return item
+    }
+
     func profileMenu(tabID: UUID) -> NSMenu {
         let menu = NSMenu()
         let state = AgentInbox.locateInWindows(tabID).map { $0.pane.tabs[$0.tabIndex].state }

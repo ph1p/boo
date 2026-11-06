@@ -112,7 +112,8 @@ class PaneView: NSView {
     var isCloseButtonHovered: Bool = false
     /// The pointer is on the group chip of `hoveredTabIndex`.
     var isGroupChipHovered: Bool = false
-    var isPlusButtonHovered: Bool = false
+    /// The `+` / ⋯ / unzoom button under the pointer.
+    var hoveredBarButton: TabBarButton?
     private var tabBarTrackingArea: NSTrackingArea?
 
     /// Horizontal scroll offset for tab bar when tabs overflow in scroll mode.
@@ -209,35 +210,14 @@ class PaneView: NSView {
     /// Red frame while the front tab records, so it's clear which split is captured.
     let recordingBorder = PaneView.makeBorderOverlay()
 
-    /// ⋯ notch with record / split / zoom / close in the pane's bottom-right corner.
-    let paneControls = PaneControlsView()
-    /// Pointer-in-pane tracking for `paneControls`; its own owner so the tab
+    /// Pointer-in-pane tracking for the ⋯ button; its own owner so the tab
     /// bar's enter/exit handling stays untouched.
     let paneHoverTracker = PaneHoverTracker()
     var isPointerInPane = false
-    /// Whether `paneControls` currently shows.
-    var paneControlsShown = false
-    /// The island edge drawn around the notch's cut while it shows. A view,
-    /// not a sublayer, so it shares the pane's flipped coordinates.
-    final class IslandCutStroke: NSView {
-        var path: CGPath? { didSet { needsDisplay = true } }
-        var color: NSColor = .clear { didSet { needsDisplay = true } }
-        override var isFlipped: Bool { true }
-        override func hitTest(_ point: NSPoint) -> NSView? { nil }
-        override func draw(_ dirtyRect: NSRect) {
-            guard let path, let ctx = NSGraphicsContext.current?.cgContext else { return }
-            ctx.addPath(path)
-            ctx.setStrokeColor(color.cgColor)
-            ctx.setLineWidth(IslandMetrics.borderWidth)
-            ctx.strokePath()
-        }
-    }
-
-    let islandCutStroke: IslandCutStroke = {
-        let v = IslandCutStroke()
-        v.isHidden = true
-        return v
-    }()
+    /// Whether the tab bar's ⋯ button currently shows.
+    var isMoreButtonShown = false
+    /// Builds the pane menu the ⋯ button drops down.
+    var paneMenuProvider: (() -> NSMenu?)?
     private var paneSettingsObserver: NSObjectProtocol?
 
     /// Surface and window frame at the last surface refresh. A split or close
@@ -284,11 +264,9 @@ class PaneView: NSView {
         } else {
             layer.borderColor = theme.paneBorder.cgColor
         }
-        if let c = layer.borderColor { islandCutStroke.color = NSColor(cgColor: c) ?? .clear }
     }
 
     func updateFindBarTheme() {
-        paneControls.applyTheme()
         recordingBorder.layer?.borderColor = AppSettings.shared.theme.error.withAlphaComponent(0.8).cgColor
         findBar?.applyTheme()
         findBar?.needsDisplay = true
@@ -320,16 +298,17 @@ class PaneView: NSView {
     // MARK: - Zoom
 
     /// True while this pane is zoomed (its workspace's other panes are hidden).
-    /// The corner notch then carries an unzoom button.
+    /// The tab bar then carries an unzoom button after the `+` and ⋯.
     var isZoomed = false {
         didSet {
             guard isZoomed != oldValue else { return }
-            updatePaneControls()
+            if hoveredBarButton == .unzoom { hoveredBarButton = nil }
             needsLayout = true
+            needsDisplay = true
         }
     }
 
-    /// Called when the notch's unzoom button is clicked.
+    /// Called when the tab bar's unzoom button is clicked.
     var onUnzoomRequested: (() -> Void)?
 
     /// Per tab: clears a progress bar nobody updated for `TerminalProgress.staleAfter`.
@@ -362,12 +341,6 @@ class PaneView: NSView {
         addSubview(activityBorder)
         recordingBorder.layer?.borderColor = AppSettings.shared.theme.error.withAlphaComponent(0.8).cgColor
         addSubview(recordingBorder)
-        paneControls.isHidden = true
-        paneControls.alphaValue = 0
-        addSubview(islandCutStroke)
-        paneControls.onUnzoom = { [weak self] in self?.onUnzoomRequested?() }
-        paneControls.onResize = { [weak self] in self?.updatePaneControls() }
-        addSubview(paneControls)
         paneHoverTracker.onChange = { [weak self] inside in
             self?.isPointerInPane = inside
             self?.updatePaneControls()
@@ -435,20 +408,11 @@ class PaneView: NSView {
         // dim overlay first (it swallows clicks to focus the pane), activity frame on top so
         // it stays visible on unfocused panes. Adding a content subview buries them, so the
         // order is re-asserted here — checking BOTH slots, since either can slip.
-        // The corner notch sits above all of them, in the bottom-right corner.
         if focusCatcher.frame != bounds { focusCatcher.frame = bounds }
         if activityBorder.frame != bounds { activityBorder.frame = bounds }
         if broadcastBorder.frame != bounds { broadcastBorder.frame = bounds }
         if recordingBorder.frame != bounds { recordingBorder.frame = bounds }
-        let controlsSize = paneControls.frame.size
-        let controlsFrame = NSRect(
-            x: bounds.width - controlsSize.width, y: bounds.height - controlsSize.height,
-            width: controlsSize.width, height: controlsSize.height)
-        if paneControls.frame != controlsFrame { paneControls.frame = controlsFrame }
-        syncIslandCut()
-        let overlays: [NSView] = [
-            focusCatcher, broadcastBorder, activityBorder, recordingBorder, paneControls, islandCutStroke
-        ]
+        let overlays: [NSView] = [focusCatcher, broadcastBorder, activityBorder, recordingBorder]
         if !zip(subviews.suffix(overlays.count), overlays).allSatisfy({ $0 === $1 }) {
             for overlay in overlays { addSubview(overlay, positioned: .above, relativeTo: nil) }
         }
@@ -483,21 +447,20 @@ class PaneView: NSView {
         if let idx = tabIndex(at: point) {
             let overChip = groupChipHit(at: point, tabIndex: idx) != nil
             let overClose = !overChip && isOverCloseButton(point: point, tabIndex: idx)
-            if hoveredTabIndex != idx || isPlusButtonHovered || isCloseButtonHovered != overClose
+            if hoveredTabIndex != idx || hoveredBarButton != nil || isCloseButtonHovered != overClose
                 || isGroupChipHovered != overChip
             {
                 hoveredTabIndex = idx
                 isCloseButtonHovered = overClose
                 isGroupChipHovered = overChip
-                isPlusButtonHovered = false
+                hoveredBarButton = nil
                 needsDisplay = true
             }
-        } else if isPlusButtonHit(at: point) {
-            // Over plus button
-            if !isPlusButtonHovered || hoveredTabIndex != -1 {
+        } else if let button = tabBarButton(at: point) {
+            if hoveredBarButton != button || hoveredTabIndex != -1 {
                 hoveredTabIndex = -1
                 isCloseButtonHovered = false
-                isPlusButtonHovered = true
+                hoveredBarButton = button
                 needsDisplay = true
             }
         } else {
@@ -510,10 +473,10 @@ class PaneView: NSView {
     }
 
     private func clearTabHover() {
-        if hoveredTabIndex != -1 || isPlusButtonHovered || isCloseButtonHovered {
+        if hoveredTabIndex != -1 || hoveredBarButton != nil || isCloseButtonHovered {
             hoveredTabIndex = -1
             isCloseButtonHovered = false
-            isPlusButtonHovered = false
+            hoveredBarButton = nil
             needsDisplay = true
         }
     }
@@ -588,14 +551,20 @@ class PaneView: NSView {
                     self.focusActiveView()
                 })
         }
-        elements.append(
-            AccessibleElement(parent: self, role: .button, label: "New tab", localRect: plusButtonSlot()) {
-                [weak self] in
-                guard let self else { return }
-                self.addNewTab(
-                    contentType: .terminal, workingDirectory: self.pane.activeTab?.workingDirectory ?? "~",
-                    group: self.activeGroupID)
-            })
+        let cluster = tabBarButtonsSlot()
+        for button in tabBarButtons {
+            guard let rect = tabBarButtonSlot(button, in: cluster) else { continue }
+            let label: String
+            switch button {
+            case .plus: label = "New tab"
+            case .more: label = "Pane menu"
+            case .unzoom: label = "Unzoom pane"
+            }
+            elements.append(
+                AccessibleElement(parent: self, role: .button, label: label, localRect: rect) { [weak self] in
+                    self?.pressTabBarButton(button, event: nil)
+                })
+        }
         return elements + content
     }
 

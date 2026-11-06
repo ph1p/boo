@@ -20,8 +20,8 @@ extension PaneView {
             }
             return nil
         } else {
-            // Exclude the pinned plus button zone on the right
-            if point.x >= bounds.width - plusButtonWidth - Self.tabBarSideInset { return nil }
+            // Exclude the pinned buttons on the right
+            if point.x >= bounds.width - tabBarButtonsWidth - Self.tabBarSideInset { return nil }
             let widths = allTabWidths()
             let adjusted = point.x + tabScrollOffset
             var cx: CGFloat = Self.tabBarSideInset
@@ -32,11 +32,6 @@ extension PaneView {
             }
             return nil
         }
-    }
-
-    /// Check if a point is over the plus button.
-    func isPlusButtonHit(at point: NSPoint) -> Bool {
-        plusButtonSlot().contains(point)
     }
 
     /// Check if a point is over the close button area of a given tab.
@@ -115,9 +110,9 @@ extension PaneView {
             return
         }
 
-        // Plus button — show dropdown menu for tab type selection
-        guard isPlusButtonHit(at: point) else { return }
-        showNewTabMenu(event: event)
+        // `+` (tab type menu), ⋯ (pane menu) or unzoom.
+        guard let button = tabBarButton(at: point) else { return }
+        pressTabBarButton(button, event: event)
     }
 
     override func mouseDragged(with event: NSEvent) {
@@ -231,11 +226,7 @@ extension PaneView {
 
         addGroupItems(to: menu, tabIndex: index)
 
-        if pane.tabs[index].contentType == .terminal {
-            let profileItem = NSMenuItem(title: "Profile", action: nil, keyEquivalent: "")
-            profileItem.submenu = RuleEngine.shared.profileMenu(tabID: pane.tabs[index].id)
-            menu.addItem(profileItem)
-        }
+        if let profile = RuleEngine.shared.profileMenuItem(for: pane.tabs[index]) { menu.addItem(profile) }
 
         menu.addSection(AgentMenuItems.tabItems(tabID: pane.tabs[index].id, paneID: paneID))
 
@@ -598,7 +589,7 @@ extension PaneView {
     /// Overload for callers that already measured the tabs — `allTabWidths()`
     /// does text layout per title, so don't repeat it within one pass.
     func scrollMaxOffset(widths: [CGFloat]) -> CGFloat {
-        let totalW = Self.tabBarSideInset * 2 + widths.reduce(0, +) + plusButtonWidth
+        let totalW = Self.tabBarSideInset * 2 + widths.reduce(0, +) + tabBarButtonsWidth
         return max(0, totalW - bounds.width)
     }
 
