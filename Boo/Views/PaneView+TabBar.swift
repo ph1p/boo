@@ -532,11 +532,7 @@ extension PaneView {
             item.representedObject = type
             menu.addItem(item)
         }
-        let agentItems = AgentMenuItems.newTabItems(paneID: paneID)
-        if !agentItems.isEmpty {
-            menu.addItem(.separator())
-            agentItems.forEach(menu.addItem)
-        }
+        menu.addSection(AgentMenuItems.newTabItems(paneID: paneID))
     }
 
     @objc private func newTabMenuAction(_ sender: NSMenuItem) {

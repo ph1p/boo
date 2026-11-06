@@ -88,7 +88,7 @@ extension MainWindowController {
         guard
             let newID = splitPane(
                 target.paneID, in: target.workspace, toward: edge,
-                focus: json["focus"] as? Bool ?? true, cwd: cwd, command: command)
+                focus: json["focus"] as? Bool ?? true, cwd: cwd, launch: command.map { LaunchSpec(command: $0) })
         else {
             reply(["ok": false, "error": "pane not found"])
             return

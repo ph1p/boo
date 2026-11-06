@@ -17,12 +17,6 @@ final class AgentMenuRequest: NSObject {
 /// The agent entries of the tab bar's menus. Their actions go up the
 /// responder chain to the window's `MainWindowController`.
 @MainActor enum AgentMenuItems {
-    /// Agent CLIs found on this Mac; the agents plugin refreshes it on launch.
-    static var installed: Set<AgentKind> = Set(AgentKind.taskKinds)
-
-    /// The installed agents a tab can start, in picker order.
-    static var installedKinds: [AgentKind] { AgentKind.taskKinds.filter { installed.contains($0) } }
-
     /// The prompt "Ask Agent About This Tab" starts an agent with.
     static func askAboutTabPrompt(handle: String) -> String {
         "Look at Boo tab \(handle): run `boo read \(handle)` to see its screen. "
@@ -33,7 +27,7 @@ final class AgentMenuRequest: NSObject {
     /// Empty while agents are off.
     static func newTabItems(paneID: UUID) -> [NSMenuItem] {
         guard AppSettings.shared.agentsEnabled else { return [] }
-        var items = installedKinds.map { kind in
+        var items = AgentsPlugin.installedKinds.map { kind in
             item(
                 "New \(kind.shortName) Tab", #selector(MainWindowController.newAgentTabAction(_:)),
                 AgentMenuRequest(kind: kind, paneID: paneID))
@@ -45,7 +39,7 @@ final class AgentMenuRequest: NSObject {
     /// "Start Agent Here" (one entry per installed agent) and "Ask Agent About
     /// This Tab" for a tab's context menu. Empty while agents are off.
     static func tabItems(tabID: UUID, paneID: UUID) -> [NSMenuItem] {
-        let kinds = installedKinds
+        let kinds = AgentsPlugin.installedKinds
         guard AppSettings.shared.agentsEnabled, !kinds.isEmpty else { return [] }
         let start = NSMenuItem(title: "Start Agent Here", action: nil, keyEquivalent: "")
         start.image = NSImage(systemSymbolName: "sparkles", accessibilityDescription: nil)

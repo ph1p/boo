@@ -10,6 +10,7 @@ extension BooPaths {
     }
 
     /// The agents switch the last sync applied; nil before the first one.
+    /// Read and written on the main thread only.
     nonisolated(unsafe) private static var syncedAgentsEnabled: Bool?
 
     /// Applies the agents switch: on installs or updates the hooks, the
@@ -20,18 +21,23 @@ extension BooPaths {
     static func syncAgentIntegration(enabled: Bool = AppSettings.shared.agentsEnabled) -> Bool {
         guard syncedAgentsEnabled != enabled else { return false }
         syncedAgentsEnabled = enabled
-        let fm = FileManager.default
-        guard enabled else {
-            fm.createFile(atPath: agentsDisabledFlagPath, contents: Data())
-            return true
+        // The files are written in the background, in switch order.
+        agentIntegrationQueue.async {
+            let fm = FileManager.default
+            guard enabled else {
+                fm.createFile(atPath: agentsDisabledFlagPath, contents: Data())
+                return
+            }
+            try? fm.removeItem(atPath: agentsDisabledFlagPath)
+            installMCPLauncher()
+            installClaudeHook()
+            installCodexNotify()
+            installOpenCodePlugin()
         }
-        try? fm.removeItem(atPath: agentsDisabledFlagPath)
-        installMCPLauncher()
-        installClaudeHook()
-        installCodexNotify()
-        installOpenCodePlugin()
         return true
     }
+
+    private static let agentIntegrationQueue = DispatchQueue(label: "boo.agent-integration", qos: .utility)
 
     // MARK: - Codex
 

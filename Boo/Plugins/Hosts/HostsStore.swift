@@ -111,7 +111,8 @@ final class HostsStore: ObservableObject {
         else { return }
         let command = Self.command(for: host)
         if split {
-            controller.splitPane(workspace.activePaneID, in: workspace, toward: .right, command: command)
+            controller.splitPane(
+                workspace.activePaneID, in: workspace, toward: .right, launch: LaunchSpec(command: command))
         } else {
             controller.openCommandTab(command, cwd: NSHomeDirectory())
         }

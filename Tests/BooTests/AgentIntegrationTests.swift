@@ -81,19 +81,6 @@ final class AgentIntegrationTests: XCTestCase {
 
     // MARK: Palette
 
-    func testPaletteSkipsItemsUnderAHiddenMenu() {
-        let main = NSMenu()
-        let top = NSMenuItem(title: "Agents", action: nil, keyEquivalent: "")
-        let sub = NSMenu(title: "Agents")
-        let item = NSMenuItem(title: "Show Crew", action: #selector(NSResponder.selectAll(_:)), keyEquivalent: "")
-        sub.addItem(item)
-        top.submenu = sub
-        main.addItem(top)
-        XCTAssertFalse(PaletteSources.isHidden(item))
-        top.isHidden = true
-        XCTAssertTrue(PaletteSources.isHidden(item))
-    }
-
     func testNoAgentRowsWhileAgentsAreOff() {
         let settings = AppSettings.shared
         let was = settings.agentsEnabled

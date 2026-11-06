@@ -164,31 +164,19 @@ enum PaletteSources {
             // Recipes get their own rows, with the folder as subtitle.
             !$0.isAlternate && $0.id != paletteActionID
                 && $0.item.action != #selector(MainWindowController.runRecipeAction(_:))
-        }.compactMap { action in
-            // Validation runs first: it hides items (agents not installed).
-            let isEnabled = action.isEnabled
-            guard !isHidden(action.item) else { return nil }
-            return PaletteItem(
+        }.map { action in
+            PaletteItem(
                 id: "action:\(action.id)", kind: .action,
                 title: action.path.dropFirst().joined(separator: " › "),
-                subtitle: action.path[0], shortcut: action.shortcut, isEnabled: isEnabled,
+                subtitle: action.path[0], shortcut: action.shortcut, isEnabled: action.isEnabled,
                 perform: { action.perform() })
         }
-    }
-
-    /// Hidden itself or under a hidden menu (the Agents menu while agents are off).
-    static func isHidden(_ item: NSMenuItem) -> Bool {
-        if item.isHidden { return true }
-        guard let menu = item.menu, let parent = menu.supermenu,
-            let owner = parent.items.first(where: { $0.submenu === menu })
-        else { return false }
-        return isHidden(owner)
     }
 
     /// Message, merge and discard rows for every agent in the crew.
     static func agents() -> [PaletteItem] {
         guard AppSettings.shared.agentsEnabled else { return [] }
-        return AgentsPlugin.allCrewRows().flatMap { row -> [PaletteItem] in
+        return AgentsPlugin.allCrewRows(light: true).flatMap { row -> [PaletteItem] in
             let label = row.handle.isEmpty ? row.name : "\(row.handle) · \(row.name)"
             func item(_ action: AgentsPlugin.CrewAction, _ verb: String) -> PaletteItem {
                 PaletteItem(

@@ -254,7 +254,8 @@ enum AgentKind: String, CaseIterable {
 
 ### `AgentsPlugin.checkAvailability()`
 
-Runs `AgentBinaryScanner.detectInstalledAgents()` on a background task and stores the result in `installedAgents`. This controls:
+Runs `AgentBinaryScanner.detectInstalledAgents()` on a background task and stores the result in the static `AgentsPlugin.installedAgents` (the app's one list; `installedKinds` is the
+task-capable subset in picker order), then rebuilds the Agents menu. This controls:
 
 - **Empty state** — shows provider-specific "Start X" buttons only for installed CLIs; shows a plain "No agent CLIs installed" message when none are found
 - **Settings view** — `AgentCenterSettingsView(installedAgents:)` filters the Providers section to show only installed agents
@@ -285,21 +286,24 @@ Wraps `AgentSession` with `paneID`, `tabID`, `tabTitle`, and `isFocused` so the 
 - **Enable Agents** (Agents settings page, `AppSettings.agentsEnabled`, stored as the "agents" entry of
   `disabledPluginIDs`). Off hides the sidebar tab, the Agents menu, the tab menus' agent items, the palette's
   agent rows, the inbox status segment and the terminal's agent button, and stops the jump hotkey.
+  Switching off also clears `AgentInbox` (badges, segment and jump read it), and the inbox ignores
+  `agent_event`s while off.
 - **Integration install** (`BooPaths.syncAgentIntegration`, `BooPaths+AgentIntegration.swift`, re-run on
-  `.plugins` settings changes). On: installs the MCP launcher, the Claude hook, Codex's top-level `notify`
+  `.plugins` settings changes; the files are written on a background queue). On: installs the MCP launcher, the Claude hook, Codex's top-level `notify`
   in `~/.codex/config.toml` (skipped when the user already has one) and the OpenCode plugin
   `~/.config/opencode/plugins/boo.js` (only when those folders exist). Off: writes `~/.boo/agents-disabled`;
   installed hooks and the OpenCode plugin see the flag and do nothing.
 - **Agents menu** (`MainWindowController+AgentMenu.swift`): New Agent… (⌥⌘N), New <Agent> Tab per installed
-  agent, Show Crew (⌥⌘A), Jump to Next Waiting Agent (⇧⌘J).
+  agent, Show Crew (⌥⌘A), Jump to Next Waiting Agent (⇧⌘J). `rebuildAgentsMenu()` refills it when the switch
+  flips and after the installed-agents scan; while off it is hidden and empty.
 - **Tab menus** (`AgentMenuItems`): the tab bar's + menu lists "New <Agent> Tab" and "New Agent…"; a tab's
   context menu has "Start Agent Here" and "Ask Agent About This Tab".
-- **Command palette** (`PaletteSources.agents`): Message / Merge / Discard rows per crew agent. Menu items
-  hidden by validation or under a hidden menu are left out (`PaletteSources.isHidden`).
+- **Command palette** (`PaletteSources.agents`): Message / Merge / Discard rows per crew agent, from
+  `AgentsPlugin.allCrewRows(light: true)` (no task status, no side effects).
 - **Drafts**: a crew composer that closes without sending keeps its text per field in memory
   (`AgentCrewUIState.drafts`); Send, Esc and Cancel drop it.
 - **Background start**: agent tabs open behind the current one with the prompt in `_BOO_PROMPT` and come
-  forward once the agent runs; messages to a background agent are typed before its tab is shown.
+  forward once the agent runs (`pendingReveals`, fired from `paneView(_:commandStarted:)`, or after 1s); messages to a background agent are typed before its tab is shown.
 
 ### Agent workflow features
 

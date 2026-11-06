@@ -114,7 +114,7 @@ extension AgentsPlugin {
         }
 
         // No agent CLI installed: the crew section is gone too, so say what to install.
-        if sections.isEmpty && installedAgents.isEmpty {
+        if sections.isEmpty && Self.installedAgents.isEmpty {
             let emptyContent = AnyView(
                 VStack(alignment: .leading, spacing: 8) {
                     Text("No agent CLIs installed")
@@ -135,7 +135,7 @@ extension AgentsPlugin {
                 content: emptyContent,
                 prefersOuterScrollView: false,
                 generation: SidebarSection.generation(
-                    for: installedAgents.map(\.rawValue).sorted()))
+                    for: Self.installedAgents.map(\.rawValue).sorted()))
             sections.append(emptySection)
         }
 

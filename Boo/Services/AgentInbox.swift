@@ -225,6 +225,14 @@ final class AgentInbox {
         changed()
     }
 
+    /// Forgets every agent and the orchestrator: the agents switch went off.
+    func clear() {
+        guard !items.isEmpty || orchestrator != nil else { return }
+        items = [:]
+        orchestrator = nil
+        changed()
+    }
+
     func remove(tabID: UUID) {
         guard items.removeValue(forKey: tabID) != nil else { return }
         changed()
@@ -289,6 +297,8 @@ extension AgentInbox {
     /// A bare `pane_id` resolves to that pane's active tab.
     func handleSocketEvent(_ json: [String: Any]) -> [String: Any] {
         guard let event = json["event"] as? String else { return ["ok": false, "error": "missing event"] }
+        // Agents off: hooks installed before the switch flipped report nothing.
+        guard AppSettings.shared.agentsEnabled else { return ["ok": true, "state": NSNull()] }
         if let tabID = orchestratorTab(json) {
             applyOrchestrator(
                 event: event, tabID: tabID, message: Self.nonEmpty(json["message"]), tool: Self.nonEmpty(json["tool"]),

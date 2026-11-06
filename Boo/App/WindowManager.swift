@@ -302,12 +302,15 @@ final class WindowManager {
                 }
                 // The agents switch is the agents plugin's enabled state.
                 let agentsFlipped = (topic == nil || topic == .plugins) && BooPaths.syncAgentIntegration()
-                // Rebuild so removed overrides fall back to the built-in shortcuts,
-                // and so the Agents menu follows the agents switch.
-                if topic == .shortcuts || agentsFlipped, let owner = WindowManager.shared.menuOwner {
+                // Rebuild so removed overrides fall back to the built-in shortcuts.
+                if topic == .shortcuts, let owner = WindowManager.shared.menuOwner {
                     owner.setupMenuItems()
                     owner.rebuildPluginsMenu()
+                } else if agentsFlipped {
+                    WindowManager.shared.menuOwner?.rebuildAgentsMenu()
                 }
+                // Off: badges, the inbox segment and jump all read the inbox.
+                if agentsFlipped && !AppSettings.shared.agentsEnabled { AgentInbox.shared.clear() }
                 if topic == nil || topic == .theme {
                     AppStore.shared.refreshTheme()
                     let theme = AppSettings.shared.theme

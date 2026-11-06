@@ -398,11 +398,17 @@ extension MainWindowController {
     // MARK: - Plugins Menu
 
     /// Rebuild the Plugins top-level menu from current plugin contributions.
+    /// The main menu and its top-level item titled `title`; nil unless this
+    /// window owns the shared menu bar (background windows must not retarget it).
+    func ownedTopMenuItem(titled title: String) -> (mainMenu: NSMenu, item: NSMenuItem)? {
+        guard WindowManager.shared.ownsMenu(self), let mainMenu = NSApplication.shared.mainMenu,
+            let item = mainMenu.items.first(where: { $0.submenu?.title == title })
+        else { return nil }
+        return (mainMenu, item)
+    }
+
     func rebuildPluginsMenu() {
-        // Background windows must not retarget the shared menu.
-        guard WindowManager.shared.ownsMenu(self) else { return }
-        guard let mainMenu = NSApplication.shared.mainMenu,
-            let pluginsMenuItem = mainMenu.items.first(where: { $0.submenu?.title == "Plugins" }),
+        guard let (mainMenu, pluginsMenuItem) = ownedTopMenuItem(titled: "Plugins"),
             let pluginsMenu = pluginsMenuItem.submenu
         else { return }
 

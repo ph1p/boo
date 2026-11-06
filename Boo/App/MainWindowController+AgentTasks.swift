@@ -235,19 +235,20 @@ extension MainWindowController {
 
     /// Brings `tabID` forward once its shell started the agent (Boo's shell
     /// integration reports the command), or after a second without it.
-    private func revealAgentTab(_ tabID: UUID, in pv: PaneView, workspaceID: UUID, waited: TimeInterval = 0) {
-        let started = pv.terminalView(forTab: tabID)?.commandHistory.last != nil
-        guard started || waited >= 1 else {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self, weak pv] in
-                guard let pv else { return }
-                self?.revealAgentTab(tabID, in: pv, workspaceID: workspaceID, waited: waited + 0.05)
+    private func revealAgentTab(_ tabID: UUID, in pv: PaneView, workspaceID: UUID) {
+        let reveal: (TimeInterval) -> Void = { [weak self, weak pv] delay in
+            // A moment for the agent to draw over the echoed command line.
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                guard let self, let pv, let index = pv.pane.tabs.firstIndex(where: { $0.id == tabID }) else { return }
+                self.focusActivity(workspaceID: workspaceID, paneID: pv.pane.id, tabIndex: index)
             }
-            return
         }
-        // A moment for the agent to draw over the echoed command line.
-        DispatchQueue.main.asyncAfter(deadline: .now() + (started ? 0.15 : 0)) { [weak self, weak pv] in
-            guard let self, let pv, let index = pv.pane.tabs.firstIndex(where: { $0.id == tabID }) else { return }
-            self.focusActivity(workspaceID: workspaceID, paneID: pv.pane.id, tabIndex: index)
+        guard pv.terminalView(forTab: tabID)?.commandHistory.last == nil else { return reveal(0.15) }
+        // Fired by `paneView(_:commandStarted:paneID:tabID:)`.
+        pendingReveals[tabID] = { reveal(0.15) }
+        // The shell may lack Boo's integration and never report: show it anyway.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
+            self?.pendingReveals.removeValue(forKey: tabID)?()
         }
     }
 

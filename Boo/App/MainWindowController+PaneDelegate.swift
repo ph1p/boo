@@ -147,6 +147,7 @@ extension MainWindowController: PaneViewDelegate {
             pane.setCommandRunning(true, at: tabIndex)
             if pane.tabs.indices.contains(tabIndex) {
                 CommandLog.shared.commandStarted(tabID: pane.tabs[tabIndex].id)
+                pendingReveals.removeValue(forKey: pane.tabs[tabIndex].id)?()
             }
             booLog(
                 .debug, .terminal,

@@ -89,6 +89,8 @@ import SwiftUI
 
     /// Pending image sends keyed by tab ID, waiting for a live shell PID.
     /// `failedPID` is the PID that last failed — only retry with a different PID.
+    /// Background agent tabs to show once their command starts, by tab ID.
+    var pendingReveals: [UUID: () -> Void] = [:]
     var pendingImageSends: [UUID: (path: String, size: ghostty_surface_size_s?, failedPID: pid_t)] = [:]
 
     /// Registry of factories for named custom tab types (registerMultiContentTab API).

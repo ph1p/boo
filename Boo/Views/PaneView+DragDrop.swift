@@ -237,11 +237,7 @@ extension PaneView {
             menu.addItem(profileItem)
         }
 
-        let agentItems = AgentMenuItems.tabItems(tabID: pane.tabs[index].id, paneID: paneID)
-        if !agentItems.isEmpty {
-            menu.addItem(.separator())
-            agentItems.forEach(menu.addItem)
-        }
+        menu.addSection(AgentMenuItems.tabItems(tabID: pane.tabs[index].id, paneID: paneID))
 
         // Move to workspace submenu
         if let workspaces = paneDelegate?.paneViewWorkspaceNames(self), !workspaces.isEmpty {

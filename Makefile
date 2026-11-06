@@ -265,6 +265,8 @@ app: release
 	done
 	@rsync -a Vendor/ghostty/zig-out/share/ghostty/ "$(APP_BUNDLE)/Contents/Resources/ghostty/"
 	@rsync -a Vendor/ghostty/zig-out/share/terminfo/ "$(APP_BUNDLE)/Contents/Resources/terminfo/"
+	@# Boo's shell integration and agent hooks; installed into ~/.boo on launch.
+	@rsync -a Resources/shell-integration "$(APP_BUNDLE)/Contents/Resources/"
 	@if [ -f assets/AppIcon.icns ]; then \
 		cp assets/AppIcon.icns "$(APP_BUNDLE)/Contents/Resources/"; \
 	fi

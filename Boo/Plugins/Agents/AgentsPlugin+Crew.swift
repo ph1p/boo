@@ -162,20 +162,34 @@ extension AgentsPlugin {
 
     /// Live agents (with Boo's hooks or found by process), then stopped task
     /// workspaces, across every window.
+    /// - Parameter light: For a quick listing (the command palette): no task
+    ///   status, and the unhooked grace bookkeeping is read, not advanced.
     static func allCrewRows(
         order: [UUID: Int] = workspaceOrder(),
-        sessions: [(session: WorkspaceAgentSession, workspace: CrewWorkspace?)]? = nil
+        sessions: [(session: WorkspaceAgentSession, workspace: CrewWorkspace?)]? = nil,
+        light: Bool = false
     ) -> [AgentCrewRow] {
         let items = Array(AgentInbox.shared.items.values)
         let hooked = Set(items.map(\.tabID))
         // The orchestrator's tab reports through hooks too but is not a crew agent.
         let reported = hooked.union(AgentInbox.shared.orchestratorTabID().map { [$0] } ?? [])
         let unhooked = unhookedRows(sessions: sessions ?? allAgentSessions(order: order), hooked: reported)
-        let settled = settledUnhooked(unhooked, seen: &unhookedFirstSeen)
-        if let recheck = settled.recheckAt { scheduleUnhookedRecheck(at: recheck) }
+        var seen = unhookedFirstSeen
+        let settled = settledUnhooked(unhooked, seen: &seen)
+        if !light {
+            unhookedFirstSeen = seen
+            if let recheck = settled.recheckAt { scheduleUnhookedRecheck(at: recheck) }
+        }
         // One window walk per agent for the whole pass, not one per column.
         var locations: [UUID: AgentInbox.Location] = [:]
         for item in items { locations[item.tabID] = AgentInbox.locateInWindows(item.tabID) }
+        // Light passes (the palette) skip the git status lookups.
+        let liveStatus: (AgentInbox.Item) -> AgentTaskStatus.Summary? =
+            light
+            ? { _ in nil }
+            : { item in locations[item.tabID].flatMap { taskSummary(folder: $0.workspace.folderPath, of: item) } }
+        let stoppedStatus: (String) -> AgentTaskStatus.Summary? =
+            light ? { _ in nil } : { AgentTaskStatus.shared.summary(for: $0, stamp: "stopped") }
         return crewRows(
             items: items, crew: AgentCrew.shared,
             isTask: { locations[$0].map { AgentWorktree.looksLikeWorktree($0.workspace.folderPath) } ?? false },
@@ -183,13 +197,12 @@ extension AgentsPlugin {
             workspace: { id in
                 locations[id].map { crewWorkspace($0.workspace, order: order[$0.workspace.id] ?? 0) }
             },
-            taskStatus: { item in
-                locations[item.tabID].flatMap { taskSummary(folder: $0.workspace.folderPath, of: item) }
-            })
+            taskStatus: liveStatus)
             + settled.rows
             + stoppedTaskRows(
                 workspaces: WindowManager.shared.controllers.flatMap(\.appState.workspaces),
-                live: hooked.union(unhooked.map(\.id)), order: order)
+                live: hooked.union(unhooked.map(\.id)), order: order,
+                taskStatus: stoppedStatus)
     }
 
     /// When each agent tab without hook events was first seen by process.
@@ -246,7 +259,7 @@ extension AgentsPlugin {
         let rows = Self.allCrewRows(order: order, sessions: agentSessions)
         let activeID = actions?.activeWorkspaceID?()
         let activeOnly = Self.crewActiveOnly
-        let agents = AgentKind.taskKinds.filter { installedAgents.contains($0) }
+        let agents = Self.installedKinds
         guard !rows.isEmpty || !agents.isEmpty else { return nil }
         // Agent sessions by tab, for Timeline and Transcript.
         var sessions: [UUID: AgentSession] = [:]
@@ -307,7 +320,7 @@ extension AgentsPlugin {
             // Sized to its rows, so every agent shows without scrolling.
             prefersOuterScrollView: false,
             generation: SidebarSection.generation(
-                for: rows.map(\.key) + installedAgents.map(\.rawValue).sorted()
+                for: rows.map(\.key) + Self.installedAgents.map(\.rawValue).sorted()
                     + ["\(activeID?.uuidString ?? "")|\(activeName ?? "")|\(activeOnly)"]
                     + sessions.map { "\($0.key)=\($0.value.sessionID ?? "")" }.sorted()))
     }

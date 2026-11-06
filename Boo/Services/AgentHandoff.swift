@@ -74,7 +74,8 @@ enum AgentHandoff {
         // A remote tab's folder doesn't exist here; the split starts in the default.
         let cwd = tab.remoteSession == nil ? workingDirectory(ofTab: sourceTab) : nil
         return location.controller.splitPane(
-            location.pane.id, in: location.workspace, toward: .right, cwd: cwd, command: command) != nil
+            location.pane.id, in: location.workspace, toward: .right, cwd: cwd, launch: LaunchSpec(command: command))
+            != nil
     }
 
     /// First message for an agent started from a failed command.

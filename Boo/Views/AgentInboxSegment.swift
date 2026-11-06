@@ -27,7 +27,7 @@ final class AgentInboxSegment: StatusBarPlugin {
     }
 
     func isVisible(settings: AppSettings, state: StatusBarState) -> Bool {
-        settings.agentsEnabled && MainActor.assumeIsolated { !AgentInbox.shared.items.isEmpty }
+        MainActor.assumeIsolated { !AgentInbox.shared.items.isEmpty }
     }
 
     func draw(

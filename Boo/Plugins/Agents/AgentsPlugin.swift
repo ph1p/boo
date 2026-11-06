@@ -77,7 +77,11 @@ final class AgentsPlugin: BooPluginProtocol {
 
     /// Which agent CLIs are installed on this machine (populated async at startup).
     /// Defaults to all kinds so the UI is not empty during the initial check.
-    private(set) var installedAgents: Set<AgentKind> = Set(AgentKind.allCases).subtracting([.custom])
+    /// One set for the app: the sidebar, menus and palette all read it.
+    private(set) static var installedAgents: Set<AgentKind> = Set(AgentKind.allCases).subtracting([.custom])
+
+    /// The installed agents a tab can start, in picker order.
+    static var installedKinds: [AgentKind] { AgentKind.taskKinds.filter { installedAgents.contains($0) } }
 
     private(set) var agentStartTime: Date?
     private(set) var activeAgent: AgentSession?
@@ -317,8 +321,8 @@ final class AgentsPlugin: BooPluginProtocol {
         let found = await Task.detached(priority: .utility) {
             AgentBinaryScanner.detectInstalledAgents()
         }.value
-        installedAgents = found
-        AgentMenuItems.installed = found
+        Self.installedAgents = found
+        WindowManager.shared.menuOwner?.rebuildAgentsMenu()
         return true
     }
 

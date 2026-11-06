@@ -7,11 +7,30 @@ extension MainWindowController {
     func makeAgentsMenuItem() -> NSMenuItem {
         let menuItem = NSMenuItem()
         menuItem.title = "Agents"
-        let menu = NSMenu(title: "Agents")
+        menuItem.submenu = NSMenu(title: "Agents")
+        fillAgentsMenu(menuItem)
+        return menuItem
+    }
+
+    /// Refill the Agents menu: after the agents switch flips, and once the
+    /// installed agents are known.
+    func rebuildAgentsMenu() {
+        guard let (mainMenu, menuItem) = ownedTopMenuItem(titled: "Agents") else { return }
+        fillAgentsMenu(menuItem)
+        ShortcutOverrides.apply(to: mainMenu)
+    }
+
+    /// Off: the menu is hidden and empty, so its shortcuts and palette rows go too.
+    private func fillAgentsMenu(_ menuItem: NSMenuItem) {
+        guard let menu = menuItem.submenu else { return }
+        menu.removeAllItems()
+        let enabled = AppSettings.shared.agentsEnabled
+        menuItem.isHidden = !enabled
+        guard enabled else { return }
         let newAgent = NSMenuItem(title: "New Agent…", action: #selector(newAgentAction(_:)), keyEquivalent: "n")
         newAgent.keyEquivalentModifierMask = [.command, .option]
         menu.addItem(newAgent)
-        for kind in AgentKind.taskKinds {
+        for kind in AgentsPlugin.installedKinds {
             let item = NSMenuItem(
                 title: "New \(kind.shortName) Tab", action: #selector(newAgentTabAction(_:)), keyEquivalent: "")
             item.representedObject = AgentMenuRequest(kind: kind)
@@ -26,9 +45,6 @@ extension MainWindowController {
             keyEquivalent: "J")
         jump.keyEquivalentModifierMask = [.command, .shift]
         menu.addItem(jump)
-        menuItem.submenu = menu
-        menuItem.isHidden = !AppSettings.shared.agentsEnabled
-        return menuItem
     }
 
     /// The pane a menu request names, else the active one.
@@ -42,7 +58,7 @@ extension MainWindowController {
     @discardableResult
     private func startAgentTab(for request: AgentMenuRequest?, prompt: String) -> UUID? {
         let picked = AgentCrewUIState.shared.taskAgent
-        let fallback = AgentMenuItems.installed.contains(picked) ? picked : AgentMenuItems.installedKinds.first
+        let fallback = AgentsPlugin.installedAgents.contains(picked) ? picked : AgentsPlugin.installedKinds.first
         guard let kind = request?.kind ?? fallback,
             let pv = paneView(for: request)
         else { return nil }
