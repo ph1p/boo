@@ -87,6 +87,7 @@ struct AgentNewTaskForm: View {
             .disabled(state.isBusy)
             .onSubmit { if canStart { start(prompt) } }
             .onKeyPress(.escape) {
+                state.cancel()
                 onDone()
                 return .handled
             }
@@ -120,6 +121,7 @@ struct AgentNewTaskForm: View {
         let agent = self.agent
         if state.taskPlace == .tab {
             onStartHere(agent, prompt)
+            state.cancel()
             onDone()
             return
         }
@@ -131,6 +133,7 @@ struct AgentNewTaskForm: View {
                 state.note = error
                 state.noteIsWarning = true
             } else {
+                state.dropDraft(.newTask)
                 onDone()
             }
         }

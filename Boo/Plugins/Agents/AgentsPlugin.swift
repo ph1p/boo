@@ -222,8 +222,7 @@ final class AgentsPlugin: BooPluginProtocol {
     func startAgent(kind: AgentKind, cwd: String? = nil, resumeSessionID: String? = nil, prompt: String? = nil) {
         let cwd = cwd ?? currentCwd ?? activeAgent?.cwd ?? "~"
         if resumeSessionID == nil, kind != .custom {
-            let command = MainWindowController.agentTaskCommand(kind: kind, prompt: prompt ?? "")
-            actions?.openTab?(.terminalWithCommand(workingDirectory: cwd, command: command))
+            actions?.openTab?(.agent(kind: kind, workingDirectory: cwd, prompt: prompt ?? ""))
             return
         }
         var command: String
@@ -319,6 +318,7 @@ final class AgentsPlugin: BooPluginProtocol {
             AgentBinaryScanner.detectInstalledAgents()
         }.value
         installedAgents = found
+        AgentMenuItems.installed = found
         return true
     }
 

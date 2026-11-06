@@ -24,6 +24,24 @@ extension AppSettings {
         !disabledPluginIDsSet.contains(pluginID)
     }
 
+    func setPluginEnabled(_ pluginID: String, _ enabled: Bool) {
+        guard enabled != isPluginEnabled(pluginID) else { return }
+        var ids = disabledPluginIDs.filter { $0 != pluginID }
+        if !enabled { ids.append(pluginID) }
+        disabledPluginIDs = ids
+    }
+
+    /// The agents plugin's ID: its enabled state is the app-wide agents switch.
+    static let agentsPluginID = "agents"
+
+    /// Agents on: the crew sidebar, the agent entries in the tab bar, menus and
+    /// command palette, and Boo's agent hooks. Off: none of them show, and Boo
+    /// stops installing its hooks (the installed ones exit at once).
+    var agentsEnabled: Bool {
+        get { isPluginEnabled(Self.agentsPluginID) }
+        set { setPluginEnabled(Self.agentsPluginID, newValue) }
+    }
+
     /// Plugins open in the sidebar by default when opening a new pane or starting the app.
     /// Saved tab order for the sidebar tab bar (plugin IDs in display order).
     var sidebarTabOrder: [String] {

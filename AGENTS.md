@@ -77,7 +77,7 @@ CGhostty/             C module wrapping ghostty.h
 CIronmark/            C module wrapping ironmark (Rust markdown parser)
 CObjCSafe/            Obj-C shim for exception-safe AppKit calls
 Vendor/               ghostty + ironmark submodules; patches/ (local Ghostty patches)
-Resources/shell-integration/  boo.{zsh,bash,fish}, boo-claude-hook (agent inbox hook)
+Resources/shell-integration/  boo.{zsh,bash,fish}, boo-claude-hook (agent inbox hook), boo-opencode-plugin.js
 examples/plugins/     Example script plugins
 Tests/BooTests/       1300+ tests
 documentation/        Vocs documentation site
@@ -279,6 +279,27 @@ Runs `AgentBinaryScanner.detectInstalledAgents()` on a background task and store
 ### `WorkspaceAgentSession`
 
 Wraps `AgentSession` with `paneID`, `tabID`, `tabTitle`, and `isFocused` so the plugin can present all active agent tabs across the workspace in a single "Open Sessions" section.
+
+### Agents switch and entry points
+
+- **Enable Agents** (Agents settings page, `AppSettings.agentsEnabled`, stored as the "agents" entry of
+  `disabledPluginIDs`). Off hides the sidebar tab, the Agents menu, the tab menus' agent items, the palette's
+  agent rows, the inbox status segment and the terminal's agent button, and stops the jump hotkey.
+- **Integration install** (`BooPaths.syncAgentIntegration`, `BooPaths+AgentIntegration.swift`, re-run on
+  `.plugins` settings changes). On: installs the MCP launcher, the Claude hook, Codex's top-level `notify`
+  in `~/.codex/config.toml` (skipped when the user already has one) and the OpenCode plugin
+  `~/.config/opencode/plugins/boo.js` (only when those folders exist). Off: writes `~/.boo/agents-disabled`;
+  installed hooks and the OpenCode plugin see the flag and do nothing.
+- **Agents menu** (`MainWindowController+AgentMenu.swift`): New Agent… (⌥⌘N), New <Agent> Tab per installed
+  agent, Show Crew (⌥⌘A), Jump to Next Waiting Agent (⇧⌘J).
+- **Tab menus** (`AgentMenuItems`): the tab bar's + menu lists "New <Agent> Tab" and "New Agent…"; a tab's
+  context menu has "Start Agent Here" and "Ask Agent About This Tab".
+- **Command palette** (`PaletteSources.agents`): Message / Merge / Discard rows per crew agent. Menu items
+  hidden by validation or under a hidden menu are left out (`PaletteSources.isHidden`).
+- **Drafts**: a crew composer that closes without sending keeps its text per field in memory
+  (`AgentCrewUIState.drafts`); Send, Esc and Cancel drop it.
+- **Background start**: agent tabs open behind the current one with the prompt in `_BOO_PROMPT` and come
+  forward once the agent runs; messages to a background agent are typed before its tab is shown.
 
 ### Agent workflow features
 

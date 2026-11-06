@@ -156,16 +156,19 @@ final class AgentWorktreeTests: XCTestCase {
         XCTAssertThrowsError(try AgentWorktree.create(repo: sandbox, name: "x", root: root))
     }
 
-    @MainActor func testAgentCommand() {
+    @MainActor func testAgentLaunch() {
         typealias C = MainWindowController
-        XCTAssertEqual(C.agentTaskCommand(kind: .claudeCode, prompt: " "), "claude")
-        XCTAssertEqual(C.agentTaskCommand(kind: .claudeCode, prompt: "fix it"), "claude 'fix it'")
-        XCTAssertEqual(C.agentTaskCommand(kind: .codex, prompt: "don't"), "codex 'don'\\''t'")
-        XCTAssertEqual(C.agentTaskCommand(kind: .openCode, prompt: "go"), "opencode --prompt 'go'")
-        XCTAssertEqual(C.agentTaskCommand(kind: .openCode, prompt: ""), "opencode")
+        let prompt = "\"$\(C.promptEnvKey)\""
+        XCTAssertEqual(C.agentLaunch(kind: .claudeCode, prompt: " ").command, "claude")
+        XCTAssertEqual(C.agentLaunch(kind: .claudeCode, prompt: " ").env, [:])
+        let launch = C.agentLaunch(kind: .claudeCode, prompt: " fix it ")
+        XCTAssertEqual(launch.command, "claude \(prompt)")
+        XCTAssertEqual(launch.env, [C.promptEnvKey: "fix it"])
+        XCTAssertEqual(C.agentLaunch(kind: .openCode, prompt: "go").command, "opencode --prompt \(prompt)")
+        XCTAssertEqual(C.agentLaunch(kind: .openCode, prompt: "").command, "opencode")
         XCTAssertEqual(
-            C.agentTaskCommand(kind: .claudeCode, prompt: "go", model: "opus"), "claude --model 'opus' 'go'")
-        XCTAssertEqual(C.agentTaskCommand(kind: .openCode, prompt: "", model: " "), "opencode")
+            C.agentLaunch(kind: .claudeCode, prompt: "go", model: "opus").command, "claude --model 'opus' \(prompt)")
+        XCTAssertEqual(C.agentLaunch(kind: .openCode, prompt: "", model: " ").command, "opencode")
     }
 
     /// The "Setup command" setting runs first; `;` so a failed setup still starts the agent.

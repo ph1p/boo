@@ -16,9 +16,24 @@ extension MainWindowController {
         return setup.isEmpty ? command : "\(setup); \(command)"
     }
 
-    /// Shell command that starts `kind`, passing `prompt` as the first message.
-    static func agentTaskCommand(kind: AgentKind, prompt: String, model: String? = nil) -> String {
+    /// The variable a launched agent reads its first prompt from. The shell
+    /// then echoes `claude "$_BOO_PROMPT"` instead of the whole prompt.
+    /// Not `BOO_*`: a launch spec's env drops those.
+    static let promptEnvKey = "_BOO_PROMPT"
+
+    /// How a new terminal starts `kind` with `prompt`: a short command, and
+    /// the prompt in the environment. With `setup`, the task setup command runs first.
+    static func agentLaunch(
+        kind: AgentKind, prompt: String, model: String? = nil, setup: Bool = false
+    ) -> LaunchSpec {
         let prompt = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        var command = agentCommand(
+            kind: kind, model: model, promptArgument: prompt.isEmpty ? nil : "\"$\(promptEnvKey)\"")
+        if setup { command = withTaskSetup(command) }
+        return LaunchSpec(command: command, env: prompt.isEmpty ? [:] : [promptEnvKey: prompt])
+    }
+
+    private static func agentCommand(kind: AgentKind, model: String?, promptArgument: String?) -> String {
         var base: String
         switch kind {
         case .claudeCode, .custom: base = "claude"
@@ -29,10 +44,9 @@ extension MainWindowController {
         if let model = model?.trimmingCharacters(in: .whitespaces), !model.isEmpty {
             base += " --model " + shellQuoted(model)
         }
-        guard !prompt.isEmpty else { return base }
+        guard let promptArgument else { return base }
         if kind == .openCode { base += " --prompt" }
-        // Always quote: a bare word prompt could still be read as a subcommand.
-        return base + " " + shellQuoted(prompt)
+        return base + " " + promptArgument
     }
 
     static func shellQuoted(_ text: String) -> String {
@@ -139,14 +153,12 @@ extension MainWindowController {
                     NotificationCenter.default.post(name: .agentWorktreesChanged, object: nil)
                     guard let self else { return }
                     let title = name.isEmpty ? (info.path as NSString).lastPathComponent : name
-                    let command = Self.withTaskSetup(Self.agentTaskCommand(kind: kind, prompt: prompt, model: model))
-                    if let caller, let launch = self.openTaskBesideCaller(caller, info: info, command: command) {
+                    let spec = Self.agentLaunch(kind: kind, prompt: prompt, model: model, setup: true)
+                    if let caller, let launch = self.openTaskBesideCaller(caller, info: info, launch: spec) {
                         completion(.success(launch))
                         return
                     }
-                    let workspace = self.openWorkspace(
-                        path: info.path, name: title,
-                        initialCommand: command)
+                    let workspace = self.openWorkspace(path: info.path, name: title, initialLaunch: spec)
                     let tabID = workspace.pane(for: workspace.activePaneID)?.tabs.last?.id
                     completion(.success(AgentTaskLaunch(info: info, workspaceID: workspace.id, tabID: tabID)))
                 case .failure(let error):
@@ -160,11 +172,11 @@ extension MainWindowController {
     /// (see `openHelperTab`), so a crew stays together instead of a new workspace.
     /// Nil when the caller is gone or its pane belongs to tmux.
     private func openTaskBesideCaller(
-        _ callerTab: UUID, info: AgentWorktree.Info, command: String
+        _ callerTab: UUID, info: AgentWorktree.Info, launch: LaunchSpec
     ) -> AgentTaskLaunch? {
         guard let home = AgentInbox.locateInWindows(callerTab), home.controller === self, !home.pane.tmuxOwned,
             let opened = openHelperTab(
-                caller: callerTab, in: home.workspace, callerPane: home.pane.id, cwd: info.path, command: command)
+                caller: callerTab, in: home.workspace, callerPane: home.pane.id, cwd: info.path, launch: launch)
         else { return nil }
         return AgentTaskLaunch(info: info, workspaceID: home.workspace.id, tabID: opened.tabID)
     }
@@ -173,33 +185,77 @@ extension MainWindowController {
     /// (right after the caller and earlier helpers). The tab shown before stays
     /// shown and focus stays where it is. A tmux pane can't hold it: split instead.
     func openHelperTab(
-        caller: UUID, in workspace: Workspace, callerPane: UUID, cwd: String, command: String
+        caller: UUID, in workspace: Workspace, callerPane: UUID, cwd: String, launch: LaunchSpec
     ) -> (paneID: UUID, tabID: UUID)? {
         guard let pane = workspace.pane(for: callerPane), !pane.tmuxOwned,
             let paneView = workspacePaneViews[workspace.id]?[callerPane]
         else {
-            return splitHelperPane(callerPane, in: workspace, cwd: cwd, command: command)
+            return splitHelperPane(callerPane, in: workspace, cwd: cwd, launch: launch)
         }
-        let shown = pane.activeTab?.id
-        // The new tab starts its terminal as the active tab, then steps back.
-        guard
-            let tabID = paneView.addNewTab(
-                workingDirectory: cwd, launch: LaunchSpec(command: command), focus: false)
-        else { return nil }
+        guard let tabID = addTabBehindShown(in: paneView, workingDirectory: cwd, launch: launch) else { return nil }
         pane.joinCrew(helper: tabID, parent: caller)
-        if let shown, let index = pane.tabs.firstIndex(where: { $0.id == shown }) {
-            paneView.activateTab(index, focus: false)
-        }
         paneView.groupsChanged()
         saveSession()
         return (callerPane, tabID)
     }
 
+    /// Starts `kind` in a new terminal tab of `paneView` (default: the active
+    /// pane) with `prompt` as its first message. The tab starts behind the shown
+    /// one and comes forward once the agent runs, so the shell typing the
+    /// command never shows.
+    @discardableResult
+    func startAgentTab(
+        kind: AgentKind, prompt: String, workingDirectory: String, in paneView: PaneView? = nil, group: UUID? = nil
+    ) -> UUID? {
+        guard AppSettings.shared.agentsEnabled, let workspace = activeWorkspace,
+            let pv = paneView ?? paneViews[workspace.activePaneID]
+        else { return nil }
+        guard
+            let tabID = addTabBehindShown(
+                in: pv, workingDirectory: workingDirectory, launch: Self.agentLaunch(kind: kind, prompt: prompt),
+                group: group ?? pv.activeGroupID)
+        else { return nil }
+        revealAgentTab(tabID, in: pv, workspaceID: workspace.id)
+        return tabID
+    }
+
+    /// Adds a terminal tab that starts as the active tab (so its terminal
+    /// starts), then steps back behind the tab shown before. Focus stays put.
+    private func addTabBehindShown(
+        in pv: PaneView, workingDirectory: String, launch: LaunchSpec, group: UUID? = nil
+    ) -> UUID? {
+        let shown = pv.pane.activeTab?.id
+        guard let tabID = pv.addNewTab(workingDirectory: workingDirectory, launch: launch, group: group, focus: false)
+        else { return nil }
+        if let shown, shown != tabID, let index = pv.pane.tabs.firstIndex(where: { $0.id == shown }) {
+            pv.activateTab(index, focus: false)
+        }
+        return tabID
+    }
+
+    /// Brings `tabID` forward once its shell started the agent (Boo's shell
+    /// integration reports the command), or after a second without it.
+    private func revealAgentTab(_ tabID: UUID, in pv: PaneView, workspaceID: UUID, waited: TimeInterval = 0) {
+        let started = pv.terminalView(forTab: tabID)?.commandHistory.last != nil
+        guard started || waited >= 1 else {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self, weak pv] in
+                guard let pv else { return }
+                self?.revealAgentTab(tabID, in: pv, workspaceID: workspaceID, waited: waited + 0.05)
+            }
+            return
+        }
+        // A moment for the agent to draw over the echoed command line.
+        DispatchQueue.main.asyncAfter(deadline: .now() + (started ? 0.15 : 0)) { [weak self, weak pv] in
+            guard let self, let pv, let index = pv.pane.tabs.firstIndex(where: { $0.id == tabID }) else { return }
+            self.focusActivity(workspaceID: workspaceID, paneID: pv.pane.id, tabIndex: index)
+        }
+    }
+
     /// Splits `anchor` to the right for a helper, leaving focus where it is.
     private func splitHelperPane(
-        _ anchor: UUID, in workspace: Workspace, cwd: String, command: String
+        _ anchor: UUID, in workspace: Workspace, cwd: String, launch: LaunchSpec
     ) -> (paneID: UUID, tabID: UUID)? {
-        guard let paneID = splitPane(anchor, in: workspace, toward: .right, focus: false, cwd: cwd, command: command),
+        guard let paneID = splitPane(anchor, in: workspace, toward: .right, focus: false, cwd: cwd, launch: launch),
             let tabID = workspace.pane(for: paneID)?.activeTab?.id
         else { return nil }
         return (paneID, tabID)
@@ -302,12 +358,12 @@ extension MainWindowController {
         let cwd =
             (json["cwd"] as? String).map { ($0 as NSString).expandingTildeInPath }
             ?? location.map { $0.pane.tabs[$0.tabIndex].workingDirectory } ?? workspace.folderPath
-        let command = Self.agentTaskCommand(kind: kind, prompt: prompt, model: json["model"] as? String)
+        let launch = Self.agentLaunch(kind: kind, prompt: prompt, model: json["model"] as? String)
         let opened =
             if let caller, location != nil {
-                openHelperTab(caller: caller.tabID, in: workspace, callerPane: anchor, cwd: cwd, command: command)
+                openHelperTab(caller: caller.tabID, in: workspace, callerPane: anchor, cwd: cwd, launch: launch)
             } else {
-                splitHelperPane(anchor, in: workspace, cwd: cwd, command: command)
+                splitHelperPane(anchor, in: workspace, cwd: cwd, launch: launch)
             }
         guard let (paneID, tabID) = opened else {
             reply(["ok": false, "error": "could not open a pane for the helper"])
@@ -670,15 +726,39 @@ extension MainWindowController {
     /// no agent running there (a stopped task after a quit or restart), the tab
     /// is a plain shell: it resumes the agent with `text` instead of running
     /// the text as shell commands.
+    /// The text goes into the tab's terminal before the tab comes forward, so
+    /// the user sees it arrive whole instead of watching it being typed.
     @discardableResult
     func sendToAgent(workspaceID: UUID, text: String) -> Bool {
         guard let target = agentTab(inWorkspace: workspaceID) else { return false }
+        let input =
+            hasLiveAgent(inWorkspace: workspaceID)
+            ? text : Self.resumeCommand(kind: taskAgentKind(workspaceID), text: text)
+        return submit(input, toTab: target, inWorkspace: workspaceID)
+    }
+
+    /// Submits `input` in the tab's terminal, then shows the tab. A tab never
+    /// shown since launch has no terminal yet: it is shown first so one starts.
+    private func submit(
+        _ input: String, toTab target: (paneID: UUID, tabIndex: Int), inWorkspace workspaceID: UUID
+    ) -> Bool {
+        if let view = backgroundTerminal(workspaceID: workspaceID, paneID: target.paneID, tabIndex: target.tabIndex) {
+            view.paste(input, submit: true)
+            focusActivity(workspaceID: workspaceID, paneID: target.paneID, tabIndex: target.tabIndex)
+            return true
+        }
         focusActivity(workspaceID: workspaceID, paneID: target.paneID, tabIndex: target.tabIndex)
         guard let view = ghosttyView(for: target.paneID) else { return false }
-        view.paste(
-            hasLiveAgent(inWorkspace: workspaceID)
-                ? text : Self.resumeCommand(kind: taskAgentKind(workspaceID), text: text), submit: true)
+        view.paste(input, submit: true)
         return true
+    }
+
+    /// The live terminal of a tab, shown or not.
+    private func backgroundTerminal(workspaceID: UUID, paneID: UUID, tabIndex: Int) -> GhosttyView? {
+        guard let workspace = appState.workspace(withID: workspaceID),
+            let pane = workspace.pane(for: paneID), pane.tabs.indices.contains(tabIndex)
+        else { return nil }
+        return workspacePaneViews[workspaceID]?[paneID]?.terminalView(forTab: pane.tabs[tabIndex].id)
     }
 
     /// Restarts a stopped task's agent in its tab, on its last conversation.
@@ -687,10 +767,8 @@ extension MainWindowController {
         guard !hasLiveAgent(inWorkspace: workspaceID), let target = agentTab(inWorkspace: workspaceID) else {
             return false
         }
-        focusActivity(workspaceID: workspaceID, paneID: target.paneID, tabIndex: target.tabIndex)
-        guard let view = ghosttyView(for: target.paneID) else { return false }
-        view.paste(Self.resumeCommand(kind: taskAgentKind(workspaceID), text: nil), submit: true)
-        return true
+        return submit(
+            Self.resumeCommand(kind: taskAgentKind(workspaceID), text: nil), toTab: target, inWorkspace: workspaceID)
     }
 
     /// The agent the workspace's task started with (Claude Code for tasks made

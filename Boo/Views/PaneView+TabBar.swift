@@ -519,7 +519,7 @@ extension PaneView {
         NSMenu.popUpContextMenu(menu, with: event, for: self)
     }
 
-    /// One "New <Type> Tab" item per creatable content type.
+    /// One "New <Type> Tab" item per creatable content type, then the agents.
     func addNewTabItems(to menu: NSMenu) {
         for type in ContentType.creatableTypes {
             let item = NSMenuItem(
@@ -531,6 +531,11 @@ extension PaneView {
             item.image = type.icon
             item.representedObject = type
             menu.addItem(item)
+        }
+        let agentItems = AgentMenuItems.newTabItems(paneID: paneID)
+        if !agentItems.isEmpty {
+            menu.addItem(.separator())
+            agentItems.forEach(menu.addItem)
         }
     }
 

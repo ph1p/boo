@@ -336,7 +336,16 @@ extension MainWindowController: NSMenuItemValidation {
         case #selector(stopBroadcastAction(_:)):
             return broadcast != nil
         case #selector(jumpToNextWaitingAgentAction(_:)):
-            return AgentInbox.shared.attentionCount > 0
+            return AppSettings.shared.agentsEnabled && AgentInbox.shared.attentionCount > 0
+        case #selector(newAgentTabAction(_:)):
+            // The Agents menu lists every agent: hide the ones not installed.
+            if let kind = (menuItem.representedObject as? AgentMenuRequest)?.kind {
+                menuItem.isHidden = !AgentMenuItems.installed.contains(kind)
+            }
+            return AppSettings.shared.agentsEnabled
+        case #selector(newAgentAction(_:)), #selector(showCrewAction(_:)), #selector(askAgentAboutTabAction(_:)),
+            #selector(sendContextToAgentAction(_:)):
+            return AppSettings.shared.agentsEnabled
         default:
             return true
         }

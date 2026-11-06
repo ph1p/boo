@@ -150,7 +150,6 @@ enum BooPaths {
     /// Called once at startup. Overwrites stale copies so scripts stay up-to-date.
     /// Also injects a source line into the user's shell RC files if not already present.
     static func installShellIntegration() {
-        installMCPLauncher()
         guard let resourcesDir = Bundle.main.resourcePath else { return }
         let sourceDir = (resourcesDir as NSString).appendingPathComponent("shell-integration")
         let fm = FileManager.default
@@ -163,7 +162,7 @@ enum BooPaths {
             try? fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: dst)
         }
         injectShellRCLines()
-        installClaudeHook()
+        syncAgentIntegration()
     }
 
     /// `boo-mcp`: stable path for agents' MCP config that starts this app's
@@ -178,7 +177,7 @@ enum BooPaths {
         ((configDir as NSString).appendingPathComponent("bin") as NSString).appendingPathComponent("boo")
     }
 
-    private static func installMCPLauncher() {
+    static func installMCPLauncher() {
         // Only from a bundled app: a `swift run` binary moves with every build.
         guard Bundle.main.bundlePath.hasSuffix(".app"), let binary = Bundle.main.executablePath else { return }
         let quoted = "'" + binary.replacingOccurrences(of: "'", with: "'\\''") + "'"

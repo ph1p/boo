@@ -7,10 +7,14 @@
 # Codex: notify = ["~/.boo/shell-integration/boo-claude-hook", "codex"]
 # (Codex appends its JSON payload as the last argument).
 #
+# OpenCode uses boo-opencode-plugin.js instead.
+#
 # BOO_PANE_ID / BOO_TAB_ID are set per surface by Boo. Never blocks the agent:
 # no output except that context, always exits 0.
 
 [[ -z "$BOO_SOCK" || -z "$BOO_PANE_ID" ]] && exit 0
+# Agents turned off in Boo's settings: the hook stays registered but idles.
+[[ -e "$HOME/.boo/agents-disabled" ]] && exit 0
 
 # Script via -c: stdin carries Claude's JSON payload.
 read -r -d '' BOO_HOOK_PY <<'PYEOF'

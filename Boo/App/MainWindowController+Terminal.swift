@@ -153,11 +153,11 @@ extension MainWindowController {
             pv.addNewTab(contentType: .terminal, workingDirectory: workingDirectory)
 
         case .terminalWithCommand(let workingDirectory, let command):
-            pv.addNewTab(contentType: .terminal, workingDirectory: workingDirectory)
-            // Send command after tab is ready
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
-                self?.sendRawToActivePane(command + "\n")
-            }
+            // Ghostty's initial input: typed once the shell reads, no timing race.
+            pv.addNewTab(workingDirectory: workingDirectory, launch: LaunchSpec(command: command))
+
+        case .agent(let kind, let workingDirectory, let prompt):
+            startAgentTab(kind: kind, prompt: prompt, workingDirectory: workingDirectory, in: pv)
 
         case .browser(let url):
             pv.addNewTab(contentType: .browser, url: url)

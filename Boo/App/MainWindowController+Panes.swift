@@ -63,7 +63,7 @@ extension MainWindowController {
     @discardableResult
     func splitPane(
         _ oldPaneID: UUID, in workspace: Workspace, toward edge: PaneDirection,
-        focus: Bool = true, cwd: String? = nil, command: String? = nil
+        focus: Bool = true, cwd: String? = nil, command: String? = nil, launch: LaunchSpec? = nil
     ) -> UUID? {
         // tmux owns the layout of its windows: ask it, and its layout change adds the pane.
         if let tmux = TmuxControlClient.owning(workspace: workspace.id) {
@@ -109,8 +109,10 @@ extension MainWindowController {
                     selectedPluginTabID: activePluginTabID)
             }
         }
-        if let command, let newTab = workspace.pane(for: newID)?.activeTab {
-            GhosttyView.pendingLaunch[newTab.id] = LaunchSpec(command: command)
+        if let spec = launch ?? command.map({ LaunchSpec(command: $0) }),
+            let newTab = workspace.pane(for: newID)?.activeTab
+        {
+            GhosttyView.pendingLaunch[newTab.id] = spec
         }
         if focus {
             workspace.activePaneID = newID

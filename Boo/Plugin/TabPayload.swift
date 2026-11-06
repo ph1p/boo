@@ -9,6 +9,11 @@ enum TabPayload {
     /// Open a terminal tab and run a command.
     case terminalWithCommand(workingDirectory: String, command: String)
 
+    /// Start a coding agent in a new terminal tab, with `prompt` as its first
+    /// message (empty: none). The tab starts in the background and comes forward
+    /// once the agent runs.
+    case agent(kind: AgentKind, workingDirectory: String, prompt: String)
+
     /// Open a browser tab with the given URL.
     case browser(url: URL)
 

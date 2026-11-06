@@ -275,6 +275,8 @@ extension MainWindowController {
         bmMenuItem.submenu = bmMenu
         mainMenu.addItem(bmMenuItem)
 
+        mainMenu.addItem(makeAgentsMenuItem())
+
         // Plugins menu (rebuilt dynamically as plugins load/unload)
         let pluginsMenuItem = NSMenuItem()
         pluginsMenuItem.title = "Plugins"
@@ -298,11 +300,6 @@ extension MainWindowController {
         windowMenu.addItem(
             withTitle: "Merge All Windows", action: #selector(mergeAllWindowsAction(_:)), keyEquivalent: "")
         windowMenu.addItem(.separator())
-        let jumpAgent = NSMenuItem(
-            title: "Jump to Next Waiting Agent", action: #selector(jumpToNextWaitingAgentAction(_:)),
-            keyEquivalent: "J")
-        jumpAgent.keyEquivalentModifierMask = [.command, .shift]
-        windowMenu.addItem(jumpAgent)
         // ⌥⌘O: ⇧⌘O is Open Folder.
         let orchestrator = NSMenuItem(
             title: "Toggle Orchestrator", action: #selector(toggleOrchestratorAction(_:)), keyEquivalent: "o")

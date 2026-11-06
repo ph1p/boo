@@ -91,16 +91,20 @@ struct PluginDetailSettingsView: View {
         let _ = observer.revision
 
         SettingsPage(title: manifest.name) {
-            if manifest.id == "agents" {
-                AgentCenterSettingsView()
-                AgentQuickAccessSettingsSection()
-                AgentCostSettingsSection()
-                // Its manifest settings below the custom page (not the page switch itself).
-                ForEach(groupedSettings.filter { $0.title == "Tasks" || $0.title == "Agents List" }, id: \.title) {
-                    group in
-                    Section(title: group.title) {
-                        ForEach(group.settings, id: \.key) { setting in
-                            PluginSettingControl(pluginID: manifest.id, setting: setting)
+            if manifest.id == AppSettings.agentsPluginID {
+                AgentsSwitchSettingsSection()
+                if AppSettings.shared.agentsEnabled {
+                    AgentCenterSettingsView()
+                    AgentQuickAccessSettingsSection()
+                    AgentCostSettingsSection()
+                    // Its manifest settings below the custom page (not the page switch itself).
+                    ForEach(
+                        groupedSettings.filter { $0.title == "Tasks" || $0.title == "Agents List" }, id: \.title
+                    ) { group in
+                        Section(title: group.title) {
+                            ForEach(group.settings, id: \.key) { setting in
+                                PluginSettingControl(pluginID: manifest.id, setting: setting)
+                            }
                         }
                     }
                 }
@@ -189,13 +193,7 @@ private struct PluginRow: View {
                     .labelsHidden()
                     .toggleStyle(.themedSwitch)
                     .onChange(of: isEnabled) { _, enabled in
-                        var disabled = AppSettings.shared.disabledPluginIDs
-                        if enabled {
-                            disabled.removeAll { $0 == manifest.id }
-                        } else {
-                            disabled.append(manifest.id)
-                        }
-                        AppSettings.shared.disabledPluginIDs = disabled
+                        AppSettings.shared.setPluginEnabled(manifest.id, enabled)
                     }
             }
             .padding(.vertical, 6)

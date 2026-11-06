@@ -249,7 +249,7 @@ class TerminalScrollView: NSView {
     /// Shows the agent button on the failed block under `point`, at the right
     /// end of its prompt line (or the top line when that scrolled away).
     private func updateAgentButton(at point: NSPoint) {
-        guard AppSettings.shared.errorAgentButtonEnabled, ghosttyView.tabID != nil,
+        guard AppSettings.shared.agentsEnabled, AppSettings.shared.errorAgentButtonEnabled, ghosttyView.tabID != nil,
             let cellHeight = ghosttyView.cellHeight, cellHeight > 0
         else { return hideAgentButton() }
         if !agentButton.isHidden, agentButton.frame.insetBy(dx: -4, dy: -4).contains(point) { return }

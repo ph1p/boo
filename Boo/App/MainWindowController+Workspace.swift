@@ -395,16 +395,20 @@ extension MainWindowController {
         savePluginStateForActiveTab()
     }
 
-    /// Opens `path` as a new workspace. With `initialCommand`, its first tab is
+    /// Opens `path` as a new workspace. With `initialLaunch`, its first tab is
     /// a terminal that runs the command as soon as the shell starts.
     @discardableResult
-    func openWorkspace(path: String, name: String? = nil, initialCommand: String? = nil) -> Workspace {
+    func openWorkspace(
+        path: String, name: String? = nil, initialLaunch: LaunchSpec? = nil
+    ) -> Workspace {
         let workspace = Workspace(folderPath: path)
         workspace.customName = name ?? appState.nextGeneratedWorkspaceName()
-        if let initialCommand, let pane = workspace.pane(for: workspace.activePaneID) {
+        if let launch = initialLaunch,
+            let pane = workspace.pane(for: workspace.activePaneID)
+        {
             pane.stopAll()
             pane.addTab(workingDirectory: path)
-            if let tab = pane.tabs.last { GhosttyView.pendingLaunch[tab.id] = LaunchSpec(command: initialCommand) }
+            if let tab = pane.tabs.last { GhosttyView.pendingLaunch[tab.id] = launch }
         } else {
             configureInitialTab(for: workspace)
         }

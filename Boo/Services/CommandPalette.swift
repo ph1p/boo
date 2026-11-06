@@ -4,11 +4,12 @@ import Cocoa
 @MainActor
 struct PaletteItem: Identifiable {
     enum Kind: Int, CaseIterable {
-        case action, workspace, tab, bookmark, host, theme, profile, recipe, task, history
+        case action, agent, workspace, tab, bookmark, host, theme, profile, recipe, task, history
 
         var title: String {
             switch self {
             case .action: return "Actions"
+            case .agent: return "Agents"
             case .workspace: return "Workspaces"
             case .tab: return "Tabs"
             case .bookmark: return "Bookmarks"
@@ -155,7 +156,7 @@ enum PaletteSources {
     static func items(menu: NSMenu? = NSApplication.shared.mainMenu) -> [PaletteItem] {
         let places = workspaces() + tabs() + bookmarks() + hosts()
         let looks = themes() + profiles()
-        return actions(menu: menu) + places + looks + RecipesMenu.paletteItems() + projectTasks()
+        return actions(menu: menu) + agents() + places + looks + RecipesMenu.paletteItems() + projectTasks()
     }
 
     static func actions(menu: NSMenu?) -> [PaletteItem] {
@@ -163,12 +164,51 @@ enum PaletteSources {
             // Recipes get their own rows, with the folder as subtitle.
             !$0.isAlternate && $0.id != paletteActionID
                 && $0.item.action != #selector(MainWindowController.runRecipeAction(_:))
-        }.map { action in
-            PaletteItem(
+        }.compactMap { action in
+            // Validation runs first: it hides items (agents not installed).
+            let isEnabled = action.isEnabled
+            guard !isHidden(action.item) else { return nil }
+            return PaletteItem(
                 id: "action:\(action.id)", kind: .action,
                 title: action.path.dropFirst().joined(separator: " › "),
-                subtitle: action.path[0], shortcut: action.shortcut, isEnabled: action.isEnabled,
+                subtitle: action.path[0], shortcut: action.shortcut, isEnabled: isEnabled,
                 perform: { action.perform() })
+        }
+    }
+
+    /// Hidden itself or under a hidden menu (the Agents menu while agents are off).
+    static func isHidden(_ item: NSMenuItem) -> Bool {
+        if item.isHidden { return true }
+        guard let menu = item.menu, let parent = menu.supermenu,
+            let owner = parent.items.first(where: { $0.submenu === menu })
+        else { return false }
+        return isHidden(owner)
+    }
+
+    /// Message, merge and discard rows for every agent in the crew.
+    static func agents() -> [PaletteItem] {
+        guard AppSettings.shared.agentsEnabled else { return [] }
+        return AgentsPlugin.allCrewRows().flatMap { row -> [PaletteItem] in
+            let label = row.handle.isEmpty ? row.name : "\(row.handle) · \(row.name)"
+            func item(_ action: AgentsPlugin.CrewAction, _ verb: String) -> PaletteItem {
+                PaletteItem(
+                    id: "agent:\(action.rawValue):\(row.id.uuidString)", kind: .agent,
+                    title: "\(verb) \(label)", subtitle: row.agent,
+                    perform: {
+                        // Message and discard open their field in the crew section.
+                        if action == .message || action == .discard {
+                            _ = WindowManager.shared.activeController?.showCrew()
+                        }
+                        AgentsPlugin.perform(action, on: row)
+                    })
+            }
+            var items: [PaletteItem] = []
+            if row.hasHooks && !row.isStopped { items.append(item(.message, "Message")) }
+            if row.isTask {
+                items.append(item(.merge, "Merge"))
+                items.append(item(.discard, "Discard"))
+            }
+            return items
         }
     }
 

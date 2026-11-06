@@ -61,7 +61,7 @@ struct CrewWorkspace: Equatable, Hashable {
 final class AgentCrewUIState: ObservableObject {
     static let shared = AgentCrewUIState()
 
-    enum Composer: Equatable {
+    enum Composer: Hashable {
         /// A message to this agent.
         case message(UUID)
         /// The prompt for a new agent task.
@@ -76,6 +76,9 @@ final class AgentCrewUIState: ObservableObject {
     @Published var selection: UUID?
     @Published var composer: Composer?
     @Published var text = ""
+    /// Unsent text of fields that closed without sending, by field. A click
+    /// elsewhere closes the field but keeps what was typed for the next open.
+    private(set) var drafts: [Composer: String] = [:]
     /// Shown under the open field: why a start failed, or what a discard loses.
     @Published var note: String?
     /// The discard loses commits or uncommitted changes.
@@ -115,8 +118,9 @@ final class AgentCrewUIState: ObservableObject {
     func open(_ composer: Composer) {
         if case .message(let id) = composer { selection = id }
         if case .discard(let id) = composer { selection = id }
+        stashDraft()
         self.composer = composer
-        text = ""
+        text = drafts.removeValue(forKey: composer) ?? ""
         note = nil
         noteIsWarning = false
         isBusy = false
@@ -125,13 +129,35 @@ final class AgentCrewUIState: ObservableObject {
         if composer == .newTask, !newTaskInPopover, self === Self.shared { _ = Self.presentNewTask() }
     }
 
+    /// Closes the open field and keeps its unsent text as a draft.
     func close() {
+        stashDraft()
         composer = nil
         text = ""
         note = nil
         isBusy = false
         // Closing from elsewhere (a keypress, another composer) takes the popover too.
         if newTaskInPopover, self === Self.shared { AgentNewTaskPopover.dismiss() }
+    }
+
+    /// Closes the open field and drops its text: the user cancelled it, or it was sent.
+    func cancel() {
+        if let composer { drafts[composer] = nil }
+        text = ""
+        close()
+    }
+
+    /// Drops a closed field's draft (a new task that started after its form closed).
+    func dropDraft(_ composer: Composer) {
+        if self.composer == composer { text = "" }
+        drafts[composer] = nil
+    }
+
+    /// Keeps the open field's text for the next time it opens; empty text drops the draft.
+    private func stashDraft() {
+        guard let composer, composer.takesText else { return }
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        drafts[composer] = trimmed.isEmpty ? nil : text
     }
 
     /// Folds or unfolds a workspace group; a folded group drops the selection
@@ -335,7 +361,7 @@ struct AgentCrewView: View {
                                     button: "Send"
                                 ) { text in
                                     onSend(row, text)
-                                    state.close()
+                                    state.cancel()
                                 }
                             }
                             if state.composer == .discard(row.id) { discardConfirm(row) }
@@ -389,7 +415,7 @@ struct AgentCrewView: View {
         }
         .onKeyPress(.escape) {
             guard state.composer != nil else { return .ignored }
-            state.close()
+            state.cancel()
             return .handled
         }
         .onChange(of: state.composer) { _, composer in
@@ -714,7 +740,7 @@ struct AgentCrewView: View {
                 .disabled(state.isBusy)
                 .onSubmit(send)
                 .onKeyPress(.escape) {
-                    state.close()
+                    state.cancel()
                     return .handled
                 }
                 .onAppear { fieldFocused = true }
@@ -732,7 +758,7 @@ struct AgentCrewView: View {
                     .layoutPriority(-1)
                 Spacer(minLength: 4)
                 if state.isBusy { ProgressView().controlSize(.mini) }
-                Button("Cancel") { state.close() }
+                Button("Cancel") { state.cancel() }
                     .buttonStyle(.themed(.secondary))
                 Button(button, action: send)
                     .buttonStyle(.themed(.primary))

@@ -1,5 +1,29 @@
 import SwiftUI
 
+// MARK: - Switch
+
+/// The app-wide agents switch. Off hides every agent entry (sidebar, tab bar,
+/// menus, command palette) and stops Boo from wiring itself into the agents.
+struct AgentsSwitchSettingsSection: View {
+    @ObservedObject private var observer = SettingsObserver(topics: [.plugins])
+
+    var body: some View {
+        let _ = observer.revision
+        Section(title: "Agents") {
+            ToggleRow(
+                label: "Enable Agents",
+                help: "Off hides the agents sidebar, the agent entries in the tab bar, menus and command palette. "
+                    + "Boo then stops installing its Claude Code, Codex and OpenCode hooks; "
+                    + "the ones already installed do nothing.",
+                isOn: Binding(
+                    get: { AppSettings.shared.agentsEnabled },
+                    set: { AppSettings.shared.agentsEnabled = $0 }
+                )
+            )
+        }
+    }
+}
+
 // MARK: - Quick Access
 
 /// The global "next agent that needs you" hotkey and the failed-command button.

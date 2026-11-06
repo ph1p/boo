@@ -25,7 +25,7 @@ final class AgentJumpHotKey {
 
     func configure() {
         let text = AppSettings.shared.agentJumpHotkey.trimmingCharacters(in: .whitespaces)
-        guard !text.isEmpty else {
+        guard !text.isEmpty, AppSettings.shared.agentsEnabled else {
             hotKey = nil
             problem = nil
             return

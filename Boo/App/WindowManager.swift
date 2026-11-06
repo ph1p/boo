@@ -300,8 +300,11 @@ final class WindowManager {
                 if let topic {
                     BooSocketServer.shared.emitSettingsChanged(topic: topic.rawValue)
                 }
-                // Rebuild so removed overrides fall back to the built-in shortcuts.
-                if topic == .shortcuts, let owner = WindowManager.shared.menuOwner {
+                // The agents switch is the agents plugin's enabled state.
+                let agentsFlipped = (topic == nil || topic == .plugins) && BooPaths.syncAgentIntegration()
+                // Rebuild so removed overrides fall back to the built-in shortcuts,
+                // and so the Agents menu follows the agents switch.
+                if topic == .shortcuts || agentsFlipped, let owner = WindowManager.shared.menuOwner {
                     owner.setupMenuItems()
                     owner.rebuildPluginsMenu()
                 }
