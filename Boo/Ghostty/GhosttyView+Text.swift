@@ -350,13 +350,42 @@ extension GhosttyView {
             to: CopyMode.Point(row: row, column: Int(columns) - 1))
     }
 
-    /// The link or file reference under a point, if any.
+    /// Whether viewport `row` soft-wraps into the next row. Ghostty joins
+    /// soft-wrapped rows when reading text, so a two-row read without a
+    /// newline means the rows form one logical line.
+    func rowWraps(_ row: Int) -> Bool {
+        guard let size = gridSize, row + 1 < Int(size.rows), size.columns > 0,
+            let text = readText(
+                GHOSTTY_POINT_VIEWPORT, from: CopyMode.Point(row: row, column: 0),
+                to: CopyMode.Point(row: row + 1, column: Int(size.columns) - 1))
+        else { return false }
+        return !text.contains("\n")
+    }
+
+    /// The link or file reference under a point, if any. Matches against the
+    /// whole logical line, so a URL wrapped across rows opens in full.
     func link(at point: NSPoint) -> TerminalLink? {
         guard let row = viewportRow(at: point), let column = viewportColumn(at: point),
             let line = viewportLine(row)
         else { return nil }
         guard let index = LinkResolver.characterIndex(forColumn: column, in: line) else { return nil }
-        return LinkResolver.link(in: line, at: index)
+
+        // Bounded so a huge wrapped blob doesn't cost a read per row on every hover.
+        let maxRows = 20
+        var top = row
+        while row - top < maxRows, top > 0, rowWraps(top - 1) { top -= 1 }
+        var bottom = row
+        while bottom - row < maxRows, rowWraps(bottom) { bottom += 1 }
+        if top == bottom { return LinkResolver.link(in: line, at: index) }
+
+        var logical = ""
+        var offset = 0
+        for r in top...bottom {
+            let text = r == row ? line : (viewportLine(r) ?? "")
+            if r < row { offset += text.count }
+            logical += text
+        }
+        return LinkResolver.link(in: logical, at: offset + index)
     }
 
     /// Opens the link under `point`; false when there is none.
