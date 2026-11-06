@@ -5,8 +5,11 @@ import Cocoa
 extension MainWindowController {
     func handleTabDrop(source: PaneView, tabIndex: Int, dest: PaneView, zone: TabDropZone) {
         guard activeWorkspace != nil else { return }
-        // tmux owns which pane a tmux tab lives in.
-        if source.paneID != dest.paneID, source.pane.tmuxOwned || dest.pane.tmuxOwned { return }
+        // tmux owns which pane a tmux tab lives in: ask tmux to move it.
+        if source.paneID != dest.paneID, source.pane.tmuxOwned || dest.pane.tmuxOwned {
+            tmuxTabDrop(source: source.paneID, dest: dest.paneID, zone: zone)
+            return
+        }
 
         // Dropped on a pane of another window: the tab moves there.
         if let target = WindowManager.shared.controller(showing: dest), target !== self {

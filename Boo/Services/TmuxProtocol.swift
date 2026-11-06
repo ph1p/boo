@@ -24,6 +24,7 @@ enum TmuxProtocol {
         case windowClose(window: String)
         case windowRenamed(window: String, name: String)
         case sessionChanged(id: String, name: String)
+        case sessionRenamed(id: String, name: String)
         case exit
         case other
     }
@@ -53,6 +54,7 @@ enum TmuxProtocol {
         case "%window-close", "%unlinked-window-close": return .windowClose(window: arg(1))
         case "%window-renamed": return .windowRenamed(window: arg(1), name: rest(2))
         case "%session-changed": return .sessionChanged(id: arg(1), name: rest(2))
+        case "%session-renamed": return .sessionRenamed(id: arg(1), name: rest(2))
         case "%exit": return .exit
         default: return .other
         }

@@ -678,6 +678,7 @@ import SwiftUI
             manager.writeSession(from: self, sync: true)
             if !manager.isTerminating {
                 manager.remove(self)
+                destroyParkedTmuxGateways()
                 // Settings is an auxiliary window: left open it would keep the app
                 // alive with no terminal window. Closing it lets the app quit.
                 for w in NSApp.windows where w.windowController is SettingsWindowController {
@@ -723,6 +724,7 @@ import SwiftUI
     }
 
     private func tearDownAllWorkspaces() {
+        destroyParkedTmuxGateways()
         for ws in appState.workspaces {
             for pane in ws.panes.values {
                 notifyTerminalClosed(for: pane.tabs)

@@ -48,6 +48,38 @@ __boo_precmd() {
     fi
 }
 
+# A plain `tmux` (new session or attach) can open as Boo tabs and splits:
+# tmux control mode (-CC). Settings › Terminal picks always, ask or never.
+# Inside tmux, with -C/-CC already given, or for any other subcommand it is
+# the usual tmux.
+tmux() {
+    local arg mode answer
+    if [[ -n "$TMUX" ]]; then command tmux "$@"; return; fi
+    for arg in "$@"; do
+        case "$arg" in -C | -CC) command tmux "$@"; return ;; esac
+    done
+    case "$1" in
+    "" | new | new-session | attach | attach-session | a | at) ;;
+    *) command tmux "$@"; return ;;
+    esac
+    mode=$(command boo tmux mode 2>/dev/null)
+    if [[ "$mode" == "ask" ]]; then
+        printf 'Open tmux as Boo tabs and splits? [Y]es [n]o [a]lways ne[v]er: '
+        read -r answer || return 130
+        case "$answer" in
+        "" | y | Y | yes) mode=always ;;
+        a | A | always) command boo tmux mode always >/dev/null 2>&1; mode=always ;;
+        v | V | never) command boo tmux mode never >/dev/null 2>&1; mode=never ;;
+        *) mode=never ;;
+        esac
+    fi
+    if [[ "$mode" == "always" ]]; then
+        command tmux -CC "$@"
+    else
+        command tmux "$@"
+    fi
+}
+
 # Append to zsh hook arrays without replacing existing hooks.
 autoload -Uz add-zsh-hook
 add-zsh-hook preexec __boo_preexec

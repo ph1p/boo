@@ -10,7 +10,7 @@ extension PaneView {
     /// before its title — `drawSingleTab` gates on the same predicate, so the
     /// measured slot and the drawn content can't disagree.
     func tabHasLeadingIcon(_ tab: Pane.Tab) -> Bool {
-        if tab.contentType != .terminal { return true }
+        if tab.contentType != .terminal || pane.tmuxOwned { return true }
         let process = tab.state.foregroundProcess
         return !process.isEmpty && !ProcessIcon.isShell(process) && ProcessIcon.icon(for: process) != nil
     }

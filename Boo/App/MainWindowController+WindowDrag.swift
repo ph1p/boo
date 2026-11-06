@@ -252,6 +252,11 @@ extension MainWindowController {
         guard manager.isManaged(self), manager.controller(atScreenPoint: point, excluding: nil) == nil,
             let workspace = appState.workspaceContainingPane(source.paneID)
         else { return }
+        if source.pane.tmuxOwned {
+            // tmux windows stay in the window that hosts their session.
+            if workspace.panes.count > 1 { tmuxBreakOut(source.paneID) }
+            return
+        }
         if workspace.totalTabCount == 1 {
             if let index = appState.workspaces.firstIndex(where: { $0 === workspace }) {
                 dropWorkspace(at: index, atScreenPoint: point)

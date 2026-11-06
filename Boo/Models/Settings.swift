@@ -157,6 +157,7 @@ final class AppSettings {
         static let secureKeyboardEntry = "secureKeyboardEntry"
         static let restoreScrollback = "restoreScrollback"
         static let tmuxIntegration = "tmuxIntegration"
+        static let tmuxMode = "tmuxMode"
         static let shortcutOverrides = "shortcutOverrides"
 
         static let paletteRecents = "paletteRecents"
@@ -597,6 +598,17 @@ final class AppSettings {
         set { set(newValue, forKey: K.tmuxIntegration) }
     }
 
+    /// What a plain `tmux` typed in a Boo shell does: switch to control mode
+    /// (`always`), ask first (`ask`), or run tmux as usual (`never`).
+    /// Read by the shell integration's `tmux` wrapper via `boo tmux mode`.
+    var tmuxMode: TmuxMode {
+        get {
+            guard tmuxIntegration else { return .never }
+            return UserDefaults.standard.string(forKey: K.tmuxMode).flatMap(TmuxMode.init(rawValue:)) ?? .ask
+        }
+        set { set(newValue.rawValue, forKey: K.tmuxMode) }
+    }
+
     // MARK: - Shortcuts
 
     /// Menu item id ("Terminal/Split Right") → shortcut spec ("cmd+shift+d");
@@ -701,6 +713,19 @@ final class AppSettings {
     deinit {
         if let observer = observer {
             NotificationCenter.default.removeObserver(observer)
+        }
+    }
+}
+
+/// See `AppSettings.tmuxMode`.
+enum TmuxMode: String, CaseIterable {
+    case always, ask, never
+
+    var label: String {
+        switch self {
+        case .always: "Always"
+        case .ask: "Ask"
+        case .never: "Never"
         }
     }
 }

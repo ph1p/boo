@@ -4,7 +4,7 @@ import Cocoa
 @MainActor
 struct PaletteItem: Identifiable {
     enum Kind: Int, CaseIterable {
-        case action, agent, workspace, tab, bookmark, host, theme, profile, recipe, task, history
+        case action, agent, workspace, tab, bookmark, host, tmux, theme, profile, recipe, task, history
 
         var title: String {
             switch self {
@@ -14,6 +14,7 @@ struct PaletteItem: Identifiable {
             case .tab: return "Tabs"
             case .bookmark: return "Bookmarks"
             case .host: return "SSH Hosts"
+            case .tmux: return "tmux"
             case .theme: return "Themes"
             case .profile: return "Profiles"
             case .recipe: return "Recipes"
@@ -45,15 +46,16 @@ struct PaletteQuery: Equatable {
         self.text = text
     }
 
-    /// `>` actions, `@` workspaces, `@ssh` hosts, `#` tabs, `:` themes and
-    /// profiles, `!` history.
+    /// `>` actions, `@` workspaces, `@ssh` hosts, `@tmux` sessions, `#` tabs,
+    /// `:` themes and profiles, `!` history.
     init(_ raw: String) {
         let trimmed = raw.trimmingCharacters(in: .whitespaces)
-        if trimmed.lowercased().hasPrefix("@ssh"),
-            trimmed.count == 4 || trimmed.dropFirst(4).first?.isWhitespace == true
-        {
-            kind = .host
-            text = String(trimmed.dropFirst(4)).trimmingCharacters(in: .whitespaces)
+        for (word, kind) in [("@ssh", PaletteItem.Kind.host), ("@tmux", .tmux)] {
+            guard trimmed.lowercased().hasPrefix(word),
+                trimmed.count == word.count || trimmed.dropFirst(word.count).first?.isWhitespace == true
+            else { continue }
+            self.kind = kind
+            text = String(trimmed.dropFirst(word.count)).trimmingCharacters(in: .whitespaces)
             return
         }
         let prefixes: [Character: PaletteItem.Kind] = [
@@ -154,7 +156,7 @@ enum PaletteRanker {
 @MainActor
 enum PaletteSources {
     static func items(menu: NSMenu? = NSApplication.shared.mainMenu) -> [PaletteItem] {
-        let places = workspaces() + tabs() + bookmarks() + hosts()
+        let places = workspaces() + tabs() + bookmarks() + hosts() + tmux()
         let looks = themes() + profiles()
         return actions(menu: menu) + agents() + places + looks + RecipesMenu.paletteItems() + projectTasks()
     }
@@ -299,6 +301,47 @@ enum PaletteSources {
                 subtitle: host.address == host.alias ? "" : host.address,
                 perform: { store.connect(host, split: false) })
         }
+    }
+
+    /// tmux sessions to start or attach, here and on ssh hosts. Sessions
+    /// Boo already shows are left out.
+    static func tmux() -> [PaletteItem] {
+        guard AppSettings.shared.tmuxIntegration else { return [] }
+        let shown = Set(
+            TmuxControlClient.all.compactMap { client in client.session.map { "\(client.remoteHost ?? ""):\($0)" } })
+        func start(_ name: String?, _ host: String?) -> @MainActor () -> Void {
+            { WindowManager.shared.activeController?.startTmuxSession(name, host: host) }
+        }
+        var items = [
+            PaletteItem(
+                id: "tmux:new", kind: .tmux, title: "New tmux Session",
+                subtitle: "Its windows open as workspaces", perform: start(nil, nil))
+        ]
+        for session in TmuxSessions.local() where !shown.contains(":\(session.name)") {
+            items.append(
+                PaletteItem(
+                    id: "tmux:attach:\(session.name)", kind: .tmux, title: "Attach tmux Session \(session.name)",
+                    subtitle: session.summary, perform: start(session.name, nil)))
+        }
+        let known = TmuxSessions.hosts
+        for host in known {
+            for session in TmuxSessions.remote(on: host) where !shown.contains("\(host):\(session.name)") {
+                items.append(
+                    PaletteItem(
+                        id: "tmux:attach:\(host):\(session.name)", kind: .tmux,
+                        title: "Attach tmux Session \(session.name) on \(host)",
+                        subtitle: session.summary, perform: start(session.name, host)))
+            }
+        }
+        HostsStore.shared.start()
+        let hosts = known + HostsStore.shared.hosts.map(\.alias).filter { !known.contains($0) }
+        for host in hosts {
+            items.append(
+                PaletteItem(
+                    id: "tmux:new:\(host)", kind: .tmux, title: "New tmux Session on \(host)",
+                    subtitle: "Over ssh", perform: start(nil, host)))
+        }
+        return items
     }
 
     /// Tasks of the focused local terminal's project; picking one runs it in a new tab.

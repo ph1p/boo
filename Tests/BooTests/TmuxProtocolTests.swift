@@ -16,6 +16,7 @@ final class TmuxProtocolTests: XCTestCase {
         XCTAssertEqual(line("%unlinked-window-close @3"), .windowClose(window: "@3"))
         XCTAssertEqual(line("%window-renamed @3 my shell"), .windowRenamed(window: "@3", name: "my shell"))
         XCTAssertEqual(line("%session-changed $0 0"), .sessionChanged(id: "$0", name: "0"))
+        XCTAssertEqual(line("%session-renamed $0 my work"), .sessionRenamed(id: "$0", name: "my work"))
         XCTAssertEqual(
             line("%layout-change @0 8205,80x24,0,0,0 8205,80x24,0,0,0 *"),
             .layoutChange(window: "@0", layout: "8205,80x24,0,0,0"))

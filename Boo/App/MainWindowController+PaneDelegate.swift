@@ -405,7 +405,13 @@ extension MainWindowController: PaneViewDelegate {
 
         let destWorkspace = appState.workspaces[workspaceIndex]
         let destPaneID = destWorkspace.activePaneID
-        guard let destPane = destWorkspace.pane(for: destPaneID), !sourcePane.tmuxOwned, !destPane.tmuxOwned
+        if sourcePane.tmuxOwned {
+            if destWorkspace !== sourceWorkspace, destWorkspace.tmuxWindowID != nil {
+                tmuxMovePane(paneID, toWorkspace: destWorkspace)
+            }
+            return
+        }
+        guard let destPane = destWorkspace.pane(for: destPaneID), !destPane.tmuxOwned
         else { return }
 
         // Extract the tabs and their views from the source pane

@@ -9,7 +9,8 @@ import Cocoa
 extension MainWindowController {
     /// "Group" submenu for a workspace's context menu, shared by the top bar and the side strip.
     func workspaceGroupMenuItems(forWorkspaceAt index: Int) -> [NSMenuItem] {
-        guard index >= 0, index < appState.workspaces.count else { return [] }
+        guard index >= 0, index < appState.workspaces.count, appState.workspaces[index].tmuxWindowID == nil
+        else { return [] }
         let ws = appState.workspaces[index]
         let wsID = ws.id
         let settings = AppSettings.shared
@@ -44,6 +45,7 @@ extension MainWindowController {
 
     /// Context menu for a group header (top-bar chip or side-strip header).
     func workspaceGroupHeaderMenuItems(groupID: String) -> [NSMenuItem] {
+        if let client = Self.tmuxClient(chipID: groupID) { return tmuxChipMenuItems(client) }
         guard let group = AppSettings.shared.workspaceGroup(id: groupID) else { return [] }
         let colorMenu = NSMenu()
         for color in WorkspaceColor.allCases {
@@ -101,6 +103,12 @@ extension MainWindowController {
     }
 
     func toggleWorkspaceGroup(_ groupID: String) {
+        // A tmux chip opens its session menu: the active window would stay
+        // visible anyway, so collapsing a session hides next to nothing.
+        if let client = Self.tmuxClient(chipID: groupID) {
+            showTmuxChipMenu(client)
+            return
+        }
         guard let group = AppSettings.shared.workspaceGroup(id: groupID) else { return }
         AppSettings.shared.setWorkspaceGroupCollapsed(id: groupID, !group.isCollapsed)
     }
@@ -117,7 +125,7 @@ extension MainWindowController {
     func stackWorkspace(from source: Int, onto target: Int) {
         let workspaces = appState.workspaces
         guard source != target, workspaces.indices.contains(source), workspaces.indices.contains(target),
-            !workspaces[source].isPinned, !workspaces[target].isPinned
+            workspaces[source].joinsGroups, workspaces[target].joinsGroups
         else { return }
         let moved = workspaces[source].id
         let anchor = workspaces[target].id
@@ -133,7 +141,7 @@ extension MainWindowController {
 
     /// Drag-drop of workspace `source` onto a group header: join that group at its end.
     func moveWorkspace(at source: Int, intoGroup groupID: String) {
-        guard appState.workspaces.indices.contains(source), !appState.workspaces[source].isPinned,
+        guard appState.workspaces.indices.contains(source), appState.workspaces[source].joinsGroups,
             let group = AppSettings.shared.workspaceGroup(id: groupID)
         else { return }
         let moved = appState.workspaces[source].id
@@ -174,7 +182,10 @@ extension MainWindowController {
     /// Group id per workspace index in this window; pinned workspaces count as ungrouped.
     private func workspaceGroupIDs() -> [String?] {
         let byMember = AppSettings.shared.workspaceGroups.groupIDByMember
-        return appState.workspaces.map { $0.isPinned ? nil : byMember[$0.id.uuidString] }
+        return appState.workspaces.map { ws in
+            if let chip = tmuxChip(for: ws) { return chip.id }
+            return ws.isPinned ? nil : byMember[ws.id.uuidString]
+        }
     }
 
     /// Keep each group's members contiguous in this window: later members are
@@ -213,6 +224,8 @@ extension MainWindowController {
         let above = groupOf(i - 1)
         let below = groupOf(i + 1)
         let member = wsID.uuidString
+        // tmux chips are not stored groups: nothing joins or leaves them.
+        if [own, above, below].contains(where: { $0?.hasPrefix(Self.tmuxChipPrefix) == true }) { return }
         if let above, above == below, above != own {
             AppSettings.shared.assignWorkspace(member: member, toGroup: above)
         } else if let own, above != own, below != own {
@@ -251,6 +264,8 @@ extension MainWindowController {
 
     /// A new window only makes sense when the group leaves something behind.
     func canMoveWorkspaceGroupToNewWindow(_ groupID: String) -> Bool {
+        // A tmux session stays with the window that runs its control client.
+        guard !groupID.hasPrefix(Self.tmuxChipPrefix) else { return false }
         let count = workspaceIDs(inGroup: groupID).count
         return count > 0 && count < appState.workspaces.count
     }
@@ -264,6 +279,7 @@ extension MainWindowController {
     /// A group header was dropped outside this window: move the whole group into
     /// the window under the cursor, or into a new window there.
     func dropWorkspaceGroup(_ groupID: String, atScreenPoint point: NSPoint) {
+        guard !groupID.hasPrefix(Self.tmuxChipPrefix) else { return }
         let manager = WindowManager.shared
         if let target = manager.controller(atScreenPoint: point, excluding: self) {
             let dropIndex = target.workspaceDropIndex(atScreenPoint: point)

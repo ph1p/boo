@@ -326,6 +326,9 @@ extension PaneView {
         ctx.fillEllipse(in: CGRect(x: pill.minX + 3, y: pill.minY + 3, width: size, height: size))
     }
 
+    /// Marks tabs that show a tmux pane, and tmux in menus.
+    static let tmuxSymbol = "rectangle.split.3x1"
+
     /// A plugin tab's own icon (review, diff, timeline), else its content type's.
     static func tabSymbolName(_ tab: Pane.Tab) -> String {
         if case .pluginView(let state) = tab.state.contentState { return state.iconSymbol }
@@ -352,6 +355,17 @@ extension PaneView {
         // Process icon (when a non-shell process is running) — terminal tabs only.
         // Gated on the same predicate `measuredTabWidth` uses to reserve the space.
         guard tabHasLeadingIcon(tab) else { return 0 }
+        // A tmux pane: its foreground process is Boo's bridge, so mark it as tmux.
+        if pane.tmuxOwned {
+            let color = WorkspaceColor.green.themed(theme) ?? theme.chromeText
+            Self.drawIconTile(tile, color: color, isActive: isActive)
+            guard
+                let drawn = Self.drawTabIcon(
+                    symbolName: Self.tmuxSymbol, color: color, x: x, midY: midY, isActive: isActive)
+            else { return 0 }
+            drawn.draw()
+            return drawn.width
+        }
         let process = tab.state.foregroundProcess
         let iconColor = ProcessIcon.themeColor(for: process, theme: theme, isActive: isActive)
         let iconSize: CGFloat = 14

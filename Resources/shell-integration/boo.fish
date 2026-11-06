@@ -43,3 +43,41 @@ function __boo_precmd --on-event fish_postexec
         python3 -c "import socket,json,os;s=socket.socket(socket.AF_UNIX,socket.SOCK_STREAM);s.settimeout(2);s.connect('$BOO_SOCK');s.sendall(json.dumps({'cmd':'agent_idle','pane_id':'$BOO_PANE_ID'}).encode()+b'\n');s.recv(64);s.close()" 2>/dev/null &
     end
 end
+
+# A plain `tmux` (new session or attach) can open as Boo tabs and splits:
+# tmux control mode (-CC). Settings › Terminal picks always, ask or never.
+# Inside tmux, with -C/-CC already given, or for any other subcommand it is
+# the usual tmux.
+function tmux --wraps tmux
+    if test -n "$TMUX"; or contains -- -C $argv; or contains -- -CC $argv
+        command tmux $argv
+        return
+    end
+    switch "$argv[1]"
+        case '' new new-session attach attach-session a at
+        case '*'
+            command tmux $argv
+            return
+    end
+    set -l mode (command boo tmux mode 2>/dev/null)
+    if test "$mode" = ask
+        read -l -P 'Open tmux as Boo tabs and splits? [Y]es [n]o [a]lways ne[v]er: ' answer; or return 130
+        switch "$answer"
+            case '' y Y yes
+                set mode always
+            case a A always
+                command boo tmux mode always >/dev/null 2>&1
+                set mode always
+            case v V never
+                command boo tmux mode never >/dev/null 2>&1
+                set mode never
+            case '*'
+                set mode never
+        end
+    end
+    if test "$mode" = always
+        command tmux -CC $argv
+    else
+        command tmux $argv
+    end
+end

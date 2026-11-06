@@ -26,15 +26,20 @@ extension MainWindowController {
         let theme = AppSettings.shared.theme
         // Pinned workspaces stay in the pinned section, outside any group.
         let wsGroups = appState.workspaces.map { $0.isPinned ? nil : groups.group(forMember: $0.id.uuidString) }
+        // A tmux session's windows share one chip, whatever groups say.
+        let tmuxChips = appState.workspaces.map(tmuxChip(for:))
         let wsItems = appState.workspaces.enumerated().map { (i, ws) in
             ToolbarView.WorkspaceItem(
                 name: ws.displayName, isActive: i == appState.activeWorkspaceIndex,
                 resolvedColor: ws.resolvedColor(theme: theme),
                 isPinned: ws.isPinned, color: ws.color, hasCustomColor: ws.customColor != nil,
                 hasActivity: ws.hasActivity && i != appState.activeWorkspaceIndex,
-                progress: TerminalProgress.summary(ws.progressReports), groupID: wsGroups[i]?.id,
-                groupName: wsGroups[i]?.name, groupCollapsed: wsGroups[i]?.isCollapsed ?? false,
-                groupColor: wsGroups[i]?.resolvedColor(theme: theme))
+                progress: TerminalProgress.summary(ws.progressReports),
+                groupID: tmuxChips[i]?.id ?? wsGroups[i]?.id,
+                groupName: tmuxChips[i]?.name ?? wsGroups[i]?.name,
+                groupCollapsed: tmuxChips[i] == nil && wsGroups[i]?.isCollapsed == true,
+                groupColor: tmuxChips[i] != nil
+                    ? WorkspaceColor.green.themed(theme) : wsGroups[i]?.resolvedColor(theme: theme))
         }
         toolbar.update(workspaces: wsItems, sidebarVisible: sidebarVisible)
         if let sideBar = sideWorkspaceBar {

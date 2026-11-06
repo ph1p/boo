@@ -83,7 +83,7 @@ final class TmuxControlClientTests: XCTestCase {
     func testAttachOpensWindowsAsWorkspaces() throws {
         attach("@0 1 8205,80x24,0,0{40x24,0,0,0,39x24,41,0,1} zsh", "@1 0 b25d,80x24,0,0,2 logs")
         XCTAssertEqual(host.opened.map(\.window), ["@0", "@1"])
-        XCTAssertEqual(host.opened.map(\.name), ["tmux: zsh", "tmux: logs"])
+        XCTAssertEqual(host.opened.map(\.name), ["zsh", "logs"])
         XCTAssertEqual(host.opened.map(\.focus), [true, false])
         let first = host.opened[0]
         XCTAssertEqual(Set(first.tree.leafIDs), Set(first.programs.keys))
@@ -115,12 +115,37 @@ final class TmuxControlClientTests: XCTestCase {
         XCTAssertEqual(host.layouts.last?.2.isEmpty, true)
     }
 
+    func testSessionRenameDetachAndKill() throws {
+        attach("@0 1 8205,80x24,0,0,0 zsh")
+        XCTAssertEqual(client.label, "session 0")
+        client.remoteHost = "web"
+        feed("%session-renamed $0 work")
+        XCTAssertEqual(client.label, "web: work")
+        feed("%session-renamed $9 other")
+        XCTAssertEqual(client.session, "work")
+
+        client.renameSession("it's")
+        XCTAssertEqual(gateway.commands.last, "rename-session -- 'it'\\''s'")
+
+        // Detaching leaves the session to come back to.
+        feed("%exit detached")
+        XCTAssertTrue(client.canReattach)
+        client.killSession()
+        XCTAssertFalse(client.canReattach)
+    }
+
+    func testServerExitCannotReattach() {
+        attach("@0 1 8205,80x24,0,0,0 zsh")
+        feed("%exit server exited")
+        XCTAssertFalse(client.canReattach)
+    }
+
     func testRenameAndClose() throws {
         attach("@0 1 8205,80x24,0,0,0 zsh")
         let workspace = try XCTUnwrap(host.opened.first).id
         feed("%window-renamed @0 build")
         XCTAssertEqual(host.renamed.first?.0, workspace)
-        XCTAssertEqual(host.renamed.first?.1, "tmux: build")
+        XCTAssertEqual(host.renamed.first?.1, "build")
         feed("%window-close @0")
         XCTAssertEqual(host.closed, [workspace])
         XCTAssertNil(TmuxControlClient.owning(workspace: workspace))
@@ -159,6 +184,48 @@ final class TmuxControlClientTests: XCTestCase {
         XCTAssertEqual(gateway.commands.last, "new-window")
         client.detach()
         XCTAssertEqual(gateway.commands.filter { $0 == "detach-client" }.count, 1)
+    }
+
+    func testDragCommandsMovePanes() throws {
+        attach("@0 1 8205,80x24,0,0{40x24,0,0,0,39x24,41,0,1} zsh", "@1 0 b25d,80x24,0,0,2 logs")
+        let left = try XCTUnwrap(host.opened[0].tree.leafIDs.first)
+        let right = try XCTUnwrap(host.opened[0].tree.leafIDs.last)
+        let other = try XCTUnwrap(host.opened[1].tree.leafIDs.first)
+        XCTAssertTrue(client.owns(pane: other))
+        XCTAssertFalse(client.owns(pane: UUID()))
+
+        client.join(pane: other, to: left, toward: .left, full: false)
+        XCTAssertEqual(gateway.commands.last, "join-pane -h -b -s %2 -t %0")
+        client.join(pane: other, to: right, toward: .down, full: true)
+        XCTAssertEqual(gateway.commands.last, "join-pane -v -f -s %2 -t %1")
+        client.swap(pane: left, with: right)
+        XCTAssertEqual(gateway.commands.last, "swap-pane -s %0 -t %1")
+        client.breakOut(pane: right)
+        XCTAssertEqual(gateway.commands.last, "break-pane -s %1")
+        let sent = gateway.commands.count
+        client.join(pane: left, to: left, toward: .right, full: false)
+        client.swap(pane: left, with: UUID())
+        XCTAssertEqual(gateway.commands.count, sent)
+    }
+
+    func testPaneMovedToAnotherWindowIsRelinked() throws {
+        attach("@0 1 8205,80x24,0,0{40x24,0,0,0,39x24,41,0,1} zsh", "@1 0 b25d,80x24,0,0,2 logs")
+        let moved = try XCTUnwrap(host.opened[0].tree.leafIDs.last)
+
+        // join-pane %1 into @1: tmux may report the new window first.
+        feed("%layout-change @1 8205,80x24,0,0{40x24,0,0,2,39x24,41,0,1} x *")
+        let (workspace, tree, programs) = try XCTUnwrap(host.layouts.last)
+        XCTAssertEqual(workspace, host.opened[1].id)
+        XCTAssertEqual(tree.leafIDs.count, 2)
+        XCTAssertFalse(tree.leafIDs.contains(moved))
+        XCTAssertEqual(programs.count, 1)
+        XCTAssertTrue(gateway.commands.contains("capture-pane -p -e -C -q -J -t %1 -S -1000"))
+
+        feed("%layout-change @0 b25d,80x24,0,0,0 x *")
+        XCTAssertEqual(host.layouts.last?.0, host.opened[0].id)
+        XCTAssertEqual(host.layouts.last?.1.leafIDs.count, 1)
+        // The old pane's bridge going away must not kill the moved pane.
+        XCTAssertFalse(gateway.commands.contains("kill-pane -t %1"))
     }
 
     func testGatewayExitClosesEverything() throws {

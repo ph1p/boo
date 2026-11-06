@@ -255,6 +255,9 @@ final class BooSocketServer: @unchecked Sendable {
         case "list_themes":
             handleListThemes(clientFD: clientFD)
             return
+        case "tmux_mode":
+            handleTmuxMode(json: json, clientFD: clientFD)
+            return
         case "get_workspaces":
             handleControlCommand(cmd: cmd, json: json, clientFD: clientFD)
             return

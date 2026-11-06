@@ -13,6 +13,7 @@ struct TerminalSettingsView: View {
     @State private var newTabCwdMode = AppSettings.shared.newTabCwdMode
     @State private var restoreScrollback = AppSettings.shared.restoreScrollback
     @State private var tmuxIntegration = AppSettings.shared.tmuxIntegration
+    @State private var tmuxMode = AppSettings.shared.tmuxMode
     @ObservedObject private var observer = SettingsObserver(topics: [.theme, .terminal])
 
     private let monoFonts = AppSettings.availableMonospaceFonts
@@ -78,7 +79,20 @@ struct TerminalSettingsView: View {
                         "Show `tmux -CC` sessions as workspaces and panes. Takes effect in terminals opened afterwards.",
                     isOn: $tmuxIntegration
                 )
-                .onChange(of: tmuxIntegration) { _, v in AppSettings.shared.tmuxIntegration = v }
+                .onChange(of: tmuxIntegration) { _, v in
+                    AppSettings.shared.tmuxIntegration = v
+                    tmuxMode = AppSettings.shared.tmuxMode
+                }
+                if tmuxIntegration {
+                    SettingStack(
+                        label: "Typing `tmux` opens it as tabs and splits",
+                        help:
+                            "Ask shows a one-line prompt in the shell. Start or attach sessions any time from the command palette (tmux)."
+                    ) {
+                        ThemedSegmentedPicker(selection: $tmuxMode) { $0.label }
+                            .onChange(of: tmuxMode) { _, v in AppSettings.shared.tmuxMode = v }
+                    }
+                }
             }
 
             TerminalLinksSection()

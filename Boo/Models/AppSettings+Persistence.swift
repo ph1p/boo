@@ -175,6 +175,7 @@ extension AppSettings {
             K.notificationExpiryMinutes: notificationExpiryMinutes,
             K.restoreScrollback: restoreScrollback,
             K.tmuxIntegration: tmuxIntegration,
+            K.tmuxMode: UserDefaults.standard.string(forKey: K.tmuxMode) ?? TmuxMode.ask.rawValue,
             K.shortcutOverrides: shortcutOverrides,
             K.workspaceGroups: workspaceGroups.map(\.dictionary)
         ]

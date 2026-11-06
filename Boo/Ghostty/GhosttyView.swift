@@ -526,7 +526,7 @@ import Cocoa
         if let tabID { RuleEngine.shared.unregister(tabID: tabID) }
         outputTap.detach(surface: surface)
         tmuxTap.detach(surface: surface)
-        endTmuxControl()
+        endTmuxControl(restore: false)
         self.surface = nil  // nil first to prevent callbacks reaching a freed surface
         GhosttyRuntime.shared.unregisterSurface(surface)
         ghostty_surface_free(surface)
@@ -633,9 +633,11 @@ extension GhosttyView: TmuxGateway {
                 }
                 let tmux = TmuxControlClient(gateway: self, host: controller)
                 tmuxControl = tmux
-                showTmuxOverlay(for: tmux)
+                // The terminal leaves its pane while tmux runs; the overlay
+                // covers it when it could not.
+                if !controller.tmuxGatewayEntered(self, client: tmux) { showTmuxOverlay(for: tmux) }
             case .exit:
-                endTmuxControl()
+                endTmuxControl(restore: true)
             case .line:
                 break
             }
@@ -643,11 +645,20 @@ extension GhosttyView: TmuxGateway {
         if !lines.isEmpty { tmuxControl?.receive(lines: lines) }
     }
 
-    private func endTmuxControl() {
-        tmuxControl?.gatewayExited()
+    /// `restore` puts a parked gateway back into a pane; false when it is being destroyed.
+    private func endTmuxControl(restore: Bool) {
+        guard let tmux = tmuxControl else { return }
         tmuxControl = nil
+        tmux.gatewayExited()
         tmuxOverlay?.removeFromSuperview()
         tmuxOverlay = nil
+        let controller = tmux.hostedBy as? MainWindowController
+        if restore {
+            controller?.tmuxGatewayExited(self, client: tmux)
+        } else {
+            tmux.parked = nil
+            controller?.refreshToolbar()
+        }
     }
 
     private func showTmuxOverlay(for tmux: TmuxControlClient) {

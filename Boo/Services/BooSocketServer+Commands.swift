@@ -126,6 +126,21 @@ extension BooSocketServer {
 
     // MARK: - Control Commands (dispatched to MainActor)
 
+    /// The shell's `tmux` wrapper asks this before every plain `tmux`;
+    /// `mode` set stores the user's "always"/"never" answer from its prompt.
+    func handleTmuxMode(json: [String: Any], clientFD: Int32) {
+        if let raw = json["mode"] as? String {
+            guard let mode = TmuxMode(rawValue: raw) else {
+                sendResponse(fd: clientFD, ok: false, error: "mode is always, ask or never")
+                return
+            }
+            DispatchQueue.main.async { AppSettings.shared.tmuxMode = mode }
+            sendJSON(fd: clientFD, dict: ["ok": true, "mode": mode.rawValue])
+            return
+        }
+        sendJSON(fd: clientFD, dict: ["ok": true, "mode": AppSettings.shared.tmuxMode.rawValue])
+    }
+
     func handleControlCommand(cmd: String, json: [String: Any], clientFD: Int32) {
         guard let handler = onControlCommand else {
             sendResponse(fd: clientFD, ok: false, error: "app not ready")

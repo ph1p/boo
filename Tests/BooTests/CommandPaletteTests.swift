@@ -82,6 +82,12 @@ final class CommandPaletteTests: XCTestCase {
         XCTAssertEqual(PaletteQuery("@sshd"), PaletteQuery(kind: .workspace, text: "sshd"))
     }
 
+    func testTmuxPrefixSelectsSessions() {
+        XCTAssertEqual(PaletteQuery("@tmux main"), PaletteQuery(kind: .tmux, text: "main"))
+        XCTAssertEqual(PaletteQuery("@tmux"), PaletteQuery(kind: .tmux, text: ""))
+        XCTAssertEqual(PaletteQuery("@tmuxer"), PaletteQuery(kind: .workspace, text: "tmuxer"))
+    }
+
     func testHistoryOnlyWithBangPrefix() {
         XCTAssertEqual(PaletteQuery("! git"), PaletteQuery(kind: .history, text: "git"))
         let items = [item(.action, "Git Pull"), item(.history, "git pull --rebase")]

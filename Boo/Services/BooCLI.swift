@@ -36,6 +36,7 @@ enum BooCLI {
                                        124 timed out
           read <agent> [--lines N]     Print the agent's screen (default 60 lines)
           status <state> [message]     Report this tab's state: working, blocked, done, error
+          tmux mode [always|ask|never] Print or set what a plain `tmux` in a Boo shell does
 
         Tasks started with `boo run` (their own worktree and branch):
           diff <agent> [--stat]        Print what the task changed
@@ -224,6 +225,19 @@ enum BooCLI {
                 return Output(text: "discarded \(target): its worktree and branch are deleted", status: 0)
             case "browser":
                 return try browser(rest, cwd: cwd) { try request($0) }
+            case "tmux":
+                guard rest.first == "mode", rest.count <= 2 else {
+                    return Output(text: "usage: boo tmux mode [always|ask|never]", status: 2)
+                }
+                var message: [String: Any] = ["cmd": "tmux_mode"]
+                if rest.count == 2 {
+                    guard TmuxMode(rawValue: rest[1]) != nil else {
+                        return Output(text: "usage: boo tmux mode [always|ask|never]", status: 2)
+                    }
+                    message["mode"] = rest[1]
+                }
+                let reply = try request(message, fromPane: false)
+                return Output(text: reply["mode"] as? String ?? "", status: 0)
             case "help", "-h", "--help":
                 return Output(text: usage, status: 0)
             default:

@@ -201,8 +201,8 @@ extension MainWindowController {
     }
 
     @objc func reopenTabAction(_ sender: Any?) {
-        guard let item = undoStack.popLast(), let workspace = activeWorkspace else { return }
-        if openTmuxWindow(in: workspace) { return }
+        // tmux panes hold no tabs: reopen in a regular workspace.
+        guard let item = undoStack.popLast(), let workspace = activateContentWorkspace() else { return }
 
         switch item {
         case .tab(let paneID, let cwd, _):

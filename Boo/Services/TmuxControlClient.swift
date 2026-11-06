@@ -134,8 +134,48 @@ final class TmuxControlClient {
         live.lazy.compactMap(\.client).first { $0.windows.values.contains { $0.workspace == workspace } }
     }
 
+    /// The client showing `pane`, if it is a tmux pane.
+    static func owning(pane: UUID) -> TmuxControlClient? {
+        live.lazy.compactMap(\.client).first { $0.owns(pane: pane) }
+    }
+
+    /// Every live client, oldest first.
+    static var all: [TmuxControlClient] { live.compactMap(\.client) }
+
+    static func client(id: UUID) -> TmuxControlClient? {
+        live.lazy.compactMap(\.client).first { $0.id == id }
+    }
+
+    /// Names this connection in the workspace bar (`tmux:<id>` group).
+    let id = UUID()
+    /// The window showing this session's workspaces.
+    var hostedBy: TmuxHost? { host }
+    /// The ssh host the session runs on, when Boo started it there.
+    var remoteHost: String?
+    /// The terminal that ran `tmux -CC`, out of sight while control mode lasts.
+    var parked: TmuxParkedGateway?
+
+    /// "session" or "host: session", for the session's chip and menus.
+    var label: String {
+        // tmux numbers unnamed sessions; a bare "0" says nothing on its own.
+        let name = session.map { $0.allSatisfy(\.isNumber) ? "session \($0)" : $0 } ?? "tmux"
+        return remoteHost.map { "\($0): \(name)" } ?? name
+    }
+
     /// The attached session's name, once tmux reported it.
     private(set) var session: String?
+    private var sessionID: String?
+    /// The text after `%exit`, once tmux said it is ending this client.
+    private var exitReason: String?
+    private var killed = false
+
+    /// The session outlived this connection (detached, or the gateway's
+    /// terminal or ssh went away), so attaching again makes sense.
+    var canReattach: Bool {
+        guard session != nil, !killed else { return false }
+        guard let exitReason else { return true }
+        return exitReason.hasPrefix("detached") || exitReason == "lost tty"
+    }
     /// Called once per run loop turn in which the session or its windows changed.
     var onChange: (() -> Void)?
     private var changePending = false
@@ -197,16 +237,23 @@ final class TmuxControlClient {
         case .windowRenamed(let window, let name):
             guard let workspace = windows[window]?.workspace else { return }
             windows[window]?.name = name
-            host?.tmuxRenameWorkspace(workspace, name: Self.title(name))
+            host?.tmuxRenameWorkspace(workspace, name: name)
             changed()
-        case .sessionChanged(_, let name):
+        case .sessionRenamed(let id, let name):
+            guard id == sessionID else { return }
+            session = name
+            changed()
+        case .sessionChanged(let id, let name):
+            sessionID = id
             if started {
                 for window in Array(windows.keys) { close(window: window) }
             }
             session = name
             start()
             changed()
-        case .exit, .end, .error, .other:
+        case .exit:
+            exitReason = String(decoding: raw.dropFirst(5), as: UTF8.self).trimmingCharacters(in: .whitespaces)
+        case .end, .error, .other:
             break
         }
     }
@@ -232,19 +279,60 @@ final class TmuxControlClient {
     // MARK: - Boo actions
 
     func split(pane id: UUID, toward edge: PaneDirection) {
-        guard let pane = panes.values.first(where: { $0.id == id }) else { return }
-        let flags: String
+        guard let pane = tmuxID(of: id) else { return }
+        send("split-window \(Self.flags(edge)) -t \(pane)")
+    }
+
+    /// Whether `pane` is one of this session's panes.
+    func owns(pane id: UUID) -> Bool { tmuxID(of: id) != nil }
+
+    /// Moves `source` next to `target`, which may be in another window;
+    /// `full` spans the target window's whole side.
+    func join(pane source: UUID, to target: UUID, toward edge: PaneDirection, full: Bool) {
+        guard source != target, let from = tmuxID(of: source), let to = tmuxID(of: target) else { return }
+        send("join-pane \(Self.flags(edge))\(full ? " -f" : "") -s \(from) -t \(to)")
+    }
+
+    func swap(pane a: UUID, with b: UUID) {
+        guard a != b, let first = tmuxID(of: a), let second = tmuxID(of: b) else { return }
+        send("swap-pane -s \(first) -t \(second)")
+    }
+
+    /// Moves `pane` into a new window of its own.
+    func breakOut(pane id: UUID) {
+        guard let pane = tmuxID(of: id) else { return }
+        send("break-pane -s \(pane)")
+    }
+
+    private func tmuxID(of id: UUID) -> String? {
+        panes.values.first { $0.id == id && !$0.closing }?.tmuxID
+    }
+
+    private static func flags(_ edge: PaneDirection) -> String {
         switch edge {
-        case .right: flags = "-h"
-        case .left: flags = "-h -b"
-        case .down: flags = "-v"
-        case .up: flags = "-v -b"
+        case .right: return "-h"
+        case .left: return "-h -b"
+        case .down: return "-v"
+        case .up: return "-v -b"
         }
-        send("split-window \(flags) -t \(pane.tmuxID)")
     }
 
     func newWindow() {
         send("new-window")
+    }
+
+    func renameSession(_ name: String) {
+        let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { return }
+        send("rename-session -- \(LinkResolver.shellQuote(name))")
+    }
+
+    /// Ends the session and every program in it; the gateway then exits.
+    func killSession() {
+        guard !ended else { return }
+        send("kill-session")
+        killed = true
+        ended = true
     }
 
     func show(workspace: UUID) {
@@ -286,7 +374,7 @@ final class TmuxControlClient {
 
     // MARK: - Windows
 
-    private static func title(_ name: String) -> String { "tmux: \(name)" }
+    /// The session's chip says tmux, so a window keeps its own name.
 
     private func open(_ info: TmuxProtocol.WindowInfo, focus: Bool) {
         guard !ended, windows[info.id] == nil, let host, let layout = TmuxProtocol.parseLayout(info.layout) else {
@@ -296,7 +384,7 @@ final class TmuxControlClient {
         let tree = tree(for: layout)
         guard
             let workspace = host.tmuxOpenWorkspace(
-                window: info.id, name: Self.title(info.name), tree: tree, programs: programs, focus: focus)
+                window: info.id, name: info.name, tree: tree, programs: programs, focus: focus)
         else {
             for pane in panes.values where pane.window == info.id { drop(pane) }
             return
@@ -338,7 +426,14 @@ final class TmuxControlClient {
     /// Links the layout's panes Boo doesn't show yet; returns each new pane's program.
     private func linkNewPanes(_ layout: TmuxProtocol.Layout, window: String) -> [UUID: String] {
         var programs: [UUID: String] = [:]
-        for tmuxID in layout.paneIDs where panes[tmuxID] == nil {
+        for tmuxID in layout.paneIDs {
+            if let known = panes[tmuxID] {
+                if known.window == window { continue }
+                // Moved here from another window (join-pane, break-pane): it gets a
+                // new Boo pane here; that window's layout drops the old one.
+                known.closing = true
+                drop(known)
+            }
             let pane = link(tmuxID, window: window)
             programs[pane.id] = pane.command
         }
@@ -373,7 +468,7 @@ final class TmuxControlClient {
 
     private func link(_ tmuxID: String, window: String) -> (id: UUID, command: String) {
         let id = UUID()
-        let registration = bridges.register { [weak self] event in self?.bridge(event, pane: tmuxID) }
+        let registration = bridges.register { [weak self] event in self?.bridge(event, pane: tmuxID, id: id) }
         let pane = PaneLink(id: id, tmuxID: tmuxID, window: window, token: registration.token)
         panes[tmuxID] = pane
         // -C octal-escapes ESC: a raw ESC in the reply would end the control mode DCS.
@@ -420,8 +515,9 @@ final class TmuxControlClient {
         }
     }
 
-    private func bridge(_ event: TmuxBridgeServer.Event, pane tmuxID: String) {
-        guard let pane = panes[tmuxID] else { return }
+    private func bridge(_ event: TmuxBridgeServer.Event, pane tmuxID: String, id: UUID) {
+        // `id` tells a pane that moved windows from its old bridge, still closing.
+        guard let pane = panes[tmuxID], pane.id == id else { return }
         switch event {
         case .connected:
             pane.connected = true

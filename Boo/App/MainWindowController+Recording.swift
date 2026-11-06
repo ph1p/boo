@@ -242,6 +242,7 @@ extension MainWindowController {
         if pv.pane.activeTab?.contentType == .terminal {
             add("Clear Scrollback", #selector(clearScrollbackAction(_:)), "eraser")
         }
+        if let tmux = tmuxMenuItem(for: pv) { menu.addItem(tmux) }
         guard multiPane else { return menu }
         menu.addItem(.separator())
         if hasActiveRecordings {

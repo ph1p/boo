@@ -54,6 +54,20 @@ final class BooCLITests: XCTestCase {
         XCTAssertTrue(run([]).1.isEmpty, "usage errors send nothing")
     }
 
+    func testTmuxModeReadsAndSets() {
+        let (current, asked) = run(["tmux", "mode"], reply: ["ok": true, "mode": "ask"])
+        XCTAssertEqual(current, BooCLI.Output(text: "ask", status: 0))
+        XCTAssertEqual(asked.first?["cmd"] as? String, "tmux_mode")
+        XCTAssertNil(asked.first?["mode"])
+
+        let (set, sent) = run(["tmux", "mode", "always"], reply: ["ok": true, "mode": "always"])
+        XCTAssertEqual(set.text, "always")
+        XCTAssertEqual(sent.first?["mode"] as? String, "always")
+
+        XCTAssertEqual(run(["tmux", "mode", "sometimes"]).0.status, 2)
+        XCTAssertEqual(run(["tmux"]).0.status, 2)
+    }
+
     func testSendReportsQueuedAndRefusals() {
         let (queued, sent) = run(
             ["send", "t3", "also", "lint"], reply: ["ok": true, "status": "queued", "to": "t3 docs"])
