@@ -62,29 +62,6 @@ struct FileTreeGitBadge: View {
     }
 }
 
-/// Scrolls the enclosing NSScrollView so this row stays visible while it holds the
-/// keyboard cursor. The sidebar's scroll view is AppKit-owned, so `ScrollViewReader`
-/// can't reach it.
-private struct ScrollIntoView: NSViewRepresentable {
-    let active: Bool
-
-    func makeNSView(context: Context) -> NSView { NSView() }
-
-    func updateNSView(_ view: NSView, context: Context) {
-        guard active, !context.coordinator.wasActive else {
-            context.coordinator.wasActive = active
-            return
-        }
-        context.coordinator.wasActive = true
-        DispatchQueue.main.async {
-            view.scrollToVisible(view.bounds.insetBy(dx: 0, dy: -6))
-        }
-    }
-
-    func makeCoordinator() -> Coordinator { Coordinator() }
-    final class Coordinator { var wasActive = false }
-}
-
 /// Click kind from the live modifier state — `onTapGesture` doesn't report it.
 @MainActor
 private func currentClickKind() -> FileTreeSelection.ClickKind {
@@ -155,7 +132,6 @@ struct FileTreeRowView: View {
     var style: RowStyle
     var rootPath: String
     var isSelected: Bool
-    var isCursor: Bool
     var treeFocused: Bool
     var gitStatus: FileGitStatus?
     var dimIgnored: Bool
@@ -215,7 +191,6 @@ struct FileTreeRowView: View {
             }
         }
         .help(info.map { "\(node.name)\n\($0)" } ?? node.name)
-        .background(ScrollIntoView(active: isCursor))
     }
 
     private func requestInfo() {
@@ -458,7 +433,6 @@ struct FileTreeMatchRowView: View {
     let absolutePath: String
     var style: RowStyle
     var isSelected: Bool
-    var isCursor: Bool
     var treeFocused: Bool
     var gitStatus: FileGitStatus?
     var onClick: (FileTreeSelection.ClickKind) -> Void
@@ -500,7 +474,6 @@ struct FileTreeMatchRowView: View {
         .onHover { isHovered = $0 }
         .onTapGesture { onClick(currentClickKind()) }
         .help(path)
-        .background(ScrollIntoView(active: isCursor))
         .contextMenu {
             Button("Reveal in Tree") { onReveal() }
             if !match.entry.isDirectory {

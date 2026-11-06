@@ -207,7 +207,8 @@ final class LocalFileTreePlugin: BooPluginProtocol, FileTreeBrowsing {
             name: title,
             icon: manifest.icon,
             content: treeView,
-            prefersOuterScrollView: true,
+            prefersOuterScrollView: false,
+            scrollsItself: true,
             generation: SidebarSection.generation(for: [cwd, isAIAgent ? "ai" : "plain", navigationKey(context)])
         )
         let infoSection = SidebarSection(

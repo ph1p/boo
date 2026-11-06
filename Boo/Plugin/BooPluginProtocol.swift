@@ -123,6 +123,10 @@ protocol BooPluginProtocol: BooPlugin {
     /// Plugins that already contain their own scroll view should return false.
     var prefersOuterScrollView: Bool { get }
 
+    /// Whether the detail view scrolls itself (a lazy list) yet should grow to fill
+    /// the sidebar like an outer-scrolled section. Overrides `prefersOuterScrollView`.
+    var scrollsItself: Bool { get }
+
     /// Content identity for the section built by the default `makeSidebarTab`.
     ///
     /// The host reuses the hosted view — and so skips the `rootView` swap — whenever the
@@ -218,6 +222,7 @@ extension BooPluginProtocol {
             icon: manifest.icon,
             content: view,
             prefersOuterScrollView: prefersOuterScrollView,
+            scrollsItself: scrollsItself,
             generation: sectionGeneration(context: context),
             identity: sectionIdentity(context: context)
         )
@@ -253,6 +258,7 @@ extension BooPluginProtocol {
     func makeStatusBarContent(context: TerminalContext) -> StatusBarContent? { nil }
     func sectionTitle(context: TerminalContext) -> String? { nil }
     var prefersOuterScrollView: Bool { true }
+    var scrollsItself: Bool { false }
 
     /// Default: a fresh value every cycle, i.e. "assume the content changed".
     ///

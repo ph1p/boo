@@ -713,6 +713,7 @@ private func makeNonGrowableSection(id: String, name: String = "Info") -> Sideba
                         icon: plugin.manifest.icon,
                         content: content,
                         prefersOuterScrollView: plugin.prefersOuterScrollView,
+                        scrollsItself: plugin.scrollsItself,
                         generation: 0
                     ))
             }
@@ -855,6 +856,26 @@ private func makeNonGrowableSection(id: String, name: String = "Info") -> Sideba
         XCTAssertFalse(
             v.sectionStates[0].contentContainer is NSScrollView,
             "Non-scroll section should use direct hosting, not NSScrollView")
+    }
+
+    func testSelfScrollingSectionUsesDirectHostingAndGrows() {
+        sectionGenCounter += 1
+        let section = SidebarSection(
+            id: "lazy",
+            name: "Lazy",
+            icon: "star",
+            content: AnyView(ScrollView { LazyVStack { Text("Row") } }),
+            prefersOuterScrollView: true,
+            scrollsItself: true,
+            generation: sectionGenCounter
+        )
+        XCTAssertFalse(section.prefersOuterScrollView, "scrollsItself overrides the outer scroll view")
+        let v = makePanelView()
+        v.updateSections([section], expandedIDs: ["lazy"])
+        XCTAssertFalse(
+            v.sectionStates[0].contentContainer is NSScrollView,
+            "A self-scrolling section must not sit in an outer NSScrollView (it would defeat LazyVStack)")
+        XCTAssertTrue(v.sectionStates[0].canGrow, "A self-scrolling section still grows to fill the sidebar")
     }
 
     // MARK: - Height Persistence Across Rebuilds

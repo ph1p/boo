@@ -115,6 +115,7 @@ struct FileTreeView: View {
     @State private var typeAhead = ""
     @State private var typeAheadAt = Date.distantPast
     @State private var rowCache = FileTreeRowCache()
+    @State private var scrollPosition = ScrollPosition(edge: .top)
     var actions: FileTreeActions
     /// Back/forward/up and terminal linking; nil hides the navigation bar.
     var navigation: FileTreeNavigation? = nil
@@ -161,21 +162,40 @@ struct FileTreeView: View {
                 )
             }
 
-            Group {
-                if filter.isActive {
-                    filterResults(cfg: cfg, git: git, order: order)
-                } else {
-                    tree(rows: rows, cfg: cfg, git: git, order: order)
+            // The tree scrolls itself so the LazyVStack only builds the rows on screen
+            // (inside the sidebar's outer NSScrollView every row was built and re-diffed).
+            ScrollViewReader { proxy in
+                ScrollView(.vertical) {
+                    Group {
+                        if filter.isActive {
+                            filterResults(cfg: cfg, git: git, order: order)
+                        } else {
+                            tree(rows: rows, cfg: cfg, git: git, order: order)
+                        }
+                    }
+                    .padding(.bottom, 6)
+                }
+                .id(ObjectIdentifier(root))
+                .scrollPosition($scrollPosition)
+                .onScrollGeometryChange(for: CGFloat.self) {
+                    $0.contentOffset.y
+                } action: { _, y in
+                    root.scrollOffset = y
+                }
+                .onAppear { scrollPosition.scrollTo(y: root.scrollOffset) }
+                .onChange(of: selection.cursor) { _, cursor in
+                    guard let cursor else { return }
+                    scrollToCursor(cursor, proxy: proxy)
                 }
             }
+            // Ideal height only seeds the sidebar's initial split; the panel sizes it after.
+            .frame(minHeight: 0, idealHeight: estimatedHeight(rowCount: rows.count, style: cfg))
             .focusable()
             .focused($treeFocused)
             .focusEffectDisabled()
             .onKeyPress(phases: .down) { handleKey($0, rows: rows, order: order) }
             .onCopyCommand { copyProviders(order: order) }
             .onCommand(#selector(NSResponder.selectAll(_:))) { selection.selectAll(order: order) }
-
-            Spacer(minLength: 0)
         }
         .frame(maxHeight: .infinity)
         .background(Color(nsColor: theme.sidebarBg))
@@ -263,7 +283,6 @@ struct FileTreeView: View {
                             isDragged: dragState.draggedPath == path,
                             style: cfg, rootPath: root.path,
                             isSelected: selection.contains(path),
-                            isCursor: selection.cursor == path,
                             treeFocused: treeFocused,
                             gitStatus: git?.status(for: path, isDirectory: row.node.isDirectory),
                             dimIgnored: AppSettings.shared.explorerDimIgnored,
@@ -295,7 +314,6 @@ struct FileTreeView: View {
                 FileTreeMatchRowView(
                     match: match, absolutePath: path, style: cfg,
                     isSelected: selection.contains(path),
-                    isCursor: selection.cursor == path,
                     treeFocused: treeFocused,
                     gitStatus: git?.status(for: path, isDirectory: match.entry.isDirectory),
                     onClick: { kind in
@@ -401,6 +419,21 @@ struct FileTreeView: View {
         var rowActions = actions
         rowActions.onBrowse = navigation?.browse
         return rowActions
+    }
+
+    /// Scroll the cursor row into view. Rows off screen don't exist in the lazy
+    /// stack, so the scroll has to go through their ForEach id.
+    private func scrollToCursor(_ cursor: String, proxy: ScrollViewProxy) {
+        // Filter rows are keyed by path relative to the root, tree rows by absolute path.
+        let prefix = root.path.hasSuffix("/") ? root.path : root.path + "/"
+        guard !filter.isActive || cursor.hasPrefix(prefix) else { return }
+        let id = filter.isActive ? String(cursor.dropFirst(prefix.count)) : cursor
+        // Next turn: a reveal selects the row in the same update that lists it.
+        DispatchQueue.main.async { proxy.scrollTo(id) }
+    }
+
+    private func estimatedHeight(rowCount: Int, style: RowStyle) -> CGFloat {
+        CGFloat(max(1, rowCount)) * (style.fontSize + 10) + 12
     }
 
     private func goUp() {

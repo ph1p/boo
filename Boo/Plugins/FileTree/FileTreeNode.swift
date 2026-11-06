@@ -83,6 +83,10 @@ final class FileTreeNode: Identifiable, ObservableObject, @unchecked Sendable {
     /// Git decorations for the tree. Only meaningful on the root node.
     @Published var gitStatus: FileTreeGitStatus?
 
+    /// Last scroll offset of the tree view showing this root, so switching terminals
+    /// returns to where the user left it. Only meaningful on the root node.
+    var scrollOffset: CGFloat = 0
+
     struct Entry: Sendable {
         let name: String
         let path: String

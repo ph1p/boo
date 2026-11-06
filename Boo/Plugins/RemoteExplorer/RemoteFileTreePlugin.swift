@@ -57,6 +57,7 @@ final class RemoteFileTreePlugin: BooPluginProtocol, FileTreeBrowsing {
     var onRequestCycleRerun: (() -> Void)?
 
     var prefersOuterScrollView: Bool { true }
+    var scrollsItself: Bool { true }
 
     var subscribedEvents: Set<PluginEvent> {
         [.processChanged, .remoteDirectoryListed, .focusChanged, .terminalClosed]

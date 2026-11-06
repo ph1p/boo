@@ -28,6 +28,10 @@ struct SidebarSection: Identifiable {
     let icon: String
     let content: AnyView
     let prefersOuterScrollView: Bool
+    /// Content that scrolls itself (a lazy list) but should still grow like an
+    /// outer-scrolled section. An outer NSScrollView would size its hosting view to
+    /// the full content, which makes SwiftUI build every row of a `LazyVStack`.
+    let scrollsItself: Bool
     /// Monotonic generation counter. `updateContentView` is skipped when generation matches.
     let generation: UInt64
 
@@ -38,12 +42,13 @@ struct SidebarSection: Identifiable {
     /// swaps. A new identity also counts as a new generation.
     init(
         id: String, name: String, icon: String, content: AnyView, prefersOuterScrollView: Bool,
-        generation: UInt64, identity: String? = nil
+        scrollsItself: Bool = false, generation: UInt64, identity: String? = nil
     ) {
         self.id = id
         self.name = name
         self.icon = icon
-        self.prefersOuterScrollView = prefersOuterScrollView
+        self.prefersOuterScrollView = prefersOuterScrollView && !scrollsItself
+        self.scrollsItself = scrollsItself
         if let identity {
             self.content = AnyView(content.id(identity))
             self.generation = Self.generation(for: [String(generation), identity])
@@ -267,10 +272,7 @@ class SidebarPanelView: NSView {
                     } else {
                         // Newly expanded — create content view, restore saved height
                         removeContentView(at: i)
-                        addContentView(
-                            at: i,
-                            content: section.content,
-                            prefersOuterScrollView: section.prefersOuterScrollView)
+                        addContentView(at: i, for: section)
                         sectionStates[i].contentHeight = resolvedHeight(
                             for: section.id, intrinsic: sectionStates[i].intrinsicHeight)
                         hadCollapseOrExpand = true
@@ -348,10 +350,7 @@ class SidebarPanelView: NSView {
 
             sectionGenerations[section.id] = section.generation
             if isExpanded {
-                addContentView(
-                    at: idx,
-                    content: section.content,
-                    prefersOuterScrollView: section.prefersOuterScrollView)
+                addContentView(at: idx, for: section)
                 sectionStates[idx].contentHeight = resolvedHeight(
                     for: section.id, intrinsic: sectionStates[idx].intrinsicHeight)
             }
@@ -370,25 +369,32 @@ class SidebarPanelView: NSView {
     }
 
     /// Add a content view for a section, optionally wrapped in an outer NSScrollView.
-    private func addContentView(at index: Int, content: AnyView, prefersOuterScrollView: Bool) {
+    private func addContentView(at index: Int, for section: SidebarSection) {
         // Wrap content in a top-leading aligned container to prevent centering
         let aligned = AnyView(
-            content
+            section.content
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading))
 
-        // Measure intrinsic content height
-        sectionStates[index].canGrow = prefersOuterScrollView
+        sectionStates[index].canGrow = section.prefersOuterScrollView || section.scrollsItself
 
-        if !prefersOuterScrollView {
+        if !section.prefersOuterScrollView {
             let hosting = NSHostingView(rootView: aligned)
             hosting.wantsLayer = true
             hosting.layer?.masksToBounds = true
             hosting.sizingOptions = [.intrinsicContentSize]
             hosting.frame.size.width = max(1, bounds.width)
+            // Measure intrinsic content height
             sectionStates[index].intrinsicHeight = hosting.fittingSize.height
             addSubview(hosting)
             sectionStates[index].contentContainer = hosting
-            observeIntrinsicSizeChanges(hosting, sectionID: sectionStates[index].id)
+            if section.scrollsItself {
+                // Sized by the panel like a growable section: the measurement above
+                // only seeds the initial split. Stop reporting it so row changes
+                // don't re-measure the whole list.
+                hosting.sizingOptions = []
+            } else {
+                observeIntrinsicSizeChanges(hosting, sectionID: sectionStates[index].id)
+            }
             return
         }
 
