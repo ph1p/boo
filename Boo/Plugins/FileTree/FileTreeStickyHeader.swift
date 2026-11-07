@@ -32,6 +32,22 @@ enum FileTreeSticky {
         return []  // Unreachable: at `maxRows` covered rows the capped list always fits.
     }
 
+    /// The top row that shows `rows[index]` just below its pinned folders.
+    ///
+    /// Scrolling the row itself to the top would hide it under its own folders. Take the
+    /// smallest lift `c` whose header (pinned for top row `index - c`) fits in `c` rows.
+    static func topIndex(revealing index: Int, in rows: [FileTreeView.FlatRow]) -> Int {
+        for lift in 0...min(index, maxRows) where pinnedRows(rows, topIndex: index - lift).count <= lift {
+            return index - lift
+        }
+        return max(0, index - maxRows)
+    }
+
+    /// Whether `rows[index]` sits under the header when `topIndex` is the first row in view.
+    static func isCovered(_ index: Int, in rows: [FileTreeView.FlatRow], topIndex: Int) -> Bool {
+        index < topIndex + pinnedRows(rows, topIndex: topIndex).count
+    }
+
     /// Ancestor folder rows of `rows[index]`, outermost first.
     private static func ancestors(of index: Int, in rows: [FileTreeView.FlatRow]) -> [FileTreeView.FlatRow] {
         var result: [FileTreeView.FlatRow] = []

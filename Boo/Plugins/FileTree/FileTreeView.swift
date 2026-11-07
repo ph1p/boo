@@ -201,7 +201,7 @@ struct FileTreeView: View {
                 .onAppear { scrollPosition.scrollTo(y: root.scrollOffset) }
                 .onChange(of: selection.cursor) { _, cursor in
                     guard let cursor else { return }
-                    scrollToCursor(cursor, proxy: proxy)
+                    scrollToCursor(cursor, rows: rows, stickyFolders: stickyFolders, proxy: proxy)
                 }
             }
             // Ideal height only seeds the sidebar's initial split; the panel sizes it after.
@@ -441,22 +441,40 @@ struct FileTreeView: View {
 
     /// Scroll the cursor row into view. Rows off screen don't exist in the lazy
     /// stack, so the scroll has to go through their ForEach id.
-    private func scrollToCursor(_ cursor: String, proxy: ScrollViewProxy) {
+    private func scrollToCursor(
+        _ cursor: String, rows: [FlatRow], stickyFolders: Bool, proxy: ScrollViewProxy
+    ) {
         // Filter rows are keyed by path relative to the root, tree rows by absolute path.
         let prefix = root.path.hasSuffix("/") ? root.path : root.path + "/"
         guard !filter.isActive || cursor.hasPrefix(prefix) else { return }
         let id = filter.isActive ? String(cursor.dropFirst(prefix.count)) : cursor
         // Next turn: a reveal selects the row in the same update that lists it.
-        DispatchQueue.main.async { proxy.scrollTo(id) }
+        DispatchQueue.main.async {
+            // A row above the view or under the pinned folders goes just below them.
+            // The tree can change before this turn runs, so the index is re-checked.
+            if stickyFolders, let index = rowCache.index(of: id), index < rows.count,
+                FileTreeSticky.isCovered(index, in: rows, topIndex: sticky.topIndex)
+            {
+                scrollBelowPinned(index, rows: rows, proxy: proxy)
+            } else {
+                proxy.scrollTo(id)
+            }
+        }
     }
 
     /// Scroll a pinned folder's own row to just below the folders pinned above it.
     private func revealPinned(_ row: FlatRow, rows: [FlatRow], proxy: ScrollViewProxy) {
-        guard let index = rowCache.index(of: row.id) else { return }
-        let target = max(0, index - min(row.depth, FileTreeSticky.maxRows))
         treeFocused = true
+        // A new cursor scrolls through `scrollToCursor`; only an unchanged one needs it here.
+        if selection.cursor == row.node.path, let index = rowCache.index(of: row.id) {
+            scrollBelowPinned(index, rows: rows, proxy: proxy)
+        }
         selection.select(row.node.path)
-        proxy.scrollTo(rows[target].id, anchor: .top)
+    }
+
+    private func scrollBelowPinned(_ index: Int, rows: [FlatRow], proxy: ScrollViewProxy) {
+        let top = FileTreeSticky.topIndex(revealing: index, in: rows)
+        proxy.scrollTo(rows[top].id, anchor: .top)
     }
 
     private func estimatedHeight(rowCount: Int, style: RowStyle) -> CGFloat {

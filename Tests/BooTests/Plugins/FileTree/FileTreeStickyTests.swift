@@ -56,6 +56,28 @@ final class FileTreeStickyTests: XCTestCase {
         XCTAssertEqual(pinned(3, in: []), [])
     }
 
+    /// A revealed row lands just below its pinned folders, never under them.
+    func testRevealTopKeepsRowBelowHeader() {
+        let rows = makeRows()
+        XCTAssertEqual(FileTreeSticky.topIndex(revealing: 0, in: rows), 0)
+        XCTAssertEqual(FileTreeSticky.topIndex(revealing: 1, in: rows), 0)  // a1
+        XCTAssertEqual(FileTreeSticky.topIndex(revealing: 2, in: rows), 0)  // x
+        XCTAssertEqual(FileTreeSticky.topIndex(revealing: 3, in: rows), 2)  // y under [a]
+        XCTAssertEqual(FileTreeSticky.topIndex(revealing: 5, in: rows), 5)  // b
+        for index in rows.indices {
+            let top = FileTreeSticky.topIndex(revealing: index, in: rows)
+            XCTAssertFalse(FileTreeSticky.isCovered(index, in: rows, topIndex: top), "row \(index)")
+        }
+    }
+
+    func testCoveredRows() {
+        let rows = makeRows()
+        XCTAssertTrue(FileTreeSticky.isCovered(2, in: rows, topIndex: 2))  // x under [a]
+        XCTAssertFalse(FileTreeSticky.isCovered(3, in: rows, topIndex: 2))
+        XCTAssertTrue(FileTreeSticky.isCovered(0, in: rows, topIndex: 2))  // above the view
+        XCTAssertFalse(FileTreeSticky.isCovered(0, in: rows, topIndex: 0))
+    }
+
     func testRowCacheIndexesRowIDs() {
         let cache = FileTreeRowCache()
         let root = FileTreeNode(name: "r", path: "/r", isDirectory: true)
