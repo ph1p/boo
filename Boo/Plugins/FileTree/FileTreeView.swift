@@ -116,6 +116,7 @@ struct FileTreeView: View {
     @State private var typeAheadAt = Date.distantPast
     @State private var rowCache = FileTreeRowCache()
     @State private var scrollPosition = ScrollPosition(edge: .top)
+    @State private var sticky = FileTreeStickyState()
     var actions: FileTreeActions
     /// Back/forward/up and terminal linking; nil hides the navigation bar.
     var navigation: FileTreeNavigation? = nil
@@ -144,6 +145,7 @@ struct FileTreeView: View {
         let flat = filter.isActive ? nil : rowCache.rows(for: root, showHidden: showHidden)
         let rows = flat?.rows ?? []
         let order = flat?.order ?? filter.matches.map { absolutePath($0.entry) }
+        let stickyFolders = AppSettings.shared.explorerStickyFolders && !filter.isActive
 
         VStack(alignment: .leading, spacing: 0) {
             if let navigation, AppSettings.shared.explorerShowNavigationBar {
@@ -175,8 +177,22 @@ struct FileTreeView: View {
                     }
                     .padding(.bottom, 6)
                 }
+                .overlay(alignment: .top) {
+                    if stickyFolders {
+                        FileTreeStickyHeader(
+                            state: sticky, rows: rows, style: cfg, git: git,
+                            background: Color(nsColor: theme.sidebarBg),
+                            separator: Color(nsColor: theme.separator),
+                            onSelect: { row in revealPinned(row, rows: rows, proxy: proxy) }
+                        )
+                    }
+                }
                 .id(ObjectIdentifier(root))
                 .scrollPosition($scrollPosition)
+                .onScrollTargetVisibilityChange(idType: String.self) { ids in
+                    guard stickyFolders else { return }
+                    sticky.update(topIndex: ids.lazy.compactMap { rowCache.index(of: $0) }.min() ?? 0)
+                }
                 .onScrollGeometryChange(for: CGFloat.self) {
                     $0.contentOffset.y
                 } action: { _, y in
@@ -293,6 +309,8 @@ struct FileTreeView: View {
                     }
                 }
             }
+            // Row ids feed the sticky header's "first row in view".
+            .scrollTargetLayout()
             .padding(.top, 6)
         }
     }
@@ -430,6 +448,15 @@ struct FileTreeView: View {
         let id = filter.isActive ? String(cursor.dropFirst(prefix.count)) : cursor
         // Next turn: a reveal selects the row in the same update that lists it.
         DispatchQueue.main.async { proxy.scrollTo(id) }
+    }
+
+    /// Scroll a pinned folder's own row to just below the folders pinned above it.
+    private func revealPinned(_ row: FlatRow, rows: [FlatRow], proxy: ScrollViewProxy) {
+        guard let index = rowCache.index(of: row.id) else { return }
+        let target = max(0, index - min(row.depth, FileTreeSticky.maxRows))
+        treeFocused = true
+        selection.select(row.node.path)
+        proxy.scrollTo(rows[target].id, anchor: .top)
     }
 
     private func estimatedHeight(rowCount: Int, style: RowStyle) -> CGFloat {
@@ -574,6 +601,8 @@ struct FileTreeView: View {
         /// Set for the hint row under an expanded folder that is empty or unreadable;
         /// `node` is then that folder. Placeholders never take part in selection.
         var placeholder: Placeholder? = nil
+        /// Index of the parent folder's row; nil for top-level rows.
+        var parentIndex: Int? = nil
 
         var id: String { placeholder == nil ? node.id : node.id + "\u{0}placeholder" }
     }

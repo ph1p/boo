@@ -234,6 +234,9 @@ final class AppSettings {
 
     var explorerShowNavigationBar: Bool { pluginBool("file-tree-local", "showNavigationBar", default: true) }
 
+    /// Pin the open parent folders of the rows in view to the top of the tree.
+    var explorerStickyFolders: Bool { pluginBool("file-tree-local", "stickyFolders", default: true) }
+
     /// Whether `..`, Go Up and Browse Folder move the explorer or `cd` the shell.
     var explorerNavigationMode: ExplorerNavigationMode {
         ExplorerNavigationMode(rawValue: pluginString("file-tree-local", "navigationMode", default: "browse"))

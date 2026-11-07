@@ -34,6 +34,9 @@ final class LocalFileTreePlugin: BooPluginProtocol, FileTreeBrowsing {
                 key: "showNavigationBar", type: .bool, label: "Show navigation bar",
                 defaultValue: AnyCodableValue(true), options: nil, group: "Display"),
             PluginManifest.SettingManifest(
+                key: "stickyFolders", type: .bool, label: "Pin parent folders while scrolling",
+                defaultValue: AnyCodableValue(true), options: nil, group: "Display"),
+            PluginManifest.SettingManifest(
                 key: "gitDecorations", type: .bool, label: "Show git status",
                 defaultValue: AnyCodableValue(true), options: nil, group: "Display"),
             PluginManifest.SettingManifest(

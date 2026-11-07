@@ -33,6 +33,9 @@ struct RowStyle {
         return color(for: status)
     }
 
+    /// Leading inset of a row's chevron at `depth`.
+    static func indent(depth: Int) -> CGFloat { CGFloat(depth) * 16 + 12 }
+
     func rowBackground(selected: Bool, focused: Bool, hovered: Bool) -> Color {
         if selected { return focused ? selectionColor : inactiveSelectionColor }
         return hovered ? hoverColor : .clear
@@ -86,6 +89,10 @@ final class FileTreeRowCache {
 
     private var key: Key?
     private var cached: (rows: [FileTreeView.FlatRow], order: [String]) = ([], [])
+    private var indexByID: [String: Int] = [:]
+
+    /// Position of a row id in the last rows built.
+    func index(of id: String) -> Int? { indexByID[id] }
 
     func rows(for root: FileTreeNode, showHidden: Bool) -> (rows: [FileTreeView.FlatRow], order: [String]) {
         let key = Key(root: ObjectIdentifier(root), revision: root.treeRevision, showHidden: showHidden)
@@ -93,24 +100,31 @@ final class FileTreeRowCache {
         var rows: [FileTreeView.FlatRow] = []
         /// Appends the visible children of `node`; returns how many it appended.
         @discardableResult
-        func collect(_ node: FileTreeNode, depth: Int, parent: String) -> Int {
+        func collect(_ node: FileTreeNode, depth: Int, parent: String, parentIndex: Int?) -> Int {
             guard let children = node.children else { return 0 }
             let visible = showHidden ? children : children.filter { !$0.name.hasPrefix(".") }
             for child in visible {
-                rows.append(FileTreeView.FlatRow(node: child, depth: depth, parentPath: parent))
+                let index = rows.count
+                rows.append(.init(node: child, depth: depth, parentPath: parent, parentIndex: parentIndex))
                 guard child.isDirectory && child.isExpanded else { continue }
-                let added = collect(child, depth: depth + 1, parent: child.path)
-                if child.loadFailed {
-                    rows.append(.init(node: child, depth: depth + 1, parentPath: child.path, placeholder: .failed))
-                } else if added == 0, child.children != nil {
-                    rows.append(.init(node: child, depth: depth + 1, parentPath: child.path, placeholder: .empty))
+                let added = collect(child, depth: depth + 1, parent: child.path, parentIndex: index)
+                let placeholder: FileTreeView.FlatRow.Placeholder? =
+                    child.loadFailed ? .failed : (added == 0 && child.children != nil ? .empty : nil)
+                if let placeholder {
+                    rows.append(
+                        .init(
+                            node: child, depth: depth + 1, parentPath: child.path, placeholder: placeholder,
+                            parentIndex: index))
                 }
             }
             return visible.count
         }
-        collect(root, depth: 0, parent: root.path)
+        collect(root, depth: 0, parent: root.path, parentIndex: nil)
         self.key = key
         cached = (rows, rows.compactMap { $0.placeholder == nil ? $0.node.path : nil })
+        indexByID = [:]
+        indexByID.reserveCapacity(rows.count)
+        for (index, row) in rows.enumerated() { indexByID[row.id] = index }
         return cached
     }
 }
@@ -156,7 +170,7 @@ struct FileTreeRowView: View {
         VStack(spacing: 0) {
             if dropLineAbove {
                 FileTreeDropLine(accentColor: style.accentColor)
-                    .padding(.leading, CGFloat(depth) * 16 + 12)
+                    .padding(.leading, RowStyle.indent(depth: depth))
             }
 
             rowContent
@@ -245,7 +259,7 @@ struct FileTreeRowView: View {
             FileTreeGitBadge(status: gitStatus, isDirectory: node.isDirectory, style: style)
                 .padding(.trailing, 10)
         }
-        .padding(.leading, CGFloat(depth) * 16 + 12)
+        .padding(.leading, RowStyle.indent(depth: depth))
         .padding(.vertical, 3)
         .background(
             RoundedRectangle(cornerRadius: 4)
@@ -531,7 +545,7 @@ struct FileTreePlaceholderRow: View {
             Spacer(minLength: 0)
         }
         // Lines up with the names of sibling rows (chevron 10 + spacing 5).
-        .padding(.leading, CGFloat(depth) * 16 + 12 + 15)
+        .padding(.leading, RowStyle.indent(depth: depth) + 15)
         .padding(.vertical, 3)
     }
 }
