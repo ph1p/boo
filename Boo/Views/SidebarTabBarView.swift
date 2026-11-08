@@ -131,11 +131,14 @@ class SidebarTabBarView: NSView {
         visibleTabs.compactMap { tabRects[$0.id] }
     }
 
+    /// The view itself is the tooltip owner: AppKit keeps the owner unretained,
+    /// so a temporary bridged `NSString` would be freed before the tooltip
+    /// timer fires and crash in `-[NSToolTipManager displayToolTip:]`.
     private func rebuildTooltips() {
         removeAllToolTips()
         for tab in visibleTabs {
             guard let rect = tabRects[tab.id] else { continue }
-            addToolTip(rect, owner: tab.label as NSString, userData: nil)
+            addToolTip(rect, owner: self, userData: nil)
         }
     }
 
@@ -506,5 +509,14 @@ class SidebarTabBarView: NSView {
 
         img.unlockFocus()
         return img
+    }
+}
+
+extension SidebarTabBarView: NSViewToolTipOwner {
+    func view(
+        _ view: NSView, stringForToolTip tag: NSView.ToolTipTag, point: NSPoint,
+        userData data: UnsafeMutableRawPointer?
+    ) -> String {
+        visibleTabs.first(where: { tabRects[$0.id]?.contains(point) == true })?.label ?? ""
     }
 }

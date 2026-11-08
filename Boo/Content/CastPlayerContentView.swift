@@ -513,14 +513,20 @@ final class CastScrubber: NSView {
         ring.stroke()
     }
 
+    /// The scrubber itself is the tooltip owner (AppKit does not retain it, so
+    /// a temporary `NSString` owner would dangle); the tag maps to the marker.
+    private var toolTipMarkers: [NSView.ToolTipTag: String] = [:]
+
     private func rebuildToolTips() {
         removeAllToolTips()
+        toolTipMarkers.removeAll()
         for (i, m) in markers.enumerated() {
             let mx = x(for: m.time)
             let label = m.label.isEmpty ? "Marker \(i + 1)" : m.label
-            addToolTip(
+            let tag = addToolTip(
                 NSRect(x: mx - Self.snap, y: 0, width: Self.snap * 2, height: bounds.height),
-                owner: "\(label) · \(CastPlayback.formatTime(m.time))" as NSString, userData: nil)
+                owner: self, userData: nil)
+            toolTipMarkers[tag] = "\(label) · \(CastPlayback.formatTime(m.time))"
         }
         needsDisplay = true
     }
@@ -616,5 +622,14 @@ final class PlayerTextButton: PaneControlItem {
         super.layout()
         let h = label.intrinsicContentSize.height
         label.frame = NSRect(x: 0, y: (bounds.height - h) / 2, width: bounds.width, height: h)
+    }
+}
+
+extension CastScrubber: NSViewToolTipOwner {
+    func view(
+        _ view: NSView, stringForToolTip tag: NSView.ToolTipTag, point: NSPoint,
+        userData data: UnsafeMutableRawPointer?
+    ) -> String {
+        toolTipMarkers[tag] ?? ""
     }
 }

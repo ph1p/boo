@@ -230,13 +230,17 @@ class TerminalScrollView: NSView {
                 owner: self, userInfo: ["area": Self.scrollerArea]))
     }
 
+    // `event.trackingArea` is only valid for entered/exited/cursor-update
+    // events; reading it on a mouseMoved event raises an
+    // NSInternalInconsistencyException, so hit-test the scroller by point.
     override func mouseMoved(with event: NSEvent) {
-        if event.trackingArea?.userInfo?["area"] as? String == Self.scrollerArea {
-            guard NSScroller.preferredScrollerStyle == .legacy else { return }
+        let point = convert(event.locationInWindow, from: nil)
+        if NSScroller.preferredScrollerStyle == .legacy, let scroller = scrollView.verticalScroller,
+            convert(scroller.bounds, from: scroller).contains(point)
+        {
             scrollView.flashScrollers()
-            return
         }
-        updateAgentButton(at: convert(event.locationInWindow, from: nil))
+        updateAgentButton(at: point)
     }
 
     override func mouseExited(with event: NSEvent) {
