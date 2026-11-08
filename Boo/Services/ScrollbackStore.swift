@@ -34,7 +34,10 @@ enum ScrollbackStore {
         let fm = FileManager.default
         try? fm.createDirectory(
             atPath: directory, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
-        fm.createFile(atPath: path(for: id), contents: data, attributes: [.posixPermissions: 0o600])
+        // Atomic: autosave rewrites files while a crash could cut a write short.
+        let file = path(for: id)
+        guard (try? data.write(to: URL(fileURLWithPath: file), options: .atomic)) != nil else { return }
+        try? fm.setAttributes([.posixPermissions: 0o600], ofItemAtPath: file)
     }
 
     /// Drops trailing blank lines (the empty rows below the prompt) and caps

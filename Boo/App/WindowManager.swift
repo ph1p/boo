@@ -68,6 +68,13 @@ final class WindowManager {
     func openInitialWindow() -> MainWindowController {
         installSharedHandlers()
         let snapshot = SessionStore.load()
+        // Restored tabs pick their agents up while the windows below are built.
+        let resumeAgents = shouldResumeAgents(in: snapshot)
+        CrashRecovery.resumeOnRestore = resumeAgents
+        defer {
+            CrashRecovery.resumeOnRestore = false
+            announceRecovery(resumed: resumeAgents ? snapshot.map(Self.agentCount) ?? 0 : 0)
+        }
         QuickTerminalController.shared.restore(snapshot?.quickTerminal)
         var saved = snapshot?.allWindows ?? []
         var keyIndex = snapshot?.resolvedKeyWindowIndex ?? 0
@@ -102,6 +109,80 @@ final class WindowManager {
     }
 
     /// Saves the session in the background, from whichever window is in front.
+    /// The agents saved in `snapshot`, across all windows.
+    static func agentCount(in snapshot: SessionSnapshot) -> Int {
+        snapshot.allWindows.reduce(0) { total, window in
+            total
+                + window.workspaces.reduce(0) { sum, ws in
+                    sum + ws.panes.reduce(0) { $0 + $1.tabs.filter { $0.agent != nil }.count }
+                }
+        }
+    }
+
+    /// Whether this launch restarts the agents saved in `snapshot`; asks first in `.ask` mode.
+    private func shouldResumeAgents(in snapshot: SessionSnapshot?) -> Bool {
+        guard let snapshot, CrashRecovery.shouldResumeAgents() else { return false }
+        let count = Self.agentCount(in: snapshot)
+        guard count > 0 else { return false }
+        switch AppSettings.shared.agentRecovery {
+        case .resume: return true
+        case .off: return false
+        case .ask:
+            let alert = NSAlert()
+            alert.messageText =
+                CrashRecovery.previousRunCrashed ? "Boo quit unexpectedly" : "Resume your agents?"
+            alert.informativeText =
+                "\(count) agent \(count == 1 ? "session was" : "sessions were") running. "
+                + "Resume \(count == 1 ? "it" : "them") in \(count == 1 ? "its tab" : "their tabs")?\n\n"
+                + "Change this in Settings → Terminal → Sessions."
+            alert.addButton(withTitle: "Resume")
+            alert.addButton(withTitle: "Don't Resume")
+            return alert.runModal() == .alertFirstButtonReturn
+        }
+    }
+
+    /// After a crash, says the session came back (and how many agents resume).
+    private func announceRecovery(resumed count: Int) {
+        guard CrashRecovery.previousRunCrashed else { return }
+        let message =
+            count > 0
+            ? "Recovered from a crash. \(count) agent\(count == 1 ? " resumes" : "s resume") in \(count == 1 ? "its tab" : "their tabs")."
+            : "Recovered your session after a crash."
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1) { BooAlert.showTransient(message) }
+    }
+
+    // MARK: - Autosave
+
+    private var autosaveTimer: Timer?
+    private var autosaveTicks = 0
+    static let autosaveInterval: TimeInterval = 30
+    /// Scrollback is costlier to read, so it's written every this many autosaves.
+    static let scrollbackAutosaveEvery = 4
+
+    /// Saves the session every 30 s and scrollback every 2 min, so a crash
+    /// loses little: tabs, their directories and the agents to resume.
+    func startAutosave() {
+        autosaveTimer?.invalidate()
+        let timer = Timer(timeInterval: Self.autosaveInterval, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.autosave() }
+        }
+        timer.tolerance = 5
+        RunLoop.main.add(timer, forMode: .common)
+        autosaveTimer = timer
+    }
+
+    private func autosave() {
+        guard !isTerminating, controllers.contains(where: \.persistsSession) else { return }
+        autosaveTicks += 1
+        for controller in controllers where controller.persistsSession {
+            controller.prepareSessionSave()
+        }
+        if autosaveTicks % Self.scrollbackAutosaveEvery == 0, AppSettings.shared.restoreScrollback {
+            writeScrollback()
+        }
+        saveSessionSoon()
+    }
+
     func saveSessionSoon() {
         guard let controller = activeController ?? controllers.first else { return }
         writeSession(from: controller, sync: false)
@@ -227,6 +308,12 @@ final class WindowManager {
     private func saveScrollback() {
         ScrollbackStore.clear()
         guard AppSettings.shared.restoreScrollback else { return }
+        writeScrollback()
+    }
+
+    /// Writes every open terminal's screen; files of closed tabs stay until
+    /// the next launch prunes them.
+    private func writeScrollback() {
         for controller in controllers where controller.persistsSession {
             for paneView in controller.paneViews.values {
                 for (tabID, view) in paneView.terminalViewsByTab {

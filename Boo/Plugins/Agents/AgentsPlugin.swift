@@ -229,20 +229,7 @@ final class AgentsPlugin: BooPluginProtocol {
             actions?.openTab?(.agent(kind: kind, workingDirectory: cwd, prompt: prompt ?? ""))
             return
         }
-        var command: String
-        switch kind {
-        case .claudeCode:
-            command = "claude"
-            if let id = resumeSessionID { command += " --resume \(shellEscape(id))" }
-        case .codex:
-            command = "codex"
-            if let id = resumeSessionID { command += " resume \(shellEscape(id))" }
-        case .openCode:
-            command = "opencode"
-            if let id = resumeSessionID { command += " --session \(shellEscape(id))" }
-        case .custom:
-            return
-        }
+        guard let id = resumeSessionID, let command = kind.resumeCommand(sessionID: id) else { return }
         actions?.openTab?(.terminalWithCommand(workingDirectory: cwd, command: command))
     }
 

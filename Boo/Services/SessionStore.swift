@@ -16,6 +16,8 @@ struct SessionTab: Codable, Sendable {
     let groupID: UUID?
     /// ID the tab's scrollback was saved under on quit (see ScrollbackStore).
     let scrollbackID: UUID?
+    /// The agent running in the tab when the session was saved (see CrashRecovery).
+    let agent: AgentResumePoint?
 
     init(
         contentState: ContentState? = nil,
@@ -26,7 +28,8 @@ struct SessionTab: Codable, Sendable {
         sidebarSectionOrder: [String: [String]]? = nil,
         selectedPluginTabID: String? = nil,
         groupID: UUID? = nil,
-        scrollbackID: UUID? = nil
+        scrollbackID: UUID? = nil,
+        agent: AgentResumePoint? = nil
     ) {
         self.contentState = contentState
         self.expandedPluginIDs = expandedPluginIDs
@@ -37,6 +40,7 @@ struct SessionTab: Codable, Sendable {
         self.selectedPluginTabID = selectedPluginTabID
         self.groupID = groupID
         self.scrollbackID = scrollbackID
+        self.agent = agent
     }
 }
 
@@ -205,7 +209,8 @@ enum SessionStore {
     }
 
     /// Build one window's session state from `appState`. Main thread only.
-    static func buildWindow(appState: AppState) -> SessionWindow {
+    /// `agents` maps a tab ID to the agent running in it.
+    static func buildWindow(appState: AppState, agents: [UUID: AgentResumePoint] = [:]) -> SessionWindow {
         // tmux windows live in tmux; the next attach shows them again.
         let saved = appState.workspaces.filter { $0.tmuxWindowID == nil }
         let active =
@@ -228,7 +233,8 @@ enum SessionStore {
                         sidebarSectionOrder: tab.state.sidebarSectionOrder,
                         selectedPluginTabID: tab.state.selectedPluginTabID,
                         groupID: tab.groupID,
-                        scrollbackID: tab.contentType == .terminal ? tab.id : nil
+                        scrollbackID: tab.contentType == .terminal ? tab.id : nil,
+                        agent: tab.contentType == .terminal ? agents[tab.id] : nil
                     )
                 }
                 return SessionPane(
@@ -396,6 +402,9 @@ enum SessionStore {
                         pane.updateContentState(at: idx, restoredState)
                         if let savedID = tab.scrollbackID, restoredState.contentType == .terminal {
                             ScrollbackStore.schedule(savedID: savedID, for: pane.tabs[idx].id)
+                        }
+                        if let agent = tab.agent, restoredState.contentType == .terminal {
+                            CrashRecovery.scheduleResume(agent, for: pane.tabs[idx].id)
                         }
                         pane.updatePluginState(
                             at: idx,

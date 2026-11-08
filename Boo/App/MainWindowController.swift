@@ -707,7 +707,7 @@ import SwiftUI
 
     /// This window's session entry. Main thread only.
     func sessionWindow() -> SessionWindow {
-        var entry = SessionStore.buildWindow(appState: appState)
+        var entry = SessionStore.buildWindow(appState: appState, agents: agentResumePoints())
         let isFullScreen = window?.styleMask.contains(.fullScreen) ?? false
         if let placement = currentPlacement() {
             entry.frame = placement.frame

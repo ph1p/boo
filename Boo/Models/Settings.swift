@@ -158,6 +158,8 @@ final class AppSettings {
         static let restoreScrollback = "restoreScrollback"
         static let tmuxIntegration = "tmuxIntegration"
         static let tmuxMode = "tmuxMode"
+        static let agentRecovery = "agentRecovery"
+        static let resumeAgentsAfterQuit = "resumeAgentsAfterQuit"
         static let shortcutOverrides = "shortcutOverrides"
 
         static let paletteRecents = "paletteRecents"
@@ -612,6 +614,24 @@ final class AppSettings {
         set { set(newValue.rawValue, forKey: K.tmuxMode) }
     }
 
+    // MARK: - Agent recovery
+
+    /// What happens to the agents that ran in a tab when Boo crashes: start
+    /// the same conversation again in the restored tab, ask first, or nothing.
+    var agentRecovery: AgentRecoveryMode {
+        get {
+            UserDefaults.standard.string(forKey: K.agentRecovery).flatMap(AgentRecoveryMode.init(rawValue:))
+                ?? .resume
+        }
+        set { set(newValue.rawValue, forKey: K.agentRecovery) }
+    }
+
+    /// Also resume agents after a normal quit (an update relaunch, ⌘Q).
+    var resumeAgentsAfterQuit: Bool {
+        get { bool(K.resumeAgentsAfterQuit, default: false) }
+        set { set(newValue, forKey: K.resumeAgentsAfterQuit) }
+    }
+
     // MARK: - Shortcuts
 
     /// Menu item id ("Terminal/Split Right") → shortcut spec ("cmd+shift+d");
@@ -716,6 +736,19 @@ final class AppSettings {
     deinit {
         if let observer = observer {
             NotificationCenter.default.removeObserver(observer)
+        }
+    }
+}
+
+/// See `AppSettings.agentRecovery`.
+enum AgentRecoveryMode: String, CaseIterable {
+    case resume, ask, off
+
+    var label: String {
+        switch self {
+        case .resume: "Resume"
+        case .ask: "Ask"
+        case .off: "Off"
         }
     }
 }

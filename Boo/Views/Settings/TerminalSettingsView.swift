@@ -14,6 +14,8 @@ struct TerminalSettingsView: View {
     @State private var restoreScrollback = AppSettings.shared.restoreScrollback
     @State private var tmuxIntegration = AppSettings.shared.tmuxIntegration
     @State private var tmuxMode = AppSettings.shared.tmuxMode
+    @State private var agentRecovery = AppSettings.shared.agentRecovery
+    @State private var resumeAgentsAfterQuit = AppSettings.shared.resumeAgentsAfterQuit
     @ObservedObject private var observer = SettingsObserver(topics: [.theme, .terminal])
 
     private let monoFonts = AppSettings.availableMonospaceFonts
@@ -66,12 +68,28 @@ struct TerminalSettingsView: View {
                 ToggleRow(
                     label: "Restore scrollback",
                     help:
-                        "On quit, save each terminal's output to ~/.boo/scrollback (owner-only) and show it again when the session is restored.",
+                        "Save each terminal's output to ~/.boo/scrollback (owner-only) on quit and every few minutes, and show it again when the session is restored.",
                     isOn: $restoreScrollback
                 )
                 .onChange(of: restoreScrollback) { _, v in
                     AppSettings.shared.restoreScrollback = v
                     if !v { ScrollbackStore.clear() }
+                }
+                SettingStack(
+                    label: "After a crash, agents",
+                    help:
+                        "Resume starts each tab's agent conversation again (Claude Code, Codex, OpenCode). Ask shows a prompt at launch."
+                ) {
+                    ThemedSegmentedPicker(selection: $agentRecovery) { $0.label }
+                        .onChange(of: agentRecovery) { _, v in AppSettings.shared.agentRecovery = v }
+                }
+                if agentRecovery != .off {
+                    ToggleRow(
+                        label: "Also after a normal quit",
+                        help: "Resume agents after quitting Boo or restarting it for an update, too.",
+                        isOn: $resumeAgentsAfterQuit
+                    )
+                    .onChange(of: resumeAgentsAfterQuit) { _, v in AppSettings.shared.resumeAgentsAfterQuit = v }
                 }
                 ToggleRow(
                     label: "Native tmux windows",

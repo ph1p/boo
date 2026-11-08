@@ -129,6 +129,21 @@ extension MainWindowController {
     /// Agents running in the workspace's terminal tabs, found by process
     /// detection (with or without Boo's hooks). Only the active workspace has
     /// a focused tab, whose state the bridge holds live.
+    /// The resumable agent in each tab, saved with the session so a crash
+    /// doesn't lose the conversation. Empty when agent recovery is off.
+    func agentResumePoints() -> [UUID: AgentResumePoint] {
+        guard AppSettings.shared.agentRecovery != .off else { return [:] }
+        var points: [UUID: AgentResumePoint] = [:]
+        for workspace in appState.workspaces where workspace.tmuxWindowID == nil {
+            for session in agentSessions(in: workspace) {
+                guard let id = session.agent.sessionID, session.agent.kind != .custom else { continue }
+                points[session.tabID] = AgentResumePoint(
+                    kind: session.agent.kind, sessionID: id, cwd: session.agent.cwd)
+            }
+        }
+        return points
+    }
+
     func agentSessions(in workspace: Workspace) -> [WorkspaceAgentSession] {
         let isActive = workspace.id == activeWorkspace?.id
         let bridge: TerminalBridge = self.bridge

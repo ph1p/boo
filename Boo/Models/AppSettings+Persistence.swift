@@ -36,7 +36,8 @@ extension AppSettings {
         K.historyIgnorePattern, K.historyRetentionDays, K.historySearchShortcutEnabled, K.agentCostTracking,
         K.agentBudgetPerTask,
         K.agentBudgetPerDay, K.portNotificationsEnabled, K.errorAgentButtonEnabled, K.notifyMinCommandSeconds,
-        K.notificationGroupBursts, K.notificationExpiryMinutes, K.shortcutOverrides
+        K.notificationGroupBursts, K.notificationExpiryMinutes, K.shortcutOverrides, K.agentRecovery,
+        K.resumeAgentsAfterQuit
     ]
 
     static let syncedCustomThemesKey = "customThemes"
@@ -176,6 +177,8 @@ extension AppSettings {
             K.restoreScrollback: restoreScrollback,
             K.tmuxIntegration: tmuxIntegration,
             K.tmuxMode: UserDefaults.standard.string(forKey: K.tmuxMode) ?? TmuxMode.ask.rawValue,
+            K.agentRecovery: agentRecovery.rawValue,
+            K.resumeAgentsAfterQuit: resumeAgentsAfterQuit,
             K.shortcutOverrides: shortcutOverrides,
             K.workspaceGroups: workspaceGroups.map(\.dictionary)
         ]

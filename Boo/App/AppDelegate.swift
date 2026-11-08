@@ -69,8 +69,11 @@ public enum BooMain {
         ActivityNotifier.shared.requestPermission()
         ActivityNotifier.shared.refreshCachedStatus()
 
+        // Before the session restores: it decides whether saved agents resume.
+        CrashRecovery.markLaunch()
         WindowManager.shared.openInitialWindow()
         didOpenInitialWindow = true
+        WindowManager.shared.startAutosave()
         ScrollbackStore.pruneUnclaimed()
         if !pendingOpenURLs.isEmpty {
             let urls = pendingOpenURLs
@@ -107,6 +110,8 @@ public enum BooMain {
         // `kubectl get -w` children otherwise outlive the app until the server
         // times the watch out.
         KubeStore.shared.stopWatching()
+        // Last: anything that dies before this counts as a crash at the next launch.
+        CrashRecovery.markCleanExit()
     }
 
     /// Finder double-click / Open With / Dock drop. Recordings open in a player tab.

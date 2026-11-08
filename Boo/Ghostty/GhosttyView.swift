@@ -159,7 +159,9 @@ import Cocoa
         func addEnv(_ key: String, _ value: String) {
             envPairs.append((key: Array(key.utf8CString), value: Array(value.utf8CString)))
         }
-        var launch = explicitLaunch ?? tabID.flatMap { Self.pendingLaunch.removeValue(forKey: $0) }
+        var launch =
+            explicitLaunch ?? tabID.flatMap { Self.pendingLaunch.removeValue(forKey: $0) }
+            ?? tabID.flatMap(CrashRecovery.takeResume(for:))
         // A tab starts with its profile's shell, env and cwd (rules can only
         // see the starting directory at this point).
         if explicitLaunch == nil, tabID != nil,
