@@ -11,7 +11,6 @@ A native macOS terminal with workspaces, split panes, a file explorer and agent 
 <p align="center">
   <img width="90%" alt="Boo with split panes and the file explorer" src="./documentation/public/app.png" />
   <img width="90%" alt="Boo with a git diff and the Git sidebar" src="./documentation/public/git.png" />
-  <img width="60%" alt="Boo Settings" src="./documentation/public/settings.png" />
 </p>
 
 ## Install
