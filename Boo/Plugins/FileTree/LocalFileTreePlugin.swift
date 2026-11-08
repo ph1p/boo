@@ -176,7 +176,7 @@ final class LocalFileTreePlugin: BooPluginProtocol, FileTreeBrowsing {
         open(path, terminalID: terminal.terminalID, terminalCwd: terminal.cwd, canSendToTerminal: canSendToTerminal)
     }
 
-    static func cdCommand(_ path: String) -> String { "cd \(shellEscape(path))\r" }
+    static func cdCommand(_ path: String) -> String { ShellCommand.cd(shellEscape(path)) }
 
     /// The bar's path label: relative to the terminal folder when inside it, else
     /// `~`-abbreviated. Also part of the navigation generation key.
@@ -345,7 +345,7 @@ final class LocalFileTreePlugin: BooPluginProtocol, FileTreeBrowsing {
                     ? (ProcessInfo.processInfo.environment["EDITOR"] ?? "vi")
                     : configured
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                    actions?.sendToTerminal?("\(editorCmd) \(shellEscape(path))\r")
+                    actions?.sendToTerminal?(ShellCommand.hidden("\(editorCmd) \(shellEscape(path))"))
                 }
             case .external:
                 NSWorkspace.shared.open(URL(fileURLWithPath: path))

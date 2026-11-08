@@ -392,7 +392,7 @@ extension MainWindowController {
         let idx = sender.tag
         let bookmarks = BookmarkService.shared.bookmarks
         guard idx >= 0, idx < bookmarks.count else { return }
-        sendRawToActivePane("cd \(shellEscape(bookmarks[idx].path))\r")
+        sendRawToActivePane(ShellCommand.cd(shellEscape(bookmarks[idx].path)))
     }
 
     // MARK: - Plugins Menu

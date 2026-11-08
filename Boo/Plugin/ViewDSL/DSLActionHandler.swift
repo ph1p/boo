@@ -18,7 +18,7 @@ final class DSLActionHandler {
         switch action.type {
         case "cd":
             guard let path = action.path, !path.isEmpty else { return nil }
-            sendToTerminal?("cd \(RemoteExplorer.shellEscPath(path))\r")
+            sendToTerminal?(ShellCommand.cd(RemoteExplorer.shellEscPath(path)))
             return "Changed directory to \(path)"
 
         case "open":

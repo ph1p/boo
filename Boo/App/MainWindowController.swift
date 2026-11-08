@@ -550,7 +550,7 @@ import SwiftUI
         statusBar.translatesAutoresizingMaskIntoConstraints = false
         statusBar.onBranchSwitch = { [weak self] branch in
             let escaped = RemoteExplorer.shellEscPath(branch)
-            self?.sendRawToActivePane("git switch \(escaped)\r")
+            self?.sendRawToActivePane(ShellCommand.hidden("git switch \(escaped)"))
         }
         statusBar.onSidebarToggle = { [weak self] in
             self?.toggleSidebar(userInitiated: true)

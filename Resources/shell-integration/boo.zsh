@@ -14,6 +14,9 @@ __boo_path() {
     [[ "$PATH" == "$HOME/.boo/bin:"* ]] || export PATH="$HOME/.boo/bin:${PATH//$HOME\/.boo\/bin:/}"
 }
 __boo_path
+# Boo types some commands for you (cd from the file tree, bookmarks, editor
+# opens) with a leading space; this keeps them out of shell history.
+setopt HIST_IGNORE_SPACE
 
 # Capture integration dir at source time (expands correctly for sourced files).
 _BOO_INTEGRATION_DIR="${${(%):-%x}:h}"

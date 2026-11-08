@@ -20,6 +20,32 @@ __boo_path() {
     esac
 }
 __boo_path
+# Boo types some commands for you (cd from the file tree, bookmarks, editor
+# opens) with a leading space; ignorespace keeps them out of shell history.
+# Checked before each prompt too: rc files and bash-preexec may rewrite it.
+__boo_histcontrol() {
+    case ":${HISTCONTROL-}:" in
+    *:ignorespace:* | *:ignoreboth:*) ;;
+    *) HISTCONTROL="${HISTCONTROL:+$HISTCONTROL:}ignorespace" ;;
+    esac
+}
+__boo_histcontrol
+# Newest history entry into _BOO_HIST_NUM and _BOO_HIST_CMD (both "" when
+# history is empty or off). Sets globals rather than printing: one fork a call.
+__boo_hist() {
+    local h re='^ *([0-9]+)[* ] (.*)$'
+    h=$(HISTTIMEFORMAT='' builtin history 1)
+    if [[ $h =~ $re ]]; then
+        _BOO_HIST_NUM=${BASH_REMATCH[1]}
+        _BOO_HIST_CMD=${BASH_REMATCH[2]}
+    else
+        _BOO_HIST_NUM=""
+        _BOO_HIST_CMD=""
+    fi
+}
+# History entry number at the last prompt: a command that leaves it unchanged
+# never reached history (leading space).
+_BOO_PROMPT_HIST=""
 _BOO_INTEGRATION_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Command tracking via OSC 2 (SET_TITLE) with BOO_CMD: prefix.
@@ -33,22 +59,33 @@ __boo_osc() {
 _BOO_AGENT_CMDS="claude codex opencode aider"
 _BOO_LAST_WAS_AGENT=0
 
+# $1: the command line. $2: set when the caller already checked it reached history.
 __boo_preexec() {
-    local cmd
-    cmd="${1%% *}"
+    local line="$1" cmd
+    # A line that never reached history leaves `history 1` on the previous
+    # command, which bash-preexec then passes here: report no command instead.
+    if [[ -z "$2" && -n "$_BOO_PROMPT_HIST" ]]; then
+        __boo_hist
+        [[ "$_BOO_HIST_NUM" == "$_BOO_PROMPT_HIST" ]] && line=""
+    fi
+    cmd="${line%% *}"
     cmd="${cmd##*/}"  # basename
     if [[ " $_BOO_AGENT_CMDS " == *" $cmd "* ]]; then
         _BOO_LAST_WAS_AGENT=1
     else
         _BOO_LAST_WAS_AGENT=0
     fi
-    __boo_osc "cmd_start;$1"
+    __boo_osc "cmd_start;$line"
 }
 
 __boo_precmd() {
     local code=$?
     __boo_osc "cmd_end;$code"
     __boo_path
+    __boo_histcontrol
+    __boo_hist
+    _BOO_PROMPT_HIST=$_BOO_HIST_NUM
+    _BOO_REPORTED=""
     if [[ "$_BOO_LAST_WAS_AGENT" == "1" && -n "$BOO_SOCK" && -n "$BOO_PANE_ID" ]]; then
         _BOO_LAST_WAS_AGENT=0
         python3 -c "import socket,json,os;s=socket.socket(socket.AF_UNIX,socket.SOCK_STREAM);s.settimeout(2);s.connect('$BOO_SOCK');s.sendall(json.dumps({'cmd':'agent_idle','pane_id':'$BOO_PANE_ID'}).encode()+b'\n');s.recv(64);s.close()" 2>/dev/null &
@@ -95,14 +132,16 @@ if declare -f __bp_install >/dev/null 2>&1; then
     preexec_functions+=(__boo_preexec)
 else
     # Fallback: DEBUG trap fires before each command; PROMPT_COMMAND fires before each prompt.
-    __boo_last_cmd=""
+    # The trap fires for every simple command, PROMPT_COMMAND's included.
+    # Report a line's first command once (precmd re-arms); a history entry
+    # number unchanged since the prompt means nothing new reached history.
+    _BOO_REPORTED=""
     __boo_debug_trap() {
-        local cmd
-        cmd=$(history 1 | sed 's/^[[:space:]]*[0-9]*[[:space:]]*//')
-        if [[ "$cmd" != "$__boo_last_cmd" && -n "$cmd" ]]; then
-            __boo_last_cmd="$cmd"
-            __boo_preexec "$cmd"
-        fi
+        [[ -n "$_BOO_REPORTED" ]] && return
+        __boo_hist
+        [[ -z "$_BOO_HIST_NUM" || "$_BOO_HIST_NUM" == "$_BOO_PROMPT_HIST" ]] && return
+        _BOO_REPORTED=1
+        __boo_preexec "$_BOO_HIST_CMD" checked
     }
     trap '__boo_debug_trap' DEBUG
 

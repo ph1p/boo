@@ -118,7 +118,7 @@ final class RemoteFileTreePlugin: BooPluginProtocol, FileTreeBrowsing {
         onRequestCycleRerun?()
     }
 
-    static func cdCommand(_ path: String) -> String { "cd \(RemoteExplorer.shellEscPath(path))\r" }
+    static func cdCommand(_ path: String) -> String { ShellCommand.cd(RemoteExplorer.shellEscPath(path)) }
 
     /// The bar's path label: relative to the terminal folder when inside it, else
     /// abbreviated against the remote home.
@@ -325,7 +325,7 @@ final class RemoteFileTreePlugin: BooPluginProtocol, FileTreeBrowsing {
         {
             let configured = AppSettings.shared.fileEditorCommand.trimmingCharacters(in: .whitespaces)
             let editor = configured.isEmpty ? "${EDITOR:-vi}" : configured
-            actions?.sendToTerminal?("\(editor) \(RemoteExplorer.shellEscPath(path))\r")
+            actions?.sendToTerminal?(ShellCommand.hidden("\(editor) \(RemoteExplorer.shellEscPath(path))"))
             return
         }
         fetchToCache(path) { [weak self] local in

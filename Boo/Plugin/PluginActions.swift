@@ -54,7 +54,7 @@ final class PluginActions {
     }
 
     func cd(to path: String) {
-        sendToTerminal?("cd \(RemoteExplorer.shellEscPath(path))\r")
+        sendToTerminal?(ShellCommand.cd(RemoteExplorer.shellEscPath(path)))
     }
 
     func exec(_ command: String) {

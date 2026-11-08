@@ -250,7 +250,7 @@ enum PaletteSources {
                 subtitle: abbreviate(bookmark.path),
                 perform: {
                     WindowManager.shared.activeController?.sendRawToActivePane(
-                        "cd \(shellEscape(bookmark.path))\r")
+                        ShellCommand.cd(shellEscape(bookmark.path)))
                 })
         }
     }

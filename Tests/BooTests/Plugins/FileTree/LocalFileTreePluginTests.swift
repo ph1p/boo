@@ -303,7 +303,7 @@ final class LocalFileTreePluginTests: XCTestCase {
             _ = plugin.makeDetailView(context: ctx)
 
             plugin.open(sub.path, terminal: ctx.terminal, canSendToTerminal: true)
-            XCTAssertEqual(sent, ["cd \(shellEscape(sub.path))\r"])
+            XCTAssertEqual(sent, [" cd \(shellEscape(sub.path))\r"])
             XCTAssertEqual(plugin.rootPath(for: ctx.terminal), tmpDir.path, "root waits for the shell")
 
             // An AI agent owns the terminal: browse instead of typing into its prompt.

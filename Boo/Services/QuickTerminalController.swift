@@ -330,7 +330,7 @@ final class QuickTerminalController: NSObject, NSWindowDelegate, NSMenuItemValid
     }
 
     @objc func clearScrollbackAction(_ sender: Any?) {
-        activeHost?.terminal?.sendRaw("printf '\\033[3J\\033[2J\\033[H'\r")
+        activeHost?.terminal?.sendRaw(ShellCommand.clearScrollback)
     }
 
     @objc func jumpToPreviousPromptAction(_ sender: Any?) { focusedTerminal?.jumpToPrompt(-1) }

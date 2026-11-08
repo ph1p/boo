@@ -44,12 +44,3 @@ func folderIcon(for name: String) -> String {
     default: return "folder.fill"
     }
 }
-
-/// Shell-escape a path using single quotes.
-func shellEscape(_ path: String) -> String {
-    let special = CharacterSet(charactersIn: " '\"\\$`!#&|;(){}[]<>*?~\t\n")
-    if path.unicodeScalars.contains(where: { special.contains($0) }) {
-        return "'" + path.replacingOccurrences(of: "'", with: "'\\''") + "'"
-    }
-    return path
-}

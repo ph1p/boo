@@ -62,7 +62,7 @@ extension MainWindowController {
 
     @objc func clearScrollbackAction(_ sender: Any?) {
         // Clear scrollback + screen via shell command
-        sendRawToActivePane("printf '\\033[3J\\033[2J\\033[H'\r")
+        sendRawToActivePane(ShellCommand.clearScrollback)
     }
 
     @objc func saveAction(_ sender: Any?) {
@@ -259,7 +259,7 @@ extension MainWindowController {
         let lineArg = line.map { " +\($0)" } ?? ""
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-            self?.sendRawToActivePane("\(editorCmd)\(lineArg) \(shellEscape(path))\r")
+            self?.sendRawToActivePane(ShellCommand.hidden("\(editorCmd)\(lineArg) \(shellEscape(path))"))
         }
     }
 
