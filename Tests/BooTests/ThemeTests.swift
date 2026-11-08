@@ -101,7 +101,7 @@ final class ThemeTests: XCTestCase {
         let original = settings.themeName
 
         settings.themeName = "NonExistentTheme"
-        XCTAssertEqual(settings.theme.name, "Default Dark")
+        XCTAssertEqual(settings.theme.name, "GitHub Dark")
 
         settings.themeName = original
     }

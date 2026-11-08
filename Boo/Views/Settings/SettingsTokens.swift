@@ -68,5 +68,5 @@ struct Tokens {
 // SwiftUI skips re-rendering rows whose stored inputs didn't change, so a
 // theme switch leaves them painted with the previous theme's colors.
 extension EnvironmentValues {
-    @Entry var tokens: Tokens = Tokens(theme: .defaultDark)
+    @Entry var tokens: Tokens = Tokens(theme: .githubDark)
 }

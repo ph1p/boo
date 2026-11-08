@@ -175,8 +175,8 @@ struct ThemeRow: View {
                         customs.removeAll { $0.name == theme.name }
                         AppSettings.shared.customThemes = customs
                         if selectedTheme == theme.name {
-                            selectedTheme = "Default Dark"
-                            AppSettings.shared.themeName = "Default Dark"
+                            selectedTheme = "GitHub Dark"
+                            AppSettings.shared.themeName = "GitHub Dark"
                         }
                     }
                 }
