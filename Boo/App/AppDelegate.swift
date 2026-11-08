@@ -23,6 +23,7 @@ public enum BooMain {
     /// Files opened before the first window exists (Finder launch).
     private var pendingOpenURLs: [URL] = []
     private var didOpenInitialWindow = false
+    private var terminationSignalSource: DispatchSourceSignal?
 
     public func applicationDidFinishLaunching(_ notification: Notification) {
         // ssh/kubectl spawns need the login shell's SSH_AUTH_SOCK / PATH / KUBECONFIG;
@@ -71,6 +72,7 @@ public enum BooMain {
 
         // Before the session restores: it decides whether saved agents resume.
         CrashRecovery.markLaunch()
+        installTerminationSignalHandler()
         WindowManager.shared.openInitialWindow()
         didOpenInitialWindow = true
         WindowManager.shared.startAutosave()
@@ -98,6 +100,25 @@ public enum BooMain {
 
         // Start Sparkle so it can manage automatic update checks and installs.
         SparkleUpdater.shared.start()
+    }
+
+    /// `kill <pid>`, logout scripts and some updaters send SIGTERM, which ends
+    /// the app without `applicationWillTerminate`. Save the session first so
+    /// tabs and agent sessions are current; the run marker stays, so the next
+    /// launch treats this like a force quit and resumes agents.
+    private func installTerminationSignalHandler() {
+        signal(SIGTERM, SIG_IGN)
+        let source = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)
+        source.setEventHandler {
+            MainActor.assumeIsolated {
+                booLog(.warning, .app, "SIGTERM: saving session before exit")
+                WindowManager.shared.saveSessionForTermination()
+            }
+            signal(SIGTERM, SIG_DFL)
+            raise(SIGTERM)
+        }
+        source.resume()
+        terminationSignalSource = source
     }
 
     public func applicationWillTerminate(_ notification: Notification) {

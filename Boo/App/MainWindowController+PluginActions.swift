@@ -133,15 +133,41 @@ extension MainWindowController {
     /// doesn't lose the conversation. Empty when agent recovery is off.
     func agentResumePoints() -> [UUID: AgentResumePoint] {
         guard AppSettings.shared.agentRecovery != .off else { return [:] }
+        // Agents restored into tabs that haven't started yet: not running, but
+        // still owed a resume if Boo goes down again before their tab opens.
+        let pending = CrashRecovery.pendingResumePoints
         var points: [UUID: AgentResumePoint] = [:]
         for workspace in appState.workspaces where workspace.tmuxWindowID == nil {
+            if !pending.isEmpty {
+                for tab in workspace.panes.values.flatMap(\.tabs) { points[tab.id] = pending[tab.id] }
+            }
             for session in agentSessions(in: workspace) {
                 guard let id = session.agent.sessionID, session.agent.kind != .custom else { continue }
                 points[session.tabID] = AgentResumePoint(
-                    kind: session.agent.kind, sessionID: id, cwd: session.agent.cwd)
+                    kind: session.agent.kind, sessionID: id, cwd: session.agent.cwd,
+                    wasRunning: session.agent.state == .running)
             }
         }
         return points
+    }
+
+    /// Starts the terminals of restored tabs that resume an agent, without
+    /// showing them, so agents run again before their tab is opened.
+    func startResumedAgents() {
+        let pending = CrashRecovery.pendingResumePoints
+        guard !pending.isEmpty else { return }
+        // Panes of inactive workspaces aren't in the window, so they size from it.
+        let size = window?.contentLayoutRect.size ?? NSSize(width: 1000, height: 700)
+        for workspace in appState.workspaces where workspace.tmuxWindowID == nil {
+            for pane in workspace.panes.values where !pane.tmuxOwned {
+                for tab in pane.tabs where pending[tab.id] != nil {
+                    // One per runloop turn: each spawns a pty and an agent.
+                    DispatchQueue.main.async { [weak self, paneID = pane.id, tabID = tab.id] in
+                        self?.paneView(for: paneID, in: workspace)?.startTerminalInBackground(for: tabID, size: size)
+                    }
+                }
+            }
+        }
     }
 
     func agentSessions(in workspace: Workspace) -> [WorkspaceAgentSession] {

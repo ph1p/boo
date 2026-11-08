@@ -787,9 +787,9 @@ extension MainWindowController {
         switch kind {
         case .claudeCode, .custom: base = "claude --continue"
         case .codex: base = "codex resume --last"
-        case .openCode: base = text.isEmpty ? "opencode --continue" : "opencode --continue --prompt"
+        case .openCode: base = "opencode --continue"
         }
-        return text.isEmpty ? base : base + " " + shellQuoted(text)
+        return text.isEmpty ? base : base + kind.promptArgument(text)
     }
 
     private func isAgentWorking(inWorkspace workspaceID: UUID) -> Bool {

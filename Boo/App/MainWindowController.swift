@@ -633,7 +633,7 @@ import SwiftUI
         }
 
         workspace.normalizePaneState()
-        guard let pane = workspace.pane(for: paneID) else {
+        guard let pv = paneView(for: paneID, in: workspace) else {
             debugLog(
                 "[WorkspaceSwitch] missingPaneView workspace=\(workspace.id.uuidString) pane=\(paneID.uuidString)"
             )
@@ -641,9 +641,16 @@ import SwiftUI
             _ = fallbackPane.addTab(workingDirectory: workspace.folderPath)
             return makePaneView(paneID: paneID, pane: fallbackPane)
         }
+        return pv
+    }
 
+    /// The pane view of `paneID` in `workspace`, created and cached on first
+    /// use; works for inactive workspaces too. Nil when the pane is gone.
+    func paneView(for paneID: UUID, in workspace: Workspace) -> PaneView? {
+        if let existing = workspacePaneViews[workspace.id]?[paneID] { return existing }
+        guard let pane = workspace.pane(for: paneID) else { return nil }
         let pv = makePaneView(paneID: paneID, pane: pane)
-        paneViews[paneID] = pv
+        workspacePaneViews[workspace.id, default: [:]][paneID] = pv
         return pv
     }
 

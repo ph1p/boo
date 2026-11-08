@@ -16,6 +16,8 @@ struct TerminalSettingsView: View {
     @State private var tmuxMode = AppSettings.shared.tmuxMode
     @State private var agentRecovery = AppSettings.shared.agentRecovery
     @State private var resumeAgentsAfterQuit = AppSettings.shared.resumeAgentsAfterQuit
+    @State private var resumeAgentsImmediately = AppSettings.shared.resumeAgentsImmediately
+    @State private var continueInterruptedAgents = AppSettings.shared.continueInterruptedAgents
     @ObservedObject private var observer = SettingsObserver(topics: [.theme, .terminal])
 
     private let monoFonts = AppSettings.availableMonospaceFonts
@@ -76,7 +78,7 @@ struct TerminalSettingsView: View {
                     if !v { ScrollbackStore.clear() }
                 }
                 SettingStack(
-                    label: "After a crash, agents",
+                    label: "After a crash or force quit, agents",
                     help:
                         "Resume starts each tab's agent conversation again (Claude Code, Codex, OpenCode). Ask shows a prompt at launch."
                 ) {
@@ -90,6 +92,20 @@ struct TerminalSettingsView: View {
                         isOn: $resumeAgentsAfterQuit
                     )
                     .onChange(of: resumeAgentsAfterQuit) { _, v in AppSettings.shared.resumeAgentsAfterQuit = v }
+                    ToggleRow(
+                        label: "Start agents right away",
+                        help: "Resume every agent at launch. Off: each agent starts when you first open its tab.",
+                        isOn: $resumeAgentsImmediately
+                    )
+                    .onChange(of: resumeAgentsImmediately) { _, v in AppSettings.shared.resumeAgentsImmediately = v }
+                    ToggleRow(
+                        label: "Continue interrupted work",
+                        help:
+                            "Tell agents that were working when Boo went down to pick their task up again. Off: they wait for you.",
+                        isOn: $continueInterruptedAgents
+                    )
+                    .onChange(of: continueInterruptedAgents) { _, v in AppSettings.shared.continueInterruptedAgents = v
+                    }
                 }
                 ToggleRow(
                     label: "Native tmux windows",

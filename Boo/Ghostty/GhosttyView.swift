@@ -161,7 +161,7 @@ import Cocoa
         }
         var launch =
             explicitLaunch ?? tabID.flatMap { Self.pendingLaunch.removeValue(forKey: $0) }
-            ?? tabID.flatMap(CrashRecovery.takeResume(for:))
+            ?? tabID.flatMap { CrashRecovery.takeResume(for: $0) }
         // A tab starts with its profile's shell, env and cwd (rules can only
         // see the starting directory at this point).
         if explicitLaunch == nil, tabID != nil,

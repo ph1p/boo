@@ -74,6 +74,12 @@ final class WindowManager {
         defer {
             CrashRecovery.resumeOnRestore = false
             announceRecovery(resumed: resumeAgents ? snapshot.map(Self.agentCount) ?? 0 : 0)
+            if resumeAgents, AppSettings.shared.resumeAgentsImmediately {
+                // After the windows have laid out, so background terminals get a real size.
+                DispatchQueue.main.async { [weak self] in
+                    for controller in self?.controllers ?? [] { controller.startResumedAgents() }
+                }
+            }
         }
         QuickTerminalController.shared.restore(snapshot?.quickTerminal)
         var saved = snapshot?.allWindows ?? []
@@ -129,8 +135,7 @@ final class WindowManager {
         case .off: return false
         case .ask:
             let alert = NSAlert()
-            alert.messageText =
-                CrashRecovery.previousRunCrashed ? "Boo quit unexpectedly" : "Resume your agents?"
+            alert.messageText = CrashRecovery.previousRunEnd?.title ?? "Resume your agents?"
             alert.informativeText =
                 "\(count) agent \(count == 1 ? "session was" : "sessions were") running. "
                 + "Resume \(count == 1 ? "it" : "them") in \(count == 1 ? "its tab" : "their tabs")?\n\n"
@@ -141,13 +146,13 @@ final class WindowManager {
         }
     }
 
-    /// After a crash, says the session came back (and how many agents resume).
+    /// After a crash or kill, says the session came back (and how many agents resume).
     private func announceRecovery(resumed count: Int) {
-        guard CrashRecovery.previousRunCrashed else { return }
+        guard let cause = CrashRecovery.previousRunEnd?.cause else { return }
         let message =
             count > 0
-            ? "Recovered from a crash. \(count) agent\(count == 1 ? " resumes" : "s resume") in \(count == 1 ? "its tab" : "their tabs")."
-            : "Recovered your session after a crash."
+            ? "Recovered from \(cause). \(count) agent\(count == 1 ? " resumes" : "s resume") in \(count == 1 ? "its tab" : "their tabs")."
+            : "Recovered your session after \(cause)."
         DispatchQueue.main.asyncAfter(deadline: .now() + 1) { BooAlert.showTransient(message) }
     }
 

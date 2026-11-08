@@ -95,6 +95,20 @@ extension PaneView {
         }
     }
 
+    /// Start the terminal of tab `tabID` without showing it, so a process it
+    /// launches (a resumed agent) runs before the tab is opened. The view is
+    /// cached like a switched-away tab and shown by `startTerminalSession`.
+    func startTerminalInBackground(for tabID: UUID, size: NSSize) {
+        guard ghosttyView?.tabID != tabID, tabViews[tabID] == nil,
+            let tab = pane.tabs.first(where: { $0.id == tabID }), tab.contentType == .terminal
+        else { return }
+        let gv = GhosttyView(workingDirectory: tab.workingDirectory, paneID: paneID, tabID: tabID)
+        // Size the pty like the visible terminal so the agent doesn't lay out for 0 columns.
+        gv.setFrameSize(bounds.width > 0 && bounds.height > 0 ? bounds.size : size)
+        wireCallbacks(gv)
+        tabViews[tabID] = CachedTerminal(view: gv, wrapper: nil)
+    }
+
     /// Start a non-terminal content session for the given tab.
     private func startContentSession(for tab: Pane.Tab) {
         // Hide the terminal view. Not every caller runs storeCurrentView first (a cross-pane

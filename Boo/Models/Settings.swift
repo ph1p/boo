@@ -160,6 +160,8 @@ final class AppSettings {
         static let tmuxMode = "tmuxMode"
         static let agentRecovery = "agentRecovery"
         static let resumeAgentsAfterQuit = "resumeAgentsAfterQuit"
+        static let resumeAgentsImmediately = "resumeAgentsImmediately"
+        static let continueInterruptedAgents = "continueInterruptedAgents"
         static let shortcutOverrides = "shortcutOverrides"
 
         static let paletteRecents = "paletteRecents"
@@ -630,6 +632,18 @@ final class AppSettings {
     var resumeAgentsAfterQuit: Bool {
         get { bool(K.resumeAgentsAfterQuit, default: false) }
         set { set(newValue, forKey: K.resumeAgentsAfterQuit) }
+    }
+
+    /// Start resumed agents at launch, not when their tab is first opened.
+    var resumeAgentsImmediately: Bool {
+        get { bool(K.resumeAgentsImmediately, default: true) }
+        set { set(newValue, forKey: K.resumeAgentsImmediately) }
+    }
+
+    /// Ask agents that were mid-turn when Boo went down to continue their task.
+    var continueInterruptedAgents: Bool {
+        get { bool(K.continueInterruptedAgents, default: false) }
+        set { set(newValue, forKey: K.continueInterruptedAgents) }
     }
 
     // MARK: - Shortcuts

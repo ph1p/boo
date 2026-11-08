@@ -37,7 +37,7 @@ extension AppSettings {
         K.agentBudgetPerTask,
         K.agentBudgetPerDay, K.portNotificationsEnabled, K.errorAgentButtonEnabled, K.notifyMinCommandSeconds,
         K.notificationGroupBursts, K.notificationExpiryMinutes, K.shortcutOverrides, K.agentRecovery,
-        K.resumeAgentsAfterQuit
+        K.resumeAgentsAfterQuit, K.resumeAgentsImmediately, K.continueInterruptedAgents
     ]
 
     static let syncedCustomThemesKey = "customThemes"
@@ -179,6 +179,8 @@ extension AppSettings {
             K.tmuxMode: UserDefaults.standard.string(forKey: K.tmuxMode) ?? TmuxMode.ask.rawValue,
             K.agentRecovery: agentRecovery.rawValue,
             K.resumeAgentsAfterQuit: resumeAgentsAfterQuit,
+            K.resumeAgentsImmediately: resumeAgentsImmediately,
+            K.continueInterruptedAgents: continueInterruptedAgents,
             K.shortcutOverrides: shortcutOverrides,
             K.workspaceGroups: workspaceGroups.map(\.dictionary)
         ]
