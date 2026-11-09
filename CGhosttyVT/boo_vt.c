@@ -99,7 +99,7 @@ void boo_vt_set_colors(BooVT *vt, uint32_t fg, uint32_t bg, uint32_t cursor, con
 }
 
 void boo_vt_set_cursor_style(BooVT *vt, uint8_t style) {
-    GhosttyTerminalCursorStyle s = (GhosttyTerminalCursorStyle)style;
+    GhosttyCursorStyle s = (GhosttyCursorStyle)style;
     ghostty_terminal_set(vt->terminal, GHOSTTY_TERMINAL_OPT_DEFAULT_CURSOR_STYLE, &s);
     // The default only applies on a DECSCUSR reset; apply it now.
     static const uint8_t reset[] = "\x1b[0 q";
@@ -110,7 +110,7 @@ bool boo_vt_held(const BooVT *vt) { return vt->held; }
 
 void boo_vt_end_hold(BooVT *vt) {
     if (!vt->held) return;
-    GhosttyTerminalModeConfig mode = {.mode = GHOSTTY_MODE_SYNC_OUTPUT, .value = false};
+    GhosttyTerminalModeConfig mode = {.mode = GHOSTTY_MODE_SYNCHRONIZED_OUTPUT, .value = false};
     ghostty_terminal_set(vt->terminal, GHOSTTY_TERMINAL_OPT_MODE, &mode);
     vt->held = false;
 }
@@ -214,7 +214,7 @@ const BooVTCell *boo_vt_capture(BooVT *vt, BooVTFrame *frame, const char **text)
                 ghostty_cell_get(raw, GHOSTTY_CELL_DATA_WIDE, &wide);
             out->wide = (uint8_t)wide;
 
-            GhosttyStyle style = {.size = sizeof(GhosttyStyle)};
+            GhosttyStyle style = {0};
             ghostty_render_state_row_cells_get(vt->cells, GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_STYLE, &style);
 
             GhosttyColorRgb c;
@@ -222,7 +222,7 @@ const BooVTCell *boo_vt_capture(BooVT *vt, BooVTFrame *frame, const char **text)
             uint32_t fg = has_fg ? pack(c) : def_fg;
             bool has_bg = ghostty_render_state_row_cells_get(vt->cells, GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_BG_COLOR, &c) == GHOSTTY_SUCCESS;
             uint32_t bg = has_bg ? pack(c) : def_bg;
-            if (style.inverse) {
+            if (style.flags & GHOSTTY_STYLE_FLAG_INVERSE) {
                 uint32_t t = fg;
                 fg = bg;
                 bg = t;
@@ -233,15 +233,15 @@ const BooVTCell *boo_vt_capture(BooVT *vt, BooVTFrame *frame, const char **text)
             out->has_bg = has_bg && bg != def_bg;
 
             uint8_t flags = 0;
-            if (style.bold) flags |= BOO_VT_BOLD;
-            if (style.italic) flags |= BOO_VT_ITALIC;
-            if (style.faint) flags |= BOO_VT_FAINT;
-            if (style.strikethrough) flags |= BOO_VT_STRIKE;
-            if (style.overline) flags |= BOO_VT_OVERLINE;
+            if (style.flags & GHOSTTY_STYLE_FLAG_BOLD) flags |= BOO_VT_BOLD;
+            if (style.flags & GHOSTTY_STYLE_FLAG_ITALIC) flags |= BOO_VT_ITALIC;
+            if (style.flags & GHOSTTY_STYLE_FLAG_FAINT) flags |= BOO_VT_FAINT;
+            if (style.flags & GHOSTTY_STYLE_FLAG_STRIKETHROUGH) flags |= BOO_VT_STRIKE;
+            if (style.flags & GHOSTTY_STYLE_FLAG_OVERLINE) flags |= BOO_VT_OVERLINE;
             out->flags = flags;
-            out->underline = (uint8_t)style.underline;
+            out->underline = (uint8_t)GHOSTTY_STYLE_UNDERLINE(style);
 
-            if (!style.invisible && wide != GHOSTTY_CELL_WIDE_SPACER_TAIL && wide != GHOSTTY_CELL_WIDE_SPACER_HEAD)
+            if (!(style.flags & GHOSTTY_STYLE_FLAG_INVISIBLE) && wide != GHOSTTY_CELL_WIDE_SPACER_TAIL && wide != GHOSTTY_CELL_WIDE_SPACER_HEAD)
                 read_text(vt, out);
         }
         y++;
