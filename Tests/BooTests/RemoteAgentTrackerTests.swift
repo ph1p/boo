@@ -65,6 +65,54 @@ final class RemoteAgentTrackerTests: XCTestCase {
         XCTAssertEqual(inbox.items[tab]?.state, .needsInput, "hook-fed items are left alone")
     }
 
+    private func makeHookTracker() -> (RemoteAgentTracker, AgentInbox, () -> Void) {
+        let inbox = AgentInbox()
+        inbox.locate = { _ in nil }
+        var pending: [@MainActor () -> Void] = []
+        let tracker = RemoteAgentTracker(
+            inbox: inbox, isRemoteShell: { _ in false }, schedule: { _, work in pending.append(work) })
+        return (
+            tracker, inbox,
+            {
+                for work in pending { work() }
+                pending.removeAll()
+            }
+        )
+    }
+
+    func testInterruptSettlesHookFedWorkingItem() {
+        let (tracker, inbox, fire) = makeHookTracker()
+        let tab = UUID()
+        inbox.apply(event: "prompt", tabID: tab)
+        tracker.titleChanged(tabID: tab, title: "⠂ Task", shellPID: 1)
+        tracker.titleChanged(tabID: tab, title: "✳ Task", shellPID: 1)
+        XCTAssertEqual(inbox.items[tab]?.state, .working, "waits out the grace for a Stop hook")
+        fire()
+        XCTAssertEqual(inbox.items[tab]?.state, .done)
+        XCTAssertEqual(inbox.items[tab]?.seen, true, "an interrupt the user made needs no attention")
+    }
+
+    func testStopHookWinsOverIdleTitle() {
+        let (tracker, inbox, fire) = makeHookTracker()
+        let tab = UUID()
+        inbox.apply(event: "prompt", tabID: tab, now: Date(timeIntervalSince1970: 1))
+        tracker.titleChanged(tabID: tab, title: "⠂ Task", shellPID: 1)
+        tracker.titleChanged(tabID: tab, title: "✳ Task", shellPID: 1)
+        inbox.apply(event: "stop", tabID: tab, reply: "Done.", now: Date(timeIntervalSince1970: 2))
+        fire()
+        XCTAssertEqual(inbox.items[tab]?.reply, "Done.")
+        XCTAssertEqual(inbox.items[tab]?.seen, false, "a real finish keeps its attention dot")
+    }
+
+    func testIdleTitleWithoutSpinnerLeavesHookItem() {
+        let (tracker, inbox, fire) = makeHookTracker()
+        let tab = UUID()
+        inbox.apply(event: "prompt", tabID: tab)
+        tracker.titleChanged(tabID: tab, title: "✳ Task", shellPID: 1)
+        fire()
+        XCTAssertEqual(inbox.items[tab]?.state, .working, "only a spinner-to-idle flip is an interrupt")
+    }
+
     func testForgetDropsClosedTab() {
         let (tracker, inbox) = makeTracker()
         let tab = UUID()

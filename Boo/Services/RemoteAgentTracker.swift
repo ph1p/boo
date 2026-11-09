@@ -12,6 +12,10 @@ import Foundation
 /// - title no longer an agent's → the item is removed
 ///
 /// Tabs with a hook-fed inbox item are left alone: the hooks are the better source.
+/// One exception: Claude fires no Stop hook when the user interrupts a turn
+/// (Esc), so a hook-fed item would stay working. When its title goes from a
+/// spinner to the idle mark and no hook has reported within a grace period,
+/// the item is marked done (seen, no notification).
 @MainActor
 final class RemoteAgentTracker {
     static let shared = RemoteAgentTracker()
@@ -31,16 +35,28 @@ final class RemoteAgentTracker {
 
     /// Tabs this tracker owns an inbox item for, with the last state read from the title.
     private(set) var tracked: [UUID: TitleState] = [:]
+    /// Last title state of hook-fed tabs, to catch an interrupt (spinner → idle).
+    private var hookTitles: [UUID: TitleState] = [:]
+
+    /// Wait before an idle title overrules a working hook item: a normal turn's
+    /// Stop hook can land after the title change and must win (it carries the reply).
+    static let interruptGrace: TimeInterval = 2
+    /// Runs the interrupt check after a delay; injectable for tests.
+    let schedule: (TimeInterval, @escaping @MainActor () -> Void) -> Void
 
     init(
         inbox: AgentInbox = .shared,
         isRemoteShell: @escaping (pid_t) -> Bool = { pid in
             guard pid > 0, let name = ProcessTree.foregroundProcess(shellPID: pid) else { return false }
             return RemoteAgentTracker.remoteProcesses.contains(name)
+        },
+        schedule: @escaping (TimeInterval, @escaping @MainActor () -> Void) -> Void = { delay, work in
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { MainActor.assumeIsolated { work() } }
         }
     ) {
         self.inbox = inbox
         self.isRemoteShell = isRemoteShell
+        self.schedule = schedule
     }
 
     /// The agent and state a title shows, or nil when it isn't an agent's title.
@@ -55,14 +71,21 @@ final class RemoteAgentTracker {
 
     func titleChanged(tabID: UUID, title: String, shellPID: pid_t) {
         guard let parsed = Self.parse(title: title) else {
+            hookTitles[tabID] = nil
             end(tabID: tabID)
             return
         }
         // A title without a status glyph says nothing about the state.
         guard let state = parsed.state else { return }
         if tracked[tabID] == nil {
+            if let item = inbox.items[tabID] {
+                hookTitleChanged(tabID: tabID, state: state, item: item)
+                return
+            }
+            // Remember it: the hook item may arrive mid-turn.
+            hookTitles[tabID] = state
             // Only remote tabs no hook reports for.
-            guard inbox.items[tabID] == nil, isRemoteShell(shellPID) else { return }
+            guard isRemoteShell(shellPID) else { return }
         } else if tracked[tabID] == state {
             return
         }
@@ -94,5 +117,22 @@ final class RemoteAgentTracker {
     /// The tab closed: its inbox item goes with it, so only the entry is dropped.
     func forget(tabID: UUID) {
         tracked[tabID] = nil
+        hookTitles[tabID] = nil
+    }
+
+    /// A hook-fed tab's title went idle after a spinner while its item is still
+    /// working: the user interrupted the turn. Settle it once the grace passes
+    /// without a newer hook event.
+    private func hookTitleChanged(tabID: UUID, state: TitleState, item: AgentInbox.Item) {
+        let previous = hookTitles.updateValue(state, forKey: tabID)
+        guard state == .idle, previous == .working, item.state == .working else { return }
+        let stamp = item.updatedAt
+        schedule(Self.interruptGrace) { [weak self] in
+            guard let self, self.hookTitles[tabID] == .idle,
+                let current = self.inbox.items[tabID], current.state == .working, current.updatedAt == stamp
+            else { return }
+            self.inbox.apply(event: "stop", tabID: tabID, agent: current.agent)
+            self.inbox.markSeen(tabID: tabID)
+        }
     }
 }
