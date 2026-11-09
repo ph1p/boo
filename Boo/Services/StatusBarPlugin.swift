@@ -41,6 +41,9 @@ protocol StatusBarPlugin: AnyObject {
     /// When the bar is too narrow, visible segments with the highest value
     /// are dropped first. Alerts use 0 so they never collapse.
     var collapsePriority: Int { get }
+    /// The sidebar plugin this segment belongs to. While that plugin is off,
+    /// the segment is not drawn and not listed in settings or the menu.
+    var ownerPluginID: String? { get }
 }
 
 extension StatusBarPlugin {
@@ -49,19 +52,22 @@ extension StatusBarPlugin {
     var displayName: String { id }
     var isClickable: Bool { false }
     var collapsePriority: Int { 50 }
+    var ownerPluginID: String? { nil }
+
+    /// False while the owning plugin is turned off.
+    func isOwnerEnabled(_ settings: AppSettings) -> Bool {
+        ownerPluginID.map(settings.isPluginEnabled) ?? true
+    }
 
     /// Draws a semibold colored status label (broadcast, recording) and
-    /// returns its full-height hit rect, padded 4pt on each side. Like any
-    /// left segment, `draw` returns the bare text width (rect width - 8).
-    static func drawAlertLabel(_ text: String, color: NSColor, at x: CGFloat, y: CGFloat) -> NSRect {
+    /// returns its full-height hit rect, padded 4pt on each side. These are
+    /// right segments: the label ends at `rx`, and `draw` returns the padded width.
+    static func drawAlertLabel(_ text: String, color: NSColor, endingAt rx: CGFloat, y: CGFloat) -> NSRect {
         let attrs: [NSAttributedString.Key: Any] = [
             .font: NSFont.systemFont(ofSize: 10, weight: .semibold),
             .foregroundColor: color
         ]
-        let str = text as NSString
-        let size = str.safeSize(withAttributes: attrs)
-        str.safeDraw(at: NSPoint(x: x, y: y), withAttributes: attrs)
-        return NSRect(x: x - 4, y: 0, width: size.width + 8, height: DensityMetrics.current.statusBarHeight)
+        return drawLabel(text, attrs: attrs, endingAt: rx, y: y)
     }
 
     /// Draws a right-side text segment ending at `rx` and returns its

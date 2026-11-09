@@ -320,8 +320,8 @@ final class RecordingSegment: StatusBarPlugin {
         at x: CGFloat, y: CGFloat, theme: TerminalTheme, settings: AppSettings, state: StatusBarState, ctx: CGContext
     ) -> CGFloat {
         guard count > 0 else { return 0 }
-        hitRect = Self.drawAlertLabel(Self.label(count: count), color: theme.error, at: x, y: y)
-        return hitRect.width - 8
+        hitRect = Self.drawAlertLabel(Self.label(count: count), color: theme.error, endingAt: x, y: y)
+        return hitRect.width
     }
 
     func handleClick(at point: NSPoint, in barView: StatusBarView) -> Bool {

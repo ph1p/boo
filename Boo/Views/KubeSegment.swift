@@ -7,6 +7,7 @@ final class KubeSegment: StatusBarPlugin {
     let position: StatusBarPosition = .right
     let priority = 54
     let displayName = "Kubernetes context"
+    let ownerPluginID: String? = "kube"
     let isClickable = true
     let collapsePriority = 50
     var hitRect: NSRect = .zero

@@ -144,9 +144,7 @@ final class KeyTableSegment: StatusBarPlugin {
             .font: NSFont.monospacedSystemFont(ofSize: 10, weight: .semibold),
             .foregroundColor: theme.accentColor
         ]
-        let str = indicator as NSString
-        str.safeDraw(at: NSPoint(x: x, y: y), withAttributes: attrs)
-        return str.safeSize(withAttributes: attrs).width
+        return Self.drawLabel(indicator, attrs: attrs, endingAt: x, y: y).width
     }
 
     func handleClick(at point: NSPoint, in barView: StatusBarView) -> Bool { false }

@@ -126,7 +126,8 @@ extension StatusBarView {
         let byID = pluginsByID
         func shown(_ ids: [String]) -> [StatusBarPlugin] {
             ids.compactMap { byID[$0] }.filter {
-                $0.isVisible(settings: settings, state: state) && !settings.isStatusBarSegmentHidden($0.id)
+                $0.isOwnerEnabled(settings) && $0.isVisible(settings: settings, state: state)
+                    && !settings.isStatusBarSegmentHidden($0.id)
             }
         }
         return (shown(arrangement.left), shown(arrangement.right))

@@ -106,8 +106,8 @@ final class BroadcastSegment: StatusBarPlugin {
         at x: CGFloat, y: CGFloat, theme: TerminalTheme, settings: AppSettings, state: StatusBarState, ctx: CGContext
     ) -> CGFloat {
         guard let count = memberCount else { return 0 }
-        hitRect = Self.drawAlertLabel(Self.label(memberCount: count), color: Self.color, at: x, y: y)
-        return hitRect.width - 8
+        hitRect = Self.drawAlertLabel(Self.label(memberCount: count), color: Self.color, endingAt: x, y: y)
+        return hitRect.width
     }
 
     func handleClick(at point: NSPoint, in barView: StatusBarView) -> Bool {

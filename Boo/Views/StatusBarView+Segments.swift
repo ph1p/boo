@@ -86,6 +86,7 @@ final class GitBranchSegment: StatusBarPlugin {
     let position: StatusBarPosition = .left
     let priority = 10
     let displayName = "Git branch"
+    let ownerPluginID: String? = "git-panel"
     let isClickable = true
     let collapsePriority = 30
     var hitRect: NSRect = .zero
@@ -225,6 +226,7 @@ final class PathSegment: StatusBarPlugin {
     let position: StatusBarPosition = .left
     let priority = 20
     let displayName = "Current path"
+    let ownerPluginID: String? = "file-tree-local"
     let collapsePriority = 20
 
     func isVisible(settings: AppSettings, state: StatusBarState) -> Bool {
@@ -422,6 +424,7 @@ final class SystemInfoSegment: StatusBarPlugin {
     let position: StatusBarPosition = .right
     let priority = 45
     let displayName = "System info"
+    let ownerPluginID: String? = "system-info"
     let collapsePriority = 75
 
     private var memoryPct: Int = 0
@@ -482,22 +485,26 @@ final class SystemInfoSegment: StatusBarPlugin {
         ]
         let middotWidth = middot.safeSize(withAttributes: middotAttrs).width
 
-        var cx = x
-        for (i, part) in parts.enumerated() {
-            let attrs: [NSAttributedString.Key: Any] = [
-                .font: font,
-                .foregroundColor: part.1
-            ]
-            let str = part.0 as NSString
-            str.safeDraw(at: NSPoint(x: cx, y: y), withAttributes: attrs)
-            cx += str.safeSize(withAttributes: attrs).width
-            if i < parts.count - 1 {
+        let drawn = parts.map { part -> (NSString, [NSAttributedString.Key: Any]) in
+            (part.0 as NSString, [.font: font, .foregroundColor: part.1])
+        }
+        let textWidth =
+            drawn.reduce(0) { $0 + $1.0.safeSize(withAttributes: $1.1).width }
+            + middotWidth * CGFloat(max(0, drawn.count - 1))
+
+        // A right-side segment: `x` is its right edge, and the width includes
+        // 4pt padding either side (like the clock).
+        var cx = x - textWidth - 4
+        for (i, part) in drawn.enumerated() {
+            part.0.safeDraw(at: NSPoint(x: cx, y: y), withAttributes: part.1)
+            cx += part.0.safeSize(withAttributes: part.1).width
+            if i < drawn.count - 1 {
                 middot.safeDraw(at: NSPoint(x: cx, y: y), withAttributes: middotAttrs)
                 cx += middotWidth
             }
         }
 
-        return cx - x
+        return drawn.isEmpty ? 0 : textWidth + 8
     }
 
     func handleClick(at point: NSPoint, in barView: StatusBarView) -> Bool { false }
@@ -568,6 +575,7 @@ final class PluginContentSegment: StatusBarPlugin {
     let pluginID: String
     let isClickable = true
     let collapsePriority = 60
+    var ownerPluginID: String? { pluginID }
     var displayName: String {
         PluginSettingsView.registeredManifests.first { $0.id == pluginID }?.name ?? pluginID
     }

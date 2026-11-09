@@ -28,9 +28,10 @@ extension StatusBarView {
         Dictionary((leftPlugins + rightPlugins).map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
     }
 
-    /// Every registered segment, keyed by ID.
+    /// Every registered segment whose plugin is on, keyed by ID.
     var segmentCatalog: [String: SegmentInfo] {
-        pluginsByID.mapValues {
+        let settings = AppSettings.shared
+        return pluginsByID.filter { $0.value.isOwnerEnabled(settings) }.mapValues {
             SegmentInfo(id: $0.id, displayName: $0.displayName, isLeftByDefault: $0.position == .left)
         }
     }
