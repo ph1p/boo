@@ -20,3 +20,4 @@ Boo/Resources/EditorSource/node_modules
 .swiftpm
 .pnpm-store
 /docs/
+documentation/docs/pages.gen.ts
