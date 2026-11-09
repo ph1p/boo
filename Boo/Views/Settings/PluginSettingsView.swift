@@ -127,6 +127,36 @@ struct PluginDetailSettingsView: View {
 
 // MARK: - Plugin Row
 
+/// A plugin icon: an SF Symbol name, or `asset:<name>` for a template PDF in
+/// `Resources/Images` (as the sidebar tab bar resolves it).
+struct PluginIconImage: View {
+    let name: String
+    /// SF Symbol point size; nil keeps the environment font (the settings
+    /// sidebar's own icon size). An asset is drawn a little larger: a symbol's
+    /// glyph overhangs its point size, and an asset fills its box exactly.
+    var pointSize: CGFloat? = nil
+
+    private var assetSize: CGFloat { ((pointSize ?? 14) * 1.15).rounded() }
+
+    var body: some View {
+        if name.hasPrefix("asset:"),
+            let url = BooResourceBundle.bundle.url(
+                forResource: String(name.dropFirst(6)), withExtension: "pdf", subdirectory: "Images"),
+            let image = NSImage(contentsOf: url)
+        {
+            Image(nsImage: image)
+                .renderingMode(.template)
+                .resizable()
+                .scaledToFit()
+                .frame(width: assetSize, height: assetSize)
+        } else if let pointSize {
+            Image(systemName: name).font(.system(size: pointSize))
+        } else {
+            Image(systemName: name)
+        }
+    }
+}
+
 private struct PluginRow: View {
     @Environment(\.tokens) private var tokens
     let manifest: PluginManifest
@@ -157,8 +187,7 @@ private struct PluginRow: View {
 
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 10) {
-                Image(systemName: manifest.icon)
-                    .font(.system(size: 14))
+                PluginIconImage(name: manifest.icon, pointSize: 14)
                     .foregroundStyle(isEnabled ? t.text : t.muted)
                     .frame(width: 20)
                 VStack(alignment: .leading, spacing: 1) {

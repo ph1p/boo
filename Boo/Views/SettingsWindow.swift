@@ -125,10 +125,10 @@ struct SettingsView: View {
             case .editor: return "curlybraces"
             case .browser: return "globe"
             case .notifications: return "bell"
-            case .plugins: return "puzzlepiece"
+            case .plugins: return "powerplug"
             case .shortcuts: return "command"
             case .pluginSettings(let id):
-                return PluginSettingsView.registeredManifests.first(where: { $0.id == id })?.icon ?? "puzzlepiece"
+                return PluginSettingsView.registeredManifests.first(where: { $0.id == id })?.icon ?? "powerplug"
             }
         }
     }
@@ -157,7 +157,7 @@ struct SettingsView: View {
         Label {
             Text(tab.label)
         } icon: {
-            Image(systemName: tab.icon)
+            PluginIconImage(name: tab.icon, pointSize: 12)
                 .frame(width: 22, alignment: .center)
                 .padding(.trailing, 4)
         }

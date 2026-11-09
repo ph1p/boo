@@ -34,7 +34,7 @@ final class AgentsPlugin: BooPluginProtocol {
         id: "agents",
         name: "Agents",
         version: "1.0.0",
-        icon: "sparkles",
+        icon: "asset:robot-head",
         description: "Agent Center for Claude Code, Codex, OpenCode, and AI CLI sessions",
         when: "!remote",
         runtime: nil,

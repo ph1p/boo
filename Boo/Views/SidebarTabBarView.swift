@@ -285,8 +285,7 @@ class SidebarTabBarView: NSView {
                 title: tab.label,
                 action: #selector(selectOverflowTabFromMenu(_:)),
                 keyEquivalent: "")
-            item.image = NSImage(systemSymbolName: tab.icon, accessibilityDescription: tab.label)?
-                .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 13, weight: .regular))
+            item.image = resolveIcon(tab.icon, size: 13, color: .labelColor, label: tab.label)
             item.representedObject = tab.id
             item.target = self
             if tab.id == selectedTab {
@@ -331,17 +330,16 @@ class SidebarTabBarView: NSView {
                 ctx.setFillColor(theme.subtleFill.cgColor)
                 WorkspacePillStyle.fillRoundedRect(ctx, rect: pillRect(in: tabRect))
 
-                if let img = NSImage(systemSymbolName: tab.icon, accessibilityDescription: nil) {
-                    // Deliberate raw alpha: ghost glyph fainter than textTertiary.
-                    let config = NSImage.SymbolConfiguration(pointSize: iconSize * 0.75, weight: .regular)
-                        .applying(.init(paletteColors: [theme.chromeMuted.withAlphaComponent(0.2)]))
-                    if let tinted = img.withSymbolConfiguration(config) {
-                        let imgSize = tinted.size
-                        let iconX = tabRect.midX - imgSize.width / 2
-                        let iconY = tabRect.minY + (tabRect.height - imgSize.height) / 2
-                        tinted.draw(
-                            in: NSRect(x: iconX, y: iconY, width: imgSize.width, height: imgSize.height))
-                    }
+                // Deliberate raw alpha: ghost glyph fainter than textTertiary.
+                if let tinted = resolveIcon(
+                    tab.icon, size: iconSize * 0.75, color: theme.chromeMuted.withAlphaComponent(0.2),
+                    label: tab.label)
+                {
+                    let imgSize = tinted.size
+                    let iconX = tabRect.midX - imgSize.width / 2
+                    let iconY = tabRect.minY + (tabRect.height - imgSize.height) / 2
+                    tinted.draw(
+                        in: NSRect(x: iconX, y: iconY, width: imgSize.width, height: imgSize.height))
                 }
                 continue
             }
@@ -416,20 +414,17 @@ class SidebarTabBarView: NSView {
             let ghostRect = CGRect(x: ghostX, y: ghostY, width: ghostSize, height: ghostSize)
             WorkspacePillStyle.fillRoundedRect(ctx, rect: ghostRect.insetBy(dx: -1, dy: -1))
 
-            if let img = NSImage(systemSymbolName: tab.icon, accessibilityDescription: nil) {
-                let config = NSImage.SymbolConfiguration(
-                    pointSize: iconSize * 0.75, weight: .regular
-                ).applying(.init(paletteColors: [theme.accentColor]))
-                if let tinted = img.withSymbolConfiguration(config) {
-                    let imgSize = tinted.size
-                    let iconX = ghostX + ghostSize / 2 - imgSize.width / 2
-                    let iconY = ghostY + ghostSize / 2 - imgSize.height / 2
-                    ctx.saveGState()
-                    ctx.setAlpha(0.9)
-                    tinted.draw(
-                        in: NSRect(x: iconX, y: iconY, width: imgSize.width, height: imgSize.height))
-                    ctx.restoreGState()
-                }
+            if let tinted = resolveIcon(
+                tab.icon, size: iconSize * 0.75, color: theme.accentColor, label: tab.label)
+            {
+                let imgSize = tinted.size
+                let iconX = ghostX + ghostSize / 2 - imgSize.width / 2
+                let iconY = ghostY + ghostSize / 2 - imgSize.height / 2
+                ctx.saveGState()
+                ctx.setAlpha(0.9)
+                tinted.draw(
+                    in: NSRect(x: iconX, y: iconY, width: imgSize.width, height: imgSize.height))
+                ctx.restoreGState()
             }
         }
     }
@@ -459,17 +454,20 @@ class SidebarTabBarView: NSView {
         if name.hasPrefix("asset:") {
             let assetName = String(name.dropFirst(6))
             // Try to load PDF from SPM Bundle.module Images folder
+            // A symbol's glyph overhangs its point size; an asset fills its box.
+            // Scale the asset up so both read the same size side by side.
+            let assetSize = (size * 1.15).rounded()
             if let url = BooResourceBundle.bundle.url(
                 forResource: assetName, withExtension: "pdf", subdirectory: "Images"),
                 let img = NSImage(contentsOf: url)
             {
                 img.isTemplate = true
-                return img.tinted(with: color, size: NSSize(width: size, height: size))
+                return img.tinted(with: color, size: NSSize(width: assetSize, height: assetSize))
             }
             // Try direct resource lookup
             if let img = BooResourceBundle.bundle.image(forResource: assetName) {
                 img.isTemplate = true
-                return img.tinted(with: color, size: NSSize(width: size, height: size))
+                return img.tinted(with: color, size: NSSize(width: assetSize, height: assetSize))
             }
             // Create a text-based icon as fallback
             return createTextIcon(assetName, size: size, color: color)
