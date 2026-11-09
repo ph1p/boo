@@ -79,4 +79,4 @@ See [Installation](https://ph1p.github.io/boo/installation#build-from-source), [
 
 ## License
 
-MIT
+Apache-2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE).
