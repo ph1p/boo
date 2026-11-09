@@ -268,6 +268,15 @@ final class AgentInbox {
             workspaceID: location.workspace.id, paneID: location.pane.id, tabIndex: location.tabIndex)
     }
 
+    /// The agent that finished its turn most recently, seen or not.
+    @discardableResult
+    func jumpToLastFinished() -> Bool {
+        prune()
+        let finished = items.values.filter { $0.state == .done || $0.state == .error }
+        guard let last = finished.max(by: { $0.updatedAt < $1.updatedAt }) else { return false }
+        return jump(to: last.tabID)
+    }
+
     /// Jump to the first item waiting for the user.
     @discardableResult
     func jumpToNextAttention() -> Bool {

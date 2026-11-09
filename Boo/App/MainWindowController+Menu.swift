@@ -89,7 +89,7 @@ extension MainWindowController {
             keyEquivalent: "")
         // Browser items have no target: they resolve to the focused
         // BrowserContentView through the responder chain and stay disabled
-        // otherwise. ⌘[ / ⌘] already focus panes, so Back/Forward stay unbound.
+        // otherwise. ⌘[ / ⌘] walk the focus history, so Back/Forward stay unbound.
         viewMenu.addItem(.separator())
         viewMenu.addItem(
             withTitle: "Open Location…", action: #selector(BrowserContentView.browserOpenLocationAction(_:)),
@@ -170,14 +170,30 @@ extension MainWindowController {
         termMenu.addItem(splitH)
         termMenu.addItem(.separator())
 
+        // ⌘[ / ⌘] belong to Focus Back / Forward; ⌥⌘⇥ would open the app switcher.
         let focusNext = NSMenuItem(
             title: "Focus Next Pane", action: #selector(focusNextPaneAction(_:)), keyEquivalent: "]")
-        focusNext.keyEquivalentModifierMask = [.command]
+        focusNext.keyEquivalentModifierMask = [.command, .option]
         termMenu.addItem(focusNext)
         let focusPrev = NSMenuItem(
             title: "Focus Previous Pane", action: #selector(focusPrevPaneAction(_:)), keyEquivalent: "[")
-        focusPrev.keyEquivalentModifierMask = [.command]
+        focusPrev.keyEquivalentModifierMask = [.command, .option]
         termMenu.addItem(focusPrev)
+        let pickPane = NSMenuItem(title: "Pick Pane…", action: #selector(pickPaneAction(_:)), keyEquivalent: "p")
+        pickPane.keyEquivalentModifierMask = [.command, .control]
+        pickPane.toolTip = "Label every pane: type a label to focus it, or press Tab first to swap it with this one"
+        termMenu.addItem(pickPane)
+        let paneNumbers = NSMenuItem(title: "Focus Pane", action: nil, keyEquivalent: "")
+        let paneNumberMenu = NSMenu(title: "Focus Pane")
+        for i in 1...9 {
+            let item = NSMenuItem(
+                title: "\(i)", action: #selector(focusPaneNumberAction(_:)), keyEquivalent: "\(i)")
+            item.keyEquivalentModifierMask = [.command, .control]
+            item.tag = i - 1
+            paneNumberMenu.addItem(item)
+        }
+        paneNumbers.submenu = paneNumberMenu
+        termMenu.addItem(paneNumbers)
         // Arrow bindings match Ghostty's defaults: ⌥⌘ select, ⌃⌘ resize, ⌃⇧⌘ move.
         termMenu.addItem(
             paneDirectionMenu(
@@ -329,15 +345,53 @@ extension MainWindowController {
         mainMenu.addItem(helpMenuItem)
         NSApplication.shared.helpMenu = helpMenu
 
-        // Cmd+1 through Cmd+9 for workspace switching
+        // ⌘1-8 pick a workspace, ⌘9 the last one (as browsers do with tabs).
         viewMenu.addItem(.separator())
-        for i in 1...9 {
+        let goToWorkspace = NSMenuItem(
+            title: "Go to Workspace…", action: #selector(goToWorkspaceAction(_:)), keyEquivalent: "p")
+        goToWorkspace.keyEquivalentModifierMask = [.command]
+        viewMenu.addItem(goToWorkspace)
+        for i in 1...8 {
             let item = NSMenuItem(
                 title: "Workspace \(i)", action: #selector(switchToWorkspaceAction(_:)), keyEquivalent: "\(i)")
             item.keyEquivalentModifierMask = [.command]
             item.tag = i - 1
             viewMenu.addItem(item)
         }
+        let lastWorkspace = NSMenuItem(
+            title: "Last Workspace", action: #selector(lastWorkspaceAction(_:)), keyEquivalent: "9")
+        lastWorkspace.keyEquivalentModifierMask = [.command]
+        viewMenu.addItem(lastWorkspace)
+        // ⌃⌘[ / ⌃⌘] land on ö / ä on a German layout; ⌃⌥⇥ is the same on every layout.
+        addNavigationItem(
+            to: viewMenu, title: "Next Workspace", action: #selector(nextWorkspaceAction(_:)),
+            key: "]", modifiers: [.command, .control], twinKey: "\t", twinModifiers: [.control, .option])
+        addNavigationItem(
+            to: viewMenu, title: "Previous Workspace", action: #selector(previousWorkspaceAction(_:)),
+            key: "[", modifiers: [.command, .control], twinKey: ShortcutOverrides.Shortcut.backTab,
+            twinModifiers: [.control, .option, .shift])
+        addNavigationItem(
+            to: viewMenu, title: "Move Workspace Up", action: #selector(moveWorkspaceUpAction(_:)),
+            key: "[", modifiers: [.command, .control, .option])
+        addNavigationItem(
+            to: viewMenu, title: "Move Workspace Down", action: #selector(moveWorkspaceDownAction(_:)),
+            key: "]", modifiers: [.command, .control, .option])
+
+        viewMenu.addItem(.separator())
+        // ⇧ turns [ ] into { }, and AppKit matches the shifted character.
+        addNavigationItem(
+            to: viewMenu, title: "Next Tab", action: #selector(nextTabAction(_:)),
+            key: "}", modifiers: [.command, .shift], twinKey: "\t", twinModifiers: [.control])
+        addNavigationItem(
+            to: viewMenu, title: "Previous Tab", action: #selector(previousTabAction(_:)),
+            key: "{", modifiers: [.command, .shift], twinKey: ShortcutOverrides.Shortcut.backTab,
+            twinModifiers: [.control, .shift])
+        addNavigationItem(
+            to: viewMenu, title: "Focus Back", action: #selector(focusBackAction(_:)),
+            key: "[", modifiers: [.command])
+        addNavigationItem(
+            to: viewMenu, title: "Focus Forward", action: #selector(focusForwardAction(_:)),
+            key: "]", modifiers: [.command])
 
         viewMenu.addItem(.separator())
         for i in 1...9 {
@@ -359,6 +413,23 @@ extension MainWindowController {
 
         NSApplication.shared.mainMenu = mainMenu
         ShortcutOverrides.apply(to: mainMenu)
+    }
+
+    /// An item, plus an optional hidden twin with a second shortcut. The twin
+    /// is an alternate, so the menu and palette list the command once.
+    private func addNavigationItem(
+        to menu: NSMenu, title: String, action: Selector, key: String, modifiers: NSEvent.ModifierFlags,
+        twinKey: String? = nil, twinModifiers: NSEvent.ModifierFlags = []
+    ) {
+        let item = NSMenuItem(title: title, action: action, keyEquivalent: key)
+        item.keyEquivalentModifierMask = modifiers
+        menu.addItem(item)
+        guard let twinKey else { return }
+        let twin = NSMenuItem(title: title, action: action, keyEquivalent: twinKey)
+        twin.keyEquivalentModifierMask = twinModifiers
+        twin.isAlternate = true
+        twin.isHidden = true
+        menu.addItem(twin)
     }
 
     @objc func switchToTabAction(_ sender: NSMenuItem) {

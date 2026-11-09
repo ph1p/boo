@@ -13,6 +13,20 @@ enum ShortcutOverrides {
 
         static let none = Shortcut(key: "", modifiers: [])
 
+        /// ⇧⇥ arrives as back-tab (U+0019), so a menu item only matches it
+        /// with that key: "\t" plus shift never fires.
+        init(key: String, modifiers: NSEvent.ModifierFlags) {
+            if (key == "\t" && modifiers.contains(.shift)) || key == Self.backTab {
+                self.key = Self.backTab
+                self.modifiers = modifiers.union(.shift)
+            } else {
+                self.key = key
+                self.modifiers = modifiers
+            }
+        }
+
+        static let backTab = "\u{19}"
+
         var display: String { key.isEmpty ? "" : ActionRegistry.display(key: key, modifiers: modifiers) }
     }
 
@@ -90,7 +104,7 @@ enum ShortcutOverrides {
         if shortcut.modifiers.contains(.option) { parts.append("opt") }
         if shortcut.modifiers.contains(.shift) { parts.append("shift") }
         if shortcut.modifiers.contains(.command) { parts.append("cmd") }
-        let key = shortcut.key.lowercased()
+        let key = shortcut.key == Shortcut.backTab ? "\t" : shortcut.key.lowercased()
         if let name = namedKeys.first(where: { $0.value == key })?.key {
             parts.append(name)
         } else if let scalar = key.unicodeScalars.first, key.unicodeScalars.count == 1,

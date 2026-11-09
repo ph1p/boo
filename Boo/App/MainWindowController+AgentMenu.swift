@@ -45,6 +45,11 @@ extension MainWindowController {
             keyEquivalent: "J")
         jump.keyEquivalentModifierMask = [.command, .shift]
         menu.addItem(jump)
+        let lastDone = NSMenuItem(
+            title: "Jump to Last Finished Agent", action: #selector(jumpToLastFinishedAgentAction(_:)),
+            keyEquivalent: "J")
+        lastDone.keyEquivalentModifierMask = [.command, .shift, .option]
+        menu.addItem(lastDone)
     }
 
     /// The pane a menu request names, else the active one.

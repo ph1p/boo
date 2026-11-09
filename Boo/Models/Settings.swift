@@ -60,6 +60,7 @@ final class AppSettings {
         static let statusBarSeparators = "statusBarSeparators"
         static let statusBarShowConnection = "statusBarShowConnection"
         static let debugLogging = "debugLogging"
+        static let tmuxLeaderPreset = "tmuxLeaderPreset"
         static let sidebarPosition = "sidebarPosition"
         static let workspaceBarPosition = "workspaceBarPosition"
         static let sidebarDensity = "sidebarDensity"
@@ -270,6 +271,14 @@ final class AppSettings {
     var sidebarFontName: String {
         get { UserDefaults.standard.string(forKey: K.sidebarFontName) ?? "" }
         set { set(newValue, forKey: K.sidebarFontName, topic: .sidebarFont) }
+    }
+
+    // MARK: - Keyboard
+
+    /// Built-in tmux-style leader keys (⌃A) while ~/.boo/keytables.json is missing.
+    var tmuxLeaderPreset: Bool {
+        get { bool(K.tmuxLeaderPreset, default: false) }
+        set { set(newValue, forKey: K.tmuxLeaderPreset, topic: .shortcuts) }
     }
 
     // MARK: - Debug

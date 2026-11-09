@@ -125,6 +125,7 @@ extension MainWindowController {
             pluginRegistry.notifyCwdChanged(newPath: cwd, context: baseContext)
         }
         if reason == .focusChanged || reason == .workspaceSwitched {
+            recordFocus()
             if ws.activePaneID != lastFocusedPluginPaneID {
                 lastFocusedPluginPaneID = ws.activePaneID
                 pluginRegistry.notifyFocusChanged(terminalID: ws.activePaneID, context: baseContext)

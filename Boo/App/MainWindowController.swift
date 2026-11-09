@@ -53,6 +53,8 @@ import SwiftUI
     var workspacePaneViews: [UUID: [UUID: PaneView]] = [:]
     /// Panes of the active workspace that mirror each other's typing.
     var broadcast: BroadcastGroup?
+    /// Places focused in this window, for ⌘[ / ⌘].
+    var focusHistory = FocusHistory()
     /// Workspace whose split tree is currently rendered in the split container.
     var renderedWorkspaceID: UUID?
     /// Other window highlighted as the drop target while a workspace is dragged out of this one.

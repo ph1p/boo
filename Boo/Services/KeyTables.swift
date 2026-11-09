@@ -5,8 +5,9 @@ extension Notification.Name {
     static let keyTableChanged = Notification.Name("BooKeyTableChanged")
 }
 
-/// Leader-key mode from `~/.boo/keytables.json`. Off while the file is
-/// missing; re-read when Boo becomes active after the file changed.
+/// Leader-key mode from `~/.boo/keytables.json`. While the file is missing it
+/// is off, or the built-in tmux preset when that setting is on. Re-read when
+/// Boo becomes active after the file changed.
 @MainActor
 final class KeyTables {
     static let shared = KeyTables(path: BooPaths.keyTablesFile)
@@ -17,6 +18,8 @@ final class KeyTables {
     private var reportedProblems: [String] = []
     private var timer: Timer?
     private var activeObserver: Any?
+    private var settingsObserver: Any?
+    private var loadedPreset = false
     /// Keys whose press the mode took; their release must not reach Ghostty.
     private var swallowedKeyCodes = Set<UInt16>()
 
@@ -28,6 +31,11 @@ final class KeyTables {
         reloadIfChanged()
         activeObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.reloadIfChanged() }
+        }
+        settingsObserver = NotificationCenter.default.addObserver(
+            forName: .settingsChanged, object: nil, queue: .main
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.reloadIfChanged() }
         }
@@ -44,17 +52,19 @@ final class KeyTables {
 
     func reloadIfChanged() {
         let date = (try? FileManager.default.attributesOfItem(atPath: path))?[.modificationDate] as? Date
-        guard date != loadedDate else { return }
+        let preset = AppSettings.shared.tmuxLeaderPreset
+        guard date != loadedDate || preset != loadedPreset else { return }
         loadedDate = date
-        reload(knownActionIDs: Set(ActionRegistry.actions().map(\.id)))
+        loadedPreset = preset
+        reload(knownActionIDs: Set(ActionRegistry.actions().map(\.id)), preset: preset)
     }
 
     /// Loads the file and reports what is wrong with it once per distinct set
     /// of problems, so re-activating Boo doesn't nag.
-    func reload(knownActionIDs: Set<String>, report: Bool = true) {
+    func reload(knownActionIDs: Set<String>, report: Bool = true, preset: Bool = false) {
         end()
         guard let data = FileManager.default.contents(atPath: path) else {
-            machine = nil
+            machine = preset ? KeyTableMachine(config: .tmuxPreset) : nil
             reportedProblems = []
             return
         }

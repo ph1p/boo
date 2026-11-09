@@ -100,7 +100,8 @@ enum ActionRegistry {
         in menu: NSMenu? = NSApplication.shared.mainMenu, includeUnbound: Bool = false
     ) -> [ShortcutGroup] {
         var groups: [ShortcutGroup] = []
-        for action in actions(in: menu) where includeUnbound ? !action.isAlternate : !action.keyEquivalent.isEmpty {
+        let all = actions(in: menu)
+        for action in all where includeUnbound ? !action.isAlternate : !action.keyEquivalent.isEmpty {
             let group = action.path[0] == "Boo" ? "General" : action.path[0]
             // Nested items ("Select Pane > Left") read as "Select Pane Left".
             var title = action.path.dropFirst().joined(separator: " ")
@@ -108,8 +109,19 @@ enum ActionRegistry {
             var actionID: String? = action.id
             if let run = numberedRun(title: title, key: action.keyEquivalent) {
                 guard run.number == 1 else { continue }
-                title = run.prefix + " 1-9"
-                shortcut = display(key: "", modifiers: action.modifiers) + "1-9"
+                // "Workspace 1-8" when ⌘9 is bound to something else.
+                let numbers = Set(
+                    all.compactMap { other -> Int? in
+                        guard other.isAlternate == action.isAlternate, other.modifiers == action.modifiers,
+                            let r = numberedRun(
+                                title: other.path.dropFirst().joined(separator: " "), key: other.keyEquivalent),
+                            r.prefix == run.prefix
+                        else { return nil }
+                        return r.number
+                    })
+                let last = (2...9).prefix { numbers.contains($0) }.last ?? 1
+                title = run.prefix + " 1-\(last)"
+                shortcut = display(key: "", modifiers: action.modifiers) + "1-\(last)"
                 actionID = nil
             }
             let entry = ShortcutEntry(title: title, shortcut: shortcut, actionID: actionID)
@@ -140,6 +152,7 @@ enum ActionRegistry {
         case "": break
         case "\r": display += "\u{23CE}"
         case " ": display += "Space"
+        case "\t", "\u{19}": display += "\u{21E5}"
         case String(UnicodeScalar(NSLeftArrowFunctionKey)!): display += "\u{2190}"
         case String(UnicodeScalar(NSRightArrowFunctionKey)!): display += "\u{2192}"
         case String(UnicodeScalar(NSUpArrowFunctionKey)!): display += "\u{2191}"

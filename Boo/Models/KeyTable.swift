@@ -155,6 +155,52 @@ struct KeyTableConfig: Equatable {
     }
 }
 
+extension KeyTableConfig {
+    /// tmux's default bindings behind ⌃A, for the "tmux-style leader" setting.
+    /// Keys match by the character they type, so `%` and `"` work on any layout.
+    static let tmuxPresetJSON = #"""
+        {
+          "leader": "ctrl+a",
+          "tables": {
+            "root": {
+              "%": "Terminal/Split Right",
+              "\"": "Terminal/Split Down",
+              "x": "File/Close Pane",
+              "z": "Terminal/Zoom Pane",
+              "o": "Terminal/Focus Next Pane",
+              ";": "View/Focus Back",
+              "q": "Terminal/Pick Pane…",
+              "h": "Terminal/Select Pane/Left",
+              "j": "Terminal/Select Pane/Down",
+              "k": "Terminal/Select Pane/Up",
+              "l": "Terminal/Select Pane/Right",
+              "left": "Terminal/Select Pane/Left",
+              "down": "Terminal/Select Pane/Down",
+              "up": "Terminal/Select Pane/Up",
+              "right": "Terminal/Select Pane/Right",
+              "{": "Terminal/Move Pane/Left",
+              "}": "Terminal/Move Pane/Right",
+              "=": "Terminal/Equalize Splits",
+              "[": "Terminal/Copy Mode",
+              "c": "File/New Terminal Tab",
+              "n": "View/Next Tab",
+              "p": "View/Previous Tab",
+              "s": "View/Go to Workspace…",
+              "w": "View/Go to Workspace…",
+              "(": "View/Previous Workspace",
+              ")": "View/Next Workspace",
+              "?": "View/Command Palette…"
+            }
+          }
+        }
+        """#
+
+    static var tmuxPreset: KeyTableConfig {
+        // The literal is fixed and covered by a test; it cannot fail to parse.
+        try! parse(Data(tmuxPresetJSON.utf8)).config
+    }
+}
+
 enum KeyTableError: Error, Equatable {
     case notJSON
 }

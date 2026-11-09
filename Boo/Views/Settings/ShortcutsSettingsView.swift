@@ -12,6 +12,7 @@ struct ShortcutsSettingsView: View {
     @State private var recordingID: String?
     @State private var message: String?
     @State private var monitor: Any?
+    @State private var tmuxLeader = AppSettings.shared.tmuxLeaderPreset
 
     /// Generated from the live main menu, so it cannot drift from it.
     private var filteredGroups: [ActionRegistry.ShortcutGroup] {
@@ -36,6 +37,17 @@ struct ShortcutsSettingsView: View {
         let overrides = AppSettings.shared.shortcutOverrides
 
         SettingsPage(title: "Keyboard Shortcuts") {
+            ToggleRow(
+                label: "tmux-style leader key",
+                help: "⌃A, then a tmux key: % \" split, x close, z zoom, hjkl or arrows move, o next pane, "
+                    + "q pick pane, c new tab, n/p next/previous tab, s workspaces. ⌃A twice types ⌃A. "
+                    + "Ignored while ~/.boo/keytables.json exists.",
+                isOn: $tmuxLeader
+            )
+            .onChange(of: tmuxLeader) { _, v in
+                AppSettings.shared.tmuxLeaderPreset = v
+            }
+
             SettingTextField(
                 placeholder: "Filter shortcuts",
                 text: $searchText,

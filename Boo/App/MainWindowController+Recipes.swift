@@ -126,6 +126,13 @@ final class RecipesMenu: NSObject, NSMenuDelegate {
 
     func menuNeedsUpdate(_ menu: NSMenu) { refresh(menu) }
 
+    /// No recipe item has a shortcut. Without this, AppKit rebuilds the menu
+    /// (a directory read) on every key event it matches against the menu.
+    func menuHasKeyEquivalent(
+        _ menu: NSMenu, for event: NSEvent, target: AutoreleasingUnsafeMutablePointer<AnyObject?>,
+        action: UnsafeMutablePointer<Selector?>
+    ) -> Bool { false }
+
     func refresh(_ menu: NSMenu) {
         while let first = menu.items.first, !first.isSeparatorItem { menu.removeItem(first) }
         let entries = RecipeStore.list()

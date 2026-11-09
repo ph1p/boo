@@ -413,9 +413,15 @@ extension GhosttyView {
             return true
         }
 
-        // Ctrl+key (without Cmd) always goes to the terminal — these are
-        // terminal control characters (Ctrl+C, Ctrl+R, Ctrl+Z, etc.)
+        // Ctrl+key (without Cmd) goes to the terminal — these are terminal
+        // control characters (Ctrl+C, Ctrl+R, Ctrl+Z, etc.). Only ⌃⇥ and
+        // ⌃digit carry no control character, so a menu item may claim them.
         if hasCtrl, !hasCmd {
+            if !KeyTables.shared.isActive, Self.isMenuCtrlKey(event),
+                NSApp.mainMenu?.performKeyEquivalent(with: event) == true
+            {
+                return true
+            }
             keyDown(with: event)
             return true
         }
@@ -428,6 +434,12 @@ extension GhosttyView {
             if Self.menuHandlesEvent(event) {
                 return false
             }
+            // On non-US layouts macOS localizes key equivalents (German:
+            // ⌘] becomes ⌘ä), so the literal check above misses them. Let
+            // AppKit's own matching try before the terminal gets the key.
+            if NSApp.mainMenu?.performKeyEquivalent(with: event) == true {
+                return true
+            }
             // No menu item for this combo — let Ghostty handle it
             keyDown(with: event)
             return true
@@ -437,6 +449,13 @@ extension GhosttyView {
     }
 
     /// Check if any menu item in the app's menu bar matches this key event.
+    /// ⌃⇥ (with any of ⌥⇧) and ⌃1-9: control keys a menu item may own.
+    static func isMenuCtrlKey(_ event: NSEvent) -> Bool {
+        if event.keyCode == 48 { return true }  // Tab
+        let digits: Set<UInt16> = [18, 19, 20, 21, 23, 22, 26, 28, 25]  // 1-9, layout-independent
+        return digits.contains(event.keyCode) && !event.modifierFlags.contains(.option)
+    }
+
     private static func menuHandlesEvent(_ event: NSEvent) -> Bool {
         guard let mainMenu = NSApp.mainMenu else { return false }
         return menuContainsEquivalent(mainMenu, event: event)

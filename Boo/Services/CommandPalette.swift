@@ -4,7 +4,7 @@ import Cocoa
 @MainActor
 struct PaletteItem: Identifiable {
     enum Kind: Int, CaseIterable {
-        case action, agent, workspace, tab, bookmark, host, secret, tmux, theme, profile, recipe, task, history
+        case action, agent, workspace, tab, pane, bookmark, host, secret, tmux, theme, profile, recipe, task, history
 
         var title: String {
             switch self {
@@ -12,6 +12,7 @@ struct PaletteItem: Identifiable {
             case .agent: return "Agents"
             case .workspace: return "Workspaces"
             case .tab: return "Tabs"
+            case .pane: return "Panes"
             case .bookmark: return "Bookmarks"
             case .host: return "SSH Hosts"
             case .secret: return "1Password"
@@ -48,7 +49,7 @@ struct PaletteQuery: Equatable {
     }
 
     /// `>` actions, `@` workspaces, `@ssh` hosts, `@op` 1Password items, `@tmux` sessions, `#` tabs,
-    /// `:` themes and profiles, `!` history.
+    /// `%` panes, `:` themes and profiles, `!` history.
     init(_ raw: String) {
         let trimmed = raw.trimmingCharacters(in: .whitespaces)
         for (word, kind) in [("@ssh", PaletteItem.Kind.host), ("@op", .secret), ("@tmux", .tmux)] {
@@ -60,7 +61,7 @@ struct PaletteQuery: Equatable {
             return
         }
         let prefixes: [Character: PaletteItem.Kind] = [
-            ">": .action, "@": .workspace, "#": .tab, ":": .theme, "!": .history
+            ">": .action, "@": .workspace, "#": .tab, "%": .pane, ":": .theme, "!": .history
         ]
         if let first = trimmed.first, let kind = prefixes[first] {
             self.kind = kind
@@ -157,7 +158,7 @@ enum PaletteRanker {
 @MainActor
 enum PaletteSources {
     static func items(menu: NSMenu? = NSApplication.shared.mainMenu) -> [PaletteItem] {
-        let places = workspaces() + tabs() + bookmarks() + hosts() + secrets() + tmux()
+        let places = workspaces() + tabs() + panes() + bookmarks() + hosts() + secrets() + tmux()
         let looks = themes() + profiles()
         return actions(menu: menu) + agents() + places + looks + RecipesMenu.paletteItems() + projectTasks()
     }
@@ -239,6 +240,31 @@ enum PaletteSources {
                                 controller.focusActivity(workspaceID: workspace.id, paneID: pane.id, tabIndex: index)
                             })
                     }
+                }
+            }
+        }
+    }
+
+    /// One row per split pane, numbered in split-tree order like ⌃⌘1-9.
+    /// Workspaces with a single pane are left out: the workspace row covers them.
+    static func panes() -> [PaletteItem] {
+        WindowManager.shared.controllers.flatMap { controller in
+            controller.appState.workspaces.flatMap { workspace -> [PaletteItem] in
+                let ids = workspace.splitTree.leafIDs
+                guard ids.count > 1 else { return [] }
+                return ids.enumerated().compactMap { number, paneID -> PaletteItem? in
+                    guard let pane = workspace.pane(for: paneID) else { return nil }
+                    let tab = pane.activeTab
+                    return PaletteItem(
+                        id: "pane:\(paneID.uuidString)", kind: .pane,
+                        title: "Pane \(number + 1) · \(tab?.title ?? "")",
+                        subtitle: "\(workspace.displayName) · \(abbreviate(tab?.state.workingDirectory ?? ""))",
+                        perform: { [weak controller] in
+                            guard let controller else { return }
+                            controller.window?.makeKeyAndOrderFront(nil)
+                            controller.focusActivity(
+                                workspaceID: workspace.id, paneID: paneID, tabIndex: pane.activeTabIndex)
+                        })
                 }
             }
         }

@@ -807,6 +807,10 @@ extension MainWindowController {
     @objc func jumpToNextWaitingAgentAction(_ sender: Any?) {
         AgentInbox.shared.jumpToNextAttention()
     }
+
+    @objc func jumpToLastFinishedAgentAction(_ sender: Any?) {
+        AgentInbox.shared.jumpToLastFinished()
+    }
 }
 
 // MARK: - Context handoff

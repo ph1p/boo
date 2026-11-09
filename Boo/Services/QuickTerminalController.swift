@@ -320,6 +320,10 @@ final class QuickTerminalController: NSObject, NSWindowDelegate, NSMenuItemValid
 
     @objc func focusPrevPaneAction(_ sender: Any?) { cycleTab(by: -1) }
 
+    @objc func nextTabAction(_ sender: Any?) { cycleTab(by: 1) }
+
+    @objc func previousTabAction(_ sender: Any?) { cycleTab(by: -1) }
+
     private func cycleTab(by delta: Int) {
         guard !hosts.isEmpty else { return }
         select((activeIndex + delta + hosts.count) % hosts.count)
@@ -374,10 +378,21 @@ final class QuickTerminalController: NSObject, NSWindowDelegate, NSMenuItemValid
     @objc func jumpToBookmarkAction(_ sender: NSMenuItem) {}
     @objc func sendContextToAgentAction(_ sender: Any?) {}
     @objc func toggleOrchestratorAction(_ sender: Any?) {}
+    @objc func goToWorkspaceAction(_ sender: Any?) {}
+    @objc func lastWorkspaceAction(_ sender: Any?) {}
+    @objc func nextWorkspaceAction(_ sender: Any?) {}
+    @objc func previousWorkspaceAction(_ sender: Any?) {}
+    @objc func moveWorkspaceUpAction(_ sender: Any?) {}
+    @objc func moveWorkspaceDownAction(_ sender: Any?) {}
+    @objc func focusBackAction(_ sender: Any?) {}
+    @objc func focusForwardAction(_ sender: Any?) {}
+    @objc func focusPaneNumberAction(_ sender: NSMenuItem) {}
+    @objc func pickPaneAction(_ sender: Any?) {}
 
     static let enabledActions: Set<Selector> = [
         #selector(newTabAction(_:)), #selector(smartCloseAction(_:)), #selector(switchToTabAction(_:)),
         #selector(focusNextPaneAction(_:)), #selector(focusPrevPaneAction(_:)),
+        #selector(nextTabAction(_:)), #selector(previousTabAction(_:)),
         #selector(clearScreenAction(_:)), #selector(clearScrollbackAction(_:)),
         #selector(toggleQuickTerminalAction(_:))
     ]

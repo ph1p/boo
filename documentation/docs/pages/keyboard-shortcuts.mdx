@@ -13,7 +13,8 @@ The tables below list the defaults.
 | **Cmd+N**       | New window                           |
 | **Cmd+Shift+N** | New workspace                        |
 | **Cmd+Shift+O** | Open folder as workspace             |
-| **Cmd+1-9**     | Switch to workspace N                |
+| **Cmd+1-8**     | Switch to workspace N                |
+| **Cmd+9**       | Switch to the last workspace         |
 | **Cmd+M**       | Minimize window                      |
 | **Opt+Space**   | Toggle quick terminal (from any app) |
 | **Cmd+,**       | Settings                             |
@@ -28,6 +29,7 @@ Change the quick terminal key in **Settings → Shortcuts → Quick Terminal**.
 | **Cmd+T**                            | New terminal tab                     |
 | **Cmd+Shift+T**                      | New browser tab                      |
 | **Cmd+Opt+1-9** or **Cmd+Shift+1-9** | Switch to tab N in the active pane   |
+| **Cmd+Shift+]** / **Cmd+Shift+[**    | Next / previous tab (also **Ctrl+Tab** / **Ctrl+Shift+Tab**) |
 | **Cmd+W**                            | Close (tab, then pane, then workspace) |
 | **Cmd+Opt+Z**                        | Reopen closed tab                    |
 | **Cmd+S**                            | Save (editor)                        |
@@ -40,7 +42,9 @@ Change the quick terminal key in **Settings → Shortcuts → Quick Terminal**.
 | **Cmd+D**                 | Split right                    |
 | **Cmd+Shift+D**           | Split down                     |
 | **Cmd+Shift+W**           | Close pane                     |
-| **Cmd+]** / **Cmd+[**     | Focus next / previous pane     |
+| **Cmd+Opt+]** / **Cmd+Opt+[** | Focus next / previous pane |
+| **Cmd+Ctrl+1-9**          | Focus pane N (split order)     |
+| **Cmd+Ctrl+P**            | Pick pane: type its label to jump; Tab swaps instead |
 | **Cmd+Opt+Arrows**        | Select pane in that direction  |
 | **Cmd+Ctrl+Arrows**       | Resize pane in that direction  |
 | **Cmd+Ctrl+Shift+Arrows** | Move (swap) pane               |
@@ -81,10 +85,20 @@ See [Windows & Splits](/windows-and-splits).
 | Shortcut                         | Action                         |
 | -------------------------------- | ------------------------------ |
 | **Cmd+Shift+P**                  | Command palette                |
+| **Cmd+P**                        | Go to workspace (palette filtered to `@`) |
+| **Cmd+Ctrl+]** / **Cmd+Ctrl+[**  | Next / previous workspace (also **Ctrl+Opt+Tab** / **Ctrl+Opt+Shift+Tab**) |
+| **Cmd+Ctrl+Opt+]** / **Cmd+Ctrl+Opt+[** | Move workspace down / up |
+| **Cmd+]** / **Cmd+[**            | Focus forward / back: walks the panes, tabs and workspaces you visited |
 | **Cmd+B**                        | Toggle sidebar                 |
 | **Cmd+Return** or **Cmd+Ctrl+F** | Toggle full screen             |
 | **Cmd+L**                        | Open location (browser tab)    |
 | **Cmd+R**                        | Reload page (browser tab)      |
+
+In the command palette, `%` lists panes, `#` tabs and `@` workspaces. **Ctrl+N** / **Ctrl+P** move the selection like the arrow keys.
+
+### German and other layouts
+
+Shortcuts with `[`, `]`, `{` and `}` follow your keyboard layout. On a German (QWERTZ) keyboard, macOS shows and matches them as `ö`, `ä`, `Ö` and `Ä`: **Cmd+ö** is focus back, **Cmd+ä** is focus forward. The menus show the key your layout uses.
 
 ## Bookmarks
 
@@ -99,6 +113,7 @@ See [Windows & Splits](/windows-and-splits).
 | ------------------ | ----------------------------------------------- |
 | **Cmd+Opt+Return** | Send selection or last output to agent          |
 | **Cmd+Shift+J**    | Jump to next waiting agent                      |
+| **Cmd+Opt+Shift+J** | Jump to the agent that finished last           |
 | **Cmd+Opt+O**      | Toggle orchestrator                             |
 | **Cmd+Return**     | Send comments to agent (review tab)             |
 | **Cmd+Return**     | Allow the first approval card (orchestrator drawer focused) |
@@ -126,7 +141,26 @@ With the navigation bar shown, **Opt+Up** goes to the parent folder, **Opt+Down*
 
 ## Key Tables
 
-Key tables add tmux-style leader keys. They are off until you create `~/.boo/keytables.json`:
+Key tables add tmux-style leader keys. Turn on **Settings → Shortcuts → tmux-style leader key** for tmux's defaults behind **Ctrl+A**:
+
+| Key after Ctrl+A        | Action                          |
+| ----------------------- | ------------------------------- |
+| `%` / `"`               | Split right / down              |
+| `x`                     | Close pane                      |
+| `z`                     | Zoom pane                       |
+| `o` / `;`               | Next pane / previous place      |
+| `q`                     | Pick pane                       |
+| `h` `j` `k` `l`, arrows | Select pane in that direction   |
+| `{` / `}`               | Move pane left / right          |
+| `=`                     | Equalize splits                 |
+| `[`                     | Copy mode                       |
+| `c`                     | New terminal tab                |
+| `n` / `p`               | Next / previous tab             |
+| `s` or `w`              | Go to workspace                 |
+| `(` / `)`               | Previous / next workspace       |
+| `?`                     | Command palette                 |
+
+For your own tables, create `~/.boo/keytables.json`. The file replaces the built-in set:
 
 ```json
 {
