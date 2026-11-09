@@ -1,0 +1,913 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Boo — a native macOS terminal for coding agents</title>
+<meta name="description" content="Boo is a native macOS terminal with workspaces, split panes, a file explorer and agent tools. Built on Ghostty for terminal emulation and Metal rendering.">
+<meta property="og:title" content="Boo — a native macOS terminal">
+<meta property="og:description" content="Workspaces, split panes, a file explorer and agent tools. Built on Ghostty.">
+<meta property="og:image" content="https://ph1p.github.io/boo/social-preview.png">
+<link rel="icon" href="/boo/logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0b0c10;
+  --bg2: #111319;
+  --card: #151821;
+  --line: #232734;
+  --text: #e8eaf0;
+  --muted: #9aa1b2;
+  --dim: #6b7285;
+  --accent: #8b7cff;
+  --accent2: #4fd1c5;
+  --warn: #f6b352;
+  --ok: #5fd38d;
+  --err: #ff6b6b;
+  --radius: 14px;
+  --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0; background: var(--bg); color: var(--text);
+  font: 16px/1.6 Inter, -apple-system, BlinkMacSystemFont, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: inherit; }
+img { max-width: 100%; display: block; }
+code, kbd, pre { font-family: var(--mono); }
+kbd {
+  font-size: .8em; padding: 1px 6px; border-radius: 5px;
+  background: var(--card); border: 1px solid var(--line); border-bottom-width: 2px;
+  white-space: nowrap;
+}
+.wrap { max-width: 1180px; margin: 0 auto; padding: 0 24px; }
+
+/* nav */
+nav {
+  position: sticky; top: 0; z-index: 10;
+  backdrop-filter: saturate(160%) blur(14px); -webkit-backdrop-filter: saturate(160%) blur(14px);
+  background: rgba(11,12,16,.72); border-bottom: 1px solid rgba(255,255,255,.05);
+}
+nav .wrap { display: flex; align-items: center; gap: 28px; height: 60px; }
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 700; text-decoration: none; font-size: 18px; }
+.brand img { width: 30px; height: 30px; }
+nav .links { display: flex; gap: 22px; margin-left: auto; font-size: 14px; color: var(--muted); }
+nav .links a { text-decoration: none; }
+nav .links a:hover { color: var(--text); }
+.btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 11px 20px; border-radius: 10px; font-weight: 600; font-size: 15px;
+  text-decoration: none; border: 1px solid var(--line); background: var(--card);
+  transition: transform .15s, background .15s, border-color .15s;
+}
+.btn:hover { transform: translateY(-1px); border-color: #34394a; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn.primary:hover { background: #9a8dff; }
+.btn.sm { padding: 7px 14px; font-size: 13px; }
+
+/* hero */
+.hero { position: relative; padding: 88px 0 40px; text-align: center; overflow: hidden; }
+.hero::before {
+  content: ""; position: absolute; inset: -200px -10% auto; height: 700px; z-index: -1;
+  background:
+    radial-gradient(600px 300px at 30% 30%, rgba(139,124,255,.28), transparent 70%),
+    radial-gradient(500px 280px at 72% 20%, rgba(79,209,197,.18), transparent 70%);
+}
+.hero .logo { width: 120px; height: 120px; margin: 0 auto 22px; filter: drop-shadow(0 12px 40px rgba(139,124,255,.45)); }
+.eyebrow {
+  display: inline-block; font: 600 12px/1 var(--mono); letter-spacing: .08em; text-transform: uppercase;
+  color: var(--accent2); padding: 6px 12px; border: 1px solid rgba(79,209,197,.3); border-radius: 99px; margin-bottom: 22px;
+}
+h1 { font-size: clamp(38px, 6vw, 68px); line-height: 1.05; letter-spacing: -.03em; margin: 0 0 20px; font-weight: 800; }
+h1 .grad { background: linear-gradient(90deg, #b3a9ff, #4fd1c5); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.lead { font-size: 19px; color: var(--muted); max-width: 680px; margin: 0 auto 32px; }
+.cta { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+.req { margin-top: 14px; font-size: 13px; color: var(--dim); }
+.shot {
+  border-radius: 12px; overflow: hidden;
+  background: linear-gradient(180deg, #1a1d27, #10121a);
+  box-shadow: 0 30px 80px -20px rgba(0,0,0,.8), 0 0 0 1px rgba(255,255,255,.06);
+}
+.shot img { width: 100%; height: auto; }
+.shot.missing { aspect-ratio: 16/10; display: grid; place-items: center; color: var(--dim); font: 13px var(--mono); }
+.hero .shot { margin: 56px auto 0; max-width: 1100px; }
+
+/* chips */
+.chips { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin: 48px auto 0; max-width: 900px; }
+.chips a {
+  font-size: 13px; color: var(--muted); text-decoration: none; padding: 6px 12px;
+  border: 1px solid var(--line); border-radius: 99px; background: var(--bg2);
+}
+.chips a:hover { color: var(--text); border-color: #3a4052; }
+
+/* sections */
+section.feature { padding: 96px 0; border-top: 1px solid rgba(255,255,255,.04); }
+.split { display: grid; grid-template-columns: 5fr 7fr; gap: 56px; align-items: center; }
+.split.flip { grid-template-columns: 7fr 5fr; }
+.split.flip .text { order: 2; }
+.split > *, .grid > *, .plugs > *, .keys > * { min-width: 0; }
+.kicker { font: 600 12px/1 var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--accent); margin-bottom: 14px; }
+h2 { font-size: clamp(28px, 3.4vw, 40px); line-height: 1.12; letter-spacing: -.02em; margin: 0 0 16px; }
+h3 { font-size: 17px; margin: 0 0 6px; }
+.text p { color: var(--muted); margin: 0 0 20px; }
+ul.points { list-style: none; padding: 0; margin: 0 0 22px; display: grid; gap: 10px; }
+ul.points li { position: relative; padding-left: 26px; color: #c9cdd8; font-size: 15px; }
+ul.points li::before {
+  content: ""; position: absolute; left: 4px; top: .62em; width: 8px; height: 8px; border-radius: 2px;
+  background: var(--accent); box-shadow: 0 0 12px var(--accent);
+}
+ul.points b { color: var(--text); font-weight: 600; }
+.more { font-size: 14px; color: var(--accent2); text-decoration: none; font-weight: 600; }
+.more:hover { text-decoration: underline; }
+
+/* agents band */
+.band { background: linear-gradient(180deg, rgba(139,124,255,.07), transparent 60%); }
+.center { text-align: center; max-width: 760px; margin: 0 auto 48px; }
+.center p { color: var(--muted); font-size: 18px; }
+.grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.grid.two { grid-template-columns: repeat(2, 1fr); }
+.card {
+  background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 22px;
+  transition: border-color .2s, transform .2s;
+}
+.card:hover { border-color: #353b4e; transform: translateY(-2px); }
+.card p { color: var(--muted); font-size: 14.5px; margin: 0; }
+.card .ico {
+  width: 36px; height: 36px; border-radius: 9px; display: grid; place-items: center; margin-bottom: 14px;
+  background: rgba(139,124,255,.14); color: #b3a9ff; font: 600 15px var(--mono);
+}
+.card .shot { margin: -4px -4px 18px; border-radius: 9px; }
+.states { display: flex; gap: 8px; flex-wrap: wrap; margin: 4px 0 22px; }
+.state { font: 12px var(--mono); padding: 4px 10px; border-radius: 99px; border: 1px solid; }
+.state.w { color: var(--warn); border-color: rgba(246,179,82,.35); }
+.state.e { color: var(--err); border-color: rgba(255,107,107,.35); }
+.state.d { color: var(--ok); border-color: rgba(95,211,141,.35); }
+.state.a { color: #b3a9ff; border-color: rgba(139,124,255,.4); }
+
+/* terminal snippet */
+.term {
+  background: #0e1016; border: 1px solid var(--line); border-radius: 12px; overflow: hidden;
+  font: 13.5px/1.65 var(--mono); box-shadow: 0 20px 60px -20px rgba(0,0,0,.7);
+}
+.term .bar { display: flex; gap: 7px; padding: 11px 14px; border-bottom: 1px solid var(--line); background: #13151d; }
+.term .bar i { width: 11px; height: 11px; border-radius: 50%; background: #3a3f4f; }
+.term .bar i:nth-child(1) { background: #ff5f57; } .term .bar i:nth-child(2) { background: #febc2e; } .term .bar i:nth-child(3) { background: #28c840; }
+.term pre { margin: 0; padding: 16px 18px; overflow-x: auto; color: #c9cdd8; }
+.term .p { color: var(--accent2); } .term .c { color: var(--dim); } .term .k { color: #b3a9ff; } .term .s { color: var(--ok); }
+
+/* theme strip */
+.themes { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0 22px; }
+.sw { display: flex; border-radius: 6px; overflow: hidden; border: 1px solid var(--line); height: 22px; }
+.sw span { width: 14px; }
+
+/* install */
+.install { padding: 100px 0 120px; text-align: center; border-top: 1px solid rgba(255,255,255,.04); }
+.install .term { max-width: 640px; margin: 32px auto 0; text-align: left; }
+.steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; max-width: 900px; margin: 40px auto 0; text-align: left; }
+.steps .card b { font: 600 13px var(--mono); color: var(--accent2); display: block; margin-bottom: 8px; }
+
+footer { border-top: 1px solid var(--line); padding: 32px 0; color: var(--dim); font-size: 14px; }
+footer .wrap { display: flex; gap: 24px; flex-wrap: wrap; align-items: center; }
+footer .wrap > :last-child { margin-left: auto; }
+footer a { text-decoration: none; } footer a:hover { color: var(--text); }
+
+/* plugin list */
+.plugs { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.plug {
+  display: flex; gap: 12px; align-items: flex-start; padding: 13px 14px;
+  background: var(--card); border: 1px solid var(--line); border-radius: 11px;
+  transition: border-color .2s;
+}
+.plug:hover { border-color: #3a4052; }
+.plug b { font-size: 14.5px; }
+.plug p { margin: 2px 0 0; color: var(--muted); font-size: 13px; line-height: 1.45; }
+.plug .pi {
+  flex: none; width: 28px; height: 28px; border-radius: 7px; display: grid; place-items: center;
+  background: rgba(79,209,197,.12); color: var(--accent2); font: 600 14px var(--mono);
+}
+.grid.four { grid-template-columns: repeat(4, 1fr); }
+.card.mini { padding: 18px; }
+.card.mini .ico { width: 30px; height: 30px; font-size: 13px; margin-bottom: 10px; }
+
+/* code tabs */
+.term.code .bar { align-items: center; }
+.ctabs { display: flex; gap: 2px; margin-left: 14px; }
+.ctabs button {
+  font: 12px var(--mono); color: var(--dim); background: none; border: 0; padding: 3px 10px; border-radius: 6px; cursor: pointer;
+}
+.ctabs button[aria-selected="true"] { color: var(--text); background: #222634; }
+.ctabs button:focus-visible { outline: 2px solid var(--accent); }
+.term pre[hidden] { display: none; }
+.term { position: relative; }
+.copy {
+  position: absolute; top: 6px; right: 8px; font: 11px var(--mono); color: var(--dim);
+  background: #1b1e28; border: 1px solid var(--line); border-radius: 6px; padding: 3px 9px; cursor: pointer;
+  opacity: 0; transition: opacity .15s;
+}
+.term:hover .copy, .copy:focus-visible { opacity: 1; }
+.copy.done { color: var(--ok); }
+.examples { margin-top: 16px; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.ex-h { padding: 10px 14px; font-size: 13px; color: var(--muted); background: var(--bg2); border-bottom: 1px solid var(--line); }
+.ex-h a { color: var(--accent2); text-decoration: none; }
+.ex { display: flex; gap: 12px; padding: 9px 14px; font-size: 13.5px; border-top: 1px solid rgba(255,255,255,.03); }
+.ex code { color: #b3a9ff; min-width: 150px; }
+.ex span { color: var(--muted); }
+
+/* stats */
+.stats { display: flex; justify-content: center; gap: 44px; flex-wrap: wrap; margin-top: 40px; }
+.stats div { text-align: center; }
+.stats b { display: block; font-size: 28px; font-weight: 800; letter-spacing: -.02em; }
+.stats span { font-size: 13px; color: var(--dim); }
+
+/* shortcuts */
+.keys { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+.kcol { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px; }
+.kcol h3 { font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--accent); font-family: var(--mono); margin-bottom: 14px; }
+.kr { display: flex; flex-direction: column; gap: 4px; font-size: 13.5px; color: var(--muted); padding: 8px 0; border-top: 1px solid rgba(255,255,255,.04); }
+.kr:first-of-type { border-top: 0; }
+.kr span { display: flex; gap: 4px; }
+.kr kbd { color: var(--text); }
+
+/* faq */
+.faq { max-width: 820px; }
+.faq details { border: 1px solid var(--line); border-radius: 12px; background: var(--card); margin-bottom: 10px; }
+.faq summary {
+  cursor: pointer; list-style: none; padding: 17px 20px; font-weight: 600; display: flex; justify-content: space-between; gap: 16px;
+}
+.faq summary::-webkit-details-marker { display: none; }
+.faq summary::after { content: "+"; color: var(--dim); font: 400 20px/1 var(--mono); transition: transform .2s; }
+.faq details[open] summary::after { transform: rotate(45deg); }
+.faq details p { margin: 0; padding: 0 20px 18px; color: var(--muted); }
+
+.reveal { opacity: 0; transform: translateY(18px); transition: opacity .6s ease, transform .6s ease; }
+.reveal.in { opacity: 1; transform: none; }
+@media (prefers-reduced-motion: reduce) { .reveal { opacity: 1; transform: none; transition: none; } html { scroll-behavior: auto; } }
+
+@media (max-width: 900px) {
+  .split, .split.flip { grid-template-columns: 1fr; gap: 32px; }
+  .split.flip .text { order: 0; }
+  .grid, .steps, .grid.four, .keys { grid-template-columns: 1fr 1fr; }
+  nav .links { display: none; }
+  nav .btn { margin-left: auto; }
+}
+@media (max-width: 600px) {
+  .wrap { padding: 0 16px; }
+  .grid, .grid.two, .grid.four, .steps, .keys, .plugs { grid-template-columns: 1fr; }
+  .stats { gap: 24px; }
+  .ex { flex-direction: column; gap: 2px; }
+  section.feature { padding: 64px 0; }
+  .hero { padding-top: 56px; }
+}
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="wrap">
+    <a class="brand" href="#top"><img src="/boo/logo.png" alt="">Boo</a>
+    <div class="links">
+      <a href="#workspaces">Workspaces</a>
+      <a href="#agents">Agents</a>
+      <a href="#tools">Terminal tools</a>
+      <a href="#plugins">Plugins</a>
+      <a href="#shortcuts">Shortcuts</a>
+      <a href="/boo/">Docs</a>
+      <a href="https://github.com/ph1p/boo">GitHub</a>
+    </div>
+    <a class="btn primary sm" href="https://github.com/ph1p/boo/releases/latest">Download</a>
+  </div>
+</nav>
+
+<header class="hero" id="top">
+  <div class="wrap">
+    <img class="logo" src="/boo/logo.png" alt="Boo logo">
+    <div class="eyebrow">Native macOS · Built on Ghostty</div>
+    <h1>The terminal built for<br><span class="grad">you and your agents</span></h1>
+    <p class="lead">Boo is a native macOS terminal with workspaces, split panes, a file explorer and agent tools. Ghostty does the terminal emulation and Metal rendering; Boo adds everything around it.</p>
+    <div class="cta">
+      <a class="btn primary" href="https://github.com/ph1p/boo/releases/latest">Download for macOS</a>
+      <a class="btn" href="/boo/getting-started">Get started</a>
+      <a class="btn" href="https://github.com/ph1p/boo">View on GitHub</a>
+    </div>
+    <div class="req">Free and open source (MIT) · macOS 15+ on Apple Silicon · updates itself via Sparkle</div>
+    <div class="stats">
+      <div><b>3</b><span>agent CLIs tracked</span></div>
+      <div><b>13</b><span>built-in plugins</span></div>
+      <div><b>32</b><span>themes</span></div>
+      <div><b>6</b><span>tab types</span></div>
+    </div>
+    <div class="shot"><img src="/boo/landing/img/hero.png" alt="Boo with split panes, a file explorer sidebar and the workspace bar" onerror="this.onerror=null;this.src='/boo/app.png'"></div>
+    <div class="chips">
+      <a href="#workspaces">Workspaces &amp; splits</a>
+      <a href="#tabs">Browser, editor &amp; preview tabs</a>
+      <a href="#explorer">File explorer</a>
+      <a href="#agents">Agent inbox</a>
+      <a href="#tasks">Worktree tasks</a>
+      <a href="#orchestrator">Orchestrator</a>
+      <a href="#palette">Command palette</a>
+      <a href="#tools">Quick select &amp; copy mode</a>
+      <a href="#recording">Recording &amp; MP4</a>
+      <a href="#tmux">tmux</a>
+      <a href="#themes">32 themes</a>
+      <a href="#rules">Rules &amp; profiles</a>
+      <a href="#plugins">13 sidebar plugins</a>
+      <a href="#plugin-dev">JS plugin API</a>
+      <a href="#recipes">Recipes</a>
+      <a href="#shortcuts">Shortcuts</a>
+      <a href="#remote">Remote control</a>
+      <a href="#scripting">Socket &amp; MCP</a>
+    </div>
+  </div>
+</header>
+
+<!-- Workspaces -->
+<section class="feature" id="workspaces">
+  <div class="wrap split">
+    <div class="text reveal">
+      <div class="kicker">Workspaces, panes, tabs</div>
+      <h2>Every project gets its own room</h2>
+      <p>Open a folder as a workspace with its own color, file tree and layout. Split in any direction, give each pane its own tab bar, and come back tomorrow to exactly where you left off.</p>
+      <ul class="points">
+        <li><b>Splits everywhere</b> — <kbd>⌘D</kbd> right, <kbd>⇧⌘D</kbd> down, zoom, swap, equalize, or drag a tab onto a pane edge</li>
+        <li><b>Tab groups &amp; vertical tabs</b> — colored, collapsible groups; tabs in a column with agent status per row</li>
+        <li><b>Workspace groups</b> — collapse related workspaces into one pill; color new ones by project</li>
+        <li><b>Session &amp; scrollback restore</b> — layouts, ratios, tab folders and colored scrollback survive a restart</li>
+        <li><b>Recipes</b> — save a layout with commands as JSON and reopen it in one go</li>
+        <li><b>Multiple windows</b> — tear tabs off, move workspaces, merge everything back</li>
+      </ul>
+      <a class="more" href="/boo/windows-and-splits">Windows &amp; splits →</a>
+    </div>
+    <div class="shot reveal"><img src="/boo/app.png" alt="Boo with tab groups and several split panes"></div>
+  </div>
+</section>
+
+<!-- Tabs -->
+<section class="feature" id="tabs">
+  <div class="wrap split flip">
+    <div class="text reveal">
+      <div class="kicker">Multi-content tabs</div>
+      <h2>A tab doesn't have to be a terminal</h2>
+      <p>Browser, code editor, image viewer, markdown preview and recording player live in the same tab bars as your shells. Open the dev server next to the logs, the README next to the code.</p>
+      <ul class="points">
+        <li><b>Browser tabs</b> — <kbd>⇧⌘T</kbd>, or <kbd>⌘</kbd>-click any URL in the terminal</li>
+        <li><b>Editor</b> — CodeMirror with autosave, format on save, encoding and line-ending info, reload on disk change</li>
+        <li><b>Markdown &amp; images</b> — rendered previews, or images inline via the Kitty graphics protocol</li>
+        <li><b>Progress bars</b> — OSC 9;4 progress shows on the tab, the workspace pill and the Dock icon</li>
+      </ul>
+      <a class="more" href="/boo/multi-content-tabs">Multi-content tabs →</a>
+    </div>
+    <div class="shot reveal"><img src="/boo/landing/img/tabs.png" alt="A pane with a terminal, a browser tab and a markdown preview tab" onerror="this.parentNode.classList.add('missing');this.replaceWith('/boo/landing/img/tabs.png')"></div>
+  </div>
+</section>
+
+<!-- Explorer -->
+<section class="feature" id="explorer">
+  <div class="wrap split">
+    <div class="text reveal">
+      <div class="kicker">File explorer &amp; git</div>
+      <h2>Your files, even over SSH</h2>
+      <p>A live file tree follows the active terminal: local folders through FSEvents, and remote shells by reusing the connection you already opened.</p>
+      <ul class="points">
+        <li><b>Remote browsing</b> — SSH, Mosh, docker, podman, kubectl, lxc, lima, colima, distrobox, vagrant, adb and more</li>
+        <li><b>Git status</b> — VS Code–style badges rolled up to folders, ignored files dimmed</li>
+        <li><b>Git sidebar</b> — staged, unstaged and untracked files with inline stage/unstage; branch switcher in the status bar</li>
+        <li><b>Keyboard first</b> — fuzzy filter with <kbd>/</kbd>, multi-select, rename, trash, type-ahead</li>
+      </ul>
+      <a class="more" href="/boo/remote-sessions">Remote sessions →</a>
+    </div>
+    <div class="shot reveal"><img src="/boo/git.png" alt="Boo showing a git diff and the Git sidebar"></div>
+  </div>
+</section>
+
+<!-- Agents -->
+<section class="feature band" id="agents">
+  <div class="wrap">
+    <div class="center reveal">
+      <div class="kicker">Agents</div>
+      <h2>Run Claude Code, Codex and OpenCode side by side</h2>
+      <p>Boo knows which of your terminals run a coding agent and what each one is doing — across every window. It tells you who needs you, gives each task its own worktree, and lets you review the result before you merge.</p>
+    </div>
+    <div class="split reveal">
+      <div class="text">
+        <h3 style="font-size:22px;margin-bottom:10px">Agent inbox</h3>
+        <p>One list of every agent, summed up in the status bar and colored by state. <kbd>⇧⌘J</kbd> jumps to the next agent waiting for input; a notification arrives when one finishes in a tab you're not looking at.</p>
+        <div class="states">
+          <span class="state w">● needs input</span>
+          <span class="state a">● working</span>
+          <span class="state d">● done</span>
+          <span class="state e">● failed</span>
+        </div>
+        <ul class="points">
+          <li><b>Agents sidebar</b> — open sessions, changed files with diff stats, worktrees, config and skills</li>
+          <li><b>Send to agent</b> — <kbd>⌥⌘↩</kbd> hands the selection or last command's output to the nearest agent</li>
+          <li><b>Works remotely</b> — agents behind ssh or mosh are tracked from their title and bell</li>
+        </ul>
+      </div>
+      <div class="shot"><img src="/boo/landing/img/agents.png" alt="The agent inbox with several Claude Code sessions in different states" onerror="this.parentNode.classList.add('missing');this.replaceWith('/boo/landing/img/agents.png')"></div>
+    </div>
+
+    <div class="grid" style="margin-top:56px">
+      <div class="card reveal" id="tasks">
+        <div class="shot"><img src="/boo/landing/img/review.png" alt="Review tab with inline comments on a diff" onerror="this.parentNode.classList.add('missing');this.replaceWith('/boo/landing/img/review.png')"></div>
+        <h3>Worktree tasks &amp; review</h3>
+        <p><b>File → New Agent Task…</b> starts an agent on its own <code>boo/&lt;task&gt;</code> branch and worktree. Review the diff, comment on lines, send feedback with <kbd>⌘↩</kbd>, then merge or discard.</p>
+      </div>
+      <div class="card reveal">
+        <div class="shot"><img src="/boo/landing/img/timeline.png" alt="Agent timeline with prompts, tool calls, tokens and cost" onerror="this.parentNode.classList.add('missing');this.replaceWith('/boo/landing/img/timeline.png')"></div>
+        <h3>Timeline &amp; cost</h3>
+        <p>Replay a Claude Code session: every prompt, tool call, duration, token count and cost, plus the files it edited. Repeated calls are folded so loops stand out.</p>
+      </div>
+      <div class="card reveal" id="orchestrator">
+        <div class="shot"><img src="/boo/landing/img/orchestrator.png" alt="The orchestrator drawer listing agents that need input" onerror="this.parentNode.classList.add('missing');this.replaceWith('/boo/landing/img/orchestrator.png')"></div>
+        <h3>Orchestrator</h3>
+        <p>One Claude Code session that sees every agent (<kbd>⌥⌘O</kbd>). It answers waiting agents, splits work into parallel tasks and merges them — anything risky waits on an approval card.</p>
+      </div>
+    </div>
+
+    <div class="split" style="margin-top:56px">
+      <div class="text reveal">
+        <h3 style="font-size:22px;margin-bottom:10px">Agents that arrange their own workspace</h3>
+        <p>Boo ships an MCP server and a <code>boo</code> CLI. An agent can open a pane for the dev server, read the test output next door, start helpers in their own worktrees and open the review for you — and it never types into its own pane.</p>
+        <a class="more" href="/boo/agents">Agents guide →</a>
+      </div>
+      <div class="term reveal">
+        <div class="bar"><i></i><i></i><i></i></div>
+<pre><span class="c"># register once</span>
+<span class="p">❯</span> claude mcp add -s user boo -- ~/.boo/shell-integration/boo-mcp
+
+<span class="c"># from inside an agent: start a helper on its own branch</span>
+<span class="p">❯</span> <span class="k">boo run</span> "add tests for the parser"
+<span class="c">  ↳ new tab on its own git worktree and branch</span>
+<span class="p">❯</span> <span class="k">boo agents</span>
+<span class="p">❯</span> <span class="k">boo wait</span> t2
+<span class="p">❯</span> <span class="k">boo diff</span> t2 &amp;&amp; <span class="k">boo merge</span> t2</pre>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Palette -->
+<section class="feature" id="palette">
+  <div class="wrap split flip">
+    <div class="text reveal">
+      <div class="kicker">Command palette</div>
+      <h2>Everything is one keystroke away</h2>
+      <p><kbd>⇧⌘P</kbd> searches every menu command, workspace and tab of every window, bookmarks, SSH hosts, themes, profiles and recipes. Matching is fuzzy and recent picks rank higher.</p>
+      <ul class="points">
+        <li><b>Prefixes</b> — <code>&gt;</code> commands, <code>@</code> workspaces, <code>@ssh</code> hosts, <code>#</code> tabs, <code>%</code> panes, <code>:</code> themes, <code>!</code> history</li>
+        <li><b>Live theme preview</b> — highlight a theme to try it, <kbd>Esc</kbd> to revert</li>
+        <li><b>Every shortcut rebindable</b> — and they work on non-US layouts like QWERTZ</li>
+      </ul>
+      <a class="more" href="/boo/keyboard-shortcuts">Keyboard shortcuts →</a>
+    </div>
+    <div class="shot reveal"><img src="/boo/landing/img/palette.png" alt="The command palette" onerror="this.parentNode.classList.add('missing');this.replaceWith('/boo/landing/img/palette.png')"></div>
+  </div>
+</section>
+
+<!-- Terminal tools -->
+<section class="feature" id="tools">
+  <div class="wrap">
+    <div class="center reveal">
+      <div class="kicker">Terminal tools</div>
+      <h2>A terminal that understands its output</h2>
+      <p>Shell integration marks every prompt, so Boo knows where each command and its output start and end.</p>
+    </div>
+    <div class="grid reveal">
+      <div class="card">
+        <div class="shot"><img src="/boo/landing/img/quick-select.png" alt="Quick select labels on URLs, paths and hashes" onerror="this.parentNode.classList.add('missing');this.replaceWith('/boo/landing/img/quick-select.png')"></div>
+        <h3>Quick select</h3>
+        <p><kbd>⇧⌘Space</kbd> labels every URL, path, git hash, IP and UUID on screen. Type the label to copy, with <kbd>⇧</kbd> to paste at the prompt.</p>
+      </div>
+      <div class="card">
+        <div class="ico">⌘↑</div>
+        <h3>Command blocks</h3>
+        <p>Gutter marks per prompt (red when it failed), jump with <kbd>⌘↑</kbd>/<kbd>⌘↓</kbd>, right-click to copy a command's output, re-run it or send it to an agent.</p>
+      </div>
+      <div class="card">
+        <div class="ico">vi</div>
+        <h3>Copy mode</h3>
+        <p><kbd>⇧⌘C</kbd> puts a keyboard cursor on the scrollback. Move with vi keys, select with <kbd>v</kbd>/<kbd>V</kbd>, yank with <kbd>y</kbd>.</p>
+      </div>
+      <div class="card">
+        <div class="ico">⌥␣</div>
+        <h3>Quick terminal</h3>
+        <p><kbd>⌥Space</kbd> from any app drops a terminal from the top of the screen, with its own tabs that keep running while hidden.</p>
+      </div>
+      <div class="card">
+        <div class="ico">⇶</div>
+        <h3>Broadcast input</h3>
+        <p>Type once into every pane of a workspace, or ⌘-click to pick panes. Panes running an agent never receive it.</p>
+      </div>
+      <div class="card">
+        <div class="ico">^R</div>
+        <h3>History everywhere</h3>
+        <p><kbd>⌃R</kbd> searches every command you ran in Boo — across tabs, windows and hosts — with folder, exit code and duration.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Recording -->
+<section class="feature" id="recording">
+  <div class="wrap split">
+    <div class="text reveal">
+      <div class="kicker">Session recording</div>
+      <h2>Record a pane. Export an MP4.</h2>
+      <p>Record one pane or all of them as asciicast files — output only, never keystrokes. Drop chapter markers with <kbd>⇧⌘M</kbd>, play recordings back in a tab, and render them to H.264 video in your theme and font, faster than real time.</p>
+      <ul class="points">
+        <li><b>Player</b> — seek, speed from 0.25× to 4×, jump between markers</li>
+        <li><b>Idle trimming</b> — long pauses are shortened on playback</li>
+        <li><b>Library</b> — rename, export, reveal and trash recordings from Settings</li>
+      </ul>
+      <a class="more" href="/boo/features#session-recording">Recording →</a>
+    </div>
+    <div class="shot reveal"><img src="/boo/landing/img/recording.png" alt="The recording player tab" onerror="this.parentNode.classList.add('missing');this.replaceWith('/boo/landing/img/recording.png')"></div>
+  </div>
+</section>
+
+<!-- tmux -->
+<section class="feature" id="tmux">
+  <div class="wrap split flip">
+    <div class="text reveal">
+      <div class="kicker">tmux</div>
+      <h2>tmux sessions as native panes</h2>
+      <p>Run <code>tmux -CC</code> and each tmux window becomes a Boo workspace, each tmux pane a Boo pane. Focus, zoom, rename and reorder stay in sync both ways — also with other attached clients.</p>
+      <ul class="points">
+        <li><b>Session chip</b> — open hidden windows, switch sessions, run any tmux command</li>
+        <li><b>Clipboard</b> — tmux buffers land on the macOS clipboard</li>
+        <li><b>Reattach on launch</b> — sessions attached at quit open again</li>
+      </ul>
+      <a class="more" href="/boo/features#tmux">tmux →</a>
+    </div>
+    <div class="term reveal">
+      <div class="bar"><i></i><i></i><i></i></div>
+<pre><span class="p">❯</span> ssh build-box
+<span class="p">build-box ❯</span> tmux -CC attach -t work
+<span class="c">  ↳ 3 tmux windows → 3 Boo workspaces</span>
+<span class="c">  ↳ 5 tmux panes   → 5 native Boo panes</span>
+<span class="s">  ✓ scrollback, focus and zoom in sync</span></pre>
+    </div>
+  </div>
+</section>
+
+<!-- Themes -->
+<section class="feature" id="themes">
+  <div class="wrap split">
+    <div class="text reveal">
+      <div class="kicker">Themes &amp; appearance</div>
+      <h2>The whole UI follows your theme</h2>
+      <p>32 built-in themes restyle the terminal and every piece of chrome around it. Edit a theme and watch the app change live, or import one from iTerm2 or Ghostty.</p>
+      <div class="themes" aria-hidden="true">
+        <div class="sw" title="Catppuccin Mocha"><span style="background:#1e1e2e"></span><span style="background:#cba6f7"></span><span style="background:#a6e3a1"></span><span style="background:#f38ba8"></span></div>
+        <div class="sw" title="Tokyo Night"><span style="background:#1a1b26"></span><span style="background:#7aa2f7"></span><span style="background:#9ece6a"></span><span style="background:#f7768e"></span></div>
+        <div class="sw" title="Dracula"><span style="background:#282a36"></span><span style="background:#bd93f9"></span><span style="background:#50fa7b"></span><span style="background:#ff79c6"></span></div>
+        <div class="sw" title="Nord"><span style="background:#2e3440"></span><span style="background:#88c0d0"></span><span style="background:#a3be8c"></span><span style="background:#bf616a"></span></div>
+        <div class="sw" title="Gruvbox Dark"><span style="background:#282828"></span><span style="background:#fabd2f"></span><span style="background:#b8bb26"></span><span style="background:#fb4934"></span></div>
+        <div class="sw" title="Rosé Pine"><span style="background:#191724"></span><span style="background:#c4a7e7"></span><span style="background:#9ccfd8"></span><span style="background:#eb6f92"></span></div>
+        <div class="sw" title="Solarized Light"><span style="background:#fdf6e3"></span><span style="background:#268bd2"></span><span style="background:#859900"></span><span style="background:#dc322f"></span></div>
+        <div class="sw" title="Synthwave '84"><span style="background:#262335"></span><span style="background:#ff7edb"></span><span style="background:#72f1b8"></span><span style="background:#fede5d"></span></div>
+      </div>
+      <ul class="points">
+        <li><b>Theme editor</b> — every chrome color derived and previewed live</li>
+        <li><b>Shaders</b> — Ghostty shaders per tab, like a CRT look for demos</li>
+        <li><b>Settings search</b> — find any option by what it does</li>
+      </ul>
+      <a class="more" href="/boo/theming">Theming →</a>
+    </div>
+    <div class="shot reveal"><img src="/boo/landing/img/themes.png" alt="The same window in four themes" onerror="this.parentNode.classList.add('missing');this.replaceWith('/boo/landing/img/themes.png')"></div>
+  </div>
+</section>
+
+<!-- Rules & profiles -->
+<section class="feature" id="rules">
+  <div class="wrap split flip">
+    <div class="text reveal">
+      <div class="kicker">Rules &amp; profiles</div>
+      <h2>Production looks like production</h2>
+      <p>A profile is a set of overrides — theme, font, shader, shell, environment. A rule applies one by host, folder, container, kube context or process, or runs an action when output matches a regex.</p>
+      <a class="more" href="/boo/rules-and-profiles">Rules &amp; profiles →</a>
+    </div>
+    <div class="term reveal">
+      <div class="bar"><i></i><i></i><i></i></div>
+<pre><span class="c">// ~/.boo/profiles.json</span>
+{
+  <span class="k">"profiles"</span>: [{
+    <span class="k">"name"</span>: <span class="s">"Production"</span>,
+    <span class="k">"theme"</span>: <span class="s">"Gruvbox Dark"</span>,
+    <span class="k">"env"</span>: { <span class="k">"AWS_PROFILE"</span>: <span class="s">"prod"</span> }
+  }]
+}
+<span class="c">// rule: ssh host prod-* → profile "Production"</span></pre>
+    </div>
+  </div>
+</section>
+
+<!-- Plugins -->
+<section class="feature band" id="plugins">
+  <div class="wrap">
+    <div class="center reveal">
+      <div class="kicker">Sidebar plugins</div>
+      <h2>A sidebar that knows your stack</h2>
+      <p>Thirteen built-in plugins sit in stacked, collapsible panels next to the terminal. Each one shows up only where it makes sense — Git in a repo, Docker on your Mac, Files over SSH — and you toggle them from the status bar.</p>
+    </div>
+    <div class="split reveal">
+      <div class="shot"><img src="/boo/landing/img/plugins.png" alt="Sidebar plugins: file explorer, Git, System and Tasks" onerror="this.parentNode.classList.add('missing');this.replaceWith('/boo/landing/img/plugins.png')"></div>
+      <div class="plugs">
+        <div class="plug"><span class="pi">▸</span><div><b>Files</b><p>Live tree, local via FSEvents or remote over SSH and Mosh</p></div></div>
+        <div class="plug"><span class="pi">⎇</span><div><b>Git</b><p>Branch, ahead/behind, stage and unstage inline</p></div></div>
+        <div class="plug"><span class="pi">✦</span><div><b>Agents</b><p>Sessions, changed files, worktrees, config and skills</p></div></div>
+        <div class="plug"><span class="pi">▶</span><div><b>Tasks</b><p>Run <code>package.json</code> scripts, make, just, cargo and swift tasks</p></div></div>
+        <div class="plug"><span class="pi">◫</span><div><b>Docker</b><p>Containers with exec, logs, start, stop and restart</p></div></div>
+        <div class="plug"><span class="pi">☸</span><div><b>Kubernetes</b><p>Pods, workloads, jobs, services, logs and port-forwards</p></div></div>
+        <div class="plug"><span class="pi">⇢</span><div><b>Hosts</b><p>Your <code>~/.ssh/config</code>, one click to connect</p></div></div>
+        <div class="plug"><span class="pi">⚿</span><div><b>1Password</b><p>Search items, copy or type secrets, insert <code>op://</code> references</p></div></div>
+        <div class="plug"><span class="pi">★</span><div><b>Bookmarks</b><p>Saved folders per host, <kbd>⌃1</kbd>–<kbd>⌃9</kbd> to jump</p></div></div>
+        <div class="plug"><span class="pi">✎</span><div><b>Notes</b><p>A markdown note per workspace</p></div></div>
+        <div class="plug"><span class="pi">❯</span><div><b>Snippets</b><p>Saved commands to paste at the prompt</p></div></div>
+        <div class="plug"><span class="pi">◔</span><div><b>System</b><p>CPU, memory, disk, battery, plus status bar readouts</p></div></div>
+      </div>
+    </div>
+
+    <div class="split" style="margin-top:88px" id="plugin-dev">
+      <div class="text reveal">
+        <div class="kicker">Write your own</div>
+        <h2>A plugin is two files of JavaScript</h2>
+        <p>Drop a <code>plugin.json</code> and a <code>main.js</code> into <code>~/.boo/plugins/&lt;name&gt;/</code>. No build step, no Node, no npm — scripts run in JavaScriptCore, and Boo reloads the plugin the moment you save.</p>
+        <ul class="points">
+          <li><b>Declarative UI</b> — return stacks, labels, lists, buttons and badges from <code>render(ctx)</code>; tints follow the theme</li>
+          <li><b>Real context</b> — folder, git branch and changes, running process, remote host and settings arrive in <code>ctx</code></li>
+          <li><b>Actions</b> — <code>exec</code>, <code>paste</code>, <code>cd</code>, <code>newTab</code>, <code>newPane</code>, <code>open</code>, <code>copy</code>, <code>notification</code> and more</li>
+          <li><b>Hooks into Boo</b> — status bar segments, a settings page, items in the Plugins menu with their own shortcuts</li>
+          <li><b>Scoped by <code>when</code></b> — <code>env.local</code>, <code>git.active</code>, <code>process.name</code>… decide where the panel appears</li>
+        </ul>
+        <a class="more" href="/boo/plugin-development">Plugin development guide →</a>
+      </div>
+      <div class="reveal">
+        <div class="term code">
+          <div class="bar"><i></i><i></i><i></i>
+            <div class="ctabs" role="tablist">
+              <button role="tab" aria-selected="true" data-tab="pj">plugin.json</button>
+              <button role="tab" aria-selected="false" data-tab="mj">main.js</button>
+            </div>
+          </div>
+<pre data-pane="pj"><span class="c">// ~/.boo/plugins/make-targets/plugin.json</span>
+{
+  <span class="k">"id"</span>: <span class="s">"make-targets"</span>,
+  <span class="k">"name"</span>: <span class="s">"Make Targets"</span>,
+  <span class="k">"version"</span>: <span class="s">"1.0.0"</span>,
+  <span class="k">"icon"</span>: <span class="s">"hammer"</span>,
+  <span class="k">"when"</span>: <span class="s">"env.local"</span>,
+  <span class="k">"runtime"</span>: <span class="s">"js"</span>,
+  <span class="k">"capabilities"</span>: { <span class="k">"sidebarTab"</span>: true },
+  <span class="k">"statusBar"</span>: { <span class="k">"position"</span>: <span class="s">"left"</span>, <span class="k">"template"</span>: <span class="s">"make"</span> }
+}</pre>
+<pre data-pane="mj" hidden><span class="c">// ~/.boo/plugins/make-targets/main.js</span>
+<span class="k">function</span> render(ctx) {
+  <span class="k">var</span> src = readFile(<span class="s">"Makefile"</span>);
+  <span class="k">if</span> (!src) <span class="k">return</span> { type: <span class="s">"label"</span>, text: <span class="s">"No Makefile"</span>, style: <span class="s">"muted"</span> };
+
+  <span class="k">var</span> targets = src.split(<span class="s">"\n"</span>)
+    .map(<span class="k">function</span> (l) { <span class="k">return</span> (l.match(<span class="s">/^([a-zA-Z][\w-]*)\s*:/</span>) || [])[1]; })
+    .filter(Boolean);
+
+  <span class="k">return</span> {
+    type: <span class="s">"list"</span>,
+    items: targets.map(<span class="k">function</span> (t) {
+      <span class="k">return</span> { label: t, icon: <span class="s">"terminal"</span>,
+               action: { type: <span class="s">"exec"</span>, command: <span class="s">"make "</span> + t } };
+    })
+  };
+}</pre>
+        </div>
+        <div class="examples">
+          <div class="ex-h">Examples in <a href="https://github.com/ph1p/boo/tree/main/examples/plugins"><code>examples/plugins</code></a></div>
+          <div class="ex"><code>hello-world</code><span>the smallest plugin, two files</span></div>
+          <div class="ex"><code>make-targets</code><span>Makefile targets, click to run</span></div>
+          <div class="ex"><code>project-info</code><span>detects the project type and its key files</span></div>
+          <div class="ex"><code>node-project</code><span>scripts, dependencies and quick actions</span></div>
+          <div class="ex"><code>terminal-inspector</code><span>every context field, setting and action</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid four reveal" style="margin-top:56px">
+      <div class="card mini"><div class="ico">↻</div><h3>Hot reload</h3><p>Save the file and the panel updates. No restart, no build.</p></div>
+      <div class="card mini"><div class="ico">!</div><h3>Fails safely</h3><p>If <code>render</code> throws, the panel shows the error; after one second, a timeout.</p></div>
+      <div class="card mini"><div class="ico">⚙</div><h3>Settings</h3><p>Toggles, sliders and pickers in Settings → Plugins, read from <code>ctx.settings</code>.</p></div>
+      <div class="card mini"><div class="ico">Sw</div><h3>Or go native</h3><p>Built-ins are Swift plugins with full SwiftUI and AppKit, behind the same protocol.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- Recipes -->
+<section class="feature" id="recipes">
+  <div class="wrap split">
+    <div class="text reveal">
+      <div class="kicker">Recipes</div>
+      <h2>Your whole dev setup, one click away</h2>
+      <p>A recipe is a workspace you can open again: a folder plus a layout of panes, each tab starting in its own directory and running its own command. Save the current workspace as a recipe, then reopen it from the menu, the palette, the socket or MCP.</p>
+      <ul class="points">
+        <li><b>Plain JSON</b> in <code>~/.boo/recipes/</code>, synced with your other settings</li>
+        <li><b>Nested splits</b> with ratios, per-tab <code>cwd</code>, <code>command</code> and <code>env</code></li>
+        <li><b>Safe to save</b> — Boo stores your last commands as hints, never runs them unasked</li>
+      </ul>
+      <a class="more" href="/boo/features#recipes">Recipes →</a>
+    </div>
+    <div class="term reveal">
+      <div class="bar"><i></i><i></i><i></i></div>
+<pre><span class="c">// ~/.boo/recipes/web.json</span>
+{
+  <span class="k">"name"</span>: <span class="s">"web"</span>,
+  <span class="k">"folder"</span>: <span class="s">"~/code/app"</span>,
+  <span class="k">"layout"</span>: {
+    <span class="k">"split"</span>: <span class="s">"right"</span>, <span class="k">"ratio"</span>: 0.6,
+    <span class="k">"a"</span>: { <span class="k">"tabs"</span>: [{ <span class="k">"command"</span>: <span class="s">"pnpm dev"</span> }, {}] },
+    <span class="k">"b"</span>: { <span class="k">"split"</span>: <span class="s">"down"</span>,
+      <span class="k">"a"</span>: { <span class="k">"tabs"</span>: [{ <span class="k">"cwd"</span>: <span class="s">"./api"</span>, <span class="k">"command"</span>: <span class="s">"pnpm test --watch"</span> }] },
+      <span class="k">"b"</span>: {} }
+  }
+}</pre>
+    </div>
+  </div>
+</section>
+
+<!-- Remote / scripting / security -->
+<section class="feature" id="remote">
+  <div class="wrap">
+    <div class="center reveal">
+      <div class="kicker">Beyond the window</div>
+      <h2>Drive Boo from anywhere</h2>
+    </div>
+    <div class="grid reveal" id="scripting">
+      <div class="card">
+        <div class="ico">◉</div>
+        <h3>Remote control</h3>
+        <p>An optional web UI on your LAN: see every pane, type, switch tabs, and approve or deny waiting agents from your phone. Stops itself after 30 minutes idle.</p>
+        <p style="margin-top:12px"><a class="more" href="/boo/remote-control">Remote control →</a></p>
+      </div>
+      <div class="card">
+        <div class="ico">{}</div>
+        <h3>Unix socket</h3>
+        <p>Newline-delimited JSON on <code>~/.boo/boo.sock</code>: query layout, split panes, send text, read screens, subscribe to events like <code>cmd_ended</code>.</p>
+        <p style="margin-top:12px"><a class="more" href="/boo/ipc-socket">IPC socket →</a></p>
+      </div>
+      <div class="card">
+        <div class="ico">⇄</div>
+        <h3>Settings sync</h3>
+        <p>Keep settings, profiles, rules, themes and recipes the same on every Mac through a shared folder, with conflict detection.</p>
+        <p style="margin-top:12px"><a class="more" href="/boo/history-and-sync">History &amp; sync →</a></p>
+      </div>
+      <div class="card">
+        <div class="ico">🔒</div>
+        <h3>Secure by default</h3>
+        <p>Secure Keyboard Entry, confirmations for risky pastes and clipboard reads, and an owner-only <code>~/.boo</code>.</p>
+        <p style="margin-top:12px"><a class="more" href="/boo/security">Security →</a></p>
+      </div>
+      <div class="card">
+        <div class="ico">▤</div>
+        <h3>Configurable status bar</h3>
+        <p>Environment, branch, path, process, listening ports with one-click open, kube context, clock — reorder or hide any of them.</p>
+      </div>
+      <div class="card">
+        <div class="ico">⌁</div>
+        <h3>Ghostty inside</h3>
+        <p>GPU rendering with Metal, Kitty graphics and keyboard protocols, ligatures — the terminal core is Ghostty.</p>
+        <p style="margin-top:12px"><a class="more" href="/boo/ghostty-integration">Ghostty integration →</a></p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Shortcuts -->
+<section class="feature" id="shortcuts">
+  <div class="wrap">
+    <div class="center reveal">
+      <div class="kicker">Keyboard first</div>
+      <h2>Keep your hands on the keys</h2>
+      <p>Every menu command has a shortcut slot you can rebind in Settings. Brackets follow your layout, so on QWERTZ <kbd>⌘ö</kbd> and <kbd>⌘ä</kbd> just work. Prefer tmux habits? Turn on the <kbd>⌃A</kbd> leader key.</p>
+    </div>
+    <div class="keys reveal">
+      <div class="kcol">
+        <h3>Panes &amp; tabs</h3>
+        <div class="kr"><span><kbd>⌘D</kbd> <kbd>⇧⌘D</kbd></span>Split right / down</div>
+        <div class="kr"><span><kbd>⇧⌘↩</kbd></span>Zoom pane</div>
+        <div class="kr"><span><kbd>⌃⌘P</kbd></span>Pick a pane by label</div>
+        <div class="kr"><span><kbd>⌘[</kbd> <kbd>⌘]</kbd></span>Focus back / forward</div>
+        <div class="kr"><span><kbd>⌥⌘Z</kbd></span>Reopen closed tab</div>
+      </div>
+      <div class="kcol">
+        <h3>Navigate</h3>
+        <div class="kr"><span><kbd>⇧⌘P</kbd></span>Command palette</div>
+        <div class="kr"><span><kbd>⌘P</kbd></span>Go to workspace</div>
+        <div class="kr"><span><kbd>⇧⌘O</kbd></span>Open folder as workspace</div>
+        <div class="kr"><span><kbd>⌘B</kbd></span>Toggle sidebar</div>
+        <div class="kr"><span><kbd>⌥Space</kbd></span>Quick terminal, from any app</div>
+      </div>
+      <div class="kcol">
+        <h3>Terminal</h3>
+        <div class="kr"><span><kbd>⌘↑</kbd> <kbd>⌘↓</kbd></span>Previous / next prompt</div>
+        <div class="kr"><span><kbd>⌥⌘C</kbd></span>Copy last output</div>
+        <div class="kr"><span><kbd>⇧⌘Space</kbd></span>Quick select</div>
+        <div class="kr"><span><kbd>⇧⌘C</kbd></span>Copy mode</div>
+        <div class="kr"><span><kbd>⌃R</kbd></span>Search history</div>
+      </div>
+      <div class="kcol">
+        <h3>Agents</h3>
+        <div class="kr"><span><kbd>⇧⌘J</kbd></span>Next waiting agent</div>
+        <div class="kr"><span><kbd>⌥⇧⌘J</kbd></span>Agent that finished last</div>
+        <div class="kr"><span><kbd>⌥⌘↩</kbd></span>Send output to agent</div>
+        <div class="kr"><span><kbd>⌥⌘O</kbd></span>Orchestrator</div>
+        <div class="kr"><span><kbd>⌘↩</kbd></span>Send review comments</div>
+      </div>
+    </div>
+    <p style="text-align:center;margin-top:28px"><a class="more" href="/boo/keyboard-shortcuts">All shortcuts →</a></p>
+  </div>
+</section>
+
+<!-- FAQ -->
+<section class="feature" id="faq">
+  <div class="wrap faq">
+    <div class="center reveal" style="margin-bottom:36px">
+      <div class="kicker">FAQ</div>
+      <h2>Questions, answered</h2>
+    </div>
+    <details class="reveal"><summary>How is Boo related to Ghostty?</summary><p>Boo embeds Ghostty's terminal core through libghostty. Ghostty handles terminal emulation, fonts and Metal rendering; Boo builds the window, workspaces, sidebar, agent tools and everything else around it. Your Ghostty shaders and themes work in Boo.</p></details>
+    <details class="reveal"><summary>Which coding agents does it support?</summary><p>Claude Code, Codex and OpenCode are detected out of the box, including when they run behind ssh or mosh. Other AI CLIs show up in the Agents sidebar, and any agent can drive Boo through the MCP server or the <code>boo</code> CLI.</p></details>
+    <details class="reveal"><summary>Do I need agents to use Boo?</summary><p>No. Workspaces, splits, the file explorer, quick select, copy mode, recording, tmux integration and plugins are all useful on their own. The agent features stay out of the way until a terminal runs one.</p></details>
+    <details class="reveal"><summary>Does it work on Intel Macs?</summary><p>Release builds target macOS 15 or later on Apple Silicon. You can try building from source for other setups.</p></details>
+    <details class="reveal"><summary>Where does Boo keep my data?</summary><p>Everything lives in <code>~/.boo</code>, readable only by you: settings, session, history, notes, recipes, plugins and recordings. Nothing leaves your Mac unless you turn on settings sync to a folder you pick, or remote control on your LAN.</p></details>
+    <details class="reveal"><summary>How do updates work?</summary><p>Boo updates itself through Sparkle. Releases are published on GitHub, so you can also download any version by hand.</p></details>
+  </div>
+</section>
+
+<!-- Install -->
+<section class="install" id="install">
+  <div class="wrap reveal">
+    <img src="/boo/logo.png" alt="" style="width:72px;height:72px;margin:0 auto 18px">
+    <h2>Get Boo</h2>
+    <p style="color:var(--muted);font-size:18px;margin:0 0 28px">Free, open source, and native. macOS 15+ on Apple Silicon.</p>
+    <div class="cta">
+      <a class="btn primary" href="https://github.com/ph1p/boo/releases/latest">Download latest release</a>
+      <a class="btn" href="/boo/installation">Installation guide</a>
+    </div>
+    <div class="steps">
+      <div class="card"><b>1 · Download</b><p>Grab the zip from GitHub Releases and move Boo to Applications.</p></div>
+      <div class="card"><b>2 · Open a folder</b><p><kbd>⇧⌘O</kbd> opens a folder as a workspace with its file tree.</p></div>
+      <div class="card"><b>3 · Start an agent</b><p>Run <code>claude</code> in a tab — Boo starts tracking it right away.</p></div>
+    </div>
+    <div class="term">
+      <div class="bar"><i></i><i></i><i></i></div>
+<pre><span class="c"># "Boo cannot be opened"? Clear the quarantine flag:</span>
+<span class="p">❯</span> xattr -dr com.apple.quarantine /Applications/Boo.app
+
+<span class="c"># or build from source</span>
+<span class="p">❯</span> git clone --recursive https://github.com/ph1p/boo.git
+<span class="p">❯</span> cd boo &amp;&amp; make setup &amp;&amp; make run</pre>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <a class="brand" href="#top"><img src="/boo/logo.png" alt="" style="width:22px;height:22px">Boo</a>
+    <a href="/boo/">Documentation</a>
+    <a href="https://github.com/ph1p/boo">GitHub</a>
+    <a href="https://github.com/ph1p/boo/releases">Releases</a>
+    <a href="/boo/contributing">Contributing</a>
+    <span>MIT licensed · built on <a href="https://github.com/ghostty-org/ghostty">Ghostty</a></span>
+  </div>
+</footer>
+
+<script>
+  const io = new IntersectionObserver((entries) => {
+    for (const e of entries) if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); }
+  }, { rootMargin: '0px 0px -8% 0px' });
+  document.querySelectorAll('.reveal').forEach((el) => io.observe(el));
+
+  document.querySelectorAll('.ctabs').forEach((tabs) => {
+    const term = tabs.closest('.term');
+    tabs.addEventListener('click', (e) => {
+      const b = e.target.closest('button'); if (!b) return;
+      tabs.querySelectorAll('button').forEach((x) => x.setAttribute('aria-selected', x === b));
+      term.querySelectorAll('pre[data-pane]').forEach((p) => { p.hidden = p.dataset.pane !== b.dataset.tab; });
+    });
+  });
+  document.querySelectorAll('.term').forEach((term) => {
+    const btn = document.createElement('button');
+    btn.className = 'copy'; btn.type = 'button'; btn.textContent = 'copy';
+    btn.addEventListener('click', async () => {
+      const pre = [...term.querySelectorAll('pre')].find((p) => !p.hidden);
+      const text = pre.innerText.split('\n').map((l) => l.replace(/^\S*❯ /, '')).join('\n');
+      try { await navigator.clipboard.writeText(text); btn.textContent = 'copied'; btn.classList.add('done'); }
+      catch { btn.textContent = 'failed'; }
+      setTimeout(() => { btn.textContent = 'copy'; btn.classList.remove('done'); }, 1400);
+    });
+    term.appendChild(btn);
+  });
+</script>
+</body>
+</html>
