@@ -19,12 +19,27 @@ enum TmuxProtocol {
         case end(number: String)
         case error(number: String)
         case output(pane: String, data: [UInt8])
-        case layoutChange(window: String, layout: String)
+        /// `layout` is the window's full layout, even while a pane is zoomed;
+        /// `zoomed` is set when one pane fills the window.
+        case layoutChange(window: String, layout: String, zoomed: Bool)
         case windowAdd(window: String)
         case windowClose(window: String)
         case windowRenamed(window: String, name: String)
+        /// The active pane of `window` changed.
+        case windowPaneChanged(window: String, pane: String)
+        /// The current window of session `session` changed.
+        case sessionWindowChanged(session: String, window: String)
         case sessionChanged(id: String, name: String)
         case sessionRenamed(id: String, name: String)
+        /// A session was created or destroyed.
+        case sessionsChanged
+        /// A `refresh-client -B` subscription's value changed; `pane` is empty
+        /// for session and window subscriptions.
+        case subscriptionChanged(name: String, pane: String, value: String)
+        /// Flow control (`pause-after`): tmux stopped or resumed a pane's output.
+        case pause(pane: String)
+        case resume(pane: String)
+        case pasteBufferChanged(name: String)
         case exit
         case other
     }
@@ -49,15 +64,32 @@ enum TmuxProtocol {
         case "%begin": return .begin(number: arg(2), fromClient: (Int(arg(3)) ?? 0) & 1 == 1)
         case "%end": return .end(number: arg(2))
         case "%error": return .error(number: arg(2))
-        case "%layout-change": return .layoutChange(window: arg(1), layout: arg(2))
+        case "%layout-change":
+            return .layoutChange(window: arg(1), layout: arg(2), zoomed: arg(4).contains("Z"))
         case "%window-add": return .windowAdd(window: arg(1))
         case "%window-close", "%unlinked-window-close": return .windowClose(window: arg(1))
         case "%window-renamed": return .windowRenamed(window: arg(1), name: rest(2))
+        case "%window-pane-changed": return .windowPaneChanged(window: arg(1), pane: arg(2))
+        case "%session-window-changed": return .sessionWindowChanged(session: arg(1), window: arg(2))
         case "%session-changed": return .sessionChanged(id: arg(1), name: rest(2))
         case "%session-renamed": return .sessionRenamed(id: arg(1), name: rest(2))
+        case "%sessions-changed": return .sessionsChanged
+        case "%subscription-changed": return subscription(words.dropFirst())
+        case "%pause": return .pause(pane: arg(1))
+        case "%continue": return .resume(pane: arg(1))
+        case "%paste-buffer-changed": return .pasteBufferChanged(name: rest(1))
         case "%exit": return .exit
         default: return .other
         }
+    }
+
+    /// `name $session @window index %pane ... : value`; the value may hold spaces.
+    private static func subscription(_ words: ArraySlice<Substring>) -> Line {
+        guard let marker = words.firstIndex(of: ":"), marker > words.startIndex else { return .other }
+        let fields = Array(words[..<marker])
+        let pane = fields.count > 4 && fields[4].hasPrefix("%") ? String(fields[4]) : ""
+        let value = words[(marker + 1)...].joined(separator: " ")
+        return .subscriptionChanged(name: String(fields[0]), pane: pane, value: value)
     }
 
     /// `%N data` or, extended, `%N age ... : data`.
@@ -268,22 +300,58 @@ enum TmuxProtocol {
 
     // MARK: - Commands
 
-    static let windowFormat = "#{window_id} #{window_active} #{window_layout} #{window_name}"
+    /// The name goes last: it may hold spaces.
+    static let windowFormat =
+        "#{window_id} #{window_active} #{window_layout} #{pane_id} #{window_zoomed_flag} #{window_name}"
 
     struct WindowInfo: Equatable {
         let id: String
         let active: Bool
         let layout: String
+        /// The window's active pane (`%N`).
+        var activePane: String = ""
+        var zoomed = false
         let name: String
     }
 
     /// A line printed with `windowFormat`.
     static func windowInfo(_ line: String) -> WindowInfo? {
-        let parts = line.split(separator: " ", maxSplits: 3, omittingEmptySubsequences: false)
-        guard parts.count >= 3, parts[0].hasPrefix("@") else { return nil }
+        let parts = line.split(separator: " ", maxSplits: 5, omittingEmptySubsequences: false)
+        guard parts.count >= 5, parts[0].hasPrefix("@"), parts[3].hasPrefix("%") else { return nil }
         return WindowInfo(
-            id: String(parts[0]), active: parts[1] == "1", layout: String(parts[2]),
-            name: parts.count > 3 ? String(parts[3]) : "")
+            id: String(parts[0]), active: parts[1] == "1", layout: String(parts[2]), activePane: String(parts[3]),
+            zoomed: parts[4] == "1", name: parts.count > 5 ? String(parts[5]) : "")
+    }
+
+    /// `#{version}` as a comparable number: "3.6b" is 3.6, "next-3.4" is
+    /// 3.4. Builds without a number ("master", "openbsd-7.4") count as new.
+    static func version(_ text: String) -> Double {
+        var text = text.trimmingCharacters(in: .whitespaces)
+        if text.hasPrefix("next-") { text.removeFirst(5) }
+        let number = text.prefix { $0.isNumber || $0 == "." }
+        guard !number.isEmpty, !text.hasPrefix("openbsd"), let value = Double(number) else { return .infinity }
+        return value
+    }
+
+    /// tmux 3.2 added `refresh-client -B` subscriptions, `-f pause-after`
+    /// flow control and `move-window -b`.
+    static let controlFeaturesVersion = 3.2
+
+    /// The `move-window` command that puts `window` where it sits in `order`
+    /// (window ids in the wanted order): after the window before it, or
+    /// before the one after it when it moved to the front.
+    static func moveWindow(_ window: String, toMatch order: [String]) -> String? {
+        guard let index = order.firstIndex(of: window), order.count > 1 else { return nil }
+        if index > 0 { return "move-window -a -s \(window) -t \(order[index - 1])" }
+        return "move-window -b -s \(window) -t \(order[1])"
+    }
+
+    /// The windows to open on attach when the session has more than `limit`
+    /// (0: no limit): the chosen ones, always including the active window.
+    static func windowsToOpen(_ windows: [WindowInfo], chosen: Set<String>?) -> [WindowInfo] {
+        guard let chosen else { return windows }
+        let picked = windows.filter { chosen.contains($0.id) || $0.active }
+        return picked.isEmpty ? Array(windows.prefix(1)) : picked
     }
 
     /// Bytes per `send-keys` command, to keep command lines short.

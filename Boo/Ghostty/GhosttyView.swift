@@ -670,6 +670,10 @@ extension GhosttyView: TmuxGateway {
         overlay.autoresizingMask = [.width, .height]
         overlay.onDetach = { [weak tmux] in tmux?.detach() }
         overlay.onNewWindow = { [weak tmux] in tmux?.newWindow() }
+        overlay.onRunCommand = { [weak tmux] in
+            guard let tmux, let host = tmux.hostedBy as? MainWindowController else { return }
+            host.promptTmuxCommand(tmux)
+        }
         overlay.onShowWindow = { [weak tmux] workspace in tmux?.show(workspace: workspace) }
         tmux.onChange = { [weak overlay, weak tmux] in
             guard let tmux else { return }

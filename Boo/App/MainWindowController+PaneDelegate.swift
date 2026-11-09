@@ -44,6 +44,7 @@ extension MainWindowController: PaneViewDelegate {
 
         workspace.activePaneID = paneID
         for (id, pv) in paneViews { pv.isFocused = id == paneID }
+        TmuxControlClient.owning(workspace: workspace.id)?.focus(pane: paneID)
 
         if let pane = workspace.pane(for: paneID) {
             if pane.setActivity(false, at: pane.activeTabIndex) { refreshToolbar() }

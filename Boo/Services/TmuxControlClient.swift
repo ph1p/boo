@@ -22,6 +22,23 @@ protocol TmuxHost: AnyObject {
     func tmuxRenameWorkspace(_ workspace: UUID, name: String)
     func tmuxCloseWorkspace(_ workspace: UUID)
     func tmuxShowWorkspace(_ workspace: UUID)
+    /// tmux made `pane` its window's active pane.
+    func tmuxFocusPane(_ pane: UUID, workspace: UUID)
+    /// tmux switched the session to the window `workspace` shows; follow it
+    /// only while one of the session's windows is in front.
+    func tmuxSelectWorkspace(_ workspace: UUID)
+    /// Shows only `pane` (nil: every pane), as tmux zoomed or unzoomed it.
+    func tmuxSetZoom(workspace: UUID, pane: UUID?)
+    /// A pane's working directory or running command changed in tmux.
+    func tmuxPaneChanged(_ pane: UUID, directory: String?, command: String?)
+    /// tmux paused (or resumed) the pane's output under flow control.
+    func tmuxPanePaused(_ pane: UUID, paused: Bool)
+    func tmuxShowError(_ message: String)
+    /// Asks which of a large session's windows to open; `choose` gets their
+    /// ids, or nil to open every one.
+    func tmuxChooseWindows(
+        _ windows: [TmuxProtocol.WindowInfo], session: String, choose: @escaping (Set<String>?) -> Void)
+    func tmuxCopyToClipboard(_ text: String)
 }
 
 /// Drives one tmux control-mode connection (`tmux -CC`). Each tmux window
@@ -54,6 +71,8 @@ final class TmuxControlClient {
         var tmuxSize: TmuxProtocol.CellSize?
         var bridgeSize: TmuxProtocol.CellSize?
         var requestedSize: TmuxProtocol.CellSize?
+        /// tmux stopped sending its output (flow control).
+        var paused = false
 
         init(id: UUID, tmuxID: String, window: String, token: String) {
             self.id = id
@@ -67,11 +86,23 @@ final class TmuxControlClient {
         let workspace: UUID
         var tree: SplitTree
         var name: String
+        /// The window's active pane as Boo last told or heard from tmux.
+        var activePane = ""
+        var zoomed = false
+    }
+
+    /// A sent command waiting for its reply.
+    private struct Pending {
+        let command: String
+        let reply: ((Reply) -> Void)?
+        /// An error reply is expected now and then (a pane already gone) and
+        /// is not shown.
+        let quiet: Bool
     }
 
     private struct Block {
         let number: String
-        let reply: ((Reply) -> Void)?
+        let pending: Pending?
         var lines: [[UInt8]] = []
     }
 
@@ -80,6 +111,33 @@ final class TmuxControlClient {
         let isError: Bool
         var text: [String] { lines.map { String(decoding: $0, as: UTF8.self) } }
     }
+
+    /// Settings read when they matter; tests pin them.
+    struct Options {
+        var historyLines = 1000
+        var pauseAfterSeconds = 0
+        var autoUnpause = false
+        var externalWindowsInBackground = true
+        var attachWindowLimit = 10
+        var mirrorPasteBuffer = false
+
+        static var current: Options {
+            let settings = AppSettings.shared
+            return Options(
+                historyLines: max(0, settings.tmuxHistoryLines),
+                pauseAfterSeconds: max(0, settings.tmuxPauseAfterSeconds),
+                autoUnpause: settings.tmuxAutoUnpause,
+                externalWindowsInBackground: settings.tmuxExternalWindowsInBackground,
+                attachWindowLimit: max(0, settings.tmuxAttachWindowLimit),
+                mirrorPasteBuffer: settings.tmuxMirrorPasteBuffer)
+        }
+    }
+
+    var options: () -> Options = { .current }
+
+    /// `refresh-client -B` subscriptions feeding each pane's tab.
+    static let directorySubscription = "boo-cwd"
+    static let commandSubscription = "boo-cmd"
 
     /// Output held for a bridge that hasn't connected stays under this.
     static let maxPending = 4 << 20
@@ -97,8 +155,8 @@ final class TmuxControlClient {
     private var started = false
     private var ended = false
     private var held: [String] = []
-    /// Reply handlers in command order; `replyHead` is the next one due.
-    private var replies: [((Reply) -> Void)?] = []
+    /// Sent commands in order; `replyHead` is the next one due a reply.
+    private var replies: [Pending] = []
     private var replyHead = 0
     /// Output for connected bridges, sent once per batch of gateway lines.
     private var outgoing: [String: [UInt8]] = [:]
@@ -110,6 +168,17 @@ final class TmuxControlClient {
     private var sizeSync: DispatchWorkItem?
     /// The window whose panes last changed size; it sets the client size.
     private var sizingWindow: String?
+    /// The session's current window, as Boo last told or heard from tmux.
+    private var activeWindow: String?
+    /// The server's version (`TmuxProtocol.version`), once known.
+    private(set) var version: Double?
+    /// Windows Boo itself created (new-window, break-pane): they open in front.
+    private var ownWindows: Set<String> = []
+    private var pendingRenames: [String: DispatchWorkItem] = [:]
+    /// Windows left closed on attach, by id, with their names.
+    private var unopened: [String: String] = [:]
+    /// The server's sessions, refreshed when tmux says they changed.
+    private(set) var sessions: [TmuxSessions.Session] = []
 
     init(gateway: TmuxGateway, host: TmuxHost, bridges: TmuxBridgeServer = .shared) {
         self.gateway = gateway
@@ -124,6 +193,7 @@ final class TmuxControlClient {
             forName: NSApplication.willTerminateNotification, object: nil, queue: .main
         ) { _ in
             MainActor.assumeIsolated {
+                TmuxControlClient.rememberAttachedSessions()
                 for client in TmuxControlClient.live.compactMap(\.client) { client.ended = true }
             }
         }
@@ -185,6 +255,11 @@ final class TmuxControlClient {
         windows.sorted { Self.order($0.key) < Self.order($1.key) }.map { ($0.value.workspace, $0.value.name) }
     }
 
+    /// Windows not opened on attach (see `tmuxAttachWindowLimit`).
+    var unopenedWindows: [(id: String, name: String)] {
+        unopened.sorted { Self.order($0.key) < Self.order($1.key) }.map { ($0.key, $0.value) }
+    }
+
     private static func order(_ window: String) -> Int { Int(window.dropFirst()) ?? .max }
 
     // MARK: - Gateway input
@@ -207,10 +282,17 @@ final class TmuxControlClient {
             switch line {
             case .end(let n) where n == open.number:
                 block = nil
-                open.reply?(Reply(lines: open.lines, isError: false))
+                open.pending?.reply?(Reply(lines: open.lines, isError: false))
             case .error(let n) where n == open.number:
                 block = nil
-                open.reply?(Reply(lines: open.lines, isError: true))
+                let reply = Reply(lines: open.lines, isError: true)
+                if let pending = open.pending {
+                    if let handler = pending.reply {
+                        handler(reply)
+                    } else if !pending.quiet {
+                        report(reply, of: pending.command)
+                    }
+                }
             default:
                 open.lines.append(raw)
                 block = open
@@ -219,26 +301,76 @@ final class TmuxControlClient {
         }
         switch TmuxProtocol.parse(raw) {
         case .begin(let number, let fromClient):
-            block = Block(number: number, reply: fromClient ? nextReply() : nil)
+            block = Block(number: number, pending: fromClient ? nextReply() : nil)
         case .output(let pane, let data):
             output(data, to: pane)
-        case .layoutChange(let window, let layout):
-            if windows[window] != nil { apply(layout: layout, window: window) }
+        case .layoutChange(let window, let layout, let zoomed):
+            if windows[window] != nil { apply(layout: layout, window: window, zoomed: zoomed) }
         case .windowAdd(let window):
             guard started else { return }
-            send("display -p -t \(window) \"\(TmuxProtocol.windowFormat)\"") { [weak self] reply in
-                guard let self, !reply.isError, let info = reply.text.first.flatMap(TmuxProtocol.windowInfo) else {
-                    return
-                }
-                self.open(info, focus: true)
+            lookUp(window) { [weak self] info in
+                guard let self else { return }
+                let own = self.ownWindows.remove(info.id) != nil
+                self.open(info, focus: own || !self.options().externalWindowsInBackground)
             }
         case .windowClose(let window):
+            if unopened.removeValue(forKey: window) != nil { changed() }
             close(window: window)
         case .windowRenamed(let window, let name):
+            if unopened[window] != nil {
+                unopened[window] = name
+                changed()
+            }
             guard let workspace = windows[window]?.workspace else { return }
             windows[window]?.name = name
             host?.tmuxRenameWorkspace(workspace, name: name)
             changed()
+        case .windowPaneChanged(let window, let paneID):
+            guard let link = windows[window], link.activePane != paneID else { return }
+            windows[window]?.activePane = paneID
+            if let pane = panes[paneID], pane.window == window, !pane.closing {
+                host?.tmuxFocusPane(pane.id, workspace: link.workspace)
+            }
+        case .sessionWindowChanged(let session, let window):
+            guard session == sessionID, activeWindow != window else { return }
+            activeWindow = window
+            if let link = windows[window] { host?.tmuxSelectWorkspace(link.workspace) }
+        case .sessionsChanged:
+            if started { refreshSessions() }
+        case .subscriptionChanged(let name, let paneID, let value):
+            guard let pane = panes[paneID], !pane.closing else { return }
+            switch name {
+            case Self.directorySubscription:
+                host?.tmuxPaneChanged(pane.id, directory: value, command: nil)
+            case Self.commandSubscription:
+                host?.tmuxPaneChanged(pane.id, directory: nil, command: value)
+            default:
+                break
+            }
+        case .pause(let paneID):
+            guard let pane = panes[paneID] else { return }
+            if options().autoUnpause {
+                send(Self.continueCommand(paneID), quiet: true)
+            } else {
+                pane.paused = true
+                host?.tmuxPanePaused(pane.id, paused: true)
+            }
+        case .resume(let paneID):
+            guard let pane = panes[paneID] else { return }
+            if pane.paused {
+                pane.paused = false
+                host?.tmuxPanePaused(pane.id, paused: false)
+            }
+            // Output sent while paused is gone: redraw from tmux's screen.
+            pane.phase = .capturing
+            pane.held = []
+            capture(pane, history: false)
+        case .pasteBufferChanged(let name):
+            guard started, options().mirrorPasteBuffer else { return }
+            send("show-buffer -b \(LinkResolver.shellQuote(name))", quiet: true) { [weak self] reply in
+                guard let self, !reply.isError else { return }
+                self.host?.tmuxCopyToClipboard(reply.text.joined(separator: "\n"))
+            }
         case .sessionRenamed(let id, let name):
             guard id == sessionID else { return }
             session = name
@@ -248,6 +380,8 @@ final class TmuxControlClient {
             if started {
                 for window in Array(windows.keys) { close(window: window) }
             }
+            unopened.removeAll()
+            activeWindow = nil
             session = name
             start()
             changed()
@@ -283,6 +417,113 @@ final class TmuxControlClient {
         send("split-window \(Self.flags(edge)) -t \(pane)")
     }
 
+    /// Boo focused `pane`: make it tmux's active pane, in the current window.
+    func focus(pane id: UUID) {
+        guard started, !ended, let pane = panes.values.first(where: { $0.id == id && !$0.closing }),
+            let link = windows[pane.window]
+        else { return }
+        select(window: pane.window)
+        guard link.activePane != pane.tmuxID else { return }
+        windows[pane.window]?.activePane = pane.tmuxID
+        send("select-pane -t \(pane.tmuxID)", quiet: true)
+    }
+
+    /// Boo showed `workspace`: make its window the session's current one.
+    func focus(workspace: UUID) {
+        guard started, !ended, let window = window(of: workspace) else { return }
+        select(window: window)
+    }
+
+    private func select(window: String) {
+        guard activeWindow != window else { return }
+        activeWindow = window
+        send("select-window -t \(window)", quiet: true)
+    }
+
+    /// Moves focus the way tmux would (`select-pane -L` and so on); the
+    /// pane tmux picks comes back as `%window-pane-changed`.
+    func focusPane(from id: UUID, toward direction: PaneDirection) {
+        guard let pane = tmuxID(of: id) else { return }
+        let flag: String
+        switch direction {
+        case .left: flag = "-L"
+        case .right: flag = "-R"
+        case .up: flag = "-U"
+        case .down: flag = "-D"
+        }
+        send("select-pane \(flag) -t \(pane)", quiet: true)
+    }
+
+    /// The next (`step` > 0) or previous pane in tmux's order.
+    func cyclePane(from id: UUID, by step: Int) {
+        guard let pane = panes.values.first(where: { $0.id == id && !$0.closing }) else { return }
+        send("select-pane -t \(pane.window).\(step > 0 ? "+" : "-")", quiet: true)
+    }
+
+    /// Zooms `pane` to fill its window, or unzooms it (`resize-pane -Z`).
+    func toggleZoom(pane id: UUID) {
+        guard let pane = tmuxID(of: id) else { return }
+        send("resize-pane -Z -t \(pane)")
+    }
+
+    /// Renames `workspace`'s window. The workspace editor renames as the
+    /// user types, so the command waits for a pause in typing.
+    func renameWindow(workspace: UUID, to name: String, after delay: TimeInterval = 0.4) {
+        let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let window = window(of: workspace) else { return }
+        pendingRenames[window]?.cancel()
+        pendingRenames[window] = nil
+        guard !name.isEmpty else { return }
+        let rename = DispatchWorkItem { [weak self] in
+            guard let self, !self.ended, self.windows[window] != nil, self.windows[window]?.name != name else { return }
+            self.pendingRenames[window] = nil
+            self.send("rename-window -t \(window) -- \(LinkResolver.shellQuote(name))")
+        }
+        guard delay > 0 else { return rename.perform() }
+        pendingRenames[window] = rename
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: rename)
+    }
+
+    /// Moves `workspace`'s window to match the order of `workspaces` (Boo's
+    /// workspace order after a drag; other workspaces are skipped).
+    func reorder(_ workspace: UUID, in workspaces: [UUID]) {
+        guard let window = window(of: workspace) else { return }
+        let order = workspaces.compactMap(self.window(of:))
+        guard let command = TmuxProtocol.moveWindow(window, toMatch: order) else { return }
+        // `move-window -b` needs tmux 3.2.
+        if command.contains(" -b "), (version ?? 0) < TmuxProtocol.controlFeaturesVersion { return }
+        send(command)
+    }
+
+    func unpause(pane id: UUID) {
+        guard let pane = tmuxID(of: id) else { return }
+        send(Self.continueCommand(pane), quiet: true)
+    }
+
+    private static func continueCommand(_ pane: String) -> String {
+        "refresh-client -A \(LinkResolver.shellQuote("\(pane):continue"))"
+    }
+
+    /// Opens a window that was left closed on attach.
+    func openWindow(_ id: String) {
+        guard unopened.removeValue(forKey: id) != nil else { return }
+        changed()
+        lookUp(id) { [weak self] info in self?.open(info, focus: true) }
+    }
+
+    /// Moves this client to another session; tmux answers `%session-changed`.
+    func switchSession(to name: String) {
+        guard name != session else { return }
+        send("switch-client -t \(LinkResolver.shellQuote(name))")
+    }
+
+    /// Runs a tmux command typed by the user.
+    func run(_ command: String, reply: @escaping (Reply) -> Void) {
+        let command = command.replacingOccurrences(of: "\n", with: " ").trimmingCharacters(in: .whitespaces)
+        guard !command.isEmpty, !ended else { return }
+        send(command, reply: reply)
+    }
+
     /// Whether `pane` is one of this session's panes.
     func owns(pane id: UUID) -> Bool { tmuxID(of: id) != nil }
 
@@ -301,11 +542,15 @@ final class TmuxControlClient {
     /// Moves `pane` into a new window of its own.
     func breakOut(pane id: UUID) {
         guard let pane = tmuxID(of: id) else { return }
-        send("break-pane -s \(pane)")
+        createWindow("break-pane -P -F '#{window_id}' -s \(pane)")
     }
 
     private func tmuxID(of id: UUID) -> String? {
         panes.values.first { $0.id == id && !$0.closing }?.tmuxID
+    }
+
+    private func window(of workspace: UUID) -> String? {
+        windows.first { $0.value.workspace == workspace }?.key
     }
 
     private static func flags(_ edge: PaneDirection) -> String {
@@ -318,7 +563,16 @@ final class TmuxControlClient {
     }
 
     func newWindow() {
-        send("new-window")
+        createWindow("new-window -P -F '#{window_id}'")
+    }
+
+    /// Runs a command printing the window it makes, which then opens in front.
+    private func createWindow(_ command: String) {
+        send(command) { [weak self] reply in
+            guard let self else { return }
+            if reply.isError { return self.report(reply, of: command) }
+            if let id = reply.text.first, id.hasPrefix("@") { self.ownWindows.insert(id) }
+        }
     }
 
     func renameSession(_ name: String) {
@@ -341,13 +595,20 @@ final class TmuxControlClient {
 
     // MARK: - Commands
 
-    private func send(_ command: String, reply: ((Reply) -> Void)? = nil) {
-        replies.append(reply)
+    private func send(_ command: String, quiet: Bool = false, reply: ((Reply) -> Void)? = nil) {
+        replies.append(Pending(command: command, reply: reply, quiet: quiet))
         guard started else { return held.append(command) }
         gateway?.writeTmuxCommand(command)
     }
 
-    private func nextReply() -> ((Reply) -> Void)? {
+    /// Shows an error reply tmux sent for `command`.
+    private func report(_ reply: Reply, of command: String) {
+        let text = reply.text.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+        let verb = command.split(separator: " ").first.map(String.init) ?? command
+        host?.tmuxShowError(text.isEmpty ? "tmux \(verb) failed" : "tmux \(verb): \(text)")
+    }
+
+    private func nextReply() -> Pending? {
         guard replyHead < replies.count else { return nil }
         let reply = replies[replyHead]
         replyHead += 1
@@ -366,9 +627,62 @@ final class TmuxControlClient {
         for command in held { gateway?.writeTmuxCommand(command) }
         held.removeAll()
         if let size = gateway?.tmuxGridSize { setClientSize(size) }
+        if version == nil {
+            send("display -p '#{version}'", quiet: true) { [weak self] reply in
+                guard let self else { return }
+                let version = reply.isError ? 0 : TmuxProtocol.version(reply.text.first ?? "")
+                self.version = version
+                if version >= TmuxProtocol.controlFeaturesVersion { self.enableControlFeatures() }
+            }
+        }
+        refreshSessions()
         send("list-windows -F \"\(TmuxProtocol.windowFormat)\"") { [weak self] reply in
             guard let self, !reply.isError else { return }
-            for info in reply.text.compactMap(TmuxProtocol.windowInfo) { self.open(info, focus: info.active) }
+            let infos = reply.text.compactMap(TmuxProtocol.windowInfo)
+            self.activeWindow = infos.first(where: \.active)?.id
+            let limit = self.options().attachWindowLimit
+            guard limit > 0, infos.count > limit, let host = self.host else {
+                return self.openAttached(infos, chosen: nil)
+            }
+            host.tmuxChooseWindows(infos, session: self.label) { [weak self] chosen in
+                self?.openAttached(infos, chosen: chosen)
+            }
+        }
+    }
+
+    /// Pane directory and command subscriptions, and flow control (tmux 3.2+).
+    private func enableControlFeatures() {
+        for (name, format) in [
+            (Self.directorySubscription, "#{pane_current_path}"), (Self.commandSubscription, "#{pane_current_command}")
+        ] {
+            send("refresh-client -B \(LinkResolver.shellQuote("\(name):%*:\(format)"))", quiet: true)
+        }
+        let pauseAfter = options().pauseAfterSeconds
+        if pauseAfter > 0 { send("refresh-client -f pause-after=\(pauseAfter)", quiet: true) }
+    }
+
+    private func refreshSessions() {
+        send("list-sessions -F \(LinkResolver.shellQuote(TmuxSessions.listFormat))", quiet: true) { [weak self] reply in
+            guard let self, !reply.isError else { return }
+            self.sessions = TmuxSessions.parse(reply.text.joined(separator: "\n"))
+            self.changed()
+        }
+    }
+
+    private func openAttached(_ infos: [TmuxProtocol.WindowInfo], chosen: Set<String>?) {
+        guard !ended else { return }
+        let opening = TmuxProtocol.windowsToOpen(infos, chosen: chosen)
+        let ids = Set(opening.map(\.id))
+        for info in infos where !ids.contains(info.id) { unopened[info.id] = info.name }
+        for info in opening { open(info, focus: info.active) }
+        changed()
+    }
+
+    /// Asks tmux for `window`'s details.
+    private func lookUp(_ window: String, then handle: @escaping (TmuxProtocol.WindowInfo) -> Void) {
+        send("display -p -t \(window) \"\(TmuxProtocol.windowFormat)\"", quiet: true) { reply in
+            guard !reply.isError, let info = reply.text.first.flatMap(TmuxProtocol.windowInfo) else { return }
+            handle(info)
         }
     }
 
@@ -389,12 +703,17 @@ final class TmuxControlClient {
             for pane in panes.values where pane.window == info.id { drop(pane) }
             return
         }
-        windows[info.id] = WindowLink(workspace: workspace, tree: tree, name: info.name)
+        windows[info.id] = WindowLink(
+            workspace: workspace, tree: tree, name: info.name, activePane: info.activePane, zoomed: info.zoomed)
+        if let active = panes[info.activePane], active.window == info.id {
+            host.tmuxFocusPane(active.id, workspace: workspace)
+            if info.zoomed { host.tmuxSetZoom(workspace: workspace, pane: active.id) }
+        }
         noteSizes(layout)
         changed()
     }
 
-    private func apply(layout text: String, window: String) {
+    private func apply(layout text: String, window: String, zoomed: Bool) {
         guard let layout = TmuxProtocol.parseLayout(text), var link = windows[window] else { return }
         let ids = Set(layout.paneIDs)
         let programs = linkNewPanes(layout, window: window)
@@ -402,6 +721,11 @@ final class TmuxControlClient {
         windows[window] = link
         closePanes(where: { $0.window == window && !ids.contains($0.tmuxID) }) {
             host?.tmuxApplyLayout(workspace: link.workspace, tree: link.tree, programs: programs)
+        }
+        if link.zoomed != zoomed {
+            windows[window]?.zoomed = zoomed
+            let pane = zoomed ? panes[link.activePane].flatMap { $0.window == window ? $0.id : nil } : nil
+            host?.tmuxSetZoom(workspace: link.workspace, pane: pane)
         }
         noteSizes(layout)
     }
@@ -471,12 +795,23 @@ final class TmuxControlClient {
         let registration = bridges.register { [weak self] event in self?.bridge(event, pane: tmuxID, id: id) }
         let pane = PaneLink(id: id, tmuxID: tmuxID, window: window, token: registration.token)
         panes[tmuxID] = pane
+        capture(pane, history: true)
+        return (id, registration.command)
+    }
+
+    /// Redraws the pane from tmux's copy of its screen (and scrollback, with
+    /// `history`), then lets its output through.
+    private func capture(_ pane: PaneLink, history: Bool) {
+        let tmuxID = pane.tmuxID
+        let lines = options().historyLines
         // -C octal-escapes ESC: a raw ESC in the reply would end the control mode DCS.
-        send("capture-pane -p -e -C -q -J -t \(tmuxID) -S -1000") { [weak self, weak pane] reply in
-            guard let self, let pane else { return }
+        let start = history && lines > 0 ? " -S -\(lines)" : ""
+        send("capture-pane -p -e -C -q -J -t \(tmuxID)\(start)", quiet: true) { [weak self, weak pane] reply in
+            guard let self, let pane, case .capturing = pane.phase else { return }
             pane.phase = .awaitingCursor
             pane.screen = reply.isError ? [] : reply.lines.map { TmuxProtocol.unescape($0) }
-            self.send("display -p -t \(tmuxID) \"#{cursor_x} #{cursor_y}\"") { [weak self, weak pane] reply in
+            self.send("display -p -t \(tmuxID) \"#{cursor_x} #{cursor_y}\"", quiet: true) {
+                [weak self, weak pane] reply in
                 guard let self, let pane, case .awaitingCursor = pane.phase else { return }
                 pane.phase = .live
                 self.deliver(
@@ -486,7 +821,6 @@ final class TmuxControlClient {
                 pane.held = []
             }
         }
-        return (id, registration.command)
     }
 
     private func drop(_ pane: PaneLink) {
@@ -527,7 +861,7 @@ final class TmuxControlClient {
             }
         case .input(let bytes):
             guard !ended else { return }
-            for command in TmuxProtocol.sendKeys(pane: tmuxID, bytes: bytes) { send(command) }
+            for command in TmuxProtocol.sendKeys(pane: tmuxID, bytes: bytes) { send(command, quiet: true) }
         case .resize(let size):
             pane.bridgeSize = size
             sizingWindow = pane.window
@@ -537,7 +871,7 @@ final class TmuxControlClient {
             // The user closed the pane in Boo: close it in tmux too.
             guard !pane.closing, !ended else { return }
             pane.closing = true
-            send("kill-pane -t \(tmuxID)")
+            send("kill-pane -t \(tmuxID)", quiet: true)
         }
     }
 
@@ -555,13 +889,16 @@ final class TmuxControlClient {
         guard started, !ended else { return }
         let sizes = Dictionary(
             panes.values.compactMap { p in p.bridgeSize.map { (p.id, $0) } }, uniquingKeysWith: { a, _ in a })
-        if let window = sizingWindow ?? windows.keys.first, let link = windows[window],
-            let total = TmuxProtocol.clientSize(link.tree, sizes: sizes)
-        {
-            setClientSize(total)
+        if let window = sizingWindow ?? windows.keys.first, let link = windows[window] {
+            // A zoomed pane fills the window: its size is the client's.
+            let zoomedSize = panes[link.activePane].flatMap { $0.window == window ? $0.bridgeSize : nil }
+            if let total = link.zoomed ? zoomedSize : TmuxProtocol.clientSize(link.tree, sizes: sizes) {
+                setClientSize(total)
+            }
         }
         guard Date() >= settleUntil else { return }
-        for pane in panes.values where !pane.closing {
+        // resize-pane would unzoom a zoomed window.
+        for pane in panes.values where !pane.closing && windows[pane.window]?.zoomed != true {
             guard let want = pane.bridgeSize, want != pane.tmuxSize, want != pane.requestedSize else { continue }
             pane.requestedSize = want
             send("resize-pane -t \(pane.tmuxID) -x \(want.columns) -y \(want.rows)")
@@ -571,6 +908,29 @@ final class TmuxControlClient {
     private func setClientSize(_ size: TmuxProtocol.CellSize) {
         guard size != clientSize, size.columns > 0, size.rows > 0 else { return }
         clientSize = size
-        send("refresh-client -C \(size.columns)x\(size.rows)")
+        send("refresh-client -C \(size.columns)x\(size.rows)", quiet: true)
+    }
+
+    // MARK: - Reattach on launch
+
+    private static let attachedAtQuitKey = "tmuxSessionsAttachedAtQuit"
+
+    /// Notes the sessions shown at quit, for `tmuxReattachOnLaunch`.
+    private static func rememberAttachedSessions() {
+        let sessions = live.compactMap(\.client).filter { !$0.ended }.compactMap { client in
+            client.session.map { ["session": $0, "host": client.remoteHost ?? ""] }
+        }
+        UserDefaults.standard.set(sessions, forKey: attachedAtQuitKey)
+    }
+
+    /// The sessions shown when Boo last quit, as (session, ssh host); read once.
+    static func takeSessionsAttachedAtQuit() -> [(session: String, host: String?)] {
+        let stored = UserDefaults.standard.array(forKey: attachedAtQuitKey) as? [[String: String]] ?? []
+        UserDefaults.standard.removeObject(forKey: attachedAtQuitKey)
+        return stored.compactMap { entry in
+            guard let session = entry["session"], !session.isEmpty else { return nil }
+            let host = entry["host"] ?? ""
+            return (session, host.isEmpty ? nil : host)
+        }
     }
 }

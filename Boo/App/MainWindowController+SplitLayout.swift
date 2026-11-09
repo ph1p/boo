@@ -25,6 +25,10 @@ extension MainWindowController {
 
     func cyclePaneFocus(by step: Int) {
         guard let workspace = activeWorkspace else { return }
+        // tmux picks the pane; it comes back as %window-pane-changed.
+        if let client = TmuxControlClient.owning(workspace: workspace.id) {
+            return client.cyclePane(from: workspace.activePaneID, by: step)
+        }
         let ids = workspace.splitTree.leafIDs
         guard ids.count > 1, let index = ids.firstIndex(of: workspace.activePaneID) else { return }
         focusPane(ids[(index + step + ids.count) % ids.count], in: workspace)
@@ -32,6 +36,9 @@ extension MainWindowController {
 
     /// Focus the pane next to the active one in `direction`.
     func focusPane(_ direction: PaneDirection) {
+        if let workspace = activeWorkspace, let client = TmuxControlClient.owning(workspace: workspace.id) {
+            return client.focusPane(from: workspace.activePaneID, toward: direction)
+        }
         guard let workspace = activeWorkspace,
             let target = workspace.splitTree.neighbor(
                 of: workspace.activePaneID, toward: direction, in: splitLayoutSize)
@@ -116,6 +123,10 @@ extension MainWindowController {
 
     @objc func toggleZoomPaneAction(_ sender: Any?) {
         guard let workspace = activeWorkspace else { return }
+        // tmux zooms; the layout change it sends sets Boo's zoom.
+        if let client = TmuxControlClient.owning(workspace: workspace.id) {
+            return client.toggleZoom(pane: workspace.activePaneID)
+        }
         if workspace.zoomedPaneID != nil {
             setZoomedPane(nil, in: workspace)
         } else if workspace.splitTree.leafCount > 1 {

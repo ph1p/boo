@@ -175,6 +175,7 @@ extension MainWindowController {
         // A drop back on its own spot is not a move, so membership stays.
         if appState.workspaces.firstIndex(where: { $0.id == movedID }) != source {
             syncWorkspaceGroupAfterMove(movedID)
+            TmuxControlClient.owning(workspace: movedID)?.reorder(movedID, in: appState.workspaces.map(\.id))
         }
         finishGroupChange()
     }

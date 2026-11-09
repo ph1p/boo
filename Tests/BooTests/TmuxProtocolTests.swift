@@ -19,9 +19,23 @@ final class TmuxProtocolTests: XCTestCase {
         XCTAssertEqual(line("%session-renamed $0 my work"), .sessionRenamed(id: "$0", name: "my work"))
         XCTAssertEqual(
             line("%layout-change @0 8205,80x24,0,0,0 8205,80x24,0,0,0 *"),
-            .layoutChange(window: "@0", layout: "8205,80x24,0,0,0"))
+            .layoutChange(window: "@0", layout: "8205,80x24,0,0,0", zoomed: false))
+        XCTAssertEqual(
+            line("%layout-change @0 8205,80x24,0,0,0 b25d,80x24,0,0,1 *Z"),
+            .layoutChange(window: "@0", layout: "8205,80x24,0,0,0", zoomed: true))
+        XCTAssertEqual(line("%window-pane-changed @1 %4"), .windowPaneChanged(window: "@1", pane: "%4"))
+        XCTAssertEqual(line("%session-window-changed $0 @2"), .sessionWindowChanged(session: "$0", window: "@2"))
+        XCTAssertEqual(line("%pause %3"), .pause(pane: "%3"))
+        XCTAssertEqual(line("%continue %3"), .resume(pane: "%3"))
+        XCTAssertEqual(line("%paste-buffer-changed buffer0"), .pasteBufferChanged(name: "buffer0"))
+        XCTAssertEqual(
+            line("%subscription-changed boo-cwd $0 @1 0 %2 : /Users/me/my dir"),
+            .subscriptionChanged(name: "boo-cwd", pane: "%2", value: "/Users/me/my dir"))
+        // A session-level subscription has no pane.
+        XCTAssertEqual(
+            line("%subscription-changed s $0 - - - : x"), .subscriptionChanged(name: "s", pane: "", value: "x"))
         XCTAssertEqual(line("%exit"), .exit)
-        XCTAssertEqual(line("%sessions-changed"), .other)
+        XCTAssertEqual(line("%sessions-changed"), .sessionsChanged)
         XCTAssertEqual(line("@0 1 layout name"), .other)
     }
 
@@ -95,10 +109,39 @@ final class TmuxProtocolTests: XCTestCase {
 
     func testWindowInfo() {
         XCTAssertEqual(
-            P.windowInfo("@2 1 8205,80x24,0,0,0 vim notes.md"),
-            .init(id: "@2", active: true, layout: "8205,80x24,0,0,0", name: "vim notes.md"))
-        XCTAssertEqual(P.windowInfo("@2 0 8205,80x24,0,0,0")?.name, "")
+            P.windowInfo("@2 1 8205,80x24,0,0,0 %0 1 vim notes.md"),
+            .init(
+                id: "@2", active: true, layout: "8205,80x24,0,0,0", activePane: "%0", zoomed: true,
+                name: "vim notes.md"))
+        XCTAssertEqual(P.windowInfo("@2 0 8205,80x24,0,0,0 %0 0")?.name, "")
+        XCTAssertNil(P.windowInfo("@2 0 8205,80x24,0,0,0 vim"))
         XCTAssertNil(P.windowInfo("%begin 1 2 1"))
+    }
+
+    func testVersion() {
+        XCTAssertEqual(P.version("3.6b"), 3.6)
+        XCTAssertEqual(P.version("3.2a"), 3.2)
+        XCTAssertEqual(P.version("next-3.4"), 3.4)
+        XCTAssertEqual(P.version("master"), .infinity)
+        XCTAssertGreaterThanOrEqual(P.version("3.2"), P.controlFeaturesVersion)
+        XCTAssertLessThan(P.version("3.1c"), P.controlFeaturesVersion)
+    }
+
+    func testMoveWindowFollowsBooOrder() {
+        XCTAssertEqual(P.moveWindow("@3", toMatch: ["@1", "@3", "@2"]), "move-window -a -s @3 -t @1")
+        XCTAssertEqual(P.moveWindow("@3", toMatch: ["@3", "@1", "@2"]), "move-window -b -s @3 -t @1")
+        XCTAssertNil(P.moveWindow("@3", toMatch: ["@3"]))
+        XCTAssertNil(P.moveWindow("@9", toMatch: ["@1", "@3"]))
+    }
+
+    func testWindowsToOpen() {
+        let windows = (0..<4).map {
+            P.WindowInfo(id: "@\($0)", active: $0 == 2, layout: "", activePane: "%\($0)", name: "w\($0)")
+        }
+        XCTAssertEqual(P.windowsToOpen(windows, chosen: nil).map(\.id), ["@0", "@1", "@2", "@3"])
+        // The current window always opens.
+        XCTAssertEqual(P.windowsToOpen(windows, chosen: ["@0"]).map(\.id), ["@0", "@2"])
+        XCTAssertEqual(P.windowsToOpen(windows, chosen: []).map(\.id), ["@2"])
     }
 
     func testSendKeysHexAndChunks() {

@@ -159,6 +159,13 @@ final class AppSettings {
         static let restoreScrollback = "restoreScrollback"
         static let tmuxIntegration = "tmuxIntegration"
         static let tmuxMode = "tmuxMode"
+        static let tmuxHistoryLines = "tmuxHistoryLines"
+        static let tmuxPauseAfterSeconds = "tmuxPauseAfterSeconds"
+        static let tmuxAutoUnpause = "tmuxAutoUnpause"
+        static let tmuxExternalWindowsInBackground = "tmuxExternalWindowsInBackground"
+        static let tmuxAttachWindowLimit = "tmuxAttachWindowLimit"
+        static let tmuxMirrorPasteBuffer = "tmuxMirrorPasteBuffer"
+        static let tmuxReattachOnLaunch = "tmuxReattachOnLaunch"
         static let agentRecovery = "agentRecovery"
         static let resumeAgentsAfterQuit = "resumeAgentsAfterQuit"
         static let resumeAgentsImmediately = "resumeAgentsImmediately"
@@ -623,6 +630,50 @@ final class AppSettings {
             return UserDefaults.standard.string(forKey: K.tmuxMode).flatMap(TmuxMode.init(rawValue:)) ?? .ask
         }
         set { set(newValue.rawValue, forKey: K.tmuxMode) }
+    }
+
+    /// Scrollback lines `capture-pane` fetches when a tmux pane opens.
+    var tmuxHistoryLines: Int {
+        get { UserDefaults.standard.object(forKey: K.tmuxHistoryLines) as? Int ?? 1000 }
+        set { set(newValue, forKey: K.tmuxHistoryLines) }
+    }
+
+    /// tmux pauses a pane whose output is this many seconds behind
+    /// (`pause-after`, tmux 3.2+). 0 = never.
+    var tmuxPauseAfterSeconds: Int {
+        get { UserDefaults.standard.object(forKey: K.tmuxPauseAfterSeconds) as? Int ?? 0 }
+        set { set(newValue, forKey: K.tmuxPauseAfterSeconds) }
+    }
+
+    /// Resume a paused tmux pane right away instead of showing its Unpause bar.
+    var tmuxAutoUnpause: Bool {
+        get { bool(K.tmuxAutoUnpause, default: false) }
+        set { set(newValue, forKey: K.tmuxAutoUnpause) }
+    }
+
+    /// Windows another tmux client creates open without taking focus.
+    var tmuxExternalWindowsInBackground: Bool {
+        get { bool(K.tmuxExternalWindowsInBackground, default: true) }
+        set { set(newValue, forKey: K.tmuxExternalWindowsInBackground) }
+    }
+
+    /// Attaching to a session with more windows than this asks which to
+    /// open. 0 = open every window.
+    var tmuxAttachWindowLimit: Int {
+        get { UserDefaults.standard.object(forKey: K.tmuxAttachWindowLimit) as? Int ?? 10 }
+        set { set(newValue, forKey: K.tmuxAttachWindowLimit) }
+    }
+
+    /// Copy each new tmux paste buffer to the macOS clipboard.
+    var tmuxMirrorPasteBuffer: Bool {
+        get { bool(K.tmuxMirrorPasteBuffer, default: false) }
+        set { set(newValue, forKey: K.tmuxMirrorPasteBuffer) }
+    }
+
+    /// Attach again on launch to the tmux sessions Boo showed when it quit.
+    var tmuxReattachOnLaunch: Bool {
+        get { bool(K.tmuxReattachOnLaunch, default: false) }
+        set { set(newValue, forKey: K.tmuxReattachOnLaunch) }
     }
 
     // MARK: - Agent recovery

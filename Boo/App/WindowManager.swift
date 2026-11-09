@@ -64,6 +64,26 @@ final class WindowManager {
 
     /// Windows at launch: restores every saved window (or one fresh window).
     /// The first keeps the frame autosave; the saved key window ends up key.
+    /// Reattaches the tmux sessions Boo showed when it quit
+    /// (`tmuxReattachOnLaunch`); local ones only while they still exist.
+    private func reattachTmuxSessions() {
+        let sessions = TmuxControlClient.takeSessionsAttachedAtQuit()
+        let settings = AppSettings.shared
+        guard settings.tmuxIntegration, settings.tmuxReattachOnLaunch, !sessions.isEmpty else { return }
+        // Starts the background fetch the check below reads.
+        _ = TmuxSessions.local()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
+            guard
+                let controller = self?.controllers.first(where: { $0.window?.isKeyWindow == true })
+                    ?? self?.controllers.first
+            else { return }
+            let local = Set(TmuxSessions.local().map(\.name))
+            for entry in sessions where entry.host != nil || local.contains(entry.session) {
+                controller.startTmuxSession(entry.session, host: entry.host)
+            }
+        }
+    }
+
     @discardableResult
     func openInitialWindow() -> MainWindowController {
         installSharedHandlers()
@@ -74,6 +94,7 @@ final class WindowManager {
         defer {
             CrashRecovery.resumeOnRestore = false
             announceRecovery(resumed: resumeAgents ? snapshot.map(Self.agentCount) ?? 0 : 0)
+            reattachTmuxSessions()
             if resumeAgents, AppSettings.shared.resumeAgentsImmediately {
                 // After the windows have laid out, so background terminals get a real size.
                 DispatchQueue.main.async { [weak self] in
