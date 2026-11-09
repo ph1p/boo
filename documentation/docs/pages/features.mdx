@@ -100,6 +100,24 @@ Boo's shell integration marks each prompt (OSC 133), so the terminal knows where
 
 Run `tmux -CC` (or `tmux -CC attach`) in a Boo terminal, and the tmux session opens as native Boo workspaces: each tmux window becomes a workspace, each tmux pane a Boo pane. Splits and new tabs in those workspaces go through tmux. Turn it off with **Settings → General → Startup → Native tmux windows**; the change applies to terminals opened afterwards.
 
+Boo and tmux stay in step both ways:
+
+- **Focus** — clicking a pane or a workspace selects that pane or window in tmux, and a change made in tmux (or by another client) moves the focus in Boo
+- **Zoom, navigation** — zooming a pane and moving between panes use tmux's `resize-pane -Z` and `select-pane`, so other clients see the same state
+- **Rename and reorder** — renaming a workspace renames the tmux window; dragging workspaces reorders the windows (tmux 3.2 or newer)
+- **Working directory and command** — each pane shows the folder and program tmux reports for it (tmux 3.2 or newer)
+- **Errors** — a tmux command that fails shows its message briefly
+
+The session chip's menu opens windows that are not shown yet, switches to another session on the same server, and runs any tmux command (**Run tmux Command…**, also on the gateway terminal). Windows another client creates open behind the current workspace.
+
+Settings for native tmux windows (shown when the option is on):
+
+- **Scrollback on attach** — how many lines of each pane's history Boo copies when it opens
+- **Ask which windows to open** — a session with more windows than this asks which to open; the rest stay in the chip menu
+- **Pause panes that fall behind** — tmux pauses a pane whose output Boo has not read for that long, so a flood of output cannot stall the session. A bar on the pane unpauses it; **Unpause right away** does that automatically
+- **Copy tmux buffers to the clipboard** — text copied in tmux (copy mode, `set-buffer`) lands on the macOS clipboard
+- **Reattach sessions on launch** — sessions attached when Boo quit open again at the next launch
+
 ## Images in the terminal
 
 Programs that use the Kitty graphics protocol show images inline. The file explorer can also show images this way (see [File Explorer](#file-explorer)).

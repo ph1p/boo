@@ -126,6 +126,7 @@ struct TerminalSettingsView: View {
                         ThemedSegmentedPicker(selection: $tmuxMode) { $0.label }
                             .onChange(of: tmuxMode) { _, v in AppSettings.shared.tmuxMode = v }
                     }
+                    TmuxSettingsRows()
                 }
             }
 
@@ -136,6 +137,80 @@ struct TerminalSettingsView: View {
             QuickTerminalSettingsSection()
         }
         .foregroundStyle(t.text)
+    }
+}
+
+// MARK: - tmux
+
+/// The finer tmux integration settings, shown while it is on.
+private struct TmuxSettingsRows: View {
+    @State private var historyLines = AppSettings.shared.tmuxHistoryLines
+    @State private var attachLimit = AppSettings.shared.tmuxAttachWindowLimit
+    @State private var externalInBackground = AppSettings.shared.tmuxExternalWindowsInBackground
+    @State private var pauseAfter = AppSettings.shared.tmuxPauseAfterSeconds
+    @State private var autoUnpause = AppSettings.shared.tmuxAutoUnpause
+    @State private var mirrorPasteBuffer = AppSettings.shared.tmuxMirrorPasteBuffer
+    @State private var reattachOnLaunch = AppSettings.shared.tmuxReattachOnLaunch
+
+    private static let historyChoices = [0, 500, 1000, 2000, 5000, 10000]
+    private static let limitChoices = [0, 5, 10, 20, 50]
+    private static let pauseChoices = [0, 1, 2, 5, 10, 30]
+
+    private func binding<V>(_ state: Binding<V>, _ store: @escaping (V) -> Void) -> Binding<V> {
+        Binding(
+            get: { state.wrappedValue },
+            set: {
+                state.wrappedValue = $0
+                store($0)
+            })
+    }
+
+    var body: some View {
+        SettingRow(
+            label: "Scrollback on attach", help: "Lines of each pane's history Boo copies from tmux when it opens."
+        ) {
+            ThemedMenuPicker(
+                selection: binding($historyLines) { AppSettings.shared.tmuxHistoryLines = $0 },
+                options: Self.historyChoices
+            ) { $0 == 0 ? "Screen only" : "\($0) lines" }
+        }
+        SettingRow(
+            label: "Ask which windows to open",
+            help: "Sessions with more windows than this ask on attach. The rest wait in the session menu."
+        ) {
+            ThemedMenuPicker(
+                selection: binding($attachLimit) { AppSettings.shared.tmuxAttachWindowLimit = $0 },
+                options: Self.limitChoices
+            ) { $0 == 0 ? "Never" : "Over \($0)" }
+        }
+        ToggleRow(
+            label: "Open other clients' windows in the background",
+            help: "Windows made outside Boo (another client, a script) join the session without taking focus.",
+            isOn: binding($externalInBackground) { AppSettings.shared.tmuxExternalWindowsInBackground = $0 })
+        SettingRow(
+            label: "Pause panes that fall behind",
+            help:
+                "tmux stops sending a pane's output once Boo is this many seconds behind, so a flood cannot stall the session. Needs tmux 3.2. Takes effect on the next attach."
+        ) {
+            ThemedMenuPicker(
+                selection: binding($pauseAfter) { AppSettings.shared.tmuxPauseAfterSeconds = $0 },
+                options: Self.pauseChoices
+            ) { $0 == 0 ? "Off" : "After \($0) s" }
+        }
+        if pauseAfter > 0 {
+            ToggleRow(
+                label: "Unpause right away",
+                help: "Resume a paused pane at once and redraw it. Off: the pane shows a bar with Unpause.",
+                isOn: binding($autoUnpause) { AppSettings.shared.tmuxAutoUnpause = $0 })
+        }
+        ToggleRow(
+            label: "Copy tmux buffers to the clipboard",
+            help: "Text copied in tmux (copy mode, set-buffer) lands on the macOS clipboard too.",
+            isOn: binding($mirrorPasteBuffer) { AppSettings.shared.tmuxMirrorPasteBuffer = $0 })
+        ToggleRow(
+            label: "Reattach sessions on launch",
+            help: "Sessions Boo showed when it quit open again the next time it starts.",
+            isOn: binding($reattachOnLaunch) { AppSettings.shared.tmuxReattachOnLaunch = $0 })
     }
 }
 

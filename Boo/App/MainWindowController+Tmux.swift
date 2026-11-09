@@ -67,6 +67,112 @@ extension MainWindowController: TmuxHost {
         activateWorkspace(index)
     }
 
+    func tmuxFocusPane(_ paneID: UUID, workspace id: UUID) {
+        guard let workspace = appState.workspace(withID: id), workspace.activePaneID != paneID else { return }
+        if workspace === activeWorkspace, paneViews[paneID] != nil {
+            focusPane(paneID, in: workspace)
+        } else {
+            workspace.activePaneID = paneID
+        }
+    }
+
+    func tmuxSelectWorkspace(_ id: UUID) {
+        // Follow tmux only while this session is what the window shows.
+        guard let active = activeWorkspace, active.id != id,
+            let client = TmuxControlClient.owning(workspace: id),
+            TmuxControlClient.owning(workspace: active.id) === client
+        else { return }
+        tmuxShowWorkspace(id)
+    }
+
+    func tmuxSetZoom(workspace id: UUID, pane: UUID?) {
+        guard let workspace = appState.workspace(withID: id), workspace.zoomedPaneID != pane else { return }
+        if let pane { workspace.activePaneID = pane }
+        setZoomedPane(pane, in: workspace)
+    }
+
+    func tmuxPaneChanged(_ paneID: UUID, directory: String?, command: String?) {
+        guard let workspace = appState.workspaceContainingPane(paneID), let pane = workspace.pane(for: paneID)
+        else { return }
+        let view = workspace === activeWorkspace ? paneViews[paneID] : nil
+        if let directory, !directory.isEmpty {
+            // A remote session's paths mean nothing on this Mac.
+            guard TmuxControlClient.owning(workspace: workspace.id)?.remoteHost == nil else { return }
+            pane.updateWorkingDirectory(at: pane.activeTabIndex, directory)
+            if let view { paneView(view, didChangeDirectory: directory, paneID: paneID) }
+        }
+        if let command, !command.isEmpty {
+            pane.updateTitle(at: pane.activeTabIndex, command)
+            if let view { paneView(view, titleChanged: command, paneID: paneID) }
+        }
+        view?.needsDisplay = true
+    }
+
+    func tmuxPanePaused(_ paneID: UUID, paused: Bool) {
+        guard let view = paneViews[paneID] else { return }
+        TmuxPausedBar.set(paused, on: view) { [weak self] in
+            guard let self, let workspace = self.appState.workspaceContainingPane(paneID) else { return }
+            TmuxControlClient.owning(workspace: workspace.id)?.unpause(pane: paneID)
+        }
+    }
+
+    func tmuxShowError(_ message: String) {
+        BooAlert.showTransient(message)
+    }
+
+    func tmuxChooseWindows(
+        _ windows: [TmuxProtocol.WindowInfo], session: String, choose: @escaping (Set<String>?) -> Void
+    ) {
+        guard let window else { return choose(nil) }
+        let alert = NSAlert()
+        alert.messageText = "Open which windows of tmux \(session)?"
+        alert.informativeText =
+            "The session has \(windows.count) windows. The others stay in the session menu, ready to open."
+        alert.addButton(withTitle: "Open Selected")
+        alert.addButton(withTitle: "Open All")
+        alert.addButton(withTitle: "Only the Current One")
+        let boxes = windows.map { info -> NSButton in
+            let box = NSButton(checkboxWithTitle: info.name.isEmpty ? info.id : info.name, target: nil, action: nil)
+            box.state = info.active ? .on : .off
+            return box
+        }
+        let stack = NSStackView(views: boxes)
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        stack.spacing = 4
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        let document = TmuxFlippedView()
+        document.translatesAutoresizingMaskIntoConstraints = false
+        document.addSubview(stack)
+        let scroll = NSScrollView(frame: NSRect(x: 0, y: 0, width: 300, height: min(320, CGFloat(windows.count) * 22)))
+        scroll.hasVerticalScroller = true
+        scroll.drawsBackground = false
+        scroll.documentView = document
+        NSLayoutConstraint.activate([
+            stack.topAnchor.constraint(equalTo: document.topAnchor),
+            stack.leadingAnchor.constraint(equalTo: document.leadingAnchor),
+            stack.bottomAnchor.constraint(equalTo: document.bottomAnchor),
+            document.widthAnchor.constraint(equalTo: scroll.contentView.widthAnchor)
+        ])
+        alert.accessoryView = scroll
+        alert.beginSheetModal(for: window) { response in
+            switch response {
+            case .alertFirstButtonReturn:
+                choose(Set(zip(windows, boxes).filter { $0.1.state == .on }.map { $0.0.id }))
+            case .alertSecondButtonReturn:
+                choose(nil)
+            default:
+                choose([])
+            }
+        }
+    }
+
+    func tmuxCopyToClipboard(_ text: String) {
+        guard !text.isEmpty else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+    }
+
     /// One single-tab pane per leaf, each running its bridge program.
     private func tmuxPanes(_ programs: [UUID: String], folder: String) -> [Pane] {
         programs.map { paneID, program in
@@ -286,9 +392,38 @@ extension MainWindowController {
             item.state = window.workspace == active ? .on : .off
             return item
         }
+        let hidden = client.unopenedWindows
+        if !hidden.isEmpty {
+            let submenu = NSMenu()
+            for window in hidden {
+                submenu.addItem(ClosureMenuItem(title: window.name) { [weak client] in client?.openWindow(window.id) })
+            }
+            let item = NSMenuItem(title: "Open Window", action: nil, keyEquivalent: "")
+            item.submenu = submenu
+            items.append(item)
+        }
         items.append(.separator())
         items.append(
             ClosureMenuItem(title: "New Window") { [weak client] in client?.newWindow() })
+        let others = client.sessions.filter { $0.name != client.session }
+        if !others.isEmpty {
+            let submenu = NSMenu()
+            for session in others {
+                let item = ClosureMenuItem(title: session.name) { [weak client] in
+                    client?.switchSession(to: session.name)
+                }
+                item.toolTip = session.summary
+                submenu.addItem(item)
+            }
+            let item = NSMenuItem(title: "Switch Session", action: nil, keyEquivalent: "")
+            item.submenu = submenu
+            items.append(item)
+        }
+        items.append(
+            ClosureMenuItem(title: "Run tmux Command…") { [weak self, weak client] in
+                guard let client else { return }
+                self?.promptTmuxCommand(client)
+            })
         items.append(
             ClosureMenuItem(title: "Rename Session…") { [weak self, weak client] in
                 guard let client else { return }
@@ -305,6 +440,40 @@ extension MainWindowController {
                 self?.confirmKillTmuxSession(client)
             })
         return items
+    }
+
+    /// Asks for a tmux command, runs it in the session and shows what it printed.
+    func promptTmuxCommand(_ client: TmuxControlClient) {
+        promptForText(
+            title: "Run tmux Command",
+            informative: "Runs in session \(client.label), as if typed after the prefix and :.",
+            placeholder: "list-keys -T prefix", confirm: "Run"
+        ) { [weak self] command in
+            client.run(command) { reply in
+                let output = reply.text.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+                if reply.isError {
+                    self?.tmuxShowError(output.isEmpty ? "tmux: \(command) failed" : "tmux: \(output)")
+                } else if !output.isEmpty {
+                    self?.showTmuxOutput(output, command: command)
+                }
+            }
+        }
+    }
+
+    private func showTmuxOutput(_ output: String, command: String) {
+        guard let window else { return }
+        let alert = NSAlert()
+        alert.messageText = command
+        let scroll = NSTextView.scrollableTextView()
+        scroll.frame = NSRect(x: 0, y: 0, width: 480, height: 260)
+        if let text = scroll.documentView as? NSTextView {
+            text.isEditable = false
+            text.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
+            text.string = output
+        }
+        alert.accessoryView = scroll
+        alert.addButton(withTitle: "Close")
+        alert.beginSheetModal(for: window)
     }
 
     private func confirmKillTmuxSession(_ client: TmuxControlClient) {
@@ -373,4 +542,9 @@ extension MainWindowController {
         let point = view.convert(window?.mouseLocationOutsideOfEventStream ?? .zero, from: nil)
         menu.popUp(positioning: nil, at: point, in: view)
     }
+}
+
+/// Lays out the window picker's list from the top.
+private final class TmuxFlippedView: NSView {
+    override var isFlipped: Bool { true }
 }

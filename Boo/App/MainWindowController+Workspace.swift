@@ -210,6 +210,8 @@ extension MainWindowController {
                 let trimmed = name.trimmingCharacters(in: .whitespaces)
                 // Empty falls back to the folder name rather than a blank pill.
                 edit { $0.customName = trimmed.isEmpty ? nil : trimmed }
+                // A tmux window keeps its name in tmux too.
+                TmuxControlClient.owning(workspace: wsID)?.renameWindow(workspace: wsID, to: trimmed)
             },
             onColor: { color in
                 edit {
@@ -560,6 +562,7 @@ extension MainWindowController {
 
         appState.setActiveWorkspace(index)
         guard let workspace = activeWorkspace else { return }
+        TmuxControlClient.owning(workspace: workspace.id)?.focus(workspace: workspace.id)
 
         // Skip self-activation (startup restore): isVisible is uninitialized and would overwrite the loaded state.
         // Also require that `prev` is the workspace actually rendered on screen — during

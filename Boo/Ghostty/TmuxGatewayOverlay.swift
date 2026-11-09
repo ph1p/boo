@@ -8,6 +8,7 @@ final class TmuxGatewayOverlay: NSView {
     var onShowWindow: ((UUID) -> Void)?
     var onNewWindow: (() -> Void)?
     var onDetach: (() -> Void)?
+    var onRunCommand: (() -> Void)?
 
     private let status = NSTextField(labelWithString: "Connecting to tmux…")
     private let list = NSStackView()
@@ -36,7 +37,8 @@ final class TmuxGatewayOverlay: NSView {
 
         let newWindow = NSButton(title: "New Window", target: self, action: #selector(newWindowTapped))
         let detach = NSButton(title: "Detach", target: self, action: #selector(detachTapped))
-        let buttons = NSStackView(views: [newWindow, detach])
+        let run = NSButton(title: "Run Command…", target: self, action: #selector(runCommandTapped))
+        let buttons = NSStackView(views: [newWindow, run, detach])
         buttons.spacing = 8
 
         let hint = NSTextField(labelWithString: "Esc or q detaches. tmux keeps running.")
@@ -125,4 +127,5 @@ final class TmuxGatewayOverlay: NSView {
 
     @objc private func newWindowTapped() { onNewWindow?() }
     @objc private func detachTapped() { onDetach?() }
+    @objc private func runCommandTapped() { onRunCommand?() }
 }
