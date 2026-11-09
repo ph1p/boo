@@ -4,7 +4,7 @@ import Cocoa
 @MainActor
 struct PaletteItem: Identifiable {
     enum Kind: Int, CaseIterable {
-        case action, agent, workspace, tab, bookmark, host, tmux, theme, profile, recipe, task, history
+        case action, agent, workspace, tab, bookmark, host, secret, tmux, theme, profile, recipe, task, history
 
         var title: String {
             switch self {
@@ -14,6 +14,7 @@ struct PaletteItem: Identifiable {
             case .tab: return "Tabs"
             case .bookmark: return "Bookmarks"
             case .host: return "SSH Hosts"
+            case .secret: return "1Password"
             case .tmux: return "tmux"
             case .theme: return "Themes"
             case .profile: return "Profiles"
@@ -46,11 +47,11 @@ struct PaletteQuery: Equatable {
         self.text = text
     }
 
-    /// `>` actions, `@` workspaces, `@ssh` hosts, `@tmux` sessions, `#` tabs,
+    /// `>` actions, `@` workspaces, `@ssh` hosts, `@op` 1Password items, `@tmux` sessions, `#` tabs,
     /// `:` themes and profiles, `!` history.
     init(_ raw: String) {
         let trimmed = raw.trimmingCharacters(in: .whitespaces)
-        for (word, kind) in [("@ssh", PaletteItem.Kind.host), ("@tmux", .tmux)] {
+        for (word, kind) in [("@ssh", PaletteItem.Kind.host), ("@op", .secret), ("@tmux", .tmux)] {
             guard trimmed.lowercased().hasPrefix(word),
                 trimmed.count == word.count || trimmed.dropFirst(word.count).first?.isWhitespace == true
             else { continue }
@@ -156,7 +157,7 @@ enum PaletteRanker {
 @MainActor
 enum PaletteSources {
     static func items(menu: NSMenu? = NSApplication.shared.mainMenu) -> [PaletteItem] {
-        let places = workspaces() + tabs() + bookmarks() + hosts() + tmux()
+        let places = workspaces() + tabs() + bookmarks() + hosts() + secrets() + tmux()
         let looks = themes() + profiles()
         return actions(menu: menu) + agents() + places + looks + RecipesMenu.paletteItems() + projectTasks()
     }
@@ -301,6 +302,25 @@ enum PaletteSources {
                 subtitle: host.address == host.alias ? "" : host.address,
                 perform: { store.connect(host, split: false) })
         }
+    }
+
+    /// 1Password items (copy the password), plus the `op run` prefix. Empty
+    /// until the plugin is enabled; the first open starts loading.
+    static func secrets() -> [PaletteItem] {
+        let store = OnePasswordStore.shared
+        guard store.isEnabled else { return [] }
+        store.start()
+        let run = PaletteItem(
+            id: "secret:op-run", kind: .secret, title: "Insert op run Prefix",
+            subtitle: OnePasswordStore.runPrefix, perform: { store.insertRunPrefix() })
+        return [run]
+            + store.items.map { item in
+                PaletteItem(
+                    id: "secret:\(item.id)", kind: .secret, title: item.title,
+                    subtitle: ([item.vaultName, item.detail].filter { !$0.isEmpty } + ["copy password"])
+                        .joined(separator: " · "),
+                    perform: { store.copy(.password, of: item) })
+            }
     }
 
     /// tmux sessions to start or attach, here and on ssh hosts. Sessions

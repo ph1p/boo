@@ -223,7 +223,7 @@ extension AppSettings {
 
     /// Built-in plugins that start disabled. Each is disabled once, so a
     /// user who enables one keeps it enabled.
-    static let defaultOffPluginIDs = ["kube"]
+    static let defaultOffPluginIDs = ["kube", "1password"]
 
     func applyDefaultOffPlugins() {
         let applied = Set(UserDefaults.standard.stringArray(forKey: K.defaultOffPluginsApplied) ?? [])

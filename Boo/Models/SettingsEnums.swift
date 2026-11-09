@@ -259,7 +259,9 @@ enum TextOpenMode: String, CaseIterable, Codable, SettingChoice {
     static var visibleCases: [TextOpenMode] { [.editor, .terminalEditor, .external] }
 }
 
-enum LinkOpenMode: String, CaseIterable, Codable {
+enum LinkOpenMode: String, CaseIterable, Codable, SettingChoice {
+    static var visibleCases: [LinkOpenMode] { allCases }
+
     case browserTab = "browserTab"
     case externalBrowser = "externalBrowser"
 

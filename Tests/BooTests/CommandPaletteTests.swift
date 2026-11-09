@@ -82,6 +82,12 @@ final class CommandPaletteTests: XCTestCase {
         XCTAssertEqual(PaletteQuery("@sshd"), PaletteQuery(kind: .workspace, text: "sshd"))
     }
 
+    func testOpPrefixSelectsSecrets() {
+        XCTAssertEqual(PaletteQuery("@op github"), PaletteQuery(kind: .secret, text: "github"))
+        XCTAssertEqual(PaletteQuery("@op"), PaletteQuery(kind: .secret, text: ""))
+        XCTAssertEqual(PaletteQuery("@ops"), PaletteQuery(kind: .workspace, text: "ops"))
+    }
+
     func testTmuxPrefixSelectsSessions() {
         XCTAssertEqual(PaletteQuery("@tmux main"), PaletteQuery(kind: .tmux, text: "main"))
         XCTAssertEqual(PaletteQuery("@tmux"), PaletteQuery(kind: .tmux, text: ""))
