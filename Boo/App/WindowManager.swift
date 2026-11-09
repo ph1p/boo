@@ -62,8 +62,6 @@ final class WindowManager {
 
     // MARK: - Lifecycle
 
-    /// Windows at launch: restores every saved window (or one fresh window).
-    /// The first keeps the frame autosave; the saved key window ends up key.
     /// Reattaches the tmux sessions Boo showed when it quit
     /// (`tmuxReattachOnLaunch`); local ones only while they still exist.
     private func reattachTmuxSessions() {
@@ -84,6 +82,8 @@ final class WindowManager {
         }
     }
 
+    /// Windows at launch: restores every saved window (or one fresh window).
+    /// The first keeps the frame autosave; the saved key window ends up key.
     @discardableResult
     func openInitialWindow() -> MainWindowController {
         installSharedHandlers()
