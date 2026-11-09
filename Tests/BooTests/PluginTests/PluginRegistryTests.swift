@@ -42,6 +42,7 @@ final class PluginRegistryTests: XCTestCase {
             "bookmarks",
             "hosts",
             "kube",
+            "1password",
             "notes",
             "snippets",
             "tasks",
