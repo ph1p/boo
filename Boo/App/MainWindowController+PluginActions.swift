@@ -175,6 +175,9 @@ extension MainWindowController {
         let bridge: TerminalBridge = self.bridge
         return workspace.panes.values.flatMap { pane -> [WorkspaceAgentSession] in
             pane.tabs.compactMap { tab in
+                // Only terminals run agents. A browser tab has no shell, but while
+                // focused the bridge can still carry the previous terminal's agent.
+                guard tab.contentType == .terminal else { return nil }
                 // The bridge holds the focused tab's live state, but only once it
                 // switched to this tab: right after a workspace or tab switch it
                 // still describes the previous tab, whose agent would show here.
