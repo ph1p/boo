@@ -18,14 +18,26 @@ final class AgentBrowser {
     /// Hosts a background tab while a command runs: WebKit throttles and
     /// cannot snapshot a page outside a window.
     private lazy var stage: NSWindow = {
-        let window = NSWindow(
-            contentRect: NSRect(x: -20000, y: -20000, width: 1280, height: 800), styleMask: .borderless,
-            backing: .buffered, defer: false)
+        let window = StageWindow(
+            contentRect: NSRect(origin: Self.stageOrigin, size: NSSize(width: 1280, height: 800)),
+            styleMask: .borderless, backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
         window.ignoresMouseEvents = true
         window.hasShadow = false
+        window.isExcludedFromWindowsMenu = true
+        window.collectionBehavior = [.transient, .ignoresCycle, .fullScreenAuxiliary]
         return window
     }()
+    private static let stageOrigin = NSPoint(x: -20000, y: -20000)
+
+    /// AppKit moves off-screen windows back onto a screen (for example after a
+    /// display change); the stage must stay off every screen, or it shows as a
+    /// bare second window behind Boo.
+    private final class StageWindow: NSWindow {
+        override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect { frameRect }
+        override var canBecomeKey: Bool { false }
+        override var canBecomeMain: Bool { false }
+    }
 
     nonisolated static let loadTimeout: TimeInterval = 10
     static let readLimit = 20000
@@ -255,6 +267,7 @@ final class AgentBrowser {
         view.frame = host.bounds
         view.autoresizingMask = [.width, .height]
         host.addSubview(view)
+        stage.setFrameOrigin(Self.stageOrigin)
         stage.orderBack(nil)
         defer {
             // The user may have opened the tab meanwhile; then it lives in its pane.
