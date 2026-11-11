@@ -127,7 +127,7 @@ final class MarkdownPreviewContentView: NSView, ContentViewProtocol, PageFindabl
         loadMarkdown(at: path, fragment: fragment)
     }
 
-    /// Route a clicked link: anchors scroll, markdown opens in place, other
+    /// Route a clicked link: anchors scroll, markdown pages open in place, other
     /// local files open in a Boo tab, web links follow the app's link settings.
     private func openLink(_ url: URL) {
         let controller = window?.windowController as? MainWindowController
@@ -137,39 +137,25 @@ final class MarkdownPreviewContentView: NSView, ContentViewProtocol, PageFindabl
             return
         }
         let fragment = url.fragment.flatMap { $0.isEmpty ? nil : $0 }
-        if path == filePath {
-            callPage("booScrollToFragment(fragment)", ["fragment": fragment ?? ""])
-            return
-        }
-        var isDirectory: ObjCBool = false
-        guard FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory) else {
-            BooAlert.showTransient("No such file: \(path)")
-            return
-        }
-        if isDirectory.boolValue {
-            if let readme = Self.readme(in: path) {
-                navigate(toMarkdown: readme, fragment: fragment)
-            } else {
+        guard let target = MarkdownLinkResolver.resolve(path, from: filePath ?? path) else {
+            var isDirectory: ObjCBool = false
+            if FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory), isDirectory.boolValue {
                 NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
+            } else {
+                BooAlert.showTransient("No such file: \(path)")
             }
             return
         }
-        if ContentType.isMarkdown(path) {
-            navigate(toMarkdown: path, fragment: fragment)
+        if target == filePath {
+            callPage("booScrollToFragment(fragment)", ["fragment": fragment ?? ""])
+        } else if MarkdownLinkResolver.isPage(target) {
+            navigate(toMarkdown: target, fragment: fragment)
         } else if let controller {
             // Not LinkOpener: its editor target would open images as text.
-            controller.handleOpenTab(.file(path: path))
+            controller.handleOpenTab(.file(path: target))
         } else {
-            NSWorkspace.shared.open(URL(fileURLWithPath: path))
+            NSWorkspace.shared.open(URL(fileURLWithPath: target))
         }
-    }
-
-    private static func readme(in directory: String) -> String? {
-        let names = (try? FileManager.default.contentsOfDirectory(atPath: directory)) ?? []
-        return names.first {
-            ($0 as NSString).deletingPathExtension.lowercased() == "readme" && ContentType.isMarkdown($0)
-        }
-        .map { (directory as NSString).appendingPathComponent($0) }
     }
 
     /// Runs `body` as an async function in the page with `arguments` bound by name.

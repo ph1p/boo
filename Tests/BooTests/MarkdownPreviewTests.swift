@@ -32,6 +32,30 @@ final class MarkdownPreviewTests: XCTestCase {
         XCTAssertFalse(MarkdownAssetSchemeHandler.servedExtensions.contains("txt"))
     }
 
+    func testLinkResolverFollowsDocsSiteConventions() throws {
+        let fm = FileManager.default
+        let root = fm.temporaryDirectory.appendingPathComponent("boo-links-\(UUID().uuidString)").path
+        defer { try? fm.removeItem(atPath: root) }
+        for dir in [".git", "docs/pages", "guide", "empty"] {
+            try fm.createDirectory(atPath: "\(root)/\(dir)", withIntermediateDirectories: true)
+        }
+        for file in ["docs/pages/index.mdx", "docs/pages/agents.mdx", "guide/README.md", "notes.md", "LICENSE"] {
+            fm.createFile(atPath: "\(root)/\(file)", contents: Data())
+        }
+        let page = "\(root)/docs/pages/index.mdx"
+        let resolve = { MarkdownLinkResolver.resolve($0, from: page) }
+
+        XCTAssertEqual(resolve("/agents"), "\(root)/docs/pages/agents.mdx", "site-absolute, no extension")
+        XCTAssertEqual(resolve("\(root)/docs/pages/agents"), "\(root)/docs/pages/agents.mdx")
+        XCTAssertEqual(resolve("/guide/"), "\(root)/guide/README.md", "directory finds its README")
+        XCTAssertEqual(resolve("/notes"), "\(root)/notes.md", "walks up to the repo root")
+        XCTAssertEqual(resolve("/LICENSE"), "\(root)/LICENSE")
+        XCTAssertNil(resolve("/empty"), "directory without a page")
+        XCTAssertNil(resolve("/missing"))
+        XCTAssertTrue(MarkdownLinkResolver.isPage("a.mdx"))
+        XCTAssertFalse(MarkdownLinkResolver.isPage("a.png"))
+    }
+
     func testDocumentLocksScriptsToItsNonce() throws {
         let html = MarkdownPreviewPage.document(
             body: "<h1>Hi</h1><script>alert(1)</script>",
