@@ -75,6 +75,7 @@ final class ImageViewerContentView: NSView, ContentViewProtocol {
         addSubview(scrollView)
 
         hud.onAction = { [weak self] action in self?.perform(action) }
+        hud.onZoomLevel = { [weak self] level in self?.zoom(to: level) }
         hud.translatesAutoresizingMaskIntoConstraints = false
         addSubview(hud)
         NSLayoutConstraint.activate([
@@ -162,6 +163,7 @@ final class ImageViewerContentView: NSView, ContentViewProtocol {
             guard let image = imageView.image else { return }
             NSPasteboard.general.clearContents()
             NSPasteboard.general.writeObjects([image])
+            hud.confirmCopy()
         }
     }
 
@@ -256,6 +258,11 @@ final class ImageViewerContentView: NSView, ContentViewProtocol {
         focus()
     }
 
+    /// Pinches over the HUD land here; zoom the image anyway.
+    override func magnify(with event: NSEvent) {
+        scrollView.magnify(with: event)
+    }
+
     fileprivate func focus() {
         if window?.firstResponder !== self {
             window?.makeFirstResponder(self)
@@ -287,10 +294,20 @@ private final class ImageScrollView: NSScrollView {
         onMagnify?()
     }
 
-    /// Trackpad pinch.
+    /// Trackpad pinch, applied by hand: AppKit's own handling drops a gesture
+    /// whose began phase went to another view (a pinch started over the HUD)
+    /// or that arrives during scroll momentum.
     override func magnify(with event: NSEvent) {
-        super.magnify(with: event)
+        guard let documentView else { return }
+        let point = documentView.convert(event.locationInWindow, from: nil)
+        setMagnification(magnification * (1 + event.magnification), centeredAt: point)
         onMagnify?()
+    }
+
+    /// Two-finger double tap, same as double-click.
+    override func smartMagnify(with event: NSEvent) {
+        guard let documentView else { return }
+        onDoubleClick?(documentView.convert(event.locationInWindow, from: nil))
     }
 
     override func mouseDown(with event: NSEvent) {
@@ -299,8 +316,17 @@ private final class ImageScrollView: NSScrollView {
             onDoubleClick?(documentView.convert(event.locationInWindow, from: nil))
             return
         }
+        guard canPan else { return }
         dragStart = (event.locationInWindow, contentView.bounds.origin)
         NSCursor.closedHand.push()
+    }
+
+    /// Panning only makes sense when the image overflows the viewport.
+    private var canPan: Bool {
+        guard let documentView else { return false }
+        let doc = documentView.frame.size
+        let visible = contentView.bounds.size
+        return doc.width > visible.width + 0.5 || doc.height > visible.height + 0.5
     }
 
     override func mouseDragged(with event: NSEvent) {
@@ -335,58 +361,91 @@ private final class CenteringClipView: NSClipView {
 
 // MARK: - HUD
 
+/// Dark pill toolbar over the image, like Quick Look: info on the left, zoom
+/// controls in the middle, file actions on the right. Dark in every theme so
+/// it stays legible over bright images.
 private final class ImageViewerHUD: NSVisualEffectView {
     enum Action: Int { case zoomIn, zoomOut, fit, actualSize, openExternally, reveal, copy }
 
     var onAction: ((Action) -> Void)?
-    private let zoomButton = NSButton(title: "100%", target: nil, action: nil)
+    var onZoomLevel: ((CGFloat) -> Void)?
+    private let zoomButton = HUDButton()
     private let infoLabel = NSTextField(labelWithString: "")
+    private var fitButton: HUDButton?
+    private var copyButton: HUDButton?
+
+    private static let presets: [CGFloat] = [0.25, 0.5, 1, 2, 4, 8]
 
     init() {
         super.init(frame: .zero)
+        appearance = NSAppearance(named: .darkAqua)
         material = .hudWindow
         blendingMode = .withinWindow
         state = .active
         wantsLayer = true
-        layer?.cornerRadius = 10
+        layer?.cornerRadius = 16
         layer?.masksToBounds = true
+        layer?.borderWidth = 0.5
+        layer?.borderColor = NSColor.white.withAlphaComponent(0.14).cgColor
 
-        infoLabel.font = .systemFont(ofSize: 11)
+        // The blur alone stays too light over bright images; tint it darker.
+        let tint = NSView()
+        tint.wantsLayer = true
+        tint.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.35).cgColor
+        tint.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(tint)
+        NSLayoutConstraint.activate([
+            tint.topAnchor.constraint(equalTo: topAnchor), tint.bottomAnchor.constraint(equalTo: bottomAnchor),
+            tint.leadingAnchor.constraint(equalTo: leadingAnchor),
+            tint.trailingAnchor.constraint(equalTo: trailingAnchor)
+        ])
+
+        infoLabel.font = .monospacedDigitSystemFont(ofSize: 11, weight: .regular)
         infoLabel.textColor = .secondaryLabelColor
         infoLabel.lineBreakMode = .byTruncatingMiddle
         infoLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
-        zoomButton.isBordered = false
-        zoomButton.font = .monospacedDigitSystemFont(ofSize: 11, weight: .medium)
-        zoomButton.toolTip = "Actual size (1)"
-        zoomButton.widthAnchor.constraint(equalToConstant: 46).isActive = true
+        zoomButton.title = "100%"
+        zoomButton.font = .monospacedDigitSystemFont(ofSize: 11, weight: .semibold)
+        zoomButton.toolTip = "Zoom level"
         zoomButton.target = self
-        zoomButton.action = #selector(buttonPressed(_:))
-        zoomButton.tag = Action.actualSize.rawValue
+        zoomButton.action = #selector(showZoomMenu(_:))
+        zoomButton.widthAnchor.constraint(equalToConstant: 50).isActive = true
+
+        let fit = button("arrow.down.right.and.arrow.up.left", "Fit to window (0)", .fit)
+        let actual = button(nil, "Actual size (1)", .actualSize)
+        actual.title = "1:1"
+        actual.font = .systemFont(ofSize: 11, weight: .semibold)
+        actual.widthAnchor.constraint(equalToConstant: 30).isActive = true
+        let copy = button("doc.on.doc", "Copy image (⌘C)", .copy)
+        fitButton = fit
+        copyButton = copy
 
         let stack = NSStackView(views: [
-            button("minus.magnifyingglass", "Zoom out (−)", .zoomOut),
-            zoomButton,
-            button("plus.magnifyingglass", "Zoom in (+)", .zoomIn),
-            separator(),
-            button("arrow.up.left.and.down.right.magnifyingglass", "Fit to window (0)", .fit),
-            button("1.magnifyingglass", "Actual size (1)", .actualSize),
-            separator(),
             infoLabel,
             separator(),
-            button("doc.on.doc", "Copy image (⌘C)", .copy),
+            button("minus", "Zoom out (−)", .zoomOut),
+            zoomButton,
+            button("plus", "Zoom in (+)", .zoomIn),
+            separator(),
+            fit,
+            actual,
+            separator(),
+            copy,
             button("folder", "Show in Finder", .reveal),
             button("arrow.up.forward.app", "Open in default app", .openExternally)
         ])
-        stack.spacing = 4
-        stack.edgeInsets = NSEdgeInsets(top: 4, left: 8, bottom: 4, right: 8)
+        stack.spacing = 2
+        stack.setCustomSpacing(10, after: infoLabel)
+        stack.edgeInsets = NSEdgeInsets(top: 4, left: 14, bottom: 4, right: 6)
         stack.translatesAutoresizingMaskIntoConstraints = false
         addSubview(stack)
         NSLayoutConstraint.activate([
             stack.topAnchor.constraint(equalTo: topAnchor),
             stack.bottomAnchor.constraint(equalTo: bottomAnchor),
             stack.leadingAnchor.constraint(equalTo: leadingAnchor),
-            stack.trailingAnchor.constraint(equalTo: trailingAnchor)
+            stack.trailingAnchor.constraint(equalTo: trailingAnchor),
+            heightAnchor.constraint(equalToConstant: 32)
         ])
     }
 
@@ -396,31 +455,98 @@ private final class ImageViewerHUD: NSVisualEffectView {
 
     func setZoom(_ magnification: CGFloat, fit: Bool) {
         zoomButton.title = "\(Int((magnification * 100).rounded()))%"
-        zoomButton.contentTintColor = fit ? .secondaryLabelColor : .labelColor
+        fitButton?.isOn = fit
     }
 
     func setInfo(_ text: String) {
         infoLabel.stringValue = text
     }
 
-    private func button(_ symbol: String, _ tip: String, _ action: Action) -> NSButton {
-        let image = NSImage(systemSymbolName: symbol, accessibilityDescription: tip) ?? NSImage()
-        let b = NSButton(image: image, target: self, action: #selector(buttonPressed(_:)))
-        b.isBordered = false
+    /// Briefly swaps the copy icon for a checkmark.
+    func confirmCopy() {
+        guard let copyButton else { return }
+        copyButton.image = Self.symbol("checkmark", "Copied")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak copyButton] in
+            copyButton?.image = Self.symbol("doc.on.doc", "Copy image (⌘C)")
+        }
+    }
+
+    private static func symbol(_ name: String, _ description: String) -> NSImage? {
+        NSImage(systemSymbolName: name, accessibilityDescription: description)?
+            .withSymbolConfiguration(.init(pointSize: 12, weight: .medium))
+    }
+
+    private func button(_ symbol: String?, _ tip: String, _ action: Action) -> HUDButton {
+        let b = HUDButton()
+        if let symbol { b.image = Self.symbol(symbol, tip) }
         b.toolTip = tip
+        b.target = self
+        b.action = #selector(buttonPressed(_:))
         b.tag = action.rawValue
-        b.widthAnchor.constraint(equalToConstant: 24).isActive = true
         return b
     }
 
     private func separator() -> NSView {
-        let v = NSBox()
-        v.boxType = .separator
-        v.heightAnchor.constraint(equalToConstant: 14).isActive = true
+        let v = NSView()
+        v.wantsLayer = true
+        v.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.16).cgColor
+        v.widthAnchor.constraint(equalToConstant: 1).isActive = true
+        v.heightAnchor.constraint(equalToConstant: 16).isActive = true
         return v
     }
 
     @objc private func buttonPressed(_ sender: NSButton) {
         if let action = Action(rawValue: sender.tag) { onAction?(action) }
+    }
+
+    @objc private func showZoomMenu(_ sender: NSButton) {
+        let menu = NSMenu()
+        menu.addItem(ClosureMenuItem(title: "Fit to Window") { [weak self] in self?.onAction?(.fit) })
+        menu.addItem(.separator())
+        for level in Self.presets {
+            menu.addItem(
+                ClosureMenuItem(title: "\(Int(level * 100))%") { [weak self] in self?.onZoomLevel?(level) })
+        }
+        menu.popUp(positioning: nil, at: NSPoint(x: 0, y: sender.bounds.height + 4), in: sender)
+    }
+}
+
+/// Borderless toolbar button with a hover and an "on" background.
+private final class HUDButton: NSButton {
+    var isOn = false { didSet { updateBackground() } }
+    private var isHovered = false { didSet { updateBackground() } }
+
+    init() {
+        super.init(frame: .zero)
+        isBordered = false
+        bezelStyle = .regularSquare
+        imagePosition = .imageOnly
+        title = ""
+        contentTintColor = .labelColor
+        wantsLayer = true
+        layer?.cornerRadius = 6
+        setButtonType(.momentaryChange)
+        addTrackingArea(
+            NSTrackingArea(
+                rect: .zero, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect], owner: self))
+        let width = widthAnchor.constraint(equalToConstant: 26)
+        width.priority = .defaultHigh
+        NSLayoutConstraint.activate([width, heightAnchor.constraint(equalToConstant: 24)])
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override var title: String {
+        didSet { imagePosition = title.isEmpty ? .imageOnly : .noImage }
+    }
+
+    override func mouseEntered(with event: NSEvent) { isHovered = true }
+    override func mouseExited(with event: NSEvent) { isHovered = false }
+
+    private func updateBackground() {
+        let alpha: CGFloat = isOn ? 0.2 : isHovered ? 0.1 : 0
+        layer?.backgroundColor = NSColor.white.withAlphaComponent(alpha).cgColor
     }
 }
