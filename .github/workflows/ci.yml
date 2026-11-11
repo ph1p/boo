@@ -68,6 +68,12 @@ jobs:
         uses: mlugg/setup-zig@v2
         with:
           version: 0.17.0
+          # A global cache from an older Ghostty revision crashed zig build.
+          use-cache: false
+
+      - name: Ghostty revision
+        id: ghostty
+        run: echo "sha=$(git -C Vendor/ghostty rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Cache GhosttyKit build
         uses: actions/cache@v6
@@ -76,9 +82,8 @@ jobs:
             Vendor/ghostty/macos
             Vendor/ghostty/zig-out
             Vendor/ghostty/.zig-cache
-          key: ghosttykit-macos15-${{ hashFiles('Vendor/ghostty/build.zig.zon') }}-${{ hashFiles('Makefile') }}-${{ hashFiles('Vendor/patches/*.patch') }}
-          restore-keys: |
-            ghosttykit-macos15-
+          # Exact key, no restore-keys: a cache from another revision segfaults zig build.
+          key: ghosttykit-macos15-${{ steps.ghostty.outputs.sha }}-${{ hashFiles('Makefile') }}-${{ hashFiles('Vendor/patches/*.patch') }}
 
       - name: Build GhosttyKit
         run: make ghostty
@@ -140,6 +145,12 @@ jobs:
         uses: mlugg/setup-zig@v2
         with:
           version: 0.17.0
+          # A global cache from an older Ghostty revision crashed zig build.
+          use-cache: false
+
+      - name: Ghostty revision
+        id: ghostty
+        run: echo "sha=$(git -C Vendor/ghostty rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Cache GhosttyKit build
         uses: actions/cache@v6
@@ -148,9 +159,8 @@ jobs:
             Vendor/ghostty/macos
             Vendor/ghostty/zig-out
             Vendor/ghostty/.zig-cache
-          key: ghosttykit-macos15-${{ hashFiles('Vendor/ghostty/build.zig.zon') }}-${{ hashFiles('Makefile') }}-${{ hashFiles('Vendor/patches/*.patch') }}
-          restore-keys: |
-            ghosttykit-macos15-
+          # Exact key, no restore-keys: a cache from another revision segfaults zig build.
+          key: ghosttykit-macos15-${{ steps.ghostty.outputs.sha }}-${{ hashFiles('Makefile') }}-${{ hashFiles('Vendor/patches/*.patch') }}
 
       - name: Build GhosttyKit
         run: make ghostty
