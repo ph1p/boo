@@ -318,8 +318,8 @@ class PaneView: NSView {
 
     var findBar: FindBarView?
     var searchMatchTotal: Int = -1
-    /// Browser tab the find bar searches, nil while it drives the terminal.
-    weak var findBrowser: BrowserContentView?
+    /// Page (browser or markdown) the find bar searches, nil while it drives the terminal.
+    weak var findPage: PageFindable?
     /// Repaints agent status in vertical tab rows.
     private var agentInboxObserver: NSObjectProtocol?
 

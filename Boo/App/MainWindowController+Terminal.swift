@@ -17,8 +17,8 @@ extension MainWindowController {
         else { return }
         let wasVisible = pv.isFindBarVisible
         pv.showFindBar()
-        // Browser tabs search the page; only a terminal tab starts a Ghostty search.
-        if !wasVisible, !(pv.activeContentView is BrowserContentView) { activeGhosttyView?.startSearch() }
+        // Browser and markdown tabs search the page; only a terminal tab starts a Ghostty search.
+        if !wasVisible, !(pv.activeContentView is PageFindable) { activeGhosttyView?.startSearch() }
     }
 
     /// Opens a new tab in the active pane running `command`, in `cwd` or the

@@ -4,19 +4,19 @@ import Cocoa
 
 extension PaneView {
     func showFindBar() {
-        let browser = activeContentView as? BrowserContentView
-        guard pane.activeTab?.contentType == .terminal || browser != nil else { return }
+        let page = activeContentView as? PageFindable
+        guard pane.activeTab?.contentType == .terminal || page != nil else { return }
         guard findBar == nil else {
             findBar?.focusField()
             return
         }
         searchMatchTotal = -1
         let bar = FindBarView()
-        if let browser {
-            findBrowser = browser
-            bar.onSearch = { [weak browser] needle in browser?.find(needle) }
-            bar.onNavigate = { [weak browser] next in browser?.findNext(next) }
-            browser.onFindMatches = { [weak self] selected, total in
+        if let page {
+            findPage = page
+            bar.onSearch = { [weak page] needle in page?.find(needle) }
+            bar.onNavigate = { [weak page] next in page?.findNext(next) }
+            page.onFindMatches = { [weak self] selected, total in
                 self?.findBar?.updateMatches(selected: selected, total: total)
             }
         } else {
@@ -50,13 +50,13 @@ extension PaneView {
         searchMatchTotal = -1
     }
 
-    /// End whichever search the find bar is driving: page find in a browser
-    /// tab, or the Ghostty search otherwise.
+    /// End whichever search the find bar is driving: page find in a browser or
+    /// markdown tab, or the Ghostty search otherwise.
     private func endActiveSearch() {
-        if let browser = findBrowser {
-            browser.endFind()
-            browser.onFindMatches = nil
-            findBrowser = nil
+        if let page = findPage {
+            page.endFind()
+            page.onFindMatches = nil
+            findPage = nil
         } else {
             ghosttyView?.endSearch()
         }
@@ -65,7 +65,7 @@ extension PaneView {
     func dismissFindBarIfNeeded(forTabAt index: Int) {
         guard isFindBarVisible else { return }
         let targetType = index < pane.tabs.count ? pane.tabs[index].contentType : nil
-        if targetType != .terminal || findBrowser != nil {
+        if targetType != .terminal || findPage != nil {
             tearDownFindBar()
         }
     }
