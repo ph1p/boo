@@ -8,89 +8,180 @@
 <meta property="og:title" content="Boo — a native macOS terminal">
 <meta property="og:description" content="Workspaces, split panes, a file explorer and agent tools. Built on Ghostty.">
 <meta property="og:image" content="https://ph1p.github.io/boo/social-preview.png">
-<link rel="icon" href="/boo/logo.png">
+<link rel="icon" href="/boo/landing/img/icon-dark.png">
+<meta name="theme-color" content="#fafafa" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0a0a0a" media="(prefers-color-scheme: dark)">
+<script>
+  try { const t = localStorage.getItem('boo-theme'); if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; } catch {}
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
+/* Monochrome palette from the app icon: black and white. */
 :root {
-  --bg: #0b0c10;
-  --bg2: #111319;
-  --card: #151821;
-  --line: #232734;
-  --text: #e8eaf0;
-  --muted: #9aa1b2;
-  --dim: #6b7285;
-  --accent: #8b7cff;
-  --accent2: #4fd1c5;
-  --warn: #f6b352;
-  --ok: #5fd38d;
-  --err: #ff6b6b;
-  --radius: 14px;
+  --bg: #fafafa;
+  --bg2: #f0f0f0;
+  --card: #ffffff;
+  --line: rgba(0, 0, 0, .1);
+  --line2: rgba(0, 0, 0, .2);
+  --soft: rgba(0, 0, 0, .035);
+  --text: #0a0a0a;
+  --muted: #525252;
+  --dim: #8a8a8a;
+  --accent: #0a0a0a;
+  --on-accent: #ffffff;
+  --accent-hover: #262626;
+  --accent2: #404040;
+  --g1: #0a0a0a;
+  --g2: #737373;
+  --warn: #a8640a;
+  --ok: #1c7656;
+  --err: #b8382c;
+  --nav: rgba(250, 250, 250, .8);
+  --shadow: rgba(0, 0, 0, .16);
+  --glow: rgba(0, 0, 0, .06);
+  --glow2: rgba(0, 0, 0, .04);
+  --cap-top: #ffffff;
+  --cap-bot: #f0f0f0;
+  --radius: 16px;
   --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --display: var(--sans);
+  --sans: Manrope, -apple-system, BlinkMacSystemFont, sans-serif;
+  /* Terminal snippets stay black, like the app icon, in both modes. */
+  --term-bg: #0a0a0a;
+  --term-bar: #171717;
+  --term-line: rgba(255, 255, 255, .1);
+  --term-text: #f5f5f5;
+  --term-dim: #8a8a8a;
+  --term-key: #ffd59a;
+  --term-str: #8fe0b5;
+  --term-prompt: #ffffff;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0a0a0a; --bg2: #111111; --card: #151515;
+    --line: rgba(255, 255, 255, .1); --line2: rgba(255, 255, 255, .2); --soft: rgba(255, 255, 255, .04);
+    --text: #f5f5f5; --muted: #a6a6a6; --dim: #737373;
+    --accent: #ffffff; --on-accent: #0a0a0a; --accent-hover: #e5e5e5; --accent2: #d4d4d4;
+    --g1: #ffffff; --g2: #8c8c8c;
+    --warn: #f6b352; --ok: #7fd1a8; --err: #ff8a7a;
+    --nav: rgba(10, 10, 10, .78); --shadow: rgba(0, 0, 0, .6);
+    --glow: rgba(255, 255, 255, .08); --glow2: rgba(255, 255, 255, .05);
+    --cap-top: #262626; --cap-bot: #171717;
+    --term-bg: #000000; --term-bar: #0d0d0d;
+    --boo-icon: url("/boo/landing/img/icon-dark.png");
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --boo-icon: url("/boo/landing/img/icon-dark.png");
+  --bg: #0a0a0a; --bg2: #111111; --card: #151515;
+  --line: rgba(255, 255, 255, .1); --line2: rgba(255, 255, 255, .2); --soft: rgba(255, 255, 255, .04);
+  --text: #f5f5f5; --muted: #a6a6a6; --dim: #737373;
+  --accent: #ffffff; --on-accent: #0a0a0a; --accent-hover: #e5e5e5; --accent2: #d4d4d4;
+  --g1: #ffffff; --g2: #8c8c8c;
+  --warn: #f6b352; --ok: #7fd1a8; --err: #ff8a7a;
+  --nav: rgba(10, 10, 10, .78); --shadow: rgba(0, 0, 0, .6);
+  --glow: rgba(255, 255, 255, .08); --glow2: rgba(255, 255, 255, .05);
+  --cap-top: #262626; --cap-bot: #171717;
+  --term-bg: #000000; --term-bar: #0d0d0d;
+  color-scheme: dark;
 }
 * { box-sizing: border-box; }
 html { scroll-behavior: smooth; }
 body {
   margin: 0; background: var(--bg); color: var(--text);
-  font: 16px/1.6 Inter, -apple-system, BlinkMacSystemFont, sans-serif;
+  font: 16px/1.6 var(--sans);
   -webkit-font-smoothing: antialiased;
+  transition: background-color .25s, color .25s;
 }
 a { color: inherit; }
 img { max-width: 100%; display: block; }
 code, kbd, pre { font-family: var(--mono); }
+code { font-size: .9em; }
 kbd {
-  font-size: .8em; padding: 1px 6px; border-radius: 5px;
-  background: var(--card); border: 1px solid var(--line); border-bottom-width: 2px;
-  white-space: nowrap;
+  display: inline-block; font-size: .85em; line-height: 1.5; padding: 1px 7px; border-radius: 6px;
+  color: var(--text); background: linear-gradient(var(--cap-top), var(--cap-bot));
+  border: 1px solid var(--line2); box-shadow: 0 1.5px 0 var(--line2);
+  white-space: nowrap; vertical-align: .08em;
 }
 .wrap { max-width: 1180px; margin: 0 auto; padding: 0 24px; }
+:focus-visible { outline: 2px solid var(--accent2); outline-offset: 2px; }
 
 /* nav */
 nav {
   position: sticky; top: 0; z-index: 10;
   backdrop-filter: saturate(160%) blur(14px); -webkit-backdrop-filter: saturate(160%) blur(14px);
-  background: rgba(11,12,16,.72); border-bottom: 1px solid rgba(255,255,255,.05);
+  background: var(--nav); border-bottom: 1px solid var(--line);
 }
 nav .wrap { display: flex; align-items: center; gap: 28px; height: 60px; }
-.brand { display: flex; align-items: center; gap: 10px; font-weight: 700; text-decoration: none; font-size: 18px; }
-.brand img { width: 30px; height: 30px; }
+.brand { display: flex; align-items: center; gap: 10px; font: 800 20px/1 var(--display); letter-spacing: -.02em; text-decoration: none; }
+.brand img { width: 30px; height: 30px; border-radius: 8px; }
+/* Page theme picks the app icon variant. */
+.boo-icon { content: var(--boo-icon, url("/boo/landing/img/icon-light.png")); }
 nav .links { display: flex; gap: 22px; margin-left: auto; font-size: 14px; color: var(--muted); }
 nav .links a { text-decoration: none; }
 nav .links a:hover { color: var(--text); }
+.theme-toggle {
+  display: grid; place-items: center; width: 34px; height: 34px; padding: 0; border-radius: 10px; cursor: pointer;
+  color: var(--muted); background: transparent; border: 1px solid var(--line);
+}
+.theme-toggle:hover { color: var(--text); border-color: var(--line2); }
+.theme-toggle svg { width: 17px; height: 17px; }
+.theme-toggle .sun { display: none; }
+:root[data-theme="dark"] .theme-toggle .sun { display: block; }
+:root[data-theme="dark"] .theme-toggle .moon { display: none; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .theme-toggle .sun { display: block; }
+  :root:not([data-theme="light"]) .theme-toggle .moon { display: none; }
+}
 .btn {
   display: inline-flex; align-items: center; gap: 8px;
-  padding: 11px 20px; border-radius: 10px; font-weight: 600; font-size: 15px;
-  text-decoration: none; border: 1px solid var(--line); background: var(--card);
+  padding: 11px 20px; border-radius: 12px; font-weight: 600; font-size: 15px;
+  text-decoration: none; border: 1px solid var(--line2); background: var(--card); color: var(--text);
   transition: transform .15s, background .15s, border-color .15s;
 }
-.btn:hover { transform: translateY(-1px); border-color: #34394a; }
-.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-.btn.primary:hover { background: #9a8dff; }
-.btn.sm { padding: 7px 14px; font-size: 13px; }
+.btn:hover { transform: translateY(-1px); border-color: var(--accent2); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); box-shadow: 0 8px 24px -10px var(--shadow); }
+.btn.primary:hover { background: var(--accent-hover); }
+.btn.sm { padding: 7px 14px; font-size: 13px; border-radius: 10px; }
+
+/* ghost hem: the zigzag at the bottom of the logo */
+.hem { --hem: var(--bg2); height: 14px; background: var(--hem);
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='14'%3E%3Cpath d='M0 14 14 0l14 14z'/%3E%3C/svg%3E") repeat-x left bottom / 28px 14px;
+          mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='14'%3E%3Cpath d='M0 14 14 0l14 14z'/%3E%3C/svg%3E") repeat-x left bottom / 28px 14px; }
+.hem.down { transform: scaleY(-1); }
 
 /* hero */
-.hero { position: relative; padding: 88px 0 40px; text-align: center; overflow: hidden; }
+.hero { position: relative; padding: 84px 0 40px; text-align: center; overflow: hidden; isolation: isolate; }
 .hero::before {
-  content: ""; position: absolute; inset: -200px -10% auto; height: 700px; z-index: -1;
+  content: ""; position: absolute; inset: -220px -10% auto; height: 760px; z-index: -1;
   background:
-    radial-gradient(600px 300px at 30% 30%, rgba(139,124,255,.28), transparent 70%),
-    radial-gradient(500px 280px at 72% 20%, rgba(79,209,197,.18), transparent 70%);
+    radial-gradient(560px 320px at 50% 30%, var(--glow), transparent 70%),
+    radial-gradient(420px 260px at 78% 18%, var(--glow2), transparent 70%),
+    radial-gradient(420px 260px at 22% 22%, var(--glow2), transparent 70%);
 }
-.hero .logo { width: 120px; height: 120px; margin: 0 auto 22px; filter: drop-shadow(0 12px 40px rgba(139,124,255,.45)); }
+.hero .logo {
+  width: 124px; height: 124px; margin: 0 auto 24px; border-radius: 28px;
+  box-shadow: 0 18px 50px -16px var(--shadow), 0 0 0 1px var(--line);
+  animation: float 6s ease-in-out infinite;
+}
+@keyframes float { 50% { transform: translateY(-8px); } }
 .eyebrow {
-  display: inline-block; font: 600 12px/1 var(--mono); letter-spacing: .08em; text-transform: uppercase;
-  color: var(--accent2); padding: 6px 12px; border: 1px solid rgba(79,209,197,.3); border-radius: 99px; margin-bottom: 22px;
+  display: inline-flex; align-items: center; gap: 8px; font: 600 12px/1 var(--mono); letter-spacing: .08em; text-transform: uppercase;
+  color: var(--accent2); padding: 7px 13px; border: 1px solid var(--line2); border-radius: 99px; margin-bottom: 22px; background: var(--soft);
 }
-h1 { font-size: clamp(38px, 6vw, 68px); line-height: 1.05; letter-spacing: -.03em; margin: 0 0 20px; font-weight: 800; }
-h1 .grad { background: linear-gradient(90deg, #b3a9ff, #4fd1c5); -webkit-background-clip: text; background-clip: text; color: transparent; }
+h1, h2 { font-family: var(--display); }
+h1 { font-size: clamp(40px, 6.4vw, 74px); line-height: 1.02; letter-spacing: -.035em; margin: 0 0 20px; font-weight: 800; }
+h1 .grad { background: linear-gradient(90deg, var(--g1), var(--g2)); -webkit-background-clip: text; background-clip: text; color: transparent; }
 .lead { font-size: 19px; color: var(--muted); max-width: 680px; margin: 0 auto 32px; }
 .cta { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
 .req { margin-top: 14px; font-size: 13px; color: var(--dim); }
 .shot {
-  border-radius: 12px; overflow: hidden;
-  background: linear-gradient(180deg, #1a1d27, #10121a);
-  box-shadow: 0 30px 80px -20px rgba(0,0,0,.8), 0 0 0 1px rgba(255,255,255,.06);
+  border-radius: 14px; overflow: hidden; background: var(--bg2);
+  box-shadow: 0 30px 80px -24px var(--shadow), 0 0 0 1px var(--line);
 }
 .shot img { width: 100%; height: auto; }
 .shot.missing { aspect-ratio: 16/10; display: grid; place-items: center; color: var(--dim); font: 13px var(--mono); }
@@ -100,32 +191,43 @@ h1 .grad { background: linear-gradient(90deg, #b3a9ff, #4fd1c5); -webkit-backgro
 .chips { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin: 48px auto 0; max-width: 900px; }
 .chips a {
   font-size: 13px; color: var(--muted); text-decoration: none; padding: 6px 12px;
-  border: 1px solid var(--line); border-radius: 99px; background: var(--bg2);
+  border: 1px solid var(--line); border-radius: 99px; background: var(--card);
 }
-.chips a:hover { color: var(--text); border-color: #3a4052; }
+.chips a:hover { color: var(--text); border-color: var(--accent2); }
 
 /* sections */
-section.feature { padding: 96px 0; border-top: 1px solid rgba(255,255,255,.04); }
+section.feature { padding: 96px 0; border-top: 1px solid var(--line); }
 .split { display: grid; grid-template-columns: 5fr 7fr; gap: 56px; align-items: center; }
 .split.flip { grid-template-columns: 7fr 5fr; }
 .split.flip .text { order: 2; }
 .split > *, .grid > *, .plugs > *, .keys > * { min-width: 0; }
-.kicker { font: 600 12px/1 var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--accent); margin-bottom: 14px; }
-h2 { font-size: clamp(28px, 3.4vw, 40px); line-height: 1.12; letter-spacing: -.02em; margin: 0 0 16px; }
+.kicker { font: 600 12px/1 var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--accent2); margin-bottom: 14px; }
+h2 { font-size: clamp(30px, 3.6vw, 44px); line-height: 1.08; letter-spacing: -.025em; margin: 0 0 16px; font-weight: 700; }
 h3 { font-size: 17px; margin: 0 0 6px; }
 .text p { color: var(--muted); margin: 0 0 20px; }
 ul.points { list-style: none; padding: 0; margin: 0 0 22px; display: grid; gap: 10px; }
-ul.points li { position: relative; padding-left: 26px; color: #c9cdd8; font-size: 15px; }
+ul.points li { position: relative; padding-left: 26px; color: var(--muted); font-size: 15px; }
+/* a tiny ghost as the bullet */
 ul.points li::before {
-  content: ""; position: absolute; left: 4px; top: .62em; width: 8px; height: 8px; border-radius: 2px;
-  background: var(--accent); box-shadow: 0 0 12px var(--accent);
+  content: ""; position: absolute; left: 3px; top: .45em; width: 10px; height: 11px;
+  background: var(--accent2); border-radius: 5px 5px 0 0;
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 83% 82%, 67% 100%, 50% 82%, 33% 100%, 17% 82%, 0 100%);
 }
 ul.points b { color: var(--text); font-weight: 600; }
 .more { font-size: 14px; color: var(--accent2); text-decoration: none; font-weight: 600; }
 .more:hover { text-decoration: underline; }
 
-/* agents band */
-.band { background: linear-gradient(180deg, rgba(139,124,255,.07), transparent 60%); }
+/* bands sit on the cream/green with a ghost hem above and below */
+section.feature.band { background: var(--bg2); border-top: 0; position: relative; }
+section.feature.band::before, section.feature.band::after {
+  content: ""; position: absolute; left: 0; right: 0; height: 14px; background: var(--bg2);
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='14'%3E%3Cpath d='M0 14 14 0l14 14z'/%3E%3C/svg%3E") repeat-x left bottom / 28px 14px;
+          mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='14'%3E%3Cpath d='M0 14 14 0l14 14z'/%3E%3C/svg%3E") repeat-x left bottom / 28px 14px;
+}
+section.feature.band::before { top: -13px; }
+section.feature.band::after { bottom: -13px; transform: scaleY(-1); }
+section.feature.band + section.feature { border-top: 0; }
+.band .card, .band .plug { background: var(--bg); }
 .center { text-align: center; max-width: 760px; margin: 0 auto 48px; }
 .center p { color: var(--muted); font-size: 18px; }
 .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
@@ -134,30 +236,30 @@ ul.points b { color: var(--text); font-weight: 600; }
   background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 22px;
   transition: border-color .2s, transform .2s;
 }
-.card:hover { border-color: #353b4e; transform: translateY(-2px); }
+.card:hover { border-color: var(--line2); transform: translateY(-2px); }
 .card p { color: var(--muted); font-size: 14.5px; margin: 0; }
 .card .ico {
-  width: 36px; height: 36px; border-radius: 9px; display: grid; place-items: center; margin-bottom: 14px;
-  background: rgba(139,124,255,.14); color: #b3a9ff; font: 600 15px var(--mono);
+  width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; margin-bottom: 14px;
+  background: var(--accent); color: var(--on-accent); font: 600 15px var(--mono);
 }
-.card .shot { margin: -4px -4px 18px; border-radius: 9px; }
+.card .shot { margin: -4px -4px 18px; border-radius: 10px; }
 .states { display: flex; gap: 8px; flex-wrap: wrap; margin: 4px 0 22px; }
-.state { font: 12px var(--mono); padding: 4px 10px; border-radius: 99px; border: 1px solid; }
-.state.w { color: var(--warn); border-color: rgba(246,179,82,.35); }
-.state.e { color: var(--err); border-color: rgba(255,107,107,.35); }
-.state.d { color: var(--ok); border-color: rgba(95,211,141,.35); }
-.state.a { color: #b3a9ff; border-color: rgba(139,124,255,.4); }
+.state { font: 12px var(--mono); padding: 4px 10px; border-radius: 99px; border: 1px solid; background: var(--soft); }
+.state.w { color: var(--warn); }
+.state.e { color: var(--err); }
+.state.d { color: var(--ok); }
+.state.a { color: var(--text); }
 
 /* terminal snippet */
 .term {
-  background: #0e1016; border: 1px solid var(--line); border-radius: 12px; overflow: hidden;
-  font: 13.5px/1.65 var(--mono); box-shadow: 0 20px 60px -20px rgba(0,0,0,.7);
+  position: relative; background: var(--term-bg); border: 1px solid var(--term-line); border-radius: 14px; overflow: hidden;
+  font: 13.5px/1.65 var(--mono); box-shadow: 0 24px 60px -24px var(--shadow); color: var(--term-text);
 }
-.term .bar { display: flex; gap: 7px; padding: 11px 14px; border-bottom: 1px solid var(--line); background: #13151d; }
-.term .bar i { width: 11px; height: 11px; border-radius: 50%; background: #3a3f4f; }
+.term .bar { display: flex; gap: 7px; padding: 11px 14px; border-bottom: 1px solid var(--term-line); background: var(--term-bar); }
+.term .bar i { width: 11px; height: 11px; border-radius: 50%; background: rgba(255,255,255,.25); }
 .term .bar i:nth-child(1) { background: #ff5f57; } .term .bar i:nth-child(2) { background: #febc2e; } .term .bar i:nth-child(3) { background: #28c840; }
-.term pre { margin: 0; padding: 16px 18px; overflow-x: auto; color: #c9cdd8; }
-.term .p { color: var(--accent2); } .term .c { color: var(--dim); } .term .k { color: #b3a9ff; } .term .s { color: var(--ok); }
+.term pre { margin: 0; padding: 16px 18px; overflow-x: auto; color: var(--term-text); }
+.term .p { color: var(--term-prompt); } .term .c { color: var(--term-dim); } .term .k { color: var(--term-key); } .term .s { color: var(--term-str); }
 
 /* theme strip */
 .themes { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0 22px; }
@@ -165,8 +267,9 @@ ul.points b { color: var(--text); font-weight: 600; }
 .sw span { width: 14px; }
 
 /* install */
-.install { padding: 100px 0 120px; text-align: center; border-top: 1px solid rgba(255,255,255,.04); }
+.install { padding: 100px 0 120px; text-align: center; border-top: 1px solid var(--line); }
 .install .term { max-width: 640px; margin: 32px auto 0; text-align: left; }
+.install .logo { width: 76px; height: 76px; margin: 0 auto 18px; border-radius: 18px; box-shadow: 0 14px 40px -14px var(--shadow), 0 0 0 1px var(--line); }
 .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; max-width: 900px; margin: 40px auto 0; text-align: left; }
 .steps .card b { font: 600 13px var(--mono); color: var(--accent2); display: block; margin-bottom: 8px; }
 
@@ -174,85 +277,156 @@ footer { border-top: 1px solid var(--line); padding: 32px 0; color: var(--dim); 
 footer .wrap { display: flex; gap: 24px; flex-wrap: wrap; align-items: center; }
 footer .wrap > :last-child { margin-left: auto; }
 footer a { text-decoration: none; } footer a:hover { color: var(--text); }
+footer .brand { color: var(--text); font-size: 17px; }
 
 /* plugin list */
 .plugs { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.plugs.wide { grid-template-columns: repeat(4, 1fr); margin-top: 28px; }
+#plugins .shot { max-width: 1100px; margin: 0 auto; }
 .plug {
   display: flex; gap: 12px; align-items: flex-start; padding: 13px 14px;
-  background: var(--card); border: 1px solid var(--line); border-radius: 11px;
+  background: var(--card); border: 1px solid var(--line); border-radius: 12px;
   transition: border-color .2s;
 }
-.plug:hover { border-color: #3a4052; }
+.plug:hover { border-color: var(--line2); }
 .plug b { font-size: 14.5px; }
 .plug p { margin: 2px 0 0; color: var(--muted); font-size: 13px; line-height: 1.45; }
 .plug .pi {
-  flex: none; width: 28px; height: 28px; border-radius: 7px; display: grid; place-items: center;
-  background: rgba(79,209,197,.12); color: var(--accent2); font: 600 14px var(--mono);
+  flex: none; width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center;
+  background: var(--accent); color: var(--on-accent); font: 600 14px var(--mono);
 }
 .grid.four { grid-template-columns: repeat(4, 1fr); }
 .card.mini { padding: 18px; }
 .card.mini .ico { width: 30px; height: 30px; font-size: 13px; margin-bottom: 10px; }
+.card .ico svg { width: 19px; height: 19px; }
+.card.mini .ico svg { width: 16px; height: 16px; }
+.plug .pi svg { width: 15px; height: 15px; }
 
 /* code tabs */
 .term.code .bar { align-items: center; }
 .ctabs { display: flex; gap: 2px; margin-left: 14px; }
 .ctabs button {
-  font: 12px var(--mono); color: var(--dim); background: none; border: 0; padding: 3px 10px; border-radius: 6px; cursor: pointer;
+  font: 12px var(--mono); color: var(--term-dim); background: none; border: 0; padding: 3px 10px; border-radius: 6px; cursor: pointer;
 }
-.ctabs button[aria-selected="true"] { color: var(--text); background: #222634; }
-.ctabs button:focus-visible { outline: 2px solid var(--accent); }
+.ctabs button[aria-selected="true"] { color: var(--term-text); background: rgba(255,255,255,.1); }
 .term pre[hidden] { display: none; }
-.term { position: relative; }
 .copy {
-  position: absolute; top: 6px; right: 8px; font: 11px var(--mono); color: var(--dim);
-  background: #1b1e28; border: 1px solid var(--line); border-radius: 6px; padding: 3px 9px; cursor: pointer;
+  position: absolute; top: 6px; right: 8px; font: 11px var(--mono); color: var(--term-dim);
+  background: var(--term-bar); border: 1px solid var(--term-line); border-radius: 6px; padding: 3px 9px; cursor: pointer;
   opacity: 0; transition: opacity .15s;
 }
 .term:hover .copy, .copy:focus-visible { opacity: 1; }
-.copy.done { color: var(--ok); }
-.examples { margin-top: 16px; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
-.ex-h { padding: 10px 14px; font-size: 13px; color: var(--muted); background: var(--bg2); border-bottom: 1px solid var(--line); }
+.copy.done { color: var(--term-str); }
+.examples { margin-top: 16px; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; background: var(--bg); }
+.ex-h { padding: 10px 14px; font-size: 13px; color: var(--muted); background: var(--soft); border-bottom: 1px solid var(--line); }
 .ex-h a { color: var(--accent2); text-decoration: none; }
-.ex { display: flex; gap: 12px; padding: 9px 14px; font-size: 13.5px; border-top: 1px solid rgba(255,255,255,.03); }
-.ex code { color: #b3a9ff; min-width: 150px; }
+.ex { display: flex; gap: 12px; padding: 9px 14px; font-size: 13.5px; border-top: 1px solid var(--line); }
+.ex:first-of-type { border-top: 0; }
+.ex code { color: var(--accent2); min-width: 150px; }
 .ex span { color: var(--muted); }
 
 /* stats */
 .stats { display: flex; justify-content: center; gap: 44px; flex-wrap: wrap; margin-top: 40px; }
 .stats div { text-align: center; }
-.stats b { display: block; font-size: 28px; font-weight: 800; letter-spacing: -.02em; }
+.stats b { display: block; font: 800 30px/1.2 var(--display); letter-spacing: -.02em; }
 .stats span { font-size: 13px; color: var(--dim); }
 
 /* shortcuts */
-.keys { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
-.kcol { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px; }
-.kcol h3 { font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--accent); font-family: var(--mono); margin-bottom: 14px; }
-.kr { display: flex; flex-direction: column; gap: 4px; font-size: 13.5px; color: var(--muted); padding: 8px 0; border-top: 1px solid rgba(255,255,255,.04); }
-.kr:first-of-type { border-top: 0; }
-.kr span { display: flex; gap: 4px; }
-.kr kbd { color: var(--text); }
+.kbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; margin-bottom: 18px; }
+.kcats { display: flex; flex-wrap: wrap; gap: 6px; }
+.kcats button, .kseg button {
+  font: 500 14.5px var(--sans); color: var(--muted); background: var(--card); border: 1px solid var(--line);
+  padding: 8px 15px; border-radius: 99px; cursor: pointer;
+}
+.kcats button:hover, .kseg button:hover { color: var(--text); border-color: var(--line2); }
+.kcats button[aria-pressed="true"], .kseg button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.ktools { display: flex; gap: 8px; align-items: center; }
+.kseg { display: flex; gap: 0; }
+.kseg button { border-radius: 0; }
+.kseg button:first-child { border-radius: 99px 0 0 99px; }
+.kseg button:last-child { border-radius: 0 99px 99px 0; margin-left: -1px; }
+.kfilter {
+  font: 15px var(--sans); color: var(--text); background: var(--card); border: 1px solid var(--line);
+  border-radius: 99px; padding: 8px 16px; width: 230px;
+}
+.kfilter::placeholder { color: var(--dim); }
+.kfilter:focus { outline: none; border-color: var(--accent2); }
+
+.ktry {
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap; width: 100%; margin: 0 0 18px; padding: 16px 20px;
+  border: 1.5px dashed var(--line2); border-radius: var(--radius); background: var(--soft); color: var(--muted);
+  font: 16px var(--sans); text-align: left; cursor: pointer; min-height: 76px;
+}
+.ktry:hover { border-color: var(--accent2); }
+.ktry:focus { outline: none; border-style: solid; border-color: var(--accent2); background: var(--card); }
+.ktry .ghost { flex: none; width: 26px; height: 28px; color: var(--accent2); }
+.ktry .ktxt { flex: 1; min-width: 180px; }
+.ktry .ktxt b { color: var(--text); }
+.ktry .kout { display: flex; align-items: center; gap: 10px; font-weight: 600; color: var(--text); }
+.ktry.miss .kout { color: var(--dim); font-weight: 500; }
+
+.keys { columns: 2 420px; column-gap: 20px; }
+.kcol { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 22px 24px 14px; break-inside: avoid; margin-bottom: 20px; display: block }
+.kcol[hidden] { display: none; }
+.kcol h3 {
+  display: flex; align-items: center; gap: 8px; font: 600 13.5px/1 var(--mono); text-transform: uppercase; letter-spacing: .08em;
+  color: var(--accent2); margin: 0 0 10px;
+}
+.kcol h3 small { margin-left: auto; color: var(--dim); font-weight: 400; letter-spacing: 0; text-transform: none; }
+.kr {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 11px 10px; margin: 0 -10px; border-radius: 10px; font-size: 16px; line-height: 1.35; color: var(--muted);
+  transition: background-color .3s, color .3s;
+}
+.kr + .kr { border-top: 1px solid var(--line); }
+.kr[hidden] { display: none; }
+.kr:hover { color: var(--text); }
+.kr.hit { background: var(--accent); color: var(--on-accent); border-top-color: transparent; }
+.kr.hit + .kr { border-top-color: transparent; }
+.kk { display: flex; align-items: center; gap: 5px; flex: none; color: var(--dim); font-size: 13.5px; }
+
+/* keycaps */
+.cap {
+  display: inline-grid; place-items: center; min-width: 32px; height: 32px; padding: 0 9px;
+  font: 500 15px/1 var(--mono); color: var(--text);
+  background: linear-gradient(var(--cap-top), var(--cap-bot));
+  border: 1px solid var(--line2); border-radius: 8px;
+  box-shadow: 0 2.5px 0 var(--line2), inset 0 1px 0 rgba(255,255,255,.35);
+}
+.cap.mod { font-size: 19px; }
+.cap.wide { padding: 0 11px; font-size: 13.5px; }
+.kr.hit .cap { color: var(--text); }
+.kr.hit .kk { color: var(--on-accent); }
+.kout .cap { min-width: 40px; height: 40px; font-size: 18px; border-radius: 10px; box-shadow: 0 3px 0 var(--line2); }
+.kout .cap.wide { font-size: 15px; }
+.kout .cap.down { transform: translateY(2px); box-shadow: 0 1px 0 var(--line2); }
+.knone { grid-column: 1 / -1; text-align: center; color: var(--dim); padding: 24px; }
+.knote { text-align: center; margin-top: 28px; color: var(--muted); font-size: 14px; }
 
 /* faq */
 .faq { max-width: 820px; }
-.faq details { border: 1px solid var(--line); border-radius: 12px; background: var(--card); margin-bottom: 10px; }
+.faq details { border: 1px solid var(--line); border-radius: 14px; background: var(--card); margin-bottom: 10px; }
 .faq summary {
   cursor: pointer; list-style: none; padding: 17px 20px; font-weight: 600; display: flex; justify-content: space-between; gap: 16px;
 }
 .faq summary::-webkit-details-marker { display: none; }
-.faq summary::after { content: "+"; color: var(--dim); font: 400 20px/1 var(--mono); transition: transform .2s; }
+.faq summary::after { content: "+"; color: var(--accent2); font: 400 20px/1 var(--mono); transition: transform .2s; }
 .faq details[open] summary::after { transform: rotate(45deg); }
 .faq details p { margin: 0; padding: 0 20px 18px; color: var(--muted); }
 
 .reveal { opacity: 0; transform: translateY(18px); transition: opacity .6s ease, transform .6s ease; }
 .reveal.in { opacity: 1; transform: none; }
-@media (prefers-reduced-motion: reduce) { .reveal { opacity: 1; transform: none; transition: none; } html { scroll-behavior: auto; } }
+@media (prefers-reduced-motion: reduce) {
+  .reveal { opacity: 1; transform: none; transition: none; } html { scroll-behavior: auto; }
+  .hero .logo { animation: none; }
+}
 
 @media (max-width: 900px) {
   .split, .split.flip { grid-template-columns: 1fr; gap: 32px; }
   .split.flip .text { order: 0; }
-  .grid, .steps, .grid.four, .keys { grid-template-columns: 1fr 1fr; }
+  .grid, .steps, .grid.four, .keys, .plugs.wide { grid-template-columns: 1fr 1fr; }
   nav .links { display: none; }
-  nav .btn { margin-left: auto; }
+  nav .theme-toggle { margin-left: auto; }
 }
 @media (max-width: 600px) {
   .wrap { padding: 0 16px; }
@@ -261,6 +435,8 @@ footer a { text-decoration: none; } footer a:hover { color: var(--text); }
   .ex { flex-direction: column; gap: 2px; }
   section.feature { padding: 64px 0; }
   .hero { padding-top: 56px; }
+  .ktools, .kfilter { width: 100%; }
+  .kfilter { flex: 1; }
 }
 </style>
 </head>
@@ -268,7 +444,7 @@ footer a { text-decoration: none; } footer a:hover { color: var(--text); }
 
 <nav>
   <div class="wrap">
-    <a class="brand" href="#top"><img src="/boo/logo.png" alt="">Boo</a>
+    <a class="brand" href="#top"><img class="boo-icon" src="/boo/landing/img/icon-dark.png" alt="">Boo</a>
     <div class="links">
       <a href="#workspaces">Workspaces</a>
       <a href="#agents">Agents</a>
@@ -278,13 +454,17 @@ footer a { text-decoration: none; } footer a:hover { color: var(--text); }
       <a href="/boo/getting-started">Docs</a>
       <a href="https://github.com/ph1p/boo">GitHub</a>
     </div>
+    <button class="theme-toggle" type="button" id="theme" aria-label="Toggle light and dark mode" title="Toggle light / dark">
+      <svg class="lucide lucide-moon moon" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+      <svg class="lucide lucide-sun sun" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>
+    </button>
     <a class="btn primary sm" href="https://github.com/ph1p/boo/releases/latest">Download</a>
   </div>
 </nav>
 
 <header class="hero" id="top">
   <div class="wrap">
-    <img class="logo" src="/boo/logo.png" alt="Boo logo">
+    <img class="logo boo-icon" src="/boo/landing/img/icon-dark.png" alt="Boo logo">
     <div class="eyebrow">Native macOS · Built on Ghostty</div>
     <h1>The terminal built for<br><span class="grad">you and your agents</span></h1>
     <p class="lead">Boo is a native macOS terminal with workspaces, split panes, a file explorer and agent tools. Ghostty does the terminal emulation and Metal rendering; Boo adds everything around it.</p>
@@ -483,27 +663,27 @@ footer a { text-decoration: none; } footer a:hover { color: var(--text); }
         <p><kbd>⇧⌘Space</kbd> labels every URL, path, git hash, IP and UUID on screen. Type the label to copy, with <kbd>⇧</kbd> to paste at the prompt.</p>
       </div>
       <div class="card">
-        <div class="ico">⌘↑</div>
+        <div class="ico"><svg class="lucide lucide-square-terminal" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="m7 11 2-2-2-2"/><path d="M11 13h4"/><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/></svg></div>
         <h3>Command blocks</h3>
         <p>Gutter marks per prompt (red when it failed), jump with <kbd>⌘↑</kbd>/<kbd>⌘↓</kbd>, right-click to copy a command's output, re-run it or send it to an agent.</p>
       </div>
       <div class="card">
-        <div class="ico">vi</div>
+        <div class="ico"><svg class="lucide lucide-text-select" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M5 3a2 2 0 0 0-2 2"/><path d="M19 3a2 2 0 0 1 2 2"/><path d="M21 19a2 2 0 0 1-2 2"/><path d="M5 21a2 2 0 0 1-2-2"/><path d="M9 3h1"/><path d="M9 21h1"/><path d="M14 3h1"/><path d="M14 21h1"/><path d="M3 9v1"/><path d="M21 9v1"/><path d="M3 14v1"/><path d="M21 14v1"/><line x1="7" x2="15" y1="8" y2="8"/><line x1="7" x2="17" y1="12" y2="12"/><line x1="7" x2="13" y1="16" y2="16"/></svg></div>
         <h3>Copy mode</h3>
         <p><kbd>⇧⌘C</kbd> puts a keyboard cursor on the scrollback. Move with vi keys, select with <kbd>v</kbd>/<kbd>V</kbd>, yank with <kbd>y</kbd>.</p>
       </div>
       <div class="card">
-        <div class="ico">⌥␣</div>
+        <div class="ico"><svg class="lucide lucide-panel-top" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18"/></svg></div>
         <h3>Quick terminal</h3>
         <p><kbd>⌥Space</kbd> from any app drops a terminal from the top of the screen, with its own tabs that keep running while hidden.</p>
       </div>
       <div class="card">
-        <div class="ico">⇶</div>
+        <div class="ico"><svg class="lucide lucide-radio-tower" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M4.9 16.1C1 12.2 1 5.8 4.9 1.9"/><path d="M7.8 4.7a6.14 6.14 0 0 0-.8 7.5"/><circle cx="12" cy="9" r="2"/><path d="M16.2 4.8c2 2 2.26 5.11.8 7.47"/><path d="M19.1 1.9a9.96 9.96 0 0 1 0 14.1"/><path d="M9.5 18h5"/><path d="m8 22 4-11 4 11"/></svg></div>
         <h3>Broadcast input</h3>
         <p>Type once into every pane of a workspace, or ⌘-click to pick panes. Panes running an agent never receive it.</p>
       </div>
       <div class="card">
-        <div class="ico">^R</div>
+        <div class="ico"><svg class="lucide lucide-history" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg></div>
         <h3>History everywhere</h3>
         <p><kbd>⌃R</kbd> searches every command you ran in Boo — across tabs, windows and hosts — with folder, exit code and duration.</p>
       </div>
@@ -614,23 +794,23 @@ footer a { text-decoration: none; } footer a:hover { color: var(--text); }
       <h2>A sidebar that knows your stack</h2>
       <p>Thirteen built-in plugins sit in stacked, collapsible panels next to the terminal. Each one shows up only where it makes sense — Git in a repo, Docker on your Mac, Files over SSH — and you toggle them from the status bar.</p>
     </div>
-    <div class="split reveal">
+    <div class="reveal">
       <div class="shot"><img src="/boo/landing/img/plugins.png" alt="Sidebar plugins: file explorer, Git, System and Tasks" onerror="this.parentNode.classList.add('missing');this.replaceWith('/boo/landing/img/plugins.png')"></div>
-      <div class="plugs">
-        <div class="plug"><span class="pi">▸</span><div><b>Files</b><p>Live tree, local via FSEvents or remote over SSH and Mosh</p></div></div>
-        <div class="plug"><span class="pi">⎇</span><div><b>Git</b><p>Branch, ahead/behind, stage and unstage inline</p></div></div>
-        <div class="plug"><span class="pi">✦</span><div><b>Agents</b><p>Sessions, changed files, worktrees, config and skills</p></div></div>
-        <div class="plug"><span class="pi">▶</span><div><b>Tasks</b><p>Run <code>package.json</code> scripts, make, just, cargo and swift tasks</p></div></div>
-        <div class="plug"><span class="pi">◫</span><div><b>Docker</b><p>Containers with exec, logs, start, stop and restart</p></div></div>
-        <div class="plug"><span class="pi">☸</span><div><b>Kubernetes</b><p>Pods, workloads, jobs, services, logs and port-forwards</p></div></div>
-        <div class="plug"><span class="pi">⇢</span><div><b>Hosts</b><p>Your <code>~/.ssh/config</code>, one click to connect</p></div></div>
-        <div class="plug"><span class="pi">⚿</span><div><b>1Password</b><p>Search items, copy or type secrets, insert <code>op://</code> references</p></div></div>
-        <div class="plug"><span class="pi">★</span><div><b>Bookmarks</b><p>Saved folders per host, <kbd>⌃1</kbd>–<kbd>⌃9</kbd> to jump</p></div></div>
-        <div class="plug"><span class="pi">✎</span><div><b>Notes</b><p>A markdown note per workspace</p></div></div>
-        <div class="plug"><span class="pi">❯</span><div><b>Snippets</b><p>Saved commands to paste at the prompt</p></div></div>
-        <div class="plug"><span class="pi">◔</span><div><b>System</b><p>CPU, memory, disk, battery, plus status bar readouts</p></div></div>
-      </div>
     </div>
+    <div class="plugs wide reveal">
+        <div class="plug"><span class="pi"><svg class="lucide lucide-folder-tree" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M20 10a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1h-2.5a1 1 0 0 1-.8-.4l-.9-1.2A1 1 0 0 0 15 3h-2a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1Z"/><path d="M20 21a1 1 0 0 0 1-1v-3a1 1 0 0 0-1-1h-2.9a1 1 0 0 1-.88-.55l-.42-.85a1 1 0 0 0-.92-.6H13a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1Z"/><path d="M3 5a2 2 0 0 0 2 2h3"/><path d="M3 3v13a2 2 0 0 0 2 2h3"/></svg></span><div><b>Files</b><p>Live tree, local via FSEvents or remote over SSH and Mosh</p></div></div>
+        <div class="plug"><span class="pi"><svg class="lucide lucide-git-branch" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg></span><div><b>Git</b><p>Branch, ahead/behind, stage and unstage inline</p></div></div>
+        <div class="plug"><span class="pi"><svg class="lucide lucide-bot" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></svg></span><div><b>Agents</b><p>Sessions, changed files, worktrees, config and skills</p></div></div>
+        <div class="plug"><span class="pi"><svg class="lucide lucide-play" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><polygon points="6 3 20 12 6 21 6 3"/></svg></span><div><b>Tasks</b><p>Run <code>package.json</code> scripts, make, just, cargo and swift tasks</p></div></div>
+        <div class="plug"><span class="pi"><svg class="lucide lucide-container" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M22 7.7c0-.6-.4-1.2-.8-1.5l-6.3-3.9a1.72 1.72 0 0 0-1.7 0l-10.3 6c-.5.2-.9.8-.9 1.4v6.6c0 .5.4 1.2.8 1.5l6.3 3.9a1.72 1.72 0 0 0 1.7 0l10.3-6c.5-.3.9-1 .9-1.5Z"/><path d="M10 21.9V14L2.1 9.1"/><path d="m10 14 11.9-6.9"/><path d="M14 19.8v-8.1"/><path d="M18 17.5V9.4"/></svg></span><div><b>Docker</b><p>Containers with exec, logs, start, stop and restart</p></div></div>
+        <div class="plug"><span class="pi"><svg class="lucide lucide-ship" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M2 21c.6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1 .6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1"/><path d="M19.38 20A11.6 11.6 0 0 0 21 14l-9-4-9 4c0 2.9.94 5.34 2.81 7.76"/><path d="M19 13V7a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v6"/><path d="M12 10v4"/><path d="M12 2v3"/></svg></span><div><b>Kubernetes</b><p>Pods, workloads, jobs, services, logs and port-forwards</p></div></div>
+        <div class="plug"><span class="pi"><svg class="lucide lucide-server" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><rect width="20" height="8" x="2" y="2" rx="2" ry="2"/><rect width="20" height="8" x="2" y="14" rx="2" ry="2"/><line x1="6" x2="6.01" y1="6" y2="6"/><line x1="6" x2="6.01" y1="18" y2="18"/></svg></span><div><b>Hosts</b><p>Your <code>~/.ssh/config</code>, one click to connect</p></div></div>
+        <div class="plug"><span class="pi"><svg class="lucide lucide-key-round" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M2.586 17.414A2 2 0 0 0 2 18.828V21a1 1 0 0 0 1 1h3a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h1a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h.172a2 2 0 0 0 1.414-.586l.814-.814a6.5 6.5 0 1 0-4-4z"/><circle cx="16.5" cy="7.5" r=".5" fill="currentColor"/></svg></span><div><b>1Password</b><p>Search items, copy or type secrets, insert <code>op://</code> references</p></div></div>
+        <div class="plug"><span class="pi"><svg class="lucide lucide-star" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z"/></svg></span><div><b>Bookmarks</b><p>Saved folders per host, <kbd>⌃1</kbd>–<kbd>⌃9</kbd> to jump</p></div></div>
+        <div class="plug"><span class="pi"><svg class="lucide lucide-notebook-pen" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M13.4 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7.4"/><path d="M2 6h4"/><path d="M2 10h4"/><path d="M2 14h4"/><path d="M2 18h4"/><path d="M21.378 5.626a1 1 0 1 0-3.004-3.004l-5.01 5.012a2 2 0 0 0-.506.854l-.837 2.87a.5.5 0 0 0 .62.62l2.87-.837a2 2 0 0 0 .854-.506z"/></svg></span><div><b>Notes</b><p>A markdown note per workspace</p></div></div>
+        <div class="plug"><span class="pi"><svg class="lucide lucide-square-chevron-right" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><rect width="18" height="18" x="3" y="3" rx="2"/><path d="m10 8 4 4-4 4"/></svg></span><div><b>Snippets</b><p>Saved commands to paste at the prompt</p></div></div>
+        <div class="plug"><span class="pi"><svg class="lucide lucide-activity" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2"/></svg></span><div><b>System</b><p>CPU, memory, disk, battery, plus status bar readouts</p></div></div>
+      </div>
 
     <div class="split" style="margin-top:88px" id="plugin-dev">
       <div class="text reveal">
@@ -695,10 +875,10 @@ footer a { text-decoration: none; } footer a:hover { color: var(--text); }
     </div>
 
     <div class="grid four reveal" style="margin-top:56px">
-      <div class="card mini"><div class="ico">↻</div><h3>Hot reload</h3><p>Save the file and the panel updates. No restart, no build.</p></div>
-      <div class="card mini"><div class="ico">!</div><h3>Fails safely</h3><p>If <code>render</code> throws, the panel shows the error; after one second, a timeout.</p></div>
-      <div class="card mini"><div class="ico">⚙</div><h3>Settings</h3><p>Toggles, sliders and pickers in Settings → Plugins, read from <code>ctx.settings</code>.</p></div>
-      <div class="card mini"><div class="ico">Sw</div><h3>Or go native</h3><p>Built-ins are Swift plugins with full SwiftUI and AppKit, behind the same protocol.</p></div>
+      <div class="card mini"><div class="ico"><svg class="lucide lucide-refresh-cw" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg></div><h3>Hot reload</h3><p>Save the file and the panel updates. No restart, no build.</p></div>
+      <div class="card mini"><div class="ico"><svg class="lucide lucide-shield-alert" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="M12 8v4"/><path d="M12 16h.01"/></svg></div><h3>Fails safely</h3><p>If <code>render</code> throws, the panel shows the error; after one second, a timeout.</p></div>
+      <div class="card mini"><div class="ico"><svg class="lucide lucide-settings-2" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M20 7h-9"/><path d="M14 17H5"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/></svg></div><h3>Settings</h3><p>Toggles, sliders and pickers in Settings → Plugins, read from <code>ctx.settings</code>.</p></div>
+      <div class="card mini"><div class="ico"><svg class="lucide lucide-bird" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M16 7h.01"/><path d="M3.4 18H12a8 8 0 0 0 8-8V7a4 4 0 0 0-7.28-2.3L2 20"/><path d="m20 7 2 .5-2 .5"/><path d="M10 18v3"/><path d="M14 17.75V21"/><path d="M7 18a6 6 0 0 0 3.84-10.61"/></svg></div><h3>Or go native</h3><p>Built-ins are Swift plugins with full SwiftUI and AppKit, behind the same protocol.</p></div>
     </div>
   </div>
 </section>
@@ -744,36 +924,36 @@ footer a { text-decoration: none; } footer a:hover { color: var(--text); }
     </div>
     <div class="grid reveal" id="scripting">
       <div class="card">
-        <div class="ico">◉</div>
+        <div class="ico"><svg class="lucide lucide-smartphone" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><rect width="14" height="20" x="5" y="2" rx="2" ry="2"/><path d="M12 18h.01"/></svg></div>
         <h3>Remote control</h3>
         <p>An optional web UI on your LAN: see every pane, type, switch tabs, and approve or deny waiting agents from your phone. Stops itself after 30 minutes idle.</p>
         <p style="margin-top:12px"><a class="more" href="/boo/remote-control">Remote control →</a></p>
       </div>
       <div class="card">
-        <div class="ico">{}</div>
+        <div class="ico"><svg class="lucide lucide-plug" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M12 22v-5"/><path d="M9 8V2"/><path d="M15 8V2"/><path d="M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z"/></svg></div>
         <h3>Unix socket</h3>
         <p>Newline-delimited JSON on <code>~/.boo/boo.sock</code>: query layout, split panes, send text, read screens, subscribe to events like <code>cmd_ended</code>.</p>
         <p style="margin-top:12px"><a class="more" href="/boo/ipc-socket">IPC socket →</a></p>
       </div>
       <div class="card">
-        <div class="ico">⇄</div>
+        <div class="ico"><svg class="lucide lucide-folder-sync" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M9 20H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H20a2 2 0 0 1 2 2v.5"/><path d="M12 10v4h4"/><path d="m12 14 1.535-1.605a5 5 0 0 1 8 1.5"/><path d="M22 22v-4h-4"/><path d="m22 18-1.535 1.605a5 5 0 0 1-8-1.5"/></svg></div>
         <h3>Settings sync</h3>
         <p>Keep settings, profiles, rules, themes and recipes the same on every Mac through a shared folder, with conflict detection.</p>
         <p style="margin-top:12px"><a class="more" href="/boo/history-and-sync">History &amp; sync →</a></p>
       </div>
       <div class="card">
-        <div class="ico">🔒</div>
+        <div class="ico"><svg class="lucide lucide-lock" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div>
         <h3>Secure by default</h3>
         <p>Secure Keyboard Entry, confirmations for risky pastes and clipboard reads, and an owner-only <code>~/.boo</code>.</p>
         <p style="margin-top:12px"><a class="more" href="/boo/security">Security →</a></p>
       </div>
       <div class="card">
-        <div class="ico">▤</div>
+        <div class="ico"><svg class="lucide lucide-panel-bottom" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 15h18"/></svg></div>
         <h3>Configurable status bar</h3>
         <p>Environment, branch, path, process, listening ports with one-click open, kube context, clock — reorder or hide any of them.</p>
       </div>
       <div class="card">
-        <div class="ico">⌁</div>
+        <div class="ico"><svg class="lucide lucide-ghost" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M9 10h.01"/><path d="M15 10h.01"/><path d="M12 2a8 8 0 0 0-8 8v12l3-3 2.5 2.5L12 19l2.5 2.5L17 19l3 3V10a8 8 0 0 0-8-8z"/></svg></div>
         <h3>Ghostty inside</h3>
         <p>GPU rendering with Metal, Kitty graphics and keyboard protocols, ligatures — the terminal core is Ghostty.</p>
         <p style="margin-top:12px"><a class="more" href="/boo/ghostty-integration">Ghostty integration →</a></p>
@@ -790,41 +970,25 @@ footer a { text-decoration: none; } footer a:hover { color: var(--text); }
       <h2>Keep your hands on the keys</h2>
       <p>Every menu command has a shortcut slot you can rebind in Settings. Brackets follow your layout, so on QWERTZ <kbd>⌘ö</kbd> and <kbd>⌘ä</kbd> just work. Prefer tmux habits? Turn on the <kbd>⌃A</kbd> leader key.</p>
     </div>
-    <div class="keys reveal">
-      <div class="kcol">
-        <h3>Panes &amp; tabs</h3>
-        <div class="kr"><span><kbd>⌘D</kbd> <kbd>⇧⌘D</kbd></span>Split right / down</div>
-        <div class="kr"><span><kbd>⇧⌘↩</kbd></span>Zoom pane</div>
-        <div class="kr"><span><kbd>⌃⌘P</kbd></span>Pick a pane by label</div>
-        <div class="kr"><span><kbd>⌘[</kbd> <kbd>⌘]</kbd></span>Focus back / forward</div>
-        <div class="kr"><span><kbd>⌥⌘Z</kbd></span>Reopen closed tab</div>
+    <div class="reveal">
+      <button class="ktry" type="button" id="ktry">
+        <svg class="ghost" viewBox="0 0 26 28" aria-hidden="true"><path fill="currentColor" d="M13 0C5.8 0 0 5.8 0 13v15l4.3-3.5L8.7 28l4.3-3.5 4.3 3.5 4.4-3.5L26 28V13C26 5.8 20.2 0 13 0Z"/><rect x="7.5" y="8" width="3" height="8" rx="1.5" fill="var(--bg)"/><rect x="15.5" y="8" width="3" height="8" rx="1.5" fill="var(--bg)"/></svg>
+        <span class="ktxt"><b>Try it.</b> Click here and press a shortcut to find what it does in Boo.</span>
+        <span class="kout" id="kout" aria-live="polite"></span>
+      </button>
+      <div class="kbar">
+        <div class="kcats" id="kcats" role="group" aria-label="Category"></div>
+        <div class="ktools">
+          <div class="kseg" role="group" aria-label="Keyboard layout">
+            <button type="button" data-layout="us" aria-pressed="true">QWERTY</button>
+            <button type="button" data-layout="de" aria-pressed="false">QWERTZ</button>
+          </div>
+          <input class="kfilter" id="kfilter" type="search" placeholder="Filter shortcuts…" aria-label="Filter shortcuts">
+        </div>
       </div>
-      <div class="kcol">
-        <h3>Navigate</h3>
-        <div class="kr"><span><kbd>⇧⌘P</kbd></span>Command palette</div>
-        <div class="kr"><span><kbd>⌘P</kbd></span>Go to workspace</div>
-        <div class="kr"><span><kbd>⇧⌘O</kbd></span>Open folder as workspace</div>
-        <div class="kr"><span><kbd>⌘B</kbd></span>Toggle sidebar</div>
-        <div class="kr"><span><kbd>⌥Space</kbd></span>Quick terminal, from any app</div>
-      </div>
-      <div class="kcol">
-        <h3>Terminal</h3>
-        <div class="kr"><span><kbd>⌘↑</kbd> <kbd>⌘↓</kbd></span>Previous / next prompt</div>
-        <div class="kr"><span><kbd>⌥⌘C</kbd></span>Copy last output</div>
-        <div class="kr"><span><kbd>⇧⌘Space</kbd></span>Quick select</div>
-        <div class="kr"><span><kbd>⇧⌘C</kbd></span>Copy mode</div>
-        <div class="kr"><span><kbd>⌃R</kbd></span>Search history</div>
-      </div>
-      <div class="kcol">
-        <h3>Agents</h3>
-        <div class="kr"><span><kbd>⇧⌘J</kbd></span>Next waiting agent</div>
-        <div class="kr"><span><kbd>⌥⇧⌘J</kbd></span>Agent that finished last</div>
-        <div class="kr"><span><kbd>⌥⌘↩</kbd></span>Send output to agent</div>
-        <div class="kr"><span><kbd>⌥⌘O</kbd></span>Orchestrator</div>
-        <div class="kr"><span><kbd>⌘↩</kbd></span>Send review comments</div>
-      </div>
+      <div class="keys" id="keys"></div>
     </div>
-    <p style="text-align:center;margin-top:28px"><a class="more" href="/boo/keyboard-shortcuts">All shortcuts →</a></p>
+    <p class="knote"><a class="more" href="/boo/keyboard-shortcuts">All shortcuts and how to rebind them →</a></p>
   </div>
 </section>
 
@@ -847,7 +1011,7 @@ footer a { text-decoration: none; } footer a:hover { color: var(--text); }
 <!-- Install -->
 <section class="install" id="install">
   <div class="wrap reveal">
-    <img src="/boo/logo.png" alt="" style="width:72px;height:72px;margin:0 auto 18px">
+    <img class="boo-icon" src="/boo/landing/img/icon-dark.png" alt="" style="width:72px;height:72px;margin:0 auto 18px">
     <h2>Get Boo</h2>
     <p style="color:var(--muted);font-size:18px;margin:0 0 28px">Free, open source, and native. macOS 15+ on Apple Silicon.</p>
     <div class="cta">
@@ -873,7 +1037,7 @@ footer a { text-decoration: none; } footer a:hover { color: var(--text); }
 
 <footer>
   <div class="wrap">
-    <a class="brand" href="#top"><img src="/boo/logo.png" alt="" style="width:22px;height:22px">Boo</a>
+    <a class="brand" href="#top"><img class="boo-icon" src="/boo/landing/img/icon-dark.png" alt="" style="width:22px;height:22px">Boo</a>
     <a href="/boo/getting-started">Documentation</a>
     <a href="https://github.com/ph1p/boo">GitHub</a>
     <a href="https://github.com/ph1p/boo/releases">Releases</a>
@@ -908,6 +1072,208 @@ footer a { text-decoration: none; } footer a:hover { color: var(--text); }
     });
     term.appendChild(btn);
   });
+
+  // Theme: follows the system until the visitor picks one.
+  const root = document.documentElement;
+  document.getElementById('theme').addEventListener('click', () => {
+    const dark = root.dataset.theme ? root.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+    root.dataset.theme = dark ? 'light' : 'dark';
+    try { localStorage.setItem('boo-theme', root.dataset.theme); } catch {}
+  });
+
+  // Shortcuts. Defaults from /boo/keyboard-shortcuts. "a / b" lists
+  // alternatives, "⌃A, %" is a leader sequence, [ and ] follow the layout.
+  const SHORTCUTS = [
+    ['Panes', [
+      ['⌘D / ⇧⌘D', 'Split right / down'],
+      ['⇧⌘↩', 'Zoom pane'],
+      ['⌃⌘P', 'Pick a pane by label'],
+      ['⌥⌘] / ⌥⌘[', 'Next / previous pane'],
+      ['⌥⌘←→↑↓', 'Select pane in a direction'],
+      ['⌃⌘←→↑↓', 'Resize pane'],
+      ['⌃⇧⌘←→↑↓', 'Swap panes'],
+      ['⌃⌘=', 'Equalize splits'],
+      ['⌃⌘1-9', 'Go to pane N'],
+      ['⇧⌘W', 'Close pane'],
+    ]],
+    ['Tabs', [
+      ['⌘T', 'New terminal tab'],
+      ['⇧⌘T', 'New browser tab'],
+      ['⇧⌘] / ⇧⌘[', 'Next / previous tab'],
+      ['⌥⌘1-9', 'Go to tab N'],
+      ['⌘W', 'Close tab'],
+      ['⌥⌘Z', 'Reopen closed tab'],
+    ]],
+    ['Workspaces', [
+      ['⇧⌘N', 'New workspace'],
+      ['⇧⌘O', 'Open folder as workspace'],
+      ['⌘P', 'Go to workspace'],
+      ['⌘1-8', 'Workspace N'],
+      ['⌘9', 'Last workspace'],
+      ['⌃⌘] / ⌃⌘[', 'Next / previous workspace'],
+      ['⇧⌘B', 'Bookmark this folder'],
+      ['⌃1-9', 'Jump to bookmark N'],
+    ]],
+    ['View', [
+      ['⇧⌘P', 'Command palette'],
+      ['⌘] / ⌘[', 'Focus forward / back'],
+      ['⌘B', 'Toggle sidebar'],
+      ['⌘L', 'Open location'],
+      ['⌘↩', 'Full screen'],
+      ['⌥Space', 'Quick terminal, from any app'],
+      ['⌘N', 'New window'],
+      ['⌘,', 'Settings'],
+    ]],
+    ['Terminal', [
+      ['⌘↑ / ⌘↓', 'Previous / next prompt'],
+      ['⌥⌘C', 'Copy last output'],
+      ['⇧⌘Space', 'Quick select'],
+      ['⇧⌘C', 'Copy mode'],
+      ['⌃R', 'Search history'],
+      ['⌘K / ⇧⌘K', 'Clear screen / scrollback'],
+      ['⌘+ / ⌘-', 'Bigger / smaller font'],
+      ['⇧⌘M', 'Recording marker'],
+    ]],
+    ['Agents', [
+      ['⇧⌘J', 'Next waiting agent'],
+      ['⌥⇧⌘J', 'Agent that finished last'],
+      ['⌥⌘↩', 'Send selection or output to agent'],
+      ['⌥⌘O', 'Orchestrator'],
+      ['⌘↩', 'Send review comments, allow approval'],
+      ['Esc', 'Deny approval'],
+    ]],
+    ['tmux leader', '⌃A', [
+      ['% / "', 'Split right / down'],
+      ['H J K L', 'Select pane'],
+      ['Z', 'Zoom pane'],
+      ['O', 'Next pane'],
+      ['Q', 'Pick a pane'],
+      ['X', 'Close pane'],
+      ['C', 'New tab'],
+      ['N / P', 'Next / previous tab'],
+      ['[', 'Copy mode'],
+      ['?', 'Command palette'],
+    ]],
+  ];
+  const MODS = '⌃⌥⇧⌘';
+  const NAMES = { '↩': 'Return', 'Space': 'Space', 'Esc': 'Escape' };
+  let layout = 'us';
+  const bracket = (k) => (layout === 'de' ? { '[': 'ö', ']': 'ä' }[k] || k : k);
+
+  // "⌥⌘←→↑↓" → one combo per arrow; "⌃⌘1-9" → digits 1..9.
+  function expand(combo) {
+    const mods = [...combo].filter((c) => MODS.includes(c)).join('');
+    const key = combo.slice(mods.length);
+    if (key === '←→↑↓') return [...key].map((k) => mods + k);
+    const range = key.match(/^(\d)-(\d)$/);
+    if (range) { const out = []; for (let i = +range[1]; i <= +range[2]; i++) out.push(mods + i); return out; }
+    return [combo];
+  }
+  const capsHTML = (combo) => {
+    const mods = [...combo].filter((c) => MODS.includes(c));
+    const key = combo.slice(mods.length);
+    const keys = key.includes(' ') && key.length > 1 ? key.split(' ') : [key === '←→↑↓' ? '← → ↑ ↓' : key.replace(/^(\d)-(\d)$/, '$1–$2')];
+    return mods.map((m) => `<span class="cap mod">${m}</span>`).join('') +
+      keys.map((k) => `<span class="cap${k.length > 1 ? ' wide' : ''}"${NAMES[k] ? ` title="${NAMES[k]}"` : ''}>${bracket(k)}</span>`).join('');
+  };
+  
+  const rows = [];
+  const keysEl = document.getElementById('keys');
+  const catsEl = document.getElementById('kcats');
+  function render() {
+    keysEl.innerHTML = ''; rows.length = 0;
+    for (const [group, ...rest] of SHORTCUTS) {
+      const list = rest.pop(), leader = rest[0];
+      const col = document.createElement('div');
+      col.className = 'kcol'; col.dataset.group = group;
+      col.innerHTML = `<h3>${group}<small>${leader ? `<span class="kk">${capsHTML(leader)}<span>then</span></span>` : list.length}</small></h3>`;
+      for (const [combos, label] of list) {
+        const r = document.createElement('div');
+        r.className = 'kr';
+        r.innerHTML = `<span>${label}</span><span class="kk">${combos.split(' / ').map(capsHTML).join('<span>/</span>')}</span>`;
+        r.dataset.match = leader ? '' : combos.split(' / ').flatMap(expand).join('|');
+        r.dataset.text = (group + ' ' + label + ' ' + combos).toLowerCase();
+        col.appendChild(r); rows.push(r);
+      }
+      keysEl.appendChild(col);
+    }
+    applyFilter();
+  }
+
+  let cat = 'All';
+  catsEl.innerHTML = ['All', ...SHORTCUTS.map((g) => g[0])]
+    .map((c) => `<button type="button" aria-pressed="${c === cat}">${c}</button>`).join('');
+  catsEl.addEventListener('click', (e) => {
+    const b = e.target.closest('button'); if (!b) return;
+    cat = b.textContent;
+    catsEl.querySelectorAll('button').forEach((x) => x.setAttribute('aria-pressed', x === b));
+    applyFilter();
+  });
+  const filterEl = document.getElementById('kfilter');
+  filterEl.addEventListener('input', applyFilter);
+  function applyFilter() {
+    const q = filterEl.value.trim().toLowerCase();
+    let shown = 0;
+    keysEl.querySelectorAll('.kcol').forEach((col) => {
+      let n = 0;
+      col.querySelectorAll('.kr').forEach((r) => { r.hidden = q && !r.dataset.text.includes(q); if (!r.hidden) n++; });
+      col.hidden = !n || (cat !== 'All' && col.dataset.group !== cat);
+      if (!col.hidden) shown++;
+    });
+    let none = keysEl.querySelector('.knone');
+    if (!shown && !none) { none = document.createElement('p'); none.className = 'knone'; keysEl.appendChild(none); }
+    if (none) { none.hidden = !!shown; none.textContent = `Nothing matches “${filterEl.value}”.`; }
+  }
+
+  document.querySelectorAll('.kseg button').forEach((b) => b.addEventListener('click', () => setLayout(b.dataset.layout)));
+  function setLayout(l) {
+    if (l === layout) return;
+    layout = l;
+    document.querySelectorAll('.kseg button').forEach((x) => x.setAttribute('aria-pressed', x.dataset.layout === l));
+    render();
+  }
+
+  // Press-to-find: read the physical key so ⌥ and layouts don't change it.
+  const tryEl = document.getElementById('ktry');
+  const outEl = document.getElementById('kout');
+  const CODES = { ArrowLeft: '←', ArrowRight: '→', ArrowUp: '↑', ArrowDown: '↓', Enter: '↩', Space: 'Space', Escape: 'Esc',
+    BracketLeft: '[', BracketRight: ']', Equal: '=', Minus: '-', Comma: ',' };
+  function keyOf(e) {
+    if (/^Key[A-Z]$/.test(e.code)) return e.code.slice(3);
+    if (/^Digit\d$/.test(e.code)) return e.code.slice(5);
+    if (e.key === 'ö' || e.key === 'Ö') { setLayout('de'); return '['; }
+    if (e.key === 'ä' || e.key === 'Ä') { setLayout('de'); return ']'; }
+    if ((e.key === '[' || e.key === ']') && !e.altKey) setLayout('us');
+    if ('+-=,[]'.includes(e.key)) return e.key;
+    return CODES[e.code] || null;
+  }
+  let clearHit;
+  tryEl.addEventListener('keydown', (e) => {
+    if (['Meta', 'Control', 'Alt', 'Shift'].includes(e.key)) {
+      const held = (e.ctrlKey ? '⌃' : '') + (e.altKey ? '⌥' : '') + (e.shiftKey ? '⇧' : '') + (e.metaKey ? '⌘' : '');
+      outEl.innerHTML = capsHTML(held).replace(/class="cap/g, 'class="cap down');
+      return;
+    }
+    if (e.key === 'Tab' && !e.metaKey && !e.ctrlKey && !e.altKey) return;
+    const key = keyOf(e);
+    if (!key) return;
+    e.preventDefault();
+    const combo = (e.ctrlKey ? '⌃' : '') + (e.altKey ? '⌥' : '') + (e.shiftKey && key !== '+' ? '⇧' : '') + (e.metaKey ? '⌘' : '') + key;
+    const hits = rows.filter((r) => r.dataset.match.split('|').includes(combo));
+    rows.forEach((r) => r.classList.toggle('hit', hits.includes(r)));
+    if (hits.length) {
+      cat = 'All'; filterEl.value = '';
+      catsEl.querySelectorAll('button').forEach((x, i) => x.setAttribute('aria-pressed', i === 0));
+      applyFilter();
+    }
+    tryEl.classList.toggle('miss', !hits.length);
+    const label = hits.length ? hits.map((r) => r.firstChild.textContent).join(' · ') : 'Not bound by default';
+    outEl.innerHTML = capsHTML(combo) + `<span>${label}</span>`;
+    clearTimeout(clearHit);
+    clearHit = setTimeout(() => rows.forEach((r) => r.classList.remove('hit')), 2400);
+  });
+  tryEl.addEventListener('keyup', (e) => { outEl.querySelectorAll('.cap.down').forEach((c) => c.classList.remove('down')); });
+  render();
 </script>
 </body>
 </html>
