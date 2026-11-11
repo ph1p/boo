@@ -269,6 +269,7 @@ app: release
 	@rsync -a Resources/shell-integration "$(APP_BUNDLE)/Contents/Resources/"
 	@if [ -f assets/AppIcon.icns ]; then \
 		cp assets/AppIcon.icns "$(APP_BUNDLE)/Contents/Resources/"; \
+		cp assets/AppIcon-*.icns "$(APP_BUNDLE)/Contents/Resources/"; \
 	fi
 	@echo "==> $(APP_BUNDLE) created"
 

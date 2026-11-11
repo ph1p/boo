@@ -45,6 +45,7 @@ public enum BooMain {
 
         // Apply initial log level from settings
         BooLogger.shared.applyDebugSetting(AppSettings.shared.debugLogging)
+        AppSettings.shared.appIcon.apply()
 
         // Restore security-scoped bookmarks so previously-opened folders are accessible without prompting.
         FolderBookmarkStore.shared.restoreAll()

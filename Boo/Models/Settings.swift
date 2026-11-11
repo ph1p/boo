@@ -171,6 +171,7 @@ final class AppSettings {
         static let resumeAgentsImmediately = "resumeAgentsImmediately"
         static let continueInterruptedAgents = "continueInterruptedAgents"
         static let shortcutOverrides = "shortcutOverrides"
+        static let appIcon = "appIcon"
 
         static let paletteRecents = "paletteRecents"
     }
@@ -688,6 +689,16 @@ final class AppSettings {
         set { set(newValue.rawValue, forKey: K.agentRecovery) }
     }
 
+    /// Dock icon while Boo runs. Finder keeps the bundle icon (`.dark`):
+    /// rewriting the bundle would break its code signature.
+    var appIcon: AppIconStyle {
+        get { UserDefaults.standard.string(forKey: K.appIcon).flatMap(AppIconStyle.init(rawValue:)) ?? .dark }
+        set {
+            set(newValue.rawValue, forKey: K.appIcon, topic: .theme)
+            MainActor.assumeIsolated { newValue.apply() }
+        }
+    }
+
     /// Also resume agents after a normal quit (an update relaunch, ⌘Q).
     var resumeAgentsAfterQuit: Bool {
         get { bool(K.resumeAgentsAfterQuit, default: false) }
@@ -837,5 +848,23 @@ enum TmuxMode: String, CaseIterable {
         case .ask: "Ask"
         case .never: "Never"
         }
+    }
+}
+
+/// See `AppSettings.appIcon`.
+enum AppIconStyle: String, CaseIterable {
+    case dark, light, orange, yellow, blue
+
+    var label: String { rawValue.capitalized }
+
+    /// The icns in the app bundle; `.dark` is the bundle's own icon.
+    var image: NSImage? {
+        let name = self == .dark ? "AppIcon" : "AppIcon-\(label)"
+        return Bundle.main.url(forResource: name, withExtension: "icns").flatMap(NSImage.init(contentsOf:))
+    }
+
+    /// Set the Dock icon; nil restores the bundle icon.
+    @MainActor func apply() {
+        NSApp.applicationIconImage = self == .dark ? nil : image
     }
 }

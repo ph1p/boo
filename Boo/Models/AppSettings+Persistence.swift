@@ -37,7 +37,7 @@ extension AppSettings {
         K.agentBudgetPerTask,
         K.agentBudgetPerDay, K.portNotificationsEnabled, K.errorAgentButtonEnabled, K.notifyMinCommandSeconds,
         K.notificationGroupBursts, K.notificationExpiryMinutes, K.shortcutOverrides, K.agentRecovery,
-        K.resumeAgentsAfterQuit, K.resumeAgentsImmediately, K.continueInterruptedAgents
+        K.resumeAgentsAfterQuit, K.appIcon, K.resumeAgentsImmediately, K.continueInterruptedAgents
     ]
 
     static let syncedCustomThemesKey = "customThemes"
@@ -185,6 +185,7 @@ extension AppSettings {
             K.tmuxMirrorPasteBuffer: tmuxMirrorPasteBuffer,
             K.tmuxReattachOnLaunch: tmuxReattachOnLaunch,
             K.agentRecovery: agentRecovery.rawValue,
+            K.appIcon: appIcon.rawValue,
             K.resumeAgentsAfterQuit: resumeAgentsAfterQuit,
             K.resumeAgentsImmediately: resumeAgentsImmediately,
             K.continueInterruptedAgents: continueInterruptedAgents,

@@ -45,6 +45,10 @@ struct ThemeSettingsView: View {
                 Section(title: "Light") { themeGrid(lightThemes, tokens: t) }
             }
 
+            Section(title: "App Icon", footer: "Changes the Dock icon while Boo runs. Finder keeps the default.") {
+                AppIconPicker()
+            }
+
             Section(title: "Custom") {
                 VStack(alignment: .leading, spacing: 3) {
                     ForEach(customThemes, id: \.name) { theme in
@@ -215,4 +219,52 @@ struct ThemeRow: View {
         }
     }
 
+}
+
+// MARK: - App Icon
+
+/// Tiles for `AppSettings.appIcon`.
+struct AppIconPicker: View {
+    @Environment(\.tokens) private var tokens
+    @State private var selected = AppSettings.shared.appIcon
+    private let images = Dictionary(uniqueKeysWithValues: AppIconStyle.allCases.map { ($0, $0.image) })
+
+    var body: some View {
+        let t = tokens
+        HStack(spacing: 12) {
+            ForEach(AppIconStyle.allCases, id: \.self) { style in
+                let active = selected == style
+                VStack(spacing: 4) {
+                    Group {
+                        if let image = images[style] ?? nil {
+                            Image(nsImage: image).resizable()
+                        } else {
+                            Image(systemName: "app.dashed").resizable().foregroundStyle(t.muted)
+                        }
+                    }
+                    .frame(width: 64, height: 64)
+                    .padding(6)
+                    .background(
+                        RoundedRectangle(cornerRadius: 10)
+                            .fill(active ? t.accent.opacity(0.08) : Color.clear)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 10)
+                                    .strokeBorder(active ? t.accent.opacity(0.6) : t.muted.opacity(0.15), lineWidth: 1)
+                            )
+                    )
+                    Text(style.label)
+                        .font(.system(size: 11, weight: active ? .semibold : .regular))
+                        .foregroundStyle(active ? t.text : t.muted)
+                }
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    selected = style
+                    AppSettings.shared.appIcon = style
+                }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("\(style.label) app icon")
+                .accessibilityAddTraits(active ? [.isButton, .isSelected] : .isButton)
+            }
+        }
+    }
 }
