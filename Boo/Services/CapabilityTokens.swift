@@ -69,6 +69,11 @@ final class CapabilityTokens {
         owned[caller]?.contains(tabID) == true
     }
 
+    /// The tab that owns `tabID`: the agent that started it or opened it.
+    func owner(of tabID: UUID) -> UUID? {
+        owned.first { $0.value.contains(tabID) }?.key
+    }
+
     private static func randomToken() -> String {
         var generator = SystemRandomNumberGenerator()
         return (0..<32).map { _ in String(format: "%02x", UInt8.random(in: 0...255, using: &generator)) }

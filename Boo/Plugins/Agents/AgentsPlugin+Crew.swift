@@ -32,7 +32,8 @@ extension AgentsPlugin {
         workspace: (UUID) -> CrewWorkspace? = { crewWorkspace(of: $0) },
         taskStatus: (AgentInbox.Item) -> AgentTaskStatus.Summary? = { item in
             AgentInbox.locateInWindows(item.tabID).flatMap { taskSummary(folder: $0.workspace.folderPath, of: item) }
-        }
+        },
+        browsers: (UUID) -> [AgentCrewRow.BrowserLink] = { AgentBrowser.shared.links(ownedBy: $0) }
     ) -> [AgentCrewRow] {
         // Oldest change first: a handle first issued here follows when the agent
         // showed up, not the inbox's dictionary order.
@@ -59,7 +60,7 @@ extension AgentsPlugin {
                 needsAttention: item.needsAttention, isTask: isTask(item.tabID),
                 isReachable: isReachable(item.tabID), asksQuestion: item.asksQuestion,
                 updatedAt: item.updatedAt.timeIntervalSince1970, taskStatus: taskStatus(item), folder: item.cwd,
-                workspace: workspace(item.tabID))
+                workspace: workspace(item.tabID), browsers: browsers(item.tabID))
         }.sorted { lhs, rhs in
             // Parents first, each helper right below the agent that started it.
             func order(_ row: AgentCrewRow) -> (Int, Int, String) {
@@ -316,7 +317,9 @@ extension AgentsPlugin {
                     },
                     activeWorkspaceID: activeID, activeWorkspaceName: activeName, activeOnly: activeOnly,
                     onShowAll: { setActiveOnly(false) },
-                    onShowActiveOnly: { setActiveOnly(true) })),
+                    onShowActiveOnly: { setActiveOnly(true) },
+                    onShowTab: { id in if let location = AgentInbox.locateInWindows(id) { AgentInbox.focus(location) } }
+                )),
             // Sized to its rows, so every agent shows without scrolling.
             prefersOuterScrollView: false,
             generation: SidebarSection.generation(

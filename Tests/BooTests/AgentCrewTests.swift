@@ -353,6 +353,21 @@ final class AgentCrewTests: XCTestCase {
         XCTAssertEqual(rows.first?.isTask, true)
     }
 
+    /// A browser tab an agent opened is listed under that agent, not as an agent.
+    func testSidebarRowsListTheBrowserTabsAnAgentOpened() {
+        let agent = tab()
+        let other = tab()
+        event("working", agent)
+        event("working", other)
+        let page = AgentCrewRow.BrowserLink(id: UUID(), title: "Example Domain")
+        let rows = AgentsPlugin.crewRows(
+            items: Array(inbox.items.values), crew: crew, isTask: { _ in false }, isReachable: { _ in true },
+            browsers: { $0 == agent ? [page] : [] })
+        XCTAssertEqual(rows.count, 2)
+        XCTAssertEqual(rows.first { $0.id == agent }?.browsers, [page])
+        XCTAssertEqual(rows.first { $0.id == other }?.browsers, [])
+    }
+
     func testSidebarRowsListHelpersUnderTheirParentWithAPlainDetail() {
         let parent = tab()
         let child = tab()

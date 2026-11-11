@@ -34,9 +34,16 @@ struct AgentCrewRow: Identifiable, Equatable {
     /// Reports through Boo's hooks. False for an agent found only by its
     /// process: no handle, no messages, its state a guess.
     var hasHooks = true
+    /// Browser tabs the agent opened (`boo browser open`), listed under its row.
+    var browsers: [BrowserLink] = []
+
+    struct BrowserLink: Identifiable, Equatable {
+        let id: UUID
+        let title: String
+    }
 
     var key: String {
-        "\(id)|\(handle)|\(name)|\(state.rawValue)|\(detail ?? "")|\(parent ?? "")|\(queued)|\(needsAttention)|\(isTask)|\(isReachable)|\(isStopped)|\(asksQuestion)|\(updatedAt)|\(taskStatus?.text ?? "")|\(folder ?? "")|\(workspace?.key ?? "")|\(hasHooks)"
+        "\(id)|\(handle)|\(name)|\(state.rawValue)|\(detail ?? "")|\(parent ?? "")|\(queued)|\(needsAttention)|\(isTask)|\(isReachable)|\(isStopped)|\(asksQuestion)|\(updatedAt)|\(taskStatus?.text ?? "")|\(folder ?? "")|\(workspace?.key ?? "")|\(hasHooks)|\(browsers.map { "\($0.id)=\($0.title)" }.joined(separator: ","))"
     }
 }
 
@@ -246,6 +253,8 @@ struct AgentCrewView: View {
     var onShowAll: () -> Void = {}
     /// Lists only the active workspace (a group's menu).
     var onShowActiveOnly: () -> Void = {}
+    /// Shows a browser tab an agent opened.
+    var onShowTab: (UUID) -> Void = { _ in }
 
     @ObservedObject private var state = AgentCrewUIState.shared
     @State private var hoveredID: UUID?
@@ -930,6 +939,18 @@ struct AgentCrewView: View {
                             .lineLimit(1)
                             .truncationMode(.tail)
                             .help(status.branch.map { "Branch \($0)" } ?? "")
+                    }
+                    // Browser tabs the agent drives: tabs, not agents of their own.
+                    ForEach(row.browsers) { browser in
+                        Button(action: { onShowTab(browser.id) }) {
+                            Label(browser.title.isEmpty ? "Browser" : browser.title, systemImage: "globe")
+                                .font(fontScale.font(.xs))
+                                .foregroundStyle(mutedColor)
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                        }
+                        .buttonStyle(.plain)
+                        .help("Show the browser tab this agent opened")
                     }
                     if row.state == .needsInput && row.isReachable && !row.asksQuestion && !row.isStopped {
                         HStack(spacing: 6) {

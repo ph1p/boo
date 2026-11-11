@@ -455,6 +455,8 @@ extension PaneView {
     /// Dimmed text after the title: the working directory when the title shows
     /// a running process, so the tab says what runs and where. Nil otherwise.
     static func tabDisplaySubtitle(tab: Pane.Tab) -> String? {
+        // A browser an agent opened names that agent: "Example Domain  t7".
+        if tab.contentType == .browser { return AgentBrowser.ownerHandle(of: tab.id) }
         guard tab.contentType == .terminal, tab.remoteSession == nil else { return nil }
         let process = tab.state.foregroundProcess
         guard !process.isEmpty, !ProcessIcon.isShell(process) else { return nil }

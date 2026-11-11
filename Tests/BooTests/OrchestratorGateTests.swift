@@ -100,6 +100,8 @@ final class OrchestratorGateTests: XCTestCase {
         let task = UUID()
         tokens.markOwned(task, by: tab)
         XCTAssertTrue(tokens.owns(tab, task))
+        XCTAssertEqual(tokens.owner(of: task), tab)
+        XCTAssertNil(tokens.owner(of: UUID()))
         tokens.disown(task)
         XCTAssertFalse(tokens.owns(tab, task))
 

@@ -64,6 +64,22 @@ final class AgentBrowser {
         return result
     }
 
+    /// Browser tabs the agent in `caller` opened, for the line under its row.
+    func links(ownedBy caller: UUID) -> [AgentCrewRow.BrowserLink] {
+        browserTabs().compactMap { entry in
+            CapabilityTokens.shared.owns(caller, entry.tab.id)
+                ? AgentCrewRow.BrowserLink(id: entry.tab.id, title: entry.tab.title) : nil
+        }
+    }
+
+    /// The handle of the agent that opened this browser tab, while that agent
+    /// still reports through hooks; nil for tabs the user opened.
+    static func ownerHandle(of tabID: UUID) -> String? {
+        guard let owner = CapabilityTokens.shared.owner(of: tabID), AgentInbox.shared.items[owner] != nil
+        else { return nil }
+        return AgentCrew.shared.handle(for: owner)
+    }
+
     /// A tab id, a unique id prefix (as `boo browser ls` prints), or with no
     /// reference the caller's last tab. nil when nothing matches.
     func tab(matching reference: String?, caller: UUID?) -> UUID? {
@@ -242,6 +258,8 @@ final class AgentBrowser {
         location.controller.saveSession()
         CapabilityTokens.shared.markOwned(id, by: caller)
         lastTab[caller] = id
+        // The caller's Agents row lists the tab.
+        NotificationCenter.default.post(name: .agentCrewChanged, object: nil)
         return id
     }
 
@@ -256,6 +274,7 @@ final class AgentBrowser {
         paneView.groupsChanged()
         location.controller.refreshStatusBar()
         location.controller.saveSession()
+        NotificationCenter.default.post(name: .agentCrewChanged, object: nil)
     }
 
     // MARK: - Page
