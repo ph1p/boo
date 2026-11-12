@@ -13,7 +13,7 @@ struct AgentsSwitchSettingsSection: View {
             ToggleRow(
                 label: "Enable Agents",
                 help: "Off hides the agents sidebar, the agent entries in the tab bar, menus and command palette. "
-                    + "Boo then stops installing its Claude Code, Codex and OpenCode hooks; "
+                    + "Boo then stops installing its agent hooks and plugins; "
                     + "the ones already installed do nothing.",
                 isOn: Binding(
                     get: { AppSettings.shared.agentsEnabled },

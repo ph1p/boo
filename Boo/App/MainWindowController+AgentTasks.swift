@@ -34,23 +34,9 @@ extension MainWindowController {
     }
 
     private static func agentCommand(kind: AgentKind, model: String?, promptArgument: String?) -> String {
-        var base: String
-        switch kind {
-        case .claudeCode, .custom: base = "claude"
-        case .codex: base = "codex"
-        case .openCode: base = "opencode"
-        }
-        // All three take --model.
-        if let model = model?.trimmingCharacters(in: .whitespaces), !model.isEmpty {
-            base += " --model " + shellQuoted(model)
-        }
-        guard let promptArgument else { return base }
-        if kind == .openCode { base += " --prompt" }
-        return base + " " + promptArgument
-    }
-
-    static func shellQuoted(_ text: String) -> String {
-        "'" + text.replacingOccurrences(of: "'", with: "'\\''") + "'"
+        // `.custom` has no CLI of its own: it starts Claude Code.
+        let adapter = kind.adapter ?? ClaudeCodeAdapter()
+        return adapter.command(.start(model: model), prompt: promptArgument)
     }
 
     /// A started task: its worktree, workspace and the tab the agent runs in.
@@ -277,8 +263,8 @@ extension MainWindowController {
     }
 
     /// `new_agent_task {name?, prompt?, agent?, repo?, base?, model?}`: repo
-    /// defaults to the active workspace's repository; agent is claude (default),
-    /// codex or opencode. The caller (by `token`) owns the new agent's tab.
+    /// defaults to the active workspace's repository; agent is an `AgentKind.ipcName`
+    /// (default claude). The caller (by `token`) owns the new agent's tab.
     func ipcNewAgentTask(json: [String: Any], reply: @escaping ([String: Any]) -> Void) {
         let name = (json["name"] as? String) ?? ""
         let prompt = (json["prompt"] as? String) ?? ""
@@ -287,7 +273,7 @@ extension MainWindowController {
             return
         }
         guard let kind = AgentKind(ipcName: (json["agent"] as? String) ?? "claude") else {
-            reply(["ok": false, "error": "agent must be claude, codex or opencode"])
+            reply(["ok": false, "error": "agent must be one of " + AgentKind.ipcNameList])
             return
         }
         let caller = CapabilityTokens.shared.resolve(json["token"] as? String)
@@ -783,13 +769,8 @@ extension MainWindowController {
     /// folder, so the agent keeps what it did before it stopped.
     static func resumeCommand(kind: AgentKind = .claudeCode, text: String?) -> String {
         let text = text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let base: String
-        switch kind {
-        case .claudeCode, .custom: base = "claude --continue"
-        case .codex: base = "codex resume --last"
-        case .openCode: base = "opencode --continue"
-        }
-        return text.isEmpty ? base : base + kind.promptArgument(text)
+        let adapter = kind.adapter ?? ClaudeCodeAdapter()
+        return adapter.command(.continueLast, prompt: text.isEmpty ? nil : shellEscape(text))
     }
 
     private func isAgentWorking(inWorkspace workspaceID: UUID) -> Bool {

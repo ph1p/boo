@@ -1,65 +1,65 @@
 import Foundation
 
-enum AgentKind: String, CaseIterable, Equatable, Hashable {
+/// A coding agent Boo knows. The raw value is persisted (sessions, settings):
+/// never rename one. Per-agent behavior lives in its `AgentAdapter`.
+enum AgentKind: String, CaseIterable, Equatable, Hashable, Sendable {
     case claudeCode = "claude-code"
     case codex
     case openCode = "opencode"
+    case copilot
+    case pi
+    case hermes
     case custom
 
-    var displayName: String {
-        switch self {
-        case .claudeCode: return "Claude Code"
-        case .codex: return "Codex"
-        case .openCode: return "OpenCode"
-        case .custom: return "AI Agent"
-        }
-    }
+    /// Every agent's adapter, built once, in `allCases` order.
+    static let adapters: [any AgentAdapter] = [
+        ClaudeCodeAdapter(), CodexAdapter(), OpenCodeAdapter(), CopilotAdapter(), PiAdapter(), HermesAdapter()
+    ]
 
-    var shortName: String {
-        switch self {
-        case .claudeCode: return "Claude"
-        case .codex: return "Codex"
-        case .openCode: return "OpenCode"
-        case .custom: return "Agent"
-        }
-    }
+    private static let adapterByKind = Dictionary(uniqueKeysWithValues: adapters.map { ($0.kind, $0) })
 
-    var processNames: Set<String> {
-        switch self {
-        case .claudeCode: return ["claude"]
-        case .codex: return ["codex"]
-        case .openCode: return ["opencode"]
-        case .custom: return []
-        }
-    }
+    /// The agent's adapter; nil for `.custom`, an unknown AI process.
+    var adapter: (any AgentAdapter)? { Self.adapterByKind[self] }
+
+    /// The order argv and terminal titles are matched in: specific names
+    /// first, since `hermes -m anthropic/claude-...` also contains "claude".
+    static let detectionOrder: [AgentKind] = [.hermes, .pi, .copilot, .codex, .openCode, .claudeCode]
+
+    /// The env var Hermes' Boo plugin reads its first prompt from.
+    static let firstPromptEnvKey = "_BOO_FIRST_PROMPT"
+
+    var displayName: String { adapter?.displayName ?? "AI Agent" }
+
+    var shortName: String { adapter?.shortName ?? "Agent" }
 
     /// The agents a task or helper can start, in picker order.
-    static let taskKinds: [AgentKind] = [.claudeCode, .codex, .openCode]
+    static let taskKinds: [AgentKind] = adapters.map(\.kind)
 
     /// The name the socket, `boo run --agent` and inbox rows use ("claude" for Claude Code).
-    var ipcName: String { self == .claudeCode ? "claude" : rawValue }
+    var ipcName: String { adapter?.ipcName ?? rawValue }
 
     init?(ipcName: String) {
         guard let kind = Self.taskKinds.first(where: { $0.ipcName == ipcName }) else { return nil }
         self = kind
     }
 
-    static func infer(processName: String, metadata: [String: String]) -> AgentKind? {
-        if let raw = metadata["agent_kind"]?.lowercased() {
-            switch raw {
-            case "claude", "claude-code", "claudecode":
-                return .claudeCode
-            case "codex":
-                return .codex
-            case "opencode", "open-code", "open_code":
-                return .openCode
-            default:
-                break
-            }
-        }
+    /// "claude, codex, opencode, ..." for help texts and errors.
+    static let ipcNameList = taskKinds.map(\.ipcName).joined(separator: ", ")
 
-        let process = processName.lowercased()
-        return Self.allCases.first { $0.processNames.contains(process) }
+    /// "claude, codex, ... or hermes": the commands that start each agent.
+    static let binaryList: String = {
+        let binaries = adapters.map(\.binary)
+        return binaries.dropLast().joined(separator: ", ") + " or " + (binaries.last ?? "")
+    }()
+
+    /// `agent_kind` metadata values and process names, to their agent.
+    private static let byAlias: [String: AgentKind] = Dictionary(
+        adapters.flatMap { a in a.aliases.map { ($0, a.kind) } }, uniquingKeysWith: { first, _ in first })
+    private static let byBinary = Dictionary(uniqueKeysWithValues: adapters.map { ($0.binary, $0.kind) })
+
+    static func infer(processName: String, metadata: [String: String]) -> AgentKind? {
+        if let raw = metadata["agent_kind"]?.lowercased(), let kind = byAlias[raw] { return kind }
+        return byBinary[processName.lowercased()]
     }
 }
 
@@ -109,12 +109,6 @@ enum AgentBinaryScanner {
     /// Returns the subset of AgentKind whose CLI binary is found on disk.
     /// .custom is always excluded (no associated binary).
     static func detectInstalledAgents() -> Set<AgentKind> {
-        var found = Set<AgentKind>()
-        for kind in AgentKind.allCases where kind != .custom {
-            if kind.processNames.contains(where: { BinaryScanner.isInstalled($0) }) {
-                found.insert(kind)
-            }
-        }
-        return found
+        Set(AgentKind.adapters.filter { BinaryScanner.isInstalled($0.binary) }.map(\.kind))
     }
 }

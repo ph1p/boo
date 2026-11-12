@@ -503,7 +503,7 @@ struct BooMCPServer {
                             "description": "Branch or commit to start from (default: the repo's HEAD)"
                         ],
                         "agent": [
-                            "type": "string", "enum": ["claude", "codex", "opencode"],
+                            "type": "string", "enum": AgentKind.taskKinds.map(\.ipcName),
                             "description": "Which agent (default claude)"
                         ],
                         "model": ["type": "string", "description": "Model for the agent (default: its own)"],

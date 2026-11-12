@@ -171,6 +171,9 @@ enum BooPaths {
         (shellIntegrationDir as NSString).appendingPathComponent("boo-mcp")
     }
 
+    /// The hook Claude Code, Codex and Copilot run to report their state.
+    static var agentHookPath: String { shellIntegrationDir.appendingPathComponent("boo-claude-hook") }
+
     /// `boo`: the agent crew CLI (`Boo --cli`); shell integration puts its
     /// folder on PATH inside Boo terminals.
     static var cliLauncherPath: String {
@@ -232,7 +235,7 @@ enum BooPaths {
     /// works, waits for permission and finishes. Merges safely with existing
     /// hooks — never overwrites user entries.
     static func installClaudeHook() {
-        let hookScript = shellIntegrationDir.appendingPathComponent("boo-claude-hook")
+        let hookScript = agentHookPath
         let settingsPath = NSHomeDirectory().appendingPathComponent(".claude/settings.json")
 
         guard let data = try? Data(contentsOf: URL(fileURLWithPath: settingsPath)),

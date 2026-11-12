@@ -17,7 +17,7 @@ struct ClaudeConfigView: View {
 
     var body: some View {
         let grouped = Dictionary(grouping: configFiles, by: \.provider)
-        let providers = [AgentKind.claudeCode, .codex, .openCode]
+        let providers = AgentKind.taskKinds
             .filter { grouped[$0] != nil }
         let needsHeaders = providers.count > 1
 
@@ -109,29 +109,27 @@ struct AgentCenterSettingsView: View {
 
         VStack(alignment: .leading, spacing: 12) {
             Section(title: "Providers") {
-                let providers = [AgentKind.claudeCode, .codex, .openCode]
+                let providers = AgentKind.taskKinds
                     .filter { installedAgents.contains($0) }
                 if providers.isEmpty {
-                    Text("No agent CLIs found. Install claude, codex, or opencode.")
+                    Text("No agent CLIs found. Install " + AgentKind.binaryList + ".")
                         .font(.system(size: 11))
                         .foregroundStyle(t.muted)
                 } else {
+                    let configFiles = AgentsPlugin.detectAgentConfig(cwd: NSHomeDirectory()).configFiles
                     ForEach(providers, id: \.self) { kind in
-                        mergedProviderRow(kind: kind, t: t)
+                        mergedProviderRow(kind: kind, files: configFiles.filter { $0.provider == kind }, t: t)
                     }
                 }
             }
         }
     }
 
-    private func mergedProviderRow(kind: AgentKind, t: Tokens) -> some View {
-        let files = AgentsPlugin.detectAgentConfig(cwd: NSHomeDirectory()).configFiles.filter {
-            $0.provider == kind
-        }
-        let binaryName = kind.processNames.first ?? ""
-        let binaryPath = BinaryScanner.searchPaths
-            .map { ($0 as NSString).appendingPathComponent(binaryName) }
-            .first { FileManager.default.isExecutableFile(atPath: $0) }
+    private func mergedProviderRow(
+        kind: AgentKind, files: [AgentsPlugin.AgentConfig.ConfigFile], t: Tokens
+    ) -> some View {
+        let binaryPath = BinaryScanner.path(
+            of: kind.adapter?.binary ?? "", in: BinaryScanner.searchPaths.joined(separator: ":"))
         let isFound = binaryPath != nil
 
         return VStack(alignment: .leading, spacing: 8) {

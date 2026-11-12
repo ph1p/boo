@@ -204,7 +204,7 @@ An agent task is a git worktree on branch `boo/<task>` in `~/.boo/worktrees/<rep
 
 | Command          | Arguments | Reply |
 | ---------------- | --------- | ----- |
-| `new_agent_task` | `name` and/or `prompt`; optional `agent` (`claude`, `codex`, `opencode`), `model`, `repo` (default: active terminal's repo, else workspace), `base` (ref to branch from) | `path`, `workspace_id` |
+| `new_agent_task` | `name` and/or `prompt`; optional `agent` (`claude`, `codex`, `opencode`, `copilot`, `pi`, `hermes`), `model`, `repo` (default: active terminal's repo, else workspace), `base` (ref to branch from) | `path`, `workspace_id` |
 | `review_changes` | optional `workspace_id` or `pane_id` (default: active workspace) | |
 | `task_status`    | `tab_id` of the task's agent | `branch`, `target`, `ahead`, `behind`, `dirty`, `target_dirty`, `conflicts`, `mergeable`, `blocker`, `hint` |
 | `task_diff`      | `tab_id`; `stat_only: true` for the file list only | `base`, `files`, `additions`, `deletions`, `diff` (max 100,000 chars), `truncated` |

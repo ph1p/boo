@@ -9,6 +9,11 @@ func shellEscape(_ path: String) -> String {
     return path
 }
 
+/// Single-quote `text` for a shell, always (unlike `shellEscape`).
+func shellQuoted(_ text: String) -> String {
+    "'" + text.replacingOccurrences(of: "'", with: "'\\''") + "'"
+}
+
 /// Commands Boo types into a shell for the user (cd, editor, branch switch),
 /// as opposed to ones the user wrote. They start with a space so they stay out
 /// of shell history: Boo's shell integration turns on ignore-space in zsh and

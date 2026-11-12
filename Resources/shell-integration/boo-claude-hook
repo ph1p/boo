@@ -6,8 +6,11 @@
 # stdin. On SessionStart it prints context that teaches the agent the `boo` CLI.
 # Codex: notify = ["~/.boo/shell-integration/boo-claude-hook", "codex"]
 # (Codex appends its JSON payload as the last argument).
+# GitHub Copilot CLI: ~/.copilot/hooks/boo.json runs `boo-claude-hook copilot
+# <event>` per event, with Copilot's JSON payload on stdin.
 #
-# OpenCode uses boo-opencode-plugin.js instead.
+# OpenCode, pi and Hermes use their own plugins (boo-opencode-plugin.js,
+# boo-pi-extension.ts, boo-hermes-plugin.py) instead.
 #
 # BOO_PANE_ID / BOO_TAB_ID are set per surface by Boo. Never blocks the agent:
 # no output except that context, always exits 0.
@@ -46,6 +49,33 @@ def event_for_claude(p):
         return "end", None, None
     return None, None, None
 
+def event_for_copilot(name, p):
+    tool = p.get("toolName")
+    if name == "userPromptSubmitted":
+        return "prompt", None, None
+    if name == "preToolUse" and tool == "ask_user":
+        args = p.get("toolArgs")
+        if isinstance(args, str):
+            try:
+                args = json.loads(args)
+            except Exception:
+                args = {}
+        question = args.get("question") if isinstance(args, dict) else None
+        return "question", question or "has a question", tool
+    if name == "preToolUse":
+        return "tool", None, tool
+    if name == "notification":
+        kind = p.get("notification_type", "") or ""
+        message = p.get("message", "") or ""
+        if "permission" in kind or "permission" in message.lower():
+            return "permission", message or "needs your permission", None
+        return None, None, None
+    if name == "agentStop":
+        return "stop", None, None
+    if name == "sessionEnd":
+        return "end", None, None
+    return None, None, None
+
 CREW_CONTEXT = """You run in a tab of Boo, a terminal app for coding agents. When the user \
 wants another agent (a helper beside you, parallel work, a second opinion), start a real \
 one with the `boo` CLI instead of an in-process subagent, so the user can watch and talk to it:
@@ -62,7 +92,7 @@ your tab closes. `boo help` lists the rest."""
 def last_reply(p):
     """The agent's last answer: reported to the agent that started it."""
     text = p.get("last_assistant_message") or p.get("last-assistant-message")
-    path = p.get("transcript_path")
+    path = p.get("transcript_path") or p.get("transcriptPath")
     if not text and path:
         try:
             with open(path, "rb") as f:
@@ -74,9 +104,13 @@ def last_reply(p):
                     entry = json.loads(line)
                 except Exception:
                     continue
-                if entry.get("type") != "assistant":
+                kind = entry.get("type")
+                if kind == "assistant":  # Claude Code
+                    content = (entry.get("message") or {}).get("content")
+                elif kind == "assistant.message":  # Copilot CLI
+                    content = (entry.get("data") or {}).get("content")
+                else:
                     continue
-                content = (entry.get("message") or {}).get("content")
                 if isinstance(content, str):
                     text = content
                 elif isinstance(content, list):
@@ -102,6 +136,22 @@ if args and args[0] == "codex":
     if payload.get("type") != "agent-turn-complete":
         sys.exit(0)
     event, message, tool = "stop", None, None
+elif args and args[0] == "copilot":
+    agent = "copilot"
+    name = args[1] if len(args) > 1 else ""
+    try:
+        payload = json.load(sys.stdin)
+    except Exception:
+        payload = {}
+    payload.setdefault("session_id", payload.get("sessionId"))
+    if name == "sessionStart":
+        print(json.dumps({"additionalContext": CREW_CONTEXT}))
+        sys.stdout.flush()
+        event, message, tool = "start", None, None
+    else:
+        event, message, tool = event_for_copilot(name, payload)
+    if event is None:
+        sys.exit(0)
 else:
     try:
         payload = json.load(sys.stdin)

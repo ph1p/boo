@@ -1,6 +1,6 @@
 # Agents
 
-Boo runs coding agents (Claude Code, Codex, OpenCode) side by side. It tracks their state across all windows, gives each task its own git worktree, lets you review what they changed, and shows what a session cost.
+Boo runs coding agents (Claude Code, Codex, OpenCode, GitHub Copilot CLI, pi, Hermes) side by side. It tracks their state across all windows, gives each task its own git worktree, lets you review what they changed, and shows what a session cost.
 
 ## Agents Sidebar
 
@@ -28,7 +28,7 @@ Boo keeps one list of agents across all windows: working, waiting for input, don
 
 Click the segment to list every agent and jump to it or open its timeline. **Window → Jump to Next Waiting Agent** (⇧⌘J) goes to the next agent that needs you. When an agent starts waiting or finishes in a tab you are not looking at, Boo sends a notification.
 
-Claude Code reports through a hook. On launch, Boo adds `~/.boo/shell-integration/boo-claude-hook` to `~/.claude/settings.json` and keeps your own hooks. The file must exist, so start Claude Code once first. Agents running behind `ssh` or `mosh` are tracked from their terminal title and bell. For Codex and other agents, see [Agent Inbox](/ipc-socket#agent-inbox).
+Claude Code reports through a hook. On launch, Boo adds `~/.boo/shell-integration/boo-claude-hook` to `~/.claude/settings.json` and keeps your own hooks. The file must exist, so start Claude Code once first. The other agents report the same way while their config folder exists: Codex through `notify` in `~/.codex/config.toml`, OpenCode through a plugin, Copilot through `~/.copilot/hooks/boo.json`, pi through `~/.pi/agent/extensions/boo.ts`, and Hermes through `~/.hermes/plugins/boo`. Hermes has no flag that starts a chat with a prompt, so Boo's plugin types the first prompt in. Agents running behind `ssh` or `mosh` are tracked from their terminal title and bell. For other agents, see [Agent Inbox](/ipc-socket#agent-inbox).
 
 [Remote Control](/remote-control#answering-agents) can approve or deny a waiting agent from another device.
 

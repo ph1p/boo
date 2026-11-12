@@ -56,19 +56,25 @@ __boo_osc() {
     printf '\033]2;BOO_CMD:%s\a' "$1"
 }
 
-_BOO_AGENT_CMDS="claude codex opencode aider"
+_BOO_AGENT_CMDS="claude codex opencode copilot pi hermes aider"
 _BOO_LAST_WAS_AGENT=0
 
 # $1: the command line. $2: set when the caller already checked it reached history.
 __boo_preexec() {
-    local line="$1" cmd
+    local line="$1" cmd rest
     # A line that never reached history leaves `history 1` on the previous
     # command, which bash-preexec then passes here: report no command instead.
     if [[ -z "$2" && -n "$_BOO_PROMPT_HIST" ]]; then
         __boo_hist
         [[ "$_BOO_HIST_NUM" == "$_BOO_PROMPT_HIST" ]] && line=""
     fi
-    cmd="${line%% *}"
+    rest="$line"
+    cmd="${rest%% *}"
+    # Skip leading VAR=value words (`_BOO_FIRST_PROMPT=... hermes chat`).
+    while [[ "$cmd" == [A-Za-z_]*=* && "$rest" == *" "* ]]; do
+        rest="${rest#* }"
+        cmd="${rest%% *}"
+    done
     cmd="${cmd##*/}"  # basename
     if [[ " $_BOO_AGENT_CMDS " == *" $cmd "* ]]; then
         _BOO_LAST_WAS_AGENT=1

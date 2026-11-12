@@ -18,7 +18,7 @@ function __boo_path --on-event fish_prompt
 end
 __boo_path
 
-set -g _BOO_AGENT_CMDS claude codex opencode aider
+set -g _BOO_AGENT_CMDS claude codex opencode copilot pi hermes aider
 set -g _BOO_LAST_WAS_AGENT 0
 
 function __boo_osc
@@ -26,7 +26,12 @@ function __boo_osc
 end
 
 function __boo_preexec --on-event fish_preexec
-    set -l cmd (string split ' ' -- $argv[1])[1]
+    set -l words (string split ' ' -- $argv[1])
+    # Skip leading VAR=value words (`_BOO_FIRST_PROMPT=... hermes chat`).
+    while test (count $words) -gt 1; and string match -qr '^[A-Za-z_][A-Za-z0-9_]*=' -- $words[1]
+        set -e words[1]
+    end
+    set -l cmd $words[1]
     set -l base (basename $cmd)
     if contains -- $base $_BOO_AGENT_CMDS
         set -g _BOO_LAST_WAS_AGENT 1

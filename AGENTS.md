@@ -233,11 +233,11 @@ Set `capabilities.sidebarTab = true` in the manifest and implement `makeDetailVi
 
 ## Agent Center (Agents Plugin)
 
-`Boo/Plugins/Agents/` — unified plugin for Claude Code, Codex, OpenCode, and generic AI CLI sessions.
+`Boo/Plugins/Agents/` — unified plugin for Claude Code, Codex, OpenCode, GitHub Copilot CLI, pi, Hermes, and generic AI CLI sessions.
 
 ### Agent detection
 
-Agents are detected via process tree polling: `TerminalBridge` matches the foreground process name against `AgentKind.processNames`. This provides the process name, PID, and cwd.
+Agents are detected via process tree polling: `TerminalBridge` matches the foreground process name against each adapter's `binary` (`AgentKind.infer`). This provides the process name, PID, and cwd.
 
 ### `AgentKind`
 
@@ -246,9 +246,15 @@ enum AgentKind: String, CaseIterable {
     case claudeCode = "claude-code"
     case codex
     case openCode = "opencode"
-    case custom          // no associated binary — always excluded from binary scans
+    case copilot
+    case pi
+    case hermes
+    case custom          // no adapter — always excluded from binary scans
+    var adapter: (any AgentAdapter)? { ... }
 }
 ```
+
+Everything agent-specific lives in an `AgentAdapter` (`Boo/Plugins/Agents/Adapters/`): names, binary, argv and title patterns, start/continue/resume commands, how the prompt is passed (positional, a flag, or `_BOO_FIRST_PROMPT` for agents without one), config files for the sidebar, and `installIntegration()` for its hook or plugin. To add an agent: add a case, write an adapter, add it to `AgentKind.adapters`, place it in `AgentKind.detectionOrder`, and add its command to `_BOO_AGENT_CMDS` in `boo.bash`, `boo.zsh` and `boo.fish`.
 
 `AgentBinaryScanner.detectInstalledAgents()` (in `AgentCenterModels.swift`) returns the subset of non-custom kinds whose CLI binary is found on disk via `BinaryScanner.isInstalled`.
 

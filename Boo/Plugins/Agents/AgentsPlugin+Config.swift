@@ -42,71 +42,16 @@ extension AgentsPlugin {
         let home = fm.homeDirectoryForCurrentUser.path
         let projectRoot = projectRoot ?? findAgentProjectRoot(from: cwd, markers: projectMarkers) ?? cwd
 
-        checkFile(
-            fm: fm, root: projectRoot, rel: ".claude/CLAUDE.md", name: "CLAUDE.md", icon: "doc.text",
-            scope: "project", into: &config)
-        checkFile(
-            fm: fm, root: projectRoot, rel: "CLAUDE.md", name: "CLAUDE.md", icon: "doc.text",
-            scope: "project", into: &config)
-        checkFile(
-            fm: fm, root: projectRoot, rel: ".claude/settings.json", name: "Settings", icon: "gearshape",
-            scope: "project", into: &config)
-        checkFile(
-            fm: fm, root: projectRoot, rel: ".claude/settings.local.json", name: "Local Settings",
-            icon: "gearshape", scope: "project", into: &config)
-        checkFile(
-            fm: fm, root: projectRoot, rel: ".claude/mcp.json", name: "MCP Servers", icon: "server.rack",
-            scope: "project", into: &config)
-        checkFile(
-            fm: fm, root: home, rel: ".claude/settings.json", name: "Global Settings", icon: "gearshape",
-            scope: "global", into: &config)
-        checkFile(
-            fm: fm, root: home, rel: ".claude.json", name: "Global MCP", icon: "server.rack", scope: "global",
-            into: &config)
-        checkFile(
-            fm: fm, root: home, rel: ".claude/CLAUDE.md", name: "Global CLAUDE.md", icon: "doc.text",
-            scope: "global", into: &config)
-        checkFile(
-            fm: fm, root: projectRoot, rel: "AGENTS.md", name: "AGENTS.md", icon: "person.2", scope: "project",
-            into: &config)
-
-        let skillsDir = (projectRoot as NSString).appendingPathComponent(".claude/skills")
-        if let entries = try? fm.contentsOfDirectory(atPath: skillsDir) {
-            for entry in entries.sorted() {
-                let skillMd = (skillsDir as NSString).appendingPathComponent("\(entry)/SKILL.md")
-                if fm.fileExists(atPath: skillMd) {
-                    let desc = parseAgentSkillDescription(at: skillMd)
-                    config.skills.append(
-                        AgentConfig.SkillEntry(name: entry, description: desc, path: skillMd))
-                }
+        for adapter in AgentKind.adapters {
+            for spec in adapter.configFiles {
+                checkFile(
+                    fm: fm, root: spec.global ? home : projectRoot, rel: spec.path, name: spec.name, icon: spec.icon,
+                    scope: spec.global ? "global" : "project", provider: adapter.kind, into: &config)
             }
+            adapter.scanExtraConfig(root: projectRoot, home: home, into: &config)
         }
-        let globalSkillsDir = (home as NSString).appendingPathComponent(".claude/skills")
-        if let entries = try? fm.contentsOfDirectory(atPath: globalSkillsDir) {
-            let projectSkillNames = Set(config.skills.map(\.name))
-            for entry in entries.sorted() {
-                guard !projectSkillNames.contains(entry) else { continue }
-                let skillMd = (globalSkillsDir as NSString).appendingPathComponent("\(entry)/SKILL.md")
-                if fm.fileExists(atPath: skillMd) {
-                    let desc = parseAgentSkillDescription(at: skillMd)
-                    config.skills.append(
-                        AgentConfig.SkillEntry(name: entry, description: desc, path: skillMd))
-                }
-            }
-        }
-
-        scanCodexConfig(fm: fm, root: projectRoot, home: home, into: &config)
-        scanOpenCodeConfig(fm: fm, root: projectRoot, home: home, into: &config)
 
         return config
-    }
-
-    nonisolated private static func checkFile(
-        fm: FileManager, root: String, rel: String, name: String,
-        icon: String, scope: String, into config: inout AgentConfig
-    ) {
-        checkFile(
-            fm: fm, root: root, rel: rel, name: name, icon: icon, scope: scope, provider: .claudeCode, into: &config)
     }
 
     nonisolated private static func checkFile(
@@ -121,50 +66,4 @@ extension AgentsPlugin {
             }
         }
     }
-
-    nonisolated private static func scanCodexConfig(
-        fm: FileManager, root: String, home: String, into config: inout AgentConfig
-    ) {
-        checkFile(
-            fm: fm, root: root, rel: ".codex/config.toml", name: "Codex Config", icon: "gearshape",
-            scope: "project", provider: .codex, into: &config)
-        checkFile(
-            fm: fm, root: home, rel: ".codex/config.toml", name: "Global Codex Config", icon: "gearshape",
-            scope: "global", provider: .codex, into: &config)
-    }
-
-    nonisolated private static func scanOpenCodeConfig(
-        fm: FileManager, root: String, home: String, into config: inout AgentConfig
-    ) {
-        checkFile(
-            fm: fm, root: root, rel: "opencode.json", name: "OpenCode Config", icon: "gearshape",
-            scope: "project", provider: .openCode, into: &config)
-        checkFile(
-            fm: fm, root: root, rel: "opencode.jsonc", name: "OpenCode Config", icon: "gearshape",
-            scope: "project", provider: .openCode, into: &config)
-        checkFile(
-            fm: fm, root: root, rel: ".opencode", name: "OpenCode Plugins", icon: "puzzlepiece.extension",
-            scope: "project", provider: .openCode, into: &config)
-        checkFile(
-            fm: fm, root: home, rel: ".config/opencode/opencode.json", name: "Global OpenCode Config",
-            icon: "gearshape", scope: "global", provider: .openCode, into: &config)
-
-        for path in [
-            (root as NSString).appendingPathComponent("opencode.json"),
-            (root as NSString).appendingPathComponent("opencode.jsonc"),
-            (home as NSString).appendingPathComponent(".config/opencode/opencode.json")
-        ] {
-            guard let data = fm.contents(atPath: path),
-                let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-            else { continue }
-            if let agent = json["agent"] as? [String: Any] {
-                for name in agent.keys.sorted() {
-                    config.skills.append(
-                        AgentConfig.SkillEntry(
-                            name: "@\(name)", description: "OpenCode agent", path: path, provider: .openCode))
-                }
-            }
-        }
-    }
-
 }

@@ -29,21 +29,7 @@ struct AgentResumePoint: Codable, Sendable, Equatable {
 extension AgentKind {
     /// The command that reopens session `sessionID`, optionally sending `prompt`; nil for `.custom`.
     func resumeCommand(sessionID: String, prompt: String? = nil) -> String? {
-        let id = shellEscape(sessionID)
-        let base: String
-        switch self {
-        case .claudeCode: base = "claude --resume \(id)"
-        case .codex: base = "codex resume \(id)"
-        case .openCode: base = "opencode --session \(id)"
-        case .custom: return nil
-        }
-        guard let prompt, !prompt.isEmpty else { return base }
-        return base + promptArgument(prompt)
-    }
-
-    /// `prompt` as the first-message argument of this agent's CLI, with a leading space.
-    func promptArgument(_ prompt: String) -> String {
-        (self == .openCode ? " --prompt " : " ") + shellEscape(prompt)
+        adapter?.command(.resume(sessionID: sessionID), prompt: prompt.flatMap { $0.isEmpty ? nil : shellEscape($0) })
     }
 }
 

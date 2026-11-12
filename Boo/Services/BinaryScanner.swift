@@ -25,6 +25,7 @@ enum BinaryScanner {
             (home as NSString).appendingPathComponent(".local/bin"),
             (home as NSString).appendingPathComponent(".cargo/bin"),
             (home as NSString).appendingPathComponent(".bun/bin"),
+            (home as NSString).appendingPathComponent("Library/pnpm"),
             (home as NSString).appendingPathComponent(".volta/bin"),
             (home as NSString).appendingPathComponent(".nvm/current/bin")
         ]

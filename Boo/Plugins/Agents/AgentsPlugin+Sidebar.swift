@@ -120,7 +120,7 @@ extension AgentsPlugin {
                     Text("No agent CLIs installed")
                         .font(fontScale.font(.base))
                         .foregroundStyle(textColor)
-                    Text("Install claude, codex, or opencode to get started.")
+                    Text("Install " + AgentKind.binaryList + " to get started.")
                         .font(fontScale.font(.sm))
                         .foregroundStyle(mutedColor)
                 }

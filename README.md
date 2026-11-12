@@ -31,7 +31,7 @@ Boo updates itself through Sparkle (**Boo → Check for Updates...**).
 - **Tabs beyond the terminal** — Browser, code editor, image viewer and markdown preview ([docs](https://ph1p.github.io/boo/multi-content-tabs))
 - **File explorer** — Live file tree with git status, for local folders and for SSH, Mosh, container, VM and device shells ([docs](https://ph1p.github.io/boo/remote-sessions))
 - **Sidebar plugins** — Git, Docker, Kubernetes, SSH hosts, notes, snippets, bookmarks, system info; write your own in JavaScript ([docs](https://ph1p.github.io/boo/plugins))
-- **Agents** — Inbox for Claude Code, Codex and OpenCode, worktree tasks, diff review, timeline and cost, an orchestrator and an MCP server ([docs](https://ph1p.github.io/boo/agents))
+- **Agents** — Inbox for Claude Code, Codex, OpenCode, Copilot, pi and Hermes, worktree tasks, diff review, timeline and cost, an orchestrator and an MCP server ([docs](https://ph1p.github.io/boo/agents))
 - **Terminal tools** — Command palette, quick terminal, quick select, copy mode, command blocks, broadcast input, session recording with MP4 export ([docs](https://ph1p.github.io/boo/features))
 - **tmux** — `tmux -CC` sessions open as native workspaces and panes ([docs](https://ph1p.github.io/boo/features#tmux))
 - **Themes** — 32 built-in themes, a theme editor, iTerm2 and Ghostty theme import ([docs](https://ph1p.github.io/boo/features#themes))

@@ -249,14 +249,17 @@ enum ProcessTree {
         "xctest", "xctestbootstrap"
     ]
 
-    /// Maps substrings found in process argv to canonical agent process names.
-    private static let argAgentPatterns: [(substring: String, canonical: String)] = [
-        ("codex", "codex"),
-        ("opencode", "opencode"),
-        ("claude", "claude"),
-        ("aider", "aider"),
-        ("goose", "goose")
-    ]
+    /// Maps substrings found in process argv to canonical agent process names:
+    /// every adapter's patterns in `AgentKind.detectionOrder` (hermes argv can
+    /// name another agent's model), then agents Boo only recognizes.
+    private static let argAgentPatterns: [(substring: String, canonical: String)] =
+        AgentKind.detectionOrder.flatMap { kind -> [(substring: String, canonical: String)] in
+            guard let adapter = kind.adapter else { return [] }
+            return adapter.argvPatterns.map { (substring: $0.lowercased(), canonical: adapter.binary) }
+        } + [
+            ("aider", "aider"),
+            ("goose", "goose")
+        ]
 
     /// Inspects the process argv for known agent script patterns, returns canonical name or nil.
     private static func agentFromArgs(pid: pid_t) -> String? {

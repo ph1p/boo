@@ -27,11 +27,16 @@ __boo_osc() {
     printf '\033]2;BOO_CMD:%s\a' "$1"
 }
 
-_BOO_AGENT_CMDS=(claude codex opencode aider)
+_BOO_AGENT_CMDS=(claude codex opencode copilot pi hermes aider)
 _BOO_LAST_WAS_AGENT=0
 
 __boo_preexec() {
-    local cmd="${1%% *}"
+    local rest="$1" cmd="${1%% *}"
+    # Skip leading VAR=value words (`_BOO_FIRST_PROMPT=... hermes chat`).
+    while [[ "$cmd" == [A-Za-z_]*=* && "$rest" == *" "* ]]; do
+        rest="${rest#* }"
+        cmd="${rest%% *}"
+    done
     cmd="${cmd:t}"  # basename
     if (( ${_BOO_AGENT_CMDS[(Ie)$cmd]} )); then
         _BOO_LAST_WAS_AGENT=1

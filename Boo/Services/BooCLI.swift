@@ -24,7 +24,7 @@ enum BooCLI {
           agents                       Agents in every Boo window, with handles (t1, t2, ...)
           run [options] <prompt>       Start an agent that reports back to this tab
               --here                   In a tab next to this one instead of its own worktree
-              --agent claude|codex|opencode
+              --agent \(AgentKind.taskKinds.map(\.ipcName).joined(separator: "|"))
               --name <name>            Task name (branch boo/<name>)
               --model <model>
               --base <branch>          Branch the worktree starts from (default: HEAD)

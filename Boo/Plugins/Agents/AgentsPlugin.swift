@@ -22,7 +22,7 @@ private let relativeDateFormatter: DateFormatter = {
 
 /// Built-in Agent Center plugin.
 /// Shows active AI agent sessions, setup health, config, skills, MCP servers, and changed files.
-/// V1 keeps Claude Code as the richest provider while preparing Codex and OpenCode scanners.
+/// Each agent CLI plugs in through an `AgentAdapter`; Claude Code is the richest provider.
 @MainActor
 final class AgentsPlugin: BooPluginProtocol {
     var actions: PluginActions?
@@ -35,7 +35,7 @@ final class AgentsPlugin: BooPluginProtocol {
         name: "Agents",
         version: "1.0.0",
         icon: "asset:robot-head",
-        description: "Agent Center for Claude Code, Codex, OpenCode, and AI CLI sessions",
+        description: "Agent Center for Claude Code, Codex, OpenCode, Copilot, pi, Hermes and other AI CLI sessions",
         when: "!remote",
         runtime: nil,
         capabilities: PluginManifest.Capabilities(statusBarSegment: true, sidebarTab: true),

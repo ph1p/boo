@@ -68,7 +68,7 @@ enum AgentHandoff {
             booLog(.error, .app, "[AgentHandoff] can't write prompt: \(error)")
             return false
         }
-        let path = MainWindowController.shellQuoted(file.path)
+        let path = shellQuoted(file.path)
         let command = "claude \"$(cat \(path); rm -f \(path))\""
         let tab = location.pane.tabs[location.tabIndex]
         // A remote tab's folder doesn't exist here; the split starts in the default.

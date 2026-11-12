@@ -10,21 +10,34 @@ enum ProcessIcon {
     /// Returns an SF Symbol name for a known process, or nil for unknown/shell processes.
     static func icon(for process: String) -> String? {
         let name = process.lowercased()
-        return iconMap[name]
+        return iconMap[name] ?? (agentAdapter(name) != nil ? "sparkles" : nil)
     }
 
     /// Returns a short display label for the process (e.g. "Node" for "node").
     static func displayName(for process: String) -> String? {
         let name = process.lowercased()
-        return displayMap[name]
+        return displayMap[name] ?? agentAdapter(name)?.shortName
     }
 
     /// Process category for plugin when-clause matching.
     /// e.g. "editor", "runtime", "tool", "shell", "network"
     static func category(for process: String) -> String? {
         let name = process.lowercased()
-        return categoryMap[name]
+        return categoryMap[name] ?? (agentAdapter(name) != nil ? "ai" : nil)
     }
+
+    /// The agent adapter whose binary is `name`, for agents the maps below don't list.
+    private static func agentAdapter(_ name: String) -> (any AgentAdapter)? {
+        adapterByBinary[name]
+    }
+
+    private static let adapterByBinary = Dictionary(
+        uniqueKeysWithValues: AgentKind.adapters.map { ($0.binary, $0) })
+
+    /// (keyword, binary) pairs in `AgentKind.detectionOrder`, for `matchTitle`.
+    private static let titleKeywords: [(keyword: String, binary: String)] = AgentKind.detectionOrder
+        .compactMap(\.adapter)
+        .flatMap { adapter in adapter.titleKeywords.map { ($0, adapter.binary) } }
 
     /// Whether this process is a shell (should be transparent in tabs).
     static func isShell(_ process: String) -> Bool {
@@ -140,11 +153,9 @@ enum ProcessIcon {
 
         // AI agents update their title dynamically (e.g. "⠂ General coding assistance").
         // Match titles that start with known spinner/status characters used by AI CLIs.
-        if titleContainsKeyword(stripped, "codex") { return "codex" }
-        if titleContainsKeyword(stripped, "opencode") || titleContainsKeyword(stripped, "open code") {
-            return "opencode"
+        if let match = titleKeywords.first(where: { titleContainsKeyword(stripped, $0.keyword) }) {
+            return match.binary
         }
-        if titleContainsKeyword(stripped, "claude") { return "claude" }
         if let first = title.unicodeScalars.first, Self.isAISpinnerScalar(first) {
             return "claude"
         }
@@ -170,6 +181,8 @@ enum ProcessIcon {
         "codex": "codex",
         "open code": "opencode",
         "opencode": "opencode",
+        "github copilot": "copilot",
+        "hermes": "hermes",
         "cursor": "cursor"
     ]
 

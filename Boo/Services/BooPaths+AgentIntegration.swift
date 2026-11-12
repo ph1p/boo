@@ -1,7 +1,7 @@
 import Foundation
 
-/// Wires Boo into the coding agents (Claude Code, Codex, OpenCode) while the
-/// agents switch is on. Off: nothing is installed or updated, and a flag file
+/// Wires Boo into the coding agents (each `AgentAdapter` installs its own
+/// hook or plugin) while the agents switch is on. Off: nothing is installed or updated, and a flag file
 /// makes the hooks already installed exit at once.
 extension BooPaths {
     /// Present while agents are off; the agent hooks check it and stay quiet.
@@ -13,8 +13,8 @@ extension BooPaths {
     /// Read and written on the main thread only.
     nonisolated(unsafe) private static var syncedAgentsEnabled: Bool?
 
-    /// Applies the agents switch: on installs or updates the hooks, the
-    /// OpenCode plugin and the MCP/CLI launchers; off only writes the flag file.
+    /// Applies the agents switch: on installs or updates every agent's
+    /// hook or plugin and the MCP/CLI launchers; off only writes the flag file.
     /// Cheap to call again: does nothing while the switch is unchanged.
     /// True when the switch changed since the last sync.
     @discardableResult
@@ -30,9 +30,9 @@ extension BooPaths {
             }
             try? fm.removeItem(atPath: agentsDisabledFlagPath)
             installMCPLauncher()
-            installClaudeHook()
-            installCodexNotify()
-            installOpenCodePlugin()
+            for adapter in AgentKind.adapters {
+                adapter.installIntegration()
+            }
         }
         return true
     }
@@ -49,7 +49,7 @@ extension BooPaths {
         guard FileManager.default.fileExists(atPath: codexDir) else { return }
         let configPath = codexDir.appendingPathComponent("config.toml")
         let existing = (try? String(contentsOfFile: configPath, encoding: .utf8)) ?? ""
-        let hook = shellIntegrationDir.appendingPathComponent("boo-claude-hook")
+        let hook = agentHookPath
         guard let merged = mergingCodexNotify(hook: hook, into: existing) else { return }
         try? merged.write(toFile: configPath, atomically: true, encoding: .utf8)
     }
@@ -82,18 +82,13 @@ extension BooPaths {
         let fm = FileManager.default
         let root = NSHomeDirectory().appendingPathComponent(".config/opencode")
         guard fm.fileExists(atPath: root),
-            let resources = Bundle.main.resourcePath
+            let plugin = AgentIntegrationFiles.bundled("boo-opencode-plugin.js")
         else { return }
-        let source = resources.appendingPathComponent("shell-integration/boo-opencode-plugin.js")
-        guard let plugin = fm.contents(atPath: source) else { return }
         // Current OpenCode reads plugins/; older releases plugin/.
         let legacy = root.appendingPathComponent("plugin")
         let dir =
             fm.fileExists(atPath: legacy) && !fm.fileExists(atPath: root.appendingPathComponent("plugins"))
             ? legacy : root.appendingPathComponent("plugins")
-        let target = dir.appendingPathComponent("boo.js")
-        guard fm.contents(atPath: target) != plugin else { return }
-        try? fm.createDirectory(atPath: dir, withIntermediateDirectories: true)
-        fm.createFile(atPath: target, contents: plugin)
+        AgentIntegrationFiles.write(plugin, to: dir.appendingPathComponent("boo.js"))
     }
 }

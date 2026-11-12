@@ -80,7 +80,7 @@ struct TerminalSettingsView: View {
                 SettingStack(
                     label: "After a crash or force quit, agents",
                     help:
-                        "Resume starts each tab's agent conversation again (Claude Code, Codex, OpenCode). Ask shows a prompt at launch."
+                        "Resume starts each tab's agent conversation again (Claude Code, Codex, OpenCode, Copilot, pi, Hermes). Ask shows a prompt at launch."
                 ) {
                     ThemedSegmentedPicker(selection: $agentRecovery) { $0.label }
                         .onChange(of: agentRecovery) { _, v in AppSettings.shared.agentRecovery = v }
