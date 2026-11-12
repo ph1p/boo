@@ -27,6 +27,7 @@ final class RemoteControlServerTests: XCTestCase {
 
     override func tearDown() {
         RemoteControlServer.shared.onCommand = nil
+        RemoteControlServer.shared.onStream = nil
         RemoteControlServer.shared.stop()
         super.tearDown()
     }
@@ -151,5 +152,61 @@ final class RemoteControlServerTests: XCTestCase {
         }.resume()
         wait(for: [expectation], timeout: 10)
         XCTAssertEqual(status, 400)
+    }
+
+    // MARK: - Live stream
+
+    func testStreamFrameEncoding() {
+        let output = Data([1, 3, 0, 0, 0]) + Data("abc".utf8)
+        XCTAssertEqual(
+            Data("abc".utf8).withUnsafeBytes { RemoteTerminalStream.frame(.output, $0) }, output)
+        XCTAssertEqual(
+            RemoteTerminalStream.resizeFrame(columns: 80, rows: 24),
+            Data([2, 4, 0, 0, 0, 80, 0, 24, 0]))
+    }
+
+    func testStreamRejectsMissingToken() throws {
+        let (status, _) = try request(path: "/api/stream", method: "POST", body: ["pane": UUID().uuidString])
+        XCTAssertEqual(status, 401)
+    }
+
+    func testStreamRejectsInvalidPane() throws {
+        let token = RemoteControlServer.shared.token
+        let (status, _) = try request(path: "/api/stream", method: "POST", body: ["pane": "nope"], token: token)
+        XCTAssertEqual(status, 400)
+    }
+
+    func testStreamUnknownPaneIs404() throws {
+        RemoteControlServer.shared.onStream = { _, _ in false }
+        let token = RemoteControlServer.shared.token
+        let (status, _) = try request(
+            path: "/api/stream", method: "POST", body: ["pane": UUID().uuidString], token: token)
+        XCTAssertEqual(status, 404)
+    }
+
+    func testStreamDeliversFramesUntilDetached() throws {
+        let pane = UUID()
+        let closed = expectation(description: "onClose")
+        nonisolated(unsafe) var requested: UUID?
+        RemoteControlServer.shared.onStream = { paneID, stream in
+            requested = paneID
+            stream.onClose = { closed.fulfill() }
+            // Frames queued before the headers go out must still arrive, in order.
+            stream.tapResized(columns: 80, rows: 24)
+            DispatchQueue.global().asyncAfter(deadline: .now() + 0.2) {
+                let bytes: [UInt8] = Array("hi".utf8)
+                bytes.withUnsafeBufferPointer { stream.tapOutput($0) }
+                DispatchQueue.global().asyncAfter(deadline: .now() + 0.2) { stream.tapDetached() }
+            }
+            return true
+        }
+        let token = RemoteControlServer.shared.token
+        let (status, body) = try request(
+            path: "/api/stream", method: "POST", body: ["pane": pane.uuidString], token: token)
+        XCTAssertEqual(status, 200)
+        XCTAssertEqual(requested, pane)
+        XCTAssertEqual(
+            body, RemoteTerminalStream.resizeFrame(columns: 80, rows: 24) + Data([1, 2, 0, 0, 0]) + Data("hi".utf8))
+        wait(for: [closed], timeout: 5)
     }
 }

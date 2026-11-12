@@ -70,6 +70,8 @@ final class SocketServerCore: @unchecked Sendable {
     /// from a later one that got the same descriptor.
     private var clientGenerations: [Int32: UInt64] = [:]
     private var nextGeneration: UInt64 = 0
+    /// Long-lived response streams: no idle deadline, the owner closes them.
+    private var persistentFDs: Set<Int32> = []
 
     init(queue: DispatchQueue, config: Config, delegate: Delegate) {
         self.queue = queue
@@ -132,6 +134,7 @@ final class SocketServerCore: @unchecked Sendable {
         clientTimers.removeAll()
         clientSources.removeAll()
         clientBuffers.removeAll()
+        persistentFDs.removeAll()
         return closed
     }
 
@@ -165,6 +168,7 @@ final class SocketServerCore: @unchecked Sendable {
             self.clientSources.removeValue(forKey: clientFD)
             self.clientTimers.removeValue(forKey: clientFD)?.cancel()
             self.clientGenerations.removeValue(forKey: clientFD)
+            self.persistentFDs.remove(clientFD)
             self.delegate?.socketServerDidCloseClient(fd: clientFD)
         }
         source.resume()
@@ -190,8 +194,17 @@ final class SocketServerCore: @unchecked Sendable {
         }
     }
 
+    /// Exempt `fd` from the idle deadline, for a response that stays open and
+    /// streams (the peer sends nothing more once its request is in).
+    func keepOpen(fd: Int32) {
+        guard clientSources[fd] != nil else { return }
+        persistentFDs.insert(fd)
+        clientTimers.removeValue(forKey: fd)?.cancel()
+    }
+
     private func armIdleTimer(fd: Int32) {
         guard let idleTimeout = config.idleTimeout else { return }
+        guard !persistentFDs.contains(fd) else { return }
         clientTimers.removeValue(forKey: fd)?.cancel()
         let timer = DispatchSource.makeTimerSource(queue: queue)
         timer.schedule(deadline: .now() + idleTimeout)

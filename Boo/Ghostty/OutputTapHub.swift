@@ -6,12 +6,19 @@ import Foundation
 protocol OutputTapSubscriber: AnyObject, Sendable {
     func tapOutput(_ bytes: UnsafeBufferPointer<UInt8>)
     func tapResized(columns: Int, rows: Int)
+    /// The surface is going away; no more output will arrive. Runs on the
+    /// thread tearing the surface down, usually main.
+    func tapDetached()
+}
+
+extension OutputTapSubscriber {
+    func tapDetached() {}
 }
 
 /// Owns a surface's single output-callback slot and fans the bytes out to
-/// every subscriber (session recorder, trigger matcher). The C callback is
-/// installed only while there is at least one subscriber, so a surface with
-/// nothing listening pays nothing.
+/// every subscriber (session recorder, trigger matcher, remote streams). The C
+/// callback is installed only while there is at least one subscriber, so a
+/// surface with nothing listening pays nothing.
 final class OutputTapHub: @unchecked Sendable {
     private let lock = NSLock()
     private var subscribers: [ObjectIdentifier: OutputTapSubscriber] = [:] {
@@ -23,6 +30,11 @@ final class OutputTapHub: @unchecked Sendable {
     /// it is being added. Snapshot bytes arrive on the calling (main) thread;
     /// live output never does.
     private var snapshotTarget: ObjectIdentifier?
+    /// Snapshot subscribers that have not received their snapshot yet. When the
+    /// callback is already installed, the io thread can emit output between
+    /// registering the subscriber and replaying its snapshot; that output is
+    /// already part of the snapshot, so delivering it too would double it.
+    private var awaiting: Set<ObjectIdentifier> = []
     private var installed = false
 
     /// Adds `subscriber`. With `snapshot`, it first receives the grid size and
@@ -31,12 +43,18 @@ final class OutputTapHub: @unchecked Sendable {
         let id = ObjectIdentifier(subscriber)
         lock.withLock {
             subscribers[id] = subscriber
-            if snapshot { snapshotTarget = id }
+            if snapshot {
+                snapshotTarget = id
+                awaiting.insert(id)
+            }
         }
         if let surface, snapshot || !installed {
             install(surface: surface, snapshot: snapshot)
         }
-        lock.withLock { snapshotTarget = nil }
+        lock.withLock {
+            snapshotTarget = nil
+            awaiting.remove(id)
+        }
     }
 
     /// Removes `subscriber`; clears the C callback once nobody is left. The
@@ -49,8 +67,11 @@ final class OutputTapHub: @unchecked Sendable {
         if empty { detach(surface: surface) }
     }
 
-    /// Clears the callback regardless of subscribers (surface teardown).
+    /// Clears the callback regardless of subscribers (surface teardown) and
+    /// tells every remaining subscriber that no more output will come.
     func detach(surface: ghostty_surface_t?) {
+        let remaining = lock.withLock { current }
+        for s in remaining { s.tapDetached() }
         guard installed else { return }
         if let surface { ghostty_surface_set_output_callback(surface, nil, nil, nil, false) }
         installed = false
@@ -67,9 +88,13 @@ final class OutputTapHub: @unchecked Sendable {
     private func targets() -> [OutputTapSubscriber] {
         lock.withLock {
             if let snapshotTarget, Thread.isMainThread {
+                // The snapshot replays under the terminal lock, so once it
+                // starts, every later io-thread chunk follows it.
+                awaiting.remove(snapshotTarget)
                 return subscribers[snapshotTarget].map { [$0] } ?? []
             }
-            return current
+            if awaiting.isEmpty { return current }
+            return current.filter { !awaiting.contains(ObjectIdentifier($0)) }
         }
     }
 

@@ -14,7 +14,8 @@ extension Notification.Name {
 /// Security: every API request must carry the session token (regenerated on
 /// each start) via `Authorization: Bearer <token>`. The UI receives it in the URL
 /// fragment, which browsers never put on the wire.
-/// Connections use `Connection: close` — the UI polls, no keep-alive needed.
+/// Connections use `Connection: close` — the UI polls, no keep-alive needed;
+/// live pane output comes on separate held-open responses (`/api/stream`).
 /// Idle connections are dropped after `requestTimeout` so a handful of silent
 /// sockets can't exhaust `maxClients`.
 ///
@@ -27,9 +28,19 @@ final class RemoteControlServer: @unchecked Sendable {
     /// any thread; the server serializes the response and closes the socket.
     var onCommand: ((_ cmd: String, _ json: [String: Any], _ reply: @escaping ([String: Any]) -> Void) -> Void)?
 
+    /// Live-stream handler: subscribe `stream` to the pane's pty output and
+    /// return true, or return false when the pane has no terminal. Called on main.
+    var onStream: ((_ paneID: UUID, _ stream: RemoteTerminalStream) -> Bool)?
+
     private let queue = DispatchQueue(label: "com.boo.remotecontrol", qos: .utility)
 
     private static let maxRequestBytes = 65536
+    /// Open live streams at once. A browser holds at most 6 connections per
+    /// host, so the UI asks for fewer; this caps several browsers together.
+    static let maxStreams = 8
+
+    /// Live streams by connection. Touched only on `queue`.
+    private var streams: [Int32: RemoteTerminalStream] = [:]
 
     /// Owns the sockets, client tables, accept limit, idle deadlines and budgeted
     /// writes; this class supplies only the HTTP framing via `Delegate`.
@@ -219,6 +230,13 @@ final class RemoteControlServer: @unchecked Sendable {
             }
             lastActivity = booUptime()
             handleAPICommand(fd: fd, body: body)
+        case ("POST", "/api/stream"):
+            guard authorized(headerText: headerText) else {
+                sendJSON(fd: fd, status: "401 Unauthorized", dict: ["ok": false, "error": "unauthorized"])
+                return
+            }
+            lastActivity = booUptime()
+            handleStream(fd: fd, body: body)
         default:
             sendError(fd: fd, status: "404 Not Found")
         }
@@ -272,6 +290,80 @@ final class RemoteControlServer: @unchecked Sendable {
                 self.sendResponse(fd: fd, status: "200 OK", contentType: "application/json", body: body)
             }
         }
+    }
+
+    // MARK: - Live streams
+
+    /// `POST /api/stream` with `{"pane": "<uuid>"}`: hold the response open and
+    /// push the pane's pty output as `RemoteTerminalStream` frames until either
+    /// side closes. POST, not EventSource, because the token travels only in
+    /// the `Authorization` header.
+    private func handleStream(fd: Int32, body: Data) {
+        guard let json = try? JSONSerialization.jsonObject(with: body) as? [String: Any],
+            let paneID = (json["pane"] as? String).flatMap(UUID.init(uuidString:))
+        else {
+            sendJSON(fd: fd, status: "400 Bad Request", dict: ["ok": false, "error": "invalid json"])
+            return
+        }
+        guard streams.count < Self.maxStreams else {
+            sendJSON(fd: fd, status: "503 Service Unavailable", dict: ["ok": false, "error": "too many streams"])
+            return
+        }
+        guard let handler = onStream else {
+            sendJSON(fd: fd, status: "503 Service Unavailable", dict: ["ok": false, "error": "no handler"])
+            return
+        }
+        // The request is complete and the peer will send nothing more: the
+        // idle deadline would cut every stream after 15 seconds.
+        core.keepOpen(fd: fd)
+        let stream = RemoteTerminalStream(fd: fd, paneID: paneID, server: self)
+        streams[fd] = stream
+        DispatchQueue.main.async {
+            let attached = handler(paneID, stream)
+            self.queue.async {
+                // Gone while attaching: the close handler already queued
+                // `onClose`, which runs after this attach on main.
+                guard self.streams[fd] === stream else { return }
+                guard attached else {
+                    self.streams[fd] = nil
+                    self.sendJSON(fd: fd, status: "404 Not Found", dict: ["ok": false, "error": "no terminal"])
+                    return
+                }
+                guard
+                    self.core.write(
+                        fd: fd,
+                        Self.responseHead(status: "200 OK", contentType: "application/octet-stream", length: nil))
+                else { return }
+                stream.isOpen = true
+                self.writePending(stream)
+            }
+        }
+    }
+
+    /// Called from the io thread when `stream` has new frames.
+    func flushStream(_ stream: RemoteTerminalStream) {
+        queue.async { self.writePending(stream) }
+    }
+
+    /// End `stream` from the Boo side (its surface went away).
+    func endStream(_ stream: RemoteTerminalStream) {
+        queue.async {
+            guard self.streams[stream.fd] === stream else { return }
+            self.core.drop(fd: stream.fd)
+        }
+    }
+
+    private func writePending(_ stream: RemoteTerminalStream) {
+        // Not open yet: leave the frames queued, the open flushes them.
+        guard streams[stream.fd] === stream, stream.isOpen else { return }
+        let (data, overflowed) = stream.takePending()
+        if overflowed {
+            booLog(.info, .socket, "RemoteControl: stream fell behind, dropping fd=\(stream.fd)")
+            core.drop(fd: stream.fd)
+            return
+        }
+        guard !data.isEmpty else { return }
+        core.write(fd: stream.fd, data)
     }
 
     // MARK: - Responses
@@ -347,10 +439,20 @@ final class RemoteControlServer: @unchecked Sendable {
     }
 
     private func sendResponse(fd: Int32, status: String, contentType: String, body: Data) {
+        var response = Self.responseHead(status: status, contentType: contentType, length: body.count)
+        response.append(body)
+        core.write(fd: fd, response)
+        // `Connection: close`: the response is the whole conversation.
+        core.drop(fd: fd)
+    }
+
+    /// Status line and headers. Without `length` the body runs until the
+    /// connection closes, which is how a live stream is framed.
+    private static func responseHead(status: String, contentType: String, length: Int?) -> Data {
         var response = Data()
         response.append(Data("HTTP/1.1 \(status)\r\n".utf8))
         response.append(Data("Content-Type: \(contentType)\r\n".utf8))
-        response.append(Data("Content-Length: \(body.count)\r\n".utf8))
+        if let length { response.append(Data("Content-Length: \(length)\r\n".utf8)) }
         response.append(Data("Cache-Control: no-store\r\n".utf8))
         // The UI holds a live terminal, and the token travels in the URL fragment:
         // deny framing so no page can clickjack it, and suppress Referer so the
@@ -359,10 +461,7 @@ final class RemoteControlServer: @unchecked Sendable {
         response.append(Data("X-Frame-Options: DENY\r\n".utf8))
         response.append(Data("Referrer-Policy: no-referrer\r\n".utf8))
         response.append(Data("Connection: close\r\n\r\n".utf8))
-        response.append(body)
-        core.write(fd: fd, response)
-        // `Connection: close`: the response is the whole conversation.
-        core.drop(fd: fd)
+        return response
     }
 
     // MARK: - Helpers
@@ -434,5 +533,12 @@ extension RemoteControlServer: SocketServerCore.Delegate {
         return consumed
     }
 
-    func socketServerDidCloseClient(fd: Int32) {}
+    func socketServerDidCloseClient(fd: Int32) {
+        guard let stream = streams.removeValue(forKey: fd) else { return }
+        stream.markClosed()
+        DispatchQueue.main.async {
+            stream.onClose?()
+            stream.onClose = nil
+        }
+    }
 }

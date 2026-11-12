@@ -395,6 +395,12 @@ final class WindowManager {
                 WindowManager.shared.dispatchCommand(cmd: cmd, json: json, reply: reply)
             }
         }
+        RemoteControlServer.shared.onStream = { paneID, stream in
+            MainActor.assumeIsolated {
+                WindowManager.shared.controller(owningPane: paneID)?
+                    .remoteAttachStream(paneID: paneID, stream: stream) ?? false
+            }
+        }
         BooSocketServer.shared.onExternalSegmentsChanged = { segments in
             MainActor.assumeIsolated {
                 for c in WindowManager.shared.controllers {

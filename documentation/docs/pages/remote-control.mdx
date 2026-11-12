@@ -36,7 +36,7 @@ The page opens in **split view**: all panes of the active workspace, in their re
 
 Both choices are remembered on the device.
 
-The page only fetches panes whose content changed. It polls fast right after you type and slows down when the terminal is quiet. It stops while the page is in the background.
+Terminal panes on screen update live: Boo streams their output to the page as it happens, and the page renders it with Ghostty's own terminal parser. Up to four panes stream at once, the active one first. Other panes, and browsers that can't stream, fall back to snapshots: the page fetches only panes whose content changed, fast right after you type and slower when the terminal is quiet. Streaming and fetching both stop while the page is in the background.
 
 Workspaces in a [group](/features#workspaces) appear together in the workspace strip, under the group name.
 

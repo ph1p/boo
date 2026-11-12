@@ -477,9 +477,8 @@
   // formats the screen as HTML — the same emulator that rendered it in Boo.
 
   const GHOSTTY_SUCCESS = 0;
-  const GHOSTTY_FORMATTER_FORMAT_HTML = 2;
 
-  let wasm = null;       // { exports, layout, off } once loaded
+  let wasm = null;       // { exports, off } once loaded
   const utf8encode = new TextEncoder();
   const utf8decode = new TextDecoder();
 
@@ -493,15 +492,19 @@
       const exports = module.instance.exports;
       const jsonPtr = exports.ghostty_type_json();
       const mem = new Uint8Array(exports.memory.buffer, jsonPtr);
-      const layout = JSON.parse(utf8decode.decode(mem.subarray(0, mem.indexOf(0))));
-      // Resolve struct offsets once instead of on every frame.
-      const T = layout["GhosttyTerminalOptions"], F = layout["GhosttyFormatterTerminalOptions"];
+      const json = JSON.parse(utf8decode.decode(mem.subarray(0, mem.indexOf(0))));
+      // Newer modules nest the types under "types" next to ABI metadata.
+      const layout = json.types || json;
+      // Resolve struct offsets and enum values once instead of on every frame;
+      // enum numbers shift between libghostty-vt versions.
+      const F = layout["GhosttyFormatterTerminalOptions"];
       const X = layout["GhosttyFormatterTerminalExtra"], S = layout["GhosttyFormatterScreenExtra"];
       const extra = F.fields["extra"].offset;
       wasm = {
         exports,
         off: {
-          termSize: T.size, cols: T.fields["cols"], rows: T.fields["rows"], scrollback: T.fields["max_scrollback"],
+          scrollbackOpt: layout["GhosttyTerminalOption"].values["SCROLLBACK_MAX_BYTES"],
+          formatHTML: layout["GhosttyFormatterFormat"].values["HTML"],
           fmtSize: F.size, fSize: F.fields["size"], emit: F.fields["emit"], trim: F.fields["trim"],
           extraSizeAt: extra + X.fields["size"].offset, extraSize: X.size,
           paletteAt: extra + X.fields["palette"].offset,
@@ -513,76 +516,116 @@
     }
   }
 
+  // Writes a struct field. Enum-typed fields carry their enum's name as type.
   function setField(view, field, value) {
     switch (field.type) {
       case "u8": case "bool": view.setUint8(field.offset, value); break;
       case "u16": view.setUint16(field.offset, value, true); break;
-      case "u32": case "enum": view.setUint32(field.offset, value, true); break;
+      case "u32": view.setUint32(field.offset, value, true); break;
       case "u64": view.setBigUint64(field.offset, BigInt(value), true); break;
-      default: throw new Error("unsupported field type: " + field.type);
+      default:
+        if (field.size !== 4) throw new Error("unsupported field type: " + field.type);
+        view.setUint32(field.offset, value, true);
     }
   }
 
-  // Replay a VT snapshot into a wasm terminal and return the screen as HTML.
-  function vtToHTML(vtText, cols, rows) {
+  // Reads the handle a constructor stored in an opaque slot, then frees it.
+  function takeHandle(slot) {
+    const ex = wasm.exports;
+    const handle = new DataView(ex.memory.buffer).getUint32(slot, true);
+    ex.ghostty_wasm_free_opaque(slot);
+    return handle;
+  }
+
+  // A wasm terminal of cols × rows without scrollback. Free it with freeTerm.
+  function newTerm(cols, rows) {
+    const ex = wasm.exports;
+    const slot = ex.ghostty_wasm_alloc_opaque();
+    const newResult = ex.ghostty_terminal_new(0, slot, cols, rows);
+    if (newResult !== GHOSTTY_SUCCESS) {
+      ex.ghostty_wasm_free_opaque(slot);
+      throw new Error("terminal_new: " + newResult);
+    }
+    const termPtr = takeHandle(slot);
+    // size_t is 4 bytes on wasm32; zero disables scrollback.
+    const zeroPtr = ex.ghostty_wasm_alloc(4);
+    new DataView(ex.memory.buffer).setUint32(zeroPtr, 0, true);
+    ex.ghostty_terminal_set(termPtr, wasm.off.scrollbackOpt, zeroPtr);
+    ex.ghostty_wasm_free(zeroPtr, 4);
+    return termPtr;
+  }
+
+  function freeTerm(termPtr) {
+    if (termPtr) wasm.exports.ghostty_terminal_free(termPtr);
+  }
+
+  function resizeTerm(termPtr, cols, rows) {
+    const r = wasm.exports.ghostty_terminal_resize(termPtr, cols, rows, 1, 1);
+    if (r !== GHOSTTY_SUCCESS) throw new Error("terminal_resize: " + r);
+  }
+
+  // Feed raw VT bytes (a Uint8Array) to the terminal's parser.
+  function writeVT(termPtr, bytes) {
+    if (!bytes.length) return;
+    const ex = wasm.exports;
+    const dataPtr = ex.ghostty_wasm_alloc(bytes.length);
+    new Uint8Array(ex.memory.buffer).set(bytes, dataPtr);
+    ex.ghostty_terminal_vt_write(termPtr, dataPtr, bytes.length);
+    ex.ghostty_wasm_free(dataPtr, bytes.length);
+  }
+
+  // The terminal's screen as HTML, colors resolved through its palette.
+  function formatHTML(termPtr) {
     const ex = wasm.exports, o = wasm.off;
     const buf = () => ex.memory.buffer;
-    let termPtr = 0, fmtPtr = 0;
+    let fmtPtr = 0;
     try {
-      const termOptsPtr = ex.ghostty_wasm_alloc_u8_array(o.termSize);
-      new Uint8Array(buf(), termOptsPtr, o.termSize).fill(0);
-      const termOpts = new DataView(buf(), termOptsPtr, o.termSize);
-      setField(termOpts, o.cols, cols);
-      setField(termOpts, o.rows, rows);
-      setField(termOpts, o.scrollback, 0);
-      const termPtrPtr = ex.ghostty_wasm_alloc_opaque();
-      const newResult = ex.ghostty_terminal_new(0, termPtrPtr, termOptsPtr);
-      ex.ghostty_wasm_free_u8_array(termOptsPtr, o.termSize);
-      if (newResult !== GHOSTTY_SUCCESS) throw new Error("terminal_new: " + newResult);
-      termPtr = new DataView(buf()).getUint32(termPtrPtr, true);
-      ex.ghostty_wasm_free_opaque(termPtrPtr);
-
-      const vtBytes = utf8encode.encode(vtText);
-      const dataPtr = ex.ghostty_wasm_alloc_u8_array(vtBytes.length);
-      new Uint8Array(buf()).set(vtBytes, dataPtr);
-      ex.ghostty_terminal_vt_write(termPtr, dataPtr, vtBytes.length);
-      ex.ghostty_wasm_free_u8_array(dataPtr, vtBytes.length);
-
-      const fmtOptsPtr = ex.ghostty_wasm_alloc_u8_array(o.fmtSize);
+      const fmtOptsPtr = ex.ghostty_wasm_alloc(o.fmtSize);
       new Uint8Array(buf(), fmtOptsPtr, o.fmtSize).fill(0);
       const fmtOpts = new DataView(buf(), fmtOptsPtr, o.fmtSize);
       setField(fmtOpts, o.fSize, o.fmtSize);
-      setField(fmtOpts, o.emit, GHOSTTY_FORMATTER_FORMAT_HTML);
+      setField(fmtOpts, o.emit, o.formatHTML);
       setField(fmtOpts, o.trim, 1);
       fmtOpts.setUint32(o.extraSizeAt, o.extraSize, true);
       fmtOpts.setUint8(o.paletteAt, 1);
       fmtOpts.setUint32(o.screenSizeAt, o.screenSize, true);
 
-      const fmtPtrPtr = ex.ghostty_wasm_alloc_opaque();
-      const fmtResult = ex.ghostty_formatter_terminal_new(0, fmtPtrPtr, termPtr, fmtOptsPtr);
-      ex.ghostty_wasm_free_u8_array(fmtOptsPtr, o.fmtSize);
-      if (fmtResult !== GHOSTTY_SUCCESS) throw new Error("formatter_new: " + fmtResult);
-      fmtPtr = new DataView(buf()).getUint32(fmtPtrPtr, true);
-      ex.ghostty_wasm_free_opaque(fmtPtrPtr);
+      const slot = ex.ghostty_wasm_alloc_opaque();
+      const fmtResult = ex.ghostty_formatter_terminal_new(0, slot, termPtr, fmtOptsPtr);
+      ex.ghostty_wasm_free(fmtOptsPtr, o.fmtSize);
+      if (fmtResult !== GHOSTTY_SUCCESS) {
+        ex.ghostty_wasm_free_opaque(slot);
+        throw new Error("formatter_new: " + fmtResult);
+      }
+      fmtPtr = takeHandle(slot);
 
-      const outPtrPtr = ex.ghostty_wasm_alloc_opaque();
-      const outLenPtr = ex.ghostty_wasm_alloc_usize();
-      const formatResult = ex.ghostty_formatter_format_alloc(fmtPtr, 0, outPtrPtr, outLenPtr);
+      // Out pointer and out length, 4 bytes each on wasm32.
+      const outPtr8 = ex.ghostty_wasm_alloc(8);
+      const formatResult = ex.ghostty_formatter_format_alloc(fmtPtr, 0, outPtr8, outPtr8 + 4);
       if (formatResult !== GHOSTTY_SUCCESS) {
-        ex.ghostty_wasm_free_opaque(outPtrPtr);
-        ex.ghostty_wasm_free_usize(outLenPtr);
+        ex.ghostty_wasm_free(outPtr8, 8);
         throw new Error("format_alloc: " + formatResult);
       }
-      const outPtr = new DataView(buf()).getUint32(outPtrPtr, true);
-      const outLen = new DataView(buf()).getUint32(outLenPtr, true);
+      const outPtr = new DataView(buf()).getUint32(outPtr8, true);
+      const outLen = new DataView(buf()).getUint32(outPtr8 + 4, true);
+      ex.ghostty_wasm_free(outPtr8, 8);
+      if (!outPtr) return "";
       const html = utf8decode.decode(new Uint8Array(buf(), outPtr, outLen));
       ex.ghostty_free(0, outPtr, outLen);
-      ex.ghostty_wasm_free_opaque(outPtrPtr);
-      ex.ghostty_wasm_free_usize(outLenPtr);
       return html;
     } finally {
       if (fmtPtr) ex.ghostty_formatter_free(fmtPtr);
-      if (termPtr) ex.ghostty_terminal_free(termPtr);
+    }
+  }
+
+  // Replay a VT snapshot into a throwaway terminal and return the screen as HTML.
+  function vtToHTML(vtText, cols, rows) {
+    const termPtr = newTerm(cols, rows);
+    try {
+      writeVT(termPtr, utf8encode.encode(vtText));
+      return formatHTML(termPtr);
+    } finally {
+      freeTerm(termPtr);
     }
   }
 
@@ -776,7 +819,11 @@
     if (key !== layoutKey) {
       layoutKey = key;
       const ids = new Set(leaves);
-      for (const id of paneNodes.keys()) if (!ids.has(id)) paneNodes.delete(id);
+      for (const [id, n] of paneNodes) {
+        if (ids.has(id)) continue;
+        closeStream(n);
+        paneNodes.delete(id);
+      }
       stage.className = all ? "multi" : "single";
       if (!view.layout) {
         stage.replaceChildren(el("div", "placeholder", "No active workspace"));
@@ -832,6 +879,8 @@
     const n = paneNode(id);
     n.title.textContent = p.title || p.kind || "pane";
     n.count.textContent = p.tabs > 1 ? String(p.tabs) : "";
+    // Live: the stream paints this pane, the poll only names it.
+    if (p.live) return;
     if (!p.hash) {
       if (n.hash !== "none:" + p.kind) {
         n.hash = "none:" + p.kind;
@@ -989,9 +1038,12 @@
 
   // Returns true when any pane changed.
   async function refreshView() {
-    const known = {};
-    for (const [id, n] of paneNodes) if (n.hash && !n.hash.startsWith("none:")) known[id] = n.hash;
-    const v = await api("get_view", { known });
+    const known = {}, streamed = [];
+    for (const [id, n] of paneNodes) {
+      if (n.live && n.live.ok) streamed.push(id);
+      else if (n.hash && !n.hash.startsWith("none:")) known[id] = n.hash;
+    }
+    const v = await api("get_view", { known, streamed });
     if (!v.ok) return false;
     let changed = false;
     const prevActive = view.active;
@@ -1013,6 +1065,7 @@
       + (active.title ? active.title + " — Boo" : "Boo Remote Control");
     if (prevActive !== view.active) { stripKey = ""; renderStrips(); }
     updateToBottom();
+    syncStreams();
     return changed;
   }
 
@@ -1074,13 +1127,149 @@
   }
   function stopLoop() {
     running = false;
+    closeAllStreams();
     clearTimeout(timer);
     timer = null;
   }
 
   document.addEventListener("visibilitychange", () => {
-    if (!document.hidden && running) kick(true);
+    if (document.hidden) closeAllStreams();
+    else if (running) kick(true);
   });
+
+  // --- Live streams ----------------------------------------------------
+  // Visible terminal panes get their pty output pushed over /api/stream and
+  // fed into a persistent wasm terminal per pane; polling then only carries
+  // layout and titles for them. A pane whose stream fails falls back to
+  // polled snapshots and retries a few seconds later.
+
+  // Browsers allow 6 connections per host; leave room for API requests.
+  const MAX_STREAMS = 4;
+  const STREAM_OUTPUT = 1, STREAM_RESIZE = 2;
+  const STREAM_RETRY_MS = 3000;
+  const RENDER_MIN_MS = 33;
+  const streamRetryAt = new Map();   // pane id → earliest reconnect time
+
+  function openStream(id, n, tab) {
+    const live = { ctl: new AbortController(), tab, term: 0, cols: 0, rows: 0, ok: false, timer: 0, lastRender: 0 };
+    n.live = live;
+    (async () => {
+      let retry = true;
+      try {
+        const res = await fetch("/api/stream", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Authorization": "Bearer " + token },
+          body: JSON.stringify({ pane: id }),
+          signal: live.ctl.signal,
+          cache: "no-store"
+        });
+        if (res.status === 401) { retry = false; showAuth(); return; }
+        if (!res.ok || !res.body) return;
+        const reader = res.body.getReader();
+        let rest = null;
+        for (;;) {
+          const { value, done } = await reader.read();
+          if (done || n.live !== live) break;
+          let bytes = value;
+          if (rest) {
+            bytes = new Uint8Array(rest.length + value.length);
+            bytes.set(rest);
+            bytes.set(value, rest.length);
+          }
+          rest = feedFrames(id, n, live, bytes);
+        }
+      } catch (_) {
+        // Aborted on purpose, or the connection broke.
+      } finally {
+        if (live.ctl.signal.aborted) retry = false;
+        endStream(id, n, live, retry);
+      }
+    })();
+  }
+
+  // Apply every complete frame in `bytes`; return the incomplete tail, if any.
+  function feedFrames(id, n, live, bytes) {
+    const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    let off = 0;
+    while (bytes.length - off >= 5) {
+      const type = bytes[off];
+      const len = dv.getUint32(off + 1, true);
+      if (bytes.length - off - 5 < len) break;
+      const payload = bytes.subarray(off + 5, off + 5 + len);
+      off += 5 + len;
+      if (type === STREAM_RESIZE && len >= 4) {
+        const cols = dv.getUint16(off - len, true), rows = dv.getUint16(off - len + 2, true);
+        if (!cols || !rows) continue;
+        if (!live.term) live.term = newTerm(cols, rows);
+        else if (cols !== live.cols || rows !== live.rows) resizeTerm(live.term, cols, rows);
+        live.cols = cols;
+        live.rows = rows;
+        if (!live.ok) { live.ok = true; n.hash = "live"; }
+        scheduleLiveRender(n, live);
+      } else if (type === STREAM_OUTPUT && live.term) {
+        writeVT(live.term, payload);
+        scheduleLiveRender(n, live);
+      }
+    }
+    return off < bytes.length ? bytes.slice(off) : null;
+  }
+
+  // Coalesce output into at most one repaint per frame, and no more often
+  // than RENDER_MIN_MS: formatting the whole screen is the costly part.
+  function scheduleLiveRender(n, live) {
+    if (live.timer) return;
+    const wait = Math.max(0, live.lastRender + RENDER_MIN_MS - performance.now());
+    live.timer = setTimeout(() => requestAnimationFrame(() => {
+      live.timer = 0;
+      if (!live.term || n.live !== live) return;
+      live.lastRender = performance.now();
+      n.screen.innerHTML = formatHTML(live.term);
+      if (n.cols !== live.cols) { n.cols = live.cols; fitPane(n); }
+      if (n.stick) n.wrap.scrollTop = n.wrap.scrollHeight;
+    }), wait);
+  }
+
+  function endStream(id, n, live, retry) {
+    clearTimeout(live.timer);
+    freeTerm(live.term);
+    live.term = 0;
+    if (n.live !== live) return;
+    n.live = null;
+    n.hash = null;   // the next poll brings a snapshot
+    if (retry) streamRetryAt.set(id, performance.now() + STREAM_RETRY_MS);
+    kick(false);
+  }
+
+  function closeStream(n) {
+    if (n.live) n.live.ctl.abort();
+  }
+  function closeAllStreams() {
+    for (const n of paneNodes.values()) closeStream(n);
+  }
+
+  // Stream the panes on screen (the active one first), close the rest.
+  function syncStreams() {
+    if (!wasm || !running || document.hidden || !window.ReadableStream) { closeAllStreams(); return; }
+    const leaves = leafIDs(view.layout);
+    const shown = $("stage").classList.contains("multi") ? leaves : [view.active];
+    const order = [view.active, ...shown.filter((id) => id !== view.active)];
+    const want = new Map();
+    for (const id of order) {
+      const p = view.panes[id];
+      if (!p || !p.cols || !shown.includes(id)) continue;
+      if (want.size >= MAX_STREAMS) break;
+      want.set(id, p.tab || "");
+    }
+    for (const [id, n] of paneNodes) {
+      if (n.live && want.get(id) !== n.live.tab) closeStream(n);
+    }
+    const now = performance.now();
+    for (const [id, tab] of want) {
+      const n = paneNodes.get(id);
+      if (!n || n.live || (streamRetryAt.get(id) || 0) > now) continue;
+      openStream(id, n, tab);
+    }
+  }
 
   // Run an action, then refresh everything quickly.
   async function act(fn) {

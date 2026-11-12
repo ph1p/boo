@@ -87,12 +87,15 @@ extension MainWindowController {
     /// Split layout plus every visible pane's screen, for the web UI's split view.
     /// `known` maps pane id → the hash the client already shows; such panes come
     /// back without their (large) VT snapshot.
+    /// `streamed` lists panes whose output the client receives live over
+    /// `/api/stream`; those skip the snapshot entirely and report only the size.
     func remoteGetView(json: [String: Any], reply: @escaping ([String: Any]) -> Void) {
         guard let ws = activeWorkspace else {
             reply(["ok": true, "layout": NSNull(), "panes": [String: Any](), "active": ""])
             return
         }
         let known = json["known"] as? [String: Any] ?? [:]
+        let streamed = Set(json["streamed"] as? [String] ?? [])
         let tree = ws.displayedTree
         var panes: [String: Any] = [:]
         for paneID in tree.leafIDs {
@@ -105,11 +108,19 @@ extension MainWindowController {
                 "kind": tab?.contentType.rawValue ?? "terminal",
                 "tabs": pane.tabs.count
             ]
+            if let tab { entry["tab"] = tab.id.uuidString }
             if let gv = terminalView(workspace: ws, paneID: paneID),
                 let grid = gv.gridSize, grid.columns > 0, grid.rows > 0
             {
                 let cols = Int(grid.columns)
                 let rows = Int(grid.rows)
+                if streamed.contains(key) {
+                    entry["cols"] = cols
+                    entry["rows"] = rows
+                    entry["live"] = true
+                    panes[key] = entry
+                    continue
+                }
                 // Styled VT for the wasm renderer; plain text only when that fails.
                 let vt = gv.readViewportStyled()
                 let body = vt ?? gv.readViewportText() ?? ""
@@ -343,5 +354,27 @@ extension MainWindowController: NSMenuItemValidation {
         default:
             return true
         }
+    }
+}
+
+// MARK: - Live stream
+
+extension MainWindowController {
+
+    /// Subscribe `stream` to the pty output of the terminal shown in `paneID`,
+    /// starting with a snapshot of its screen. False when the pane shows no
+    /// terminal. The stream ends when the browser disconnects or the surface
+    /// is torn down.
+    func remoteAttachStream(paneID: UUID, stream: RemoteTerminalStream) -> Bool {
+        guard let ws = appState.workspaceContainingPane(paneID),
+            let gv = terminalView(workspace: ws, paneID: paneID),
+            let surface = gv.surface
+        else { return false }
+        stream.onClose = { [weak gv] in
+            guard let gv else { return }
+            gv.outputTap.remove(stream, surface: gv.surface)
+        }
+        gv.outputTap.add(stream, snapshot: true, surface: surface)
+        return true
     }
 }
