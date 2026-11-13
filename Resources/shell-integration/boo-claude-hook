@@ -4,8 +4,10 @@
 # Claude Code: registered for SessionStart, UserPromptSubmit, PostToolUse,
 # Notification, Stop and SessionEnd; the event comes from the JSON payload on
 # stdin. On SessionStart it prints context that teaches the agent the `boo` CLI.
-# Codex: notify = ["~/.boo/shell-integration/boo-claude-hook", "codex"]
-# (Codex appends its JSON payload as the last argument).
+# Codex: ~/.codex/hooks.json runs `boo-claude-hook codex-hooks` per event, with
+# the JSON payload on stdin (Claude's format). Also, while the slot is free,
+# notify = ["~/.boo/shell-integration/boo-claude-hook", "codex"]
+# (Codex appends its JSON payload as the last argument; turn ends only).
 # GitHub Copilot CLI: ~/.copilot/hooks/boo.json runs `boo-claude-hook copilot
 # <event>` per event, with Copilot's JSON payload on stdin.
 #
@@ -76,6 +78,19 @@ def event_for_copilot(name, p):
         return "end", None, None
     return None, None, None
 
+def event_for_codex(p):
+    name = p.get("hook_event_name", "")
+    if name == "PermissionRequest":
+        tool = p.get("tool_name")
+        command = (p.get("tool_input") or {}).get("command")
+        if isinstance(command, list):
+            command = " ".join(str(c) for c in command)
+        message = "wants to run " + command if isinstance(command, str) and command else "needs your permission"
+        return "permission", message, tool
+    if name == "Interrupt":
+        return "stop", None, None
+    return event_for_claude(p)
+
 CREW_CONTEXT = """You run in a tab of Boo, a terminal app for coding agents. When the user \
 wants another agent (a helper beside you, parallel work, a second opinion), start a real \
 one with the `boo` CLI instead of an in-process subagent, so the user can watch and talk to it:
@@ -136,6 +151,21 @@ if args and args[0] == "codex":
     if payload.get("type") != "agent-turn-complete":
         sys.exit(0)
     event, message, tool = "stop", None, None
+elif args and args[0] == "codex-hooks":
+    agent = "codex"
+    try:
+        payload = json.load(sys.stdin)
+    except Exception:
+        payload = {}
+    if payload.get("hook_event_name") == "SessionStart":
+        print(json.dumps({"hookSpecificOutput": {
+            "hookEventName": "SessionStart", "additionalContext": CREW_CONTEXT}}))
+        sys.stdout.flush()
+        event, message, tool = "start", None, None
+    else:
+        event, message, tool = event_for_codex(payload)
+    if event is None:
+        sys.exit(0)
 elif args and args[0] == "copilot":
     agent = "copilot"
     name = args[1] if len(args) > 1 else ""

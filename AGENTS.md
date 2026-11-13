@@ -295,8 +295,8 @@ Wraps `AgentSession` with `paneID`, `tabID`, `tabTitle`, and `isFocused` so the 
   Switching off also clears `AgentInbox` (badges, segment and jump read it), and the inbox ignores
   `agent_event`s while off.
 - **Integration install** (`BooPaths.syncAgentIntegration`, `BooPaths+AgentIntegration.swift`, re-run on
-  `.plugins` settings changes; the files are written on a background queue). On: installs the MCP launcher, the Claude hook, Codex's top-level `notify`
-  in `~/.codex/config.toml` (skipped when the user already has one) and the OpenCode plugin
+  `.plugins` settings changes; the files are written on a background queue). On: installs the MCP launcher, the Claude hook, Codex hooks in `~/.codex/hooks.json` (Codex asks the user to trust
+  them once via `/hooks`) plus its top-level `notify` in `~/.codex/config.toml` (skipped when the user already has one) and the OpenCode plugin
   `~/.config/opencode/plugins/boo.js` (only when those folders exist). Off: writes `~/.boo/agents-disabled`;
   installed hooks and the OpenCode plugin see the flag and do nothing.
 - **Agents menu** (`MainWindowController+AgentMenu.swift`): New Agent… (⌥⌘N), New <Agent> Tab per installed

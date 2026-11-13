@@ -22,5 +22,8 @@ struct CodexAdapter: AgentAdapter {
         ]
     }
 
-    func installIntegration() { BooPaths.installCodexNotify() }
+    func installIntegration() {
+        BooPaths.installCodexHooks()
+        BooPaths.installCodexNotify()
+    }
 }

@@ -31,6 +31,33 @@ final class AgentIntegrationTests: XCTestCase {
         XCTAssertNotNil(BooPaths.mergingCodexNotify(hook: "/h", into: config))
     }
 
+    // MARK: Codex hooks
+
+    func testCodexHooksCoverEveryEventInSync() throws {
+        let command = BooPaths.codexHookCommand
+        let user: [String: Any] = ["hooks": [["type": "command", "command": "my-stop"]]]
+        let merged = try XCTUnwrap(
+            BooPaths.mergingClaudeHook(
+                command: command, into: ["hooks": ["Stop": [user]]], events: BooPaths.codexHookEvents,
+                matchers: [:], async: false, timeout: 3))
+        let hooks = try XCTUnwrap(merged["hooks"] as? [String: Any])
+        XCTAssertEqual(Set(hooks.keys), Set(BooPaths.codexHookEvents))
+        for event in BooPaths.codexHookEvents {
+            let entry = try XCTUnwrap((hooks[event] as? [[String: Any]])?.last, event)
+            XCTAssertNil(entry["matcher"], event)
+            let hook = try XCTUnwrap((entry["hooks"] as? [[String: Any]])?.first, event)
+            XCTAssertEqual(hook["command"] as? String, command, event)
+            XCTAssertNil(hook["async"], event)
+        }
+        XCTAssertEqual((hooks["Stop"] as? [[String: Any]])?.count, 2, "the user's own Stop hook stays")
+        XCTAssertTrue(command.hasSuffix(" codex-hooks"))
+        XCTAssertNil(
+            BooPaths.mergingClaudeHook(
+                command: command, into: merged, events: BooPaths.codexHookEvents, matchers: [:], async: false,
+                timeout: 3),
+            "second run changes nothing")
+    }
+
     // MARK: Composer drafts
 
     func testClosingKeepsTheDraftForTheNextOpen() {

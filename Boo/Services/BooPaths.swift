@@ -246,22 +246,26 @@ enum BooPaths {
         try? updated.write(to: URL(fileURLWithPath: settingsPath))
     }
 
-    /// `root` with the hook added for every event in `claudeHookEvents` that
-    /// lacks it; nil when nothing changes.
-    static func mergingClaudeHook(command: String, into root: [String: Any]) -> [String: Any]? {
+    /// `root` with the hook added for every event in `events` that lacks it;
+    /// nil when nothing changes. Defaults to Claude Code's events; Codex reads
+    /// the same format from ~/.codex/hooks.json, but runs every hook in sync.
+    static func mergingClaudeHook(
+        command: String, into root: [String: Any], events: [String] = claudeHookEvents,
+        matchers: [String: String] = claudeHookMatchers, async: Bool = true, timeout: Int = 5
+    ) -> [String: Any]? {
         var hooks = root["hooks"] as? [String: Any] ?? [:]
         var changed = false
-        for event in claudeHookEvents {
+        for event in events {
             var entries = hooks[event] as? [[String: Any]] ?? []
             let present = entries.contains { entry in
                 (entry["hooks"] as? [[String: Any]])?.contains { ($0["command"] as? String) == command } ?? false
             }
             guard !present else { continue }
-            var hook: [String: Any] = ["type": "command", "command": command, "timeout": 5]
+            var hook: [String: Any] = ["type": "command", "command": command, "timeout": timeout]
             // Claude reads a hook's context only when it waits for the hook.
-            if event != "SessionStart" { hook["async"] = true }
+            if async && event != "SessionStart" { hook["async"] = true }
             var entry: [String: Any] = ["hooks": [hook]]
-            if let matcher = claudeHookMatchers[event] { entry["matcher"] = matcher }
+            if let matcher = matchers[event] { entry["matcher"] = matcher }
             entries.append(entry)
             hooks[event] = entries
             changed = true

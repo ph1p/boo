@@ -54,6 +54,39 @@ extension BooPaths {
         try? merged.write(toFile: configPath, atomically: true, encoding: .utf8)
     }
 
+    /// Codex lifecycle hooks the agent hook reports to Boo's agent inbox, plus
+    /// SessionStart, where it tells the agent about the `boo` CLI.
+    static let codexHookEvents = [
+        "SessionStart", "UserPromptSubmit", "PostToolUse", "PermissionRequest", "Stop", "Interrupt", "SessionEnd"
+    ]
+
+    /// Adds Boo's hook to ~/.codex/hooks.json for every event in
+    /// `codexHookEvents`, so Boo sees when Codex works, waits for a permission
+    /// and finishes. `notify` alone only reports finished turns, and only while
+    /// no other program holds it. Codex asks the user to review new hooks once
+    /// (`/hooks`) before it runs them. Skipped while Codex was never set up.
+    static func installCodexHooks() {
+        let codexDir = NSHomeDirectory().appendingPathComponent(".codex")
+        guard FileManager.default.fileExists(atPath: codexDir) else { return }
+        let path = codexDir.appendingPathComponent("hooks.json")
+        var root: [String: Any] = [:]
+        if let data = FileManager.default.contents(atPath: path) {
+            // Never overwrite a file we can't read back.
+            guard let parsed = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else { return }
+            root = parsed
+        }
+        guard
+            let merged = mergingClaudeHook(
+                command: codexHookCommand, into: root, events: codexHookEvents, matchers: [:], async: false,
+                timeout: 3),
+            let data = try? JSONSerialization.data(withJSONObject: merged, options: [.prettyPrinted, .sortedKeys])
+        else { return }
+        AgentIntegrationFiles.write(data, to: path)
+    }
+
+    /// The command Codex's hooks run: the payload comes on stdin.
+    static var codexHookCommand: String { shellEscape(agentHookPath) + " codex-hooks" }
+
     /// `toml` with `notify = [hook, "codex"]` as its first line; nil when it
     /// already sets a top-level `notify` (ours or another program's).
     static func mergingCodexNotify(hook: String, into toml: String) -> String? {
