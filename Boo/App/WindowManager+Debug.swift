@@ -4,9 +4,18 @@
     /// Dev builds only: socket commands that let a script see and drive the UI
     /// without screen-recording or accessibility permission.
     ///
-    /// - `debug_snapshot {path, sidebar_tab?, dialog?, settings_plugin?}`: draws the first window
-    ///   (or, with `dialog: true`, its open sheet or modal alert; with `settings_plugin`, the
-    ///   Settings window open on that plugin's page) to a PNG.
+    /// - `debug_snapshot {path, sidebar_tab?, dialog?, settings_plugin?, scale?, children?}`: draws the
+    ///   first window (or, with `dialog: true`, its open sheet or modal alert; with `settings_plugin`,
+    ///   the Settings window open on that plugin's page) to a PNG. `scale` is pixels per point
+    ///   (default: the screen's). `children: true` also draws the window's child windows, such as
+    ///   the command palette, where they sit over it.
+    /// - `debug_window {width, height}`: resizes the first window (points).
+    /// - `debug_workspace {name}`: renames the active workspace.
+    /// - `debug_action {selector}`: sends a menu action to the first window's controller, for
+    ///   example `showCommandPaletteAction:`, `quickSelectAction:` or `toggleOrchestratorAction:`.
+    /// - `debug_palette {query?}`: opens the command palette over the first window with `query`
+    ///   typed. In an app that is not frontmost the menu actions are disabled, so a screenshot
+    ///   wants a query that lists something else.
     /// - `debug_crew_action {action, handle?|name?, text?}`: what a crew sidebar button does
     ///   (`show`, `message`, `resume`, `review`, `merge`, `discard`, `allow`, `deny`, `new_task`).
     ///   `message` and `new_task` open their inline field, or send `text` right away.
@@ -34,15 +43,57 @@
                     window = SettingsWindowController.shared.window
                     window?.contentView?.layoutSubtreeIfNeeded()
                 }
-                guard let view = window?.contentView?.superview ?? window?.contentView,
-                    let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds)
-                else {
+                let scale = (json["scale"] as? NSNumber).map { CGFloat($0.doubleValue) }
+                guard let window, let rep = Self.snapshot(of: window, scale: scale) else {
                     reply(["ok": false, "error": "no window"])
                     return true
                 }
-                view.cacheDisplay(in: view.bounds, to: rep)
+                if json["children"] as? Bool == true {
+                    Self.draw(children: window.childWindows ?? [], of: window, into: rep, scale: scale)
+                }
                 let png = rep.representation(using: .png, properties: [:])
                 reply(["ok": (try? png?.write(to: URL(fileURLWithPath: path))) != nil, "path": path])
+            case "debug_workspace":
+                guard let controller = controllers.first, let workspace = controller.activeWorkspace,
+                    let name = json["name"] as? String
+                else {
+                    reply(["ok": false, "error": "no workspace or name"])
+                    return true
+                }
+                workspace.customName = name
+                controller.refreshToolbar()
+                reply(["ok": true])
+            case "debug_window":
+                guard let window = controllers.first?.window,
+                    let width = (json["width"] as? NSNumber)?.doubleValue,
+                    let height = (json["height"] as? NSNumber)?.doubleValue
+                else {
+                    reply(["ok": false, "error": "no window or size"])
+                    return true
+                }
+                var frame = window.frame
+                frame.origin.y += frame.height - height
+                frame.size = NSSize(width: width, height: height)
+                window.setFrame(frame, display: true)
+                window.contentView?.layoutSubtreeIfNeeded()
+                reply(["ok": true, "width": window.frame.width, "height": window.frame.height])
+            case "debug_action":
+                guard let controller = controllers.first, let name = json["selector"] as? String,
+                    controller.responds(to: Selector(name))
+                else {
+                    reply(["ok": false, "error": "no window or unknown selector"])
+                    return true
+                }
+                reply(["ok": true])
+                Self.onMainRunLoop { NSApp.sendAction(Selector(name), to: controller, from: nil) }
+            case "debug_palette":
+                guard let window = controllers.first?.window else {
+                    reply(["ok": false, "error": "no window"])
+                    return true
+                }
+                reply(["ok": true])
+                let query = json["query"] as? String ?? ""
+                Self.onMainRunLoop { CommandPaletteController.shared.open(over: window, query: query) }
             case "debug_crew_action":
                 guard let action = (json["action"] as? String).flatMap(AgentsPlugin.CrewAction.init) else {
                     reply(["ok": false, "error": "unknown action"])
@@ -148,6 +199,45 @@
                 return false
             }
             return true
+        }
+
+        /// The window's frame view as a bitmap, `scale` pixels per point.
+        private static func snapshot(of window: NSWindow, scale: CGFloat?) -> NSBitmapImageRep? {
+            guard let view = window.contentView?.superview ?? window.contentView else { return nil }
+            let rep: NSBitmapImageRep?
+            if let scale {
+                rep = NSBitmapImageRep(
+                    bitmapDataPlanes: nil, pixelsWide: Int(view.bounds.width * scale),
+                    pixelsHigh: Int(view.bounds.height * scale), bitsPerSample: 8, samplesPerPixel: 4,
+                    hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)
+                rep?.size = view.bounds.size
+            } else {
+                rep = view.bitmapImageRepForCachingDisplay(in: view.bounds)
+            }
+            guard let rep else { return nil }
+            view.cacheDisplay(in: view.bounds, to: rep)
+            return rep
+        }
+
+        /// Draws each child window into `rep` at its place over `parent`.
+        private static func draw(children: [NSWindow], of parent: NSWindow, into rep: NSBitmapImageRep, scale: CGFloat?)
+        {
+            guard let context = NSGraphicsContext(bitmapImageRep: rep) else { return }
+            NSGraphicsContext.saveGraphicsState()
+            NSGraphicsContext.current = context
+            for child in children where child.isVisible {
+                guard let image = snapshot(of: child, scale: scale) else { continue }
+                let origin = NSPoint(
+                    x: child.frame.minX - parent.frame.minX, y: child.frame.minY - parent.frame.minY)
+                let rect = NSRect(origin: origin, size: child.frame.size)
+                // A clear panel with a rounded content view snapshots with white corners.
+                let radius = child.contentView?.layer?.cornerRadius ?? 0
+                NSGraphicsContext.saveGraphicsState()
+                NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius).addClip()
+                image.draw(in: rect)
+                NSGraphicsContext.restoreGraphicsState()
+            }
+            NSGraphicsContext.restoreGraphicsState()
         }
 
         private func openDialog() -> NSWindow? {

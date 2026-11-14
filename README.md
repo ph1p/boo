@@ -9,7 +9,10 @@ A native macOS terminal with workspaces, split panes, a file explorer and agent 
 ## Screenshots
 
 <p align="center">
-  <img width="100%" alt="Boo with split panes and the file explorer" src="./documentation/public/app.png" />
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="./documentation/public/app-dark.png" />
+    <img width="100%" alt="Boo with split panes and the file explorer" src="./documentation/public/app-light.png" />
+  </picture>
   <img width="100%" alt="Boo with a git diff and the Git sidebar" src="./documentation/public/git.png" />
 </p>
 

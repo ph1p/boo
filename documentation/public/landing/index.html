@@ -20,11 +20,17 @@
 <meta name="twitter:description" content="Workspaces, split panes, a file explorer and agent tools. Built on Ghostty.">
 <meta name="twitter:image" content="https://ph1p.github.io/boo/social-preview.png">
 <link rel="icon" href="/boo/landing/img/icon-dark.png">
-<link rel="preload" as="image" href="/boo/landing/img/hero.webp" fetchpriority="high">
+<link rel="preload" as="image" href="/boo/landing/img/hero-light.webp" media="(prefers-color-scheme: light)" fetchpriority="high">
+<link rel="preload" as="image" href="/boo/landing/img/hero-dark.webp" media="(prefers-color-scheme: dark)" fetchpriority="high">
 <meta name="theme-color" content="#fafafa" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#0a0a0a" media="(prefers-color-scheme: dark)">
 <script>
   try { const t = localStorage.getItem('boo-theme'); if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; } catch {}
+  // The hero is a <picture> that follows the system; a stored choice overrides its media query.
+  function booHeroShot() {
+    const source = document.querySelector('#hero-shot source'), t = document.documentElement.dataset.theme;
+    if (source) source.media = t === 'dark' ? 'all' : t === 'light' ? 'not all' : '(prefers-color-scheme: dark)';
+  }
 </script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -196,6 +202,14 @@ h1 .grad { background: linear-gradient(90deg, var(--g1), var(--g2)); -webkit-bac
   box-shadow: 0 30px 80px -24px var(--shadow), 0 0 0 1px var(--line);
 }
 .shot img { width: 100%; height: auto; }
+/* Screenshots come in pairs; the page theme picks one. A hidden lazy image is never fetched. */
+.shot-dark { display: none; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .shot-light { display: none; }
+  :root:not([data-theme="light"]) .shot-dark { display: block; }
+}
+:root[data-theme="dark"] .shot-light { display: none; }
+:root[data-theme="dark"] .shot-dark { display: block; }
 .shot.missing { aspect-ratio: 16/10; display: grid; place-items: center; color: var(--dim); font: 13px var(--mono); }
 .hero .shot { margin: 56px auto 0; max-width: 1100px; }
 
@@ -521,7 +535,7 @@ footer .brand { color: var(--text); font-size: 17px; }
       <div><b>34</b><span>themes</span></div>
       <div><b>7</b><span>tab types</span></div>
     </div>
-    <div class="shot"><img src="/boo/landing/img/hero.webp" width="1719" height="1064" fetchpriority="high" decoding="async" alt="Boo with split panes, a file explorer sidebar and the workspace bar"></div>
+    <div class="shot"><picture id="hero-shot"><source srcset="/boo/landing/img/hero-dark.webp" media="(prefers-color-scheme: dark)"><img src="/boo/landing/img/hero-light.webp" width="1720" height="1065" fetchpriority="high" decoding="async" alt="Boo with split panes, a file explorer sidebar and the workspace bar"></picture><script>booHeroShot()</script></div>
     <div class="chips">
       <a href="#workspaces">Workspaces &amp; splits</a>
       <a href="#tabs">Browser, editor &amp; preview tabs</a>
@@ -562,7 +576,7 @@ footer .brand { color: var(--text); font-size: 17px; }
       </ul>
       <a class="more" href="/boo/windows-and-splits">Windows &amp; splits →</a>
     </div>
-    <div class="shot reveal"><img src="/boo/landing/img/workspaces.webp" width="1720" height="1100" loading="lazy" decoding="async" alt="Boo with tab groups and several split panes"></div>
+    <div class="shot reveal"><img class="shot-light" src="/boo/landing/img/workspaces-light.webp" width="1720" height="1065" loading="lazy" decoding="async" alt="Boo with tab groups and several split panes"><img class="shot-dark" src="/boo/landing/img/workspaces-dark.webp" width="1720" height="1065" loading="lazy" decoding="async" alt="Boo with tab groups and several split panes"></div>
   </div>
 </section>
 
@@ -581,7 +595,7 @@ footer .brand { color: var(--text); font-size: 17px; }
       </ul>
       <a class="more" href="/boo/multi-content-tabs">Multi-content tabs →</a>
     </div>
-    <div class="shot reveal"><img src="/boo/landing/img/tabs.webp" width="1719" height="1064" loading="lazy" decoding="async" alt="A pane with a terminal, a browser tab and a markdown preview tab" onerror="this.parentNode.classList.add('missing');this.replaceWith('/boo/landing/img/tabs.webp')"></div>
+    <div class="shot reveal"><img class="shot-light" src="/boo/landing/img/tabs-light.webp" width="1720" height="1065" loading="lazy" decoding="async" alt="A pane with a terminal, a browser tab and a markdown preview tab"><img class="shot-dark" src="/boo/landing/img/tabs-dark.webp" width="1720" height="1065" loading="lazy" decoding="async" alt="A pane with a terminal, a browser tab and a markdown preview tab"></div>
   </div>
 </section>
 
@@ -600,7 +614,7 @@ footer .brand { color: var(--text); font-size: 17px; }
       </ul>
       <a class="more" href="/boo/remote-sessions">Remote sessions →</a>
     </div>
-    <div class="shot reveal"><img src="/boo/landing/img/git.webp" width="1720" height="1100" loading="lazy" decoding="async" alt="Boo showing a git diff and the Git sidebar"></div>
+    <div class="shot reveal"><img class="shot-light" src="/boo/landing/img/git-light.webp" width="1720" height="1065" loading="lazy" decoding="async" alt="Boo showing a git diff and the Git sidebar"><img class="shot-dark" src="/boo/landing/img/git-dark.webp" width="1720" height="1065" loading="lazy" decoding="async" alt="Boo showing a git diff and the Git sidebar"></div>
   </div>
 </section>
 
@@ -628,12 +642,12 @@ footer .brand { color: var(--text); font-size: 17px; }
           <li><b>Works remotely</b> — agents behind ssh or mosh are tracked from their title and bell</li>
         </ul>
       </div>
-      <div class="shot"><img src="/boo/landing/img/agents.webp" width="1719" height="1064" loading="lazy" decoding="async" alt="The agent inbox with several Claude Code sessions in different states" onerror="this.parentNode.classList.add('missing');this.replaceWith('/boo/landing/img/agents.webp')"></div>
+      <div class="shot"><img class="shot-light" src="/boo/landing/img/agents-light.webp" width="1720" height="1065" loading="lazy" decoding="async" alt="The agent inbox with several Claude Code sessions in different states"><img class="shot-dark" src="/boo/landing/img/agents-dark.webp" width="1720" height="1065" loading="lazy" decoding="async" alt="The agent inbox with several Claude Code sessions in different states"></div>
     </div>
 
     <div class="grid" style="margin-top:56px">
       <div class="card reveal" id="tasks">
-        <div class="shot"><img src="/boo/landing/img/review.webp" width="1719" height="1064" loading="lazy" decoding="async" alt="Review tab with inline comments on a diff" onerror="this.parentNode.classList.add('missing');this.replaceWith('/boo/landing/img/review.webp')"></div>
+        <div class="shot"><img class="shot-light" src="/boo/landing/img/review-light.webp" width="1720" height="1065" loading="lazy" decoding="async" alt="Review tab with inline comments on a diff"><img class="shot-dark" src="/boo/landing/img/review-dark.webp" width="1720" height="1065" loading="lazy" decoding="async" alt="Review tab with inline comments on a diff"></div>
         <h3>Worktree tasks &amp; review</h3>
         <p><b>File → New Agent Task…</b> starts an agent on its own <code>boo/&lt;task&gt;</code> branch and worktree. Review the diff, comment on lines, send feedback with <kbd>⌘↩</kbd>, then merge or discard.</p>
       </div>
@@ -685,7 +699,7 @@ footer .brand { color: var(--text); font-size: 17px; }
       </ul>
       <a class="more" href="/boo/keyboard-shortcuts">Keyboard shortcuts →</a>
     </div>
-    <div class="shot reveal"><img src="/boo/landing/img/palette.webp" width="1719" height="1064" loading="lazy" decoding="async" alt="The command palette" onerror="this.parentNode.classList.add('missing');this.replaceWith('/boo/landing/img/palette.webp')"></div>
+    <div class="shot reveal"><img class="shot-light" src="/boo/landing/img/palette-light.webp" width="1720" height="1065" loading="lazy" decoding="async" alt="The command palette"><img class="shot-dark" src="/boo/landing/img/palette-dark.webp" width="1720" height="1065" loading="lazy" decoding="async" alt="The command palette"></div>
   </div>
 </section>
 
@@ -699,7 +713,7 @@ footer .brand { color: var(--text); font-size: 17px; }
     </div>
     <div class="grid reveal">
       <div class="card">
-        <div class="shot"><img src="/boo/landing/img/quick-select.webp" width="680" height="470" loading="lazy" decoding="async" alt="Quick select labels on URLs, paths and hashes" onerror="this.parentNode.classList.add('missing');this.replaceWith('/boo/landing/img/quick-select.webp')"></div>
+        <div class="shot"><img class="shot-light" src="/boo/landing/img/quick-select-light.webp" width="996" height="700" loading="lazy" decoding="async" alt="Quick select labels on URLs, paths and hashes"><img class="shot-dark" src="/boo/landing/img/quick-select-dark.webp" width="996" height="700" loading="lazy" decoding="async" alt="Quick select labels on URLs, paths and hashes"></div>
         <h3>Quick select</h3>
         <p><kbd>⇧⌘Space</kbd> labels every URL, path, git hash, IP and UUID on screen. Type the label to copy, with <kbd>⇧</kbd> to paste at the prompt.</p>
       </div>
@@ -801,7 +815,7 @@ footer .brand { color: var(--text); font-size: 17px; }
       </ul>
       <a class="more" href="/boo/theming">Theming →</a>
     </div>
-    <div class="shot reveal"><img src="/boo/landing/img/themes.webp" width="1719" height="1064" loading="lazy" decoding="async" alt="The same window in four themes" onerror="this.parentNode.classList.add('missing');this.replaceWith('/boo/landing/img/themes.webp')"></div>
+    <div class="shot reveal"><img src="/boo/landing/img/themes.webp" width="1720" height="1065" loading="lazy" decoding="async" alt="The same window in four themes" onerror="this.parentNode.classList.add('missing');this.replaceWith('/boo/landing/img/themes.webp')"></div>
   </div>
 </section>
 
@@ -838,7 +852,7 @@ footer .brand { color: var(--text); font-size: 17px; }
       <p>Thirteen built-in plugins sit in stacked, collapsible panels next to the terminal. Each one shows up only where it makes sense — Git in a repo, Docker on your Mac, Files over SSH — and you turn each one on or off in Settings.</p>
     </div>
     <div class="reveal">
-      <div class="shot"><img src="/boo/landing/img/plugins.webp" width="1508" height="669" loading="lazy" decoding="async" alt="Sidebar plugins: file explorer, Git, System and Tasks" onerror="this.parentNode.classList.add('missing');this.replaceWith('/boo/landing/img/plugins.webp')"></div>
+      <div class="shot"><img class="shot-light" src="/boo/landing/img/plugins-light.webp" width="2032" height="1430" loading="lazy" decoding="async" alt="Sidebar plugins: file explorer, Git, System and Tasks"><img class="shot-dark" src="/boo/landing/img/plugins-dark.webp" width="2032" height="1430" loading="lazy" decoding="async" alt="Sidebar plugins: file explorer, Git, System and Tasks"></div>
     </div>
     <div class="plugs wide reveal">
         <div class="plug"><span class="pi"><svg class="lucide lucide-folder-tree" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M20 10a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1h-2.5a1 1 0 0 1-.8-.4l-.9-1.2A1 1 0 0 0 15 3h-2a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1Z"/><path d="M20 21a1 1 0 0 0 1-1v-3a1 1 0 0 0-1-1h-2.9a1 1 0 0 1-.88-.55l-.42-.85a1 1 0 0 0-.92-.6H13a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1Z"/><path d="M3 5a2 2 0 0 0 2 2h3"/><path d="M3 3v13a2 2 0 0 0 2 2h3"/></svg></span><div><b>Files</b><p>Live tree, local via FSEvents or remote over SSH and Mosh</p></div></div>
@@ -1122,6 +1136,7 @@ footer .brand { color: var(--text); font-size: 17px; }
     const dark = root.dataset.theme ? root.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
     root.dataset.theme = dark ? 'light' : 'dark';
     try { localStorage.setItem('boo-theme', root.dataset.theme); } catch {}
+    booHeroShot();
   });
 
   // Shortcuts. Defaults from /boo/keyboard-shortcuts. "a / b" lists

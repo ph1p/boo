@@ -1,4 +1,4 @@
-.PHONY: build run stop clean ghostty ironmark editor setup release test app sign notarize zip zip-from-app dmg dmg-from-app dist lint format
+.PHONY: build bundle run stop clean ghostty ironmark editor setup release test app sign notarize zip zip-from-app dmg dmg-from-app dist lint format
 
 # ── Configuration ────────────────────────────────────────────────────────────
 
@@ -168,8 +168,8 @@ build: editor
 	done
 	@echo "==> Ghostty resources bundled"
 
-# Build and run as a proper .app bundle so macOS menu/shortcut wiring works
-run: build
+# Assemble .build/debug/Boo.app without starting it
+bundle: build
 	@mkdir -p .build/debug/Boo.app/Contents/MacOS
 	@mkdir -p .build/debug/Boo.app/Contents/Resources
 	@mkdir -p .build/debug/Boo.app/Contents/Frameworks
@@ -199,6 +199,9 @@ run: build
 		ID="$(LOCAL_SIGNING_IDENTITY)"; \
 	fi; \
 	codesign --force --deep --sign "$${ID:--}" --entitlements Boo/App/Boo.entitlements .build/debug/Boo.app 2>/dev/null || true
+
+# Build and run as a proper .app bundle so macOS menu/shortcut wiring works
+run: bundle
 	@$(MAKE) --no-print-directory stop
 	open .build/debug/Boo.app
 
