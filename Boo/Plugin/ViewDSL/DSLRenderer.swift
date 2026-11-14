@@ -144,7 +144,7 @@ struct DSLRenderer: View {
         let color = tint.map { tintColor($0) } ?? Color(nsColor: theme.accentColor)
         Text(text)
             .font(.system(size: density == .comfortable ? 10 : 9, weight: .bold))
-            .foregroundStyle(.white)
+            .foregroundStyle(tint == nil ? Color(nsColor: PaneView.contrastingText(on: theme.accentColor)) : .white)
             .padding(.horizontal, 6)
             .padding(.vertical, 2)
             .background(color)

@@ -36,6 +36,6 @@ final class CustomThemeCacheTests: XCTestCase {
 
         // Selecting a different (missing) custom name falls back, not the cached one.
         defaults.set("Missing Theme", forKey: "themeName")
-        XCTAssertEqual(settings.theme.name, TerminalTheme.githubDark.name)
+        XCTAssertEqual(settings.theme.name, TerminalTheme.booDark.name)
     }
 }

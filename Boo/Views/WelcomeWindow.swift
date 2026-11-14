@@ -64,7 +64,7 @@ struct WelcomeView: View {
 
     /// A few dark and light themes; the full list is in Settings ▸ Theme.
     static let starterThemes = [
-        "GitHub Dark", "Default Dark", "Tokyo Night", "Catppuccin Mocha", "Default Light", "Catppuccin Latte",
+        "Boo Dark", "GitHub Dark", "Tokyo Night", "Catppuccin Mocha", "Boo Light", "Catppuccin Latte",
         "Solarized Light", "GitHub Light"
     ]
 

@@ -4,6 +4,8 @@ import Cocoa
 
 extension TerminalTheme {
     static let themes: [TerminalTheme] = [
+        .booDark,
+        .booLight,
         .defaultDark,
         .defaultLight,
         .tokyoNight,
@@ -37,6 +39,70 @@ extension TerminalTheme {
         .synthwave84,
         .moonlight
     ]
+
+    /// Monochrome palette of the app icon and the landing page, dark variant.
+    static let booDark = TerminalTheme(
+        name: "Boo Dark",
+        foreground: TerminalColor(r: 245, g: 245, b: 245),
+        background: TerminalColor(r: 10, g: 10, b: 10),
+        cursor: TerminalColor(r: 255, g: 255, b: 255),
+        selection: NSColor(red: 1, green: 1, blue: 1, alpha: 0.2),
+        ansiColors: [
+            TerminalColor(r: 38, g: 38, b: 38),  // 0 black
+            TerminalColor(r: 255, g: 138, b: 122),  // 1 red
+            TerminalColor(r: 127, g: 209, b: 168),  // 2 green
+            TerminalColor(r: 246, g: 179, b: 82),  // 3 yellow
+            TerminalColor(r: 143, g: 184, b: 255),  // 4 blue
+            TerminalColor(r: 200, g: 166, b: 245),  // 5 magenta
+            TerminalColor(r: 134, g: 213, b: 224),  // 6 cyan
+            TerminalColor(r: 212, g: 212, b: 212),  // 7 white
+            TerminalColor(r: 115, g: 115, b: 115),  // 8 bright black
+            TerminalColor(r: 255, g: 166, b: 152),  // 9 bright red
+            TerminalColor(r: 143, g: 224, b: 181),  // 10 bright green
+            TerminalColor(r: 255, g: 213, b: 154),  // 11 bright yellow
+            TerminalColor(r: 171, g: 202, b: 255),  // 12 bright blue
+            TerminalColor(r: 217, g: 192, b: 250),  // 13 bright magenta
+            TerminalColor(r: 165, g: 227, b: 236),  // 14 bright cyan
+            TerminalColor(r: 255, g: 255, b: 255)  // 15 bright white
+        ],
+        chromeBg: NSColor(red: 17 / 255, green: 17 / 255, blue: 17 / 255, alpha: 1),
+        chromeText: NSColor(red: 245 / 255, green: 245 / 255, blue: 245 / 255, alpha: 1),
+        chromeMuted: NSColor(red: 138 / 255, green: 138 / 255, blue: 138 / 255, alpha: 1),
+        sidebarBg: NSColor(red: 21 / 255, green: 21 / 255, blue: 21 / 255, alpha: 1),
+        accentColor: NSColor(red: 1, green: 1, blue: 1, alpha: 1)
+    )
+
+    /// Monochrome palette of the app icon and the landing page, light variant.
+    static let booLight = TerminalTheme(
+        name: "Boo Light",
+        foreground: TerminalColor(r: 10, g: 10, b: 10),
+        background: TerminalColor(r: 250, g: 250, b: 250),
+        cursor: TerminalColor(r: 10, g: 10, b: 10),
+        selection: NSColor(red: 0, green: 0, blue: 0, alpha: 0.12),
+        ansiColors: [
+            TerminalColor(r: 38, g: 38, b: 38),  // 0 black
+            TerminalColor(r: 184, g: 56, b: 44),  // 1 red
+            TerminalColor(r: 28, g: 118, b: 86),  // 2 green
+            TerminalColor(r: 168, g: 100, b: 10),  // 3 yellow
+            TerminalColor(r: 43, g: 95, b: 184),  // 4 blue
+            TerminalColor(r: 123, g: 63, b: 176),  // 5 magenta
+            TerminalColor(r: 15, g: 118, b: 132),  // 6 cyan
+            TerminalColor(r: 115, g: 115, b: 115),  // 7 white
+            TerminalColor(r: 82, g: 82, b: 82),  // 8 bright black
+            TerminalColor(r: 210, g: 74, b: 60),  // 9 bright red
+            TerminalColor(r: 35, g: 144, b: 106),  // 10 bright green
+            TerminalColor(r: 194, g: 122, b: 20),  // 11 bright yellow
+            TerminalColor(r: 59, g: 117, b: 214),  // 12 bright blue
+            TerminalColor(r: 147, g: 83, b: 204),  // 13 bright magenta
+            TerminalColor(r: 22, g: 143, b: 159),  // 14 bright cyan
+            TerminalColor(r: 10, g: 10, b: 10)  // 15 bright white
+        ],
+        chromeBg: NSColor(red: 240 / 255, green: 240 / 255, blue: 240 / 255, alpha: 1),
+        chromeText: NSColor(red: 10 / 255, green: 10 / 255, blue: 10 / 255, alpha: 1),
+        chromeMuted: NSColor(red: 115 / 255, green: 115 / 255, blue: 115 / 255, alpha: 1),
+        sidebarBg: NSColor(red: 1, green: 1, blue: 1, alpha: 1),
+        accentColor: NSColor(red: 10 / 255, green: 10 / 255, blue: 10 / 255, alpha: 1)
+    )
 
     static let defaultDark = TerminalTheme(
         name: "Default Dark",

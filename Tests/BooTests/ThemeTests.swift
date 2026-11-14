@@ -5,7 +5,7 @@ import XCTest
 final class ThemeTests: XCTestCase {
 
     func testAllThemesExist() {
-        XCTAssertEqual(TerminalTheme.themes.count, 32)
+        XCTAssertEqual(TerminalTheme.themes.count, 34)
     }
 
     func testAllThemesHave16AnsiColors() {
@@ -101,7 +101,7 @@ final class ThemeTests: XCTestCase {
         let original = settings.themeName
 
         settings.themeName = "NonExistentTheme"
-        XCTAssertEqual(settings.theme.name, "GitHub Dark")
+        XCTAssertEqual(settings.theme.name, "Boo Dark")
 
         settings.themeName = original
     }

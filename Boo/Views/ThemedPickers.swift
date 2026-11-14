@@ -202,7 +202,7 @@ struct ThemedSwitchStyle: ToggleStyle {
                         .overlay(Capsule().strokeBorder(on ? .clear : t.separator, lineWidth: 0.5))
                         .overlay(alignment: on ? .trailing : .leading) {
                             Circle()
-                                .fill(Color.white)
+                                .fill(on ? Color(nsColor: PaneView.contrastingText(on: t.theme.accentColor)) : .white)
                                 .shadow(color: .black.opacity(0.25), radius: 1, y: 0.5)
                                 .padding(2)
                         }

@@ -4,7 +4,7 @@ extension AppSettings {
     // MARK: - Theme
 
     var themeName: String {
-        get { UserDefaults.standard.string(forKey: K.themeName) ?? "GitHub Dark" }
+        get { UserDefaults.standard.string(forKey: K.themeName) ?? "Boo Dark" }
         set { set(newValue, forKey: K.themeName, topic: .theme) }
     }
 
@@ -17,7 +17,7 @@ extension AppSettings {
     }
 
     var darkThemeName: String {
-        get { UserDefaults.standard.string(forKey: K.darkThemeName) ?? "GitHub Dark" }
+        get { UserDefaults.standard.string(forKey: K.darkThemeName) ?? "Boo Dark" }
         set {
             set(newValue, forKey: K.darkThemeName, topic: .theme)
             if autoTheme { DispatchQueue.main.async { AppSettings.shared.applySystemAppearance() } }
@@ -25,7 +25,7 @@ extension AppSettings {
     }
 
     var lightThemeName: String {
-        get { UserDefaults.standard.string(forKey: K.lightThemeName) ?? "Solarized Light" }
+        get { UserDefaults.standard.string(forKey: K.lightThemeName) ?? "Boo Light" }
         set {
             set(newValue, forKey: K.lightThemeName, topic: .theme)
             if autoTheme { DispatchQueue.main.async { AppSettings.shared.applySystemAppearance() } }
@@ -61,7 +61,7 @@ extension AppSettings {
             return cached.theme
         }
         let decoded = data.flatMap { try? JSONDecoder().decode([CustomThemeData].self, from: $0) } ?? []
-        let theme = decoded.first(where: { $0.name == name })?.toTheme() ?? .githubDark
+        let theme = decoded.first(where: { $0.name == name })?.toTheme() ?? .booDark
         customThemeCache = (name, data, theme)
         return theme
     }
