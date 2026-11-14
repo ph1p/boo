@@ -108,7 +108,7 @@ final class RuleEngine {
         ProfileResolver.resolve(
             override: override,
             ruleMatches: RuleMatcher.profileMatches(for: context, in: RulesStore.shared.active),
-            workspaceDefault: nil,
+            workspaceDefault: workspace?.settings.defaultProfile,
             globalDefault: AppSettings.shared.defaultProfile,
             profiles: ProfileStore.shared.profiles)
     }
@@ -195,7 +195,7 @@ final class RuleEngine {
         reevaluateAll()
     }
 
-    private func reevaluateAll() {
+    func reevaluateAll() {
         for tabID in entries.keys { evaluate(tabID) }
     }
 

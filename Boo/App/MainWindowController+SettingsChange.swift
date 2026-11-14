@@ -58,12 +58,6 @@ extension MainWindowController {
         if topic == nil || topic == .layout {
             self.statusBarHeightConstraint?.constant = DensityMetrics.current.statusBarHeight
             self.statusBar.needsDisplay = true
-            let newSidebarPos = AppSettings.shared.sidebarPosition
-            if newSidebarPos != self.currentSidebarPosition {
-                self.currentSidebarPosition = newSidebarPos
-                self.sidebarController.position = newSidebarPos
-                self.rebuildSidebarLayout()
-            }
             let newWsBarPos = AppSettings.shared.workspaceBarPosition
             if newWsBarPos != self.currentWorkspaceBarPosition {
                 self.currentWorkspaceBarPosition = newWsBarPos
@@ -76,14 +70,7 @@ extension MainWindowController {
                 }
                 self.toolbar.needsDisplay = true
             }
-            let newTabOverflow = AppSettings.shared.tabOverflowMode
-            if newTabOverflow != self.currentTabOverflowMode {
-                self.currentTabOverflowMode = newTabOverflow
-                for (_, pv) in self.paneViews {
-                    pv.needsLayout = true
-                    pv.needsDisplay = true
-                }
-            }
+            self.refreshWorkspaceOverrides()
             // Tab bar position changed — swap constraints and re-install content views
             self.applySidebarTabBarPositionConstraints()
             if let ctx = self.pluginRegistry.lastContext {

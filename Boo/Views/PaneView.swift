@@ -495,7 +495,7 @@ class PaneView: NSView {
     override func draw(_ dirtyRect: NSRect) {
         guard let ctx = NSGraphicsContext.current?.cgContext else { return }
         let theme = AppSettings.shared.theme
-        let overflowMode = AppSettings.shared.tabOverflowMode
+        let overflowMode = tabOverflowMode
         let barH = tabBarHeight
         if overflowMode == .vertical {
             drawTabsVertical(ctx: ctx, theme: theme)

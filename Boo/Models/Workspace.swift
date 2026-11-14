@@ -100,6 +100,9 @@ final class Workspace {
     /// Per-workspace sidebar visibility and width overrides.
     var sidebarState: SidebarWorkspaceState = Workspace.defaultSidebarState()
 
+    /// What this workspace overrides from the global settings.
+    var settings = WorkspaceSettings()
+
     /// Resolved color: custom color takes precedence, then preset, then nil.
     var resolvedColor: NSColor? {
         customColor ?? color.nsColor

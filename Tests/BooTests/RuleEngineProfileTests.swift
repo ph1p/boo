@@ -66,6 +66,8 @@ final class RuleEngineProfileTests: XCTestCase {
             RuleEngine.profileSourceLabel(profile: "prod", source: .rule("prod-hosts")), "prod: rule \"prod-hosts\"")
         XCTAssertEqual(RuleEngine.profileSourceLabel(profile: "prod", source: .manual), "prod: picked by hand")
         XCTAssertEqual(RuleEngine.profileSourceLabel(profile: "prod", source: .globalDefault), "prod: default")
+        XCTAssertEqual(
+            RuleEngine.profileSourceLabel(profile: "prod", source: .workspaceDefault), "prod: workspace default")
         XCTAssertNil(RuleEngine.profileSourceLabel(profile: nil, source: nil))
     }
 

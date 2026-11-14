@@ -367,3 +367,39 @@ struct ShortcutPill: View {
             )
     }
 }
+
+/// A row with an Inherit switch over an optional value. Turning it off seeds
+/// the value with `fallback`, so the control starts from what applies today.
+struct InheritableField<Value, Control: View>: View {
+    let label: String
+    var help: String? = nil
+    @Binding var value: Value?
+    let fallback: Value
+    @ViewBuilder let control: (Binding<Value>) -> Control
+    @Environment(\.tokens) private var tokens
+
+    init(
+        label: String, help: String? = nil, value: Binding<Value?>, fallback: Value,
+        @ViewBuilder control: @escaping (Binding<Value>) -> Control
+    ) {
+        self.label = label
+        self.help = help
+        _value = value
+        self.fallback = fallback
+        self.control = control
+    }
+
+    var body: some View {
+        SettingRow(label: label, help: help) {
+            HStack(spacing: 10) {
+                if value != nil {
+                    control(Binding(get: { value ?? fallback }, set: { value = $0 }))
+                }
+                Toggle("Inherit", isOn: Binding(get: { value == nil }, set: { value = $0 ? nil : fallback }))
+                    .toggleStyle(.themedCheckbox)
+                    .font(.system(size: 11))
+                    .foregroundStyle(tokens.muted)
+            }
+        }
+    }
+}

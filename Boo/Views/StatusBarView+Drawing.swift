@@ -45,7 +45,7 @@ extension StatusBarView {
         drawnSegments.removeAll()
 
         // Sidebar toggle sits at the edge the sidebar is on
-        let toggleLeading = settings.sidebarPosition == .left
+        let toggleLeading = sidebarPosition == .left
         let sidebarToggleWidth = drawSidebarToggle(ctx: ctx, theme: theme, leading: toggleLeading)
         let leftStart: CGFloat = toggleLeading ? sidebarToggleWidth : IslandMetrics.contentInset
         let rightEnd = bounds.width - (toggleLeading ? IslandMetrics.contentInset : sidebarToggleWidth) + 2
@@ -127,7 +127,7 @@ extension StatusBarView {
         func shown(_ ids: [String]) -> [StatusBarPlugin] {
             ids.compactMap { byID[$0] }.filter {
                 $0.isOwnerEnabled(settings) && $0.isVisible(settings: settings, state: state)
-                    && !settings.isStatusBarSegmentHidden($0.id)
+                    && !isSegmentHidden($0.id, settings: settings)
             }
         }
         return (shown(arrangement.left), shown(arrangement.right))
@@ -214,7 +214,7 @@ extension StatusBarView {
         ctx.strokePath()
 
         // Vertical divider a third in from the side the sidebar is on
-        let sidebarLeft = AppSettings.shared.sidebarPosition == .left
+        let sidebarLeft = sidebarPosition == .left
         let divX = iconX + iconDrawSize * (sidebarLeft ? 0.35 : 0.65)
         ctx.move(to: CGPoint(x: divX, y: iconRect.minY + 1))
         ctx.addLine(to: CGPoint(x: divX, y: iconRect.maxY - 1))

@@ -97,7 +97,7 @@ extension StatusBarView {
         for id in arrangement.left + arrangement.right {
             guard let info = catalog[id] else { continue }
             let item = add(info.displayName, #selector(toggleSegmentFromMenu(_:)), id: id)
-            item.state = settings.isStatusBarSegmentHidden(id) ? .off : .on
+            item.state = isSegmentHidden(id, settings: settings) ? .off : .on
             item.indentationLevel = 1
             if collapsedSegmentIDs.contains(id) {
                 item.toolTip = "Shown, but left out while the window is too narrow"
@@ -112,8 +112,12 @@ extension StatusBarView {
 
     @objc private func toggleSegmentFromMenu(_ sender: NSMenuItem) {
         guard let id = sender.representedObject as? String else { return }
-        let settings = AppSettings.shared
-        settings.setStatusBarSegment(id, hidden: !settings.isStatusBarSegmentHidden(id))
+        let hidden = !isSegmentHidden(id)
+        if hiddenSegmentsOverride != nil, let onWorkspaceSegmentToggle {
+            onWorkspaceSegmentToggle(id, hidden)
+        } else {
+            AppSettings.shared.setStatusBarSegment(id, hidden: hidden)
+        }
     }
 
     @objc private func moveSegmentAcrossFromMenu(_ sender: NSMenuItem) {

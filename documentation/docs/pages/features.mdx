@@ -25,6 +25,17 @@ Open folders as workspaces with their own file tree using **Cmd+Shift+N** (home 
 - **Scrollback restore** — On quit, each terminal's screen and scrollback (up to 2 MB per tab, colors included) is saved to `~/.boo/scrollback/` and replayed into the tab on next launch. The files are owner-only and deleted once replayed. Turn it off with **Settings → Terminal → Sessions → Restore scrollback**.
 - **Drag to switch workspace** — While dragging a tab, hover over a workspace pill for ~500 ms to spring-load into that workspace, then drop the tab onto any pane there.
 
+### Workspace settings
+
+A workspace can override a few app settings. Right-click a workspace and choose **Workspace Settings…**, or use **Settings…** in the workspace's rename popover. Every field starts on **Inherit**, which follows the app settings:
+
+- **Default profile** — the [profile](/rules-and-profiles#which-profile-a-tab-uses) for tabs that no rule claims
+- **Sidebar position** and **Tabs** (scroll, wrap, vertical)
+- **Sidebar tab** — the plugin tab shown first
+- **Status bar segments** — once switched on, the workspace has its own list of shown segments, and the status bar's right-click menu edits that list
+
+Changes apply at once and are saved with the session. tmux workspaces have no settings.
+
 ## Recipes
 
 A recipe is a workspace you can open again: a folder plus a layout of panes, each with tabs that start in a given directory and can run a command. Recipes are JSON files in `~/.boo/recipes/`; open one from **File → Recipes**, the command palette, or `run_recipe` over the socket and MCP.

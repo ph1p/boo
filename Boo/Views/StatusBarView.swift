@@ -19,6 +19,20 @@ import Cocoa
     /// The remote session type (SSH/Docker) if active.
     var remoteSession: RemoteSessionType?
 
+    /// The window's sidebar side when its workspace overrides the global one.
+    var sidebarPositionOverride: SidebarPosition?
+    /// Segments the active workspace hides. When set, it decides for every
+    /// segment and the global toggles are ignored.
+    var hiddenSegmentsOverride: Set<String>?
+    /// Called instead of writing the global setting while `hiddenSegmentsOverride` is set.
+    var onWorkspaceSegmentToggle: ((_ id: String, _ hidden: Bool) -> Void)?
+
+    var sidebarPosition: SidebarPosition { sidebarPositionOverride ?? AppSettings.shared.sidebarPosition }
+
+    func isSegmentHidden(_ id: String, settings: AppSettings = .shared) -> Bool {
+        hiddenSegmentsOverride?.contains(id) ?? settings.isStatusBarSegmentHidden(id)
+    }
+
     var barHeight: CGFloat { DensityMetrics.current.statusBarHeight }
     nonisolated(unsafe) private var settingsObserver: Any?
     nonisolated(unsafe) private var agentInboxObserver: Any?

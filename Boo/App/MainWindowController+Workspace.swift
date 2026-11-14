@@ -62,6 +62,7 @@ extension MainWindowController: ToolbarViewDelegate {
 
     func toolbar(_ toolbar: ToolbarView, contextMenuItemsForWorkspaceAt index: Int) -> [NSMenuItem] {
         workspaceGroupMenuItems(forWorkspaceAt: index) + agentTaskMenuItems(forWorkspaceAt: index)
+            + workspaceSettingsMenuItems(forWorkspaceAt: index)
     }
 
     func toolbarDidRequestNewWorkspace(_ toolbar: ToolbarView) {
@@ -117,6 +118,7 @@ extension MainWindowController: WorkspaceBarViewDelegate {
 
     func workspaceBar(_ bar: WorkspaceBarView, contextMenuItemsForWorkspaceAt index: Int) -> [NSMenuItem] {
         workspaceGroupMenuItems(forWorkspaceAt: index) + agentTaskMenuItems(forWorkspaceAt: index)
+            + workspaceSettingsMenuItems(forWorkspaceAt: index)
     }
 
     func workspaceBarDidRequestNewWorkspace(_ bar: WorkspaceBarView) {
@@ -185,6 +187,13 @@ extension MainWindowController {
                 self.saveSession()
             }
         ]
+        if ws.tmuxWindowID == nil {
+            actions.append(
+                InlineEditorAction(title: "Settings\u{2026}", symbol: "slider.horizontal.3") { [weak self] in
+                    close()
+                    self?.showWorkspaceSettings(forWorkspace: wsID)
+                })
+        }
         if canMove {
             actions.append(
                 InlineEditorAction(title: "Move to New Window", symbol: "macwindow.badge.plus") { [weak self] in
@@ -571,6 +580,7 @@ extension MainWindowController {
         if let prev = previousWorkspace, prev.id != workspace.id, renderedWorkspaceID == prev.id {
             persistActiveWorkspaceSidebarState(for: prev)
         }
+        refreshWorkspaceOverrides()
 
         workspace.normalizePaneState()
         debugLog(

@@ -326,24 +326,7 @@ private struct ProfileEditor: View {
         _ label: String, value: Binding<Value?>, fallback: Value,
         @ViewBuilder control: @escaping (Binding<Value>) -> Control
     ) -> some View {
-        let t = tokens
-        let inherits = value.wrappedValue == nil
-        SettingRow(label: label) {
-            HStack(spacing: 10) {
-                if !inherits {
-                    control(Binding(get: { value.wrappedValue ?? fallback }, set: { value.wrappedValue = $0 }))
-                }
-                Toggle(
-                    "Inherit",
-                    isOn: Binding(
-                        get: { value.wrappedValue == nil },
-                        set: { value.wrappedValue = $0 ? nil : fallback })
-                )
-                .toggleStyle(.themedCheckbox)
-                .font(.system(size: 11))
-                .foregroundStyle(t.muted)
-            }
-        }
+        InheritableField(label: label, value: value, fallback: fallback, control: control)
     }
 
     static func parseEnv(_ text: String) -> [String: String]? {

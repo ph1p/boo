@@ -32,7 +32,7 @@ extension PaneView {
     /// Between the last row and the footer.
     static let verticalFooterGap: CGFloat = 2
 
-    var isVerticalTabs: Bool { AppSettings.shared.tabOverflowMode == .vertical }
+    var isVerticalTabs: Bool { tabOverflowMode == .vertical }
 
     /// Width of the tab column; 0 outside vertical mode. Narrow panes give up
     /// at most 40% of their width to it.

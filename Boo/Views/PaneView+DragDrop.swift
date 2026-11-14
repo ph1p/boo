@@ -6,7 +6,7 @@ extension PaneView {
     // MARK: - Tab Hit Testing
 
     func tabIndex(at point: NSPoint) -> Int? {
-        let mode = AppSettings.shared.tabOverflowMode
+        let mode = tabOverflowMode
         if mode == .vertical { return verticalTabIndex(at: point) }
         if mode == .wrap {
             let layouts = wrapLayout()
@@ -37,7 +37,7 @@ extension PaneView {
     /// Check if a point is over the close button area of a given tab.
     func isOverCloseButton(point: NSPoint, tabIndex idx: Int) -> Bool {
         guard showTabClose, !pane.isTabHidden(at: idx) else { return false }
-        let mode = AppSettings.shared.tabOverflowMode
+        let mode = tabOverflowMode
         if mode == .vertical { return isOverVerticalCloseButton(point: point, tabIndex: idx) }
         let localX: CGFloat
         let w: CGFloat
@@ -67,7 +67,7 @@ extension PaneView {
             needsDisplay = true
             return
         }
-        guard point.y < tabBarHeight, AppSettings.shared.tabOverflowMode == .scroll else {
+        guard point.y < tabBarHeight, tabOverflowMode == .scroll else {
             super.scrollWheel(with: event)
             return
         }
@@ -567,7 +567,7 @@ extension PaneView {
     func autoscrollTabBar(local: NSPoint) {
         if isVerticalTabs { return autoscrollVerticalTabs(localY: local.y) }
         let localX = local.x
-        guard AppSettings.shared.tabOverflowMode == .scroll else { return }
+        guard tabOverflowMode == .scroll else { return }
         let maxScroll = scrollMaxOffset()
         guard maxScroll > 0 else { return }
         let edgeZone: CGFloat = 40
@@ -598,7 +598,7 @@ extension PaneView {
     /// Position in pane-local coords for the insertion indicator at a given tab index.
     /// Returns (x, y) where y accounts for the correct row in wrap mode.
     func tabInsertionPosition(at index: Int) -> NSPoint {
-        let mode = AppSettings.shared.tabOverflowMode
+        let mode = tabOverflowMode
         if mode == .vertical { return NSPoint(x: Self.tabBarSideInset, y: verticalInsertionY(at: index)) }
         if mode == .wrap {
             let layouts = wrapLayout()
@@ -620,7 +620,7 @@ extension PaneView {
     /// insertion indicator should centre itself. Scroll mode centres pills in
     /// the whole bar; wrap mode centres them within their row.
     func tabInsertionRowCenterY(at index: Int) -> CGFloat {
-        if AppSettings.shared.tabOverflowMode == .wrap {
+        if tabOverflowMode == .wrap {
             let layouts = wrapLayout()
             let rowY = index < layouts.count ? layouts[index].y : (layouts.last?.y ?? Self.tabBarSideInset)
             return rowY + singleRowTabHeight / 2
@@ -632,7 +632,7 @@ extension PaneView {
     func tabInsertionIndex(at point: NSPoint) -> Int {
         let count = pane.tabs.count
         if isVerticalTabs { return verticalInsertionIndex(at: point) }
-        if AppSettings.shared.tabOverflowMode == .wrap {
+        if tabOverflowMode == .wrap {
             let layouts = wrapLayout()
             // Determine which row the point is on (rows start below the bar's top inset)
             let row = max(0, Int((point.y - Self.tabBarSideInset) / singleRowTabHeight))

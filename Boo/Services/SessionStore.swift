@@ -102,6 +102,8 @@ struct SessionWorkspace: Codable, Sendable {
     // Per-workspace sidebar state — optional for backwards compatibility
     let sidebarIsVisible: Bool?
     let sidebarWidth: Double?
+    /// Optional so sessions saved before workspace settings decode.
+    var settings: WorkspaceSettings? = nil
 }
 
 /// One main window: its workspaces plus window chrome.
@@ -283,7 +285,8 @@ enum SessionStore {
                 panes: panes,
                 activePaneID: ws.activePaneID,
                 sidebarIsVisible: ws.sidebarState.isVisible,
-                sidebarWidth: ws.sidebarState.width.map { Double($0) }
+                sidebarWidth: ws.sidebarState.width.map { Double($0) },
+                settings: ws.settings.isEmpty ? nil : ws.settings
             )
         }
 
@@ -374,6 +377,7 @@ enum SessionStore {
             ws.customName = sw.customName
             ws.color = WorkspaceColor(rawValue: sw.color) ?? .none
             ws.isPinned = sw.isPinned
+            ws.settings = sw.settings ?? WorkspaceSettings()
             if let r = sw.customColorRed, let g = sw.customColorGreen, let b = sw.customColorBlue {
                 ws.customColor = NSColor(srgbRed: r, green: g, blue: b, alpha: 1)
             }

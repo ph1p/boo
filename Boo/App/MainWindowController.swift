@@ -38,6 +38,8 @@ import SwiftUI
         get { sidebarController?.position ?? .right }
         set { sidebarController?.position = newValue }
     }
+    /// The global settings with the active workspace's overrides on top.
+    var effectiveSettings: EffectiveSettings { AppSettings.shared.effective(for: activeWorkspace) }
     var currentWorkspaceBarPosition: WorkspaceBarPosition = .left
     var currentTabOverflowMode: TabOverflowMode = .scroll
     var sideWorkspaceBar: WorkspaceBarView?
@@ -541,7 +543,7 @@ import SwiftUI
         NSLayoutConstraint.activate(fixedConstraints)
         applySidebarTabBarPositionConstraints()
 
-        currentSidebarPosition = AppSettings.shared.sidebarPosition
+        currentSidebarPosition = effectiveSettings.sidebarPosition
         sidebarController.position = currentSidebarPosition
         if sidebarVisible {
             addSplitSubviewsInSidebarOrder()
@@ -566,7 +568,7 @@ import SwiftUI
         contentView.addSubview(statusBar)
 
         currentWorkspaceBarPosition = AppSettings.shared.workspaceBarPosition
-        currentTabOverflowMode = AppSettings.shared.tabOverflowMode
+        currentTabOverflowMode = effectiveSettings.tabOverflowMode
 
         // Toolbar, panes and status bar share one `gap` side inset so their content
         // lines up; the side workspace bar adjusts the leading/trailing constraints.

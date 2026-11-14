@@ -314,7 +314,8 @@ extension MainWindowController {
             if sidebarVisible { toggleSidebar(userInitiated: false) }
         } else if let choice = Self.sidebarTabSelection(
             active: activePluginTabID, displaced: displacedPluginTabID,
-            remembered: coordinator.selectedPluginTabID, available: sorted.map(\.id.id)),
+            remembered: coordinator.selectedPluginTabID ?? effectiveSettings.sidebarDefaultTab,
+            available: sorted.map(\.id.id)),
             choice.show != activePluginTabID
         {
             // The active tab disappeared, or the one it replaced is back.

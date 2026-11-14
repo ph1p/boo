@@ -76,7 +76,7 @@ extension PaneView {
     /// Slot of tab `index` in view coordinates (scroll offset applied).
     func tabSlotRect(at index: Int) -> CGRect? {
         if isVerticalTabs { return verticalSlotRect(at: index) }
-        if AppSettings.shared.tabOverflowMode == .wrap {
+        if tabOverflowMode == .wrap {
             let layouts = wrapLayout()
             guard index < layouts.count else { return nil }
             let lay = layouts[index]

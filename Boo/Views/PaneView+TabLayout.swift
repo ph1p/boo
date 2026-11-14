@@ -61,7 +61,7 @@ extension PaneView {
     /// insets, so the outermost pills keep the same margin to the pane edge
     /// as they keep between each other.
     var tabBarHeight: CGFloat {
-        let mode = AppSettings.shared.tabOverflowMode
+        let mode = tabOverflowMode
         if mode == .vertical { return 0 }
         let rows = mode == .wrap ? wrapRowCount() : 1
         return singleRowTabHeight * CGFloat(rows) + Self.tabBarSideInset * 2
@@ -117,5 +117,13 @@ extension PaneView {
         var rows = Int((last.y - Self.tabBarSideInset) / singleRowTabHeight) + 1
         if !plusFitsOnLastRow(layouts) { rows += 1 }
         return rows
+    }
+}
+
+extension PaneView {
+    /// The window's tab layout: its workspace can override the global setting.
+    var tabOverflowMode: TabOverflowMode {
+        (window?.windowController as? MainWindowController)?.currentTabOverflowMode
+            ?? AppSettings.shared.tabOverflowMode
     }
 }

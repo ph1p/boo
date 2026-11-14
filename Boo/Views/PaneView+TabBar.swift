@@ -141,7 +141,7 @@ extension PaneView {
         let inset = Self.tabBarSideInset
         if isVerticalTabs { return verticalFooterSlot() }
         let w = widths ?? allTabWidths()
-        if AppSettings.shared.tabOverflowMode == .wrap {
+        if tabOverflowMode == .wrap {
             return tabBarButtonsSlot(layouts: wrapLayout(widths: w))
         }
         let isOverflowing = scrollMaxOffset(widths: w) > 0
