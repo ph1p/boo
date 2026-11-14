@@ -1,3 +1,7 @@
+---
+description: How Boo is built. Swift, AppKit and SwiftUI on top of GhosttyKit, with the app's layers, state model and data flow.
+---
+
 # Architecture
 
 ## Stack
@@ -21,7 +25,7 @@ Boo/                Library target (all app code)
   Models/           Workspace, Pane (+ TabState), SplitTree, AppSettings (Settings.swift), Theme
   Plugin/           Plugin framework: protocol, registry, runtime, ViewDSL
   Plugins/          Built-in plugins: Agents, Bookmarks, Debug, Docker, FileTree, Git, Hosts,
-                    Kube, Notes, RemoteExplorer, Snippets, SystemInfo
+                    Kube, Notes, OnePassword, RemoteExplorer, Snippets, SystemInfo, Tasks
   Views/            PaneView, SplitContainerView, StatusBarView, ToolbarView, SettingsWindow
   Services/         TerminalBridge, SessionStore, socket server (BooSocketServer, UnixSocket),
                     BooMCPServer, RemoteControlServer, AgentInbox, Orchestrator*,

@@ -5,10 +5,22 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Boo — a native macOS terminal for coding agents</title>
 <meta name="description" content="Boo is a native macOS terminal with workspaces, split panes, a file explorer and agent tools. Built on Ghostty for terminal emulation and Metal rendering.">
-<meta property="og:title" content="Boo — a native macOS terminal">
+<link rel="canonical" href="https://ph1p.github.io/boo/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Boo">
+<meta property="og:url" content="https://ph1p.github.io/boo/">
+<meta property="og:title" content="Boo — a native macOS terminal for coding agents">
 <meta property="og:description" content="Workspaces, split panes, a file explorer and agent tools. Built on Ghostty.">
 <meta property="og:image" content="https://ph1p.github.io/boo/social-preview.png">
+<meta property="og:image:width" content="1280">
+<meta property="og:image:height" content="640">
+<meta property="og:image:alt" content="Boo, a native macOS terminal for coding agents">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Boo — a native macOS terminal for coding agents">
+<meta name="twitter:description" content="Workspaces, split panes, a file explorer and agent tools. Built on Ghostty.">
+<meta name="twitter:image" content="https://ph1p.github.io/boo/social-preview.png">
 <link rel="icon" href="/boo/landing/img/icon-dark.png">
+<link rel="preload" as="image" href="/boo/landing/img/hero.webp" fetchpriority="high">
 <meta name="theme-color" content="#fafafa" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#0a0a0a" media="(prefers-color-scheme: dark)">
 <script>
@@ -16,7 +28,7 @@
 </script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400..800&family=JetBrains+Mono:wght@400..600&display=swap" rel="stylesheet">
 <style>
 /* Monochrome palette from the app icon: black and white. */
 :root {
@@ -439,12 +451,41 @@ footer .brand { color: var(--text); font-size: 17px; }
   .kfilter { flex: 1; }
 }
 </style>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "SoftwareApplication",
+      "name": "Boo",
+      "description": "Boo is a native macOS terminal with workspaces, split panes, a file explorer and agent tools. Built on Ghostty for terminal emulation and Metal rendering.",
+      "url": "https://ph1p.github.io/boo/",
+      "image": "https://ph1p.github.io/boo/social-preview.png",
+      "applicationCategory": "DeveloperApplication",
+      "operatingSystem": "macOS 15 or later",
+      "downloadUrl": "https://github.com/ph1p/boo/releases/latest",
+      "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+    },
+    {
+      "@type": "FAQPage",
+      "mainEntity": [
+        { "@type": "Question", "name": "How is Boo related to Ghostty?", "acceptedAnswer": { "@type": "Answer", "text": "Boo embeds Ghostty's terminal core through libghostty. Ghostty handles terminal emulation, fonts and Metal rendering; Boo builds the window, workspaces, sidebar, agent tools and everything else around it. Your Ghostty shaders and themes work in Boo." } },
+        { "@type": "Question", "name": "Which coding agents does it support?", "acceptedAnswer": { "@type": "Answer", "text": "Claude Code, Codex, OpenCode, GitHub Copilot CLI, pi and Hermes are detected out of the box, including when they run behind ssh or mosh. Other AI CLIs show up in the Agents sidebar, and any agent can drive Boo through the MCP server or the boo CLI." } },
+        { "@type": "Question", "name": "Do I need agents to use Boo?", "acceptedAnswer": { "@type": "Answer", "text": "No. Workspaces, splits, the file explorer, quick select, copy mode, recording, tmux integration and plugins are all useful on their own. The agent features stay out of the way until a terminal runs one." } },
+        { "@type": "Question", "name": "Does it work on Intel Macs?", "acceptedAnswer": { "@type": "Answer", "text": "Release builds target macOS 15 or later on Apple Silicon. You can try building from source for other setups." } },
+        { "@type": "Question", "name": "Where does Boo keep my data?", "acceptedAnswer": { "@type": "Answer", "text": "Everything lives in ~/.boo, readable only by you: settings, session, history, notes, recipes, plugins and recordings. Nothing leaves your Mac unless you turn on settings sync to a folder you pick, or remote control on your LAN." } },
+        { "@type": "Question", "name": "How do updates work?", "acceptedAnswer": { "@type": "Answer", "text": "Boo updates itself through Sparkle. Releases are published on GitHub, so you can also download any version by hand." } }
+      ]
+    }
+  ]
+}
+</script>
 </head>
 <body>
 
 <nav>
   <div class="wrap">
-    <a class="brand" href="#top"><img class="boo-icon" src="/boo/landing/img/icon-dark.png" alt="">Boo</a>
+    <a class="brand" href="#top"><img class="boo-icon" src="/boo/landing/img/icon-dark.png" alt="" width="30" height="30">Boo</a>
     <div class="links">
       <a href="#workspaces">Workspaces</a>
       <a href="#agents">Agents</a>
@@ -464,7 +505,7 @@ footer .brand { color: var(--text); font-size: 17px; }
 
 <header class="hero" id="top">
   <div class="wrap">
-    <img class="logo boo-icon" src="/boo/landing/img/icon-dark.png" alt="Boo logo">
+    <img class="logo boo-icon" src="/boo/landing/img/icon-dark.png" alt="Boo logo" width="256" height="256">
     <div class="eyebrow">Native macOS · Built on Ghostty</div>
     <h1>The terminal built for<br><span class="grad">you and your agents</span></h1>
     <p class="lead">Boo is a native macOS terminal with workspaces, split panes, a file explorer and agent tools. Ghostty does the terminal emulation and Metal rendering; Boo adds everything around it.</p>
@@ -475,12 +516,12 @@ footer .brand { color: var(--text); font-size: 17px; }
     </div>
     <div class="req">Free and open source (Apache-2.0) · macOS 15+ on Apple Silicon · updates itself via Sparkle</div>
     <div class="stats">
-      <div><b>3</b><span>agent CLIs tracked</span></div>
+      <div><b>6</b><span>agent CLIs tracked</span></div>
       <div><b>13</b><span>built-in plugins</span></div>
       <div><b>32</b><span>themes</span></div>
-      <div><b>6</b><span>tab types</span></div>
+      <div><b>7</b><span>tab types</span></div>
     </div>
-    <div class="shot"><img src="/boo/landing/img/hero.png" alt="Boo with split panes, a file explorer sidebar and the workspace bar" onerror="this.onerror=null;this.src='/boo/app.png'"></div>
+    <div class="shot"><img src="/boo/landing/img/hero.webp" width="1719" height="1064" fetchpriority="high" decoding="async" alt="Boo with split panes, a file explorer sidebar and the workspace bar"></div>
     <div class="chips">
       <a href="#workspaces">Workspaces &amp; splits</a>
       <a href="#tabs">Browser, editor &amp; preview tabs</a>
@@ -521,7 +562,7 @@ footer .brand { color: var(--text); font-size: 17px; }
       </ul>
       <a class="more" href="/boo/windows-and-splits">Windows &amp; splits →</a>
     </div>
-    <div class="shot reveal"><img src="/boo/app.png" alt="Boo with tab groups and several split panes"></div>
+    <div class="shot reveal"><img src="/boo/landing/img/workspaces.webp" width="1720" height="1100" loading="lazy" decoding="async" alt="Boo with tab groups and several split panes"></div>
   </div>
 </section>
 
@@ -540,7 +581,7 @@ footer .brand { color: var(--text); font-size: 17px; }
       </ul>
       <a class="more" href="/boo/multi-content-tabs">Multi-content tabs →</a>
     </div>
-    <div class="shot reveal"><img src="/boo/landing/img/tabs.png" alt="A pane with a terminal, a browser tab and a markdown preview tab" onerror="this.parentNode.classList.add('missing');this.replaceWith('/boo/landing/img/tabs.png')"></div>
+    <div class="shot reveal"><img src="/boo/landing/img/tabs.webp" width="1719" height="1064" loading="lazy" decoding="async" alt="A pane with a terminal, a browser tab and a markdown preview tab" onerror="this.parentNode.classList.add('missing');this.replaceWith('/boo/landing/img/tabs.webp')"></div>
   </div>
 </section>
 
@@ -559,7 +600,7 @@ footer .brand { color: var(--text); font-size: 17px; }
       </ul>
       <a class="more" href="/boo/remote-sessions">Remote sessions →</a>
     </div>
-    <div class="shot reveal"><img src="/boo/git.png" alt="Boo showing a git diff and the Git sidebar"></div>
+    <div class="shot reveal"><img src="/boo/landing/img/git.webp" width="1720" height="1100" loading="lazy" decoding="async" alt="Boo showing a git diff and the Git sidebar"></div>
   </div>
 </section>
 
@@ -568,8 +609,8 @@ footer .brand { color: var(--text); font-size: 17px; }
   <div class="wrap">
     <div class="center reveal">
       <div class="kicker">Agents</div>
-      <h2>Run Claude Code, Codex and OpenCode side by side</h2>
-      <p>Boo knows which of your terminals run a coding agent and what each one is doing — across every window. It tells you who needs you, gives each task its own worktree, and lets you review the result before you merge.</p>
+      <h2>Run Claude Code, Codex, OpenCode and more side by side</h2>
+      <p>Boo tracks Claude Code, Codex, OpenCode, GitHub Copilot CLI, pi and Hermes. It knows which of your terminals run a coding agent and what each one is doing — across every window. It tells you who needs you, gives each task its own worktree, and lets you review the result before you merge.</p>
     </div>
     <div class="split reveal">
       <div class="text">
@@ -587,22 +628,22 @@ footer .brand { color: var(--text); font-size: 17px; }
           <li><b>Works remotely</b> — agents behind ssh or mosh are tracked from their title and bell</li>
         </ul>
       </div>
-      <div class="shot"><img src="/boo/landing/img/agents.png" alt="The agent inbox with several Claude Code sessions in different states" onerror="this.parentNode.classList.add('missing');this.replaceWith('/boo/landing/img/agents.png')"></div>
+      <div class="shot"><img src="/boo/landing/img/agents.webp" width="1719" height="1064" loading="lazy" decoding="async" alt="The agent inbox with several Claude Code sessions in different states" onerror="this.parentNode.classList.add('missing');this.replaceWith('/boo/landing/img/agents.webp')"></div>
     </div>
 
     <div class="grid" style="margin-top:56px">
       <div class="card reveal" id="tasks">
-        <div class="shot"><img src="/boo/landing/img/review.png" alt="Review tab with inline comments on a diff" onerror="this.parentNode.classList.add('missing');this.replaceWith('/boo/landing/img/review.png')"></div>
+        <div class="shot"><img src="/boo/landing/img/review.webp" width="1719" height="1064" loading="lazy" decoding="async" alt="Review tab with inline comments on a diff" onerror="this.parentNode.classList.add('missing');this.replaceWith('/boo/landing/img/review.webp')"></div>
         <h3>Worktree tasks &amp; review</h3>
         <p><b>File → New Agent Task…</b> starts an agent on its own <code>boo/&lt;task&gt;</code> branch and worktree. Review the diff, comment on lines, send feedback with <kbd>⌘↩</kbd>, then merge or discard.</p>
       </div>
       <div class="card reveal">
-        <div class="shot"><img src="/boo/landing/img/timeline.png" alt="Agent timeline with prompts, tool calls, tokens and cost" onerror="this.parentNode.classList.add('missing');this.replaceWith('/boo/landing/img/timeline.png')"></div>
+        <div class="shot"><img src="/boo/landing/img/timeline.webp" width="1719" height="1064" loading="lazy" decoding="async" alt="Agent timeline with prompts, tool calls, tokens and cost" onerror="this.parentNode.classList.add('missing');this.replaceWith('/boo/landing/img/timeline.webp')"></div>
         <h3>Timeline &amp; cost</h3>
         <p>Replay a Claude Code session: every prompt, tool call, duration, token count and cost, plus the files it edited. Repeated calls are folded so loops stand out.</p>
       </div>
       <div class="card reveal" id="orchestrator">
-        <div class="shot"><img src="/boo/landing/img/orchestrator.png" alt="The orchestrator drawer listing agents that need input" onerror="this.parentNode.classList.add('missing');this.replaceWith('/boo/landing/img/orchestrator.png')"></div>
+        <div class="shot"><img src="/boo/landing/img/orchestrator.webp" width="1719" height="1064" loading="lazy" decoding="async" alt="The orchestrator drawer listing agents that need input" onerror="this.parentNode.classList.add('missing');this.replaceWith('/boo/landing/img/orchestrator.webp')"></div>
         <h3>Orchestrator</h3>
         <p>One Claude Code session that sees every agent (<kbd>⌥⌘O</kbd>). It answers waiting agents, splits work into parallel tasks and merges them — anything risky waits on an approval card.</p>
       </div>
@@ -638,13 +679,13 @@ footer .brand { color: var(--text); font-size: 17px; }
       <h2>Everything is one keystroke away</h2>
       <p><kbd>⇧⌘P</kbd> searches every menu command, workspace and tab of every window, bookmarks, SSH hosts, themes, profiles and recipes. Matching is fuzzy and recent picks rank higher.</p>
       <ul class="points">
-        <li><b>Prefixes</b> — <code>&gt;</code> commands, <code>@</code> workspaces, <code>@ssh</code> hosts, <code>#</code> tabs, <code>%</code> panes, <code>:</code> themes, <code>!</code> history</li>
+        <li><b>Prefixes</b> — <code>&gt;</code> commands, <code>@</code> workspaces, <code>@ssh</code> hosts, <code>@op</code> 1Password, <code>@tmux</code> sessions, <code>#</code> tabs, <code>%</code> panes, <code>:</code> themes and profiles, <code>!</code> history</li>
         <li><b>Live theme preview</b> — highlight a theme to try it, <kbd>Esc</kbd> to revert</li>
         <li><b>Every shortcut rebindable</b> — and they work on non-US layouts like QWERTZ</li>
       </ul>
       <a class="more" href="/boo/keyboard-shortcuts">Keyboard shortcuts →</a>
     </div>
-    <div class="shot reveal"><img src="/boo/landing/img/palette.png" alt="The command palette" onerror="this.parentNode.classList.add('missing');this.replaceWith('/boo/landing/img/palette.png')"></div>
+    <div class="shot reveal"><img src="/boo/landing/img/palette.webp" width="1719" height="1064" loading="lazy" decoding="async" alt="The command palette" onerror="this.parentNode.classList.add('missing');this.replaceWith('/boo/landing/img/palette.webp')"></div>
   </div>
 </section>
 
@@ -658,7 +699,7 @@ footer .brand { color: var(--text); font-size: 17px; }
     </div>
     <div class="grid reveal">
       <div class="card">
-        <div class="shot"><img src="/boo/landing/img/quick-select.png" alt="Quick select labels on URLs, paths and hashes" onerror="this.parentNode.classList.add('missing');this.replaceWith('/boo/landing/img/quick-select.png')"></div>
+        <div class="shot"><img src="/boo/landing/img/quick-select.webp" width="680" height="470" loading="lazy" decoding="async" alt="Quick select labels on URLs, paths and hashes" onerror="this.parentNode.classList.add('missing');this.replaceWith('/boo/landing/img/quick-select.webp')"></div>
         <h3>Quick select</h3>
         <p><kbd>⇧⌘Space</kbd> labels every URL, path, git hash, IP and UUID on screen. Type the label to copy, with <kbd>⇧</kbd> to paste at the prompt.</p>
       </div>
@@ -705,7 +746,7 @@ footer .brand { color: var(--text); font-size: 17px; }
       </ul>
       <a class="more" href="/boo/features#session-recording">Recording →</a>
     </div>
-    <div class="shot reveal"><img src="/boo/landing/img/recording.png" alt="The recording player tab" onerror="this.parentNode.classList.add('missing');this.replaceWith('/boo/landing/img/recording.png')"></div>
+    <div class="shot reveal"><img src="/boo/landing/img/recording.webp" width="680" height="529" loading="lazy" decoding="async" alt="The recording player tab" onerror="this.parentNode.classList.add('missing');this.replaceWith('/boo/landing/img/recording.webp')"></div>
   </div>
 </section>
 
@@ -758,7 +799,7 @@ footer .brand { color: var(--text); font-size: 17px; }
       </ul>
       <a class="more" href="/boo/theming">Theming →</a>
     </div>
-    <div class="shot reveal"><img src="/boo/landing/img/themes.png" alt="The same window in four themes" onerror="this.parentNode.classList.add('missing');this.replaceWith('/boo/landing/img/themes.png')"></div>
+    <div class="shot reveal"><img src="/boo/landing/img/themes.webp" width="1719" height="1064" loading="lazy" decoding="async" alt="The same window in four themes" onerror="this.parentNode.classList.add('missing');this.replaceWith('/boo/landing/img/themes.webp')"></div>
   </div>
 </section>
 
@@ -792,10 +833,10 @@ footer .brand { color: var(--text); font-size: 17px; }
     <div class="center reveal">
       <div class="kicker">Sidebar plugins</div>
       <h2>A sidebar that knows your stack</h2>
-      <p>Thirteen built-in plugins sit in stacked, collapsible panels next to the terminal. Each one shows up only where it makes sense — Git in a repo, Docker on your Mac, Files over SSH — and you toggle them from the status bar.</p>
+      <p>Thirteen built-in plugins sit in stacked, collapsible panels next to the terminal. Each one shows up only where it makes sense — Git in a repo, Docker on your Mac, Files over SSH — and you turn each one on or off in Settings.</p>
     </div>
     <div class="reveal">
-      <div class="shot"><img src="/boo/landing/img/plugins.png" alt="Sidebar plugins: file explorer, Git, System and Tasks" onerror="this.parentNode.classList.add('missing');this.replaceWith('/boo/landing/img/plugins.png')"></div>
+      <div class="shot"><img src="/boo/landing/img/plugins.webp" width="1508" height="669" loading="lazy" decoding="async" alt="Sidebar plugins: file explorer, Git, System and Tasks" onerror="this.parentNode.classList.add('missing');this.replaceWith('/boo/landing/img/plugins.webp')"></div>
     </div>
     <div class="plugs wide reveal">
         <div class="plug"><span class="pi"><svg class="lucide lucide-folder-tree" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M20 10a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1h-2.5a1 1 0 0 1-.8-.4l-.9-1.2A1 1 0 0 0 15 3h-2a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1Z"/><path d="M20 21a1 1 0 0 0 1-1v-3a1 1 0 0 0-1-1h-2.9a1 1 0 0 1-.88-.55l-.42-.85a1 1 0 0 0-.92-.6H13a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1Z"/><path d="M3 5a2 2 0 0 0 2 2h3"/><path d="M3 3v13a2 2 0 0 0 2 2h3"/></svg></span><div><b>Files</b><p>Live tree, local via FSEvents or remote over SSH and Mosh</p></div></div>
@@ -869,7 +910,7 @@ footer .brand { color: var(--text); font-size: 17px; }
           <div class="ex"><code>make-targets</code><span>Makefile targets, click to run</span></div>
           <div class="ex"><code>project-info</code><span>detects the project type and its key files</span></div>
           <div class="ex"><code>node-project</code><span>scripts, dependencies and quick actions</span></div>
-          <div class="ex"><code>terminal-inspector</code><span>every context field, setting and action</span></div>
+          <div class="ex"><code>terminal-inspector</code><span>context fields, settings and actions</span></div>
         </div>
       </div>
     </div>
@@ -926,7 +967,7 @@ footer .brand { color: var(--text); font-size: 17px; }
       <div class="card">
         <div class="ico"><svg class="lucide lucide-smartphone" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><rect width="14" height="20" x="5" y="2" rx="2" ry="2"/><path d="M12 18h.01"/></svg></div>
         <h3>Remote control</h3>
-        <p>An optional web UI on your LAN: see every pane, type, switch tabs, and approve or deny waiting agents from your phone. Stops itself after 30 minutes idle.</p>
+        <p>An optional web UI on your LAN: watch every pane update live, type, switch tabs, and approve or deny waiting agents from your phone. Stops itself after 30 minutes idle.</p>
         <p style="margin-top:12px"><a class="more" href="/boo/remote-control">Remote control →</a></p>
       </div>
       <div class="card">
@@ -1000,7 +1041,7 @@ footer .brand { color: var(--text); font-size: 17px; }
       <h2>Questions, answered</h2>
     </div>
     <details class="reveal"><summary>How is Boo related to Ghostty?</summary><p>Boo embeds Ghostty's terminal core through libghostty. Ghostty handles terminal emulation, fonts and Metal rendering; Boo builds the window, workspaces, sidebar, agent tools and everything else around it. Your Ghostty shaders and themes work in Boo.</p></details>
-    <details class="reveal"><summary>Which coding agents does it support?</summary><p>Claude Code, Codex and OpenCode are detected out of the box, including when they run behind ssh or mosh. Other AI CLIs show up in the Agents sidebar, and any agent can drive Boo through the MCP server or the <code>boo</code> CLI.</p></details>
+    <details class="reveal"><summary>Which coding agents does it support?</summary><p>Claude Code, Codex, OpenCode, GitHub Copilot CLI, pi and Hermes are detected out of the box, including when they run behind ssh or mosh. Other AI CLIs show up in the Agents sidebar, and any agent can drive Boo through the MCP server or the <code>boo</code> CLI.</p></details>
     <details class="reveal"><summary>Do I need agents to use Boo?</summary><p>No. Workspaces, splits, the file explorer, quick select, copy mode, recording, tmux integration and plugins are all useful on their own. The agent features stay out of the way until a terminal runs one.</p></details>
     <details class="reveal"><summary>Does it work on Intel Macs?</summary><p>Release builds target macOS 15 or later on Apple Silicon. You can try building from source for other setups.</p></details>
     <details class="reveal"><summary>Where does Boo keep my data?</summary><p>Everything lives in <code>~/.boo</code>, readable only by you: settings, session, history, notes, recipes, plugins and recordings. Nothing leaves your Mac unless you turn on settings sync to a folder you pick, or remote control on your LAN.</p></details>
@@ -1011,7 +1052,7 @@ footer .brand { color: var(--text); font-size: 17px; }
 <!-- Install -->
 <section class="install" id="install">
   <div class="wrap reveal">
-    <img class="boo-icon" src="/boo/landing/img/icon-dark.png" alt="" style="width:72px;height:72px;margin:0 auto 18px">
+    <img class="boo-icon" src="/boo/landing/img/icon-dark.png" alt="" width="72" height="72" style="width:72px;height:72px;margin:0 auto 18px">
     <h2>Get Boo</h2>
     <p style="color:var(--muted);font-size:18px;margin:0 0 28px">Free, open source, and native. macOS 15+ on Apple Silicon.</p>
     <div class="cta">
@@ -1021,7 +1062,7 @@ footer .brand { color: var(--text); font-size: 17px; }
     <div class="steps">
       <div class="card"><b>1 · Download</b><p>Grab the zip from GitHub Releases and move Boo to Applications.</p></div>
       <div class="card"><b>2 · Open a folder</b><p><kbd>⇧⌘O</kbd> opens a folder as a workspace with its file tree.</p></div>
-      <div class="card"><b>3 · Start an agent</b><p>Run <code>claude</code> in a tab — Boo starts tracking it right away.</p></div>
+      <div class="card"><b>3 · Start an agent</b><p>Run <code>claude</code>, <code>codex</code> or another agent CLI in a tab — Boo starts tracking it right away.</p></div>
     </div>
     <div class="term">
       <div class="bar"><i></i><i></i><i></i></div>
@@ -1037,7 +1078,7 @@ footer .brand { color: var(--text); font-size: 17px; }
 
 <footer>
   <div class="wrap">
-    <a class="brand" href="#top"><img class="boo-icon" src="/boo/landing/img/icon-dark.png" alt="" style="width:22px;height:22px">Boo</a>
+    <a class="brand" href="#top"><img class="boo-icon" src="/boo/landing/img/icon-dark.png" alt="" width="22" height="22" style="width:22px;height:22px">Boo</a>
     <a href="/boo/getting-started">Documentation</a>
     <a href="https://github.com/ph1p/boo">GitHub</a>
     <a href="https://github.com/ph1p/boo/releases">Releases</a>
@@ -1144,13 +1185,13 @@ footer .brand { color: var(--text); font-size: 17px; }
     ]],
     ['tmux leader', '⌃A', [
       ['% / "', 'Split right / down'],
-      ['H J K L', 'Select pane'],
-      ['Z', 'Zoom pane'],
-      ['O', 'Next pane'],
-      ['Q', 'Pick a pane'],
-      ['X', 'Close pane'],
-      ['C', 'New tab'],
-      ['N / P', 'Next / previous tab'],
+      ['h j k l', 'Select pane'],
+      ['z', 'Zoom pane'],
+      ['o', 'Next pane'],
+      ['q', 'Pick a pane'],
+      ['x', 'Close pane'],
+      ['c', 'New tab'],
+      ['n / p', 'Next / previous tab'],
       ['[', 'Copy mode'],
       ['?', 'Command palette'],
     ]],

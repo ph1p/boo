@@ -1,3 +1,7 @@
+---
+description: How Boo protects what you type and paste. Secure Keyboard Entry, paste and clipboard confirmations, and the owner-only ~/.boo folder.
+---
+
 # Security
 
 How Boo protects what you type and paste, and the files it keeps about you.
@@ -6,7 +10,7 @@ How Boo protects what you type and paste, and the files it keeps about you.
 
 Boo keeps its settings, session, command history, notes and recordings in `~/.boo`. At every launch Boo makes the folder owner-only (`0700`) and removes any group or other access.
 
-Saved scrollback in `~/.boo/scrollback/` can hold anything that was on screen. Each file is owner-only (`0600`) and deleted once it is replayed. Turn off **Settings → General → Startup → Restore terminal scrollback** to stop saving it; that also deletes what is saved.
+Saved scrollback in `~/.boo/scrollback/` can hold anything that was on screen. Each file is owner-only (`0600`) and deleted once it is replayed. Turn off **Settings → Terminal → Sessions → Restore scrollback** to stop saving it; that also deletes what is saved.
 
 ## Secure Keyboard Entry
 

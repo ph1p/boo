@@ -1,3 +1,7 @@
+---
+description: Work with several Boo windows, split panes in any direction, drag tabs and workspaces between windows, and use native tmux windows.
+---
+
 # Windows & Splits
 
 Each window has its own workspaces, sidebar and plugins. Settings, themes and bookmarks are shared. Inside a workspace, panes split the terminal area, and each pane has its own tabs.
@@ -40,7 +44,7 @@ On quit, Boo saves every window with its workspaces, frame, full-screen state an
 
 The arrow shortcuts match Ghostty's defaults. Resize moves the divider 10 points per step. Move swaps the pane with its neighbor, and focus follows.
 
-**Zoom** fills the workspace with the active pane. While zoomed, an unzoom button sits in the pane's bottom-right corner. Click it or press ⇧⌘↩ again to show all panes. Selecting a hidden pane also ends zoom.
+**Zoom** fills the workspace with the active pane. While zoomed, an unzoom button sits at the end of the pane's tab bar. Click it or press ⇧⌘↩ again to show all panes. Selecting a hidden pane also ends zoom.
 
 ### Drag to split
 
@@ -58,7 +62,7 @@ A pane left without tabs closes.
 
 Run `tmux -CC` (or `tmux -CC attach`) and Boo shows the session natively: each tmux window becomes a workspace, and each tmux pane a Boo pane. Splits and new tabs in such a workspace go through tmux. Quitting Boo leaves the tmux session running.
 
-Turn it off with **Settings → General → Native tmux windows**. The change applies to terminals opened afterwards.
+Turn it off with **Settings → Terminal → Sessions → Native tmux windows**. The change applies to terminals opened afterwards.
 
 ## Scripting
 

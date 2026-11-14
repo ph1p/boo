@@ -1,3 +1,7 @@
+---
+description: Script Boo over its Unix socket and MCP server. Read the pane layout, split panes, send text, start agent tasks and subscribe to events.
+---
+
 # IPC Socket
 
 Boo listens on a Unix socket at `~/.boo/boo.sock`. Scripts, plugins and agents use it to read and drive the app.
@@ -28,17 +32,17 @@ Most commands act on the frontmost Boo window. With a `pane_id` they go to the w
 
 | Category       | Commands |
 | -------------- | -------- |
-| **Query**      | `get_context`, `get_theme`, `get_settings`, `get_workspaces`, `list_themes`, `get_state`, `get_view`, `get_screen` |
+| **Query**      | `get_context`, `get_theme`, `get_settings`, `get_workspaces`, `list_themes`, `get_state`, `get_screen`, `tmux_mode` |
 | **Control**    | `set_theme`, `toggle_sidebar`, `switch_workspace`, `new_tab`, `new_workspace`, `send_text`, `send_key`, `select_pane`, `select_tab` |
 | **Panes**      | `split_pane`, `close_pane`, `focus_pane`, `resize_pane`, `swap_pane`, `zoom_pane`, `equalize_splits`, `get_layout` |
 | **Windows**    | `new_window`, `move_workspace_to_new_window`, `merge_all_windows` |
-| **Agents**     | `agent_event`, `agent_idle`, `agent_inbox`, `agent_jump`, `agent_respond`, `agent_timeline`, `wait_for_events` |
+| **Agents**     | `agent_event`, `agent_idle`, `agent_inbox`, `agent_jump`, `agent_respond`, `agent_send`, `agent_messages`, `agent_collected`, `agent_timeline`, `wait_for_events` |
+| **Browser**    | `browser_open`, `browser_navigate`, `browser_read`, `browser_screenshot`, `browser_console`, `browser_click`, `browser_type`, `browser_eval`, `browser_list`, `browser_close` |
 | **Tasks**      | `new_agent_task`, `review_changes`, `task_status`, `task_diff`, `merge_task`, `discard_task` |
 | **Recipes**    | `run_recipe`, `list_recipes` |
 | **Process**    | `set_status`, `clear_status`, `list_status` |
 | **Events**     | `subscribe`, `unsubscribe` |
 | **Status Bar** | `statusbar.set`, `statusbar.clear`, `statusbar.list` |
-| **Plugin**     | `<namespace>.<action>` |
 
 ## Workspaces, Tabs and Keys
 
@@ -46,7 +50,6 @@ Most commands act on the frontmost Boo window. With a `pane_id` they go to the w
 | ------------------ | --------- | ----- |
 | `get_workspaces`   | | `workspaces` (`index`, `id`, `name`, `path`, `is_active`, `pane_count`) |
 | `get_state`        | | `workspaces` (with `group` and `color` when set), `panes` of the active workspace with their `tabs`, `agents`, `theme` |
-| `get_view`         | optional `known` (pane id → last `hash`) | `layout` (split tree: `{id}` or `{dir, ratio, a, b}`), `panes` (id → `title`, `cwd`, `kind`, `tabs`, `cols`, `rows`, `hash`, plus `vt`/`text` only when the hash changed), `active`, `zoomed` |
 | `list_themes`      | | `themes` (names) |
 | `switch_workspace` | `index` or `id` | |
 | `new_tab`          | optional `cwd` (default: workspace folder), `command`, `env` (strings; `BOO_*` keys are ignored). Opens in the active pane. | `tab_id` |
@@ -148,13 +151,7 @@ done
 
 The inbox is Boo's list of coding agents across all windows. See [Agents](/agents#agent-inbox) for the UI.
 
-Claude Code reports through a hook that Boo installs. For Codex, add to `~/.codex/config.toml`:
-
-```toml
-notify = ["~/.boo/shell-integration/boo-claude-hook", "codex"]
-```
-
-Other agents report with `agent_event`:
+Claude Code, Codex, OpenCode, GitHub Copilot CLI, pi and Hermes report through hooks or plugins that Boo installs. See [Agents](/agents#agent-inbox) for the files it writes. Any other agent can report with `agent_event`:
 
 | Command         | Arguments | Reply |
 | --------------- | --------- | ----- |
@@ -223,7 +220,7 @@ echo '{"cmd":"new_agent_task","name":"fix login","prompt":"The login redirect lo
 
 ## MCP Server
 
-`Boo --mcp` is an [MCP](https://modelcontextprotocol.io) server over stdio. The installed app writes a launcher to `~/.boo/shell-integration/boo-mcp` on every start. Register it once:
+`Boo --mcp` is an [MCP](https://modelcontextprotocol.io) server over stdio. While agents are switched on, the installed app writes a launcher to `~/.boo/shell-integration/boo-mcp` when it starts. Register it once:
 
 ```bash
 claude mcp add -s user boo -- ~/.boo/shell-integration/boo-mcp
@@ -240,7 +237,9 @@ The server talks to the running app over `$BOO_SOCK`. It uses `$BOO_PANE_ID` as 
 | `send_text`       | Type into another pane. Presses Return unless `submit` is false. |
 | `close_pane`      | Close another pane |
 | `list_agents`     | The agent inbox |
-| `new_agent_task`  | Worktree task on the agent's repository with a first `prompt` |
+| `new_agent_task`  | Start another agent with a first `prompt`: on its own worktree, or with `worktree: false` in a tab beside the caller (`cwd`) |
+| `send_message`    | Message another agent by handle (`to`, `text`). It arrives when that agent finishes its turn. |
+| `read_messages`   | Read and clear messages waiting for the caller |
 | `run_recipe`      | Open a [recipe](/features#recipes) by `name` |
 | `open_review`     | Review tab for the agent's workspace |
 | `wait_for_events` | Block until something happens (`since`, `timeout`) |
@@ -250,6 +249,7 @@ The server talks to the running app over `$BOO_SOCK`. It uses `$BOO_PANE_ID` as 
 | `task_diff`       | A task's changes (`stat_only` for the summary) |
 | `merge_task`      | Merge a task into its main checkout (`cleanup` removes the worktree) |
 | `discard_task`    | Delete a task's worktree and branch |
+| `browser_open`, `browser_navigate`, `browser_read`, `browser_screenshot`, `browser_console`, `browser_click`, `browser_type`, `browser_eval`, `browser_list`, `browser_close` | Drive a Boo [browser tab](/multi-content-tabs#browser), for example to check a dev server |
 
 ## Status Bar Segments
 
@@ -279,7 +279,8 @@ echo '{"cmd":"set_status","pid":'"$$"',"name":"claude","category":"ai"}' | nc -U
 
 Every Boo terminal gets a random `BOO_TOKEN`. A command needs it when it gives a process power it lacks in its own shell:
 
-- `agent_respond`
+- `agent_respond` and `agent_send`
+- every `browser_*` command (also needs **Settings → Browser → Let agents use the browser**, and an approval card for tabs the caller did not open)
 - `send_text` or `send_key` into an agent or a remote session
 - `close_pane` on an agent pane
 - `merge_task` and `discard_task`

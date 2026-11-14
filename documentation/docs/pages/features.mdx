@@ -1,10 +1,14 @@
+---
+description: Every Boo feature in one place. Command palette, workspaces, recipes, split panes, quick terminal, tmux, recording, themes, sidebar plugins, status bar and settings.
+---
+
 # Features
 
 ## Command Palette
 
-**Cmd+Shift+P** opens a search over every menu command (plugin commands included), the workspaces and tabs of all windows, bookmarks, SSH hosts, themes, profiles and [recipes](#recipes). Matching is fuzzy, and recent picks rank higher. Each command shows its shortcut; commands that can't run right now are dimmed.
+**Cmd+Shift+P** opens a search over every menu command (plugin commands included), the workspaces and tabs of all windows, bookmarks, SSH hosts, 1Password items, tmux sessions, themes, profiles and [recipes](#recipes). Matching is fuzzy, and recent picks rank higher. Each command shows its shortcut; commands that can't run right now are dimmed.
 
-- **Prefixes** — `>` commands, `@` workspaces, `@ssh` SSH hosts, `#` tabs, `%` panes, `:` themes and [profiles](/rules-and-profiles#profiles), `!` [command history](/history-and-sync#shell-history)
+- **Prefixes** — `>` commands, `@` workspaces, `@ssh` SSH hosts, `@op` 1Password items, `@tmux` tmux sessions, `#` tabs, `%` panes, `:` themes and [profiles](/rules-and-profiles#profiles), `!` [command history](/history-and-sync#shell-history)
 - **Theme preview** — Highlighting a theme previews it live; **Esc** reverts
 - **Keys** — **Up**/**Down** move, **Return** runs, **Esc** closes
 
@@ -18,7 +22,7 @@ Open folders as workspaces with their own file tree using **Cmd+Shift+N** (home 
 - **Color by project** — With **Settings → Layout → Color new workspaces by project**, each new workspace gets a color derived from its repository (or folder). The same project gets the same color every time; a color you pick wins.
 - **Renaming** — Double-click a workspace pill to rename it, or use the right-click context menu
 - **Session persistence** — Workspace names, colors, split layouts, tab paths, and split pane ratios are saved to `~/.boo/session.json` and restored on next launch. Remote connections are not restored; tabs reopen at their local working directory.
-- **Scrollback restore** — On quit, each terminal's screen and scrollback (up to 2 MB per tab, colors included) is saved to `~/.boo/scrollback/` and replayed into the tab on next launch. The files are owner-only and deleted once replayed. Turn it off under Settings → General → Startup.
+- **Scrollback restore** — On quit, each terminal's screen and scrollback (up to 2 MB per tab, colors included) is saved to `~/.boo/scrollback/` and replayed into the tab on next launch. The files are owner-only and deleted once replayed. Turn it off with **Settings → Terminal → Sessions → Restore scrollback**.
 - **Drag to switch workspace** — While dragging a tab, hover over a workspace pill for ~500 ms to spring-load into that workspace, then drop the tab onto any pane there.
 
 ## Recipes
@@ -68,8 +72,8 @@ See [Windows & Splits](/windows-and-splits) for the full guide.
 Press **Opt+Space** from any app to drop a terminal down from the top of the screen; press it again to hide it. The shells keep running while it is hidden, and its tabs come back on the next launch.
 
 - **Tabs** — **Cmd+T** opens a tab in the current directory, **Cmd+W** closes it, **Cmd+Opt+1-9** switches. Click a tab to select it, middle-click to close
-- **Hides on focus loss** — Clicking another window hides it; turn off **Hide when it loses focus** in Settings → Shortcuts
-- **Settings → Shortcuts → Quick Terminal** — change the hotkey (like `` ctrl+` ``, `cmd+shift+t` or `f12`), the height, or turn the hotkey off. **Window → Toggle Quick Terminal** works either way
+- **Hides on focus loss** — Clicking another window hides it; turn off **Hide when it loses focus** in Settings → Terminal → Quick Terminal
+- **Settings → Terminal → Quick Terminal** — change the hotkey (like `` ctrl+` ``, `cmd+shift+t` or `f12`), the height, or turn the hotkey off. **Window → Toggle Quick Terminal** works either way
 
 The quick terminal has no splits. While the hotkey is on, Opt+Space no longer types a non-breaking space in other apps.
 
@@ -98,7 +102,7 @@ Boo's shell integration marks each prompt (OSC 133), so the terminal knows where
 
 ## tmux
 
-Run `tmux -CC` (or `tmux -CC attach`) in a Boo terminal, and the tmux session opens as native Boo workspaces: each tmux window becomes a workspace, each tmux pane a Boo pane. Splits and new tabs in those workspaces go through tmux. Turn it off with **Settings → General → Startup → Native tmux windows**; the change applies to terminals opened afterwards.
+Run `tmux -CC` (or `tmux -CC attach`) in a Boo terminal, and the tmux session opens as native Boo workspaces: each tmux window becomes a workspace, each tmux pane a Boo pane. Splits and new tabs in those workspaces go through tmux. Turn it off with **Settings → Terminal → Sessions → Native tmux windows**; the change applies to terminals opened afterwards.
 
 Boo and tmux stay in step both ways:
 
@@ -146,7 +150,7 @@ A number before a motion repeats it (**5j**). **Cmd+C** copies the selection wit
 
 ## Session Recording
 
-**Terminal → Record Session**, or **Start Recording** in a pane's **⋯** corner menu, records the terminal's output as an [asciicast v2](https://docs.asciinema.org/manual/asciicast/v2/) file. **Record All Panes** in the same menu records every terminal pane at once. The tab shows a red dot while recording, and the pane gets a red frame. Choose the item again to stop. Only output and resizes are recorded, never keystrokes. Closing the tab also stops the recording.
+**Terminal → Record Session**, or **Start Recording** in the **⋯** menu of a pane's tab bar, records the terminal's output as an [asciicast v2](https://docs.asciinema.org/manual/asciicast/v2/) file. **Record All Panes** in the same menu records every terminal pane at once. The tab shows a red dot while recording, and the pane gets a red frame. Choose the item again to stop. Only output and resizes are recorded, never keystrokes. Closing the tab also stops the recording.
 
 **Terminal → Add Recording Marker** (**Cmd+Shift+M**) drops a chapter mark into the running recording; the player can jump between marks.
 
@@ -257,9 +261,11 @@ The sidebar shows stacked, collapsible panels powered by the [plugin system](/pl
 - **Hosts** — The `Host` entries of `~/.ssh/config` (including `Include`d files), with the last connection and the number of open sessions. Click to connect in a new tab, **Opt+click** to connect in a split; right-click to **Go to Session**, **Copy ssh Command** or **Edit in Config**.
 - **Notes** — One markdown note per workspace plus a global **Scratch** note, stored in `~/.boo/notes/` and saved as you type. Search all notes, switch between edit and preview, or open a note in an editor tab. **Terminal → Append Selection to Note** adds the selection (or the last command's output) to the workspace's note.
 - **Kubernetes** — Off by default; turn it on in **Settings → Plugins**. Pods, workloads, jobs, cronjobs, services and ingresses of the current context and namespace, watched only while their section is expanded. Pods offer **Exec Shell**, **Follow Logs** (or double-click), port-forwarding, **Previous Logs** and **Delete Pod…**; every resource has **Describe**, **View YAML**, **Edit…** and **Copy Name**; deployments, statefulsets and daemonsets add **Scale…** and **Rollout Restart…**, and cronjobs **Run Now…**.
+- **Tasks** — The project's `package.json` scripts and make, just, cargo and swift tasks. Click one to run it.
+- **1Password** — Off by default; needs the `op` CLI. Search items, copy or type secrets, and insert `op://` references.
 - **Debug** — Live log of plugin lifecycle events and current terminal state, for plugin authors.
 
-Toggle panels via status bar icons or extend with [custom plugins](/plugin-development).
+Turn panels on or off in **Settings → Plugins**, or extend with [custom plugins](/plugin-development).
 
 ## Agents
 
@@ -328,24 +334,24 @@ Secure Keyboard Entry, paste and clipboard-read confirmations, and the owner-onl
 
 ## Settings
 
-Open with **Cmd+,**. The sidebar groups the tabs under **Terminal**, **Appearance**, **Apps** and **Plugins**. The search field above it filters tabs by name and by what they contain (try "font", "sync" or "iterm2"); Return opens the first match.
+Open with **Cmd+,**. The sidebar groups the tabs under **General**, **Terminal**, **Appearance**, **Apps** and **Plugins**. The search field above it filters tabs by name and by what they contain (try "font", "sync" or "iterm2"); Return opens the first match.
 
 | Tab               | Options |
 | ----------------- | ------- |
-| **General**       | Default folders, startup (incl. scrollback restore, native tmux windows), file editor, advanced, agents, [sync](/history-and-sync#sync), [command history](/history-and-sync#history-settings) |
-| **Theme**         | 32 color themes with live preview, custom theme editor (whole UI restyles live while editing) |
-| **Appearance**    | Terminal font, font size, cursor style (block/beam/underline/outline), [terminal shader](/rules-and-profiles#shaders); sidebar font and font size |
-| **Status Bar**    | Preview, built-in segments (connection, path, clock, pane & tab count, listening ports), plugin segments |
-| **Layout**        | Sidebar position (toggle with Cmd+B), workspace bar, tab groups, pane controls, tab overflow mode (scroll/wrap/vertical) |
+| **General**       | Folders for new workspaces, file tree, [sync](/history-and-sync#sync), advanced |
+| **Shortcuts**     | Searchable list of every menu command; click a shortcut to rebind it. tmux-style leader key |
+| **Notifications** | Command notifications, new port notifications, minimum duration, grouping bursts, removal |
+| **Permissions**   | Code signature, Full Disk Access status, links to privacy settings ([Installation](/installation#permissions)) |
+| **Terminal**      | Font, cursor style and [shader](/rules-and-profiles#shaders); sessions (scrollback restore, bringing agents back after a crash, native tmux windows); quick terminal hotkey; what ⌘-click on a link opens; [command history](/history-and-sync#history-settings) |
 | **Profiles**      | [Profiles](/rules-and-profiles#profiles) and the default for new tabs |
 | **Rules**         | [Rules](/rules-and-profiles#settings--rules) editor, regex tester, `sendText` approvals |
 | **Recordings**    | [Recording](#recordings-settings) folder, file names, idle limit, stop action, library |
-| **Permissions**   | Code signature, Full Disk Access status, links to privacy settings ([Installation](/installation#permissions)) |
-| **Editor**        | Font, editing, display, cursor, terminal links, saving (autosave, format on save, reload on disk change) |
-| **Browser**       | Browser tab behavior and history |
-| **Notifications** | Command notifications, new port notifications, minimum duration, grouping bursts, removal |
+| **Theme**         | Follow the system's dark or light mode, 32 color themes with live preview, app icon, custom theme editor (whole UI restyles live while editing) |
+| **Layout**        | Sidebar position (toggle with Cmd+B) and font, workspace bar, tab groups, pane controls, tab overflow mode (scroll/wrap/vertical) |
+| **Status Bar**    | Preview, built-in segments (connection, path, clock, pane & tab count, listening ports), plugin segments |
+| **Editor**        | Font, editing, display, cursor, saving (autosave, format on save, reload on disk change) |
+| **Browser**       | Browser tab behavior, whether agents may use the browser, history |
 | **Plugins**       | Enable/disable plugins, per-plugin settings (file explorer icons/hidden files, git settings) |
-| **Shortcuts**     | Searchable list of every menu command; click a shortcut to rebind it. Quick Terminal hotkey |
 
 ## Welcome Window
 

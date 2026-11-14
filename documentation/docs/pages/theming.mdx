@@ -1,3 +1,7 @@
+---
+description: How Boo themes are built. Terminal and chrome base colors, the semantic tokens derived from them, the built-in themes and how to use them in SwiftUI and plugins.
+---
+
 # Theming
 
 ## Theme Structure
@@ -33,8 +37,7 @@ Ghostty theme file (`ThemeImporter`).
 
 Derived tokens are computed from the base colors, so every theme gets them for
 free. **Use the token that names the role.** Do not write
-`chromeMuted.withAlphaComponent(…)` by hand. The full table is a comment in
-`Theme.swift`.
+`chromeMuted.withAlphaComponent(…)` by hand. The full table is below.
 
 | Token | Derivation | Used for |
 | --- | --- | --- |
@@ -86,7 +89,7 @@ If you need a raw alpha (state matrices, animations), stay inside these bands:
 
 ## SwiftUI
 
-SwiftUI views use `Tokens` (`Boo/Views/SettingsWindow.swift`). It mirrors the
+SwiftUI views use `Tokens` (`Boo/Views/Settings/SettingsTokens.swift`). It mirrors the
 theme colors as SwiftUI `Color`:
 
 - Named mirrors: `t.text`, `t.textSecondary`, `t.textTertiary`, `t.separator`,

@@ -1,3 +1,7 @@
+---
+description: Profiles give a Boo tab its own theme, font, shader, shell and environment. Rules pick a profile by host, folder, container or process, or react to output.
+---
+
 # Rules & Profiles
 
 A **profile** is a named set of terminal overrides: theme, font, shader, shell, environment. A **rule** picks a profile for a tab based on where it is (host, folder, container, kube context, process), or runs an action when output matches a regex. Both live in JSON files under `~/.boo/`, and Boo reloads them when you save.
@@ -34,7 +38,7 @@ Profiles are stored in `~/.boo/profiles.json`. Edit them in **Settings → Profi
 | `shell` | Program that runs instead of your login shell in new tabs |
 | `env` | Extra environment variables for new tabs. A launch's own variables win |
 | `cwd` | Starting directory for new tabs (`~` is expanded) |
-| `linkTarget` | Where file links open: `"editor"` (built-in editor) or `"external"` (the editor from **Settings → Editor**) |
+| `linkTarget` | Where file links open: `"editor"` (built-in editor) or `"external"` (the editor from **Settings → Terminal → Links → External editor**) |
 
 Fields you leave out use the global setting. `shell`, `env` and `cwd` affect only new tabs. Theme, font and shader also change an open tab when its profile changes.
 
@@ -58,7 +62,7 @@ A profile picked by hand is not saved with the session.
 
 Shaders post-process the whole terminal image through Ghostty's `custom-shader` support.
 
-- **Global** — **Settings → Appearance → Terminal Shader** applies to every terminal
+- **Global** — **Settings → Terminal → Look → Shader** applies to every terminal
 - **Per profile** — a profile's `shader` replaces the global one; `""` turns it off
 
 Boo bundles three presets: `crt`, `bloom` and `scanlines`. To use your own Shadertoy-style GLSL file (a `mainImage` function that samples `iChannel0`), pick it with **Choose File…** or put its path in a profile. A missing file is ignored.

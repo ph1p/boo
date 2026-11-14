@@ -1,3 +1,7 @@
+---
+description: How Boo plugins fill the sidebar and status bar. Built-in and external plugins, the plugin lifecycle and when plugins refresh.
+---
+
 # Plugin System
 
 Plugins fill the sidebar and the status bar. Each plugin gets its own sidebar tab, and some also add a status bar segment.
@@ -20,16 +24,18 @@ To write your own, see [Plugin Development](/plugin-development).
 | **Bookmarks**  | `bookmarks`                           | always                           | Saved directories, namespaced per host                       |
 | **Hosts**      | `hosts`                               | always                           | `Host` entries from `~/.ssh/config`; click to connect        |
 | **Kubernetes** | `kube`                                | always (**off by default**)      | Pods, workloads, jobs, services and ingresses                |
+| **1Password**  | `1password`                           | always (**off by default**)      | Search items, copy or type secrets, insert `op://` references. Needs the `op` CLI |
+| **Tasks**      | `tasks`                               | always                           | Run `package.json` scripts and make, just, cargo and swift tasks |
 | **Notes**      | `notes`                               | always                           | Markdown note per workspace, saved to `~/.boo/notes`         |
 | **Snippets**   | `snippets`                            | always                           | Saved commands to paste into the terminal                    |
 | **System**     | `system-info`                         | local                            | CPU, memory, disk, battery; optional status bar readouts     |
 | **Debug**      | `debug`                               | always                           | Live plugin event log and terminal state, for plugin authors |
 
-Git, Docker, Bookmarks, Hosts and Kubernetes hide while an AI agent (Claude Code, Codex, …) runs in the focused pane. Agents, Docker, Git, System and Debug also add a status bar segment.
+Agents, Docker, Git and System also add a status bar segment.
 
 ## Enabling and Configuring
 
-**Settings → Plugins** turns each plugin on or off and shows its settings. Kubernetes starts disabled; enable it there. The Agents plugin has its own settings page.
+**Settings → Plugins** turns each plugin on or off and shows its settings. Kubernetes and 1Password start disabled; enable them there. The Agents plugin has its own settings page.
 
 ## How It Works
 

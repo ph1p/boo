@@ -1,19 +1,24 @@
+---
+description: Run Claude Code, Codex, OpenCode, GitHub Copilot CLI, pi and Hermes side by side in Boo. Track agent state, give each task a git worktree, review changes and see session cost.
+---
+
 # Agents
 
 Boo runs coding agents (Claude Code, Codex, OpenCode, GitHub Copilot CLI, pi, Hermes) side by side. It tracks their state across all windows, gives each task its own git worktree, lets you review what they changed, and shows what a session cost.
 
 ## Agents Sidebar
 
-The **Agents** sidebar tab covers the current workspace:
+The **Agents** sidebar tab has three sections:
 
-| Section        | What it shows                                                                                           |
-| -------------- | ------------------------------------------------------------------------------------------------------- |
-| Open Sessions  | Agent sessions. Click to focus; right-click to resume, copy the session ID, open the transcript or timeline |
-| Changes        | Files changed while an agent is active, with diff stats                                                 |
-| Worktrees      | The repository's worktrees. Click one to open it in a new tab                                           |
-| Config, Skills | The agent's config files and skills                                                                     |
+| Section   | What it shows                                                                                           |
+| --------- | ------------------------------------------------------------------------------------------------------- |
+| Agents    | The crew: every agent in every window. Click to focus; right-click to resume, send a message, review changes, merge or discard its worktree, open the timeline or transcript, or copy the handle or session ID |
+| Worktrees | The repository's worktrees. Click one to open it in a new tab                                           |
+| Config    | The agent's config files                                                                                |
 
-With no agent in the tab, the sidebar shows a **Start** button for each installed agent CLI.
+**Only Show This Workspace** in the section header limits the crew to the current workspace. The header counts the agents that wait for you. With no agent running, the section shows a form that starts one in a new tab or on its own worktree.
+
+The **Agents** menu starts agents too: **New Agent…** (⌥⌘N), **New &lt;Agent&gt; Tab** for each installed CLI, and **Show Crew** (⌥⌘A). The agents switch in Settings turns the whole integration off: the menu hides and Boo's hooks stay silent.
 
 ## Agent Inbox
 
@@ -26,7 +31,7 @@ Boo keeps one list of agents across all windows: working, waiting for input, don
 | Success | Done, not yet looked at |
 | Accent  | Working                 |
 
-Click the segment to list every agent and jump to it or open its timeline. **Window → Jump to Next Waiting Agent** (⇧⌘J) goes to the next agent that needs you. When an agent starts waiting or finishes in a tab you are not looking at, Boo sends a notification.
+Click the segment to list every agent and jump to it or open its timeline. **Agents → Jump to Next Waiting Agent** (⇧⌘J) goes to the next agent that needs you. When an agent starts waiting or finishes in a tab you are not looking at, Boo sends a notification.
 
 Claude Code reports through a hook. On launch, Boo adds `~/.boo/shell-integration/boo-claude-hook` to `~/.claude/settings.json` and keeps your own hooks. The file must exist, so start Claude Code once first. The other agents report the same way while their config folder exists: Codex through hooks in `~/.codex/hooks.json` (review them once with `/hooks` in Codex; until then only `notify` in `~/.codex/config.toml` reports finished turns, and only when no other program holds it), OpenCode through a plugin, Copilot through `~/.copilot/hooks/boo.json`, pi through `~/.pi/agent/extensions/boo.ts`, and Hermes through `~/.hermes/plugins/boo`. Hermes has no flag that starts a chat with a prompt, so Boo's plugin types the first prompt in. Agents running behind `ssh` or `mosh` are tracked from their terminal title and bell. For other agents, see [Agent Inbox](/ipc-socket#agent-inbox).
 
@@ -89,6 +94,6 @@ The orchestrator can read everything. It writes freely only into its own agent t
 
 Each card shows the action, the target and the exact text. Choose **Allow** (⌘↩), **Deny** (Esc) or **Allow for this pane** (for the rest of the session; not offered for merge or discard). If the target changes state before you decide, the card turns stale and nothing is sent. A card that arrives while the drawer is hidden triggers a notification.
 
-If the orchestrator writes to the same agent more than three times without the agent changing state, the next write waits on a **Possible loop** card.
+If the orchestrator has written to the same agent three times without the agent changing state, the next write waits on a **Possible loop** card.
 
 Before merging, it asks the agent to commit or rebase if needed. If your main checkout has uncommitted changes, it tells you and waits. It never stashes, resets or checks out anything there.
