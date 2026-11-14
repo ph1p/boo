@@ -44,6 +44,7 @@ extension MainWindowController: PaneViewDelegate {
 
         workspace.activePaneID = paneID
         for (id, pv) in paneViews { pv.isFocused = id == paneID }
+        applyFocusedTabSidebarState(in: workspace)
         TmuxControlClient.owning(workspace: workspace.id)?.focus(pane: paneID)
 
         if let pane = workspace.pane(for: paneID) {

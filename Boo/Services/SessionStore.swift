@@ -20,8 +20,12 @@ struct SessionTab: Codable, Sendable {
     let agent: AgentResumePoint?
     /// The profile picked by hand for the tab. Optional so old sessions decode.
     let profileOverride: String?
+    /// The tab's own sidebar state (sidebar scope "Tab"). Optional so old sessions decode.
+    let sidebarVisible: Bool?
+    let sidebarWidth: Double?
 
     init(
+
         contentState: ContentState? = nil,
         expandedPluginIDs: [String]? = nil,
         userCollapsedSectionIDs: [String]? = nil,
@@ -32,7 +36,9 @@ struct SessionTab: Codable, Sendable {
         groupID: UUID? = nil,
         scrollbackID: UUID? = nil,
         agent: AgentResumePoint? = nil,
-        profileOverride: String? = nil
+        profileOverride: String? = nil,
+        sidebarVisible: Bool? = nil,
+        sidebarWidth: Double? = nil
     ) {
         self.contentState = contentState
         self.expandedPluginIDs = expandedPluginIDs
@@ -45,6 +51,8 @@ struct SessionTab: Codable, Sendable {
         self.scrollbackID = scrollbackID
         self.agent = agent
         self.profileOverride = profileOverride
+        self.sidebarVisible = sidebarVisible
+        self.sidebarWidth = sidebarWidth
     }
 }
 
@@ -239,7 +247,9 @@ enum SessionStore {
                         groupID: tab.groupID,
                         scrollbackID: tab.contentType == .terminal ? tab.id : nil,
                         agent: tab.contentType == .terminal ? agents[tab.id] : nil,
-                        profileOverride: tab.contentType == .terminal ? tab.state.profileOverride : nil
+                        profileOverride: tab.contentType == .terminal ? tab.state.profileOverride : nil,
+                        sidebarVisible: tab.state.sidebarVisible,
+                        sidebarWidth: tab.state.sidebarWidth.map { Double($0) }
                     )
                 }
                 return SessionPane(
@@ -412,6 +422,11 @@ enum SessionStore {
                             // The rule engine resolves it when the terminal registers.
                             pane.setProfile(at: idx, override: name, effective: nil, source: nil)
                         }
+                        pane.setSidebarState(
+                            at: idx,
+                            SidebarWorkspaceState(
+                                isVisible: tab.sidebarVisible,
+                                width: tab.sidebarWidth.flatMap { $0 > 0 ? CGFloat($0) : nil }))
                         if let agent = tab.agent, restoredState.contentType == .terminal {
                             CrashRecovery.scheduleResume(agent, for: pane.tabs[idx].id)
                         }

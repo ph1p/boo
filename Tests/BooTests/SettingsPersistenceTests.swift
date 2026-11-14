@@ -134,9 +134,9 @@ final class SettingsPersistenceTests: XCTestCase {
 
     func testSidebarPerWorkspaceStatePersistsInSettingsJSON() {
         let settings = AppSettings.shared
-        let original = settings.sidebarPerWorkspaceState
-        settings.sidebarPerWorkspaceState = true
-        defer { settings.sidebarPerWorkspaceState = original }
+        let original = settings.sidebarStateScope
+        settings.sidebarStateScope = .tab
+        defer { settings.sidebarStateScope = original }
 
         let path = BooPaths.settingsFile
         guard let data = try? Data(contentsOf: URL(fileURLWithPath: path)),
@@ -151,6 +151,7 @@ final class SettingsPersistenceTests: XCTestCase {
             true,
             "sidebarPerWorkspaceState should be persisted in settings.json"
         )
+        XCTAssertEqual(json["sidebarStateScope"] as? String, "tab")
     }
 
     func testSSHSettingsPersistToFile() {

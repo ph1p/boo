@@ -186,6 +186,28 @@ extension MainWindowController {
         }
     }
 
+    /// Sidebar scope "Tab": shows the sidebar the way the newly focused tab
+    /// left it. Every change is written to its tab when it happens, so the
+    /// outgoing tab needs no save here.
+    func applyFocusedTabSidebarState(in workspace: Workspace) {
+        guard AppSettings.shared.sidebarStateScope == .tab, renderedWorkspaceID == workspace.id else { return }
+        let target = sidebarController.resolveEffectiveSidebarState(for: workspace)
+        let visible = target.isVisible ?? sidebarController.isVisible
+        let live = sidebarController.captureLiveState(for: workspace)
+        if visible == sidebarController.isVisible, abs((target.width ?? 0) - (live.width ?? 0)) < 0.5 { return }
+
+        // Same pattern as a workspace switch: showing the sidebar resizes the
+        // split view, and that transient width must not be saved into the tab.
+        sidebarController.suppressSidebarStateSync += 1
+        let generation = sidebarController.beginActivation()
+        sidebarController.applyRestoredState(target)
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.sidebarController.restoreActiveWorkspaceWidth(ifGeneration: generation)
+            self.sidebarController.suppressSidebarStateSync -= 1
+        }
+    }
+
     func resetSidebarWidthToDefault() {
         guard sidebarVisible else { return }
         let defaultWidth: CGFloat = 220

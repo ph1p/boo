@@ -3,11 +3,12 @@ import Cocoa
 enum SidebarStatePersistenceTarget: Equatable {
     case appSettings
     case workspace
+    case tab
 }
 
 struct SidebarStateEnvironment {
     var defaultState: SidebarWorkspaceState
-    var usesPerWorkspaceState: Bool
+    var scope: SidebarStateScope
     var position: SidebarPosition
     var splitViewWidth: CGFloat?
     var dividerThickness: CGFloat
@@ -17,18 +18,27 @@ struct SidebarStateEnvironment {
 }
 
 enum SidebarStateResolver {
-    static func persistenceTarget(usesPerWorkspaceState: Bool) -> SidebarStatePersistenceTarget {
-        usesPerWorkspaceState ? .workspace : .appSettings
+    static func persistenceTarget(scope: SidebarStateScope) -> SidebarStatePersistenceTarget {
+        switch scope {
+        case .window: return .appSettings
+        case .workspace: return .workspace
+        case .tab: return .tab
+        }
     }
 
+    /// The tab's own state, then what the workspace remembers, then the
+    /// window's. Each scope reads only its own level and the ones above it,
+    /// and a level without a value falls through to the next.
     static func effectiveState(
+        tabState: SidebarWorkspaceState? = nil,
         workspaceState: SidebarWorkspaceState?,
         environment: SidebarStateEnvironment
     ) -> SidebarWorkspaceState {
-        let sourceState = environment.usesPerWorkspaceState ? workspaceState : nil
+        let tab = environment.scope == .tab ? tabState : nil
+        let workspace = environment.scope == .window ? nil : workspaceState
         return SidebarWorkspaceState(
-            isVisible: sourceState?.isVisible ?? environment.defaultState.isVisible,
-            width: sourceState?.width ?? environment.defaultState.width
+            isVisible: tab?.isVisible ?? workspace?.isVisible ?? environment.defaultState.isVisible,
+            width: tab?.width ?? workspace?.width ?? environment.defaultState.width
         )
     }
 

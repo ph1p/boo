@@ -5,7 +5,7 @@ import XCTest
 
 final class SidebarStateResolverTests: XCTestCase {
     private func makeEnvironment(
-        usesPerWorkspaceState: Bool = false,
+        scope: SidebarStateScope = .window,
         position: SidebarPosition = .right,
         splitViewWidth: CGFloat? = 1_000,
         dividerThickness: CGFloat = 1,
@@ -13,7 +13,7 @@ final class SidebarStateResolverTests: XCTestCase {
     ) -> SidebarStateEnvironment {
         SidebarStateEnvironment(
             defaultState: SidebarWorkspaceState(isVisible: true, width: 250),
-            usesPerWorkspaceState: usesPerWorkspaceState,
+            scope: scope,
             position: position,
             splitViewWidth: splitViewWidth,
             dividerThickness: dividerThickness,
@@ -25,7 +25,7 @@ final class SidebarStateResolverTests: XCTestCase {
         let workspaceState = SidebarWorkspaceState(isVisible: false, width: 312)
         let resolvedState = SidebarStateResolver.effectiveState(
             workspaceState: workspaceState,
-            environment: makeEnvironment(usesPerWorkspaceState: true)
+            environment: makeEnvironment(scope: .workspace)
         )
 
         XCTAssertEqual(resolvedState.isVisible, false)
@@ -36,7 +36,7 @@ final class SidebarStateResolverTests: XCTestCase {
         let workspaceState = SidebarWorkspaceState(isVisible: false, width: 312)
         let resolvedState = SidebarStateResolver.effectiveState(
             workspaceState: workspaceState,
-            environment: makeEnvironment(usesPerWorkspaceState: false)
+            environment: makeEnvironment(scope: .window)
         )
 
         XCTAssertEqual(resolvedState.isVisible, true)
@@ -44,14 +44,35 @@ final class SidebarStateResolverTests: XCTestCase {
     }
 
     func testPersistenceTargetMatchesPerWorkspaceFlag() {
-        XCTAssertEqual(
-            SidebarStateResolver.persistenceTarget(usesPerWorkspaceState: true),
-            .workspace
-        )
-        XCTAssertEqual(
-            SidebarStateResolver.persistenceTarget(usesPerWorkspaceState: false),
-            .appSettings
-        )
+        XCTAssertEqual(SidebarStateResolver.persistenceTarget(scope: .tab), .tab)
+        XCTAssertEqual(SidebarStateResolver.persistenceTarget(scope: .workspace), .workspace)
+        XCTAssertEqual(SidebarStateResolver.persistenceTarget(scope: .window), .appSettings)
+    }
+
+    func testTabScopeChain() {
+        let workspaceState = SidebarWorkspaceState(isVisible: false, width: 312)
+        let own = SidebarStateResolver.effectiveState(
+            tabState: SidebarWorkspaceState(isVisible: true, width: 400),
+            workspaceState: workspaceState,
+            environment: makeEnvironment(scope: .tab))
+        XCTAssertEqual(own.isVisible, true)
+        XCTAssertEqual(own.width ?? -1, 400, accuracy: 0.001)
+
+        // A tab without its own state starts from what the workspace used last.
+        let fresh = SidebarStateResolver.effectiveState(
+            tabState: SidebarWorkspaceState(),
+            workspaceState: workspaceState,
+            environment: makeEnvironment(scope: .tab))
+        XCTAssertEqual(fresh.isVisible, false)
+        XCTAssertEqual(fresh.width ?? -1, 312, accuracy: 0.001)
+
+        // Only the tab scope reads the tab's state.
+        let ignored = SidebarStateResolver.effectiveState(
+            tabState: SidebarWorkspaceState(isVisible: true, width: 400),
+            workspaceState: workspaceState,
+            environment: makeEnvironment(scope: .workspace))
+        XCTAssertEqual(ignored.isVisible, false)
+        XCTAssertEqual(ignored.width ?? -1, 312, accuracy: 0.001)
     }
 
     func testNormalizedWidthSnapsOnceWithoutDrift() {
@@ -99,8 +120,8 @@ final class SidebarStateResolverTests: XCTestCase {
     }
 
     func testLayoutSettingsBindingReadsFreshValuesAndWritesBack() {
-        let original = AppSettings.shared.sidebarPerWorkspaceState
-        defer { AppSettings.shared.sidebarPerWorkspaceState = original }
+        let original = AppSettings.shared.sidebarStateScope
+        defer { AppSettings.shared.sidebarStateScope = original }
 
         let binding = LayoutSettingsBindings.binding(\.sidebarPerWorkspaceState)
         AppSettings.shared.sidebarPerWorkspaceState = false

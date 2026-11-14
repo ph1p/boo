@@ -115,9 +115,9 @@ final class MainWindowControllerTerminalLifecycleTests: XCTestCase {
     }
 
     func testHidingSidebarPreservesWorkspaceWidth() throws {
-        let originalPerWorkspace = AppSettings.shared.sidebarPerWorkspaceState
-        AppSettings.shared.sidebarPerWorkspaceState = true
-        defer { AppSettings.shared.sidebarPerWorkspaceState = originalPerWorkspace }
+        let originalScope = AppSettings.shared.sidebarStateScope
+        AppSettings.shared.sidebarStateScope = .workspace
+        defer { AppSettings.shared.sidebarStateScope = originalScope }
 
         let windowController = MainWindowController()
         defer { windowController.window?.close() }
@@ -137,6 +137,44 @@ final class MainWindowControllerTerminalLifecycleTests: XCTestCase {
         XCTAssertFalse(windowController.sidebarVisible)
         XCTAssertEqual(workspace.sidebarState.isVisible, false)
         XCTAssertEqual(workspace.sidebarState.width ?? -1, width, accuracy: 2)
+    }
+
+    func testTabScopeKeepsSidebarVisibilityPerTab() throws {
+        let originalScope = AppSettings.shared.sidebarStateScope
+        AppSettings.shared.sidebarStateScope = .tab
+        defer { AppSettings.shared.sidebarStateScope = originalScope }
+
+        let windowController = MainWindowController()
+        defer { windowController.window?.close() }
+        let workspace = try XCTUnwrap(windowController.activeWorkspace)
+        let pane = try XCTUnwrap(workspace.pane(for: workspace.activePaneID))
+        windowController.activateWorkspace(0)
+        if !windowController.sidebarVisible { windowController.toggleSidebar(userInitiated: true) }
+        XCTAssertEqual(pane.tabs[0].state.sidebarVisible, true)
+
+        // A new tab starts with the current state and gets its own on change.
+        let second = pane.addTab(workingDirectory: workspace.folderPath)
+        pane.setActiveTab(second)
+        XCTAssertNil(pane.tabs[second].state.sidebarVisible)
+        XCTAssertEqual(windowController.sidebarController.resolveEffectiveSidebarState().isVisible, true)
+
+        windowController.toggleSidebar(userInitiated: true)
+        XCTAssertEqual(pane.tabs[second].state.sidebarVisible, false)
+        XCTAssertEqual(pane.tabs[0].state.sidebarVisible, true)
+
+        // Back on the first tab the sidebar returns.
+        pane.setActiveTab(0)
+        windowController.applyFocusedTabSidebarState(in: workspace)
+        XCTAssertTrue(windowController.sidebarVisible)
+        XCTAssertEqual(pane.tabs[second].state.sidebarVisible, false)
+    }
+
+    func testSessionTabRoundTripsSidebarState() throws {
+        let data = try JSONEncoder().encode(SessionTab(sidebarVisible: false, sidebarWidth: 301))
+        let decoded = try JSONDecoder().decode(SessionTab.self, from: data)
+        XCTAssertEqual(decoded.sidebarVisible, false)
+        XCTAssertEqual(decoded.sidebarWidth, 301)
+        XCTAssertNil(try JSONDecoder().decode(SessionTab.self, from: Data("{}".utf8)).sidebarVisible)
     }
 
 }

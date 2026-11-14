@@ -65,8 +65,8 @@ final class SidebarController {
     /// Last intended visible width. This is the canonical width while hidden or restoring.
     private var intendedVisibleWidth: CGFloat?
 
-    /// This window's sidebar visibility and width. Source of truth when
-    /// per-workspace state is off; otherwise the fallback for workspaces without
+    /// This window's sidebar visibility and width. Source of truth in the
+    /// "Window" scope; otherwise the fallback for workspaces and tabs without
     /// their own. Seeded from the app defaults, so a new window starts from the
     /// last state any window remembered.
     private(set) var windowState: SidebarWorkspaceState = Workspace.defaultSidebarState()
@@ -246,8 +246,11 @@ final class SidebarController {
     }
 
     func resolveEffectiveSidebarState(for workspace: Workspace? = nil) -> SidebarWorkspaceState {
-        SidebarStateResolver.effectiveState(
-            workspaceState: (workspace ?? windowController?.activeWorkspace)?.sidebarState,
+        let target = workspace ?? windowController?.activeWorkspace
+        let tab = target.flatMap { $0.pane(for: $0.activePaneID)?.activeTab?.state }
+        return SidebarStateResolver.effectiveState(
+            tabState: tab.map { SidebarWorkspaceState(isVisible: $0.sidebarVisible, width: $0.sidebarWidth) },
+            workspaceState: target?.sidebarState,
             environment: stateEnvironment()
         )
     }
@@ -267,11 +270,19 @@ final class SidebarController {
         for workspace: Workspace? = nil,
         rememberAsDefault: Bool = true
     ) -> SidebarWorkspaceState {
-        let target = SidebarStateResolver.persistenceTarget(
-            usesPerWorkspaceState: AppSettings.shared.sidebarPerWorkspaceState
-        )
+        let target = SidebarStateResolver.persistenceTarget(scope: AppSettings.shared.sidebarStateScope)
 
         switch target {
+        case .tab:
+            let targetWS = workspace ?? windowController?.activeWorkspace
+            debugLog(
+                "[Sidebar] persistResolvedState → target=tab ws=\(targetWS?.id.uuidString.prefix(8) ?? "nil") visible=\(String(describing: state.isVisible)), width=\(state.width ?? -1)"
+            )
+            if let pane = targetWS.flatMap({ $0.pane(for: $0.activePaneID) }) {
+                pane.setSidebarState(at: pane.activeTabIndex, state)
+            }
+            // Also the workspace's "last used" state: a tab without its own starts from it.
+            targetWS?.sidebarState = state
         case .workspace:
             let targetWS = workspace ?? windowController?.activeWorkspace
             debugLog(
@@ -311,7 +322,7 @@ final class SidebarController {
     private func stateEnvironment(splitViewWidth: CGFloat? = nil) -> SidebarStateEnvironment {
         SidebarStateEnvironment(
             defaultState: windowState,
-            usesPerWorkspaceState: AppSettings.shared.sidebarPerWorkspaceState,
+            scope: AppSettings.shared.sidebarStateScope,
             position: position,
             splitViewWidth: splitViewWidth ?? windowController?.mainSplitView.bounds.width,
             dividerThickness: windowController?.mainSplitView.dividerThickness ?? 1,

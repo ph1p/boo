@@ -43,12 +43,15 @@ struct LayoutSettingsView: View {
                         "When on, the sidebar keeps its own state across all terminals — switching tabs or panes does not change the active plugin, expanded sections, or scroll position.",
                     isOn: LayoutSettingsBindings.binding(\.sidebarGlobalState)
                 )
-                ToggleRow(
-                    label: "Remember width and visibility per workspace",
+                SettingStack(
+                    label: "Remember width and visibility per",
                     help:
-                        "When on, each workspace keeps its own sidebar width and visibility. When off, all workspaces share one width and visibility state.",
-                    isOn: LayoutSettingsBindings.binding(\.sidebarPerWorkspaceState)
-                )
+                        "Window: one sidebar state for all workspaces. Workspace: each workspace keeps its own. Tab: each tab keeps its own, and a new tab starts with the current state."
+                ) {
+                    ThemedSegmentedPicker(selection: LayoutSettingsBindings.binding(\.sidebarStateScope)) {
+                        $0.label
+                    }
+                }
             }
 
             SidebarFontSection()

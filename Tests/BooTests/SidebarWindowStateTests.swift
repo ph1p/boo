@@ -5,22 +5,22 @@ import XCTest
 
 @MainActor
 final class SidebarWindowStateTests: XCTestCase {
-    private var originalPerWorkspace = false
+    private var originalScope = SidebarStateScope.window
     private var originalWidth: CGFloat = 0
     private var originalHidden = false
 
     override func setUp() async throws {
         try await super.setUp()
-        originalPerWorkspace = AppSettings.shared.sidebarPerWorkspaceState
+        originalScope = AppSettings.shared.sidebarStateScope
         originalWidth = AppSettings.shared.sidebarWidth
         originalHidden = AppSettings.shared.sidebarDefaultHidden
-        AppSettings.shared.sidebarPerWorkspaceState = false
+        AppSettings.shared.sidebarStateScope = .window
         AppSettings.shared.sidebarWidth = 260
         AppSettings.shared.sidebarDefaultHidden = false
     }
 
     override func tearDown() async throws {
-        AppSettings.shared.sidebarPerWorkspaceState = originalPerWorkspace
+        AppSettings.shared.sidebarStateScope = originalScope
         AppSettings.shared.sidebarWidth = originalWidth
         AppSettings.shared.sidebarDefaultHidden = originalHidden
         try await super.tearDown()

@@ -120,6 +120,7 @@ extension AppSettings {
             K.sidebarTabBarPosition: sidebarTabBarPosition.rawValue,
             K.sidebarGlobalState: sidebarGlobalState,
             K.sidebarPerWorkspaceState: sidebarPerWorkspaceState,
+            K.sidebarStateScope: sidebarStateScope.rawValue,
             K.autoColorWorkspaces: autoColorWorkspaces,
             K.openWorkspaceEditorOnCreate: openWorkspaceEditorOnCreate,
             K.openGroupEditorOnCreate: openGroupEditorOnCreate,

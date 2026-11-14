@@ -38,6 +38,11 @@ struct TabState {
     /// A trigger marked this tab; cleared when the tab is focused. Not persisted.
     var triggerMark: String?
 
+    /// Sidebar visibility and width remembered for this tab (sidebar scope
+    /// "Tab"); nil until the tab has its own. Saved with the session.
+    var sidebarVisible: Bool?
+    var sidebarWidth: CGFloat?
+
     // Plugin UI State
     var expandedPluginIDs: Set<String> = []
     /// Section IDs the user has *explicitly* collapsed. Used to suppress auto-expand on first show.
@@ -538,6 +543,12 @@ final class Pane {
     }
 
     /// Sets the hand-picked and effective profile; false when nothing changed.
+    func setSidebarState(at index: Int, _ state: SidebarWorkspaceState) {
+        guard index >= 0, index < tabs.count else { return }
+        tabs[index].state.sidebarVisible = state.isVisible
+        tabs[index].state.sidebarWidth = state.width
+    }
+
     @discardableResult
     func setProfile(at index: Int, override: String?, effective: String?, source: ProfileSource?) -> Bool {
         guard index >= 0, index < tabs.count else { return false }

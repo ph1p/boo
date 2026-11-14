@@ -28,6 +28,24 @@ enum SidebarPosition: Int, CaseIterable {
     }
 }
 
+/// What remembers the sidebar's visibility and width.
+enum SidebarStateScope: String, CaseIterable {
+    /// One state for the whole window.
+    case window
+    /// Each workspace keeps its own.
+    case workspace
+    /// Each tab keeps its own.
+    case tab
+
+    var label: String {
+        switch self {
+        case .window: return "Window"
+        case .workspace: return "Workspace"
+        case .tab: return "Tab"
+        }
+    }
+}
+
 enum WorkspaceBarPosition: Int, CaseIterable {
     case left = 0
     case top = 1

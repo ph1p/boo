@@ -105,6 +105,7 @@ final class AppSettings {
         static let sidebarTabBarPosition = "sidebarTabBarPosition"
         static let sidebarGlobalState = "sidebarGlobalState"
         static let sidebarPerWorkspaceState = "sidebarPerWorkspaceState"
+        static let sidebarStateScope = "sidebarStateScope"
         static let autoColorWorkspaces = "autoColorWorkspaces"
         static let workspaceGroups = "workspaceGroups"
         static let openWorkspaceEditorOnCreate = "openWorkspaceEditorOnCreate"
@@ -539,10 +540,31 @@ final class AppSettings {
         set { set(newValue, forKey: K.sidebarGlobalState, topic: .layout) }
     }
 
-    /// When true, each workspace remembers its own sidebar visibility and width.
+    /// What remembers the sidebar's visibility and width. Settings written
+    /// before the scope existed only have `sidebarPerWorkspaceState`.
+    var sidebarStateScope: SidebarStateScope {
+        get {
+            if let scope = UserDefaults.standard.string(forKey: K.sidebarStateScope)
+                .flatMap(SidebarStateScope.init(rawValue:))
+            {
+                return scope
+            }
+            return bool(K.sidebarPerWorkspaceState, default: false) ? .workspace : .window
+        }
+        set {
+            // Still written, so an older Boo reading this file keeps its behaviour.
+            UserDefaults.standard.set(newValue != .window, forKey: K.sidebarPerWorkspaceState)
+            set(newValue.rawValue, forKey: K.sidebarStateScope, topic: .layout)
+        }
+    }
+
+    /// Whether the sidebar state is kept below the window (per workspace or tab).
     var sidebarPerWorkspaceState: Bool {
-        get { bool(K.sidebarPerWorkspaceState, default: false) }
-        set { set(newValue, forKey: K.sidebarPerWorkspaceState, topic: .layout) }
+        get { sidebarStateScope != .window }
+        set {
+            guard newValue != sidebarPerWorkspaceState else { return }
+            sidebarStateScope = newValue ? .workspace : .window
+        }
     }
 
     /// When true, new workspaces get a color derived from their git root.

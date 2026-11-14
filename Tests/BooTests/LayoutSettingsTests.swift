@@ -11,6 +11,7 @@ import XCTest
             UserDefaults.standard.removeObject(forKey: "sidebarDensity")
             UserDefaults.standard.removeObject(forKey: "sidebarDefaultHidden")
             UserDefaults.standard.removeObject(forKey: "sidebarPerWorkspaceState")
+            UserDefaults.standard.removeObject(forKey: "sidebarStateScope")
             UserDefaults.standard.removeObject(forKey: "sidebarTabBarPosition")
         }
         try await super.tearDown()
@@ -111,7 +112,32 @@ import XCTest
             "sidebarDefaultHidden should be persisted in settings.json")
     }
 
+    func testSidebarStateScopeMigratesFromPerWorkspaceToggle() {
+        let defaults = UserDefaults.standard
+        defaults.removeObject(forKey: "sidebarStateScope")
+        defaults.set(true, forKey: "sidebarPerWorkspaceState")
+        XCTAssertEqual(AppSettings.shared.sidebarStateScope, .workspace)
+        defaults.set(false, forKey: "sidebarPerWorkspaceState")
+        XCTAssertEqual(AppSettings.shared.sidebarStateScope, .window)
+    }
+
+    func testSidebarStateScopeRoundTripKeepsOldToggleInSync() {
+        AppSettings.shared.sidebarStateScope = .tab
+        XCTAssertEqual(AppSettings.shared.sidebarStateScope, .tab)
+        XCTAssertTrue(AppSettings.shared.sidebarPerWorkspaceState)
+        XCTAssertTrue(UserDefaults.standard.bool(forKey: "sidebarPerWorkspaceState"))
+
+        // The old toggle, set to what it already is, leaves the tab scope alone.
+        AppSettings.shared.sidebarPerWorkspaceState = true
+        XCTAssertEqual(AppSettings.shared.sidebarStateScope, .tab)
+
+        AppSettings.shared.sidebarStateScope = .window
+        XCTAssertFalse(AppSettings.shared.sidebarPerWorkspaceState)
+        XCTAssertFalse(UserDefaults.standard.bool(forKey: "sidebarPerWorkspaceState"))
+    }
+
     func testSidebarPerWorkspaceStateDefault() {
+        UserDefaults.standard.removeObject(forKey: "sidebarStateScope")
         UserDefaults.standard.removeObject(forKey: "sidebarPerWorkspaceState")
         XCTAssertFalse(
             AppSettings.shared.sidebarPerWorkspaceState,
