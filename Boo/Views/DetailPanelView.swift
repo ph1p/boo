@@ -236,6 +236,13 @@ class SidebarPanelView: NSView {
 
     // MARK: - Update
 
+    /// Makes the next `updateSections` replace every section's content, even
+    /// with unchanged generations. The content carries the window theme, so a
+    /// theme change needs new content although the data is the same.
+    func invalidateContent() {
+        sectionGenerations.removeAll()
+    }
+
     func updateSections(_ sections: [SidebarSection], expandedIDs: Set<String>) {
         let newIDs = sections.map(\.id)
         let oldIDs = sectionStates.map(\.id)

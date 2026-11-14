@@ -59,6 +59,7 @@ extension MainWindowController {
         // Rebuild plugin sidebar to pick up new theme
         if let ctx = pluginRegistry.lastContext {
             cachedDetailViews.removeAll()
+            for case let panel as SidebarPanelView in pluginPanelViews.values { panel.invalidateContent() }
             rebuildSidebarTabs(context: ctx)
         }
     }
