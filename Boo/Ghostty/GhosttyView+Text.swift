@@ -44,7 +44,7 @@ extension GhosttyView {
         }
         let overlay = QuickSelectOverlay(
             frame: bounds, matches: matches,
-            cellSize: CGSize(width: cellWidth, height: cellHeight),
+            cellSize: CGSize(width: cellWidth, height: cellHeight), padding: gridPadding,
             onPick: { [weak self] text, insert in
                 guard let self else { return }
                 self.endQuickSelect()
@@ -83,8 +83,8 @@ extension GhosttyView {
             var w = 0.0
             var h = 0.0
             ghostty_surface_ime_point(surface, &x, &y, &w, &h)
-            let row = Int((CGFloat(y) - cellHeight / 2 - Self.gridPadding) / cellHeight)
-            let column = Int((CGFloat(x) - Self.gridPadding + cellWidth / 2) / cellWidth)
+            let row = Int((CGFloat(y) - cellHeight / 2 - gridPadding) / cellHeight)
+            let column = Int((CGFloat(x) - gridPadding + cellWidth / 2) / cellWidth)
             cursor = CopyMode.Point(row: bar.offset + min(max(0, row), rows - 1), column: max(0, column))
         }
 
@@ -93,6 +93,7 @@ extension GhosttyView {
             cells: { [weak self] row in CopyMode.cells(of: self?.screenLine(row) ?? "") })
         let overlay = CopyModeOverlay(
             frame: bounds, state: state, cellSize: CGSize(width: cellWidth, height: cellHeight),
+            padding: gridPadding,
             viewport: { [weak self] in
                 let bar = self?.scrollbar
                 return (bar?.offset ?? 0, bar?.len ?? rows)
@@ -274,8 +275,13 @@ extension GhosttyView {
 
     enum CommandPart { case input, output }
 
-    /// Matches `window-padding-x/y` in the generated Ghostty config.
-    nonisolated static let gridPadding: CGFloat = 3
+    /// `window-padding-x/y` in the generated Ghostty config, unless a profile sets its own.
+    nonisolated static let defaultGridPadding: CGFloat = 3
+
+    /// The space between this view's edge and its grid, in points.
+    var gridPadding: CGFloat {
+        surface.flatMap { GhosttyRuntime.shared.padding(of: $0) }.map { CGFloat($0) } ?? Self.defaultGridPadding
+    }
 
     /// Prompts that start in the viewport, newest first.
     func promptMarks() -> [PromptMark] {
@@ -327,7 +333,7 @@ extension GhosttyView {
     /// Viewport row under a point in this view's coordinates.
     func viewportRow(at point: NSPoint) -> Int? {
         guard let cellHeight, let rows = gridSize?.rows else { return nil }
-        let fromTop = bounds.height - point.y - Self.gridPadding
+        let fromTop = bounds.height - point.y - gridPadding
         guard fromTop >= 0 else { return nil }
         let row = Int(fromTop / cellHeight)
         return row < Int(rows) ? row : nil
@@ -336,7 +342,7 @@ extension GhosttyView {
     /// Viewport column under a point in this view's coordinates.
     func viewportColumn(at point: NSPoint) -> Int? {
         guard let cellWidth, let columns = gridSize?.columns else { return nil }
-        let x = point.x - Self.gridPadding
+        let x = point.x - gridPadding
         guard x >= 0 else { return nil }
         let column = Int(x / cellWidth)
         return column < Int(columns) ? column : nil

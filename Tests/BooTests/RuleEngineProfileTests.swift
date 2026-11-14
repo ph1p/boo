@@ -67,6 +67,26 @@ final class RuleEngineProfileTests: XCTestCase {
         XCTAssertNotEqual(plain.cacheKey, beam.cacheKey)
     }
 
+    func testPaddingIsValidatedInheritedAndStyled() throws {
+        let json = """
+            {"profiles": [
+              {"name": "base", "padding": 12},
+              {"name": "child", "basedOn": "base"},
+              {"name": "bad", "padding": 99, "fontSize": 13}
+            ]}
+            """
+        let (profiles, problems) = try ProfileFile.parse(Data(json.utf8))
+        XCTAssertEqual(problems.count, 1)
+        XCTAssertNil(profiles[2].padding)
+        XCTAssertEqual(profiles[2].fontSize, 13)
+        let resolved = ProfileFile.resolve(profiles).profiles
+        XCTAssertEqual(resolved[1].padding, 12)
+        let style = SurfaceStyle(profile: resolved[1], workspace: nil)
+        XCTAssertEqual(style.padding, 12)
+        XCTAssertFalse(style.isDefault)
+        XCTAssertNotEqual(style.cacheKey, SurfaceStyle(profile: nil, workspace: nil).cacheKey)
+    }
+
     private func resolve(
         override: String? = nil, rules: [(String, String)] = [], workspace: String? = nil, global: String? = nil
     ) -> ProfileResolution? {

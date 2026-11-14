@@ -92,16 +92,19 @@ enum QuickSelect {
 final class QuickSelectOverlay: NSView {
     private let matches: [QuickSelect.Match]
     private let cellSize: CGSize
+    /// The terminal's padding: where the grid starts inside the view.
+    private let padding: CGFloat
     private var typed = ""
     private let onPick: (String, _ insert: Bool) -> Void
     private let onCancel: () -> Void
 
     init(
-        frame: NSRect, matches: [QuickSelect.Match], cellSize: CGSize,
+        frame: NSRect, matches: [QuickSelect.Match], cellSize: CGSize, padding: CGFloat,
         onPick: @escaping (String, Bool) -> Void, onCancel: @escaping () -> Void
     ) {
         self.matches = matches
         self.cellSize = cellSize
+        self.padding = padding
         self.onPick = onPick
         self.onCancel = onCancel
         super.init(frame: frame)
@@ -150,7 +153,7 @@ final class QuickSelectOverlay: NSView {
         NSColor.black.withAlphaComponent(0.25).setFill()
         bounds.fill()
 
-        let pad = GhosttyView.gridPadding
+        let pad = padding
         let font = NSFont.monospacedSystemFont(ofSize: max(9, cellSize.height * 0.62), weight: .bold)
         for match in matches {
             let dimmed = !typed.isEmpty && !match.label.hasPrefix(typed)

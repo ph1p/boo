@@ -34,6 +34,9 @@ extension Notification.Name {
         if let style = surfaceStyles.removeValue(forKey: surface) { freeConfigIfUnused(style) }
     }
 
+    /// The padding around `surface`'s grid in points; nil when it uses the default.
+    func padding(of surface: ghostty_surface_t) -> Int? { surfaceStyles[surface]?.padding }
+
     /// Shows `style` on `surface`. A style that changes nothing shares the
     /// global config; any other gets a config of its own, shared by every
     /// surface with the same style.
@@ -277,8 +280,9 @@ extension Notification.Name {
 
         // Window / terminal behavior
         lines.append("window-decoration = none")
-        lines.append("window-padding-x = \(Int(GhosttyView.gridPadding))")
-        lines.append("window-padding-y = \(Int(GhosttyView.gridPadding))")
+        let padding = style?.padding ?? Int(GhosttyView.defaultGridPadding)
+        lines.append("window-padding-x = \(padding)")
+        lines.append("window-padding-y = \(padding)")
         lines.append("confirm-close-surface = false")
         lines.append("quit-after-last-window-closed = false")
         lines.append("mouse-hide-while-typing = true")

@@ -12,6 +12,8 @@ struct SurfaceStyle: Hashable, Sendable {
     var shader: String?
     /// A profile's cursor shape, as `Profile.cursorStyle` names it.
     var cursorStyle: String?
+    /// A profile's padding around the grid, in whole points.
+    var padding: Int?
 
     init(profile: Profile?, workspace: WorkspaceSettings?) {
         theme = profile?.theme ?? workspace?.themeName
@@ -21,6 +23,7 @@ struct SurfaceStyle: Hashable, Sendable {
         fontSize = profile?.fontSize ?? workspace?.fontSize
         shader = profile?.shader
         cursorStyle = profile?.cursorStyle
+        padding = profile?.padding.map { Int($0) }
     }
 
     /// Nothing differs: the surface can share the global config.
@@ -32,7 +35,7 @@ struct SurfaceStyle: Hashable, Sendable {
 
     /// Names the config file written for this style.
     var cacheKey: String {
-        [theme, lightTheme, fontFamily, fontSize.map { "\($0)" }, shader, cursorStyle]
+        [theme, lightTheme, fontFamily, fontSize.map { "\($0)" }, shader, cursorStyle, padding.map { "\($0)" }]
             .map { $0 ?? "\u{1}" }.joined(separator: "\u{0}")
     }
 }

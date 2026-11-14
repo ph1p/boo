@@ -162,6 +162,7 @@ struct ProfilesSettingsView: View {
         if let v = p.linkTarget { parts.append(v.displayName) }
         if let v = p.cursorStyle { parts.append("\(v) cursor") }
         if let v = p.badge { parts.append("badge \(v)") }
+        if let v = p.padding { parts.append("padding \(Int(v))") }
         return parts.joined(separator: " · ")
     }
 
@@ -297,6 +298,9 @@ private struct ProfileEditor: View {
                 ThemedMenuPicker(selection: binding, options: CursorStyle.profileValues.map(\.name)) {
                     CursorStyle(profileValue: $0)?.label ?? $0
                 }
+            }
+            field("Padding", value: $profile.padding, fallback: Double(GhosttyView.defaultGridPadding)) { binding in
+                ThemedStepper(value: binding, in: Profile.paddingRange, step: 1) { "\(Int($0)) pt" }
             }
             field("Shader", value: $profile.shader, fallback: AppSettings.shared.terminalShader) { binding in
                 ShaderPicker(value: binding)

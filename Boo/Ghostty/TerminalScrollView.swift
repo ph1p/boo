@@ -265,7 +265,7 @@ class TerminalScrollView: NSView {
         agentButtonBlock = block
         agentButton.failures = testFailures(inBlock: block)
         let size = agentButton.fittingSize
-        let top = GhosttyView.gridPadding + CGFloat(max(0, mark.row)) * cellHeight
+        let top = ghosttyView.gridPadding + CGFloat(max(0, mark.row)) * cellHeight
         let scroller = NSScroller.scrollerWidth(for: .regular, scrollerStyle: .overlay)
         agentButton.frame =
             NSRect(

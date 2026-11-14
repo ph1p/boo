@@ -8,6 +8,7 @@ final class PromptGutterView: NSView {
 
     private var marks: [GhosttyView.PromptMark] = []
     private var cellHeight: CGFloat = 0
+    private var padding = GhosttyView.defaultGridPadding
     private nonisolated(unsafe) var settingsObserver: NSObjectProtocol?
 
     override init(frame: NSRect) {
@@ -33,7 +34,9 @@ final class PromptGutterView: NSView {
     func update(from view: GhosttyView) {
         let marks = view.promptMarks()
         let cellHeight = view.cellHeight ?? 0
-        guard marks != self.marks || cellHeight != self.cellHeight else { return }
+        let padding = view.gridPadding
+        guard marks != self.marks || cellHeight != self.cellHeight || padding != self.padding else { return }
+        self.padding = padding
         self.marks = marks
         self.cellHeight = cellHeight
         needsDisplay = true
@@ -52,7 +55,7 @@ final class PromptGutterView: NSView {
         guard cellHeight > 0, !marks.isEmpty, let ctx = NSGraphicsContext.current?.cgContext else { return }
         let theme = booTheme
         for mark in marks {
-            let y = GhosttyView.gridPadding + CGFloat(mark.row) * cellHeight
+            let y = padding + CGFloat(mark.row) * cellHeight
             let rect = CGRect(x: 0, y: y, width: Self.tickWidth, height: cellHeight)
             guard rect.intersects(dirtyRect) else { continue }
             ctx.setFillColor(Self.color(for: mark.status, theme: theme).cgColor)

@@ -1,0 +1,24 @@
+diff --git a/src/Surface.zig b/src/Surface.zig
+index 7f7b1df88..3fb951bad 100644
+--- a/src/Surface.zig
++++ b/src/Surface.zig
+@@ -1867,6 +1867,19 @@ pub fn updateConfig(
+         break :font_size size;
+     });
+ 
++    // Boo: padding can differ per surface, so a config update applies it.
++    // Balanced padding follows the size and needs no update here.
++    if (self.config.window_padding_balance == .false) {
++        const padding = self.config.scaledPadding(
++            @floatFromInt(self.font_size.xdpi),
++            @floatFromInt(self.font_size.ydpi),
++        );
++        if (!std.meta.eql(padding, self.size.padding)) {
++            self.size.padding = padding;
++            try self.resize(self.size.screen);
++        }
++    }
++
+     // We need to store our configs in a heap-allocated pointer so that
+     // our messages aren't huge.
+     var renderer_message = try rendererpkg.Message.initChangeConfig(self.alloc, config);

@@ -176,6 +176,8 @@ struct CopyMode {
 final class CopyModeOverlay: NSView {
     private(set) var state: CopyMode
     private let cellSize: CGSize
+    /// The terminal's padding: where the grid starts inside the view.
+    private let padding: CGFloat
     /// Screen row at the top of the viewport, and viewport height in rows.
     private let viewport: () -> (top: Int, rows: Int)
     private let onScroll: (_ top: Int) -> Void
@@ -184,7 +186,7 @@ final class CopyModeOverlay: NSView {
     private var count = ""
 
     init(
-        frame: NSRect, state: CopyMode, cellSize: CGSize,
+        frame: NSRect, state: CopyMode, cellSize: CGSize, padding: CGFloat,
         viewport: @escaping () -> (top: Int, rows: Int),
         onScroll: @escaping (Int) -> Void,
         onCopy: @escaping (CopyMode.Point, CopyMode.Point) -> Void,
@@ -192,6 +194,7 @@ final class CopyModeOverlay: NSView {
     ) {
         self.state = state
         self.cellSize = cellSize
+        self.padding = padding
         self.viewport = viewport
         self.onScroll = onScroll
         self.onCopy = onCopy
@@ -310,7 +313,7 @@ final class CopyModeOverlay: NSView {
 
     override func draw(_ dirtyRect: NSRect) {
         let theme = booTheme
-        let pad = GhosttyView.gridPadding
+        let pad = padding
         let view = viewport()
         func rect(row: Int, from: Int, to: Int) -> CGRect {
             CGRect(

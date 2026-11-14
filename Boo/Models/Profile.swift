@@ -27,6 +27,8 @@ struct Profile: Codable, Equatable, Sendable {
     var tabColor: String?
     /// A short label shown next to the tab title.
     var badge: String?
+    /// Space between the terminal text and the pane's edge, in points.
+    var padding: Double?
     /// The profile whose fields fill the ones this profile leaves out.
     var basedOn: String?
 
@@ -34,7 +36,7 @@ struct Profile: Codable, Equatable, Sendable {
         name: String, theme: String? = nil, fontFamily: String? = nil, fontSize: Double? = nil,
         shader: String? = nil, shell: String? = nil, env: [String: String]? = nil, cwd: String? = nil,
         linkTarget: LinkTarget? = nil, cursorStyle: String? = nil, tabColor: String? = nil,
-        badge: String? = nil, basedOn: String? = nil
+        badge: String? = nil, basedOn: String? = nil, padding: Double? = nil
     ) {
         self.name = name
         self.theme = theme
@@ -49,7 +51,10 @@ struct Profile: Codable, Equatable, Sendable {
         self.tabColor = tabColor
         self.badge = badge
         self.basedOn = basedOn
+        self.padding = padding
     }
+
+    static let paddingRange: ClosedRange<Double> = 0...40
 
     /// This profile with `parent`'s values in every field it leaves out.
     /// `env` merges per key; this profile's variables win.
@@ -65,6 +70,7 @@ struct Profile: Codable, Equatable, Sendable {
         p.cursorStyle = cursorStyle ?? parent.cursorStyle
         p.tabColor = tabColor ?? parent.tabColor
         p.badge = badge ?? parent.badge
+        p.padding = padding ?? parent.padding
         if env != nil || parent.env != nil {
             p.env = (parent.env ?? [:]).merging(env ?? [:]) { _, own in own }
         }
@@ -155,6 +161,10 @@ struct ProfileFile: Codable, Equatable {
             if let color = p.tabColor, NSColor(hex: color) == nil {
                 problems.append("profile \"\(name)\": \"tabColor\" must look like \"#RRGGBB\", ignored")
                 p.tabColor = nil
+            }
+            if let padding = p.padding, !Profile.paddingRange.contains(padding) {
+                problems.append("profile \"\(name)\": \"padding\" must be between 0 and 40, ignored")
+                p.padding = nil
             }
             if p.badge?.trimmingCharacters(in: .whitespaces).isEmpty == true { p.badge = nil }
             profiles.append(p)
