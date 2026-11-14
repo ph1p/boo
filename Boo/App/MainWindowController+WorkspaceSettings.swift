@@ -39,7 +39,9 @@ extension MainWindowController {
         let old = workspace.settings
         change(&workspace.settings)
         guard workspace.settings != old else { return }
-        if workspace.settings.defaultProfile != old.defaultProfile { RuleEngine.shared.reevaluateAll() }
+        if workspace.settings.defaultProfile != old.defaultProfile || !workspace.settings.sameSurfaceLook(as: old) {
+            RuleEngine.shared.reevaluateAll()
+        }
         if workspace === activeWorkspace { refreshWorkspaceOverrides() }
         saveSession()
     }

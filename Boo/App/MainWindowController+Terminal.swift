@@ -102,17 +102,27 @@ extension MainWindowController {
     }
 
     @objc func increaseFontSizeAction(_ sender: Any?) {
-        let current = AppSettings.shared.fontSize
-        if current < 32 { AppSettings.shared.fontSize = current + 1 }
+        zoomFont { $0 < 32 ? $0 + 1 : nil }
     }
 
     @objc func decreaseFontSizeAction(_ sender: Any?) {
-        let current = AppSettings.shared.fontSize
-        if current > 8 { AppSettings.shared.fontSize = current - 1 }
+        zoomFont { $0 > 8 ? $0 - 1 : nil }
     }
 
     @objc func resetFontSizeAction(_ sender: Any?) {
-        AppSettings.shared.fontSize = 14
+        zoomFont { _ in 14 }
+    }
+
+    /// Zoom changes the layer that owns the size: the active workspace's
+    /// font size when it sets one, else the global setting. A size set by a
+    /// profile stays as it is.
+    private func zoomFont(_ next: (Double) -> Double?) {
+        if let workspace = activeWorkspace, let size = workspace.settings.fontSize {
+            guard let new = next(size) else { return }
+            updateWorkspaceSettings(workspace.id) { $0.fontSize = new }
+        } else if let new = next(Double(AppSettings.shared.fontSize)) {
+            AppSettings.shared.fontSize = CGFloat(new)
+        }
     }
 
     @objc func toggleFullScreenAction(_ sender: Any?) {

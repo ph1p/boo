@@ -38,11 +38,6 @@ struct Profile: Codable, Equatable, Sendable {
         self.linkTarget = linkTarget
     }
 
-    /// Whether the profile changes how the surface looks (needs its own config).
-    var changesSurface: Bool {
-        theme != nil || fontFamily != nil || fontSize != nil || shader != nil
-    }
-
     /// What a new tab with this profile starts with; nil when it changes nothing.
     func launchSpec(merging base: LaunchSpec?) -> LaunchSpec? {
         guard shell != nil || cwd != nil || !(env ?? [:]).isEmpty else { return base }

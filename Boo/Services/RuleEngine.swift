@@ -220,7 +220,8 @@ final class RuleEngine {
             loc.controller.refreshTabBar(workspace: loc.workspace, pane: loc.pane)
         }
         if let surface = view.surface {
-            GhosttyRuntime.shared.setProfile(profile, for: surface)
+            GhosttyRuntime.shared.setStyle(
+                SurfaceStyle(profile: profile, workspace: loc.workspace.settings), for: surface)
         }
 
         // Context rules fire on entering their context.

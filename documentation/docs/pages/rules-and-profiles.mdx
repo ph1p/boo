@@ -40,7 +40,7 @@ Profiles are stored in `~/.boo/profiles.json`. Edit them in **Settings → Profi
 | `cwd` | Starting directory for new tabs (`~` is expanded) |
 | `linkTarget` | Where file links open: `"editor"` (built-in editor) or `"external"` (the editor from **Settings → Terminal → Links → External editor**) |
 
-Fields you leave out use the global setting. `shell`, `env` and `cwd` affect only new tabs. Theme, font and shader also change an open tab when its profile changes.
+Fields you leave out use the workspace's theme and font from its [workspace settings](/features#workspace-settings), and the global setting after that. `shell`, `env` and `cwd` affect only new tabs. Theme, font and shader also change an open tab when its profile changes.
 
 A profile with an empty or duplicate name, or an out-of-range `fontSize`, is skipped. If the file doesn't parse, Boo keeps the last good profiles.
 

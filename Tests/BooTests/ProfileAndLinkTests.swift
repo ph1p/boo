@@ -18,9 +18,41 @@ final class ProfileFileTests: XCTestCase {
         XCTAssertEqual(problems.count, 3)
     }
 
-    func testChangesSurface() {
-        XCTAssertFalse(Profile(name: "a", shell: "zsh").changesSurface)
-        XCTAssertTrue(Profile(name: "a", shader: "").changesSurface)
+    func testSurfaceStyleDefault() {
+        XCTAssertTrue(SurfaceStyle(profile: Profile(name: "a", shell: "zsh"), workspace: nil).isDefault)
+        XCTAssertFalse(SurfaceStyle(profile: Profile(name: "a", shader: ""), workspace: nil).isDefault)
+        XCTAssertTrue(SurfaceStyle(profile: nil, workspace: WorkspaceSettings(defaultProfile: "a")).isDefault)
+    }
+
+    func testSurfaceStylePrefersProfileOverWorkspace() {
+        let workspace = WorkspaceSettings(
+            themeName: "Boo Dark", lightThemeName: "Boo Light", fontName: "Menlo", fontSize: 16)
+        let inherited = SurfaceStyle(profile: nil, workspace: workspace)
+        XCTAssertEqual(inherited.themeName(lightAppearance: false), "Boo Dark")
+        XCTAssertEqual(inherited.themeName(lightAppearance: true), "Boo Light")
+        XCTAssertEqual(inherited.fontFamily, "Menlo")
+        XCTAssertEqual(inherited.fontSize, 16)
+
+        // A profile's theme is fixed, so the workspace's light theme no longer applies.
+        let profiled = SurfaceStyle(profile: Profile(name: "p", theme: "Nord", fontSize: 20), workspace: workspace)
+        XCTAssertEqual(profiled.themeName(lightAppearance: true), "Nord")
+        XCTAssertEqual(profiled.fontFamily, "Menlo")
+        XCTAssertEqual(profiled.fontSize, 20)
+
+        let lightOnly = SurfaceStyle(profile: nil, workspace: WorkspaceSettings(lightThemeName: "Boo Light"))
+        XCTAssertNil(lightOnly.themeName(lightAppearance: false))
+        XCTAssertEqual(lightOnly.themeName(lightAppearance: true), "Boo Light")
+    }
+
+    func testSurfaceStyleKeysDiffer() {
+        let a = SurfaceStyle(profile: Profile(name: "a", theme: "Nord"), workspace: nil)
+        let b = SurfaceStyle(profile: Profile(name: "b", fontFamily: "Nord"), workspace: nil)
+        XCTAssertNotEqual(a.cacheKey, b.cacheKey)
+        // Two profiles with the same look share one config.
+        XCTAssertEqual(a, SurfaceStyle(profile: Profile(name: "c", theme: "Nord", shell: "zsh"), workspace: nil))
+        XCTAssertTrue(
+            WorkspaceSettings(defaultProfile: "x").sameSurfaceLook(as: WorkspaceSettings(sidebarPosition: 0)))
+        XCTAssertFalse(WorkspaceSettings(fontSize: 12).sameSurfaceLook(as: WorkspaceSettings()))
     }
 
     func testLaunchSpecMerging() {

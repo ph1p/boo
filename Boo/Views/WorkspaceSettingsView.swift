@@ -18,6 +18,8 @@ struct WorkspaceSettingsView: View {
     let onChange: (WorkspaceSettings) -> Void
     let onDone: () -> Void
     @Environment(\.tokens) private var t
+    private let themes = AppSettings.shared.allThemes.map(\.name)
+    private let monoFonts = AppSettings.availableMonospaceFonts
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -41,6 +43,25 @@ struct WorkspaceSettingsView: View {
                         value: $settings.defaultProfile, fallback: profiles[0]
                     ) { ThemedMenuPicker(selection: $0, options: profiles, width: 180) { $0 } }
                 }
+            }
+
+            Section(title: "Terminal") {
+                InheritableField(
+                    label: "Theme", help: "A tab's profile theme still wins.",
+                    value: $settings.themeName, fallback: AppSettings.shared.themeName
+                ) { ThemedMenuPicker(selection: $0, options: themes, width: 180) { $0 } }
+                if AppSettings.shared.autoTheme {
+                    InheritableField(
+                        label: "Theme in light mode", help: "Used while macOS is in light mode.",
+                        value: $settings.lightThemeName, fallback: AppSettings.shared.lightThemeName
+                    ) { ThemedMenuPicker(selection: $0, options: themes, width: 180) { $0 } }
+                }
+                InheritableField(label: "Font", value: $settings.fontName, fallback: AppSettings.shared.fontName) {
+                    FontChooser(selectedFont: $0, fonts: monoFonts, width: 180)
+                }
+                InheritableField(
+                    label: "Font size", value: $settings.fontSize, fallback: Double(AppSettings.shared.fontSize)
+                ) { FontSizePicker(value: $0, range: 8...36) }
             }
 
             Section(title: "Layout") {

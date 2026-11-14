@@ -13,6 +13,18 @@ struct WorkspaceSettings: Codable, Equatable, Sendable {
     /// Status bar segments hidden in this workspace. When set, it replaces the
     /// global visibility of every segment.
     var statusBarHiddenSegments: [String]?
+    /// Terminal theme of this workspace's tabs (a profile's theme still wins).
+    var themeName: String?
+    /// Replaces `themeName` while Boo follows a light system appearance
+    /// (Settings → Theme → auto).
+    var lightThemeName: String?
+    var fontName: String?
+    var fontSize: Double?
+
+    /// Whether the two settings draw the same terminal.
+    func sameSurfaceLook(as other: WorkspaceSettings) -> Bool {
+        SurfaceStyle(profile: nil, workspace: self) == SurfaceStyle(profile: nil, workspace: other)
+    }
 
     var isEmpty: Bool { self == WorkspaceSettings() }
 }

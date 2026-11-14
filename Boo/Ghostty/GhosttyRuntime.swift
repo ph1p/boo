@@ -17,15 +17,13 @@ extension Notification.Name {
     private(set) var app: ghostty_app_t?
     private(set) var config: ghostty_config_t?
     private var settingsObserver: Any?
-    private var profilesObserver: Any?
 
     /// All active surfaces that need config updates.
     private var surfaces: [ghostty_surface_t] = []
-    /// The profile each surface shows; surfaces not listed use `config`.
-    private var surfaceProfiles: [ghostty_surface_t: Profile] = [:]
-    /// Configs built for profiles that change the surface, by profile name.
-    /// Rebuilt lazily after every reload.
-    private var profileConfigs: [String: (profile: Profile, config: ghostty_config_t)] = [:]
+    /// The style each surface shows; surfaces not listed use `config`.
+    private var surfaceStyles: [ghostty_surface_t: SurfaceStyle] = [:]
+    /// Configs built for the styles in use. Rebuilt lazily after every reload.
+    private var styleConfigs: [SurfaceStyle: ghostty_config_t] = [:]
 
     func registerSurface(_ surface: ghostty_surface_t) {
         surfaces.append(surface)
@@ -33,32 +31,33 @@ extension Notification.Name {
 
     func unregisterSurface(_ surface: ghostty_surface_t) {
         surfaces.removeAll { $0 == surface }
-        surfaceProfiles[surface] = nil
+        if let style = surfaceStyles.removeValue(forKey: surface) { freeConfigIfUnused(style) }
     }
 
-    /// Shows `profile` on `surface` (nil: the global settings). Only fields
-    /// that change the look (theme, font, shader) need a config of their own.
-    func setProfile(_ profile: Profile?, for surface: ghostty_surface_t) {
-        let effective = profile?.changesSurface == true ? profile : nil
-        let previous = surfaceProfiles[surface]
+    /// Shows `style` on `surface`. A style that changes nothing shares the
+    /// global config; any other gets a config of its own, shared by every
+    /// surface with the same style.
+    func setStyle(_ style: SurfaceStyle, for surface: ghostty_surface_t) {
+        let effective = style.isDefault ? nil : style
+        let previous = surfaceStyles[surface]
         guard previous != effective else { return }
-        surfaceProfiles[surface] = effective
-        guard let cfg = effectiveConfig(for: surface) else { return }
-        pushConfig(cfg, to: surface)
+        surfaceStyles[surface] = effective
+        if let cfg = effectiveConfig(for: surface) { pushConfig(cfg, to: surface) }
+        if let previous { freeConfigIfUnused(previous) }
     }
 
     private func effectiveConfig(for surface: ghostty_surface_t) -> ghostty_config_t? {
-        guard let profile = surfaceProfiles[surface] else { return config }
-        if let cached = profileConfigs[profile.name] {
-            if cached.profile == profile { return cached.config }
-            // Edited since it was built; surfaces copy their config, so the
-            // stale one can go now.
-            ghostty_config_free(cached.config)
-            profileConfigs[profile.name] = nil
-        }
-        guard let cfg = buildConfig(profile: profile) else { return config }
-        profileConfigs[profile.name] = (profile, cfg)
+        guard let style = surfaceStyles[surface] else { return config }
+        if let cached = styleConfigs[style] { return cached }
+        guard let cfg = buildConfig(style: style) else { return config }
+        styleConfigs[style] = cfg
         return cfg
+    }
+
+    /// Surfaces copy their config, so one no surface names any more can go.
+    private func freeConfigIfUnused(_ style: SurfaceStyle) {
+        guard !surfaceStyles.values.contains(style), let cfg = styleConfigs.removeValue(forKey: style) else { return }
+        ghostty_config_free(cfg)
     }
 
     private func pushConfig(_ cfg: ghostty_config_t, to surface: ghostty_surface_t) {
@@ -187,15 +186,10 @@ extension Notification.Name {
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.reloadConfig() }
         }
-        profilesObserver = NotificationCenter.default.addObserver(
-            forName: .profilesChanged, object: nil, queue: .main
-        ) { [weak self] _ in
-            MainActor.assumeIsolated { self?.reloadProfiles() }
-        }
     }
 
     /// Build a fresh Ghostty config from Boo settings.
-    private func buildConfig(profile: Profile? = nil) -> ghostty_config_t? {
+    private func buildConfig(style: SurfaceStyle? = nil) -> ghostty_config_t? {
         let cfg = ghostty_config_new()
         guard let cfg = cfg else { return nil }
 
@@ -203,7 +197,7 @@ extension Notification.Name {
         // settings.  Loading the user's Ghostty config would prepend values
         // for repeatable keys like font-family, making our settings ignored.
         // Overrides go in ~/.boo/ghostty-user.conf instead (applyBooSettings).
-        applyBooSettings(to: cfg, profile: profile)
+        applyBooSettings(to: cfg, style: style)
         ghostty_config_finalize(cfg)
 
         return cfg
@@ -221,9 +215,9 @@ extension Notification.Name {
             ghostty_app_update_config(app, newConfig)
         }
 
-        // Profile configs inherit the global settings, so they are rebuilt too.
-        let oldProfileConfigs = profileConfigs
-        profileConfigs = [:]
+        // Style configs inherit the global settings, so they are rebuilt too.
+        let oldStyleConfigs = styleConfigs
+        styleConfigs = [:]
 
         // Push config to each existing surface (font, colors, cursor, etc.).
         for surface in surfaces {
@@ -231,30 +225,27 @@ extension Notification.Name {
         }
 
         if let old = old { ghostty_config_free(old) }
-        for entry in oldProfileConfigs.values { ghostty_config_free(entry.config) }
+        for cfg in oldStyleConfigs.values { ghostty_config_free(cfg) }
 
         booLog(.info, .app, "Config reloaded, pushed to \(surfaces.count) surface(s)")
     }
 
-    /// Write Boo settings as a Ghostty config file and load it.
-    /// Profiles in `profiles.json` changed: surfaces showing an edited
-    /// profile get it rebuilt.
-    private func reloadProfiles() {
-        let store = ProfileStore.shared
-        for (surface, profile) in surfaceProfiles {
-            setProfile(store.profile(named: profile.name), for: surface)
-        }
-    }
-
-    private func applyBooSettings(to cfg: ghostty_config_t, profile: Profile? = nil) {
+    /// Write Boo settings as a Ghostty config file and load it. A field of
+    /// `style` replaces the global setting.
+    private func applyBooSettings(to cfg: ghostty_config_t, style: SurfaceStyle? = nil) {
         let settings = AppSettings.shared
-        let theme = profile?.theme.flatMap { settings.theme(named: $0) } ?? settings.theme
+        let lightAppearance =
+            settings.autoTheme && NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .aqua
+        // A theme that no longer exists falls back to the global one.
+        let theme =
+            style?.themeName(lightAppearance: lightAppearance).flatMap { settings.theme(named: $0) }
+            ?? settings.theme
 
         var lines: [String] = []
 
         // Font
-        lines.append("font-family = \(profile?.fontFamily ?? settings.fontName)")
-        lines.append("font-size = \(Int(profile?.fontSize ?? settings.fontSize))")
+        lines.append("font-family = \(style?.fontFamily ?? settings.fontName)")
+        lines.append("font-size = \(Int(style?.fontSize ?? Double(settings.fontSize)))")
 
         // Cursor
         switch settings.cursorStyle {
@@ -301,15 +292,15 @@ extension Notification.Name {
         lines.append("copy-on-select = clipboard")
 
         // A profile's shader ("" = none) replaces the global one.
-        if let shader = ShaderLibrary.path(for: profile?.shader ?? settings.terminalShader) {
+        if let shader = ShaderLibrary.path(for: style?.shader ?? settings.terminalShader) {
             lines.append("custom-shader = \(shader)")
             lines.append("custom-shader-animation = true")
         }
 
         // Write temp config file and load it
         var tmpPath = BooPaths.ghosttyConfigFile
-        if let profile {
-            tmpPath = (tmpPath as NSString).deletingPathExtension + "-profile-\(RuleSet.hash(profile.name)).conf"
+        if let style {
+            tmpPath = (tmpPath as NSString).deletingPathExtension + "-style-\(RuleSet.hash(style.cacheKey)).conf"
         }
         let content = lines.joined(separator: "\n") + "\n"
         do {
