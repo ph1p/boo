@@ -316,13 +316,15 @@ final class Workspace {
         return newID
     }
 
-    func closePane(_ paneID: UUID) -> Bool {
+    /// `stopping: false` takes the pane out of the layout with its sessions
+    /// still running, for a close that can be undone.
+    func closePane(_ paneID: UUID, stopping: Bool = true) -> Bool {
         // Find the closest sibling before removing
         let sibling = splitTree.siblingLeafID(of: paneID)
         guard let newTree = splitTree.removing(leafID: paneID) else {
             return false
         }
-        panes[paneID]?.stopAll()
+        if stopping { panes[paneID]?.stopAll() }
         panes.removeValue(forKey: paneID)
         splitTree = newTree
         focusHistory.removeAll { $0 == paneID }
@@ -334,6 +336,14 @@ final class Workspace {
             activePaneID = fromHistory ?? sibling ?? splitTree.leafIDs.first ?? UUID()
         }
         return true
+    }
+
+    /// Puts a pane taken out with `closePane(_:stopping: false)` back at its
+    /// old place in the layout and focuses it.
+    func restorePane(_ pane: Pane, at slot: SplitTree.Slot) {
+        panes[pane.id] = pane
+        splitTree = splitTree.inserting(leaf: pane.id, at: slot)
+        activePaneID = pane.id
     }
 
     /// Lays the workspace out as `tree`: `newPanes` fill its new leaves, and

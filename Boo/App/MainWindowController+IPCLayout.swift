@@ -115,7 +115,7 @@ extension MainWindowController {
             return
         }
         workspace.activePaneID = paneID
-        closePaneAction(nil)
+        closeActivePane(undo: .live, announce: false)
         reply(["ok": true, "active_pane": workspace.activePaneID.uuidString])
     }
 

@@ -524,16 +524,7 @@ extension MainWindowController: PaneViewDelegate {
                 guard let pv else { return }
                 // Re-resolve index — tabs may have changed while alert was shown
                 guard let currentIndex = pane.tabs.firstIndex(where: { $0.id == tabID }) else { return }
-                let item = ClosedItem.tab(
-                    paneID: paneID,
-                    workingDirectory: pane.tabs[currentIndex].workingDirectory,
-                    index: currentIndex
-                )
-                self?.pushUndo(item)
-                self?.notifyTerminalClosed(for: pane.tabs[currentIndex].id)
-                pv.closeTab(at: currentIndex)
-                self?.refreshStatusBar()
-                self?.saveSession()
+                self?.closeTab(in: pv, at: currentIndex, undo: .live)
             }
         }
     }
@@ -545,6 +536,8 @@ extension MainWindowController: PaneViewDelegate {
 
         if let pane = workspace.pane(for: paneID) {
             pane.updateRemoteSession(at: pane.activeTabIndex, nil)
+            // The shell is gone: the close can be undone as a fresh shell only.
+            if let tabID = pane.activeTab?.id { exitedTabIDs.insert(tabID) }
         }
 
         bridge.monitor.untrack(paneID: paneID)

@@ -28,7 +28,7 @@ enum BooAlert {
 
     /// Show a brief message bubble at the bottom of the key window, fading out
     /// after ~2.5 seconds.  Follows the `flashTerminal()` animation pattern.
-    static func showTransient(_ message: String, actions: [ToastAction] = []) {
+    static func showTransient(_ message: String, actions: [ToastAction] = [], lifetime: TimeInterval? = nil) {
         guard let window = NSApp.keyWindow,
             let contentView = window.contentView
         else { return }
@@ -133,7 +133,7 @@ enum BooAlert {
         }
 
         // Fade out after delay, then remove and close the gap.
-        let lifetime = actions.isEmpty ? toastLifetime : actionToastLifetime
+        let lifetime = lifetime ?? (actions.isEmpty ? toastLifetime : actionToastLifetime)
         DispatchQueue.main.asyncAfter(deadline: .now() + lifetime) {
             dismissToast(shell, in: contentView)
         }

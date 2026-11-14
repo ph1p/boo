@@ -392,7 +392,7 @@ extension MainWindowController {
             if isActive {
                 let focused = workspace.activePaneID
                 workspace.activePaneID = pane.id
-                closePaneAction(nil)
+                closeActivePane(undo: .none)
                 if focused != pane.id, workspace.pane(for: focused) != nil { workspace.activePaneID = focused }
             } else {
                 notifyTerminalClosed(for: pane.tabs)

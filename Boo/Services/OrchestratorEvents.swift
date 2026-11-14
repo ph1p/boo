@@ -148,7 +148,11 @@ final class OrchestratorEvents {
 
     /// A tab's terminal closed. Tear-off closes and reopens it in another
     /// window, so this waits a tick and posts only when the tab is really gone.
-    func terminalClosed(_ tabID: UUID, isGone: @escaping (UUID) -> Bool = { AgentInbox.locateInWindows($0) == nil }) {
+    /// A tab parked for "Undo Close" is in no window but not gone either.
+    func terminalClosed(
+        _ tabID: UUID,
+        isGone: @escaping (UUID) -> Bool = { AgentInbox.locateInWindows($0) == nil && !ParkedTabs.contains($0) }
+    ) {
         DispatchQueue.main.async { [weak self] in
             MainActor.assumeIsolated {
                 guard let self, isGone(tabID) else { return }

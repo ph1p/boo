@@ -148,112 +148,7 @@ extension MainWindowController {
     }
 
     @objc func closePaneAction(_ sender: Any?) {
-        guard let workspace = activeWorkspace else { return }
-        let paneID = workspace.activePaneID
-        booLog(
-            .debug, .terminal, "closing pane=\(paneID.uuidString.prefix(8)) remainingPanes=\(workspace.panes.count - 1)"
-        )
-        if workspace.panes.count > 1, let pane = workspace.pane(for: paneID) {
-            notifyTerminalClosed(for: pane.tabs)
-        }
-
-        // Clear the previous-tab tracker so the stale bridge state
-        // (which still holds the closed pane's title/cwd) is not
-        // synced onto the surviving pane's tab when it gains focus.
-        previousFocusedTabID = nil
-
-        // Remove the closed pane's view from cache
-        bridge.monitor.untrack(paneID: paneID)
-        let closedPV = paneViews.removeValue(forKey: paneID)
-        closedPV?.stopAll()
-
-        if workspace.closePane(paneID) {
-            let validIDs = Set(workspace.splitTree.leafIDs)
-
-            for id in paneViews.keys where !validIDs.contains(id) {
-                paneViews.removeValue(forKey: id)
-            }
-
-            splitContainer.update(tree: workspace.displayedTree)
-            saveSession()
-
-            DispatchQueue.main.async { [weak self] in
-                guard let self, self.activeWorkspace != nil else { return }
-                for id in validIDs {
-                    if let pv = self.paneViews[id] {
-                        pv.startActiveSession()
-                    }
-                }
-                self.refreshAllSurfaces()
-                self.syncCoordinatorPaneViews()
-                self.updatePaneCloseButtons()
-                self.runPluginCycle(reason: .focusChanged)
-                DispatchQueue.main.async { [weak self] in
-                    guard let self, let ws = self.activeWorkspace,
-                        let pv = self.paneViews[ws.activePaneID]
-                    else { return }
-                    pv.focusActiveView()
-                }
-            }
-        } else {
-            toolbarDidCloseWorkspace(at: appState.activeWorkspaceIndex)
-        }
-    }
-
-    @objc func reopenTabAction(_ sender: Any?) {
-        // tmux panes hold no tabs: reopen in a regular workspace.
-        guard let item = undoStack.popLast(), let workspace = activateContentWorkspace() else { return }
-
-        switch item {
-        case .tab(let paneID, let cwd, _):
-            let targetPaneID = workspace.pane(for: paneID) != nil ? paneID : workspace.activePaneID
-            if let pv = paneViews[targetPaneID] {
-                pv.addNewTab(workingDirectory: cwd)
-            }
-
-        case .pane(let siblingID, let cwd, let direction):
-            // Re-split the sibling pane (or active pane if sibling is gone)
-            let targetID = workspace.pane(for: siblingID) != nil ? siblingID : workspace.activePaneID
-            window?.makeFirstResponder(nil)
-
-            guard let newID = workspace.splitPane(targetID, direction: direction) else {
-                booLog(
-                    .debug,
-                    .terminal,
-                    "undoCloseItem: splitPane returned nil for targetID \(targetID.uuidString.prefix(8)) — skipped"
-                )
-                break
-            }
-            // Override the new pane's tab to use the closed pane's cwd
-            if let pane = workspace.pane(for: newID) {
-                pane.stopAll()
-                _ = pane.addTab(workingDirectory: cwd)
-            }
-            workspace.activePaneID = newID
-            splitContainer.update(tree: workspace.displayedTree)
-            saveSession()
-
-            DispatchQueue.main.async { [weak self] in
-                guard let self else { return }
-                // Reattach all panes
-                for id in workspace.splitTree.leafIDs {
-                    if let pv = self.paneViews[id] {
-                        pv.startActiveSession()
-                    }
-                }
-                self.updatePaneCloseButtons()
-                DispatchQueue.main.async { [weak self] in
-                    guard let self, let pv = self.paneViews[newID] else { return }
-                    pv.focusActiveView()
-                }
-            }
-        }
-        refreshStatusBar()
-    }
-
-    func pushUndo(_ item: ClosedItem) {
-        undoStack.append(item)
-        if undoStack.count > 20 { undoStack.removeFirst() }
+        closeActivePane(undo: .live)
     }
 
     /// Find the split direction of the parent split containing the given leaf.
@@ -302,32 +197,12 @@ extension MainWindowController {
                 tabIndex: pane.activeTabIndex
             ) { [weak self, weak pv] in
                 guard let self, let pv else { return }
-                let item = ClosedItem.tab(
-                    paneID: workspace.activePaneID,
-                    workingDirectory: pane.activeTab?.workingDirectory ?? workspace.folderPath,
-                    index: pane.activeTabIndex
-                )
-                self.pushUndo(item)
-                if let tab = pane.activeTab {
-                    self.notifyTerminalClosed(for: tab.id)
-                }
-                pv.closeTab(at: pane.activeTabIndex)
-                self.refreshStatusBar()
-                self.saveSession()
+                self.closeTab(in: pv, at: pane.activeTabIndex, undo: .live)
             }
         } else if workspace.panes.count > 1 {
             closeTabAfterConfirmation(paneID: workspace.activePaneID, tabIndex: pane.activeTabIndex) { [weak self] in
                 guard let self else { return }
-                let cwd = pane.activeTab?.workingDirectory ?? workspace.folderPath
-                let direction = self.findSplitDirection(for: workspace.activePaneID, in: workspace.splitTree)
-                let siblingID = self.findSiblingID(for: workspace.activePaneID, in: workspace.splitTree)
-                let item = ClosedItem.pane(
-                    siblingPaneID: siblingID ?? workspace.activePaneID,
-                    workingDirectory: cwd,
-                    direction: direction ?? .horizontal
-                )
-                self.pushUndo(item)
-                self.closePaneAction(nil)
+                self.closeActivePane(undo: .live)
             }
         } else if appState.workspaces.count > 1 {
             if let location = unsavedEditorLocation(workspaceIndex: appState.activeWorkspaceIndex) {

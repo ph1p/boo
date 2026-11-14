@@ -188,6 +188,27 @@ extension PaneView {
 
         let wasActive = index == pane.activeTabIndex
         pane.removeTab(at: index)
+        finishTabRemoval(wasActive: wasActive)
+    }
+
+    /// Takes a terminal tab out of the pane together with its running view,
+    /// for "Undo Close". Returns nil and changes nothing when the tab can't be
+    /// parked: not a terminal, never shown, or the pane's last tab.
+    func parkTab(at index: Int) -> DetachedTab? {
+        guard index >= 0, index < pane.tabs.count, pane.tabs.count > 1 else { return nil }
+        let tabID = pane.tabs[index].id
+        guard pane.tabs[index].contentType == .terminal, terminalView(forTab: tabID) != nil else { return nil }
+        lastAutoScrolledTabIndex = -1
+        cancelPendingDebounces(for: tabID)
+        let wasActive = index == pane.activeTabIndex
+        guard let tab = pane.extractTab(at: index) else { return nil }
+        let view = extractGhosttyView(for: tabID)
+        finishTabRemoval(wasActive: wasActive)
+        return DetachedTab(tab: tab, ghosttyView: view, contentView: nil)
+    }
+
+    /// Shows the tab that is active after one left the pane.
+    private func finishTabRemoval(wasActive: Bool) {
         if pane.tabs.isEmpty { return }
         if wasActive {
             startActiveSession()

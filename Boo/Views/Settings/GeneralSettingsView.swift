@@ -9,6 +9,7 @@ struct GeneralSettingsView: View {
     @State private var defaultMainPage = AppSettings.shared.defaultMainPage
     @State private var defaultTabType = AppSettings.shared.defaultTabType
     @State private var debugLogging = AppSettings.shared.debugLogging
+    @State private var undoCloseSeconds = AppSettings.shared.undoCloseSeconds
     @State private var fileEditorCommand = AppSettings.shared.fileEditorCommand
     @ObservedObject private var observer = SettingsObserver(topics: [.theme])
 
@@ -91,6 +92,19 @@ struct GeneralSettingsView: View {
             }
 
             SyncFolderSection()
+
+            Section(title: "Closing") {
+                SettingRow(
+                    label: "Undo close",
+                    help:
+                        "A closed tab, pane or workspace keeps running this long. Undo Close (Cmd+Opt+Z) brings it back as it was; later it reopens a new shell in the same folder."
+                ) {
+                    ThemedMenuPicker(selection: $undoCloseSeconds, options: [0, 5, 10, 20, 30, 60]) {
+                        $0 == 0 ? "Off" : "\($0) seconds"
+                    }
+                    .onChange(of: undoCloseSeconds) { _, v in AppSettings.shared.undoCloseSeconds = v }
+                }
+            }
 
             Section(title: "Advanced") {
                 ToggleRow(

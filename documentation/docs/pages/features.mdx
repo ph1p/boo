@@ -91,11 +91,22 @@ The quick terminal has no splits. While the hotkey is on, Opt+Space no longer ty
 
 ## Per-Pane Tabs
 
-Each pane has its own tab bar. Create new terminal tabs with **Cmd+T** (browser tabs with **Cmd+Shift+T**), close with **Cmd+W**, and switch with **Cmd+Opt+1-9** or **Cmd+Shift+1-9**. Closed tabs can be reopened with **Cmd+Opt+Z**. Tabs can also host a browser, text editor, image viewer, or markdown preview — see [Multi-Content Tabs](/multi-content-tabs).
+Each pane has its own tab bar. Create new terminal tabs with **Cmd+T** (browser tabs with **Cmd+Shift+T**), close with **Cmd+W**, and switch with **Cmd+Opt+1-9** or **Cmd+Shift+1-9**. A closed tab comes back with **Cmd+Opt+Z** — see [Undo Close](#undo-close). Tabs can also host a browser, text editor, image viewer, or markdown preview — see [Multi-Content Tabs](/multi-content-tabs).
 
 Editor tabs have a status strip (line and column, indentation, encoding, line endings, language), **Save As…** (**Cmd+Shift+S**), autosave, and reload a file that changed on disk. With unsaved edits, Boo asks which version to keep. Set these in **Settings → Editor**.
 
 Smart close order: tab → pane → workspace.
+
+### Undo Close
+
+A tab, pane or workspace you close keeps running for 10 seconds. In that time **File → Undo Close** (**Cmd+Opt+Z**), or **Undo** in the toast that appears, brings it back as it was: same shell, same running command, same scrollback, same place in the layout. Repeat the shortcut to walk back through up to 20 closes.
+
+After the 10 seconds the sessions end. **Undo Close** then opens a new shell in the closed tab's or pane's folder; a workspace can no longer be brought back.
+
+- Set the time in **Settings → General → Closing → Undo close**. **Off** ends sessions at once
+- A tab whose shell already exited, a tmux tab, and a browser, editor or other non-terminal tab closed on its own are not kept running
+- Closing a window, or its last workspace, is final
+- If a shell exits while its tab is closed, that close reopens as a new shell
 
 - **Right-click a tab** — Context menu with "Close Tab" (or "Close Workspace" when it's the only tab) and a "Move Tab to Workspace →" submenu listing all other open workspaces.
 - **Drag tabs across workspaces** — Drag a tab to a different pane or split zone in the current workspace, or use the workspace pill hover to move it to another workspace entirely. Moving the last tab out of a workspace prompts to close that workspace.

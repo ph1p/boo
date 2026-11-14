@@ -325,13 +325,17 @@ extension MainWindowController {
             guard let self,
                 let resolvedIndex = self.appState.workspaces.firstIndex(where: { $0.id == wsID })
             else { return }
-            self.forceCloseWorkspace(at: resolvedIndex)
+            self.forceCloseWorkspace(at: resolvedIndex, undoable: true)
         }
     }
 
-    func forceCloseWorkspace(at index: Int) {
+    /// `undoable` keeps the workspace running for the undo time, when it is
+    /// not the window's last one.
+    func forceCloseWorkspace(at index: Int, undoable: Bool = false) {
         guard index >= 0, index < appState.workspaces.count else { return }
+        if undoable, parkWorkspace(at: index) { return }
         let ws = appState.workspaces[index]
+        exitedTabIDs.subtract(ws.panes.values.flatMap { $0.tabs.map(\.id) })
         for pane in ws.panes.values {
             notifyTerminalClosed(for: pane.tabs)
         }

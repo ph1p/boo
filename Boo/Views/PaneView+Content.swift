@@ -253,7 +253,13 @@ extension PaneView {
         return contentViews[tabID] as? EditorContentView
     }
 
-    private func wireCallbacks(_ gv: GhosttyView) {
+    /// Points every terminal of this pane back at the pane, after
+    /// `GhosttyView.muteCallbacks()`.
+    func rewireTerminals() {
+        for view in terminalViewsByTab.values { wireCallbacks(view) }
+    }
+
+    func wireCallbacks(_ gv: GhosttyView) {
         gv.onFocused = { [weak self] in
             guard let self else { return }
             self.paneDelegate?.paneView(self, didFocus: self.paneID)

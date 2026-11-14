@@ -152,11 +152,11 @@ final class WindowManagerTests: XCTestCase {
         let detached = try XCTUnwrap(source.detachWorkspace(at: 1))
         Self.keptDetached.append(detached)
         XCTAssertNil(source.registeredTabKeys[movingTabID])
-        XCTAssertEqual(source.undoStack.map(\.paneID), [staying.activePaneID])
+        XCTAssertEqual(source.closedItems.entries.compactMap { $0.fallback?.paneID }, [staying.activePaneID])
 
         target.adoptWorkspace(detached)
         XCTAssertEqual(target.registeredTabKeys[movingTabID], "plugin:key")
-        XCTAssertEqual(target.undoStack.map(\.paneID), [movingPaneID])
+        XCTAssertEqual(target.closedItems.entries.compactMap { $0.fallback?.paneID }, [movingPaneID])
     }
 
     func testMovedWorkspaceIsSavedWithTargetWindow() throws {

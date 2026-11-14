@@ -311,6 +311,8 @@ extension MainWindowController: NSMenuItemValidation {
                 RemoteControlServer.shared.isRunning
                 ? "Stop Remote Control Server" : "Start Remote Control Server"
             return true
+        case #selector(reopenTabAction(_:)):
+            return !closedItems.isEmpty
         case #selector(copyRemoteControlURLAction(_:)):
             return RemoteControlServer.shared.isRunning
         case #selector(toggleSecureKeyboardEntryAction(_:)):

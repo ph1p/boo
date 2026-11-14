@@ -65,6 +65,27 @@ import Cocoa
     /// Called when Ghostty requests the search UI to close.
     var onSearchEnded: (() -> Void)?
     let createdAt = Date()
+
+    /// Cuts the view off from its pane while it is parked for "Undo Close".
+    /// `PaneView.wireCallbacks` connects it again.
+    func muteCallbacks() {
+        onFocused = nil
+        onPwdChanged = nil
+        onTitleChanged = nil
+        onDirectoryListing = nil
+        onProcessExited = nil
+        onShellPIDDiscovered = nil
+        onCommandStart = nil
+        onCommandEnd = nil
+        onHistorySearch = nil
+        onProgressReport = nil
+        onBell = nil
+        onDesktopNotification = nil
+        onSearchRequested = nil
+        onSearchTotal = nil
+        onSearchSelected = nil
+        onSearchEnded = nil
+    }
     var shellPID: pid_t = 0
 
     /// Current scrollbar state from the terminal core.

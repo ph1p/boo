@@ -252,7 +252,15 @@ import SwiftUI
             }
         }
     }
-    var undoStack: [ClosedItem] = []
+    /// Closed tabs, panes and workspaces that "Undo Close" can bring back.
+    lazy var closedItems: ClosedItemStore<ParkedItem> = {
+        let store = ClosedItemStore<ParkedItem>()
+        store.destroy = { $0.destroy() }
+        return store
+    }()
+    /// Tabs whose shell exited and that are about to close. They are not
+    /// kept alive for undo: there is nothing left to bring back.
+    var exitedTabIDs: Set<UUID> = []
 
     var activeRemoteSession: RemoteSessionType? {
         coordinator?.activeRemoteSession
@@ -690,6 +698,7 @@ import SwiftUI
     /// Synchronous final save on window close (fires before `applicationWillTerminate` returns):
     /// `saveSession()` writes in the background, so this flush guarantees the final state on disk.
     func windowWillClose(_ notification: Notification) {
+        closedItems.discardAll()
         if hasOrchestratorDrawer { OrchestratorController.shared.closeDrawer() }
         coordinator?.saveSidebarStateToSettings()
         // Persist all live state to the model synchronously, then write synchronously.
@@ -755,6 +764,7 @@ import SwiftUI
     }
 
     private func tearDownAllWorkspaces() {
+        closedItems.discardAll()
         destroyParkedTmuxGateways()
         for ws in appState.workspaces {
             for pane in ws.panes.values {

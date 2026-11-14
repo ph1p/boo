@@ -56,7 +56,7 @@ extension MainWindowController {
         fileMenu.addItem(.separator())
         fileMenu.addItem(withTitle: "Close", action: #selector(smartCloseAction(_:)), keyEquivalent: "w")
         let reopenClosedTab = NSMenuItem(
-            title: "Reopen Closed Tab", action: #selector(reopenTabAction(_:)), keyEquivalent: "z")
+            title: "Undo Close", action: #selector(reopenTabAction(_:)), keyEquivalent: "z")
         reopenClosedTab.keyEquivalentModifierMask = [.command, .option]
         fileMenu.addItem(reopenClosedTab)
         fileMenu.addItem(.separator())

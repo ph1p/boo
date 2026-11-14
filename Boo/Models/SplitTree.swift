@@ -162,6 +162,63 @@ indirect enum SplitTree: Sendable {
             return .split(direction: dir, first: first, second: newSecond, ratio: ratio)
         }
     }
+
+    /// Where a leaf sat in the tree: enough to put it back after `removing`.
+    struct Slot: Equatable {
+        /// The leaves of the subtree the leaf shared its split with.
+        let siblingLeaves: [UUID]
+        let direction: SplitDirection
+        /// The ratio of the split the leaf was in.
+        let ratio: CGFloat
+        /// Whether the leaf was the first child of that split.
+        let isFirst: Bool
+
+        fileprivate func wrap(_ sibling: SplitTree, with id: UUID) -> SplitTree {
+            isFirst
+                ? .split(direction: direction, first: .leaf(id: id), second: sibling, ratio: ratio)
+                : .split(direction: direction, first: sibling, second: .leaf(id: id), ratio: ratio)
+        }
+    }
+
+    /// The slot of a leaf; nil for the only leaf or a leaf that isn't here.
+    func slot(of leafID: UUID) -> Slot? {
+        guard case .split(let dir, let first, let second, let ratio) = self else { return nil }
+        if case .leaf(let id) = first, id == leafID {
+            return Slot(siblingLeaves: second.leafIDs, direction: dir, ratio: ratio, isFirst: true)
+        }
+        if case .leaf(let id) = second, id == leafID {
+            return Slot(siblingLeaves: first.leafIDs, direction: dir, ratio: ratio, isFirst: false)
+        }
+        return first.slot(of: leafID) ?? second.slot(of: leafID)
+    }
+
+    /// Puts a leaf back at `slot`. When the subtree it sat beside has changed
+    /// since, the leaf goes beside the first of its old neighbours that is
+    /// still here, and beside the whole tree when none is.
+    func inserting(leaf id: UUID, at slot: Slot) -> SplitTree {
+        let wanted = Set(slot.siblingLeaves)
+        if let tree = wrapping(id, at: slot, where: { Set($0.leafIDs) == wanted }) { return tree }
+        let present = Set(leafIDs)
+        if let anchor = slot.siblingLeaves.first(where: { present.contains($0) }),
+            let tree = wrapping(id, at: slot, where: { $0.leafIDs == [anchor] })
+        {
+            return tree
+        }
+        return slot.wrap(self, with: id)
+    }
+
+    /// Wraps the outermost subtree that passes `matches` in the slot's split.
+    private func wrapping(_ id: UUID, at slot: Slot, where matches: (SplitTree) -> Bool) -> SplitTree? {
+        if matches(self) { return slot.wrap(self, with: id) }
+        guard case .split(let dir, let first, let second, let ratio) = self else { return nil }
+        if let newFirst = first.wrapping(id, at: slot, where: matches) {
+            return .split(direction: dir, first: newFirst, second: second, ratio: ratio)
+        }
+        if let newSecond = second.wrapping(id, at: slot, where: matches) {
+            return .split(direction: dir, first: first, second: newSecond, ratio: ratio)
+        }
+        return nil
+    }
 }
 
 // MARK: - Codable

@@ -11,7 +11,7 @@ final class MenuShortcutTests: XCTestCase {
 
         let undoItems = menuItems(matching: "z", modifiers: [.command])
         XCTAssertTrue(undoItems.contains { $0.title == "Undo" })
-        XCTAssertFalse(undoItems.contains { $0.title == "Reopen Closed Tab" })
+        XCTAssertFalse(undoItems.contains { $0.title == "Undo Close" })
     }
 
     @MainActor
@@ -19,7 +19,7 @@ final class MenuShortcutTests: XCTestCase {
         let controller = MainWindowController()
         controller.setupMenuItems()
 
-        let reopenItem = menuItem(titled: "Reopen Closed Tab")
+        let reopenItem = menuItem(titled: "Undo Close")
         XCTAssertEqual(reopenItem?.keyEquivalent, "z")
         XCTAssertEqual(reopenItem?.normalizedModifierFlags, [.command, .option])
     }

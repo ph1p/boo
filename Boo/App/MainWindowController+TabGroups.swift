@@ -23,16 +23,8 @@ extension MainWindowController {
                     self.smartCloseAction(nil)
                     break
                 }
-                let tab = pane.tabs[index]
-                if tab.contentType == .terminal {
-                    self.pushUndo(
-                        ClosedItem.tab(paneID: paneID, workingDirectory: tab.workingDirectory, index: index))
-                }
-                self.notifyTerminalClosed(for: tab.id)
-                pv.closeTab(at: index)
+                self.closeTab(in: pv, at: index, undo: .live, announce: false)
             }
-            self.refreshStatusBar()
-            self.saveSession()
             DispatchQueue.main.async { AgentInbox.shared.prune() }
         }
 

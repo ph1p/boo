@@ -65,6 +65,7 @@ final class AppSettings {
         static let workspaceBarPosition = "workspaceBarPosition"
         static let sidebarDensity = "sidebarDensity"
         static let tabOverflowMode = "tabOverflowMode"
+        static let undoCloseSeconds = "undoCloseSeconds"
         static let disabledPluginIDs = "disabledPluginIDs"
         static let sidebarPluginOrder = "sidebarPluginOrder"
         static let sidebarWidth = "sidebarWidth"
@@ -508,6 +509,16 @@ final class AppSettings {
             changed = true
         }
         if changed { saveToFile() }
+    }
+
+    /// Seconds a closed tab, pane or workspace keeps running so "Undo Close"
+    /// can bring it back as it was. 0 turns this off.
+    var undoCloseSeconds: Int {
+        get {
+            guard UserDefaults.standard.object(forKey: K.undoCloseSeconds) != nil else { return 10 }
+            return min(60, max(0, UserDefaults.standard.integer(forKey: K.undoCloseSeconds)))
+        }
+        set { set(min(60, max(0, newValue)), forKey: K.undoCloseSeconds, topic: .layout) }
     }
 
     var tabOverflowMode: TabOverflowMode {

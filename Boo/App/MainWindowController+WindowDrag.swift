@@ -8,7 +8,7 @@ struct DetachedWorkspace {
     /// Plugin tab dedupe keys of the workspace's tabs (tab ID → "typeID:key").
     var tabKeys: [UUID: String] = [:]
     /// Reopen-closed entries that point into this workspace, oldest first.
-    var undoItems: [MainWindowController.ClosedItem] = []
+    var undoItems: [ClosedItemStore<ParkedItem>.Entry] = []
 }
 
 /// A tab taken out of its pane together with its live view (nil when the tab
@@ -111,8 +111,7 @@ extension MainWindowController {
         for tabID in ws.panes.values.flatMap({ $0.tabs.map(\.id) }) {
             detached.tabKeys[tabID] = registeredTabKeys.removeValue(forKey: tabID)
         }
-        detached.undoItems = undoStack.filter { paneIDs.contains($0.paneID) }
-        undoStack.removeAll { paneIDs.contains($0.paneID) }
+        detached.undoItems = closedItems.extract { !$0.paneIDs.isDisjoint(with: paneIDs) }
         appState.detachWorkspace(at: index)
         if renderedWorkspaceID == ws.id { renderedWorkspaceID = nil }
         guard !appState.workspaces.isEmpty else { return detached }
@@ -137,7 +136,7 @@ extension MainWindowController {
         }
         workspacePaneViews[ws.id] = detached.paneViews
         registeredTabKeys.merge(detached.tabKeys) { _, moved in moved }
-        detached.undoItems.forEach(pushUndo)
+        closedItems.append(detached.undoItems)
         let activePaneID = ws.activePaneID
         let dest = appState.insertWorkspace(ws, at: index ?? appState.workspaces.count)
         guard activate else {
