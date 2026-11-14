@@ -81,14 +81,36 @@ final class RuleEngine {
         detachMatcher(entry)
     }
 
-    /// The profile a new local tab starting in `cwd` gets, for its shell,
-    /// environment and starting directory.
-    func launchProfile(cwd: String) -> Profile? {
-        let context = RuleContext(
-            host: nil, cwd: cwd, container: nil,
-            kubeContext: RulesStore.shared.active.usesKubeContext ? kube.current() : nil, process: "")
-        let name = RuleMatcher.profile(for: context, in: RulesStore.shared.active) ?? AppSettings.shared.defaultProfile
-        return ProfileStore.shared.profile(named: name)
+    /// The profile a new tab starting in `cwd` gets, for its shell,
+    /// environment and starting directory. A tab that is already in a
+    /// workspace brings its own pick and remote context along.
+    func launchProfile(tabID: UUID?, cwd: String) -> Profile? {
+        let rules = RulesStore.shared.active
+        let kubeContext = rules.usesKubeContext ? kube.current() : nil
+        var context = RuleContext(host: nil, cwd: cwd, container: nil, kubeContext: kubeContext, process: "")
+        var override: String?
+        var workspace: Workspace?
+        if let loc = tabID.flatMap(AgentInbox.locateInWindows) {
+            let tab = loc.pane.tabs[loc.tabIndex]
+            override = tab.state.profileOverride
+            workspace = loc.workspace
+            if tab.remoteSession != nil {
+                context = Self.context(of: tab, kube: kubeContext)
+                context.process = ""
+            }
+        }
+        return resolveProfile(override: override, context: context, workspace: workspace)?.profile
+    }
+
+    /// The profile for a tab in `context`: `override`, else the first matching
+    /// rule, else the workspace default, else the global default.
+    func resolveProfile(override: String?, context: RuleContext, workspace: Workspace?) -> ProfileResolution? {
+        ProfileResolver.resolve(
+            override: override,
+            ruleMatches: RuleMatcher.profileMatches(for: context, in: RulesStore.shared.active),
+            workspaceDefault: nil,
+            globalDefault: AppSettings.shared.defaultProfile,
+            profiles: ProfileStore.shared.profiles)
     }
 
     /// Pins a tab to `name` (nil: back to the rules and the default).
@@ -164,10 +186,8 @@ final class RuleEngine {
         entry.context = context
         entry.matcher?.update(context: context)
 
-        // Profile: the tab's own pick, else the first matching rule, else the default.
         let override = tab.state.profileOverride
-        let candidate = override ?? RuleMatcher.profile(for: context, in: rules) ?? AppSettings.shared.defaultProfile
-        let profile = ProfileStore.shared.profile(named: candidate)
+        let profile = resolveProfile(override: override, context: context, workspace: loc.workspace)?.profile
         if loc.pane.setProfile(at: loc.tabIndex, override: override, effective: profile?.name) {
             loc.controller.refreshTabBar(workspace: loc.workspace, pane: loc.pane)
         }

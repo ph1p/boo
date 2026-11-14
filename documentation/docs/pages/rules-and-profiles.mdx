@@ -50,10 +50,11 @@ A profile with an empty or duplicate name, or an out-of-range `fontSize`, is ski
 2. Otherwise, the profile of the first [rule](#rules) whose `when` matches
 3. Otherwise, the default from **Settings → Profiles → New tabs use**
 
+A step that names a profile that no longer exists is skipped, and the next one decides. The settings pages warn about rules and a default that point at a missing profile.
+
 Pick a profile by hand from:
 
 - the tab's right-click menu → **Profile** (**Auto** returns the tab to rules and the default; **Edit Profiles…** opens the settings page)
-- the profile chip in the pane controls, shown while a tab runs a profile other than the default
 - the [command palette](/features#command-palette) with the `:` prefix, which lists themes and profiles
 
 A profile picked by hand is not saved with the session.

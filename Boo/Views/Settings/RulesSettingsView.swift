@@ -2,7 +2,7 @@ import SwiftUI
 
 struct RulesSettingsView: View {
     @Environment(\.tokens) private var tokens
-    @ObservedObject private var store = NotificationObserver([.rulesChanged])
+    @ObservedObject private var store = NotificationObserver([.rulesChanged, .profilesChanged])
     @State private var text = RulesStore.shared.text()
     @State private var savedText = RulesStore.shared.text()
     @State private var saveError: String?
@@ -21,8 +21,10 @@ struct RulesSettingsView: View {
                     + "process) and fire actions on terminal output (notify, markTab, run, sendText, openLink). "
                     + "Output regex captures are available as $0…$9 and BOO_MATCH_0…9.")
 
-            if !rules.problems.isEmpty {
-                ProblemBanner(problems: rules.problems)
+            let problems =
+                rules.problems + rules.all.unknownProfileProblems(known: Set(ProfileStore.shared.names))
+            if !problems.isEmpty {
+                ProblemBanner(problems: problems)
             }
 
             if !rules.suspended.isEmpty {

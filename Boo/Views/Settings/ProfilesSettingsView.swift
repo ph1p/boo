@@ -73,8 +73,9 @@ struct ProfilesSettingsView: View {
                     + "profiles by host, folder, container or Kubernetes context; the tab menu and the palette "
                     + "(:profile) switch by hand.")
 
-            if !ProfileStore.shared.problems.isEmpty {
-                ProblemBanner(problems: ProfileStore.shared.problems)
+            let problems = ProfileStore.shared.problems + ProfileStore.shared.defaultProfileProblems
+            if !problems.isEmpty {
+                ProblemBanner(problems: problems)
             }
 
             Section(title: "Default") {

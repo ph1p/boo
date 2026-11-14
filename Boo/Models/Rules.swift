@@ -85,6 +85,14 @@ struct RuleSet: Equatable, Sendable {
     var outputRules: [Rule] { rules.filter { $0.enabled && $0.isOutputRule } }
     var usesKubeContext: Bool { rules.contains { $0.enabled && $0.when.kubeContext != nil } }
 
+    /// One warning per enabled rule that names a profile not in `known`.
+    func unknownProfileProblems(known: Set<String>) -> [String] {
+        rules.compactMap { rule in
+            guard rule.enabled, case .profile(let name) = rule.then, !known.contains(name) else { return nil }
+            return "rule \"\(rule.id)\": profile \"\(name)\" does not exist, the rule is skipped"
+        }
+    }
+
     struct ParseError: Error, Equatable {
         var message: String
     }
@@ -240,13 +248,22 @@ enum RuleMatcher {
         return true
     }
 
+    struct ProfileMatch: Equatable, Sendable {
+        var name: String
+        var ruleID: String
+    }
+
     /// The profile name of the first enabled context rule that matches.
     static func profile(for context: RuleContext, in set: RuleSet) -> String? {
-        for rule in set.contextRules {
-            guard case .profile(let name) = rule.then else { continue }
-            if contextMatches(rule.when, context) { return name }
+        profileMatches(for: context, in: set).first?.name
+    }
+
+    /// Every enabled profile rule that matches, in file order.
+    static func profileMatches(for context: RuleContext, in set: RuleSet) -> [ProfileMatch] {
+        set.contextRules.compactMap { rule in
+            guard case .profile(let name) = rule.then, contextMatches(rule.when, context) else { return nil }
+            return ProfileMatch(name: name, ruleID: rule.id)
         }
-        return nil
     }
 
     /// Context rules with actions that match `context`.

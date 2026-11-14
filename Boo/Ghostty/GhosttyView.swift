@@ -162,10 +162,10 @@ import Cocoa
         var launch =
             explicitLaunch ?? tabID.flatMap { Self.pendingLaunch.removeValue(forKey: $0) }
             ?? tabID.flatMap { CrashRecovery.takeResume(for: $0) }
-        // A tab starts with its profile's shell, env and cwd (rules can only
-        // see the starting directory at this point).
+        // A tab starts with its profile's shell, env and cwd (rules see the
+        // starting directory and, for a restored remote tab, its host).
         if explicitLaunch == nil, tabID != nil,
-            let profile = RuleEngine.shared.launchProfile(cwd: launch?.cwd ?? workingDirectory)
+            let profile = RuleEngine.shared.launchProfile(tabID: tabID, cwd: launch?.cwd ?? workingDirectory)
         {
             launch = profile.launchSpec(merging: launch)
         }

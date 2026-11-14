@@ -55,6 +55,43 @@ struct Profile: Codable, Equatable, Sendable {
     }
 }
 
+/// Why a tab runs its profile.
+enum ProfileSource: Equatable, Sendable {
+    /// Picked by hand for the tab.
+    case manual
+    /// The rule with this id matched.
+    case rule(String)
+    case workspaceDefault
+    case globalDefault
+}
+
+struct ProfileResolution: Equatable {
+    var profile: Profile
+    var source: ProfileSource
+}
+
+enum ProfileResolver {
+    /// The profile a tab runs: its own pick, else the first matching rule,
+    /// else the workspace default, else the global default. A name without a
+    /// profile is skipped, so a deleted profile falls through to the next step.
+    static func resolve(
+        override: String?, ruleMatches: [RuleMatcher.ProfileMatch], workspaceDefault: String?,
+        globalDefault: String?, profiles: [Profile]
+    ) -> ProfileResolution? {
+        var candidates: [(String, ProfileSource)] = []
+        if let override { candidates.append((override, .manual)) }
+        candidates += ruleMatches.map { ($0.name, .rule($0.ruleID)) }
+        if let workspaceDefault { candidates.append((workspaceDefault, .workspaceDefault)) }
+        if let globalDefault { candidates.append((globalDefault, .globalDefault)) }
+        for (name, source) in candidates {
+            if let profile = profiles.first(where: { $0.name == name }) {
+                return ProfileResolution(profile: profile, source: source)
+            }
+        }
+        return nil
+    }
+}
+
 struct ProfileFile: Codable, Equatable {
     var profiles: [Profile]
 
@@ -133,6 +170,12 @@ final class ProfileStore {
     }
 
     var names: [String] { profiles.map(\.name) }
+
+    /// A warning when the global default names a profile that is gone.
+    var defaultProfileProblems: [String] {
+        guard let name = AppSettings.shared.defaultProfile, profile(named: name) == nil else { return [] }
+        return ["default profile \"\(name)\" does not exist, new tabs use the plain settings"]
+    }
 
     func profile(named name: String?) -> Profile? {
         guard let name else { return nil }
