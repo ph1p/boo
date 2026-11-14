@@ -75,17 +75,13 @@ final class ClosedItemStore<Live> {
     func expire() {
         let date = now()
         for entry in entries {
-            if let deadline = entry.deadline, deadline <= date { dropLive(id: entry.id, reschedule: false) }
+            if let deadline = entry.deadline, deadline <= date { dropLive(id: entry.id) }
         }
         schedule()
     }
 
     /// Destroys the live payload of one entry, for example when its shell exits.
     func dropLive(id: UUID) {
-        dropLive(id: id, reschedule: true)
-    }
-
-    private func dropLive(id: UUID, reschedule: Bool) {
         guard let index = entries.firstIndex(where: { $0.id == id }) else { return }
         // Out of the list before `destroy` runs: `destroy` can call back in.
         let live = entries[index].live
@@ -93,7 +89,7 @@ final class ClosedItemStore<Live> {
         entries[index].deadline = nil
         if entries[index].fallback == nil { entries.remove(at: index) }
         if let live { destroy(live) }
-        if reschedule { schedule() }
+        schedule()
     }
 
     /// The window closes: nothing can be undone any more.

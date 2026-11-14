@@ -357,15 +357,15 @@ extension PaneView {
         let title = Self.tabDisplayTitle(tab: tab) as NSString
         let titleSize = title.size(withAttributes: titleAttrs)
         let badge = ProfileBadge.text(for: tab)
-        let badgeW = badge.map { ProfileBadge.width(of: $0) + ProfileBadge.gap } ?? 0
+        let badgeW = ProfileBadge.advance(of: badge)
         let titleW = min(titleSize.width, max(0, maxW - badgeW))
         title.draw(
             in: CGRect(x: textX, y: titleMidY - titleSize.height / 2, width: titleW, height: titleSize.height),
             withAttributes: titleAttrs)
         if let badge, maxW > badgeW {
             ProfileBadge.draw(
-                ctx, text: badge, x: textX + titleW + ProfileBadge.gap, midY: titleMidY,
-                color: tab.state.profile.flatMap { ProfileStore.shared.accent(forProfile: $0) } ?? theme.accentColor)
+                ctx, text: badge, after: textX + titleW, midY: titleMidY,
+                color: ProfileBadge.color(for: tab, theme: theme))
         }
 
         if let detail {
@@ -401,7 +401,7 @@ extension PaneView {
             ctx.fillPath()
         }
 
-        if tab.state.isRecording { Self.drawRecordingDot(ctx, in: pill, theme: booTheme) }
+        if tab.state.isRecording { Self.drawRecordingDot(ctx, in: pill, theme: theme) }
 
         if tab.state.hasActivity && !isActive {
             let dotSize: CGFloat = 5

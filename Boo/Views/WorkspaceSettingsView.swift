@@ -123,10 +123,6 @@ struct WorkspaceSettingsView: View {
     private func segmentBinding(_ id: String) -> Binding<Bool> {
         Binding(
             get: { !(settings.statusBarHiddenSegments ?? []).contains(id) },
-            set: { shown in
-                var list = (settings.statusBarHiddenSegments ?? []).filter { $0 != id }
-                if !shown { list.append(id) }
-                settings.statusBarHiddenSegments = list
-            })
+            set: { settings.setSegment(id, hidden: !$0) })
     }
 }

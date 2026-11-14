@@ -37,18 +37,24 @@ struct EffectiveSettings: Equatable {
     /// nil: every segment follows its global toggle.
     var statusBarHiddenSegments: Set<String>?
     var sidebarDefaultTab: String?
-    var defaultProfile: String?
 
     static func resolve(
-        workspace: WorkspaceSettings?, sidebarPosition: SidebarPosition, tabOverflowMode: TabOverflowMode,
-        defaultProfile: String?
+        workspace: WorkspaceSettings?, sidebarPosition: SidebarPosition, tabOverflowMode: TabOverflowMode
     ) -> EffectiveSettings {
         EffectiveSettings(
             sidebarPosition: workspace?.sidebarPosition.flatMap(SidebarPosition.init(rawValue:)) ?? sidebarPosition,
             tabOverflowMode: workspace?.tabOverflowMode.flatMap(TabOverflowMode.init(rawValue:)) ?? tabOverflowMode,
             statusBarHiddenSegments: workspace?.statusBarHiddenSegments.map(Set.init),
-            sidebarDefaultTab: workspace?.sidebarDefaultTab,
-            defaultProfile: workspace?.defaultProfile ?? defaultProfile)
+            sidebarDefaultTab: workspace?.sidebarDefaultTab)
+    }
+}
+
+extension WorkspaceSettings {
+    /// Hides or shows one status bar segment in this workspace.
+    mutating func setSegment(_ id: String, hidden: Bool) {
+        var list = (statusBarHiddenSegments ?? []).filter { $0 != id }
+        if hidden { list.append(id) }
+        statusBarHiddenSegments = list
     }
 }
 
@@ -56,7 +62,6 @@ extension AppSettings {
     /// Never stored globally: two windows can show different workspaces.
     func effective(for workspace: Workspace?) -> EffectiveSettings {
         EffectiveSettings.resolve(
-            workspace: workspace?.settings, sidebarPosition: sidebarPosition, tabOverflowMode: tabOverflowMode,
-            defaultProfile: defaultProfile)
+            workspace: workspace?.settings, sidebarPosition: sidebarPosition, tabOverflowMode: tabOverflowMode)
     }
 }

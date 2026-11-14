@@ -250,14 +250,13 @@ extension PaneView {
         let titleSize = title.size()
         // The profile's badge follows the title and keeps its full width.
         let badge = ProfileBadge.text(for: tab)
-        let badgeW = badge.map { ProfileBadge.width(of: $0) + ProfileBadge.gap } ?? 0
+        let badgeW = ProfileBadge.advance(of: badge)
         let maxTitleW = max(0, pillRect.maxX - textX - closeZone - badgeW)
         let titleW = min(titleSize.width, maxTitleW)
         title.draw(in: CGRect(x: textX, y: midY - titleSize.height / 2, width: titleW, height: titleSize.height))
         if let badge, maxTitleW > 0 {
             ProfileBadge.draw(
-                ctx, text: badge, x: textX + titleW + ProfileBadge.gap, midY: midY,
-                color: tab.state.profile.flatMap { ProfileStore.shared.accent(forProfile: $0) } ?? theme.accentColor)
+                ctx, text: badge, after: textX + titleW, midY: midY, color: ProfileBadge.color(for: tab, theme: theme))
         }
 
         // OSC 9;4 progress along the pill's bottom edge.
@@ -278,7 +277,7 @@ extension PaneView {
             ctx.fillPath()
         }
 
-        if tab.state.isRecording { Self.drawRecordingDot(ctx, in: pillRect, theme: booTheme) }
+        if tab.state.isRecording { Self.drawRecordingDot(ctx, in: pillRect, theme: theme) }
 
         let closeSize = WorkspacePillStyle.closeButtonSize
         let closeRect = CGRect(

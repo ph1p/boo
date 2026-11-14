@@ -128,11 +128,7 @@ struct RulesFormView: View {
     }
 
     private func save() {
-        guard let draft else { return }
-        guard targetIsCurrent else {
-            error = "rules.json changed since you opened this rule. Cancel and open it again."
-            return
-        }
+        guard let draft, !targetIsStale() else { return }
         // Nothing changed: leave the rule as written, so it keeps its approval.
         if let original, draft == RuleDraft(original) {
             close()
@@ -164,12 +160,15 @@ struct RulesFormView: View {
         }
     }
 
+    /// True, with the error shown, when the rule being edited changed on disk.
+    private func targetIsStale() -> Bool {
+        if targetIsCurrent { return false }
+        error = "rules.json changed since you opened this rule. Cancel and open it again."
+        return true
+    }
+
     private func delete() {
-        guard let editing else { return }
-        guard targetIsCurrent else {
-            error = "rules.json changed since you opened this rule. Cancel and open it again."
-            return
-        }
+        guard let editing, !targetIsStale() else { return }
         var doc = document
         doc.remove(at: editing)
         close()

@@ -24,11 +24,7 @@ extension MainWindowController {
         statusBar.hiddenSegmentsOverride = effective.statusBarHiddenSegments
         statusBar.onWorkspaceSegmentToggle = { [weak self] id, hidden in
             guard let self, let workspace = self.activeWorkspace else { return }
-            self.updateWorkspaceSettings(workspace.id) { settings in
-                var list = (settings.statusBarHiddenSegments ?? []).filter { $0 != id }
-                if hidden { list.append(id) }
-                settings.statusBarHiddenSegments = list
-            }
+            self.updateWorkspaceSettings(workspace.id) { $0.setSegment(id, hidden: hidden) }
         }
         statusBar.needsDisplay = true
         if effectiveTheme.name != appliedChromeThemeName { applyChromeTheme() }
@@ -66,7 +62,7 @@ extension MainWindowController {
 
     /// Changes one workspace's settings, applies them and saves the session.
     func updateWorkspaceSettings(_ workspaceID: UUID, _ change: (inout WorkspaceSettings) -> Void) {
-        guard let workspace = appState.workspaces.first(where: { $0.id == workspaceID }) else { return }
+        guard let workspace = appState.workspace(withID: workspaceID) else { return }
         let old = workspace.settings
         change(&workspace.settings)
         guard workspace.settings != old else { return }
@@ -93,7 +89,7 @@ extension MainWindowController {
 
     func showWorkspaceSettings(forWorkspace workspaceID: UUID) {
         guard let window, window.attachedSheet == nil,
-            let workspace = appState.workspaces.first(where: { $0.id == workspaceID })
+            let workspace = appState.workspace(withID: workspaceID)
         else { return }
         let theme = effectiveTheme
         let catalog = statusBar.segmentCatalog

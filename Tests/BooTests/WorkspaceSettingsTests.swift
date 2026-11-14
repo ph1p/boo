@@ -51,33 +51,31 @@ final class WorkspaceSettingsTests: XCTestCase {
 
     func testEffectiveSettingsPreferWorkspaceValues() {
         let inherited = EffectiveSettings.resolve(
-            workspace: WorkspaceSettings(), sidebarPosition: .right, tabOverflowMode: .wrap, defaultProfile: "global")
+            workspace: WorkspaceSettings(), sidebarPosition: .right, tabOverflowMode: .wrap)
         XCTAssertEqual(inherited.sidebarPosition, .right)
         XCTAssertEqual(inherited.tabOverflowMode, .wrap)
         XCTAssertNil(inherited.statusBarHiddenSegments)
         XCTAssertNil(inherited.sidebarDefaultTab)
-        XCTAssertEqual(inherited.defaultProfile, "global")
         XCTAssertEqual(
             inherited,
             EffectiveSettings.resolve(
-                workspace: nil, sidebarPosition: .right, tabOverflowMode: .wrap, defaultProfile: "global"))
+                workspace: nil, sidebarPosition: .right, tabOverflowMode: .wrap))
 
         let overridden = EffectiveSettings.resolve(
             workspace: WorkspaceSettings(
                 defaultProfile: "prod", sidebarDefaultTab: "git-panel", sidebarPosition: 0, tabOverflowMode: 2,
                 statusBarHiddenSegments: []),
-            sidebarPosition: .right, tabOverflowMode: .wrap, defaultProfile: "global")
+            sidebarPosition: .right, tabOverflowMode: .wrap)
         XCTAssertEqual(overridden.sidebarPosition, .left)
         XCTAssertEqual(overridden.tabOverflowMode, .vertical)
         XCTAssertEqual(overridden.statusBarHiddenSegments, [])
         XCTAssertEqual(overridden.sidebarDefaultTab, "git-panel")
-        XCTAssertEqual(overridden.defaultProfile, "prod")
     }
 
     func testUnknownRawValuesInherit() {
         let effective = EffectiveSettings.resolve(
             workspace: WorkspaceSettings(sidebarPosition: 9, tabOverflowMode: 9),
-            sidebarPosition: .left, tabOverflowMode: .scroll, defaultProfile: nil)
+            sidebarPosition: .left, tabOverflowMode: .scroll)
         XCTAssertEqual(effective.sidebarPosition, .left)
         XCTAssertEqual(effective.tabOverflowMode, .scroll)
     }

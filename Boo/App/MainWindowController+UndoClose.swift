@@ -106,10 +106,10 @@ extension MainWindowController {
             if let parked = pv.parkTab(at: index) {
                 notifyTerminalClosed(for: tab.id)
                 parked.ghosttyView?.muteCallbacks()
+                let live = ParkedItem.tab(parked, paneID: pv.paneID, index: index)
                 let id = closedItems.push(
-                    fallback: fallback, live: .tab(parked, paneID: pv.paneID, index: index),
-                    lifetime: undoCloseLifetime, paneIDs: [pv.paneID])
-                watchForExit(of: parked.ghosttyView.map { [$0] } ?? [], entry: id)
+                    fallback: fallback, live: live, lifetime: undoCloseLifetime, paneIDs: [pv.paneID])
+                watchForExit(of: live.terminalViews, entry: id)
                 refreshStatusBar()
                 saveSession()
                 if announce { announceClose("Tab closed", entry: id) }
@@ -197,23 +197,22 @@ extension MainWindowController {
 
         splitContainer.update(tree: workspace.displayedTree)
         saveSession()
+        settlePanes(of: workspace)
+    }
 
+    /// After a pane left or rejoined `workspace`: restarts the sessions,
+    /// refreshes the surfaces and focuses `paneID` (nil: the active pane).
+    private func settlePanes(of workspace: Workspace, focus paneID: UUID? = nil) {
         DispatchQueue.main.async { [weak self] in
             guard let self, self.activeWorkspace != nil else { return }
-            for id in validIDs {
-                if let pv = self.paneViews[id] {
-                    pv.startActiveSession()
-                }
-            }
+            for id in workspace.splitTree.leafIDs { self.paneViews[id]?.startActiveSession() }
             self.refreshAllSurfaces()
             self.syncCoordinatorPaneViews()
             self.updatePaneCloseButtons()
             self.runPluginCycle(reason: .focusChanged)
             DispatchQueue.main.async { [weak self] in
-                guard let self, let ws = self.activeWorkspace,
-                    let pv = self.paneViews[ws.activePaneID]
-                else { return }
-                pv.focusActiveView()
+                guard let self, let id = paneID ?? self.activeWorkspace?.activePaneID else { return }
+                self.paneViews[id]?.focusActiveView()
             }
         }
     }
@@ -335,19 +334,7 @@ extension MainWindowController {
             updateSplits(workspace.displayedTree, fadingIn: paneID)
             trackShell(of: pv.ghosttyView, paneID: paneID, tabID: parked.pane.activeTab?.id)
             saveSession()
-            DispatchQueue.main.async { [weak self] in
-                guard let self else { return }
-                for id in workspace.splitTree.leafIDs {
-                    self.paneViews[id]?.startActiveSession()
-                }
-                self.refreshAllSurfaces()
-                self.syncCoordinatorPaneViews()
-                self.updatePaneCloseButtons()
-                self.runPluginCycle(reason: .focusChanged)
-                DispatchQueue.main.async { [weak self] in
-                    self?.paneViews[paneID]?.focusActiveView()
-                }
-            }
+            settlePanes(of: workspace, focus: paneID)
             refreshStatusBar()
             return true
 

@@ -24,7 +24,7 @@ extension PaneView {
             textW += ceil(
                 ("  " + subtitle as NSString).size(withAttributes: [.font: Self.tabSubtitleMeasureFont]).width)
         }
-        if let badge = ProfileBadge.text(for: tab) { textW += ProfileBadge.width(of: badge) + ProfileBadge.gap }
+        textW += ProfileBadge.advance(of: ProfileBadge.text(for: tab))
         var natural = textW + Self.tabTextLeadIn + Self.tabCloseHitZone + Self.tabPillInsetX * 2
         if tabHasLeadingIcon(tab) { natural += Self.tabIconAdvance }
         return min(tabMaxWidth, max(tabMinWidth, natural))
