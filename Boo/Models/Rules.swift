@@ -45,11 +45,12 @@ struct RuleCondition: Equatable, Sendable {
             && workspace == nil && workspaceFolder == nil && gitBranch == nil && user == nil && time == nil
     }
 
-    /// The keys a `when` object may hold.
-    static let keys: Set<String> = [
-        "host", "cwd", "container", "kubeContext", "process", "output", "workspace", "workspaceFolder",
-        "gitBranch", "user", "time"
+    /// The keys a `when` object may hold, in the order the docs and the form list them.
+    static let orderedKeys = [
+        "host", "cwd", "container", "kubeContext", "process", "workspace", "workspaceFolder", "gitBranch", "user",
+        "time", "output"
     ]
+    static let keys = Set(orderedKeys)
 }
 
 /// A daily time window in minutes since midnight. `end` is exclusive; a

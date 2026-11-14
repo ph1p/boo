@@ -177,7 +177,15 @@ Text in actions can use `$0` (the whole match) to `$9` (capture groups); `$$` is
 
 ### Settings → Rules
 
-- An editor for `rules.json` with **Save** (**Cmd+S**), **Revert** and **Open in Editor**, and the number of rules loaded. Problems in the file are listed at the top of the page
+The page edits `rules.json` in two views, switched at the top. Problems in the file are listed above both.
+
+- **Form**: the rules as a list. Turn a rule on or off, move it up or down, or click it to edit its conditions, its profile or actions, and for output rules the cooldown and the full-screen option. **Add Rule** starts a new one
+- **JSON**: an editor for the file with **Save** (**Cmd+S**), **Revert** and **Open in Editor**, and the number of rules loaded
+
+The form keeps keys it has no field for, and a rule you don't change keeps its `sendText` approval. Saving from the form rewrites the whole file with its own indentation and key order, and it also saves unsaved edits from the JSON view. While the file is not valid JSON, the form is unavailable; fix the file in the JSON view first. An action the form has no fields for is shown as a custom action and stays as written.
+
+Below both views:
+
 - A **Regex Tester**: enter a pattern and some sample lines to see which lines match and what `$0`…`$9` capture
 - **Confirmations**: **Reset Approvals** forgets every approved `sendText`
 
