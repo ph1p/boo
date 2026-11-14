@@ -309,7 +309,7 @@ final class CopyModeOverlay: NSView {
     }
 
     override func draw(_ dirtyRect: NSRect) {
-        let theme = AppSettings.shared.theme
+        let theme = booTheme
         let pad = GhosttyView.gridPadding
         let view = viewport()
         func rect(row: Int, from: Int, to: Int) -> CGRect {

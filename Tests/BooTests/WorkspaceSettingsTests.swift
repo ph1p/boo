@@ -1,8 +1,42 @@
+import SwiftUI
 import XCTest
 
 @testable import Boo
 
 final class WorkspaceSettingsTests: XCTestCase {
+    @MainActor
+    func testWorkspaceThemeName() {
+        let settings = AppSettings.shared
+        let preview = settings.previewTheme
+        settings.previewTheme = nil
+        defer { settings.previewTheme = preview }
+
+        XCTAssertNil(settings.themeName(for: nil, lightAppearance: false))
+        XCTAssertNil(settings.themeName(for: WorkspaceSettings(), lightAppearance: true))
+
+        let pair = WorkspaceSettings(themeName: "Boo Dark", lightThemeName: "Boo Light")
+        XCTAssertEqual(settings.themeName(for: pair, lightAppearance: false), "Boo Dark")
+        XCTAssertEqual(settings.themeName(for: pair, lightAppearance: true), "Boo Light")
+        // Without a light variant the one theme serves both appearances.
+        let single = WorkspaceSettings(themeName: "Boo Dark")
+        XCTAssertEqual(settings.themeName(for: single, lightAppearance: true), "Boo Dark")
+
+        // A theme preview in Settings wins over the workspace.
+        settings.previewTheme = settings.theme
+        XCTAssertNil(settings.themeName(for: pair, lightAppearance: false))
+    }
+
+    @MainActor
+    func testThemedSectionKeepsIdentity() {
+        let section = SidebarSection(
+            id: "s", name: "S", icon: "star", content: AnyView(EmptyView()), prefersOuterScrollView: true,
+            generation: 7)
+        let themed = section.themed(AppSettings.shared.theme)
+        XCTAssertEqual(themed.id, section.id)
+        XCTAssertEqual(themed.generation, section.generation)
+        XCTAssertEqual(themed.prefersOuterScrollView, section.prefersOuterScrollView)
+    }
+
     func testRoundTripAndEmpty() throws {
         XCTAssertTrue(WorkspaceSettings().isEmpty)
         XCTAssertTrue(try JSONDecoder().decode(WorkspaceSettings.self, from: Data("{}".utf8)).isEmpty)

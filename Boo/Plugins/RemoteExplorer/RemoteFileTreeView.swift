@@ -3,9 +3,10 @@ import SwiftUI
 /// Shown while waiting for the remote session to authenticate/connect.
 struct RemoteConnectingView: View {
     let session: RemoteSessionType
+    @Environment(\.windowTheme) private var windowTheme
 
     var body: some View {
-        let theme = AppSettings.shared.theme
+        let theme = windowTheme ?? AppSettings.shared.theme
 
         VStack(spacing: 12) {
             Spacer()
@@ -45,9 +46,10 @@ struct RemoteConnectionFailedView: View {
     let session: RemoteSessionType
     var onRetry: (() -> Void)?
     @State private var isRetrying = false
+    @Environment(\.windowTheme) private var windowTheme
 
     var body: some View {
-        let theme = AppSettings.shared.theme
+        let theme = windowTheme ?? AppSettings.shared.theme
 
         VStack(spacing: 12) {
             Spacer()

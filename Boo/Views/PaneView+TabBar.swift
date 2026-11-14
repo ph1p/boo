@@ -272,7 +272,7 @@ extension PaneView {
             ctx.fillPath()
         }
 
-        if tab.state.isRecording { Self.drawRecordingDot(ctx, in: pillRect) }
+        if tab.state.isRecording { Self.drawRecordingDot(ctx, in: pillRect, theme: booTheme) }
 
         let closeSize = WorkspacePillStyle.closeButtonSize
         let closeRect = CGRect(
@@ -320,9 +320,9 @@ extension PaneView {
     }
 
     /// Red dot on the pill's top-left corner while the tab records.
-    static func drawRecordingDot(_ ctx: CGContext, in pill: CGRect) {
+    static func drawRecordingDot(_ ctx: CGContext, in pill: CGRect, theme: TerminalTheme) {
         let size: CGFloat = 6
-        ctx.setFillColor(AppSettings.shared.theme.error.cgColor)
+        ctx.setFillColor(theme.error.cgColor)
         ctx.fillEllipse(in: CGRect(x: pill.minX + 3, y: pill.minY + 3, width: size, height: size))
     }
 

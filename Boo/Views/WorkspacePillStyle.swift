@@ -43,11 +43,10 @@ enum WorkspacePillStyle {
     /// workspace strip's vertical ones — the axis lives in the points.
     @MainActor
     static func drawBackdropFade(
-        _ ctx: CGContext, in clipRect: CGRect, from start: CGPoint, to end: CGPoint
+        _ ctx: CGContext, in clipRect: CGRect, from start: CGPoint, to end: CGPoint,
+        backdrop: NSColor
     ) {
-        drawFade(
-            ctx, in: clipRect, from: start, to: end,
-            color: AppSettings.shared.theme.windowBackdrop)
+        drawFade(ctx, in: clipRect, from: start, to: end, color: backdrop)
     }
 
     /// Same fade, but into an arbitrary surface colour — the pane tab bar shares

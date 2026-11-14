@@ -26,7 +26,7 @@ struct SidebarSection: Identifiable {
     let id: String
     let name: String
     let icon: String
-    let content: AnyView
+    private(set) var content: AnyView
     let prefersOuterScrollView: Bool
     /// Content that scrolls itself (a lazy list) but should still grow like an
     /// outer-scrolled section. An outer NSScrollView would size its hosting view to
@@ -56,6 +56,13 @@ struct SidebarSection: Identifiable {
             self.content = content
             self.generation = generation
         }
+    }
+
+    /// The section with `theme` handed to its content as `windowTheme`.
+    func themed(_ theme: TerminalTheme) -> SidebarSection {
+        var section = self
+        section.content = AnyView(content.environment(\.windowTheme, theme))
+        return section
     }
 
     /// Generation derived from a section's row identities.
@@ -788,14 +795,14 @@ class SidebarPanelView: NSView {
 
         let ghostView = NSView(frame: NSRect(x: 0, y: 0, width: ghostWidth, height: ghostHeight))
         ghostView.wantsLayer = true
-        ghostView.layer?.backgroundColor = AppSettings.shared.theme.dragGhostBg.cgColor
+        ghostView.layer?.backgroundColor = booTheme.dragGhostBg.cgColor
         ghostView.layer?.cornerRadius = 6
         ghostView.layer?.borderColor = NSColor.separatorColor.cgColor
         ghostView.layer?.borderWidth = 1
 
         let label = NSTextField(labelWithString: ghostTitle)
         label.font = SidebarSectionHeaderView.titleFont
-        label.textColor = AppSettings.shared.theme.chromeMuted
+        label.textColor = booTheme.chromeMuted
         label.frame = NSRect(x: 6, y: 2, width: ghostWidth - 12, height: ghostHeight - 4)
         ghostView.addSubview(label)
 
@@ -891,7 +898,7 @@ class SidebarPanelView: NSView {
 
     override func draw(_ dirtyRect: NSRect) {
         guard let ctx = NSGraphicsContext.current?.cgContext else { return }
-        let theme = AppSettings.shared.theme
+        let theme = booTheme
         ctx.setFillColor(theme.sidebarBg.cgColor)
         ctx.fill(bounds)
 

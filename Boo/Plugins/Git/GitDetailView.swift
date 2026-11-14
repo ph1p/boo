@@ -40,12 +40,14 @@ struct GitDetailView: View {
         changedFiles.filter { $0.isUnstaged && !$0.isUntracked }
     }
 
+    @Environment(\.windowTheme) private var windowTheme
+
     private var untrackedFiles: [GitPlugin.GitChangedFile] {
         changedFiles.filter(\.isUntracked)
     }
 
     var body: some View {
-        let theme = AppSettings.shared.theme
+        let theme = windowTheme ?? AppSettings.shared.theme
         let density = AppSettings.shared.sidebarDensity
 
         VStack(alignment: .leading, spacing: 0) {

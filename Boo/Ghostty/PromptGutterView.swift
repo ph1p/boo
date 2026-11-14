@@ -50,7 +50,7 @@ final class PromptGutterView: NSView {
 
     override func draw(_ dirtyRect: NSRect) {
         guard cellHeight > 0, !marks.isEmpty, let ctx = NSGraphicsContext.current?.cgContext else { return }
-        let theme = AppSettings.shared.theme
+        let theme = booTheme
         for mark in marks {
             let y = GhosttyView.gridPadding + CGFloat(mark.row) * cellHeight
             let rect = CGRect(x: 0, y: y, width: Self.tickWidth, height: cellHeight)

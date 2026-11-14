@@ -5,10 +5,11 @@ struct KubePanelView: View {
     @ObservedObject var store = KubeStore.shared
     var fontScale: SidebarFontScale = SidebarFontScale(base: AppSettings.shared.sidebarFontSize)
     @State private var filter = ""
+    @Environment(\.windowTheme) private var windowTheme
 
     var body: some View {
         let _ = settings.revision
-        let theme = AppSettings.shared.theme
+        let theme = windowTheme ?? AppSettings.shared.theme
         let colors = KubeRowColors(
             text: Color(nsColor: theme.chromeText),
             muted: Color(nsColor: theme.chromeMuted),

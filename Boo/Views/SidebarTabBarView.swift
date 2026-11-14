@@ -311,7 +311,7 @@ class SidebarTabBarView: NSView {
 
     override func draw(_ dirtyRect: NSRect) {
         guard let ctx = NSGraphicsContext.current?.cgContext else { return }
-        let theme = AppSettings.shared.theme
+        let theme = booTheme
         let iconSize: CGFloat = 18
 
         // No fill and no separator rule: the strip sits inside the sidebar island,

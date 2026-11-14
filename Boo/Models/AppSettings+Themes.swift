@@ -128,12 +128,29 @@ extension AppSettings {
     }
 
     /// Apply the correct theme based on system dark/light mode.
-    @MainActor func applySystemAppearance() {
+    /// `appearanceChanged`: the system switched between dark and light.
+    @MainActor func applySystemAppearance(appearanceChanged: Bool = false) {
         guard autoTheme else { return }
         let isDark = NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
         let target = isDark ? darkThemeName : lightThemeName
         if target != themeName {
             themeName = target
+        } else if appearanceChanged {
+            // Workspace themes carry their own light variant, so they follow
+            // the appearance even when the global theme stays the same.
+            notify(topic: .theme)
         }
+    }
+
+    /// Whether themes with a light variant use it right now.
+    @MainActor var followsLightAppearance: Bool {
+        autoTheme && NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .aqua
+    }
+
+    /// The theme name a workspace asks for; nil when it follows the global
+    /// theme. A theme preview in Settings wins over every workspace.
+    func themeName(for workspace: WorkspaceSettings?, lightAppearance: Bool) -> String? {
+        guard previewTheme == nil else { return nil }
+        return SurfaceStyle(profile: nil, workspace: workspace).themeName(lightAppearance: lightAppearance)
     }
 }

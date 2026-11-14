@@ -23,7 +23,7 @@ extension MainWindowController {
         // group members next to each other no matter how they got out of order.
         if clusterWorkspaceGroups() { saveSession() }
         let groups = AppSettings.shared.workspaceGroups
-        let theme = AppSettings.shared.theme
+        let theme = effectiveTheme
         // Pinned workspaces stay in the pinned section, outside any group.
         let wsGroups = appState.workspaces.map { $0.isPinned ? nil : groups.group(forMember: $0.id.uuidString) }
         // A tmux session's windows share one chip, whatever groups say.

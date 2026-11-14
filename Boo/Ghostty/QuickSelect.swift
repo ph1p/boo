@@ -146,7 +146,7 @@ final class QuickSelectOverlay: NSView {
     }
 
     override func draw(_ dirtyRect: NSRect) {
-        let theme = AppSettings.shared.theme
+        let theme = booTheme
         NSColor.black.withAlphaComponent(0.25).setFill()
         bounds.fill()
 

@@ -40,6 +40,25 @@ import SwiftUI
     }
     /// The global settings with the active workspace's overrides on top.
     var effectiveSettings: EffectiveSettings { AppSettings.shared.effective(for: activeWorkspace) }
+    /// The theme of this window's chrome: the active workspace's theme, else
+    /// the global one. Views in the window read it through `NSView.booTheme`.
+    var effectiveTheme: TerminalTheme {
+        let settings = AppSettings.shared
+        let name = settings.themeName(
+            for: activeWorkspace?.settings, lightAppearance: settings.followsLightAppearance)
+        guard let name else { return settings.theme }
+        if let cached = workspaceThemeCache, cached.name == name { return cached.theme }
+        // A theme that no longer exists falls back to the global one.
+        let theme = settings.theme(named: name) ?? settings.theme
+        workspaceThemeCache = (name, theme)
+        return theme
+    }
+    /// Draw code asks for the theme on every pass, and looking a custom theme
+    /// up by name decodes the stored themes. Cleared when themes change.
+    var workspaceThemeCache: (name: String, theme: TerminalTheme)?
+    /// Name of the theme the chrome was last styled with. A new window starts
+    /// with the global theme.
+    var appliedChromeThemeName = AppSettings.shared.theme.name
     var currentWorkspaceBarPosition: WorkspaceBarPosition = .left
     var currentTabOverflowMode: TabOverflowMode = .scroll
     var sideWorkspaceBar: WorkspaceBarView?
@@ -313,6 +332,7 @@ import SwiftUI
         // Initialize coordinator and sidebar controller before UI setup
         let theBridge = TerminalBridge(paneID: UUID(), workspaceID: UUID(), workingDirectory: "")
         let theRegistry = PluginRegistry()
+        theRegistry.themeProvider = { [weak self] in self?.effectiveTheme ?? AppSettings.shared.theme }
         coordinator = WindowStateCoordinator(bridge: theBridge, pluginRegistry: theRegistry)
         sidebarController = SidebarController(windowController: self)
         if let state = restoredWindow?.sidebarState {
@@ -462,7 +482,7 @@ import SwiftUI
         window.delegate = self
         contentView.wantsLayer = true
         // Backdrop the islands float on — visible in every gap between them.
-        contentView.layer?.backgroundColor = AppSettings.shared.theme.windowBackdrop.cgColor
+        contentView.layer?.backgroundColor = effectiveTheme.windowBackdrop.cgColor
 
         toolbar.translatesAutoresizingMaskIntoConstraints = false
         toolbar.delegate = self
@@ -499,8 +519,8 @@ import SwiftUI
 
         sidebarContainer = NSView()
         sidebarContainer.wantsLayer = true
-        sidebarContainer.layer?.backgroundColor = AppSettings.shared.theme.sidebarBg.cgColor
-        IslandMetrics.round(sidebarContainer, borderColor: AppSettings.shared.theme.sidebarBorder)
+        sidebarContainer.layer?.backgroundColor = effectiveTheme.sidebarBg.cgColor
+        IslandMetrics.round(sidebarContainer, borderColor: effectiveTheme.sidebarBorder)
 
         // Sidebar tab bar
         let tabBar = SidebarTabBarView(frame: .zero)

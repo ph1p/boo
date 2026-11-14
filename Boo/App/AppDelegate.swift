@@ -94,7 +94,7 @@ public enum BooMain {
 
         // Watch system appearance changes for auto-theme
         appearanceObserver = NSApp.observe(\.effectiveAppearance) { _, _ in
-            Task { @MainActor in AppSettings.shared.applySystemAppearance() }
+            Task { @MainActor in AppSettings.shared.applySystemAppearance(appearanceChanged: true) }
         }
         AppSettings.shared.applySystemAppearance()
         WelcomeWindowController.showIfFirstLaunch(returningUser: returningUser)

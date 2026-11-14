@@ -69,6 +69,13 @@ class PaneControlItem: NSView {
 
     func hoverChanged() {}
 
+    /// Subclasses style themselves in `hoverChanged()`, first without a
+    /// window; restyle for the window's theme once there is one.
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if window != nil { hoverChanged() }
+    }
+
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
         if let trackingArea { removeTrackingArea(trackingArea) }
@@ -135,7 +142,7 @@ final class PaneControlButton: PaneControlItem {
     func applyTheme() { hoverChanged() }
 
     override func hoverChanged() {
-        let theme = AppSettings.shared.theme
+        let theme = booTheme
         icon.contentTintColor = hovered ? theme.chromeText : theme.textSecondary
         layer?.backgroundColor = hovered ? theme.hoverFill.cgColor : nil
     }

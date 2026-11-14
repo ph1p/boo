@@ -16,7 +16,7 @@ class ThemedSplitView: NSSplitView {
     /// In the island style the divider *is* the gap between two islands, so it
     /// matches the window backdrop rather than drawing a border line.
     override var dividerColor: NSColor {
-        AppSettings.shared.theme.windowBackdrop
+        booTheme.windowBackdrop
     }
 
     /// Widen the divider to the island gap so panes (and the sidebar) are spaced
@@ -81,7 +81,7 @@ class ThemedSplitView: NSSplitView {
         super.drawDivider(in: rect)
         guard dividerHoverHighlighted || isDraggingDivider else { return }
         // A rounded grip inset from the ends: softer while hovering, solid while dragging.
-        let accent = AppSettings.shared.theme.accentEmphasis
+        let accent = booTheme.accentEmphasis
         (isDraggingDivider ? accent : accent.withAlphaComponent(0.6)).setFill()
         let barThickness: CGFloat = isDraggingDivider ? 3 : 2
         let inset: CGFloat = 6

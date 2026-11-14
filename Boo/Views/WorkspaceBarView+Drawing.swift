@@ -14,14 +14,14 @@ extension WorkspaceBarView {
     // MARK: - Vertical Drawing (left bar)
 
     private func drawVertical(_ ctx: CGContext) {
-        let theme = AppSettings.shared.theme
+        let theme = booTheme
 
         // No fill and no edge stroke: like the toolbar and status bar, this is a
         // bare strip over the window backdrop. Only the pills carry chrome.
 
         // Resolved once, not per pill: `IslandMetrics.borderColor` re-reads the
         // theme and re-runs the chrome-border blend on every access.
-        let islandBorder = IslandMetrics.borderColor
+        let islandBorder = theme.islandBorder
 
         // Clip the scrolling stack to its viewport so a pill straddling the bottom
         // edge is cut off cleanly instead of bleeding into the pinned `+`.
@@ -139,7 +139,8 @@ extension WorkspaceBarView {
             ctx,
             in: CGRect(x: verticalStripX, y: y, width: Self.verticalWidth, height: height),
             from: CGPoint(x: 0, y: topDown ? y : y + height),
-            to: CGPoint(x: 0, y: topDown ? y + height : y))
+            to: CGPoint(x: 0, y: topDown ? y + height : y),
+            backdrop: booTheme.windowBackdrop)
     }
 
     /// Paint the hovered workspace as a wide pill floating over the panes. Drawn

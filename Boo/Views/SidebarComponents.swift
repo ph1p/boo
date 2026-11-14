@@ -77,7 +77,7 @@ class SidebarDragHandleView: NSView {
         // hairline sits half a separator band above that header.
         let lineY = Self.reachAbove - SidebarLayout.separatorHeight / 2
         let r = CGRect(x: 0, y: lineY - barH / 2, width: bounds.width, height: barH)
-        AppSettings.shared.theme.accentEmphasis.setFill()
+        booTheme.accentEmphasis.setFill()
         NSBezierPath(rect: r).fill()
     }
 
@@ -187,7 +187,7 @@ class SidebarSectionHeaderView: NSView {
 
     override func draw(_ dirtyRect: NSRect) {
         guard let ctx = NSGraphicsContext.current?.cgContext else { return }
-        let theme = AppSettings.shared.theme
+        let theme = booTheme
         let padH: CGFloat = AppSettings.shared.sidebarDensity == .comfortable ? 12 : 8
 
         // Same surface as the panel: sections read as groups, not stacked bars.

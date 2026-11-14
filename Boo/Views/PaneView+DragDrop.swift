@@ -276,7 +276,7 @@ extension PaneView {
 
     /// Small filled circle in the group's color, for menu items naming a group.
     private func groupSwatch(_ group: TabGroup) -> NSImage {
-        let color = groupTint(group, theme: AppSettings.shared.theme)
+        let color = groupTint(group, theme: booTheme)
         return NSImage(size: NSSize(width: 10, height: 10), flipped: false) { rect in
             color.setFill()
             NSBezierPath(ovalIn: rect.insetBy(dx: 1, dy: 1)).fill()

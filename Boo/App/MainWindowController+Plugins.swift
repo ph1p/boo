@@ -400,7 +400,7 @@ extension MainWindowController {
         let pluginCtx = pluginRegistry.buildPluginContext(for: id, terminal: context)
 
         // Always call makeSidebarTab to get fresh data from the plugin
-        guard let sidebarTab = plugin.makeSidebarTab(context: pluginCtx) else { return }
+        guard let sidebarTab = plugin.makeSidebarTab(context: pluginCtx)?.themed(effectiveTheme) else { return }
 
         // Filter out sections the user has hidden (keeping at least one)
         let allSections = sidebarTab.sections

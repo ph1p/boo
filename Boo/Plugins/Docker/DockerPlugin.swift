@@ -127,7 +127,7 @@ final class DockerPluginNew: BooPluginProtocol {
                 content: AnyView(
                     DockerConnectionErrorView(
                         error: error,
-                        theme: AppSettings.shared.theme,
+                        theme: context.theme.source,
                         fontScale: context.fontScale)),
                 prefersOuterScrollView: false,
                 // The view renders the error text, so that text is the content identity.
@@ -139,7 +139,7 @@ final class DockerPluginNew: BooPluginProtocol {
         }
 
         let act = actions
-        let theme = AppSettings.shared.theme
+        let theme = context.theme.source
         let density = context.density
         let fontScale = context.fontScale
 

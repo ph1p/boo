@@ -36,13 +36,14 @@ struct NotesPanelView: View {
 
     private var currentPath: String { other?.path ?? path }
     private var currentTitle: String { other?.title ?? title }
+    @Environment(\.windowTheme) private var windowTheme
     private var kind: NoteKind {
         other == nil ? .workspace : currentPath == NotesStore.scratchPath() ? .scratch : .other
     }
 
     var body: some View {
         let _ = settings.revision
-        let theme = AppSettings.shared.theme
+        let theme = windowTheme ?? AppSettings.shared.theme
 
         VStack(alignment: .leading, spacing: 0) {
             header(theme: theme)

@@ -234,8 +234,7 @@ extension Notification.Name {
     /// `style` replaces the global setting.
     private func applyBooSettings(to cfg: ghostty_config_t, style: SurfaceStyle? = nil) {
         let settings = AppSettings.shared
-        let lightAppearance =
-            settings.autoTheme && NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .aqua
+        let lightAppearance = settings.followsLightAppearance
         // A theme that no longer exists falls back to the global one.
         let theme =
             style?.themeName(lightAppearance: lightAppearance).flatMap { settings.theme(named: $0) }

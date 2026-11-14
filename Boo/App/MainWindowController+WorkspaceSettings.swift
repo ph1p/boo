@@ -31,6 +31,36 @@ extension MainWindowController {
             }
         }
         statusBar.needsDisplay = true
+        if effectiveTheme.name != appliedChromeThemeName { applyChromeTheme() }
+    }
+
+    /// Restyles the window chrome with `effectiveTheme`: colours, pane
+    /// backgrounds, sidebar and status bar.
+    func applyChromeTheme() {
+        let theme = effectiveTheme
+        appliedChromeThemeName = theme.name
+        window?.backgroundColor = theme.windowBackdrop
+        window?.appearance = NSAppearance(named: theme.isDark ? .darkAqua : .aqua)
+        window?.contentView?.layer?.backgroundColor = theme.windowBackdrop.cgColor
+        sidebarContainer.layer?.backgroundColor = theme.sidebarBg.cgColor
+        // splitContainer stays clear — panes are the islands (see SplitContainerView.init)
+        mainSplitView.needsDisplay = true
+        // A refresh, not just a redraw: workspace colours resolve
+        // against the theme palette.
+        refreshToolbar()
+        statusBar.needsDisplay = true
+        // Island borders are layer strokes, not drawn in `draw(_:)`,
+        // so they need an explicit refresh on theme change.
+        // Toolbar, status bar and the side workspace bar carry no
+        // border — they are bare strips.
+        IslandMetrics.refreshBorder(sidebarContainer, color: theme.sidebarBorder)
+        sideWorkspaceBar?.needsDisplay = true
+        for (_, pv) in paneViews { pv.applyTheme() }
+        // Rebuild plugin sidebar to pick up new theme
+        if let ctx = pluginRegistry.lastContext {
+            cachedDetailViews.removeAll()
+            rebuildSidebarTabs(context: ctx)
+        }
     }
 
     /// Changes one workspace's settings, applies them and saves the session.
@@ -64,7 +94,7 @@ extension MainWindowController {
         guard let window, window.attachedSheet == nil,
             let workspace = appState.workspaces.first(where: { $0.id == workspaceID })
         else { return }
-        let theme = AppSettings.shared.theme
+        let theme = effectiveTheme
         let catalog = statusBar.segmentCatalog
         let arrangement = statusBar.arrangement()
         let segments = (arrangement.left + arrangement.right).compactMap { catalog[$0] }
@@ -90,5 +120,14 @@ extension MainWindowController {
         sheet.contentViewController = NSHostingController(
             rootView: view.environment(\.tokens, Tokens(theme: theme)))
         window.beginSheet(sheet)
+    }
+}
+
+extension NSView {
+    /// The theme of the window this view sits in: its active workspace's
+    /// theme, else the global one. A view outside a main window gets the
+    /// global theme.
+    var booTheme: TerminalTheme {
+        (window?.windowController as? MainWindowController)?.effectiveTheme ?? AppSettings.shared.theme
     }
 }

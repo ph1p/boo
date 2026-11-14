@@ -93,8 +93,11 @@ struct ThemeSnapshot {
     let background: NSColor
     let chromeBg: NSColor
     let ansiColors: [NSColor]
+    /// The full theme the snapshot was taken from.
+    let source: TerminalTheme
 
     init(from theme: TerminalTheme) {
+        self.source = theme
         self.chromeText = theme.chromeText
         self.chromeMuted = theme.chromeMuted
         self.accentColor = theme.accentColor
@@ -104,6 +107,13 @@ struct ThemeSnapshot {
         self.chromeBg = theme.chromeBg
         self.ansiColors = theme.ansiColors.map(\.nsColor)
     }
+}
+
+extension EnvironmentValues {
+    /// The theme of the window a sidebar view sits in; nil outside a window's
+    /// sidebar. A workspace can run its own theme, so sidebar views read this
+    /// before the global theme.
+    @Entry var windowTheme: TerminalTheme?
 }
 
 /// Scoped settings reader for a single plugin.

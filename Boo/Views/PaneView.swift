@@ -254,7 +254,7 @@ class PaneView: NSView {
     /// focused pane gets a softer accent tint instead of dimming its siblings.
     func syncIslandStroke() {
         guard let layer else { return }
-        let theme = AppSettings.shared.theme
+        let theme = booTheme
         if !recordingBorder.isHidden {
             layer.borderColor = theme.error.withAlphaComponent(0.8).cgColor
         } else if !activityBorder.isHidden {
@@ -266,8 +266,27 @@ class PaneView: NSView {
         }
     }
 
+    /// Restyles the pane for its window's theme. A pane is built before it
+    /// has a window, so it starts with the global theme and restyles here once
+    /// it joins one.
+    func applyTheme() {
+        layer?.backgroundColor = booTheme.background.nsColor.cgColor
+        // Pane island stroke is restyled inside updateOverlayColors()
+        // (via syncIslandStroke), which also honours the accent tint
+        // while an activity frame is showing.
+        updateOverlayColors()
+        updateFindBarTheme()
+        needsLayout = true
+        needsDisplay = true
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if window != nil { applyTheme() }
+    }
+
     func updateFindBarTheme() {
-        recordingBorder.layer?.borderColor = AppSettings.shared.theme.error.withAlphaComponent(0.8).cgColor
+        recordingBorder.layer?.borderColor = booTheme.error.withAlphaComponent(0.8).cgColor
         findBar?.applyTheme()
         findBar?.needsDisplay = true
     }
@@ -276,7 +295,7 @@ class PaneView: NSView {
     /// `MainWindowController`; without the accent refresh here a visible activity frame
     /// keeps the old theme's accent.
     func updateOverlayColors() {
-        let theme = AppSettings.shared.theme
+        let theme = booTheme
         activityBorder.layer?.borderColor =
             theme.accentColor.withAlphaComponent(Self.activityBorderAlpha).cgColor
         syncIslandStroke()
@@ -330,16 +349,16 @@ class PaneView: NSView {
         self.pane = pane
         super.init(frame: .zero)
         wantsLayer = true
-        layer?.backgroundColor = AppSettings.shared.theme.background.nsColor.cgColor
+        layer?.backgroundColor = booTheme.background.nsColor.cgColor
         // Each pane is an island: rounding here also clips the terminal's
         // Metal sublayer, which libghostty owns and we can't round directly.
         IslandMetrics.round(
             self, radius: IslandMetrics.innerRadius,
-            borderColor: AppSettings.shared.theme.paneBorder)
+            borderColor: booTheme.paneBorder)
         addSubview(focusCatcher)
         addSubview(broadcastBorder)
         addSubview(activityBorder)
-        recordingBorder.layer?.borderColor = AppSettings.shared.theme.error.withAlphaComponent(0.8).cgColor
+        recordingBorder.layer?.borderColor = booTheme.error.withAlphaComponent(0.8).cgColor
         addSubview(recordingBorder)
         paneHoverTracker.onChange = { [weak self] inside in
             self?.isPointerInPane = inside
@@ -494,7 +513,7 @@ class PaneView: NSView {
 
     override func draw(_ dirtyRect: NSRect) {
         guard let ctx = NSGraphicsContext.current?.cgContext else { return }
-        let theme = AppSettings.shared.theme
+        let theme = booTheme
         let overflowMode = tabOverflowMode
         let barH = tabBarHeight
         if overflowMode == .vertical {

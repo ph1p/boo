@@ -27,7 +27,7 @@ extension StatusBarView {
 
     override func draw(_ dirtyRect: NSRect) {
         guard let ctx = NSGraphicsContext.current?.cgContext else { return }
-        let theme = AppSettings.shared.theme
+        let theme = booTheme
         let settings = AppSettings.shared
         let state = currentState
 

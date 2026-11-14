@@ -27,6 +27,11 @@ struct SidebarTab {
     let label: String
     /// Sections to render inside the tab. Single section = no header; multiple = collapsible.
     let sections: [SidebarSection]
+
+    /// The tab with `theme` handed to every section's content.
+    func themed(_ theme: TerminalTheme) -> SidebarTab {
+        SidebarTab(id: id, icon: icon, label: label, sections: sections.map { $0.themed(theme) })
+    }
 }
 
 /// Content for a status bar segment declared by a plugin.

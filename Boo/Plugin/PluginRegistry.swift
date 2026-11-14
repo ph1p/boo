@@ -23,6 +23,9 @@ final class PluginRegistry {
 
     /// Callback for plugins to request a cycle rerun.
     var onRequestCycleRerun: (() -> Void)?
+    /// The theme plugins style their content with. The window sets it to its
+    /// own theme, which follows the active workspace.
+    var themeProvider: () -> TerminalTheme = { AppSettings.shared.theme }
 
     /// Force the next cycle to report contextChanged/visibilityChanged as true.
     func clearChangeDetection() {
@@ -136,7 +139,7 @@ final class PluginRegistry {
         let visibleIDs = Set(visiblePlugins.map(\.pluginID))
 
         // Build per-plugin contexts and collect status bar content
-        let theme = ThemeSnapshot(from: AppSettings.shared.theme)
+        let theme = ThemeSnapshot(from: themeProvider())
         let density = AppSettings.shared.sidebarDensity
         let fontScale = SidebarFontScale(base: AppSettings.shared.sidebarFontSize)
         let statusBarContents: [(String, StatusBarContent)] = visiblePlugins.compactMap { plugin in
@@ -172,7 +175,7 @@ final class PluginRegistry {
                 plugin.isVisible(for: terminal)
             else { return nil }
             let ctx = buildPluginContext(for: plugin.pluginID, terminal: terminal)
-            return plugin.makeSidebarTab(context: ctx)
+            return plugin.makeSidebarTab(context: ctx)?.themed(themeProvider())
         }
     }
 
@@ -194,7 +197,7 @@ final class PluginRegistry {
     func buildPluginContext(for pluginID: String, terminal: TerminalContext) -> PluginContext {
         PluginContext(
             terminal: terminal,
-            theme: ThemeSnapshot(from: AppSettings.shared.theme),
+            theme: ThemeSnapshot(from: themeProvider()),
             density: AppSettings.shared.sidebarDensity,
             settings: PluginSettingsReader(pluginID: pluginID),
             fontScale: SidebarFontScale(base: AppSettings.shared.sidebarFontSize)

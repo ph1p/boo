@@ -5,10 +5,11 @@ struct HostsPanelView: View {
     @ObservedObject var store = HostsStore.shared
     var fontScale: SidebarFontScale = SidebarFontScale(base: AppSettings.shared.sidebarFontSize)
     @State private var filter = ""
+    @Environment(\.windowTheme) private var windowTheme
 
     var body: some View {
         let _ = settings.revision
-        let theme = AppSettings.shared.theme
+        let theme = windowTheme ?? AppSettings.shared.theme
         let mutedColor = Color(nsColor: theme.chromeMuted)
         let textColor = Color(nsColor: theme.chromeText)
         let accentColor = Color(nsColor: theme.accentColor)

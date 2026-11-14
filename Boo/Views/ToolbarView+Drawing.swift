@@ -48,7 +48,7 @@ extension ToolbarView {
 
     private func drawCenteredWorkspaceTitle(_ ctx: CGContext) {
         guard let active = workspaces.first(where: { $0.isActive }) else { return }
-        let theme = AppSettings.shared.theme
+        let theme = booTheme
 
         let para = NSMutableParagraphStyle()
         para.alignment = .center
@@ -104,7 +104,7 @@ extension ToolbarView {
     }()
 
     internal func drawWorkspaces(_ ctx: CGContext) {
-        let theme = AppSettings.shared.theme
+        let theme = booTheme
         let zoneStart = trafficLightWidth
         let zoneEnd = workspaceZoneEnd
         let totalW = totalWorkspaceContentWidth  // hits cache
@@ -257,7 +257,8 @@ extension ToolbarView {
         WorkspacePillStyle.drawBackdropFade(
             ctx, in: CGRect(x: x, y: 0, width: width, height: barHeight),
             from: CGPoint(x: leftToRight ? x : x + width, y: 0),
-            to: CGPoint(x: leftToRight ? x + width : x, y: 0))
+            to: CGPoint(x: leftToRight ? x + width : x, y: 0),
+            backdrop: booTheme.windowBackdrop)
     }
 
     // MARK: - Hit Testing

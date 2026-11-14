@@ -125,8 +125,14 @@ import Cocoa
         applyTheme()
     }
 
+    /// Built before it has a window, so it restyles once it joins one.
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if window != nil { applyTheme() }
+    }
+
     func applyTheme() {
-        let theme = AppSettings.shared.theme
+        let theme = booTheme
         // Same surface as the pane, so the bar reads as part of the terminal.
         layer?.backgroundColor = theme.background.nsColor.cgColor
         fieldView.theme = theme
@@ -145,7 +151,7 @@ import Cocoa
     private var hasNoMatches = false
 
     private func refreshMatchColor() {
-        let theme = AppSettings.shared.theme
+        let theme = booTheme
         matchLabel.textColor = hasNoMatches ? theme.error : theme.textSecondary
         fieldView.hasError = hasNoMatches
     }
@@ -187,7 +193,7 @@ import Cocoa
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
         // Hairline against the terminal below, like a system find bar's bottom edge.
-        AppSettings.shared.theme.separator.setFill()
+        booTheme.separator.setFill()
         NSRect(x: 0, y: 0, width: bounds.width, height: 0.5).fill()
     }
 
@@ -309,7 +315,7 @@ private final class FindBarStepper: NSView {
     }
 
     func applyTheme() {
-        let theme = AppSettings.shared.theme
+        let theme = booTheme
         layer?.backgroundColor = theme.controlFill.cgColor
         layer?.borderColor = theme.separator.cgColor
         layer?.borderWidth = 0.5
@@ -382,7 +388,7 @@ private final class FindBarButton: PaneControlItem {
     func applyTheme() { hoverChanged() }
 
     override func hoverChanged() {
-        let theme = AppSettings.shared.theme
+        let theme = booTheme
         let lit = hovered && isEnabled
         switch style {
         case .segment:

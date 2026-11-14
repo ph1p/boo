@@ -343,7 +343,7 @@ private final class FailedBlockButton: NSButton {
     }
 
     private func applyTheme() {
-        let theme = AppSettings.shared.theme
+        let theme = booTheme
         layer?.backgroundColor = theme.cardBg.cgColor
         layer?.borderWidth = 1
         layer?.borderColor = theme.error.withAlphaComponent(0.6).cgColor

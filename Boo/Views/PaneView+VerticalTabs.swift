@@ -314,7 +314,7 @@ extension PaneView {
             case .done: status = "Done"
             case .error: status = "Error"
             }
-            return (status, AgentInboxSegment.color(for: item, theme: AppSettings.shared.theme))
+            return (status, AgentInboxSegment.color(for: item, theme: booTheme))
         }
         return ((tab.workingDirectory as NSString).lastPathComponent, nil)
     }
@@ -395,7 +395,7 @@ extension PaneView {
             ctx.fillPath()
         }
 
-        if tab.state.isRecording { Self.drawRecordingDot(ctx, in: pill) }
+        if tab.state.isRecording { Self.drawRecordingDot(ctx, in: pill, theme: booTheme) }
 
         if tab.state.hasActivity && !isActive {
             let dotSize: CGFloat = 5

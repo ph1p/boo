@@ -120,11 +120,12 @@ struct FileTreeView: View {
     var actions: FileTreeActions
     /// Back/forward/up and terminal linking; nil hides the navigation bar.
     var navigation: FileTreeNavigation? = nil
+    @Environment(\.windowTheme) private var windowTheme
 
     var body: some View {
         let _ = settings.revision
         let _ = root.treeRevision
-        let theme = AppSettings.shared.theme
+        let theme = windowTheme ?? AppSettings.shared.theme
         let cfg = RowStyle(
             showIcons: AppSettings.shared.explorerIconsEnabled,
             fontSize: AppSettings.shared.sidebarFontSize,
