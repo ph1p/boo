@@ -129,6 +129,12 @@ final class RuleEngine {
     func profileMenu(tabID: UUID) -> NSMenu {
         let menu = NSMenu()
         let state = AgentInbox.locateInWindows(tabID).map { $0.pane.tabs[$0.tabIndex].state }
+        if let why = Self.profileSourceLabel(profile: state?.profile, source: state?.profileSource) {
+            let header = NSMenuItem(title: why, action: nil, keyEquivalent: "")
+            header.isEnabled = false
+            menu.addItem(header)
+            menu.addItem(.separator())
+        }
         let auto = ClosureMenuItem(title: "Auto") { [weak self] in self?.setProfileOverride(nil, tabID: tabID) }
         auto.state = state?.profileOverride == nil ? .on : .off
         if state?.profileOverride == nil, let current = state?.profile {
@@ -142,6 +148,13 @@ final class RuleEngine {
             item.state = state?.profileOverride == name ? .on : .off
             menu.addItem(item)
         }
+        // A pick whose profile was deleted stays visible, so it can be undone.
+        if let override = state?.profileOverride, !names.contains(override) {
+            let missing = NSMenuItem(title: "\(override) (missing)", action: nil, keyEquivalent: "")
+            missing.state = .on
+            missing.isEnabled = false
+            menu.addItem(missing)
+        }
         menu.addItem(.separator())
         menu.addItem(
             ClosureMenuItem(title: "Edit Profiles…") {
@@ -150,10 +163,22 @@ final class RuleEngine {
         return menu
     }
 
+    /// The menu line that says why a tab runs its profile, for example
+    /// `prod: rule "prod-hosts"`; nil without a profile.
+    static func profileSourceLabel(profile: String?, source: ProfileSource?) -> String? {
+        guard let profile, let source else { return nil }
+        switch source {
+        case .manual: return "\(profile): picked by hand"
+        case .rule(let id): return "\(profile): rule \"\(id)\""
+        case .workspaceDefault: return "\(profile): workspace default"
+        case .globalDefault: return "\(profile): default"
+        }
+    }
+
     func setProfileOverride(_ name: String?, tabID: UUID) {
         guard let loc = AgentInbox.locateInWindows(tabID) else { return }
         let state = loc.pane.tabs[loc.tabIndex].state
-        loc.pane.setProfile(at: loc.tabIndex, override: name, effective: state.profile)
+        loc.pane.setProfile(at: loc.tabIndex, override: name, effective: state.profile, source: state.profileSource)
         evaluate(tabID)
     }
 
@@ -187,8 +212,11 @@ final class RuleEngine {
         entry.matcher?.update(context: context)
 
         let override = tab.state.profileOverride
-        let profile = resolveProfile(override: override, context: context, workspace: loc.workspace)?.profile
-        if loc.pane.setProfile(at: loc.tabIndex, override: override, effective: profile?.name) {
+        let resolved = resolveProfile(override: override, context: context, workspace: loc.workspace)
+        let profile = resolved?.profile
+        if loc.pane.setProfile(
+            at: loc.tabIndex, override: override, effective: profile?.name, source: resolved?.source)
+        {
             loc.controller.refreshTabBar(workspace: loc.workspace, pane: loc.pane)
         }
         if let surface = view.surface {

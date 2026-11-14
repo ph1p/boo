@@ -60,6 +60,38 @@ final class RuleEngineProfileTests: XCTestCase {
             [.init(name: "A", ruleID: "first"), .init(name: "B", ruleID: "second")])
     }
 
+    @MainActor
+    func testSourceLabel() {
+        XCTAssertEqual(
+            RuleEngine.profileSourceLabel(profile: "prod", source: .rule("prod-hosts")), "prod: rule \"prod-hosts\"")
+        XCTAssertEqual(RuleEngine.profileSourceLabel(profile: "prod", source: .manual), "prod: picked by hand")
+        XCTAssertEqual(RuleEngine.profileSourceLabel(profile: "prod", source: .globalDefault), "prod: default")
+        XCTAssertNil(RuleEngine.profileSourceLabel(profile: nil, source: nil))
+    }
+
+    func testSessionTabRoundTripsProfileOverride() throws {
+        let data = try JSONEncoder().encode(SessionTab(profileOverride: "prod"))
+        XCTAssertEqual(try JSONDecoder().decode(SessionTab.self, from: data).profileOverride, "prod")
+        XCTAssertNil(try JSONDecoder().decode(SessionTab.self, from: Data("{}".utf8)).profileOverride)
+    }
+
+    @MainActor
+    func testSnapshotKeepsProfileOverride() throws {
+        let state = AppState()
+        let workspace = Workspace(folderPath: "/tmp")
+        state.addWorkspace(workspace)
+        let pane = try XCTUnwrap(workspace.pane(for: workspace.activePaneID))
+        pane.setProfile(at: 0, override: "prod", effective: "prod", source: .manual)
+
+        let window = SessionStore.buildWindow(appState: state)
+        XCTAssertEqual(window.workspaces.first?.panes.first?.tabs.first?.profileOverride, "prod")
+
+        let restored = SessionStore.workspaces(from: window)
+        let tab = try XCTUnwrap(restored.first?.panes.values.first?.tabs.first)
+        XCTAssertEqual(tab.state.profileOverride, "prod")
+        XCTAssertNil(tab.state.profile)
+    }
+
     func testUnknownProfileProblems() throws {
         let json = """
             [{"id": "ok", "when": {"process": "vim"}, "then": {"profile": "A"}},

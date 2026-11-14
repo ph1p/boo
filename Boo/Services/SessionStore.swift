@@ -18,6 +18,8 @@ struct SessionTab: Codable, Sendable {
     let scrollbackID: UUID?
     /// The agent running in the tab when the session was saved (see CrashRecovery).
     let agent: AgentResumePoint?
+    /// The profile picked by hand for the tab. Optional so old sessions decode.
+    let profileOverride: String?
 
     init(
         contentState: ContentState? = nil,
@@ -29,7 +31,8 @@ struct SessionTab: Codable, Sendable {
         selectedPluginTabID: String? = nil,
         groupID: UUID? = nil,
         scrollbackID: UUID? = nil,
-        agent: AgentResumePoint? = nil
+        agent: AgentResumePoint? = nil,
+        profileOverride: String? = nil
     ) {
         self.contentState = contentState
         self.expandedPluginIDs = expandedPluginIDs
@@ -41,6 +44,7 @@ struct SessionTab: Codable, Sendable {
         self.groupID = groupID
         self.scrollbackID = scrollbackID
         self.agent = agent
+        self.profileOverride = profileOverride
     }
 }
 
@@ -234,7 +238,8 @@ enum SessionStore {
                         selectedPluginTabID: tab.state.selectedPluginTabID,
                         groupID: tab.groupID,
                         scrollbackID: tab.contentType == .terminal ? tab.id : nil,
-                        agent: tab.contentType == .terminal ? agents[tab.id] : nil
+                        agent: tab.contentType == .terminal ? agents[tab.id] : nil,
+                        profileOverride: tab.contentType == .terminal ? tab.state.profileOverride : nil
                     )
                 }
                 return SessionPane(
@@ -402,6 +407,10 @@ enum SessionStore {
                         pane.updateContentState(at: idx, restoredState)
                         if let savedID = tab.scrollbackID, restoredState.contentType == .terminal {
                             ScrollbackStore.schedule(savedID: savedID, for: pane.tabs[idx].id)
+                        }
+                        if let name = tab.profileOverride, restoredState.contentType == .terminal {
+                            // The rule engine resolves it when the terminal registers.
+                            pane.setProfile(at: idx, override: name, effective: nil, source: nil)
                         }
                         if let agent = tab.agent, restoredState.contentType == .terminal {
                             CrashRecovery.scheduleResume(agent, for: pane.tabs[idx].id)

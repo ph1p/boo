@@ -29,10 +29,12 @@ struct TabState {
     /// A session recording is running; not persisted.
     var isRecording: Bool = false
     /// Profile picked by hand (tab menu, palette); wins over rules until
-    /// reset to "Auto". Not persisted.
+    /// reset to "Auto". Saved with the session.
     var profileOverride: String?
     /// The profile in effect: override, rule match or default. Not persisted.
     var profile: String?
+    /// Why `profile` is in effect; nil without a profile. Not persisted.
+    var profileSource: ProfileSource?
     /// A trigger marked this tab; cleared when the tab is focused. Not persisted.
     var triggerMark: String?
 
@@ -537,12 +539,14 @@ final class Pane {
 
     /// Sets the hand-picked and effective profile; false when nothing changed.
     @discardableResult
-    func setProfile(at index: Int, override: String?, effective: String?) -> Bool {
+    func setProfile(at index: Int, override: String?, effective: String?, source: ProfileSource?) -> Bool {
         guard index >= 0, index < tabs.count else { return false }
         let state = tabs[index].state
-        guard state.profileOverride != override || state.profile != effective else { return false }
+        guard state.profileOverride != override || state.profile != effective || state.profileSource != source
+        else { return false }
         tabs[index].state.profileOverride = override
         tabs[index].state.profile = effective
+        tabs[index].state.profileSource = source
         return true
     }
 
