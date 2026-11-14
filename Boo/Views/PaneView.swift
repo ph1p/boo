@@ -270,7 +270,7 @@ class PaneView: NSView {
     /// has a window, so it starts with the global theme and restyles here once
     /// it joins one.
     func applyTheme() {
-        layer?.backgroundColor = booTheme.background.nsColor.cgColor
+        layer?.backgroundColor = booTheme.background.surfaceColor.cgColor
         // Pane island stroke is restyled inside updateOverlayColors()
         // (via syncIslandStroke), which also honours the accent tint
         // while an activity frame is showing.
@@ -349,7 +349,7 @@ class PaneView: NSView {
         self.pane = pane
         super.init(frame: .zero)
         wantsLayer = true
-        layer?.backgroundColor = booTheme.background.nsColor.cgColor
+        layer?.backgroundColor = booTheme.background.surfaceColor.cgColor
         // Each pane is an island: rounding here also clips the terminal's
         // Metal sublayer, which libghostty owns and we can't round directly.
         IslandMetrics.round(
@@ -523,7 +523,7 @@ class PaneView: NSView {
 
         // Tab bar background — same as the terminal below, so the pills read as
         // sitting inside the pane rather than on a separate chrome strip.
-        ctx.setFillColor(theme.background.nsColor.cgColor)
+        ctx.setFillColor(theme.background.surfaceColor.cgColor)
         ctx.fill(CGRect(x: 0, y: 0, width: bounds.width, height: barH))
 
         if overflowMode == .wrap {

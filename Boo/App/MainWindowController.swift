@@ -302,6 +302,10 @@ import SwiftUI
         // Boo has its own workspace bar; native window tabs would nest a second one.
         window.tabbingMode = .disallowed
         window.isReleasedWhenClosed = false
+        // Ghostty renders into a Display P3 surface. With the window in the
+        // same space both reach the screen through one conversion, so chrome
+        // drawn in the terminal's background colour has no visible seam.
+        window.colorSpace = .displayP3
         window.backgroundColor = AppSettings.shared.theme.windowBackdrop
         window.appearance = NSAppearance(named: AppSettings.shared.theme.isDark ? .darkAqua : .aqua)
         window.titlebarAppearsTransparent = true

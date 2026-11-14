@@ -95,14 +95,14 @@ extension PaneView {
                 WorkspacePillStyle.drawFade(
                     ctx, in: CGRect(x: 0, y: 0, width: 20, height: barH),
                     from: CGPoint(x: 0, y: 0), to: CGPoint(x: 20, y: 0),
-                    color: theme.background.nsColor)
+                    color: theme.background.surfaceColor)
             }
             if tabScrollOffset < maxScroll {
                 let fadeW: CGFloat = 32
                 WorkspacePillStyle.drawFade(
                     ctx, in: CGRect(x: pinnedButtonsX - fadeW, y: 0, width: fadeW, height: barH),
                     from: CGPoint(x: pinnedButtonsX, y: 0), to: CGPoint(x: pinnedButtonsX - fadeW, y: 0),
-                    color: theme.background.nsColor)
+                    color: theme.background.surfaceColor)
             }
         }
         drawGroupDropIndicator(ctx: ctx, theme: theme)

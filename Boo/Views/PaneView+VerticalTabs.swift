@@ -154,7 +154,7 @@ extension PaneView {
     func drawTabsVertical(ctx: CGContext, theme: TerminalTheme) {
         let colW = verticalTabColumnWidth
         guard colW > 0 else { return }
-        ctx.setFillColor(theme.background.nsColor.cgColor)
+        ctx.setFillColor(theme.background.surfaceColor.cgColor)
         ctx.fill(CGRect(x: 0, y: 0, width: colW, height: bounds.height))
         ctx.setFillColor(theme.paneBorder.cgColor)
         ctx.fill(CGRect(x: colW - 1, y: 0, width: 1, height: bounds.height))
@@ -202,7 +202,7 @@ extension PaneView {
             WorkspacePillStyle.drawFade(
                 ctx, in: CGRect(x: 0, y: footer.minY - 24, width: colW - 1, height: 24),
                 from: CGPoint(x: 0, y: footer.minY), to: CGPoint(x: 0, y: footer.minY - 24),
-                color: theme.background.nsColor)
+                color: theme.background.surfaceColor)
         }
         drawGroupDropIndicator(ctx: ctx, theme: theme)
         ctx.restoreGState()

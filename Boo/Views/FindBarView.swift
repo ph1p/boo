@@ -134,7 +134,7 @@ import Cocoa
     func applyTheme() {
         let theme = booTheme
         // Same surface as the pane, so the bar reads as part of the terminal.
-        layer?.backgroundColor = theme.background.nsColor.cgColor
+        layer?.backgroundColor = theme.background.surfaceColor.cgColor
         fieldView.theme = theme
         textField.textColor = theme.chromeText
         textField.customPlaceholderColor = theme.textTertiary

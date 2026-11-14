@@ -162,6 +162,19 @@ struct TerminalColor: Codable, Equatable, Hashable {
         NSColor(red: CGFloat(r) / 255, green: CGFloat(g) / 255, blue: CGFloat(b) / 255, alpha: 1)
     }
 
+    /// The colour as the terminal surface shows it. Ghostty renders into an
+    /// 8-bit Display P3 target, so chrome that meets the terminal without a
+    /// seam (tab bar, find bar) takes the same rounded P3 value. The sRGB
+    /// colour reaches the screen through another conversion and can end up
+    /// one level off, which shows on near-black backgrounds.
+    var surfaceColor: NSColor {
+        guard let p3 = nsColor.usingColorSpace(.displayP3) else { return nsColor }
+        func level(_ value: CGFloat) -> CGFloat { (value * 255).rounded() / 255 }
+        return NSColor(
+            displayP3Red: level(p3.redComponent), green: level(p3.greenComponent),
+            blue: level(p3.blueComponent), alpha: 1)
+    }
+
     var cgColor: CGColor {
         CGColor(red: CGFloat(r) / 255, green: CGFloat(g) / 255, blue: CGFloat(b) / 255, alpha: 1)
     }
