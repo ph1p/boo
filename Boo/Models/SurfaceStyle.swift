@@ -10,6 +10,8 @@ struct SurfaceStyle: Hashable, Sendable {
     var fontSize: Double?
     /// A shader preset name or a path; "" turns the global shader off.
     var shader: String?
+    /// A profile's cursor shape, as `Profile.cursorStyle` names it.
+    var cursorStyle: String?
 
     init(profile: Profile?, workspace: WorkspaceSettings?) {
         theme = profile?.theme ?? workspace?.themeName
@@ -18,6 +20,7 @@ struct SurfaceStyle: Hashable, Sendable {
         fontFamily = profile?.fontFamily ?? workspace?.fontName
         fontSize = profile?.fontSize ?? workspace?.fontSize
         shader = profile?.shader
+        cursorStyle = profile?.cursorStyle
     }
 
     /// Nothing differs: the surface can share the global config.
@@ -29,7 +32,7 @@ struct SurfaceStyle: Hashable, Sendable {
 
     /// Names the config file written for this style.
     var cacheKey: String {
-        [theme, lightTheme, fontFamily, fontSize.map { "\($0)" }, shader]
+        [theme, lightTheme, fontFamily, fontSize.map { "\($0)" }, shader, cursorStyle]
             .map { $0 ?? "\u{1}" }.joined(separator: "\u{0}")
     }
 }

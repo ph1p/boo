@@ -248,11 +248,17 @@ extension PaneView {
                     ]))
         }
         let titleSize = title.size()
-        let maxTitleW = max(0, pillRect.maxX - textX - closeZone)
-        title.draw(
-            in: CGRect(
-                x: textX, y: midY - titleSize.height / 2,
-                width: min(titleSize.width, maxTitleW), height: titleSize.height))
+        // The profile's badge follows the title and keeps its full width.
+        let badge = ProfileBadge.text(for: tab)
+        let badgeW = badge.map { ProfileBadge.width(of: $0) + ProfileBadge.gap } ?? 0
+        let maxTitleW = max(0, pillRect.maxX - textX - closeZone - badgeW)
+        let titleW = min(titleSize.width, maxTitleW)
+        title.draw(in: CGRect(x: textX, y: midY - titleSize.height / 2, width: titleW, height: titleSize.height))
+        if let badge, maxTitleW > 0 {
+            ProfileBadge.draw(
+                ctx, text: badge, x: textX + titleW + ProfileBadge.gap, midY: midY,
+                color: tab.state.profile.flatMap { ProfileStore.shared.accent(forProfile: $0) } ?? theme.accentColor)
+        }
 
         // OSC 9;4 progress along the pill's bottom edge.
         if let progress = tab.state.progress {

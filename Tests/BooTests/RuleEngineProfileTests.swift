@@ -5,6 +5,68 @@ import XCTest
 final class RuleEngineProfileTests: XCTestCase {
     private let profiles = ["manual", "ruleA", "ruleB", "workspace", "global"].map { Profile(name: $0) }
 
+    // MARK: - basedOn
+
+    func testBasedOnFillsMissingFields() {
+        let base = Profile(
+            name: "base", theme: "Boo Dark", fontSize: 14, env: ["A": "1", "B": "1"], cursorStyle: "beam",
+            tabColor: "#FF0000", badge: "BASE")
+        let child = Profile(name: "child", fontSize: 18, env: ["B": "2"], badge: "KID", basedOn: "base")
+        let grandchild = Profile(name: "grandchild", theme: "Boo Light", basedOn: "child")
+        let (resolved, problems) = ProfileFile.resolve([grandchild, child, base])
+        XCTAssertEqual(problems, [])
+        XCTAssertEqual(resolved.map(\.name), ["grandchild", "child", "base"])
+        let kid = resolved[1]
+        XCTAssertEqual(kid.theme, "Boo Dark")
+        XCTAssertEqual(kid.fontSize, 18)
+        XCTAssertEqual(kid.env, ["A": "1", "B": "2"])
+        XCTAssertEqual(kid.cursorStyle, "beam")
+        XCTAssertEqual(kid.tabColor, "#FF0000")
+        XCTAssertEqual(kid.badge, "KID")
+        XCTAssertEqual(kid.basedOn, "base")
+        XCTAssertEqual(resolved[0].theme, "Boo Light")
+        XCTAssertEqual(resolved[0].fontSize, 18)
+        XCTAssertEqual(resolved[2], base)
+    }
+
+    func testBasedOnLoopAndMissingParentStayUnmerged() {
+        let a = Profile(name: "a", theme: "Boo Dark", basedOn: "b")
+        let b = Profile(name: "b", fontSize: 20, basedOn: "a")
+        let intoLoop = Profile(name: "c", basedOn: "a")
+        let orphan = Profile(name: "d", badge: "X", basedOn: "gone")
+        let selfBased = Profile(name: "e", basedOn: "e")
+        let all = [a, b, intoLoop, orphan, selfBased]
+        let (resolved, problems) = ProfileFile.resolve(all)
+        XCTAssertEqual(resolved, all)
+        XCTAssertEqual(problems.count, 5)
+        XCTAssertEqual(problems.filter { $0.contains("loop") }.count, 4)
+        XCTAssertTrue(problems.contains { $0.contains("\"d\"") && $0.contains("\"gone\"") })
+    }
+
+    func testParseDropsBadLookFieldsOnly() throws {
+        let json = """
+            {"profiles": [{"name": "p", "cursorStyle": "wobble", "tabColor": "red", "badge": "  ", "fontSize": 12},
+                          {"name": "q", "cursorStyle": "Outline", "tabColor": "#00ff00", "badge": "Q"}]}
+            """
+        let (profiles, problems) = try ProfileFile.parse(Data(json.utf8))
+        XCTAssertEqual(profiles.count, 2)
+        XCTAssertEqual(problems.count, 2)
+        XCTAssertNil(profiles[0].cursorStyle)
+        XCTAssertNil(profiles[0].tabColor)
+        XCTAssertNil(profiles[0].badge)
+        XCTAssertEqual(profiles[0].fontSize, 12)
+        XCTAssertEqual(CursorStyle(profileValue: profiles[1].cursorStyle ?? ""), .blockOutline)
+        XCTAssertEqual(profiles[1].badge, "Q")
+    }
+
+    func testSurfaceStyleCarriesProfileCursor() {
+        let plain = SurfaceStyle(profile: Profile(name: "p"), workspace: nil)
+        let beam = SurfaceStyle(profile: Profile(name: "p", cursorStyle: "beam"), workspace: nil)
+        XCTAssertTrue(plain.isDefault)
+        XCTAssertFalse(beam.isDefault)
+        XCTAssertNotEqual(plain.cacheKey, beam.cacheKey)
+    }
+
     private func resolve(
         override: String? = nil, rules: [(String, String)] = [], workspace: String? = nil, global: String? = nil
     ) -> ProfileResolution? {

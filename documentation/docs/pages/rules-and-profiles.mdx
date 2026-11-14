@@ -32,17 +32,36 @@ Profiles are stored in `~/.boo/profiles.json`. Edit them in **Settings → Profi
 | Field | Description |
 | --- | --- |
 | `name` | Required and unique. Rules and menus refer to the profile by name |
+| `basedOn` | The name of another profile. Every field this profile leaves out takes that profile's value; `env` is merged per variable |
 | `theme` | A theme name from **Settings → Theme** (built-in or custom). The theme also tints the tab's accent |
 | `fontFamily`, `fontSize` | Terminal font. `fontSize` must be between 4 and 200 |
+| `cursorStyle` | `"block"`, `"beam"`, `"underline"` or `"outline"` |
+| `tabColor` | `"#RRGGBB"`. Colors the tab's accent line and badge instead of the theme's accent |
+| `badge` | A short label shown next to the tab title, for example `"PROD"`. Up to 12 characters are shown |
 | `shader` | A shader preset name or a path to a GLSL file. `""` turns the global shader off for this profile |
 | `shell` | Program that runs instead of your login shell in new tabs |
 | `env` | Extra environment variables for new tabs. A launch's own variables win |
 | `cwd` | Starting directory for new tabs (`~` is expanded) |
 | `linkTarget` | Where file links open: `"editor"` (built-in editor) or `"external"` (the editor from **Settings → Terminal → Links → External editor**) |
 
-Fields you leave out use the workspace's theme and font from its [workspace settings](/features#workspace-settings), and the global setting after that. `shell`, `env` and `cwd` affect only new tabs. Theme, font and shader also change an open tab when its profile changes.
+Fields you leave out use the workspace's theme and font from its [workspace settings](/features#workspace-settings), and the global setting after that. `shell`, `env` and `cwd` affect only new tabs. Theme, font, cursor, shader, tab color and badge also change an open tab when its profile changes.
 
-A profile with an empty or duplicate name, or an out-of-range `fontSize`, is skipped. If the file doesn't parse, Boo keeps the last good profiles.
+A profile with an empty or duplicate name, or an out-of-range `fontSize`, is skipped. An invalid `cursorStyle` or `tabColor` is ignored and the rest of the profile still applies. If the file doesn't parse, Boo keeps the last good profiles.
+
+### Building on another profile
+
+`basedOn` lets a profile start from another one, so shared values live in one place:
+
+```json
+{
+  "profiles": [
+    { "name": "Work", "fontSize": 14, "env": { "EDITOR": "nvim" } },
+    { "name": "Production", "basedOn": "Work", "theme": "Gruvbox Dark", "tabColor": "#E5484D", "badge": "PROD" }
+  ]
+}
+```
+
+Chains can be several profiles long. A `basedOn` that names a missing profile, or a chain that loops back on itself, is reported in **Settings → Profiles**, and the profile is used with only its own fields.
 
 ### Which profile a tab uses
 

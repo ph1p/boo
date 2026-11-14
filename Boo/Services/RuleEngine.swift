@@ -54,7 +54,10 @@ final class RuleEngine {
             })
         observers.append(
             center.addObserver(forName: .profilesChanged, object: nil, queue: .main) { _ in
-                MainActor.assumeIsolated { RuleEngine.shared.reevaluateAll() }
+                MainActor.assumeIsolated {
+                    RuleEngine.shared.reevaluateAll()
+                    RuleEngine.shared.refreshTabBars()
+                }
             })
         observers.append(
             center.addObserver(forName: .settingsChanged, object: nil, queue: .main) { note in
@@ -110,7 +113,7 @@ final class RuleEngine {
             ruleMatches: RuleMatcher.profileMatches(for: context, in: RulesStore.shared.active),
             workspaceDefault: workspace?.settings.defaultProfile,
             globalDefault: AppSettings.shared.defaultProfile,
-            profiles: ProfileStore.shared.profiles)
+            profiles: ProfileStore.shared.resolvedProfiles)
     }
 
     /// Pins a tab to `name` (nil: back to the rules and the default).
@@ -197,6 +200,15 @@ final class RuleEngine {
 
     func reevaluateAll() {
         for tabID in entries.keys { evaluate(tabID) }
+    }
+
+    /// A profile's badge or tab color can change while its name stays.
+    private func refreshTabBars() {
+        for tabID in entries.keys {
+            guard let loc = AgentInbox.locateInWindows(tabID), loc.pane.tabs[loc.tabIndex].state.profile != nil
+            else { continue }
+            loc.controller.refreshTabBar(workspace: loc.workspace, pane: loc.pane)
+        }
     }
 
     private func evaluate(_ tabID: UUID) {

@@ -110,6 +110,7 @@ struct ProfilesSettingsView: View {
                 ProfileEditor(
                     profile: Binding(get: { draft }, set: { self.draft = $0 }),
                     isNew: !profiles.contains { $0.name == selected },
+                    parents: profiles.map(\.name).filter { $0 != selected },
                     error: saveError,
                     onSave: { save($0) },
                     onCancel: { close() },
@@ -150,6 +151,7 @@ struct ProfilesSettingsView: View {
 
     static func summary(of p: Profile) -> String {
         var parts: [String] = []
+        if let v = p.basedOn { parts.append("based on \(v)") }
         if let v = p.theme { parts.append(v) }
         if let v = p.fontFamily { parts.append(v) }
         if let v = p.fontSize { parts.append("\(Int(v)) pt") }
@@ -158,6 +160,8 @@ struct ProfilesSettingsView: View {
         if let v = p.cwd { parts.append(v) }
         if let env = p.env, !env.isEmpty { parts.append("\(env.count) env") }
         if let v = p.linkTarget { parts.append(v.displayName) }
+        if let v = p.cursorStyle { parts.append("\(v) cursor") }
+        if let v = p.badge { parts.append("badge \(v)") }
         return parts.joined(separator: " · ")
     }
 
@@ -199,6 +203,10 @@ struct ProfilesSettingsView: View {
         }
         if let selected, let i = list.firstIndex(where: { $0.name == selected }) {
             list[i] = p
+            // Profiles based on a renamed profile follow the new name.
+            if selected != p.name {
+                for j in list.indices where list[j].basedOn == selected { list[j].basedOn = p.name }
+            }
         } else {
             list.append(p)
         }
@@ -217,7 +225,13 @@ struct ProfilesSettingsView: View {
     private func delete() {
         guard let selected else { return close() }
         do {
-            try ProfileStore.shared.save(profiles.filter { $0.name != selected })
+            // Profiles based on the deleted one stand on their own from now on.
+            let rest = profiles.filter { $0.name != selected }.map { profile -> Profile in
+                var p = profile
+                if p.basedOn == selected { p.basedOn = nil }
+                return p
+            }
+            try ProfileStore.shared.save(rest)
             if AppSettings.shared.defaultProfile == selected { AppSettings.shared.defaultProfile = nil }
             close()
         } catch {
@@ -242,6 +256,8 @@ private struct ProfileEditor: View {
     @Environment(\.tokens) private var tokens
     @Binding var profile: Profile
     let isNew: Bool
+    /// The other profiles, which this one can be based on.
+    let parents: [String]
     let error: String?
     let onSave: (Profile) -> Void
     let onCancel: () -> Void
@@ -257,6 +273,15 @@ private struct ProfileEditor: View {
             SettingRow(label: "Name") {
                 SettingTextField(placeholder: "Production", text: $profile.name, width: 220)
             }
+            if !parents.isEmpty || profile.basedOn != nil {
+                SettingRow(label: "Based on", help: "Fields set to Inherit take this profile's value first.") {
+                    ThemedMenuPicker(
+                        selection: Binding(
+                            get: { profile.basedOn ?? "" }, set: { profile.basedOn = $0.isEmpty ? nil : $0 }),
+                        options: [""] + parents
+                    ) { $0.isEmpty ? "None" : $0 }
+                }
+            }
 
             field("Theme", value: $profile.theme, fallback: AppSettings.shared.themeName) { binding in
                 ThemedMenuPicker(selection: binding, options: AppSettings.shared.allThemes.map(\.name)) { $0 }
@@ -265,7 +290,13 @@ private struct ProfileEditor: View {
                 FontChooser(selectedFont: binding, fonts: monoFonts)
             }
             field("Font size", value: $profile.fontSize, fallback: Double(AppSettings.shared.fontSize)) { binding in
-                FontSizePicker(value: binding, range: 8...36)
+                FontSizePicker(value: binding, range: 4...200)
+            }
+            field("Cursor", value: $profile.cursorStyle, fallback: Self.cursorName(AppSettings.shared.cursorStyle)) {
+                binding in
+                ThemedMenuPicker(selection: binding, options: CursorStyle.profileValues.map(\.name)) {
+                    CursorStyle(profileValue: $0)?.label ?? $0
+                }
             }
             field("Shader", value: $profile.shader, fallback: AppSettings.shared.terminalShader) { binding in
                 ShaderPicker(value: binding)
@@ -273,6 +304,20 @@ private struct ProfileEditor: View {
             field("Link target", value: $profile.linkTarget, fallback: AppSettings.shared.defaultLinkTarget) {
                 binding in
                 ThemedMenuPicker(selection: binding) { $0.displayName }
+            }
+            field("Tab color", value: $profile.tabColor, fallback: AppSettings.shared.theme.accentColor.hexString) {
+                binding in
+                ColorPicker(
+                    "",
+                    selection: Binding(
+                        get: { Color(nsColor: NSColor(hex: binding.wrappedValue) ?? .systemBlue) },
+                        set: { binding.wrappedValue = NSColor($0).hexString }),
+                    supportsOpacity: false
+                )
+                .labelsHidden()
+            }
+            field("Badge", value: $profile.badge, fallback: "") { binding in
+                SettingTextField(placeholder: "PROD", text: binding, width: 120)
             }
 
             Text("New tabs only")
@@ -327,6 +372,10 @@ private struct ProfileEditor: View {
         @ViewBuilder control: @escaping (Binding<Value>) -> Control
     ) -> some View {
         InheritableField(label: label, value: value, fallback: fallback, control: control)
+    }
+
+    private static func cursorName(_ style: CursorStyle) -> String {
+        CursorStyle.profileValues.first { $0.style == style }?.name ?? "block"
     }
 
     static func parseEnv(_ text: String) -> [String: String]? {

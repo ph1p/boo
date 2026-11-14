@@ -24,6 +24,7 @@ extension PaneView {
             textW += ceil(
                 ("  " + subtitle as NSString).size(withAttributes: [.font: Self.tabSubtitleMeasureFont]).width)
         }
+        if let badge = ProfileBadge.text(for: tab) { textW += ProfileBadge.width(of: badge) + ProfileBadge.gap }
         var natural = textW + Self.tabTextLeadIn + Self.tabCloseHitZone + Self.tabPillInsetX * 2
         if tabHasLeadingIcon(tab) { natural += Self.tabIconAdvance }
         return min(tabMaxWidth, max(tabMinWidth, natural))
@@ -37,6 +38,7 @@ extension PaneView {
             let tab = pane.tabs[i]
             var k =
                 "\(Self.tabDisplayTitle(tab: tab))|\(Self.tabDisplaySubtitle(tab: tab) ?? "")|\(tabHasLeadingIcon(tab))"
+                + "|\(ProfileBadge.text(for: tab) ?? "")"
             if let group = pane.group(id: tab.groupID) {
                 k += "|\(group.id)|\(group.isCollapsed)|\(pane.isFirstTabOfGroup(at: i) ? group.name : "")"
             }

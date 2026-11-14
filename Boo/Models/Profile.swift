@@ -21,11 +21,20 @@ struct Profile: Codable, Equatable, Sendable {
     /// Starting directory for new tabs.
     var cwd: String?
     var linkTarget: LinkTarget?
+    /// "block", "beam", "underline" or "outline".
+    var cursorStyle: String?
+    /// "#RRGGBB" for the tab's accent line and badge; replaces the theme's accent.
+    var tabColor: String?
+    /// A short label shown next to the tab title.
+    var badge: String?
+    /// The profile whose fields fill the ones this profile leaves out.
+    var basedOn: String?
 
     init(
         name: String, theme: String? = nil, fontFamily: String? = nil, fontSize: Double? = nil,
         shader: String? = nil, shell: String? = nil, env: [String: String]? = nil, cwd: String? = nil,
-        linkTarget: LinkTarget? = nil
+        linkTarget: LinkTarget? = nil, cursorStyle: String? = nil, tabColor: String? = nil,
+        badge: String? = nil, basedOn: String? = nil
     ) {
         self.name = name
         self.theme = theme
@@ -36,6 +45,30 @@ struct Profile: Codable, Equatable, Sendable {
         self.env = env
         self.cwd = cwd
         self.linkTarget = linkTarget
+        self.cursorStyle = cursorStyle
+        self.tabColor = tabColor
+        self.badge = badge
+        self.basedOn = basedOn
+    }
+
+    /// This profile with `parent`'s values in every field it leaves out.
+    /// `env` merges per key; this profile's variables win.
+    func filling(from parent: Profile) -> Profile {
+        var p = self
+        p.theme = theme ?? parent.theme
+        p.fontFamily = fontFamily ?? parent.fontFamily
+        p.fontSize = fontSize ?? parent.fontSize
+        p.shader = shader ?? parent.shader
+        p.shell = shell ?? parent.shell
+        p.cwd = cwd ?? parent.cwd
+        p.linkTarget = linkTarget ?? parent.linkTarget
+        p.cursorStyle = cursorStyle ?? parent.cursorStyle
+        p.tabColor = tabColor ?? parent.tabColor
+        p.badge = badge ?? parent.badge
+        if env != nil || parent.env != nil {
+            p.env = (parent.env ?? [:]).merging(env ?? [:]) { _, own in own }
+        }
+        return p
     }
 
     /// What a new tab with this profile starts with; nil when it changes nothing.
@@ -113,9 +146,76 @@ struct ProfileFile: Codable, Equatable {
             }
             var p = profile
             p.name = name
+            // A bad look value costs only that field, not the whole profile.
+            if let style = p.cursorStyle, CursorStyle(profileValue: style) == nil {
+                problems.append(
+                    "profile \"\(name)\": \"cursorStyle\" must be block, beam, underline or outline, ignored")
+                p.cursorStyle = nil
+            }
+            if let color = p.tabColor, NSColor(hex: color) == nil {
+                problems.append("profile \"\(name)\": \"tabColor\" must look like \"#RRGGBB\", ignored")
+                p.tabColor = nil
+            }
+            if p.badge?.trimmingCharacters(in: .whitespaces).isEmpty == true { p.badge = nil }
             profiles.append(p)
         }
         return (profiles, problems)
+    }
+
+    /// Fills every profile from its `basedOn` chain. A missing parent or a
+    /// cycle is reported and that profile is used as written.
+    static func resolve(_ profiles: [Profile]) -> (profiles: [Profile], problems: [String]) {
+        let byName = Dictionary(profiles.map { ($0.name, $0) }, uniquingKeysWith: { first, _ in first })
+        var problems: [String] = []
+        var done: [String: Profile] = [:]
+        // Profiles whose chain runs into a loop; none of them can be merged.
+        var looped = Set<String>()
+
+        func resolved(_ profile: Profile, path: [String]) -> Profile? {
+            if looped.contains(profile.name) {
+                looped.formUnion(path)
+                return nil
+            }
+            if let hit = done[profile.name] { return hit }
+            guard let parentName = profile.basedOn, !parentName.isEmpty else {
+                done[profile.name] = profile
+                return profile
+            }
+            // nil: the chain loops back, so nothing on it can be merged.
+            guard !path.contains(parentName), parentName != profile.name else {
+                looped.formUnion(path + [profile.name])
+                return nil
+            }
+            guard let parent = byName[parentName] else {
+                problems.append(
+                    "profile \"\(profile.name)\": \"basedOn\" names \"\(parentName)\", which does not exist")
+                done[profile.name] = profile
+                return profile
+            }
+            guard let base = resolved(parent, path: path + [profile.name]) else { return nil }
+            let merged = profile.filling(from: base)
+            done[profile.name] = merged
+            return merged
+        }
+
+        let result = profiles.map { profile -> Profile in
+            if let merged = resolved(profile, path: []) { return merged }
+            problems.append("profile \"\(profile.name)\": \"basedOn\" runs into a loop, ignored")
+            return profile
+        }
+        return (result, problems)
+    }
+}
+
+extension CursorStyle {
+    /// The names a profile's `cursorStyle` accepts.
+    static let profileValues: [(name: String, style: CursorStyle)] = [
+        ("block", .block), ("beam", .beam), ("underline", .underline), ("outline", .blockOutline)
+    ]
+
+    init?(profileValue: String) {
+        guard let hit = Self.profileValues.first(where: { $0.name == profileValue.lowercased() }) else { return nil }
+        self = hit.style
     }
 }
 
@@ -126,7 +226,10 @@ final class ProfileStore {
     static let shared = ProfileStore(path: BooPaths.profilesFile)
 
     let path: String
+    /// The profiles as written in the file; the editor works on these.
     private(set) var profiles: [Profile] = []
+    /// The profiles with their `basedOn` chain filled in, by name.
+    private var resolved: [String: Profile] = [:]
     /// Why the file (or some of its entries) couldn't be used; empty when fine.
     private(set) var problems: [String] = []
     private let file: WatchedFile
@@ -156,10 +259,14 @@ final class ProfileStore {
         }
     }
 
-    /// The accent of the profile's theme, for the tab bar; nil without a theme.
+    /// The profile's `tabColor`, else the accent of its theme, for the tab
+    /// bar; nil when it sets neither.
     func accent(forProfile name: String) -> NSColor? {
         if let cached = accents[name] { return cached }
-        let color = profile(named: name)?.theme.flatMap { AppSettings.shared.theme(named: $0) }?.accentColor
+        let profile = profile(named: name)
+        let color =
+            profile?.tabColor.flatMap { NSColor(hex: $0) }
+            ?? profile?.theme.flatMap { AppSettings.shared.theme(named: $0) }?.accentColor
         accents[name] = color
         return color
     }
@@ -172,9 +279,13 @@ final class ProfileStore {
         return ["default profile \"\(name)\" does not exist, new tabs use the plain settings"]
     }
 
+    /// Every profile with its `basedOn` chain filled in, in file order.
+    var resolvedProfiles: [Profile] { profiles.compactMap { resolved[$0.name] } }
+
+    /// The profile as tabs use it: `basedOn` filled in.
     func profile(named name: String?) -> Profile? {
         guard let name else { return nil }
-        return profiles.first { $0.name == name }
+        return resolved[name]
     }
 
     func reload() {
@@ -201,10 +312,14 @@ final class ProfileStore {
         reload()
     }
 
-    private func update(profiles: [Profile], problems: [String]) {
+    private func update(profiles: [Profile], problems fileProblems: [String]) {
+        let merged = ProfileFile.resolve(profiles)
+        // A kept-after-parse-failure list already carries its chain problems.
+        let problems = fileProblems + merged.problems.filter { !fileProblems.contains($0) }
         let changed = profiles != self.profiles || problems != self.problems
         accents.removeAll()
         self.profiles = profiles
+        self.resolved = Dictionary(merged.profiles.map { ($0.name, $0) }, uniquingKeysWith: { first, _ in first })
         self.problems = problems
         if !problems.isEmpty { booLog(.warning, .app, "[Profiles] \(problems.joined(separator: "; "))") }
         if changed { NotificationCenter.default.post(name: .profilesChanged, object: nil) }

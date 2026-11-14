@@ -247,7 +247,7 @@ extension Notification.Name {
         lines.append("font-size = \(Int(style?.fontSize ?? Double(settings.fontSize)))")
 
         // Cursor
-        switch settings.cursorStyle {
+        switch style?.cursorStyle.flatMap({ CursorStyle(profileValue: $0) }) ?? settings.cursorStyle {
         case .block: lines.append("cursor-style = block")
         case .beam: lines.append("cursor-style = bar")
         case .underline: lines.append("cursor-style = underline")

@@ -356,11 +356,17 @@ extension PaneView {
         ]
         let title = Self.tabDisplayTitle(tab: tab) as NSString
         let titleSize = title.size(withAttributes: titleAttrs)
+        let badge = ProfileBadge.text(for: tab)
+        let badgeW = badge.map { ProfileBadge.width(of: $0) + ProfileBadge.gap } ?? 0
+        let titleW = min(titleSize.width, max(0, maxW - badgeW))
         title.draw(
-            in: CGRect(
-                x: textX, y: titleMidY - titleSize.height / 2, width: min(titleSize.width, maxW),
-                height: titleSize.height),
+            in: CGRect(x: textX, y: titleMidY - titleSize.height / 2, width: titleW, height: titleSize.height),
             withAttributes: titleAttrs)
+        if let badge, maxW > badgeW {
+            ProfileBadge.draw(
+                ctx, text: badge, x: textX + titleW + ProfileBadge.gap, midY: titleMidY,
+                color: tab.state.profile.flatMap { ProfileStore.shared.accent(forProfile: $0) } ?? theme.accentColor)
+        }
 
         if let detail {
             var x = textX
