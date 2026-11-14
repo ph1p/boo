@@ -105,6 +105,72 @@ final class RulesTests: XCTestCase {
         XCTAssertEqual(RuleMatcher.profile(for: ctx, in: set), "A")
     }
 
+    func testWorkspaceBranchUserAndTimeConditions() throws {
+        let (set, problems) = try parse(
+            """
+            [{"id": "r", "when": {"workspace": "api*", "workspaceFolder": "~/work", "gitBranch": "release/*",
+              "user": "root", "time": "22:00-06:00"}, "then": {"profile": "P"}}]
+            """)
+        XCTAssertEqual(problems, [])
+        XCTAssertTrue(set.usesGitBranch)
+        XCTAssertTrue(set.usesTime)
+        var ctx = RuleContext(
+            host: nil, cwd: "/", container: nil, kubeContext: nil, process: "", workspace: "API server",
+            workspaceFolder: NSHomeDirectory() + "/work/api", gitBranch: "release/1.2", user: "root",
+            minuteOfDay: 23 * 60)
+        XCTAssertEqual(RuleMatcher.profile(for: ctx, in: set), "P")
+        ctx.minuteOfDay = 5 * 60 + 59
+        XCTAssertEqual(RuleMatcher.profile(for: ctx, in: set), "P", "the window crosses midnight")
+        ctx.minuteOfDay = 6 * 60
+        XCTAssertNil(RuleMatcher.profile(for: ctx, in: set), "the end is exclusive")
+        ctx.minuteOfDay = nil
+        XCTAssertNil(RuleMatcher.profile(for: ctx, in: set))
+        ctx.minuteOfDay = 0
+        for change: (inout RuleContext) -> Void in [
+            { $0.workspace = "web" }, { $0.workspaceFolder = "/tmp" }, { $0.gitBranch = nil },
+            { $0.gitBranch = "main" }, { $0.user = "me" }
+        ] {
+            var other = ctx
+            change(&other)
+            XCTAssertNil(RuleMatcher.profile(for: other, in: set))
+        }
+    }
+
+    func testTimeRange() {
+        XCTAssertEqual(TimeRange("09:00-18:30")?.start, 540)
+        XCTAssertEqual(TimeRange("09:00-18:30")?.end, 1110)
+        XCTAssertEqual(TimeRange("9:00 - 18:30")?.start, 540)
+        XCTAssertTrue(TimeRange("09:00-18:00")?.contains(540) == true)
+        XCTAssertTrue(TimeRange("09:00-18:00")?.contains(1080) == false)
+        for bad in ["", "09:00", "09:00-09:00", "24:00-01:00", "09:60-10:00", "9-18", "09:0-18:00", "a:b-c:d"] {
+            XCTAssertNil(TimeRange(bad), bad)
+        }
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 3600) ?? .current
+        XCTAssertEqual(TimeRange.minuteOfDay(Date(timeIntervalSince1970: 0), calendar: calendar), 60)
+    }
+
+    func testUnknownConditionWarnsAndBadTimeSkips() throws {
+        let (set, problems) = try parse(
+            """
+            [{"id": "a", "when": {"host": "h", "hots": "x"}, "then": {"profile": "P"}},
+             {"id": "b", "when": {"time": "soon"}, "then": {"profile": "P"}},
+             {"id": "c", "when": {"hots": "x"}, "then": {"profile": "P"}}]
+            """)
+        XCTAssertEqual(set.rules.map(\.id), ["a"], "an unknown key alone leaves no condition")
+        XCTAssertEqual(problems.count, 3)
+        XCTAssertTrue(problems[0].contains("unknown condition \"when.hots\""))
+        XCTAssertTrue(problems[1].contains("09:00-18:00"))
+        XCTAssertTrue(problems[2].contains("no conditions"))
+    }
+
+    func testRuleUserComesFromTheSession() {
+        XCTAssertEqual(RuleEngine.user(of: nil), NSUserName())
+        XCTAssertEqual(RuleEngine.user(of: .ssh(host: "deploy@db.prod")), "deploy")
+        XCTAssertNil(RuleEngine.user(of: .ssh(host: "db.prod")))
+        XCTAssertNil(RuleEngine.user(of: .ssh(host: "@db.prod")))
+    }
+
     // MARK: Glob
 
     func testGlobPlain() {

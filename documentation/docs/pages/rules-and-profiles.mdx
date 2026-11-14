@@ -4,7 +4,7 @@ description: Profiles give a Boo tab its own theme, font, shader, shell and envi
 
 # Rules & Profiles
 
-A **profile** is a named set of terminal overrides: theme, font, shader, shell, environment. A **rule** picks a profile for a tab based on where it is (host, folder, container, kube context, process), or runs an action when output matches a regex. Both live in JSON files under `~/.boo/`, and Boo reloads them when you save.
+A **profile** is a named set of terminal overrides: theme, font, shader, shell, environment. A **rule** picks a profile for a tab based on where it is (host, folder, container, kube context, process, workspace, git branch, user, time of day), or runs an action when output matches a regex. Both live in JSON files under `~/.boo/`, and Boo reloads them when you save.
 
 ## Profiles
 
@@ -133,9 +133,20 @@ A rule with errors is skipped and reported on the settings page; the other rules
 | `container` | The container the tab is attached to |
 | `kubeContext` | The `current-context` of your kubeconfig |
 | `process` | The foreground process |
+| `workspace` | The workspace's name |
+| `workspaceFolder` | The workspace's folder. A path pattern, like `cwd` |
+| `gitBranch` | The checked-out branch of the repository around the tab's folder. Local tabs only; a detached HEAD gives the first 7 characters of the commit |
+| `user` | Your macOS user name in a local tab. In an ssh tab, the user of `user@host`; an ssh tab without a user name and a container tab never match |
+| `time` | A daily window in local time, `"HH:MM-HH:MM"`. The end is exclusive, and `"22:00-06:00"` crosses midnight |
 | `output` | A regex, matched against each line of output |
 
-All keys except `output` take glob patterns: `*` and `?`, case-insensitive. In `cwd`, `*` stops at `/` and `**` crosses it, a leading `~` is your home folder, and a pattern for a folder also matches everything below it. So `"cwd": "~/work/client"` matches `~/work/client/api` too.
+```json
+{ "id": "release-evenings", "when": { "gitBranch": "release/*", "time": "18:00-23:00" }, "then": { "profile": "Careful" } }
+```
+
+A `time` window opens and closes on the full minute, without anything happening in the tab. A key that isn't in this table is reported on the settings page and ignored; the rule still loads with its other conditions.
+
+All keys except `output` and `time` take glob patterns: `*` and `?`, case-insensitive. In `cwd` and `workspaceFolder`, `*` stops at `/` and `**` crosses it, a leading `~` is your home folder, and a pattern for a folder also matches everything below it. So `"cwd": "~/work/client"` matches `~/work/client/api` too.
 
 ### Profile rules
 

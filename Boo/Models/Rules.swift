@@ -30,9 +30,59 @@ struct RuleCondition: Equatable, Sendable {
     var process: String?
     /// Regular expression matched against each line of output.
     var output: String?
+    /// The workspace's name.
+    var workspace: String?
+    /// The workspace's folder; a path glob like `cwd`.
+    var workspaceFolder: String?
+    /// The checked-out branch of the repository around a local tab's folder.
+    var gitBranch: String?
+    var user: String?
+    /// A daily window such as `09:00-18:00`, in local time.
+    var time: TimeRange?
 
     var isEmpty: Bool {
         host == nil && cwd == nil && container == nil && kubeContext == nil && process == nil && output == nil
+            && workspace == nil && workspaceFolder == nil && gitBranch == nil && user == nil && time == nil
+    }
+
+    /// The keys a `when` object may hold.
+    static let keys: Set<String> = [
+        "host", "cwd", "container", "kubeContext", "process", "output", "workspace", "workspaceFolder",
+        "gitBranch", "user", "time"
+    ]
+}
+
+/// A daily time window in minutes since midnight. `end` is exclusive; a
+/// window whose start is after its end crosses midnight.
+struct TimeRange: Equatable, Sendable {
+    var start: Int
+    var end: Int
+
+    /// Parses `HH:MM-HH:MM`; nil when malformed or empty (start equals end).
+    init?(_ text: String) {
+        let parts = text.split(separator: "-", omittingEmptySubsequences: false)
+        guard parts.count == 2, let start = Self.minutes(parts[0]), let end = Self.minutes(parts[1]), start != end
+        else { return nil }
+        self.start = start
+        self.end = end
+    }
+
+    func contains(_ minute: Int) -> Bool {
+        start < end ? (start..<end).contains(minute) : minute >= start || minute < end
+    }
+
+    /// Minutes since midnight of `date` in `calendar`.
+    static func minuteOfDay(_ date: Date, calendar: Calendar = .current) -> Int {
+        let parts = calendar.dateComponents([.hour, .minute], from: date)
+        return (parts.hour ?? 0) * 60 + (parts.minute ?? 0)
+    }
+
+    private static func minutes(_ text: Substring) -> Int? {
+        let parts = text.trimmingCharacters(in: .whitespaces).split(separator: ":", omittingEmptySubsequences: false)
+        guard parts.count == 2, parts[1].count == 2, let hour = Int(parts[0]), let minute = Int(parts[1]),
+            (0...23).contains(hour), (0...59).contains(minute)
+        else { return nil }
+        return hour * 60 + minute
     }
 }
 
@@ -58,10 +108,17 @@ struct RuleContext: Equatable, Sendable {
     var container: String?
     var kubeContext: String?
     var process: String
+    var workspace: String?
+    var workspaceFolder: String?
+    var gitBranch: String?
+    var user: String?
+    /// Minutes since midnight; set only while a rule has a `time` condition.
+    var minuteOfDay: Int?
 
     init(
         host: String?, hostAlias: String? = nil, cwd: String, container: String?, kubeContext: String?,
-        process: String
+        process: String, workspace: String? = nil, workspaceFolder: String? = nil, gitBranch: String? = nil,
+        user: String? = nil, minuteOfDay: Int? = nil
     ) {
         self.host = host
         self.hostAlias = hostAlias
@@ -69,6 +126,11 @@ struct RuleContext: Equatable, Sendable {
         self.container = container
         self.kubeContext = kubeContext
         self.process = process
+        self.workspace = workspace
+        self.workspaceFolder = workspaceFolder
+        self.gitBranch = gitBranch
+        self.user = user
+        self.minuteOfDay = minuteOfDay
     }
 
     static let empty = RuleContext(host: nil, cwd: "", container: nil, kubeContext: nil, process: "")
@@ -84,6 +146,8 @@ struct RuleSet: Equatable, Sendable {
     var contextRules: [Rule] { rules.filter { $0.enabled && !$0.isOutputRule } }
     var outputRules: [Rule] { rules.filter { $0.enabled && $0.isOutputRule } }
     var usesKubeContext: Bool { rules.contains { $0.enabled && $0.when.kubeContext != nil } }
+    var usesGitBranch: Bool { rules.contains { $0.enabled && $0.when.gitBranch != nil } }
+    var usesTime: Bool { rules.contains { $0.enabled && $0.when.time != nil } }
 
     /// One warning per enabled rule that names a profile not in `known`.
     func unknownProfileProblems(known: Set<String>) -> [String] {
@@ -123,7 +187,9 @@ struct RuleSet: Equatable, Sendable {
         var seen = Set<String>()
         for (index, item) in list.enumerated() {
             do {
-                var rule = try parseRule(item, index: index)
+                let parsed = try parseRule(item, index: index)
+                var rule = parsed.rule
+                problems += parsed.warnings
                 if seen.contains(rule.id) {
                     problems.append("rule \"\(rule.id)\": duplicate id, renamed to \"\(rule.id)#\(index)\"")
                     rule.id += "#\(index)"
@@ -137,7 +203,8 @@ struct RuleSet: Equatable, Sendable {
         return (RuleSet(rules: rules), problems)
     }
 
-    private static func parseRule(_ item: Any, index: Int) throws -> Rule {
+    /// `warnings` are problems that don't stop the rule from loading.
+    private static func parseRule(_ item: Any, index: Int) throws -> (rule: Rule, warnings: [String]) {
         guard let dict = item as? [String: Any] else {
             throw ParseError(message: "rule #\(index + 1): not an object")
         }
@@ -150,9 +217,21 @@ struct RuleSet: Equatable, Sendable {
             guard let s = value as? String, !s.isEmpty else { throw fail("\"when.\(key)\" must be a non-empty string") }
             return s
         }
-        let when = RuleCondition(
+        var when = RuleCondition(
             host: try string("host"), cwd: try string("cwd"), container: try string("container"),
-            kubeContext: try string("kubeContext"), process: try string("process"), output: try string("output"))
+            kubeContext: try string("kubeContext"), process: try string("process"), output: try string("output"),
+            workspace: try string("workspace"), workspaceFolder: try string("workspaceFolder"),
+            gitBranch: try string("gitBranch"), user: try string("user"))
+        if let time = try string("time") {
+            guard let range = TimeRange(time) else {
+                throw fail("\"when.time\" must look like \"09:00-18:00\"")
+            }
+            when.time = range
+        }
+        // A misspelled key would otherwise widen the rule without a word.
+        let warnings = whenDict.keys.filter { !RuleCondition.keys.contains($0) }.sorted().map {
+            fail("unknown condition \"when.\($0)\" is ignored").message
+        }
         guard !when.isEmpty else { throw fail("\"when\" has no conditions") }
         if let output = when.output {
             do { _ = try NSRegularExpression(pattern: output) } catch {
@@ -179,11 +258,12 @@ struct RuleSet: Equatable, Sendable {
         let fingerprintSource =
             (try? JSONSerialization.data(withJSONObject: dict, options: [.sortedKeys]))
             .flatMap { String(data: $0, encoding: .utf8) } ?? id
-        return Rule(
+        let rule = Rule(
             id: id, when: when, then: then, cooldown: cooldown,
             altScreen: dict["altScreen"] as? Bool ?? false,
             enabled: dict["enabled"] as? Bool ?? true,
             fingerprint: Self.hash(fingerprintSource))
+        return (rule, warnings)
     }
 
     private static func parseAction(_ item: Any, fail: (String) -> ParseError) throws -> TriggerAction {
@@ -244,6 +324,21 @@ enum RuleMatcher {
         }
         if let cwd = condition.cwd {
             guard !context.cwd.isEmpty, Glob.matches(cwd, context.cwd, path: true) else { return false }
+        }
+        if let workspace = condition.workspace {
+            guard let value = context.workspace, Glob.matches(workspace, value) else { return false }
+        }
+        if let folder = condition.workspaceFolder {
+            guard let value = context.workspaceFolder, Glob.matches(folder, value, path: true) else { return false }
+        }
+        if let branch = condition.gitBranch {
+            guard let value = context.gitBranch, Glob.matches(branch, value) else { return false }
+        }
+        if let user = condition.user {
+            guard let value = context.user, Glob.matches(user, value) else { return false }
+        }
+        if let time = condition.time {
+            guard let minute = context.minuteOfDay, time.contains(minute) else { return false }
         }
         return true
     }

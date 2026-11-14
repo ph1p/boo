@@ -37,6 +37,9 @@ final class RuleEngine {
     private var observers: [Any] = []
     private var started = false
     private let kube = KubeContextReader()
+    private let branches = GitBranchReader()
+    /// Runs only while a rule has a `time` condition.
+    private var clock: Timer?
 
     func start() {
         guard !started else { return }
@@ -65,6 +68,40 @@ final class RuleEngine {
                 guard note.userInfo?["topic"] as? String == SettingsTopic.profiles.rawValue else { return }
                 MainActor.assumeIsolated { RuleEngine.shared.reevaluateAll() }
             })
+        updateClock()
+    }
+
+    /// Re-evaluates every tab at each full minute while a rule has a `time`
+    /// condition, so a window opens and closes without a context change.
+    private func updateClock() {
+        guard RulesStore.shared.active.usesTime else {
+            clock?.invalidate()
+            clock = nil
+            return
+        }
+        guard clock == nil else { return }
+        let now = Date().timeIntervalSinceReferenceDate
+        let next = Date(timeIntervalSinceReferenceDate: (now / 60).rounded(.down) * 60 + 60)
+        let timer = Timer(fire: next, interval: 60, repeats: true) { _ in
+            MainActor.assumeIsolated { RuleEngine.shared.reevaluateAll() }
+        }
+        timer.tolerance = 1
+        RunLoop.main.add(timer, forMode: .common)
+        clock = timer
+    }
+
+    /// The parts of a tab's context that come from outside the tab.
+    private func ambient(for rules: RuleSet, cwd: String?) -> Ambient {
+        Ambient(
+            kube: rules.usesKubeContext ? kube.current() : nil,
+            gitBranch: rules.usesGitBranch ? cwd.flatMap { branches.cached($0) } : nil,
+            minuteOfDay: rules.usesTime ? TimeRange.minuteOfDay(Date()) : nil)
+    }
+
+    struct Ambient {
+        var kube: String?
+        var gitBranch: String?
+        var minuteOfDay: Int?
     }
 
     // MARK: Tabs
@@ -89,16 +126,23 @@ final class RuleEngine {
     /// workspace brings its own pick and remote context along.
     func launchProfile(tabID: UUID?, cwd: String) -> Profile? {
         let rules = RulesStore.shared.active
-        let kubeContext = rules.usesKubeContext ? kube.current() : nil
-        var context = RuleContext(host: nil, cwd: cwd, container: nil, kubeContext: kubeContext, process: "")
+        // A launch can't wait for the background read: the shell and its
+        // environment are fixed once the surface starts.
+        if rules.usesGitBranch { branches.readNow(cwd) }
+        let ambient = ambient(for: rules, cwd: cwd)
+        var context = RuleContext(
+            host: nil, cwd: cwd, container: nil, kubeContext: ambient.kube, process: "",
+            gitBranch: ambient.gitBranch, user: NSUserName(), minuteOfDay: ambient.minuteOfDay)
         var override: String?
         var workspace: Workspace?
         if let loc = tabID.flatMap(AgentInbox.locateInWindows) {
             let tab = loc.pane.tabs[loc.tabIndex]
             override = tab.state.profileOverride
             workspace = loc.workspace
+            context.workspace = loc.workspace.displayName
+            context.workspaceFolder = loc.workspace.folderPath
             if tab.remoteSession != nil {
-                context = Self.context(of: tab, kube: kubeContext)
+                context = Self.context(of: tab, workspace: loc.workspace, ambient: ambient)
                 context.process = ""
             }
         }
@@ -195,6 +239,7 @@ final class RuleEngine {
         for (tabID, entry) in entries {
             installMatcher(entry, tabID: tabID)
         }
+        updateClock()
         reevaluateAll()
     }
 
@@ -219,7 +264,13 @@ final class RuleEngine {
         guard let loc = AgentInbox.locateInWindows(tabID) else { return }
         let rules = RulesStore.shared.active
         let tab = loc.pane.tabs[loc.tabIndex]
-        let context = Self.context(of: tab, kube: rules.usesKubeContext ? kube.current() : nil)
+        let localCwd = tab.remoteSession == nil ? tab.workingDirectory : nil
+        let context = Self.context(
+            of: tab, workspace: loc.workspace, ambient: ambient(for: rules, cwd: localCwd))
+        if rules.usesGitBranch, let localCwd {
+            // The branch is read off the main thread; a change comes back here.
+            branches.refresh(localCwd) { [weak self] in self?.branchChanged(in: localCwd) }
+        }
         entry.context = context
         entry.matcher?.update(context: context)
 
@@ -246,7 +297,15 @@ final class RuleEngine {
         }
     }
 
-    static func context(of tab: Pane.Tab, kube: String?) -> RuleContext {
+    private func branchChanged(in cwd: String) {
+        for tabID in entries.keys {
+            guard let loc = AgentInbox.locateInWindows(tabID) else { continue }
+            let tab = loc.pane.tabs[loc.tabIndex]
+            if tab.remoteSession == nil, tab.workingDirectory == cwd { evaluate(tabID) }
+        }
+    }
+
+    static func context(of tab: Pane.Tab, workspace: Workspace?, ambient: Ambient) -> RuleContext {
         var host: String?
         var alias: String?
         var container: String?
@@ -263,8 +322,25 @@ final class RuleEngine {
         }
         let cwd = tab.remoteSession != nil ? (tab.remoteWorkingDirectory ?? "") : tab.workingDirectory
         return RuleContext(
-            host: host, hostAlias: alias, cwd: cwd, container: container, kubeContext: kube,
-            process: tab.state.foregroundProcess)
+            host: host, hostAlias: alias, cwd: cwd, container: container, kubeContext: ambient.kube,
+            process: tab.state.foregroundProcess, workspace: workspace?.displayName,
+            workspaceFolder: workspace?.folderPath,
+            gitBranch: tab.remoteSession == nil ? ambient.gitBranch : nil,
+            user: user(of: tab.remoteSession), minuteOfDay: ambient.minuteOfDay)
+    }
+
+    /// The local user in a local tab; in a remote tab the user of
+    /// `user@host`, when the session names one.
+    nonisolated static func user(of session: RemoteSessionType?) -> String? {
+        switch session {
+        case nil:
+            return NSUserName()
+        case .ssh(let host, _), .mosh(let host):
+            guard let at = host.firstIndex(of: "@"), at != host.startIndex else { return nil }
+            return String(host[..<at])
+        case .container:
+            return nil
+        }
     }
 
     // MARK: Output rules
@@ -445,6 +521,46 @@ final class RuleEngine {
             let level: BooLogger.Level = result.status == 0 ? .info : .warning
             booLog(level, .app, "[Rules] \(ruleID): run exited \(result.status)\(text.isEmpty ? "" : ": \(text)")")
         }
+    }
+}
+
+/// The checked-out branch per folder. Reads happen off the main thread; the
+/// cache answers at once with the last known value.
+@MainActor
+final class GitBranchReader {
+    private var cache: [String: String?] = [:]
+    private var pending = Set<String>()
+    private static let limit = 256
+
+    func cached(_ cwd: String) -> String? {
+        cache[cwd] ?? nil
+    }
+
+    /// Reads on the calling thread, for the one caller that can't wait.
+    func readNow(_ cwd: String) {
+        store(StatusBarView.detectGitInfo(in: cwd).0, for: cwd)
+    }
+
+    /// Re-reads `cwd`'s branch and calls `changed` when it differs from the
+    /// cached one.
+    func refresh(_ cwd: String, changed: @escaping @MainActor () -> Void) {
+        guard !cwd.isEmpty, pending.insert(cwd).inserted else { return }
+        DispatchQueue.global(qos: .utility).async {
+            let branch = StatusBarView.detectGitInfo(in: cwd).0
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    self.pending.remove(cwd)
+                    let known = self.cache[cwd]
+                    self.store(branch, for: cwd)
+                    if known.map({ $0 != branch }) ?? true { changed() }
+                }
+            }
+        }
+    }
+
+    private func store(_ branch: String?, for cwd: String) {
+        if cache.count >= Self.limit, cache[cwd] == nil { cache.removeAll() }
+        cache[cwd] = .some(branch)
     }
 }
 
