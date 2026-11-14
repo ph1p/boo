@@ -86,6 +86,11 @@ struct HostSystemInfoService: SystemInfoService {
     }
 
     func cpuUsage() -> Double {
+        guard let ticks = cpuTicks(), ticks.total > 0 else { return 0 }
+        return Double(ticks.busy) / Double(ticks.total)
+    }
+
+    func cpuTicks() -> (busy: UInt64, total: UInt64)? {
         var cpuInfo: processor_info_array_t?
         var numCPUInfo: mach_msg_type_number_t = 0
         var numCPUs: natural_t = 0
@@ -96,7 +101,7 @@ struct HostSystemInfoService: SystemInfoService {
             &cpuInfo,
             &numCPUInfo
         )
-        guard result == KERN_SUCCESS, let info = cpuInfo else { return 0 }
+        guard result == KERN_SUCCESS, let info = cpuInfo else { return nil }
         defer {
             vm_deallocate(
                 mach_task_self_,
@@ -105,18 +110,18 @@ struct HostSystemInfoService: SystemInfoService {
             )
         }
 
-        var totalUser: Int32 = 0
-        var totalSystem: Int32 = 0
-        var totalIdle: Int32 = 0
+        // Per-core counters are unsigned 32-bit ticks. Widen before summing:
+        // on a many-core machine the Int32 sum overflows after a few weeks up.
+        var busy: UInt64 = 0
+        var idle: UInt64 = 0
         for i in 0..<Int(numCPUs) {
             let offset = Int(CPU_STATE_MAX) * i
-            totalUser += info[offset + Int(CPU_STATE_USER)] + info[offset + Int(CPU_STATE_NICE)]
-            totalSystem += info[offset + Int(CPU_STATE_SYSTEM)]
-            totalIdle += info[offset + Int(CPU_STATE_IDLE)]
+            for state in [CPU_STATE_USER, CPU_STATE_NICE, CPU_STATE_SYSTEM] {
+                busy += UInt64(UInt32(bitPattern: info[offset + Int(state)]))
+            }
+            idle += UInt64(UInt32(bitPattern: info[offset + Int(CPU_STATE_IDLE)]))
         }
-        let total = Double(totalUser + totalSystem + totalIdle)
-        guard total > 0 else { return 0 }
-        return Double(totalUser + totalSystem) / total
+        return (busy, busy + idle)
     }
 
     // MARK: - Uptime

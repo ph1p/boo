@@ -29,9 +29,17 @@ protocol SystemInfoService {
     func diskUsage() -> (usage: Double, freeGB: Double)
     func loadAverage() -> Double
     func cpuUsage() -> Double
+    /// Cumulative CPU ticks since boot, summed over all cores. Two readings
+    /// give the usage between them; `cpuUsage()` alone is the average since boot.
+    /// `nil` when the service has no tick counters.
+    func cpuTicks() -> (busy: UInt64, total: UInt64)?
     func uptime() -> TimeInterval
     func networkThroughput() -> (bytesIn: UInt64, bytesOut: UInt64)
     func batteryInfo() -> BatteryInfo?
+}
+
+extension SystemInfoService {
+    func cpuTicks() -> (busy: UInt64, total: UInt64)? { nil }
 }
 
 /// Battery status for portable Macs.
