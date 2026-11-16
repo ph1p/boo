@@ -151,4 +151,11 @@ final class JSCRuntimeTests: XCTestCase {
         XCTAssertTrue(result.contains("first"), "Got: \(result)")
         XCTAssertTrue(result.contains("second"), "Got: \(result)")
     }
+
+    func testUnserializableReturnValueThrowsInsteadOfCrashing() {
+        for body in ["return 42;", "return undefined;"] {
+            let source = "function transform(ctx) { \(body) }"
+            XCTAssertThrowsError(try runtime.execute(source: source, context: makeContext()), body)
+        }
+    }
 }

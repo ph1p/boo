@@ -79,9 +79,6 @@ final class SocketServerCore: @unchecked Sendable {
         self.delegate = delegate
     }
 
-    /// Descriptors of the currently connected clients.
-    var connectedFDs: [Int32] { Array(clientSources.keys) }
-
     /// The connection now on `fd`, nil when none is. Must be called on `queue`.
     func generation(of fd: Int32) -> UInt64? { clientGenerations[fd] }
 
@@ -238,9 +235,6 @@ final class SocketServerCore: @unchecked Sendable {
             return
         }
 
-        // Progress on the wire refreshes the deadline: it exists to reap silent
-        // connections, not to cut off a peer that is still sending.
-        armIdleTimer(fd: fd)
         deliver(fd: fd)
     }
 
@@ -257,6 +251,9 @@ final class SocketServerCore: @unchecked Sendable {
             // failure, already dropped this client out from under us.
             guard clientBuffers[fd] != nil else { return }
             clientBuffers[fd] = Data(buffer.dropFirst(consumed))
+            // Only a complete message refreshes the deadline. Refreshing on every
+            // read let a peer hold a slot for days by trickling one byte at a time.
+            armIdleTimer(fd: fd)
         }
     }
 

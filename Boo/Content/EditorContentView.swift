@@ -500,16 +500,8 @@ final class EditorContentView: NSView, ContentViewProtocol {
         }
         guard let data else { return false }
 
-        // Writing through a symlink would replace the link with a plain file.
-        let url = URL(fileURLWithPath: path).resolvingSymlinksInPath()
-        let fm = FileManager.default
-        let permissions = (try? fm.attributesOfItem(atPath: url.path))?[.posixPermissions]
         do {
-            try data.write(to: url, options: .atomic)
-            // The atomic replace is a new file; keep the original's mode (e.g. +x).
-            if let permissions {
-                try? fm.setAttributes([.posixPermissions: permissions], ofItemAtPath: url.path)
-            }
+            try BooPaths.writeAtomically(data, toFile: path)
         } catch {
             debugLog("[Editor] Save failed: \(error.localizedDescription)")
             if reason == .explicit || !autosaveFailed {

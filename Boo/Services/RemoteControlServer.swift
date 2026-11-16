@@ -278,6 +278,7 @@ final class RemoteControlServer: @unchecked Sendable {
             sendJSON(fd: fd, status: "503 Service Unavailable", dict: ["ok": false, "error": "no handler"])
             return
         }
+        let generation = core.generation(of: fd)
         handler(cmd, json) { [weak self] response in
             guard let self else { return }
             // Encode here rather than inside the queue hop: `[String: Any]` is not
@@ -285,8 +286,9 @@ final class RemoteControlServer: @unchecked Sendable {
             let body = Self.jsonBody(response)
             self.queue.async {
                 // Client may have disconnected while the command ran; writing to a
-                // reused descriptor would answer the wrong request.
-                guard self.core.connectedFDs.contains(fd) else { return }
+                // reused descriptor would answer the wrong request. Compare the
+                // connection, not just the number: a new client can hold the same fd.
+                guard let generation, self.core.generation(of: fd) == generation else { return }
                 self.sendResponse(fd: fd, status: "200 OK", contentType: "application/json", body: body)
             }
         }

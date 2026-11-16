@@ -318,7 +318,11 @@ final class BooSocketServer: @unchecked Sendable {
             return
         }
         let category = json["category"] as? String ?? "unknown"
-        let p = pid_t(pid)
+        // `pid_t(pid)` traps on a value outside Int32; the pid comes off the socket.
+        guard let p = pid_t(exactly: pid), p > 0 else {
+            sendResponse(fd: clientFD, ok: false, error: "invalid pid")
+            return
+        }
 
         guard kill(p, 0) == 0 || errno == EPERM else {
             sendResponse(fd: clientFD, ok: false, error: "process \(pid) not found")
@@ -346,7 +350,10 @@ final class BooSocketServer: @unchecked Sendable {
             sendResponse(fd: clientFD, ok: false, error: "missing pid")
             return
         }
-        let p = pid_t(pid)
+        guard let p = pid_t(exactly: pid) else {
+            sendResponse(fd: clientFD, ok: false, error: "invalid pid")
+            return
+        }
         if _processes.removeValue(forKey: p) != nil {
             ancestorCache.removeAll()
             booLog(.debug, .socket, "Status cleared: pid=\(pid)")
@@ -386,13 +393,6 @@ final class BooSocketServer: @unchecked Sendable {
     /// Close a client connection.
     func dropClient(fd: Int32) {
         core.drop(fd: fd)
-    }
-
-    /// Whether `fd` is still one of ours. Deferred replies must check this before
-    /// writing: the descriptor may have been closed and reused for another client.
-    /// Must be called on `queue`.
-    func isConnected(fd: Int32) -> Bool {
-        core.connectedFDs.contains(fd)
     }
 
     /// Identifies the connection now on `fd`; compare before a deferred write.

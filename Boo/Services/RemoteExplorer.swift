@@ -352,9 +352,8 @@ final class RemoteExplorer: @unchecked Sendable {
         for dir in searchDirs {
             guard let files = try? fm.contentsOfDirectory(atPath: dir) else { continue }
             for file in files {
-                let lower = file.lowercased()
                 // Socket must contain ALL required terms (both user and hostname)
-                guard requiredTerms.allSatisfy({ lower.contains($0) }) else { continue }
+                guard requiredTerms.allSatisfy({ socketName(file, containsWhole: $0) }) else { continue }
 
                 let path = dir + "/" + file
                 var statBuf = stat()
@@ -367,6 +366,17 @@ final class RemoteExplorer: @unchecked Sendable {
             }
         }
         return nil
+    }
+
+    /// Whether `term` (a user or a host) stands in a socket file name as a whole
+    /// word. A plain substring test let `db1` match `cm-deploy@db10:22`, and the
+    /// commands then ran on the other host. A dash ends a word, because control
+    /// paths use it as a separator (`cm-%r@%h:%p`, `%h-%p`).
+    static func socketName(_ name: String, containsWhole term: String) -> Bool {
+        guard !term.isEmpty else { return false }
+        let word = "[\\p{L}\\p{N}.]"
+        let pattern = "(?<!\(word))\(NSRegularExpression.escapedPattern(for: term))(?!\(word))"
+        return name.range(of: pattern, options: [.regularExpression, .caseInsensitive]) != nil
     }
 
     /// An unlaunched `/usr/bin/ssh` with the login shell's agent socket
@@ -481,8 +491,9 @@ final class RemoteExplorer: @unchecked Sendable {
             // limactl shell <vm> sh -c "command"
             args = [tool.execSubcommand, target, "sh", "-c", command]
         case .adb:
-            // adb shell sh -c "command"
-            args = [tool.execSubcommand, "sh", "-c", command]
+            // adb joins its arguments with spaces before the device shell parses
+            // them, so the command must travel as one quoted word.
+            args = [tool.execSubcommand, "sh -c " + shellQuoted(command)]
         default:
             // docker/podman/nerdctl exec <container> sh -c "command"
             args = [tool.execSubcommand, target, "sh", "-c", command]

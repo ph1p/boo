@@ -8,13 +8,14 @@ extension BooSocketServer {
     // MARK: - Query: get_context
 
     func handleGetContext(clientFD: Int32) {
+        let generation = connectionGeneration(fd: clientFD)
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             let ctx = AppStore.shared.context
             let dict = Self.serializeContext(ctx)
             nonisolated(unsafe) let sendableDict = dict
             self.queue.async {
-                guard self.isConnected(fd: clientFD) else { return }
+                guard let generation, self.connectionGeneration(fd: clientFD) == generation else { return }
                 self.sendJSON(fd: clientFD, dict: ["ok": true, "context": sendableDict])
             }
         }
@@ -154,7 +155,7 @@ extension BooSocketServer {
             guard let self else { return }
             nonisolated(unsafe) let sendableResponse = response
             queue.async {
-                guard self.connectionGeneration(fd: fd) == generation else { return }
+                guard let generation, self.connectionGeneration(fd: fd) == generation else { return }
                 self.sendJSON(fd: fd, dict: sendableResponse)
             }
         }

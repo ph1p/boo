@@ -59,7 +59,7 @@ extension AppSettings {
     /// Applies a snapshot pulled from the sync folder. Unknown keys are ignored.
     func applySyncSnapshot(_ dict: [String: Any]) {
         for key in Self.syncedKeys {
-            if let value = dict[key] { UserDefaults.standard.set(value, forKey: key) }
+            if let value = dict[key], Self.isStorable(value) { UserDefaults.standard.set(value, forKey: key) }
         }
         if let themes = dict[Self.syncedCustomThemesKey],
             let data = try? JSONSerialization.data(withJSONObject: themes)
@@ -205,7 +205,7 @@ extension AppSettings {
         do {
             let data = try JSONSerialization.data(
                 withJSONObject: fileDictionary(), options: [.prettyPrinted, .sortedKeys])
-            try data.write(to: URL(fileURLWithPath: BooPaths.settingsFile))
+            try BooPaths.writeAtomically(data, toFile: BooPaths.settingsFile)
         } catch {
             debugLog("[Settings] Failed to save: \(error)")
             if !saveErrorShown {
@@ -225,11 +225,17 @@ extension AppSettings {
         else { return }
 
         // Only load values that aren't already in UserDefaults (first launch migration)
-        for (key, value) in dict {
+        for (key, value) in dict where Self.isStorable(value) {
             if UserDefaults.standard.object(forKey: key) == nil {
                 UserDefaults.standard.set(value, forKey: key)
             }
         }
+    }
+
+    /// Whether UserDefaults accepts `value`. JSON `null` (also nested) decodes to
+    /// NSNull, and storing that raises an NSException at launch.
+    static func isStorable(_ value: Any) -> Bool {
+        PropertyListSerialization.propertyList(value, isValidFor: .binary)
     }
 
     /// Built-in plugins that start disabled. Each is disabled once, so a

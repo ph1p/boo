@@ -349,8 +349,19 @@ enum SessionStore {
             return try JSONDecoder().decode(SessionSnapshot.self, from: data)
         } catch {
             debugLog("[SessionStore] Failed to load session: \(error)")
+            keepUnreadableSession()
             return nil
         }
+    }
+
+    /// Copy a session file that failed to load aside before the next save
+    /// replaces it: a build that cannot read a newer build's file (they share
+    /// `~/.boo/session.json`) would otherwise erase every window and tab.
+    private static func keepUnreadableSession() {
+        let backup = sessionFile + ".unreadable"
+        let fm = FileManager.default
+        try? fm.removeItem(atPath: backup)
+        try? fm.copyItem(atPath: sessionFile, toPath: backup)
     }
 
     /// Reconstruct Workspace objects from a snapshot, skipping any workspaces
@@ -391,7 +402,8 @@ enum SessionStore {
             )
 
             // Build a lookup so we can match panes to split-tree leaf IDs
-            let paneByID = Dictionary(uniqueKeysWithValues: sw.panes.map { ($0.id, $0) })
+            // (a hand-edited file may repeat an id; the first pane wins)
+            let paneByID = Dictionary(sw.panes.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
             let leafIDs = sw.splitTree.leafIDs
 
             for leafID in leafIDs {

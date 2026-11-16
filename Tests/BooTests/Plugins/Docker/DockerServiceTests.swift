@@ -34,7 +34,7 @@ final class DockerServiceTests: XCTestCase {
             XCTAssertNotNil(docker.socketPath)
             XCTAssertNil(docker.connectionError)
         } else {
-            XCTAssertNil(docker.socketPath)
+            // A stale socket (stopped colima) keeps its path: found, not responding.
             XCTAssertNotNil(docker.connectionError)
         }
     }

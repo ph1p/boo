@@ -172,8 +172,11 @@ extension MainWindowController {
             reply(["ok": false, "error": "missing key"])
             return
         }
-        guard let gv = activeGhosttyView else {
-            reply(["ok": false, "error": "no active terminal"])
+        // A named pane gets the key itself: the approval gate judged that pane,
+        // so falling back to the active one would press the key somewhere unchecked.
+        guard let target = ipcTargetPane(json, reply: reply) else { return }
+        guard let gv = terminalView(workspace: target.workspace, paneID: target.paneID) else {
+            reply(["ok": false, "error": "pane has no running terminal"])
             return
         }
         switch key {

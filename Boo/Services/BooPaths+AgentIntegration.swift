@@ -51,7 +51,7 @@ extension BooPaths {
         let existing = (try? String(contentsOfFile: configPath, encoding: .utf8)) ?? ""
         let hook = agentHookPath
         guard let merged = mergingCodexNotify(hook: hook, into: existing) else { return }
-        try? merged.write(toFile: configPath, atomically: true, encoding: .utf8)
+        try? writeAtomically(Data(merged.utf8), toFile: configPath)
     }
 
     /// Codex lifecycle hooks the agent hook reports to Boo's agent inbox, plus

@@ -167,6 +167,8 @@ final class ApprovalCenter {
     static func action(cmd: String, json: [String: Any]) -> String {
         switch cmd {
         case "agent_respond":
+            // Without `response` the command types `text` into the agent.
+            if json["response"] == nil, json["text"] is String { return "Message agent" }
             return (json["response"] as? String) == "deny" ? "Deny permission prompt" : "Approve permission prompt"
         case "send_text": return "Type into pane"
         case "agent_send": return "Message agent"
@@ -187,7 +189,7 @@ final class ApprovalCenter {
 
     static func payload(cmd: String, json: [String: Any]) -> String {
         switch cmd {
-        case "agent_respond": return json["response"] as? String ?? ""
+        case "agent_respond": return json["response"] as? String ?? json["text"] as? String ?? ""
         case "agent_send": return json["text"] as? String ?? ""
         case "send_text", "browser_type":
             let text = json["text"] as? String ?? ""

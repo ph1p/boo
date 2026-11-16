@@ -133,6 +133,16 @@ final class BooSocketProtocolTests: BooSocketIntegrationTestCase {
         XCTAssertTrue((response["error"] as? String)?.contains("not found") ?? false)
     }
 
+    func testStatusCommandsRejectAPIDOutsideTheValidRange() throws {
+        // Past Int32: the conversion used to trap and take the app down.
+        for pid in [4_294_967_296, -1, 0] {
+            let response = try roundTrip(["cmd": "set_status", "pid": pid, "name": "fake", "category": "ai"])
+            XCTAssertEqual(response["ok"] as? Bool, false, "pid \(pid)")
+        }
+        let cleared = try roundTrip(["cmd": "clear_status", "pid": 4_294_967_296])
+        XCTAssertEqual(cleared["ok"] as? Bool, false)
+    }
+
     func testListStatus() throws {
         let pid = getpid()
         _ = try roundTrip(

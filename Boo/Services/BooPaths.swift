@@ -217,8 +217,19 @@ enum BooPaths {
             } else {
                 line = "\n\(sentinel)\n[ -f \"\(scriptPath)\" ] && source \"\(scriptPath)\"\n"
             }
-            try? (existing + line).write(toFile: rcPath, atomically: true, encoding: .utf8)
+            try? writeAtomically(Data((existing + line).utf8), toFile: rcPath)
         }
+    }
+
+    /// Atomic write for files the user owns. Writes through a symlink instead of
+    /// replacing it (dotfiles are often links into a repo) and keeps the file's
+    /// permissions, both of which a plain atomic write loses.
+    static func writeAtomically(_ data: Data, toFile path: String) throws {
+        let target = URL(fileURLWithPath: path).resolvingSymlinksInPath()
+        let fm = FileManager.default
+        let mode = (try? fm.attributesOfItem(atPath: target.path))?[.posixPermissions]
+        try data.write(to: target, options: .atomic)
+        if let mode { try? fm.setAttributes([.posixPermissions: mode], ofItemAtPath: target.path) }
     }
 
     /// Claude Code events the agent hook reports to Boo's agent inbox, plus
@@ -243,7 +254,7 @@ enum BooPaths {
             let merged = mergingClaudeHook(command: hookScript, into: root),
             let updated = try? JSONSerialization.data(withJSONObject: merged, options: [.prettyPrinted, .sortedKeys])
         else { return }
-        try? updated.write(to: URL(fileURLWithPath: settingsPath))
+        try? writeAtomically(updated, toFile: settingsPath)
     }
 
     /// `root` with the hook added for every event in `events` that lacks it;

@@ -21,6 +21,12 @@ final class JSCRuntime: @unchecked Sendable {
 
     private let logger = Logger(subsystem: "com.boo", category: "JSCRuntime")
 
+    /// Runs `execute` gave up on that are still executing. JSC cannot be
+    /// interrupted, so a script stuck in a loop keeps its thread; while one is
+    /// alive, further runs are refused instead of adding a thread per cycle.
+    private let abandonedLock = NSLock()
+    private var abandonedRuns = 0
+
     /// Execute a JavaScript transform function against a terminal context.
     /// - Parameters:
     ///   - source: JavaScript source code containing a function.
@@ -48,6 +54,14 @@ final class JSCRuntime: @unchecked Sendable {
         let output = Box<String?>(nil)
         let thrownError = Box<(any Error)?>(nil)
 
+        let stillRunning = abandonedLock.withLock { abandonedRuns > 0 }
+        if stillRunning {
+            throw JSError(message: "JS transform is still running after a timeout (endless loop?)")
+        }
+        // Both guarded by `abandonedLock`.
+        let finished = Box(false)
+        let abandoned = Box(false)
+
         let group = DispatchGroup()
         group.enter()
 
@@ -58,7 +72,13 @@ final class JSCRuntime: @unchecked Sendable {
         // later calls. The autorelease pool is still required for JSC.
         let queue = DispatchQueue(label: "com.boo.jsc.execute", qos: .userInitiated)
         queue.async {
-            defer { group.leave() }
+            defer {
+                self.abandonedLock.withLock {
+                    finished.value = true
+                    if abandoned.value { self.abandonedRuns -= 1 }
+                }
+                group.leave()
+            }
             autoreleasepool {
                 do {
                     output.value = try self.runJS(
@@ -71,6 +91,11 @@ final class JSCRuntime: @unchecked Sendable {
 
         let waitResult = group.wait(timeout: .now() + timeout)
         if waitResult == .timedOut {
+            abandonedLock.withLock {
+                guard !finished.value else { return }
+                abandoned.value = true
+                abandonedRuns += 1
+            }
             throw JSError(message: "JS transform timed out after \(Int(timeout))s")
         }
 
@@ -186,8 +211,12 @@ final class JSCRuntime: @unchecked Sendable {
             return value.toString()
         }
 
-        let jsonData = try JSONSerialization.data(
-            withJSONObject: value.toObject() as Any, options: [])
+        // `data(withJSONObject:)` raises an NSException, which `try` cannot catch,
+        // for a number, a Date or NaN; a plugin may return any of them.
+        guard let object = value.toObject(), JSONSerialization.isValidJSONObject(object) else {
+            throw JSError(message: "Function '\(functionName)' must return a string, an object or an array")
+        }
+        let jsonData = try JSONSerialization.data(withJSONObject: object, options: [])
         return String(data: jsonData, encoding: .utf8) ?? "{}"
     }
 

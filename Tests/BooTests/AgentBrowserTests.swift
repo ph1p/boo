@@ -18,4 +18,10 @@ final class AgentBrowserTests: XCTestCase {
     func testApprovalCardNamesBrowserActions() {
         XCTAssertEqual(ApprovalCenter.action(cmd: "browser_eval", json: [:]), "Run JavaScript in browser tab")
     }
+
+    func testApprovalCardShowsATextOnlyAgentReply() {
+        let json: [String: Any] = ["text": "rm -rf build"]
+        XCTAssertEqual(ApprovalCenter.action(cmd: "agent_respond", json: json), "Message agent")
+        XCTAssertEqual(ApprovalCenter.payload(cmd: "agent_respond", json: json), "rm -rf build")
+    }
 }

@@ -227,4 +227,14 @@ final class RemoteExplorerTests: XCTestCase {
         XCTAssertEqual(RemoteExplorer.sshDestination(in: "ssh -i ~/.ssh/key host"), "host")
         XCTAssertNil(RemoteExplorer.sshDestination(in: "ssh -v"))
     }
+
+    func testSocketNameMatchesWholeTermsOnly() {
+        XCTAssertTrue(RemoteExplorer.socketName("cm-deploy@db1:22", containsWhole: "db1"))
+        XCTAssertTrue(RemoteExplorer.socketName("cm-deploy@db1:22", containsWhole: "deploy"))
+        XCTAssertTrue(RemoteExplorer.socketName("db1-22", containsWhole: "DB1"))
+        XCTAssertFalse(RemoteExplorer.socketName("cm-deploy@db10:22", containsWhole: "db1"))
+        XCTAssertFalse(RemoteExplorer.socketName("cm-deploy@db1.example.com:22", containsWhole: "db1"))
+        XCTAssertFalse(RemoteExplorer.socketName("cm-redeploy@db1:22", containsWhole: "deploy"))
+        XCTAssertFalse(RemoteExplorer.socketName("cm-deploy@db1:22", containsWhole: ""))
+    }
 }

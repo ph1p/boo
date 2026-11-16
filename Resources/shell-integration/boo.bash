@@ -9,7 +9,9 @@
 [[ -z "$PS1" ]] && return
 [[ -n "$BOO_SHELL_INTEGRATION" ]] && return
 [[ -z "$BOO_TERM" ]] && return
-export BOO_SHELL_INTEGRATION=bash
+# Not exported: a child shell (`exec bash`, a nested shell) inherits none of the
+# hooks and must set itself up again.
+BOO_SHELL_INTEGRATION=bash
 # `boo` (agents, run, send, inbox, status) for this shell and the agents it starts.
 # Checked again before each prompt: rc files that run later may rebuild PATH, and
 # on a case-insensitive disk the app's own `Boo` binary would answer to `boo`.

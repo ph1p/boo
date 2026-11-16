@@ -22,6 +22,12 @@ final class SidebarTabOrderingTests: XCTestCase {
 
     // MARK: - applied(tabs:savedOrder:)
 
+    func testApplied_survivesDuplicateIDs() {
+        let tabs = [tab("a"), tab("b"), tab("a")]
+        let result = SidebarTabOrdering.applied(tabs: tabs, savedOrder: ["b", "a", "b"])
+        XCTAssertEqual(ids(result), ["b", "a", "a"])
+    }
+
     func testApplied_respectsSavedOrder() {
         let tabs = [tab("a"), tab("b"), tab("c")]
         let result = SidebarTabOrdering.applied(tabs: tabs, savedOrder: ["c", "a", "b"])

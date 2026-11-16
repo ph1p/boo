@@ -11,10 +11,12 @@ enum SidebarTabOrdering {
     /// Sort `tabs` according to `savedOrder`, using each tab's array index as a
     /// stable fallback for IDs that aren't in the saved list.
     static func applied(tabs: [SidebarTab], savedOrder: [String]) -> [SidebarTab] {
+        // First one wins: a saved order with a repeated id, or two plugins sharing
+        // an id, must not trap the sidebar rebuild.
         let orderMap = Dictionary(
-            uniqueKeysWithValues: savedOrder.enumerated().map { ($1, $0) })
+            savedOrder.enumerated().map { ($1, $0) }, uniquingKeysWith: { first, _ in first })
         let registrationIndex = Dictionary(
-            uniqueKeysWithValues: tabs.enumerated().map { ($1.id, $0) })
+            tabs.enumerated().map { ($1.id, $0) }, uniquingKeysWith: { first, _ in first })
 
         return tabs.sorted { a, b in
             let ia = orderMap[a.id.id]

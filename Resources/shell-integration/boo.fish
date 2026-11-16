@@ -5,11 +5,15 @@
 # Or install it as a conf.d snippet:
 #   ln -s ~/.boo/shell-integration/boo.fish ~/.config/fish/conf.d/boo.fish
 
-# Guard against double-sourcing.
+# Guard against double-sourcing, non-interactive shells, and non-Boo terminals.
+# The marker is not exported: a child shell (`exec fish`, a nested shell) has
+# none of the hooks and must set itself up again.
+status is-interactive; or return
+set -q BOO_TERM; or return
 if set -q BOO_SHELL_INTEGRATION
     return
 end
-set -gx BOO_SHELL_INTEGRATION fish
+set -g BOO_SHELL_INTEGRATION fish
 # `boo` (agents, run, send, inbox, status) for this shell and the agents it starts.
 # Checked again before each prompt: config that runs later may rebuild PATH, and
 # on a case-insensitive disk the app's own `Boo` binary would answer to `boo`.

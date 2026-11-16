@@ -213,4 +213,11 @@ final class SettingsPersistenceTests: XCTestCase {
         }
         XCTAssertNil(AppSettings.shared.pluginSettingsDict(for: "cache-test")["flag"])
     }
+
+    func testIsStorableRejectsValuesUserDefaultsWouldRaiseOn() {
+        XCTAssertTrue(AppSettings.isStorable("text"))
+        XCTAssertTrue(AppSettings.isStorable(["a": 1, "b": [true, 2.5]]))
+        XCTAssertFalse(AppSettings.isStorable(NSNull()))
+        XCTAssertFalse(AppSettings.isStorable(["a": NSNull()]))
+    }
 }

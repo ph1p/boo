@@ -125,7 +125,9 @@ enum AgentWorktree {
     }
 
     static func status(of info: Info) -> Status {
-        let dirty = (try? git(["status", "--porcelain"], in: info.path)).map { !$0.isEmpty } ?? false
+        // A failed or timed-out status counts as dirty: merge and discard
+        // (`worktree remove --force`) must not run over work git could not report.
+        let dirty = (try? git(["status", "--porcelain"], in: info.path)).map { !$0.isEmpty } ?? true
         let target = (try? git(["symbolic-ref", "--short", "-q", "HEAD"], in: info.mainRoot)).flatMap {
             $0.isEmpty ? nil : $0
         }
@@ -177,7 +179,7 @@ enum AgentWorktree {
     /// Tracked files with uncommitted changes. Untracked files don't count: git
     /// itself refuses a merge that would overwrite one.
     static func isDirtyCheckout(_ path: String) -> Bool {
-        (try? git(["status", "--porcelain", "--untracked-files=no"], in: path)).map { !$0.isEmpty } ?? false
+        (try? git(["status", "--porcelain", "--untracked-files=no"], in: path)).map { !$0.isEmpty } ?? true
     }
 
     /// Files that conflict when `branch` merges into `target`, without touching
