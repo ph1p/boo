@@ -262,6 +262,9 @@ class TerminalScrollView: NSView {
             let mark = ghosttyView.promptMarks().first(where: { $0.index == block }), mark.status == .failed
         else { return hideAgentButton() }
         guard block != agentButtonBlock || agentButton.isHidden else { return }
+        // An empty prompt keeps the exit code of the command before it, so
+        // Enter or Ctrl+C after a failure marks a block with nothing to send.
+        guard ghosttyView.blockCommand(at: block) != nil else { return hideAgentButton() }
         agentButtonBlock = block
         agentButton.failures = testFailures(inBlock: block)
         let size = agentButton.fittingSize
@@ -317,7 +320,10 @@ private final class FailedBlockButton: NSButton {
         isBordered = false
         wantsLayer = true
         layer?.cornerRadius = 5
+        layer?.cornerCurve = .continuous
         imagePosition = .imageLeading
+        // Without this the icon sticks to the left edge, away from the title.
+        imageHugsTitle = true
         image = NSImage(systemSymbolName: "sparkles", accessibilityDescription: nil)?
             .withSymbolConfiguration(.init(pointSize: 10, weight: .medium))
         toolTip = "Send this failed command and its output to an agent"
@@ -329,27 +335,53 @@ private final class FailedBlockButton: NSButton {
         fatalError("init(coder:) not implemented")
     }
 
+    private var hovered = false {
+        didSet { if hovered != oldValue { applyTheme() } }
+    }
+    private var hoverArea: NSTrackingArea?
+
     override var isHidden: Bool {
-        didSet { if !isHidden { applyTheme() } }
+        didSet {
+            hovered = false
+            if !isHidden { applyTheme() }
+        }
     }
 
     override var fittingSize: NSSize {
         let size = super.fittingSize
-        return NSSize(width: size.width + 12, height: 18)
+        return NSSize(width: size.width + 16, height: 20)
     }
 
     override func resetCursorRects() {
         addCursorRect(bounds, cursor: .arrow)
     }
 
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let hoverArea { removeTrackingArea(hoverArea) }
+        let area = NSTrackingArea(
+            rect: .zero, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect], owner: self)
+        addTrackingArea(area)
+        hoverArea = area
+    }
+
+    override func mouseEntered(with event: NSEvent) { hovered = true }
+    override func mouseExited(with event: NSEvent) { hovered = false }
+
+    /// A quiet chip on the terminal background: opaque so the text under it
+    /// does not show through, red only in the icon.
     private func applyTheme() {
         let theme = booTheme
-        layer?.backgroundColor = theme.cardBg.cgColor
+        let fill = TerminalTheme.blend(theme.chromeMuted, over: theme.background.nsColor, alpha: hovered ? 0.24 : 0.14)
+        layer?.backgroundColor = fill.cgColor
         layer?.borderWidth = 1
-        layer?.borderColor = theme.error.withAlphaComponent(0.6).cgColor
+        layer?.borderColor = theme.paneBorder.cgColor
         contentTintColor = theme.error
         attributedTitle = NSAttributedString(
             string: failures?.summary ?? "Ask agent",
-            attributes: [.foregroundColor: theme.chromeText, .font: NSFont.systemFont(ofSize: 11, weight: .medium)])
+            attributes: [
+                .foregroundColor: hovered ? theme.chromeText : theme.textSecondary,
+                .font: NSFont.systemFont(ofSize: 11, weight: .medium)
+            ])
     }
 }

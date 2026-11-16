@@ -120,11 +120,35 @@ index 548169bc1..1cb8925fe 100644
      /// Returns true if the surface currently has mouse capturing
      /// enabled.
      export fn ghostty_surface_mouse_captured(surface: *Surface) bool {
+diff --git a/src/terminal/PageList.zig b/src/terminal/PageList.zig
+index 122a3e6dc..b3e4c6685 100644
+--- a/src/terminal/PageList.zig
++++ b/src/terminal/PageList.zig
+@@ -6943,14 +6943,17 @@ pub fn highlightSemanticContent(
+             // Find the start
+             var it = at.cellIterator(.right_down, end);
+             while (it.next()) |p| {
+-                switch (p.rowAndCell().cell.semantic_content) {
++                const cell = p.rowAndCell().cell;
++                switch (cell.semantic_content) {
+                     .prompt => {},
+                     .input => {
+                         result.start = p;
+                         result.end = p;
+                         break;
+                     },
+-                    .output => return null,
++                    // Empty cells default to .output but aren't real output:
++                    // a multi-line prompt leaves them after each short line.
++                    .output => if (cell.hasText()) return null,
+                 }
+             } else {
+                 // No input found
 diff --git a/src/terminal/Screen.zig b/src/terminal/Screen.zig
-index 29d630f10..0fbf4aa03 100644
+index a6f846938..fc768884b 100644
 --- a/src/terminal/Screen.zig
 +++ b/src/terminal/Screen.zig
-@@ -3600,6 +3600,86 @@ pub fn selectOutput(self: *Screen, pin: Pin) ?Selection {
+@@ -3510,6 +3510,86 @@ pub fn selectOutput(self: *Screen, pin: Pin) ?Selection {
      return .init(hl.start, hl.end, false);
  }
  
@@ -211,7 +235,7 @@ index 29d630f10..0fbf4aa03 100644
  pub const LineIterator = struct {
      screen: *const Screen,
      current: ?Pin = null,
-@@ -13021,3 +13101,65 @@ test "Screen: scrollClear cursor page pruned keeps per-page hyperlink id" {
+@@ -12977,3 +13057,95 @@ test "Screen: scrollClear cursor page pruned keeps per-page hyperlink id" {
          try testing.expect(list_cell.cell.hyperlink);
      }
  }
@@ -276,6 +300,36 @@ index 29d630f10..0fbf4aa03 100644
 +    // A row in output 1 belongs to the oldest prompt.
 +    const row1 = s.pages.pin(.{ .active = .{ .x = 0, .y = 1 } }).?;
 +    try testing.expectEqual(@as(?usize, 2), s.promptIndex(row1));
++}
++
++test "Screen: selectCommand input after a multi-line prompt" {
++    const testing = std.testing;
++    const alloc = testing.allocator;
++    const io = testing.io;
++
++    var s = try init(io, alloc, .{ .cols = 10, .rows = 10, .max_scrollback_bytes = 0 });
++    defer s.deinit();
++
++    // Row 0: ""                 (prompt starts with a blank line)
++    // Row 1: "~/dir"            (prompt info line, shorter than the row)
++    // Row 2: "> " + "ls"        (command)
++    // Row 3: "a"                (output)
++    // Row 4: "> "               (current prompt)
++    s.cursorSetSemanticContent(.{ .prompt = .initial });
++    try s.testWriteString("\n~/dir\n> ");
++    s.cursorSetSemanticContent(.{ .input = .clear_explicit });
++    try s.testWriteString("ls\n");
++    s.cursorSetSemanticContent(.output);
++    try s.testWriteString("a\n");
++    s.markCommandStatus(1);
++    s.cursorSetSemanticContent(.{ .prompt = .initial });
++    try s.testWriteString("> ");
++
++    var sel = s.selectCommand(1, .input).?;
++    defer sel.deinit(&s);
++    const contents = try s.selectionString(alloc, .{ .sel = sel, .trim = true });
++    defer alloc.free(contents);
++    try testing.expectEqualStrings("ls", contents);
 +}
 diff --git a/src/terminal/Terminal.zig b/src/terminal/Terminal.zig
 index 3f311d2bc..4fe9f062d 100644
