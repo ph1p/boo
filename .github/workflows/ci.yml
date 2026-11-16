@@ -11,7 +11,9 @@ env:
 
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  # Pull requests only: on main a later push (even a skipped docs commit) would
+  # cancel a release between tagging and publishing, and the tag blocks a retry.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   lint:
@@ -67,7 +69,7 @@ jobs:
         # needs bumping whenever the submodule moves to a revision wanting newer Zig.
         uses: mlugg/setup-zig@v2
         with:
-          version: 0.17.0
+          version: 0.17.1
           # A global cache from an older Ghostty revision crashed zig build.
           use-cache: false
 
@@ -144,7 +146,7 @@ jobs:
         # needs bumping whenever the submodule moves to a revision wanting newer Zig.
         uses: mlugg/setup-zig@v2
         with:
-          version: 0.17.0
+          version: 0.17.1
           # A global cache from an older Ghostty revision crashed zig build.
           use-cache: false
 

@@ -40,8 +40,18 @@ jobs:
       - name: Restore published Sparkle appcast
         run: |
           mkdir -p public/updates
-          curl -fsSL "https://ph1p.github.io/boo/updates/appcast.xml" \
-            -o public/updates/appcast.xml || true
+          # Only a 404 (no release yet) may leave the appcast out. Any other
+          # failure would deploy a site without it and break update checks.
+          code=$(curl -sSL --retry 3 -o appcast.tmp -w '%{http_code}' \
+            "https://ph1p.github.io/boo/updates/appcast.xml")
+          if [ "$code" = "200" ]; then
+            mv appcast.tmp public/updates/appcast.xml
+          elif [ "$code" = "404" ]; then
+            rm -f appcast.tmp
+          else
+            echo "appcast fetch failed: HTTP $code" >&2
+            exit 1
+          fi
         working-directory: documentation
 
       - name: Build

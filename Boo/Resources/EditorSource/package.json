@@ -15,7 +15,7 @@
     "@codemirror/lang-markdown": "^6.5.2",
     "@codemirror/language": "^6.13.1",
     "@codemirror/language-data": "^6.5.2",
-    "@codemirror/lint": "^6.9.7",
+    "@codemirror/lint": "^6.9.8",
     "@codemirror/lsp-client": "^6.3.0",
     "@codemirror/search": "^6.7.2",
     "@codemirror/state": "^6.7.6",
@@ -27,9 +27,9 @@
   },
   "devDependencies": {
     "@types/js-beautify": "^1.14.3",
-    "oxfmt": "^0.76.0",
-    "oxlint": "^1.91.0",
+    "oxfmt": "^0.78.0",
+    "oxlint": "^1.93.0",
     "typescript": "latest",
-    "vite": "8.3.5"
+    "vite": "8.3.8"
   }
 }
