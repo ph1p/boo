@@ -309,15 +309,19 @@ struct CommandPaletteList: View {
                                 .padding(.horizontal, 14)
                                 .frame(height: CommandPaletteModel.headerHeight, alignment: .bottomLeading)
                         case .item(let index, let item):
-                            itemRow(item, index: index, theme: theme).id(index)
+                            itemRow(item, index: index, theme: theme).id(Self.scrollID(index))
                         }
                     }
                 }
                 .padding(.vertical, 4)
             }
-            .onChange(of: model.selection) { _, index in proxy.scrollTo(index) }
+            .onChange(of: model.selection) { _, index in proxy.scrollTo(Self.scrollID(index)) }
         }
     }
+
+    /// Not the bare index: `ForEach` already tags every row, headers included,
+    /// with its Int offset, so `scrollTo(index)` landed on a row further up.
+    static func scrollID(_ index: Int) -> String { "item-\(index)" }
 
     private enum Row {
         case header(String)

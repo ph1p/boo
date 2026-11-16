@@ -357,12 +357,17 @@ struct HistorySearchBody: View {
                 ScrollView {
                     VStack(spacing: 0) {
                         ForEach(Array(model.entries.enumerated()), id: \.element.id) { index, entry in
-                            row(entry, index: index, theme: theme).id(index)
+                            row(entry, index: index, theme: theme)
                         }
                     }
                     .padding(.vertical, 4)
                 }
-                .onChange(of: model.selection) { _, index in proxy.scrollTo(index) }
+                // Scroll by the entry id `ForEach` already tags the row with. A bare
+                // index could equal another row's id and scroll to that one instead.
+                .onChange(of: model.selection) { _, index in
+                    guard model.entries.indices.contains(index) else { return }
+                    proxy.scrollTo(model.entries[index].id)
+                }
             }
         }
     }
