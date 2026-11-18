@@ -193,9 +193,9 @@ private struct DebugDetailView: View {
 
     @State private var showState = true
     @State private var filter = ""
-    private var textColor: Color { Color(nsColor: theme.chromeText) }
-    private var mutedColor: Color { Color(nsColor: theme.chromeMuted) }
-    private var accentColor: Color { Color(nsColor: theme.accentColor) }
+    private var textColor: Color { Color(nsColor: theme.textPrimary) }
+    private var mutedColor: Color { Color(nsColor: theme.textMuted) }
+    private var accentColor: Color { Color(nsColor: theme.accent) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {

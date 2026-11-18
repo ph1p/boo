@@ -32,41 +32,54 @@ extension AppSettings {
         }
     }
 
+    /// How strongly the generated chrome stands apart from the terminal
+    /// background. Applies to every theme.
+    var chromeContrast: ChromeContrast {
+        get {
+            guard UserDefaults.standard.object(forKey: K.chromeContrast) != nil else { return .balanced }
+            return ChromeContrast(rawValue: UserDefaults.standard.integer(forKey: K.chromeContrast)) ?? .balanced
+        }
+        set { set(newValue.rawValue, forKey: K.chromeContrast, topic: .theme) }
+    }
+
     private static let builtInThemesByName: [String: TerminalTheme] = {
         var map = [String: TerminalTheme]()
         for t in TerminalTheme.themes { map[t.name] = t }
         return map
     }()
 
-    /// A built-in or custom theme by name; nil when none has that name.
+    /// A theme by name, at the current chrome contrast: a built-in, then a
+    /// custom theme, then one of Ghostty's bundled themes. Nil when none has
+    /// that name.
     func theme(named name: String) -> TerminalTheme? {
-        if let t = Self.builtInThemesByName[name] { return t }
-        let data = UserDefaults.standard.data(forKey: K.customThemes)
-        let decoded = data.flatMap { try? JSONDecoder().decode([CustomThemeData].self, from: $0) } ?? []
-        return decoded.first(where: { $0.name == name })?.toTheme()
+        unresolvedTheme(named: name)?.withContrast(chromeContrast)
     }
 
+    /// The theme every surface draws with. A preview from Settings or the
+    /// command palette wins; an unknown name falls back to Boo Dark.
     var theme: TerminalTheme {
         if let preview = previewTheme { return preview }
         let name = themeName
-        if let t = Self.builtInThemesByName[name] { return t }
-        return resolvedCustomTheme(named: name)
-    }
-
-    private func resolvedCustomTheme(named name: String) -> TerminalTheme {
         let data = UserDefaults.standard.data(forKey: K.customThemes)
-        customThemeCacheLock.lock()
-        defer { customThemeCacheLock.unlock() }
-        if let cached = customThemeCache, cached.name == name, cached.data == data {
+        let contrast = chromeContrast
+        if let cached = customThemeCacheLock.withLock({ customThemeCache }), cached.name == name,
+            cached.data == data, cached.theme.contrast == contrast
+        {
             return cached.theme
         }
-        let decoded = data.flatMap { try? JSONDecoder().decode([CustomThemeData].self, from: $0) } ?? []
-        let theme = decoded.first(where: { $0.name == name })?.toTheme() ?? .booDark
-        customThemeCache = (name, data, theme)
-        return theme
+        let resolved = (unresolvedTheme(named: name) ?? .booDark).withContrast(contrast)
+        customThemeCacheLock.withLock { customThemeCache = (name, data, resolved) }
+        return resolved
     }
 
-    /// All themes: built-ins followed by user-created custom themes.
+    private func unresolvedTheme(named name: String) -> TerminalTheme? {
+        if let t = Self.builtInThemesByName[name] { return t }
+        if let custom = customThemes.first(where: { $0.name == name }) { return custom.toTheme() }
+        return GhosttyThemeCatalog.shared.theme(named: name)
+    }
+
+    /// The curated built-ins followed by user-created custom themes. Ghostty's
+    /// catalog is listed separately (`GhosttyThemeCatalog.shared.names`).
     var allThemes: [TerminalTheme] {
         TerminalTheme.themes + customThemes.map { $0.toTheme() }
     }

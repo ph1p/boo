@@ -32,7 +32,7 @@ final class WelcomeWindowController: NSWindowController {
 
     private func applyTheme() {
         let theme = AppSettings.shared.theme
-        window?.backgroundColor = theme.sidebarBg
+        window?.backgroundColor = theme.surfaceChrome
         window?.appearance = NSAppearance(named: theme.isDark ? .darkAqua : .aqua)
     }
 
@@ -65,7 +65,7 @@ struct WelcomeView: View {
     /// A few dark and light themes; the full list is in Settings ▸ Theme.
     static let starterThemes = [
         "Boo Dark", "GitHub Dark", "Tokyo Night", "Catppuccin Mocha", "Boo Light", "Catppuccin Latte",
-        "Solarized Light", "GitHub Light"
+        "Rosé Pine Dawn", "GitHub Light"
     ]
 
     /// Menu items worth knowing on day one, by `MenuAction.id`. Shortcuts

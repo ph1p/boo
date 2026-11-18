@@ -133,7 +133,7 @@ struct StatusBarSettingsView: View {
         }
         .padding(6)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(t.cardBg, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .background(t.raised, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .strokeBorder(t.separator, lineWidth: 0.5))

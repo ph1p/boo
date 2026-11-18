@@ -258,11 +258,11 @@ class PaneView: NSView {
         if !recordingBorder.isHidden {
             layer.borderColor = theme.error.withAlphaComponent(0.8).cgColor
         } else if !activityBorder.isHidden {
-            layer.borderColor = theme.accentColor.withAlphaComponent(Self.activityBorderAlpha).cgColor
+            layer.borderColor = theme.accent.withAlphaComponent(Self.activityBorderAlpha).cgColor
         } else if isFocused {
             layer.borderColor = theme.focusBorder.cgColor
         } else {
-            layer.borderColor = theme.paneBorder.cgColor
+            layer.borderColor = theme.borderPane.cgColor
         }
     }
 
@@ -297,7 +297,7 @@ class PaneView: NSView {
     func updateOverlayColors() {
         let theme = booTheme
         activityBorder.layer?.borderColor =
-            theme.accentColor.withAlphaComponent(Self.activityBorderAlpha).cgColor
+            theme.accent.withAlphaComponent(Self.activityBorderAlpha).cgColor
         syncIslandStroke()
     }
 
@@ -354,7 +354,7 @@ class PaneView: NSView {
         // Metal sublayer, which libghostty owns and we can't round directly.
         IslandMetrics.round(
             self, radius: IslandMetrics.innerRadius,
-            borderColor: booTheme.paneBorder)
+            borderColor: booTheme.borderPane)
         addSubview(focusCatcher)
         addSubview(broadcastBorder)
         addSubview(activityBorder)

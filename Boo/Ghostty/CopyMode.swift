@@ -322,7 +322,7 @@ final class CopyModeOverlay: NSView {
         }
 
         if let range = state.range {
-            theme.accentColor.withAlphaComponent(0.3).setFill()
+            theme.accent.withAlphaComponent(0.3).setFill()
             let first = max(range.start.row, view.top)
             let last = min(range.end.row, view.top + view.rows - 1)
             if first <= last {
@@ -336,9 +336,9 @@ final class CopyModeOverlay: NSView {
 
         if (view.top..<(view.top + view.rows)).contains(state.cursor.row) {
             let cursor = rect(row: state.cursor.row, from: state.cursor.column, to: state.cursor.column)
-            theme.accentColor.withAlphaComponent(0.45).setFill()
+            theme.accent.withAlphaComponent(0.45).setFill()
             cursor.fill()
-            theme.accentColor.setStroke()
+            theme.accent.setStroke()
             let outline = NSBezierPath(rect: cursor.insetBy(dx: 0.5, dy: 0.5))
             outline.lineWidth = 1
             outline.stroke()
@@ -358,7 +358,7 @@ final class CopyModeOverlay: NSView {
         let size = text.size(withAttributes: attrs)
         let badge = CGRect(
             x: bounds.maxX - size.width - 18, y: 6, width: size.width + 10, height: size.height + 4)
-        theme.accentColor.setFill()
+        theme.accent.setFill()
         NSBezierPath(roundedRect: badge, xRadius: 4, yRadius: 4).fill()
         text.draw(at: CGPoint(x: badge.minX + 5, y: badge.minY + 2), withAttributes: attrs)
     }

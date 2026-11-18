@@ -33,7 +33,7 @@ import Cocoa
         if panel == nil { buildPanel() }
 
         let theme = AppSettings.shared.theme
-        tableView?.backgroundColor = theme.cardBg
+        tableView?.backgroundColor = theme.surfaceRaised
         tableView?.enclosingScrollView?.layer?.borderColor = theme.separator.cgColor
         tableView?.reloadData()
 
@@ -136,7 +136,7 @@ import Cocoa
 
         let tv = HoverTableView()
         tv.headerView = nil
-        tv.backgroundColor = theme.cardBg
+        tv.backgroundColor = theme.surfaceRaised
         tv.rowHeight = rowHeight
         tv.intercellSpacing = .zero
         tv.gridStyleMask = []
@@ -224,7 +224,7 @@ import Cocoa
         }
 
         (cell.viewWithTag(1) as? NSTextField)?.stringValue = item.title.isEmpty ? item.url.host ?? "" : item.title
-        (cell.viewWithTag(1) as? NSTextField)?.textColor = theme.chromeText
+        (cell.viewWithTag(1) as? NSTextField)?.textColor = theme.textPrimary
         (cell.viewWithTag(2) as? NSTextField)?.stringValue = item.subtitle ?? item.url.absoluteString
         (cell.viewWithTag(2) as? NSTextField)?.textColor = theme.textTertiary
 
@@ -317,7 +317,7 @@ private final class ThemedRowView: NSTableRowView {
         if isHovered && !isSelected {
             theme.hoverFill.setFill()
         } else {
-            theme.cardBg.setFill()
+            theme.surfaceRaised.setFill()
         }
         bounds.fill()
     }

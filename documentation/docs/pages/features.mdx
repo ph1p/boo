@@ -244,34 +244,22 @@ Configure all of this in **Settings → Plugins → Files**. See [Multi-Content 
 
 ## Themes
 
-34 built-in color themes with live preview swatches in settings:
+Boo ships 12 curated themes, a dark and a light variant of six families, so the system dark/light switch always has a partner:
 
-| Theme         | Variants                        |
-| ------------- | ------------------------------- |
-| Boo           | Dark, Light (the defaults)      |
-| Default       | Dark, Light                     |
-| Catppuccin    | Mocha, Macchiato, Frappé, Latte |
-| Tokyo Night   | —                               |
-| Dracula       | —                               |
-| Nord          | —                               |
-| Solarized     | Dark, Light                     |
-| Gruvbox       | Dark, Light                     |
-| One           | Dark, Light                     |
-| Rosé Pine     | —                               |
-| Kanagawa      | —                               |
-| Everforest    | Dark, Light                     |
-| GitHub        | Dark, Light                     |
-| Ayu           | Dark, Light                     |
-| Monokai       | —                               |
-| Material      | Dark, Light                     |
-| Palenight     | —                               |
-| Horizon Dark  | —                               |
-| Cobalt2       | —                               |
-| Night Owl     | —                               |
-| Synthwave '84 | —                               |
-| Moonlight     | —                               |
+| Theme       | Variants                   |
+| ----------- | -------------------------- |
+| Boo         | Dark, Light (the defaults) |
+| Catppuccin  | Mocha, Latte               |
+| Tokyo Night | Night, Day                 |
+| Rosé Pine   | Main, Dawn                 |
+| Gruvbox     | Dark, Light                |
+| GitHub      | Dark, Light                |
 
-**Import Theme…** in Settings → Theme reads an iTerm2 `.itermcolors` file or a Ghostty theme file. The imported colors open in the theme editor, so you can adjust and save them as a custom theme. Missing colors come from the default theme, and the UI chrome is derived from the background, foreground and blue.
+**Browse Themes…** in Settings → Theme opens a searchable gallery of the more than 900 themes Ghostty bundles. Click one to use it.
+
+A theme only sets the terminal colors. Boo generates the interface colors from them: the sidebar, tab bars and status bar step one shade away from the terminal background, and text and accent are adjusted until they are readable. **Interface contrast** (Subtle, Balanced, Strong) sets how far the interface steps away, for every theme. See [Theming](/theming).
+
+**Import Theme…** in Settings → Theme reads an iTerm2 `.itermcolors` file or a Ghostty theme file. The imported colors open in the theme editor, so you can adjust and save them as a custom theme. Missing colors come from the default theme. The editor sets the terminal colors and, optionally, the accent; the interface colors are generated.
 
 ## Sidebar Plugins
 
@@ -372,7 +360,7 @@ Open with **Cmd+,**. The sidebar groups the tabs under **General**, **Terminal**
 | **Profiles**      | [Profiles](/rules-and-profiles#profiles) and the default for new tabs |
 | **Rules**         | [Rules](/rules-and-profiles#settings--rules) editor, regex tester, `sendText` approvals |
 | **Recordings**    | [Recording](#recordings-settings) folder, file names, idle limit, stop action, library |
-| **Theme**         | Follow the system's dark or light mode, 34 color themes with live preview, app icon, custom theme editor (whole UI restyles live while editing) |
+| **Theme**         | Follow the system's dark or light mode, 12 curated themes and the Ghostty theme gallery, interface contrast, app icon, custom theme editor (whole UI restyles live while editing) |
 | **Fonts**         | One font everywhere (toggle), terminal font (family, size), editor font (family, size, ligatures), sidebar font (family, size), app font (family, for tab bars, toolbar, status bar, palette) |
 | **Layout**        | Sidebar position (toggle with Cmd+B), workspace bar, tab groups, pane controls, tab overflow mode (scroll/wrap/vertical) |
 | **Status Bar**    | Preview, built-in segments (connection, path, clock, pane & tab count, listening ports), plugin segments |

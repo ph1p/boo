@@ -214,7 +214,7 @@ struct PluginErrorView: View {
             }
             Text(error)
                 .font(.system(size: 11))
-                .foregroundStyle(Color(nsColor: theme.chromeMuted))
+                .foregroundStyle(Color(nsColor: theme.textMuted))
         }
         .padding(12)
         .accessibilityElement(children: .combine)
@@ -232,7 +232,7 @@ struct PluginLoadingView: View {
                 .scaleEffect(0.7)
             Text("Loading...")
                 .font(.system(size: 11))
-                .foregroundStyle(Color(nsColor: theme.chromeMuted))
+                .foregroundStyle(Color(nsColor: theme.textMuted))
         }
         .padding(12)
         .accessibilityLabel("\(pluginName), loading")

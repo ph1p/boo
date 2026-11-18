@@ -191,16 +191,16 @@ class SidebarSectionHeaderView: NSView {
         let padH: CGFloat = AppSettings.shared.sidebarDensity == .comfortable ? 12 : 8
 
         // Same surface as the panel: sections read as groups, not stacked bars.
-        ctx.setFillColor(theme.sidebarBg.cgColor)
+        ctx.setFillColor(theme.surfaceChrome.cgColor)
         ctx.fill(bounds)
 
         if isHovered {
-            ctx.setFillColor(theme.sidebarRowHover.cgColor)
+            ctx.setFillColor(theme.rowHover.cgColor)
             // Same gap on every side, so the pill sits centered in the header.
             WorkspacePillStyle.fillRoundedRect(ctx, rect: bounds.insetBy(dx: 4, dy: 4))
         }
 
-        let fg = isHovered ? theme.chromeText : theme.textSecondary
+        let fg = isHovered ? theme.textPrimary : theme.textSecondary
         // As wide as the down chevron: chevron, title and count badge sit 6pt apart.
         let chevronBox: CGFloat = 8
         let chevronName = isExpanded ? "chevron.down" : "chevron.right"

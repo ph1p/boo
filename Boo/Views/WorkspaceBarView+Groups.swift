@@ -80,7 +80,7 @@ extension WorkspaceBarView {
         theme: TerminalTheme
     ) {
         WorkspacePillStyle.fill(
-            ctx, rect: rect, active: false, hovered: hovered, wsColor: header.color, neutral: theme.chromeMuted)
+            ctx, rect: rect, active: false, hovered: hovered, wsColor: header.color, neutral: theme.textMuted)
         let label = String(header.name.prefix(2)).uppercased() as NSString
         let attrs: [NSAttributedString.Key: Any] = [.font: Self.pillLabelRegular, .foregroundColor: tint]
         let size = label.size(withAttributes: attrs)

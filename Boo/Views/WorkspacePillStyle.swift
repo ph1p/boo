@@ -90,7 +90,7 @@ enum WorkspacePillStyle {
     }
 
     /// Fill alpha by state. Colored pills sit brighter than the neutral
-    /// (`chromeMuted`) fill so the tint stays legible.
+    /// (`textMuted`) fill so the tint stays legible.
     static func fillAlpha(active: Bool, hovered: Bool, colored: Bool) -> CGFloat {
         if colored {
             return active ? 0.22 : (hovered ? 0.12 : 0.06)
@@ -120,14 +120,14 @@ enum WorkspacePillStyle {
     /// Colour of a group's header text and chevron: the group colour (or muted
     /// chrome), brightened while the header is hovered.
     static func groupTint(color: NSColor?, hovered: Bool, theme: TerminalTheme) -> NSColor {
-        (color ?? theme.chromeMuted).withAlphaComponent(hovered ? 1 : 0.85)
+        (color ?? theme.textMuted).withAlphaComponent(hovered ? 1 : 0.85)
     }
 
     /// Soft fill behind a hovered group header.
     /// Group header chip in the horizontal strip: a filled tag in the group
     /// colour, so the header reads as a label rather than another workspace.
     static func fillGroupChip(_ ctx: CGContext, rect: CGRect, color: NSColor?, hovered: Bool, theme: TerminalTheme) {
-        let tint = color ?? theme.chromeMuted
+        let tint = color ?? theme.textMuted
         let alpha: CGFloat = color == nil ? (hovered ? 0.2 : 0.12) : (hovered ? 0.3 : 0.2)
         ctx.setFillColor(tint.withAlphaComponent(alpha).cgColor)
         fillRoundedRect(ctx, rect: rect, radius: cornerRadius)
@@ -136,7 +136,7 @@ enum WorkspacePillStyle {
     static func fillGroupHeaderHover(
         _ ctx: CGContext, rect: CGRect, radius: CGFloat = cornerRadius, theme: TerminalTheme
     ) {
-        ctx.setFillColor(theme.chromeMuted.withAlphaComponent(0.14).cgColor)
+        ctx.setFillColor(theme.textMuted.withAlphaComponent(0.14).cgColor)
         fillRoundedRect(ctx, rect: rect, radius: radius)
     }
 
@@ -153,11 +153,11 @@ enum WorkspacePillStyle {
     ) {
         let width = groupCountBadgeWidth(count, font: font)
         let badge = CGRect(x: center.x - width / 2, y: center.y - height / 2, width: width, height: height)
-        let color = tint ?? theme.chromeMuted
+        let color = tint ?? theme.textMuted
         ctx.setFillColor(color.withAlphaComponent(hiddenActivity ? 0.38 : 0.22).cgColor)
         fillRoundedRect(ctx, rect: badge, radius: height / 2)
         let text = "\(count)" as NSString
-        let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: tint ?? theme.chromeMuted]
+        let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: tint ?? theme.textMuted]
         let size = text.size(withAttributes: attrs)
         text.draw(at: NSPoint(x: badge.midX - size.width / 2, y: badge.midY - size.height / 2), withAttributes: attrs)
     }
@@ -170,7 +170,7 @@ enum WorkspacePillStyle {
     ) {
         // A faint tinted well with a hairline in the group colour: enough edge to
         // read as one unit without boxing the group off from the strip.
-        let tint = color ?? theme.chromeMuted
+        let tint = color ?? theme.textMuted
         let fillAlpha: CGFloat = color == nil ? 0.06 : 0.08
         ctx.setFillColor(tint.withAlphaComponent(highlighted ? fillAlpha + 0.09 : fillAlpha).cgColor)
         fillRoundedRect(ctx, rect: rect, radius: groupTrayRadius)
@@ -179,7 +179,7 @@ enum WorkspacePillStyle {
                 ctx, rect: rect, radius: groupTrayRadius, color: tint.withAlphaComponent(color == nil ? 0.18 : 0.28))
         }
         guard highlighted else { return }
-        ctx.setStrokeColor(theme.accentColor.cgColor)
+        ctx.setStrokeColor(theme.accent.cgColor)
         ctx.setLineWidth(1.5)
         ctx.addPath(
             CGPath(
@@ -232,7 +232,7 @@ enum WorkspacePillStyle {
     static func strokeDropRing(_ ctx: CGContext, around rect: CGRect, theme: TerminalTheme) {
         let ring = rect.insetBy(dx: -2.5, dy: -2.5)
         let radius = cornerRadius + 2.5
-        ctx.setStrokeColor(theme.accentColor.cgColor)
+        ctx.setStrokeColor(theme.accent.cgColor)
         ctx.setLineWidth(2)
         ctx.addPath(CGPath(roundedRect: ring, cornerWidth: radius, cornerHeight: radius, transform: nil))
         ctx.strokePath()
@@ -352,7 +352,7 @@ enum WorkspacePillStyle {
             // one keep it in the top-right corner.
             let size = dotCenter == nil ? 5 : activityDotSize
             let center = dotCenter ?? CGPoint(x: rect.maxX - size / 2 - 3, y: rect.minY + 3 + size / 2)
-            ctx.setFillColor(theme.accentColor.cgColor)
+            ctx.setFillColor(theme.accent.cgColor)
             ctx.fillEllipse(
                 in: CGRect(x: center.x - size / 2, y: center.y - size / 2, width: size, height: size))
         }

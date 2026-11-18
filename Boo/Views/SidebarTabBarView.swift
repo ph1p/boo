@@ -332,7 +332,7 @@ class SidebarTabBarView: NSView {
 
                 // Deliberate raw alpha: ghost glyph fainter than textTertiary.
                 if let tinted = resolveIcon(
-                    tab.icon, size: iconSize * 0.75, color: theme.chromeMuted.withAlphaComponent(0.2),
+                    tab.icon, size: iconSize * 0.75, color: theme.textMuted.withAlphaComponent(0.2),
                     label: tab.label)
                 {
                     let imgSize = tinted.size
@@ -354,7 +354,7 @@ class SidebarTabBarView: NSView {
             }
 
             let iconColor =
-                isSelected ? theme.accentColor : theme.textSecondary
+                isSelected ? theme.accent : theme.textSecondary
             if let img = resolveIcon(tab.icon, size: iconSize * 0.75, color: iconColor, label: tab.label) {
                 let imgSize = img.size
                 let iconX = tabRect.midX - imgSize.width / 2
@@ -380,7 +380,7 @@ class SidebarTabBarView: NSView {
         if !overflowRect.isEmpty {
             let hasSelectedOverflow = overflowTabs.contains(where: { $0.id == selectedTab })
             let overflowColor: NSColor =
-                hasSelectedOverflow ? theme.accentColor : theme.textSecondary
+                hasSelectedOverflow ? theme.accent : theme.textSecondary
 
             // Accent background when the active tab is in overflow. Painted *before*
             // the glyph — it used to be drawn after, tinting the ellipsis it was
@@ -410,12 +410,12 @@ class SidebarTabBarView: NSView {
             let ghostX = dragCurrentX - ghostSize / 2
             let ghostY = (bounds.height - ghostSize) / 2 - 2
 
-            ctx.setFillColor(theme.dragGhostBg.cgColor)
+            ctx.setFillColor(theme.surfaceGhost.cgColor)
             let ghostRect = CGRect(x: ghostX, y: ghostY, width: ghostSize, height: ghostSize)
             WorkspacePillStyle.fillRoundedRect(ctx, rect: ghostRect.insetBy(dx: -1, dy: -1))
 
             if let tinted = resolveIcon(
-                tab.icon, size: iconSize * 0.75, color: theme.accentColor, label: tab.label)
+                tab.icon, size: iconSize * 0.75, color: theme.accent, label: tab.label)
             {
                 let imgSize = tinted.size
                 let iconX = ghostX + ghostSize / 2 - imgSize.width / 2
@@ -436,13 +436,13 @@ class SidebarTabBarView: NSView {
         WorkspacePillStyle.fillRoundedRect(ctx, rect: rect)
         // Deliberate raw alpha: between focusRing (0.7) and focusBorder (0.45).
         WorkspacePillStyle.strokeHairline(
-            ctx, rect: rect, color: theme.accentColor.withAlphaComponent(0.55))
+            ctx, rect: rect, color: theme.accent.withAlphaComponent(0.55))
     }
 
     private func drawDropIndicator(at x: CGFloat, ctx: CGContext, theme: TerminalTheme) {
         let indicatorH = bounds.height - 8
         let indicatorY = (bounds.height - indicatorH) / 2
-        ctx.setFillColor(theme.accentColor.cgColor)
+        ctx.setFillColor(theme.accent.cgColor)
         ctx.fill(CGRect(x: x - 1, y: indicatorY, width: 2, height: indicatorH))
     }
 

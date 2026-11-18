@@ -124,7 +124,7 @@ extension PaneView {
     }
 
     func groupTint(_ group: TabGroup, theme: TerminalTheme) -> NSColor {
-        group.color.nsColor ?? theme.accentColor
+        group.color.nsColor ?? theme.accent
     }
 
     /// Black or white, whichever reads better on a solid `color` fill.
@@ -183,7 +183,7 @@ extension PaneView {
             text = Self.contrastingText(on: tint)
         } else {
             ctx.setFillColor(tint.withAlphaComponent(hovered ? 0.34 : 0.22).cgColor)
-            text = theme.chromeText
+            text = theme.textPrimary
         }
         WorkspacePillStyle.fillRoundedRect(ctx, rect: pill)
 

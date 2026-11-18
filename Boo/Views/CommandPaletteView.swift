@@ -104,10 +104,10 @@ final class CommandPaletteController: NSObject, NSTextFieldDelegate, NSWindowDel
     /// The chrome follows a previewed theme, like the rest of the window.
     private func applyTheme() {
         let theme = AppSettings.shared.theme
-        root?.layer?.backgroundColor = theme.cardBg.cgColor
+        root?.layer?.backgroundColor = theme.surfaceRaised.cgColor
         root?.layer?.borderColor = theme.separator.cgColor
         separator.layer?.backgroundColor = theme.separator.cgColor
-        field.textColor = theme.chromeText
+        field.textColor = theme.textPrimary
         field.placeholderAttributedString = NSAttributedString(
             string: "Search commands, workspaces, tabs, themes   > @ # : !",
             attributes: [.foregroundColor: theme.textTertiary, .font: AppFont.ui(ofSize: 15)])
@@ -343,7 +343,7 @@ struct CommandPaletteList: View {
 
     private func itemRow(_ item: PaletteItem, index: Int, theme: TerminalTheme) -> some View {
         let selected = index == model.selection
-        let primary = item.isEnabled ? theme.chromeText : theme.textTertiary
+        let primary = item.isEnabled ? theme.textPrimary : theme.textTertiary
         return HStack(spacing: 8) {
             Text(item.title).lineLimit(1).truncationMode(.tail)
                 .foregroundColor(Color(nsColor: primary))

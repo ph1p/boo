@@ -306,7 +306,7 @@ import SwiftUI
         // same space both reach the screen through one conversion, so chrome
         // drawn in the terminal's background colour has no visible seam.
         window.colorSpace = .displayP3
-        window.backgroundColor = AppSettings.shared.theme.windowBackdrop
+        window.backgroundColor = AppSettings.shared.theme.surfaceBackdrop
         window.appearance = NSAppearance(named: AppSettings.shared.theme.isDark ? .darkAqua : .aqua)
         window.titlebarAppearsTransparent = true
         window.titleVisibility = .hidden
@@ -494,7 +494,7 @@ import SwiftUI
         window.delegate = self
         contentView.wantsLayer = true
         // Backdrop the islands float on — visible in every gap between them.
-        contentView.layer?.backgroundColor = effectiveTheme.windowBackdrop.cgColor
+        contentView.layer?.backgroundColor = effectiveTheme.surfaceBackdrop.cgColor
 
         toolbar.translatesAutoresizingMaskIntoConstraints = false
         toolbar.delegate = self
@@ -531,8 +531,8 @@ import SwiftUI
 
         sidebarContainer = NSView()
         sidebarContainer.wantsLayer = true
-        sidebarContainer.layer?.backgroundColor = effectiveTheme.sidebarBg.cgColor
-        IslandMetrics.round(sidebarContainer, borderColor: effectiveTheme.sidebarBorder)
+        sidebarContainer.layer?.backgroundColor = effectiveTheme.surfaceChrome.cgColor
+        IslandMetrics.round(sidebarContainer, borderColor: effectiveTheme.borderChrome)
 
         // Sidebar tab bar
         let tabBar = SidebarTabBarView(frame: .zero)

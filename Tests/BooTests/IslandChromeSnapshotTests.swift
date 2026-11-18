@@ -22,7 +22,7 @@ import XCTest
         let barGap = IslandMetrics.barGap
         let root = NSView(frame: NSRect(x: 0, y: 0, width: width, height: height))
         root.wantsLayer = true
-        root.layer?.backgroundColor = AppSettings.shared.theme.windowBackdrop.cgColor
+        root.layer?.backgroundColor = AppSettings.shared.theme.surfaceBackdrop.cgColor
 
         let toolbarHeight = IslandMetrics.toolbarHeight
         let statusHeight: CGFloat = 24
@@ -45,7 +45,7 @@ import XCTest
 
         let sidebar = NSView(frame: NSRect(x: gap, y: midY, width: sidebarWidth, height: midH))
         sidebar.wantsLayer = true
-        sidebar.layer?.backgroundColor = AppSettings.shared.theme.chromeBg.cgColor
+        sidebar.layer?.backgroundColor = AppSettings.shared.theme.surfaceChrome.cgColor
         IslandMetrics.round(sidebar)
         root.addSubview(sidebar)
 
@@ -91,7 +91,7 @@ import XCTest
     func testBackdropShowsInMarginsAndGaps() throws {
         let rep = try render(makeChrome())
         let scale = CGFloat(rep.pixelsWide) / width
-        let backdrop = AppSettings.shared.theme.windowBackdrop
+        let backdrop = AppSettings.shared.theme.surfaceBackdrop
         func px(_ x: CGFloat, _ y: CGFloat) -> NSColor? {
             // Bitmap origin is top-left; the view is bottom-left.
             color(rep, Int(x * scale), Int((height - y) * scale))
@@ -208,7 +208,7 @@ import XCTest
         if let dir = ProcessInfo.processInfo.environment["BOO_SNAPSHOT_DIR"] {
             let host = NSView(frame: toolbar.bounds)
             host.wantsLayer = true
-            host.layer?.backgroundColor = AppSettings.shared.theme.windowBackdrop.cgColor
+            host.layer?.backgroundColor = AppSettings.shared.theme.surfaceBackdrop.cgColor
             host.addSubview(toolbar)
             host.layoutSubtreeIfNeeded()
             if let rep = host.bitmapImageRepForCachingDisplay(in: host.bounds) {
@@ -221,15 +221,10 @@ import XCTest
         }
     }
 
-    /// The island stroke is the same hairline, in the same colour, that panes draw
-    /// for their own internal rules — one border system, not two competing weights.
+    /// The island stroke is the same hairline weight panes draw for their own
+    /// internal rules — one border system, not two competing weights.
     func testBorderMatchesThePaneRuleHairline() {
         XCTAssertEqual(IslandMetrics.borderWidth, 1)
-        for theme in TerminalTheme.themes {
-            XCTAssertEqual(
-                theme.islandBorder, theme.chromeBorder,
-                "\(theme.name): island stroke diverges from the pane rule colour")
-        }
     }
 
     /// One spacing vocabulary. Every chrome region keeps `gap` from the window edge
@@ -312,7 +307,7 @@ import XCTest
         if let dir = ProcessInfo.processInfo.environment["BOO_SNAPSHOT_DIR"] {
             let host = NSView(frame: NSRect(x: 0, y: 0, width: 240, height: bar.bounds.height + 16))
             host.wantsLayer = true
-            host.layer?.backgroundColor = AppSettings.shared.theme.windowBackdrop.cgColor
+            host.layer?.backgroundColor = AppSettings.shared.theme.surfaceBackdrop.cgColor
             bar.frame.origin = NSPoint(x: 8, y: 8)
             bar.frame.size.width = 224
             host.addSubview(bar)
@@ -358,7 +353,7 @@ import XCTest
                 frame: NSRect(
                     x: 0, y: 0, width: WorkspaceBarView.verticalFrameWidth + 8, height: 190))
             host.wantsLayer = true
-            host.layer?.backgroundColor = AppSettings.shared.theme.windowBackdrop.cgColor
+            host.layer?.backgroundColor = AppSettings.shared.theme.surfaceBackdrop.cgColor
             // Hover the second pill so the close button in the gutter renders.
             bar.hoveredIndex = 1
             bar.frame.origin = NSPoint(x: 8, y: 0)
@@ -728,20 +723,21 @@ import XCTest
     func testDividerThicknessMatchesTheIslandGap() {
         let split = ThemedSplitView(frame: NSRect(x: 0, y: 0, width: 400, height: 300))
         XCTAssertEqual(split.dividerThickness, IslandMetrics.gap)
-        XCTAssertEqual(split.dividerColor, AppSettings.shared.theme.windowBackdrop)
+        XCTAssertEqual(split.dividerColor, AppSettings.shared.theme.surfaceBackdrop)
     }
 
     /// The backdrop has to be distinguishable from the chrome it sits behind, or the
-    /// gaps disappear and the islands stop reading as separate cards.
+    /// gaps disappear and the islands stop reading as separate cards. Measured as
+    /// OKLab lightness, the space the generated ladder steps in: near black a
+    /// clearly visible step is only a few sRGB units.
     func testBackdropIsDistinctFromChromeInEveryBuiltInTheme() {
-        for theme in TerminalTheme.themes {
-            let backdrop = theme.windowBackdrop.usingColorSpace(.sRGB)!
-            let chrome = theme.chromeBg.usingColorSpace(.sRGB)!
-            let d =
-                abs(backdrop.redComponent - chrome.redComponent)
-                + abs(backdrop.greenComponent - chrome.greenComponent)
-                + abs(backdrop.blueComponent - chrome.blueComponent)
-            XCTAssertGreaterThan(d, 0.1, "\(theme.name): backdrop is indistinguishable from chrome")
+        for base in TerminalTheme.themes {
+            for level in ChromeContrast.allCases {
+                let theme = base.withContrast(level)
+                let d = abs(OKLab(theme.surfaceBackdrop).l - OKLab(theme.surfaceChrome).l)
+                XCTAssertGreaterThan(
+                    d, 0.025 * level.surfaceScale, "\(theme.name) \(level): backdrop is indistinguishable from chrome")
+            }
         }
     }
 }

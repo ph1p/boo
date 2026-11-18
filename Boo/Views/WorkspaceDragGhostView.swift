@@ -32,10 +32,10 @@ final class WorkspaceDragGhostView: NSView {
         guard let ctx = NSGraphicsContext.current?.cgContext else { return }
         let theme = AppSettings.shared.theme
         let rect = bounds
-        ctx.setFillColor(theme.chromeBg.cgColor)
+        ctx.setFillColor(theme.surfaceChrome.cgColor)
         WorkspacePillStyle.fillRoundedRect(ctx, rect: rect)
         WorkspacePillStyle.fill(
-            ctx, rect: rect, active: active, hovered: true, wsColor: wsColor, neutral: theme.chromeMuted)
+            ctx, rect: rect, active: active, hovered: true, wsColor: wsColor, neutral: theme.textMuted)
         if active {
             WorkspacePillStyle.strokeBorder(ctx, rect: rect, theme: theme, color: wsColor)
         } else {
@@ -44,7 +44,7 @@ final class WorkspaceDragGhostView: NSView {
         }
 
         let color = WorkspacePillStyle.labelColor(
-            wsColor: wsColor, active: active, text: theme.chromeText, muted: theme.chromeMuted)
+            wsColor: wsColor, active: active, text: theme.textPrimary, muted: theme.textMuted)
         let style = NSMutableParagraphStyle()
         style.lineBreakMode = .byTruncatingTail
         style.alignment = centered ? .center : .left

@@ -53,7 +53,7 @@ struct NotesPanelView: View {
                 if isEmptyNote {
                     Text("This note is empty.")
                         .font(fontScale.font(.sm))
-                        .foregroundStyle(Color(nsColor: theme.chromeMuted))
+                        .foregroundStyle(Color(nsColor: theme.textMuted))
                         .padding(12)
                 } else {
                     NotesPreview(path: currentPath).id("\(currentPath)#\(previewRevision)")
@@ -63,7 +63,7 @@ struct NotesPanelView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(Color(nsColor: theme.sidebarBg))
+        .background(Color(nsColor: theme.surfaceChrome))
         .onAppear(perform: reloadList)
         .onChange(of: other) { _, note in memory.shown[path] = note }
         .onChange(of: preview) { _, on in
@@ -80,14 +80,14 @@ struct NotesPanelView: View {
     // MARK: - Header
 
     private func header(theme: TerminalTheme) -> some View {
-        let muted = Color(nsColor: theme.chromeMuted)
+        let muted = Color(nsColor: theme.textMuted)
         return VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: 8) {
                 noteMenu(theme: theme)
                 Spacer(minLength: 4)
                 iconButton(
                     "magnifyingglass", help: searching ? "Close search" : "Search all notes",
-                    tint: searching ? Color(nsColor: theme.accentColor) : muted, action: toggleSearch)
+                    tint: searching ? Color(nsColor: theme.accent) : muted, action: toggleSearch)
                 iconButton(
                     preview && !searching ? "pencil" : "eye",
                     help: preview && !searching ? "Edit note" : "Preview note", tint: muted, action: togglePreview)
@@ -106,7 +106,7 @@ struct NotesPanelView: View {
                     Spacer(minLength: 4)
                     Button("Back to \(title)") { open(nil, line: nil) }
                         .buttonStyle(.plain)
-                        .foregroundStyle(Color(nsColor: theme.accentColor))
+                        .foregroundStyle(Color(nsColor: theme.accent))
                         .lineLimit(1)
                         .help("Show this workspace's note")
                 }
@@ -148,15 +148,15 @@ struct NotesPanelView: View {
             HStack(spacing: 4) {
                 Image(systemName: kind.icon)
                     .font(.system(size: 10))
-                    .foregroundStyle(Color(nsColor: theme.chromeMuted))
+                    .foregroundStyle(Color(nsColor: theme.textMuted))
                 Text(currentTitle)
                     .font(fontScale.font(.sm).weight(.medium))
-                    .foregroundStyle(Color(nsColor: theme.chromeText))
+                    .foregroundStyle(Color(nsColor: theme.textPrimary))
                     .lineLimit(1)
                     .truncationMode(.middle)
                 Image(systemName: "chevron.down")
                     .font(.system(size: 8, weight: .semibold))
-                    .foregroundStyle(Color(nsColor: theme.chromeMuted))
+                    .foregroundStyle(Color(nsColor: theme.textMuted))
             }
             .contentShape(Rectangle())
         }
@@ -202,10 +202,10 @@ struct NotesPanelView: View {
                             VStack(alignment: .leading, spacing: 1) {
                                 Text("\(match.title) · line \(match.line)")
                                     .font(fontScale.font(.xs))
-                                    .foregroundStyle(Color(nsColor: theme.chromeMuted))
+                                    .foregroundStyle(Color(nsColor: theme.textMuted))
                                 Text(match.text)
                                     .font(fontScale.font(.sm))
-                                    .foregroundStyle(Color(nsColor: theme.chromeText))
+                                    .foregroundStyle(Color(nsColor: theme.textPrimary))
                                     .lineLimit(2)
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -218,7 +218,7 @@ struct NotesPanelView: View {
                     if matches.isEmpty && !query.trimmingCharacters(in: .whitespaces).isEmpty {
                         Text("No matches")
                             .font(fontScale.font(.sm))
-                            .foregroundStyle(Color(nsColor: theme.chromeMuted))
+                            .foregroundStyle(Color(nsColor: theme.textMuted))
                             .padding(.horizontal, 12)
                             .padding(.vertical, 4)
                     }

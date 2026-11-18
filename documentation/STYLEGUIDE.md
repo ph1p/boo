@@ -18,8 +18,10 @@ Read colours from `@Environment(\.tokens) private var t`. Never read
 `Tokens.current` from a leaf view's `body`, because it does not update when the
 theme changes. In AppKit, use the `TerminalTheme` property with the same name.
 
-Base colours come from the theme: `text` (chromeText), `muted` (chromeMuted),
-`accent`, `bg` (sidebarBg), `chromeBg`, `termBg` and `fg`.
+Base colours are generated from the terminal palette: `text` (textPrimary),
+`muted` (textMuted), `accent`, `bg` (surfaceChrome), `backdrop`
+(surfaceBackdrop), `raised` (surfaceRaised), `border` (borderChrome), `termBg`
+and `fg`.
 
 Derived tokens. Use these instead of `muted.opacity(…)`, so the alphas stay the
 same across the app:
@@ -32,7 +34,7 @@ same across the app:
 | `subtleFill` | muted 6 % | Text-field fill, hovered segment |
 | `hoverFill` | muted 10 % | Row hover, idle control fill, segment track |
 | `controlFill` | muted 15 % | Hovered control fill |
-| `cardBg` | muted 12 % blended over sidebarBg (opaque) | Cards, raised segment thumb |
+| `raised` | surfaceRaised: one OKLab step from `bg` (opaque) | Cards, raised segment thumb |
 | `accentSelectionFill` | accent 15 % | Selected row |
 | `accentEmphasis` | accent 85 % | Pressed/active accent fills |
 | `focusRing` | accent 70 % | Focused field border |
@@ -75,7 +77,7 @@ Pick the nearest step instead of a one-off number.
 | Action | `.buttonStyle(.themed(variant, size:))` | Variants: `.primary` (accent, one per view), `.secondary` (default), `.subtle` (toolbar-like), `.destructive`. Sizes: `.small` (24pt) and `.large` (32pt, full width) |
 | Icon-only action | `SidebarIconButton` (sidebar) / `IconButton` (settings) | Always pass `help:` |
 | Text input | `SettingTextField` / `.themedFieldChrome(focused:)` | `subtleFill` fill, separator hairline, `focusRing` and an accent halo when focused |
-| 2–4 short exclusive options | `ThemedSegmentedPicker` | The selected option sits on a raised `cardBg` thumb. Do not use it for options that can grow |
+| 2–4 short exclusive options | `ThemedSegmentedPicker` | The selected option sits on a `raised` thumb. Do not use it for options that can grow |
 | Longer or dynamic list | `ThemedMenuPicker` | Opens a native `NSMenu`. Use `itemFont:` to show font faces and `width:` for a fixed width |
 | Font family / size | `FontChooser` / `FontSizePicker` | Built on `ThemedMenuPicker` |
 | On/off setting | `.toggleStyle(.themedSwitch)` (via `ToggleRow`) | Takes effect immediately |

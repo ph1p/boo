@@ -16,7 +16,7 @@ class ThemedSplitView: NSSplitView {
     /// In the island style the divider *is* the gap between two islands, so it
     /// matches the window backdrop rather than drawing a border line.
     override var dividerColor: NSColor {
-        booTheme.windowBackdrop
+        booTheme.surfaceBackdrop
     }
 
     /// Widen the divider to the island gap so panes (and the sidebar) are spaced

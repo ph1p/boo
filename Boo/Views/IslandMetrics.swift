@@ -103,7 +103,7 @@ enum IslandMetrics {
     /// Border colour: the shared chrome rule colour, matching the seams panes
     /// already draw internally.
     @MainActor static var borderColor: NSColor {
-        AppSettings.shared.theme.islandBorder
+        AppSettings.shared.theme.borderChrome
     }
 
     /// Round `view`'s backing layer as an island and stroke its edge. Layer-backs
@@ -111,9 +111,9 @@ enum IslandMetrics {
     /// sublayers both respect the corner.
     ///
     /// The edge colour must be blended over the island's own surface or it
-    /// disappears: chrome-coloured islands take the default (`islandBorder`,
-    /// blended over chromeBg); sidebar-coloured islands pass
-    /// `theme.sidebarBorder`.
+    /// disappears: chrome-coloured islands take the default (`borderChrome`,
+    /// blended over surfaceChrome); sidebar-coloured islands pass
+    /// `theme.borderChrome`.
     @MainActor static func round(
         _ view: NSView, radius: CGFloat = radius, borderColor: NSColor? = nil
     ) {

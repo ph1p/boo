@@ -161,7 +161,7 @@ final class QuickSelectOverlay: NSView {
             let span = CGRect(
                 x: pad + CGFloat(match.column) * cellSize.width, y: y,
                 width: CGFloat(match.width) * cellSize.width, height: cellSize.height)
-            theme.accentColor.withAlphaComponent(dimmed ? 0.08 : 0.22).setFill()
+            theme.accent.withAlphaComponent(dimmed ? 0.08 : 0.22).setFill()
             NSBezierPath(roundedRect: span, xRadius: 2, yRadius: 2).fill()
             guard !dimmed else { continue }
 
@@ -171,7 +171,7 @@ final class QuickSelectOverlay: NSView {
             let pill = CGRect(
                 x: span.minX, y: y, width: size.width + 6, height: cellSize.height
             ).insetBy(dx: 0, dy: 1)
-            theme.accentColor.setFill()
+            theme.accent.setFill()
             NSBezierPath(roundedRect: pill, xRadius: 3, yRadius: 3).fill()
             label.draw(at: CGPoint(x: pill.minX + 3, y: y + (cellSize.height - size.height) / 2), withAttributes: attrs)
         }

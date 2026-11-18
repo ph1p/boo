@@ -802,14 +802,14 @@ class SidebarPanelView: NSView {
 
         let ghostView = NSView(frame: NSRect(x: 0, y: 0, width: ghostWidth, height: ghostHeight))
         ghostView.wantsLayer = true
-        ghostView.layer?.backgroundColor = booTheme.dragGhostBg.cgColor
+        ghostView.layer?.backgroundColor = booTheme.surfaceGhost.cgColor
         ghostView.layer?.cornerRadius = 6
         ghostView.layer?.borderColor = NSColor.separatorColor.cgColor
         ghostView.layer?.borderWidth = 1
 
         let label = NSTextField(labelWithString: ghostTitle)
         label.font = SidebarSectionHeaderView.titleFont
-        label.textColor = booTheme.chromeMuted
+        label.textColor = booTheme.textMuted
         label.frame = NSRect(x: 6, y: 2, width: ghostWidth - 12, height: ghostHeight - 4)
         ghostView.addSubview(label)
 
@@ -906,7 +906,7 @@ class SidebarPanelView: NSView {
     override func draw(_ dirtyRect: NSRect) {
         guard let ctx = NSGraphicsContext.current?.cgContext else { return }
         let theme = booTheme
-        ctx.setFillColor(theme.sidebarBg.cgColor)
+        ctx.setFillColor(theme.surfaceChrome.cgColor)
         ctx.fill(bounds)
 
         let w = bounds.width
@@ -915,7 +915,7 @@ class SidebarPanelView: NSView {
             if i > 0 {
                 // Inset hairline, not a full-bleed bar: matches the island chrome.
                 let inset: CGFloat = AppSettings.shared.sidebarDensity == .comfortable ? 12 : 8
-                ctx.setFillColor(theme.sidebarBorder.withAlphaComponent(0.6).cgColor)
+                ctx.setFillColor(theme.borderChrome.withAlphaComponent(0.6).cgColor)
                 let line = SidebarLayout.separatorLineWidth
                 ctx.fill(
                     CGRect(
@@ -931,7 +931,7 @@ class SidebarPanelView: NSView {
 
         if let state = sectionDragState, state.dropTargetIndex != nil {
             let barH: CGFloat = 2
-            ctx.setFillColor(theme.accentColor.cgColor)
+            ctx.setFillColor(theme.accent.cgColor)
             ctx.fill(CGRect(x: 4, y: state.indicatorY - barH / 2, width: w - 8, height: barH))
         }
     }

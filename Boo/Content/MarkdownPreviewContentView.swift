@@ -82,7 +82,7 @@ final class MarkdownPreviewContentView: NSView, ContentViewProtocol, PageFindabl
         return .init(
             background: theme.background.hexString,
             foreground: theme.foreground.hexString,
-            muted: theme.chromeMuted.hexString)
+            muted: theme.textMuted.hexString)
     }
 
     private func loadMarkdown(at path: String, fragment: String? = nil) {

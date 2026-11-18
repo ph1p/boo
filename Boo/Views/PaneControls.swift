@@ -143,7 +143,7 @@ final class PaneControlButton: PaneControlItem {
 
     override func hoverChanged() {
         let theme = booTheme
-        icon.contentTintColor = hovered ? theme.chromeText : theme.textSecondary
+        icon.contentTintColor = hovered ? theme.textPrimary : theme.textSecondary
         layer?.backgroundColor = hovered ? theme.hoverFill.cgColor : nil
     }
 

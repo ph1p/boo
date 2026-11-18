@@ -32,8 +32,8 @@ final class ExternalStatusBarSegment: StatusBarPlugin {
         state: StatusBarState, ctx: CGContext
     ) -> CGFloat {
         drawStatusBarIconLabel(
-            icon: icon, text: text, tint: resolveTint(theme: theme) ?? theme.chromeMuted,
-            textColor: theme.chromeText, at: x, y: y, ctx: ctx)
+            icon: icon, text: text, tint: resolveTint(theme: theme) ?? theme.textMuted,
+            textColor: theme.textPrimary, at: x, y: y, ctx: ctx)
     }
 
     func handleClick(at point: NSPoint, in barView: StatusBarView) -> Bool {
@@ -57,7 +57,7 @@ final class ExternalStatusBarSegment: StatusBarPlugin {
         case "blue": return .systemBlue
         case "orange": return .systemOrange
         case "purple": return .systemPurple
-        case "accent": return theme.accentColor
+        case "accent": return theme.accent
         default:
             if name.hasPrefix("#"), name.count == 7,
                 let val = UInt32(String(name.dropFirst()), radix: 16)

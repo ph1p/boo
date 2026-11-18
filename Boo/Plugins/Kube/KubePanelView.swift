@@ -11,9 +11,9 @@ struct KubePanelView: View {
         let _ = settings.revision
         let theme = windowTheme ?? AppSettings.shared.theme
         let colors = KubeRowColors(
-            text: Color(nsColor: theme.chromeText),
-            muted: Color(nsColor: theme.chromeMuted),
-            accent: Color(nsColor: theme.accentColor))
+            text: Color(nsColor: theme.textPrimary),
+            muted: Color(nsColor: theme.textMuted),
+            accent: Color(nsColor: theme.accent))
         let query = filter.trimmingCharacters(in: .whitespaces).lowercased()
         VStack(alignment: .leading, spacing: 0) {
             header(colors: colors, guarded: store.isGuardedContext(store.context))
@@ -63,7 +63,7 @@ struct KubePanelView: View {
                 }
             }
         }
-        .background(Color(nsColor: theme.sidebarBg))
+        .background(Color(nsColor: theme.surfaceChrome))
         .onAppear { store.startWatching() }
     }
 

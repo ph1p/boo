@@ -10,9 +10,9 @@ struct HostsPanelView: View {
     var body: some View {
         let _ = settings.revision
         let theme = windowTheme ?? AppSettings.shared.theme
-        let mutedColor = Color(nsColor: theme.chromeMuted)
-        let textColor = Color(nsColor: theme.chromeText)
-        let accentColor = Color(nsColor: theme.accentColor)
+        let mutedColor = Color(nsColor: theme.textMuted)
+        let textColor = Color(nsColor: theme.textPrimary)
+        let accentColor = Color(nsColor: theme.accent)
         let groups = Self.grouped(store.hosts, filter: filter, recent: store.recent)
 
         VStack(alignment: .leading, spacing: 0) {
@@ -76,7 +76,7 @@ struct HostsPanelView: View {
                 }
             }
         }
-        .background(Color(nsColor: theme.sidebarBg))
+        .background(Color(nsColor: theme.surfaceChrome))
         .onAppear {
             store.start()
             store.refreshLive()

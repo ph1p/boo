@@ -21,7 +21,7 @@ extension WorkspaceBarView {
 
         // Resolved once, not per pill: `IslandMetrics.borderColor` re-reads the
         // theme and re-runs the chrome-border blend on every access.
-        let islandBorder = theme.islandBorder
+        let borderChrome = theme.borderChrome
 
         // Clip the scrolling stack to its viewport so a pill straddling the bottom
         // edge is cut off cleanly instead of bleeding into the pinned `+`.
@@ -56,7 +56,7 @@ extension WorkspaceBarView {
             // WorkspacePillStyle. Only the square geometry differs here.
             WorkspacePillStyle.fill(
                 ctx, rect: pillRect, active: isSelected, hovered: false,
-                wsColor: wsColor, neutral: theme.chromeMuted)
+                wsColor: wsColor, neutral: theme.textMuted)
             // Like the top bar: only the active workspace carries a border.
             if isSelected {
                 WorkspacePillStyle.strokeBorder(ctx, rect: pillRect, theme: theme, color: wsColor)
@@ -65,8 +65,8 @@ extension WorkspaceBarView {
             // Draw first character(s) as label. Same text-color model as the top bar.
             let label = String(item.name.prefix(2)).uppercased()
             let textColor = WorkspacePillStyle.labelColor(
-                wsColor: wsColor, active: isSelected, text: theme.chromeText,
-                muted: theme.chromeMuted)
+                wsColor: wsColor, active: isSelected, text: theme.textPrimary,
+                muted: theme.textMuted)
             let attrs: [NSAttributedString.Key: Any] = [
                 .font: isSelected ? Self.pillLabelSelected : Self.pillLabelRegular,
                 .foregroundColor: textColor
@@ -102,7 +102,7 @@ extension WorkspaceBarView {
         // The hovered workspace, expanded over the panes: full name plus the close
         // button, neither of which fits in the two-letter resting pill. Outside the
         // stack's clip — it deliberately floats past the strip.
-        drawExpandedHoverPill(ctx, theme: theme, islandBorder: islandBorder)
+        drawExpandedHoverPill(ctx, theme: theme, borderChrome: borderChrome)
 
         // Plus button — pinned to the bottom, painted last so a pill scrolled to the
         // very end passes behind it.
@@ -113,7 +113,7 @@ extension WorkspaceBarView {
             // At a group's first member the line sits above the group's tray.
             let header = groupHeaders.first { $0.members.lowerBound == dropIdx }
             let indicatorY = (header.map { groupTrayRect($0).minY } ?? verticalItemRect(at: dropIdx).minY) - 3
-            ctx.setFillColor(theme.accentColor.cgColor)
+            ctx.setFillColor(theme.accent.cgColor)
             ctx.fill(CGRect(x: verticalPillX, y: indicatorY, width: verticalPillWidth, height: 2))
         }
         drawStackHighlight(ctx, theme: theme)
@@ -140,14 +140,14 @@ extension WorkspaceBarView {
             in: CGRect(x: verticalStripX, y: y, width: Self.verticalWidth, height: height),
             from: CGPoint(x: 0, y: topDown ? y : y + height),
             to: CGPoint(x: 0, y: topDown ? y + height : y),
-            backdrop: booTheme.windowBackdrop)
+            backdrop: booTheme.surfaceBackdrop)
     }
 
     /// Paint the hovered workspace as a wide pill floating over the panes. Drawn
     /// after the resting stack so it sits on top of its neighbours, with a shadow to
     /// read as a layer above the content rather than a hole punched in the strip.
     private func drawExpandedHoverPill(
-        _ ctx: CGContext, theme: TerminalTheme, islandBorder: NSColor
+        _ ctx: CGContext, theme: TerminalTheme, borderChrome: NSColor
     ) {
         guard hoveredIndex >= 0, hoveredIndex < items.count else { return }
         let i = hoveredIndex
@@ -162,12 +162,12 @@ extension WorkspaceBarView {
 
         // Opaque backdrop under the pill fill: the fill itself is translucent, and
         // terminal text showing through a floating control reads as a glitch.
-        ctx.setFillColor(theme.chromeBg.cgColor)
+        ctx.setFillColor(theme.surfaceChrome.cgColor)
         WorkspacePillStyle.fillRoundedRect(ctx, rect: rect)
 
         WorkspacePillStyle.fill(
             ctx, rect: rect, active: isSelected, hovered: true, wsColor: wsColor,
-            neutral: theme.chromeMuted)
+            neutral: theme.textMuted)
         // A hairline all the way round: with the shadow gone this is what separates
         // the floating pill from the terminal content behind it. The active
         // workspace keeps its accent stroke instead.
@@ -175,14 +175,14 @@ extension WorkspaceBarView {
             WorkspacePillStyle.strokeBorder(ctx, rect: rect, theme: theme, color: wsColor)
         } else {
             WorkspacePillStyle.strokeIslandBorder(
-                ctx, rect: rect, wsColor: wsColor, neutral: islandBorder)
+                ctx, rect: rect, wsColor: wsColor, neutral: borderChrome)
         }
 
-        // `chromeText` as `muted` too: the expanded pill's un-selected fallback is
+        // `textPrimary` as `muted` too: the expanded pill's un-selected fallback is
         // full-strength text, unlike the resting pills' muted two-letter label.
         let textColor = WorkspacePillStyle.labelColor(
-            wsColor: wsColor, active: isSelected, text: theme.chromeText,
-            muted: theme.chromeText)
+            wsColor: wsColor, active: isSelected, text: theme.textPrimary,
+            muted: theme.textPrimary)
 
         let sidePad = Self.verticalHoveredPillPadding
         // The close button takes the end facing the panes: trailing on a left bar,
@@ -211,7 +211,7 @@ extension WorkspaceBarView {
         } else {
             WorkspacePillStyle.drawCloseButton(
                 ctx, in: verticalCloseButtonRect(in: rect),
-                tint: wsColor ?? theme.chromeMuted, hovered: isCloseButtonHovered)
+                tint: wsColor ?? theme.textMuted, hovered: isCloseButtonHovered)
         }
         // The close button owns its slot on hover, so the dot only shows on pinned pills.
         WorkspacePillStyle.drawStatus(

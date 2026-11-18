@@ -137,7 +137,7 @@ import Cocoa
         // Same surface as the pane, so the bar reads as part of the terminal.
         layer?.backgroundColor = theme.background.surfaceColor.cgColor
         fieldView.theme = theme
-        textField.textColor = theme.chromeText
+        textField.textColor = theme.textPrimary
         textField.customPlaceholderColor = theme.textTertiary
         textField.caretColor = theme.cursor.nsColor
         textField.selectionColor = theme.selection
@@ -395,12 +395,12 @@ private final class FindBarButton: PaneControlItem {
         let lit = hovered && isEnabled
         switch style {
         case .segment:
-            icon.contentTintColor = isEnabled ? theme.chromeText : theme.textTertiary
+            icon.contentTintColor = isEnabled ? theme.textPrimary : theme.textTertiary
             layer?.backgroundColor = lit ? theme.hoverFill.cgColor : nil
         case .glyph:
             icon.contentTintColor = lit ? theme.textSecondary : theme.textTertiary
         case .push:
-            label.textColor = theme.chromeText
+            label.textColor = theme.textPrimary
             layer?.backgroundColor = (lit ? theme.separator : theme.controlFill).cgColor
             layer?.borderColor = theme.separator.cgColor
             layer?.borderWidth = 0.5

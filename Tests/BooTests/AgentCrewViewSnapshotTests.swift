@@ -154,14 +154,14 @@ final class AgentCrewViewSnapshotTests: XCTestCase {
             ui.taskPlace = place
             ui.close()
         }
-        let tokens = Tokens(theme: .defaultDark)
+        let tokens = Tokens(theme: .booDark)
         let form = AgentNewTaskForm(
             agents: [.claudeCode, .codex, .openCode], workspaceName: "boo", onStartHere: { _, _ in },
             onStartTask: { _, _, _ in }, onDone: {}
         )
         .frame(width: 288)
         .environment(\.tokens, tokens)
-        .background(tokens.cardBg)
+        .background(tokens.raised)
         let image = try render(form, as: "agent-crew-new-popover.png")
         XCTAssertGreaterThan(image.size.height, 120)
     }

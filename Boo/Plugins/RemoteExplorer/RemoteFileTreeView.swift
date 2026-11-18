@@ -13,15 +13,15 @@ struct RemoteConnectingView: View {
 
             Image(systemName: session.icon)
                 .font(.system(size: 28))
-                .foregroundStyle(Color(nsColor: theme.accentColor).opacity(0.6))
+                .foregroundStyle(Color(nsColor: theme.accent).opacity(0.6))
 
             Text("Connecting to")
                 .font(.system(size: 12))
-                .foregroundStyle(Color(nsColor: theme.chromeMuted))
+                .foregroundStyle(Color(nsColor: theme.textMuted))
 
             Text(session.displayName)
                 .font(.system(size: 13, weight: .medium, design: .monospaced))
-                .foregroundStyle(Color(nsColor: theme.chromeText))
+                .foregroundStyle(Color(nsColor: theme.textPrimary))
 
             ProgressView()
                 .scaleEffect(0.7)
@@ -29,14 +29,14 @@ struct RemoteConnectingView: View {
 
             Text(session.connectingHint)
                 .font(.system(size: 10))
-                .foregroundStyle(Color(nsColor: theme.chromeMuted).opacity(0.6))
+                .foregroundStyle(Color(nsColor: theme.textMuted).opacity(0.6))
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 20)
 
             Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(nsColor: theme.sidebarBg))
+        .background(Color(nsColor: theme.surfaceChrome))
     }
 
 }
@@ -56,15 +56,15 @@ struct RemoteConnectionFailedView: View {
 
             Image(systemName: "xmark.circle")
                 .font(.system(size: 28))
-                .foregroundStyle(Color(nsColor: theme.chromeMuted).opacity(0.6))
+                .foregroundStyle(Color(nsColor: theme.textMuted).opacity(0.6))
 
             Text("Could not connect to")
                 .font(.system(size: 12))
-                .foregroundStyle(Color(nsColor: theme.chromeMuted))
+                .foregroundStyle(Color(nsColor: theme.textMuted))
 
             Text(session.displayName)
                 .font(.system(size: 13, weight: .medium, design: .monospaced))
-                .foregroundStyle(Color(nsColor: theme.chromeText))
+                .foregroundStyle(Color(nsColor: theme.textPrimary))
 
             Text(
                 canPrompt
@@ -72,7 +72,7 @@ struct RemoteConnectionFailedView: View {
                     : "File explorer requires key-based\nSSH auth or SSH agent."
             )
             .font(.system(size: 10))
-            .foregroundStyle(Color(nsColor: theme.chromeMuted).opacity(0.6))
+            .foregroundStyle(Color(nsColor: theme.textMuted).opacity(0.6))
             .multilineTextAlignment(.center)
             .padding(.horizontal, 16)
 
@@ -93,7 +93,7 @@ struct RemoteConnectionFailedView: View {
             Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(nsColor: theme.sidebarBg))
+        .background(Color(nsColor: theme.surfaceChrome))
     }
 
     /// Plain ssh/mosh hosts can prompt; container ssh (vagrant, colima) manages its own keys.

@@ -72,7 +72,7 @@ final class QuickTerminalContentView: NSView {
     private func applyTheme() {
         let theme = AppSettings.shared.theme
         layer?.backgroundColor = theme.background.nsColor.cgColor
-        layer?.borderColor = theme.paneBorder.cgColor
+        layer?.borderColor = theme.borderPane.cgColor
         tabStrip.needsDisplay = true
     }
 }
@@ -119,7 +119,7 @@ final class QuickTerminalTabStrip: NSView {
             }
             let attrs: [NSAttributedString.Key: Any] = [
                 .font: AppFont.ui(ofSize: 11, weight: active ? .medium : .regular),
-                .foregroundColor: active ? theme.chromeText : theme.textSecondary,
+                .foregroundColor: active ? theme.textPrimary : theme.textSecondary,
                 .paragraphStyle: style
             ]
             let text = title as NSString

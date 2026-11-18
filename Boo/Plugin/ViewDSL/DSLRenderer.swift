@@ -80,8 +80,8 @@ struct DSLRenderer: View {
 
         let color: Color = {
             if let tint = tint { return tintColor(tint) }
-            if style == .muted { return Color(nsColor: theme.chromeMuted) }
-            return Color(nsColor: theme.chromeText)
+            if style == .muted { return Color(nsColor: theme.textMuted) }
+            return Color(nsColor: theme.textPrimary)
         }()
 
         Text(text)
@@ -116,8 +116,8 @@ struct DSLRenderer: View {
     ) -> some View {
         let color: Color = {
             switch style {
-            case .primary, nil: return Color(nsColor: theme.accentColor)
-            case .secondary: return Color(nsColor: theme.chromeMuted)
+            case .primary, nil: return Color(nsColor: theme.accent)
+            case .secondary: return Color(nsColor: theme.textMuted)
             case .destructive: return .red
             }
         }()
@@ -141,10 +141,10 @@ struct DSLRenderer: View {
 
     @ViewBuilder
     private func renderBadge(text: String, tint: DSLTint?, accessibilityLabel: String?) -> some View {
-        let color = tint.map { tintColor($0) } ?? Color(nsColor: theme.accentColor)
+        let color = tint.map { tintColor($0) } ?? Color(nsColor: theme.accent)
         Text(text)
             .font(.system(size: density == .comfortable ? 10 : 9, weight: .bold))
-            .foregroundStyle(tint == nil ? Color(nsColor: PaneView.contrastingText(on: theme.accentColor)) : .white)
+            .foregroundStyle(tint == nil ? Color(nsColor: PaneView.contrastingText(on: theme.accent)) : .white)
             .padding(.horizontal, 6)
             .padding(.vertical, 2)
             .background(color)
@@ -163,8 +163,8 @@ struct DSLRenderer: View {
         case .success: return Color(nsColor: theme.success)
         case .error: return Color(nsColor: theme.error)
         case .warning: return Color(nsColor: theme.warning)
-        case .accent: return Color(nsColor: theme.accentColor)
-        case .muted: return Color(nsColor: theme.chromeMuted)
+        case .accent: return Color(nsColor: theme.accent)
+        case .muted: return Color(nsColor: theme.textMuted)
         }
     }
 }
@@ -189,18 +189,18 @@ private struct DSLListItemView: View {
             if let icon = item.icon {
                 Image(systemName: icon)
                     .font(.system(size: density == .comfortable ? 13 : 11))
-                    .foregroundStyle(item.tint.map { tintColor($0) } ?? Color(nsColor: theme.chromeMuted))
+                    .foregroundStyle(item.tint.map { tintColor($0) } ?? Color(nsColor: theme.textMuted))
                     .frame(width: 16)
             }
             VStack(alignment: .leading, spacing: 1) {
                 Text(item.label)
                     .font(.system(size: fontSize))
-                    .foregroundStyle(Color(nsColor: theme.chromeText))
+                    .foregroundStyle(Color(nsColor: theme.textPrimary))
                     .lineLimit(1)
                 if let detail = item.detail {
                     Text(detail)
                         .font(.system(size: fontSize - 2, design: .monospaced))
-                        .foregroundStyle(Color(nsColor: theme.chromeMuted))
+                        .foregroundStyle(Color(nsColor: theme.textMuted))
                         .lineLimit(1)
                 }
             }
@@ -208,7 +208,7 @@ private struct DSLListItemView: View {
         }
         .frame(height: itemHeight)
         .padding(.horizontal, hPad)
-        .background(isHovered ? Color(nsColor: theme.chromeMuted).opacity(0.1) : Color.clear)
+        .background(isHovered ? Color(nsColor: theme.textMuted).opacity(0.1) : Color.clear)
         .cornerRadius(4)
         .contentShape(Rectangle())
         .onHover { isHovered = $0 }

@@ -6,7 +6,7 @@ import XCTest
 /// every change to the stored custom themes (keyed on the stored bytes).
 final class CustomThemeCacheTests: XCTestCase {
 
-    private let key = "customThemes"
+    private let key = "customThemesV2"
 
     func testCustomThemeEditIsNotServedStale() throws {
         let settings = AppSettings.shared
@@ -18,20 +18,20 @@ final class CustomThemeCacheTests: XCTestCase {
             defaults.set(originalName, forKey: "themeName")
         }
 
-        var custom = CustomThemeData.from(.defaultDark)
+        var custom = CustomThemeData.from(.booDark)
         custom.name = "Cache Test Theme"
         custom.accentHex = "#112233"
         defaults.set(try JSONEncoder().encode([custom]), forKey: key)
         defaults.set(custom.name, forKey: "themeName")
 
         XCTAssertEqual(settings.theme.name, "Cache Test Theme")
-        let first = settings.theme.accentColor.usingColorSpace(.sRGB)
+        let first = settings.theme.accent.usingColorSpace(.sRGB)
         XCTAssertEqual(first?.redComponent ?? -1, 0x11 / 255.0, accuracy: 0.01)
 
         // Write behind the setter's back — the cache must notice the new bytes.
         custom.accentHex = "#AA2233"
         defaults.set(try JSONEncoder().encode([custom]), forKey: key)
-        let second = settings.theme.accentColor.usingColorSpace(.sRGB)
+        let second = settings.theme.accent.usingColorSpace(.sRGB)
         XCTAssertEqual(second?.redComponent ?? -1, 0xAA / 255.0, accuracy: 0.01)
 
         // Selecting a different (missing) custom name falls back, not the cached one.

@@ -187,7 +187,7 @@ struct AgentCenterSettingsView: View {
             }
         }
         .padding(10)
-        .background(t.cardBg)
+        .background(t.raised)
         .clipShape(RoundedRectangle(cornerRadius: 7))
     }
 

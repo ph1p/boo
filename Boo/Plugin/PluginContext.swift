@@ -85,26 +85,24 @@ struct PluginContext {
 /// Immutable snapshot of theme colors that plugins need.
 /// Avoids plugins accessing AppSettings.shared.theme directly.
 struct ThemeSnapshot {
-    let chromeText: NSColor
-    let chromeMuted: NSColor
-    let accentColor: NSColor
-    let sidebarBg: NSColor
+    let textPrimary: NSColor
+    let textMuted: NSColor
+    let accent: NSColor
+    let surfaceChrome: NSColor
     let foreground: NSColor
     let background: NSColor
-    let chromeBg: NSColor
     let ansiColors: [NSColor]
     /// The full theme the snapshot was taken from.
     let source: TerminalTheme
 
     init(from theme: TerminalTheme) {
         self.source = theme
-        self.chromeText = theme.chromeText
-        self.chromeMuted = theme.chromeMuted
-        self.accentColor = theme.accentColor
-        self.sidebarBg = theme.sidebarBg
+        self.textPrimary = theme.textPrimary
+        self.textMuted = theme.textMuted
+        self.accent = theme.accent
+        self.surfaceChrome = theme.surfaceChrome
         self.foreground = theme.foreground.nsColor
         self.background = theme.background.nsColor
-        self.chromeBg = theme.chromeBg
         self.ansiColors = theme.ansiColors.map(\.nsColor)
     }
 }

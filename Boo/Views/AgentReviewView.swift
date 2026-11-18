@@ -662,7 +662,7 @@ struct AgentReviewView: View {
         }
         .padding(8)
         .frame(maxWidth: 560, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 6).fill(t.cardBg))
+        .background(RoundedRectangle(cornerRadius: 6).fill(t.raised))
         .padding(.leading, inset + 4).padding(.vertical, 3)
     }
 
@@ -679,7 +679,7 @@ struct AgentReviewView: View {
         }
         .padding(8)
         .frame(maxWidth: 560)
-        .background(RoundedRectangle(cornerRadius: 6).fill(t.cardBg))
+        .background(RoundedRectangle(cornerRadius: 6).fill(t.raised))
         .padding(.leading, inset + 4).padding(.vertical, 3)
     }
 

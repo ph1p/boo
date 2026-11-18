@@ -55,7 +55,7 @@ extension ToolbarView {
         para.lineBreakMode = .byTruncatingTail
         let attrs: [NSAttributedString.Key: Any] = [
             .font: ToolbarView.Fonts.headerTitle,
-            .foregroundColor: active.resolvedColor ?? theme.chromeText,
+            .foregroundColor: active.resolvedColor ?? theme.textPrimary,
             .paragraphStyle: para
         ]
 
@@ -141,11 +141,11 @@ extension ToolbarView {
             if ws.groupID == nil {
                 WorkspacePillStyle.fill(
                     ctx, rect: rect, active: ws.isActive, hovered: isWSHovered,
-                    wsColor: wsColor, neutral: theme.chromeMuted)
+                    wsColor: wsColor, neutral: theme.textMuted)
             } else if ws.isActive || isWSHovered {
                 WorkspacePillStyle.fill(
                     ctx, rect: rect, active: ws.isActive, hovered: true,
-                    wsColor: labelTint, neutral: theme.chromeMuted)
+                    wsColor: labelTint, neutral: theme.textMuted)
             }
 
             // Accent-color border on the active workspace pill
@@ -174,7 +174,7 @@ extension ToolbarView {
 
             if ws.isPinned, let pinImg = Self.pinIcon {
                 let pinColor =
-                    ws.isActive ? theme.chromeText.withAlphaComponent(0.5) : theme.chromeMuted.withAlphaComponent(0.5)
+                    ws.isActive ? theme.textPrimary.withAlphaComponent(0.5) : theme.textMuted.withAlphaComponent(0.5)
                 let iconSize: CGFloat = 9
                 let iconY = (barHeight - iconSize) / 2
                 let iconRect = NSRect(x: contentX, y: iconY, width: iconSize, height: iconSize)
@@ -183,7 +183,7 @@ extension ToolbarView {
             }
 
             let textColor = WorkspacePillStyle.labelColor(
-                wsColor: labelTint, active: ws.isActive, text: theme.chromeText, muted: theme.chromeMuted)
+                wsColor: labelTint, active: ws.isActive, text: theme.textPrimary, muted: theme.textMuted)
 
             let showClose = !ws.isPinned && ws.isActive
             // Inactive labels are centred, so they may use the slot's spare width.
@@ -203,7 +203,7 @@ extension ToolbarView {
 
             if showClose {
                 WorkspacePillStyle.drawCloseButton(
-                    ctx, in: closeRect, tint: labelTint ?? theme.chromeMuted,
+                    ctx, in: closeRect, tint: labelTint ?? theme.textMuted,
                     hovered: isWorkspaceCloseHovered && isMouseInside(closeRect))
             }
 
@@ -220,7 +220,7 @@ extension ToolbarView {
         // Draw drop insertion indicator (vertical line between workspace pills)
         if let dropIdx = dropTargetIndex {
             let indicatorX = insertionIndicatorX(for: dropIdx) - 1
-            ctx.setFillColor(theme.accentColor.cgColor)
+            ctx.setFillColor(theme.accent.cgColor)
             ctx.fill(CGRect(x: indicatorX, y: 6, width: 2, height: barHeight - 12))
         }
 
@@ -243,12 +243,12 @@ extension ToolbarView {
         let plusRect = workspacePlusButtonRect
         // Transparent at rest; the pill only appears under the pointer.
         if isWorkspacePlusButtonHovered {
-            ctx.setFillColor(theme.chromeMuted.withAlphaComponent(0.12).cgColor)
+            ctx.setFillColor(theme.textMuted.withAlphaComponent(0.12).cgColor)
             WorkspacePillStyle.fillRoundedRect(ctx, rect: plusRect)
         }
         let wsPlusAlpha: CGFloat = isWorkspacePlusButtonHovered ? 0.9 : 0.6
         WorkspacePillStyle.drawPlusGlyph(
-            ctx, in: plusRect, halfSpan: 5, color: theme.chromeMuted.withAlphaComponent(wsPlusAlpha))
+            ctx, in: plusRect, halfSpan: 5, color: theme.textMuted.withAlphaComponent(wsPlusAlpha))
     }
 
     internal func drawFadeEdge(_ ctx: CGContext, at x: CGFloat, width: CGFloat, leftToRight: Bool) {
@@ -258,7 +258,7 @@ extension ToolbarView {
             ctx, in: CGRect(x: x, y: 0, width: width, height: barHeight),
             from: CGPoint(x: leftToRight ? x : x + width, y: 0),
             to: CGPoint(x: leftToRight ? x + width : x, y: 0),
-            backdrop: booTheme.windowBackdrop)
+            backdrop: booTheme.surfaceBackdrop)
     }
 
     // MARK: - Hit Testing

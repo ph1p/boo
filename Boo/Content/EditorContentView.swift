@@ -275,7 +275,7 @@ final class EditorContentView: NSView, ContentViewProtocol {
             "cursor": theme.cursor.hexString,
             "selection": theme.selection.hexString,
             "lineHighlight": theme.background.highlight(0.05).hexString,
-            "border": theme.chromeBorder.hexString,
+            "border": theme.borderChrome.hexString,
             "syntax": [
                 "comment": theme.ansiBlue.hexString,
                 "keyword": theme.ansiMagenta.hexString,

@@ -94,9 +94,9 @@ final class BrowserContentView: NSView, ContentViewProtocol, NSTextFieldDelegate
         layer?.backgroundColor = background.cgColor
         toolbarView?.layer?.backgroundColor = background.cgColor
         toolbarSeparator?.layer?.backgroundColor = theme.separator.cgColor
-        progressView?.color = theme.accentColor
+        progressView?.color = theme.accent
 
-        urlBar?.textColor = theme.chromeText
+        urlBar?.textColor = theme.textPrimary
         urlBar?.placeholderAttributedString = NSAttributedString(
             string: "Search or enter address",
             attributes: [.foregroundColor: theme.textTertiary, .font: AppFont.ui(ofSize: 12)])
@@ -420,8 +420,8 @@ final class BrowserContentView: NSView, ContentViewProtocol, NSTextFieldDelegate
         let canFwd = webView?.canGoForward ?? false
         backButton?.isEnabled = canBack
         forwardButton?.isEnabled = canFwd
-        backButton?.contentTintColor = canBack ? theme.chromeText : theme.textSecondary
-        forwardButton?.contentTintColor = canFwd ? theme.chromeText : theme.textSecondary
+        backButton?.contentTintColor = canBack ? theme.textPrimary : theme.textSecondary
+        forwardButton?.contentTintColor = canFwd ? theme.textPrimary : theme.textSecondary
     }
 
     private func updateLoadingState() {

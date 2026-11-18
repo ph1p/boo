@@ -35,10 +35,10 @@ extension MainWindowController {
     func applyChromeTheme() {
         let theme = effectiveTheme
         appliedChromeThemeName = theme.name
-        window?.backgroundColor = theme.windowBackdrop
+        window?.backgroundColor = theme.surfaceBackdrop
         window?.appearance = NSAppearance(named: theme.isDark ? .darkAqua : .aqua)
-        window?.contentView?.layer?.backgroundColor = theme.windowBackdrop.cgColor
-        sidebarContainer.layer?.backgroundColor = theme.sidebarBg.cgColor
+        window?.contentView?.layer?.backgroundColor = theme.surfaceBackdrop.cgColor
+        sidebarContainer.layer?.backgroundColor = theme.surfaceChrome.cgColor
         // splitContainer stays clear — panes are the islands (see SplitContainerView.init)
         mainSplitView.needsDisplay = true
         // A refresh, not just a redraw: workspace colours resolve
@@ -49,7 +49,7 @@ extension MainWindowController {
         // so they need an explicit refresh on theme change.
         // Toolbar, status bar and the side workspace bar carry no
         // border — they are bare strips.
-        IslandMetrics.refreshBorder(sidebarContainer, color: theme.sidebarBorder)
+        IslandMetrics.refreshBorder(sidebarContainer, color: theme.borderChrome)
         sideWorkspaceBar?.needsDisplay = true
         for (_, pv) in paneViews { pv.applyTheme() }
         // Rebuild plugin sidebar to pick up new theme

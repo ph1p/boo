@@ -119,7 +119,7 @@ struct ThemedCheckboxStyle: ToggleStyle {
                         .overlay {
                             if configuration.isOn {
                                 Image(systemName: "checkmark").font(.system(size: 8, weight: .bold))
-                                    .foregroundStyle(t.chromeBg)
+                                    .foregroundStyle(t.bg)
                             }
                         }
                         .frame(width: 13, height: 13)

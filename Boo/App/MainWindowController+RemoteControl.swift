@@ -54,7 +54,7 @@ extension MainWindowController {
                 "background": theme.background.hexString,
                 "foreground": theme.foreground.hexString,
                 "cursor": theme.cursor.hexString,
-                "accent": theme.accentColor.hexString,
+                "accent": theme.accent.hexString,
                 "ansi": theme.ansiColors.map { $0.hexString }
             ] as [String: Any]
         ])

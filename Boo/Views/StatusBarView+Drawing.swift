@@ -199,7 +199,7 @@ extension StatusBarView {
         // Sidebar icon — centered in the zone after the separator
         let color =
             sidebarVisible
-            ? theme.accentColor
+            ? theme.accent
             : (isSidebarToggleHovered ? theme.textSecondary : theme.textTertiary)
 
         let iconX = zoneStart + (zoneWidth - iconDrawSize) / 2

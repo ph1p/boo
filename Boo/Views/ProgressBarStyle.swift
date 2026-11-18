@@ -6,7 +6,7 @@ enum ProgressBarStyle {
 
     static func fillColor(_ progress: TerminalProgress, theme: TerminalTheme) -> NSColor {
         switch progress.state {
-        case .normal: return theme.accentColor
+        case .normal: return theme.accent
         case .error: return theme.error
         case .paused: return theme.warning
         // No percent to show; a softer full bar says "busy".

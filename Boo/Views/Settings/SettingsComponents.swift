@@ -12,7 +12,7 @@ extension View {
             .clipShape(RoundedRectangle(cornerRadius: IslandMetrics.radius, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: IslandMetrics.radius, style: .continuous)
-                    .strokeBorder(t.islandBorder, lineWidth: IslandMetrics.borderWidth))
+                    .strokeBorder(t.border, lineWidth: IslandMetrics.borderWidth))
     }
 }
 
@@ -66,7 +66,7 @@ struct Section<Content: View>: View {
             .padding(.horizontal, Tokens.sectionPadding)
             .padding(.vertical, dividers ? 2 : Tokens.sectionPadding)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(tokens.cardBg, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .background(tokens.raised, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .strokeBorder(tokens.separator, lineWidth: 0.5))

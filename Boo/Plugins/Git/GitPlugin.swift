@@ -146,7 +146,7 @@ final class GitPlugin: BooPluginProtocol {
             case "M": return theme.warning
             case "A": return theme.success
             case "D": return theme.error
-            default: return theme.chromeMuted
+            default: return theme.textMuted
             }
         }
 

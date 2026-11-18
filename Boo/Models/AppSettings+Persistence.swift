@@ -13,7 +13,8 @@ extension AppSettings {
     /// folder, recordings folder, editor commands), per-machine layout and
     /// state, the sync folder itself and security decisions.
     static let syncedKeys: [String] = [
-        K.themeName, K.autoTheme, K.darkThemeName, K.lightThemeName, K.cursorStyle, K.fontSize, K.fontName,
+        K.themeName, K.autoTheme, K.darkThemeName, K.lightThemeName, K.chromeContrast, K.cursorStyle, K.fontSize,
+        K.fontName,
         K.statusBarShowPath, K.statusBarShowTime, K.statusBarShowPaneInfo, K.statusBarShowPorts,
         K.statusBarShowConnection, K.statusBarLeftOrder, K.statusBarRightOrder, K.statusBarHiddenSegments,
         K.statusBarClockFormat, K.statusBarPathStyle, K.statusBarBranchMaxLength, K.statusBarSeparators,
@@ -42,7 +43,7 @@ extension AppSettings {
         K.resumeAgentsAfterQuit, K.appIcon, K.resumeAgentsImmediately, K.continueInterruptedAgents
     ]
 
-    static let syncedCustomThemesKey = "customThemes"
+    static let syncedCustomThemesKey = "customThemesV2"
 
     /// The synced subset of the settings, plus custom themes, as JSON values.
     func syncSnapshot() -> [String: Any] {
@@ -83,6 +84,7 @@ extension AppSettings {
             K.autoTheme: autoTheme,
             K.darkThemeName: darkThemeName,
             K.lightThemeName: lightThemeName,
+            K.chromeContrast: chromeContrast.rawValue,
             K.cursorStyle: cursorStyle.rawValue,
             K.fontSize: Double(fontSize),
             K.fontName: fontName,

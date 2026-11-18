@@ -24,7 +24,7 @@ enum ProfileBadge {
 
     /// The badge's colour: the profile's accent, else the theme's.
     static func color(for tab: Pane.Tab, theme: TerminalTheme) -> NSColor {
-        tab.state.profile.flatMap { ProfileStore.shared.accent(forProfile: $0) } ?? theme.accentColor
+        tab.state.profile.flatMap { ProfileStore.shared.accent(forProfile: $0) } ?? theme.accent
     }
 
     /// Draws `text` as a pill after a title that ends at `x`, centered on `midY`.

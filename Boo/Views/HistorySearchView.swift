@@ -118,14 +118,14 @@ final class HistorySearchController: NSObject, NSTextFieldDelegate, NSWindowDele
         root.layer?.cornerRadius = 10
         root.layer?.masksToBounds = true
         root.layer?.borderWidth = 1
-        root.layer?.backgroundColor = theme.cardBg.cgColor
+        root.layer?.backgroundColor = theme.surfaceRaised.cgColor
         root.layer?.borderColor = theme.separator.cgColor
 
         field.isBordered = false
         field.drawsBackground = false
         field.focusRingType = .none
         field.font = .monospacedSystemFont(ofSize: 14, weight: .regular)
-        field.textColor = theme.chromeText
+        field.textColor = theme.textPrimary
         field.delegate = self
         field.cell?.usesSingleLineMode = true
         field.placeholderAttributedString = NSAttributedString(
@@ -332,7 +332,7 @@ struct HistorySearchBody: View {
             Text(title)
                 .font(.app(size: 11, weight: on ? .semibold : .regular))
                 .lineLimit(1).truncationMode(.middle)
-                .foregroundColor(Color(nsColor: on ? theme.chromeText : theme.textSecondary))
+                .foregroundColor(Color(nsColor: on ? theme.textPrimary : theme.textSecondary))
                 .padding(.horizontal, 8)
                 .frame(height: 20)
                 .background(
@@ -378,7 +378,7 @@ struct HistorySearchBody: View {
             Text(entry.command.replacingOccurrences(of: "\n", with: " ⏎ "))
                 .font(.system(size: 12.5, design: .monospaced))
                 .lineLimit(1).truncationMode(.tail)
-                .foregroundColor(Color(nsColor: theme.chromeText))
+                .foregroundColor(Color(nsColor: theme.textPrimary))
             Spacer(minLength: 8)
             if entry.failed, let code = entry.exitCode {
                 Text("✗ \(code)").font(.system(size: 10.5, weight: .medium, design: .monospaced))

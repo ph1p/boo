@@ -114,9 +114,9 @@ extension PaneView {
             // the pill only appears under the pointer.
             if hovered {
                 WorkspacePillStyle.fill(
-                    ctx, rect: pill, active: false, hovered: true, wsColor: nil, neutral: theme.chromeMuted)
+                    ctx, rect: pill, active: false, hovered: true, wsColor: nil, neutral: theme.textMuted)
             }
-            let color = theme.chromeMuted.withAlphaComponent(hovered ? 0.9 : 0.65)
+            let color = theme.textMuted.withAlphaComponent(hovered ? 0.9 : 0.65)
             switch button {
             case .plus where isVerticalTabs:
                 drawNewTabRow(ctx: ctx, pill: pill, color: color)

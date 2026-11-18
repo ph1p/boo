@@ -119,7 +119,7 @@ final class BooSocketQueryTests: BooSocketIntegrationTestCase {
         let response = try roundTrip(["cmd": "list_themes"])
         XCTAssertEqual(response["ok"] as? Bool, true)
         let themes = try XCTUnwrap(response["themes"] as? [String])
-        XCTAssertTrue(themes.contains("Default Dark"))
+        XCTAssertTrue(themes.contains("Tokyo Night Day"))
     }
 
     func testGetContext() throws {

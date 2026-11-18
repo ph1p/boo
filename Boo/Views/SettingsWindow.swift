@@ -328,7 +328,7 @@ class SettingsWindowController: NSWindowController {
         let theme = AppSettings.shared.theme
         // Behind the islands, so it is the backdrop rather than the chrome fill —
         // otherwise the margin flashes the wrong colour during a resize.
-        window.backgroundColor = theme.windowBackdrop
+        window.backgroundColor = theme.surfaceBackdrop
         window.appearance = NSAppearance(named: theme.isDark ? .darkAqua : .aqua)
         let hostingView = NoSafeAreaHostingView(rootView: SettingsView())
         window.contentView = hostingView
@@ -344,7 +344,7 @@ class SettingsWindowController: NSWindowController {
         ) { [weak self] _ in
             MainActor.assumeIsolated {
                 let t = AppSettings.shared.theme
-                self?.window?.backgroundColor = t.windowBackdrop
+                self?.window?.backgroundColor = t.surfaceBackdrop
                 self?.window?.appearance = NSAppearance(named: t.isDark ? .darkAqua : .aqua)
             }
         }

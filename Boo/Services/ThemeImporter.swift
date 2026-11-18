@@ -3,8 +3,8 @@ import Foundation
 /// Converts third-party terminal color schemes into Boo custom themes.
 /// Supported: iTerm2 `.itermcolors` property lists and Ghostty theme files
 /// (`palette = N=#rrggbb`, `background`, `foreground`, `cursor-color`,
-/// `selection-background`). Chrome colors are derived from the terminal
-/// colors so an imported theme looks coherent without manual tweaking.
+/// `selection-background`). Only the terminal palette is read; the chrome is
+/// generated from it like for every other theme.
 enum ThemeImporter {
     enum ImportError: LocalizedError {
         case unreadable
@@ -102,7 +102,7 @@ enum ThemeImporter {
 
     // MARK: - Assembly
 
-    /// Fills gaps from Boo's default palette and derives the chrome colors.
+    /// Fills gaps from Boo's default palette. The chrome is generated.
     static func build(
         name: String, foreground fg: TerminalColor, background bg: TerminalColor,
         cursor: TerminalColor?, selection: TerminalColor?, palette: [TerminalColor?]
@@ -111,7 +111,6 @@ enum ThemeImporter {
         let ansi = (0..<16).map { i in
             palette.indices.contains(i) ? (palette[i] ?? fallback[safe: i] ?? fg) : (fallback[safe: i] ?? fg)
         }
-        let dark = bg.luminance < 0.5
         return CustomThemeData(
             name: name,
             foreground: fg,
@@ -119,11 +118,7 @@ enum ThemeImporter {
             cursor: cursor ?? fg,
             selectionHex: (selection ?? mix(fg, bg, 0.3)).hexString,
             ansiColors: ansi,
-            chromeBgHex: bg.hexString,
-            chromeTextHex: fg.hexString,
-            chromeMutedHex: mix(fg, bg, 0.5).hexString,
-            sidebarBgHex: bg.highlight(dark ? 0.03 : -0.03).hexString,
-            accentHex: ansi[4].hexString
+            accentHex: nil
         )
     }
 

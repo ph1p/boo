@@ -83,7 +83,7 @@ enum ProcessIcon {
         /// Returns a theme-appropriate color for the process icon.
         /// Colors are derived from the terminal theme's ANSI palette and chrome colors.
         static func themeColor(for process: String, theme: TerminalTheme, isActive: Bool) -> NSColor {
-            guard isActive else { return theme.chromeMuted }
+            guard isActive else { return theme.textMuted }
             if let fixed = fixedColorMap[process.lowercased()] { return fixed }
             let cat = category(for: process)
             switch cat {
@@ -113,7 +113,7 @@ enum ProcessIcon {
                 return theme.ansiColors[4].nsColor
             case "filemanager":
                 // Accent — navigation
-                return theme.accentColor
+                return theme.accent
             case "multiplexer":
                 // Magenta — session management
                 return theme.ansiColors[5].nsColor
@@ -122,7 +122,7 @@ enum ProcessIcon {
                 return theme.ansiColors[13].nsColor
             default:
                 // Accent for known processes, muted for unknown
-                return icon(for: process) != nil ? theme.accentColor : theme.chromeMuted
+                return icon(for: process) != nil ? theme.accent : theme.textMuted
             }
         }
     #endif

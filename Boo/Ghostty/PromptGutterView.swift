@@ -45,7 +45,7 @@ final class PromptGutterView: NSView {
     static func color(for status: GhosttyView.PromptMark.Status, theme: TerminalTheme) -> NSColor {
         switch status {
         case .failed: return theme.error
-        case .succeeded: return theme.accentColor.withAlphaComponent(0.6)
+        case .succeeded: return theme.accent.withAlphaComponent(0.6)
         // Running, or the shell reported no exit status.
         case .none: return theme.focusBorder
         }

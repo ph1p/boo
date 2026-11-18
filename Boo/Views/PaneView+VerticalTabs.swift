@@ -156,7 +156,7 @@ extension PaneView {
         guard colW > 0 else { return }
         ctx.setFillColor(theme.background.surfaceColor.cgColor)
         ctx.fill(CGRect(x: 0, y: 0, width: colW, height: bounds.height))
-        ctx.setFillColor(theme.paneBorder.cgColor)
+        ctx.setFillColor(theme.borderPane.cgColor)
         ctx.fill(CGRect(x: colW - 1, y: 0, width: 1, height: bounds.height))
 
         let heights = verticalSlotHeights()
@@ -246,7 +246,7 @@ extension PaneView {
                 ctx.setFillColor(tint.withAlphaComponent(0.18).cgColor)
                 WorkspacePillStyle.fillRoundedRect(ctx, rect: pill)
             }
-            text = theme.chromeText
+            text = theme.textPrimary
         }
         // Lines the name up with the tab titles below it.
         var x = pill.minX + 11
@@ -332,9 +332,9 @@ extension PaneView {
         }
         defer { if inFlight { ctx.restoreGState() } }
         WorkspacePillStyle.fill(
-            ctx, rect: pill, active: isActive, hovered: isHovered, wsColor: nil, neutral: theme.chromeMuted)
+            ctx, rect: pill, active: isActive, hovered: isHovered, wsColor: nil, neutral: theme.textMuted)
         if selectedTabIDs.contains(tab.id) {
-            WorkspacePillStyle.strokeHairline(ctx, rect: pill, color: theme.accentColor)
+            WorkspacePillStyle.strokeHairline(ctx, rect: pill, color: theme.accent)
         }
 
         let showClose = showTabClose && (isActive || isHovered)
@@ -351,7 +351,7 @@ extension PaneView {
         let titleAttrs: [NSAttributedString.Key: Any] = [
             .font: isActive ? VerticalFonts.titleActive : VerticalFonts.title,
             .foregroundColor: isActive
-                ? theme.chromeText : (isHovered ? theme.chromeText.withAlphaComponent(0.8) : theme.chromeMuted),
+                ? theme.textPrimary : (isHovered ? theme.textPrimary.withAlphaComponent(0.8) : theme.textMuted),
             .paragraphStyle: para
         ]
         let title = Self.tabDisplayTitle(tab: tab) as NSString
@@ -377,7 +377,7 @@ extension PaneView {
                 x += 10
             }
             let attrs: [NSAttributedString.Key: Any] = [
-                .font: VerticalFonts.detail, .foregroundColor: theme.chromeMuted, .paragraphStyle: para
+                .font: VerticalFonts.detail, .foregroundColor: theme.textMuted, .paragraphStyle: para
             ]
             let text = detail.text as NSString
             let size = text.size(withAttributes: attrs)
@@ -419,7 +419,7 @@ extension PaneView {
                 in: CGRect(
                     x: pill.maxX - size - Self.tabCloseTrailingGap, y: pill.midY - size / 2, width: size,
                     height: size),
-                tint: theme.chromeMuted, hovered: isHovered && isCloseButtonHovered)
+                tint: theme.textMuted, hovered: isHovered && isCloseButtonHovered)
         }
     }
 

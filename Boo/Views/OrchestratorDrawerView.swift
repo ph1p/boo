@@ -79,8 +79,8 @@ final class OrchestratorDrawerView: NSView {
 
     private func applyModel() {
         let theme = model.theme
-        layer?.backgroundColor = theme.sidebarBg.cgColor
-        IslandMetrics.round(self, borderColor: theme.sidebarBorder)
+        layer?.backgroundColor = theme.surfaceChrome.cgColor
+        IslandMetrics.round(self, borderColor: theme.borderChrome)
         emptyState.isHidden = model.running
         terminalContainer.isHidden = !model.running
     }
@@ -240,7 +240,7 @@ struct OrchestratorPanel: View {
             HStack(spacing: 6) {
                 Circle().fill(Color(nsColor: model.stateColor)).frame(width: 7, height: 7)
                 Text("Orchestrator").font(.system(size: 12, weight: .semibold))
-                    .foregroundColor(Color(nsColor: theme.chromeText))
+                    .foregroundColor(Color(nsColor: theme.textPrimary))
                 Spacer()
                 if model.running {
                     iconButton("stop.circle", help: "Stop the orchestrator") { OrchestratorController.shared.stop() }
@@ -283,7 +283,7 @@ struct OrchestratorPanel: View {
             HStack(spacing: 6) {
                 Circle().fill(Color(nsColor: row.color)).frame(width: 6, height: 6)
                 Text(row.summary).lineLimit(1).truncationMode(.tail)
-                    .foregroundColor(Color(nsColor: theme.chromeText))
+                    .foregroundColor(Color(nsColor: theme.textPrimary))
                 Spacer(minLength: 4)
                 if row.owned {
                     Text("owned").font(.system(size: 9, weight: .medium))
@@ -320,7 +320,7 @@ struct ApprovalCardView: View {
                 Image(systemName: "hand.raised.fill").font(.system(size: 10))
                     .foregroundColor(Color(nsColor: theme.warning))
                 Text(card.action).font(.system(size: 11, weight: .semibold))
-                    .foregroundColor(Color(nsColor: theme.chromeText))
+                    .foregroundColor(Color(nsColor: theme.textPrimary))
                 Spacer()
             }
             if !card.target.isEmpty {
@@ -328,7 +328,7 @@ struct ApprovalCardView: View {
                     if let tab = card.targetTab { AgentInbox.shared.jump(to: tab) }
                 } label: {
                     Text(card.target).font(.system(size: 10)).lineLimit(1)
-                        .foregroundColor(Color(nsColor: theme.accentColor))
+                        .foregroundColor(Color(nsColor: theme.accent))
                 }
                 .buttonStyle(.plain)
                 .help("Jump to the target")
@@ -336,7 +336,7 @@ struct ApprovalCardView: View {
             if !card.payload.isEmpty {
                 Text(card.payload).font(.system(size: 11, design: .monospaced)).lineLimit(8)
                     .textSelection(.enabled)
-                    .foregroundColor(Color(nsColor: theme.chromeText))
+                    .foregroundColor(Color(nsColor: theme.textPrimary))
                     .padding(6).frame(maxWidth: .infinity, alignment: .leading)
                     .background(Color(nsColor: theme.subtleFill)).cornerRadius(4)
             }
@@ -353,7 +353,7 @@ struct ApprovalCardView: View {
             .controlSize(.small)
         }
         .padding(8)
-        .background(Color(nsColor: theme.cardBg))
+        .background(Color(nsColor: theme.surfaceRaised))
         .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color(nsColor: theme.separator), lineWidth: 1))
         .cornerRadius(6)
     }

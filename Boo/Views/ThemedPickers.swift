@@ -40,7 +40,7 @@ struct ThemedSegmentedPicker<Value: Hashable>: View {
                         .background {
                             if selected {
                                 RoundedRectangle(cornerRadius: BooStyle.Radius.control - 2, style: .continuous)
-                                    .fill(t.cardBg)
+                                    .fill(t.raised)
                                     .shadow(color: .black.opacity(0.18), radius: 1, y: 0.5)
                                     .matchedGeometryEffect(id: "thumb", in: thumb)
                             } else if hovered == option {
@@ -202,7 +202,7 @@ struct ThemedSwitchStyle: ToggleStyle {
                         .overlay(Capsule().strokeBorder(on ? .clear : t.separator, lineWidth: 0.5))
                         .overlay(alignment: on ? .trailing : .leading) {
                             Circle()
-                                .fill(on ? Color(nsColor: PaneView.contrastingText(on: t.theme.accentColor)) : .white)
+                                .fill(on ? Color(nsColor: PaneView.contrastingText(on: t.theme.accent)) : .white)
                                 .shadow(color: .black.opacity(0.25), radius: 1, y: 0.5)
                                 .padding(2)
                         }

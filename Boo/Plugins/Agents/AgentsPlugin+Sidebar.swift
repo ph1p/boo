@@ -45,9 +45,9 @@ extension AgentsPlugin {
 
         let act = actions
         let fontScale = context.fontScale
-        let textColor = Color(nsColor: context.theme.chromeText)
-        let mutedColor = Color(nsColor: context.theme.chromeMuted)
-        let accentColor = Color(nsColor: context.theme.accentColor)
+        let textColor = Color(nsColor: context.theme.textPrimary)
+        let mutedColor = Color(nsColor: context.theme.textMuted)
+        let accentColor = Color(nsColor: context.theme.accent)
 
         var sections: [SidebarSection] = []
 

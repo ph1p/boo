@@ -90,7 +90,7 @@ import XCTest
             try png.write(to: URL(fileURLWithPath: dir).appendingPathComponent("pane-activity-border.png"))
         }
 
-        let accent = AppSettings.shared.theme.accentColor.usingColorSpace(.deviceRGB)!
+        let accent = AppSettings.shared.theme.accent.usingColorSpace(.deviceRGB)!
         func isAccent(_ x: Int, _ y: Int) -> Bool {
             guard let c = rep.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB) else { return false }
             // Overlay alpha is 0.8 over the pane background, so match loosely on hue distance.

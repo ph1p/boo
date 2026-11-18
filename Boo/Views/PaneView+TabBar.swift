@@ -196,9 +196,9 @@ extension PaneView {
         let pillRect = Self.tabPillRect(inSlot: tabRect)
         WorkspacePillStyle.fill(
             ctx, rect: pillRect, active: isActive, hovered: isHovered,
-            wsColor: nil, neutral: theme.chromeMuted)
+            wsColor: nil, neutral: theme.textMuted)
         if selectedTabIDs.contains(tab.id) {
-            WorkspacePillStyle.strokeHairline(ctx, rect: pillRect, color: theme.accentColor)
+            WorkspacePillStyle.strokeHairline(ctx, rect: pillRect, color: theme.accent)
         }
 
         let midY = y + rowH / 2
@@ -233,7 +233,7 @@ extension PaneView {
         let attrs: [NSAttributedString.Key: Any] = [
             .font: isActive ? TabFonts.title10Medium : TabFonts.title10Regular,
             .foregroundColor: isActive
-                ? theme.chromeText : (isHovered ? theme.chromeText.withAlphaComponent(0.8) : theme.chromeMuted),
+                ? theme.textPrimary : (isHovered ? theme.textPrimary.withAlphaComponent(0.8) : theme.textMuted),
             .paragraphStyle: para
         ]
         let title = NSMutableAttributedString(string: Self.tabDisplayTitle(tab: tab), attributes: attrs)
@@ -243,7 +243,7 @@ extension PaneView {
                     string: "  " + subtitle,
                     attributes: [
                         .font: TabFonts.subtitle,
-                        .foregroundColor: theme.chromeMuted.withAlphaComponent(isActive ? 0.75 : 0.55),
+                        .foregroundColor: theme.textMuted.withAlphaComponent(isActive ? 0.75 : 0.55),
                         .paragraphStyle: para
                     ]))
         }
@@ -301,7 +301,7 @@ extension PaneView {
         // Close button — only show on active or hovered tab
         if showClose {
             WorkspacePillStyle.drawCloseButton(
-                ctx, in: closeRect, tint: theme.chromeMuted, hovered: isHovered && isCloseButtonHovered)
+                ctx, in: closeRect, tint: theme.textMuted, hovered: isHovered && isCloseButtonHovered)
         }
     }
 
@@ -318,7 +318,7 @@ extension PaneView {
     static func drawAgentBadge(_ ctx: CGContext, color: NSColor, theme: TerminalTheme, tileCorner: CGPoint) {
         let size: CGFloat = 7
         let rect = CGRect(x: tileCorner.x - size + 1.5, y: tileCorner.y - 1.5, width: size, height: size)
-        ctx.setFillColor(theme.chromeBg.cgColor)
+        ctx.setFillColor(theme.surfaceChrome.cgColor)
         ctx.fillEllipse(in: rect.insetBy(dx: -1.5, dy: -1.5))
         ctx.setFillColor(color.cgColor)
         ctx.fillEllipse(in: rect)
@@ -347,7 +347,7 @@ extension PaneView {
         let x = tile.midX - 7
         // Content type icon for non-terminal tabs
         if tab.contentType != .terminal {
-            let iconColor = isActive ? theme.chromeText : theme.chromeMuted
+            let iconColor = isActive ? theme.textPrimary : theme.textMuted
             Self.drawIconTile(tile, color: iconColor, isActive: isActive)
             guard
                 let drawn = Self.drawTabIcon(
@@ -362,7 +362,7 @@ extension PaneView {
         guard tabHasLeadingIcon(tab) else { return 0 }
         // A tmux pane: its foreground process is Boo's bridge, so mark it as tmux.
         if pane.tmuxOwned {
-            let color = WorkspaceColor.green.themed(theme) ?? theme.chromeText
+            let color = WorkspaceColor.green.themed(theme) ?? theme.textPrimary
             Self.drawIconTile(tile, color: color, isActive: isActive)
             guard
                 let drawn = Self.drawTabIcon(

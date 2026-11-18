@@ -152,7 +152,7 @@ final class KeyTableSegment: StatusBarPlugin {
         guard let indicator = MainActor.assumeIsolated({ KeyTables.shared.indicator }) else { return 0 }
         let attrs: [NSAttributedString.Key: Any] = [
             .font: NSFont.monospacedSystemFont(ofSize: 10, weight: .semibold),
-            .foregroundColor: theme.accentColor
+            .foregroundColor: theme.accent
         ]
         return Self.drawLabel(indicator, attrs: attrs, endingAt: x, y: y).width
     }

@@ -167,7 +167,7 @@ struct AgentNewTaskForm: View {
                     .frame(maxWidth: .infinity, minHeight: 22)
                     .background(
                         RoundedRectangle(cornerRadius: 5, style: .continuous)
-                            .fill(selected ? t.cardBg : .clear)
+                            .fill(selected ? t.raised : .clear)
                             .shadow(color: .black.opacity(selected ? 0.18 : 0), radius: 1, y: 0.5)
                     )
                     .contentShape(Rectangle())

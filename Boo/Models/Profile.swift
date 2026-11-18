@@ -276,7 +276,7 @@ final class ProfileStore {
         let profile = profile(named: name)
         let color =
             profile?.tabColor.flatMap { NSColor(hex: $0) }
-            ?? profile?.theme.flatMap { AppSettings.shared.theme(named: $0) }?.accentColor
+            ?? profile?.theme.flatMap { AppSettings.shared.theme(named: $0) }?.accent
         accents[name] = color
         return color
     }

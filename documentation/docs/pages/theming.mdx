@@ -1,68 +1,130 @@
 ---
-description: How Boo themes are built. Terminal and chrome base colors, the semantic tokens derived from them, the built-in themes and how to use them in SwiftUI and plugins.
+description: How Boo themes are built. A theme is a terminal palette; every interface color is generated from it on one OKLab scale. Tokens, contrast levels, built-in and Ghostty themes, and how to use them in SwiftUI and plugins.
 ---
 
 # Theming
 
 ## Theme Structure
 
-`TerminalTheme` (`Boo/Models/Theme.swift`) holds a few base colors: 4 terminal
-colors, 16 ANSI colors and 5 chrome colors. Every other UI color is derived
-from them.
-
-### Terminal colors
+A `TerminalTheme` (`Boo/Models/Theme.swift`) is a terminal palette plus an
+optional accent. It stores nothing else. Every interface color (sidebar,
+toolbar, status bar, borders, muted text) is generated from the palette, so any
+terminal theme gets a matching interface: built-in, imported or one of
+Ghostty's.
 
 | Field | Role |
 | --- | --- |
 | `foreground` / `background` | Terminal text and surface |
 | `cursor` | Terminal cursor |
 | `selection` | Terminal selection highlight (carries its own alpha) |
-| `ansiColors[16]` | 8 normal + 8 bright ANSI colors; also feed editor syntax colors and the status tokens below |
+| `ansiColors[16]` | 8 normal + 8 bright ANSI colors; also feed editor syntax colors and the status tokens |
+| `accent` (optional) | Overrides the generated accent. Leave it unset to pick the accent from the palette |
 
-### Chrome colors (the 5 UI base tokens)
+**Settings → Theme → New Theme…** edits these fields. **Import Theme…** reads an
+iTerm2 `.itermcolors` file or a Ghostty theme file (`ThemeImporter`). Imports
+leave the accent unset.
 
-| Field | Role |
+## Generated Interface Colors
+
+`GeneratedChrome` computes the interface colors once per theme. It works in
+OKLab and keeps the hue of the terminal background:
+
+1. **Surfaces form a lightness ladder.** The pane is the terminal background.
+   The chrome surface sits one step deeper, the backdrop one more step below
+   it. A background too dark to step below lifts its chrome instead, and the
+   backdrop sinks to near black. Raised cards step away from the chrome
+   surface, toward the foreground.
+2. **Text** is the theme foreground, pushed until it reaches 7:1 on the
+   chrome surface.
+3. **Muted text** walks from the text toward the surface while it still keeps
+   the contrast target of the current contrast level. It carries the theme's
+   own tint.
+4. **The accent** is the first saturated color of: cursor, bright blue, blue,
+   bright magenta, magenta, bright cyan, cyan. It is pushed to at least 3:1
+   on the chrome surface and on the terminal background. A theme `accent`
+   replaces this pick.
+5. **Borders** blend the muted color over the surface they sit on. The result
+   is opaque, so overlapping strokes do not double-darken.
+
+### The 60-30-10 rule
+
+The ladder gives every theme a 60-30-10 split:
+
+| Share | Role | Tokens |
+| --- | --- | --- |
+| 60% | Dominant: the terminal panes | `background` |
+| 30% | Interface: sidebar, toolbar, status bar, window frame | `surfaceChrome`, `surfaceBackdrop` |
+| 10% | Accent: selection, focus, activity | `accent` |
+
+`ThemeTests.testGeneratedChromeIsReadable` checks every built-in theme at every
+contrast level.
+
+### Interface contrast
+
+**Settings → Theme → Interface contrast** (`AppSettings.chromeContrast`) sets
+one level for all themes:
+
+| Level | Surface steps | Border alpha | Muted text contrast |
+| --- | --- | --- | --- |
+| Subtle | × 0.55 | × 0.7 | 4.5:1 |
+| Balanced (default) | × 1 | × 1 | 4.8:1 |
+| Strong | × 1.7 | × 1.5 | 5.8:1 |
+
+`AppSettings.theme(named:)` returns themes with the current level applied. For a
+theme you built yourself, call `theme.withContrast(_:)`.
+
+## Tokens
+
+**Use the token that names the role.** Do not write
+`textMuted.withAlphaComponent(…)` by hand.
+
+### Surfaces
+
+| Token | Used for |
 | --- | --- |
-| `chromeBg` | Toolbar, status bar, settings surfaces |
-| `chromeText` | Primary text and icons in bars/panels |
-| `chromeMuted` | The *source* hue for secondary text, separators, and hover fills — consume it via the semantic tokens below, not raw |
-| `sidebarBg` | Sidebar and every floating panel (find bar, autocomplete, detail panel) |
-| `accentColor` | Selection, focus, activity — anything "active" |
+| `surfaceChrome` | Sidebar, toolbar, status bar, settings and floating panels (find bar, autocomplete, detail panel) |
+| `surfaceBackdrop` | The gaps between chrome islands; the deepest surface |
+| `surfaceRaised` | Cards and raised rows inside the chrome surface |
+| `surfaceGhost` | Drag ghost backdrops (`surfaceChrome` @ 0.88) |
 
-You can edit every base color in **Settings → Theme → New Theme…**.
-**Import Theme…** in the same place reads an iTerm2 `.itermcolors` file or a
-Ghostty theme file (`ThemeImporter`).
-
-## Derived Semantic Tokens
-
-Derived tokens are computed from the base colors, so every theme gets them for
-free. **Use the token that names the role.** Do not write
-`chromeMuted.withAlphaComponent(…)` by hand. The full table is below.
+### Text
 
 | Token | Derivation | Used for |
 | --- | --- | --- |
-| `textSecondary` | `chromeMuted` @ 0.7 | Secondary labels, close buttons, hovered glyphs |
-| `textTertiary` | `chromeMuted` @ 0.5 | Placeholders, idle glyphs, inactive icons |
-| `separator` | `chromeMuted` @ 0.2 (alpha) | Hairlines over varying backgrounds: status-bar dividers, unfocused field borders |
-| `chromeBorder` / `sidebarBorder` | muted @ 0.2 blended opaque | Borders that may overlap-draw (opaque → no double-darkening) |
-| `paneBorder` | muted @ 0.2 over `background` | Edge stroke of pane islands |
-| `islandBorder` | = `chromeBorder` | Edge stroke of chrome-coloured islands. Every island border must blend over its own surface or it vanishes: panes use `paneBorder`, the sidebar uses `sidebarBorder` |
-| `hoverFill` | `chromeMuted` @ 0.10 | Row/segment/tab hover backgrounds |
-| `subtleFill` | `chromeMuted` @ 0.06 | Drag placeholder slots, idle button backgrounds |
-| `controlFill` | `chromeMuted` @ 0.15 | Small controls: close-button circle, toolbar button hover, field backgrounds |
-| `sidebarRowHover` | muted @ 0.08 over `sidebarBg` (opaque) | Sidebar list row hover |
-| `cardBg` | muted @ 0.12 over `sidebarBg` (opaque) | Card surfaces in sidebar/settings |
-| `windowBackdrop` | `chromeBg` shifted ±0.06 | The gaps between chrome islands |
-| `accentEmphasis` | `accentColor` @ 0.85 | Active/pressed accent fills, activity dots, drop insertion bars |
-| `focusRing` | `accentColor` @ 0.7 | Focused text-field borders (URL field, find bar) |
-| `focusBorder` | `accentColor` @ 0.45 | Focused pane island, active workspace pill |
-| `accentSelectionFill` | `accentColor` @ 0.15 | Selected item backgrounds (sidebar tab, list rows) |
-| `dragGhostBg` | `chromeBg` @ 0.88 | Drag ghost backdrops (tabs, workspaces, panels) |
+| `textPrimary` | foreground, ≥ 7:1 on `surfaceChrome` | Primary text and icons in bars and panels |
+| `textMuted` | see above | The source hue for the tokens below. Do not use it raw |
+| `textSecondary` | `textMuted` @ 0.7 | Secondary labels, close buttons, hovered glyphs |
+| `textTertiary` | `textMuted` @ 0.5 | Placeholders, idle glyphs, inactive icons |
+
+### Borders and fills
+
+| Token | Derivation | Used for |
+| --- | --- | --- |
+| `borderChrome` | muted @ 0.2 over `surfaceChrome`, opaque | Borders of chrome islands that may overlap-draw |
+| `borderPane` | muted @ 0.2 over `background`, opaque | Edge stroke of pane islands |
+| `separator` | muted @ 0.2 (alpha) | Hairlines drawn once over varying backgrounds |
+| `rowHover` | muted @ 0.08 over `surfaceChrome`, opaque | Sidebar list row hover |
+| `hoverFill` | muted @ 0.10 | Row, segment and tab hover |
+| `subtleFill` | muted @ 0.06 | Drag placeholder slots, idle button backgrounds |
+| `controlFill` | muted @ 0.15 | Small controls: close-button circle, toolbar button hover, field backgrounds |
+
+The border alphas scale with the contrast level. An island border must blend
+over its own surface or it vanishes: panes use `borderPane`, chrome islands use
+`borderChrome`.
+
+### Accent
+
+| Token | Derivation | Used for |
+| --- | --- | --- |
+| `accent` | see above | Selection, focus, activity |
+| `accentEmphasis` | `accent` @ 0.85 | Active/pressed accent fills, activity dots, drop insertion bars |
+| `focusRing` | `accent` @ 0.7 | Focused text-field borders (URL field, find bar) |
+| `focusBorder` | `accent` @ 0.45 | Focused pane island, active workspace pill |
+| `accentSelectionFill` | `accent` @ 0.15 | Selected item backgrounds (sidebar tab, list rows) |
 
 ### Status colors
 
-Theme-adaptive status hues are derived from the ANSI palette, so they always
-match the terminal colors:
+Status hues come from the ANSI palette, so they always match the terminal:
 
 | Token | Source | Used for |
 | --- | --- | --- |
@@ -81,21 +143,31 @@ blue") live in `Boo/Services/BooPaths.swift`: `NSColor.booRemote`,
 
 If you need a raw alpha (state matrices, animations), stay inside these bands:
 
-- **0.04–0.09** — subtle fills
-- **0.10–0.18** — hover fills
-- **0.20–0.25** — separators / borders
-- **0.40–0.60** — tertiary text
-- **0.70–0.90** — secondary text / active emphasis
+- **0.04–0.09**: subtle fills
+- **0.10–0.18**: hover fills
+- **0.20–0.25**: separators and borders
+- **0.40–0.60**: tertiary text
+- **0.70–0.90**: secondary text, active emphasis
 
 ## SwiftUI
 
-SwiftUI views use `Tokens` (`Boo/Views/Settings/SettingsTokens.swift`). It mirrors the
-theme colors as SwiftUI `Color`:
+SwiftUI views use `Tokens` (`Boo/Views/Settings/SettingsTokens.swift`). It mirrors
+the theme colors as SwiftUI `Color`:
 
-- Named mirrors: `t.text`, `t.textSecondary`, `t.textTertiary`, `t.separator`,
-  `t.hoverFill`, `t.controlFill`, `t.accentSelectionFill`, `t.focusRing`,
-  `t.cardBg`, `t.success`, …
-- Any other token: `t.color(\.subtleFill)`.
+| Shorthand | Token |
+| --- | --- |
+| `t.text` | `textPrimary` |
+| `t.muted` | `textMuted` |
+| `t.accent` | `accent` |
+| `t.bg` | `surfaceChrome` |
+| `t.backdrop` | `surfaceBackdrop` |
+| `t.raised` | `surfaceRaised` |
+| `t.border` | `borderChrome` |
+| `t.fg` / `t.termBg` | terminal `foreground` / `background` |
+
+The other tokens have mirrors with the same name (`t.textSecondary`,
+`t.hoverFill`, `t.focusRing`, `t.success`, …). Any token without a mirror:
+`t.color(\.rowHover)`.
 
 Get a `Tokens` value one of three ways:
 
@@ -111,37 +183,48 @@ Prefer tokens over `t.muted.opacity(…)`.
 
 Built-in plugins use the same tokens. Bookmarks, Snippets and Docker read
 `Tokens`; FileTree reads the `TerminalTheme` tokens directly. New plugin views
-should do the same. See [Plugin Development](/plugin-development).
+should do the same. Script plugins get a `ThemeSnapshot` with `textPrimary`,
+`textMuted`, `accent`, `surfaceChrome`, the terminal colors and the ANSI
+palette. See [Plugin Development](/plugin-development).
 
-## Built-in Themes
+## Themes
 
-Boo ships with 34 themes (`Boo/Models/TerminalTheme+BuiltIn.swift`):
+### Built-in themes
 
-- **Boo** — Dark, Light (the defaults)
-- **Default** — Dark, Light
-- **Tokyo Night**
-- **Catppuccin** — Mocha, Macchiato, Frappé, Latte
-- **Solarized** — Dark, Light
-- **Dracula**
-- **Nord**
-- **Gruvbox** — Dark, Light
-- **One** — Dark, Light
-- **Rosé Pine**
-- **Kanagawa**
-- **Everforest** — Dark, Light
-- **GitHub** — Dark, Light
-- **Ayu** — Dark, Light
-- **Monokai**
-- **Material** — Dark, Light
-- **Palenight**
-- **Horizon Dark**
-- **Cobalt2**
-- **Night Owl**
-- **Synthwave '84**
-- **Moonlight**
+Boo ships 12 curated themes in 6 families (`Boo/Models/TerminalTheme+BuiltIn.swift`).
+Each family has a dark and a light variant, so the auto dark/light switch always
+has a matching partner:
 
-A theme only defines the base colors. Adding a new token never means touching
-the built-ins or migrating saved custom themes.
+- **Boo**: Dark, Light (the defaults)
+- **Catppuccin**: Mocha, Latte
+- **Tokyo Night**: Night, Day
+- **Rosé Pine**: Main, Dawn
+- **Gruvbox**: Dark, Light
+- **GitHub**: Dark, Light
+
+### Ghostty themes
+
+`GhosttyThemeCatalog` lists the more than 900 theme files Ghostty bundles
+(its `themes` resource folder). **Settings → Theme → Browse Themes…** opens a
+searchable gallery. The catalog lists names from disk and parses a file only
+when a row scrolls in or a saved name asks for it. Names of the curated themes
+are hidden from the catalog.
+
+### Name lookup
+
+`AppSettings.theme(named:)` resolves a saved name in this order:
+
+1. built-in theme
+2. custom theme
+3. Ghostty catalog theme
+
+### Reset in this version
+
+Saved themes from before the generated model are not migrated. Custom themes
+are stored under a new key, `customThemesV2`, so older custom themes no longer
+appear. A saved theme name that no longer resolves falls back to the default
+theme. Re-import or recreate a custom theme; the importer reads iTerm2 and
+Ghostty files.
 
 ## How Theming Works
 
@@ -153,7 +236,7 @@ Theme colors are read at draw time from `AppSettings.shared.theme`. When a theme
 4. AppKit views redraw with the new colors.
 5. The Ghostty config is rebuilt with the new palette. See [Ghostty Integration](/ghostty-integration#configuration).
 
-`isDark` is not stored — it is computed from the background luminance.
+`isDark` is not stored. It is computed from the background luminance.
 
 ## Color Utilities
 

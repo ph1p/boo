@@ -90,7 +90,7 @@ final class DockerServiceTests: XCTestCase {
                 paneCount: 1,
                 tabCount: 1
             ),
-            theme: ThemeSnapshot(from: .defaultDark),
+            theme: ThemeSnapshot(from: .booDark),
             density: .comfortable,
             settings: PluginSettingsReader(pluginID: plugin.manifest.id),
             fontScale: SidebarFontScale(base: 12)
@@ -119,7 +119,7 @@ final class DockerServiceTests: XCTestCase {
                 paneCount: 1,
                 tabCount: 1
             ),
-            theme: ThemeSnapshot(from: .defaultDark),
+            theme: ThemeSnapshot(from: .booDark),
             density: .comfortable,
             settings: PluginSettingsReader(pluginID: plugin.manifest.id),
             fontScale: SidebarFontScale(base: 12)

@@ -6,19 +6,17 @@ import SwiftUI
 /// Every sub-view pulls from here instead of re-deriving colors inline.
 struct Tokens {
     let theme: TerminalTheme
-    var text: Color { Color(nsColor: theme.chromeText) }
-    var muted: Color { Color(nsColor: theme.chromeMuted) }
-    var accent: Color { Color(nsColor: theme.accentColor) }
-    var bg: Color { Color(nsColor: theme.sidebarBg) }
-    var chromeBg: Color { Color(nsColor: theme.chromeBg) }
-    var border: Color { Color(nsColor: theme.sidebarBorder) }
+    var text: Color { Color(nsColor: theme.textPrimary) }
+    var muted: Color { Color(nsColor: theme.textMuted) }
+    var accent: Color { Color(nsColor: theme.accent) }
+    var bg: Color { Color(nsColor: theme.surfaceChrome) }
+    var border: Color { Color(nsColor: theme.borderChrome) }
 
     /// The island backdrop and hairline, read from the same theme properties the
     /// AppKit chrome uses so the settings window matches the main window rather
     /// than approximating it.
-    var backdrop: Color { Color(nsColor: theme.windowBackdrop) }
-    var islandBorder: Color { Color(nsColor: theme.islandBorder) }
-    var cardBg: Color { Color(nsColor: theme.cardBg) }
+    var backdrop: Color { Color(nsColor: theme.surfaceBackdrop) }
+    var raised: Color { Color(nsColor: theme.surfaceRaised) }
 
     /// Generic mirror: any TerminalTheme color as SwiftUI Color. Every current
     /// and future token is reachable via `t.color(\.hoverFill)` — the named

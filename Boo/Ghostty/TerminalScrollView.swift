@@ -372,15 +372,15 @@ private final class FailedBlockButton: NSButton {
     /// does not show through, red only in the icon.
     private func applyTheme() {
         let theme = booTheme
-        let fill = TerminalTheme.blend(theme.chromeMuted, over: theme.background.nsColor, alpha: hovered ? 0.24 : 0.14)
+        let fill = TerminalTheme.blend(theme.textMuted, over: theme.background.nsColor, alpha: hovered ? 0.24 : 0.14)
         layer?.backgroundColor = fill.cgColor
         layer?.borderWidth = 1
-        layer?.borderColor = theme.paneBorder.cgColor
+        layer?.borderColor = theme.borderPane.cgColor
         contentTintColor = theme.error
         attributedTitle = NSAttributedString(
             string: failures?.summary ?? "Ask agent",
             attributes: [
-                .foregroundColor: hovered ? theme.chromeText : theme.textSecondary,
+                .foregroundColor: hovered ? theme.textPrimary : theme.textSecondary,
                 .font: AppFont.ui(ofSize: 11, weight: .medium)
             ])
     }

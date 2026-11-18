@@ -70,7 +70,7 @@ struct GitDetailView: View {
                     Text(commitCopied ? "Copied!" : commit)
                         .font(fontScale.font(.base, design: .monospaced))
                         .foregroundStyle(
-                            Color(nsColor: commitCopied ? theme.accentColor : theme.chromeMuted)
+                            Color(nsColor: commitCopied ? theme.accent : theme.textMuted)
                         )
                         .lineLimit(1)
                         .truncationMode(.tail)
@@ -132,7 +132,7 @@ struct GitDetailView: View {
                     sectionHeader(
                         title: "Untracked",
                         count: untrackedFiles.count,
-                        color: theme.chromeMuted,
+                        color: theme.textMuted,
                         section: .untracked,
                         expanded: $untrackedExpanded,
                         density: density,
@@ -147,7 +147,7 @@ struct GitDetailView: View {
             } else {
                 Text("Working tree clean")
                     .font(fontScale.font(.base))
-                    .foregroundStyle(Color(nsColor: theme.chromeMuted))
+                    .foregroundStyle(Color(nsColor: theme.textMuted))
                     .padding(.horizontal, density == .comfortable ? 12 : 8)
                     .padding(.vertical, density == .comfortable ? 8 : 6)
             }
@@ -200,13 +200,13 @@ struct GitDetailView: View {
                 HStack(spacing: 4) {
                     Image(systemName: "link")
                         .font(fontScale.font(.sm))
-                        .foregroundStyle(Color(nsColor: theme.chromeMuted))
+                        .foregroundStyle(Color(nsColor: theme.textMuted))
                     Text(remote.name)
                         .font(fontScale.font(.base).weight(Font.Weight.medium))
-                        .foregroundStyle(Color(nsColor: theme.accentColor))
+                        .foregroundStyle(Color(nsColor: theme.accent))
                     Text(webURL.host ?? remote.url)
                         .font(fontScale.font(.sm))
-                        .foregroundStyle(Color(nsColor: theme.chromeMuted))
+                        .foregroundStyle(Color(nsColor: theme.textMuted))
                         .lineLimit(1)
                         .truncationMode(.middle)
                 }
@@ -219,13 +219,13 @@ struct GitDetailView: View {
                 HStack(spacing: 4) {
                     Image(systemName: "link")
                         .font(fontScale.font(.sm))
-                        .foregroundStyle(Color(nsColor: theme.chromeMuted))
+                        .foregroundStyle(Color(nsColor: theme.textMuted))
                     Text(remote.name)
                         .font(fontScale.font(.base).weight(Font.Weight.medium))
-                        .foregroundStyle(Color(nsColor: theme.chromeText))
+                        .foregroundStyle(Color(nsColor: theme.textPrimary))
                     Text(remote.url)
                         .font(fontScale.font(.sm))
-                        .foregroundStyle(Color(nsColor: theme.chromeMuted))
+                        .foregroundStyle(Color(nsColor: theme.textMuted))
                         .lineLimit(1)
                         .truncationMode(.middle)
                 }
@@ -242,10 +242,10 @@ struct GitDetailView: View {
         HStack(spacing: 6) {
             Image(systemName: "arrow.triangle.branch")
                 .font(fontScale.font(.base))
-                .foregroundStyle(Color(nsColor: theme.accentColor))
+                .foregroundStyle(Color(nsColor: theme.accent))
             Text(branch)
                 .font(fontScale.font(.base, design: .monospaced).weight(.medium))
-                .foregroundStyle(Color(nsColor: theme.accentColor))
+                .foregroundStyle(Color(nsColor: theme.accent))
                 .lineLimit(1)
                 .truncationMode(.middle)
             if aheadCount > 0 || behindCount > 0 {
@@ -259,13 +259,13 @@ struct GitDetailView: View {
                             .font(fontScale.font(.base, design: .monospaced).weight(.medium))
                     }
                 }
-                .foregroundStyle(Color(nsColor: theme.chromeMuted))
+                .foregroundStyle(Color(nsColor: theme.textMuted))
             }
             Spacer()
             Button(action: { onRefresh?() }) {
                 Image(systemName: "arrow.clockwise")
                     .font(fontScale.font(.base))
-                    .foregroundStyle(Color(nsColor: theme.chromeMuted))
+                    .foregroundStyle(Color(nsColor: theme.textMuted))
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Refresh git status")
@@ -299,7 +299,7 @@ struct GitDetailView: View {
                 HStack(spacing: 4) {
                     Image(systemName: expanded.wrappedValue ? "chevron.down" : "chevron.right")
                         .font(fontScale.font(.sm).weight(.bold))
-                        .foregroundStyle(Color(nsColor: theme.chromeMuted))
+                        .foregroundStyle(Color(nsColor: theme.textMuted))
                         .frame(width: 10)
                     Text("\(title) (\(count))")
                         .font(fontScale.font(.base).weight(.semibold))
@@ -315,7 +315,7 @@ struct GitDetailView: View {
                 Button(action: { onGitAction?(["restore", "--staged", "."]) }) {
                     Text("Unstage all")
                         .font(fontScale.font(.sm))
-                        .foregroundStyle(Color(nsColor: theme.chromeMuted))
+                        .foregroundStyle(Color(nsColor: theme.textMuted))
                 }
                 .buttonStyle(.plain)
                 .opacity(isHovered ? 1.0 : 0.0)
@@ -325,7 +325,7 @@ struct GitDetailView: View {
                 Button(action: { onGitAction?(["add", "-u"]) }) {
                     Text("Stage all")
                         .font(fontScale.font(.sm))
-                        .foregroundStyle(Color(nsColor: theme.chromeMuted))
+                        .foregroundStyle(Color(nsColor: theme.textMuted))
                 }
                 .buttonStyle(.plain)
                 .opacity(isHovered ? 1.0 : 0.0)
@@ -335,7 +335,7 @@ struct GitDetailView: View {
                 Button(action: { for f in untrackedFiles { onGitAction?(["add", f.path]) } }) {
                     Text("Stage all")
                         .font(fontScale.font(.sm))
-                        .foregroundStyle(Color(nsColor: theme.chromeMuted))
+                        .foregroundStyle(Color(nsColor: theme.textMuted))
                 }
                 .buttonStyle(.plain)
                 .opacity(isHovered ? 1.0 : 0.0)
@@ -378,12 +378,12 @@ struct GitDetailView: View {
                         .frame(width: 14, alignment: .center)
                     Text((file.path as NSString).lastPathComponent)
                         .font(fontScale.font(.base))
-                        .foregroundStyle(Color(nsColor: theme.chromeText))
+                        .foregroundStyle(Color(nsColor: theme.textPrimary))
                         .lineLimit(1)
                     if !(file.path as NSString).deletingLastPathComponent.isEmpty {
                         Text((file.path as NSString).deletingLastPathComponent)
                             .font(fontScale.font(.sm))
-                            .foregroundStyle(Color(nsColor: theme.chromeMuted))
+                            .foregroundStyle(Color(nsColor: theme.textMuted))
                             .lineLimit(1)
                             .truncationMode(.head)
                     }
@@ -402,7 +402,7 @@ struct GitDetailView: View {
                     } label: {
                         Image(systemName: "doc.text.magnifyingglass")
                             .font(fontScale.font(.sm))
-                            .foregroundStyle(Color(nsColor: theme.chromeMuted))
+                            .foregroundStyle(Color(nsColor: theme.textMuted))
                             .frame(minWidth: 20, minHeight: 20)
                     }
                     .buttonStyle(.plain)
@@ -416,7 +416,7 @@ struct GitDetailView: View {
                     } label: {
                         Image(systemName: "minus.circle")
                             .font(fontScale.font(.base))
-                            .foregroundStyle(Color(nsColor: theme.chromeMuted))
+                            .foregroundStyle(Color(nsColor: theme.textMuted))
                             .frame(minWidth: 20, minHeight: 20)
                     }
                     .buttonStyle(.plain)
@@ -429,7 +429,7 @@ struct GitDetailView: View {
                     } label: {
                         Image(systemName: "plus.circle")
                             .font(fontScale.font(.base))
-                            .foregroundStyle(Color(nsColor: theme.chromeMuted))
+                            .foregroundStyle(Color(nsColor: theme.textMuted))
                             .frame(minWidth: 20, minHeight: 20)
                     }
                     .buttonStyle(.plain)
@@ -445,7 +445,7 @@ struct GitDetailView: View {
         .padding(.leading, density == .comfortable ? 16 : 12)
         .background(
             RoundedRectangle(cornerRadius: 4, style: .continuous)
-                .fill(Color(nsColor: isHovered ? theme.sidebarRowHover : .clear))
+                .fill(Color(nsColor: isHovered ? theme.rowHover : .clear))
         )
         .padding(.horizontal, density == .comfortable ? 8 : 6)
         .contentShape(Rectangle())

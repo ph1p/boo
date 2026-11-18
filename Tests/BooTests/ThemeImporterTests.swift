@@ -22,7 +22,7 @@ final class ThemeImporterTests: XCTestCase {
         XCTAssertEqual(theme.cursor, TerminalColor(r: 255, g: 0, b: 0))
         XCTAssertEqual(theme.ansiColors.count, 16)
         XCTAssertEqual(theme.ansiColors[15], TerminalColor(r: 255, g: 0, b: 0))
-        XCTAssertEqual(theme.accentHex, theme.ansiColors[4].hexString)
+        XCTAssertNil(theme.accentHex, "imports pick their accent from the palette")
     }
 
     func testITermWithoutBackgroundFails() {

@@ -43,17 +43,17 @@ final class SettingsPersistenceTests: XCTestCase {
         let settings = AppSettings.shared
         let original = settings.themeName
 
-        settings.themeName = "Dracula"
+        settings.themeName = "Gruvbox Dark"
         // Allow notification to propagate
         RunLoop.main.run(until: Date().addingTimeInterval(0.1))
 
         let path = BooPaths.ghosttyConfigFile
         let content = try? String(contentsOfFile: path, encoding: .utf8)
 
-        // Dracula background is #282a36
+        // Gruvbox Dark background is #282828
         XCTAssertTrue(
-            content?.contains("#282a36") ?? false,
-            "Config should contain Dracula background color")
+            content?.contains("#282828") ?? false,
+            "Config should contain Gruvbox Dark background color")
 
         settings.themeName = original
     }

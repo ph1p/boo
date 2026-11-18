@@ -128,7 +128,7 @@ struct ProfilesSettingsView: View {
                 .fill(
                     Color(
                         nsColor: ProfileStore.shared.accent(forProfile: profile.name)
-                            ?? AppSettings.shared.theme.accentColor)
+                            ?? AppSettings.shared.theme.accent)
                 )
                 .frame(width: 8, height: 8)
             Text(profile.name)
@@ -309,7 +309,7 @@ private struct ProfileEditor: View {
                 binding in
                 ThemedMenuPicker(selection: binding) { $0.displayName }
             }
-            field("Tab color", value: $profile.tabColor, fallback: AppSettings.shared.theme.accentColor.hexString) {
+            field("Tab color", value: $profile.tabColor, fallback: AppSettings.shared.theme.accent.hexString) {
                 binding in
                 ColorPicker(
                     "",

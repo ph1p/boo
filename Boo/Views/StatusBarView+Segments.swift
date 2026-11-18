@@ -105,7 +105,7 @@ final class GitBranchSegment: StatusBarPlugin {
 
         let iconAttrs: [NSAttributedString.Key: Any] = [
             .font: AppFont.ui(ofSize: 10),
-            .foregroundColor: theme.accentColor
+            .foregroundColor: theme.accent
         ]
         let iconStr = "\u{2387}" as NSString
         iconStr.safeDraw(at: NSPoint(x: cx, y: y), withAttributes: iconAttrs)
@@ -113,7 +113,7 @@ final class GitBranchSegment: StatusBarPlugin {
 
         let attrs: [NSAttributedString.Key: Any] = [
             .font: AppFont.mono(ofSize: 10, weight: .regular),
-            .foregroundColor: theme.accentColor
+            .foregroundColor: theme.accent
         ]
         let maxBranchChars = settings.statusBarBranchMaxLength
         let displayBranch =
@@ -138,7 +138,7 @@ final class GitBranchSegment: StatusBarPlugin {
         if state.gitRepoRoot != nil {
             let chevronAttrs: [NSAttributedString.Key: Any] = [
                 .font: AppFont.ui(ofSize: 8),
-                .foregroundColor: theme.accentColor.withAlphaComponent(0.6)
+                .foregroundColor: theme.accent.withAlphaComponent(0.6)
             ]
             let chevron = " \u{25BE}" as NSString
             chevron.safeDraw(at: NSPoint(x: cx, y: y + 1), withAttributes: chevronAttrs)
@@ -610,8 +610,8 @@ final class PluginContentSegment: StatusBarPlugin {
         guard let content else { return 0 }
         return drawStatusBarIconLabel(
             icon: content.icon, text: content.text,
-            tint: resolveTint(content.tint, theme: theme) ?? theme.chromeMuted,
-            textColor: theme.chromeText, at: x, y: y, ctx: ctx)
+            tint: resolveTint(content.tint, theme: theme) ?? theme.textMuted,
+            textColor: theme.textPrimary, at: x, y: y, ctx: ctx)
     }
 
     func handleClick(at point: NSPoint, in barView: StatusBarView) -> Bool {
@@ -633,8 +633,8 @@ final class PluginContentSegment: StatusBarPlugin {
         case .success: return theme.success
         case .error: return theme.error
         case .warning: return theme.warning
-        case .accent: return theme.accentColor
-        case .muted: return theme.chromeMuted
+        case .accent: return theme.accent
+        case .muted: return theme.textMuted
         }
     }
 }

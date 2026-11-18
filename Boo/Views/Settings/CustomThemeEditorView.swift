@@ -14,100 +14,49 @@ struct CustomThemeEditorView: View {
 
     private var preview: TerminalTheme { data.toTheme() }
     private let ansiLabels = ["Black", "Red", "Green", "Yellow", "Blue", "Magenta", "Cyan", "White"]
+    private var nameIsEmpty: Bool { data.name.trimmingCharacters(in: .whitespaces).isEmpty }
 
     var body: some View {
         let t = tokens
         VStack(spacing: 0) {
+            header
+            SettingsRowDivider()
 
-            // ── Header ──────────────────────────────────────────────────────
-            HStack(spacing: 12) {
-                TextField("Theme name", text: $data.name)
-                    .font(.system(size: 14, weight: .semibold))
-                    .textFieldStyle(.plain)
-                    .foregroundStyle(t.text)
-                Spacer()
-                HStack(spacing: 0) {
-                    Rectangle().fill(tc(preview.background)).frame(width: 18)
-                    ForEach(0..<8, id: \.self) { i in Rectangle().fill(tc(preview.ansiColors[i])) }
-                    ForEach(8..<16, id: \.self) { i in Rectangle().fill(tc(preview.ansiColors[i])) }
-                }
-                .frame(width: 136, height: 22)
-                .clipShape(RoundedRectangle(cornerRadius: 4))
-                .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(t.muted.opacity(0.15), lineWidth: 0.5))
-            }
-            .padding(.horizontal, 20)
-            .padding(.top, 18)
-            .padding(.bottom, 14)
-
-            Divider().opacity(0.25)
-
-            // ── Body ─────────────────────────────────────────────────────────
             ScrollView {
-                HStack(alignment: .top, spacing: 0) {
-
-                    VStack(alignment: .leading, spacing: 20) {
+                HStack(alignment: .top, spacing: BooStyle.Space.xl) {
+                    VStack(alignment: .leading, spacing: BooStyle.Space.xl) {
+                        EditorSection(title: "Interface") {
+                            Toggle("Pick accent from palette", isOn: autoAccent)
+                                .toggleStyle(.themedCheckbox)
+                                .font(BooStyle.Font.body)
+                                .foregroundStyle(t.text)
+                            if data.accentHex != nil {
+                                SwatchRow(label: "Accent", hex: accentBinding)
+                            }
+                            Text("Sidebar, toolbar, text and borders are generated from the terminal colors.")
+                                .font(BooStyle.Font.caption)
+                                .foregroundStyle(t.textTertiary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
                         EditorSection(title: "Terminal") {
-                            SwatchRow(label: "Foreground", hex: hexBinding(\.foreground))
                             SwatchRow(label: "Background", hex: hexBinding(\.background))
+                            SwatchRow(label: "Foreground", hex: hexBinding(\.foreground))
                             SwatchRow(label: "Cursor", hex: hexBinding(\.cursor))
                             SwatchRow(label: "Selection", hex: $data.selectionHex)
                         }
-
-                        EditorSection(title: "ANSI — Normal") {
-                            ForEach(0..<8, id: \.self) { i in
-                                SwatchRow(label: ansiLabels[i], hex: ansiBinding(i))
-                            }
-                        }
-
-                        EditorSection(title: "ANSI — Bright") {
-                            ForEach(0..<8, id: \.self) { i in
-                                SwatchRow(label: ansiLabels[i], hex: ansiBinding(i + 8))
-                            }
-                        }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.trailing, 10)
 
-                    Rectangle()
-                        .fill(t.muted.opacity(0.15))
-                        .frame(width: 0.5)
-                        .padding(.vertical, 4)
-
-                    VStack(alignment: .leading, spacing: 20) {
-                        EditorSection(title: "UI Chrome") {
-                            SwatchRow(label: "Toolbar BG", hex: $data.chromeBgHex)
-                            SwatchRow(label: "Toolbar Text", hex: $data.chromeTextHex)
-                            SwatchRow(label: "Muted Text", hex: $data.chromeMutedHex)
-                            SwatchRow(label: "Sidebar BG", hex: $data.sidebarBgHex)
-                            SwatchRow(label: "Accent", hex: $data.accentHex)
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.leading, 10)
+                    EditorSection(title: "ANSI Colors") { ansiGrid }
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .padding(20)
             }
 
-            Divider().opacity(0.25)
-
-            // ── Footer ───────────────────────────────────────────────────────
-            HStack {
-                Button("Cancel") { onCancel() }
-                    .keyboardShortcut(.cancelAction)
-                Spacer()
-                Button("Save") {
-                    while data.ansiColors.count < 16 {
-                        data.ansiColors.append(TerminalColor(r: 128, g: 128, b: 128))
-                    }
-                    onSave(data)
-                }
-                .keyboardShortcut(.defaultAction)
-                .disabled(data.name.trimmingCharacters(in: .whitespaces).isEmpty)
-            }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 12)
+            SettingsRowDivider()
+            footer
         }
-        .frame(width: 560, height: 540)
+        .frame(width: 700, height: 620)
         .background(t.bg)
         .onChange(of: data) { _, newData in schedulePreview(newData) }
         .onDisappear {
@@ -123,6 +72,81 @@ struct CustomThemeEditorView: View {
         }
     }
 
+    // MARK: Parts
+
+    /// Live miniature of the edited theme beside the name and its 60-30-10 split.
+    private var header: some View {
+        let t = tokens
+        let theme = preview
+        return HStack(alignment: .top, spacing: 20) {
+            ThemePreview(theme: theme)
+                .frame(width: 230, height: 120)
+
+            VStack(alignment: .leading, spacing: BooStyle.Space.md) {
+                Text("Name").font(BooStyle.Font.sectionTitle).foregroundStyle(t.textSecondary)
+                TextField("Theme name", text: $data.name).themedTextField()
+
+                HStack(spacing: BooStyle.Space.xs) {
+                    Image(systemName: theme.isDark ? "moon.fill" : "sun.max.fill")
+                        .font(.system(size: 10, weight: .semibold))
+                    Text(theme.isDark ? "Dark theme" : "Light theme")
+                }
+                .font(BooStyle.Font.caption)
+                .foregroundStyle(t.textSecondary)
+                .padding(.top, BooStyle.Space.xs)
+
+                ColorSplitBar(theme: theme)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(20)
+    }
+
+    /// One row per ANSI hue: the normal and bright variant side by side.
+    private var ansiGrid: some View {
+        let t = tokens
+        return Grid(alignment: .leading, horizontalSpacing: BooStyle.Space.md, verticalSpacing: BooStyle.Space.sm) {
+            GridRow {
+                Color.clear.frame(width: 1, height: 1)
+                Text("Normal")
+                Text("Bright")
+            }
+            .font(BooStyle.Font.caption)
+            .foregroundStyle(t.textTertiary)
+            ForEach(0..<8, id: \.self) { i in
+                GridRow {
+                    Text(ansiLabels[i]).font(BooStyle.Font.body).foregroundStyle(t.text)
+                    SwatchField(hex: ansiBinding(i))
+                    SwatchField(hex: ansiBinding(i + 8))
+                }
+            }
+        }
+    }
+
+    private var footer: some View {
+        let t = tokens
+        return HStack(spacing: BooStyle.Space.md) {
+            Text("Changes preview live in the app.")
+                .font(BooStyle.Font.caption)
+                .foregroundStyle(t.textTertiary)
+            Spacer()
+            Button("Cancel") { onCancel() }
+                .buttonStyle(.themed(.secondary, size: .large))
+                .keyboardShortcut(.cancelAction)
+            Button("Save Theme") {
+                while data.ansiColors.count < 16 {
+                    data.ansiColors.append(TerminalColor(r: 128, g: 128, b: 128))
+                }
+                onSave(data)
+            }
+            .buttonStyle(.themed(.primary, size: .large))
+            .keyboardShortcut(.defaultAction)
+            .disabled(nameIsEmpty)
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, BooStyle.Space.lg)
+    }
+
     /// Push the edited colors as the app-wide preview theme, debounced.
     private func schedulePreview(_ newData: CustomThemeData) {
         previewWork?.cancel()
@@ -132,6 +156,26 @@ struct CustomThemeEditorView: View {
     }
 
     // MARK: Bindings
+
+    /// On: the accent is picked from the palette (`accentHex` nil). Off: an
+    /// explicit accent, seeded with the one the palette would pick.
+    private var autoAccent: Binding<Bool> {
+        Binding(
+            get: { data.accentHex == nil },
+            set: { auto in
+                var seed = data
+                seed.accentHex = nil
+                data.accentHex = auto ? nil : seed.toTheme().accent.hexString
+            }
+        )
+    }
+
+    private var accentBinding: Binding<String> {
+        Binding(
+            get: { data.accentHex ?? preview.accent.hexString },
+            set: { data.accentHex = $0 }
+        )
+    }
 
     private func hexBinding(_ kp: WritableKeyPath<CustomThemeData, TerminalColor>) -> Binding<String> {
         Binding(
@@ -150,27 +194,72 @@ struct CustomThemeEditorView: View {
             }
         )
     }
-
-    private func tc(_ c: TerminalColor) -> Color {
-        Color(red: Double(c.r) / 255, green: Double(c.g) / 255, blue: Double(c.b) / 255)
-    }
 }
 
 // MARK: - Editor building blocks
 
+/// The 60-30-10 split of a theme as one proportional bar: terminal background,
+/// chrome surface, accent.
+struct ColorSplitBar: View {
+    @Environment(\.tokens) private var tokens
+    let theme: TerminalTheme
+
+    var body: some View {
+        let t = tokens
+        let p = Tokens(theme: theme)
+        VStack(alignment: .leading, spacing: BooStyle.Space.xs) {
+            GeometryReader { geo in
+                HStack(spacing: 0) {
+                    p.termBg.frame(width: geo.size.width * 0.6)
+                    p.bg.frame(width: geo.size.width * 0.3)
+                    p.accent
+                }
+            }
+            .frame(height: 10)
+            .clipShape(Capsule())
+            .overlay(Capsule().strokeBorder(t.separator, lineWidth: 0.5))
+            HStack(spacing: BooStyle.Space.lg) {
+                legend(p.termBg, "Background 60")
+                legend(p.bg, "Interface 30")
+                legend(p.accent, "Accent 10")
+            }
+            .font(.system(size: 10))
+            .foregroundStyle(t.textTertiary)
+            .lineLimit(1)
+        }
+    }
+
+    private func legend(_ color: Color, _ label: String) -> some View {
+        HStack(spacing: BooStyle.Space.xs) {
+            Circle().fill(color).frame(width: 7, height: 7)
+                .overlay(Circle().strokeBorder(tokens.separator, lineWidth: 0.5))
+            Text(label)
+        }
+    }
+}
+
+/// A titled card of swatch rows, matching the settings `Section` look.
 struct EditorSection<Content: View>: View {
     @Environment(\.tokens) private var tokens
     let title: String
     @ViewBuilder let content: () -> Content
+
     var body: some View {
         let t = tokens
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: BooStyle.Space.sm) {
             Text(title)
-                .font(.system(size: 9, weight: .semibold))
+                .font(BooStyle.Font.sectionTitle)
                 .foregroundStyle(t.muted)
-                .tracking(0.6)
                 .textCase(.uppercase)
-            VStack(alignment: .leading, spacing: 4) { content() }
+                .tracking(0.4)
+                .padding(.leading, BooStyle.Space.xxs)
+            VStack(alignment: .leading, spacing: BooStyle.Space.sm) { content() }
+                .padding(BooStyle.Space.lg)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(t.raised, in: RoundedRectangle(cornerRadius: BooStyle.Radius.card, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: BooStyle.Radius.card, style: .continuous)
+                        .strokeBorder(t.separator, lineWidth: 0.5))
         }
     }
 }
@@ -199,64 +288,64 @@ func hexFieldState(for draft: String) -> HexFieldState {
     return .invalid
 }
 
-/// One row: color well + label + editable hex field.
+/// One labelled row: name on the left, color well and hex field on the right.
 struct SwatchRow: View {
     @Environment(\.tokens) private var tokens
     let label: String
     @Binding var hex: String
 
+    var body: some View {
+        HStack(spacing: BooStyle.Space.md) {
+            Text(label)
+                .font(BooStyle.Font.body)
+                .foregroundStyle(tokens.text)
+                .lineLimit(1)
+            Spacer(minLength: BooStyle.Space.md)
+            SwatchField(hex: $hex)
+        }
+    }
+}
+
+/// Color well plus an editable hex field. The draft commits on Return or when
+/// focus leaves; Escape restores the stored value.
+struct SwatchField: View {
+    @Environment(\.tokens) private var tokens
+    @Binding var hex: String
+
     @State private var draft: String = ""
-    @State private var isEditing = false
+    @FocusState private var focused: Bool
 
     private var fieldState: HexFieldState { hexFieldState(for: draft) }
-    private var isInvalid: Bool { fieldState == .invalid }
 
     var body: some View {
         let t = tokens
-        HStack(spacing: 8) {
+        let shape = RoundedRectangle(cornerRadius: BooStyle.Radius.control, style: .continuous)
+        HStack(spacing: BooStyle.Space.sm) {
             ColorWell(hex: $hex)
-                .frame(width: 26, height: 20)
-                .clipShape(RoundedRectangle(cornerRadius: 4))
-                .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(t.muted.opacity(0.15), lineWidth: 0.5))
-
-            Text(label)
-                .font(.system(size: 11))
-                .foregroundStyle(t.muted)
-                .frame(width: 88, alignment: .leading)
+                .frame(width: BooStyle.Height.control, height: BooStyle.Height.control)
+                .clipShape(shape)
+                .overlay(shape.strokeBorder(t.separator, lineWidth: 1))
 
             TextField("", text: $draft)
-                .font(.system(size: 10, design: .monospaced))
+                .textFieldStyle(.plain)
+                .font(.system(size: 11, design: .monospaced))
                 .foregroundStyle(hexFieldTextColor(fieldState, tokens: t))
-                .frame(width: 64)
-                .padding(.horizontal, 5)
-                .padding(.vertical, 2)
-                .background(
-                    RoundedRectangle(cornerRadius: 4)
-                        .fill(hexFieldBg(isEditing: isEditing, tokens: t))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 4)
-                                .strokeBorder(
-                                    isInvalid
-                                        ? Color.red.opacity(0.5)
-                                        : (isEditing && fieldState == .incomplete
-                                            ? t.accent.opacity(0.4) : Color.clear),
-                                    lineWidth: 1
-                                )
-                        )
-                )
+                .focused($focused)
+                .frame(width: 60)
+                .themedFieldChrome(focused: focused)
+                .overlay(shape.strokeBorder(fieldState == .invalid ? t.error : .clear, lineWidth: 1))
                 .onAppear { draft = hex.uppercased() }
                 .onChange(of: hex) { _, newHex in
-                    if !isEditing { draft = newHex.uppercased() }
+                    if !focused { draft = newHex.uppercased() }
                 }
                 .onSubmit { commitDraft() }
-                .onTapGesture { isEditing = true }
                 .onExitCommand {
-                    isEditing = false
                     draft = hex.uppercased()
+                    focused = false
                 }
-        }
-        .onChange(of: isEditing) { _, editing in
-            if !editing { commitDraft() }
+                .onChange(of: focused) { _, isFocused in
+                    if !isFocused { commitDraft() }
+                }
         }
     }
 
@@ -266,14 +355,7 @@ struct SwatchRow: View {
         } else {
             draft = hex.uppercased()
         }
-        isEditing = false
     }
-}
-
-/// Neutral field background — the swatch next to the field already shows the
-/// color, so painting the field with it just made the hex text illegible.
-private func hexFieldBg(isEditing: Bool, tokens t: Tokens) -> Color {
-    t.muted.opacity(isEditing ? 0.14 : 0.08)
 }
 
 private func hexFieldTextColor(_ state: HexFieldState, tokens t: Tokens) -> Color {
@@ -281,9 +363,9 @@ private func hexFieldTextColor(_ state: HexFieldState, tokens t: Tokens) -> Colo
     case .valid:
         return t.text
     case .incomplete:
-        return t.muted
+        return t.textSecondary
     case .invalid:
-        return Color.red.opacity(0.85)
+        return t.error
     }
 }
 

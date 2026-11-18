@@ -103,7 +103,8 @@ final class AppSettings {
         static let defaultMainPage = "defaultMainPage"
         static let sshControlMasterApproved = "sshControlMasterApproved"
         static let welcomeShown = "welcomeShown"
-        static let customThemes = "customThemes"
+        static let customThemes = "customThemesV2"
+        static let chromeContrast = "chromeContrast"
         static let newTabCwdMode = "newTabCwdMode"
         static let activeSidebarTab = "activeSidebarTab"
         static let sidebarTabBarPosition = "sidebarTabBarPosition"
@@ -196,12 +197,18 @@ final class AppSettings {
     /// the whole UI restyles live as colors are picked. Never persisted;
     /// cleared (nil) when the editor saves or cancels.
     var previewTheme: TerminalTheme? {
-        didSet { notify(topic: .theme) }
+        didSet {
+            // Generated at the current contrast once here, not on every draw.
+            if let preview = previewTheme, preview.contrast != chromeContrast {
+                previewTheme = preview.withContrast(chromeContrast)
+            }
+            notify(topic: .theme)
+        }
     }
 
-    /// Last resolved custom theme, keyed by name and the raw stored bytes.
-    /// `theme` is read from every draw(); decoding all custom themes from JSON
-    /// each time was measurable. Keying on the stored Data (not a notification)
+    /// Last resolved theme (built-in, custom or Ghostty), keyed by name, the raw
+    /// custom-theme bytes and the contrast. `theme` is read from every draw();
+    /// resolving and generating it each time was measurable. Keying on the stored Data (not a notification)
     /// keeps the cache correct for any writer of the defaults key.
     var customThemeCache: (name: String, data: Data?, theme: TerminalTheme)?
     let customThemeCacheLock = NSLock()

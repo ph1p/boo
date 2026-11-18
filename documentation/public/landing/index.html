@@ -532,7 +532,7 @@ footer .brand { color: var(--text); font-size: 17px; }
     <div class="stats">
       <div><b>6</b><span>agent CLIs tracked</span></div>
       <div><b>13</b><span>built-in plugins</span></div>
-      <div><b>34</b><span>themes</span></div>
+      <div><b>900+</b><span>themes</span></div>
       <div><b>7</b><span>tab types</span></div>
     </div>
     <div class="shot"><picture id="hero-shot"><source srcset="/boo/landing/img/hero-dark.webp" media="(prefers-color-scheme: dark)"><img src="/boo/landing/img/hero-light.webp" width="1720" height="1065" fetchpriority="high" decoding="async" alt="Boo with split panes, a file explorer sidebar and the workspace bar"></picture><script>booHeroShot()</script></div>
@@ -547,7 +547,7 @@ footer .brand { color: var(--text); font-size: 17px; }
       <a href="#tools">Quick select &amp; copy mode</a>
       <a href="#recording">Recording &amp; MP4</a>
       <a href="#tmux">tmux</a>
-      <a href="#themes">34 themes</a>
+      <a href="#themes">Themes</a>
       <a href="#rules">Rules &amp; profiles</a>
       <a href="#plugins">13 sidebar plugins</a>
       <a href="#plugin-dev">JS plugin API</a>
@@ -795,21 +795,24 @@ footer .brand { color: var(--text); font-size: 17px; }
     <div class="text reveal">
       <div class="kicker">Themes &amp; appearance</div>
       <h2>The whole UI follows your theme</h2>
-      <p>34 built-in themes restyle the terminal and every piece of chrome around it. Edit a theme and watch the app change live, or import one from iTerm2 or Ghostty.</p>
+      <p>12 curated themes, plus every theme Ghostty ships, restyle the terminal and all the chrome around it. Boo generates the interface colors from the terminal palette, so any theme looks finished. Edit a theme and watch the app change live, or import one from iTerm2 or Ghostty.</p>
       <div class="themes" aria-hidden="true">
-        <div class="sw" title="Boo Dark"><span style="background:#0a0a0a"></span><span style="background:#f5f5f5"></span><span style="background:#7fd1a8"></span><span style="background:#ff8a7a"></span></div>
-        <div class="sw" title="Boo Light"><span style="background:#fafafa"></span><span style="background:#0a0a0a"></span><span style="background:#1c7656"></span><span style="background:#b8382c"></span></div>
-        <div class="sw" title="Catppuccin Mocha"><span style="background:#1e1e2e"></span><span style="background:#cba6f7"></span><span style="background:#a6e3a1"></span><span style="background:#f38ba8"></span></div>
-        <div class="sw" title="Tokyo Night"><span style="background:#1a1b26"></span><span style="background:#7aa2f7"></span><span style="background:#9ece6a"></span><span style="background:#f7768e"></span></div>
-        <div class="sw" title="Dracula"><span style="background:#282a36"></span><span style="background:#bd93f9"></span><span style="background:#50fa7b"></span><span style="background:#ff79c6"></span></div>
-        <div class="sw" title="Nord"><span style="background:#2e3440"></span><span style="background:#88c0d0"></span><span style="background:#a3be8c"></span><span style="background:#bf616a"></span></div>
-        <div class="sw" title="Gruvbox Dark"><span style="background:#282828"></span><span style="background:#fabd2f"></span><span style="background:#b8bb26"></span><span style="background:#fb4934"></span></div>
-        <div class="sw" title="Rosé Pine"><span style="background:#191724"></span><span style="background:#c4a7e7"></span><span style="background:#9ccfd8"></span><span style="background:#eb6f92"></span></div>
-        <div class="sw" title="Solarized Light"><span style="background:#fdf6e3"></span><span style="background:#268bd2"></span><span style="background:#859900"></span><span style="background:#dc322f"></span></div>
-        <div class="sw" title="Synthwave '84"><span style="background:#262335"></span><span style="background:#ff7edb"></span><span style="background:#72f1b8"></span><span style="background:#fede5d"></span></div>
+        <div class="sw" title="Boo Dark"><span style="background:#0c0c0c"></span><span style="background:#b4a0ff"></span><span style="background:#7fd1a8"></span><span style="background:#ff8a7a"></span></div>
+        <div class="sw" title="Boo Light"><span style="background:#f7f7f7"></span><span style="background:#6d4ae0"></span><span style="background:#1c7656"></span><span style="background:#b8382c"></span></div>
+        <div class="sw" title="Catppuccin Mocha"><span style="background:#1e1e2e"></span><span style="background:#89b4fa"></span><span style="background:#b7f8b1"></span><span style="background:#ff9cba"></span></div>
+        <div class="sw" title="Catppuccin Latte"><span style="background:#eff1f5"></span><span style="background:#1e66f5"></span><span style="background:#238e00"></span><span style="background:#c00024"></span></div>
+        <div class="sw" title="Tokyo Night"><span style="background:#1a1b26"></span><span style="background:#7aa2f7"></span><span style="background:#afe378"></span><span style="background:#ff869f"></span></div>
+        <div class="sw" title="Tokyo Night Day"><span style="background:#e1e2e7"></span><span style="background:#2675e1"></span><span style="background:#587539"></span><span style="background:#f52a65"></span></div>
+        <div class="sw" title="Rosé Pine"><span style="background:#191724"></span><span style="background:#c4a7e7"></span><span style="background:#4086a3"></span><span style="background:#ff7fa4"></span></div>
+        <div class="sw" title="Rosé Pine Dawn"><span style="background:#faf4ed"></span><span style="background:#907aa9"></span><span style="background:#286983"></span><span style="background:#b4637a"></span></div>
+        <div class="sw" title="Gruvbox Dark"><span style="background:#282828"></span><span style="background:#d79921"></span><span style="background:#98971a"></span><span style="background:#cc241d"></span></div>
+        <div class="sw" title="Gruvbox Light"><span style="background:#fbf1c7"></span><span style="background:#b27600"></span><span style="background:#98971a"></span><span style="background:#cc241d"></span></div>
+        <div class="sw" title="GitHub Dark"><span style="background:#0d1117"></span><span style="background:#58a6ff"></span><span style="background:#3fb950"></span><span style="background:#ff7b72"></span></div>
+        <div class="sw" title="GitHub Light"><span style="background:#fafbfc"></span><span style="background:#0252cc"></span><span style="background:#1a7f37"></span><span style="background:#cf222e"></span></div>
       </div>
       <ul class="points">
-        <li><b>Theme editor</b> — every chrome color derived and previewed live</li>
+        <li><b>Generated chrome</b> — sidebar, tabs and status bar built from your palette, with three contrast levels</li>
+        <li><b>Theme editor</b> — change a color and the whole app follows live</li>
         <li><b>Shaders</b> — Ghostty shaders per tab, like a CRT look for demos</li>
         <li><b>Settings search</b> — find any option by what it does</li>
       </ul>

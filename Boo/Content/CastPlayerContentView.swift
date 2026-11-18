@@ -429,7 +429,7 @@ final class CastPlayerContentView: NSView, ContentViewProtocol {
     private func applyTheme() {
         let theme = AppSettings.shared.theme
         layer?.backgroundColor = theme.background.nsColor.cgColor
-        bar.layer?.backgroundColor = theme.chromeBg.cgColor
+        bar.layer?.backgroundColor = theme.surfaceChrome.cgColor
         barRule.layer?.backgroundColor = theme.separator.cgColor
         timeLabel.textColor = theme.textSecondary
         messageLabel.textColor = theme.textSecondary
@@ -491,23 +491,23 @@ final class CastScrubber: NSView {
         theme.controlFill.setFill()
         NSBezierPath(roundedRect: track, xRadius: 2, yRadius: 2).fill()
         let head = x(for: position)
-        theme.accentColor.setFill()
+        theme.accent.setFill()
         NSBezierPath(
             roundedRect: NSRect(x: track.minX, y: track.minY, width: head - track.minX, height: track.height),
             xRadius: 2, yRadius: 2
         ).fill()
         for m in markers {
             let mx = x(for: m.time)
-            (m.time <= position ? theme.chromeBg : theme.warning).setFill()
+            (m.time <= position ? theme.surfaceChrome : theme.warning).setFill()
             NSBezierPath(
                 roundedRect: NSRect(x: mx - 1.5, y: track.midY - 4, width: 3, height: 8), xRadius: 1.5, yRadius: 1.5
             ).fill()
         }
         let r: CGFloat = hovered || dragging ? 6 : 4.5
         let knob = NSRect(x: head - r, y: track.midY - r, width: r * 2, height: r * 2)
-        theme.accentColor.setFill()
+        theme.accent.setFill()
         NSBezierPath(ovalIn: knob).fill()
-        theme.chromeBg.setStroke()
+        theme.surfaceChrome.setStroke()
         let ring = NSBezierPath(ovalIn: knob.insetBy(dx: 0.75, dy: 0.75))
         ring.lineWidth = 1.5
         ring.stroke()
@@ -614,7 +614,7 @@ final class PlayerTextButton: PaneControlItem {
 
     override func hoverChanged() {
         let theme = AppSettings.shared.theme
-        label.textColor = hovered ? theme.chromeText : theme.textSecondary
+        label.textColor = hovered ? theme.textPrimary : theme.textSecondary
         layer?.backgroundColor = (hovered ? theme.hoverFill : theme.subtleFill).cgColor
     }
 
