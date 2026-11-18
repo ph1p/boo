@@ -38,7 +38,7 @@ final class EnvironmentSegment: StatusBarPlugin {
 
         // Draw text label
         let attrs: [NSAttributedString.Key: Any] = [
-            .font: NSFont.systemFont(ofSize: 10, weight: .medium),
+            .font: AppFont.ui(ofSize: 10, weight: .medium),
             .foregroundColor: dotColor
         ]
         let str = label as NSString
@@ -104,7 +104,7 @@ final class GitBranchSegment: StatusBarPlugin {
         var cx = x
 
         let iconAttrs: [NSAttributedString.Key: Any] = [
-            .font: NSFont.systemFont(ofSize: 10),
+            .font: AppFont.ui(ofSize: 10),
             .foregroundColor: theme.accentColor
         ]
         let iconStr = "\u{2387}" as NSString
@@ -112,7 +112,7 @@ final class GitBranchSegment: StatusBarPlugin {
         cx += iconStr.safeSize(withAttributes: iconAttrs).width + 3
 
         let attrs: [NSAttributedString.Key: Any] = [
-            .font: NSFont.monospacedSystemFont(ofSize: 10, weight: .regular),
+            .font: AppFont.mono(ofSize: 10, weight: .regular),
             .foregroundColor: theme.accentColor
         ]
         let maxBranchChars = settings.statusBarBranchMaxLength
@@ -127,7 +127,7 @@ final class GitBranchSegment: StatusBarPlugin {
         // Show changed file count
         if state.gitChangedCount > 0 {
             let countAttrs: [NSAttributedString.Key: Any] = [
-                .font: NSFont.monospacedSystemFont(ofSize: 9, weight: .medium),
+                .font: AppFont.mono(ofSize: 9, weight: .medium),
                 .foregroundColor: NSColor.booRemote
             ]
             let countStr = " \(state.gitChangedCount)\u{25CF}" as NSString
@@ -137,7 +137,7 @@ final class GitBranchSegment: StatusBarPlugin {
 
         if state.gitRepoRoot != nil {
             let chevronAttrs: [NSAttributedString.Key: Any] = [
-                .font: NSFont.systemFont(ofSize: 8),
+                .font: AppFont.ui(ofSize: 8),
                 .foregroundColor: theme.accentColor.withAlphaComponent(0.6)
             ]
             let chevron = " \u{25BE}" as NSString
@@ -234,9 +234,9 @@ final class PathSegment: StatusBarPlugin {
             && settings.pluginBool("file-tree-local", "showPath", default: true)
     }
 
-    private let font = NSFont.monospacedSystemFont(ofSize: 10, weight: .regular)
+    private var font: NSFont { AppFont.mono(ofSize: 10, weight: .regular) }
 
-    /// The laid-out path, rebuilt only when the path or color changes. CoreText's
+    /// The laid-out path, rebuilt only when the path, color or font changes. CoreText's
     /// attribute handling once aborted here (an exception inside noexcept frames
     /// that `@try` can't catch) when the string was laid out on every frame; a
     /// cached CTLine only touches attributes when the path actually changes.
@@ -244,6 +244,7 @@ final class PathSegment: StatusBarPlugin {
         let path: String
         let style: StatusBarPathStyle
         let color: NSColor
+        let font: NSFont
         let line: CTLine
         let ascent: CGFloat
         let width: CGFloat
@@ -264,13 +265,16 @@ final class PathSegment: StatusBarPlugin {
     }
 
     private func layout(_ path: String, style: StatusBarPathStyle, color: NSColor) -> Line {
-        if let cached, cached.path == path, cached.style == style, cached.color == color { return cached }
+        let font = self.font
+        if let cached, cached.path == path, cached.style == style, cached.color == color, cached.font == font {
+            return cached
+        }
         let attributed = NSAttributedString(
             string: Self.drawable(Self.display(path, style: style)), attributes: [.font: font, .foregroundColor: color])
         let ctLine = CTLineCreateWithAttributedString(attributed)
         var ascent: CGFloat = 0
         let width = CGFloat(CTLineGetTypographicBounds(ctLine, &ascent, nil, nil))
-        let line = Line(path: path, style: style, color: color, line: ctLine, ascent: ascent, width: width)
+        let line = Line(path: path, style: style, color: color, font: font, line: ctLine, ascent: ascent, width: width)
         cached = line
         return line
     }
@@ -355,7 +359,7 @@ final class ProcessSegment: StatusBarPlugin {
         // Draw process name
         let label = ProcessIcon.displayName(for: process) ?? process
         let attrs: [NSAttributedString.Key: Any] = [
-            .font: NSFont.monospacedSystemFont(ofSize: 10, weight: .regular),
+            .font: AppFont.mono(ofSize: 10, weight: .regular),
             .foregroundColor: color.withAlphaComponent(0.7)
         ]
         let str = label as NSString
@@ -395,7 +399,7 @@ final class PaneInfoSegment: StatusBarPlugin {
         var info = "\(state.paneCount) pane\(state.paneCount == 1 ? "" : "s")"
         if state.tabCount > 1 { info += " \u{2022} \(state.tabCount) tabs" }
         let attrs: [NSAttributedString.Key: Any] = [
-            .font: NSFont.systemFont(ofSize: 10, weight: .regular),
+            .font: AppFont.ui(ofSize: 10, weight: .regular),
             .foregroundColor: theme.textTertiary
         ]
         let str = info as NSString
@@ -459,7 +463,7 @@ final class SystemInfoSegment: StatusBarPlugin {
         at x: CGFloat, y: CGFloat, theme: TerminalTheme, settings: AppSettings, state: StatusBarState, ctx: CGContext
     ) -> CGFloat {
         let mutedColor = theme.textSecondary
-        let font = NSFont.monospacedSystemFont(ofSize: 10, weight: .regular)
+        let font = AppFont.mono(ofSize: 10, weight: .regular)
 
         var parts: [(String, NSColor)] = []
         if settings.pluginBool("system-info", "statusBarCPU", default: false) {
@@ -546,7 +550,7 @@ final class TimeSegment: StatusBarPlugin {
         at rx: CGFloat, y: CGFloat, theme: TerminalTheme, settings: AppSettings, state: StatusBarState, ctx: CGContext
     ) -> CGFloat {
         let attrs: [NSAttributedString.Key: Any] = [
-            .font: NSFont.systemFont(ofSize: 10, weight: .regular),
+            .font: AppFont.ui(ofSize: 10, weight: .regular),
             .foregroundColor: theme.textSecondary
         ]
         let str = settings.statusBarClockFormat.string(from: Date()) as NSString

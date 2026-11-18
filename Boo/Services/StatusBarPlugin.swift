@@ -64,7 +64,7 @@ extension StatusBarPlugin {
     /// right segments: the label ends at `rx`, and `draw` returns the padded width.
     static func drawAlertLabel(_ text: String, color: NSColor, endingAt rx: CGFloat, y: CGFloat) -> NSRect {
         let attrs: [NSAttributedString.Key: Any] = [
-            .font: NSFont.systemFont(ofSize: 10, weight: .semibold),
+            .font: AppFont.ui(ofSize: 10, weight: .semibold),
             .foregroundColor: color
         ]
         return drawLabel(text, attrs: attrs, endingAt: rx, y: y)
@@ -115,7 +115,7 @@ func drawStatusBarIconLabel(
         cx += iconSize + 4
     }
     let attrs: [NSAttributedString.Key: Any] = [
-        .font: NSFont.systemFont(ofSize: 10, weight: .medium),
+        .font: AppFont.ui(ofSize: 10, weight: .medium),
         .foregroundColor: textColor
     ]
     let str = text as NSString

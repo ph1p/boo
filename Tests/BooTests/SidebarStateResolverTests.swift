@@ -123,7 +123,7 @@ final class SidebarStateResolverTests: XCTestCase {
         let original = AppSettings.shared.sidebarStateScope
         defer { AppSettings.shared.sidebarStateScope = original }
 
-        let binding = LayoutSettingsBindings.binding(\.sidebarPerWorkspaceState)
+        let binding = SettingsBindings.binding(\.sidebarPerWorkspaceState)
         AppSettings.shared.sidebarPerWorkspaceState = false
         XCTAssertFalse(binding.wrappedValue)
 

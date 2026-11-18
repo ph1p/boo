@@ -1,8 +1,6 @@
 import SwiftUI
 
 struct EditorSettingsView: View {
-    @State private var fontSize = AppSettings.shared.editorFontSize
-    @State private var fontName = AppSettings.shared.editorFontName
     @State private var tabSize = AppSettings.shared.editorTabSize
     @State private var insertSpaces = AppSettings.shared.editorInsertSpaces
     @State private var wordWrap = AppSettings.shared.editorWordWrap
@@ -14,7 +12,6 @@ struct EditorSettingsView: View {
     @State private var renderWhitespace = AppSettings.shared.editorRenderWhitespace
     @State private var bracketPairColors = AppSettings.shared.editorBracketPairColors
     @State private var stickyScroll = AppSettings.shared.editorStickyScroll
-    @State private var fontLigatures = AppSettings.shared.editorFontLigatures
     @State private var showStatusStrip = AppSettings.shared.editorShowStatusStrip
     @State private var cursorStyle = AppSettings.shared.editorCursorStyle
     @State private var cursorBlinking = AppSettings.shared.editorCursorBlinking
@@ -25,32 +22,10 @@ struct EditorSettingsView: View {
 
     @ObservedObject private var observer = SettingsObserver(topics: [.editor])
 
-    private let monoFonts = AppSettings.availableMonospaceFonts
-
     var body: some View {
         let _ = observer.revision
 
         SettingsPage(title: "Editor") {
-            Section(title: "Font") {
-                SettingRow(label: "Family") {
-                    FontChooser(selectedFont: $fontName, fonts: monoFonts)
-                        .onChange(of: fontName) { _, v in AppSettings.shared.editorFontName = v }
-                }
-                SettingRow(label: "Size") {
-                    FontSizePicker(
-                        value: Binding(get: { Double(fontSize) }, set: { fontSize = CGFloat($0) }),
-                        range: 9...24
-                    )
-                    .onChange(of: fontSize) { _, v in AppSettings.shared.editorFontSize = v }
-                }
-                ToggleRow(
-                    label: "Ligatures",
-                    help: "Joins character pairs like -> and != when the font supports it.",
-                    isOn: $fontLigatures
-                )
-                .onChange(of: fontLigatures) { _, v in AppSettings.shared.editorFontLigatures = v }
-            }
-
             Section(title: "Editing") {
                 SettingRow(label: "Tab size") {
                     ThemedSegmentedPicker(selection: $tabSize, options: [2, 4, 8]) { "\($0)" }

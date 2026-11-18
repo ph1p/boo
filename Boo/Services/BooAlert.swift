@@ -198,7 +198,7 @@ private final class ToastActionButton: NSButton {
         attributedTitle = NSAttributedString(
             string: title,
             attributes: [
-                .font: NSFont.systemFont(ofSize: 12, weight: .semibold),
+                .font: AppFont.ui(ofSize: 12, weight: .semibold),
                 .foregroundColor: NSColor.controlAccentColor
             ])
         target = self

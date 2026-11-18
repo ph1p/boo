@@ -44,8 +44,8 @@ extension ToolbarView {
     /// The chip is a full-height segment, so its hover fill lines up with the members.
     static let groupChipHeight: CGFloat = workspacePillHeight
 
-    nonisolated(unsafe) static let groupChipFont = NSFont.systemFont(ofSize: 12, weight: .medium)
-    nonisolated(unsafe) static let groupCountFont = NSFont.monospacedDigitSystemFont(ofSize: 10, weight: .semibold)
+    static var groupChipFont: NSFont { AppFont.ui(ofSize: 12, weight: .medium) }
+    static var groupCountFont: NSFont { AppFont.digits(ofSize: 10, weight: .semibold) }
 
     /// Chip spacing, shared by `chipWidth` and `drawGroupChipContent` so the
     /// measured and drawn chip can't drift apart.

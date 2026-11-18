@@ -3,7 +3,7 @@ import Cocoa
 /// The short label a profile puts next to its tab's title.
 @MainActor
 enum ProfileBadge {
-    nonisolated(unsafe) private static let font = NSFont.systemFont(ofSize: 9, weight: .bold)
+    private static var font: NSFont { AppFont.ui(ofSize: 9, weight: .bold) }
     private static let padX: CGFloat = 4
     private static let height: CGFloat = 13
     /// Space between the title and the badge.

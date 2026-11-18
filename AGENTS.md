@@ -488,6 +488,7 @@ Languages load lazily. JSON, JavaScript, CSS and HTML format with js-beautify; s
 - Use `TerminalColor.cgColor`/`.nsColor` extensions, not inline conversions
 - Colors: use the semantic tokens on `TerminalTheme` instead of `chromeMuted.withAlphaComponent(…)` or hardcoded `NSColor`s — token table in `documentation/docs/pages/theming.mdx`. SwiftUI mirrors live on `Tokens` (`SettingsWindow.swift`).
 - UI controls and metrics: follow `documentation/STYLEGUIDE.md` — themed buttons, fields, pickers, switches and steppers (`ThemedControls.swift`, `ThemedPickers.swift`), spacing/radii/heights in `BooStyle`. No stock segmented/menu pickers, `NSPopUpButton`, `Stepper` or `.switch` toggles in Boo chrome.
+- Chrome text fonts: `AppFont.ui(ofSize:weight:)` / `AppFont.digits(ofSize:weight:)`, `AppFont.mono(ofSize:weight:)` for status bar paths and counters, `Font.app(size:weight:)` in SwiftUI chrome, not `NSFont.systemFont`, `monospacedSystemFont` or `.system(size:)` — they follow Settings → Fonts → App. Keep font constants computed (`static var`), not `static let`, so a font change applies live.
 - Settings via `AppSettings.shared` with auto-notification
 - Use `RemoteExplorer.shellEscPath()` (not `shellEscape()`) for remote paths
 

@@ -103,7 +103,7 @@ enum FileTreeInfo {
 
 struct FileTreeView: View {
     @ObservedObject var root: FileTreeNode
-    @ObservedObject var settings = SettingsObserver(topics: [.theme, .explorer, .sidebarFont, .plugins])
+    @ObservedObject var settings = SettingsObserver(topics: [.theme, .explorer, .sidebarFont, .appFont, .plugins])
     @StateObject private var renameState = FileTreeRenameState()
     @StateObject private var dragState = FileTreeDragState()
     @StateObject private var selection = FileTreeSelection()
@@ -351,10 +351,7 @@ struct FileTreeView: View {
     // MARK: Helpers
 
     private var explorerFont: Font {
-        let name = AppSettings.shared.sidebarFontName
-        let size = AppSettings.shared.sidebarFontSize
-        if name.isEmpty || name == "System Default" { return .system(size: size) }
-        return .custom(name, size: size)
+        SidebarFontScale(base: AppSettings.shared.sidebarFontSize).font(.base)
     }
 
     private var trashTitle: String {

@@ -293,7 +293,7 @@ final class EditorContentView: NSView, ContentViewProtocol {
         let settings = AppSettings.shared
         let fontSize = Double(settings.editorFontSize)
         var opts: [String: Any] = [
-            "fontFamily": settings.editorFontName,
+            "fontFamily": settings.effectiveEditorFontName,
             "fontSize": fontSize,
             "lineHeight": Int((fontSize * 1.5).rounded(.up)),
             "tabSize": settings.editorTabSize,

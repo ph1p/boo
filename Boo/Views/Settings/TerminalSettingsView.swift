@@ -7,8 +7,6 @@ import SwiftUI
 struct TerminalSettingsView: View {
     @Environment(\.tokens) private var tokens
     @State private var cursorStyle = AppSettings.shared.cursorStyle
-    @State private var fontSize = Double(AppSettings.shared.fontSize)
-    @State private var fontName = AppSettings.shared.fontName
     @State private var shader = AppSettings.shared.terminalShader
     @State private var newTabCwdMode = AppSettings.shared.newTabCwdMode
     @State private var restoreScrollback = AppSettings.shared.restoreScrollback
@@ -20,30 +18,11 @@ struct TerminalSettingsView: View {
     @State private var continueInterruptedAgents = AppSettings.shared.continueInterruptedAgents
     @ObservedObject private var observer = SettingsObserver(topics: [.theme, .terminal])
 
-    private let monoFonts = AppSettings.availableMonospaceFonts
-
     var body: some View {
         let _ = observer.revision
         let t = tokens
 
         SettingsPage(title: "Terminal") {
-            Section(title: "Font") {
-                SettingRow(label: "Family") {
-                    FontChooser(selectedFont: $fontName, fonts: monoFonts)
-                        .onChange(of: fontName) { _, v in AppSettings.shared.fontName = v }
-                }
-                SettingRow(label: "Size") {
-                    FontSizePicker(value: $fontSize, range: 10...28)
-                        .onChange(of: fontSize) { _, v in AppSettings.shared.fontSize = CGFloat(v) }
-                }
-                Text("$ echo \"Hello, Boo\"")
-                    .font(.custom(fontName, size: CGFloat(fontSize)))
-                    .foregroundStyle(t.fg)
-                    .padding(8)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(RoundedRectangle(cornerRadius: 6).fill(t.termBg))
-            }
-
             Section(title: "Look") {
                 SettingStack(label: "Cursor") {
                     ThemedSegmentedPicker(selection: $cursorStyle) { $0.label }

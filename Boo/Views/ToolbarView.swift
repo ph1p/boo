@@ -60,15 +60,15 @@ class ToolbarView: NSView {
         var groupColor: NSColor? = nil
     }
 
-    // MARK: - Font Cache (avoids NSFont alloc on every draw pass)
+    // MARK: - Fonts (cached by AppFont; no NSFont alloc on every draw pass)
 
     enum Fonts {
-        nonisolated(unsafe) static let ws11Regular = NSFont.systemFont(ofSize: 13, weight: .medium)
-        nonisolated(unsafe) static let ws11Medium = NSFont.systemFont(ofSize: 13, weight: .semibold)
+        static var ws11Regular: NSFont { AppFont.ui(ofSize: 13, weight: .medium) }
+        static var ws11Medium: NSFont { AppFont.ui(ofSize: 13, weight: .semibold) }
 
         /// The centred header title (active workspace name). Larger than the pill
         /// labels beside it — it names the window, they are navigation.
-        nonisolated(unsafe) static let headerTitle = NSFont.systemFont(ofSize: 13, weight: .medium)
+        static var headerTitle: NSFont { AppFont.ui(ofSize: 13, weight: .medium) }
     }
 
     // MARK: - Measure Cache

@@ -99,7 +99,7 @@ final class BrowserContentView: NSView, ContentViewProtocol, NSTextFieldDelegate
         urlBar?.textColor = theme.chromeText
         urlBar?.placeholderAttributedString = NSAttributedString(
             string: "Search or enter address",
-            attributes: [.foregroundColor: theme.textTertiary, .font: NSFont.systemFont(ofSize: 12)])
+            attributes: [.foregroundColor: theme.textTertiary, .font: AppFont.ui(ofSize: 12)])
         urlBarPill?.theme = theme
         for btn in [backButton, forwardButton, reloadStopButton, openExternalButton, serversButton] {
             btn?.hoverBackground = theme.hoverFill
@@ -507,7 +507,7 @@ final class BrowserContentView: NSView, ContentViewProtocol, NSTextFieldDelegate
             string: "\(Int((zoom * 100).rounded()))%",
             attributes: [
                 .foregroundColor: AppSettings.shared.theme.textSecondary,
-                .font: NSFont.monospacedDigitSystemFont(ofSize: 10.5, weight: .medium)
+                .font: AppFont.digits(ofSize: 10.5, weight: .medium)
             ])
     }
 

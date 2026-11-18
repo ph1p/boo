@@ -126,7 +126,7 @@ final class PanePickerOverlay: NSView {
             (swapMode ? "Swap with active pane" : "Jump to pane")
             + " · Tab: \(swapMode ? "jump" : "swap") · Esc: cancel"
         let hintAttributes: [NSAttributedString.Key: Any] = [
-            .font: NSFont.systemFont(ofSize: 12, weight: .medium), .foregroundColor: NSColor.white
+            .font: AppFont.ui(ofSize: 12, weight: .medium), .foregroundColor: NSColor.white
         ]
         let hintSize = (hint as NSString).size(withAttributes: hintAttributes)
         let hintRect = NSRect(

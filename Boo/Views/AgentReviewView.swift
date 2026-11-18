@@ -169,11 +169,11 @@ struct AgentReviewView: View {
     @FocusState private var fileListFocused: Bool
 
     private var fontSize: CGFloat { max(10, CGFloat(AppSettings.shared.editorFontSize) - 1) }
-    private var mono: Font { .custom(AppSettings.shared.editorFontName, size: fontSize) }
+    private var mono: Font { .custom(AppSettings.shared.effectiveEditorFontName, size: fontSize) }
     /// One character of the editor font, to size unwrapped side-by-side columns.
     private var charWidth: CGFloat {
         let font =
-            NSFont(name: AppSettings.shared.editorFontName, size: fontSize)
+            NSFont(name: AppSettings.shared.effectiveEditorFontName, size: fontSize)
             ?? .monospacedSystemFont(ofSize: fontSize, weight: .regular)
         return ("M" as NSString).size(withAttributes: [.font: font]).width
     }

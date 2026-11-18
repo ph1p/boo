@@ -376,11 +376,10 @@ private struct PluginSettingControl: View {
     }
 
     private func fontPicker(value: String, fonts: [String]) -> some View {
-        let displayValue = value.isEmpty ? "System Default" : value
-        return FontChooser(
-            selectedFont: Binding(
-                get: { displayValue },
-                set: { AppSettings.shared.setPluginSetting(pluginID, setting.key, $0 == "System Default" ? "" : $0) }
+        FontChooser(
+            selectedFont: SettingsBindings.systemFont(
+                get: { value },
+                set: { AppSettings.shared.setPluginSetting(pluginID, setting.key, $0) }
             ),
             fonts: fonts, width: 200)
     }

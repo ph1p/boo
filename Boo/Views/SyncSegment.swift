@@ -25,7 +25,7 @@ final class SyncSegment: StatusBarPlugin {
         let count = MainActor.assumeIsolated { SyncService.shared.conflicts.count }
         let label = count == 1 ? "⚠ Sync conflict" : "⚠ \(count) sync conflicts"
         let attrs: [NSAttributedString.Key: Any] = [
-            .font: NSFont.systemFont(ofSize: 10, weight: .semibold),
+            .font: AppFont.ui(ofSize: 10, weight: .semibold),
             .foregroundColor: NSColor.systemOrange
         ]
         hitRect = Self.drawLabel(label, attrs: attrs, endingAt: rx, y: y)

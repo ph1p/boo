@@ -118,7 +118,7 @@ final class QuickTerminalTabStrip: NSView {
                 rect.insetBy(dx: 2, dy: 3).fill()
             }
             let attrs: [NSAttributedString.Key: Any] = [
-                .font: NSFont.systemFont(ofSize: 11, weight: active ? .medium : .regular),
+                .font: AppFont.ui(ofSize: 11, weight: active ? .medium : .regular),
                 .foregroundColor: active ? theme.chromeText : theme.textSecondary,
                 .paragraphStyle: style
             ]

@@ -4,9 +4,9 @@ import Cocoa
 
 extension StatusBarView {
     /// Only read for its `capHeight`/`ascender` to centre text vertically, which
-    /// never varies — so it is built once rather than per draw pass. The status bar
-    /// repaints on hover, putting this on the mouse-move path.
-    nonisolated(unsafe) static let referenceFont = NSFont.systemFont(ofSize: 10, weight: .regular)
+    /// changes only with the app font — `AppFont` caches it rather than building it per
+    /// draw pass. The status bar repaints on hover, putting this on the mouse-move path.
+    static var referenceFont: NSFont { AppFont.ui(ofSize: 10, weight: .regular) }
 
     /// Gap on each side of a left-group separator line.
     static let separatorGap: CGFloat = 7

@@ -403,3 +403,43 @@ struct InheritableField<Value, Control: View>: View {
         }
     }
 }
+
+// MARK: - Bindings
+
+/// Two-way bindings straight to `AppSettings`, so a row never holds a stale copy.
+enum SettingsBindings {
+    static func binding<Value>(_ keyPath: ReferenceWritableKeyPath<AppSettings, Value>) -> Binding<Value> {
+        nonisolated(unsafe) let kp = keyPath
+        return Binding(
+            get: { AppSettings.shared[keyPath: kp] },
+            set: { AppSettings.shared[keyPath: kp] = $0 }
+        )
+    }
+
+    /// A `CGFloat` setting as the `Double` that `FontSizePicker` edits.
+    static func size(_ keyPath: ReferenceWritableKeyPath<AppSettings, CGFloat>) -> Binding<Double> {
+        nonisolated(unsafe) let kp = keyPath
+        return Binding(
+            get: { Double(AppSettings.shared[keyPath: kp]) },
+            set: { AppSettings.shared[keyPath: kp] = CGFloat($0) }
+        )
+    }
+
+    /// A family setting where "" means the system font, shown as "System Default".
+    static func systemFont(_ keyPath: ReferenceWritableKeyPath<AppSettings, String>) -> Binding<String> {
+        nonisolated(unsafe) let kp = keyPath
+        return systemFont(get: { AppSettings.shared[keyPath: kp] }, set: { AppSettings.shared[keyPath: kp] = $0 })
+    }
+
+    /// The same mapping for a family stored elsewhere (plugin settings).
+    static func systemFont(get: @escaping () -> String, set: @escaping (String) -> Void) -> Binding<String> {
+        let label = AppSettings.systemDefaultFontLabel
+        return Binding(
+            get: {
+                let name = get()
+                return name.isEmpty ? label : name
+            },
+            set: { set($0 == label ? "" : $0) }
+        )
+    }
+}

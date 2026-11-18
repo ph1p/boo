@@ -381,7 +381,7 @@ private final class FailedBlockButton: NSButton {
             string: failures?.summary ?? "Ask agent",
             attributes: [
                 .foregroundColor: hovered ? theme.chromeText : theme.textSecondary,
-                .font: NSFont.systemFont(ofSize: 11, weight: .medium)
+                .font: AppFont.ui(ofSize: 11, weight: .medium)
             ])
     }
 }

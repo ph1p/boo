@@ -25,7 +25,7 @@ final class OrchestratorSegment: StatusBarPlugin {
     ) -> CGFloat {
         let (label, color) = MainActor.assumeIsolated { Self.label(theme: theme) }
         let attrs: [NSAttributedString.Key: Any] = [
-            .font: NSFont.systemFont(ofSize: 10, weight: .medium),
+            .font: AppFont.ui(ofSize: 10, weight: .medium),
             .foregroundColor: color
         ]
         let str = label as NSString

@@ -8,6 +8,13 @@ extension MainWindowController {
         // Socket broadcasts and AppStore theme are app-wide: WindowManager
         // handles them once, not per window.
 
+        // App font: `AppSettings.notify` already dropped the cached fonts;
+        // the chrome refresh redraws every pane and bar and rebuilds the
+        // sidebar, so a one-font change needs no separate `.sidebarFont`.
+        if topic == .appFont {
+            self.applyChromeTheme()
+        }
+
         // Theme changes: refresh chrome colors, pane backgrounds, sidebar, status bar
         if topic == nil || topic == .theme {
             // A custom theme may have been edited under its old name.

@@ -565,7 +565,7 @@ enum TabDropZone: Equatable {
         ghostView.layer?.borderWidth = 1
 
         let label = NSTextField(labelWithString: title)
-        label.font = NSFont.systemFont(ofSize: 11, weight: .medium)
+        label.font = AppFont.ui(ofSize: 11, weight: .medium)
         label.textColor = NSColor.labelColor
         label.frame = NSRect(x: 8, y: 4, width: ghostWidth - 16, height: ghostHeight - 8)
         label.lineBreakMode = .byTruncatingTail

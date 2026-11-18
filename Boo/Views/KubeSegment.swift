@@ -38,7 +38,7 @@ final class KubeSegment: StatusBarPlugin {
             return ("⎈ \(store.context ?? "")/\(store.namespace)", store.isGuardedContext(store.context))
         }
         let attrs: [NSAttributedString.Key: Any] = [
-            .font: NSFont.systemFont(ofSize: 10, weight: guarded ? .semibold : .medium),
+            .font: AppFont.ui(ofSize: 10, weight: guarded ? .semibold : .medium),
             .foregroundColor: guarded ? NSColor.systemRed : theme.textSecondary
         ]
         hitRect = Self.drawLabel(label, attrs: attrs, endingAt: rx, y: y)

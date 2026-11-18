@@ -48,7 +48,6 @@ import Cocoa
         fieldView.addSubview(searchIcon)
 
         textField.placeholderString = "Find"
-        textField.font = NSFont.systemFont(ofSize: NSFont.systemFontSize(for: .regular))
         textField.drawsBackground = false
         textField.isBezeled = false
         textField.focusRingType = .none
@@ -64,7 +63,6 @@ import Cocoa
         textField.translatesAutoresizingMaskIntoConstraints = false
         fieldView.addSubview(textField)
 
-        matchLabel.font = NSFont.monospacedDigitSystemFont(ofSize: NSFont.smallSystemFontSize, weight: .regular)
         matchLabel.alignment = .right
         matchLabel.setContentHuggingPriority(.required, for: .horizontal)
         matchLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
@@ -133,6 +131,9 @@ import Cocoa
 
     func applyTheme() {
         let theme = booTheme
+        // Fonts set here, not in setup, so an app-font change reaches an open bar.
+        textField.font = AppFont.ui(ofSize: NSFont.systemFontSize(for: .regular))
+        matchLabel.font = AppFont.digits(ofSize: NSFont.smallSystemFontSize, weight: .regular)
         // Same surface as the pane, so the bar reads as part of the terminal.
         layer?.backgroundColor = theme.background.surfaceColor.cgColor
         fieldView.theme = theme
@@ -362,7 +363,6 @@ private final class FindBarButton: PaneControlItem {
         style = .push
         super.init(frame: .zero)
         label.stringValue = title
-        label.font = NSFont.systemFont(ofSize: NSFont.systemFontSize(for: .regular))
         label.alignment = .center
         label.translatesAutoresizingMaskIntoConstraints = false
         addSubview(label)
@@ -385,7 +385,10 @@ private final class FindBarButton: PaneControlItem {
         applyTheme()
     }
 
-    func applyTheme() { hoverChanged() }
+    func applyTheme() {
+        label.font = AppFont.ui(ofSize: NSFont.systemFontSize(for: .regular))
+        hoverChanged()
+    }
 
     override func hoverChanged() {
         let theme = booTheme
@@ -440,7 +443,7 @@ private final class FindBarTextField: NSTextField {
             string: placeholder,
             attributes: [
                 .foregroundColor: color,
-                .font: font ?? NSFont.systemFont(ofSize: NSFont.systemFontSize(for: .regular))
+                .font: font ?? AppFont.ui(ofSize: NSFont.systemFontSize(for: .regular))
             ])
     }
 

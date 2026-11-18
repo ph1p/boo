@@ -12,6 +12,7 @@ enum SettingsTopic: String, CaseIterable {
     case terminal  // cursor style, font size, font name
     case explorer  // show hidden, icons
     case sidebarFont  // sidebar font size/name
+    case appFont  // window chrome font family, one-font-everywhere toggle
     case statusBar  // status bar segments: visibility, order, sides, appearance
     case layout  // sidebar position, workspace bar, density, sidebar width, tab overflow
     case plugins  // disabled plugins, default enabled plugins, plugin settings
@@ -46,6 +47,8 @@ final class AppSettings {
         static let explorerIconsEnabled = "explorerIconsEnabled"
         static let sidebarFontSize = "sidebarFontSize"
         static let sidebarFontName = "sidebarFontName"
+        static let appFontName = "appFontName"
+        static let useOneFontEverywhere = "useOneFontEverywhere"
         static let statusBarShowPath = "statusBarShowPath"
         static let statusBarShowGitBranch = "statusBarShowGitBranch"  // legacy, migrated to plugin settings
         static let statusBarShowTime = "statusBarShowTime"
@@ -224,7 +227,11 @@ final class AppSettings {
 
     var fontName: String {
         get { UserDefaults.standard.string(forKey: K.fontName) ?? "SF Mono" }
-        set { set(newValue, forKey: K.fontName, topic: .terminal) }
+        set {
+            set(newValue, forKey: K.fontName, topic: .terminal)
+            // The other surfaces read this name while one font is used everywhere.
+            if useOneFontEverywhere { notifyFontFollowers() }
+        }
     }
 
     // MARK: - Explorer (proxies to plugin settings)
@@ -281,6 +288,35 @@ final class AppSettings {
     var sidebarFontName: String {
         get { UserDefaults.standard.string(forKey: K.sidebarFontName) ?? "" }
         set { set(newValue, forKey: K.sidebarFontName, topic: .sidebarFont) }
+    }
+
+    /// Font family for the window chrome: tab bars, workspace bar, toolbar, status bar,
+    /// palette, find bar. Empty string = system font. Sizes stay as each view designs them.
+    var appFontName: String {
+        get { UserDefaults.standard.string(forKey: K.appFontName) ?? "" }
+        set { set(newValue, forKey: K.appFontName, topic: .appFont) }
+    }
+
+    /// When on, the editor, sidebar and app use the terminal's family (`fontName`).
+    /// Their own names stay stored, so turning it off brings them back. Sizes stay separate.
+    var useOneFontEverywhere: Bool {
+        get { bool(K.useOneFontEverywhere, default: false) }
+        set {
+            set(newValue, forKey: K.useOneFontEverywhere, topic: .appFont)
+            notify(topic: .editor)
+        }
+    }
+
+    /// The families each surface draws with: the terminal's while one font is used everywhere.
+    var effectiveEditorFontName: String { useOneFontEverywhere ? fontName : editorFontName }
+    var effectiveSidebarFontName: String { useOneFontEverywhere ? fontName : sidebarFontName }
+    var effectiveAppFontName: String { useOneFontEverywhere ? fontName : appFontName }
+
+    /// Tells the surfaces that follow the terminal font to re-read their family.
+    /// No `.sidebarFont`: the `.appFont` refresh already rebuilds the sidebar.
+    private func notifyFontFollowers() {
+        notify(topic: .editor)
+        notify(topic: .appFont)
     }
 
     // MARK: - Keyboard
@@ -798,13 +834,18 @@ final class AppSettings {
         return fonts.sorted()
     }
 
+    /// Chooser label for an empty font name, which means the system font.
+    static let systemDefaultFontLabel = "System Default"
+
     static var availableSystemFonts: [String] {
-        var result = ["System Default"]
+        var result = [systemDefaultFontLabel]
         result.append(contentsOf: NSFontManager.shared.availableFontFamilies.sorted())
         return result
     }
 
     func notify(topic: SettingsTopic? = nil) {
+        // Chrome fonts are cached; drop them before any observer redraws.
+        if topic == nil || topic == .appFont { AppFont.invalidate() }
         NotificationCenter.default.post(
             name: .settingsChanged,
             object: nil,

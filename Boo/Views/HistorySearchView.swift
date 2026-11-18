@@ -130,7 +130,7 @@ final class HistorySearchController: NSObject, NSTextFieldDelegate, NSWindowDele
         field.cell?.usesSingleLineMode = true
         field.placeholderAttributedString = NSAttributedString(
             string: "Search history",
-            attributes: [.foregroundColor: theme.textTertiary, .font: NSFont.systemFont(ofSize: 14)])
+            attributes: [.foregroundColor: theme.textTertiary, .font: AppFont.ui(ofSize: 14)])
 
         let body = NSHostingView(rootView: HistorySearchBody(model: model))
         for view in [field, body] {
@@ -330,7 +330,7 @@ struct HistorySearchBody: View {
             model.toggle(chip)
         } label: {
             Text(title)
-                .font(.system(size: 11, weight: on ? .semibold : .regular))
+                .font(.app(size: 11, weight: on ? .semibold : .regular))
                 .lineLimit(1).truncationMode(.middle)
                 .foregroundColor(Color(nsColor: on ? theme.chromeText : theme.textSecondary))
                 .padding(.horizontal, 8)
@@ -349,7 +349,7 @@ struct HistorySearchBody: View {
     private func list(_ theme: TerminalTheme) -> some View {
         if model.entries.isEmpty {
             Text(model.loaded ? (model.text.isEmpty ? "No history yet" : "No matches") : "")
-                .font(.system(size: 12))
+                .font(.app(size: 12))
                 .foregroundColor(Color(nsColor: theme.textTertiary))
                 .frame(maxWidth: .infinity, minHeight: 44)
         } else {
@@ -385,17 +385,17 @@ struct HistorySearchBody: View {
                     .foregroundColor(Color(nsColor: theme.error))
             }
             if entry.count > 1 {
-                Text("×\(entry.count)").font(.system(size: 10.5))
+                Text("×\(entry.count)").font(.app(size: 10.5))
                     .foregroundColor(Color(nsColor: theme.textTertiary))
             }
             if entry.cwd != model.context.cwd {
                 Text((entry.cwd as NSString).abbreviatingWithTildeInPath)
-                    .font(.system(size: 10.5)).lineLimit(1).truncationMode(.head)
+                    .font(.app(size: 10.5)).lineLimit(1).truncationMode(.head)
                     .foregroundColor(Color(nsColor: theme.textTertiary))
                     .frame(maxWidth: 160, alignment: .trailing)
             }
             Text(formatCompactAge(entry.startedAt))
-                .font(.system(size: 10.5).monospacedDigit())
+                .font(.app(size: 10.5).monospacedDigit())
                 .foregroundColor(Color(nsColor: theme.textTertiary))
                 .frame(width: 34, alignment: .trailing)
         }
@@ -418,7 +418,7 @@ struct HistorySearchBody: View {
             Text("⌘⌫ forget")
             Spacer(minLength: 0)
         }
-        .font(.system(size: 10.5))
+        .font(.app(size: 10.5))
         .foregroundColor(Color(nsColor: theme.textTertiary))
         .padding(.horizontal, 12)
     }

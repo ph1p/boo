@@ -494,7 +494,7 @@ class SidebarTabBarView: NSView {
 
         // Draw the first letter
         let letter = String(name.prefix(1)).uppercased()
-        let font = NSFont.systemFont(ofSize: size * 0.5, weight: .semibold)
+        let font = AppFont.ui(ofSize: size * 0.5, weight: .semibold)
         let attrs: [NSAttributedString.Key: Any] = [
             .font: font,
             .foregroundColor: color

@@ -38,13 +38,13 @@ final class AgentInboxSegment: StatusBarPlugin {
             return (label, color, Self.badge(theme: theme))
         }
         let attrs: [NSAttributedString.Key: Any] = [
-            .font: NSFont.systemFont(ofSize: 10, weight: .medium),
+            .font: AppFont.ui(ofSize: 10, weight: .medium),
             .foregroundColor: color
         ]
         let str = label as NSString
         let size = str.safeSize(withAttributes: attrs)
         let badgeAttrs: [NSAttributedString.Key: Any] = [
-            .font: NSFont.monospacedDigitSystemFont(ofSize: 10, weight: .semibold),
+            .font: AppFont.digits(ofSize: 10, weight: .semibold),
             .foregroundColor: badge?.color ?? color
         ]
         let badgeStr = (badge?.text ?? "") as NSString

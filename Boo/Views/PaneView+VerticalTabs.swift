@@ -12,11 +12,11 @@ import Cocoa
 extension PaneView {
 
     enum VerticalFonts {
-        nonisolated(unsafe) static let title = NSFont.systemFont(ofSize: 11, weight: .regular)
-        nonisolated(unsafe) static let titleActive = NSFont.systemFont(ofSize: 11, weight: .medium)
-        nonisolated(unsafe) static let detail = NSFont.systemFont(ofSize: 10, weight: .regular)
-        nonisolated(unsafe) static let groupName = NSFont.systemFont(ofSize: 10.5, weight: .semibold)
-        nonisolated(unsafe) static let groupCount = NSFont.monospacedDigitSystemFont(ofSize: 9.5, weight: .medium)
+        static var title: NSFont { AppFont.ui(ofSize: 11, weight: .regular) }
+        static var titleActive: NSFont { AppFont.ui(ofSize: 11, weight: .medium) }
+        static var detail: NSFont { AppFont.ui(ofSize: 10, weight: .regular) }
+        static var groupName: NSFont { AppFont.ui(ofSize: 10.5, weight: .semibold) }
+        static var groupCount: NSFont { AppFont.digits(ofSize: 9.5, weight: .medium) }
     }
 
     static let verticalTabColumnMaxWidth: CGFloat = 168

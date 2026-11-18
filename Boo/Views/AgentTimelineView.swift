@@ -102,7 +102,8 @@ struct AgentTimelineView: View {
     @StateObject private var settings = SettingsObserver(topics: [.editor])
     @Environment(\.tokens) private var t
     private var mono: Font {
-        .custom(AppSettings.shared.editorFontName, size: max(10, CGFloat(AppSettings.shared.editorFontSize) - 2))
+        .custom(
+            AppSettings.shared.effectiveEditorFontName, size: max(10, CGFloat(AppSettings.shared.editorFontSize) - 2))
     }
 
     var body: some View {

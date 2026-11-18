@@ -2,14 +2,14 @@ import Cocoa
 
 extension PaneView {
 
-    // MARK: - Font Cache
+    // MARK: - Fonts (cached by AppFont)
 
     enum TabFonts {
-        nonisolated(unsafe) static let title10Regular = NSFont.systemFont(ofSize: 12, weight: .medium)
-        nonisolated(unsafe) static let title10Medium = NSFont.systemFont(ofSize: 12, weight: .semibold)
-        nonisolated(unsafe) static let subtitle = NSFont.systemFont(ofSize: 12, weight: .regular)
-        nonisolated(unsafe) static let groupChip = NSFont.systemFont(ofSize: 11.5, weight: .semibold)
-        nonisolated(unsafe) static let groupBadge = NSFont.monospacedDigitSystemFont(ofSize: 10, weight: .bold)
+        static var title10Regular: NSFont { AppFont.ui(ofSize: 12, weight: .medium) }
+        static var title10Medium: NSFont { AppFont.ui(ofSize: 12, weight: .semibold) }
+        static var subtitle: NSFont { AppFont.ui(ofSize: 12, weight: .regular) }
+        static var groupChip: NSFont { AppFont.ui(ofSize: 11.5, weight: .semibold) }
+        static var groupBadge: NSFont { AppFont.digits(ofSize: 10, weight: .bold) }
     }
 
     // MARK: - Pill Metrics

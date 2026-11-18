@@ -174,8 +174,8 @@ class SidebarSectionHeaderView: NSView {
         needsDisplay = true
     }
 
-    static let titleFont = NSFont.systemFont(ofSize: 11.5, weight: .semibold)
-    private static let countFont = NSFont.monospacedDigitSystemFont(ofSize: 10, weight: .medium)
+    static var titleFont: NSFont { AppFont.ui(ofSize: 11.5, weight: .semibold) }
+    private static var countFont: NSFont { AppFont.digits(ofSize: 10, weight: .medium) }
 
     /// Splits a trailing "(N)" off a section name so the count renders as a badge.
     static func splitCount(_ name: String) -> (title: String, count: String?) {

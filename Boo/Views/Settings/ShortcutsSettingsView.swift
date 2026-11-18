@@ -210,7 +210,7 @@ struct QuickTerminalSettingsSection: View {
             ToggleRow(
                 label: "Global hotkey",
                 help: "Drops a terminal down from the top of the screen, from any app.",
-                isOn: LayoutSettingsBindings.binding(\.quickTerminalEnabled)
+                isOn: SettingsBindings.binding(\.quickTerminalEnabled)
             )
             SettingRow(
                 label: "Shortcut",
@@ -232,7 +232,7 @@ struct QuickTerminalSettingsSection: View {
             }
             SettingRow(label: "Height") {
                 HStack(spacing: 8) {
-                    Slider(value: LayoutSettingsBindings.binding(\.quickTerminalHeight), in: 0.2...0.9, step: 0.05)
+                    Slider(value: SettingsBindings.binding(\.quickTerminalHeight), in: 0.2...0.9, step: 0.05)
                     Text("\(Int((settings.quickTerminalHeight * 100).rounded()))%")
                         .font(.system(size: 11).monospacedDigit())
                         .foregroundStyle(t.muted)
@@ -242,7 +242,7 @@ struct QuickTerminalSettingsSection: View {
             ToggleRow(
                 label: "Hide when it loses focus",
                 help: "Hiding keeps the shells running.",
-                isOn: LayoutSettingsBindings.binding(\.quickTerminalHideOnResign)
+                isOn: SettingsBindings.binding(\.quickTerminalHideOnResign)
             )
         }
     }

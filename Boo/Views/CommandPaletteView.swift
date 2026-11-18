@@ -110,7 +110,7 @@ final class CommandPaletteController: NSObject, NSTextFieldDelegate, NSWindowDel
         field.textColor = theme.chromeText
         field.placeholderAttributedString = NSAttributedString(
             string: "Search commands, workspaces, tabs, themes   > @ # : !",
-            attributes: [.foregroundColor: theme.textTertiary, .font: NSFont.systemFont(ofSize: 15)])
+            attributes: [.foregroundColor: theme.textTertiary, .font: AppFont.ui(ofSize: 15)])
     }
 
     private func makeContent() -> NSView {
@@ -304,7 +304,7 @@ struct CommandPaletteList: View {
                         switch row.element {
                         case .header(let title):
                             Text(title.uppercased())
-                                .font(.system(size: 10, weight: .semibold))
+                                .font(.app(size: 10, weight: .semibold))
                                 .foregroundColor(Color(nsColor: theme.textTertiary))
                                 .padding(.horizontal, 14)
                                 .frame(height: CommandPaletteModel.headerHeight, alignment: .bottomLeading)
@@ -357,7 +357,7 @@ struct CommandPaletteList: View {
                     .foregroundColor(Color(nsColor: item.isEnabled ? theme.textSecondary : theme.textTertiary))
             }
         }
-        .font(.system(size: 13))
+        .font(.app(size: 13))
         .padding(.horizontal, 10)
         .frame(height: CommandPaletteModel.rowHeight)
         .background(

@@ -3,8 +3,8 @@ import Cocoa
 // MARK: - Tab Measurement & Layout
 
 extension PaneView {
-    private static let tabMeasureFont = NSFont.systemFont(ofSize: 12, weight: .semibold)
-    private static let tabSubtitleMeasureFont = NSFont.systemFont(ofSize: 12, weight: .regular)
+    private static var tabMeasureFont: NSFont { AppFont.ui(ofSize: 12, weight: .semibold) }
+    private static var tabSubtitleMeasureFont: NSFont { AppFont.ui(ofSize: 12, weight: .regular) }
 
     /// Whether the tab draws a leading icon (content-type icon or process icon)
     /// before its title — `drawSingleTab` gates on the same predicate, so the

@@ -8,6 +8,7 @@ struct SettingsView: View {
         case general
         case terminal
         case theme
+        case fonts
         case statusBar
         case layout
         case profiles
@@ -34,7 +35,7 @@ struct SettingsView: View {
             [
                 .general, .shortcuts, .notifications, .permissions,
                 .terminal, .profiles, .rules, .recordings,
-                .theme, .layout, .statusBar,
+                .theme, .fonts, .layout, .statusBar,
                 .editor, .browser,
                 .plugins
             ]
@@ -44,7 +45,7 @@ struct SettingsView: View {
             switch self {
             case .general, .shortcuts, .notifications, .permissions: return .general
             case .terminal, .profiles, .rules, .recordings: return .terminal
-            case .theme, .statusBar, .layout: return .appearance
+            case .theme, .fonts, .statusBar, .layout: return .appearance
             case .editor, .browser: return .apps
             case .plugins, .pluginSettings: return .plugins
             }
@@ -57,20 +58,23 @@ struct SettingsView: View {
             case .general:
                 return "folder startup workspace first tab main page sync file tree editor debug logging"
             case .theme: return "colors dark light system mode custom import iterm2 ghostty palette"
+            case .fonts:
+                return
+                    "font family size typeface terminal editor sidebar ligatures monospace text app interface chrome same everywhere"
             case .terminal:
-                return "font size cursor shader directory cwd new tab scrollback restore tmux links "
+                return "cursor shader directory cwd new tab scrollback restore tmux links "
                     + "external editor click history command ignore quick terminal hotkey"
             case .statusBar: return "segments git clock battery status"
             case .layout:
-                return "sidebar font workspace bar tab groups pane controls tab overflow vertical tabs"
+                return "sidebar workspace bar tab groups pane controls tab overflow vertical tabs"
             case .profiles: return "profile shell command environment ssh directory"
             case .rules: return "regex trigger highlight notify confirm confirmation automation"
             case .recordings: return "record asciinema cast video export markers idle"
             case .permissions:
                 return "privacy full disk access files folders automation developer tools signature prompts tcc"
             case .editor:
-                return "code font tab size spaces line numbers minimap word wrap format external autosave "
-                    + "whitespace cursor ligatures sticky scroll status encoding reload"
+                return "code tab size spaces line numbers minimap word wrap format external autosave "
+                    + "whitespace cursor sticky scroll status encoding reload"
             case .browser: return "home page history website data close"
             case .notifications: return "alerts command duration ports bursts agent"
             case .plugins: return "extensions installed enable disable"
@@ -94,6 +98,7 @@ struct SettingsView: View {
             switch self {
             case .general: return "General"
             case .theme: return "Theme"
+            case .fonts: return "Fonts"
             case .terminal: return "Terminal"
             case .statusBar: return "Status Bar"
             case .layout: return "Layout"
@@ -115,6 +120,7 @@ struct SettingsView: View {
             switch self {
             case .general: return "gearshape"
             case .theme: return "paintpalette"
+            case .fonts: return "textformat"
             case .terminal: return "terminal"
             case .statusBar: return "rectangle.bottomthird.inset.filled"
             case .layout: return "square.grid.2x2"
@@ -266,6 +272,7 @@ struct SettingsView: View {
         switch selectedTab {
         case .general: GeneralSettingsView()
         case .theme: ThemeSettingsView()
+        case .fonts: FontsSettingsView()
         case .terminal: TerminalSettingsView()
         case .statusBar: StatusBarSettingsView()
         case .layout: LayoutSettingsView()

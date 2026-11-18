@@ -28,7 +28,7 @@ struct SidebarFontScale {
     /// The font family name (from Settings → Sidebar → Content Font). Empty = system default.
     let fontName: String
 
-    init(base: CGFloat, fontName: String = AppSettings.shared.sidebarFontName) {
+    init(base: CGFloat, fontName: String = AppSettings.shared.effectiveSidebarFontName) {
         self.base = base
         self.fontName = fontName
     }

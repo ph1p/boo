@@ -86,7 +86,7 @@ struct RecordingsSettingsView: View {
                         HStack(spacing: 6) {
                             TextField(
                                 SessionRecorder.defaultTemplate,
-                                text: LayoutSettingsBindings.binding(\.recordingFileNameTemplate)
+                                text: SettingsBindings.binding(\.recordingFileNameTemplate)
                             )
                             .themedTextField()
                             .font(.system(size: 12, design: .monospaced))
@@ -110,7 +110,7 @@ struct RecordingsSettingsView: View {
                         Toggle("Shorten pauses", isOn: idleEnabled).toggleStyle(.themedCheckbox)
                         if settings.recordingIdleTimeLimit > 0 {
                             ThemedStepper(
-                                value: LayoutSettingsBindings.binding(\.recordingIdleTimeLimit), in: 0.5...60, step: 0.5
+                                value: SettingsBindings.binding(\.recordingIdleTimeLimit), in: 0.5...60, step: 0.5
                             ) { Self.seconds($0) }
                         }
                     }
@@ -125,10 +125,10 @@ struct RecordingsSettingsView: View {
                 ToggleRow(
                     label: "Highlight recording panes",
                     help: "Draws a red frame around every pane whose terminal is being recorded.",
-                    isOn: LayoutSettingsBindings.binding(\.highlightRecordingPane)
+                    isOn: SettingsBindings.binding(\.highlightRecordingPane)
                 )
                 SettingStack(label: "When a recording stops") {
-                    ThemedSegmentedPicker(selection: LayoutSettingsBindings.binding(\.recordingStopAction)) { $0.label }
+                    ThemedSegmentedPicker(selection: SettingsBindings.binding(\.recordingStopAction)) { $0.label }
                 }
             }
 

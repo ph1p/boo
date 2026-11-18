@@ -99,8 +99,8 @@ class WorkspaceBarView: NSView {
 
     /// Height of an expanded group's header row (chevron + short name).
     static let groupHeaderHeight: CGFloat = 20
-    nonisolated(unsafe) static let groupLabelFont = NSFont.systemFont(ofSize: 10, weight: .semibold)
-    nonisolated(unsafe) static let groupCountFont = NSFont.monospacedDigitSystemFont(ofSize: 9.5, weight: .semibold)
+    static var groupLabelFont: NSFont { AppFont.ui(ofSize: 10, weight: .semibold) }
+    static var groupCountFont: NSFont { AppFont.digits(ofSize: 9.5, weight: .semibold) }
 
     private(set) var items: [Item] = []
     private(set) var selectedIndex: Int = -1
@@ -250,12 +250,10 @@ class WorkspaceBarView: NSView {
     /// top bar's left/right fades.
     static let verticalFadeHeight: CGFloat = 24
 
-    /// Fonts used per pill on every draw pass — built once rather than per pill.
+    /// Fonts used per pill on every draw pass — cached by `AppFont`, not built per pill.
     // Same weights as the top bar's pills (`ToolbarView.Fonts.ws11*`).
-    nonisolated(unsafe) static let pillLabelSelected = NSFont.systemFont(
-        ofSize: 13, weight: .semibold)
-    nonisolated(unsafe) static let pillLabelRegular = NSFont.systemFont(
-        ofSize: 13, weight: .medium)
+    static var pillLabelSelected: NSFont { AppFont.ui(ofSize: 13, weight: .semibold) }
+    static var pillLabelRegular: NSFont { AppFont.ui(ofSize: 13, weight: .medium) }
 
     /// How far the vertical strip is scrolled, in points. The mirror of the top
     /// bar's `workspaceScrollOffset`, only along Y.

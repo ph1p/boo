@@ -21,7 +21,7 @@ final class RemoteControlSegment: StatusBarPlugin {
         at rx: CGFloat, y: CGFloat, theme: TerminalTheme, settings: AppSettings, state: StatusBarState, ctx: CGContext
     ) -> CGFloat {
         let attrs: [NSAttributedString.Key: Any] = [
-            .font: NSFont.systemFont(ofSize: 10, weight: .semibold),
+            .font: AppFont.ui(ofSize: 10, weight: .semibold),
             .foregroundColor: NSColor.systemOrange
         ]
         hitRect = Self.drawLabel("◉ Remote", attrs: attrs, endingAt: rx, y: y)

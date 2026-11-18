@@ -27,7 +27,7 @@ final class PortsSegment: StatusBarPlugin {
     ) -> CGFloat {
         let label = MainActor.assumeIsolated { PortMonitor.label(for: PortMonitor.shared.servers) }
         let attrs: [NSAttributedString.Key: Any] = [
-            .font: NSFont.monospacedDigitSystemFont(ofSize: 10, weight: .medium),
+            .font: AppFont.digits(ofSize: 10, weight: .medium),
             .foregroundColor: theme.textSecondary
         ]
         hitRect = Self.drawLabel(label, attrs: attrs, endingAt: rx, y: y)
