@@ -79,7 +79,8 @@ final class OrchestratorDrawerView: NSView {
 
     private func applyModel() {
         let theme = model.theme
-        layer?.backgroundColor = theme.surfaceChrome.cgColor
+        // Floats over the panes, not the backdrop: an opaque fill matching the sidebar.
+        layer?.backgroundColor = theme.chromeFloatingFill.cgColor
         IslandMetrics.round(self, borderColor: theme.borderChrome)
         emptyState.isHidden = model.running
         terminalContainer.isHidden = !model.running

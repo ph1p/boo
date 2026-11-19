@@ -135,7 +135,8 @@ import Cocoa
         textField.font = AppFont.ui(ofSize: NSFont.systemFontSize(for: .regular))
         matchLabel.font = AppFont.digits(ofSize: NSFont.smallSystemFontSize, weight: .regular)
         // Same surface as the pane, so the bar reads as part of the terminal.
-        layer?.backgroundColor = theme.background.surfaceColor.cgColor
+        // Clear while terminals are translucent: the pane layer carries the fill.
+        layer?.backgroundColor = theme.paneDrawFill.cgColor
         fieldView.theme = theme
         textField.textColor = theme.textPrimary
         textField.customPlaceholderColor = theme.textTertiary
