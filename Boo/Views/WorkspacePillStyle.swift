@@ -60,6 +60,10 @@ enum WorkspacePillStyle {
         guard let c = color.usingColorSpace(.sRGB) else {
             return
         }
+        // A clear backdrop (window material) has no colour to paint over the
+        // clipped content. Erase that content instead: an opaque-to-clear mask
+        // drawn with `.destinationOut` dissolves it into whatever shows behind.
+        let erase = c.alphaComponent == 0
         let (r, g, b) = (c.redComponent, c.greenComponent, c.blueComponent)
         guard
             let gradient = CGGradient(
@@ -68,6 +72,7 @@ enum WorkspacePillStyle {
         else { return }
         ctx.saveGState()
         ctx.clip(to: clipRect)
+        if erase { ctx.setBlendMode(.destinationOut) }
         ctx.drawLinearGradient(gradient, start: start, end: end, options: [])
         ctx.restoreGState()
     }

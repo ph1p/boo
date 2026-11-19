@@ -51,6 +51,17 @@ struct ThemeSettingsView: View {
                 ) {
                     ThemedSegmentedPicker(selection: SettingsBindings.binding(\.chromeContrast)) { $0.label }
                 }
+                SettingRow(
+                    label: "Window material",
+                    help:
+                        "Let the desktop show through the window backdrop and sidebar."
+                ) {
+                    ThemedSegmentedPicker(selection: SettingsBindings.binding(\.windowMaterial)) { $0.label }
+                }
+                TranslucentTerminalsRow(
+                    help:
+                        "Show the window material behind terminal text. Needs a window material; editors and browsers stay opaque."
+                )
             }
 
             Section(
@@ -466,5 +477,22 @@ struct AppIconPicker: View {
                 .accessibilityAddTraits(active ? [.isButton, .isSelected] : .isButton)
             }
         }
+    }
+}
+
+/// Disabled while the window material is off: an opaque window has nothing to
+/// show behind the terminal. Observes `.theme` so it follows the material picker.
+private struct TranslucentTerminalsRow: View {
+    let help: String
+    // Re-renders when the window material changes, which enables the toggle.
+    @ObservedObject private var observer = SettingsObserver(topics: [.theme])
+
+    var body: some View {
+        let _ = observer.revision
+        ToggleRow(
+            label: "Translucent terminals", help: help,
+            isOn: SettingsBindings.binding(\.translucentTerminals)
+        )
+        .disabled(!AppSettings.shared.windowMaterial.isTranslucent)
     }
 }

@@ -6,13 +6,20 @@ import SwiftUI
 extension View {
     /// Render this view as an island: the chrome fill, clipped to the shared corner
     /// radius, with the same hairline every island in the main window carries.
-    func island(_ t: Tokens) -> some View {
+    /// `fillOpacity` below 1 lets a window material show through the fill.
+    func island(_ t: Tokens, fillOpacity: CGFloat = 1) -> some View {
         self
-            .background(t.bg)
+            .background(t.bg.opacity(fillOpacity))
             .clipShape(RoundedRectangle(cornerRadius: IslandMetrics.radius, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: IslandMetrics.radius, style: .continuous)
                     .strokeBorder(t.border, lineWidth: IslandMetrics.borderWidth))
+    }
+
+    /// The settings sidebar, styled like the main window's sidebar island: its
+    /// fill drops to `sidebarTint` while the window material is on.
+    func sidebarIsland(_ t: Tokens) -> some View {
+        island(t, fillOpacity: WindowMaterial.current.isTranslucent ? WindowMaterial.sidebarTint : 1)
     }
 }
 

@@ -105,6 +105,8 @@ final class AppSettings {
         static let welcomeShown = "welcomeShown"
         static let customThemes = "customThemesV2"
         static let chromeContrast = "chromeContrast"
+        static let windowMaterial = "windowMaterial"
+        static let translucentTerminals = "translucentTerminals"
         static let newTabCwdMode = "newTabCwdMode"
         static let activeSidebarTab = "activeSidebarTab"
         static let sidebarTabBarPosition = "sidebarTabBarPosition"

@@ -35,10 +35,11 @@ extension MainWindowController {
     func applyChromeTheme() {
         let theme = effectiveTheme
         appliedChromeThemeName = theme.name
-        window?.backgroundColor = theme.surfaceBackdrop
         window?.appearance = NSAppearance(named: theme.isDark ? .darkAqua : .aqua)
-        window?.contentView?.layer?.backgroundColor = theme.surfaceBackdrop.cgColor
-        sidebarContainer.layer?.backgroundColor = theme.surfaceChrome.cgColor
+        // Window, backdrop and sidebar fills: opaque theme colours or a material.
+        if let window {
+            WindowMaterialStyler.apply(theme: theme, window: window, sidebar: sidebarContainer)
+        }
         // splitContainer stays clear — panes are the islands (see SplitContainerView.init)
         mainSplitView.needsDisplay = true
         // A refresh, not just a redraw: workspace colours resolve

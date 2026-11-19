@@ -140,7 +140,7 @@ extension WorkspaceBarView {
             in: CGRect(x: verticalStripX, y: y, width: Self.verticalWidth, height: height),
             from: CGPoint(x: 0, y: topDown ? y : y + height),
             to: CGPoint(x: 0, y: topDown ? y + height : y),
-            backdrop: booTheme.surfaceBackdrop)
+            backdrop: booTheme.chromeBackdropFill)
     }
 
     /// Paint the hovered workspace as a wide pill floating over the panes. Drawn
@@ -162,7 +162,7 @@ extension WorkspaceBarView {
 
         // Opaque backdrop under the pill fill: the fill itself is translucent, and
         // terminal text showing through a floating control reads as a glitch.
-        ctx.setFillColor(theme.surfaceChrome.cgColor)
+        ctx.setFillColor(theme.chromeFloatingFill.cgColor)
         WorkspacePillStyle.fillRoundedRect(ctx, rect: rect)
 
         WorkspacePillStyle.fill(

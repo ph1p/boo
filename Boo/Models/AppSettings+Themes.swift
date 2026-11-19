@@ -42,6 +42,21 @@ extension AppSettings {
         set { set(newValue.rawValue, forKey: K.chromeContrast, topic: .theme) }
     }
 
+    /// What shows through the window backdrop and the sidebar: the theme colour,
+    /// or a translucent macOS material. Terminals stay opaque unless
+    /// `translucentTerminals` is on.
+    var windowMaterial: WindowMaterial {
+        get { WindowMaterial(storedValue: UserDefaults.standard.integer(forKey: K.windowMaterial)) }
+        set { set(newValue.rawValue, forKey: K.windowMaterial, topic: .theme) }
+    }
+
+    /// Let the window material show behind terminal text. Only takes effect
+    /// while `windowMaterial` is translucent: an opaque window has nothing behind.
+    var translucentTerminals: Bool {
+        get { bool(K.translucentTerminals, default: false) }
+        set { set(newValue, forKey: K.translucentTerminals, topic: .theme) }
+    }
+
     private static let builtInThemesByName: [String: TerminalTheme] = {
         var map = [String: TerminalTheme]()
         for t in TerminalTheme.themes { map[t.name] = t }

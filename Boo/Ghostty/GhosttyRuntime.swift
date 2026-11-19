@@ -264,6 +264,9 @@ extension Notification.Name {
 
         // Colors from theme
         lines.append("background = \(hexColor(theme.background))")
+        // Translucent terminals: the pane layer paints the background at
+        // reduced alpha, so the default cell background must stay clear.
+        if WindowMaterial.terminalsTranslucent { lines.append("background-opacity = 0") }
         lines.append("foreground = \(hexColor(theme.foreground))")
         lines.append("cursor-color = \(hexColor(theme.cursor))")
         lines.append("selection-background = \(hexNSColor(theme.selection))")

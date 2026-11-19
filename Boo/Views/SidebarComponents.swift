@@ -191,7 +191,7 @@ class SidebarSectionHeaderView: NSView {
         let padH: CGFloat = AppSettings.shared.sidebarDensity == .comfortable ? 12 : 8
 
         // Same surface as the panel: sections read as groups, not stacked bars.
-        ctx.setFillColor(theme.surfaceChrome.cgColor)
+        ctx.setFillColor(theme.chromeSidebarFill.cgColor)
         ctx.fill(bounds)
 
         if isHovered {

@@ -906,7 +906,7 @@ class SidebarPanelView: NSView {
     override func draw(_ dirtyRect: NSRect) {
         guard let ctx = NSGraphicsContext.current?.cgContext else { return }
         let theme = booTheme
-        ctx.setFillColor(theme.surfaceChrome.cgColor)
+        ctx.setFillColor(theme.chromeSidebarFill.cgColor)
         ctx.fill(bounds)
 
         let w = bounds.width

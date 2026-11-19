@@ -63,7 +63,7 @@ struct NotesPanelView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(Color(nsColor: theme.surfaceChrome))
+        .background(Color(nsColor: theme.chromeSidebarFill))
         .onAppear(perform: reloadList)
         .onChange(of: other) { _, note in memory.shown[path] = note }
         .onChange(of: preview) { _, on in

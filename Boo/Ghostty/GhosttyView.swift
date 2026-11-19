@@ -147,7 +147,7 @@ import Cocoa
         // Seed with the theme background, not black: the Metal surface takes a
         // couple of frames to paint after a split/tab creation, and a black
         // placeholder flashes visibly on light themes.
-        layer?.backgroundColor = AppSettings.shared.theme.background.surfaceColor.cgColor
+        layer?.backgroundColor = AppSettings.shared.theme.paneFill.cgColor
         registerForDraggedTypes([.fileURL, .URL, .string])
         createSurface(workingDirectory: workingDirectory, paneID: paneID, tabID: tabID, launch: launch)
     }

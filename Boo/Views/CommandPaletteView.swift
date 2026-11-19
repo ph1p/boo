@@ -104,8 +104,12 @@ final class CommandPaletteController: NSObject, NSTextFieldDelegate, NSWindowDel
     /// The chrome follows a previewed theme, like the rest of the window.
     private func applyTheme() {
         let theme = AppSettings.shared.theme
-        root?.layer?.backgroundColor = theme.surfaceRaised.cgColor
-        root?.layer?.borderColor = theme.separator.cgColor
+        if let root {
+            // Its own window, so it brings its own blur under vibrancy.
+            WindowMaterialStyler.styleIsland(
+                root, fill: theme.surfaceRaised, border: theme.separator,
+                ownBlur: true)
+        }
         separator.layer?.backgroundColor = theme.separator.cgColor
         field.textColor = theme.textPrimary
         field.placeholderAttributedString = NSAttributedString(
@@ -117,9 +121,6 @@ final class CommandPaletteController: NSObject, NSTextFieldDelegate, NSWindowDel
         let root = NSView()
         self.root = root
         root.wantsLayer = true
-        root.layer?.cornerRadius = 10
-        root.layer?.masksToBounds = true
-        root.layer?.borderWidth = 1
 
         field.isBordered = false
         field.drawsBackground = false

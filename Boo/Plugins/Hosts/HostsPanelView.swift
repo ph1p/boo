@@ -76,7 +76,7 @@ struct HostsPanelView: View {
                 }
             }
         }
-        .background(Color(nsColor: theme.surfaceChrome))
+        .background(Color(nsColor: theme.chromeSidebarFill))
         .onAppear {
             store.start()
             store.refreshLive()

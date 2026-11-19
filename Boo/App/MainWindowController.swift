@@ -652,7 +652,7 @@ import SwiftUI
         statusBarHeightConstraint = heightConstraint
 
         TrafficLightPositioner.attach(to: window, headerHeight: headerHeight)
-
+        WindowMaterialStyler.apply(theme: effectiveTheme, window: window, sidebar: sidebarContainer)
     }
 
     // MARK: - SplitContainerDelegate

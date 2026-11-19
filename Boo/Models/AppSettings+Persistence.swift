@@ -13,8 +13,9 @@ extension AppSettings {
     /// folder, recordings folder, editor commands), per-machine layout and
     /// state, the sync folder itself and security decisions.
     static let syncedKeys: [String] = [
-        K.themeName, K.autoTheme, K.darkThemeName, K.lightThemeName, K.chromeContrast, K.cursorStyle, K.fontSize,
-        K.fontName,
+        K.themeName, K.autoTheme, K.darkThemeName, K.lightThemeName, K.chromeContrast, K.windowMaterial,
+        K.translucentTerminals, K.cursorStyle,
+        K.fontSize, K.fontName,
         K.statusBarShowPath, K.statusBarShowTime, K.statusBarShowPaneInfo, K.statusBarShowPorts,
         K.statusBarShowConnection, K.statusBarLeftOrder, K.statusBarRightOrder, K.statusBarHiddenSegments,
         K.statusBarClockFormat, K.statusBarPathStyle, K.statusBarBranchMaxLength, K.statusBarSeparators,
@@ -85,6 +86,7 @@ extension AppSettings {
             K.darkThemeName: darkThemeName,
             K.lightThemeName: lightThemeName,
             K.chromeContrast: chromeContrast.rawValue,
+            K.windowMaterial: windowMaterial.rawValue, K.translucentTerminals: translucentTerminals,
             K.cursorStyle: cursorStyle.rawValue,
             K.fontSize: Double(fontSize),
             K.fontName: fontName,

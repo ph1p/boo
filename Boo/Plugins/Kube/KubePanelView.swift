@@ -63,7 +63,7 @@ struct KubePanelView: View {
                 }
             }
         }
-        .background(Color(nsColor: theme.surfaceChrome))
+        .background(Color(nsColor: theme.chromeSidebarFill))
         .onAppear { store.startWatching() }
     }
 

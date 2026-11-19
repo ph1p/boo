@@ -258,7 +258,7 @@ extension ToolbarView {
             ctx, in: CGRect(x: x, y: 0, width: width, height: barHeight),
             from: CGPoint(x: leftToRight ? x : x + width, y: 0),
             to: CGPoint(x: leftToRight ? x + width : x, y: 0),
-            backdrop: booTheme.surfaceBackdrop)
+            backdrop: booTheme.chromeBackdropFill)
     }
 
     // MARK: - Hit Testing

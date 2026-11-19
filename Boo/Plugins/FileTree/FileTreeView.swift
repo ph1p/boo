@@ -182,7 +182,7 @@ struct FileTreeView: View {
                     if stickyFolders {
                         FileTreeStickyHeader(
                             state: sticky, rows: rows, style: cfg, git: git,
-                            background: Color(nsColor: theme.surfaceChrome),
+                            background: Color(nsColor: theme.chromeSidebarFill),
                             separator: Color(nsColor: theme.separator),
                             onSelect: { row in revealPinned(row, rows: rows, proxy: proxy) }
                         )
@@ -215,7 +215,7 @@ struct FileTreeView: View {
             .onCommand(#selector(NSResponder.selectAll(_:))) { selection.selectAll(order: order) }
         }
         .frame(maxHeight: .infinity)
-        .background(Color(nsColor: theme.surfaceChrome))
+        .background(Color(nsColor: theme.chromeSidebarFill))
         .contentShape(Rectangle())
         .contextMenu {
             if let onCreateFile = actions.onCreateFile {

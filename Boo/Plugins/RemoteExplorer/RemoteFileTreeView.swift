@@ -36,7 +36,7 @@ struct RemoteConnectingView: View {
             Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(nsColor: theme.surfaceChrome))
+        .background(Color(nsColor: theme.chromeSidebarFill))
     }
 
 }
@@ -93,7 +93,7 @@ struct RemoteConnectionFailedView: View {
             Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(nsColor: theme.surfaceChrome))
+        .background(Color(nsColor: theme.chromeSidebarFill))
     }
 
     /// Plain ssh/mosh hosts can prompt; container ssh (vagrant, colima) manages its own keys.

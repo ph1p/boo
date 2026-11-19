@@ -208,7 +208,7 @@ struct SettingsView: View {
                     }
                 }
                 .frame(width: 190)
-                .island(t)
+                .sidebarIsland(t)
 
                 // Detail island
                 content
@@ -221,7 +221,7 @@ struct SettingsView: View {
         // No top padding: the header above them carries its own vertical inset.
         .padding(.horizontal, IslandMetrics.gap)
         .padding(.bottom, IslandMetrics.gap)
-        .background(t.backdrop)
+        .background(Color(nsColor: t.theme.chromeBackdropFill))
         // Resizable, never below the default size the pages are laid out for.
         .frame(
             minWidth: SettingsWindowController.defaultSize.width, maxWidth: .infinity,
@@ -326,13 +326,21 @@ class SettingsWindowController: NSWindowController {
         window.setFrameAutosaveName("BooSettingsWindow")
         window.autorecalculatesKeyViewLoop = false
         let theme = AppSettings.shared.theme
-        // Behind the islands, so it is the backdrop rather than the chrome fill —
-        // otherwise the margin flashes the wrong colour during a resize.
-        window.backgroundColor = theme.surfaceBackdrop
         window.appearance = NSAppearance(named: theme.isDark ? .darkAqua : .aqua)
         let hostingView = NoSafeAreaHostingView(rootView: SettingsView())
-        window.contentView = hostingView
+        // A plain container, not the hosting view, is the content view: the
+        // window material installs its blur beneath every subview, which needs
+        // an AppKit superview it controls rather than SwiftUI's.
+        let container = NSView()
+        hostingView.frame = container.bounds
+        hostingView.autoresizingMask = [.width, .height]
+        container.addSubview(hostingView)
+        window.contentView = container
         super.init(window: window)
+        // Behind the islands, so it is the backdrop rather than the chrome fill —
+        // otherwise the margin flashes the wrong colour during a resize. The
+        // window material makes it a tinted blur instead.
+        WindowMaterialStyler.apply(theme: theme, window: window, sidebar: nil)
 
         // Attached like the main window: the header island has the same geometry
         // (`gap` leading, `barGap` top, `toolbarHeight` tall), and the positioner
@@ -344,7 +352,9 @@ class SettingsWindowController: NSWindowController {
         ) { [weak self] _ in
             MainActor.assumeIsolated {
                 let t = AppSettings.shared.theme
-                self?.window?.backgroundColor = t.surfaceBackdrop
+                if let window = self?.window {
+                    WindowMaterialStyler.apply(theme: t, window: window, sidebar: nil)
+                }
                 self?.window?.appearance = NSAppearance(named: t.isDark ? .darkAqua : .aqua)
             }
         }

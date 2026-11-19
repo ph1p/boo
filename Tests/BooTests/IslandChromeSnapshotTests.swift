@@ -13,6 +13,18 @@ import XCTest
 
     private let width: CGFloat = 900
     private let height: CGFloat = 560
+    private var savedMaterial: WindowMaterial = .off
+
+    /// The snapshots assert opaque backdrop pixels. A window material on the
+    /// developer's machine makes those fills clear, so pin it off (CI default).
+    override func setUp() async throws {
+        savedMaterial = AppSettings.shared.windowMaterial
+        AppSettings.shared.windowMaterial = .off
+    }
+
+    override func tearDown() async throws {
+        AppSettings.shared.windowMaterial = savedMaterial
+    }
 
     /// Mirrors the constraint set in `setupUI()`: toolbar on top, status bar on
     /// the bottom, sidebar + pane splitting the middle, all inset by the island
