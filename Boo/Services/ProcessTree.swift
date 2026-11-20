@@ -95,6 +95,11 @@ enum ProcessTree {
         return current
     }
 
+    /// Whether `pid` runs. EPERM means it does, under another user.
+    static func isAlive(_ pid: pid_t) -> Bool {
+        kill(pid, 0) == 0 || errno == EPERM
+    }
+
     // MARK: - Ancestry
 
     /// Get the parent PID of a process.

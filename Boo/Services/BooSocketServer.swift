@@ -324,7 +324,7 @@ final class BooSocketServer: @unchecked Sendable {
             return
         }
 
-        guard kill(p, 0) == 0 || errno == EPERM else {
+        guard ProcessTree.isAlive(p) else {
             sendResponse(fd: clientFD, ok: false, error: "process \(pid) not found")
             return
         }

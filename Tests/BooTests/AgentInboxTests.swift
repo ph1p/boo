@@ -266,6 +266,19 @@ final class AgentInboxTests: XCTestCase {
         XCTAssertNil(inbox.items[tab]?.reply, "a new turn does not inherit the old reply")
     }
 
+    /// OpenCode idles after session.error; the stop must not hide the error.
+    func testAStopAfterAnErrorKeepsTheError() {
+        let inbox = makeInbox()
+        let tab = UUID()
+        inbox.apply(event: "prompt", tabID: tab)
+        inbox.apply(event: "error", tabID: tab, message: "rate limit")
+        inbox.apply(event: "stop", tabID: tab)
+        XCTAssertEqual(inbox.items[tab]?.state, .error)
+        XCTAssertEqual(inbox.items[tab]?.message, "Stopped: rate limit")
+        inbox.apply(event: "prompt", tabID: tab)
+        XCTAssertEqual(inbox.items[tab]?.state, .working, "the next prompt clears the error")
+    }
+
     func testPresenceFollowsTheAgentProcess() {
         let inbox = makeInbox()
         let tab = UUID()

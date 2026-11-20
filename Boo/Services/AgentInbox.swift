@@ -94,7 +94,7 @@ final class AgentInbox {
 
     /// The process in the foreground of a tab's terminal; nil when not open.
     var foregroundPID: (UUID) -> pid_t? = { AgentInbox.terminalView(ofTab: $0)?.foregroundPID }
-    var isAlive: (pid_t) -> Bool = { kill($0, 0) == 0 || errno == EPERM }
+    var isAlive: (pid_t) -> Bool = ProcessTree.isAlive
 
     init() {}
 
@@ -145,6 +145,9 @@ final class AgentInbox {
             // Hooks run as separate processes and can arrive out of order.
             if let reportedAt, let last = existing.reportedAt, reportedAt < last { return nil }
             if Self.isNestedSession(existing, event: event, sessionID: sessionID, pid: pid, now: now) { return nil }
+            // A failed turn can still report its end (OpenCode idles after
+            // session.error); the error stays until the next prompt.
+            if existing.state == .error, event == "stop" || event == "done" { return nil }
         }
         if event == "end" {
             remove(tabID: tabID)
@@ -192,10 +195,10 @@ final class AgentInbox {
     /// A nested `claude -p` shares the agent's process group, so another
     /// foreground process is a new agent, not a nested one.
     static func isNestedSession(
-        _ existing: Item, event: String, sessionID: String?, pid: pid_t? = nil, now: Date
+        _ existing: Item, event: String, sessionID: String?, pid: pid_t?, now: Date
     ) -> Bool {
         guard let own = existing.sessionID, let sessionID, sessionID != own else { return false }
-        if let pid, let known = existing.pid, pid != known { return false }
+        if isOtherAgent(existing, sessionID: sessionID, pid: pid) { return false }
         if event == "end" { return true }
         return existing.state == .working && now.timeIntervalSince(existing.updatedAt) < nestedSessionWindow
     }
@@ -257,6 +260,7 @@ final class AgentInbox {
             // keep the question it is about.
             let followsQuestion = previous == .needsInput && event == "permission" && item.message != nil
             if !followsQuestion { item.message = message }
+            if state == .error { item.message = message.map { "Stopped: \($0)" } }
             item.asksQuestion = event == "question" || (followsQuestion && item.asksQuestion)
             if state != previous { item.seen = false }
         }

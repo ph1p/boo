@@ -84,7 +84,7 @@ enum CrashRecovery {
     nonisolated(unsafe) private(set) static var previousRunEnd: UnexpectedEnd?
 
     /// Records this run and sets `previousRunEnd`. Call once, early.
-    static func markLaunch(pid: pid_t = getpid(), isAlive: (pid_t) -> Bool = processIsAlive) {
+    static func markLaunch(pid: pid_t = getpid(), isAlive: (pid_t) -> Bool = ProcessTree.isAlive) {
         let fm = FileManager.default
         try? fm.createDirectory(atPath: directory, withIntermediateDirectories: true)
         var startedAt: Date?
@@ -177,9 +177,5 @@ enum CrashRecovery {
 
     private static func path(for pid: pid_t) -> String {
         (directory as NSString).appendingPathComponent(String(pid))
-    }
-
-    private static func processIsAlive(_ pid: pid_t) -> Bool {
-        kill(pid, 0) == 0 || errno == EPERM
     }
 }

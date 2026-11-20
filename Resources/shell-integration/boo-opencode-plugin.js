@@ -53,9 +53,6 @@ function report(event, fields = {}) {
 }
 
 export const BooPlugin = async ({ client, directory }) => {
-  // Sessions whose turn ended in an error: the session.idle that follows must
-  // not turn the error into "done".
-  const failed = new Set()
   // The agent's last answer: reported to the agent that started it.
   const lastReply = async (sessionID) => {
     try {
@@ -81,7 +78,7 @@ export const BooPlugin = async ({ client, directory }) => {
         case "session.created":
           return report("start", { session_id: props.info?.id, cwd: directory })
         case "session.idle":
-          if (failed.delete(props.sessionID) || !active()) return
+          if (!active()) return
           return report("stop", {
             session_id: props.sessionID,
             reply: await lastReply(props.sessionID),
@@ -99,18 +96,14 @@ export const BooPlugin = async ({ client, directory }) => {
           const error = props.error
           // An abort (Escape) is the user's own stop, not a failure.
           if (!error || error.name === "MessageAbortedError") return
-          failed.add(props.sessionID)
           return report("error", {
-            message: "Stopped: " + (error.data?.message || error.name || "error"),
+            message: error.data?.message || error.name,
             session_id: props.sessionID,
           })
         }
       }
     },
-    "chat.message": async (input) => {
-      failed.delete(input?.sessionID)
-      return report("prompt", { session_id: input?.sessionID, cwd: directory })
-    },
+    "chat.message": async (input) => report("prompt", { session_id: input?.sessionID, cwd: directory }),
     "tool.execute.before": async (input, output) => {
       if (input?.tool === "question") {
         const question = output?.args?.questions?.[0]?.question
