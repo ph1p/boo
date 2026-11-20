@@ -11,6 +11,8 @@ final class PluginActions {
     var openDirectoryInNewPane: ((String) -> Void)?
     /// Open a file content tab (editor, viewer, etc.) in a new split pane.
     var openFileInNewPane: ((String) -> Void)?
+    /// Open a file in the user's terminal editor, in a new tab beside it.
+    var openFileInTerminalEditor: ((String) -> Void)?
     var pastePathToActivePane: ((String) -> Void)?
     /// Display an image using the Kitty Graphics Protocol.
     /// `newTab`: open a new tab first; false = inject into the focused terminal's PTY directly.

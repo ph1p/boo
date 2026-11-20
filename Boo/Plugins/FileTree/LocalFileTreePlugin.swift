@@ -335,18 +335,7 @@ final class LocalFileTreePlugin: BooPluginProtocol, FileTreeBrowsing {
             let textMode = TextOpenMode(rawValue: textModeRaw) ?? .editor
             switch textMode {
             case .terminalEditor:
-                let parentDir = (path as NSString).deletingLastPathComponent
-                actions?.openDirectoryInNewTab?(parentDir)
-                let configured = AppSettings.shared.fileEditorCommand.trimmingCharacters(
-                    in: .whitespaces
-                )
-                let editorCmd =
-                    configured.isEmpty
-                    ? (ProcessInfo.processInfo.environment["EDITOR"] ?? "vi")
-                    : configured
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                    actions?.sendToTerminal?(ShellCommand.hidden("\(editorCmd) \(shellEscape(path))"))
-                }
+                actions?.openFileInTerminalEditor?(path)
             case .external:
                 NSWorkspace.shared.open(URL(fileURLWithPath: path))
             case .editor, .multiContent:

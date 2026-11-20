@@ -11,6 +11,7 @@ extension MainWindowController {
         pluginActions.openDirectoryInNewTab = { [weak self] in self?.openDirectoryInNewTab($0) }
         pluginActions.openDirectoryInNewPane = { [weak self] in self?.openDirectoryInNewPane($0) }
         pluginActions.openFileInNewPane = { [weak self] in self?.openFileInNewPane($0) }
+        pluginActions.openFileInTerminalEditor = { [weak self] in self?.openFileInTerminalEditor($0) }
         pluginActions.pastePathToActivePane = { [weak self] in self?.pastePathToActivePane($0) }
         pluginActions.isTerminalBusy = { [weak self] in
             guard let self else { return false }
