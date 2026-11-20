@@ -114,6 +114,26 @@ enum ProcessTree {
 
     /// Check if a PID is a descendant of another PID by walking the process tree.
     /// Walks up to 64 levels to prevent infinite loops in case of cycles.
+    /// Whether a Boo app process (`….app/Contents/MacOS/Boo`, installed or dev
+    /// build) is an ancestor of `pid`: the process runs in a Boo terminal even
+    /// when its environment was stripped (Codex starts MCP servers that way).
+    static func hasBooAncestor(_ pid: pid_t) -> Bool {
+        var current = parentPID(of: pid)
+        for _ in 0..<64 {
+            if current <= 1 { return false }
+            var buffer = [CChar](repeating: 0, count: Int(MAXPATHLEN) * 4)
+            if proc_pidpath(current, &buffer, UInt32(buffer.count)) > 0 {
+                let path = String(
+                    decoding: buffer.prefix(while: { $0 != 0 }).map(UInt8.init(bitPattern:)), as: UTF8.self)
+                if path.hasSuffix(".app/Contents/MacOS/Boo") { return true }
+            }
+            let parent = parentPID(of: current)
+            if parent == current || parent <= 0 { return false }
+            current = parent
+        }
+        return false
+    }
+
     static func isDescendant(_ pid: pid_t, of ancestor: pid_t) -> Bool {
         var current = pid
         for _ in 0..<64 {

@@ -229,6 +229,8 @@ codex mcp add boo -- ~/.boo/shell-integration/boo-mcp
 
 The server talks to the running app over `$BOO_SOCK`. It uses `$BOO_PANE_ID` as the agent's own pane and sends `$BOO_TOKEN` for you. It never types into or closes the agent's own pane.
 
+An agent started outside Boo (another terminal or an IDE) still loads the server, because the registration is global. There the server lists no tools and tells the agent it is not inside Boo, so it never drives Boo panes or the Boo browser from elsewhere.
+
 | Tool              | What it does |
 | ----------------- | ------------ |
 | `get_layout`      | Panes of the agent's workspace with tabs, cwd and process. `your_pane` is the agent's own. |

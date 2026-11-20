@@ -19,6 +19,10 @@ struct BooMCPServer {
     /// `BOO_TOKEN` of the agent's terminal, sent with every command so Boo
     /// knows who asks (some commands are refused without it).
     var token: String? = nil
+    /// False when the agent runs outside Boo (another terminal or IDE): the
+    /// server then lists no tools and its instructions say so, so the agent
+    /// does not drive Boo windows the user is not looking at.
+    var insideBoo = true
 
     static let protocolVersion = "2025-06-18"
 
@@ -48,7 +52,8 @@ struct BooMCPServer {
             send: { try BooSocketClient.request($0, socketPath: socketPath, timeout: clientTimeout(for: $0)) },
             ownPaneID: env["BOO_PANE_ID"].flatMap { $0.isEmpty ? nil : $0 },
             cwd: FileManager.default.currentDirectoryPath,
-            token: env["BOO_TOKEN"].flatMap { $0.isEmpty ? nil : $0 })
+            token: env["BOO_TOKEN"].flatMap { $0.isEmpty ? nil : $0 },
+            insideBoo: env["BOO_PANE_ID"].map { !$0.isEmpty } == true || ProcessTree.hasBooAncestor(getpid()))
         while let line = readLine(strippingNewline: true) {
             guard !line.trimmingCharacters(in: .whitespaces).isEmpty else { continue }
             let response: [String: Any]?
@@ -82,13 +87,17 @@ struct BooMCPServer {
                     "protocolVersion": requested ?? Self.protocolVersion,
                     "capabilities": ["tools": [:]],
                     "serverInfo": ["name": "boo", "version": Self.version],
-                    "instructions": Self.instructions
+                    "instructions": insideBoo ? Self.instructions : Self.outsideInstructions
                 ])
         case "ping":
             return Self.result(id: id, [:])
         case "tools/list":
-            return Self.result(id: id, ["tools": Self.tools])
+            return Self.result(id: id, ["tools": insideBoo ? Self.tools : []])
         case "tools/call":
+            guard insideBoo else {
+                return Self.result(
+                    id: id, ["content": [["type": "text", "text": Self.outsideInstructions]], "isError": true])
+            }
             guard let name = params["name"] as? String, Self.tools.contains(where: { $0["name"] as? String == name })
             else {
                 return Self.errorResponse(id: id, code: -32602, message: "unknown tool: \(params["name"] ?? "")")
@@ -312,6 +321,13 @@ struct BooMCPServer {
         Clean up after yourself: once a helper from new_agent_task with worktree false is done and \
         you have its answer, close it with close_agent; close browser tabs you opened with \
         browser_close when you no longer need them.
+        """
+
+    /// Instructions when the agent does not run in a Boo terminal.
+    static let outsideInstructions = """
+        You are not running inside Boo: this terminal is not a Boo pane, so Boo's tools \
+        (panes, agents, browser) are unavailable here. Do not try to use the Boo browser or \
+        Boo panes; use your own tools instead.
         """
 
     /// Every parameter the browser tools declare, forwarded as is.

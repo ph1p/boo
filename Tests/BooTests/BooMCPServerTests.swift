@@ -187,6 +187,23 @@ final class BooMCPServerTests: XCTestCase {
         XCTAssertTrue(sent().isEmpty)
     }
 
+    func testOutsideBooListsNoToolsAndSaysSo() throws {
+        var sent: [[String: Any]] = []
+        let server = BooMCPServer(
+            send: {
+                sent.append($0)
+                return ["ok": true]
+            }, ownPaneID: nil, cwd: "/work", insideBoo: false)
+        let initialize = try XCTUnwrap(server.handle(["jsonrpc": "2.0", "id": 1, "method": "initialize"]))
+        let instructions = (initialize["result"] as? [String: Any])?["instructions"] as? String ?? ""
+        XCTAssertTrue(instructions.contains("not running inside Boo"))
+        let list = try XCTUnwrap(server.handle(["jsonrpc": "2.0", "id": 2, "method": "tools/list"]))
+        XCTAssertEqual(((list["result"] as? [String: Any])?["tools"] as? [Any])?.count, 0)
+        let opened = call(server, "browser_open", ["url": "http://localhost:3000"])
+        XCTAssertEqual(opened["isError"] as? Bool, true)
+        XCTAssertTrue(sent.isEmpty, "nothing reaches the Boo socket")
+    }
+
     func testBooErrorsAndMissingSocketBecomeToolErrors() {
         let (refusing, _) = makeServer { _ in ["ok": false, "error": "pane not found"] }
         let refused = call(refusing, "close_pane", ["pane_id": otherPane])
