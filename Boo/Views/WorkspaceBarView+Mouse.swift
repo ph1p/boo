@@ -224,10 +224,15 @@ extension WorkspaceBarView {
         if let header = groupHeaders.first(where: { $0.members.first == selectedIndex }) {
             top = header.top
         }
-        if top < verticalScrollOffset {
-            verticalScrollOffset = top
-        } else if top + Self.verticalItemSize > verticalScrollOffset + verticalScrollViewportHeight {
-            verticalScrollOffset = top + Self.verticalItemSize - verticalScrollViewportHeight
+        // Keep the pill clear of the scroll fades, not merely inside the viewport:
+        // a pill at the very edge sits under the fade. No fade is drawn at an end
+        // the strip is scrolled to, and `clampVerticalScroll` handles those ends.
+        let fade = Self.verticalFadeHeight
+        let bottom = (selectedIndex < rowTops.count ? rowTops[selectedIndex] : top) + Self.verticalItemSize
+        if top - fade < verticalScrollOffset {
+            verticalScrollOffset = top - fade
+        } else if bottom + fade > verticalScrollOffset + verticalScrollViewportHeight {
+            verticalScrollOffset = bottom + fade - verticalScrollViewportHeight
         }
         clampVerticalScroll()
     }

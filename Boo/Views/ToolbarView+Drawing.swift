@@ -228,13 +228,10 @@ extension ToolbarView {
             ctx.restoreGState()
 
             if workspaceScrollOffset > 0 {
-                drawFadeEdge(ctx, at: zoneStart, width: 20, leftToRight: true)
+                drawFadeEdge(ctx, at: zoneStart, width: Self.leadingFadeWidth, leftToRight: true)
             }
             if workspaceScrollOffset < maxWorkspaceScrollOffset {
-                // Wide enough that the clipped pill has fully dissolved into the
-                // backdrop by the time it reaches the pinned `+`, rather than a
-                // half-faded label butting up against the button.
-                let fadeW: CGFloat = 32
+                let fadeW = Self.trailingFadeWidth
                 drawFadeEdge(ctx, at: zoneEnd - fadeW, width: fadeW, leftToRight: false)
             }
         }

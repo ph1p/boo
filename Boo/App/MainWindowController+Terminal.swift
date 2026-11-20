@@ -173,31 +173,12 @@ extension MainWindowController {
             pv.addNewTab(contentType: .browser, url: url)
 
         case .file(let path):
-            // Check if file has a known content type (image, markdown, PDF, etc.)
-            if let type = ContentType.forFile(path) {
-                // Markdown respects user preference
-                if type == .markdownPreview {
-                    switch AppSettings.shared.markdownOpenMode {
-                    case .preview:
-                        openFileInTab(path: path, type: .markdownPreview)
-                    case .terminalEditor:
-                        openFileInTerminalEditor(path)
-                    case .builtInEditor, .multiContent:
-                        openFileInTab(path: path, type: .editor)
-                    case .external:
-                        NSWorkspace.shared.open(URL(fileURLWithPath: path))
-                    }
-                } else if type == .browser {
-                    // PDF (and any future file-URL-browser types): open directly as browser tab
-                    pv.addNewTab(contentType: .browser, url: URL(fileURLWithPath: path))
-                } else {
-                    openFileInTab(path: path, type: type)
-                }
-            } else if ContentType.isEditorFilePattern(filename: ((path as NSString).lastPathComponent).lowercased()) {
-                // File matches user-configured editor patterns — open in built-in editor tab
-                openFileInTab(path: path, type: .editor)
-            } else {
-                // Unknown type: open in system default app
+            switch fileOpenTarget(for: path) {
+            case .tab(let type):
+                openFileInTab(path: path, type: type)
+            case .terminalEditor:
+                openFileInTerminalEditor(path)
+            case .external:
                 NSWorkspace.shared.open(URL(fileURLWithPath: path))
             }
 
@@ -207,11 +188,71 @@ extension MainWindowController {
         refreshStatusBar()
     }
 
+    /// Where `handleOpenTab(.file)` shows a file.
+    private enum FileOpenTarget {
+        case tab(ContentType)
+        case terminalEditor
+        case external
+    }
+
+    private func fileOpenTarget(for path: String) -> FileOpenTarget {
+        if let type = ContentType.forFile(path) {
+            // Markdown respects user preference
+            guard type == .markdownPreview else { return .tab(type) }
+            switch AppSettings.shared.markdownOpenMode {
+            case .preview: return .tab(.markdownPreview)
+            case .terminalEditor: return .terminalEditor
+            case .builtInEditor, .multiContent: return .tab(.editor)
+            case .external: return .external
+            }
+        }
+        // File matches user-configured editor patterns — open in built-in editor tab
+        if ContentType.isEditorFilePattern(filename: (path as NSString).lastPathComponent.lowercased()) {
+            return .tab(.editor)
+        }
+        // Unknown type: open in system default app
+        return .external
+    }
+
+    /// Focuses the tab of the active workspace that already shows `path` as
+    /// `type`, searching the active pane first. Returns false when none does.
+    @discardableResult
+    func focusTabShowingFile(_ path: String, as type: ContentType) -> Bool {
+        guard let workspace = activeWorkspace else { return false }
+        let target = Self.canonicalFilePath(path)
+        let paneIDs = [workspace.activePaneID] + workspace.splitTree.leafIDs.filter { $0 != workspace.activePaneID }
+        for paneID in paneIDs {
+            guard let pane = workspace.pane(for: paneID), let pv = paneViews[paneID] else { continue }
+            for (index, tab) in pane.tabs.enumerated() where tab.contentType == type {
+                guard let file = pv.liveContentState(of: tab).filePath,
+                    Self.canonicalFilePath(file) == target
+                else { continue }
+                if index != pane.activeTabIndex { pv.activateTab(index) }
+                focusPane(paneID, in: workspace)
+                refreshStatusBar()
+                return true
+            }
+        }
+        return false
+    }
+
+    /// `path` with `.`/`..` and symlinks resolved, so two spellings of one file match.
+    private static func canonicalFilePath(_ path: String) -> String {
+        URL(fileURLWithPath: path).standardizedFileURL.resolvingSymlinksInPath().path
+    }
+
     /// Open a file in a new tab with the specified content type.
+    /// Opens `path` as a `type` tab, or jumps to the tab already showing it.
     private func openFileInTab(path: String, type: ContentType) {
         guard let workspace = activateContentWorkspace(),
             let pv = paneViews[workspace.activePaneID]
         else { return }
+        guard !focusTabShowingFile(path, as: type) else { return }
+        if type == .browser {
+            // PDF (and any future file-URL-browser types): open directly as browser tab
+            pv.addNewTab(contentType: .browser, url: URL(fileURLWithPath: path))
+            return
+        }
 
         let parentDir = (path as NSString).deletingLastPathComponent
         pv.addNewTab(contentType: type, workingDirectory: parentDir)
@@ -257,8 +298,10 @@ extension MainWindowController {
 
     /// Open a file in the terminal editor (respects user's editor preference).
     func openFileInTerminalEditor(_ path: String, line: Int? = nil) {
+        guard let workspace = activeWorkspace,
+            let pv = paneViews[workspace.activePaneID]
+        else { return }
         let parentDir = (path as NSString).deletingLastPathComponent
-        openDirectoryInNewTab(parentDir)
 
         let configured = AppSettings.shared.fileEditorCommand.trimmingCharacters(in: .whitespaces)
         let editorCmd =
@@ -268,12 +311,17 @@ extension MainWindowController {
         // vi, vim, nvim, nano, emacs, micro, kak and helix all take `+line`.
         let lineArg = line.map { " +\($0)" } ?? ""
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-            self?.sendRawToActivePane(ShellCommand.hidden("\(editorCmd)\(lineArg) \(shellEscape(path))"))
-        }
+        // Typed as the shell's initial input, into the new tab itself: no timer
+        // racing the shell start or a tab switch. The leading space keeps it out
+        // of the shell history, as `ShellCommand.hidden` does.
+        pv.addNewTab(
+            workingDirectory: parentDir,
+            launch: LaunchSpec(command: " \(editorCmd)\(lineArg) \(shellEscape(path))"))
+        refreshStatusBar()
     }
 
-    /// Opens `path` in an editor tab with the cursor at `line`:`column`.
+    /// Opens `path` in an editor tab with the cursor at `line`:`column`. An
+    /// editor tab that already shows the file is focused instead of duplicated.
     func openFileInEditor(path: String, line: Int?, column: Int?) {
         openFileInTab(path: path, type: .editor)
         guard let line,
@@ -320,6 +368,9 @@ extension MainWindowController {
 
     /// Open a file content tab (editor, image viewer, etc.) in a new split pane.
     func openFileInNewPane(_ path: String) {
+        // Already open: jump there rather than split off an empty pane, which the
+        // dedupe in `handleOpenTab` would otherwise leave behind.
+        if case .tab(let type) = fileOpenTarget(for: path), focusTabShowingFile(path, as: type) { return }
         guard let workspace = activateContentWorkspace() else { return }
         window?.makeFirstResponder(nil)
 

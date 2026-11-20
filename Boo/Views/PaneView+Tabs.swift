@@ -266,5 +266,13 @@ extension PaneView {
         }
     }
 
+    /// The tab's content state as its view has it now; the model copy is only
+    /// refreshed on session save.
+    func liveContentState(of tab: Pane.Tab) -> ContentState {
+        if let activeContentView, activeContentView.tabID == tab.id { return activeContentView.saveState() }
+        if let contentView = contentViews[tab.id] { return contentView.saveState() }
+        return tab.state.contentState
+    }
+
     var tabCount: Int { pane.tabs.count }
 }

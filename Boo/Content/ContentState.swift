@@ -70,6 +70,21 @@ enum ContentState: Codable, Sendable {
         }
     }
 
+    /// The local file this content shows (a `file://` page for a browser), or nil.
+    var filePath: String? {
+        let path: String?
+        switch self {
+        case .editor(let s): path = s.filePath
+        case .imageViewer(let s): path = s.filePath
+        case .markdownPreview(let s): path = s.filePath
+        case .castPlayer(let s): path = s.filePath
+        case .browser(let s): path = s.url.isFileURL ? s.url.path : nil
+        case .terminal, .pluginView: path = nil
+        }
+        guard let path, !path.isEmpty else { return nil }
+        return path
+    }
+
     /// Mutate terminal-specific state. No-op for non-terminal content.
     mutating func updateTerminal(_ transform: (inout TerminalContentState) -> Void) {
         if case .terminal(var s) = self {

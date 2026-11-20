@@ -221,19 +221,31 @@ class ToolbarView: NSView {
         needsDisplay = true
     }
 
-    /// Ensure the active workspace pill is visible in the scroll area.
+    /// Width of the scroll fade at the strip's leading edge.
+    static let leadingFadeWidth: CGFloat = 20
+    /// Width of the scroll fade at the strip's trailing edge. Wide enough that the
+    /// clipped pill has fully dissolved into the backdrop by the time it reaches
+    /// the pinned `+`, rather than a half-faded label butting up against the button.
+    static let trailingFadeWidth: CGFloat = 32
+
+    /// Ensure the active workspace pill is visible in the scroll area, clear of
+    /// the edge fades: a pill scrolled only to the zone's edge sits under the fade.
     private func scrollToActiveWorkspace() {
         guard bounds.width > 0 else { return }
-        guard let activeIndex = workspaces.firstIndex(where: { $0.isActive }) else { return }
+        guard let activeIndex = workspaces.firstIndex(where: { $0.isActive }),
+            activeIndex < workspaceLayout.pillX.count
+        else { return }
         let x = workspaceLayout.pillX[activeIndex]
-        let activeWidth = measureWorkspace(at: activeIndex) + Self.workspaceGap
-        let visibleStart = workspaceScrollOffset
-        let visibleEnd = workspaceScrollOffset + workspaceZoneWidth
+        let width = measureWorkspace(at: activeIndex)
+        // No fade is drawn at an end the strip is scrolled to, so the margin is
+        // only needed where content remains; `clampScrollOffset` handles the ends.
+        let visibleStart = workspaceScrollOffset + Self.leadingFadeWidth
+        let visibleEnd = workspaceScrollOffset + workspaceZoneWidth - Self.trailingFadeWidth
 
         if x < visibleStart {
-            workspaceScrollOffset = x
-        } else if x + activeWidth > visibleEnd {
-            workspaceScrollOffset = x + activeWidth - workspaceZoneWidth
+            workspaceScrollOffset = x - Self.leadingFadeWidth
+        } else if x + width > visibleEnd {
+            workspaceScrollOffset = x + width + Self.trailingFadeWidth - workspaceZoneWidth
         }
     }
 
