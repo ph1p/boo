@@ -77,6 +77,8 @@ class ToolbarView: NSView {
     private var _measureCache: [Int: CGFloat] = [:]
     /// Pill and group positions, rebuilt lazily after every `update()`.
     var _cachedLayout: WorkspaceStripLayout?
+    /// Index of the workspace `scrollToActiveWorkspace` last brought into view.
+    private var autoScrolledIndex: Int?
 
     // MARK: - Traffic Light Width Cache
 
@@ -216,7 +218,11 @@ class ToolbarView: NSView {
         self.sidebarVisible = sidebarVisible
         _measureCache.removeAll(keepingCapacity: true)
         _cachedLayout = nil
-        scrollToActiveWorkspace()
+        // Follow the active pill only when it moves. Re-scrolling on every refresh
+        // (a group toggle, an activity dot) yanked the strip back to the pill.
+        if workspaces.firstIndex(where: { $0.isActive }) != autoScrolledIndex {
+            scrollToActiveWorkspace()
+        }
         clampScrollOffset()
         needsDisplay = true
     }
@@ -231,6 +237,7 @@ class ToolbarView: NSView {
         guard let activeIndex = workspaces.firstIndex(where: { $0.isActive }),
             activeIndex < workspaceLayout.pillX.count
         else { return }
+        autoScrolledIndex = activeIndex
         let x = workspaceLayout.pillX[activeIndex]
         let width = measureWorkspace(at: activeIndex)
         // No fade is drawn at an end the strip is scrolled to, so the margin is

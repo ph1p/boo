@@ -338,6 +338,8 @@ class WorkspaceBarView: NSView {
     /// Measured expanded-pill name widths, keyed by "selected|name". Cleared when
     /// the items change; fonts are static so nothing else invalidates it.
     private var nameWidthCache: [String: CGFloat] = [:]
+    /// Index of the workspace `scrollToSelectedVertical` last brought into view.
+    var autoScrolledIndex: Int?
 
     func setItems(_ items: [Item], selectedIndex: Int) {
         self.items = items
@@ -346,7 +348,11 @@ class WorkspaceBarView: NSView {
         rebuildLayout()
         if hoveredIndex >= 0, hiddenRows.contains(hoveredIndex) { hoveredIndex = -1 }
         clampVerticalScroll()
-        scrollToSelectedVertical()
+        // Follow the selection only when it moves. Re-scrolling on every refresh
+        // (a group toggle, an activity dot) yanked the strip back to the pill.
+        if selectedIndex != autoScrolledIndex {
+            scrollToSelectedVertical()
+        }
         needsDisplay = true
     }
 

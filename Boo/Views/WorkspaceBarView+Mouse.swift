@@ -219,6 +219,7 @@ extension WorkspaceBarView {
         else {
             return
         }
+        autoScrolledIndex = selectedIndex
         var top = selectedIndex < rowTops.count ? rowTops[selectedIndex] : 0
         // Bring the group header into view with its first member.
         if let header = groupHeaders.first(where: { $0.members.first == selectedIndex }) {
