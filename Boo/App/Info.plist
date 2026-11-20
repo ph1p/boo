@@ -35,6 +35,13 @@
 	<string>1.70.0</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>13.0</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoadsInWebContent</key>
+		<true/>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
 	<key>NSAppleEventsUsageDescription</key>
 	<string>A program running within Boo would like to use AppleScript.</string>
 	<key>NSAudioCaptureUsageDescription</key>
