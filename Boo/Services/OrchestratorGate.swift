@@ -31,9 +31,6 @@ enum OrchestratorGate {
     static let closeCommands: Set<String> = ["close_pane"]
     /// Need a card even for tabs the orchestrator owns.
     static let alwaysApproved: Set<String> = ["merge_task", "discard_task"]
-    /// Need a Boo terminal's token; the command itself checks that the caller
-    /// started the target, so it never needs a card.
-    static let ownerCommands: Set<String> = ["agent_close"]
 
     static func isSensitive(cmd: String, target: Target?) -> Bool {
         if tabCommands.contains(cmd) { return true }
@@ -54,13 +51,22 @@ enum OrchestratorGate {
         guard let caller else {
             return .reject("\(cmd) on this target needs the BOO_TOKEN of a Boo terminal")
         }
-        if ownerCommands.contains(cmd) { return .allow }
+        if cmd == "agent_close" { return decideClose(target: target, owns: owns) }
         if caller.grade == .full { return .allow }
         if alwaysApproved.contains(cmd) { return .approve }
         // Unresolved target: let the command fail on its own (bad or missing id).
         guard let target, !target.tabIDs.isEmpty else { return .allow }
         if target.tabIDs.allSatisfy({ owns($0) || granted($0) }) { return .allow }
         return .approve
+    }
+
+    /// An agent closes only the helpers it started, whatever its grade, and
+    /// never needs a card for them.
+    private static func decideClose(target: Target?, owns: (UUID) -> Bool) -> Decision {
+        // Unresolved target: the command fails on its own.
+        guard let target, !target.tabIDs.isEmpty else { return .allow }
+        if target.tabIDs.allSatisfy(owns) { return .allow }
+        return .reject("agent_close closes only agents you started; the user closes the others")
     }
 
     // MARK: - Browser

@@ -87,8 +87,6 @@ final class AgentCrew {
     var closeTab: (UUID) -> Void = { tabID in
         AgentInbox.locateInWindows(tabID)?.controller.closeHelperTab(tabID)
     }
-    /// Whether the first tab opened the second (its capability token).
-    var owns: (UUID, UUID) -> Bool = { CapabilityTokens.shared.owns($0, $1) }
     /// Runs a flush after the current inbox update; immediate in tests.
     var schedule: (@escaping @MainActor () -> Void) -> Void = { work in
         DispatchQueue.main.async { MainActor.assumeIsolated { work() } }
@@ -317,18 +315,12 @@ final class AgentCrew {
         for helper in helpers where title(helper) != nil { closeTab(helper) }
     }
 
-    /// Closes a helper the caller started, once it is done with it. A task on its
-    /// own worktree is left to `boo merge` / `boo discard`, which the user approves.
+    /// Closes a helper the caller started, once it is done with it; the gate has
+    /// checked that it did (`OrchestratorGate`). A task on its own worktree is left to `boo merge` / `boo discard`, which the user approves.
     func closeHelper(_ helper: UUID, by caller: UUID) -> [String: Any] {
         guard helper != caller else { return ["ok": false, "error": "that is your own tab"] }
         guard title(helper) != nil else { return ["ok": false, "error": "no open tab \(helper.uuidString)"] }
         let name = label(for: helper)
-        guard links[helper]?.parent == caller || owns(caller, helper) else {
-            return [
-                "ok": false,
-                "error": "\(name) was not started by you; only its owner or the user closes it"
-            ]
-        }
         if taskName(helper) != nil {
             return [
                 "ok": false,

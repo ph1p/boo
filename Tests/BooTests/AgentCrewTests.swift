@@ -297,31 +297,26 @@ final class AgentCrewTests: XCTestCase {
         XCTAssertTrue(typed.isEmpty, "no exit report to a closed parent")
     }
 
-    func testAgentClosesOnlyHelpersItStarted() {
+    func testAgentCloseLeavesItsOwnTabAndWorktreeTasks() {
         let parent = tab()
         let helper = tab()
-        let stranger = tab()
         let task = tab()
-        let opened = tab()
         crew.link(child: helper, parent: parent, name: "docs")
         crew.link(child: task, parent: parent, name: "fix")
         tasks[task] = "fix"
-        crew.owns = { $0 == parent && $1 == opened }
         func close(_ tab: UUID) -> [String: Any]? {
             crew.handleSocketCommand(cmd: "agent_close", json: ["tab_id": tab.uuidString], caller: parent)
         }
 
-        XCTAssertEqual(close(stranger)?["ok"] as? Bool, false)
         XCTAssertEqual(close(parent)?["ok"] as? Bool, false, "not its own tab")
         XCTAssertEqual(close(task)?["ok"] as? Bool, false, "worktree tasks go through merge or discard")
         XCTAssertTrue(closed.isEmpty)
 
         XCTAssertEqual(close(helper)?["ok"] as? Bool, true)
-        XCTAssertEqual(close(opened)?["ok"] as? Bool, true, "a tab its token opened")
-        XCTAssertEqual(closed, [helper, opened])
+        XCTAssertEqual(closed, [helper])
         XCTAssertEqual(close(helper)?["ok"] as? Bool, false, "already closed")
         XCTAssertEqual(
-            crew.handleSocketCommand(cmd: "agent_close", json: ["tab_id": stranger.uuidString], caller: nil)?["ok"]
+            crew.handleSocketCommand(cmd: "agent_close", json: ["tab_id": helper.uuidString], caller: nil)?["ok"]
                 as? Bool, false)
     }
 

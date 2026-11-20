@@ -67,10 +67,13 @@ final class OrchestratorGateTests: XCTestCase {
         XCTAssertEqual(decide("get_screen", gated, target(agent: true)), .allow, "reads are free")
     }
 
-    func testAgentCloseNeedsATokenButNoCard() {
-        XCTAssertTrue(isReject(decide("agent_close", nil, target(agent: true))))
-        XCTAssertEqual(decide("agent_close", gated, target(agent: true)), .allow, "the command checks ownership")
-        XCTAssertEqual(decide("agent_close", full, target(agent: true)), .allow)
+    func testAgentCloseNeedsATokenAndClosesOnlyOwnHelpers() {
+        XCTAssertTrue(isReject(decide("agent_close", nil, target(agent: true), owned: true)))
+        XCTAssertEqual(decide("agent_close", gated, target(agent: true), owned: true), .allow, "no card")
+        XCTAssertTrue(isReject(decide("agent_close", gated, target(agent: true))), "not its helper")
+        XCTAssertTrue(isReject(decide("agent_close", full, target(agent: true))), "full grade too")
+        XCTAssertTrue(
+            isReject(decide("agent_close", full, target(agent: true), granted: true)), "a grant is not a start")
     }
 
     func testMergeAndDiscardAlwaysNeedApproval() {
