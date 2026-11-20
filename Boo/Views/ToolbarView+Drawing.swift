@@ -231,7 +231,7 @@ extension ToolbarView {
                 drawFadeEdge(ctx, at: zoneStart, width: Self.leadingFadeWidth, leftToRight: true)
             }
             if workspaceScrollOffset < maxWorkspaceScrollOffset {
-                let fadeW = Self.trailingFadeWidth
+                let fadeW = WorkspacePillStyle.pinnedFadeWidth
                 drawFadeEdge(ctx, at: zoneEnd - fadeW, width: fadeW, leftToRight: false)
             }
         }

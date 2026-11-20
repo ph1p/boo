@@ -223,8 +223,6 @@ class ToolbarView: NSView {
 
     /// Width of the scroll fade at the strip's leading edge.
     static let leadingFadeWidth: CGFloat = 20
-    /// Width of the scroll fade at the strip's trailing edge, before the pinned `+`.
-    static let trailingFadeWidth = WorkspacePillStyle.pinnedFadeWidth
 
     /// Ensure the active workspace pill is visible in the scroll area, clear of
     /// the edge fades: a pill scrolled only to the zone's edge sits under the fade.
@@ -238,12 +236,12 @@ class ToolbarView: NSView {
         // No fade is drawn at an end the strip is scrolled to, so the margin is
         // only needed where content remains; `clampScrollOffset` handles the ends.
         let visibleStart = workspaceScrollOffset + Self.leadingFadeWidth
-        let visibleEnd = workspaceScrollOffset + workspaceZoneWidth - Self.trailingFadeWidth
+        let visibleEnd = workspaceScrollOffset + workspaceZoneWidth - WorkspacePillStyle.pinnedFadeWidth
 
         if x < visibleStart {
             workspaceScrollOffset = x - Self.leadingFadeWidth
         } else if x + width > visibleEnd {
-            workspaceScrollOffset = x + width + Self.trailingFadeWidth - workspaceZoneWidth
+            workspaceScrollOffset = x + width + WorkspacePillStyle.pinnedFadeWidth - workspaceZoneWidth
         }
     }
 
