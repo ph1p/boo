@@ -213,7 +213,7 @@ struct SettingsView: View {
                 // Detail island
                 content
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                    .island(t)
+                    .contentIsland(t)
             }
         }
         // The gap around the islands is the window backdrop showing through, the

@@ -21,6 +21,12 @@ extension View {
     func sidebarIsland(_ t: Tokens) -> some View {
         island(t, fillOpacity: WindowMaterial.current.isTranslucent ? WindowMaterial.sidebarTint : 1)
     }
+
+    /// The settings detail island: translucent at `contentTint` while the
+    /// window material is on, so the page shares the window's vibrancy.
+    func contentIsland(_ t: Tokens) -> some View {
+        island(t, fillOpacity: WindowMaterial.current.isTranslucent ? WindowMaterial.contentTint : 1)
+    }
 }
 
 struct SettingsPage<Content: View>: View {
@@ -73,7 +79,12 @@ struct Section<Content: View>: View {
             .padding(.horizontal, Tokens.sectionPadding)
             .padding(.vertical, dividers ? 2 : Tokens.sectionPadding)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(tokens.raised, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            // Translucent with the window material, like the island it sits on:
+            // an opaque card would cover most of the page and hide the blur.
+            .background(
+                tokens.raised.opacity(WindowMaterial.current.isTranslucent ? WindowMaterial.contentTint : 1),
+                in: RoundedRectangle(cornerRadius: 10, style: .continuous)
+            )
             .overlay(
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .strokeBorder(tokens.separator, lineWidth: 0.5))

@@ -96,11 +96,17 @@ enum WorkspacePillStyle {
 
     /// Fill alpha by state. Colored pills sit brighter than the neutral
     /// (`textMuted`) fill so the tint stays legible.
-    static func fillAlpha(active: Bool, hovered: Bool, colored: Bool) -> CGFloat {
-        if colored {
-            return active ? 0.22 : (hovered ? 0.12 : 0.06)
-        }
-        return active ? 0.18 : (hovered ? 0.11 : 0.06)
+    /// `translucent` scales them up for the window material, where the flat
+    /// alphas disappear against the blurred desktop.
+    static func fillAlpha(
+        active: Bool, hovered: Bool, colored: Bool,
+        translucent: Bool = WindowMaterial.current.isTranslucent
+    ) -> CGFloat {
+        let base: CGFloat =
+            colored
+            ? (active ? 0.22 : (hovered ? 0.12 : 0.06))
+            : (active ? 0.18 : (hovered ? 0.11 : 0.06))
+        return translucent ? base * WindowMaterial.pillFillBoost : base
     }
 
     /// Fill the pill background for the given state.
@@ -111,9 +117,16 @@ enum WorkspacePillStyle {
         // At rest every pill shares the neutral fill and a colour shows only in
         // its label; a row of tinted boxes read as noise.
         let tint = active || hovered ? (wsColor ?? neutral) : neutral
-        let alpha = fillAlpha(active: active, hovered: hovered, colored: tint !== neutral)
+        let translucent = WindowMaterial.current.isTranslucent
+        let alpha = fillAlpha(active: active, hovered: hovered, colored: tint !== neutral, translucent: translucent)
         ctx.setFillColor(tint.withAlphaComponent(alpha).cgColor)
         fillRoundedRect(ctx, rect: rect)
+        // Over the blur a resting pill also gets a hairline: the fill alone
+        // leaves no edge against a light or busy desktop. The active pill has
+        // its own coloured border.
+        if translucent && !active {
+            strokeHairline(ctx, rect: rect, color: neutral.withAlphaComponent(WindowMaterial.pillHairlineAlpha))
+        }
     }
 
     /// Corner radius of a workspace group tray: a step rounder than the pills it holds.
@@ -176,7 +189,8 @@ enum WorkspacePillStyle {
         // A faint tinted well with a hairline in the group colour: enough edge to
         // read as one unit without boxing the group off from the strip.
         let tint = color ?? theme.textMuted
-        let fillAlpha: CGFloat = color == nil ? 0.06 : 0.08
+        let boost = WindowMaterial.current.isTranslucent ? WindowMaterial.pillFillBoost : 1
+        let fillAlpha: CGFloat = (color == nil ? 0.06 : 0.08) * boost
         ctx.setFillColor(tint.withAlphaComponent(highlighted ? fillAlpha + 0.09 : fillAlpha).cgColor)
         fillRoundedRect(ctx, rect: rect, radius: groupTrayRadius)
         if !highlighted {

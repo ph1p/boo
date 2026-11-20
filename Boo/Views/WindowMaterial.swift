@@ -35,6 +35,20 @@ enum WindowMaterial: Int, CaseIterable {
     /// island reads as the theme's chrome colour, a step off the backdrop.
     static let sidebarTint: CGFloat = 0.6
 
+    /// Opacity of the settings window's detail island and its cards. Higher
+    /// than the sidebar: the page carries body text and controls, so it keeps
+    /// more of the theme fill while the blur still reads through.
+    static let contentTint: CGFloat = 0.72
+
+    /// Multiplier on workspace pill and group tray fills over the blur. Their
+    /// opaque-mode alphas (0.06 at rest) are tuned for a flat backdrop and
+    /// vanish against a busy desktop behind the blur.
+    static let pillFillBoost: CGFloat = 2
+
+    /// Alpha of the hairline a resting workspace pill gets over the blur, so
+    /// each pill keeps an edge where its faint fill alone would not.
+    static let pillHairlineAlpha: CGFloat = 0.22
+
     /// Opacity of a terminal's default background while terminals are
     /// translucent. Text stays crisp; the blur reads through the empty cells.
     static let terminalOpacity: CGFloat = 0.75
