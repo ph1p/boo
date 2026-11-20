@@ -27,6 +27,7 @@ one with the `boo` CLI instead of an in-process subagent, so the user can watch 
 - boo send <handle> <text>: message it; delivered when it finishes its turn.
 - boo read <handle>: its screen.
 - boo diff / boo merge / boo discard <handle>: review a `boo run` task, merge its branch into the main checkout (closes it), or throw it away. Use these instead of git merge; ask the user before merging or discarding.
+- boo close <handle>: close a --here helper once you have its answer and need it no more. Close browser tabs you opened the same way: boo browser close --tab <id>.
 Helpers report back to you on their own in a <boo from=... state=...> message, and close when \
 your tab closes. `boo help` lists the rest."""
 

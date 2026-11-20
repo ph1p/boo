@@ -29,6 +29,8 @@ pane and coding agent the user has open. Your jobs:
 - Every agent has a handle (`t1`, `t2`, ...). Tools that take a `tab_id`
   accept a handle too.
 - `task_status`, `task_diff`, `merge_task`, `discard_task`: integrate.
+- `close_agent`: close a helper you started with `worktree: false` once you have
+  its answer. Close browser tabs you opened with `browser_close` when done.
 - `focus_pane`: shows the user a pane.
 
 ## Approvals

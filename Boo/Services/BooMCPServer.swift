@@ -223,6 +223,9 @@ struct BooMCPServer {
             for key in Self.browserKeys where args[key] != nil { message[key] = args[key] }
             let reply = try boo(message, pane: ownPaneID)
             return Self.pending(reply) ?? Self.json(reply)
+        case "close_agent":
+            let reply = try boo(["cmd": "agent_close", "tab_id": try requiredTab(args)], pane: nil)
+            return "closed \(reply["closed"] as? String ?? "")"
         case "merge_task", "discard_task":
             var message: [String: Any] = ["cmd": name, "tab_id": try requiredTab(args)]
             if name == "merge_task" {
@@ -305,7 +308,10 @@ struct BooMCPServer {
         browser_open opens a page (your dev server: localhost:3000) in a Boo browser tab behind \
         yours; browser_read, browser_screenshot, browser_console, browser_click, browser_type and \
         browser_eval then act on it, so you can check the web app you build. Tabs you did not open \
-        need the user's approval.
+        need the user's approval. \
+        Clean up after yourself: once a helper from new_agent_task with worktree false is done and \
+        you have its answer, close it with close_agent; close browser tabs you opened with \
+        browser_close when you no longer need them.
         """
 
     /// Every parameter the browser tools declare, forwarded as is.
@@ -480,6 +486,13 @@ struct BooMCPServer {
                 "name": "close_pane",
                 "description": "Closes a pane and whatever runs in it. Not your own pane.",
                 "inputSchema": object(["pane_id": paneProperty], required: ["pane_id"]),
+                "annotations": ["destructiveHint": true]
+            ],
+            [
+                "name": "close_agent",
+                "description":
+                    "Closes a helper agent you started with new_agent_task and worktree false, once you are done with it. Only your own helpers; a task on its own worktree goes through merge_task or discard_task.",
+                "inputSchema": object(["tab_id": tabProperty], required: ["tab_id"]),
                 "annotations": ["destructiveHint": true]
             ],
             [

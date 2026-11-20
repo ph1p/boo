@@ -10,6 +10,7 @@ import Foundation
 ///     boo inbox                           read messages waiting for this tab
 ///     boo wait t3                         block until t3 finishes its turn
 ///     boo read t3 [--lines N]             print t3's screen
+///     boo close t3                        close a --here helper you started
 ///     boo status working|blocked|done|error [message]
 ///     boo diff t3 | merge t3 [--keep] | discard t3   a task's worktree
 enum BooCLI {
@@ -35,6 +36,8 @@ enum BooCLI {
                                        prints its answer. Exit 0 done, 1 error/exited, 3 asks,
                                        124 timed out
           read <agent> [--lines N]     Print the agent's screen (default 60 lines)
+          close <agent>                Close a helper you started with run --here, once you are
+                                       done with it
           status <state> [message]     Report this tab's state: working, blocked, done, error
           tmux mode [always|ask|never] Print or set what a plain `tmux` in a Boo shell does
 
@@ -223,6 +226,12 @@ enum BooCLI {
                 guard let target = rest.first else { return Output(text: "usage: boo discard <agent>", status: 2) }
                 _ = try request(["cmd": "discard_task", "tab_id": target], fromPane: false)
                 return Output(text: "discarded \(target): its worktree and branch are deleted", status: 0)
+            case "close":
+                guard let target = rest.first, rest.count == 1 else {
+                    return Output(text: "usage: boo close <agent>", status: 2)
+                }
+                let reply = try request(["cmd": "agent_close", "tab_id": target])
+                return Output(text: "closed \(reply["closed"] as? String ?? target)", status: 0)
             case "browser":
                 return try browser(rest, cwd: cwd) { try request($0) }
             case "tmux":

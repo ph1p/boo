@@ -47,7 +47,8 @@ final class BooMCPServerTests: XCTestCase {
         XCTAssertEqual(
             tools.compactMap { $0["name"] as? String },
             [
-                "get_layout", "split_pane", "read_pane", "send_text", "close_pane", "list_agents", "new_agent_task",
+                "get_layout", "split_pane", "read_pane", "send_text", "close_pane", "close_agent", "list_agents",
+                "new_agent_task",
                 "send_message", "read_messages", "run_recipe", "open_review", "wait_for_events", "agent_respond",
                 "focus_pane", "task_status",
                 "task_diff",

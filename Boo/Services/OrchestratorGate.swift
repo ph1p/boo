@@ -24,13 +24,16 @@ enum OrchestratorGate {
     }
 
     /// Always sensitive, whatever the target.
-    static let tabCommands: Set<String> = ["agent_respond", "agent_send", "merge_task", "discard_task"]
+    static let tabCommands: Set<String> = ["agent_respond", "agent_send", "merge_task", "discard_task", "agent_close"]
     /// Sensitive when the pane's tab runs an agent or a remote session.
     static let typingCommands: Set<String> = ["send_text", "send_key"]
     /// Sensitive when any tab of the pane runs an agent.
     static let closeCommands: Set<String> = ["close_pane"]
     /// Need a card even for tabs the orchestrator owns.
     static let alwaysApproved: Set<String> = ["merge_task", "discard_task"]
+    /// Need a Boo terminal's token; the command itself checks that the caller
+    /// started the target, so it never needs a card.
+    static let ownerCommands: Set<String> = ["agent_close"]
 
     static func isSensitive(cmd: String, target: Target?) -> Bool {
         if tabCommands.contains(cmd) { return true }
@@ -51,6 +54,7 @@ enum OrchestratorGate {
         guard let caller else {
             return .reject("\(cmd) on this target needs the BOO_TOKEN of a Boo terminal")
         }
+        if ownerCommands.contains(cmd) { return .allow }
         if caller.grade == .full { return .allow }
         if alwaysApproved.contains(cmd) { return .approve }
         // Unresolved target: let the command fail on its own (bad or missing id).

@@ -255,6 +255,12 @@ final class BooCLITests: XCTestCase {
         let (discarded, discardSent) = run(["discard", "t5"])
         XCTAssertEqual(discarded.text, "discarded t5: its worktree and branch are deleted")
         XCTAssertEqual(discardSent.first?["cmd"] as? String, "discard_task")
+
+        let (closedOutput, closeSent) = run(["close", "t5"], reply: ["ok": true, "closed": "t5 docs"])
+        XCTAssertEqual(closedOutput.text, "closed t5 docs")
+        XCTAssertEqual(closeSent.first?["cmd"] as? String, "agent_close")
+        XCTAssertEqual(closeSent.first?["tab_id"] as? String, "t5")
+        XCTAssertEqual(run(["close"]).0.status, 2)
         XCTAssertEqual(run(["merge"]).0.status, 2)
     }
 

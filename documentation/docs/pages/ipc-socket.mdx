@@ -36,7 +36,7 @@ Most commands act on the frontmost Boo window. With a `pane_id` they go to the w
 | **Control**    | `set_theme`, `toggle_sidebar`, `switch_workspace`, `new_tab`, `new_workspace`, `send_text`, `send_key`, `select_pane`, `select_tab` |
 | **Panes**      | `split_pane`, `close_pane`, `focus_pane`, `resize_pane`, `swap_pane`, `zoom_pane`, `equalize_splits`, `get_layout` |
 | **Windows**    | `new_window`, `move_workspace_to_new_window`, `merge_all_windows` |
-| **Agents**     | `agent_event`, `agent_idle`, `agent_inbox`, `agent_jump`, `agent_respond`, `agent_send`, `agent_messages`, `agent_collected`, `agent_timeline`, `wait_for_events` |
+| **Agents**     | `agent_event`, `agent_idle`, `agent_inbox`, `agent_jump`, `agent_respond`, `agent_send`, `agent_messages`, `agent_collected`, `agent_close`, `agent_timeline`, `wait_for_events` |
 | **Browser**    | `browser_open`, `browser_navigate`, `browser_read`, `browser_screenshot`, `browser_console`, `browser_click`, `browser_type`, `browser_eval`, `browser_list`, `browser_close` |
 | **Tasks**      | `new_agent_task`, `review_changes`, `task_status`, `task_diff`, `merge_task`, `discard_task` |
 | **Recipes**    | `run_recipe`, `list_recipes` |
@@ -236,6 +236,7 @@ The server talks to the running app over `$BOO_SOCK`. It uses `$BOO_PANE_ID` as 
 | `read_pane`       | Last `lines` (default 100) of a pane's output |
 | `send_text`       | Type into another pane. Presses Return unless `submit` is false. |
 | `close_pane`      | Close another pane |
+| `close_agent`     | Close a helper the caller started beside it (`worktree: false`) once it is done |
 | `list_agents`     | The agent inbox |
 | `new_agent_task`  | Start another agent with a first `prompt`: on its own worktree, or with `worktree: false` in a tab beside the caller (`cwd`) |
 | `send_message`    | Message another agent by handle (`to`, `text`). It arrives when that agent finishes its turn. |
@@ -284,6 +285,7 @@ Every Boo terminal gets a random `BOO_TOKEN`. A command needs it when it gives a
 - `send_text` or `send_key` into an agent or a remote session
 - `close_pane` on an agent pane
 - `merge_task` and `discard_task`
+- `agent_close`, which closes only a helper the caller started (`tab_id`); a task on its own worktree goes through `merge_task` or `discard_task`
 
 Send the token as `"token"` in the request.
 

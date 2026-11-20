@@ -82,10 +82,13 @@ final class AgentCrew {
     /// Messages for the orchestrator go to its event stream instead of its prompt.
     var postEvent: (String, [String: Any]) -> Void = { OrchestratorEvents.shared.post($0, $1) }
     var now: () -> Date = { Date() }
-    /// Closes a helper's tab without asking, when the tab that started it closed.
+    /// Closes a helper's tab without asking: the tab that started it closed, or
+    /// asked for it with `agent_close`.
     var closeTab: (UUID) -> Void = { tabID in
         AgentInbox.locateInWindows(tabID)?.controller.closeHelperTab(tabID)
     }
+    /// Whether the first tab opened the second (its capability token).
+    var owns: (UUID, UUID) -> Bool = { CapabilityTokens.shared.owns($0, $1) }
     /// Runs a flush after the current inbox update; immediate in tests.
     var schedule: (@escaping @MainActor () -> Void) -> Void = { work in
         DispatchQueue.main.async { MainActor.assumeIsolated { work() } }
@@ -314,6 +317,29 @@ final class AgentCrew {
         for helper in helpers where title(helper) != nil { closeTab(helper) }
     }
 
+    /// Closes a helper the caller started, once it is done with it. A task on its
+    /// own worktree is left to `boo merge` / `boo discard`, which the user approves.
+    func closeHelper(_ helper: UUID, by caller: UUID) -> [String: Any] {
+        guard helper != caller else { return ["ok": false, "error": "that is your own tab"] }
+        guard title(helper) != nil else { return ["ok": false, "error": "no open tab \(helper.uuidString)"] }
+        let name = label(for: helper)
+        guard links[helper]?.parent == caller || owns(caller, helper) else {
+            return [
+                "ok": false,
+                "error": "\(name) was not started by you; only its owner or the user closes it"
+            ]
+        }
+        if taskName(helper) != nil {
+            return [
+                "ok": false,
+                "error":
+                    "\(name) runs on its own worktree: use boo merge or boo discard (the user approves)"
+            ]
+        }
+        closeTab(helper)
+        return ["ok": true, "closed": name]
+    }
+
     /// Drops a closed tab: its links, its children's links to it and its outbox.
     func forget(_ tabID: UUID) {
         links[tabID] = nil
@@ -353,7 +379,8 @@ final class AgentCrew {
 
     // MARK: - Socket
 
-    /// `agent_send {tab_id, text}`, `agent_messages` and `agent_collected {tab_id}`;
+    /// `agent_send {tab_id, text}`, `agent_messages`, `agent_collected {tab_id}` and
+    /// `agent_close {tab_id}`;
     /// nil for other commands.
     /// `tab_id` may be a handle or `parent` (resolved in `WindowManager.dispatchGated`).
     func handleSocketCommand(cmd: String, json: [String: Any], caller: UUID?) -> [String: Any]? {
@@ -382,6 +409,12 @@ final class AgentCrew {
             }
             markSeen(child)
             return ["ok": true, "dropped": collected(from: child, by: caller)]
+        case "agent_close":
+            guard let caller else { return ["ok": false, "error": "run this inside a Boo terminal"] }
+            guard let helper = (json["tab_id"] as? String).flatMap(UUID.init(uuidString:)) else {
+                return ["ok": false, "error": "missing tab_id (a handle like t3)"]
+            }
+            return closeHelper(helper, by: caller)
         case "agent_messages":
             guard let caller else { return ["ok": false, "error": "run this inside a Boo terminal"] }
             let messages = takeMessages(for: caller).map { message -> [String: Any] in
