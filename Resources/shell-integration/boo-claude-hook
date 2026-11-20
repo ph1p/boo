@@ -23,8 +23,10 @@
 
 # Script via -c: stdin carries Claude's JSON payload.
 read -r -d '' BOO_HOOK_PY <<'PYEOF'
-import json, socket, sys
+import json, socket, sys, time
 
+# When the agent ran the hook; Boo drops reports that arrive after a newer one.
+started_at = time.time()
 sock_path, pane_id, tab_id = sys.argv[1:4]
 args = sys.argv[4:]
 
@@ -200,7 +202,7 @@ else:
     if event is None:
         sys.exit(0)
 
-msg = {"cmd": "agent_event", "pane_id": pane_id, "event": event, "agent": agent}
+msg = {"cmd": "agent_event", "pane_id": pane_id, "event": event, "agent": agent, "at": started_at}
 if tab_id:
     msg["tab_id"] = tab_id
 if event == "stop":

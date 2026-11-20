@@ -41,6 +41,13 @@ final class AgentInbox {
         /// Listed by SessionStart and no turn yet: a new helper still reading
         /// its prompt, not one that finished.
         var fresh = false
+        /// The tab's foreground process when the agent last reported: the agent
+        /// itself. Tells a nested or new agent apart, and whether it still runs.
+        var pid: pid_t?
+        /// When the agent's hook last sent a report; an older one that arrives
+        /// late is dropped. Boo's own updates (a delivery, a title read) carry no
+        /// stamp, so a slow hook still overrules them.
+        var reportedAt: Date?
 
         var id: UUID { tabID }
 
@@ -85,6 +92,10 @@ final class AgentInbox {
         return true
     }
 
+    /// The process in the foreground of a tab's terminal; nil when not open.
+    var foregroundPID: (UUID) -> pid_t? = { AgentInbox.terminalView(ofTab: $0)?.foregroundPID }
+    var isAlive: (pid_t) -> Bool = { kill($0, 0) == 0 || errno == EPERM }
+
     init() {}
 
     /// Attention first (needs-input, then unseen done/error), then most recent.
@@ -97,6 +108,23 @@ final class AgentInbox {
     }
 
     var attentionCount: Int { items.values.filter(\.needsAttention).count }
+
+    /// Whether an agent still runs in its tab, by the process it reported from.
+    enum Presence {
+        /// In the foreground of its terminal, or not known: it reads typed text.
+        case foreground
+        /// Alive but not in the foreground (suspended, or a program it started).
+        case background
+        /// Its process exited without a SessionEnd.
+        case gone
+    }
+
+    func presence(of tabID: UUID) -> Presence {
+        guard let pid = items[tabID]?.pid, let current = foregroundPID(tabID), current != pid else {
+            return .foreground
+        }
+        return isAlive(pid) ? .background : .gone
+    }
 
     /// Every status bar redraws from this.
     private func changed() {
@@ -111,10 +139,12 @@ final class AgentInbox {
     func apply(
         event: String, tabID: UUID, agent: String = "claude", message: String? = nil,
         tool: String? = nil, reply: String? = nil, sessionID: String? = nil, cwd: String? = nil,
-        now: Date = Date()
+        pid: pid_t? = nil, reportedAt: Date? = nil, now: Date = Date()
     ) -> State? {
-        if let existing = items[tabID], Self.isNestedSession(existing, event: event, sessionID: sessionID, now: now) {
-            return nil
+        if let existing = items[tabID] {
+            // Hooks run as separate processes and can arrive out of order.
+            if let reportedAt, let last = existing.reportedAt, reportedAt < last { return nil }
+            if Self.isNestedSession(existing, event: event, sessionID: sessionID, pid: pid, now: now) { return nil }
         }
         if event == "end" {
             remove(tabID: tabID)
@@ -123,9 +153,13 @@ final class AgentInbox {
         if event == "start" {
             // A new or resumed session idles at its prompt: list it (with a handle)
             // before its first turn, so a resumed task leaves Stopped at once.
-            guard items[tabID] == nil else { return nil }
+            // A known agent's /clear or compaction keeps its row; another process
+            // with a new session replaces the row of one that quit unreported.
+            if let existing = items[tabID], !Self.isOtherAgent(existing, sessionID: sessionID, pid: pid) { return nil }
             var item = Item(tabID: tabID, agent: agent, state: .done, updatedAt: now, seen: true)
             item.sessionID = sessionID
+            item.pid = pid
+            item.reportedAt = reportedAt
             item.cwd = cwd
             item.fresh = true
             items[tabID] = item
@@ -134,10 +168,12 @@ final class AgentInbox {
         }
         let previous = items[tabID]?.state
         guard
-            let item = Self.updated(
+            var item = Self.updated(
                 items[tabID], event: event, tabID: tabID, agent: agent, message: message, tool: tool,
                 reply: reply, sessionID: sessionID, cwd: cwd, now: now)
         else { return nil }
+        item.pid = pid ?? item.pid
+        item.reportedAt = reportedAt ?? item.reportedAt
         items[tabID] = item
         changed()
         return item.needsAttention && item.state != previous ? item.state : nil
@@ -153,10 +189,21 @@ final class AgentInbox {
     /// It must not end the agent's row or change its state. A different session
     /// after the agent's turn is a new agent in the tab (`/clear`, a restart);
     /// the agent's own SessionEnd, not another's, ends its row.
-    static func isNestedSession(_ existing: Item, event: String, sessionID: String?, now: Date) -> Bool {
+    /// A nested `claude -p` shares the agent's process group, so another
+    /// foreground process is a new agent, not a nested one.
+    static func isNestedSession(
+        _ existing: Item, event: String, sessionID: String?, pid: pid_t? = nil, now: Date
+    ) -> Bool {
         guard let own = existing.sessionID, let sessionID, sessionID != own else { return false }
+        if let pid, let known = existing.pid, pid != known { return false }
         if event == "end" { return true }
         return existing.state == .working && now.timeIntervalSince(existing.updatedAt) < nestedSessionWindow
+    }
+
+    /// Another session in another process than the tab's agent: a new agent.
+    static func isOtherAgent(_ existing: Item, sessionID: String?, pid: pid_t?) -> Bool {
+        guard let sessionID, sessionID != existing.sessionID, let pid, let known = existing.pid else { return false }
+        return pid != known
     }
 
     /// Applies a hook event from the orchestrator's own session. Kept out of
@@ -213,7 +260,9 @@ final class AgentInbox {
             item.asksQuestion = event == "question" || (followsQuestion && item.asksQuestion)
             if state != previous { item.seen = false }
         }
-        if state == .done { item.reply = reply }
+        // Codex reports a turn end twice (notify and its Stop hook); the second
+        // may carry no reply.
+        if state == .done { item.reply = reply ?? (previous == .done ? item.reply : nil) }
         return item
     }
 
@@ -320,7 +369,8 @@ extension AgentInbox {
             agent: (json["agent"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "claude",
             message: Self.nonEmpty(json["message"]), tool: Self.nonEmpty(json["tool"]),
             reply: Self.nonEmpty(json["reply"]),
-            sessionID: Self.nonEmpty(json["session_id"]), cwd: Self.nonEmpty(json["cwd"]))
+            sessionID: Self.nonEmpty(json["session_id"]), cwd: Self.nonEmpty(json["cwd"]),
+            pid: foregroundPID(tabID), reportedAt: (json["at"] as? Double).map(Date.init(timeIntervalSince1970:)))
         if newState != nil { signalAttention(tabID: tabID) }
         return ["ok": true, "state": items[tabID]?.state.rawValue ?? NSNull()]
     }

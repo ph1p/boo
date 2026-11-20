@@ -219,4 +219,68 @@ final class AgentInboxTests: XCTestCase {
         XCTAssertEqual(stop?.first?["async"] as? Bool, true)
         XCTAssertNil(BooPaths.mergingClaudeHook(command: command, into: merged), "second run changes nothing")
     }
+
+    // MARK: - Reliability
+
+    /// Hooks are separate processes: a report sent before the last one but
+    /// handled after it is dropped.
+    func testALateReportIsDropped() {
+        let inbox = makeInbox()
+        let tab = UUID()
+        let start = Date()
+        inbox.apply(event: "prompt", tabID: tab, reportedAt: start.addingTimeInterval(2))
+        inbox.apply(event: "stop", tabID: tab, reportedAt: start.addingTimeInterval(1))
+        XCTAssertEqual(inbox.items[tab]?.state, .working)
+        inbox.apply(event: "stop", tabID: tab, reportedAt: start.addingTimeInterval(3))
+        XCTAssertEqual(inbox.items[tab]?.state, .done)
+    }
+
+    /// A nested `claude -p` shares the agent's process; another process with
+    /// another session is a new agent in the tab, even while the old one worked.
+    func testAnotherProcessIsANewAgentNotANestedSession() {
+        let inbox = makeInbox()
+        let tab = UUID()
+        inbox.apply(event: "prompt", tabID: tab, sessionID: "outer", pid: 100)
+        inbox.apply(event: "stop", tabID: tab, sessionID: "nested", pid: 100)
+        XCTAssertEqual(inbox.items[tab]?.state, .working, "the nested session is ignored")
+
+        inbox.apply(event: "start", tabID: tab, sessionID: "outer-clear", pid: 100)
+        XCTAssertEqual(inbox.items[tab]?.state, .working, "the agent's own restart keeps its row")
+
+        inbox.apply(event: "start", tabID: tab, sessionID: "new", pid: 200)
+        XCTAssertEqual(inbox.items[tab]?.state, .done)
+        XCTAssertEqual(inbox.items[tab]?.fresh, true, "a new agent replaced the one that quit")
+        XCTAssertEqual(inbox.items[tab]?.pid, 200)
+    }
+
+    /// Codex reports a turn end twice; the second report has no reply.
+    func testARepeatedStopKeepsTheReply() {
+        let inbox = makeInbox()
+        let tab = UUID()
+        inbox.apply(event: "prompt", tabID: tab)
+        inbox.apply(event: "stop", tabID: tab, reply: "Done.")
+        inbox.apply(event: "stop", tabID: tab)
+        XCTAssertEqual(inbox.items[tab]?.reply, "Done.")
+        inbox.apply(event: "prompt", tabID: tab)
+        inbox.apply(event: "stop", tabID: tab)
+        XCTAssertNil(inbox.items[tab]?.reply, "a new turn does not inherit the old reply")
+    }
+
+    func testPresenceFollowsTheAgentProcess() {
+        let inbox = makeInbox()
+        let tab = UUID()
+        var foreground: pid_t? = 100
+        var alive = true
+        inbox.foregroundPID = { _ in foreground }
+        inbox.isAlive = { _ in alive }
+        XCTAssertEqual(inbox.presence(of: tab), .foreground, "unknown counts as present")
+        inbox.apply(event: "stop", tabID: tab, pid: 100)
+        XCTAssertEqual(inbox.presence(of: tab), .foreground)
+        foreground = 99
+        XCTAssertEqual(inbox.presence(of: tab), .background)
+        alive = false
+        XCTAssertEqual(inbox.presence(of: tab), .gone)
+        foreground = nil
+        XCTAssertEqual(inbox.presence(of: tab), .foreground, "a closed terminal is not judged")
+    }
 }

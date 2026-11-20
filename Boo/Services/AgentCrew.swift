@@ -66,6 +66,10 @@ final class AgentCrew {
     var acceptsTyping: (UUID) -> Bool = { tabID in
         AgentInbox.shared.items[tabID].flatMap { AgentKind(ipcName: $0.agent) } != nil
     }
+    /// Whether the agent still runs in the foreground of its tab.
+    var presence: (UUID) -> AgentInbox.Presence = { AgentInbox.shared.presence(of: $0) }
+    /// Drops an agent that quit without a SessionEnd; the inbox update reports it exited.
+    var agentGone: (UUID) -> Void = { AgentInbox.shared.remove(tabID: $0) }
     /// Pastes and submits text in a tab's terminal; false when it is not open.
     var deliver: (UUID, String) -> Bool = { AgentInbox.shared.sendMessage($0, $1) }
     /// Called after a delivery, so the receiver shows as working right away.
@@ -213,6 +217,14 @@ final class AgentCrew {
     private func flush(_ tabID: UUID) -> Bool {
         guard let messages = outbox[tabID], !messages.isEmpty else { return false }
         guard let state = state(tabID), state == .done || state == .error, acceptsTyping(tabID) else { return false }
+        switch presence(tabID) {
+        case .foreground: break
+        // Suspended or running a program: typing would go to the wrong process.
+        case .background: return false
+        case .gone:
+            agentGone(tabID)
+            return false
+        }
         guard deliver(tabID, Self.envelope(messages)) else { return false }
         outbox[tabID] = nil
         for message in messages where message.state != nil { message.fromTab.map(markSeen) }

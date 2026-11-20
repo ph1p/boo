@@ -191,6 +191,13 @@ extension GhosttyView {
         sendText(text)
     }
 
+    /// The pty's foreground process group (the program the user talks to), or nil.
+    var foregroundPID: pid_t? {
+        guard let surface else { return nil }
+        let pid = ghostty_surface_foreground_pid(surface)
+        return pid > 0 && pid <= UInt64(pid_t.max) ? pid_t(pid) : nil
+    }
+
     /// The terminal has echo turned off (a password prompt), per the pty's termios.
     var isEchoOff: Bool {
         guard let surface else { return false }

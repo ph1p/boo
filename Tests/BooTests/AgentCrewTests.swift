@@ -44,6 +44,11 @@ final class AgentCrewTests: XCTestCase {
         crew.postEvent = { [unowned self] name, payload in events.append((name, payload)) }
         crew.schedule = { work in work() }
         crew.markSeen = { [unowned self] in inbox.markSeen(tabID: $0) }
+        crew.presence = { [unowned self] in inbox.presence(of: $0) }
+        crew.agentGone = { [unowned self] in
+            inbox.remove(tabID: $0)
+            crew.inboxChanged(inbox.items)
+        }
     }
 
     private func tab() -> UUID {
@@ -158,6 +163,45 @@ final class AgentCrewTests: XCTestCase {
         XCTAssertTrue(typed.isEmpty)
         event("stop", parent)
         XCTAssertEqual(typed.map(\.0), [parent])
+    }
+
+    /// An agent that quit without a SessionEnd leaves its shell in the
+    /// foreground: a message for it is not typed into the shell, and its
+    /// parent learns it exited.
+    func testAMessageForAnAgentThatQuitIsNotTypedIntoItsShell() {
+        let parent = tab()
+        let child = tab()
+        var foreground: [UUID: pid_t] = [child: 100]
+        inbox.foregroundPID = { foreground[$0] }
+        inbox.isAlive = { $0 != 100 }
+        event("stop", parent)
+        crew.link(child: child, parent: parent, name: "docs")
+        inbox.apply(event: "stop", tabID: child, reply: "Done.", pid: 100)
+        crew.inboxChanged(inbox.items)
+        event("stop", parent)  // took the report, idle again
+        typed = []
+
+        foreground[child] = 99
+        XCTAssertNotEqual(crew.send(to: child, from: parent, text: "next"), .delivered)
+        XCTAssertFalse(typed.contains { $0.0 == child }, "nothing typed into the shell")
+        XCTAssertNil(inbox.items[child])
+        XCTAssertEqual(typed.last?.1, "<boo from=\"t2 docs\" state=\"exited\">\nThe agent exited.\n</boo>")
+    }
+
+    /// A suspended agent (or a program it runs in the foreground) is alive
+    /// but does not read the prompt: messages wait.
+    func testMessagesWaitWhileTheAgentIsNotInTheForeground() {
+        let target = tab()
+        var foreground: pid_t = 100
+        inbox.foregroundPID = { _ in foreground }
+        inbox.isAlive = { _ in true }
+        inbox.apply(event: "stop", tabID: target, pid: 100)
+        crew.inboxChanged(inbox.items)
+
+        foreground = 99
+        XCTAssertEqual(crew.send(to: target, from: nil, text: "next"), .queued)
+        XCTAssertTrue(typed.isEmpty)
+        XCTAssertNotNil(inbox.items[target], "still listed")
     }
 
     func testChildExitIsReported() {
