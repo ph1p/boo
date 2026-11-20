@@ -49,6 +49,12 @@ def event_for_claude(p):
         return None, None, None  # idle reminders, auth notices
     if name == "Stop":
         return "stop", None, None
+    if name == "StopFailure":
+        # The turn ended on an API error (rate limit, auth, billing...).
+        kind = p.get("error_type") or p.get("matcher") or p.get("error")
+        detail = p.get("error_message") or p.get("message")
+        text = " ".join(str(x) for x in (kind, detail) if x) or "API error"
+        return "error", "Stopped: " + text.replace("_", " "), None
     if name == "SessionEnd":
         return "end", None, None
     return None, None, None
@@ -73,7 +79,13 @@ def event_for_copilot(name, p):
         message = p.get("message", "") or ""
         if "permission" in kind or "permission" in message.lower():
             return "permission", message or "needs your permission", None
+        if kind == "elicitation_dialog":
+            return "question", message or "has a question", None
         return None, None, None
+    if name == "errorOccurred" and p.get("recoverable") is False:
+        error = p.get("error") or {}
+        text = error.get("message") if isinstance(error, dict) else None
+        return "error", "Stopped: " + (text or "error"), None
     if name == "agentStop":
         return "stop", None, None
     if name == "sessionEnd":

@@ -16,6 +16,8 @@ import Foundation
 /// (Esc), so a hook-fed item would stay working. When its title goes from a
 /// spinner to the idle mark and no hook has reported within a grace period,
 /// the item is marked done (seen, no notification).
+/// Likewise, a spinner after the idle mark while the item waits on a prompt
+/// means the user answered it in the tab: the item works again.
 @MainActor
 final class RemoteAgentTracker {
     static let shared = RemoteAgentTracker()
@@ -125,6 +127,12 @@ final class RemoteAgentTracker {
     /// without a newer hook event.
     private func hookTitleChanged(tabID: UUID, state: TitleState, item: AgentInbox.Item) {
         let previous = hookTitles.updateValue(state, forKey: tabID)
+        // A prompt shows the idle mark; spinning again means the user answered it
+        // in the tab. The tool's PostToolUse hook only reports once it finishes.
+        if state == .working, previous == .idle, item.state == .needsInput {
+            inbox.apply(event: "working", tabID: tabID, agent: item.agent)
+            return
+        }
         guard state == .idle, previous == .working, item.state == .working else { return }
         let stamp = item.updatedAt
         schedule(Self.interruptGrace) { [weak self] in

@@ -104,6 +104,22 @@ final class RemoteAgentTrackerTests: XCTestCase {
         XCTAssertEqual(inbox.items[tab]?.seen, false, "a real finish keeps its attention dot")
     }
 
+    /// The PostToolUse hook only reports once an approved tool finishes; the
+    /// spinner shows the agent works again as soon as the prompt is answered.
+    func testSpinnerAfterAnsweredPromptMarksHookItemWorking() {
+        let (tracker, inbox, _) = makeHookTracker()
+        let tab = UUID()
+        inbox.apply(event: "prompt", tabID: tab)
+        tracker.titleChanged(tabID: tab, title: "⠂ Task", shellPID: 1)
+        inbox.apply(event: "permission", tabID: tab, message: "Bash?")
+        tracker.titleChanged(tabID: tab, title: "⠄ Task", shellPID: 1)
+        XCTAssertEqual(inbox.items[tab]?.state, .needsInput, "a spinning title alone answers nothing")
+        tracker.titleChanged(tabID: tab, title: "✳ Task", shellPID: 1)
+        XCTAssertEqual(inbox.items[tab]?.state, .needsInput)
+        tracker.titleChanged(tabID: tab, title: "⠂ Task", shellPID: 1)
+        XCTAssertEqual(inbox.items[tab]?.state, .working)
+    }
+
     func testIdleTitleWithoutSpinnerLeavesHookItem() {
         let (tracker, inbox, fire) = makeHookTracker()
         let tab = UUID()

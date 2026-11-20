@@ -34,7 +34,8 @@ struct CopilotAdapter: AgentAdapter {
 
     /// The events boo-claude-hook handles for Copilot.
     static let hookEvents = [
-        "sessionStart", "userPromptSubmitted", "preToolUse", "notification", "agentStop", "sessionEnd"
+        "sessionStart", "userPromptSubmitted", "preToolUse", "notification", "agentStop", "errorOccurred",
+        "sessionEnd"
     ]
 
     /// Copilot's home: `$COPILOT_HOME`, else ~/.copilot.

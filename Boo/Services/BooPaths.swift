@@ -235,7 +235,8 @@ enum BooPaths {
     /// Claude Code events the agent hook reports to Boo's agent inbox, plus
     /// SessionStart, where it tells the agent about the `boo` CLI.
     static let claudeHookEvents = [
-        "SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "Notification", "Stop", "SessionEnd"
+        "SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "Notification", "Stop", "StopFailure",
+        "SessionEnd"
     ]
 
     /// Events the hook needs only for some tools: PreToolUse just to read the
