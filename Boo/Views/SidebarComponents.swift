@@ -327,3 +327,22 @@ struct SidebarIconButton: View {
         .accessibilityLabel(help)
     }
 }
+
+// MARK: - Fitted Scroll View
+
+/// Scrolls its content when the sidebar gives it less height than it needs, yet
+/// still reports the content's height as its ideal size, so a section sized to its
+/// rows keeps that size and only scrolls once the panel has to clamp it.
+struct FittedScrollView<Content: View>: View {
+    @ViewBuilder let content: Content
+    @State private var contentHeight: CGFloat = 0
+
+    var body: some View {
+        ScrollView(.vertical) {
+            content
+                .onGeometryChange(for: CGFloat.self, of: \.size.height) { contentHeight = $0 }
+        }
+        .scrollBounceBehavior(.basedOnSize)
+        .frame(idealHeight: contentHeight)
+    }
+}
