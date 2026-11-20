@@ -383,7 +383,7 @@ Wraps `AgentSession` with `paneID`, `tabID`, `tabTitle`, and `isFocused` so the 
   Needs you / Working / Done / Stopped, with handles, parent links, queued counts and actions (show, message,
   review, merge, discard, new task). Rows for tabs in no Boo window (another Boo instance or app sharing
   the socket) show "not in a Boo window" and can't be shown, but stay listed. The section sizes to its
-  rows (`prefersOuterScrollView: false`), so every agent shows without scrolling; a row's detail is
+  rows (`sizing: .fitted`), so every agent shows without scrolling until the sidebar is too short; a row's detail is
   the first line of the answer without backticks. An agent with no name (its tab is in no Boo window)
   reads "claude in <folder>", as in `boo agents`. Buttons go through `AgentsPlugin.perform(CrewAction, on:)`.
   No pop-up dialogs: Message, New task and the Discard confirmation are inline fields driven by the shared

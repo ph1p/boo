@@ -129,7 +129,7 @@ final class DockerPluginNew: BooPluginProtocol {
                         error: error,
                         theme: context.theme.source,
                         fontScale: context.fontScale)),
-                prefersOuterScrollView: false,
+                sizing: .fitted,
                 // The view renders the error text, so that text is the content identity.
                 generation: SidebarSection.generation(for: ["error", error]))
             return SidebarTab(
@@ -198,7 +198,6 @@ final class DockerPluginNew: BooPluginProtocol {
                                 command: "docker inspect \(c.name) | less\r", text: nil))
                     }
                 )),
-            prefersOuterScrollView: true,
             generation: SidebarSection.generation(
                 for: [pinnedFolder ?? ""]
                     + DockerService.shared.containers.map {
@@ -216,7 +215,6 @@ final class DockerPluginNew: BooPluginProtocol {
                 DockerImagesView(
                     theme: theme, fontScale: fontScale, density: density,
                     onRemove: { i in DockerService.shared.removeImage(i.id) })),
-            prefersOuterScrollView: true,
             generation: SidebarSection.generation(
                 for: DockerService.shared.images.map { "\($0.id)|\($0.repoTag)" }))
 
@@ -231,7 +229,6 @@ final class DockerPluginNew: BooPluginProtocol {
                 DockerNetworksView(
                     theme: theme, fontScale: fontScale, density: density,
                     onRemove: { n in DockerService.shared.removeNetwork(n.id) })),
-            prefersOuterScrollView: true,
             generation: SidebarSection.generation(
                 for: DockerService.shared.networks.map { "\($0.id)|\($0.name)" }))
 
@@ -246,7 +243,6 @@ final class DockerPluginNew: BooPluginProtocol {
                 DockerVolumesView(
                     theme: theme, fontScale: fontScale, density: density,
                     onRemove: { v in DockerService.shared.removeVolume(v.name) })),
-            prefersOuterScrollView: true,
             generation: SidebarSection.generation(
                 for: DockerService.shared.volumes.map { "\($0.name)|\($0.driver)" }))
 

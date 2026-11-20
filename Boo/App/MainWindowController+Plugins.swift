@@ -393,7 +393,7 @@ extension MainWindowController {
 
     /// Show content for the given plugin tab ID in the sidebar container.
     /// Always calls makeSidebarTab() to get fresh data, but reuses view when context and generations match.
-    /// Single section → full-height content (with scroll view if prefersOuterScrollView).
+    /// Single section → full-height content (in a scroll view when its sizing is `.outerScroll`).
     /// Multiple sections → SidebarPanelView with collapsible headers.
     func showPluginTabContent(id: String, context: TerminalContext) {
         guard let plugin = pluginRegistry.plugin(for: id) else { return }
@@ -450,11 +450,11 @@ extension MainWindowController {
         // In-place update when the on-screen panel already has the wanted layout:
         // a rebuild would lose scroll position and every SwiftUI @StateObject in it.
         switch (pluginPanelViews[id], sections.count) {
-        case (let scrollView as PluginScrollView, 1) where sections[0].prefersOuterScrollView:
+        case (let scrollView as PluginScrollView, 1) where sections[0].sizing == .outerScroll:
             scrollView.setContent(sections[0].content)
             scrollView.isHidden = false
             return
-        case (let hosting as NSHostingView<AnyView>, 1) where !sections[0].prefersOuterScrollView:
+        case (let hosting as NSHostingView<AnyView>, 1) where sections[0].sizing != .outerScroll:
             hosting.rootView = PluginScrollView.documentContent(sections[0].content)
             hosting.isHidden = false
             return
@@ -486,7 +486,7 @@ extension MainWindowController {
     private func installSingleSection(
         _ section: SidebarSection, pluginID: String
     ) {
-        let container = section.prefersOuterScrollView ? makeSectionScrollView(section) : makeBareSectionView(section)
+        let container = section.sizing == .outerScroll ? makeSectionScrollView(section) : makeBareSectionView(section)
         let edgePad: CGFloat = 2
         sidebarContainer.addSubview(container)
         NSLayoutConstraint.activate([

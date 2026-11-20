@@ -35,7 +35,7 @@ final class NotesPlugin: BooPluginProtocol {
     }
 
     /// The editor scrolls itself.
-    var prefersOuterScrollView: Bool { false }
+    var sidebarSizing: SidebarSizing { .scrollsItself }
 
     private let memory = NotesPanelMemory()
 

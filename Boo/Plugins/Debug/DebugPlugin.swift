@@ -26,7 +26,7 @@ final class DebugPlugin: BooPluginProtocol {
         ]
     )
 
-    var prefersOuterScrollView: Bool { false }
+    var sidebarSizing: SidebarSizing { .scrollsItself }
 
     var subscribedEvents: Set<PluginEvent> {
         [

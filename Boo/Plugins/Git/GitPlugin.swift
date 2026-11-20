@@ -39,8 +39,6 @@ final class GitPlugin: BooPluginProtocol {
         ]
     )
 
-    var prefersOuterScrollView: Bool { true }
-
     var subscribedEvents: Set<PluginEvent> { [.cwdChanged, .focusChanged] }
 
     func checkAvailability() async -> Bool {

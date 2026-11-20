@@ -127,8 +127,6 @@ final class LocalFileTreePlugin: BooPluginProtocol, FileTreeBrowsing {
     var hostActions: PluginHostActions?
     var onRequestCycleRerun: (() -> Void)?
 
-    var prefersOuterScrollView: Bool { true }
-
     var subscribedEvents: Set<PluginEvent> {
         [.cwdChanged, .remoteSessionChanged, .focusChanged, .processChanged, .terminalClosed]
     }
@@ -210,8 +208,7 @@ final class LocalFileTreePlugin: BooPluginProtocol, FileTreeBrowsing {
             name: title,
             icon: manifest.icon,
             content: treeView,
-            prefersOuterScrollView: false,
-            scrollsItself: true,
+            sizing: .scrollsItself,
             generation: SidebarSection.generation(for: [cwd, isAIAgent ? "ai" : "plain", navigationKey(context)])
         )
         let infoSection = SidebarSection(
@@ -219,7 +216,6 @@ final class LocalFileTreePlugin: BooPluginProtocol, FileTreeBrowsing {
             name: "Folder Info",
             icon: "info.circle",
             content: AnyView(FolderInfoView(path: cwd, fontScale: context.fontScale, theme: context.theme)),
-            prefersOuterScrollView: true,
             generation: SidebarSection.generation(for: [cwd])
         )
         return SidebarTab(

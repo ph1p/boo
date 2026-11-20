@@ -284,48 +284,47 @@ extension AgentsPlugin {
             name: waiting > 0 ? "Agents (\(waiting) need you)" : shown == 0 ? "Agents" : "Agents (\(shown))",
             icon: "person.3",
             content: AnyView(
-                FittedScrollView {
-                    AgentCrewView(
-                        rows: rows, fontScale: fontScale, textColor: textColor, mutedColor: mutedColor,
-                        accentColor: accentColor,
-                        onJump: { Self.perform(.show, on: $0) },
-                        onSend: { row, text in AgentCrew.shared.send(to: row.id, from: nil, text: text) },
-                        onReview: { Self.perform(.review, on: $0) },
-                        onMerge: { Self.perform(.merge, on: $0) },
-                        onDiscardSummary: { row, completion in
-                            Self.withTask(row) { controller, workspaceID in
-                                controller.agentTaskDiscardSummary(workspaceID: workspaceID, completion: completion)
-                            }
-                        },
-                        onDiscard: { row in
-                            Self.withTask(row) { controller, workspaceID in
-                                controller.discardAgentTaskConfirmed(workspaceID: workspaceID)
-                            }
-                        },
-                        onStartTask: startTask,
-                        agents: agents,
-                        onStartHere: startHere,
-                        onRespond: { row, response in Self.perform(response == .approve ? .allow : .deny, on: row) },
-                        onResume: { Self.perform(.resume, on: $0) },
-                        sessions: sessions,
-                        onShowTimeline: { [weak self] _, session in
-                            guard let id = session.sessionID else { return }
-                            let folder = (session.cwd as NSString).lastPathComponent
-                            self?.actions?.openAgentTimeline?(id, "\(session.kind.shortName) — \(folder)")
-                        },
-                        onOpenTranscript: { [weak self] path in
-                            self?.actions?.handle(DSLAction(type: "open", path: path, command: nil, text: nil))
-                        },
-                        activeWorkspaceID: activeID, activeWorkspaceName: activeName, activeOnly: activeOnly,
-                        onShowAll: { setActiveOnly(false) },
-                        onShowActiveOnly: { setActiveOnly(true) },
-                        onShowTab: { id in
-                            if let location = AgentInbox.locateInWindows(id) { AgentInbox.focus(location) }
+                AgentCrewView(
+                    rows: rows, fontScale: fontScale, textColor: textColor, mutedColor: mutedColor,
+                    accentColor: accentColor,
+                    onJump: { Self.perform(.show, on: $0) },
+                    onSend: { row, text in AgentCrew.shared.send(to: row.id, from: nil, text: text) },
+                    onReview: { Self.perform(.review, on: $0) },
+                    onMerge: { Self.perform(.merge, on: $0) },
+                    onDiscardSummary: { row, completion in
+                        Self.withTask(row) { controller, workspaceID in
+                            controller.agentTaskDiscardSummary(workspaceID: workspaceID, completion: completion)
                         }
-                    )
-                }),
+                    },
+                    onDiscard: { row in
+                        Self.withTask(row) { controller, workspaceID in
+                            controller.discardAgentTaskConfirmed(workspaceID: workspaceID)
+                        }
+                    },
+                    onStartTask: startTask,
+                    agents: agents,
+                    onStartHere: startHere,
+                    onRespond: { row, response in Self.perform(response == .approve ? .allow : .deny, on: row) },
+                    onResume: { Self.perform(.resume, on: $0) },
+                    sessions: sessions,
+                    onShowTimeline: { [weak self] _, session in
+                        guard let id = session.sessionID else { return }
+                        let folder = (session.cwd as NSString).lastPathComponent
+                        self?.actions?.openAgentTimeline?(id, "\(session.kind.shortName) — \(folder)")
+                    },
+                    onOpenTranscript: { [weak self] path in
+                        self?.actions?.handle(DSLAction(type: "open", path: path, command: nil, text: nil))
+                    },
+                    activeWorkspaceID: activeID, activeWorkspaceName: activeName, activeOnly: activeOnly,
+                    onShowAll: { setActiveOnly(false) },
+                    onShowActiveOnly: { setActiveOnly(true) },
+                    onShowTab: { id in
+                        if let location = AgentInbox.locateInWindows(id) { AgentInbox.focus(location) }
+                    }
+                )
+            ),
             // Sized to its rows; scrolls once the sidebar is too short for them.
-            prefersOuterScrollView: false,
+            sizing: .fitted,
             generation: SidebarSection.generation(
                 for: rows.map(\.key) + Self.installedAgents.map(\.rawValue).sorted()
                     + ["\(activeID?.uuidString ?? "")|\(activeName ?? "")|\(activeOnly)"]

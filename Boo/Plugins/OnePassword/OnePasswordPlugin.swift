@@ -32,7 +32,7 @@ final class OnePasswordPlugin: BooPluginProtocol {
 
     /// The item list scrolls on its own below a fixed header; nested in the
     /// sidebar's outer scroll view it got no height and would not scroll.
-    var scrollsItself: Bool { true }
+    var sidebarSizing: SidebarSizing { .scrollsItself }
 
     /// `OnePasswordPanelView` observes `OnePasswordStore`; only the font scale is baked in.
     func sectionGeneration(context: PluginContext) -> UInt64 {

@@ -124,13 +124,9 @@ protocol BooPluginProtocol: BooPlugin {
     /// Return nil to use the static manifest name.
     func sectionTitle(context: TerminalContext) -> String?
 
-    /// Whether the sidebar should add an outer NSScrollView around the detail view.
-    /// Plugins that already contain their own scroll view should return false.
-    var prefersOuterScrollView: Bool { get }
-
-    /// Whether the detail view scrolls itself (a lazy list) yet should grow to fill
-    /// the sidebar like an outer-scrolled section. Overrides `prefersOuterScrollView`.
-    var scrollsItself: Bool { get }
+    /// How the sidebar sizes the detail view: in an outer scroll view (the default),
+    /// filling the sidebar while it scrolls itself, or fitted to its content.
+    var sidebarSizing: SidebarSizing { get }
 
     /// Content identity for the section built by the default `makeSidebarTab`.
     ///
@@ -226,8 +222,7 @@ extension BooPluginProtocol {
             name: title,
             icon: manifest.icon,
             content: view,
-            prefersOuterScrollView: prefersOuterScrollView,
-            scrollsItself: scrollsItself,
+            sizing: sidebarSizing,
             generation: sectionGeneration(context: context),
             identity: sectionIdentity(context: context)
         )
@@ -262,8 +257,7 @@ extension BooPluginProtocol {
     func makeDetailView(context: TerminalContext, actionHandler: DSLActionHandler) -> AnyView? { nil }
     func makeStatusBarContent(context: TerminalContext) -> StatusBarContent? { nil }
     func sectionTitle(context: TerminalContext) -> String? { nil }
-    var prefersOuterScrollView: Bool { true }
-    var scrollsItself: Bool { false }
+    var sidebarSizing: SidebarSizing { .outerScroll }
 
     /// Default: a fresh value every cycle, i.e. "assume the content changed".
     ///

@@ -29,12 +29,12 @@ final class WorkspaceSettingsTests: XCTestCase {
     @MainActor
     func testThemedSectionKeepsIdentity() {
         let section = SidebarSection(
-            id: "s", name: "S", icon: "star", content: AnyView(EmptyView()), prefersOuterScrollView: true,
+            id: "s", name: "S", icon: "star", content: AnyView(EmptyView()),
             generation: 7)
         let themed = section.themed(AppSettings.shared.theme)
         XCTAssertEqual(themed.id, section.id)
         XCTAssertEqual(themed.generation, section.generation)
-        XCTAssertEqual(themed.prefersOuterScrollView, section.prefersOuterScrollView)
+        XCTAssertEqual(themed.sizing, section.sizing)
     }
 
     func testRoundTripAndEmpty() throws {

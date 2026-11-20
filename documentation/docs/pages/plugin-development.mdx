@@ -297,7 +297,7 @@ func cwdChanged(newPath: String, context: TerminalContext) {
 With `sidebarTab: true`, the default `makeSidebarTab(context:)` puts `makeDetailView` in a single section. Override these to change the section:
 
 - `sectionTitle(context:)`: a dynamic header. Return `nil` to use `manifest.name`.
-- `prefersOuterScrollView`: return `false` if your view scrolls itself.
+- `sidebarSizing`: `.outerScroll` (default) puts the view in a scroll view. Return `.scrollsItself` if your view scrolls itself (a lazy list, an editor), or `.fitted` to size the section to its content.
 - `sectionGeneration(context:)`: by default the view is rebuilt every cycle. To reuse it, return `SidebarSection.generation(for: [keys])` over the values your view depends on.
 - `sectionIdentity(context:)`: return a new value to reset the view's `@State`, for example on a workspace switch.
 

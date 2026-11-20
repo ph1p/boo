@@ -63,8 +63,6 @@ final class AgentsPlugin: BooPluginProtocol {
         ]
     )
 
-    var prefersOuterScrollView: Bool { true }
-
     func isVisible(for context: TerminalContext) -> Bool {
         AppSettings.shared.isPluginEnabled(pluginID)
     }

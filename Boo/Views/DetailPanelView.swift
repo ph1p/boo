@@ -22,16 +22,24 @@ enum SidebarLayout {
 
 // MARK: - Section Data
 
+/// How the sidebar sizes a section's content.
+enum SidebarSizing {
+    /// The host puts the content in a scroll view; the section grows to fill.
+    case outerScroll
+    /// The content scrolls itself (a lazy list, an editor); the section grows to
+    /// fill. An outer NSScrollView would size its hosting view to the full content,
+    /// which makes SwiftUI build every row of a `LazyVStack`.
+    case scrollsItself
+    /// Sized to its content; scrolls once the sidebar is too short for it.
+    case fitted
+}
+
 struct SidebarSection: Identifiable {
     let id: String
     let name: String
     let icon: String
     private(set) var content: AnyView
-    let prefersOuterScrollView: Bool
-    /// Content that scrolls itself (a lazy list) but should still grow like an
-    /// outer-scrolled section. An outer NSScrollView would size its hosting view to
-    /// the full content, which makes SwiftUI build every row of a `LazyVStack`.
-    let scrollsItself: Bool
+    let sizing: SidebarSizing
     /// Monotonic generation counter. `updateContentView` is skipped when generation matches.
     let generation: UInt64
 
@@ -40,20 +48,23 @@ struct SidebarSection: Identifiable {
     /// the identity changes, the content starts over with fresh state instead (a
     /// note panel switching to another workspace's note). Nil keeps state across
     /// swaps. A new identity also counts as a new generation.
+    @MainActor
     init(
-        id: String, name: String, icon: String, content: AnyView, prefersOuterScrollView: Bool,
-        scrollsItself: Bool = false, generation: UInt64, identity: String? = nil
+        id: String, name: String, icon: String, content: AnyView, sizing: SidebarSizing = .outerScroll,
+        generation: UInt64, identity: String? = nil
     ) {
         self.id = id
         self.name = name
         self.icon = icon
-        self.prefersOuterScrollView = prefersOuterScrollView && !scrollsItself
-        self.scrollsItself = scrollsItself
+        self.sizing = sizing
+        // Every host (panel, single section, in-place swap) shows `content`, so a
+        // fitted section gets its scroll view here once.
+        let sized = sizing == .fitted ? AnyView(FittedScrollView { content }) : content
         if let identity {
-            self.content = AnyView(content.id(identity))
+            self.content = AnyView(sized.id(identity))
             self.generation = Self.generation(for: [String(generation), identity])
         } else {
-            self.content = content
+            self.content = sized
             self.generation = generation
         }
     }
@@ -389,9 +400,9 @@ class SidebarPanelView: NSView {
             section.content
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading))
 
-        sectionStates[index].canGrow = section.prefersOuterScrollView || section.scrollsItself
+        sectionStates[index].canGrow = section.sizing != .fitted
 
-        if !section.prefersOuterScrollView {
+        if section.sizing != .outerScroll {
             let hosting = NSHostingView(rootView: aligned)
             hosting.wantsLayer = true
             hosting.layer?.masksToBounds = true
@@ -401,7 +412,7 @@ class SidebarPanelView: NSView {
             sectionStates[index].intrinsicHeight = hosting.fittingSize.height
             addSubview(hosting)
             sectionStates[index].contentContainer = hosting
-            if section.scrollsItself {
+            if section.sizing == .scrollsItself {
                 // Sized by the panel like a growable section: the measurement above
                 // only seeds the initial split. Stop reporting it so row changes
                 // don't re-measure the whole list.

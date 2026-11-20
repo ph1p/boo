@@ -28,7 +28,7 @@ nonisolated(unsafe) private var sectionGenCounter: UInt64 = 0
 /// `generation: nil` bumps the shared counter, so each section looks like fresh
 /// content; pass an explicit generation to re-send the same content (or simulate a
 /// data change) across `updateSections` calls.
-private func makeSection(
+@MainActor private func makeSection(
     id: String, name: String = "Test", generation: UInt64? = nil
 ) -> SidebarSection {
     sectionGenCounter += 1
@@ -37,19 +37,18 @@ private func makeSection(
         name: name,
         icon: "star",
         content: AnyView(MockPluginContent(label: name)),
-        prefersOuterScrollView: true,
         generation: generation ?? sectionGenCounter
     )
 }
 
-private func makeNonGrowableSection(id: String, name: String = "Info") -> SidebarSection {
+@MainActor private func makeNonGrowableSection(id: String, name: String = "Info") -> SidebarSection {
     sectionGenCounter += 1
     return SidebarSection(
         id: id,
         name: name,
         icon: "info.circle",
         content: AnyView(MockPluginContent(label: name)),
-        prefersOuterScrollView: false,
+        sizing: .fitted,
         generation: sectionGenCounter
     )
 }
@@ -712,8 +711,7 @@ private func makeNonGrowableSection(id: String, name: String = "Info") -> Sideba
                         name: plugin.sectionTitle(context: pluginCtx) ?? plugin.manifest.name,
                         icon: plugin.manifest.icon,
                         content: content,
-                        prefersOuterScrollView: plugin.prefersOuterScrollView,
-                        scrollsItself: plugin.scrollsItself,
+                        sizing: plugin.sidebarSizing,
                         generation: 0
                     ))
             }
@@ -848,7 +846,7 @@ private func makeNonGrowableSection(id: String, name: String = "Info") -> Sideba
             name: "Direct",
             icon: "star",
             content: AnyView(Text("Hello")),
-            prefersOuterScrollView: false,
+            sizing: .fitted,
             generation: sectionGenCounter
         )
         let v = makePanelView()
@@ -856,6 +854,7 @@ private func makeNonGrowableSection(id: String, name: String = "Info") -> Sideba
         XCTAssertFalse(
             v.sectionStates[0].contentContainer is NSScrollView,
             "Non-scroll section should use direct hosting, not NSScrollView")
+        XCTAssertFalse(v.sectionStates[0].canGrow, "A fitted section keeps its content height")
     }
 
     func testSelfScrollingSectionUsesDirectHostingAndGrows() {
@@ -865,11 +864,9 @@ private func makeNonGrowableSection(id: String, name: String = "Info") -> Sideba
             name: "Lazy",
             icon: "star",
             content: AnyView(ScrollView { LazyVStack { Text("Row") } }),
-            prefersOuterScrollView: true,
-            scrollsItself: true,
+            sizing: .scrollsItself,
             generation: sectionGenCounter
         )
-        XCTAssertFalse(section.prefersOuterScrollView, "scrollsItself overrides the outer scroll view")
         let v = makePanelView()
         v.updateSections([section], expandedIDs: ["lazy"])
         XCTAssertFalse(

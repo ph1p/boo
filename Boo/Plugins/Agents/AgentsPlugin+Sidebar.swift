@@ -77,7 +77,6 @@ extension AgentsPlugin {
                             act?.handle(DSLAction(type: "copy", path: nil, command: nil, text: path))
                         }
                     )),
-                prefersOuterScrollView: true,
                 // Count alone is not enough: switching to a project with the same
                 // number of worktrees left the previous project's rows on screen.
                 generation: SidebarSection.generation(
@@ -108,7 +107,6 @@ extension AgentsPlugin {
                             act?.sendToTerminal?("@\(path) ")
                         }
                     )),
-                prefersOuterScrollView: true,
                 generation: SidebarSection.generation(for: agentConfig.configFiles.map { "\($0.path)|\($0.scope)" }))
             sections.append(configSection)
         }
@@ -133,7 +131,7 @@ extension AgentsPlugin {
                 name: "Agents",
                 icon: "sparkles",
                 content: emptyContent,
-                prefersOuterScrollView: false,
+                sizing: .fitted,
                 generation: SidebarSection.generation(
                     for: Self.installedAgents.map(\.rawValue).sorted()))
             sections.append(emptySection)
