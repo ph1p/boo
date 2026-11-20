@@ -296,7 +296,21 @@ enum ProcessTree {
         return nil
     }
 
-    // MARK: - argv
+    /// Background commands Claude Code runs for the process `pid`: its Bash
+    /// tool sources a shell snapshot in each one (`zsh -c source
+    /// ~/.claude/shell-snapshots/...`). Checked after a turn ends, when only
+    /// background commands remain. MCP servers and hooks are children too, but
+    /// run no snapshot. A command that serves a TCP port (a dev server) is a
+    /// service, not a task the agent waits for, and is left out.
+    static func claudeBackgroundShells(of pid: pid_t) -> Set<pid_t> {
+        let shells = childPIDs(of: pid).filter {
+            processArgs(pid: $0)?.contains("/shell-snapshots/snapshot-") == true
+        }
+        return Set(
+            shells.filter { shell in
+                !descendants(of: shell, limit: 32).contains { !PaneServers.listeningTCPPorts(pid: $0).isEmpty }
+            })
+    }
 
     /// Get process command line arguments using sysctl (no subprocess).
     /// Reads only argv — stops before environment variables to avoid false matches

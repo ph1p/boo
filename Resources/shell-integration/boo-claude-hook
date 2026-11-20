@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Boo agent hook: reports what a coding agent is doing to Boo's agent inbox.
 #
-# Claude Code: registered for SessionStart, UserPromptSubmit, PostToolUse,
-# Notification, Stop and SessionEnd; the event comes from the JSON payload on
+# Claude Code: registered for SessionStart, UserPromptSubmit, PreToolUse,
+# PostToolUse, Notification, Stop, StopFailure, SubagentStart, SubagentStop and
+# SessionEnd; the event comes from the JSON payload on
 # stdin. On SessionStart it prints context that teaches the agent the `boo` CLI.
 # Codex: ~/.codex/hooks.json runs `boo-claude-hook codex-hooks` per event, with
 # the JSON payload on stdin (Claude's format). Also, while the slot is free,
@@ -47,6 +48,10 @@ def event_for_claude(p):
         if kind in ("permission_prompt", "elicitation_dialog") or (not kind and "permission" in message):
             return "permission", message, None
         return None, None, None  # idle reminders, auth notices
+    if name == "SubagentStart":
+        return "subagent-start", None, None
+    if name == "SubagentStop":
+        return "subagent-stop", None, None
     if name == "Stop":
         return "stop", None, None
     if name == "StopFailure":
@@ -221,7 +226,9 @@ if tab_id:
 if event == "stop":
     msg["reply"] = last_reply(payload)
 for key, value in (("message", message), ("tool", tool), ("reply", msg.pop("reply", None)),
-                   ("session_id", payload.get("session_id")), ("cwd", payload.get("cwd"))):
+                   ("session_id", payload.get("session_id")), ("cwd", payload.get("cwd")),
+                   # Set on a subagent's own events: tells its tools from the agent's.
+                   ("subagent_id", payload.get("agent_id"))):
     if value:
         msg[key] = value
 try:

@@ -296,4 +296,127 @@ final class AgentInboxTests: XCTestCase {
         foreground = nil
         XCTAssertEqual(inbox.presence(of: tab), .foreground, "a closed terminal is not judged")
     }
+
+    // MARK: - Background work
+
+    /// A turn that ends while background commands run is not done: the agent
+    /// stays working until they end, then finishes with that turn's reply.
+    func testStopWithBackgroundShellsHoldsWorkingUntilTheyEnd() {
+        let inbox = makeInbox()
+        var shells: Set<pid_t> = [7]
+        inbox.backgroundShells = { _ in shells }
+        defer { inbox.stopBackgroundWatch() }
+        let tab = UUID()
+        let start = Date()
+        inbox.apply(event: "prompt", tabID: tab, pid: 42, now: start)
+
+        XCTAssertNil(inbox.apply(event: "stop", tabID: tab, reply: "Started the build.", pid: 42, now: start))
+        XCTAssertEqual(inbox.items[tab]?.state, .working)
+        XCTAssertEqual(inbox.items[tab]?.tool, AgentInbox.backgroundTool)
+        XCTAssertEqual(inbox.attentionCount, 0, "no ping while background work runs")
+
+        inbox.checkBackground(now: start.addingTimeInterval(60))
+        XCTAssertEqual(inbox.items[tab]?.state, .working, "still running")
+
+        shells = []
+        inbox.checkBackground(now: start.addingTimeInterval(62))
+        XCTAssertEqual(inbox.items[tab]?.state, .working, "waits for the turn Claude starts on its own")
+        inbox.checkBackground(now: start.addingTimeInterval(62 + AgentInbox.backgroundGrace))
+        XCTAssertEqual(inbox.items[tab]?.state, .done)
+        XCTAssertEqual(inbox.items[tab]?.reply, "Started the build.")
+        XCTAssertEqual(inbox.attentionCount, 1)
+        XCTAssertNil(inbox.backgroundTimer, "no held agent left to watch")
+    }
+
+    /// The turn Claude starts when its background work ends takes over; its own
+    /// Stop finishes the agent.
+    func testTheNextTurnEndsTheHold() {
+        let inbox = makeInbox()
+        var shells: Set<pid_t> = [7]
+        inbox.backgroundShells = { _ in shells }
+        defer { inbox.stopBackgroundWatch() }
+        let tab = UUID()
+        inbox.apply(event: "prompt", tabID: tab, pid: 42)
+        inbox.apply(event: "stop", tabID: tab, pid: 42)
+        XCTAssertEqual(inbox.items[tab]?.holdsForBackground, true)
+
+        shells = []
+        inbox.apply(event: "tool", tabID: tab, tool: "Read", pid: 42)
+        XCTAssertEqual(inbox.items[tab]?.holdsForBackground, false)
+        XCTAssertEqual(inbox.items[tab]?.tool, "Read")
+        XCTAssertEqual(inbox.apply(event: "stop", tabID: tab, reply: "Build passed.", pid: 42), .done)
+        XCTAssertEqual(inbox.items[tab]?.reply, "Build passed.")
+    }
+
+    /// A background subagent holds the agent; its own tool calls do not end
+    /// the hold, its SubagentStop does.
+    func testBackgroundSubagentHoldsUntilItStops() {
+        let inbox = makeInbox()
+        inbox.backgroundShells = { _ in [] }
+        defer { inbox.stopBackgroundWatch() }
+        let tab = UUID()
+        let start = Date()
+        inbox.apply(event: "prompt", tabID: tab, now: start)
+        inbox.apply(event: "subagent-start", tabID: tab, subagentID: "fg")
+        inbox.apply(event: "subagent-stop", tabID: tab, subagentID: "fg")
+        inbox.apply(event: "subagent-start", tabID: tab, subagentID: "bg")
+
+        XCTAssertNil(inbox.apply(event: "stop", tabID: tab, now: start))
+        XCTAssertEqual(inbox.items[tab]?.state, .working)
+        inbox.apply(event: "tool", tabID: tab, tool: "Grep", subagentID: "bg", now: start.addingTimeInterval(5))
+        XCTAssertEqual(inbox.items[tab]?.holdsForBackground, true, "the subagent's tools are not a new turn")
+        XCTAssertEqual(inbox.items[tab]?.tool, AgentInbox.backgroundTool)
+
+        inbox.apply(event: "subagent-stop", tabID: tab, subagentID: "bg")
+        inbox.checkBackground(now: start.addingTimeInterval(10))
+        inbox.checkBackground(now: start.addingTimeInterval(10 + AgentInbox.backgroundGrace))
+        XCTAssertEqual(inbox.items[tab]?.state, .done)
+    }
+
+    /// Hooks run as separate processes: a stop that arrives before its start
+    /// leaves no subagent behind.
+    func testASubagentStopBeforeItsStartCountsNothing() {
+        let inbox = makeInbox()
+        inbox.backgroundShells = { _ in [] }
+        let tab = UUID()
+        inbox.apply(event: "prompt", tabID: tab)
+        inbox.apply(event: "subagent-stop", tabID: tab, subagentID: "a")
+        inbox.apply(event: "subagent-start", tabID: tab, subagentID: "a")
+        XCTAssertEqual(inbox.items[tab]?.subagents, [])
+        XCTAssertEqual(inbox.apply(event: "stop", tabID: tab), .done)
+    }
+
+    /// Only Claude Code's shells are known; other agents end their turn as before.
+    func testOtherAgentsAreNotHeld() {
+        let inbox = makeInbox()
+        inbox.backgroundShells = { _ in [7] }
+        let tab = UUID()
+        inbox.apply(event: "prompt", tabID: tab, agent: "codex", pid: 42)
+        XCTAssertEqual(inbox.apply(event: "stop", tabID: tab, agent: "codex", pid: 42), .done)
+    }
+
+    /// A watcher never exits: after `backgroundLimit` the agent is done, and
+    /// the same watcher holds no later turn.
+    func testAWatcherIsWaitedOutOnce() {
+        let inbox = makeInbox()
+        var shells: Set<pid_t> = [7]
+        inbox.backgroundShells = { _ in shells }
+        defer { inbox.stopBackgroundWatch() }
+        let tab = UUID()
+        let start = Date()
+        inbox.apply(event: "prompt", tabID: tab, pid: 42, now: start)
+        inbox.apply(event: "stop", tabID: tab, reply: "Watching.", pid: 42, now: start)
+
+        inbox.checkBackground(now: start.addingTimeInterval(AgentInbox.backgroundLimit - 1))
+        XCTAssertEqual(inbox.items[tab]?.state, .working)
+        inbox.checkBackground(now: start.addingTimeInterval(AgentInbox.backgroundLimit))
+        XCTAssertEqual(inbox.items[tab]?.state, .done)
+        XCTAssertEqual(inbox.items[tab]?.reply, "Watching.")
+
+        inbox.apply(event: "prompt", tabID: tab, pid: 42)
+        XCTAssertEqual(inbox.apply(event: "stop", tabID: tab, pid: 42), .done, "the watcher was waited out")
+        shells.insert(8)
+        inbox.apply(event: "prompt", tabID: tab, pid: 42)
+        XCTAssertNil(inbox.apply(event: "stop", tabID: tab, pid: 42), "a new background command holds again")
+    }
 }

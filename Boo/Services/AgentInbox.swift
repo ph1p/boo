@@ -48,6 +48,22 @@ final class AgentInbox {
         /// late is dropped. Boo's own updates (a delivery, a title read) carry no
         /// stamp, so a slow hook still overrules them.
         var reportedAt: Date?
+        /// Subagents (the Agent tool) started and not yet stopped. A background
+        /// one outlives the turn that started it. Starts and stops toggle an
+        /// id, so a stop that arrives before its start (hooks run as separate
+        /// processes) cancels out.
+        var subagents: Set<String> = []
+        /// When the agent ended its turn while background work it started
+        /// still ran: listed as working until that work ends (see
+        /// "Background work" below).
+        var heldSince: Date?
+        /// Whether the agent is held for its background work.
+        var holdsForBackground: Bool { heldSince != nil }
+        /// When a held agent's background work was first seen gone.
+        var backgroundEndedAt: Date?
+        /// Background shells already waited out for `backgroundLimit` (watchers
+        /// that never exit): they hold no later turn.
+        var waitedOutShells: Set<pid_t> = []
 
         var id: UUID { tabID }
 
@@ -95,6 +111,10 @@ final class AgentInbox {
     /// The process in the foreground of a tab's terminal; nil when not open.
     var foregroundPID: (UUID) -> pid_t? = { AgentInbox.terminalView(ofTab: $0)?.foregroundPID }
     var isAlive: (pid_t) -> Bool = ProcessTree.isAlive
+    /// Background commands the agent with this PID still runs (dev servers left out).
+    var backgroundShells: (pid_t) -> Set<pid_t> = ProcessTree.claudeBackgroundShells(of:)
+    /// Polls held agents until their background work ends; nil while none is held.
+    var backgroundTimer: Timer?
 
     init() {}
 
@@ -139,8 +159,13 @@ final class AgentInbox {
     func apply(
         event: String, tabID: UUID, agent: String = "claude", message: String? = nil,
         tool: String? = nil, reply: String? = nil, sessionID: String? = nil, cwd: String? = nil,
-        pid: pid_t? = nil, reportedAt: Date? = nil, now: Date = Date()
+        pid: pid_t? = nil, reportedAt: Date? = nil, subagentID: String? = nil, now: Date = Date()
     ) -> State? {
+        // Subagent starts and stops only count; they arrive in any order.
+        if event == "subagent-start" || event == "subagent-stop" {
+            trackSubagent(id: subagentID, tabID: tabID)
+            return nil
+        }
         if let existing = items[tabID] {
             // Hooks run as separate processes and can arrive out of order.
             if let reportedAt, let last = existing.reportedAt, reportedAt < last { return nil }
@@ -148,6 +173,9 @@ final class AgentInbox {
             // A failed turn can still report its end (OpenCode idles after
             // session.error); the error stays until the next prompt.
             if existing.state == .error, event == "stop" || event == "done" { return nil }
+            // A background subagent's tools run after the turn ended; the agent
+            // stays held until that work ends.
+            if existing.holdsForBackground, subagentID != nil, event == "tool" { return nil }
         }
         if event == "end" {
             remove(tabID: tabID)
@@ -167,6 +195,12 @@ final class AgentInbox {
             item.fresh = true
             items[tabID] = item
             changed()
+            return nil
+        }
+        if event == "stop", agent == "claude",
+            holdForBackground(
+                tabID: tabID, reply: reply, sessionID: sessionID, cwd: cwd, pid: pid, reportedAt: reportedAt, now: now)
+        {
             return nil
         }
         let previous = items[tabID]?.state
@@ -249,6 +283,8 @@ final class AgentInbox {
         item.state = state
         item.fresh = false
         item.updatedAt = now
+        item.heldSince = nil
+        item.backgroundEndedAt = nil
         item.sessionID = sessionID ?? item.sessionID
         item.cwd = cwd ?? item.cwd
         switch state {
@@ -374,7 +410,8 @@ extension AgentInbox {
             message: Self.nonEmpty(json["message"]), tool: Self.nonEmpty(json["tool"]),
             reply: Self.nonEmpty(json["reply"]),
             sessionID: Self.nonEmpty(json["session_id"]), cwd: Self.nonEmpty(json["cwd"]),
-            pid: foregroundPID(tabID), reportedAt: (json["at"] as? Double).map(Date.init(timeIntervalSince1970:)))
+            pid: foregroundPID(tabID), reportedAt: (json["at"] as? Double).map(Date.init(timeIntervalSince1970:)),
+            subagentID: Self.nonEmpty(json["subagent_id"]))
         if newState != nil { signalAttention(tabID: tabID) }
         return ["ok": true, "state": items[tabID]?.state.rawValue ?? NSNull()]
     }
@@ -485,5 +522,113 @@ extension AgentInbox {
             "fresh": item.fresh,
             "updated_at": item.updatedAt.timeIntervalSince1970
         ]
+    }
+}
+
+// MARK: - Background work
+
+/// Background work: Claude Code ends a turn (its Stop hook) while commands it
+/// started with `run_in_background`, a Monitor or a background subagent still
+/// run, and wakes up again when they finish. Such an agent is not done: it is
+/// listed as working, with no attention ping, until that work ends.
+extension AgentInbox {
+    /// The tool label a held agent shows ("using background tasks").
+    static let backgroundTool = "background tasks"
+    /// How often held agents are checked for their background work.
+    static let backgroundPollInterval: TimeInterval = 2
+    /// After the background work ends, Claude starts a turn on its own; the
+    /// agent stays working this long for that turn's first report.
+    static let backgroundGrace: TimeInterval = 15
+    /// The longest an agent is held: a watcher (`tsc --watch`, a test watcher)
+    /// never exits, so after this the agent is done anyway.
+    static let backgroundLimit: TimeInterval = 10 * 60
+
+    /// Whether the agent still has background work: subagents, or shells of
+    /// its process.
+    func hasBackgroundWork(_ item: Item) -> Bool {
+        if !item.subagents.isEmpty { return true }
+        guard let pid = item.pid else { return false }
+        return !backgroundShells(pid).subtracting(item.waitedOutShells).isEmpty
+    }
+
+    /// Holds a Stop as working while background work runs. True when it did;
+    /// the turn's reply is kept for when the agent is finally done.
+    func holdForBackground(
+        tabID: UUID, reply: String?, sessionID: String?, cwd: String?, pid: pid_t?, reportedAt: Date?, now: Date
+    ) -> Bool {
+        guard var item = items[tabID] else { return false }
+        item.pid = pid ?? item.pid
+        guard hasBackgroundWork(item) else { return false }
+        item.heldSince = item.heldSince ?? now
+        item.state = .working
+        item.backgroundEndedAt = nil
+        item.tool = Self.backgroundTool
+        item.message = nil
+        item.asksQuestion = false
+        item.fresh = false
+        item.reply = reply ?? item.reply
+        item.updatedAt = now
+        item.sessionID = sessionID ?? item.sessionID
+        item.cwd = cwd ?? item.cwd
+        item.reportedAt = reportedAt ?? item.reportedAt
+        items[tabID] = item
+        changed()
+        startBackgroundWatch()
+        return true
+    }
+
+    /// Records a subagent's start or stop (SubagentStart / SubagentStop).
+    func trackSubagent(id: String?, tabID: UUID) {
+        guard let id else { return }
+        items[tabID]?.subagents.formSymmetricDifference([id])
+    }
+
+    /// Ends the hold of every agent whose background work is gone for
+    /// `backgroundGrace` without a newer report, or that was held for
+    /// `backgroundLimit`: it is done, with the reply of the turn it held.
+    func checkBackground(now: Date = Date()) {
+        for (tabID, item) in items where item.holdsForBackground {
+            if let since = item.heldSince, now.timeIntervalSince(since) >= Self.backgroundLimit {
+                // What still runs now is waited out: it holds no later turn.
+                if let pid = item.pid { items[tabID]?.waitedOutShells.formUnion(backgroundShells(pid)) }
+                items[tabID]?.subagents = []
+                finishHold(tabID: tabID, item: item, now: now)
+                continue
+            }
+            if hasBackgroundWork(item) {
+                items[tabID]?.backgroundEndedAt = nil
+                continue
+            }
+            guard let ended = item.backgroundEndedAt else {
+                items[tabID]?.backgroundEndedAt = now
+                continue
+            }
+            guard now.timeIntervalSince(ended) >= Self.backgroundGrace else { continue }
+            finishHold(tabID: tabID, item: item, now: now)
+        }
+        if !items.values.contains(where: \.holdsForBackground) { stopBackgroundWatch() }
+    }
+
+    /// Ends a hold: the agent is done with the reply of the turn it held.
+    private func finishHold(tabID: UUID, item: Item, now: Date) {
+        items[tabID]?.heldSince = nil
+        if apply(event: "stop", tabID: tabID, agent: item.agent, reply: item.reply, now: now) != nil {
+            signalAttention(tabID: tabID)
+        }
+    }
+
+    func startBackgroundWatch() {
+        guard backgroundTimer == nil else { return }
+        let timer = Timer.scheduledTimer(withTimeInterval: Self.backgroundPollInterval, repeats: true) {
+            [weak self] _ in
+            MainActor.assumeIsolated { self?.checkBackground() }
+        }
+        timer.tolerance = 0.5
+        backgroundTimer = timer
+    }
+
+    func stopBackgroundWatch() {
+        backgroundTimer?.invalidate()
+        backgroundTimer = nil
     }
 }
