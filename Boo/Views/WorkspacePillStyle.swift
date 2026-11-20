@@ -24,6 +24,10 @@ enum WorkspacePillStyle {
     /// Activity dot diameter; it sits in the close slot, so the two never overlap.
     static let activityDotSize: CGFloat = 6
 
+    /// Width of the scroll fade in front of a strip's pinned buttons. Wide enough
+    /// that a clipped pill has fully dissolved before it reaches the button.
+    static let pinnedFadeWidth: CGFloat = 32
+
     /// Fill `rect` as a rounded rect at the shared control radius. The
     /// `setFillColor` / `addPath(CGPath(roundedRect:…))` / `fillPath` incantation
     /// was repeated at a dozen sites across the chrome; this is the one copy.

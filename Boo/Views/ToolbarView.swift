@@ -223,10 +223,8 @@ class ToolbarView: NSView {
 
     /// Width of the scroll fade at the strip's leading edge.
     static let leadingFadeWidth: CGFloat = 20
-    /// Width of the scroll fade at the strip's trailing edge. Wide enough that the
-    /// clipped pill has fully dissolved into the backdrop by the time it reaches
-    /// the pinned `+`, rather than a half-faded label butting up against the button.
-    static let trailingFadeWidth: CGFloat = 32
+    /// Width of the scroll fade at the strip's trailing edge, before the pinned `+`.
+    static let trailingFadeWidth = WorkspacePillStyle.pinnedFadeWidth
 
     /// Ensure the active workspace pill is visible in the scroll area, clear of
     /// the edge fades: a pill scrolled only to the zone's edge sits under the fade.

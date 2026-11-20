@@ -258,10 +258,8 @@ extension PaneView {
             // The view's own tab, not `pane.activeTab` — a session save right after a
             // cross-pane drop would otherwise persist the displayed view's state under
             // the incoming tab's index.
-            if let activeContentView, activeContentView.tabID == tab.id {
-                pane.updateContentState(at: index, activeContentView.saveState())
-            } else if let contentView = contentViews[tab.id] {
-                pane.updateContentState(at: index, contentView.saveState())
+            if let view = contentView(of: tab.id) {
+                pane.updateContentState(at: index, view.saveState())
             }
         }
     }
@@ -269,9 +267,13 @@ extension PaneView {
     /// The tab's content state as its view has it now; the model copy is only
     /// refreshed on session save.
     func liveContentState(of tab: Pane.Tab) -> ContentState {
-        if let activeContentView, activeContentView.tabID == tab.id { return activeContentView.saveState() }
-        if let contentView = contentViews[tab.id] { return contentView.saveState() }
-        return tab.state.contentState
+        contentView(of: tab.id)?.saveState() ?? tab.state.contentState
+    }
+
+    /// The content view showing the tab: the displayed one or a cached one.
+    private func contentView(of tabID: UUID) -> ContentViewProtocol? {
+        if let activeContentView, activeContentView.tabID == tabID { return activeContentView }
+        return contentViews[tabID]
     }
 
     var tabCount: Int { pane.tabs.count }

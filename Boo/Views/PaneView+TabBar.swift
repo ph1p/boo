@@ -98,7 +98,7 @@ extension PaneView {
                     color: theme.paneDrawFill)
             }
             if tabScrollOffset < maxScroll {
-                let fadeW: CGFloat = 32
+                let fadeW = WorkspacePillStyle.pinnedFadeWidth
                 WorkspacePillStyle.drawFade(
                     ctx, in: CGRect(x: pinnedButtonsX - fadeW, y: 0, width: fadeW, height: barH),
                     from: CGPoint(x: pinnedButtonsX, y: 0), to: CGPoint(x: pinnedButtonsX - fadeW, y: 0),
