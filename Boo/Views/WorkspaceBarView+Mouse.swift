@@ -71,8 +71,10 @@ extension WorkspaceBarView {
         }
     }
 
-    // MARK: - Right Click Context Menu
+    // MARK: - Right Click
 
+    /// A group header shows its menu; a workspace opens the same editor
+    /// bubble as a double-click.
     override func rightMouseDown(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
         if let header = hitTestGroupHeader(at: point) {
@@ -84,41 +86,13 @@ extension WorkspaceBarView {
             return
         }
         guard let idx = hitTestItemIndex(at: point), idx >= 0, idx < items.count else { return }
-        showContextMenu(at: idx, event: event)
-    }
-
-    private func showContextMenu(at index: Int, event: NSEvent) {
-        let item = items[index]
-        let menu = WorkspaceContextMenu.make(
-            index: index, isPinned: item.isPinned, canMoveToNewWindow: items.count > 1,
-            extraItems: delegate?.workspaceBar(self, contextMenuItemsForWorkspaceAt: index) ?? [],
-            target: self,
-            actions: .init(
-                edit: #selector(contextEditWorkspace(_:)), togglePin: #selector(contextTogglePin(_:)),
-                moveToNewWindow: #selector(contextMoveToNewWindow(_:)), close: #selector(contextClose(_:))))
-        NSMenu.popUpContextMenu(menu, with: event, for: self)
-    }
-
-    @objc private func contextEditWorkspace(_ sender: NSMenuItem) {
-        editWorkspace(at: sender.tag)
+        editWorkspace(at: idx)
     }
 
     /// Ask the delegate to show the inline editor for the pill at `index`.
     func editWorkspace(at index: Int) {
         guard index >= 0, index < items.count else { return }
         delegate?.workspaceBar(self, editWorkspaceAt: index, anchor: verticalItemRect(at: index))
-    }
-
-    @objc private func contextMoveToNewWindow(_ sender: NSMenuItem) {
-        delegate?.workspaceBar(self, moveWorkspaceToNewWindowAt: sender.tag)
-    }
-
-    @objc private func contextTogglePin(_ sender: NSMenuItem) {
-        delegate?.workspaceBar(self, togglePinForWorkspaceAt: sender.tag)
-    }
-
-    @objc private func contextClose(_ sender: NSMenuItem) {
-        delegate?.workspaceBar(self, didCloseAt: sender.tag)
     }
 
     // MARK: - Hover Tracking

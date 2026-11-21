@@ -410,39 +410,6 @@ extension MainWindowController {
 
     // MARK: - Merge / discard
 
-    /// Merge and Discard for workspaces whose folder is a linked worktree.
-    func agentTaskMenuItems(forWorkspaceAt index: Int) -> [NSMenuItem] {
-        guard index >= 0, index < appState.workspaces.count else { return [] }
-        let workspace = appState.workspaces[index]
-        guard AgentWorktree.looksLikeWorktree(workspace.folderPath) else { return [] }
-        let review = NSMenuItem(
-            title: "Review Changes...", action: #selector(reviewAgentTaskAction(_:)), keyEquivalent: "")
-        let merge = NSMenuItem(
-            title: "Merge Worktree...", action: #selector(mergeAgentTaskAction(_:)), keyEquivalent: "")
-        let discard = NSMenuItem(
-            title: "Discard Worktree...", action: #selector(discardAgentTaskAction(_:)), keyEquivalent: "")
-        for item in [review, merge, discard] {
-            item.target = self
-            item.representedObject = workspace.id
-        }
-        return [review, merge, discard]
-    }
-
-    @objc func mergeAgentTaskAction(_ sender: NSMenuItem) {
-        guard let id = sender.representedObject as? UUID else { return }
-        mergeAgentTask(workspaceID: id)
-    }
-
-    @objc func discardAgentTaskAction(_ sender: NSMenuItem) {
-        guard let id = sender.representedObject as? UUID else { return }
-        discardAgentTask(workspaceID: id)
-    }
-
-    @objc func reviewAgentTaskAction(_ sender: NSMenuItem) {
-        guard let id = sender.representedObject as? UUID else { return }
-        openReview(workspaceID: id)
-    }
-
     func mergeAgentTask(workspaceID: UUID) {
         guard let folder = appState.workspace(withID: workspaceID)?.folderPath else { return }
         // The full check (conflicts, a dirty main checkout) before asking, like `boo merge`.

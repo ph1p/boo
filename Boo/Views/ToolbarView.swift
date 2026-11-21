@@ -4,7 +4,6 @@ import Cocoa
     func toolbar(_ toolbar: ToolbarView, didSelectWorkspaceAt index: Int)
     func toolbar(_ toolbar: ToolbarView, didCloseWorkspaceAt index: Int)
     func toolbarDidToggleSidebar(_ toolbar: ToolbarView)
-    func toolbar(_ toolbar: ToolbarView, togglePinForWorkspaceAt index: Int)
     func toolbar(_ toolbar: ToolbarView, moveWorkspaceFrom source: Int, to destination: Int)
     /// Workspace `source` was dropped onto the pill at `target`: group them.
     func toolbar(_ toolbar: ToolbarView, stackWorkspaceAt source: Int, onto target: Int)
@@ -22,16 +21,12 @@ import Cocoa
     func toolbar(_ toolbar: ToolbarView, dropWorkspaceAt index: Int, atScreenPoint point: NSPoint)
     /// A dragged workspace moved; `point` is the screen point when outside this window, nil otherwise or when the drag ends.
     func toolbar(_ toolbar: ToolbarView, workspaceDragMovedOutsideTo point: NSPoint?)
-    func toolbar(_ toolbar: ToolbarView, moveWorkspaceToNewWindowAt index: Int)
     func toolbarDidRequestNewWorkspace(_ toolbar: ToolbarView)
-    /// Extra items for a workspace's context menu, shown above Close.
-    func toolbar(_ toolbar: ToolbarView, contextMenuItemsForWorkspaceAt index: Int) -> [NSMenuItem]
     /// Open the inline name/color editor for a workspace, anchored on `rect` in the toolbar.
     func toolbar(_ toolbar: ToolbarView, editWorkspaceAt index: Int, anchor rect: NSRect)
 }
 
 extension ToolbarViewDelegate {
-    func toolbar(_ toolbar: ToolbarView, contextMenuItemsForWorkspaceAt index: Int) -> [NSMenuItem] { [] }
     func toolbar(_ toolbar: ToolbarView, editWorkspaceAt index: Int, anchor rect: NSRect) {}
     func toolbar(_ toolbar: ToolbarView, stackWorkspaceAt source: Int, onto target: Int) {}
     func toolbar(_ toolbar: ToolbarView, moveWorkspaceAt source: Int, intoGroup groupID: String) {}

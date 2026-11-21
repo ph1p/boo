@@ -3,7 +3,6 @@ import Cocoa
 @MainActor protocol WorkspaceBarViewDelegate: AnyObject {
     func workspaceBar(_ bar: WorkspaceBarView, didSelectAt index: Int)
     func workspaceBar(_ bar: WorkspaceBarView, didCloseAt index: Int)
-    func workspaceBar(_ bar: WorkspaceBarView, togglePinForWorkspaceAt index: Int)
     func workspaceBar(_ bar: WorkspaceBarView, moveWorkspaceFrom source: Int, to destination: Int)
     /// Workspace `source` was dropped onto the pill at `target`: group them.
     func workspaceBar(_ bar: WorkspaceBarView, stackWorkspaceAt source: Int, onto target: Int)
@@ -13,10 +12,7 @@ import Cocoa
     func workspaceBar(_ bar: WorkspaceBarView, dropWorkspaceAt index: Int, atScreenPoint point: NSPoint)
     /// A dragged workspace moved; `point` is the screen point when outside this window, nil otherwise or when the drag ends.
     func workspaceBar(_ bar: WorkspaceBarView, workspaceDragMovedOutsideTo point: NSPoint?)
-    func workspaceBar(_ bar: WorkspaceBarView, moveWorkspaceToNewWindowAt index: Int)
     func workspaceBarDidRequestNewWorkspace(_ bar: WorkspaceBarView)
-    /// Extra items for a workspace's context menu, shown above Close.
-    func workspaceBar(_ bar: WorkspaceBarView, contextMenuItemsForWorkspaceAt index: Int) -> [NSMenuItem]
     /// Open the inline name/color editor for a workspace, anchored on `rect` in the bar.
     func workspaceBar(_ bar: WorkspaceBarView, editWorkspaceAt index: Int, anchor rect: NSRect)
     /// A workspace-group header (or a collapsed group's pill) was clicked.
@@ -30,7 +26,6 @@ import Cocoa
 }
 
 extension WorkspaceBarViewDelegate {
-    func workspaceBar(_ bar: WorkspaceBarView, contextMenuItemsForWorkspaceAt index: Int) -> [NSMenuItem] { [] }
     func workspaceBar(_ bar: WorkspaceBarView, editWorkspaceAt index: Int, anchor rect: NSRect) {}
     func workspaceBar(_ bar: WorkspaceBarView, toggleGroup groupID: String) {}
     func workspaceBar(_ bar: WorkspaceBarView, moveGroup groupID: String, to destination: Int) {}

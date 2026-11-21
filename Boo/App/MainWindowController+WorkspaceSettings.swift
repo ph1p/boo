@@ -74,20 +74,6 @@ extension MainWindowController {
         saveSession()
     }
 
-    func workspaceSettingsMenuItems(forWorkspaceAt index: Int) -> [NSMenuItem] {
-        guard index >= 0, index < appState.workspaces.count else { return [] }
-        let workspace = appState.workspaces[index]
-        // A tmux workspace isn't saved, so its settings would not survive.
-        guard workspace.tmuxWindowID == nil else { return [] }
-        let id = workspace.id
-        return [
-            .separator(),
-            ClosureMenuItem(title: "Workspace Settings\u{2026}") { [weak self] in
-                self?.showWorkspaceSettings(forWorkspace: id)
-            }
-        ]
-    }
-
     func showWorkspaceSettings(forWorkspace workspaceID: UUID) {
         guard let window, window.attachedSheet == nil,
             let workspace = appState.workspace(withID: workspaceID)

@@ -18,11 +18,9 @@ private class SpyDelegate: WorkspaceBarViewDelegate {
     }
     func workspaceBar(_ bar: WorkspaceBarView, setColorForWorkspaceAt index: Int, color: WorkspaceColor) {}
     func workspaceBar(_ bar: WorkspaceBarView, setCustomColorForWorkspaceAt index: Int, color: NSColor) {}
-    func workspaceBar(_ bar: WorkspaceBarView, togglePinForWorkspaceAt index: Int) {}
     func workspaceBar(_ bar: WorkspaceBarView, moveWorkspaceFrom source: Int, to destination: Int) {}
     func workspaceBar(_ bar: WorkspaceBarView, dropWorkspaceAt index: Int, atScreenPoint point: NSPoint) {}
     func workspaceBar(_ bar: WorkspaceBarView, workspaceDragMovedOutsideTo point: NSPoint?) {}
-    func workspaceBar(_ bar: WorkspaceBarView, moveWorkspaceToNewWindowAt index: Int) {}
     func workspaceBarDidRequestNewWorkspace(_ bar: WorkspaceBarView) {}
 }
 
@@ -111,11 +109,9 @@ private class ToolbarSpyDelegate: ToolbarViewDelegate {
     }
     func toolbar(_ toolbar: ToolbarView, setColorForWorkspaceAt index: Int, color: WorkspaceColor) {}
     func toolbar(_ toolbar: ToolbarView, setCustomColorForWorkspaceAt index: Int, color: NSColor) {}
-    func toolbar(_ toolbar: ToolbarView, togglePinForWorkspaceAt index: Int) {}
     func toolbar(_ toolbar: ToolbarView, moveWorkspaceFrom source: Int, to destination: Int) {}
     func toolbar(_ toolbar: ToolbarView, dropWorkspaceAt index: Int, atScreenPoint point: NSPoint) {}
     func toolbar(_ toolbar: ToolbarView, workspaceDragMovedOutsideTo point: NSPoint?) {}
-    func toolbar(_ toolbar: ToolbarView, moveWorkspaceToNewWindowAt index: Int) {}
     func toolbarDidRequestNewWorkspace(_ toolbar: ToolbarView) {}
 }
 

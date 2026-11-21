@@ -14,12 +14,6 @@ extension MainWindowController: ToolbarViewDelegate {
 
     func toolbarDidToggleSidebar(_ toolbar: ToolbarView) { toggleSidebar(userInitiated: true) }
 
-    func toolbar(_ toolbar: ToolbarView, togglePinForWorkspaceAt index: Int) {
-        appState.togglePin(at: index)
-        refreshToolbar()
-        saveSession()
-    }
-
     func toolbar(_ toolbar: ToolbarView, moveWorkspaceFrom source: Int, to destination: Int) {
         reorderWorkspace(from: source, to: destination)
     }
@@ -56,15 +50,6 @@ extension MainWindowController: ToolbarViewDelegate {
         updateWorkspaceDragTarget(atScreenPoint: point)
     }
 
-    func toolbar(_ toolbar: ToolbarView, moveWorkspaceToNewWindowAt index: Int) {
-        moveWorkspaceToNewWindow(at: index)
-    }
-
-    func toolbar(_ toolbar: ToolbarView, contextMenuItemsForWorkspaceAt index: Int) -> [NSMenuItem] {
-        workspaceGroupMenuItems(forWorkspaceAt: index) + agentTaskMenuItems(forWorkspaceAt: index)
-            + workspaceSettingsMenuItems(forWorkspaceAt: index)
-    }
-
     func toolbarDidRequestNewWorkspace(_ toolbar: ToolbarView) {
         newWorkspaceAction(nil)
     }
@@ -86,12 +71,6 @@ extension MainWindowController: WorkspaceBarViewDelegate {
         toolbarDidCloseWorkspace(at: index)
     }
 
-    func workspaceBar(_ bar: WorkspaceBarView, togglePinForWorkspaceAt index: Int) {
-        appState.togglePin(at: index)
-        refreshToolbar()
-        saveSession()
-    }
-
     func workspaceBar(_ bar: WorkspaceBarView, moveWorkspaceFrom source: Int, to destination: Int) {
         reorderWorkspace(from: source, to: destination)
     }
@@ -110,15 +89,6 @@ extension MainWindowController: WorkspaceBarViewDelegate {
 
     func workspaceBar(_ bar: WorkspaceBarView, workspaceDragMovedOutsideTo point: NSPoint?) {
         updateWorkspaceDragTarget(atScreenPoint: point)
-    }
-
-    func workspaceBar(_ bar: WorkspaceBarView, moveWorkspaceToNewWindowAt index: Int) {
-        moveWorkspaceToNewWindow(at: index)
-    }
-
-    func workspaceBar(_ bar: WorkspaceBarView, contextMenuItemsForWorkspaceAt index: Int) -> [NSMenuItem] {
-        workspaceGroupMenuItems(forWorkspaceAt: index) + agentTaskMenuItems(forWorkspaceAt: index)
-            + workspaceSettingsMenuItems(forWorkspaceAt: index)
     }
 
     func workspaceBarDidRequestNewWorkspace(_ bar: WorkspaceBarView) {
@@ -187,6 +157,33 @@ extension MainWindowController {
                 self.saveSession()
             }
         ]
+        // The group picker is a menu; it pops up at the click once the bubble is gone.
+        if let groupItem = workspaceGroupMenuItems(forWorkspaceAt: index).first, let groupMenu = groupItem.submenu {
+            actions.append(
+                InlineEditorAction(title: groupItem.title + "\u{2026}", symbol: "rectangle.3.group") {
+                    close()
+                    let location = NSEvent.mouseLocation
+                    DispatchQueue.main.async { groupMenu.popUp(positioning: nil, at: location, in: nil) }
+                })
+        }
+        if AgentWorktree.looksLikeWorktree(ws.folderPath) {
+            actions += [
+                InlineEditorAction(title: "Review Changes\u{2026}", symbol: "doc.text.magnifyingglass") {
+                    [weak self] in
+                    close()
+                    _ = self?.openReview(workspaceID: wsID)
+                },
+                InlineEditorAction(title: "Merge Worktree\u{2026}", symbol: "arrow.triangle.merge") { [weak self] in
+                    close()
+                    self?.mergeAgentTask(workspaceID: wsID)
+                },
+                InlineEditorAction(title: "Discard Worktree\u{2026}", symbol: "trash", isDestructive: true) {
+                    [weak self] in
+                    close()
+                    self?.discardAgentTask(workspaceID: wsID)
+                }
+            ]
+        }
         if ws.tmuxWindowID == nil {
             actions.append(
                 InlineEditorAction(title: "Settings\u{2026}", symbol: "slider.horizontal.3") { [weak self] in

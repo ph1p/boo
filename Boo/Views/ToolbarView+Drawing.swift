@@ -415,12 +415,12 @@ extension ToolbarView {
         return workspaceIndex(atX: point.x)
     }
 
-    // MARK: - Right Click Context Menu
+    // MARK: - Right Click
 
+    /// A group chip shows its menu; a workspace pill opens the same editor
+    /// bubble as a double-click.
     override func rightMouseDown(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
-
-        // Only show context menu in workspace zone
         guard !hideWorkspaces, point.x >= trafficLightWidth && point.x < workspaceZoneEnd + zoneGap else { return }
 
         if let chip = hitTestGroupChip(at: point) {
@@ -432,41 +432,13 @@ extension ToolbarView {
             return
         }
 
-        if let i = workspaceIndex(atX: point.x) { showWorkspaceContextMenu(at: i, event: event) }
-    }
-
-    internal func showWorkspaceContextMenu(at index: Int, event: NSEvent) {
-        let ws = workspaces[index]
-        let menu = WorkspaceContextMenu.make(
-            index: index, isPinned: ws.isPinned, canMoveToNewWindow: workspaces.count > 1,
-            extraItems: delegate?.toolbar(self, contextMenuItemsForWorkspaceAt: index) ?? [],
-            target: self,
-            actions: .init(
-                edit: #selector(contextEditWorkspace(_:)), togglePin: #selector(contextTogglePin(_:)),
-                moveToNewWindow: #selector(contextMoveToNewWindow(_:)), close: #selector(contextClose(_:))))
-        NSMenu.popUpContextMenu(menu, with: event, for: self)
-    }
-
-    @objc internal func contextEditWorkspace(_ sender: NSMenuItem) {
-        editWorkspace(at: sender.tag)
+        if let i = workspaceIndex(atX: point.x) { editWorkspace(at: i) }
     }
 
     /// Ask the delegate to show the inline editor for the pill at `index`.
     func editWorkspace(at index: Int) {
         guard let rect = workspacePillRect(at: index) else { return }
         delegate?.toolbar(self, editWorkspaceAt: index, anchor: rect)
-    }
-
-    @objc internal func contextTogglePin(_ sender: NSMenuItem) {
-        delegate?.toolbar(self, togglePinForWorkspaceAt: sender.tag)
-    }
-
-    @objc internal func contextMoveToNewWindow(_ sender: NSMenuItem) {
-        delegate?.toolbar(self, moveWorkspaceToNewWindowAt: sender.tag)
-    }
-
-    @objc internal func contextClose(_ sender: NSMenuItem) {
-        delegate?.toolbar(self, didCloseWorkspaceAt: sender.tag)
     }
 
     // MARK: - Testing Hooks
