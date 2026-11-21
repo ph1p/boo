@@ -194,9 +194,9 @@ extension PaneView {
         // Pill inside the tab slot — the horizontal inset supplies the gap between
         // neighbouring pills, the vertical one keeps the pill off the bar edges.
         let pillRect = Self.tabPillRect(inSlot: tabRect)
-        WorkspacePillStyle.fill(
+        WorkspacePillStyle.fillTab(
             ctx, rect: pillRect, active: isActive, hovered: isHovered,
-            wsColor: nil, neutral: theme.textMuted)
+            neutral: theme.textMuted)
         if selectedTabIDs.contains(tab.id) {
             WorkspacePillStyle.strokeHairline(ctx, rect: pillRect, color: theme.accent)
         }

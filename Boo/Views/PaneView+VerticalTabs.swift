@@ -331,8 +331,8 @@ extension PaneView {
             ctx.setAlpha(0.45)
         }
         defer { if inFlight { ctx.restoreGState() } }
-        WorkspacePillStyle.fill(
-            ctx, rect: pill, active: isActive, hovered: isHovered, wsColor: nil, neutral: theme.textMuted)
+        WorkspacePillStyle.fillTab(
+            ctx, rect: pill, active: isActive, hovered: isHovered, neutral: theme.textMuted)
         if selectedTabIDs.contains(tab.id) {
             WorkspacePillStyle.strokeHairline(ctx, rect: pill, color: theme.accent)
         }

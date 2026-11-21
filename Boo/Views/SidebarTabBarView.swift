@@ -353,8 +353,10 @@ class SidebarTabBarView: NSView {
                 drawSelectedPill(ctx, in: pillRect(in: tabRect), theme: theme)
             }
 
-            let iconColor =
-                isSelected ? theme.accent : theme.textSecondary
+            // Idle glyphs use full muted (not textSecondary's 0.7) and hover lifts
+            // to primary text, so the strip reads crisp instead of washed out.
+            let iconColor: NSColor =
+                isSelected ? theme.accent : (isHovered ? theme.textPrimary : theme.textMuted)
             if let img = resolveIcon(tab.icon, size: iconSize * 0.75, color: iconColor, label: tab.label) {
                 let imgSize = img.size
                 let iconX = tabRect.midX - imgSize.width / 2
@@ -380,7 +382,7 @@ class SidebarTabBarView: NSView {
         if !overflowRect.isEmpty {
             let hasSelectedOverflow = overflowTabs.contains(where: { $0.id == selectedTab })
             let overflowColor: NSColor =
-                hasSelectedOverflow ? theme.accent : theme.textSecondary
+                hasSelectedOverflow ? theme.accent : theme.textMuted
 
             // Accent background when the active tab is in overflow. Painted *before*
             // the glyph — it used to be drawn after, tinting the ellipsis it was
@@ -432,11 +434,12 @@ class SidebarTabBarView: NSView {
     /// Accent fill plus the island hairline — how the strip marks the active tab,
     /// whether it sits in the visible row or behind the overflow "···" button.
     private func drawSelectedPill(_ ctx: CGContext, in rect: CGRect, theme: TerminalTheme) {
-        ctx.setFillColor(theme.accentSelectionFill.cgColor)
+        // Deliberate raw alphas: the selected tab is the strip's only colour, so it
+        // runs stronger than accentSelectionFill (0.15) to read as vibrant.
+        ctx.setFillColor(theme.accent.withAlphaComponent(0.28).cgColor)
         WorkspacePillStyle.fillRoundedRect(ctx, rect: rect)
-        // Deliberate raw alpha: between focusRing (0.7) and focusBorder (0.45).
         WorkspacePillStyle.strokeHairline(
-            ctx, rect: rect, color: theme.accent.withAlphaComponent(0.55))
+            ctx, rect: rect, color: theme.accent.withAlphaComponent(0.85))
     }
 
     private func drawDropIndicator(at x: CGFloat, ctx: CGContext, theme: TerminalTheme) {

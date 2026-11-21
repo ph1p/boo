@@ -195,7 +195,9 @@ class SidebarSectionHeaderView: NSView {
         ctx.fill(bounds)
 
         if isHovered {
-            ctx.setFillColor(theme.rowHover.cgColor)
+            // Translucent hoverFill lifts the header over the sidebar fill; opaque
+            // rowHover painted darker than the surface on dark chrome.
+            ctx.setFillColor(theme.hoverFill.cgColor)
             // Same gap on every side, so the pill sits centered in the header.
             WorkspacePillStyle.fillRoundedRect(ctx, rect: bounds.insetBy(dx: 4, dy: 4))
         }

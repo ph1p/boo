@@ -113,6 +113,25 @@ enum WorkspacePillStyle {
         return translucent ? base * WindowMaterial.pillFillBoost : base
     }
 
+    /// Pane tab pill: the active tab gets a brighter neutral fill and hairline so
+    /// it reads at a glance; resting and hovered tabs keep the shared neutral fill.
+    static func fillTab(
+        _ ctx: CGContext, rect: CGRect, active: Bool, hovered: Bool, neutral: NSColor
+    ) {
+        guard active else {
+            fill(ctx, rect: rect, active: false, hovered: hovered, wsColor: nil, neutral: neutral)
+            return
+        }
+        // Neutral but brighter than the shared active fill, with a faint
+        // neutral hairline: crisp without tinting the whole pill in accent.
+        // Deliberate raw alphas.
+        let translucent = WindowMaterial.current.isTranslucent
+        let alpha: CGFloat = translucent ? 0.20 * WindowMaterial.pillFillBoost : 0.20
+        ctx.setFillColor(neutral.withAlphaComponent(alpha).cgColor)
+        fillRoundedRect(ctx, rect: rect)
+        strokeHairline(ctx, rect: rect, color: neutral.withAlphaComponent(0.18))
+    }
+
     /// Fill the pill background for the given state.
     static func fill(
         _ ctx: CGContext, rect: CGRect, active: Bool, hovered: Bool,
