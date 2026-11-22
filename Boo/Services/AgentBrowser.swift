@@ -26,20 +26,38 @@ final class AgentBrowser {
         window.hasShadow = false
         window.isExcludedFromWindowsMenu = true
         window.collectionBehavior = [.transient, .ignoresCycle, .fullScreenAuxiliary]
+        // The window server can move it without going through `setFrame`.
+        for name in [NSWindow.didMoveNotification, NSWindow.didChangeScreenNotification] {
+            NotificationCenter.default.addObserver(forName: name, object: window, queue: .main) { _ in
+                MainActor.assumeIsolated { window.setFrameOrigin(Self.stageOrigin) }
+            }
+        }
         return window
     }()
     private static let stageOrigin = NSPoint(x: -20000, y: -20000)
+    /// Commands running with a tab on the stage.
+    private var stagedCommands = 0
 
     /// AppKit moves off-screen windows back onto a screen (for example after a
     /// display change); the stage must stay off every screen, or it shows as a
     /// bare second window behind Boo.
     private final class StageWindow: NSWindow {
         override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect { frameRect }
+        override func setFrame(_ frameRect: NSRect, display flag: Bool) {
+            guard frameRect.origin != AgentBrowser.stageOrigin else { return super.setFrame(frameRect, display: flag) }
+            super.setFrame(NSRect(origin: AgentBrowser.stageOrigin, size: frameRect.size), display: flag)
+        }
+        override func setFrameOrigin(_ point: NSPoint) { super.setFrameOrigin(AgentBrowser.stageOrigin) }
         override var canBecomeKey: Bool { false }
         override var canBecomeMain: Bool { false }
     }
 
     nonisolated static let loadTimeout: TimeInterval = 10
+    /// WebKit can drop a script or snapshot callback (a page that navigates away
+    /// mid-script, a hung web process). The command must still end, or its tab
+    /// stays on the stage.
+    nonisolated static let scriptTimeout: TimeInterval = 60
+    nonisolated static let snapshotTimeout: TimeInterval = 15
     static let readLimit = 20000
 
     // MARK: - Targets
@@ -288,12 +306,43 @@ final class AgentBrowser {
         host.addSubview(view)
         stage.setFrameOrigin(Self.stageOrigin)
         stage.orderBack(nil)
+        stagedCommands += 1
         defer {
+            stagedCommands -= 1
             // The user may have opened the tab meanwhile; then it lives in its pane.
             if view.superview === host { view.removeFromSuperview() }
-            if host.subviews.isEmpty { stage.orderOut(nil) }
+            if stagedCommands == 0 {
+                // No command uses the stage: drop anything left behind, so it never
+                // shows a dead tab.
+                for leftover in host.subviews { leftover.removeFromSuperview() }
+                stage.orderOut(nil)
+            }
         }
         return try await body()
+    }
+
+    /// Runs a WebKit call that answers through `finish`, failing after `seconds`
+    /// if it never does. A late answer is ignored.
+    private func answer<T: Sendable>(
+        within seconds: TimeInterval, _ what: String, _ start: (@escaping (Result<T, Error>) -> Void) -> Void
+    ) async throws -> T {
+        let once = Once<T>()
+        return try await withCheckedThrowingContinuation { continuation in
+            once.continuation = continuation
+            start { once.finish($0) }
+            Task { @MainActor in
+                try? await Task.sleep(for: .seconds(seconds))
+                once.finish(.failure(Failure(message: "\(what) got no answer within \(Int(seconds))s")))
+            }
+        }
+    }
+
+    @MainActor private final class Once<T: Sendable> {
+        var continuation: CheckedContinuation<T, Error>?
+        func finish(_ result: Result<T, Error>) {
+            continuation?.resume(with: result)
+            continuation = nil
+        }
     }
 
     private func waitForLoad(_ view: BrowserContentView, timeout: TimeInterval = loadTimeout) async {
@@ -313,12 +362,11 @@ final class AgentBrowser {
     private func evaluate(_ body: String, _ arguments: [String: Any], in view: BrowserContentView) async throws -> Any?
     {
         guard let webView = view.webView else { throw Failure(message: "the tab has no page") }
-        let result: ScriptResult = try await withCheckedThrowingContinuation { continuation in
+        let result: ScriptResult = try await answer(within: Self.scriptTimeout, "the script") { finish in
             webView.callAsyncJavaScript(body, arguments: arguments, in: nil, in: .page) { result in
                 switch result {
-                case .success(let value):
-                    continuation.resume(returning: ScriptResult(value: value is NSNull ? nil : value))
-                case .failure(let error): continuation.resume(throwing: Failure(message: Self.message(of: error)))
+                case .success(let value): finish(.success(ScriptResult(value: value is NSNull ? nil : value)))
+                case .failure(let error): finish(.failure(Failure(message: Self.message(of: error))))
                 }
             }
         }
@@ -333,16 +381,17 @@ final class AgentBrowser {
     private func screenshot(_ view: BrowserContentView, to path: String?) async throws -> String {
         guard let webView = view.webView else { throw Failure(message: "the tab has no page") }
         view.layoutSubtreeIfNeeded()
-        let image: NSImage = try await withCheckedThrowingContinuation { continuation in
+        let shot: ScriptResult = try await answer(within: Self.snapshotTimeout, "the screenshot") { finish in
             webView.takeSnapshot(with: nil) { image, error in
                 if let image {
-                    continuation.resume(returning: image)
+                    finish(.success(ScriptResult(value: image)))
                 } else {
-                    continuation.resume(throwing: Failure(message: error.map(Self.message) ?? "snapshot failed"))
+                    finish(.failure(Failure(message: error.map(Self.message) ?? "snapshot failed")))
                 }
             }
         }
-        guard let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil),
+        guard let image = shot.value as? NSImage,
+            let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil),
             let png = NSBitmapImageRep(cgImage: cgImage).representation(using: .png, properties: [:])
         else { throw Failure(message: "could not encode the screenshot") }
         let file: URL
