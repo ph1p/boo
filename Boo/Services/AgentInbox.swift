@@ -9,7 +9,11 @@ extension Notification.Name {
 /// place shows which agent needs an answer and jumps to its tab.
 @MainActor
 final class AgentInbox {
-    static let shared = AgentInbox()
+    static let shared: AgentInbox = {
+        let inbox = AgentInbox()
+        inbox.watchesLiveness = true
+        return inbox
+    }()
 
     enum State: String {
         case working
@@ -64,6 +68,10 @@ final class AgentInbox {
         /// Background shells already waited out for `backgroundLimit` (watchers
         /// that never exit): they hold no later turn.
         var waitedOutShells: Set<pid_t> = []
+        /// When a subagent last started, stopped or used a tool. An interrupt
+        /// sends no SubagentStop, so a subagent quiet for `subagentQuiet` no
+        /// longer holds the agent.
+        var subagentActivityAt: Date?
 
         var id: UUID { tabID }
 
@@ -115,6 +123,10 @@ final class AgentInbox {
     var backgroundShells: (pid_t) -> Set<pid_t> = ProcessTree.claudeBackgroundShells(of:)
     /// Polls held agents until their background work ends; nil while none is held.
     var backgroundTimer: Timer?
+    /// Sweeps out agents whose tab closed or whose process exited; only the
+    /// app's shared inbox runs it (tests call `sweep()` themselves).
+    var watchesLiveness = false
+    var livenessTimer: Timer?
 
     init() {}
 
@@ -148,6 +160,7 @@ final class AgentInbox {
 
     /// Every status bar redraws from this.
     private func changed() {
+        if watchesLiveness { items.isEmpty ? stopLivenessWatch() : startLivenessWatch() }
         NotificationCenter.default.post(name: .agentInboxChanged, object: self)
     }
 
@@ -163,9 +176,10 @@ final class AgentInbox {
     ) -> State? {
         // Subagent starts and stops only count; they arrive in any order.
         if event == "subagent-start" || event == "subagent-stop" {
-            trackSubagent(id: subagentID, tabID: tabID)
+            trackSubagent(id: subagentID, tabID: tabID, now: now)
             return nil
         }
+        if subagentID != nil { items[tabID]?.subagentActivityAt = now }
         if let existing = items[tabID] {
             // Hooks run as separate processes and can arrive out of order.
             if let reportedAt, let last = existing.reportedAt, reportedAt < last { return nil }
@@ -314,6 +328,16 @@ final class AgentInbox {
         changed()
     }
 
+    /// The user interrupted the agent's turn (Esc), which sends no Stop: it is
+    /// done and seen, without a notification. Its foreground subagents died
+    /// with the turn and sent no SubagentStop either.
+    func interrupted(tabID: UUID) {
+        guard let item = items[tabID], item.state == .working else { return }
+        items[tabID]?.subagents = []
+        apply(event: "stop", tabID: tabID, agent: item.agent)
+        markSeen(tabID: tabID)
+    }
+
     /// Forgets every agent and the orchestrator: the agents switch went off.
     func clear() {
         guard !items.isEmpty || orchestrator != nil else { return }
@@ -333,6 +357,38 @@ final class AgentInbox {
         guard !gone.isEmpty else { return }
         for id in gone { items.removeValue(forKey: id) }
         changed()
+    }
+
+    /// How often the shared inbox looks for closed tabs and exited agents.
+    static let livenessInterval: TimeInterval = 3
+
+    /// Drops items whose tab closed (a close confirmed in a sheet, a closed
+    /// workspace or window) or whose agent process exited without a SessionEnd
+    /// (killed, crashed, its ssh dropped). Items with no known process, such as
+    /// remote ones fed by the title, only go with their tab.
+    func sweep() {
+        let gone = items.values.filter { item in
+            if locate(item.tabID) == nil { return true }
+            guard let pid = item.pid else { return false }
+            return !isAlive(pid)
+        }.map(\.tabID)
+        guard !gone.isEmpty else { return }
+        for id in gone { items.removeValue(forKey: id) }
+        changed()
+    }
+
+    private func startLivenessWatch() {
+        guard livenessTimer == nil else { return }
+        let timer = Timer.scheduledTimer(withTimeInterval: Self.livenessInterval, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.sweep() }
+        }
+        timer.tolerance = 1
+        livenessTimer = timer
+    }
+
+    private func stopLivenessWatch() {
+        livenessTimer?.invalidate()
+        livenessTimer = nil
     }
 
     // MARK: - Jumping
@@ -542,11 +598,22 @@ extension AgentInbox {
     /// The longest an agent is held: a watcher (`tsc --watch`, a test watcher)
     /// never exits, so after this the agent is done anyway.
     static let backgroundLimit: TimeInterval = 10 * 60
+    /// A subagent with no start, stop or tool report for this long is taken
+    /// as gone: an interrupted one never sends its SubagentStop. Its commands
+    /// still count as background shells while they run.
+    static let subagentQuiet: TimeInterval = 3 * 60
+
+    /// Whether the agent's subagents still count as running at `now`.
+    static func hasLiveSubagents(_ item: Item, now: Date) -> Bool {
+        guard !item.subagents.isEmpty else { return false }
+        guard let last = item.subagentActivityAt else { return true }
+        return now.timeIntervalSince(last) < subagentQuiet
+    }
 
     /// Whether the agent still has background work: subagents, or shells of
     /// its process.
-    func hasBackgroundWork(_ item: Item) -> Bool {
-        if !item.subagents.isEmpty { return true }
+    func hasBackgroundWork(_ item: Item, now: Date = Date()) -> Bool {
+        if Self.hasLiveSubagents(item, now: now) { return true }
         guard let pid = item.pid else { return false }
         return !backgroundShells(pid).subtracting(item.waitedOutShells).isEmpty
     }
@@ -558,7 +625,12 @@ extension AgentInbox {
     ) -> Bool {
         guard var item = items[tabID] else { return false }
         item.pid = pid ?? item.pid
-        guard hasBackgroundWork(item) else { return false }
+        // Subagents gone quiet were interrupted: they hold no later turn.
+        if !Self.hasLiveSubagents(item, now: now) {
+            item.subagents = []
+            items[tabID]?.subagents = []
+        }
+        guard hasBackgroundWork(item, now: now) else { return false }
         item.heldSince = item.heldSince ?? now
         item.state = .working
         item.backgroundEndedAt = nil
@@ -578,9 +650,10 @@ extension AgentInbox {
     }
 
     /// Records a subagent's start or stop (SubagentStart / SubagentStop).
-    func trackSubagent(id: String?, tabID: UUID) {
+    func trackSubagent(id: String?, tabID: UUID, now: Date = Date()) {
         guard let id else { return }
         items[tabID]?.subagents.formSymmetricDifference([id])
+        items[tabID]?.subagentActivityAt = now
     }
 
     /// Ends the hold of every agent whose background work is gone for
@@ -595,7 +668,7 @@ extension AgentInbox {
                 finishHold(tabID: tabID, item: item, now: now)
                 continue
             }
-            if hasBackgroundWork(item) {
+            if hasBackgroundWork(item, now: now) {
                 items[tabID]?.backgroundEndedAt = nil
                 continue
             }

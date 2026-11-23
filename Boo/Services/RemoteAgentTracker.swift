@@ -133,14 +133,15 @@ final class RemoteAgentTracker {
             inbox.apply(event: "working", tabID: tabID, agent: item.agent)
             return
         }
-        guard state == .idle, previous == .working, item.state == .working else { return }
+        // A held agent already ended its turn: its idle title is expected.
+        guard state == .idle, previous == .working, item.state == .working, !item.holdsForBackground else { return }
         let stamp = item.updatedAt
         schedule(Self.interruptGrace) { [weak self] in
             guard let self, self.hookTitles[tabID] == .idle,
-                let current = self.inbox.items[tabID], current.state == .working, current.updatedAt == stamp
+                let current = self.inbox.items[tabID], current.state == .working, !current.holdsForBackground,
+                current.updatedAt == stamp
             else { return }
-            self.inbox.apply(event: "stop", tabID: tabID, agent: current.agent)
-            self.inbox.markSeen(tabID: tabID)
+            self.inbox.interrupted(tabID: tabID)
         }
     }
 }

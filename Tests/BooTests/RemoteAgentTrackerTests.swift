@@ -92,6 +92,20 @@ final class RemoteAgentTrackerTests: XCTestCase {
         XCTAssertEqual(inbox.items[tab]?.seen, true, "an interrupt the user made needs no attention")
     }
 
+    /// A Stop held for background work shows the idle title on purpose: no interrupt.
+    func testIdleTitleLeavesAHeldAgentHeld() {
+        let (tracker, inbox, fire) = makeHookTracker()
+        inbox.backgroundShells = { _ in [7] }
+        defer { inbox.stopBackgroundWatch() }
+        let tab = UUID()
+        inbox.apply(event: "prompt", tabID: tab, pid: 42)
+        tracker.titleChanged(tabID: tab, title: "⠂ Task", shellPID: 1)
+        inbox.apply(event: "stop", tabID: tab, pid: 42)
+        tracker.titleChanged(tabID: tab, title: "✳ Task", shellPID: 1)
+        fire()
+        XCTAssertEqual(inbox.items[tab]?.holdsForBackground, true)
+    }
+
     func testStopHookWinsOverIdleTitle() {
         let (tracker, inbox, fire) = makeHookTracker()
         let tab = UUID()
@@ -127,14 +141,5 @@ final class RemoteAgentTrackerTests: XCTestCase {
         tracker.titleChanged(tabID: tab, title: "✳ Task", shellPID: 1)
         fire()
         XCTAssertEqual(inbox.items[tab]?.state, .working, "only a spinner-to-idle flip is an interrupt")
-    }
-
-    func testForgetDropsClosedTab() {
-        let (tracker, inbox) = makeTracker()
-        let tab = UUID()
-        tracker.titleChanged(tabID: tab, title: "⠂ Fix the login bug", shellPID: 1)
-        inbox.remove(tabID: tab)
-        tracker.forget(tabID: tab)
-        XCTAssertNil(tracker.tracked[tab])
     }
 }

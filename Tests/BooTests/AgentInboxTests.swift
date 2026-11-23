@@ -386,6 +386,71 @@ final class AgentInboxTests: XCTestCase {
         XCTAssertEqual(inbox.apply(event: "stop", tabID: tab), .done)
     }
 
+    /// An interrupted subagent sends no SubagentStop: once it is quiet for
+    /// `subagentQuiet` it holds neither the current turn nor a later one.
+    func testAQuietSubagentStopsHoldingTheAgent() {
+        let inbox = makeInbox()
+        inbox.backgroundShells = { _ in [] }
+        defer { inbox.stopBackgroundWatch() }
+        let tab = UUID()
+        let start = Date()
+        inbox.apply(event: "prompt", tabID: tab, now: start)
+        inbox.apply(event: "subagent-start", tabID: tab, subagentID: "lost", now: start)
+        XCTAssertNil(inbox.apply(event: "stop", tabID: tab, now: start))
+        XCTAssertEqual(inbox.items[tab]?.holdsForBackground, true)
+
+        let quiet = start.addingTimeInterval(AgentInbox.subagentQuiet)
+        inbox.checkBackground(now: quiet)
+        inbox.checkBackground(now: quiet.addingTimeInterval(AgentInbox.backgroundGrace))
+        XCTAssertEqual(inbox.items[tab]?.state, .done, "done long before backgroundLimit")
+
+        inbox.apply(event: "prompt", tabID: tab, now: quiet.addingTimeInterval(60))
+        XCTAssertEqual(
+            inbox.apply(event: "stop", tabID: tab, now: quiet.addingTimeInterval(70)), .done,
+            "the lost subagent holds no later turn")
+        XCTAssertEqual(inbox.items[tab]?.subagents, [])
+    }
+
+    /// Esc ends a turn without a Stop and kills its foreground subagents.
+    func testAnInterruptEndsTheTurnAndForgetsItsSubagents() {
+        let inbox = makeInbox()
+        inbox.backgroundShells = { _ in [] }
+        let tab = UUID()
+        inbox.apply(event: "prompt", tabID: tab)
+        inbox.apply(event: "subagent-start", tabID: tab, subagentID: "fg")
+        inbox.interrupted(tabID: tab)
+        XCTAssertEqual(inbox.items[tab]?.state, .done)
+        XCTAssertEqual(inbox.items[tab]?.seen, true, "the user did it: no attention")
+        XCTAssertEqual(inbox.items[tab]?.subagents, [])
+    }
+
+    /// The sweep drops agents whose tab closed (also behind a confirmation
+    /// sheet, or with its workspace or window) and agents whose process exited
+    /// without a SessionEnd. One with no known process stays while its tab does.
+    func testSweepDropsClosedTabsAndExitedAgents() {
+        let inbox = makeInbox()
+        let open = UUID()
+        let closed = UUID()
+        let exited = UUID()
+        let remote = UUID()
+        let workspace = Workspace(folderPath: "/tmp")
+        let pane = try! XCTUnwrap(workspace.pane(for: workspace.activePaneID))
+        let controller = MainWindowController(restoreSession: false)
+        Self.keptAlive.append(controller)
+        inbox.locate = { id in
+            id == closed
+                ? nil : AgentInbox.Location(controller: controller, workspace: workspace, pane: pane, tabIndex: 0)
+        }
+        inbox.isAlive = { $0 != 2 }
+        inbox.apply(event: "prompt", tabID: open, pid: 1)
+        inbox.apply(event: "prompt", tabID: closed, pid: 1)
+        inbox.apply(event: "stop", tabID: exited, pid: 2)
+        inbox.apply(event: "working", tabID: remote)
+
+        inbox.sweep()
+        XCTAssertEqual(Set(inbox.items.keys), [open, remote])
+    }
+
     /// Only Claude Code's shells are known; other agents end their turn as before.
     func testOtherAgentsAreNotHeld() {
         let inbox = makeInbox()
