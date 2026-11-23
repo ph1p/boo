@@ -62,9 +62,8 @@ final class AgentTaskStatusTests: XCTestCase {
         XCTAssertEqual(PaneView.agentBadgeColor(for: inbox.items[tab], theme: theme), theme.warning)
 
         inbox.apply(event: "stop", tabID: tab)
-        if inbox.items[tab]?.needsAttention == true {
-            XCTAssertNotNil(PaneView.agentBadgeColor(for: inbox.items[tab], theme: theme), "unread answer")
-        }
+        XCTAssertEqual(inbox.items[tab]?.needsAttention, true)
+        XCTAssertNotNil(PaneView.agentBadgeColor(for: inbox.items[tab], theme: theme), "unread answer")
         inbox.markSeen(tabID: tab)
         XCTAssertNil(PaneView.agentBadgeColor(for: inbox.items[tab], theme: theme), "a read answer stays quiet")
     }

@@ -8,6 +8,11 @@ import XCTest
 /// `BOO_SNAPSHOT_DIR` to write `review-unified.png` and `review-split.png` there.
 @MainActor
 final class AgentReviewViewSnapshotTests: XCTestCase {
+    /// A visual check, not a test: the file list is covered by `AgentReviewTests`.
+    override func setUpWithError() throws {
+        try XCTSkipIf(ProcessInfo.processInfo.environment["BOO_SNAPSHOT_DIR"] == nil, "set BOO_SNAPSHOT_DIR to render")
+    }
+
     func testRendersModifiedAndAddedFiles() throws {
         let base = URL(fileURLWithPath: NSTemporaryDirectory()).resolvingSymlinksInPath().path
         let repo = (base as NSString).appendingPathComponent("boo-review-\(UUID().uuidString)")

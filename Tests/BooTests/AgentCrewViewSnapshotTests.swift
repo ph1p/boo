@@ -7,6 +7,11 @@ import XCTest
 /// write `agent-crew.png` there for a visual check.
 @MainActor
 final class AgentCrewViewSnapshotTests: XCTestCase {
+    /// A visual check, not a test: the layout itself is covered by `AgentCrewTests`.
+    override func setUpWithError() throws {
+        try XCTSkipIf(ProcessInfo.processInfo.environment["BOO_SNAPSHOT_DIR"] == nil, "set BOO_SNAPSHOT_DIR to render")
+    }
+
     private func row(
         _ handle: String, _ name: String, _ state: AgentInbox.State, detail: String? = nil,
         parent: String? = nil, queued: Int = 0, attention: Bool = false, task: Bool = false

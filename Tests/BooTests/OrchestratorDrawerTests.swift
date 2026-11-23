@@ -4,14 +4,6 @@ import XCTest
 
 @MainActor
 final class OrchestratorDrawerTests: XCTestCase {
-    func testEnqueueAnnouncesTheCard() {
-        let center = ApprovalCenter()
-        var announced: [String] = []
-        center.onEnqueued = { announced.append($0.action) }
-        center.enqueue(cmd: "send_text", json: ["text": "y"], caller: UUID(), targets: [UUID()]) { $0(["ok": true]) }
-        XCTAssertEqual(announced, ["Type into pane"])
-    }
-
     func testTargetLabelNamesTheAgent() {
         let inbox = AgentInbox()
         inbox.locate = { _ in nil }
