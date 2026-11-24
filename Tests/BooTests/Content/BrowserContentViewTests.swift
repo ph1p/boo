@@ -201,15 +201,8 @@ final class BrowserContentViewTests: XCTestCase {
     }
 
     private func assertAddressBarEditShortcutPassesThrough(characters: String, keyCode: UInt16, message: String) {
-        let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 800, height: 600),
-            styleMask: .borderless,
-            backing: .buffered,
-            defer: false
-        )
         let view = BrowserContentView(url: ContentType.blankURL)
-        view.frame = window.contentView?.bounds ?? .zero
-        window.contentView?.addSubview(view)
+        let window = show(view)
         guard let addressBar = findSubview(of: SelectAllTextField.self, in: view) else {
             return XCTFail("Expected browser address bar")
         }
@@ -262,6 +255,19 @@ final class BrowserContentViewTests: XCTestCase {
         return view
     }
 
+    /// Puts `view` on screen the way a shown pane does; the window closes after the test.
+    @discardableResult
+    private func show(_ view: BrowserContentView) -> NSWindow {
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 800, height: 600), styleMask: .borderless, backing: .buffered,
+            defer: false)
+        window.isReleasedWhenClosed = false
+        view.frame = window.contentView?.bounds ?? .zero
+        window.contentView?.addSubview(view)
+        addTeardownBlock { window.close() }
+        return window
+    }
+
     func testASwitchedAwayTabSuspendsAndComesBack() throws {
         let view = try loadedPage()
         let url = view.url
@@ -278,6 +284,7 @@ final class BrowserContentViewTests: XCTestCase {
         guard case .browser(let saved) = view.saveState() else { return XCTFail("not a browser state") }
         XCTAssertEqual(saved.url, url)
 
+        show(view)
         view.activate()
         XCTAssertFalse(view.isSuspended)
         XCTAssertNotNil(view.webView)
@@ -294,9 +301,31 @@ final class BrowserContentViewTests: XCTestCase {
 
     func testAShownTabIsNeverSuspended() throws {
         let view = try loadedPage()
+        show(view)
         view.activate()
         XCTAssertNil(view.suspendTimer)
         XCTAssertFalse(view.canSuspendNow)
+        view.cleanup()
+    }
+
+    /// A workspace switch takes the shown tab out of the window without
+    /// retiring it; it unloads all the same and comes back with the workspace.
+    func testATabInAHiddenWorkspaceSuspendsAndComesBack() throws {
+        let view = try loadedPage()
+        let window = show(view)
+        view.activate()
+        XCTAssertNil(view.suspendTimer)
+
+        view.removeFromSuperview()
+        XCTAssertNotNil(view.suspendTimer)
+        XCTAssertTrue(view.canSuspendNow)
+        view.suspend()
+        XCTAssertNil(view.webView)
+
+        window.contentView?.addSubview(view)
+        XCTAssertFalse(view.isSuspended)
+        XCTAssertNotNil(view.webView)
+        XCTAssertNil(view.suspendTimer)
         view.cleanup()
     }
 

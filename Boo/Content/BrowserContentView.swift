@@ -566,6 +566,16 @@ final class BrowserContentView: NSView, ContentViewProtocol, NSTextFieldDelegate
         scheduleSuspend()
     }
 
+    /// A workspace switch takes the pane, and the tab it shows, out of the
+    /// window without retiring the tab: it unloads like a switched-away tab
+    /// and comes back when the workspace shows again. A retired tab only
+    /// passes through a window while an agent command stages it.
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        guard !isRetired else { return }
+        if window == nil { scheduleSuspend() } else { resume() }
+    }
+
     func cleanup() {
         suspendTimer?.invalidate()
         suspendTimer = nil

@@ -2,8 +2,9 @@ import Cocoa
 import WebKit
 
 /// Unloading idle browser tabs: each WKWebView keeps a WebContent process
-/// (often 50–300 MB) alive. A tab switched away from for `suspendDelay`, or
-/// right away under memory pressure, drops its web view and keeps only what
+/// (often 50–300 MB) alive. A tab out of sight for `suspendDelay` (switched
+/// away from in its pane, or left in a workspace not on screen), or right away
+/// under memory pressure, drops its web view and keeps only what
 /// it needs to come back: history, scroll position and zoom. Showing the tab,
 /// or an agent command on it, rebuilds the page.
 extension BrowserContentView {
@@ -15,7 +16,7 @@ extension BrowserContentView {
         let canGoForward: Bool
     }
 
-    /// How long a tab stays loaded after it is switched away from.
+    /// How long a tab stays loaded once it is out of sight.
     nonisolated(unsafe) static var suspendDelay: TimeInterval = 10 * 60
     /// Tabs that stay loaded however long they are hidden: those an agent
     /// still running opened, since it may come back to the page it set up.
@@ -28,11 +29,15 @@ extension BrowserContentView {
 
     var isSuspended: Bool { suspended != nil }
 
+    /// Not on screen: switched away from in its pane, or its pane belongs to a
+    /// workspace that is not shown. Either way it is out of the window.
+    var isOutOfSight: Bool { isRetired || window == nil }
+
     /// Arms the idle timer; any later use of the tab re-arms it.
     func scheduleSuspend() {
         suspendTimer?.invalidate()
         suspendTimer = nil
-        guard isRetired, !isSuspended else { return }
+        guard isOutOfSight, !isSuspended else { return }
         let timer = Timer(timeInterval: Self.suspendDelay, repeats: false) { [weak self] _ in
             MainActor.assumeIsolated { self?.suspendIfIdle() }
         }
@@ -58,7 +63,7 @@ extension BrowserContentView {
     /// Whether the page may be dropped at this moment (media aside, which
     /// WebKit reports asynchronously).
     var canSuspendNow: Bool {
-        guard isRetired, !isSuspended, let webView else { return false }
+        guard !isSuspended, let webView else { return false }
         // `window` is set while the tab shows or an agent command stages it.
         return window == nil && !webView.isLoading && !Self.isBlank(currentURL)
             && webView.cameraCaptureState == .none && webView.microphoneCaptureState == .none
@@ -97,7 +102,6 @@ extension BrowserContentView {
     }
 
     @objc func memoryPressureRaised() {
-        guard isRetired else { return }
         suspendIfIdle()
     }
 
