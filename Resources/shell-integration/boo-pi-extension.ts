@@ -18,7 +18,7 @@ one with the \`boo\` CLI instead of an in-process subagent, so the user can watc
 - boo run --here "<prompt>": helper in a tab next to yours (your crew group), same folder.
 - boo run "<prompt>": helper on its own git worktree and branch (for code changes).
 - boo agents: every agent with its handle (t1, t2...) and state; "(you)" marks your own tab.
-- boo wait <handle>: blocks until it finishes its turn, prints its answer (exit 3: it asks a question).
+- boo wait <handle>: blocks until it finishes its turn, prints its answer (exit 3: it asks a question; exit 124 after 9 min: still working, run it again).
 - boo send <handle> <text>: message it; delivered when it finishes its turn.
 - boo read <handle>: its screen.
 - boo diff / boo merge / boo discard <handle>: review a \`boo run\` task, merge its branch into the main checkout (closes it), or throw it away. Use these instead of git merge; ask the user before merging or discarding.

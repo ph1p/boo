@@ -207,6 +207,30 @@ final class BooCLITests: XCTestCase {
         XCTAssertEqual(waitOutput([nil]).0.status, 1, "unknown agent gives up")
     }
 
+    /// Without --timeout the wait ends before an agent's shell tool kills it,
+    /// and says how to go on; --timeout 0 waits for good.
+    func testWaitTimesOutByDefaultAndZeroWaitsForever() {
+        func wait(_ arguments: [String], maxPolls: Int) -> (BooCLI.Output, Int) {
+            var polls = 0
+            let output = BooCLI.run(
+                ["wait", "t4"] + arguments, env: env, cwd: "/work/repo",
+                send: { message in
+                    guard message["cmd"] as? String == "agent_inbox" else { return ["ok": true] }
+                    polls += 1
+                    let state = polls > maxPolls ? "done" : "working"
+                    return ["ok": true, "items": [["handle": "t4", "state": state, "message": "running tests"]]]
+                }, sleep: { _ in })
+            return (output, polls)
+        }
+        let (bounded, polls) = wait([], maxPolls: .max)
+        XCTAssertEqual(
+            bounded,
+            BooCLI.Output(text: "t4 still working after 9m (running tests); run boo wait t4 again", status: 124))
+        XCTAssertEqual(polls, Int(BooCLI.defaultWaitTimeout) + 1)
+        XCTAssertEqual(wait(["--timeout", "0"], maxPolls: 2000).0.status, 0, "0 has no limit")
+        XCTAssertEqual(wait(["--timeout", "90"], maxPolls: .max).0.text.prefix(25), "t4 still working after 1m")
+    }
+
     /// `parent` is not a handle: the caller's own row names it.
     func testWaitForParentFollowsTheCallersRow() throws {
         let me = "22222222-2222-2222-2222-222222222222"

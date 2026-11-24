@@ -34,7 +34,8 @@ enum BooCLI {
           inbox                        Read and clear messages waiting for this tab
           wait <agent> [--timeout S]   Block until the agent finishes its turn, asks or exits;
                                        prints its answer. Exit 0 done, 1 error/exited, 3 asks,
-                                       124 timed out
+                                       124 still working after S seconds (default 540,
+                                       0 waits forever): call it again
           read <agent> [--lines N]     Print the agent's screen (default 60 lines)
           close <agent>                Close a helper you started with run --here, once you are
                                        done with it
@@ -161,12 +162,14 @@ enum BooCLI {
                 guard let target = args.first else {
                     return Output(text: "usage: boo wait <agent> [--timeout S]", status: 2)
                 }
-                var timeout: TimeInterval?
+                // Bounded by default: an agent's shell tool kills a command after
+                // at most 10 minutes and the agent then learns nothing.
+                var timeout: TimeInterval? = defaultWaitTimeout
                 if let seconds {
                     guard let value = TimeInterval(seconds), value >= 0 else {
                         return Output(text: "--timeout needs seconds", status: 2)
                     }
-                    timeout = value
+                    timeout = value == 0 ? nil : value
                 }
                 let output = try wait(
                     for: target, caller: tab, timeout: timeout, poll: { try request(["cmd": "agent_inbox"]) },
@@ -386,6 +389,16 @@ enum BooCLI {
         }
     }
 
+    /// `boo wait` without `--timeout`: under the 10-minute cap of agent shell tools.
+    static let defaultWaitTimeout: TimeInterval = 540
+
+    /// "45s", "9m", "9m 30s".
+    static func duration(_ seconds: TimeInterval) -> String {
+        let total = Int(seconds)
+        guard total >= 60 else { return "\(total)s" }
+        return total % 60 == 0 ? "\(total / 60)m" : "\(total / 60)m \(total % 60)s"
+    }
+
     /// Polls `agent_inbox` until `target` stops working. A turn that ended before
     /// the agent was seen working counts once it stays idle for `settle` seconds,
     /// so `boo run` then `boo wait` does not return the previous turn's state.
@@ -448,7 +461,12 @@ enum BooCLI {
             } else if waited >= 30 {
                 return Output(text: "no agent \(target) (boo agents lists handles)", status: 1)
             }
-            if let timeout, waited >= timeout { return Output(text: "timed out waiting for \(wanted)", status: 124) }
+            if let timeout, waited >= timeout {
+                let status = (row?["message"] as? String).map { $0.isEmpty ? "" : " (\($0))" } ?? ""
+                return Output(
+                    text: "\(wanted) still working after \(duration(waited))\(status); run boo wait \(wanted) again",
+                    status: 124)
+            }
             sleep(interval)
             waited += interval
         }
