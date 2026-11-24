@@ -278,10 +278,26 @@ extension GitPlugin {
             path: repoRoot,
             filter: { path in
                 // Ignore anything inside .git/
-                !path.contains("/.git/") && !path.hasSuffix("/.git")
+                !path.contains("/.git/") && !path.hasSuffix("/.git") && !Self.isBuildOutput(path, repoRoot: repoRoot)
             },
             onChange: { _ in debouncedRefresh(0.5) }
         )
         workTreeWatcher?.start()
+    }
+
+    /// Folders whose churn (builds, installs, test runs) is gitignored in
+    /// practice. Their events would only re-run `git status` for nothing; a
+    /// change committed under one still shows on the next other refresh.
+    nonisolated static let buildOutputDirs: Set<Substring> = [
+        "node_modules", ".build", "DerivedData", "target", "dist", ".next", ".nuxt", ".turbo",
+        ".gradle", "__pycache__", ".venv", ".zig-cache", "zig-out", ".cache"
+    ]
+
+    /// Only the part below `repoRoot` counts: a repo inside a folder named
+    /// `target` or `dist` must still be watched.
+    nonisolated static func isBuildOutput(_ path: String, repoRoot: String) -> Bool {
+        // FSEvents may report the path through /private or a resolved link.
+        let rel = path.range(of: repoRoot + "/").map { path[$0.upperBound...] } ?? Substring(path)
+        return rel.split(separator: "/").contains { buildOutputDirs.contains($0) }
     }
 }
