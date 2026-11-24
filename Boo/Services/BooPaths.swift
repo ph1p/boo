@@ -251,9 +251,20 @@ enum BooPaths {
         let hookScript = agentHookPath
         let settingsPath = NSHomeDirectory().appendingPathComponent(".claude/settings.json")
 
-        guard let data = try? Data(contentsOf: URL(fileURLWithPath: settingsPath)),
-            let root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
-            let merged = mergingClaudeHook(command: hookScript, into: root),
+        let fm = FileManager.default
+        // No settings file yet (a new Claude Code user): start from an empty one.
+        // An existing file that does not parse is left alone.
+        var root: [String: Any] = [:]
+        if fm.fileExists(atPath: settingsPath) {
+            guard let data = try? Data(contentsOf: URL(fileURLWithPath: settingsPath)),
+                let parsed = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+            else { return }
+            root = parsed
+        } else {
+            let dir = (settingsPath as NSString).deletingLastPathComponent
+            guard fm.fileExists(atPath: dir) else { return }
+        }
+        guard let merged = mergingClaudeHook(command: hookScript, into: root),
             let updated = try? JSONSerialization.data(withJSONObject: merged, options: [.prettyPrinted, .sortedKeys])
         else { return }
         try? writeAtomically(updated, toFile: settingsPath)

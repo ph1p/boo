@@ -383,6 +383,11 @@ final class AgentInboxTests: XCTestCase {
         inbox.apply(event: "subagent-stop", tabID: tab, subagentID: "a")
         inbox.apply(event: "subagent-start", tabID: tab, subagentID: "a")
         XCTAssertEqual(inbox.items[tab]?.subagents, [])
+        // A repeated stop does not bring a finished subagent back.
+        inbox.apply(event: "subagent-start", tabID: tab, subagentID: "b")
+        inbox.apply(event: "subagent-stop", tabID: tab, subagentID: "b")
+        inbox.apply(event: "subagent-stop", tabID: tab, subagentID: "b")
+        XCTAssertEqual(inbox.items[tab]?.subagents, [])
         XCTAssertEqual(inbox.apply(event: "stop", tabID: tab), .done)
     }
 

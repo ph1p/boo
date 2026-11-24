@@ -154,6 +154,26 @@ final class BooCLITests: XCTestCase {
         XCTAssertEqual(waitOutput(["done", "working", "done"]).1, 3, "a new turn ends the wait right away")
     }
 
+    /// A message still queued for the agent starts its next turn: the reply
+    /// on hand answers the previous one.
+    func testWaitSkipsTheReplyWhileAMessageIsQueued() throws {
+        var polls = 0
+        let rows: [[String: Any]] = [
+            ["handle": "t4", "state": "done", "reply": "Old.", "queued": 1],
+            ["handle": "t4", "state": "done", "reply": "Old.", "queued": 1],
+            ["handle": "t4", "state": "working", "reply": "Old.", "queued": 0],
+            ["handle": "t4", "state": "done", "reply": "New.", "queued": 0]
+        ]
+        let output = try BooCLI.wait(
+            for: "T4", timeout: nil,
+            poll: {
+                defer { polls += 1 }
+                return ["ok": true, "items": [rows[min(polls, rows.count - 1)]]]
+            }, sleep: { _ in })
+        XCTAssertEqual(output, BooCLI.Output(text: "New.", status: 0))
+        XCTAssertEqual(polls, 4)
+    }
+
     /// SessionStart lists a new helper as idle before it reads its prompt:
     /// that is no answer yet.
     func testWaitGivesANewHelperTimeToStart() throws {

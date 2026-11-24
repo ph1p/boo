@@ -404,12 +404,16 @@ enum BooCLI {
         var waited: TimeInterval = 0
         var sawWorking = false
         var sawAgent = false
+        var queuedFor: TimeInterval = 0
+        func sameTab(_ value: Any?, _ id: String) -> Bool {
+            (value as? String)?.caseInsensitiveCompare(id) == .orderedSame
+        }
         while true {
             let rows = (try poll())["items"] as? [[String: Any]] ?? []
             if reference == "parent" {
                 // The caller's row names its parent's handle; once found, a parent
                 // that disappears has exited.
-                if let caller, let own = rows.first(where: { ($0["tab_id"] as? String) == caller }),
+                if let caller, let own = rows.first(where: { sameTab($0["tab_id"], caller) }),
                     let parent = own["parent"] as? String
                 {
                     wanted = parent
@@ -417,14 +421,18 @@ enum BooCLI {
                     return Output(text: "this tab has no parent agent", status: 1)
                 }
             }
-            let row = rows.first { ($0["handle"] as? String) == wanted || ($0["tab_id"] as? String) == target }
+            let row = rows.first { ($0["handle"] as? String) == wanted || sameTab($0["tab_id"], target) }
             if let row {
                 sawAgent = true
                 if let handle = row["handle"] as? String { wanted = handle }
                 let state = row["state"] as? String ?? ""
                 // A fresh row has not had a turn yet: a new helper still starting up.
                 let fresh = row["fresh"] as? Bool == true
-                if state == "working" {
+                // A message still queued for it starts its next turn: the reply
+                // on hand answers the previous one. Waits at most a minute for it.
+                let queued = (row["queued"] as? Int ?? 0) > 0 && state == "done" && queuedFor < 60
+                queuedFor = queued ? queuedFor + interval : 0
+                if state == "working" || queued {
                     sawWorking = true
                 } else if sawWorking || waited >= (fresh ? freshSettle : settle) {
                     func text(_ key: String) -> String { row[key] as? String ?? "" }

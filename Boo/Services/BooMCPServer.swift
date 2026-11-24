@@ -310,8 +310,9 @@ struct BooMCPServer {
         exits, Boo types <boo from="t3 name" state="done">its answer</boo> into your prompt, so \
         do not poll them. Messages from other agents and the user arrive the same way. Reply or \
         steer with send_message (to: a handle, or parent for the agent that started you); it waits \
-        until the receiver finishes its turn. wait_for_events blocks until agents change state, so loop on it \
-        (pass the last seq as since) instead of polling. task_status says whether a task can \
+        until the receiver finishes its turn. Only when you coordinate several agents and have nothing \
+        else to do, block on wait_for_events (pass the last seq as since) instead of polling; their \
+        reports still arrive in your prompt, so do not act on one twice. task_status says whether a task can \
         merge and why not; merge_task and discard_task always wait for the user's approval. \
         run_recipe opens one of the user's saved workspace layouts. \
         browser_open opens a page (your dev server: localhost:3000) in a Boo browser tab behind \
@@ -669,13 +670,23 @@ enum BooSocketClient {
 
         var payload = try JSONSerialization.data(withJSONObject: message)
         payload.append(UInt8(ascii: "\n"))
-        let written = payload.withUnsafeBytes { write(fd, $0.baseAddress, $0.count) }
-        guard written == payload.count else { throw BooMCPServer.Failure(message: "could not write to Boo") }
+        // A large payload can go out in parts; a signal can interrupt either call.
+        var sent = 0
+        while sent < payload.count {
+            let count = payload.withUnsafeBytes { write(fd, $0.baseAddress! + sent, $0.count - sent) }
+            if count < 0 && errno == EINTR { continue }
+            guard count > 0 else { throw BooMCPServer.Failure(message: "could not write to Boo") }
+            sent += count
+        }
 
         var response = Data()
         var chunk = [UInt8](repeating: 0, count: 65536)
         while response.last != UInt8(ascii: "\n") {
             let count = read(fd, &chunk, chunk.count)
+            if count < 0 && errno == EINTR { continue }
+            if count < 0 && (errno == EAGAIN || errno == EWOULDBLOCK) {
+                throw BooMCPServer.Failure(message: "Boo did not answer within \(timeout)s")
+            }
             guard count > 0 else { break }
             response.append(chunk, count: count)
         }

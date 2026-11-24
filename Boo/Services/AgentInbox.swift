@@ -53,10 +53,12 @@ final class AgentInbox {
         /// stamp, so a slow hook still overrules them.
         var reportedAt: Date?
         /// Subagents (the Agent tool) started and not yet stopped. A background
-        /// one outlives the turn that started it. Starts and stops toggle an
-        /// id, so a stop that arrives before its start (hooks run as separate
-        /// processes) cancels out.
+        /// one outlives the turn that started it.
         var subagents: Set<String> = []
+        /// Subagents whose stop arrived. A stop can come before its start (hooks
+        /// run as separate processes), and a hook can repeat: a known id never
+        /// counts as running again.
+        var stoppedSubagents: Set<String> = []
         /// When the agent ended its turn while background work it started
         /// still ran: listed as working until that work ends (see
         /// "Background work" below).
@@ -176,7 +178,7 @@ final class AgentInbox {
     ) -> State? {
         // Subagent starts and stops only count; they arrive in any order.
         if event == "subagent-start" || event == "subagent-stop" {
-            trackSubagent(id: subagentID, tabID: tabID, now: now)
+            trackSubagent(id: subagentID, started: event == "subagent-start", tabID: tabID, now: now)
             return nil
         }
         if subagentID != nil { items[tabID]?.subagentActivityAt = now }
@@ -650,9 +652,14 @@ extension AgentInbox {
     }
 
     /// Records a subagent's start or stop (SubagentStart / SubagentStop).
-    func trackSubagent(id: String?, tabID: UUID, now: Date = Date()) {
-        guard let id else { return }
-        items[tabID]?.subagents.formSymmetricDifference([id])
+    func trackSubagent(id: String?, started: Bool, tabID: UUID, now: Date = Date()) {
+        guard let id, items[tabID] != nil else { return }
+        if started {
+            if items[tabID]?.stoppedSubagents.contains(id) == false { items[tabID]?.subagents.insert(id) }
+        } else {
+            items[tabID]?.subagents.remove(id)
+            items[tabID]?.stoppedSubagents.insert(id)
+        }
         items[tabID]?.subagentActivityAt = now
     }
 

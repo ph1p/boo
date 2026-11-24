@@ -304,6 +304,11 @@ final class AgentCrew {
         if let link = links[tabID], title(tabID) != nil || state(link.parent) != nil {
             report(link, from: tabID, state: "exited", text: "The agent exited.")
         }
+        // Messages for the exited agent would reach the next agent started in its tab.
+        if outbox[tabID] != nil {
+            outbox[tabID] = nil
+            changed()
+        }
         if title(tabID) == nil { tabClosed(tabID) }
     }
 
