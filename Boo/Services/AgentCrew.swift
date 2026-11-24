@@ -91,11 +91,29 @@ final class AgentCrew {
     var schedule: (@escaping @MainActor () -> Void) -> Void = { work in
         DispatchQueue.main.async { MainActor.assumeIsolated { work() } }
     }
+    /// Whether the tab's own shell holds its foreground, so nothing started
+    /// from it still runs; nil when unknown (its terminal has not started).
+    var atShell: (UUID) -> Bool? = { tabID in
+        guard let view = AgentInbox.terminalView(ofTab: tabID), view.shellPID > 0,
+            let foreground = view.foregroundPID
+        else { return nil }
+        return foreground == view.shellPID
+    }
+    /// The last lines of a tab's terminal.
+    var screenTail: (UUID) -> String? = { AgentInbox.terminalView(ofTab: $0)?.readRecentText(lines: 10) }
+    /// Only the shared crew runs the start check on a timer; tests call `checkStarts()`.
+    var watchesStarts = false
+
+    /// Helpers that have not reported to the inbox yet → checks in a row that
+    /// found their shell back in the foreground.
+    private var unstarted: [UUID: Int] = [:]
+    private var startTimer: Timer?
 
     init() {}
 
     func startObserving() {
         guard observer == nil else { return }
+        watchesStarts = true
         observer = NotificationCenter.default.addObserver(forName: .agentInboxChanged, object: nil, queue: .main) {
             [weak self] notification in
             guard let inbox = notification.object as? AgentInbox else { return }
@@ -141,6 +159,10 @@ final class AgentCrew {
         handle(for: parent)
         handle(for: child)
         links[child] = Link(parent: parent, name: name)
+        if state(child) == nil {
+            unstarted[child] = 0
+            startStartWatch()
+        }
         changed()
     }
 
@@ -259,7 +281,10 @@ final class AgentCrew {
     /// Reports helpers' state changes to their parents and flushes outboxes of
     /// agents that just finished a turn.
     func inboxChanged(_ items: [UUID: AgentInbox.Item]) {
-        for tabID in items.keys where handles[tabID] == nil { handle(for: tabID) }
+        for tabID in items.keys {
+            if handles[tabID] == nil { handle(for: tabID) }
+            unstarted[tabID] = nil
+        }
         var ready: [UUID] = []
         for (tabID, item) in items.sorted(by: { $0.value.updatedAt < $1.value.updatedAt }) {
             let previous = lastStates[tabID]
@@ -345,7 +370,60 @@ final class AgentCrew {
         sentAt = sentAt.filter { !$0.key.contains(tabID.uuidString) }
         handles[tabID] = nil
         lastStates[tabID] = nil
+        unstarted[tabID] = nil
         changed()
+    }
+
+    // MARK: - Start check
+
+    /// Checks in a row that must find a helper's shell back in its foreground.
+    static let startChecks = 3
+    static let startCheckInterval: TimeInterval = 3
+
+    /// A helper whose agent ended before it ever reported to the inbox (it
+    /// crashed at launch, a bad flag, a missing binary) sends no hook event, so
+    /// `ended` never fires for it. Once its shell is back in the foreground for
+    /// `startChecks` checks in a row, the parent hears it exited, with the
+    /// terminal's last lines to show why. The link stays: a later start reports as usual.
+    func checkStarts() {
+        for (child, count) in unstarted {
+            guard let link = links[child], state(child) == nil else {
+                unstarted[child] = nil
+                continue
+            }
+            // Not at its shell, or unknown (a tab moving between windows): start over.
+            guard title(child) != nil, atShell(child) == true else {
+                unstarted[child] = 0
+                continue
+            }
+            guard count + 1 >= Self.startChecks else {
+                unstarted[child] = count + 1
+                continue
+            }
+            unstarted[child] = nil
+            report(link, from: child, state: "exited", text: Self.exitedUnreported(screen: screenTail(child)))
+        }
+        if unstarted.isEmpty {
+            startTimer?.invalidate()
+            startTimer = nil
+        }
+    }
+
+    static func exitedUnreported(screen: String?) -> String {
+        let text = "The agent exited before it reported to Boo; it may not have started."
+        guard let screen = screen?.trimmingCharacters(in: .whitespacesAndNewlines), !screen.isEmpty else {
+            return text
+        }
+        return text + "\nLast lines of its terminal:\n" + screen
+    }
+
+    private func startStartWatch() {
+        guard watchesStarts, startTimer == nil else { return }
+        let timer = Timer.scheduledTimer(withTimeInterval: Self.startCheckInterval, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.checkStarts() }
+        }
+        timer.tolerance = 1
+        startTimer = timer
     }
 
     static let maxReportLength = 4000

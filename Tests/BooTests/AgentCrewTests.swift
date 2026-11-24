@@ -214,6 +214,62 @@ final class AgentCrewTests: XCTestCase {
         XCTAssertEqual(typed.last?.1, "<boo from=\"t2 docs\" state=\"exited\">\nThe agent exited.\n</boo>")
     }
 
+    func testAHelperThatExitsBeforeReportingIsReportedOnceItsShellIsBack() {
+        let parent = tab()
+        let child = tab()
+        var shell = false
+        crew.atShell = { _ in shell }
+        crew.screenTail = { _ in "zsh: command not found: claude\n" }
+        event("stop", parent)
+        crew.link(child: child, parent: parent, name: "docs")
+
+        crew.checkStarts()
+        shell = true
+        crew.checkStarts()
+        crew.checkStarts()
+        XCTAssertTrue(typed.isEmpty, "two checks at the shell are not enough")
+        shell = false
+        crew.checkStarts()
+        shell = true
+        crew.checkStarts()
+        crew.checkStarts()
+        XCTAssertTrue(typed.isEmpty, "a running program starts the count over")
+        crew.checkStarts()
+        XCTAssertEqual(
+            typed.last?.1,
+            "<boo from=\"t2 docs\" state=\"exited\">\nThe agent exited before it reported to Boo; it may not have started.\n"
+                + "Last lines of its terminal:\nzsh: command not found: claude\n</boo>")
+        XCTAssertEqual(crew.links[child]?.parent, parent, "a later start still reports")
+
+        crew.checkStarts()
+        XCTAssertEqual(typed.count, 1, "reported once")
+    }
+
+    func testAHelperThatReportsIsNotCheckedAgain() {
+        let parent = tab()
+        let child = tab()
+        crew.atShell = { _ in true }
+        event("stop", parent)
+        crew.link(child: child, parent: parent, name: "docs")
+        event("start", child)
+        event("end", child)
+        typed = []
+        for _ in 0..<AgentCrew.startChecks { crew.checkStarts() }
+        XCTAssertTrue(typed.isEmpty, "its exit was already reported by the inbox")
+    }
+
+    func testAClosedHelperIsNotReportedAsUnstarted() {
+        let parent = tab()
+        let child = tab()
+        crew.atShell = { _ in true }
+        event("stop", parent)
+        crew.link(child: child, parent: parent, name: "docs")
+        crew.tabClosed(child)
+        for _ in 0..<AgentCrew.startChecks { crew.checkStarts() }
+        XCTAssertTrue(typed.isEmpty)
+        XCTAssertNil(crew.links[child])
+    }
+
     func testOrchestratorGetsAnEventInsteadOfTyping() {
         let parent = tab()
         orchestrator = parent
