@@ -25,11 +25,15 @@ struct FileTreeActions: @unchecked Sendable {
     var onBrowse: (@MainActor (String) -> Void)?
     /// Trash one or more paths (the multi-selection); the view confirms first.
     var onMoveToTrash: (@MainActor ([String]) -> Void)?
-    var onRename: (@MainActor (_ oldPath: String, _ newName: String) -> Void)?
+    /// Rename in place; `done` gets the new path, or nil when it failed.
+    var onRename: (@MainActor (_ oldPath: String, _ newName: String, _ done: @escaping Done) -> Void)?
     var onMove: (@MainActor (_ sourcePath: String, _ destinationDir: String) -> Void)?
-    var onCreateFolder: (@MainActor (_ parentPath: String) -> Void)?
-    var onCreateFile: (@MainActor (_ parentPath: String) -> Void)?
-    var onDuplicate: (@MainActor (String) -> Void)?
+    /// Create a folder or file at `relativePath` (a `FileTreeNaming` target, so it may
+    /// contain "/" for missing folders) inside `parentPath`; `done` gets the created path.
+    var onCreateFolder: (@MainActor (_ parentPath: String, _ relativePath: String, _ done: @escaping Done) -> Void)?
+    var onCreateFile: (@MainActor (_ parentPath: String, _ relativePath: String, _ done: @escaping Done) -> Void)?
+    /// Copy next to the original; `done` gets the copy's path.
+    var onDuplicate: (@MainActor (_ path: String, _ done: @escaping Done) -> Void)?
     var onCopyImage: (@MainActor (String) -> Void)?
     var onReferenceInAI: (@MainActor (String) -> Void)?
     var onSetFileRoot: (@MainActor (String) -> Void)?
@@ -48,6 +52,10 @@ struct FileTreeActions: @unchecked Sendable {
     /// One-line size/date summary for the hover tooltip, or nil when unavailable.
     var onFetchInfo: (@MainActor (String) async -> String?)?
     var isAIAgentRunning: Bool = false
+
+    /// Completion of a file operation: the resulting path, or nil when it failed (the
+    /// plugin has already told the user why).
+    typealias Done = @MainActor (String?) -> Void
 
     /// Whether rows offer removal at all, and whether it goes to the Trash.
     var canRemove: Bool { onMoveToTrash != nil || onDelete != nil }
@@ -74,19 +82,43 @@ enum FileTreeInfo {
 
 // MARK: - Shared State
 
-/// Rename state lifted out of per-row @State so it survives row rebuilds.
+/// Inline editing state — renaming a row, or naming a not-yet-created item in a draft
+/// row — lifted out of per-row @State so it survives row rebuilds.
 @MainActor final class FileTreeRenameState: ObservableObject {
+    /// A file or folder being named in place before it exists on disk.
+    struct Draft: Equatable {
+        let parentPath: String
+        let isDirectory: Bool
+    }
+
     @Published var renamingPath: String?
+    @Published var draft: Draft?
     @Published var renameText: String = ""
 
+    var isEditing: Bool { renamingPath != nil || draft != nil }
+
+    // The short delay lets a closing context menu hand focus back before the field
+    // appears and takes it.
     func beginRename(path: String, currentName: String) {
+        draft = nil
         renameText = currentName
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
             self.renamingPath = path
         }
     }
 
-    func cancel() { renamingPath = nil }
+    func beginCreate(in parentPath: String, isDirectory: Bool) {
+        renamingPath = nil
+        renameText = ""
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            self.draft = Draft(parentPath: parentPath, isDirectory: isDirectory)
+        }
+    }
+
+    func cancel() {
+        renamingPath = nil
+        draft = nil
+    }
 
     func commit(actions: FileTreeActions) {
         guard let path = renamingPath else { return }
@@ -94,8 +126,17 @@ enum FileTreeInfo {
         renamingPath = nil
         let currentName = (path as NSString).lastPathComponent
         if !newName.isEmpty && newName != currentName {
-            actions.onRename?(path, newName)
+            actions.onRename?(path, newName) { _ in }
         }
+    }
+
+    /// End the draft and return what to create, or nil when the name was left empty
+    /// (Escape, or focus moved away without typing).
+    func commitDraft() -> (draft: Draft, name: String)? {
+        guard let draft else { return nil }
+        self.draft = nil
+        let name = renameText.trimmingCharacters(in: .whitespacesAndNewlines)
+        return name.isEmpty ? nil : (draft, name)
     }
 }
 
@@ -218,11 +259,11 @@ struct FileTreeView: View {
         .background(Color(nsColor: theme.chromeSidebarFill))
         .contentShape(Rectangle())
         .contextMenu {
-            if let onCreateFile = actions.onCreateFile {
-                Button("New File") { onCreateFile(root.path) }
+            if actions.onCreateFile != nil {
+                Button("New File") { startCreate(in: root.path, isDirectory: false) }
             }
-            if let onCreateFolder = actions.onCreateFolder {
-                Button("New Folder") { onCreateFolder(root.path) }
+            if actions.onCreateFolder != nil {
+                Button("New Folder") { startCreate(in: root.path, isDirectory: true) }
             }
             Divider()
             if let refreshAction {
@@ -258,6 +299,7 @@ struct FileTreeView: View {
         }
         .onChange(of: root.path) { _, path in
             selection.clear()
+            renameState.cancel()
             filter.configure(rootPath: path, showHidden: AppSettings.shared.showHiddenFiles, source: root.source)
         }
         .onChange(of: showHidden) { _, hidden in
@@ -280,6 +322,9 @@ struct FileTreeView: View {
             // Multi-selection in row order, computed once for every row's context menu.
             let selectedInOrder = selection.selected.count > 1 ? selection.ordered(in: order) : []
             LazyVStack(alignment: .leading, spacing: 0) {
+                if let draft = renameState.draft, draft.parentPath == root.path {
+                    draftRow(draft, depth: 0, cfg: cfg)
+                }
                 if rows.isEmpty, root.children != nil {
                     FileTreePlaceholderRow(
                         text: root.loadFailed ? "Can't read folder" : "Empty folder", depth: 0, style: cfg,
@@ -305,8 +350,15 @@ struct FileTreeView: View {
                             dimIgnored: AppSettings.shared.explorerDimIgnored,
                             menuPaths: !selectedInOrder.isEmpty && selection.contains(path) ? selectedInOrder : [path],
                             onClick: { kind in click(row.node, kind: kind, order: order) },
-                            onTrash: { pendingTrash = $0 }
+                            onTrash: { pendingTrash = $0 },
+                            onCreate: { startCreate(in: $0, isDirectory: $1) }
                         )
+                        // A draft item sits first under the folder it is created in.
+                        if let draft = renameState.draft, draft.parentPath == path,
+                            row.node.isDirectory, row.node.isExpanded
+                        {
+                            draftRow(draft, depth: row.depth + 1, cfg: cfg)
+                        }
                     }
                 }
             }
@@ -430,11 +482,91 @@ struct FileTreeView: View {
         }
     }
 
-    /// Row actions with "Browse Folder" wired to this view's navigation.
+    /// Row actions with "Browse Folder" wired to this view's navigation, and renames and
+    /// duplicates that select their result (a duplicate then goes straight into rename).
     private var rowActions: FileTreeActions {
         var rowActions = actions
         rowActions.onBrowse = navigation?.browse
+        if let rename = actions.onRename {
+            rowActions.onRename = { oldPath, newName, done in
+                rename(oldPath, newName) { newPath in
+                    done(newPath)
+                    guard let newPath else { return }
+                    showResult(newPath, in: (oldPath as NSString).deletingLastPathComponent)
+                }
+            }
+        }
+        if let duplicate = actions.onDuplicate {
+            let canRename = actions.onRename != nil
+            let renameState = renameState
+            rowActions.onDuplicate = { path, done in
+                duplicate(path) { copy in
+                    done(copy)
+                    guard let copy else { return }
+                    showResult(copy, in: (path as NSString).deletingLastPathComponent) {
+                        guard canRename else { return }
+                        renameState.beginRename(path: copy, currentName: (copy as NSString).lastPathComponent)
+                    }
+                }
+            }
+        }
         return rowActions
+    }
+
+    // MARK: Create
+
+    /// Show a draft row for a new file or folder in `parentPath`; nothing touches the
+    /// disk until a name is entered.
+    private func startCreate(in parentPath: String, isDirectory: Bool) {
+        guard isDirectory ? actions.onCreateFolder != nil : actions.onCreateFile != nil else { return }
+        filter.clear()
+        if parentPath != root.path {
+            // Revealing a (made-up) child expands every folder down to and including
+            // `parentPath`, so its draft row has a place to appear.
+            root.reveal((parentPath as NSString).appendingPathComponent("_"))
+        }
+        renameState.beginCreate(in: parentPath, isDirectory: isDirectory)
+    }
+
+    private func draftRow(_ draft: FileTreeRenameState.Draft, depth: Int, cfg: RowStyle) -> some View {
+        FileTreeDraftRow(
+            isDirectory: draft.isDirectory, depth: depth, style: cfg, text: $renameState.renameText,
+            onCommit: { commitDraft() },
+            onCancel: { renameState.cancel() }
+        )
+    }
+
+    /// Create the drafted item. A trailing "/" makes a folder even from New File, and
+    /// "a/b.txt" creates the missing folders on the way. A new file opens.
+    private func commitDraft() {
+        guard let (draft, name) = renameState.commitDraft() else { return }
+        guard let target = FileTreeNaming.target(name, allowNesting: true) else {
+            BooAlert.showTransient("Invalid name")
+            return
+        }
+        let isDirectory = draft.isDirectory || target.forcesDirectory
+        guard let create = isDirectory ? actions.onCreateFolder : actions.onCreateFile else { return }
+        let actions = actions
+        treeFocused = true
+        create(draft.parentPath, target.path) { path in
+            guard let path else { return }
+            showResult(path, in: draft.parentPath) {
+                if !isDirectory { actions.onFileClicked?(path) }
+            }
+        }
+    }
+
+    /// Re-list `dir` (the file watcher may not have caught up yet), then reveal and
+    /// select `path`, which scrolls it into view.
+    private func showResult(_ path: String, in dir: String, then: (@MainActor @Sendable () -> Void)? = nil) {
+        let root = root
+        let selection = selection
+        root.refresh(changedDirs: [dir]) {
+            root.reveal(path) { _ in
+                selection.select(path)
+                then?()
+            }
+        }
     }
 
     /// Scroll the cursor row into view. Rows off screen don't exist in the lazy
@@ -494,10 +626,25 @@ struct FileTreeView: View {
     // MARK: Keyboard
 
     private func handleKey(_ press: KeyPress, rows: [FlatRow], order: [String]) -> KeyPress.Result {
-        guard renameState.renamingPath == nil else { return .ignored }
+        guard !renameState.isEditing else { return .ignored }
         let mods = press.modifiers
         let shift = mods.contains(.shift)
         let cursorRow = rows.first { $0.placeholder == nil && $0.node.path == selection.cursor }
+
+        // ⌃⌘N new file, ⌃⇧⌘N new folder, in the cursor's folder (⌘N, ⇧⌘N and ⌥⌘N are
+        // menu shortcuts). Matched by character, so it holds on any layout.
+        if mods.isSuperset(of: [.command, .control]), !mods.contains(.option),
+            press.key.character.lowercased() == "n"
+        {
+            let parent: String
+            if let row = cursorRow, !filter.isActive {
+                parent = row.node.isDirectory ? row.node.path : row.parentPath
+            } else {
+                parent = root.path
+            }
+            startCreate(in: parent, isDirectory: shift)
+            return .handled
+        }
 
         // ⌥-arrows navigate folders (⌘-arrows and ⌘[ ⌘] belong to menu items).
         if mods.contains(.option), let navigation {

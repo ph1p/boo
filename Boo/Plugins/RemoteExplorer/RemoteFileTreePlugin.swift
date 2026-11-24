@@ -245,15 +245,17 @@ final class RemoteFileTreePlugin: BooPluginProtocol, FileTreeBrowsing {
             onNavigate: { path in
                 act()?.sendToTerminal?(Self.cdCommand(path))
             },
-            onRename: { [weak self] oldPath, newName in
-                guard !newName.isEmpty, !newName.contains("/"), newName != ".", newName != ".." else {
+            onRename: { [weak self] oldPath, newName, done in
+                guard let target = FileTreeNaming.target(newName, allowNesting: false) else {
                     BooAlert.showTransient("Invalid name")
-                    return
+                    return done(nil)
                 }
                 let parent = (oldPath as NSString).deletingLastPathComponent
-                let newPath = RemoteFileTreeSource.childPath(parent, newName)
-                guard oldPath != newPath else { return }
-                self?.runOperation(Self.moveScript(from: oldPath, to: newPath), failure: "Rename", refresh: [parent])
+                let newPath = RemoteFileTreeSource.childPath(parent, target.path)
+                guard let self, oldPath != newPath else { return done(nil) }
+                self.runOperation(
+                    Self.moveScript(from: oldPath, to: newPath), failure: "Rename", refresh: [parent]
+                ) { done($0 == nil ? nil : newPath) }
             },
             onMove: { [weak self] sourcePath, destinationDir in
                 let name = (sourcePath as NSString).lastPathComponent
@@ -263,19 +265,26 @@ final class RemoteFileTreePlugin: BooPluginProtocol, FileTreeBrowsing {
                     Self.moveScript(from: sourcePath, to: destPath), failure: "Move",
                     refresh: [(sourcePath as NSString).deletingLastPathComponent, destinationDir])
             },
-            onCreateFolder: { [weak self] parent in
-                self?.runOperation(
-                    Self.createScript(in: parent, baseName: "New Folder", command: "mkdir -- \"$n\""),
-                    failure: "Create folder", refresh: [parent])
+            onCreateFolder: { [weak self] parent, relativePath, done in
+                guard let self else { return done(nil) }
+                self.runOperation(
+                    Self.createScript(in: parent, relativePath: relativePath, isDirectory: true),
+                    failure: "Create folder", refresh: [parent]
+                ) { done($0 == nil ? nil : RemoteFileTreeSource.childPath(parent, relativePath)) }
             },
-            onCreateFile: { [weak self] parent in
-                self?.runOperation(
-                    Self.createScript(in: parent, baseName: "New File", command: ": > \"$n\""),
-                    failure: "Create file", refresh: [parent])
+            onCreateFile: { [weak self] parent, relativePath, done in
+                guard let self else { return done(nil) }
+                self.runOperation(
+                    Self.createScript(in: parent, relativePath: relativePath, isDirectory: false),
+                    failure: "Create file", refresh: [parent]
+                ) { done($0 == nil ? nil : RemoteFileTreeSource.childPath(parent, relativePath)) }
             },
-            onDuplicate: { [weak self] path in
+            onDuplicate: { [weak self] path, done in
+                guard let self else { return done(nil) }
                 let parent = (path as NSString).deletingLastPathComponent
-                self?.runOperation(Self.duplicateScript(path), failure: "Duplicate", refresh: [parent])
+                self.runOperation(Self.duplicateScript(path), failure: "Duplicate", refresh: [parent]) { output in
+                    done(output.flatMap(Self.reportedName(in:)).map { RemoteFileTreeSource.childPath(parent, $0) })
+                }
             },
             onReferenceInAI: { path in
                 act()?.sendToTerminal?("@\(path) ")
@@ -454,13 +463,23 @@ final class RemoteFileTreePlugin: BooPluginProtocol, FileTreeBrowsing {
     }
 
     /// Run a file operation remotely, report a failure, then re-read the touched folders.
-    private func runOperation(_ script: String, failure label: String, refresh dirs: [String]) {
-        guard let source = activeSource else { return }
+    /// `completion` gets the script's output, or nil when the operation failed.
+    private func runOperation(
+        _ script: String, failure label: String, refresh dirs: [String],
+        completion: (@MainActor (_ output: String?) -> Void)? = nil
+    ) {
+        guard let source = activeSource else {
+            completion?(nil)
+            return
+        }
         Task { [weak self] in
-            if let message = await source.perform(script) {
+            let output = await source.run(script)
+            let message = output.map(RemoteFileTreeSource.failureMessage(in:)) ?? "Remote host unreachable"
+            if let message {
                 BooAlert.showTransient("\(label) failed: \(message)")
             }
             self?.refreshDirectories(dirs)
+            completion?(message == nil ? output : nil)
         }
     }
 
@@ -486,16 +505,26 @@ final class RemoteFileTreePlugin: BooPluginProtocol, FileTreeBrowsing {
                 + "else mv -- \(RemoteExplorer.shellEscPath(source)) \(dest); fi")
     }
 
-    /// Create `baseName`, or `baseName 2`, `baseName 3`… in `parent`; `command` sees the
-    /// chosen name as `$n`.
-    nonisolated static func createScript(in parent: String, baseName: String, command: String) -> String {
-        let base = shellEscape(baseName)
+    /// Create `relativePath` ("a/b/c.txt" creates the missing folders) in `parent`. Fails
+    /// when the item already exists.
+    nonisolated static func createScript(in parent: String, relativePath: String, isDirectory: Bool) -> String {
+        let n = shellEscape(relativePath)
+        let make =
+            isDirectory
+            ? "mkdir -p -- \(n)"
+            : "mkdir -p -- \"$(dirname -- \(n))\" && : > \(n)"
         return RemoteFileTreeSource.operationScript(
-            "cd \(RemoteExplorer.shellEscPath(parent)) && n=\(base) && i=2 && "
-                + "while [ -e \"$n\" ] || [ -L \"$n\" ]; do n=\(base)\" $i\"; i=$((i+1)); done && \(command)")
+            "cd \(RemoteExplorer.shellEscPath(parent)) && "
+                + "if [ -e \(n) ] || [ -L \(n) ]; then echo 'An item with that name already exists' >&2; false; "
+                + "else \(make); fi")
     }
 
-    /// `name copy.ext`, then `name copy 2.ext`… — the local tree's naming.
+    /// Marks the name a script chose, written to the real stdout (fd 3) because
+    /// `operationScript` discards the body's own stdout.
+    nonisolated static let nameMarker = "\u{1E}"
+
+    /// `name copy.ext`, then `name copy 2.ext`… — the local tree's naming. Reports the
+    /// chosen name after `nameMarker`.
     nonisolated static func duplicateScript(_ path: String) -> String {
         let parent = (path as NSString).deletingLastPathComponent
         let name = (path as NSString).lastPathComponent
@@ -503,10 +532,18 @@ final class RemoteFileTreePlugin: BooPluginProtocol, FileTreeBrowsing {
         let stem = (name as NSString).deletingPathExtension
         let s = shellEscape(stem)
         let x = shellEscape(ext.isEmpty ? "" : ".\(ext)")
-        return RemoteFileTreeSource.operationScript(
-            "cd \(RemoteExplorer.shellEscPath(parent)) && s=\(s) && x=\(x) && n=\"$s copy$x\" && i=2 && "
-                + "while [ -e \"$n\" ] || [ -L \"$n\" ]; do n=\"$s copy $i$x\"; i=$((i+1)); done && "
-                + "cp -R -- \(shellEscape(name)) \"$n\"")
+        return "exec 3>&1; "
+            + RemoteFileTreeSource.operationScript(
+                "cd \(RemoteExplorer.shellEscPath(parent)) && s=\(s) && x=\(x) && n=\"$s copy$x\" && i=2 && "
+                    + "while [ -e \"$n\" ] || [ -L \"$n\" ]; do n=\"$s copy $i$x\"; i=$((i+1)); done && "
+                    + "cp -R -- \(shellEscape(name)) \"$n\" && printf '\\036%s' \"$n\" >&3")
+    }
+
+    /// The name a script reported after `nameMarker`, if any.
+    nonisolated static func reportedName(in output: String) -> String? {
+        guard let range = output.range(of: nameMarker, options: .backwards) else { return nil }
+        let name = output[range.upperBound...].trimmingCharacters(in: .newlines)
+        return name.isEmpty ? nil : name
     }
 
     // MARK: - Lifecycle

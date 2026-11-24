@@ -155,12 +155,6 @@ final class RemoteFileTreeSource: FileTreeSource, @unchecked Sendable {
         return Self.parseInfo(output)
     }
 
-    /// Run a file operation. Returns nil on success, else a message for the user.
-    func perform(_ script: String) async -> String? {
-        guard let output = await run(script) else { return "Remote host unreachable" }
-        return Self.failureMessage(in: output)
-    }
-
     /// Which of `names` already exist in `directory`.
     func existingNames(_ names: [String], in directory: String) async -> [String]? {
         let quoted = names.map(shellEscape).joined(separator: " ")

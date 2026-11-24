@@ -212,32 +212,52 @@ final class RemoteFileTreeSourceTests: XCTestCase {
         XCTAssertTrue(exists("c.txt"))
     }
 
-    func testCreatePicksFreeName() throws {
-        for _ in 0..<3 {
-            let output = try sh(
-                RemoteFileTreePlugin.createScript(in: dir, baseName: "New Folder", command: "mkdir -- \"$n\""))
-            XCTAssertNil(RemoteFileTreeSource.failureMessage(in: output))
-        }
-        XCTAssertTrue(exists("New Folder"))
-        XCTAssertTrue(exists("New Folder 2"))
-        XCTAssertTrue(exists("New Folder 3"))
+    func testCreateMakesNamedItemsAndMissingFolders() throws {
+        let folder = try sh(RemoteFileTreePlugin.createScript(in: dir, relativePath: "src", isDirectory: true))
+        XCTAssertNil(RemoteFileTreeSource.failureMessage(in: folder))
+        XCTAssertTrue(exists("src"))
 
-        _ = try sh(RemoteFileTreePlugin.createScript(in: dir, baseName: "New File", command: ": > \"$n\""))
-        XCTAssertTrue(exists("New File"))
+        let nested = try sh(RemoteFileTreePlugin.createScript(in: dir, relativePath: "a/b/c.txt", isDirectory: false))
+        XCTAssertNil(RemoteFileTreeSource.failureMessage(in: nested))
+        var isDir: ObjCBool = false
+        let file = (dir as NSString).appendingPathComponent("a/b/c.txt")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: file, isDirectory: &isDir))
+        XCTAssertFalse(isDir.boolValue)
+
+        let dash = try sh(RemoteFileTreePlugin.createScript(in: dir, relativePath: "-x", isDirectory: false))
+        XCTAssertNil(RemoteFileTreeSource.failureMessage(in: dash))
+        XCTAssertTrue(exists("-x"))
+    }
+
+    func testCreateRefusesExistingName() throws {
+        try "keep".write(toFile: (dir as NSString).appendingPathComponent("a.txt"), atomically: true, encoding: .utf8)
+        let output = try sh(RemoteFileTreePlugin.createScript(in: dir, relativePath: "a.txt", isDirectory: false))
+        XCTAssertNotNil(RemoteFileTreeSource.failureMessage(in: output))
+        let content = try String(contentsOfFile: (dir as NSString).appendingPathComponent("a.txt"), encoding: .utf8)
+        XCTAssertEqual(content, "keep", "An existing file must not be truncated")
     }
 
     func testDuplicateUsesCopyNaming() throws {
         try "x".write(toFile: (dir as NSString).appendingPathComponent("notes.md"), atomically: true, encoding: .utf8)
         let path = (dir as NSString).appendingPathComponent("notes.md")
-        _ = try sh(RemoteFileTreePlugin.duplicateScript(path))
-        _ = try sh(RemoteFileTreePlugin.duplicateScript(path))
+        let first = try sh(RemoteFileTreePlugin.duplicateScript(path))
+        let second = try sh(RemoteFileTreePlugin.duplicateScript(path))
         XCTAssertTrue(exists("notes copy.md"))
         XCTAssertTrue(exists("notes copy 2.md"))
+        XCTAssertNil(RemoteFileTreeSource.failureMessage(in: first))
+        XCTAssertEqual(RemoteFileTreePlugin.reportedName(in: first), "notes copy.md")
+        XCTAssertEqual(RemoteFileTreePlugin.reportedName(in: second), "notes copy 2.md")
 
         mkdir("pkg")
         touch("pkg/inner")
         _ = try sh(RemoteFileTreePlugin.duplicateScript((dir as NSString).appendingPathComponent("pkg")))
         XCTAssertTrue(exists("pkg copy/inner"), "Folders duplicate recursively")
+    }
+
+    func testDuplicateFailureReportsNoName() throws {
+        let output = try sh(RemoteFileTreePlugin.duplicateScript((dir as NSString).appendingPathComponent("missing")))
+        XCTAssertNotNil(RemoteFileTreeSource.failureMessage(in: output))
+        XCTAssertNil(RemoteFileTreePlugin.reportedName(in: output))
     }
 
     // MARK: - Transfer scripts

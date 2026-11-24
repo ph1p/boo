@@ -416,4 +416,26 @@ final class LocalFileTreePluginTests: XCTestCase {
             "A cwd change must bump generations so the sections re-render")
     }
 
+    // MARK: - Create
+
+    func testCreateItemMakesMissingFolders() throws {
+        let file = try XCTUnwrap(
+            LocalFileTreePlugin.createItem(in: tmpDir.path, relativePath: "a/b/c.txt", isDirectory: false))
+        XCTAssertEqual(file, tmpDir.appendingPathComponent("a/b/c.txt").path)
+        var isDir: ObjCBool = false
+        XCTAssertTrue(FileManager.default.fileExists(atPath: file, isDirectory: &isDir))
+        XCTAssertFalse(isDir.boolValue)
+
+        let folder = try XCTUnwrap(
+            LocalFileTreePlugin.createItem(in: tmpDir.path, relativePath: "x/y", isDirectory: true))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: folder, isDirectory: &isDir))
+        XCTAssertTrue(isDir.boolValue)
+    }
+
+    func testCreateItemRefusesExistingName() throws {
+        let url = tmpDir.appendingPathComponent("keep.txt")
+        try "keep".write(to: url, atomically: true, encoding: .utf8)
+        XCTAssertNil(LocalFileTreePlugin.createItem(in: tmpDir.path, relativePath: "keep.txt", isDirectory: false))
+        XCTAssertEqual(try String(contentsOf: url, encoding: .utf8), "keep", "An existing file must not be truncated")
+    }
 }

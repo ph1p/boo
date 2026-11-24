@@ -153,6 +153,8 @@ struct FileTreeRowView: View {
     var menuPaths: [String]
     var onClick: (FileTreeSelection.ClickKind) -> Void
     var onTrash: ([String]) -> Void
+    /// Start a draft row for a new item: (parent folder, isDirectory).
+    var onCreate: (String, Bool) -> Void
     @State private var isHovered = false
     /// Size/date line for the tooltip, fetched once after the pointer rests on the row.
     @State private var info: String?
@@ -420,14 +422,19 @@ struct FileTreeRowView: View {
     private var contextMenuEdit: some View {
         Divider()
         if node.isDirectory {
-            if let onCreateFile = actions.onCreateFile {
-                Button("New File") { onCreateFile(node.path) }
+            if actions.onCreateFile != nil {
+                Button("New File") { onCreate(node.path, false) }
             }
-            if let onCreateFolder = actions.onCreateFolder {
-                Button("New Folder") { onCreateFolder(node.path) }
+            if actions.onCreateFolder != nil {
+                Button("New Folder") { onCreate(node.path, true) }
             }
-        } else if let onDuplicate = actions.onDuplicate {
-            Button("Duplicate") { onDuplicate(node.path) }
+        } else {
+            if actions.onCreateFile != nil {
+                Button("New File Here") { onCreate(parentPath, false) }
+            }
+            if let onDuplicate = actions.onDuplicate {
+                Button("Duplicate") { onDuplicate(node.path) { _ in } }
+            }
         }
         if actions.onRename != nil {
             Button("Rename") { renameState.beginRename(path: node.path, currentName: node.name) }
@@ -579,10 +586,47 @@ struct FileTreeDropLine: View {
     }
 }
 
+// MARK: - Draft Row
+
+/// The name field for a file or folder that does not exist yet, laid out like a row.
+/// Return creates it; Escape or an empty name drops it.
+struct FileTreeDraftRow: View {
+    let isDirectory: Bool
+    let depth: Int
+    var style: RowStyle
+    @Binding var text: String
+    var onCommit: () -> Void
+    var onCancel: () -> Void
+
+    var body: some View {
+        HStack(spacing: 5) {
+            if isDirectory {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(style.mutedColor)
+                    .frame(width: 10)
+            } else {
+                Spacer().frame(width: 10)
+            }
+            if style.showIcons {
+                FileTreeIcon(name: "", isDirectory: isDirectory, style: style)
+            }
+            InlineRenameField(
+                text: $text, placeholder: isDirectory ? "Folder name" : "File name (a/b.txt makes folders)",
+                onCommit: onCommit, onCancel: onCancel)
+            Spacer(minLength: 4)
+        }
+        .padding(.leading, RowStyle.indent(depth: depth))
+        .padding(.trailing, 10)
+        .padding(.vertical, 3)
+    }
+}
+
 // MARK: - Inline Rename Field
 
 struct InlineRenameField: NSViewRepresentable {
     @Binding var text: String
+    var placeholder: String? = nil
     var onCommit: () -> Void
     var onCancel: () -> Void
 
@@ -592,6 +636,7 @@ struct InlineRenameField: NSViewRepresentable {
         field.isEditable = true
         field.focusRingType = .exterior
         field.stringValue = text
+        field.placeholderString = placeholder
         field.delegate = context.coordinator
         field.cell?.isScrollable = true
         field.cell?.wraps = false

@@ -342,6 +342,35 @@ final class LocalFileTreePlugin: BooPluginProtocol, FileTreeBrowsing {
         }
     }
 
+    /// Create a file or folder at `relativePath` under `parentPath`, making any missing
+    /// folders on the way. Never overwrites: an existing item is an error. Returns the
+    /// created path, or nil after telling the user why it failed.
+    @MainActor
+    static func createItem(in parentPath: String, relativePath: String, isDirectory: Bool) -> String? {
+        let fm = FileManager.default
+        let destPath = (parentPath as NSString).appendingPathComponent(relativePath)
+        let kind = isDirectory ? "folder" : "file"
+        if fm.fileExists(atPath: destPath) {
+            BooAlert.showTransient("\"\(relativePath)\" already exists")
+            return nil
+        }
+        do {
+            if isDirectory {
+                try fm.createDirectory(atPath: destPath, withIntermediateDirectories: true)
+            } else {
+                try fm.createDirectory(
+                    atPath: (destPath as NSString).deletingLastPathComponent, withIntermediateDirectories: true)
+                guard fm.createFile(atPath: destPath, contents: nil) else {
+                    throw CocoaError(.fileWriteUnknown)
+                }
+            }
+            return destPath
+        } catch {
+            BooAlert.showTransient("Create \(kind) failed: \(error.localizedDescription)")
+            return nil
+        }
+    }
+
     private func buildTreeActions() -> FileTreeActions {
         // Resolved on each invocation rather than captured: `PluginRegistry.actions` is
         // reassigned after registration, and these closures outlive that assignment.
@@ -392,18 +421,20 @@ final class LocalFileTreePlugin: BooPluginProtocol, FileTreeBrowsing {
                     }
                 }
             },
-            onRename: { oldPath, newName in
-                guard !newName.contains("/"), !newName.contains("..") else {
+            onRename: { oldPath, newName, done in
+                guard let target = FileTreeNaming.target(newName, allowNesting: false) else {
                     BooAlert.showTransient("Invalid name")
-                    return
+                    return done(nil)
                 }
                 let parentDir = (oldPath as NSString).deletingLastPathComponent
-                let newPath = (parentDir as NSString).appendingPathComponent(newName)
-                guard oldPath != newPath else { return }
+                let newPath = (parentDir as NSString).appendingPathComponent(target.path)
+                guard oldPath != newPath else { return done(nil) }
                 do {
                     try FileManager.default.moveItem(atPath: oldPath, toPath: newPath)
+                    done(newPath)
                 } catch {
                     BooAlert.showTransient("Rename failed: \(error.localizedDescription)")
+                    done(nil)
                 }
             },
             onMove: { sourcePath, destinationDir in
@@ -418,34 +449,13 @@ final class LocalFileTreePlugin: BooPluginProtocol, FileTreeBrowsing {
                     BooAlert.showTransient("Move failed: \(error.localizedDescription)")
                 }
             },
-            onCreateFolder: { parentPath in
-                var folderName = "New Folder"
-                var destPath = (parentPath as NSString).appendingPathComponent(folderName)
-                var counter = 2
-                while FileManager.default.fileExists(atPath: destPath) {
-                    folderName = "New Folder \(counter)"
-                    destPath = (parentPath as NSString).appendingPathComponent(folderName)
-                    counter += 1
-                }
-                do {
-                    try FileManager.default.createDirectory(
-                        atPath: destPath, withIntermediateDirectories: false)
-                } catch {
-                    BooAlert.showTransient("Create folder failed: \(error.localizedDescription)")
-                }
+            onCreateFolder: { parentPath, relativePath, done in
+                done(Self.createItem(in: parentPath, relativePath: relativePath, isDirectory: true))
             },
-            onCreateFile: { parentPath in
-                var fileName = "New File"
-                var destPath = (parentPath as NSString).appendingPathComponent(fileName)
-                var counter = 2
-                while FileManager.default.fileExists(atPath: destPath) {
-                    fileName = "New File \(counter)"
-                    destPath = (parentPath as NSString).appendingPathComponent(fileName)
-                    counter += 1
-                }
-                FileManager.default.createFile(atPath: destPath, contents: nil)
+            onCreateFile: { parentPath, relativePath, done in
+                done(Self.createItem(in: parentPath, relativePath: relativePath, isDirectory: false))
             },
-            onDuplicate: { path in
+            onDuplicate: { path, done in
                 let parentDir = (path as NSString).deletingLastPathComponent
                 let name = (path as NSString).lastPathComponent
                 let ext = (name as NSString).pathExtension
@@ -461,8 +471,10 @@ final class LocalFileTreePlugin: BooPluginProtocol, FileTreeBrowsing {
                 }
                 do {
                     try FileManager.default.copyItem(atPath: path, toPath: destPath)
+                    done(destPath)
                 } catch {
                     BooAlert.showTransient("Duplicate failed: \(error.localizedDescription)")
+                    done(nil)
                 }
             },
             onCopyImage: { path in
