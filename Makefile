@@ -162,7 +162,7 @@ build: editor
 	@for dir in .build/debug .build/arm64-apple-macosx/debug; do \
 		if [ -d "$$dir" ]; then \
 			mkdir -p "$$dir/ghostty-resources"; \
-			rsync -a --delete Vendor/ghostty/zig-out/share/ghostty/ "$$dir/ghostty-resources/ghostty/"; \
+			rsync -a --delete --delete-excluded --exclude themes Vendor/ghostty/zig-out/share/ghostty/ "$$dir/ghostty-resources/ghostty/"; \
 			rsync -a --delete Vendor/ghostty/zig-out/share/terminfo/ "$$dir/ghostty-resources/terminfo/"; \
 		fi; \
 	done
@@ -192,7 +192,8 @@ bundle: build
 			done; \
 		fi; \
 	done
-	@rsync -a .build/debug/ghostty-resources/ .build/debug/Boo.app/Contents/Resources/ 2>/dev/null || true
+	@rsync -a --delete .build/debug/ghostty-resources/ghostty/ .build/debug/Boo.app/Contents/Resources/ghostty/ 2>/dev/null || true
+	@rsync -a .build/debug/ghostty-resources/terminfo .build/debug/Boo.app/Contents/Resources/ 2>/dev/null || true
 	@rsync -a Resources/shell-integration .build/debug/Boo.app/Contents/Resources/
 	@ID="$(SIGNING_IDENTITY)"; \
 	if [ -z "$$ID" ] && security find-identity -p codesigning 2>/dev/null | grep -q "\"$(LOCAL_SIGNING_IDENTITY)\""; then \
@@ -218,7 +219,7 @@ release: editor
 	@for dir in .build/release .build/arm64-apple-macosx/release; do \
 		if [ -d "$$dir" ]; then \
 			mkdir -p "$$dir/ghostty-resources"; \
-			rsync -a --delete Vendor/ghostty/zig-out/share/ghostty/ "$$dir/ghostty-resources/ghostty/"; \
+			rsync -a --delete --delete-excluded --exclude themes Vendor/ghostty/zig-out/share/ghostty/ "$$dir/ghostty-resources/ghostty/"; \
 			rsync -a --delete Vendor/ghostty/zig-out/share/terminfo/ "$$dir/ghostty-resources/terminfo/"; \
 		fi; \
 	done
@@ -266,7 +267,9 @@ app: release
 			done; \
 		fi; \
 	done
-	@rsync -a Vendor/ghostty/zig-out/share/ghostty/ "$(APP_BUNDLE)/Contents/Resources/ghostty/"
+	@# Ghostty's ~900 themes stay out: Boo writes every color itself, and Ghostty
+	@# applies config over a theme, so they never show. --delete drops old copies.
+	@rsync -a --delete --delete-excluded --exclude themes Vendor/ghostty/zig-out/share/ghostty/ "$(APP_BUNDLE)/Contents/Resources/ghostty/"
 	@rsync -a Vendor/ghostty/zig-out/share/terminfo/ "$(APP_BUNDLE)/Contents/Resources/terminfo/"
 	@# Boo's shell integration and agent hooks; installed into ~/.boo on launch.
 	@rsync -a Resources/shell-integration "$(APP_BUNDLE)/Contents/Resources/"
