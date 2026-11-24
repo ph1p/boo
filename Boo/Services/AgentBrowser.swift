@@ -256,6 +256,8 @@ final class AgentBrowser {
         guard let view = paneView(location)?.browserView(for: id) else {
             throw Failure(message: "the tab has not loaded since Boo started: click it once")
         }
+        // A suspended tab rebuilds its page; using it also restarts its idle clock.
+        view.resume()
         return view
     }
 

@@ -240,4 +240,87 @@ final class BrowserContentViewTests: XCTestCase {
         }
         return nil
     }
+
+    // MARK: - Suspending idle tabs
+
+    private func loadedPage() throws -> BrowserContentView {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("boo-suspend-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        addTeardownBlock { try? FileManager.default.removeItem(at: dir) }
+        let page = dir.appendingPathComponent("page.html")
+        try "<title>Kept</title><p>hello</p>".write(to: page, atomically: true, encoding: .utf8)
+        let view = BrowserContentView(url: page)
+        view.tabID = UUID()
+        let loaded = expectation(description: "loaded")
+        Task { @MainActor in
+            while view.webView?.url == nil || view.webView?.isLoading == true {
+                try? await Task.sleep(for: .milliseconds(20))
+            }
+            loaded.fulfill()
+        }
+        wait(for: [loaded], timeout: 10)
+        return view
+    }
+
+    func testASwitchedAwayTabSuspendsAndComesBack() throws {
+        let view = try loadedPage()
+        let url = view.url
+        view.setPageZoom(1.25)
+        view.deactivate()
+        XCTAssertNotNil(view.suspendTimer)
+        XCTAssertTrue(view.canSuspendNow)
+
+        view.suspend()
+        XCTAssertTrue(view.isSuspended)
+        XCTAssertNil(view.webView)
+        XCTAssertNil(view.suspendTimer)
+        XCTAssertEqual(view.pageZoom, 1.25)
+        guard case .browser(let saved) = view.saveState() else { return XCTFail("not a browser state") }
+        XCTAssertEqual(saved.url, url)
+
+        view.activate()
+        XCTAssertFalse(view.isSuspended)
+        XCTAssertNotNil(view.webView)
+        XCTAssertEqual(view.webView?.pageZoom, 1.25)
+        XCTAssertNil(view.suspendTimer)
+        let reloaded = expectation(description: "reloaded")
+        Task { @MainActor in
+            while view.webView?.url != url { try? await Task.sleep(for: .milliseconds(20)) }
+            reloaded.fulfill()
+        }
+        wait(for: [reloaded], timeout: 10)
+        view.cleanup()
+    }
+
+    func testAShownTabIsNeverSuspended() throws {
+        let view = try loadedPage()
+        view.activate()
+        XCTAssertNil(view.suspendTimer)
+        XCTAssertFalse(view.canSuspendNow)
+        view.cleanup()
+    }
+
+    func testATabAnAgentKeepsIsNotSuspended() throws {
+        let view = try loadedPage()
+        let keeps = BrowserContentView.keepsLoaded
+        defer { BrowserContentView.keepsLoaded = keeps }
+        BrowserContentView.keepsLoaded = { _ in true }
+        view.deactivate()
+        XCTAssertFalse(view.canSuspendNow)
+        view.cleanup()
+    }
+
+    func testABlankTabIsNotSuspended() {
+        let view = BrowserContentView(url: ContentType.blankURL)
+        view.deactivate()
+        XCTAssertFalse(view.canSuspendNow)
+        view.cleanup()
+    }
+
+    func testCleanupStopsTheIdleTimer() throws {
+        let view = try loadedPage()
+        view.deactivate()
+        view.cleanup()
+        XCTAssertNil(view.suspendTimer)
+    }
 }

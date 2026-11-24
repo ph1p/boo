@@ -30,6 +30,14 @@ final class BrowserContentView: NSView, ContentViewProtocol, NSTextFieldDelegate
     private weak var openExternalButton: NavHoverButton?
     private weak var serversButton: NavHoverButton?
 
+    // MARK: Suspension (BrowserContentView+Suspend.swift)
+
+    /// True while the tab is switched away from in its pane.
+    var isRetired = false
+    /// What a suspended tab needs to come back; nil while its page is loaded.
+    var suspended: SuspendedPage?
+    var suspendTimer: Timer?
+
     var findNeedle = ""
     var findTotal = 0
     var findIndex = -1
@@ -69,6 +77,9 @@ final class BrowserContentView: NSView, ContentViewProtocol, NSTextFieldDelegate
             name: .settingsChanged,
             object: nil
         )
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(memoryPressureRaised), name: Self.memoryPressure, object: nil)
+        Self.watchMemoryPressure()
     }
 
     deinit {
@@ -271,7 +282,8 @@ final class BrowserContentView: NSView, ContentViewProtocol, NSTextFieldDelegate
         return btn
     }
 
-    private func setupWebView() {
+    /// Builds the web view; `load: false` leaves it empty for a resume to fill.
+    func setupWebView(load shouldLoad: Bool = true) {
         let config = WKWebViewConfiguration()
         config.websiteDataStore =
             AppSettings.shared.browserPersistentWebsiteDataEnabled ? .default() : .nonPersistent()
@@ -321,7 +333,7 @@ final class BrowserContentView: NSView, ContentViewProtocol, NSTextFieldDelegate
         click.delaysPrimaryMouseButtonEvents = false
         wv.addGestureRecognizer(click)
 
-        if !Self.isBlank(currentURL) {
+        if shouldLoad, !Self.isBlank(currentURL) {
             load(currentURL)
         }
     }
@@ -331,7 +343,7 @@ final class BrowserContentView: NSView, ContentViewProtocol, NSTextFieldDelegate
     }
 
     /// Mirror the web view's observable state into the toolbar and callbacks.
-    private func syncWebViewState() {
+    func syncWebViewState() {
         guard let wv = webView else { return }
         if let url = wv.url, url != currentURL {
             syncVisibleURL(url)
@@ -414,10 +426,10 @@ final class BrowserContentView: NSView, ContentViewProtocol, NSTextFieldDelegate
         navigate(to: url)
         window?.makeFirstResponder(webView)
     }
-    private func updateNavButtons() {
+    func updateNavButtons() {
         let theme = AppSettings.shared.theme
-        let canBack = webView?.canGoBack ?? false
-        let canFwd = webView?.canGoForward ?? false
+        let canBack = canGoBack
+        let canFwd = canGoForward
         backButton?.isEnabled = canBack
         forwardButton?.isEnabled = canFwd
         backButton?.contentTintColor = canBack ? theme.textPrimary : theme.textSecondary
@@ -488,14 +500,14 @@ final class BrowserContentView: NSView, ContentViewProtocol, NSTextFieldDelegate
     @objc func decreaseFontSizeAction(_ sender: Any?) { setPageZoom(Self.nextZoom(from: pageZoom, zoomIn: false)) }
     @objc func resetFontSizeAction(_ sender: Any?) { setPageZoom(1) }
 
-    var pageZoom: CGFloat { webView?.pageZoom ?? 1 }
+    var pageZoom: CGFloat { suspended?.zoom ?? webView?.pageZoom ?? 1 }
 
-    private func setPageZoom(_ zoom: CGFloat) {
+    func setPageZoom(_ zoom: CGFloat) {
         webView?.pageZoom = zoom
         updateZoomButton()
     }
 
-    private func updateZoomButton() {
+    func updateZoomButton() {
         guard let zoomButton else { return }
         let zoom = pageZoom
         let isDefault = abs(zoom - 1) < 0.001
@@ -537,6 +549,8 @@ final class BrowserContentView: NSView, ContentViewProtocol, NSTextFieldDelegate
     // MARK: - ContentViewProtocol
 
     func activate() {
+        isRetired = false
+        resume()
         // A blank tab has nothing to interact with yet; start in the address bar.
         if webView?.isHidden == false {
             window?.makeFirstResponder(webView)
@@ -548,11 +562,21 @@ final class BrowserContentView: NSView, ContentViewProtocol, NSTextFieldDelegate
 
     func deactivate() {
         autocompletePanel?.close()
+        isRetired = true
+        scheduleSuspend()
     }
 
     func cleanup() {
+        suspendTimer?.invalidate()
+        suspendTimer = nil
+        suspended = nil
         autocompletePanel?.close()
         autocompletePanel = nil
+        tearDownWebView()
+    }
+
+    /// Drops the web view and its observers; the toolbar stays.
+    func tearDownWebView() {
         for observation in observations { observation.invalidate() }
         observations = []
         webView?.stopLoading()
@@ -568,8 +592,8 @@ final class BrowserContentView: NSView, ContentViewProtocol, NSTextFieldDelegate
             BrowserContentState(
                 title: currentTitle,
                 url: currentURL,
-                canGoBack: webView?.canGoBack ?? false,
-                canGoForward: webView?.canGoForward ?? false
+                canGoBack: canGoBack,
+                canGoForward: canGoForward
             ))
     }
 
@@ -586,6 +610,7 @@ final class BrowserContentView: NSView, ContentViewProtocol, NSTextFieldDelegate
 
     /// Navigate to a URL.
     func navigate(to url: URL) {
+        resume()
         syncVisibleURL(url)
         // The address bar may still own focus (Return was just pressed), which
         // makes syncVisibleURL leave its text alone.
@@ -604,13 +629,20 @@ final class BrowserContentView: NSView, ContentViewProtocol, NSTextFieldDelegate
     }
 
     /// Go back in history.
-    func goBack() { webView?.goBack() }
+    func goBack() {
+        resume()
+        webView?.goBack()
+    }
 
     /// Go forward in history.
-    func goForward() { webView?.goForward() }
+    func goForward() {
+        resume()
+        webView?.goForward()
+    }
 
     /// Reload the current page; after a failed load there is no page to reload.
     func reload() {
+        resume()
         if lastError != nil || webView?.url == nil {
             hideError()
             if !Self.isBlank(currentURL) { load(currentURL) }
@@ -622,8 +654,8 @@ final class BrowserContentView: NSView, ContentViewProtocol, NSTextFieldDelegate
     /// Stop loading.
     func stopLoading() { webView?.stopLoading() }
 
-    var canGoBack: Bool { webView?.canGoBack ?? false }
-    var canGoForward: Bool { webView?.canGoForward ?? false }
+    var canGoBack: Bool { suspended?.canGoBack ?? webView?.canGoBack ?? false }
+    var canGoForward: Bool { suspended?.canGoForward ?? webView?.canGoForward ?? false }
     var url: URL { currentURL }
     var displayedURLString: String { urlBar?.stringValue ?? "" }
 
