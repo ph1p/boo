@@ -10,8 +10,9 @@ import Foundation
 struct BooMCPServer {
     typealias Send = ([String: Any]) throws -> [String: Any]
 
-    /// Sends one socket command and returns Boo's reply.
-    let send: Send
+    /// Sends one socket command and returns Boo's reply. Variable so each
+    /// tool call can bind its own cancellation (see `runStdio`).
+    var send: Send
     /// The pane the agent runs in, if it runs in Boo.
     let ownPaneID: String?
     /// The agent's working directory: default cwd for new panes and the repo for new tasks.
@@ -54,21 +55,21 @@ struct BooMCPServer {
             cwd: FileManager.default.currentDirectoryPath,
             token: env["BOO_TOKEN"].flatMap { $0.isEmpty ? nil : $0 },
             insideBoo: env["BOO_PANE_ID"].map { !$0.isEmpty } == true || ProcessTree.hasBooAncestor(getpid()))
+        let dispatcher = BooMCPDispatcher(
+            handle: { message, cancel in
+                var server = server
+                server.send = {
+                    try BooSocketClient.request(
+                        $0, socketPath: socketPath, timeout: clientTimeout(for: $0), cancel: cancel)
+                }
+                return server.handle(message)
+            },
+            write: { FileHandle.standardOutput.write($0) })
         while let line = readLine(strippingNewline: true) {
-            guard !line.trimmingCharacters(in: .whitespaces).isEmpty else { continue }
-            let response: [String: Any]?
-            if let data = line.data(using: .utf8),
-                let message = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
-            {
-                response = server.handle(message)
-            } else {
-                response = errorResponse(id: NSNull(), code: -32700, message: "parse error")
-            }
-            guard let response,
-                let data = try? JSONSerialization.data(withJSONObject: response, options: [.withoutEscapingSlashes])
-            else { continue }
-            FileHandle.standardOutput.write(data + Data("\n".utf8))
+            dispatcher.receive(line)
         }
+        // Stdin closed: let running calls answer (a piped script may still read).
+        dispatcher.waitForCalls()
         exit(0)
     }
 
@@ -118,7 +119,7 @@ struct BooMCPServer {
         ["jsonrpc": "2.0", "id": id, "result": result]
     }
 
-    private static func errorResponse(id: Any, code: Int, message: String) -> [String: Any] {
+    static func errorResponse(id: Any, code: Int, message: String) -> [String: Any] {
         ["jsonrpc": "2.0", "id": id, "error": ["code": code, "message": message]]
     }
 
@@ -654,14 +655,24 @@ struct BooMCPServer {
 
 /// Minimal blocking client for the Boo socket: one JSON line out, one back.
 enum BooSocketClient {
-    static func request(_ message: [String: Any], socketPath: String, timeout: Int = 10) throws -> [String: Any] {
+    static func request(
+        _ message: [String: Any], socketPath: String, timeout: Int = 10, cancel: BooMCPCancel? = nil
+    ) throws -> [String: Any] {
         guard UnixSocket.address(socketPath) != nil else {
             throw BooMCPServer.Failure(message: "socket path too long: \(socketPath)")
         }
         guard let fd = UnixSocket.connect(path: socketPath) else {
             throw BooMCPServer.Failure(message: "Boo is not running (no socket at \(socketPath)).")
         }
-        defer { close(fd) }
+        // Cleared before close, so a late cancel never shuts down a reused fd.
+        guard cancel?.attach(fd) ?? true else {
+            close(fd)
+            throw BooMCPServer.Failure(message: "cancelled")
+        }
+        defer {
+            cancel?.detach()
+            close(fd)
+        }
         var tv = timeval(tv_sec: timeout, tv_usec: 0)
         setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, socklen_t(MemoryLayout<timeval>.size))
         setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, socklen_t(MemoryLayout<timeval>.size))
