@@ -21,32 +21,51 @@ extension MainWindowController {
         let ids: [String: Any] = ["tab_id": tabID.uuidString, "workspace_id": workspaceID.uuidString]
         let statOnly = json["stat_only"] as? Bool ?? false
         let cleanup = json["cleanup"] as? Bool ?? true
+        // The state the user approved on the card (set by the gate, never by the caller).
+        let approved = AgentWorktree.decodeSnapshot(json)
+        let send: ([String: Any]) -> Void = { reply($0.merging(ids) { current, _ in current }) }
         Task { @MainActor [weak self] in
-            let outcome = await Task.detached(priority: .userInitiated) { Self.runTaskCommand(cmd, folders: folders) }
-                .value
-            var response: [String: Any]
+            let outcome = await Task.detached(priority: .userInitiated) {
+                Self.runTaskCommand(cmd, folders: folders, approved: approved)
+            }.value
             switch outcome {
             case .notTask:
                 let path = (folders[0] as NSString).abbreviatingWithTildeInPath
-                response = ["ok": false, "error": "\(path) is not an agent task worktree"]
+                send(["ok": false, "error": "\(path) is not an agent task worktree"])
             case .failed(let message):
-                response = ["ok": false, "error": message]
+                send(["ok": false, "error": message])
             case .status(let check, let info):
-                response = Self.serialize(check, info)
+                send(Self.serialize(check, info))
             case .blocked(let check, let info):
-                response = [
+                send([
                     "ok": false, "error": Self.blockerMessage(check, info) ?? "", "blocker": check.blocker ?? NSNull()
-                ]
+                ])
             case .diff(let changes):
-                response = Self.serialize(changes, statOnly: statOnly)
+                send(Self.serialize(changes, statOnly: statOnly))
             case .merged(let check, let info):
-                response = ["ok": true, "merged": check.status.ahead, "target": check.status.target ?? NSNull()]
-                if cleanup { self?.closeAndRemoveAgentTask(workspaceID: workspaceID, info: info, tabID: tabID) }
+                var response: [String: Any] = [
+                    "ok": true, "merged": check.status.ahead, "target": check.status.target ?? NSNull()
+                ]
+                guard cleanup, let self else { return send(response) }
+                self.closeAndRemoveAgentTask(
+                    workspaceID: workspaceID, info: info, tabID: tabID, mode: .afterMerge
+                ) { result in
+                    if case .success(let kept?) = result { response["kept"] = kept }
+                    send(response)
+                }
             case .discard(let info):
-                response = ["ok": true]
-                self?.closeAndRemoveAgentTask(workspaceID: workspaceID, info: info, tabID: tabID)
+                guard let self else { return send(["ok": false, "error": "window closed"]) }
+                self.closeAndRemoveAgentTask(
+                    workspaceID: workspaceID, info: info, tabID: tabID, mode: .discard(approved)
+                ) { result in
+                    switch result {
+                    case .success(let restore):
+                        send(["ok": true, "restore": restore ?? NSNull()])
+                    case .failure(let error):
+                        send(["ok": false, "error": error.localizedDescription])
+                    }
+                }
             }
-            reply(response.merging(ids) { current, _ in current })
         }
     }
 
@@ -60,8 +79,11 @@ extension MainWindowController {
         case discard(AgentWorktree.Info)
     }
 
-    /// The git side of a task command; blocks.
-    nonisolated private static func runTaskCommand(_ cmd: String, folders: [String]) -> TaskOutcome {
+    /// The git side of a task command; blocks. `approved` pins merge and
+    /// discard to the state the user saw on the approval card.
+    nonisolated private static func runTaskCommand(
+        _ cmd: String, folders: [String], approved: AgentWorktree.Snapshot?
+    ) -> TaskOutcome {
         guard let info = folders.lazy.compactMap(AgentWorktree.info(for:)).first else { return .notTask }
         switch cmd {
         case "task_status":
@@ -76,12 +98,20 @@ extension MainWindowController {
             let check = AgentWorktree.mergeCheck(of: info)
             if check.blocker != nil { return .blocked(check, info) }
             do {
-                try AgentWorktree.merge(info)
+                try AgentWorktree.merge(info, approvedHead: approved?.head)
                 return .merged(check, info)
             } catch {
                 return .failed(error.localizedDescription)
             }
         default:  // discard_task
+            // Checked before the agent's tab closes, and again before deleting.
+            if let approved,
+                let change = AgentWorktree.changes(from: approved, to: AgentWorktree.snapshot(of: info), in: info)
+            {
+                return .failed(
+                    "The task changed since the user approved discarding it: \(change). Nothing was deleted; ask again."
+                )
+            }
             return .discard(info)
         }
     }

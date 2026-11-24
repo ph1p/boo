@@ -256,4 +256,107 @@ final class AgentWorktreeTests: XCTestCase {
         XCTAssertTrue((parent as NSString).lastPathComponent.hasPrefix("myrepo-"), parent)
         XCTAssertEqual(AgentWorktree.parentFolder(for: other, in: root), parent, "stable across calls")
     }
+
+    // MARK: - Safe removal
+
+    func testDiscardRefusesWhenTheTaskChangedSinceApproval() throws {
+        let info = try AgentWorktree.create(repo: repo, name: "drift", root: root)
+        try write("b.txt", "draft\n", in: info.path)
+        let approved = AgentWorktree.snapshot(of: info)
+        XCTAssertNil(AgentWorktree.changes(from: approved, to: AgentWorktree.snapshot(of: info), in: info))
+
+        try write("b.txt", "draft, edited\n", in: info.path)
+        XCTAssertEqual(
+            AgentWorktree.changes(from: approved, to: AgentWorktree.snapshot(of: info), in: info),
+            "new uncommitted changes", "an edit to an already dirty file counts")
+        XCTAssertThrowsError(try AgentWorktree.discard(info, approved: approved)) {
+            XCTAssertTrue($0 is AgentWorktree.Changed)
+        }
+        XCTAssertTrue(FileManager.default.fileExists(atPath: info.path), "nothing was deleted")
+
+        let dirty = AgentWorktree.snapshot(of: info)
+        try git("add", ".", in: info.path)
+        try git("commit", "-q", "-m", "one", in: info.path)
+        try commit("c.txt", "two\n", in: info.path)
+        XCTAssertEqual(
+            AgentWorktree.changes(from: dirty, to: AgentWorktree.snapshot(of: info), in: info), "2 new commits")
+    }
+
+    func testDiscardKeepsARestorableCopy() throws {
+        let info = try AgentWorktree.create(repo: repo, name: "throwaway", root: root)
+        try commit("b.txt", "committed\n", in: info.path)
+        try write("c.txt", "uncommitted\n", in: info.path)
+        let restore = try AgentWorktree.discard(info, approved: AgentWorktree.snapshot(of: info))
+
+        XCTAssertEqual(restore, "git branch boo/throwaway refs/boo/trash/throwaway")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: info.path))
+        XCTAssertThrowsError(try git("rev-parse", "--verify", "-q", "refs/heads/boo/throwaway"))
+        XCTAssertEqual(try git("show", "refs/boo/trash/throwaway:b.txt"), "committed")
+        XCTAssertEqual(try git("show", "refs/boo/trash/throwaway:c.txt"), "uncommitted")
+        XCTAssertEqual(try git("status", "--porcelain"), "", "the main checkout is untouched")
+
+        let again = try AgentWorktree.create(repo: repo, name: "throwaway", root: root)
+        XCTAssertEqual(
+            try AgentWorktree.discard(again, approved: nil), "git branch boo/throwaway refs/boo/trash/throwaway-2",
+            "an earlier copy is never overwritten")
+    }
+
+    func testPruneDropsOldTrash() throws {
+        let info = try AgentWorktree.create(repo: repo, name: "old", root: root)
+        try AgentWorktree.discard(info, approved: nil)
+        AgentWorktree.pruneTrash(in: repo, now: Date().addingTimeInterval(13 * 24 * 3600))
+        XCTAssertNoThrow(try git("rev-parse", "--verify", "-q", "refs/boo/trash/old"))
+        AgentWorktree.pruneTrash(in: repo, now: Date().addingTimeInterval(15 * 24 * 3600))
+        XCTAssertThrowsError(try git("rev-parse", "--verify", "-q", "refs/boo/trash/old"))
+    }
+
+    func testMergeCleanupKeepsUnmergedWork() throws {
+        let info = try AgentWorktree.create(repo: repo, name: "busy", root: root)
+        try commit("b.txt", "one\n", in: info.path)
+        try AgentWorktree.merge(info)
+
+        try write("c.txt", "still working\n", in: info.path)
+        XCTAssertNotNil(AgentWorktree.removeMerged(info), "uncommitted work keeps the worktree")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: "\(info.path)/c.txt"))
+
+        try git("add", ".", in: info.path)
+        try git("commit", "-q", "-m", "more", in: info.path)
+        XCTAssertEqual(
+            AgentWorktree.removeMerged(info),
+            "kept \((info.path as NSString).abbreviatingWithTildeInPath): boo/busy has commits that are not merged")
+        XCTAssertNoThrow(try git("rev-parse", "--verify", "-q", "refs/heads/boo/busy"))
+
+        try AgentWorktree.merge(info)
+        XCTAssertNil(AgentWorktree.removeMerged(info))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: info.path))
+        XCTAssertThrowsError(try git("rev-parse", "--verify", "-q", "refs/heads/boo/busy"))
+    }
+
+    func testMergeRefusesWhenTheBranchMovedSinceApproval() throws {
+        let info = try AgentWorktree.create(repo: repo, name: "moving", root: root)
+        try commit("b.txt", "one\n", in: info.path)
+        let approved = try git("rev-parse", "boo/moving")
+        try commit("c.txt", "two\n", in: info.path)
+        XCTAssertThrowsError(try AgentWorktree.merge(info, approvedHead: approved)) {
+            XCTAssertTrue($0.localizedDescription.contains("1 new commit"), $0.localizedDescription)
+        }
+        XCTAssertFalse(FileManager.default.fileExists(atPath: "\(repo!)/b.txt"), "nothing was merged")
+    }
+
+    func testTaskCardsShowWhatBooComputed() throws {
+        let info = try AgentWorktree.create(repo: repo, name: "card", root: root)
+        try commit("b.txt", "one\n", in: info.path)
+        try write("c.txt", "draft\n", in: info.path)
+        let discard = WindowManager.taskCard(cmd: "discard_task", info: info, cleanup: true)
+        XCTAssertTrue(discard.text.contains("losing 1 unmerged commit and uncommitted changes"), discard.text)
+        XCTAssertEqual(
+            AgentWorktree.decodeSnapshot(discard.pinned), AgentWorktree.snapshot(of: info),
+            "the card pins the state it showed")
+
+        try git("add", ".", in: info.path)
+        try git("commit", "-q", "-m", "c", in: info.path)
+        let merge = WindowManager.taskCard(cmd: "merge_task", info: info, cleanup: true)
+        XCTAssertEqual(merge.text, "Merges 2 commits from boo/card into main, then removes the worktree.")
+        XCTAssertEqual(merge.pinned[AgentWorktree.approvedHeadKey], try git("rev-parse", "boo/card"))
+    }
 }

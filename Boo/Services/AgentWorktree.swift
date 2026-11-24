@@ -225,8 +225,17 @@ enum AgentWorktree {
     /// Refuses with uncommitted changes in the worktree or the main checkout
     /// (never stashes); a conflicting merge is aborted so the main checkout is
     /// left as it was.
-    static func merge(_ info: Info) throws {
+    /// With `approvedHead`, refuses when the branch moved since the user approved.
+    static func merge(_ info: Info, approvedHead: String? = nil) throws {
         guard let branch = info.branch else { throw GitError(message: "The worktree is not on a branch.") }
+        if let approvedHead, let head = try? git(["rev-parse", "-q", "--verify", branch], in: info.mainRoot),
+            head != approvedHead
+        {
+            let approved = Snapshot(head: approvedHead, tree: nil, statusDigest: nil)
+            let current = Snapshot(head: head, tree: nil, statusDigest: nil)
+            let change = changes(from: approved, to: current, in: info) ?? "its branch moved"
+            throw Changed(message: "The task changed since you approved merging it: \(change). Nothing was merged.")
+        }
         if status(of: info).isDirty {
             throw GitError(message: "The worktree has uncommitted changes. Commit or discard them first.")
         }
@@ -247,11 +256,7 @@ enum AgentWorktree {
     /// Deletes the checkout and, when given, its branch.
     static func remove(_ info: Info, deleteBranch: Bool) throws {
         try git(["worktree", "remove", "--force", info.path], in: info.mainRoot)
-        // The repo's folder under the worktree root stays behind once its last task is gone.
-        let parent = (info.path as NSString).deletingLastPathComponent
-        if (try? FileManager.default.contentsOfDirectory(atPath: parent))?.isEmpty == true {
-            try? FileManager.default.removeItem(atPath: parent)
-        }
+        removeEmptyParent(of: info.path)
         if deleteBranch, let branch = info.branch {
             try git(["branch", "-D", branch], in: info.mainRoot)
         }
@@ -323,8 +328,8 @@ enum AgentWorktree {
 
     @discardableResult
     /// Runs git and returns trimmed stdout; throws with git's message on failure.
-    static func git(_ args: [String], in directory: String) throws -> String {
-        guard let result = run(args, in: directory) else {
+    static func git(_ args: [String], in directory: String, environment: [String: String] = [:]) throws -> String {
+        guard let result = run(args, in: directory, environment: environment) else {
             throw GitError(message: "git \(args.first ?? "") timed out.")
         }
         guard result.status == 0 else {
@@ -337,8 +342,8 @@ enum AgentWorktree {
     }
 
     /// Runs git, any exit status; nil when it timed out or could not start.
-    private static func run(_ args: [String], in directory: String) -> Subprocess.Result? {
-        var env = ProcessInfo.processInfo.environment
+    static func run(_ args: [String], in directory: String, environment: [String: String] = [:]) -> Subprocess.Result? {
+        var env = ProcessInfo.processInfo.environment.merging(environment) { _, extra in extra }
         env["GIT_TERMINAL_PROMPT"] = "0"
         env["GIT_EDITOR"] = "true"
         return Subprocess.run("/usr/bin/git", ["-C", directory] + args, environment: env, timeout: 30)

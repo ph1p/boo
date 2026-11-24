@@ -429,29 +429,44 @@ extension MainWindowController {
     }
 
     func discardAgentTask(workspaceID: UUID) {
-        withAgentTask(workspaceID: workspaceID) { [weak self] workspace, info, status in
-            self?.confirmDiscard(workspace: workspace, info: info, status: status)
+        withAgentTask(workspaceID: workspaceID) { [weak self] workspace, info, state in
+            self?.confirmDiscard(workspace: workspace, info: info, state: state)
         }
+    }
+
+    /// What a discard confirmation showed: the worktree's status and the
+    /// snapshot the discard is pinned to.
+    struct DiscardState {
+        let status: AgentWorktree.Status
+        let snapshot: AgentWorktree.Snapshot
+        /// What changed since the snapshot passed as `against`, nil when nothing did.
+        let change: String?
     }
 
     /// Reads the worktree's git state off the main thread, then calls back on main.
     private func withAgentTask(
-        workspaceID: UUID, _ body: @escaping @MainActor (Workspace, AgentWorktree.Info, AgentWorktree.Status) -> Void
+        workspaceID: UUID, against approved: AgentWorktree.Snapshot? = nil,
+        _ body: @escaping @MainActor (Workspace, AgentWorktree.Info, DiscardState) -> Void
     ) {
         guard let workspace = appState.workspace(withID: workspaceID) else { return }
         let folder = workspace.folderPath
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             let info = AgentWorktree.info(for: folder)
-            let status = info.map(AgentWorktree.status(of:))
+            let state = info.map { info in
+                let snapshot = AgentWorktree.snapshot(of: info)
+                return DiscardState(
+                    status: AgentWorktree.status(of: info), snapshot: snapshot,
+                    change: approved.flatMap { AgentWorktree.changes(from: $0, to: snapshot, in: info) })
+            }
             DispatchQueue.main.async {
                 guard let self,
                     let workspace = self.appState.workspace(withID: workspaceID)
                 else { return }
-                guard let info, let status else {
+                guard let info, let state else {
                     self.showAgentTaskError("\(workspace.displayName) is not a git worktree.", title: "Not a Worktree")
                     return
                 }
-                body(workspace, info, status)
+                body(workspace, info, state)
             }
         }
     }
@@ -511,7 +526,9 @@ extension MainWindowController {
                         self.showAgentTaskError(error.localizedDescription, title: "Merge Failed")
                         return
                     }
-                    if removeAfter { self.closeAndRemoveAgentTask(workspaceID: workspaceID, info: info) }
+                    if removeAfter {
+                        self.closeAndRemoveAgentTask(workspaceID: workspaceID, info: info, mode: .afterMerge)
+                    }
                 }
             }
         }
@@ -519,7 +536,7 @@ extension MainWindowController {
 
     /// What discarding a task does and loses, e.g. "Closes the workspace and
     /// deletes the worktree and branch x, losing 2 unmerged commits."
-    static func discardSummary(
+    nonisolated static func discardSummary(
         info: AgentWorktree.Info, status: AgentWorktree.Status
     ) -> (text: String, losesWork: Bool) {
         var losses: [String] = []
@@ -529,30 +546,47 @@ extension MainWindowController {
             "Closes the workspace and deletes the worktree"
             + (info.branch.map { " and branch \($0)" } ?? "")
             + (losses.isEmpty ? "." : ", losing \(losses.joined(separator: " and ")).")
+            + (losses.isEmpty ? "" : " A copy stays restorable for 14 days.")
         return (text, !losses.isEmpty)
     }
 
+    /// The snapshot each inline discard confirmation showed, by workspace.
+    private static var shownDiscardSnapshots: [UUID: AgentWorktree.Snapshot] = [:]
+
     /// The discard summary for an inline confirmation (the crew sidebar).
     func agentTaskDiscardSummary(workspaceID: UUID, completion: @escaping @MainActor (String, Bool) -> Void) {
-        withAgentTask(workspaceID: workspaceID) { _, info, status in
-            let summary = Self.discardSummary(info: info, status: status)
+        withAgentTask(workspaceID: workspaceID) { _, info, state in
+            Self.shownDiscardSnapshots[workspaceID] = state.snapshot
+            let summary = Self.discardSummary(info: info, status: state.status)
             completion(summary.text, summary.losesWork)
         }
     }
 
-    /// Discards without asking: the caller already confirmed.
+    /// Discards without asking: the caller already confirmed what
+    /// `agentTaskDiscardSummary` showed. Deletes nothing when it changed since.
     func discardAgentTaskConfirmed(workspaceID: UUID) {
-        withAgentTask(workspaceID: workspaceID) { [weak self] _, info, _ in
-            self?.closeAndRemoveAgentTask(workspaceID: workspaceID, info: info)
+        let shown = Self.shownDiscardSnapshots.removeValue(forKey: workspaceID)
+        withAgentTask(workspaceID: workspaceID, against: shown) { [weak self] workspace, info, state in
+            guard let self else { return }
+            if let change = state.change {
+                self.showAgentTaskError(
+                    "\(workspace.displayName) changed since you confirmed: \(change). Nothing was deleted.",
+                    title: "Not Discarded")
+            } else {
+                self.closeAndRemoveAgentTask(
+                    workspaceID: workspaceID, info: info, mode: .discard(shown ?? state.snapshot))
+            }
         }
     }
 
-    private func confirmDiscard(workspace: Workspace, info: AgentWorktree.Info, status: AgentWorktree.Status) {
+    private func confirmDiscard(
+        workspace: Workspace, info: AgentWorktree.Info, state: DiscardState, changed: String? = nil
+    ) {
         guard let window else { return }
-        let summary = Self.discardSummary(info: info, status: status)
+        let summary = Self.discardSummary(info: info, status: state.status)
         let alert = NSAlert()
         alert.messageText = "Discard \(workspace.displayName)?"
-        alert.informativeText = summary.text
+        alert.informativeText = (changed.map { "Changed since you looked: \($0).\n\n" } ?? "") + summary.text
         alert.alertStyle = summary.losesWork ? .warning : .informational
         alert.addButton(withTitle: "Discard")
         alert.addButton(withTitle: "Cancel")
@@ -560,15 +594,34 @@ extension MainWindowController {
         let workspaceID = workspace.id
         alert.beginSheetModal(for: window) { [weak self] response in
             guard response == .alertFirstButtonReturn else { return }
-            self?.closeAndRemoveAgentTask(workspaceID: workspaceID, info: info)
+            // The agent may have kept working while the sheet was open: ask again.
+            self?.withAgentTask(workspaceID: workspaceID, against: state.snapshot) { workspace, info, current in
+                guard let self else { return }
+                if let change = current.change {
+                    self.confirmDiscard(workspace: workspace, info: info, state: current, changed: change)
+                } else {
+                    self.closeAndRemoveAgentTask(workspaceID: workspaceID, info: info, mode: .discard(state.snapshot))
+                }
+            }
         }
     }
 
-    /// Closes the workspace first (its shells hold the folder), then deletes
-    /// the worktree and branch.
+    /// How `closeAndRemoveAgentTask` deletes the worktree.
+    enum AgentTaskRemoval {
+        /// After a merge: without force, keeping anything not merged.
+        case afterMerge
+        /// Discard what the user approved; refuses when it changed since.
+        case discard(AgentWorktree.Snapshot?)
+    }
+
     /// Closes the task's UI and deletes its worktree. A task opened beside its
     /// caller lives in a tab (`tabID`) of a shared workspace: close only that tab.
-    func closeAndRemoveAgentTask(workspaceID: UUID, info: AgentWorktree.Info, tabID: UUID? = nil) {
+    /// `completion` gets a note (what a merge cleanup kept, how to restore a
+    /// discard) or the error; without one, errors and kept worktrees show an alert.
+    func closeAndRemoveAgentTask(
+        workspaceID: UUID, info: AgentWorktree.Info, tabID: UUID? = nil, mode: AgentTaskRemoval,
+        completion: (@MainActor (Result<String?, Error>) -> Void)? = nil
+    ) {
         if let index = appState.workspaces.firstIndex(where: { $0.id == workspaceID }) {
             let ownsWorkspace = AgentWorktree.standardized(appState.workspaces[index].folderPath) == info.path
             if let tabID, !ownsWorkspace {
@@ -578,13 +631,23 @@ extension MainWindowController {
             }
         }
         DispatchQueue.global(qos: .utility).async {
-            let result = Result(catching: { try AgentWorktree.remove(info, deleteBranch: true) })
-            DispatchQueue.main.async { NotificationCenter.default.post(name: .agentWorktreesChanged, object: nil) }
-            if case .failure(let error) = result {
-                DispatchQueue.main.async {
-                    // The window may be gone when this was its last workspace.
-                    let controller = WindowManager.shared.activeController
+            let result: Result<String?, Error> =
+                switch mode {
+                case .afterMerge: .success(AgentWorktree.removeMerged(info))
+                case .discard(let approved): Result { try AgentWorktree.discard(info, approved: approved) }
+                }
+            DispatchQueue.main.async {
+                NotificationCenter.default.post(name: .agentWorktreesChanged, object: nil)
+                if let completion { return completion(result) }
+                // The window may be gone when this was its last workspace.
+                let controller = WindowManager.shared.activeController
+                switch (result, mode) {
+                case (.failure(let error), _):
                     controller?.showAgentTaskError(error.localizedDescription, title: "Couldn't Remove Worktree")
+                case (.success(let kept?), .afterMerge):
+                    controller?.showAgentTaskError("Merged, but \(kept).", title: "Worktree Kept")
+                default:
+                    break
                 }
             }
         }

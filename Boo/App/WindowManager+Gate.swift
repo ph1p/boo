@@ -20,6 +20,13 @@ extension WindowManager {
             }
             json["tab_id"] = tabID.uuidString
         }
+        // Only an approval card may pin the approved task state.
+        let isTaskChange = cmd == "merge_task" || cmd == "discard_task"
+        if isTaskChange {
+            for key in [AgentWorktree.approvedHeadKey, AgentWorktree.approvedTreeKey, AgentWorktree.approvedStatusKey] {
+                json[key] = nil
+            }
+        }
         let target = OrchestratorGate.needsTarget(cmd) ? gateTarget(cmd: cmd, json: json) : nil
         let decision = OrchestratorGate.decide(
             cmd: cmd, caller: caller, target: target,
@@ -42,7 +49,12 @@ extension WindowManager {
                 reply(["ok": false, "error": "missing token"])
                 return
             }
-            enqueueCard(cmd: cmd, json: json, caller: caller, target: target, loop: false, reply: reply)
+            guard isTaskChange else {
+                return enqueueCard(cmd: cmd, json: json, caller: caller, target: target, loop: false, reply: reply)
+            }
+            prepareTaskCard(cmd: cmd, json: json) { [weak self] json in
+                self?.enqueueCard(cmd: cmd, json: json, caller: caller, target: target, loop: false, reply: reply)
+            }
         }
     }
 
@@ -96,6 +108,55 @@ extension WindowManager {
         var pending: [String: Any] = ["ok": true, "status": "pending", "approval_id": request.id.uuidString]
         if loop { pending["reason"] = "possible_loop" }
         reply(pending)
+    }
+
+    // MARK: - Task cards
+
+    /// Writes what a merge or discard really does into the card (computed by
+    /// Boo, not taken from the agent), and pins the state the user sees, so the
+    /// command refuses if the task changes before it runs.
+    func prepareTaskCard(cmd: String, json: [String: Any], then enqueue: @escaping @MainActor ([String: Any]) -> Void) {
+        guard let tabID = (json["tab_id"] as? String).flatMap(UUID.init(uuidString:)),
+            let location = AgentInbox.locateInWindows(tabID)
+        else { return enqueue(json) }
+        let folders = [location.pane.tabs[location.tabIndex].workingDirectory, location.workspace.folderPath]
+            .compactMap { $0 }
+        let agentSummary = (json["summary"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let cleanup = json["cleanup"] as? Bool ?? true
+        Task { @MainActor in
+            let card = await Task.detached(priority: .userInitiated) {
+                folders.lazy.compactMap(AgentWorktree.info(for:)).first.map {
+                    Self.taskCard(cmd: cmd, info: $0, cleanup: cleanup)
+                }
+            }.value
+            var json = json
+            if let card {
+                json.merge(card.pinned) { _, pinned in pinned }
+                json["summary"] = agentSummary.isEmpty ? card.text : card.text + "\n\nAgent: " + agentSummary
+            }
+            enqueue(json)
+        }
+    }
+
+    /// The card text and the pinned state for a task command; blocks.
+    nonisolated static func taskCard(
+        cmd: String, info: AgentWorktree.Info, cleanup: Bool
+    ) -> (text: String, pinned: [String: String]) {
+        if cmd == "discard_task" {
+            let summary = MainWindowController.discardSummary(info: info, status: AgentWorktree.status(of: info))
+            return (summary.text, AgentWorktree.encode(AgentWorktree.snapshot(of: info)))
+        }
+        let check = AgentWorktree.mergeCheck(of: info)
+        if let blocker = MainWindowController.blockerMessage(check, info) { return ("Will fail: " + blocker, [:]) }
+        let branch = info.branch ?? "the worktree"
+        let ahead = check.status.ahead
+        let text =
+            "Merges \(ahead) commit\(ahead == 1 ? "" : "s") from \(branch) into \(check.status.target ?? "the main checkout")"
+            + (cleanup ? ", then removes the worktree." : ".")
+        let head = info.branch.flatMap {
+            try? AgentWorktree.git(["rev-parse", "-q", "--verify", $0], in: info.mainRoot)
+        }
+        return (text, head.map { [AgentWorktree.approvedHeadKey: $0] } ?? [:])
     }
 
     /// The tabs a sensitive command acts on, nil when its id resolves nowhere.

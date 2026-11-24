@@ -223,12 +223,14 @@ enum BooCLI {
                 let reply = try request(["cmd": "merge_task", "tab_id": target, "cleanup": !keep], fromPane: false)
                 let commits = reply["merged"] as? Int ?? 0
                 let into = (reply["target"] as? String).map { " into \($0)" } ?? ""
-                let closed = keep ? "" : "; its tab and worktree are closed"
+                let kept = reply["kept"] as? String
+                let closed = keep ? "" : kept.map { "; \($0)" } ?? "; its tab and worktree are closed"
                 return Output(text: "merged \(commits) commit\(commits == 1 ? "" : "s")\(into)\(closed)", status: 0)
             case "discard":
                 guard let target = rest.first else { return Output(text: "usage: boo discard <agent>", status: 2) }
-                _ = try request(["cmd": "discard_task", "tab_id": target], fromPane: false)
-                return Output(text: "discarded \(target): its worktree and branch are deleted", status: 0)
+                let reply = try request(["cmd": "discard_task", "tab_id": target], fromPane: false)
+                let restore = (reply["restore"] as? String).map { " (undo within 14 days: \($0))" } ?? ""
+                return Output(text: "discarded \(target): its worktree and branch are deleted\(restore)", status: 0)
             case "close":
                 guard let target = rest.first, rest.count == 1 else {
                     return Output(text: "usage: boo close <agent>", status: 2)
