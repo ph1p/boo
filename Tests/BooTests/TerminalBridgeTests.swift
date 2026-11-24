@@ -1367,4 +1367,19 @@ import XCTest
         XCTAssertEqual(bridge.state.remoteSession, .container(target: "195cad4b6562", tool: .docker))
         XCTAssertEqual(bridge.state.remoteCwd, "/app")
     }
+
+    // MARK: - Spinner frames
+
+    func testASpinnerGlyphChangeIsAFrame() {
+        XCTAssertTrue(TerminalBridge.isSpinnerFrame(from: "✳ Fix the bug", to: "✶ Fix the bug"))
+        XCTAssertTrue(TerminalBridge.isSpinnerFrame(from: "⠋ Fix the bug", to: "⠙ Fix the bug"))
+        XCTAssertTrue(TerminalBridge.isSpinnerFrame(from: "Fix the bug", to: "✳ Fix the bug"))
+    }
+
+    func testANewTitleIsNotAFrame() {
+        XCTAssertFalse(TerminalBridge.isSpinnerFrame(from: "✳ Fix the bug", to: "✳ Write tests"))
+        XCTAssertFalse(TerminalBridge.isSpinnerFrame(from: "✳ Fix the bug", to: "zsh"))
+        XCTAssertFalse(TerminalBridge.isSpinnerFrame(from: "vim a.txt", to: "vim b.txt"))
+        XCTAssertFalse(TerminalBridge.isSpinnerFrame(from: "", to: "zsh"))
+    }
 }

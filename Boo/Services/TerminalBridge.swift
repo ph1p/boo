@@ -127,7 +127,7 @@ final class TerminalBridge: @unchecked Sendable {
 
     /// Resolve the foreground process from title + socket registration.
     private func resolveProcess(
-        paneID: UUID, title: String
+        paneID: UUID, title: String, maxAge: TimeInterval = 0
     ) -> (
         name: String, pid: pid_t?, category: String?, metadata: [String: String]
     ) {
@@ -147,8 +147,9 @@ final class TerminalBridge: @unchecked Sendable {
         if let pid = shellPID, pid > 0 {
             // A title change is the signal that the foreground process may have
             // changed, so this path must see live data — `maxAge: 0` skips the
-            // short-lived cache without evicting it for the sidebar.
-            if let procName = ProcessTree.foregroundProcess(shellPID: pid, maxAge: 0) {
+            // short-lived cache without evicting it for the sidebar. A spinner frame
+            // is not such a signal and passes the cache age instead.
+            if let procName = ProcessTree.foregroundProcess(shellPID: pid, maxAge: maxAge) {
                 return (procName, nil, ProcessIcon.category(for: procName), [:])
             }
             // Nil from a live shell means the tree really is idle: `foregroundProcess` walks
@@ -365,7 +366,11 @@ final class TerminalBridge: @unchecked Sendable {
         var next = state
         next.terminalTitle = title
 
-        let resolvedProcess = resolveProcess(paneID: paneID, title: title)
+        // AI CLIs animate a spinner in the title several times a second; a frame
+        // change is no new process, so it may reuse a recent tree walk.
+        let isSpinnerFrame = Self.isSpinnerFrame(from: state.terminalTitle, to: title)
+        let resolvedProcess = resolveProcess(
+            paneID: paneID, title: title, maxAge: isSpinnerFrame ? ForegroundProcessCache.defaultMaxAge : 0)
         let processChanged = Self.applyResolvedProcess(resolvedProcess, to: &next)
         if processChanged {
             booLog(
@@ -444,6 +449,23 @@ final class TerminalBridge: @unchecked Sendable {
                 ensureContainerCwdPolling()
             }
         }
+    }
+
+    /// True when two titles differ only in a leading AI spinner glyph
+    /// ("✳ Fix bug" to "✶ Fix bug"), i.e. an animation frame, not a new process.
+    static func isSpinnerFrame(from old: String, to new: String) -> Bool {
+        func strip(_ title: String) -> (rest: Substring, spinner: Bool) {
+            var rest = title.drop { $0.isWhitespace }
+            var spinner = false
+            while let first = rest.unicodeScalars.first, ProcessIcon.isAISpinnerScalar(first) {
+                rest = rest.dropFirst()
+                spinner = true
+            }
+            return (rest.drop { $0.isWhitespace }, spinner)
+        }
+        let before = strip(old)
+        let after = strip(new)
+        return (before.spinner || after.spinner) && before.rest == after.rest
     }
 
     func handleDirectoryListing(path: String, output: String, paneID: UUID) {
