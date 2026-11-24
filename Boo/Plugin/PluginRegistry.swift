@@ -27,10 +27,12 @@ final class PluginRegistry {
     /// own theme, which follows the active workspace.
     var themeProvider: () -> TerminalTheme = { AppSettings.shared.theme }
 
-    /// Force the next cycle to report contextChanged/visibilityChanged as true.
-    func clearChangeDetection() {
+    /// Force the next cycle to report contextChanged (and visibilityChanged,
+    /// unless `keepVisibility`) as true. Visibility is recomputed every cycle,
+    /// so keeping it only skips the menu rebuild when nothing appeared or left.
+    func clearChangeDetection(keepVisibility: Bool = false) {
         lastCycleContext = nil
-        lastCycleVisibleIDs = nil
+        if !keepVisibility { lastCycleVisibleIDs = nil }
     }
 
     /// Unified actions distributed to all plugins on set.

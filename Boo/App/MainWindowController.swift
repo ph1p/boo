@@ -364,8 +364,10 @@ import SwiftUI
                 guard let self else { return }
                 self.cycleRerunScheduled = false
                 self.cachedDetailViews.removeAll()
-                self.pluginRegistry.clearChangeDetection()
-                self.runPluginCycle(reason: .focusChanged)
+                // Not a focus change: a plugin asked to refresh. Keeping visibility
+                // skips the Plugins menu rebuild on every agent hook event.
+                self.pluginRegistry.clearChangeDetection(keepVisibility: true)
+                self.runPluginCycle(reason: .titleChanged)
             }
         }
         pluginRegistry.registerBuiltins()
