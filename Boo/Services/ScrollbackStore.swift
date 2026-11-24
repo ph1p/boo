@@ -44,26 +44,28 @@ enum ScrollbackStore {
     /// the size, cutting at a newline so no escape sequence is split.
     static func trimmed(_ text: String) -> Data? {
         // Works on bytes from the end: the screen can be megabytes, and only
-        // the last `maxBytes` survive.
-        let bytes = Array(text.utf8)
-        let newline = UInt8(ascii: "\n")
-        var end = bytes.count
-        while end > 0 {
-            let start = bytes[..<end].lastIndex(of: newline).map { $0 + 1 } ?? 0
-            guard isBlank(bytes[start..<end]) else { break }
-            end = max(0, start - 1)
+        // the last `maxBytes` survive. Reads the string's own storage, no copy.
+        var text = text
+        return text.withUTF8 { bytes -> Data? in
+            let newline = UInt8(ascii: "\n")
+            var end = bytes.count
+            while end > 0 {
+                let start = bytes[..<end].lastIndex(of: newline).map { $0 + 1 } ?? 0
+                guard isBlank(bytes[start..<end]) else { break }
+                end = max(0, start - 1)
+            }
+            guard end > 0 else { return nil }
+            var start = max(0, end - maxBytes)
+            if start > 0 {
+                guard let cut = bytes[start..<end].firstIndex(of: newline) else { return nil }
+                start = cut + 1
+            }
+            return start < end ? Data(bytes[start..<end]) : nil
         }
-        guard end > 0 else { return nil }
-        var start = max(0, end - maxBytes)
-        if start > 0 {
-            guard let cut = bytes[start..<end].firstIndex(of: newline) else { return nil }
-            start = cut + 1
-        }
-        return start < end ? Data(bytes[start..<end]) : nil
     }
 
     /// Blank once SGR sequences (ESC [ params m) are ignored.
-    private static func isBlank(_ line: ArraySlice<UInt8>) -> Bool {
+    private static func isBlank<Bytes: Collection>(_ line: Bytes) -> Bool where Bytes.Element == UInt8 {
         var inEscape = false
         for byte in line {
             if inEscape {

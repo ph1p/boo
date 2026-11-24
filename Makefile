@@ -179,7 +179,7 @@ bundle: build
 	@/usr/libexec/PlistBuddy -c "Delete SUPublicEDKey" .build/debug/Boo.app/Contents/Info.plist 2>/dev/null || true
 	@for bundle in .build/debug/*.bundle; do \
 		if [ -d "$$bundle" ]; then \
-			rsync -a "$$bundle" .build/debug/Boo.app/Contents/Resources/; \
+			rsync -a --delete "$$bundle" .build/debug/Boo.app/Contents/Resources/; \
 		fi; \
 	done
 	@for dir in .build/debug .build/arm64-apple-macosx/debug; do \

@@ -141,8 +141,9 @@ struct HostSystemInfoService: SystemInfoService {
         var totalOut: UInt64 = 0
         var ptr: UnsafeMutablePointer<ifaddrs>? = firstAddr
         while let addr = ptr {
-            if addr.pointee.ifa_addr.pointee.sa_family == UInt8(AF_LINK) {
-                let data = unsafeBitCast(addr.pointee.ifa_data, to: UnsafeMutablePointer<if_data>.self)
+            // Some interfaces have no address or no link data.
+            if let sa = addr.pointee.ifa_addr, sa.pointee.sa_family == UInt8(AF_LINK), let raw = addr.pointee.ifa_data {
+                let data = raw.assumingMemoryBound(to: if_data.self)
                 totalIn += UInt64(data.pointee.ifi_ibytes)
                 totalOut += UInt64(data.pointee.ifi_obytes)
             }

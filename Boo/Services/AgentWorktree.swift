@@ -247,6 +247,11 @@ enum AgentWorktree {
     /// Deletes the checkout and, when given, its branch.
     static func remove(_ info: Info, deleteBranch: Bool) throws {
         try git(["worktree", "remove", "--force", info.path], in: info.mainRoot)
+        // The repo's folder under the worktree root stays behind once its last task is gone.
+        let parent = (info.path as NSString).deletingLastPathComponent
+        if (try? FileManager.default.contentsOfDirectory(atPath: parent))?.isEmpty == true {
+            try? FileManager.default.removeItem(atPath: parent)
+        }
         if deleteBranch, let branch = info.branch {
             try git(["branch", "-D", branch], in: info.mainRoot)
         }

@@ -94,7 +94,10 @@ final class HistoryStore: @unchecked Sendable {
         guard days > 0 else { return }
         let cutoff = now.addingTimeInterval(-Double(days) * 86_400).timeIntervalSince1970
         queue.async { [self] in
-            if let db = open() { exec(db, "DELETE FROM history WHERE started_at < ?", [.real(cutoff)]) }
+            guard let db = open() else { return }
+            exec(db, "DELETE FROM history WHERE started_at < ?", [.real(cutoff)])
+            // Hands the write-ahead log's space back once the deletes are in the database.
+            exec(db, "PRAGMA wal_checkpoint(TRUNCATE)", [])
         }
     }
 
@@ -245,6 +248,7 @@ final class HistoryStore: @unchecked Sendable {
         let schema = """
             PRAGMA journal_mode = WAL;
             PRAGMA synchronous = NORMAL;
+            PRAGMA journal_size_limit = 1048576;
             CREATE TABLE IF NOT EXISTS history (
                 id INTEGER PRIMARY KEY,
                 cmd TEXT NOT NULL,
