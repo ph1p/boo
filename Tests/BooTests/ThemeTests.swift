@@ -118,6 +118,37 @@ final class ThemeTests: XCTestCase {
         XCTAssertNil(catalog.theme(named: "../etc/passwd"))
     }
 
+    /// The app bundle ships the themes packed by scripts/pack-ghostty-themes.sh;
+    /// the catalog reads that file like the folder it came from.
+    func testGhosttyCatalogReadsThePackedThemes() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("boo-ghostty-\(UUID().uuidString)")
+        let themes = dir.appendingPathComponent("themes")
+        try FileManager.default.createDirectory(at: themes, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try "background = #1e2127\nforeground = #abb2bf\n"
+            .write(to: themes.appendingPathComponent("Zeta Test"), atomically: true, encoding: .utf8)
+        try "background = #fafafa\nforeground = #383a42"  // no trailing newline
+            .write(to: themes.appendingPathComponent("Alpha (Light)"), atomically: true, encoding: .utf8)
+        try "not a theme".write(to: themes.appendingPathComponent(".hidden"), atomically: true, encoding: .utf8)
+
+        let script = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("scripts/pack-ghostty-themes.sh")
+        let pack = dir.appendingPathComponent("themes.pack")
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/bash")
+        process.arguments = [script.path, themes.path, pack.path]
+        try process.run()
+        process.waitUntilExit()
+        XCTAssertEqual(process.terminationStatus, 0)
+
+        let catalog = GhosttyThemeCatalog(source: .pack(pack.path))
+        XCTAssertEqual(catalog.names, ["Alpha (Light)", "Zeta Test"])
+        XCTAssertEqual(catalog.theme(named: "Zeta Test")?.background.hexString.uppercased(), "#1E2127")
+        XCTAssertEqual(catalog.theme(named: "Alpha (Light)")?.foreground.hexString.uppercased(), "#383A42")
+        XCTAssertNil(catalog.theme(named: "Missing"))
+    }
+
     func testLightThemesHaveLightBackground() {
         let latte = TerminalTheme.catppuccinLatte
         XCTAssertGreaterThan(latte.background.r, 200)
